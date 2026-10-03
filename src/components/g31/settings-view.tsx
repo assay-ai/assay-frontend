@@ -1,0 +1,156 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import { Check } from "lucide-react";
+import Link from "next/link";
+
+import { Button } from "@/components/ui/button";
+import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
+import { Switch } from "@/components/ui/switch";
+import { listAgents } from "@/services/account.service";
+
+import { KeyValueRow, PageHeader } from "./chrome";
+
+/**
+ * Settings.
+ *
+ * The design's subtitle is the promise this screen has to keep: "thin at MVP —
+ * everything here is also a documented endpoint". Right now almost nothing
+ * here is, so almost nothing here is writable.
+ *
+ * Identity has no endpoint: no user, session or organization resource exists
+ * on this API. Email, login method, organization and time zone are named and
+ * left unanswered rather than filled with a plausible person. The one row
+ * that can be answered is the wallet, which is the agent's `agentAccount`
+ * (CAIP-10) from `GET /agents` — the ledger account it spends from.
+ *
+ * Preferences likewise have no endpoint, so the three switches are read-only.
+ * A switch that flips and forgets is worse than a switch that says it cannot
+ * save: the second is a missing feature, the first is a lie about quiet hours
+ * on a product that pages people about money.
+ */
+
+interface Agent {
+  agentId: string;
+  label?: string;
+  agentAccount?: string;
+  chainId?: string;
+}
+
+export function SettingsView() {
+  const agents = useQuery({
+    queryKey: ["agents"],
+    retry: false,
+    queryFn: () => listAgents({ limit: 50 }) as unknown as Promise<{ items: Agent[] }>,
+  });
+
+  const first = agents.data?.items[0];
+
+  return (
+    <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
+      <PageHeader
+        title="Settings"
+        subtitle="thin at MVP — everything here is also a documented endpoint"
+        actions={
+          <Button icon={<Check />} type="button" disabled>
+            Save
+          </Button>
+        }
+      />
+
+      <div className="flex w-full flex-col gap-4 tablet:flex-row tablet:items-start">
+        <Panel className="min-w-0 flex-1">
+          <PanelHeader>
+            <PanelTitles>
+              <PanelTitle>Identity</PanelTitle>
+              <PanelDescription className="whitespace-normal">
+                provisioned by Privy · no seed phrase, no chain selector, no gas token
+              </PanelDescription>
+            </PanelTitles>
+          </PanelHeader>
+          <PanelBody className="px-5 pb-[18px] pt-2">
+            <KeyValueRow label="Email" value="not published" valueClassName="text-03" />
+            <KeyValueRow label="Login method" value="not published" valueClassName="text-03" />
+            <KeyValueRow label="Organization" value="not published" valueClassName="text-03" />
+            <KeyValueRow
+              label="Wallet"
+              value={
+                first?.agentAccount ? (
+                  <span className="break-all">{first.agentAccount}</span>
+                ) : (
+                  "not published"
+                )
+              }
+              valueClassName={first?.agentAccount ? undefined : "text-03"}
+            />
+            <KeyValueRow label="Time zone" value="UTC" />
+            <KeyValueRow
+              label="Currency display"
+              sub="the MVP settles in one stablecoin; the asset id is never shown"
+              value="USD"
+              divider={false}
+            />
+            <p className="pt-2 text-body-xs text-03">
+              No user, session or organization endpoint exists on this API yet, so nothing above can
+              be read or changed from here.
+            </p>
+          </PanelBody>
+        </Panel>
+
+        <Panel className="tablet:w-[520px] tablet:shrink-0">
+          <PanelHeader>
+            <PanelTitles>
+              <PanelTitle>Preferences</PanelTitle>
+              <PanelDescription>no preferences endpoint exists yet</PanelDescription>
+            </PanelTitles>
+          </PanelHeader>
+          <PanelBody className="gap-4 p-5">
+            {[
+              {
+                title: "Daily digest email",
+                sub: "spend, calls, amount not charged, notable events",
+                on: true,
+              },
+              {
+                title: "Quiet hours 22:00–07:00",
+                sub: "never applies to the Critical class",
+                on: true,
+              },
+              {
+                title: "Show atomic units and CAIP-19 assets",
+                sub: "in the raw-JSON view only",
+                on: false,
+              },
+            ].map((pref) => (
+              <div key={pref.title} className="flex w-full items-center gap-3.5">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="text-body-13 text-01">{pref.title}</span>
+                  <span className="text-body-xs text-03">{pref.sub}</span>
+                </div>
+                <Switch checked={pref.on} readOnly label={pref.on ? "On" : "Off"} />
+              </div>
+            ))}
+            <p className="text-body-xs text-03">
+              Read-only. A switch that flips and forgets would be worse than one that says it cannot
+              save.
+            </p>
+          </PanelBody>
+        </Panel>
+      </div>
+
+      <Panel>
+        <PanelHeader>
+          <PanelTitles>
+            <PanelTitle>Close account</PanelTitle>
+            <PanelDescription className="whitespace-normal">
+              export is forced before deactivation; credentials and the signer are revoked last
+            </PanelDescription>
+          </PanelTitles>
+          <Button variant="secondary" size="sm" asChild>
+            <Link href="/settings/close">Open</Link>
+          </Button>
+        </PanelHeader>
+      </Panel>
+    </div>
+  );
+}

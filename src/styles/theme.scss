@@ -1,0 +1,167 @@
+/**
+ * Design tokens — extracted from the product design's Foundations page.
+ * The primary ramp follows the current logo rather than the original design palette.
+ *
+ * Token names are kept VERBATIM from the design file. Do not rename them to
+ * match a component's needs; rename the component.
+ *
+ * Themed tokens (backgrounds, borders, text, shadows, chart-6) resolve through
+ * the `mode` axis the design declares: light is the `:root` default, dark is
+ * `[data-theme='dark']`. Every other token is mode-independent by design — the
+ * accent ramps are chosen to hold contrast on both grounds.
+ */
+
+:root {
+  /* Background */
+  --bg-01: #ffffff;
+  --bg-02: #f7f8fa;
+  --bg-03: #eff1f4;
+  --bg-04: #e1e5ea;
+  --bg-inverse: #0b0d10;
+
+  /* Border */
+  --border-01: #eceef2;
+  --border-02: #dee3e9;
+  --border-03: #c2c9d2;
+
+  /* Text */
+  --text-01: #0b0d11;
+  --text-02: #58616e;
+  --text-03: #7a8494;
+  --text-inverse: #f4f6f8;
+  --text-on-color: #ffffff;
+
+  /* Elevation */
+  --shadow-hair: #0b0d110a;
+  --shadow-soft: #0b0d1114;
+
+  /* Chart — 6 is the "other"/rest series and follows the ground */
+  --chart-1: var(--primary-500);
+  --chart-2: #0ba5ec;
+  --chart-3: #12a594;
+  --chart-4: #8e4ec6;
+  --chart-5: #f5a524;
+  --chart-6: #c2c9d2;
+
+  /* Primary — lavender from public/images/logo.png (#9284d9).
+   * Filled controls use a darker shade for readable white labels.
+   */
+  --primary-5: #9284d90d;
+  --primary-10: #9284d914;
+  --primary-20: #9284d92e;
+  --primary-300: #b5abe6;
+  --primary-400: #9284d9;
+  --primary-500: #7866bf;
+  --primary-600: #6553aa;
+  --primary-700: #52438c;
+
+  /* Success */
+  --success-10: #12a47214;
+  --success-20: #12a4722e;
+  --success-300: #7bd9b6;
+  --success-400: #35be90;
+  --success-500: #12a472;
+  --success-600: #0e8a60;
+  --success-700: #0a6e4c;
+
+  /* Danger */
+  --danger-10: #e5484d14;
+  --danger-20: #e5484d2e;
+  --danger-300: #f6a9a9;
+  --danger-400: #ee6e6e;
+  --danger-500: #e5484d;
+  --danger-600: #cb3a40;
+  --danger-700: #a82d33;
+
+  /* Warning */
+  --warning-10: #f5a52414;
+  --warning-20: #f5a5242e;
+  --warning-300: #fbd38d;
+  --warning-400: #f5a524;
+  --warning-500: #e08c08;
+  --warning-600: #b87205;
+  --warning-700: #8a5503;
+
+  /* Info */
+  --info-10: #0ba5ec14;
+  --info-20: #0ba5ec2e;
+  --info-400: #38bdf8;
+  --info-500: #0ba5ec;
+  --info-600: #0284c7;
+
+  /* Accents */
+  --teal-10: #12a59414;
+  --teal-20: #12a5942e;
+  --teal-400: #34d3c4;
+  --teal-500: #12a594;
+  --teal-600: #0d8579;
+
+  --indigo-10: #8e4ec614;
+  --indigo-20: #8e4ec62e;
+  --indigo-400: #a57be0;
+  --indigo-500: #8e4ec6;
+
+  --pink-10: #e93d8214;
+  --pink-500: #e93d82;
+
+  --yellow-10: #f5c51814;
+  --yellow-400: #ffd23f;
+  --yellow-500: #f5c518;
+
+  --lime-500: #86bc2a;
+
+  /* Overlay */
+  --overlay-dark-10: #0000001a;
+  --overlay-light-10: #ffffff1a;
+
+  /* Spacing — 4pt base */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /**
+   * Radius. These are the values every component in the design actually binds
+   * to ($radius-md on Button/Search/Segmented, $radius-lg on Metric Tile/
+   * Banner/Sidebar, $radius-xl on panels). The Foundations "Shape" panel
+   * annotates the scale as 4/6/8/12 — that caption is stale, one step below
+   * the variables the components render with. The variables win.
+   *
+   * `full` has no variable in the design; components use the literal 999.
+   */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-full: 999px;
+
+  /* Type */
+  --font-sans: var(--font-funnel-sans), "Funnel Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+[data-theme="dark"] {
+  --bg-01: #0b0d10;
+  --bg-02: #101317;
+  --bg-03: #171b21;
+  --bg-04: #232a33;
+  --bg-inverse: #f3f5f7;
+
+  --border-01: #1c222a;
+  --border-02: #29313b;
+  --border-03: #3c4653;
+
+  --text-01: #f4f6f8;
+  --text-02: #9aa5b2;
+  --text-03: #69737f;
+  --text-inverse: #0b0d11;
+  --text-on-color: #ffffff;
+
+  --shadow-hair: #00000040;
+  --shadow-soft: #00000059;
+
+  --chart-6: #3c4653;
+}

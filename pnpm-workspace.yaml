@@ -1,0 +1,28 @@
+# pnpm 9 refuses to run *any* command in a directory whose `pnpm-workspace.yaml`
+# has no `packages:` — including `pnpm --version`, which makes the failure look
+# like a broken pnpm rather than a missing line here. pnpm 10 does not require
+# it. This repo is one package, so the list is just the root; the file exists
+# for `allowBuilds` below, not to declare a workspace.
+packages:
+  - '.'
+
+allowBuilds:
+  '@parcel/watcher': true
+  # The four `false` entries below are transitive native builds pulled in by
+  # `@solana/kit` and `@privy-io/react-auth`. They are answered explicitly
+  # because pnpm otherwise writes an unanswered placeholder into this tracked
+  # file on every install, and that placeholder is not a valid setting — so the
+  # NEXT `pnpm build` fails inside pnpm's own dependency check, printing a pnpm
+  # stack trace. It reads like a broken toolchain rather than one bad line here.
+  #
+  # `false` is safe for all four, verified by reading each package:
+  #   @reown/appkit  — postinstall is a version-check script, not a build
+  #   bufferutil     — `ws` wraps `require()` in try/catch, JS fallback
+  #   keccak         — its own script is `node-gyp-build || exit 0`
+  #   utf-8-validate — same optional accelerator for `ws` as bufferutil
+  '@reown/appkit': false
+  bufferutil: false
+  keccak: false
+  sharp: true
+  unrs-resolver: true
+  utf-8-validate: false

@@ -1,0 +1,336 @@
+"use client";
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, FolderOpen, Scale, X } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import * as React from "react";
+
+import { Banner } from "@/components/ui/banner";
+import { Button } from "@/components/ui/button";
+import {
+  Panel,
+  PanelBody,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  PanelTitles,
+} from "@/components/ui/panel";
+import { count, stampUtc } from "@/features/g34a/stats";
+import { DisputeFilingForm } from "@/features/provider-disputes/dispute-filing-form";
+import {
+  WhatHappensIfYouDoNothing,
+  WhatIsNotHappening,
+} from "@/features/provider-slash-case/assurances";
+import { CaseContext } from "@/features/provider-slash-case/context";
+import { Measurement } from "@/features/provider-slash-case/measurement";
+import { StatusHeader } from "@/features/provider-slash-case/status-header";
+import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
+import { getSlashProposalTimeline } from "@/services/provider-disputes.service";
+import {
+  acknowledgeSlashProposal,
+  getSlashProposalCaseDetail,
+} from "@/services/provider-slash-cases.service";
+
+/**
+ * The slash proposal case — route
+ * `/provider/cases/[proposalId]`.
+ *
+ * One case: what is being taken, on what evidence, by when, and what a
+ * provider can do about it. The frame's order is the argument and is kept
+ * exactly — the status and both clocks, the three figures, **what is not
+ * happening**, **what happens if you do nothing**, the context that would win
+ * a dispute, the actions, and only then the arithmetic. The measurement is
+ * last on purpose: a provider reads what is being done to their business
+ * before they read the sum that justifies it.
+ *
+ * ## Reads
+ *
+ * - `GET /providers/me/slash-proposals/:id` — the whole case in one response
+ *   (`SlashProposalCaseDto`). Typed as `SlashProposalCaseDetail`, which
+ *   **extends** the dispute filing screen's `SlashProposalCase` rather than restating it, and
+ *   shares that screen's cache key so mounting the filing form inline below
+ *   reuses this fetch.
+ * - `GET /providers/me/slash-proposals/:id/timeline` — the case history.
+ *   Rendered as a short strip, not as the dispute case screen's full case-state screen: the
+ *   restoration record it also returns belongs to that screen and is not
+ *   drawn twice here.
+ *
+ * ## Writes
+ *
+ * - `POST …/acknowledge` — records that the provider has seen the case. It
+ *   moves **no clock**, and the button says so, because a control that looks
+ *   like it might buy time and does not is worse than no control.
+ * - `POST …/dispute` — through `DisputeFilingForm`, which another agent owns
+ *   at `@/features/provider-disputes/dispute-filing-form` and whose own
+ *   docstring says it is exported separately so this screen can mount it
+ *   inline. It is not rebuilt here.
+ *
+ * Both writes answer with the whole case, which is seeded straight into the
+ * cache with `setQueryData`. A refetch would be wrong rather than merely
+ * wasteful: provider `GET`s are HTTP-cached for 10s with an hour of
+ * stale-while-revalidate, so a read immediately after a write is served the
+ * pre-write body.
+ *
+ * ## What this screen does NOT render, and why
+ *
+ * Everything below is a control or a figure the frame draws that no field on
+ * the wire supports. Each is absent rather than approximated.
+ *
+ * - **"Download pack"** — no endpoint returns a downloadable evidence pack for
+ *   a window. `evidenceVerdictCount` is a count and nothing more.
+ * - **"Open evidence (612 verdicts)"** as a link. The count is real and is
+ *   rendered; the destination is not. `GET /providers/me/verdicts/:id/evidence`
+ *   is per **verdict**, and this case is about a window — there is no route
+ *   that opens "the evidence for window w_6". The count therefore renders as a
+ *   figure, and the binding's SLA screen (which does read that window) is
+ *   offered as the nearest real destination.
+ * - **"Re-derive yourself"**, **"View diff"** — see `measurement.tsx` and
+ *   `context.tsx`.
+ * - **"(dashboard)"** next to the acknowledgement stamp — the channel is not
+ *   recorded; see `status-header.tsx`.
+ * - **"Payouts are final."** — see `assurances.tsx`.
+ *
+ * ## Not this screen
+ *
+ * The operator's side of the same case — claiming it, adjudicating it,
+ * seconding a decision — is a different surface behind a different guard. A
+ * provider can see their case, acknowledge it and object to it; nothing here
+ * decides it.
+ */
+
+const CASE_KEY = (proposalId: string) => ["provider", "slash-proposal-case", proposalId];
+
+/** The statuses in which objecting is still possible — the button is drawn only then. */
+const DISPUTABLE: readonly string[] = ["PROPOSED"];
+
+export default function SlashProposalCasePage() {
+  const params = useParams<{ proposalId: string }>();
+  const proposalId = params.proposalId;
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [filing, setFiling] = React.useState(false);
+
+  const caseQuery = useQuery({
+    queryKey: CASE_KEY(proposalId),
+    queryFn: () => getSlashProposalCaseDetail(proposalId),
+    retry: 0,
+  });
+  const data: SlashProposalCaseDetail | undefined = caseQuery.data;
+
+  const timelineQuery = useQuery({
+    queryKey: ["provider", "slash-proposal-timeline", proposalId],
+    queryFn: () => getSlashProposalTimeline(proposalId),
+    retry: 0,
+  });
+
+  const acknowledge = useMutation({
+    mutationFn: () => acknowledgeSlashProposal(proposalId),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(CASE_KEY(proposalId), updated);
+      void queryClient.invalidateQueries({
+        queryKey: ["provider", "slash-proposal-timeline", proposalId],
+      });
+    },
+  });
+
+  // ── Not found / not yours ────────────────────────────────────────────────
+  //
+  // A case in another organization answers the SAME 404 a non-existent id
+  // does — deliberately, and the copy must not distinguish them.
+  if (caseQuery.isError) {
+    return (
+      <Banner
+        tone="danger"
+        title="No case with this id."
+        description="Either no slash proposal has this id, or it does not belong to your organisation. Both answer the same way, so there is nothing more this screen can tell you."
+      />
+    );
+  }
+
+  if (!data) {
+    return (
+      <p className="text-body-13 text-03">Loading the case…</p>
+    );
+  }
+
+  const { proposal } = data;
+  const canDispute = DISPUTABLE.includes(proposal.status) && proposal.disputeId === null;
+  const events = timelineQuery.data?.events ?? [];
+
+  /*
+    ONE instant, deliberately. There are two execution deadlines behind this
+    case — the platform's `earliestExecutionAt` and, once the backend mirrors it, the
+    chain's own `chainExecutableAt` — and they are not the same moment, because
+    the on-chain proposal is made after delivery stamps the response window. A
+    provider has no action keyed to the chain clock, and two dates minutes apart
+    would only invite planning against the earlier one.
+
+    So this takes the LATER of the two. `chainExecutableAt` is absent until the
+    backend mirrors it, and `NEGATIVE_INFINITY` is the sentinel that makes an absent chain
+    clock lose the comparison rather than win it — as does an unparseable one,
+    since every comparison against `NaN` is false. The consequence is the one
+    that matters: this date can only ever overstate the wait, never understate
+    it. Nothing is taken from stake before both deadlines have passed.
+
+    The winner is carried as the original string rather than re-serialised, so
+    an unparseable value reaches `stampUtc` and renders as a dash, exactly as it
+    would anywhere else on this screen, instead of throwing on `toISOString`.
+
+    Not a `useMemo` — this component returns early above, so a hook here would
+    change hook order between renders. It is two `Date` parses.
+  */
+  const offChainExecutionMs = new Date(proposal.clocks.earliestExecutionAt).getTime();
+  const onChainExecutionMs = proposal.clocks.chainExecutableAt
+    ? new Date(proposal.clocks.chainExecutableAt).getTime()
+    : Number.NEGATIVE_INFINITY;
+  const nothingBeforeAt =
+    onChainExecutionMs > offChainExecutionMs && proposal.clocks.chainExecutableAt
+      ? proposal.clocks.chainExecutableAt
+      : proposal.clocks.earliestExecutionAt;
+
+  return (
+    <>
+      {/* ── Page header ──────────────────────────────────────────────── */}
+      <header className="flex w-full min-w-0 flex-col gap-0.5">
+        <h1 className="truncate text-heading-sm text-01 tablet:text-heading-md">
+          Proposed penalty · {proposal.bindingLabel}
+        </h1>
+        <p className="font-mono text-mono-12 text-03">
+          case {proposal.id} · proposed {stampUtc(proposal.clocks.proposedAt)} UTC
+        </p>
+      </header>
+
+      {/* ── Status header, both clocks, three figures ─────────────────── */}
+      <StatusHeader data={data} />
+
+      {/* ── The one deadline that binds your stake ────────────────────── */}
+      <p className="text-body-13 leading-[1.55] text-02">
+        Nothing can be taken from your stake before{" "}
+        <span className="font-mono text-mono-13 font-semibold text-01">
+          {stampUtc(nothingBeforeAt)} UTC
+        </span>
+        . Every deadline this case runs on has passed by then, so this is the date to plan
+        against — the wait can be longer than it, never shorter.
+      </p>
+
+      {/* ── The two panels the frame puts before the arithmetic ───────── */}
+      <div className="flex w-full flex-col gap-5 tablet:flex-row tablet:items-start">
+        <div className="flex w-full min-w-0 flex-1 flex-col gap-5">
+          <WhatIsNotHappening data={data} />
+          <WhatHappensIfYouDoNothing data={data} />
+        </div>
+        <div className="w-full min-w-0 flex-1">
+          <CaseContext data={data} />
+        </div>
+      </div>
+
+      {/* ── Actions ──────────────────────────────────────────────────── */}
+      <section className="flex w-full flex-col gap-3 tablet:flex-row tablet:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-01 bg-01 px-3.5 py-2.5">
+          <FolderOpen aria-hidden="true" className="size-4 shrink-0 text-03" />
+          {/* The count is real; the destination is not. See the file header. */}
+          <p className="min-w-0 flex-1 text-body-13 text-02">
+            {`${count(data.evidenceVerdictCount)} verdict${
+              data.evidenceVerdictCount === 1 ? "" : "s"
+            } sealed in this window's evidence pack. ${
+              data.evidenceVerdictCount === 0
+                ? "Nothing has been sealed for it, so there is no pack to open."
+                : "No route opens a whole window's pack yet — the binding's SLA screen is the nearest view of it."
+            }`}
+          </p>
+        </div>
+
+        {proposal.clocks.acknowledgedAt === null ? (
+          <Button
+            variant="secondary"
+            icon={<Check aria-hidden="true" />}
+            loading={acknowledge.isPending}
+            disabled={acknowledge.isPending}
+            onClick={() => acknowledge.mutate()}
+          >
+            Acknowledge
+          </Button>
+        ) : null}
+
+        {canDispute ? (
+          <Button
+            variant={filing ? "secondary" : "primary"}
+            icon={filing ? <X aria-hidden="true" /> : <Scale aria-hidden="true" />}
+            onClick={() => setFiling((open) => !open)}
+          >
+            {filing ? "Close" : "Dispute"}
+          </Button>
+        ) : null}
+      </section>
+
+      {proposal.clocks.acknowledgedAt !== null ? (
+        <p className="text-body-xs text-03">
+          Acknowledged {stampUtc(proposal.clocks.acknowledgedAt)} UTC. Acknowledging records that
+          you have seen the case; it does not move any deadline in either direction.
+        </p>
+      ) : null}
+
+      {acknowledge.isError ? (
+        <Banner
+          tone="danger"
+          title="That could not be recorded."
+          description="The acknowledgement was not saved. Nothing else about the case has changed."
+        />
+      ) : null}
+
+      {/* ── Dispute filing, mounted inline ───────────────────────────── */}
+      {filing ? (
+        <DisputeFilingForm
+          proposalId={proposalId}
+          onCancel={() => setFiling(false)}
+          onFiled={(result) => {
+            setFiling(false);
+            void queryClient.invalidateQueries({ queryKey: CASE_KEY(proposalId) });
+            const disputeId = result.proposal.disputeId;
+            router.push(disputeId ? `/provider/disputes/${disputeId}` : "/provider/disputes");
+          }}
+        />
+      ) : null}
+
+      {/* ── The measurement ──────────────────────────────────────────── */}
+      <Measurement data={data} />
+
+      {/* ── Case history ─────────────────────────────────────────────── */}
+      <Panel>
+        <PanelHeader>
+          <PanelTitles>
+            <PanelTitle>Case history</PanelTitle>
+            <PanelDescription>every event on this case, ours as well as yours</PanelDescription>
+          </PanelTitles>
+        </PanelHeader>
+        <PanelBody>
+          {events.length === 0 ? (
+            <p className="px-5 py-4 text-body-13 text-02">
+              {timelineQuery.isError
+                ? "The history could not be loaded. The case itself above is unaffected."
+                : "Nothing has happened on this case yet."}
+            </p>
+          ) : (
+            <ol className="flex w-full flex-col">
+              {events.map((event) => (
+                <li
+                  key={event.id}
+                  className="flex w-full flex-col gap-1 border-t border-01 px-5 py-3 first:border-t-0 tablet:flex-row tablet:items-baseline tablet:gap-3.5"
+                >
+                  <span className="shrink-0 font-mono text-mono-12 text-03">
+                    {stampUtc(event.occurredAt)}
+                  </span>
+                  <span className="w-[150px] shrink-0 font-mono text-mono-12 font-semibold text-01">
+                    {event.kind}
+                  </span>
+                  {/* Backend-produced sentence — rendered as sent, never reconstructed. */}
+                  <span className="min-w-0 flex-1 text-body-13 text-02">{event.summary}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </PanelBody>
+      </Panel>
+    </>
+  );
+}

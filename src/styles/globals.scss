@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /**
+   * The document scrolls. Several designed screens are taller than the
+   * viewport at their own breakpoint (the operator console is 1440x1500,
+   * the mapping tester 1440x1470), so a 100vh/overflow-hidden shell would
+   * clip them. Panes that need their own scroll region opt in locally.
+   */
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    min-height: 100vh;
+    color: var(--text-01);
+    background-color: var(--bg-01);
+    font-size: 16px;
+    font-style: normal;
+    font-weight: 400;
+    line-height: 24px;
+  }
+
+  * {
+    border-color: var(--border-02);
+  }
+}
+
+@layer utilities {
+  /* Remove number input arrows for Chrome, Safari, Edge */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  /* Remove number input arrows for Firefox */
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  .animate-reverse {
+    animation-direction: reverse;
+  }
+
+  /* Custom scrollbar styles */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--bg-02);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-03);
+    border-radius: var(--radius-full);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-03);
+  }
+
+  * {
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: var(--border-03) var(--bg-02); /* Firefox */
+  }
+}
+
+/* Toast Progress Bar Styles */
+.toast-with-progress {
+  position: relative;
+  overflow: hidden;
+}
+
+.toast-with-progress::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 0%;
+  background: var(--primary-500);
+  animation: toast-progress 3s linear forwards;
+  z-index: 1;
+}
+
+.toast-success::after {
+  background: var(--success-500);
+}
+
+.toast-error::after {
+  background: var(--danger-500);
+}
+
+.toast-warning::after {
+  background: var(--warning-500);
+}
+
+.toast-info::after {
+  background: var(--info-500);
+}
+
+.toast-loading::after {
+  background: var(--primary-500);
+}
+
+@keyframes toast-progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}

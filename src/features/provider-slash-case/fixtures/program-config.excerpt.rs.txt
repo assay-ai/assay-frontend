@@ -1,0 +1,27 @@
+// Trimmed excerpt of `programs/x402-payment/src/state.rs` from the assay-solana
+// repository. It is kept here so `distribution.test.ts` can pin the UI's copy of the slash
+// split without a checkout of the program. Refresh it whenever the program's `Config` changes.
+
+#[account]
+#[derive(InitSpace)]
+pub struct Config {
+    // ... fields elided ...
+    /// The harmed agent's compensating share of a penalty. Must be non-zero: a penalty split
+    /// that compensates nobody is a transfer to the platform.
+    pub slash_agent_bps: u16,
+    /// The platform's share of a penalty. `10_000 - agent - platform` stays with the provider.
+    pub slash_platform_bps: u16,
+    // ... fields elided ...
+}
+
+impl Config {
+    /// The provider's own share of a penalty. Derived rather than stored, so it cannot
+    /// disagree with the other two.
+    pub fn slash_provider_bps(&self) -> u16 {
+        10_000u16
+            .saturating_sub(self.slash_agent_bps)
+            .saturating_sub(self.slash_platform_bps)
+    }
+
+    // ... methods elided ...
+}
