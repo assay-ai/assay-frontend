@@ -97,7 +97,7 @@ const STAKE_ADDRESS = "0x9F2c8A1e5D7b30C4f6A8e2B915D3c7E04A6b1F82";
 /** The console credential this provider's own actions are stamped with. */
 const CONSOLE_CREDENTIAL = "cred_8f3a1d0c";
 
-const EGRESS_IPS = ["203.0.113.21", "203.0.113.22", "203.0.113.9"];
+const EGRESS_IPS = ["203.0.113.21", "203.0.113.22", "198.51.100.9"];
 
 /** CAIP-10 for the payout address. Built lazily — see the module docstring. */
 function payoutAccount(): string {
