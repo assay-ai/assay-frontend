@@ -45,13 +45,18 @@ RUN pnpm run build
 FROM base AS runner
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
+# `next start` writes its image/fetch cache under .next/cache, so that tree is
+# the one path the unprivileged user below must own.
+COPY --from=builder --chown=pn:pn /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.js ./
 COPY --from=builder /app/package.json ./
 ENV NODE_ENV=production
 ENV SSR_MODE=1
 ENV NODE_OPTIONS=--max-old-space-size=2048
+# Drop root before serving. `pn` (uid 1000) is the unprivileged user the base
+# image ships; everything else under /app only needs to be readable.
+USER pn
 # The image serves on 3000 (the `next start` default). NEXT_PUBLIC_BASE_URL is
 # inlined at build time and must match the published URL, port included.
 EXPOSE 3000

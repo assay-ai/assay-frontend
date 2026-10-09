@@ -10,7 +10,7 @@ const CACHE_FILE = path.join(__dirname, ".icon-update-cache.json");
  */
 function calculateFileHash(filePath) {
   const content = fs.readFileSync(filePath, "utf8");
-  return crypto.createHash("md5").update(content).digest("hex");
+  return crypto.createHash("sha256").update(content).digest("hex");
 }
 
 /**
