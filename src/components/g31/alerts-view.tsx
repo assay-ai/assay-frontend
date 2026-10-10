@@ -266,9 +266,11 @@ export function AlertsView() {
     if (!configuringChannel) return;
     const existing = channelByType.get(configuringChannel);
     const trimmed = draftDestination.trim();
+    // The API refuses a blank destination (400): a channel is turned off with its toggle.
+    if (trimmed === "") return;
     channelMutation.mutate({
       channel: configuringChannel,
-      destination: trimmed === "" ? null : trimmed,
+      destination: trimmed,
       enabled: existing?.enabled ?? true,
     });
   }
@@ -539,7 +541,7 @@ export function AlertsView() {
             placeholder={configuringMeta?.placeholder}
             value={draftDestination}
             onChange={(e) => setDraftDestination(e.currentTarget.value)}
-            hint="Leave blank and save to clear it — an empty destination is stored as unconfigured, not as an empty string."
+            hint="A destination is required. To stop receiving this channel, turn it off with its toggle instead."
           />
           <DialogFooter>
             <Button variant="secondary" type="button" onClick={() => setConfiguringChannel(null)}>
@@ -549,6 +551,7 @@ export function AlertsView() {
               variant="primary"
               type="button"
               loading={channelMutation.isPending}
+              disabled={draftDestination.trim() === ""}
               onClick={saveDestination}
             >
               Save
