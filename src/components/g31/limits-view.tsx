@@ -650,16 +650,16 @@ export function LimitsView() {
               </PanelBody>
             </Panel>
 
-            {/* ASK — stored, not yet enforced */}
+            {/* ASK — refused until approvals exist */}
             <Panel>
               <PanelHeader>
                 <PanelTitles>
-                  <PanelTitle>ASK — stored, not enforced</PanelTitle>
+                  <PanelTitle>ASK — refused until approvals exist</PanelTitle>
                   <PanelDescription className="whitespace-normal">
-                    written by every save below; nothing holds a call for approval yet
+                    a call above this amount is refused, because nobody can approve it yet
                   </PanelDescription>
                 </PanelTitles>
-                <StatusPill label="NOT ENFORCED" tone="neutral" />
+                <StatusPill label="REFUSES ABOVE" tone="warning" />
               </PanelHeader>
               <PanelBody className="px-5 pb-4 pt-2">
                 <KeyValueRow
@@ -673,11 +673,11 @@ export function LimitsView() {
                 <div className="flex items-start gap-2 pt-2.5">
                   <Info aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-03" />
                   <p className="text-body-xs text-03">
-                    This value is versioned and saved like every other limit on this screen, but
-                    nothing in the backend enforces it yet: there is no <code>AWAITING_APPROVAL</code>{" "}
-                    intent state and no <code>POLICY_APPROVAL_TIMEOUT</code> — neither is built. A
-                    call above this amount spends normally today; setting it does not yet hold
-                    anything for a human.
+                    There is no approval flow yet — no <code>AWAITING_APPROVAL</code> state and no
+                    approval link — so a call priced above this amount is refused with{" "}
+                    <code>MCP_APPROVAL_REQUIRED</code> instead of being held for a human. An approval
+                    nobody can give resolves to deny, never allow. Raise or clear the value to let
+                    such calls through.
                   </p>
                 </div>
               </PanelBody>
