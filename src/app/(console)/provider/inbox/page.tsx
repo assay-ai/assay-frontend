@@ -91,20 +91,20 @@ export default function ProviderInboxPage() {
   return (
     <>
       {/* Page Header. */}
-      <header className="flex w-full items-center justify-between gap-4">
+      <header className="flex w-full flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">Inbox</h1>
           {/*
             The frame writes "2 items · …". The count is live; the clause after
             it is the design's, word for word.
           */}
-          <p className="truncate font-mono text-mono-12 text-03">
+          <p className="font-mono text-mono-12 text-03 sm:truncate">
             {formatCount(items.length)} item{items.length === 1 ? "" : "s"} · only things with a
             clock or a decision — a read/unread list of things that happened is the verdict feed
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/*
             `POST /notifications/read-all` exists on the API and has **no
             function in `src/services/account.service.ts`**, so this control cannot act, and it says so rather

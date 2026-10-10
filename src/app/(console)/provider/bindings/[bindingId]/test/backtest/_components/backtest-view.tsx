@@ -247,13 +247,13 @@ export function BacktestView({ bindingId }: { bindingId: string }) {
   return (
     <>
       {/* Page Header. */}
-      <div className="flex w-full items-center justify-between gap-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <div className="flex w-full flex-wrap items-center justify-between gap-4">
+        <div className="flex min-w-0 flex-1 basis-[16rem] flex-col gap-0.5">
           {/* 23px/600/-0.5 in the design; `heading-md` (24px) is the nearest step. */}
-          <h1 className="truncate text-heading-md text-01">{title}</h1>
-          <p className="font-mono text-mono-12 text-03">{subtitle}</p>
+          <h1 className="break-all text-heading-md text-01 tablet:truncate">{title}</h1>
+          <p className="break-words font-mono text-mono-12 text-03">{subtitle}</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* Both actions act on a run. With no run there is nothing to save
               and nothing to carry into the workbench, so both are disabled
               rather than wired to a route that would receive nothing. */}

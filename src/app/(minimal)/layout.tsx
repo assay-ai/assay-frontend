@@ -15,62 +15,46 @@ import { MinimalBar } from "@/components/layout/minimal-bar";
  * | Provider setup      | `/provider/setup`        |
  * | Binding and traffic | `/provider/traffic`      |
  * | Verdicts and flags  | `/provider/flags`        |
- * | Shadow mode         | `/provider/shadow-mode`  |
  *
- * ## Why the bar's copy lives in the layout
+ * ## The bar's copy
  *
- * Both text slots are per-screen, and both are static copy in the design, so
- * they are a pathname map here — the same shape `(main)/layout.tsx` already
- * uses for its mobile titles. A screen gets the correct bar for free and
- * writes no shell code.
- *
- * That map is the seam for live data. "as of 12:41 UTC" and "612 in the last
- * 24h" are placeholders a screen will eventually want to compute; when one
- * does, lift `status` out of this table rather than rendering a second bar.
+ * The left slot is a pathname map of real screen names; the design's sample
+ * facts (a demo company, a step counter, timestamps, counts) are not rendered
+ * because nothing computes them. There is no shadow-mode route.
  *
  * ## Body
  *
  * `layout vertical`, `gap 16`, `padding [22, 26]` on the provider setup, binding traffic and
- * verdicts-and-flags screens; the page ground is `$bg-02` on all five
+ * verdicts-and-flags screens; the page ground is `$bg-02` on the four
  * frames. **The provider view screen's body diverges**: `gap 18`, `padding [24, 28]`.
  * The layout applies the three-way majority and `/provider/view` overrides it
  * on its own root element — do not change the default for it.
  */
 
-interface BarCopy {
-  /** Verbatim from the frame's own Bar copy. */
-  context: string;
-  status?: string;
-}
-
-const BAR_COPY: Record<string, BarCopy> = {
-  "/provider/view": { context: "Provider view · provider.example", status: "as of 12:41 UTC" },
-  "/provider/setup": { context: "Provider setup · provider.example", status: "step 2 of 4" },
-  "/provider/traffic": {
-    context: "provider.example · binding ais_lookup",
-    status: "as of 12:41 UTC",
-  },
-  "/provider/flags": {
-    context: "provider.example · verdicts",
-    status: "612 in the last 24h",
-  },
-  "/provider/shadow-mode": {
-    context: "provider.example · shadow mode",
-    status: "August 2026",
-  },
+/*
+  Only what is true of the route itself. The design's frames carried sample
+  facts ("provider.example", "step 2 of 4", "as of 12:41 UTC", "612 in the last
+  24h") that nothing computes, so they are not rendered; a screen that wants a
+  live status in the bar has to lift real data here first.
+*/
+const BAR_CONTEXT: Record<string, string> = {
+  "/provider/view": "Provider view",
+  "/provider/setup": "Provider setup",
+  "/provider/traffic": "Binding and traffic",
+  "/provider/flags": "Verdicts",
 };
 
-function barCopyFor(pathname: string): BarCopy {
-  if (BAR_COPY[pathname]) return BAR_COPY[pathname];
-  const match = Object.keys(BAR_COPY)
+function contextFor(pathname: string): string {
+  if (BAR_CONTEXT[pathname]) return BAR_CONTEXT[pathname];
+  const match = Object.keys(BAR_CONTEXT)
     .filter((href) => pathname.startsWith(href))
     .sort((a, b) => b.length - a.length)[0];
-  return match ? BAR_COPY[match] : { context: "provider.example" };
+  return match ? BAR_CONTEXT[match] : "Provider";
 }
 
 export default function MinimalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { context, status } = barCopyFor(pathname);
+  const context = contextFor(pathname);
   // /login has no signed-in tenant to show: an unauthenticated visitor must
   // never see a seeded demo company's name and avatar next to a sign-in
   // form. Every other route in this group keeps the bar unchanged.
@@ -84,7 +68,7 @@ export default function MinimalLayout({ children }: { children: React.ReactNode 
   return (
     <div className="flex min-h-screen flex-col bg-02">
       {!isLogin && (
-        <MinimalBar context={context} status={status} avatarInitials="PE" avatarName="provider.example" />
+        <MinimalBar context={context} />
       )}
       {/* This group is not just /login: /provider/setup, /provider/view,
           /provider/traffic and /provider/flags are all authenticated screens

@@ -74,6 +74,7 @@ const OVERRIDABLE: ReceiptState[] = [
   "MISAPPLIED",
   "SYSTEM_ERROR",
   "REQUEST_ERROR",
+  "EXPIRED",
 ];
 
 function short(id: string): string {

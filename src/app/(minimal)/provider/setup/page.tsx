@@ -76,7 +76,15 @@ export default function ProviderSetupPage() {
     saveError,
     saved,
     egressIps,
+    terms,
   } = setup;
+
+  // Both come from the registration state, not from copy: the step count is
+  // what the server reports and the minimum is the published stake row.
+  const stepCount = steps.length;
+  const stepWord = ["", "One", "Two", "Three", "Four", "Five", "Six"][stepCount] ?? String(stepCount);
+  const stakeMinimum =
+    terms.commercialTerms.find((term) => term.key === "stakeRequired")?.value ?? null;
 
   const statusOf = (key: string) => steps.find((s) => s.key === key)?.status ?? "NOT_STARTED";
 
@@ -87,7 +95,7 @@ export default function ProviderSetupPage() {
         <div className="flex min-w-0 flex-col gap-[3px]">
           <h1 className="text-heading-md text-01">Set up your provider account</h1>
           <p className="text-body-sm text-02">
-            Four steps, then you write your binding and publish it yourself. You do not build
+            {stepCount > 0 ? `${stepWord} ${stepCount === 1 ? "step" : "steps"}` : "A few steps"}, then you write your binding and publish it yourself. You do not build
             anything against our API — you need an endpoint and a wallet.
           </p>
         </div>
@@ -197,7 +205,7 @@ export default function ProviderSetupPage() {
               <PanelTitles>
                 <PanelTitle>What happens next</PanelTitle>
                 <PanelDescription className="whitespace-normal">
-                  after you finish these three steps
+                  after you finish {stepCount > 0 ? `these ${stepCount} steps` : "these steps"}
                 </PanelDescription>
               </PanelTitles>
             </PanelHeader>
@@ -205,7 +213,9 @@ export default function ProviderSetupPage() {
               <NextStep
                 ordinal="1"
                 title="You register and stake"
-                body="Open registration. $100 minimum stake before paid traffic; the free path needs none."
+                body={`Open registration. ${
+                  stakeMinimum ? `${stakeMinimum} stake` : "A minimum stake"
+                } before paid traffic; the free path needs none.`}
               />
               <NextStep
                 ordinal="2"
@@ -253,7 +263,7 @@ export default function ProviderSetupPage() {
 
       {registered && allDone ? (
         <Outcome tone="teal" icon={<CircleCheck />}>
-          All four steps are done. You are registered as a provider.
+          {stepCount > 0 ? `All ${stepCount} steps are done.` : "Setup is done."} You are registered as a provider.
         </Outcome>
       ) : null}
     </>

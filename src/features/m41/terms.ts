@@ -25,8 +25,8 @@ import type { ProviderTermsSummary } from "@/interfaces";
  * shows that refusal — nobody is recorded as having accepted a version they
  * were not shown.
  *
- * Two rows already differ from the server: `stakeRequired` reads "$100
- * minimum" here and "$50.00 minimum" on the wire. See the report.
+ * `stakeRequired` mirrors the wire ("$50.00 minimum"); the setup screen reads
+ * the published value, never a literal.
  */
 export const DESIGN_TERMS: ProviderTermsSummary = {
   providerAgreementVersion: "v1.0",
@@ -47,7 +47,7 @@ export const DESIGN_TERMS: ProviderTermsSummary = {
     {
       key: "stakeRequired",
       label: "Stake required",
-      value: "$100 minimum",
+      value: "$50.00 minimum",
       caption: "before paid traffic — the free path needs none",
     },
     {

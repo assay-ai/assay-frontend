@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { samplingExplainerCopy } from "./receipt-state";
+import { STATE_CARDS, deriveReceiptState, samplingExplainerCopy } from "./receipt-state";
 import type { Receipt } from "./wire";
 
 const receipt = (sampling: Receipt["sampling"]) => ({ sampling }) as Receipt;
@@ -17,5 +17,26 @@ describe("samplingExplainerCopy", () => {
     const copy = samplingExplainerCopy(receipt({ rate: 0.008, display: "1 in 125" }), "$0.0010");
     expect(copy.body).toContain("At $0.0010 a call, judging every one would cost more");
     expect(copy.tail).toBeUndefined();
+  });
+});
+
+describe("deriveReceiptState — expired intents", () => {
+  const base = {
+    classification: "REQUEST_ERROR",
+    verdict: null,
+    chargedPrice: { amount: "0", asset: "x", decimals: 6 },
+  };
+
+  it("reports EXPIRED even when the row carries a REQUEST_ERROR classification", () => {
+    expect(deriveReceiptState({ ...base, status: "EXPIRED" } as unknown as Receipt)).toBe("EXPIRED");
+    expect(deriveReceiptState({ ...base, status: "VOIDED" } as unknown as Receipt)).toBe(
+      "REQUEST_ERROR",
+    );
+  });
+
+  it("explains expiry as not charged with the hold released", () => {
+    expect(STATE_CARDS.EXPIRED.sentence).toMatch(/not charged/i);
+    expect(STATE_CARDS.EXPIRED.sentence).toMatch(/released/i);
+    expect(STATE_CARDS.EXPIRED.sentence).not.toMatch(/malformed/i);
   });
 });

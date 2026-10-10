@@ -7,6 +7,14 @@ import { useParams } from "next/navigation";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Panel,
@@ -258,9 +266,13 @@ export default function LiveSlaPositionPage() {
     queryClient.setQueryData(["provider", "tool-binding", bindingId], updated);
     void queryClient.invalidateQueries({ queryKey: ["provider", "tool-bindings", "sidebar"] });
   };
+  const [confirmingPause, setConfirmingPause] = React.useState(false);
   const pause = useMutation({
     mutationFn: () => pauseToolBinding(bindingId),
-    onSuccess: applyWrite,
+    onSuccess: (updated) => {
+      setConfirmingPause(false);
+      applyWrite(updated);
+    },
   });
   const resume = useMutation({
     mutationFn: () => resumeToolBinding(bindingId),
@@ -299,7 +311,15 @@ export default function LiveSlaPositionPage() {
     return `This window has reached the sample gate and is within its effective threshold.`;
   })();
 
-  const projectionLine = position
+  const windowClosed = current?.status === "CLOSED";
+  // A closed window has final figures, not a projection.
+  const projectionLine = windowClosed
+    ? `final failure rate ${
+        current!.observedFailureRate == null ? DASH : percent(current!.observedFailureRate)
+      } over ${count(current!.verifiedCalls)} verified calls${
+        current!.outcome ? ` · ${current!.outcome.replace(/_/g, " ").toLowerCase()}` : ""
+      }`
+    : position
     ? `projected at close ${percent(position.projectedFailureRate)} (± ${percent(
         position.toleranceAtClose,
         1
@@ -334,9 +354,8 @@ export default function LiveSlaPositionPage() {
         variant={full ? "danger" : "secondary"}
         className={full ? "min-w-0 flex-1 px-3.5 py-3" : undefined}
         icon={<Pause aria-hidden="true" />}
-        loading={pause.isPending}
         disabled={busy || !binding}
-        onClick={() => pause.mutate()}
+        onClick={() => setConfirmingPause(true)}
       >
         Pause binding
       </Button>
@@ -358,7 +377,7 @@ export default function LiveSlaPositionPage() {
             The layout is not this screen's to change, so the identity stays
             here and steps down a size below tablet rather than being lost.
           */}
-          <h1 className="truncate text-heading-sm text-01 tablet:text-heading-md">
+          <h1 className="break-all text-heading-sm text-01 tablet:truncate tablet:text-heading-md">
             {current
               ? `SLA position · ${shortBindingId(bindingId)} · window ${current.label} ${
                   current.status === "OPEN" ? "in flight" : "closed"
@@ -366,7 +385,11 @@ export default function LiveSlaPositionPage() {
               : `SLA position · ${shortBindingId(bindingId)}`}
           </h1>
           <p className="font-mono text-mono-12 text-03 tablet:truncate">
-            {current && nowMs !== null
+            {current && windowClosed
+              ? `opened ${stampUtc(current.openedAt)} · closed ${
+                  current.closedAt ? `${stampUtc(current.closedAt)} UTC` : DASH
+                } at ${count(current.verifiedCalls)} verified calls`
+              : current && nowMs !== null
               ? `opened ${stampUtc(current.openedAt)} · ${elapsed(current.openedAt, nowMs)} elapsed · closes at ${count(
                   current.minVerifiedCalls
                 )} verified calls or ${stampUtc(current.deadlineAt)} UTC`
@@ -529,6 +552,45 @@ export default function LiveSlaPositionPage() {
         </Button>
         {pauseButton(true)}
       </div>
+
+      {confirmingPause ? (
+        <Dialog open onOpenChange={(open) => !open && setConfirmingPause(false)}>
+          <DialogContent className="max-w-[460px]">
+            <DialogHeader>
+              <DialogTitle>Pause binding</DialogTitle>
+              <DialogDescription className="text-body-13 text-02">
+                {openWindow
+                  ? `Window ${openWindow.label} keeps the ${count(openWindow.verifiedCalls)} verified calls it has already accrued. No further calls accrue to it while this binding is paused. There is no routing penalty and nothing already earned changes.`
+                  : "No window is accruing for this binding right now. There is no routing penalty and nothing already earned changes."}
+              </DialogDescription>
+            </DialogHeader>
+
+            {pause.isError ? (
+              <p className="text-body-13 text-danger-500">
+                This binding could not be paused. It may already have stopped serving.
+              </p>
+            ) : null}
+
+            <DialogFooter className="gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setConfirmingPause(false)}
+                disabled={pause.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                icon={<Pause aria-hidden="true" />}
+                loading={pause.isPending}
+                onClick={() => pause.mutate()}
+              >
+                Pause binding
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </>
   );
 }

@@ -615,14 +615,14 @@ export default function ProviderExitPage() {
   return (
     <>
       {/* Page Header — row, gap 16, space-between, centred. */}
-      <header className="flex w-full items-center justify-between gap-4">
+      <header className="flex w-full flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">Leaving</h1>
           <p className="font-mono text-mono-12 text-03">
             nothing here is a lock-up on your earnings — those are paid on the normal schedule
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <Button
             variant="secondary"
             icon={<Download />}
@@ -728,7 +728,9 @@ export default function ProviderExitPage() {
         </PanelHeader>
         {/* Body — padding [6, 10, 10, 10]. */}
         <PanelBody className="px-2.5 pb-2.5 pt-1.5">
-          <Table columns={COLUMNS} rows={rows} caption="What has to close first" />
+          <div className="min-w-0 overflow-x-auto">
+            <Table columns={COLUMNS} rows={rows} caption="What has to close first" />
+          </div>
         </PanelBody>
       </Panel>
 
@@ -805,6 +807,8 @@ export default function ProviderExitPage() {
  * base58 signature produced elsewhere is the only route that provider has. It
  * moves behind a disclosure; it does not go away.
  */
+const FIELDS_REQUIRED = "Enter the chain and the wallet address that will hold the stake account.";
+
 function ProveAuthoritySheet({
   open,
   onOpenChange,
@@ -850,6 +854,11 @@ function ProveAuthoritySheet({
 
   const ready = chainId.trim() !== "" && address.trim() !== "";
 
+  // The "enter the chain and the address" message is about empty fields only; drop it as soon as they are filled.
+  React.useEffect(() => {
+    if (ready) setError((current) => (current === FIELDS_REQUIRED ? null : current));
+  }, [ready]);
+
   const challenge = useMutation({
     mutationFn: () => createStakeAuthorityChallenge({ chainId, address: address.trim() }),
     onSuccess: () => setError(null),
@@ -875,9 +884,11 @@ function ProveAuthoritySheet({
   /** Challenge → sign → prove, in one press, without a nonce reaching the screen. */
   async function signAndProve() {
     if (!ready) {
-      setError("Enter the chain and the wallet address that will hold the stake account.");
+      setError(FIELDS_REQUIRED);
       return;
     }
+    // Any earlier validation or press-time message is stale once the fields are valid.
+    setError(null);
 
     /*
       The three signer states are checked BEFORE `createStakeAuthorityChallenge`
@@ -894,8 +905,18 @@ function ProveAuthoritySheet({
       wallets that would be true. Return quietly; the button re-enables the
       moment a chain is known.
     */
-    if (signerState.status === "chain-unknown") return;
-    if (signerState.status === "hydrating") return;
+    if (signerState.status === "chain-unknown") {
+      setError(
+        "That chain is not recognised yet, so no wallet can be matched to it. Check the chain id, or use the offline route below.",
+      );
+      return;
+    }
+    if (signerState.status === "hydrating") {
+      setError(
+        "Still reading the wallets connected in this browser. Press again in a moment, or use the offline route below.",
+      );
+      return;
+    }
     if (signerState.status === "no-wallet") {
       setWallet("no-wallet");
       return;

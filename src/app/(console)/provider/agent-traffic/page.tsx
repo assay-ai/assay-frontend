@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { Banner } from "@/components/ui/banner";
@@ -147,11 +147,22 @@ interface AgentRow extends TableRowData {
 
 function ProviderTrafficPageContent() {
   const searchParams = useSearchParams();
-  const deepLinkedAgentId = searchParams.get("agentId") ?? "";
+  const router = useRouter();
+  const pathname = usePathname();
+  const deepLinkedAgentId = (searchParams.get("agentId") ?? "").trim();
+  // A deep link is validated like Apply is: a bad id is shown inline and never sent.
+  const deepLinkValid = deepLinkedAgentId === "" || looksLikeUuid(deepLinkedAgentId);
 
   const [agentInput, setAgentInput] = React.useState(deepLinkedAgentId);
-  const [appliedAgentId, setAppliedAgentId] = React.useState(deepLinkedAgentId);
-  const [validationError, setValidationError] = React.useState(false);
+  const [appliedAgentId, setAppliedAgentId] = React.useState(deepLinkValid ? deepLinkedAgentId : "");
+  const [validationError, setValidationError] = React.useState(!deepLinkValid);
+
+  // Keep `?agentId=` in step with the applied filter so a reload re-applies what is on screen.
+  const syncUrl = (agentId: string) => {
+    router.replace(agentId ? `${pathname}?agentId=${encodeURIComponent(agentId)}` : pathname, {
+      scroll: false,
+    });
+  };
 
   // Fixed once per mount rather than recomputed every render, so the query
   // key (and the window shown in the panel description) does not drift
@@ -177,12 +188,14 @@ function ProviderTrafficPageContent() {
     }
     setValidationError(false);
     setAppliedAgentId(trimmed);
+    syncUrl(trimmed);
   };
 
   const clearFilter = () => {
     setAgentInput("");
     setAppliedAgentId("");
     setValidationError(false);
+    syncUrl("");
   };
 
   const traffic = trafficQuery.data;
@@ -325,7 +338,7 @@ function ProviderTrafficPageContent() {
               <Button size="sm" variant="secondary" onClick={applyFilter}>
                 Apply
               </Button>
-              {appliedAgentId ? (
+              {appliedAgentId || validationError ? (
                 <Button size="sm" variant="ghost" onClick={clearFilter}>
                   Clear
                 </Button>

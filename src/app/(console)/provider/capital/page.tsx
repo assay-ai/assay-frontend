@@ -33,6 +33,7 @@ import { formatCount } from "@/features/buyer/period";
 import {
   latestObservedAt,
   stakeActionChain,
+  hasAmbiguousStakeChain,
   stakeChains,
   stakeDecimals,
 } from "@/features/provider-stake/chain-stake";
@@ -380,7 +381,7 @@ export default function ProviderCapitalPage() {
     correct on every screen until it is signed.
   */
   const actionChain = stakeActionChain(data);
-  const ambiguousChain = Boolean(data) && actionChain === null && stakeChains(data).length > 1;
+  const ambiguousChain = Boolean(data) && actionChain === null && hasAmbiguousStakeChain(data);
   const noAuthority = data ? actionChain?.stakeAuthority == null : true;
   /*
     eip155 has no stake account: `X402Stake` keys a mapping on the provider and
@@ -416,7 +417,7 @@ export default function ProviderCapitalPage() {
   return (
     <>
       {/* Page Header — row, gap 16, space-between, centred. */}
-      <header className="flex w-full items-center justify-between gap-4">
+      <header className="flex w-full flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">Capital</h1>
           <p className="font-mono text-mono-12 text-03">
@@ -438,7 +439,7 @@ export default function ProviderCapitalPage() {
               : "chain is authoritative · nothing observed yet"}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/*
             NOT ON THE FRAME, and it renders in every state on purpose: nothing
             on the wire says whether the stake PDA exists (`hasKnownStake` is

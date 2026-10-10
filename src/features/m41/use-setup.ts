@@ -504,7 +504,11 @@ export function useProviderSetup() {
     onSuccess: (result) => {
       setProbe(result);
       setSavedEndpointNow(result.endpoint);
-      queryClient.invalidateQueries({ queryKey: ["provider", "registration"] });
+      // Write the saved value into the cache instead of invalidating: the
+      // refetch would be served the pre-write body from the HTTP cache.
+      queryClient.setQueryData<ProviderRegistrationState>(["provider", "registration"], (old) =>
+        old ? { ...old, registration: { ...old.registration, endpoint: result.endpoint } } : old,
+      );
     },
   });
 
@@ -535,7 +539,8 @@ export function useProviderSetup() {
     authoritative wherever it answers. It cannot answer before registration,
     so the pre-registration column is derived here from the same rules.
   */
-  const savedEndpoint = state?.registration.endpoint ?? savedEndpointNow;
+  // The value saved in this session wins: the cached read can be a stale body.
+  const savedEndpoint = savedEndpointNow ?? state?.registration.endpoint ?? null;
 
   const readSteps: StepView[] = state
     ? state.steps.map((s) => ({ key: s.key, status: s.status }))
