@@ -254,7 +254,7 @@ export default function FundingPage() {
       ) : null}
 
       {balancesQuery.isPending || balancesQuery.error ? null : (
-        <div className="flex w-full flex-col gap-4 desktop:flex-row">
+        <div className="flex w-full flex-col gap-4">
           {/*
             One card per chain, never a total. This block used to
             be a single "Balance" panel filled from `primaryBalance(...)`, i.e.
@@ -287,7 +287,7 @@ export default function FundingPage() {
             />
           </div>
 
-          <Panel className="w-full desktop:w-[520px] desktop:shrink-0">
+          <Panel className="w-full">
             <PanelHeader>
               <PanelTitles>
                 <PanelTitle>Auto top-up</PanelTitle>

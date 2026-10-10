@@ -15,7 +15,6 @@ import { PublicTopBar } from "@/components/layout/public-top-bar";
  * | Economics calculator             | `/calculator`                |
  * | Catalogue and demand             | `/catalogue`                 |
  * | Tool contract and policy         | `/catalogue/[toolId]`        |
- * | Policy library and version diff  | `/catalogue/[toolId]/policy` |
  *
  * The nav item hrefs already live in `public-top-bar.tsx`'s
  * `DEFAULT_PUBLIC_NAV_ITEMS` and match this table.

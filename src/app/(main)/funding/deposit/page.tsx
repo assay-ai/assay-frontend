@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { CircleCheck, TriangleAlert, Wallet } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -188,9 +188,7 @@ function TxReference({ chain, reference }: { chain: Chain | null; reference: str
 }
 
 function DepositPageContent() {
-  const search = useSearchParams();
   const router = useRouter();
-  const method = search.get("method") === "wallet" ? "wallet" : "transfer";
   const queryClient = useQueryClient();
 
   const [amount, setAmount] = React.useState("25.00");
@@ -710,15 +708,14 @@ function DepositPageContent() {
           option this used to carry, and a bare memo-less transfer to an address
           could never be reconciled back to an intent anyway.
 
-          `defaultValue={method}` is left exactly as it was: `?method=wallet`
-          now finds a matching option instead of silently falling back, and with
-          no query param the browser selects this option regardless. The label
+          The only option is also the default, so the select always has a
+          matching value, whatever `?method=` says. The label
           is the wallet Privy actually handed us — the literal `7xKX…9pQr` that
           stood here before was an address nobody in this codebase holds.
         */}
         <Select
           label="Pay from"
-          defaultValue={method}
+          defaultValue="wallet"
           disabled={walletAddress === null || busy}
           hint={
             chainId === null

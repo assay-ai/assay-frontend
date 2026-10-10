@@ -78,6 +78,8 @@ export function CloseAccountView() {
     blocker line per chain, each naming its chain, and no total.
   */
   const rows = chainBalances(balances.data?.balances);
+  // Only an account that really holds money blocks closure; a $0.00 hold is noise.
+  const heldRows = rows.filter((row) => BigInt(row.held.amount) > 0n);
   const multiChain = rows.length > 1;
   const suffix = (chainId: string) => (multiChain ? ` · ${chainLabel(chainId)}` : "");
 
@@ -131,7 +133,7 @@ export function CloseAccountView() {
                 /* `.length`, not the array — an array is always truthy, and a
                    zero-row response must read as "could not be read", not as a
                    held figure of $0.00 on an account that may hold money. */
-                rows.length === 0 ? (
+                heldRows.length === 0 ? (
                   <div className="flex items-center gap-3 border-b border-01 px-3 py-2.5">
                     <div className="min-w-0 flex-1 font-mono text-mono-12 font-semibold text-01">
                       No call in flight
@@ -141,13 +143,13 @@ export function CloseAccountView() {
                     <div className="w-[240px] text-right font-mono text-mono-12 text-02">—</div>
                   </div>
                 ) : (
-                  rows.map((row) => (
+                  heldRows.map((row) => (
                     <div
                       key={`held-${row.accountId}`}
                       className="flex items-center gap-3 border-b border-01 px-3 py-2.5"
                     >
                       <div className="min-w-0 flex-1 truncate font-mono text-mono-12 font-semibold text-01">
-                        No call in flight{suffix(row.chainId)}
+                        Funds held{suffix(row.chainId)}
                       </div>
                       <div className="w-[140px] text-right font-mono text-mono-12 text-02">
                         {formatMoney(row.held, { decimals: 2 })}

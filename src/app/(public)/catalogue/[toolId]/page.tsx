@@ -1,5 +1,4 @@
-import { CircleCheck, FileText, FlaskConical } from "lucide-react";
-import Link from "next/link";
+import { CircleCheck, FlaskConical } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -211,7 +210,7 @@ export default async function ToolContractPage({
 
   return (
     <div className="flex w-full flex-1 flex-col gap-[18px] px-7 py-[22px]">
-      <header className="flex w-full items-center justify-between gap-4">
+      <header className="flex w-full flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">{contract.title}</h1>
           <p className="text-mono-12 font-mono text-03">{contract.sub}</p>
@@ -226,16 +225,10 @@ export default async function ToolContractPage({
           <Button variant="secondary" icon={<FlaskConical />}>
             Open in tester
           </Button>
-          <Button asChild>
-            <Link href={`/catalogue/${toolId}/policy`}>
-              <FileText />
-              Read the policy
-            </Link>
-          </Button>
         </div>
       </header>
 
-      <div className="flex w-full flex-1 items-start gap-4">
+      <div className="flex w-full flex-1 flex-col items-stretch gap-4 tablet:flex-row tablet:items-start">
         <Panel className="min-w-0 flex-1">
           <PanelHeader>
             <PanelTitles>
@@ -269,7 +262,7 @@ export default async function ToolContractPage({
           </PanelBody>
         </Panel>
 
-        <div className="flex w-[440px] shrink-0 flex-col gap-4">
+        <div className="flex w-full shrink-0 flex-col gap-4 tablet:w-[440px]">
           <Panel>
             <PanelHeader>
               <PanelTitles>
