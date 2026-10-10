@@ -184,3 +184,41 @@ export function isEscrowDisarmed(escrow: {
 function isZeroAmount(amount: string): boolean {
   return /^0*$/.test(amount.trim());
 }
+
+/**
+ * Whether a read of the escrow already shows the limits the buyer signed.
+ *
+ * Needed because "the write landed" and "a read shows it" are not the same
+ * moment. Measured on eip155:46630: the relayed SetLimits came back mined, the
+ * single refetch fired right after it still read 0 / 0 (an RPC answering a
+ * block behind the receipt), and "Currently set" stayed at $0.00 under
+ * "Done — your new limits are on chain" until a full reload.
+ */
+export function limitsLanded(
+  escrow: { maxVoucherAmount: { amount: string } | null; maxPerWindow: { amount: string } | null } | null | undefined,
+  signed: EscrowLimitsBody,
+): boolean {
+  if (!escrow?.maxVoucherAmount || !escrow.maxPerWindow) return false;
+  return (
+    BigInt(escrow.maxVoucherAmount.amount) === BigInt(signed.maxVoucherAmount) &&
+    BigInt(escrow.maxPerWindow.amount) === BigInt(signed.maxPerWindow)
+  );
+}
+
+export const LIMITS_LANDING_POLL_MS = 2_000;
+export const LIMITS_LANDING_TIMEOUT_MS = 30_000;
+
+/**
+ * The escrow query's `refetchInterval` after a successful write: poll until the
+ * read shows the signed limits, then stop — and stop anyway after a bounded
+ * wait, so a read that never catches up costs a few requests, not a loop.
+ */
+export function limitsLandingInterval(
+  escrow: Parameters<typeof limitsLanded>[0],
+  awaiting: { body: EscrowLimitsBody; since: number } | null,
+  now: number,
+): number | false {
+  if (!awaiting) return false;
+  if (now - awaiting.since > LIMITS_LANDING_TIMEOUT_MS) return false;
+  return limitsLanded(escrow, awaiting.body) ? false : LIMITS_LANDING_POLL_MS;
+}

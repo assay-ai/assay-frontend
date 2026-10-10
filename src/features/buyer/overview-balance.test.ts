@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { FullBalance } from "@/features/g30/balance";
 
-import { overviewBalance } from "./overview-balance";
+import { overviewBalance, singleBalanceSub } from "./overview-balance";
 
 const SOLANA = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
 const EVM = "eip155:46630";
@@ -70,5 +70,35 @@ describe("overviewBalance — one tile, N chains", () => {
     // and only one of them stops a call. The tile already makes this
     // distinction ("— not available"); the list must not undo it.
     expect(overviewBalance([])).toEqual({ kind: "absent" });
+  });
+});
+
+describe("singleBalanceSub — money on its way in is named, not hidden", () => {
+  const asset = `${EVM}/erc20:0xa0b8`;
+  const money = (amount: string) => ({ amount, asset, decimals: 6 });
+
+  it("says only 'available now' when nothing is confirming", () => {
+    expect(singleBalanceSub({ ...evmRow, pending: money("0"), pendingDeposits: money("0") })).toBe(
+      "available now",
+    );
+    expect(singleBalanceSub(evmRow)).toBe("available now");
+  });
+
+  it("names a deposit waiting for finality beside a $0.00 available", () => {
+    // Measured on eip155:46630: 20 USDG in escrow, ledger `pending` 20000000,
+    // `available` 0 for the ~17 minutes finality takes. The tile read
+    // "$0.00 available now" with nothing saying the 20 existed.
+    const row = {
+      ...evmRow,
+      available: money("0"),
+      pending: money("20000000"),
+      pendingDeposits: money("0"),
+    } as FullBalance;
+    expect(singleBalanceSub(row)).toBe("available now · $20.00 confirming on chain");
+  });
+
+  it("adds both inbound buckets, as the Funding card does", () => {
+    const row = { ...evmRow, pending: money("1500000"), pendingDeposits: money("500000") } as FullBalance;
+    expect(singleBalanceSub(row)).toBe("available now · $2.00 confirming on chain");
   });
 });
