@@ -1,5 +1,6 @@
 import { chainFigure, type ChainFigure } from "@/features/chain-read/chain-read";
 import type { ProviderChainStake, ProviderStake } from "@/interfaces";
+import { chainIdOfAccount } from "@/utils/chain";
 
 /**
  * Reading `GET /providers/me/stake`'s per-chain list without picking a chain
@@ -79,6 +80,46 @@ export function stakeActionChain(stake: ProviderStake | undefined): ProviderChai
   if (chains.length === 1) return chains[0];
   const proved = chains.filter((entry) => entry.stakeAuthority !== null);
   return proved.length === 1 ? proved[0] : null;
+}
+
+/**
+ * The cached stake read with a just-proved authority layered onto ITS chain.
+ *
+ * `POST /providers/me/stake-authority` answers with the CAIP-10 account and
+ * nothing else, and a refetch straight after it can be served the pre-write
+ * body from the browser's HTTP cache, so the proof is seeded into the cache
+ * instead. It goes on the per-chain entry because that is the only place any
+ * reader looks (`stakeActionChain`); a top-level field is read by nobody.
+ *
+ * A chain the read does not list gets an entry whose figures are all UNKNOWN
+ * (`hasKnownStake: false`, `chainReadable: false`) — the proof says who holds
+ * the authority, not what is staked. A non-CAIP-10 value names no chain and
+ * changes nothing.
+ */
+export function withProvedStakeAuthority(
+  stake: ProviderStake | undefined,
+  stakeAuthority: string,
+): ProviderStake | undefined {
+  const chainId = chainIdOfAccount(stakeAuthority);
+  if (!stake || !chainId) return stake;
+  const listed = stake.stake.some((entry) => entry.chainId === chainId);
+  const chains: ProviderChainStake[] = listed
+    ? stake.stake.map((entry) => (entry.chainId === chainId ? { ...entry, stakeAuthority } : entry))
+    : [
+        ...stake.stake,
+        {
+          chainId,
+          hasKnownStake: false,
+          staked: null,
+          observedAt: null,
+          unbonding: null,
+          unbondingStartedAt: null,
+          unbondingCompletesAt: null,
+          chainReadable: false,
+          stakeAuthority,
+        },
+      ];
+  return { ...stake, stake: chains };
 }
 
 /**

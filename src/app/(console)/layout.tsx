@@ -2,7 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
+import { Toaster } from "sonner";
 
+import { AlertFill, CheckCircle } from "@/components/icons";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
 import { Sidebar, type SidebarBindingItem } from "@/components/layout/sidebar";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
@@ -167,6 +169,17 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
       <main className="flex min-w-0 flex-1 flex-col gap-3.5 p-4 tablet:gap-4 tablet:px-[26px] tablet:py-[22px]">
         {children}
       </main>
+
+      {/* Without a mounted Toaster every `toast()` on a console screen is a
+          silent no-op — BUG-J-PROV-02's "Publish gives no feedback" was this.
+          Same props as `(main)` and `(operator)`. */}
+      <Toaster
+        position="top-center"
+        icons={{
+          success: <CheckCircle className="mt-2 text-xl" />,
+          error: <AlertFill className="mt-2 text-danger-500" />,
+        }}
+      />
     </div>
   );
 }
