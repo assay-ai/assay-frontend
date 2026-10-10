@@ -69,10 +69,11 @@ const ZERO = new Decimal(0);
 // --- Illustrative published constants. The on-chain values are configurable. ---
 
 /**
- * Illustrative take rates for this calculator — 5% unverified, 10% verified.
- * The deployed take rate is configurable and may differ.
+ * The platform's take rate. One rate for every tier — the backend charges a
+ * single `PLATFORM_FEE_BPS` (10% by default) whatever the tier — so the tiers
+ * differ by stake and slashability here, not by take.
  */
-const UNVERIFIED_TAKE = new Decimal("0.05");
+const UNVERIFIED_TAKE = new Decimal("0.10");
 const VERIFIED_TAKE = new Decimal("0.10");
 
 /**
@@ -110,7 +111,7 @@ type PricingMode = "Free" | "Freemium" | "Paid";
 const PRICING_MODES: PricingMode[] = ["Free", "Freemium", "Paid"];
 
 interface Tier {
-  /** 0.05 or 0.10. */
+  /** The take rate, 0.10. */
   take: Decimal;
   /** Whether a listing on this tier has to post stake at all. */
   stakes: boolean;
