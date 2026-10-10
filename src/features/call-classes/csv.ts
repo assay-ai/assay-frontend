@@ -124,12 +124,18 @@ export function parseCallsCsv(csv: string): CallRow[] {
  * Σ over the rest equals `totals.withheld`.
  */
 function isCredited(row: CallRow): boolean {
-  return row.status === "SETTLED";
+  // A rail-B call the verdict settled is credited only once its voucher is
+  // redeemed on chain; until then the export says PAID_AWAITING_REDEMPTION.
+  return row.status === "SETTLED" && row.classification !== "PAID_AWAITING_REDEMPTION";
 }
 
 /** A call still in flight has neither earned nor withheld anything yet. */
 function isPending(row: CallRow): boolean {
-  return row.status === "VERIFYING" || row.classification === "PENDING";
+  return (
+    row.status === "VERIFYING" ||
+    row.classification === "PENDING" ||
+    row.classification === "PAID_AWAITING_REDEMPTION"
+  );
 }
 
 /**
@@ -167,12 +173,16 @@ function sum(
  * altogether. Drawing an empty row for a class nothing can write would
  * be inventing traffic.
  *
+ * PAID_AWAITING_REDEMPTION is ours too: a rail-B call that passed and is
+ * credited once its voucher is redeemed on chain. Listed beside PAID_CREDITED.
+ *
  * PENDING is the mirror image: the wire emits it and **neither design draws it**.
  * It is listed last because the totals have to add up — a screen whose job is
  * explaining a count difference cannot drop four calls to keep its layout.
  */
 export const CLASS_ORDER = [
   "PAID_CREDITED",
+  "PAID_AWAITING_REDEMPTION",
   "PAID_UNCREDITED",
   "FREE",
   "EXPLORATION",
