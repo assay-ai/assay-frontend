@@ -35,6 +35,7 @@ import {
   minorUnitsFromMajorInput,
   Note,
   PageHeader,
+  priceModeError,
   UNKNOWN,
 } from "@/features/provider-binding/chrome";
 
@@ -220,7 +221,9 @@ export default function PricingAndTierPage() {
   }, [binding]);
 
   const parsedPrice = minorUnitsFromMajorInput(priceInput, binding?.price.decimals ?? 6);
-  const priceError = priceInput.trim() === "" && dirty ? "A price is required." : parsedPrice.error;
+  const priceError =
+    (priceInput.trim() === "" && dirty ? "A price is required." : parsedPrice.error) ??
+    (mode !== "" ? priceModeError(mode, priceInput, parsedPrice.amount) : null);
 
   const priceChanged = Boolean(binding) && parsedPrice.amount !== null && parsedPrice.amount !== binding!.price.amount;
   const modeChanged = Boolean(binding) && mode !== "" && mode !== binding!.pricingMode;
@@ -346,6 +349,12 @@ export default function PricingAndTierPage() {
           </>
         }
       />
+
+      {save.isError ? (
+        <p role="alert" className="text-body-13 text-danger-500">
+          {save.error instanceof ApiError ? save.error.message : "Could not save the price."}
+        </p>
+      ) : null}
 
       <div className="flex w-full flex-col items-start gap-4 desktop:flex-row">
         <Panel className="flex-1">

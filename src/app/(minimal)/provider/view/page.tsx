@@ -518,7 +518,7 @@ export default function ProviderViewPage() {
       ) : null}
 
       {/* Tiles — row, gap 14, four equal tiles. */}
-      <div className="grid w-full grid-cols-2 gap-3.5 tablet:flex">
+      <div className="grid w-full grid-cols-[repeat(2,minmax(0,1fr))] gap-3.5 tablet:flex [&>*]:min-w-0 [&>*]:break-words">
         <MetricTile
           label="Calls today"
           value={calls.isLoading ? DASH : formatCount(callsToday)}

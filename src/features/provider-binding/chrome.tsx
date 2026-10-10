@@ -161,6 +161,18 @@ export function minorUnitsFromMajorInput(text: string, decimals: number): MinorU
   return { amount: scaled.toFixed(0), error: null };
 }
 
+/**
+ * A charging mode (PAID, FREEMIUM) needs a price above zero; only FREE may be
+ * zero. `input` is the raw text so an empty box is refused too. Mirrors the
+ * backend's PROVIDER_BINDING_PRICE_NOT_POSITIVE.
+ */
+export function priceModeError(mode: string, input: string, amount: string | null): string | null {
+  if (mode !== "PAID" && mode !== "FREEMIUM") return null;
+  if (input.trim() === "") return "A price is required for a paid mode — use Free for no charge.";
+  if (amount !== null && /^0*$/.test(amount)) return "More than zero — use Free for no charge.";
+  return null;
+}
+
 /** A whole-number form field -> `number | null`, or an error. */
 export function integerFromInput(text: string): { value: number | null; error: string | null } {
   const trimmed = text.trim();

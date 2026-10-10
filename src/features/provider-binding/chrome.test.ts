@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { minorUnitsFromMajorInput } from "./chrome";
+import { minorUnitsFromMajorInput, priceModeError } from "./chrome";
 
 describe("minorUnitsFromMajorInput", () => {
   it.each([".", "1.2.3", "abc", "-1", "1e3"])("rejects %j without throwing", (text) => {
@@ -23,5 +23,22 @@ describe("minorUnitsFromMajorInput", () => {
     expect(minorUnitsFromMajorInput("0.1234567", 6).error).toMatch(/decimal places/);
     expect(minorUnitsFromMajorInput("9007199254.740993", 6).error).toBe("Too large.");
     expect(minorUnitsFromMajorInput("9007199254.740991", 6).error).toBeNull();
+  });
+});
+
+describe("priceModeError", () => {
+  it.each(["PAID", "FREEMIUM"])("refuses zero and empty on %s", (mode) => {
+    expect(priceModeError(mode, "0", "0")).not.toBeNull();
+    expect(priceModeError(mode, "0.000000", "0")).not.toBeNull();
+    expect(priceModeError(mode, "", null)).not.toBeNull();
+  });
+
+  it("accepts a positive price on a charging mode", () => {
+    expect(priceModeError("PAID", "0.25", "250000")).toBeNull();
+  });
+
+  it("allows zero on FREE", () => {
+    expect(priceModeError("FREE", "0", "0")).toBeNull();
+    expect(priceModeError("FREE", "", null)).toBeNull();
   });
 });
