@@ -1,4 +1,5 @@
 import type { FullBalance } from "@/features/g30/balance";
+import { formatMoney } from "@/utils/money";
 
 /**
  * What the Overview's single balance tile can honestly say.
@@ -24,4 +25,22 @@ export function overviewBalance(balances: readonly FullBalance[]): OverviewBalan
   if (balances.length === 0) return { kind: "absent" };
   if (balances.length === 1) return { kind: "single", balance: balances[0] };
   return { kind: "multiple", chainCount: balances.length };
+}
+
+/**
+ * The single tile's sub-line. `available` is what a call can draw on now, so it
+ * stays the figure; a deposit still waiting for finality (`pending`, ~17
+ * minutes on eip155:46630) or not yet observed (`pendingDeposits`) is named
+ * beside it. Without this the tile read "$0.00 available now" while the escrow
+ * held the buyer's 20 USDG and /funding listed the deposit — the same two
+ * buckets the Funding card's "Pending deposit" row adds.
+ */
+export function singleBalanceSub(balance: FullBalance): string {
+  const inbound = [balance.pending, balance.pendingDeposits].reduce(
+    (sum, part) => (part ? sum + BigInt(part.amount) : sum),
+    0n,
+  );
+  if (inbound <= 0n) return "available now";
+  const money = { amount: inbound.toString(), asset: balance.asset, decimals: balance.decimals };
+  return `available now · ${formatMoney(money)} confirming on chain`;
 }

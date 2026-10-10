@@ -25,6 +25,8 @@ import { ErrorBlock, KeyValueRow, NoteBox, PageHeader, PendingBlock } from "@/fe
 import {
   ESCROW_LIMITS_DECIMALS,
   isEscrowDisarmed,
+  limitsLanded,
+  limitsLandingInterval,
   parseLimitsForm,
   submitLimitsForm,
   type LimitsFormErrors,
@@ -33,7 +35,7 @@ import { RelayedDoneNotice, RelayedRefusalNotice } from "@/features/escrow/relay
 import { relayedRefusal, type RelayedRefusal } from "@/features/escrow/relayed-refusal";
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
 import { isUserRejection, useSigner } from "@/hooks/useSigner";
-import type { EscrowIntent, RelayedEscrowIntent } from "@/interfaces";
+import type { EscrowIntent, EscrowLimitsBody, RelayedEscrowIntent } from "@/interfaces";
 import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import { ApiError } from "@/libs/ApiClient";
 import { useChains } from "@/hooks/useChains";
@@ -99,11 +101,22 @@ function EscrowLimitsPageContent() {
     session — so this is shaped for N and identical on one.
   */
   const requestedChain = useSearchParams().get("chain");
+  /*
+    The limits just signed, while a read has not shown them yet. A single
+    refetch after the write was not enough: on eip155:46630 it read the
+    pre-write 0 / 0 and the screen kept saying so until a reload. See
+    `limitsLandingInterval`.
+  */
+  const [awaitingLimits, setAwaitingLimits] = React.useState<{
+    body: EscrowLimitsBody;
+    since: number;
+  } | null>(null);
   const escrowQuery = useQuery({
     queryKey: ["escrow", requestedChain],
     queryFn: () => getEscrow(requestedChain),
     retry: 0,
     networkMode: "always" as const,
+    refetchInterval: (query) => limitsLandingInterval(query.state.data, awaitingLimits, Date.now()),
   });
   const escrow = escrowQuery.data;
   /* Which of the three the chain said. Never `!escrow?.exists` — see the block below. */
@@ -265,14 +278,22 @@ function EscrowLimitsPageContent() {
     setRefusal(null);
     setBroadcasting(true);
     try {
+      const signed = setLimits.variables;
       const result = await runEscrowAction(intent, signerState.signer);
       if (result.kind === "relayed") {
         setRelayed(result.relayed);
+        // The relayer's own post-transaction read, when it already shows the
+        // new limits, is the freshest answer there is — use it straight away.
+        if (signed && limitsLanded(result.relayed.escrow, signed)) {
+          queryClient.setQueryData(["escrow", requestedChain], result.relayed.escrow);
+        }
       } else {
         setSignature(result.signature);
       }
       // Takes effect the moment it lands; refetch so the meter and the
-      // "currently set" figures below stop reading the pre-write state.
+      // "currently set" figures below stop reading the pre-write state, and
+      // keep polling until a read actually shows the signed limits.
+      if (signed) setAwaitingLimits({ body: signed, since: Date.now() });
       queryClient.invalidateQueries({ queryKey: ["escrow"] });
     } catch (e) {
       if (isUserRejection(e)) {

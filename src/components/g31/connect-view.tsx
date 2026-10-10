@@ -7,6 +7,7 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
+import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
 import { listAgents, listCredentials } from "@/services/account.service";
 
 import { PageHeader } from "./chrome";
@@ -31,9 +32,10 @@ import { relativeTime } from "./format";
  * (the "Credential created" reveal), so only the clear-text prefix can be shown and the config block
  * says so.
  *
- * The MCP endpoint URL is not exposed by any endpoint or environment variable
- * on the frontend, so it is rendered as a named placeholder rather than a
- * guess — a wrong URL in a copy-paste block costs somebody an afternoon.
+ * The MCP endpoint URL comes from `NEXT_PUBLIC_MCP_URL` (`mcpEndpointUrl`); no
+ * API endpoint reports it, so an unconfigured build renders a named
+ * placeholder rather than a guess — a wrong URL in a copy-paste block costs
+ * somebody an afternoon.
  */
 
 interface Agent {
@@ -90,7 +92,7 @@ export function ConnectView() {
   }, [credentialsQuery.data]);
 
   const config = `"x402": {
-  "url": "https://<your-mcp-endpoint>/v1",
+  "url": "${mcpEndpointUrl()}",
   "headers": { "Authorization": "Bearer ${live ? `${live.prefix}…` : "<credential>"}" }
 }
 // This key does not expire. Revoke or rotate it at any time under Agents.`;

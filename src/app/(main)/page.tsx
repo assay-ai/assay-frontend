@@ -33,7 +33,7 @@ import {
   trendLabel,
 } from "@/features/buyer/period";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
-import { overviewBalance } from "@/features/buyer/overview-balance";
+import { overviewBalance, singleBalanceSub } from "@/features/buyer/overview-balance";
 import { useOverview, type NotificationRow } from "@/features/buyer/use-overview";
 import type { FullBalance } from "@/features/g30/balance";
 import { formatMoney, notCharged } from "@/utils/money";
@@ -202,7 +202,7 @@ export default function OverviewPage() {
           }
           sub={
             balanceState.kind === "single"
-              ? "available now"
+              ? singleBalanceSub(balanceState.balance)
               : balanceState.kind === "multiple"
                 ? "balances are per chain — open Funding"
                 : "not available"

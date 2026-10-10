@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  LIMITS_LANDING_POLL_MS,
+  LIMITS_LANDING_TIMEOUT_MS,
   isEscrowDisarmed,
+  limitsLanded,
+  limitsLandingInterval,
   parseLimitsForm,
   submitLimitsForm,
   type LimitsFormInput,
@@ -168,5 +172,36 @@ describe("isEscrowDisarmed", () => {
     expect(
       isEscrowDisarmed({ exists: true, maxVoucherAmount: null, maxPerWindow: limit("0") }),
     ).toBe(false);
+  });
+});
+
+describe("limitsLanded / limitsLandingInterval — the screen catches up with the chain", () => {
+  // Measured on eip155:46630: the relayed SetLimits landed (1.00 / 10.00), the
+  // one refetch fired right after it still read 0 / 0, and "Currently set"
+  // stayed at $0.00 under "Done — your new limits are on chain" until reload.
+  const asset = "eip155:46630/erc20:0xDbbC";
+  const money = (amount: string) => ({ amount, asset, decimals: 6 });
+  const signed = { maxVoucherAmount: "1000000", maxPerWindow: "10000000" };
+  const before = { maxVoucherAmount: money("0"), maxPerWindow: money("0") };
+  const after = { maxVoucherAmount: money("1000000"), maxPerWindow: money("10000000") };
+
+  it("is true only when both on-chain limits equal the signed ones", () => {
+    expect(limitsLanded(after, signed)).toBe(true);
+    expect(limitsLanded(before, signed)).toBe(false);
+    expect(limitsLanded({ ...after, maxPerWindow: money("0") }, signed)).toBe(false);
+    expect(limitsLanded(undefined, signed)).toBe(false);
+    expect(limitsLanded({ maxVoucherAmount: null, maxPerWindow: null }, signed)).toBe(false);
+  });
+
+  it("polls while the read still shows the pre-write limits, and stops once they land", () => {
+    const awaiting = { body: signed, since: 1_000 };
+    expect(limitsLandingInterval(before, awaiting, 2_000)).toBe(LIMITS_LANDING_POLL_MS);
+    expect(limitsLandingInterval(after, awaiting, 2_000)).toBe(false);
+  });
+
+  it("does not poll when nothing was submitted, and gives up after the timeout", () => {
+    expect(limitsLandingInterval(before, null, 2_000)).toBe(false);
+    const awaiting = { body: signed, since: 1_000 };
+    expect(limitsLandingInterval(before, awaiting, 1_000 + LIMITS_LANDING_TIMEOUT_MS + 1)).toBe(false);
   });
 });

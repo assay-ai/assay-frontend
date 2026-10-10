@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import Decimal from "decimal.js";
-import { History, Info, Pause, Pencil, ShieldCheck, TriangleAlert } from "lucide-react";
+import { History, Info, Pause, Pencil, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -21,6 +21,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { policyBootstrapAsset, type PolicyBootstrapAsset } from "@/features/limits/policy-bootstrap";
+import { useChains } from "@/hooks/useChains";
 import type { Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { listAgents } from "@/services/account.service";
@@ -106,6 +108,11 @@ import {
  *    resent, so "left untouched" and "cleared" (an explicit JSON `null`)
  *    stay distinguishable — verified against the running API: an omitted
  *    key kept the previous version's value, an explicit `null` cleared it.
+ *  - **Creating.** With no policy (404 `SPEND_POLICY_NOT_FOUND`) the same
+ *    sheet writes version 1 through the same `PATCH`, diffed against "no
+ *    ceiling anywhere" and carrying `assetId`/`decimals` — a first version
+ *    has nothing to inherit them from. They are the settlement asset of the
+ *    agent's chain on `GET /chains` (`policyBootstrapAsset`), never a literal.
  *  - **TELL has no per-user-editable resource for the bands themselves.**
  *    `notification_preferences` is keyed on `(event, channel)`, not on a
  *    50/80/100% band, and `SPEND_THRESHOLD_CROSSED`'s bands
@@ -166,6 +173,32 @@ function writeBackPolicy(client: QueryClient, next: SpendPolicy): void {
   );
   void client.invalidateQueries({ queryKey: ["spend-policy"] });
 }
+
+/**
+ * What a create diffs against: no ceiling anywhere. Every field the buyer
+ * leaves blank on a first policy is therefore omitted from the body, and the
+ * backend's own default for an omitted field on a first version is `null` too.
+ */
+const NO_POLICY: Pick<
+  SpendPolicy,
+  | "perCallMax"
+  | "dailyCap"
+  | "monthlyCap"
+  | "maxSpendPerHour"
+  | "requireApprovalAbove"
+  | "maxCallsPerMinute"
+  | "maxCallsPerHour"
+  | "allowedTools"
+> = {
+  perCallMax: null,
+  dailyCap: null,
+  monthlyCap: null,
+  maxSpendPerHour: null,
+  requireApprovalAbove: null,
+  maxCallsPerMinute: null,
+  maxCallsPerHour: null,
+  allowedTools: null,
+};
 
 function LimitRow({
   label,
@@ -320,12 +353,21 @@ export function LimitsView() {
   });
 
   const agentsQuery = useQuery({ queryKey: ["agents"], queryFn: () => listAgents({ limit: 50 }) });
+  const { chains } = useChains();
 
   const day = React.useMemo(() => todayBounds(), []);
   const month = React.useMemo(() => monthBounds(), []);
 
   const policy = policyQuery.data ?? null;
   const usage = policy?.usage;
+  /*
+    Only consulted while no policy exists: a first PATCH must name
+    `assetId`/`decimals` (`SPEND_POLICY_ASSET_REQUIRED` otherwise), and they
+    come from the agent's chain's settlement asset on `GET /chains`.
+  */
+  const bootstrap: PolicyBootstrapAsset = agentsQuery.isError
+    ? { kind: "unknown", reason: "the agents on this account could not be read" }
+    : policyBootstrapAsset(agentsQuery.data?.items, chains);
   // See the header comment: `usage.spendToday`/`spendThisMonth` are the
   // enforcement-side figures and are preferred whenever the policy carries a
   // `usage` block. `GET /receipts/summary` runs unconditionally (a query, not
@@ -367,7 +409,9 @@ export function LimitsView() {
     onSuccess: (next) => {
       writeBackPolicy(queryClient, next);
       void queryClient.invalidateQueries({ queryKey: ["spend-policy-history"] });
-      toast.success(`Saved as policy v${next.policyVersion}`);
+      toast.success(
+        next.policyVersion === 1 ? "Policy created as v1" : `Saved as policy v${next.policyVersion}`
+      );
       setEditOpen(false);
     },
     onError: (error) => {
@@ -390,7 +434,23 @@ export function LimitsView() {
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
 
   function openEdit() {
-    if (!policy) return;
+    if (!policy) {
+      if (bootstrap.kind !== "ready") return;
+      // Create: every field blank, i.e. no ceiling until the buyer types one.
+      setPerCallMaxText("");
+      setDailyCapText("");
+      setMonthlyCapText("");
+      setMaxCallsPerMinuteText("");
+      setMaxCallsPerHourText("");
+      setMaxSpendPerHourText("");
+      setRequireApprovalAboveText("");
+      setAllowedToolsMode("all");
+      setAllowedToolsText("");
+      setChangeReason("");
+      setFormErrors({});
+      setEditOpen(true);
+      return;
+    }
     setPerCallMaxText(policy.perCallMax ? toDecimal(policy.perCallMax).toString() : "");
     setDailyCapText(policy.dailyCap ? toDecimal(policy.dailyCap).toString() : "");
     setMonthlyCapText(policy.monthlyCap ? toDecimal(policy.monthlyCap).toString() : "");
@@ -408,13 +468,16 @@ export function LimitsView() {
   }
 
   function handleSave() {
-    if (!policy) return;
+    if (!policy && bootstrap.kind !== "ready") return;
+    const creating = !policy;
+    const base = policy ?? NO_POLICY;
+    const decimals = policy ? policy.decimals : bootstrap.kind === "ready" ? bootstrap.decimals : 0;
 
-    const perCallMax = parseMoneyField(perCallMaxText, policy.decimals);
-    const dailyCap = parseMoneyField(dailyCapText, policy.decimals);
-    const monthlyCap = parseMoneyField(monthlyCapText, policy.decimals);
-    const maxSpendPerHour = parseMoneyField(maxSpendPerHourText, policy.decimals);
-    const requireApprovalAbove = parseMoneyField(requireApprovalAboveText, policy.decimals);
+    const perCallMax = parseMoneyField(perCallMaxText, decimals);
+    const dailyCap = parseMoneyField(dailyCapText, decimals);
+    const monthlyCap = parseMoneyField(monthlyCapText, decimals);
+    const maxSpendPerHour = parseMoneyField(maxSpendPerHourText, decimals);
+    const requireApprovalAbove = parseMoneyField(requireApprovalAboveText, decimals);
     const maxCallsPerMinute = parseIntField(maxCallsPerMinuteText);
     const maxCallsPerHour = parseIntField(maxCallsPerHourText);
 
@@ -434,32 +497,40 @@ export function LimitsView() {
     setFormErrors({});
 
     const body: UpdateSpendPolicyBody = {
-      changeReason: changeReason.trim() || "Updated from Limits",
+      changeReason: changeReason.trim() || (creating ? "Created from Limits" : "Updated from Limits"),
     };
 
-    const perCallMaxPatch = diffMoney(perCallMax.value, policy.perCallMax);
+    const perCallMaxPatch = diffMoney(perCallMax.value, base.perCallMax);
     if (perCallMaxPatch !== undefined) body.perCallMax = perCallMaxPatch;
-    const dailyCapPatch = diffMoney(dailyCap.value, policy.dailyCap);
+    const dailyCapPatch = diffMoney(dailyCap.value, base.dailyCap);
     if (dailyCapPatch !== undefined) body.dailyCap = dailyCapPatch;
-    const monthlyCapPatch = diffMoney(monthlyCap.value, policy.monthlyCap);
+    const monthlyCapPatch = diffMoney(monthlyCap.value, base.monthlyCap);
     if (monthlyCapPatch !== undefined) body.monthlyCap = monthlyCapPatch;
-    const maxSpendPerHourPatch = diffMoney(maxSpendPerHour.value, policy.maxSpendPerHour);
+    const maxSpendPerHourPatch = diffMoney(maxSpendPerHour.value, base.maxSpendPerHour);
     if (maxSpendPerHourPatch !== undefined) body.maxSpendPerHour = maxSpendPerHourPatch;
-    const requireApprovalAbovePatch = diffMoney(requireApprovalAbove.value, policy.requireApprovalAbove);
+    const requireApprovalAbovePatch = diffMoney(requireApprovalAbove.value, base.requireApprovalAbove);
     if (requireApprovalAbovePatch !== undefined) body.requireApprovalAbove = requireApprovalAbovePatch;
 
-    const maxCallsPerMinutePatch = diffInt(maxCallsPerMinute.value, policy.maxCallsPerMinute);
+    const maxCallsPerMinutePatch = diffInt(maxCallsPerMinute.value, base.maxCallsPerMinute);
     if (maxCallsPerMinutePatch !== undefined) body.maxCallsPerMinute = maxCallsPerMinutePatch;
-    const maxCallsPerHourPatch = diffInt(maxCallsPerHour.value, policy.maxCallsPerHour);
+    const maxCallsPerHourPatch = diffInt(maxCallsPerHour.value, base.maxCallsPerHour);
     if (maxCallsPerHourPatch !== undefined) body.maxCallsPerHour = maxCallsPerHourPatch;
 
-    const allowedToolsPatch = diffAllowedTools(allowedToolsMode, allowedToolsText, policy.allowedTools);
+    const allowedToolsPatch = diffAllowedTools(allowedToolsMode, allowedToolsText, base.allowedTools);
     if (allowedToolsPatch !== undefined) body.allowedTools = allowedToolsPatch;
 
     const changedKeys = Object.keys(body).filter((key) => key !== "changeReason");
     if (changedKeys.length === 0) {
-      toast.info("Nothing changed — no PATCH was sent");
+      toast.info(
+        creating ? "Set at least one limit to create a policy" : "Nothing changed — no PATCH was sent"
+      );
       return;
+    }
+
+    // A first version has nothing to inherit the asset from; see `policyBootstrapAsset`.
+    if (creating && bootstrap.kind === "ready") {
+      body.assetId = bootstrap.assetId;
+      body.decimals = bootstrap.decimals;
     }
 
     editMutation.mutate(body);
@@ -502,6 +573,16 @@ export function LimitsView() {
             {policy ? (
               <Button variant="secondary" icon={<Pencil />} type="button" onClick={openEdit}>
                 Edit limits
+              </Button>
+            ) : null}
+            {!policy && policyQuery.isSuccess ? (
+              <Button
+                icon={<Plus />}
+                type="button"
+                disabled={bootstrap.kind !== "ready"}
+                onClick={openEdit}
+              >
+                Create policy
               </Button>
             ) : null}
             {policy ? (
@@ -568,11 +649,28 @@ export function LimitsView() {
           }. Nothing here is a statement about what your agent may spend — a limit that cannot be read is not the same as a limit that does not exist.`}
         />
       ) : !policy ? (
-        <EmptyState
-          icon={<ShieldCheck width={22} height={22} />}
-          title="No policy has been written yet"
-          description="Until a spend policy exists, nothing here refuses a call. The API answers SPEND_POLICY_NOT_FOUND for this organization, and the limits below are what a policy would set."
-        />
+        <div className="flex w-full flex-col items-start gap-3">
+          <EmptyState
+            icon={<ShieldCheck width={22} height={22} />}
+            title="No policy has been written yet"
+            description="Until a spend policy exists, nothing here refuses a call. Create one to set a per-call ceiling, daily and monthly caps, velocity limits and an approval threshold."
+          />
+          <p data-testid="policy-bootstrap-note" className="text-body-xs text-03">
+            {bootstrap.kind === "ready"
+              ? `Amounts are in ${bootstrap.symbol} on ${bootstrap.chainName}, the asset your agent settles in.`
+              : bootstrap.kind === "reading"
+                ? "Reading which asset your agent settles in…"
+                : `A policy cannot be created here yet: ${bootstrap.reason}.`}
+          </p>
+          <Button
+            icon={<Plus />}
+            type="button"
+            disabled={bootstrap.kind !== "ready"}
+            onClick={openEdit}
+          >
+            Create policy
+          </Button>
+        </div>
       ) : (
         <>
           <div className="flex w-full flex-col gap-4">
@@ -798,11 +896,15 @@ export function LimitsView() {
       <Sheet open={editOpen} onOpenChange={setEditOpen}>
         <SheetContent className="tablet:max-w-[560px]">
           <SheetHeader>
-            <SheetTitle>Edit limits</SheetTitle>
+            <SheetTitle>{policy ? "Edit limits" : "Create policy"}</SheetTitle>
             <SheetDescription>
-              Leave a field as shown to keep its current value. Clear a field to remove that
-              ceiling entirely (unlimited) — the two are different PATCH bodies under the hood, and
-              this form sends only the fields you actually touch.
+              {policy
+                ? "Leave a field as shown to keep its current value. Clear a field to remove that " +
+                  "ceiling entirely (unlimited) — the two are different PATCH bodies under the hood, and " +
+                  "this form sends only the fields you actually touch."
+                : `Fill in the limits you want; a blank field means no ceiling. Amounts are in ${
+                    bootstrap.kind === "ready" ? bootstrap.symbol : "your settlement asset"
+                  }. This writes version 1 of your policy.`}
             </SheetDescription>
           </SheetHeader>
           <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
@@ -923,7 +1025,7 @@ export function LimitsView() {
               Cancel
             </Button>
             <Button type="button" loading={editMutation.isPending} onClick={handleSave}>
-              Save changes
+              {policy ? "Save changes" : "Create policy"}
             </Button>
           </SheetFooter>
         </SheetContent>
