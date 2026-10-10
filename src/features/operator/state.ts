@@ -129,9 +129,9 @@ export function isLegalInStatus(
  * `OUTCOME_CONSEQUENCE[source.outcome].opensFleetSweep` and never looks at the
  * status. Gating it by status would be wrong in both directions:
  *
- *  - it would **miss `AWAITING_SECOND`**, where a sweep is perfectly legal —
- *    `decide` writes `outcome` even when it defers the second signature, and
- *    only `resolvedAt` is held back;
+ *  - it would **offer `AWAITING_SECOND`**, where the proposal's `outcome` is
+ *    still null — `decide` keeps the decision on the dispute until the second
+ *    signature lands — so `openSweep` refuses there with a 422;
  *  - it would **offer `UPHELD`**, which is only ever produced by the two
  *    upholding outcomes, both of which have `opensFleetSweep: false`. The
  *    button would render and 422 every time.

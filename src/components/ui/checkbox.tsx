@@ -18,7 +18,7 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
     return (
       <label
         className={cn(
-          "inline-flex items-center gap-[9px]",
+          "relative inline-flex items-center gap-[9px]",
           disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer",
           className
         )}

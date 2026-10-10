@@ -78,6 +78,17 @@ export function formatNotificationBody(body: string): string {
   );
 }
 
+/**
+ * The penalty title carries the amount in raw minor units with no asset at all
+ * ("A penalty of 28470000 is proposed against your stake"), so the settlement
+ * scale is assumed here too.
+ */
+export function formatNotificationTitle(title: string): string {
+  return title.replace(/\b(penalty of )(\d{1,30})\b(?![.:/])/gi, (_match, lead: string, amount: string) =>
+    `${lead}${formatMoney({ amount, asset: "", decimals: NOTIFICATION_ASSET_DECIMALS }, { decimals: 2 })}`
+  );
+}
+
 export function InboxItem({ item }: { item: NotificationItem }) {
   const { Icon, tone, border } = SEVERITY_ICON[item.severity] ?? SEVERITY_ICON.INFO;
 
@@ -93,7 +104,7 @@ export function InboxItem({ item }: { item: NotificationItem }) {
         className={`shrink-0 ${tone}`}
       />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="text-label-sm leading-[1.4] text-01">{item.title}</p>
+        <p className="text-label-sm leading-[1.4] text-01">{formatNotificationTitle(item.title)}</p>
         <p className="break-words text-body-13 leading-[1.55] text-02 [overflow-wrap:anywhere]">
           {formatNotificationBody(item.body)}
         </p>
