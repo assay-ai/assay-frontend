@@ -476,8 +476,8 @@ export function LimitsView() {
   const subtitle = policy
     ? `Policy v${policy.policyVersion} · changed ${relativeTime(
         policy.createdAt
-      )} · lowering applies immediately, raising requires re-authorisation and a reason`
-    : "lowering applies immediately, raising requires re-authorisation and a reason";
+      )} · changes apply immediately and are recorded with a reason`
+    : "changes apply immediately and are recorded with a reason";
 
   return (
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
@@ -486,7 +486,17 @@ export function LimitsView() {
         subtitle={subtitle}
         actions={
           <>
-            <Button variant="secondary" icon={<History />} asChild={false} type="button">
+            <Button
+              variant="secondary"
+              icon={<History />}
+              asChild={false}
+              type="button"
+              onClick={() =>
+                document
+                  .getElementById("limits-change-history")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+            >
               Change history
             </Button>
             {policy ? (
@@ -749,7 +759,7 @@ export function LimitsView() {
       )}
 
       {/* Change history */}
-      <Panel>
+      <Panel id="limits-change-history">
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>Change history</PanelTitle>

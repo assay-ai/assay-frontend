@@ -53,7 +53,7 @@ export default function WhyListHerePage() {
       {/* Body */}
       <div className="flex w-full flex-1 flex-col gap-4 px-7 pb-7">
         {/* Facts */}
-        <div className="flex w-full gap-3.5">
+        <div className="flex w-full flex-col gap-3.5 tablet:flex-row">
           {FACTS.map((fact) => (
             <div
               key={fact.key}
@@ -83,7 +83,7 @@ export default function WhyListHerePage() {
               return (
                 <div
                   key={term.title}
-                  className="flex w-full items-start gap-4 border-t border-01 py-3"
+                  className="flex w-full flex-wrap items-start gap-x-4 gap-y-2 border-t border-01 py-3"
                 >
                   <Icon
                     aria-hidden="true"
@@ -97,7 +97,7 @@ export default function WhyListHerePage() {
                     <p className="text-label-sm text-01">{term.title}</p>
                     <p className="text-body-xs text-03">{term.detail}</p>
                   </div>
-                  <p className="w-[330px] shrink-0 text-right font-mono text-mono-12 text-02">
+                  <p className="w-full pl-8 font-mono text-mono-12 text-02 tablet:w-[330px] tablet:shrink-0 tablet:pl-0 tablet:text-right">
                     {term.value}
                   </p>
                 </div>

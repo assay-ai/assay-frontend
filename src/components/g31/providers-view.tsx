@@ -224,8 +224,8 @@ export function ProvidersView() {
           <>
             <Search
               wrapperClassName="w-full tablet:w-[300px]"
-              placeholder="Search providers and tools…"
-              aria-label="Search providers and tools"
+              placeholder="Search providers by name or id…"
+              aria-label="Search providers by name or id"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />

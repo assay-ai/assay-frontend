@@ -350,12 +350,25 @@ const cardRowFiguresB: CardRowFigure[] = [
  * ---------------------------------------------------------------------- */
 
 export default function KitchenSinkPage() {
-  const [theme, setTheme] = React.useState<"light" | "dark">("dark");
+  const [theme, setTheme] = React.useState<"light" | "dark">("light");
   const [expandedRows, setExpandedRows] = React.useState<string[]>(["search_web"]);
   const [environment, setEnvironment] = React.useState("prod");
   const [customEnv, setCustomEnv] = React.useState("canary");
   const [sliderValue, setSliderValue] = React.useState(220);
   const [activeTab, setActiveTab] = React.useState("overview");
+
+  // The app locks data-theme to light; take that as the starting point and
+  // put it back on unmount so the dark preview does not leak into other routes.
+  const previousTheme = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    const root = document.documentElement;
+    previousTheme.current = root.getAttribute("data-theme");
+    setTheme(previousTheme.current === "dark" ? "dark" : "light");
+    return () => {
+      if (previousTheme.current === null) root.removeAttribute("data-theme");
+      else root.setAttribute("data-theme", previousTheme.current);
+    };
+  }, []);
 
   React.useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);

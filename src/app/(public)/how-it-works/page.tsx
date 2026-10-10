@@ -128,23 +128,13 @@ export default function HowItWorksPage() {
 
         {/* CTAs */}
         <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
-          {/*
-            This CTA points at the live demo, which is not built — it is
-            blocked on the backend. An enabled control that cannot act is the
-            same failure as a search box that does nothing, so it ships
-            disabled with a reason rather than linking to a 404. Restore it to
-            a `<Link href="/demo">` once the demo lands; the copy is already the
-            design's.
-          */}
-          <button
-            type="button"
-            disabled
-            title="The live demo is not available yet."
-            className="flex items-center gap-[7px] rounded-md bg-primary-500 px-[18px] py-3 text-label-sm text-on-color shadow-hair disabled:cursor-not-allowed disabled:bg-03 disabled:text-03 disabled:shadow-none"
+          <Link
+            href="/demo"
+            className="flex items-center gap-[7px] rounded-md bg-primary-500 px-[18px] py-3 text-label-sm text-on-color shadow-hair hover:bg-primary-600"
           >
             <Play aria-hidden="true" className="h-[15px] w-[15px]" />
             Watch it refuse to charge
-          </button>
+          </Link>
           <Link
             href="/catalogue"
             className="flex items-center rounded-md border border-02 bg-01 px-[18px] py-3 text-label-sm text-01 shadow-hair hover:bg-02"

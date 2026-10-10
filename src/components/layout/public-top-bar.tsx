@@ -8,7 +8,7 @@ import { cn } from "@/utils";
 /**
  * Public Top Bar: 60px tall,
  * `$bg-01` fill, 1px `$border-01` bottom hairline. This is the marketing
- * shell (Why list here / Calculator / Catalogue / Docs / CLI), distinct
+ * shell (Why list here / Calculator / Catalogue), distinct
  * from the agent console's `Top Bar` (56px).
  *
  * The two right-side actions are instances of the design's `Button`
@@ -22,8 +22,9 @@ import { cn } from "@/utils";
  * `Button` instead.
  *
  * Responsive behaviour follows the same Foundations "Breakpoints"
- * Navigation row as the agent Top Bar: nav hidden below tablet, first 3
- * items from tablet, full nav from desktop.
+ * Navigation row as the agent Top Bar, except that below tablet the nav
+ * links drop to a compact second row under the bar instead of disappearing,
+ * so they stay reachable on phones.
  */
 
 export interface PublicTopBarNavItem {
@@ -36,8 +37,6 @@ const DEFAULT_NAV_ITEMS: PublicTopBarNavItem[] = [
   { id: "why-list-here", label: "Why list here", href: "/why-list-here" },
   { id: "calculator", label: "Calculator", href: "/calculator" },
   { id: "catalogue", label: "Catalogue", href: "/catalogue" },
-  { id: "docs", label: "Docs", href: "/docs" },
-  { id: "cli", label: "CLI", href: "/cli" },
 ];
 
 export interface PublicTopBarProps extends React.HTMLAttributes<HTMLElement> {
@@ -55,9 +54,9 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
       className,
       navItems = DEFAULT_NAV_ITEMS,
       linkAs: LinkComponent = "a",
-      signInHref = "/sign-in",
+      signInHref = "/login",
       onSignInClick,
-      listToolHref = "/list-a-tool",
+      listToolHref = "/provider/setup",
       onListToolClick,
       ...props
     },
@@ -67,25 +66,26 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
       <header
         ref={ref}
         className={cn(
-          "flex h-[60px] w-full items-center gap-[22px] border-b border-01 bg-01 px-7",
+          "flex min-h-[60px] w-full flex-wrap items-center gap-x-[22px] border-b border-01 bg-01 px-7 tablet:h-[60px] tablet:flex-nowrap",
           className
         )}
         {...props}
       >
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 py-[10px] tablet:py-0">
           <img src="/images/logo.png" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 rounded-md object-cover" />
           <span className="text-mono-sm font-mono font-semibold text-01">GoAssay.AI</span>
         </div>
 
-        <nav aria-label="Primary" className="flex min-w-0 flex-1 items-center gap-[22px]">
-          {navItems.map((item, index) => (
+        <nav
+          aria-label="Primary"
+          className="order-last flex w-full basis-full items-center gap-[22px] overflow-x-auto pb-3 tablet:order-none tablet:w-auto tablet:basis-auto tablet:min-w-0 tablet:flex-1 tablet:overflow-visible tablet:pb-0"
+        >
+          {navItems.map((item) => (
             <LinkComponent
               key={item.id}
               href={item.href}
               className={cn(
-                "hidden whitespace-nowrap text-body-13 font-sans text-02 hover:text-01",
-                index < 3 && "tablet:inline-flex",
-                "desktop:inline-flex"
+                "inline-flex whitespace-nowrap text-body-13 font-sans text-02 hover:text-01"
               )}
             >
               {item.label}
@@ -93,7 +93,7 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
           ))}
         </nav>
 
-        <div className="flex shrink-0 items-center gap-2.5">
+        <div className="ml-auto flex shrink-0 items-center gap-2.5 py-[10px] tablet:py-0">
           <a
             href={signInHref}
             onClick={onSignInClick}

@@ -165,13 +165,13 @@ export function BalanceCards({
 
   return (
     <div className="flex w-full flex-col gap-3">
-      <div className="flex w-full flex-col gap-4 desktop:flex-row">
+      <div className="grid w-full grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
         {balances.map((balance) => (
           <Panel
             key={balance.accountId}
             data-testid="balance-card"
             data-chain-id={balance.chainId}
-            className="min-w-0 flex-1"
+            className="min-w-0"
           >
             <PanelHeader>
               <PanelTitles>
