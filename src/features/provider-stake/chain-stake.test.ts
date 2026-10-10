@@ -4,6 +4,7 @@ import type { Money, ProviderChainStake, ProviderStake } from "@/interfaces";
 
 import {
   STAKE_ASSET_DECIMALS,
+  hasAmbiguousStakeChain,
   latestObservedAt,
   stakeActionChain,
   stakeChains,
@@ -165,6 +166,31 @@ describe("stakeActionChain — never `stake[0]`", () => {
   it("has no chain before the query answers", () => {
     expect(stakeActionChain(undefined)).toBeNull();
     expect(stakeActionChain(response([]))).toBeNull();
+  });
+});
+
+describe("hasAmbiguousStakeChain", () => {
+  it("is false when two chains are listed but neither has a proved authority", () => {
+    expect(
+      hasAmbiguousStakeChain(response([chain({ chainId: SOLANA }), chain({ chainId: EVM })])),
+    ).toBe(false);
+  });
+
+  it("is true only when more than one chain has a proved authority", () => {
+    expect(
+      hasAmbiguousStakeChain(
+        response([
+          chain({ chainId: SOLANA, stakeAuthority: `${SOLANA}:Auth1` }),
+          chain({ chainId: EVM, stakeAuthority: `${EVM}:0x9965` }),
+        ]),
+      ),
+    ).toBe(true);
+    expect(
+      hasAmbiguousStakeChain(
+        response([chain({ chainId: SOLANA, stakeAuthority: `${SOLANA}:Auth1` }), chain({ chainId: EVM })]),
+      ),
+    ).toBe(false);
+    expect(hasAmbiguousStakeChain(undefined)).toBe(false);
   });
 });
 

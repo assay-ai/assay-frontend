@@ -458,7 +458,7 @@ export default function MappingTesterPage() {
   return (
     <TooltipProvider delayDuration={150}>
       {/* Page Header */}
-      <header className="flex w-full items-center justify-between gap-4">
+      <header className="flex w-full flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="truncate text-heading-md text-01">
             Test · {binding.id.slice(0, 8)} · {hostOf(binding.endpoint)}
@@ -505,7 +505,7 @@ export default function MappingTesterPage() {
             value={args ?? ""}
             onChange={(event) => setArgs(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter") onRun();
+              if (event.key === "Enter" && !run.isPending) onRun();
             }}
             spellCheck={false}
             aria-label="Tool arguments, as JSON"

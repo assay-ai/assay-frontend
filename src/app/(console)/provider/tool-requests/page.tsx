@@ -21,6 +21,7 @@ import { Table, type TableColumn } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { stampUtc } from "@/features/g34a/stats";
 import { toolRequestOwnerLabel, toolRequestStateLine } from "@/features/provider-tool-requests/state";
+import { isHttpsUrl } from "@/features/provider-tool-requests/url";
 import type { CursorPage } from "@/interfaces/api";
 import type { ToolRequest } from "@/interfaces/provider-tool-requests";
 import { ApiError } from "@/libs/ApiClient";
@@ -160,6 +161,11 @@ export default function ToolRequestsPage() {
     const description = pricingRationale.trim()
       ? `What it does: ${whatItDoes.trim()}\n\nWhy a per-call price is truthful for it: ${pricingRationale.trim()}`
       : whatItDoes.trim();
+
+    if (upstreamUrl.trim() && !isHttpsUrl(upstreamUrl.trim())) {
+      setFormError("Upstream URL must be a valid https:// address.");
+      return;
+    }
 
     let monthlyCalls: number | undefined;
     if (expectedMonthlyCalls.trim()) {

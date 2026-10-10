@@ -1,5 +1,7 @@
 import { CircleCheck, FileDiff, Scale } from "lucide-react";
 
+import { formatMoney, symbolForAsset } from "@/utils/money";
+
 /**
  * One inbox item card.
  *
@@ -58,6 +60,24 @@ function utcStamp(iso: string): string {
   return `${at.toISOString().slice(0, 10)} ${at.toISOString().slice(11, 16)} UTC`;
 }
 
+/** The platform settles in 6-decimal stablecoins; the notification carries no scale. */
+const NOTIFICATION_ASSET_DECIMALS = 6;
+
+/**
+ * The penalty notification's body names the amount in raw minor units and the
+ * asset by its chain-scoped id ("Estimated penalty 28470000 solana:…/token:…").
+ * Neither is something a person reads, so the pair is rewritten as money.
+ * Bodies that do not match are returned untouched.
+ */
+export function formatNotificationBody(body: string): string {
+  return body.replace(/(\d{1,30}) ([a-z0-9-]+:[^\s/]+\/[^\s]+?)(?=[\s,.;)]|$)/gi, (_match, amount: string, asset: string) =>
+    formatMoney(
+      { amount, asset, decimals: NOTIFICATION_ASSET_DECIMALS },
+      { symbol: symbolForAsset(asset), decimals: 2 }
+    )
+  );
+}
+
 export function InboxItem({ item }: { item: NotificationItem }) {
   const { Icon, tone, border } = SEVERITY_ICON[item.severity] ?? SEVERITY_ICON.INFO;
 
@@ -74,7 +94,9 @@ export function InboxItem({ item }: { item: NotificationItem }) {
       />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className="text-label-sm leading-[1.4] text-01">{item.title}</p>
-        <p className="text-body-13 leading-[1.55] text-02">{item.body}</p>
+        <p className="break-words text-body-13 leading-[1.55] text-02 [overflow-wrap:anywhere]">
+          {formatNotificationBody(item.body)}
+        </p>
         {/*
           The frame's `C` line is a deadline ("respond by … · 2d 21h") on the
           two items that have one. **No deadline field exists on the wire** —

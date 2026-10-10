@@ -82,6 +82,16 @@ export function stakeActionChain(stake: ProviderStake | undefined): ProviderChai
 }
 
 /**
+ * True when the provider has proved a stake authority on more than one chain,
+ * so `stakeActionChain` has no single chain to act on. Chains with no proved
+ * authority do not count: with none proved the honest sentence is "no
+ * authority yet", not "more than one chain".
+ */
+export function hasAmbiguousStakeChain(stake: ProviderStake | undefined): boolean {
+  return stakeChains(stake).filter((entry) => entry.stakeAuthority !== null).length > 1;
+}
+
+/**
  * The chain the response's SINGLE requirement figures are about, or `null`.
  *
  * `requirementTotal`, `negotiatedMinimum`, `headroom`, `shortfall` and

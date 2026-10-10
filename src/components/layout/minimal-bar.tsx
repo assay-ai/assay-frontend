@@ -87,7 +87,9 @@ const MinimalBar = React.forwardRef<HTMLElement, MinimalBarProps>(
           <span className="shrink-0 whitespace-nowrap font-mono text-mono-12 text-03">{status}</span>
         ) : null}
 
-        <Avatar name={avatarName} initials={avatarInitials} src={avatarSrc} color={avatarColor} size="md" />
+        {avatarName || avatarInitials || avatarSrc ? (
+          <Avatar name={avatarName} initials={avatarInitials} src={avatarSrc} color={avatarColor} size="md" />
+        ) : null}
       </header>
     );
   }

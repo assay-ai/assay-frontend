@@ -21,6 +21,35 @@ function titleCaseKind(kind: string): string {
 }
 
 /**
+ * The timeline endpoint is HTTP-cached for ~10s server-side, so a refetch right
+ * after Acknowledge can still answer without the ACKNOWLEDGED event even though
+ * the case already carries `clocks.acknowledgedAt`. Fill that one event in from
+ * the case's own clock so every screen reading both agrees; once the endpoint
+ * catches up its own row wins and nothing is duplicated.
+ */
+export function withAcknowledgedEvent(
+  events: readonly SlashProposalEvent[],
+  proposal: SlashProposalSummary
+): SlashProposalEvent[] {
+  const acknowledgedAt = proposal.clocks.acknowledgedAt;
+  if (!acknowledgedAt || events.some((event) => event.kind === "ACKNOWLEDGED")) {
+    return [...events];
+  }
+  const synthesized: SlashProposalEvent = {
+    id: "derived-acknowledged",
+    occurredAt: acknowledgedAt,
+    kind: "ACKNOWLEDGED",
+    actorType: "provider",
+    actorId: null,
+    summary: "Provider opened the case",
+    detail: {},
+  };
+  return [...events, synthesized].sort(
+    (a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt)
+  );
+}
+
+/**
  * The rich path: a real `SlashProposalEvent[]` (already-occurred history,
  * backend-authored sentences) plus the two forward-looking milestones the
  * case's own clocks name. The two milestones are never invented timestamps —
@@ -33,14 +62,15 @@ export function buildRichTimeline(
   events: readonly SlashProposalEvent[],
   proposal: SlashProposalSummary
 ): TimelineEvent[] {
-  const rows: TimelineEvent[] = events.map((event, index) => ({
+  const all = withAcknowledgedEvent(events, proposal);
+  const rows: TimelineEvent[] = all.map((event, index) => ({
     id: event.id,
     time: stampUtc(event.occurredAt),
     label: titleCaseKind(event.kind),
     meta: event.summary,
     // The most recent real event is "in progress" until something newer
     // supersedes it; everything before it already happened.
-    tone: index === events.length - 1 ? "primary" : "success",
+    tone: index === all.length - 1 ? "primary" : "success",
   }));
 
   const { clocks } = proposal;

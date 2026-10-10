@@ -39,7 +39,13 @@ import {
   retentionLabel,
   scoreText,
 } from "@/features/provider-verdicts/format";
+import {
+  fromDayToIso,
+  toDayToIso,
+  validateVerdictFilters,
+} from "@/features/provider-verdicts/filters";
 import type { ProviderVerdictListItem, VerdictStatus } from "@/interfaces";
+import { ApiError } from "@/libs/ApiClient";
 import { getToolBinding, listSlaWindows, listProviderVerdicts } from "@/services";
 import { labelForEndpoint, shortBindingId } from "@/utils/provider-label";
 import { presentVerdict } from "@/utils/verdict";
@@ -180,6 +186,7 @@ export default function ProviderVerdictFeedPage() {
   const [filterOpen, setFilterOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<AppliedFilters>(EMPTY_FILTERS);
   const [applied, setApplied] = React.useState<AppliedFilters>(EMPTY_FILTERS);
+  const [filterError, setFilterError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -218,8 +225,8 @@ export default function ProviderVerdictFeedPage() {
         windowId,
         agentId: applied.agentId || undefined,
         reasonCode: applied.reasonCode || undefined,
-        from: applied.from ? new Date(applied.from).toISOString() : undefined,
-        to: applied.to ? new Date(applied.to + "T23:59:59.999Z").toISOString() : undefined,
+        from: fromDayToIso(applied.from),
+        to: toDayToIso(applied.to),
       }),
     getNextPageParam: (last) => last.pageInfo.nextCursor ?? undefined,
     enabled: windowsQuery.isFetched,
@@ -366,8 +373,8 @@ export default function ProviderVerdictFeedPage() {
     if (windowId) q.set("windowId", windowId);
     if (applied.agentId) q.set("agentId", applied.agentId);
     if (applied.reasonCode) q.set("reasonCode", applied.reasonCode);
-    if (applied.from) q.set("from", new Date(applied.from).toISOString());
-    if (applied.to) q.set("to", new Date(applied.to + "T23:59:59.999Z").toISOString());
+    if (applied.from) q.set("from", fromDayToIso(applied.from) as string);
+    if (applied.to) q.set("to", toDayToIso(applied.to) as string);
     return `GET /providers/me/verdicts?${q.toString()}\nAuthorization: Bearer <your token>`;
   }, [segmentDef, windowId, applied]);
 
@@ -409,6 +416,7 @@ export default function ProviderVerdictFeedPage() {
             icon={<FilterIcon aria-hidden="true" />}
             onClick={() => {
               setDraft(applied);
+              setFilterError(null);
               setFilterOpen(true);
             }}
           >
@@ -478,8 +486,9 @@ export default function ProviderVerdictFeedPage() {
         <PanelBody className="px-2.5 pb-2.5 pt-1.5">
           {verdictsQuery.isError ? (
             <p className="p-3 text-body-13 text-danger-600">
-              This feed could not be loaded. It may belong to another organisation, or the
-              binding id may not exist.
+              {verdictsQuery.error instanceof ApiError && verdictsQuery.error.status === 400
+                ? verdictsQuery.error.message
+                : "This feed could not be loaded. It may belong to another organisation, or the binding id may not exist."}
             </p>
           ) : verdictsQuery.isPending || windowsQuery.isPending || bindingQuery.isPending ? (
             <p className="p-3 font-mono text-mono-13 text-03">Loading…</p>
@@ -489,14 +498,18 @@ export default function ProviderVerdictFeedPage() {
                 icon={<ShieldCheck aria-hidden="true" width={22} height={22} />}
                 title={
                   scopedItems.length === 0
-                    ? effectiveScope === "current"
-                      ? "No verdicts in the current window"
-                      : "No verdicts yet"
+                    ? activeFilterCount(applied) > 0
+                      ? "No verdicts match these filters"
+                      : effectiveScope === "current"
+                        ? "No verdicts in the current window"
+                        : "No verdicts yet"
                     : "No verdicts match this filter"
                 }
                 description={
                   scopedItems.length === 0
-                    ? "A verdict appears here the moment a call against this binding is judged. Nothing has been judged in this scope yet."
+                    ? activeFilterCount(applied) > 0
+                      ? "Nothing in this scope matches the applied filters. Change or clear them to see more."
+                      : "A verdict appears here the moment a call against this binding is judged. Nothing has been judged in this scope yet."
                     : "Try another verdict filter, clear the search, or switch to all time."
                 }
               />
@@ -553,18 +566,23 @@ export default function ProviderVerdictFeedPage() {
             />
             <div className="flex w-full gap-3">
               <Field
-                label="From"
+                label="From (UTC)"
                 type="date"
                 value={draft.from}
                 onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
               />
               <Field
-                label="To"
+                label="To (UTC)"
                 type="date"
                 value={draft.to}
                 onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
               />
             </div>
+            {filterError ? (
+              <p role="alert" className="text-body-13 text-danger-600">
+                {filterError}
+              </p>
+            ) : null}
           </div>
           <SheetFooter className="flex-row justify-end gap-2.5">
             <Button
@@ -572,6 +590,7 @@ export default function ProviderVerdictFeedPage() {
               onClick={() => {
                 setDraft(EMPTY_FILTERS);
                 setApplied(EMPTY_FILTERS);
+                setFilterError(null);
                 setFilterOpen(false);
               }}
             >
@@ -579,7 +598,13 @@ export default function ProviderVerdictFeedPage() {
             </Button>
             <Button
               onClick={() => {
-                setApplied(draft);
+                const problem = validateVerdictFilters(draft);
+                if (problem) {
+                  setFilterError(problem);
+                  return;
+                }
+                setFilterError(null);
+                setApplied({ ...draft, agentId: draft.agentId.trim() });
                 setFilterOpen(false);
               }}
             >

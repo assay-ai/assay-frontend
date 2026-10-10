@@ -29,13 +29,13 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="flex w-full items-center justify-between gap-4">
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+    <div className="flex w-full flex-wrap items-center justify-between gap-4">
+      <div className="flex min-w-0 flex-1 basis-[16rem] flex-col gap-0.5">
         {/* 23px/600/-0.5 in the design; `heading-md` is the nearest step. */}
-        <h1 className="truncate text-heading-md text-01">{title}</h1>
-        <p className="font-mono text-mono-12 text-03">{sub}</p>
+        <h1 className="break-all text-heading-md text-01 tablet:truncate">{title}</h1>
+        <p className="break-words font-mono text-mono-12 text-03">{sub}</p>
       </div>
-      {actions ? <div className="flex shrink-0 items-center gap-2.5">{actions}</div> : null}
+      {actions ? <div className="flex flex-wrap items-center gap-2.5">{actions}</div> : null}
     </div>
   );
 }
@@ -146,7 +146,9 @@ export interface MinorUnitsResult {
 export function minorUnitsFromMajorInput(text: string, decimals: number): MinorUnitsResult {
   const trimmed = text.trim();
   if (trimmed === "") return { amount: null, error: null };
-  if (!/^\d*(\.\d*)?$/.test(trimmed)) {
+  // At least one digit: "." alone matches a loose `\d*(\.\d*)?` and makes
+  // Decimal throw. "5." and ".5" stay valid.
+  if (!/^(\d+\.?\d*|\.\d+)$/.test(trimmed)) {
     return { amount: null, error: "Digits and one decimal point only." };
   }
 
@@ -154,6 +156,8 @@ export function minorUnitsFromMajorInput(text: string, decimals: number): MinorU
   if (!scaled.isInteger()) {
     return { amount: null, error: `At most ${decimals} decimal places.` };
   }
+  // The PATCH read-back is a JSON number; anything past 2^53 comes back rounded.
+  if (scaled.gt(Number.MAX_SAFE_INTEGER)) return { amount: null, error: "Too large." };
   return { amount: scaled.toFixed(0), error: null };
 }
 

@@ -465,13 +465,13 @@ export default function BindingOverviewPage() {
       {/* ── Page Header ─────────────────────────────────────────── */}
       <header className="flex w-full flex-col items-start gap-4 tablet:flex-row tablet:items-center tablet:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <h1 className="truncate text-heading-md text-01">{title}</h1>
-          <p className="font-mono text-mono-12 text-03">
+          <h1 className="break-all text-heading-md text-01 tablet:truncate">{title}</h1>
+          <p className="break-words font-mono text-mono-12 text-03">
             {subParts.join(" · ")}
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           {isPaused ? (
             <Button
               variant="secondary"

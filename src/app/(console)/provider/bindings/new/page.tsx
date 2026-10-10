@@ -38,7 +38,8 @@ import {
   listToolCatalogue,
 } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
-import { chainIdOfAsset } from "@/utils/chain";
+import { getProviderRegistration } from "@/services/provider-registration.service";
+import { chainIdOfAsset, chainLabel } from "@/utils/chain";
 
 /**
  * `/provider/bindings/new` — the screen that creates a binding.
@@ -384,6 +385,25 @@ export default function NewToolBindingPage() {
     networkMode: "always" as const,
   });
 
+  // Which chains this provider can be paid on. Advisory like the query above:
+  // a failed read (unregistered, offline) shows no warning and the server's
+  // PROVIDER_BINDING_CHAIN_NOT_ENROLLED stays the authority.
+  const registrationQuery = useQuery({
+    queryKey: ["provider", "registration"],
+    queryFn: getProviderRegistration,
+    retry: 0,
+    networkMode: "always" as const,
+  });
+  const enrolledChains = React.useMemo(
+    () =>
+      registrationQuery.data
+        ? registrationQuery.data.registration.payoutAccounts
+            .filter((account) => account.status === "ACTIVE")
+            .map((account) => account.chainId)
+        : null,
+    [registrationQuery.data]
+  );
+
   const bindingIdByTool = React.useMemo(() => {
     const map = new Map<string, string>();
     for (const binding of existingQuery.data?.items ?? []) {
@@ -462,6 +482,8 @@ export default function NewToolBindingPage() {
   /* ------------------------------------------------------------- errors */
 
   const error = create.error;
+  const chainNotEnrolled =
+    enrolledChains !== null && settlementChain !== null && !enrolledChains.includes(settlementChain);
   const conflictBindingId = tool ? bindingIdByTool.get(tool.id) : undefined;
 
   const errorNote = !error ? null : error.code === "PROVIDER_BINDING_ALREADY_EXISTS" ? (
@@ -482,6 +504,16 @@ export default function NewToolBindingPage() {
         </Link>
       )}
       , or suspend it first. Pick another tool to create a new one.
+    </Note>
+  ) : error.code === "PROVIDER_BINDING_CHAIN_NOT_ENROLLED" ? (
+    <Note tone="warning" icon={<Wrench width={15} height={15} aria-hidden="true" />}>
+      This tool settles on{" "}
+      <span className="font-mono text-mono-12 text-01 break-all">{settlementChain ?? "its chain"}</span>
+      , and you have no active payout account there, so the binding cannot be offered.{" "}
+      <Link href="/provider/setup" className="underline">
+        Add a payout address for that chain in setup
+      </Link>{" "}
+      and try again.
     </Note>
   ) : error.code === "PROVIDER_BINDING_TOOL_UNKNOWN" ? (
     <Note tone="warning" icon={<Wrench width={15} height={15} aria-hidden="true" />}>
@@ -546,6 +578,24 @@ export default function NewToolBindingPage() {
       </Note>
 
       {errorNote}
+
+      {tool && chainNotEnrolled && !error ? (
+        <Note tone="warning" icon={<Wrench width={15} height={15} aria-hidden="true" />}>
+          This tool settles on{" "}
+          <span className="break-all font-mono text-mono-12 text-01">
+            {chainLabel(settlementChain as string)}
+          </span>
+          , and your payout accounts are on{" "}
+          {enrolledChains && enrolledChains.length > 0
+            ? enrolledChains.map(chainLabel).join(", ")
+            : "no chain yet"}
+          . Creating the binding will be refused until you{" "}
+          <Link href="/provider/setup" className="underline">
+            add a payout address for that chain
+          </Link>
+          .
+        </Note>
+      ) : null}
 
       <Panel>
         <PanelHeader>

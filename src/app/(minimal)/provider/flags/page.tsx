@@ -133,6 +133,9 @@ function matchesFilter(row: ProviderCallRow, filter: Filter): boolean {
   return row.verdict === "DEGRADED";
 }
 
+/** Rows mounted at a time; "Show more" adds another page. */
+const PAGE_SIZE = 100;
+
 interface CallTableRow extends TableRowData {
   call: ProviderCallRow;
 }
@@ -204,8 +207,15 @@ export default function VerdictsAndFlagsPage() {
             row.classification.toLowerCase().includes(needle)
       )
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-      .map((row) => ({ id: row.callId || row.intentId, call: row }));
+      // Call and intent ids repeat in the export, so the id alone is not a key.
+      .map((row, index) => ({ id: `${row.callId || row.intentId}:${index}`, call: row }));
   }, [all, filter, term]);
+
+  // The "passed"/"all" filters hold thousands of rows; mounting them all
+  // freezes the tab. Filter, search and export still work on the full set.
+  const [shown, setShown] = React.useState(PAGE_SIZE);
+  React.useEffect(() => setShown(PAGE_SIZE), [filter, term]);
+  const visibleRows = React.useMemo(() => rows.slice(0, shown), [rows, shown]);
 
   const failedInMix =
     qualityQuery.data?.verdictMix.find((entry) => entry.verdict === "FAIL")?.calls ?? null;
@@ -388,9 +398,24 @@ export default function VerdictsAndFlagsPage() {
                 <Table
                   caption="Verdicts on your calls"
                   columns={columns}
-                  rows={rows}
+                  rows={visibleRows}
                   className="min-w-[840px]"
                 />
+                {rows.length > visibleRows.length ? (
+                  <div className="flex items-center justify-between gap-3 px-2.5 pt-3">
+                    <p className="font-mono text-mono-12 text-03">
+                      showing {visibleRows.length.toLocaleString("en-US")} of{" "}
+                      {rows.length.toLocaleString("en-US")} calls
+                    </p>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setShown((current) => current + PAGE_SIZE)}
+                    >
+                      Show more
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <EmptyState

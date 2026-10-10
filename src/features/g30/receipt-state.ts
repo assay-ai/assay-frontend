@@ -93,13 +93,16 @@ export type ReceiptState =
   | "EMPTY_CONFIRMED"
   | "MISAPPLIED"
   | "SYSTEM_ERROR"
-  | "REQUEST_ERROR";
+  | "REQUEST_ERROR"
+  | "EXPIRED";
 
 /** PaymentIntentStatus values that mean the call has not finished. */
 const IN_FLIGHT = new Set(["CREATED", "FUNDS_SECURED", "PROVIDER_EXECUTING", "VERIFYING"]);
 
 export function deriveReceiptState(receipt: Receipt): ReceiptState {
   if (IN_FLIGHT.has(receipt.status)) return "CHECKING";
+  // An expired intent never completed, whatever classification a row carries.
+  if (receipt.status === "EXPIRED") return "EXPIRED";
   if (receipt.classification === "SYSTEM_ERROR") return "SYSTEM_ERROR";
   if (receipt.classification === "REQUEST_ERROR") return "REQUEST_ERROR";
 
@@ -131,7 +134,7 @@ const charged = (receipt: Receipt) => formatMoney(receipt.chargedPrice, { decima
 
 /** The five cards from `LmsKR`, in the order the design lays them out. */
 export const STATE_CARDS: Record<
-  "CHECKING" | "EMPTY_CONFIRMED" | "MISAPPLIED" | "SYSTEM_ERROR" | "REQUEST_ERROR",
+  "CHECKING" | "EMPTY_CONFIRMED" | "MISAPPLIED" | "SYSTEM_ERROR" | "REQUEST_ERROR" | "EXPIRED",
   StateCard
 > = {
   CHECKING: {
@@ -171,6 +174,15 @@ export const STATE_CARDS: Record<
     icon: "file-x",
     tone: "danger",
     sentence: "The request was rejected as malformed. You were not charged.",
+    money: (r) => charged(r),
+    moneyTeal: true,
+  },
+  EXPIRED: {
+    code: "EXPIRED",
+    icon: "circle-alert",
+    tone: "warning",
+    sentence:
+      "The call did not complete in time. You were not charged, and the funds held for it were released.",
     money: (r) => charged(r),
     moneyTeal: true,
   },

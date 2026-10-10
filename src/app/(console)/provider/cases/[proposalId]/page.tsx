@@ -25,6 +25,7 @@ import { CaseContext } from "@/features/provider-slash-case/context";
 import { Measurement } from "@/features/provider-slash-case/measurement";
 import { StatusHeader } from "@/features/provider-slash-case/status-header";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
+import { withAcknowledgedEvent } from "@/features/provider-disputes/timeline";
 import { getSlashProposalTimeline } from "@/services/provider-disputes.service";
 import {
   acknowledgeSlashProposal,
@@ -155,7 +156,7 @@ export default function SlashProposalCasePage() {
 
   const { proposal } = data;
   const canDispute = DISPUTABLE.includes(proposal.status) && proposal.disputeId === null;
-  const events = timelineQuery.data?.events ?? [];
+  const events = withAcknowledgedEvent(timelineQuery.data?.events ?? [], proposal);
 
   /*
     ONE instant, deliberately. There are two execution deadlines behind this

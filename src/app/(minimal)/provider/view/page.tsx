@@ -469,7 +469,7 @@ export default function ProviderViewPage() {
     */
     <div className="-mx-[26px] -my-[22px] flex flex-1 flex-col gap-[18px] px-7 py-6">
       {/* Header — row, gap 16, space-between, centred. */}
-      <header className="flex w-full items-center justify-between gap-4">
+      <header className="flex w-full flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
           <h1 className="text-heading-md text-01">Your traffic and earnings</h1>
           <p className="text-body-sm text-02">
@@ -518,7 +518,7 @@ export default function ProviderViewPage() {
       ) : null}
 
       {/* Tiles — row, gap 14, four equal tiles. */}
-      <div className="flex w-full gap-3.5">
+      <div className="grid w-full grid-cols-2 gap-3.5 tablet:flex">
         <MetricTile
           label="Calls today"
           value={calls.isLoading ? DASH : formatCount(callsToday)}
@@ -549,8 +549,8 @@ export default function ProviderViewPage() {
       </div>
 
       {/* Row — Traffic fills, Quality is a fixed 520. */}
-      <div className="flex w-full items-start gap-4">
-        <Panel className="min-w-0 flex-1">
+      <div className="flex w-full flex-col items-start gap-4 tablet:flex-row">
+        <Panel className="w-full min-w-0 tablet:flex-1">
           <PanelHeader>
             <PanelTitles>
               <PanelTitle>Traffic</PanelTitle>
@@ -575,7 +575,7 @@ export default function ProviderViewPage() {
           </PanelBody>
         </Panel>
 
-        <Panel className="w-[520px] shrink-0">
+        <Panel className="w-full shrink-0 tablet:w-[520px]">
           <PanelHeader>
             <PanelTitles>
               <PanelTitle>Quality</PanelTitle>
@@ -586,7 +586,7 @@ export default function ProviderViewPage() {
             </PanelTitles>
           </PanelHeader>
           {/* Body — padding [6, 10, 10, 10], no gap. */}
-          <PanelBody className="px-2.5 pb-2.5 pt-1.5">
+          <PanelBody className="overflow-x-auto px-2.5 pb-2.5 pt-1.5">
             <Table
               columns={failColumns}
               rows={failRows}
@@ -628,7 +628,7 @@ export default function ProviderViewPage() {
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
-        <PanelBody className="px-2.5 pb-2.5 pt-1.5">
+        <PanelBody className="overflow-x-auto px-2.5 pb-2.5 pt-1.5">
           <Table
             columns={batchColumns}
             rows={batchRows}
@@ -665,7 +665,7 @@ export default function ProviderViewPage() {
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
-        <PanelBody className="px-2.5 pb-2.5 pt-1.5">
+        <PanelBody className="overflow-x-auto px-2.5 pb-2.5 pt-1.5">
           {classes.totalCalls > 0 ? (
             <Table
               columns={classColumns}

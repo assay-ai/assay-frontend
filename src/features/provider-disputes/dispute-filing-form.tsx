@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Send } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { Banner } from "@/components/ui/banner";
@@ -270,11 +271,35 @@ export function DisputeFilingForm({
   }
 
   const { proposal } = data;
+
+  // A proposal that already carries a dispute cannot take a second one; point at the one on file.
+  if (proposal.status === "DISPUTED" || proposal.disputeId) {
+    return (
+      <Banner
+        tone="warning"
+        title="This proposal already has a dispute on file."
+        description={
+          proposal.disputeId ? (
+            <>
+              A second dispute cannot be filed.{" "}
+              <Link href={`/provider/disputes/${proposal.disputeId}`} className="underline">
+                Open the existing dispute
+              </Link>
+              .
+            </>
+          ) : (
+            "A second dispute cannot be filed. Find it under Disputes."
+          )
+        }
+      />
+    );
+  }
+
   const respondBy = proposal.clocks.respondByAt;
 
   return (
     <div className={className ?? "flex w-full flex-col gap-4"}>
-      <header className="flex w-full flex-col items-start gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
+      <header className="flex w-full flex-col items-stretch gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h1 className="truncate text-heading-md text-01">
             Dispute · {proposal.windowLabel ?? proposal.bindingLabel} · proposed penalty{" "}
@@ -285,7 +310,7 @@ export function DisputeFilingForm({
             {respondBy ? ` You must respond by ${stampUtc(respondBy)} UTC.` : ""}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5 tablet:shrink-0">
           <Button variant="secondary" onClick={onCancel} type="button">
             Cancel
           </Button>

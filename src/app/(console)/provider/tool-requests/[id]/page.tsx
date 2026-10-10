@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/panel";
 import { DASH, count, stampUtc } from "@/features/g34a/stats";
 import { isToolRequestTerminal, toolRequestOwnerLabel, toolRequestStateLine } from "@/features/provider-tool-requests/state";
+import { isLinkableUrl } from "@/features/provider-tool-requests/url";
 import { getToolRequest } from "@/services/provider-tool-requests.service";
 
 /**
@@ -88,7 +89,11 @@ export default function ToolRequestDetailPage() {
                 {request.description}
               </p>
 
-              {request.upstreamUrl ? (
+              {request.upstreamUrl && !isLinkableUrl(request.upstreamUrl) ? (
+                <span className="w-fit max-w-full break-all font-mono text-mono-13 text-02">
+                  {request.upstreamUrl}
+                </span>
+              ) : request.upstreamUrl ? (
                 <a
                   href={request.upstreamUrl}
                   target="_blank"
