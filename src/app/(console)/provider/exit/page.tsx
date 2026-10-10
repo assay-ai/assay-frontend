@@ -39,7 +39,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { getProviderRegistration } from "@/services/provider-registration.service";
 import { exportProviderCalls } from "@/services/provider-reports.service";
 import { listSlaWindows } from "@/services/provider-sla-windows.service";
-import { stakeActionChain } from "@/features/provider-stake/chain-stake";
+import { stakeActionChain, withProvedStakeAuthority } from "@/features/provider-stake/chain-stake";
 import {
   createStakeAuthorityChallenge,
   proveStakeAuthority,
@@ -763,9 +763,11 @@ export default function ProviderExitPage() {
             stale-while-revalidate=3600`, so a refetch here can be served the
             pre-write body straight from the BROWSER's HTTP cache for up to an
             hour — invalidating the React Query key does not reach it.
+            Seeded onto the per-chain entry: `stakeActionChain` reads nothing
+            else, and a top-level `stakeAuthority` left the banner up.
           */
           queryClient.setQueryData<ProviderStake>(["provider", "stake"], (previous) =>
-            previous ? { ...previous, stakeAuthority } : previous,
+            withProvedStakeAuthority(previous, stakeAuthority),
           );
         }}
       />

@@ -225,6 +225,19 @@ class ApiClient {
   }
 
   /**
+   * A GET that revalidates past the browser's HTTP cache.
+   *
+   * Provider GETs are served `private, max-age=10, stale-while-revalidate=3600`,
+   * so a plain refetch straight after a write is answered with the pre-write
+   * body. `no-cache` means "revalidate before serving", and the ETag turns an
+   * unchanged body into a 304. Only `Cache-Control` is sent — this is not a
+   * per-call header escape hatch.
+   */
+  getRevalidated<T>(url: string, params?: Record<string, unknown>): Promise<T> {
+    return this.request<T>({ method: "GET", url, params, headers: { "Cache-Control": "no-cache" } });
+  }
+
+  /**
    * `headers` exists for exactly one caller: the operator console's two
    * two-person actions, which carry the approver's own bearer token in
    * `X-Operator-Approver`. Deliberately not on `get`/`put`/`patch` — a

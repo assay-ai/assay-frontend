@@ -12,6 +12,7 @@ import {
   stakedFigure,
   unbondingFigure,
   unreadableChains,
+  withProvedStakeAuthority,
 } from "./chain-stake";
 
 const SOLANA = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
@@ -230,5 +231,51 @@ describe("stakeDecimals", () => {
     expect(stakeDecimals(response([chain({ hasKnownStake: false, staked: null })]))).toBe(
       STAKE_ASSET_DECIMALS,
     );
+  });
+});
+
+describe("withProvedStakeAuthority — the cache seed after a proof", () => {
+  /*
+    BUG-J-PROV-01: the prove sheet's success path wrote `stakeAuthority` at the
+    TOP level of the cached response, which no reader looks at — every reader
+    goes through `stakeActionChain`, i.e. the per-chain entries — so
+    /provider/exit kept "no authority has been proved" until a hard reload.
+  */
+  it("sets the authority on the chain it was proved on, so stakeActionChain sees it", () => {
+    const before = response([chain({ chainId: EVM, stakeAuthority: null })]);
+    const after = withProvedStakeAuthority(before, `${EVM}:0xfB18c1c4`);
+    expect(stakeActionChain(after)?.stakeAuthority).toBe(`${EVM}:0xfB18c1c4`);
+    expect(after).not.toHaveProperty("stakeAuthority");
+    // The input is cache data: it is never mutated in place.
+    expect(before.stake[0].stakeAuthority).toBeNull();
+  });
+
+  it("touches only the matching chain when there are two", () => {
+    const after = withProvedStakeAuthority(
+      response([chain({ chainId: SOLANA }), chain({ chainId: EVM })]),
+      `${EVM}:0x9965`,
+    );
+    expect(after?.stake.map((entry) => entry.stakeAuthority)).toEqual([null, `${EVM}:0x9965`]);
+    expect(stakeActionChain(after)?.chainId).toBe(EVM);
+  });
+
+  it("adds an entry with UNKNOWN figures for a chain the read did not list", () => {
+    const after = withProvedStakeAuthority(
+      response([chain({ chainId: SOLANA })]),
+      `${EVM}:0x9965`,
+    );
+    const added = after?.stake.find((entry) => entry.chainId === EVM);
+    expect(added).toMatchObject({
+      stakeAuthority: `${EVM}:0x9965`,
+      hasKnownStake: false,
+      staked: null,
+      chainReadable: false,
+    });
+  });
+
+  it("leaves a missing response or a non-CAIP-10 authority alone", () => {
+    expect(withProvedStakeAuthority(undefined, `${EVM}:0x9965`)).toBeUndefined();
+    const live = response([chain()]);
+    expect(withProvedStakeAuthority(live, "0x9965")).toBe(live);
   });
 });

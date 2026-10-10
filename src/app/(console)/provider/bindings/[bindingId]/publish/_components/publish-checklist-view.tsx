@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleAlert, CircleCheck, Rocket, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import type {
   ToolBindingDetail,
 } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
+import { applyPublished, isAlreadyLive, isPublishedState } from "@/features/provider-binding/after-publish";
 import { requirementChain, unreadableChains } from "@/features/provider-stake/chain-stake";
 import { getProviderStake } from "@/services/provider-stake.service";
 import {
@@ -238,14 +240,33 @@ export function PublishChecklistView({ bindingId }: { bindingId: string }) {
     queryFn: () => getProviderStake(),
   });
 
+  const router = useRouter();
+  const detailHref = `/provider/bindings/${bindingId}`;
+
+  /*
+    BUG-J-PROV-02: the old success path only invalidated keys, and every
+    refetch was answered from the browser's HTTP cache with the pre-publish
+    body — the screen stayed on an enabled Publish button over a binding that
+    was already ACTIVE. `applyPublished` seeds what it can from the response
+    and re-reads the stake past the cache; then the provider is taken to the
+    binding, where the live state is the thing on screen.
+  */
   const publish = useMutation({
     mutationFn: () => publishToolBinding(bindingId),
-    onSuccess: (published) => {
+    onSuccess: async (published) => {
+      await applyPublished(queryClient, published);
       toast(`Published revision ${published.publishedVersion ?? published.version}`);
-      void queryClient.invalidateQueries({ queryKey: ["provider", "tool-binding", bindingId] });
-      void queryClient.invalidateQueries({ queryKey: ["provider", "tool-bindings", "sidebar"] });
+      router.push(detailHref);
     },
     onError: (error) => {
+      // A second press, or a check read before the first publish landed: the
+      // revision is already live, which is the outcome the provider wanted.
+      if (isAlreadyLive(error)) {
+        toast((error as Error).message);
+        void queryClient.invalidateQueries({ queryKey: ["provider", "tool-binding", bindingId] });
+        router.push(detailHref);
+        return;
+      }
       // `PROVIDER_PUBLISH_CHECKS_FAILED` carries the same requirement list the
       // panel is already showing, so the recovery is to re-read the check
       // rather than to parse the error. Branch on `code`, never on the text.
@@ -262,6 +283,8 @@ export function PublishChecklistView({ bindingId }: { bindingId: string }) {
   const requirements: readonly PublishRequirementResult[] = check.data?.requirements ?? [];
   const metCount = requirements.filter((requirement) => requirement.met).length;
   const publishable = check.data?.publishable === true;
+  /* Live already, or just published and on its way to the binding page: no second press. */
+  const isLive = isPublishedState(binding.data) || publish.isSuccess;
 
   const title = binding.data ? `Publish ${labelForEndpoint(binding.data.endpoint)}` : "Publish";
 
@@ -290,11 +313,11 @@ export function PublishChecklistView({ bindingId }: { bindingId: string }) {
         <div className="flex shrink-0 items-center gap-2.5">
           <Button
             icon={<Rocket aria-hidden="true" />}
-            disabled={!publishable}
+            disabled={!publishable || isLive || publish.isPending}
             loading={publish.isPending}
             onClick={() => publish.mutate()}
           >
-            Publish
+            {isLive ? "Published" : "Publish"}
           </Button>
         </div>
       </div>
