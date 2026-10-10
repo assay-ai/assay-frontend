@@ -43,10 +43,12 @@ export interface BottomTabBarProps
   hrefs?: Partial<Record<TabBarTabId, string>>;
   /** Notification dot per tab. Every sampled screen ships this off. */
   badges?: Partial<Record<TabBarTabId, boolean>>;
+  /** Element used for tabs with an `href`; pass Next's `Link` to avoid full reloads. */
+  linkAs?: React.ElementType;
 }
 
 export const BottomTabBar = React.forwardRef<HTMLElement, BottomTabBarProps>(
-  ({ className, active, onTabChange, hrefs, badges, ...props }, ref) => {
+  ({ className, active, onTabChange, hrefs, badges, linkAs: LinkComponent = "a", ...props }, ref) => {
     return (
       <nav
         ref={ref}
@@ -95,14 +97,14 @@ export const BottomTabBar = React.forwardRef<HTMLElement, BottomTabBarProps>(
 
           if (href) {
             return (
-              <a
+              <LinkComponent
                 key={id}
                 href={href}
                 aria-current={isActive ? "page" : undefined}
                 className={sharedClassName}
               >
                 {content}
-              </a>
+              </LinkComponent>
             );
           }
 

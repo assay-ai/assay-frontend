@@ -34,6 +34,8 @@ export interface MobileTopBarProps
   onAlertsClick?: () => void;
   /** Unread alert count shown in the badge. */
   alertCount?: number;
+  /** Trailing slot after the alerts action; the buyer shell puts the account menu here. */
+  avatar?: React.ReactNode;
 }
 
 export const MobileTopBar = React.forwardRef<HTMLElement, MobileTopBarProps>(
@@ -48,6 +50,7 @@ export const MobileTopBar = React.forwardRef<HTMLElement, MobileTopBarProps>(
       showAlerts = true,
       onAlertsClick,
       alertCount = 2,
+      avatar,
       ...props
     },
     ref
@@ -105,6 +108,8 @@ export const MobileTopBar = React.forwardRef<HTMLElement, MobileTopBarProps>(
               </span>
             </button>
           ) : null}
+
+          {avatar}
         </div>
       </header>
     );
