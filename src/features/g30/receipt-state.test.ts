@@ -1,0 +1,21 @@
+import { describe, expect, it } from "vitest";
+
+import { samplingExplainerCopy } from "./receipt-state";
+import type { Receipt } from "./wire";
+
+const receipt = (sampling: Receipt["sampling"]) => ({ sampling }) as Receipt;
+
+describe("samplingExplainerCopy", () => {
+  it("says the call was judged every time when the rate is 1 (no sampling paragraph)", () => {
+    const copy = samplingExplainerCopy(receipt({ rate: 1, display: "every call" }), "$0.2500");
+    expect(copy.body).toContain("every call at $0.2500");
+    expect(copy.body).not.toMatch(/Instead we sample/);
+    expect(copy.tail).toBe("");
+  });
+
+  it("keeps the design's sampling paragraph for a sampled rate", () => {
+    const copy = samplingExplainerCopy(receipt({ rate: 0.008, display: "1 in 125" }), "$0.0010");
+    expect(copy.body).toContain("At $0.0010 a call, judging every one would cost more");
+    expect(copy.tail).toBeUndefined();
+  });
+});

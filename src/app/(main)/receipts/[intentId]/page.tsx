@@ -33,6 +33,7 @@ import {
   chargedHeadline,
   deriveReceiptState,
   notChargedHeadline,
+  samplingExplainerCopy,
   samplingSubline,
   toStageChecks,
   type ReceiptState,
@@ -379,7 +380,7 @@ function ReceiptPageContent() {
               */}
               <SamplingExplainer
                 rate={receipt.sampling.display ?? "This tool publishes no sample rate."}
-                body={`Relevance judgement is the only sampled stage. At ${listed} a call, judging every one would cost more than the call itself. Instead we sample, and the provider’s stake covers the rest: if their measured quality falls below what they published, they are slashed and you are compensated for what you spent in that window.`}
+                {...samplingExplainerCopy(receipt, listed)}
               />
             </PanelBody>
           </Panel>

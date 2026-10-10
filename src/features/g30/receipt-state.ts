@@ -233,3 +233,29 @@ export function samplingSubline(receipt: Receipt): string | null {
   if (!others.every((s) => stageStatus(s) === "passed")) return null;
   return "The relevance judgement is the only stage that did not run, and it is sampled — not skipped.";
 }
+
+/**
+ * The sampling explainer's copy for one receipt.
+ *
+ * The design's paragraph ("judging every one would cost more than the call
+ * itself. Instead we sample…") is only true for a call that IS sampled. The
+ * backend derives `rate = min(1, budget / judgementCost)` and a rate of 1 means
+ * the call was judged every time — printing the sampling paragraph beside
+ * "every call" contradicted itself. Such a call gets a sentence saying so, and
+ * no tail (the tail is the guaranteed-tier rule the sentence already covers).
+ */
+export function samplingExplainerCopy(
+  receipt: Receipt,
+  listed: string,
+): { body?: string; tail?: string } {
+  const rate = receipt.sampling.rate;
+  if (typeof rate === "number" && rate >= 1) {
+    return {
+      body: `Relevance judgement runs on every call at ${listed}, so nothing on this receipt is sampled.`,
+      tail: "",
+    };
+  }
+  return {
+    body: `Relevance judgement is the only sampled stage. At ${listed} a call, judging every one would cost more than the call itself. Instead we sample, and the provider’s stake covers the rest: if their measured quality falls below what they published, they are slashed and you are compensated for what you spent in that window.`,
+  };
+}

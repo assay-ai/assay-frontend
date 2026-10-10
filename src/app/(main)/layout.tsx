@@ -15,9 +15,10 @@ import { WalletMenu } from "@/components/layout/wallet-menu";
 /**
  * The buyer shell.
  *
- * Two chromes, one breakpoint. Foundations > Breakpoints is explicit: at 390 it
+ * Two chromes, one breakpoint (768). Foundations > Breakpoints is explicit: at 390 it
  * is a bottom tab bar with five slots and a top bar shrunk to title, and from
- * 834 up it is the full top bar. The design draws both, so
+ * 768 up it is the top bar, whose overflow "More" menu keeps every section
+ * reachable (see `nav-config.ts`). The design draws both, so
  * this renders both and lets CSS choose — a single desktop bar at every width
  * was the shell not being finished, not a decision.
  *
@@ -110,6 +111,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
           alertCount={0}
           onAlertsClick={() => router.push("/alerts")}
           onSearch={() => router.push("/spend")}
+          avatar={<WalletMenu />}
         />
       </div>
 
@@ -120,6 +122,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
 
       <div className="md:hidden">
         <BottomTabBar
+          linkAs={Link}
           active={tabFor(pathname)}
           hrefs={{
             overview: "/",

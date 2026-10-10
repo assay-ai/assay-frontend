@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import Link from "next/link";
 
+import { mobileMoreItems } from "@/components/layout/nav-config";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { Switch } from "@/components/ui/switch";
@@ -57,6 +58,23 @@ export function SettingsView() {
           </Button>
         }
       />
+
+      {/*
+        Below 768 the bottom tab bar has no room for every section, and this is
+        its "More" tab: the sections without a tab of their own are listed here.
+        The account menu (Add funds, Log out) is the avatar in the top bar.
+      */}
+      <nav aria-label="More sections" className="flex flex-col gap-1 md:hidden">
+        {mobileMoreItems().map((item) => (
+          <Link
+            key={item.id}
+            href={item.href}
+            className="flex items-center justify-between rounded-md border border-01 bg-01 px-4 py-3 text-body-13 text-01 hover:bg-02"
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
 
       <div className="flex w-full flex-col gap-4 tablet:flex-row tablet:items-start">
         <Panel className="min-w-0 flex-1">

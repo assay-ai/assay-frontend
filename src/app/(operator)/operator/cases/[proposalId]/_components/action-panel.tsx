@@ -693,8 +693,9 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
     opens a fleet sweep and never looks at the status. A status gate would be
     wrong in both directions:
 
-     - it would MISS `AWAITING_SECOND`, where a sweep is legal — `decide`
-       writes `outcome` even when it defers the second signature;
+     - it would OFFER `AWAITING_SECOND`, where the proposal's `outcome` is
+       still null — `decide` keeps the decision on the dispute until the
+       second signature lands — so `openSweep` refuses there too;
      - it would OFFER `UPHELD`, which only the two upholding outcomes produce,
        and neither of those opens a sweep. The section would render and the
        submit would 422 every time.
