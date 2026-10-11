@@ -4,11 +4,19 @@ import { editDelegationForm } from "@/features/delegation/delegation-form";
 import type { UnsettledVouchers } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 
+import type { EscrowDelegate } from "@/interfaces";
+
 import {
   editIsUnchanged,
+  HELD_DEADLINE_MARGIN_SECONDS,
+  heldIsStale,
   isUnsettledRefusal,
+  liveDelegation,
+  SETTLE_WAIT_IDLE,
+  settleWaitAfterRead,
   strandReasons,
   strandWarning,
+  UNSETTLED_WAIT_MAX_MS,
   unsettledLine,
 } from "./unsettled";
 
@@ -130,5 +138,129 @@ describe("editIsUnchanged", () => {
 
   it("is never 'unchanged' for a new grant", () => {
     expect(editIsUnchanged(null, seeded)).toBe(false);
+  });
+
+  /** Review finding 11: an expired grant seeds "1" day; re-activating it as is must be possible. */
+  it("is never 'unchanged' for an expired grant, so it can be re-activated as it was", () => {
+    expect(editIsUnchanged(seeded, { ...seeded }, { expired: true })).toBe(false);
+  });
+});
+
+const DELEGATE = "eip155:46630:0x76B98fD03eE16e2673532769891f1400b447d10C";
+function grant(unsettled: UnsettledVouchers | undefined): EscrowDelegate {
+  return {
+    delegate: DELEGATE,
+    maxVoucherAmount: usdg("500000"),
+    maxPerWindow: usdg("5000000"),
+    spentInWindow: usdg("2270000"),
+    validUntil: "2026-11-11T12:33:36.000Z",
+    status: "ACTIVE",
+    unsettled,
+  } as EscrowDelegate;
+}
+const NONE: UnsettledVouchers = { ...RETEST, count: 0, amount: usdg("0"), windowNeeds: usdg("0") };
+
+/**
+ * BUG-D1-08: /agents loaded, the agent paid, Edit limits opened without a
+ * reload: the sheet showed the page's list (nothing in flight), no warning, and
+ * an enabled "Sign and update". The sheet now reads the grant again when it
+ * opens, and only that read counts.
+ */
+describe("liveDelegation (BUG-D1-08)", () => {
+  const pageList = grant(NONE); // what /agents loaded, before the paid call
+  const openedAt = 1_000_000;
+
+  it("is not ready to sign until the sheet's own read has answered", () => {
+    expect(
+      liveDelegation({ opened: pageList, delegate: DELEGATE, list: undefined, readAt: 0, openedAt, failed: false }),
+    ).toEqual({ live: pageList, ready: false, gone: false });
+    // A read answered BEFORE the sheet opened is the page's, not the sheet's.
+    expect(
+      liveDelegation({ opened: pageList, delegate: DELEGATE, list: [grant(RETEST)], readAt: openedAt - 1, openedAt, failed: false }).ready,
+    ).toBe(false);
+  });
+
+  it("opened after a payment without a reload: shows it in flight and warns before Sign", () => {
+    const { live, ready } = liveDelegation({
+      opened: pageList,
+      delegate: DELEGATE,
+      list: [grant(RETEST)],
+      readAt: openedAt + 250,
+      openedAt,
+      failed: false,
+    });
+    expect(ready).toBe(true);
+    expect(live?.unsettled?.count).toBe(1);
+    expect(unsettledLine(live?.unsettled, "USDG")).toBe(
+      "1 payment (0.100000 USDG) still being settled",
+    );
+    const caps = { maxVoucherAmount: "500000", maxPerWindow: "5000000" };
+    // W 5 -> 2 with 2.27 + 0.10 needed: the warning, and Sign stays disabled.
+    expect(strandReasons(live?.unsettled, caps, { ...caps, maxPerWindow: "2000000" })).toEqual([
+      "maxPerWindow",
+    ]);
+    // The page's stale list said nothing would strand: the bug.
+    expect(strandReasons(pageList.unsettled, caps, { ...caps, maxPerWindow: "2000000" })).toEqual([]);
+  });
+
+  it("lets the person on when the read failed (the backend still refuses at build), and spots a vanished key", () => {
+    expect(
+      liveDelegation({ opened: pageList, delegate: DELEGATE, list: undefined, readAt: 0, openedAt, failed: true }).ready,
+    ).toBe(true);
+    expect(
+      liveDelegation({ opened: pageList, delegate: DELEGATE, list: [], readAt: openedAt + 1, openedAt, failed: false }),
+    ).toEqual({ live: null, ready: true, gone: true });
+  });
+});
+
+/** Review finding 9: the wait unlocked early after a refusal, and never ended for a busy agent. */
+describe("settleWaitAfterRead", () => {
+  const t0 = 5_000_000;
+
+  it("after a refusal, ignores a read answered before it, even one that says zero", () => {
+    const refused = { ...SETTLE_WAIT_IDLE, refusedAt: t0 };
+    const stale = settleWaitAfterRead(refused, { count: 0, strands: false, readAt: t0 - 10 }, t0 + 1);
+    expect(stale).toBe(refused);
+    const fresh = settleWaitAfterRead(refused, { count: 0, strands: false, readAt: t0 + 10 }, t0 + 11);
+    expect(fresh).toEqual({ ...SETTLE_WAIT_IDLE, settled: true });
+  });
+
+  it("ends the wait once nothing strands any more, not only at zero", () => {
+    const waiting = { ...SETTLE_WAIT_IDLE, waiting: true, startedAt: t0 };
+    expect(settleWaitAfterRead(waiting, { count: 2, strands: true, readAt: t0 + 5 }, t0 + 5)).toBe(waiting);
+    expect(settleWaitAfterRead(waiting, { count: 1, strands: false, readAt: t0 + 10 }, t0 + 10)).toEqual({
+      ...SETTLE_WAIT_IDLE,
+      settled: true,
+    });
+  });
+
+  it("gives up with 'stalled' when the agent keeps paying, and does nothing when idle", () => {
+    const waiting = { ...SETTLE_WAIT_IDLE, waiting: true, startedAt: t0 };
+    const later = t0 + UNSETTLED_WAIT_MAX_MS;
+    expect(settleWaitAfterRead(waiting, { count: 3, strands: true, readAt: later }, later)).toMatchObject({
+      waiting: false,
+      stalled: true,
+      settled: false,
+    });
+    expect(settleWaitAfterRead(SETTLE_WAIT_IDLE, { count: 0, strands: false, readAt: t0 }, t0)).toBe(
+      SETTLE_WAIT_IDLE,
+    );
+  });
+});
+
+/** Review finding 8: the held signed request goes stale with its deadline or its nonce. */
+describe("heldIsStale", () => {
+  const now = 1_793_000_000;
+  const held = { nonce: "26", deadline: String(now + 300), validUntil: "1795000000" };
+
+  it("is usable while its deadline is ahead and its nonce is the current one", () => {
+    expect(heldIsStale(held, now)).toBeNull();
+    expect(heldIsStale(held, now, "26")).toBeNull();
+  });
+
+  it("is stale near its deadline, or once another change used the nonce up", () => {
+    expect(heldIsStale(held, now + 300 - HELD_DEADLINE_MARGIN_SECONDS)).toBe("deadline");
+    expect(heldIsStale({ ...held, deadline: undefined }, now)).toBe("deadline");
+    expect(heldIsStale(held, now, "27")).toBe("nonce");
   });
 });

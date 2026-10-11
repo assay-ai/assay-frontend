@@ -36,7 +36,11 @@ import {
 } from "@/features/delegation/relayed-delegation";
 import {
   editIsUnchanged,
+  type HeldStale,
+  heldIsStale,
+  heldStaleText,
   isUnsettledRefusal,
+  liveDelegation,
   strandReasons,
   UNSETTLED_POLL_MS,
   unsettledLine,
@@ -44,7 +48,8 @@ import {
 import { isRelayedRefusal, relayedRefusal } from "@/features/escrow/relayed-refusal";
 import { useChains } from "@/hooks/useChains";
 import { isUserRejection, type Signer, useSigner } from "@/hooks/useSigner";
-import type { BuyerEscrow, EscrowDelegate } from "@/interfaces";
+import type { BuyerEscrow, DelegateIntent, EscrowDelegate } from "@/interfaces";
+import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import { ApiError } from "@/libs/ApiClient";
 import { settlementSymbol } from "@/services/chains.service";
 import {
@@ -363,29 +368,45 @@ export function PayerDelegationsPanel({
 }
 
 /**
- * The delegate's grant as the chain shows it NOW, for a sheet that waits for
- * its payments to settle (BUG-D1-07): `refresh` reads the list again past the
- * browser's cache, and until it has, the grant the sheet opened with stands.
+ * The delegate's grant as the chain shows it NOW, for a sheet about to change
+ * it (BUG-D1-07, BUG-D1-08): the list is read again, past the browser's cache,
+ * every time the sheet opens — the page's list can predate a payment made
+ * since — and on every `refresh` while waiting. One query key per delegate, so
+ * polling adds no cache entries, and a refetch already in flight is joined
+ * rather than restarted (review finding 10). See `liveDelegation`.
  */
 function useLiveDelegation(
   delegate: string,
   opened: EscrowDelegate | null,
   open: boolean,
 ) {
-  const [tick, setTick] = React.useState(0);
-  const poll = useQuery({
-    queryKey: ["escrow-delegates-poll", tick],
-    enabled: open && tick > 0,
+  const read = useQuery({
+    queryKey: ["escrow-delegates-live", delegate],
+    enabled: open && delegate !== "",
     retry: 0,
-    placeholderData: (previous) => previous,
+    staleTime: 0,
+    refetchOnMount: "always",
     queryFn: () => listDelegates(Date.now()),
   });
-  React.useEffect(() => {
-    if (!open) setTick(0);
-  }, [open]);
-  const polled = tick > 0 && poll.data ? findDelegation(poll.data.delegates, delegate) : null;
-  const refresh = React.useCallback(() => setTick((n) => n + 1), []);
-  return { live: polled ?? opened, refresh };
+  // What the cache held when this opening began: only a read answered after it
+  // counts (a previous opening's read can predate a payment made since).
+  const [opening, setOpening] = React.useState({ open: false, baseline: 0 });
+  if (opening.open !== open) setOpening({ open, baseline: read.dataUpdatedAt });
+  const { refetch } = read;
+  const refresh = React.useCallback(() => {
+    void refetch({ cancelRefetch: false });
+  }, [refetch]);
+  const openedAt = opening.open ? opening.baseline : read.dataUpdatedAt;
+  const state = liveDelegation({
+    opened,
+    delegate,
+    list: read.data?.delegates,
+    readAt: read.dataUpdatedAt,
+    openedAt,
+    // Only this opening's failure: an earlier one says nothing about now.
+    failed: read.isError && read.errorUpdatedAt > openedAt,
+  });
+  return { ...state, readAt: read.dataUpdatedAt, refresh };
 }
 
 /** The atomic caps of a standing grant, as `strandReasons` compares them. */
@@ -395,6 +416,26 @@ function capsOf(grant: EscrowDelegate) {
     maxPerWindow: grant.maxPerWindow.amount,
     validUntil: String(Math.floor(Date.parse(grant.validUntil) / 1000)),
   };
+}
+
+/** While the sheet's own read of the grant is pending, or when the grant is gone (BUG-D1-08). */
+function LiveReadNote({ ready, gone }: { ready: boolean; gone: boolean }) {
+  if (gone) {
+    return (
+      <p className="text-body-13 text-warning-700" data-testid="delegate-gone">
+        This key is no longer authorised on chain: it was revoked or replaced elsewhere. Close
+        this and check the list.
+      </p>
+    );
+  }
+  if (!ready) {
+    return (
+      <p className="font-mono text-mono-13 text-03" data-testid="delegate-reading">
+        Checking for payments still being settled…
+      </p>
+    );
+  }
+  return null;
 }
 
 /**
@@ -422,16 +463,20 @@ function RevokeSheet({
 }) {
   const open = target !== null;
   const delegate = target?.delegate ?? "";
-  const { live, refresh } = useLiveDelegation(delegate, target, open);
+  const { live, ready, gone, readAt, refresh } = useLiveDelegation(delegate, target, open);
   const unsettled = live?.unsettled;
-  const settle = useSettleWait(unsettled?.count, refresh, UNSETTLED_POLL_MS);
+  const reasons = live ? strandReasons(unsettled, capsOf(live), "revoke") : [];
+  const settle = useSettleWait(
+    { count: gone ? 0 : unsettled?.count, strands: reasons.length > 0, readAt },
+    refresh,
+    UNSETTLED_POLL_MS,
+  );
   const [busy, setBusy] = React.useState(false);
   const { reset } = settle;
   React.useEffect(() => {
     if (!open) reset();
   }, [open, reset]);
 
-  const reasons = live ? strandReasons(unsettled, capsOf(live), "revoke") : [];
   const atRisk = reasons.length > 0;
 
   const revoke = async () => {
@@ -468,6 +513,7 @@ function RevokeSheet({
           <span className="break-all font-mono text-mono-xs text-01">
             {addressOfAccount(delegate)}
           </span>
+          <LiveReadNote ready={ready} gone={gone} />
           <UnsettledPayments
             unsettled={unsettled}
             unit={unit}
@@ -475,10 +521,11 @@ function RevokeSheet({
             reasons={reasons}
             waiting={settle.waiting}
             settled={settle.settled}
+            stalled={settle.stalled}
             onWait={settle.wait}
             onProceed={() => void revoke()}
             proceedLabel="Revoke now anyway"
-            busy={busy}
+            busy={busy || !ready}
           />
           <Button
             type="button"
@@ -486,7 +533,7 @@ function RevokeSheet({
             variant="secondary"
             data-testid="sign-revoke-delegate"
             loading={busy}
-            disabled={atRisk}
+            disabled={atRisk || !ready || gone}
             onClick={() => void revoke()}
           >
             Sign and revoke
@@ -666,13 +713,15 @@ function AuthorizeSheet({
 
   const current = target?.current ?? null;
   const editing = current !== null;
-  const { live, refresh } = useLiveDelegation(target?.delegateAccount ?? "", current, open);
-  const unsettled = editing ? live?.unsettled : undefined;
-  const settle = useSettleWait(unsettled?.count, refresh, UNSETTLED_POLL_MS);
+  const live = useLiveDelegation(target?.delegateAccount ?? "", current, open && editing);
+  const grant = editing ? live.live : null;
+  const unsettled = grant?.unsettled;
   // A signed request the backend held back because payments were still being
   // settled (BUG-D1-07): submitted again — not signed again — once they have,
-  // or with the acknowledgement.
+  // or with the acknowledgement. It carries its own deadline and nonce, so it is
+  // dropped (and the sheet says so) once either has gone stale (review finding 8).
   const [held, setHeld] = React.useState<Record<string, unknown> | null>(null);
+  const [heldNote, setHeldNote] = React.useState<string | null>(null);
   // The server's clock, carried forward from the escrow read by the time elapsed
   // since (BUG-D1-05; review S3-11: the chain checks `validUntil` against its own).
   const nowSeconds = serverNowSeconds(escrow?.serverTime, escrowReceivedAt, Date.now());
@@ -683,23 +732,6 @@ function AuthorizeSheet({
   // What an edit form opened with: signing it unchanged would only re-grant the
   // standing caps with a later expiry, so the button waits for a change.
   const seededForm = React.useRef<DelegationFormInput | null>(null);
-  const { reset } = settle;
-  React.useEffect(() => {
-    if (seededFor.current === target) return;
-    seededFor.current = target;
-    const seeded =
-      target === null
-        ? null
-        : target.current
-          ? editDelegationForm(target.current, nowSeconds)
-          : defaultDelegationForm(escrow ?? null);
-    seededForm.current = target?.current ? seeded : null;
-    setForm(seeded);
-    setErrors({});
-    setConfirm("");
-    setHeld(null);
-    reset();
-  }, [target, escrow, nowSeconds, reset]);
   React.useEffect(() => {
     // An escrow read that arrives after the sheet opened can seed a fresh form.
     if (target && !target.current && form === null && escrow) {
@@ -715,10 +747,39 @@ function AuthorizeSheet({
   // Editing re-authorises the very key the grant already names, so there is no
   // key to confirm; a NEW grant still needs the last four characters (review S3-9).
   const keyConfirmed = editing || confirmsDelegateKey(confirm, delegate);
-  const unchanged = editing && editIsUnchanged(seededForm.current, form);
+  const unchanged =
+    editing &&
+    editIsUnchanged(seededForm.current, form, { expired: current?.status === "EXPIRED" });
   const reasons =
-    current && preview?.ok ? strandReasons(unsettled, capsOf(live ?? current), preview.body) : [];
-  const atRisk = reasons.length > 0 || (settle.refused && (unsettled?.count ?? 1) > 0);
+    current && preview?.ok ? strandReasons(unsettled, capsOf(grant ?? current), preview.body) : [];
+  const settle = useSettleWait(
+    { count: live.gone ? 0 : unsettled?.count, strands: reasons.length > 0, readAt: live.readAt },
+    live.refresh,
+    UNSETTLED_POLL_MS,
+  );
+  const { reset: resetWait } = settle;
+  React.useEffect(() => {
+    if (seededFor.current === target) return;
+    seededFor.current = target;
+    const seeded =
+      target === null
+        ? null
+        : target.current
+          ? editDelegationForm(target.current, nowSeconds)
+          : defaultDelegationForm(escrow ?? null);
+    seededForm.current = target?.current ? seeded : null;
+    setForm(seeded);
+    setErrors({});
+    setConfirm("");
+    setHeld(null);
+    setHeldNote(null);
+    resetWait();
+  }, [target, escrow, nowSeconds, resetWait]);
+  const atRisk = reasons.length > 0 || settle.refused;
+  // Signing waits for the sheet's own read of the grant (BUG-D1-08).
+  const readyToSign = !editing || (live.ready && !live.gone);
+  const heldStale = held ? heldIsStale(held, nowSeconds) : null;
+  const heldUsable = held !== null && heldStale === null;
 
   const change = (field: keyof DelegationFormInput, value: string) => {
     if (!form) return;
@@ -726,6 +787,7 @@ function AuthorizeSheet({
     setErrors((previous) => errorsAfterEdit(previous, field));
     // A request signed for other values is not what the form now says.
     setHeld(null);
+    setHeldNote(null);
   };
 
   const finish = (success: boolean) => {
@@ -740,11 +802,17 @@ function AuthorizeSheet({
   };
 
   /** A refusal for payments still being settled keeps the sheet open on its warning. */
-  const failed = (error: unknown) => {
+  const failed = (error: unknown, resubmitted: boolean) => {
     if (isUnsettledRefusal(error)) {
       settle.markRefused();
-      refresh();
       toast.error(explain(error, "Payments are still being settled"));
+      return;
+    }
+    if (resubmitted && isRelayedRefusal(error)) {
+      // The held signature was refused (expired, or its nonce was used up):
+      // nothing changed, so stay open and sign again rather than close.
+      setHeld(null);
+      setHeldNote(`${explain(error, "The signed change was refused")} Sign it again to apply it.`);
       return;
     }
     toast.error(
@@ -752,6 +820,10 @@ function AuthorizeSheet({
     );
     onFinished();
   };
+
+  /** The nonce a request built now would be signed at. */
+  const nonceOf = (intent: DelegateIntent): string | null =>
+    isTypedDataRequest(intent.transaction) ? String(intent.transaction.message.nonce) : null;
 
   const authorize = async (acknowledgeUnsettled = false) => {
     if (!form || !escrow || !preview) return;
@@ -763,26 +835,42 @@ function AuthorizeSheet({
     // Exactly what the sheet shows this second, computed on the server's clock.
     const body = preview.body;
     const acknowledged = acknowledgeUnsettled ? { acknowledgeUnsettled: true } : {};
+    const sign = (intent: DelegateIntent) =>
+      submitRelayedDelegation(
+        intent,
+        signer(),
+        { ...body, delegate, domain: domain(escrow) },
+        (signed) => {
+          setHeld(signed);
+          return submitDelegate({ ...signed, ...acknowledged });
+        },
+      );
     setBusy(true);
+    let resubmitted = false;
     try {
       if (held) {
-        // Already signed: hand the same request over again.
-        await submitDelegate({ ...held, ...acknowledged });
+        // Already signed. Hand the same request over again — unless it went
+        // stale while it was held: then build and sign afresh, and say why.
+        let stale: HeldStale | null = heldIsStale(held, nowSeconds);
+        let fresh: DelegateIntent | null = null;
+        if (stale === null) {
+          fresh = await createDelegateIntent({ ...body, ...acknowledged });
+          stale = heldIsStale(held, nowSeconds, nonceOf(fresh));
+        }
+        if (stale === null) {
+          resubmitted = true;
+          await submitDelegate({ ...held, ...acknowledged });
+        } else {
+          setHeld(null);
+          setHeldNote(heldStaleText(stale));
+          await sign(fresh ?? (await createDelegateIntent({ ...body, ...acknowledged })));
+        }
       } else {
-        const intent = await createDelegateIntent({ ...body, ...acknowledged });
-        await submitRelayedDelegation(
-          intent,
-          signer(),
-          { ...body, delegate, domain: domain(escrow) },
-          (signed) => {
-            setHeld(signed);
-            return submitDelegate({ ...signed, ...acknowledged });
-          },
-        );
+        await sign(await createDelegateIntent({ ...body, ...acknowledged }));
       }
       finish(true);
     } catch (error) {
-      failed(error);
+      failed(error, resubmitted);
     } finally {
       setBusy(false);
     }
@@ -871,6 +959,7 @@ function AuthorizeSheet({
                   onChange={(e) => setConfirm(e.target.value)}
                 />
               )}
+              {editing ? <LiveReadNote ready={live.ready} gone={live.gone} /> : null}
               {editing ? (
                 <UnsettledPayments
                   unsettled={unsettled}
@@ -879,13 +968,26 @@ function AuthorizeSheet({
                   reasons={reasons}
                   waiting={settle.waiting}
                   settled={settle.settled}
+                  stalled={settle.stalled}
                   onWait={settle.wait}
                   onProceed={() => void authorize(true)}
-                  proceedLabel={held ? "Submit anyway" : "Sign anyway"}
-                  busy={busy}
+                  proceedLabel={heldUsable ? "Submit anyway" : "Sign anyway"}
+                  busy={busy || !readyToSign}
                 />
               ) : null}
-              {preview?.ok ? (
+              {heldNote || heldStale ? (
+                <p className="text-body-13 text-warning-700" data-testid="held-request-stale">
+                  {heldNote ?? heldStaleText(heldStale as HeldStale)}
+                </p>
+              ) : null}
+              {heldUsable && held ? (
+                <p className="text-body-13 text-02" data-testid="authorize-delegate-summary">
+                  Signed, waiting to be submitted: up to{" "}
+                  {exact(asMoney(String(held.maxVoucherAmount)), unit)} a payment and{" "}
+                  {exact(asMoney(String(held.maxPerWindow)), unit)} per 24 hours, until{" "}
+                  {isoSeconds(Number(held.validUntil))}.
+                </p>
+              ) : preview?.ok ? (
                 <p className="text-body-13 text-02" data-testid="authorize-delegate-summary">
                   You will sign: up to {exact(asMoney(preview.body.maxVoucherAmount), unit)} a
                   payment and {exact(asMoney(preview.body.maxPerWindow), unit)} per 24 hours, until{" "}
@@ -901,10 +1003,14 @@ function AuthorizeSheet({
                 type="button"
                 data-testid="sign-authorize-delegate"
                 loading={busy}
-                disabled={!keyConfirmed || unchanged || atRisk}
+                disabled={!keyConfirmed || unchanged || atRisk || !readyToSign}
                 onClick={() => void authorize()}
               >
-                {held ? "Submit the signed change" : editing ? "Sign and update" : "Sign and authorise"}
+                {heldUsable
+                  ? "Submit the signed change"
+                  : editing
+                    ? "Sign and update"
+                    : "Sign and authorise"}
               </Button>
             </>
           ) : (

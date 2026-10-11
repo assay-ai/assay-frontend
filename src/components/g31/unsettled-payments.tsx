@@ -5,6 +5,10 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import {
+  SETTLE_STALLED_TEXT,
+  SETTLE_WAIT_IDLE,
+  type SettleRead,
+  settleWaitAfterRead,
   type StrandReason,
   strandWarning,
   unsettledLine,
@@ -30,6 +34,7 @@ export function UnsettledPayments({
   reasons,
   waiting,
   settled,
+  stalled = false,
   onWait,
   onProceed,
   proceedLabel,
@@ -44,6 +49,8 @@ export function UnsettledPayments({
   waiting: boolean;
   /** The person waited and nothing is left to settle. */
   settled: boolean;
+  /** The wait ran out with payments still at risk: the agent is still paying. */
+  stalled?: boolean;
   onWait: () => void;
   onProceed: () => void;
   proceedLabel: string;
@@ -72,6 +79,11 @@ export function UnsettledPayments({
             <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
             {strandWarning(reasons, unsettled.count)}
           </p>
+          {stalled ? (
+            <p className="text-body-13 text-warning-700" data-testid="unsettled-stalled">
+              {SETTLE_STALLED_TEXT}
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -82,7 +94,11 @@ export function UnsettledPayments({
               disabled={waiting || busy}
               onClick={onWait}
             >
-              {waiting ? "Waiting for them to settle…" : "Wait for them to settle"}
+              {waiting
+                ? "Waiting for them to settle…"
+                : stalled
+                  ? "Wait again"
+                  : "Wait for them to settle"}
             </Button>
             <Button
               type="button"
@@ -107,46 +123,45 @@ export function UnsettledPayments({
 }
 
 /**
- * The "wait for them to settle" loop: while `waiting`, `refresh` runs every
- * `intervalMs`; once the count reaches zero the wait ends and `settled` turns
- * true. A refusal from the backend (`refused`) keeps the warning up until then
- * even when the local figures did not predict it.
+ * The "wait for them to settle" loop (see `settleWaitAfterRead`): while
+ * `waiting`, `refresh` runs every `intervalMs` — it must re-read the SAME query
+ * (no new cache entry per tick, no overlapping fetch). Every answered read is
+ * fed through the pure step, so the wait ends when the figures stop stranding
+ * anything, ignores reads answered before a refusal, and gives up with
+ * `stalled` when the agent keeps paying.
  */
-export function useSettleWait(
-  count: number | undefined,
-  refresh: () => void,
-  intervalMs: number,
-) {
-  const [waiting, setWaiting] = React.useState(false);
-  const [settled, setSettled] = React.useState(false);
-  const [refused, setRefused] = React.useState(false);
+export function useSettleWait(read: SettleRead, refresh: () => void, intervalMs: number) {
+  const [state, setState] = React.useState(SETTLE_WAIT_IDLE);
   React.useEffect(() => {
-    if (!waiting) return;
+    if (!state.waiting) return;
     const timer = window.setInterval(refresh, intervalMs);
     return () => window.clearInterval(timer);
-  }, [waiting, refresh, intervalMs]);
+  }, [state.waiting, refresh, intervalMs]);
+  const { count, strands, readAt } = read;
   React.useEffect(() => {
-    if ((waiting || refused) && count === 0) {
-      setWaiting(false);
-      setRefused(false);
-      setSettled(true);
-    }
-  }, [waiting, refused, count]);
-  const reset = React.useCallback(() => {
-    setWaiting(false);
-    setSettled(false);
-    setRefused(false);
-  }, []);
+    setState((previous) => settleWaitAfterRead(previous, { count, strands, readAt }, Date.now()));
+  }, [count, strands, readAt]);
+  const reset = React.useCallback(() => setState(SETTLE_WAIT_IDLE), []);
   return {
-    waiting,
-    settled,
-    refused,
+    waiting: state.waiting,
+    settled: state.settled,
+    stalled: state.stalled,
+    /** A refusal no later read has answered yet: the warning stays up. */
+    refused: state.refusedAt !== null,
     wait: () => {
-      setSettled(false);
-      setWaiting(true);
+      setState((previous) => ({
+        ...previous,
+        waiting: true,
+        startedAt: Date.now(),
+        settled: false,
+        stalled: false,
+      }));
       refresh();
     },
-    markRefused: () => setRefused(true),
+    markRefused: () => {
+      setState((previous) => ({ ...previous, refusedAt: Date.now(), settled: false }));
+      refresh();
+    },
     reset,
   };
 }

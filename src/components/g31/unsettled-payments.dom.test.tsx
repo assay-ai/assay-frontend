@@ -57,6 +57,14 @@ describe("UnsettledPayments", () => {
     expect(html).toContain("Waiting for them to settle…");
   });
 
+  it("says the agent is still paying when the wait ran out, and offers to wait again (review finding 9)", () => {
+    const html = render({ atRisk: true, reasons: ["maxPerWindow"], stalled: true });
+    expect(html).toContain('data-testid="unsettled-stalled"');
+    expect(html).toContain("Your agent is still paying");
+    expect(html).toContain("Wait again");
+    expect(html).toContain("Sign anyway");
+  });
+
   it("says they settled once the wait is over, and nothing when there never were any", () => {
     expect(render({ unsettled: { ...IN_FLIGHT, count: 0 }, settled: true })).toContain(
       "They have settled. You can sign now.",
