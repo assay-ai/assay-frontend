@@ -3,15 +3,19 @@ import { describe, expect, it } from "vitest";
 import type { EscrowDelegate, Money } from "@/interfaces";
 
 import {
+  capsAboveEscrow,
   confirmsDelegateKey,
   type DelegateBinding,
   delegationRows,
   keyFingerprint,
   DEFAULT_DELEGATION_DAYS,
   defaultDelegationForm,
+  editDelegationForm,
+  errorsAfterEdit,
   escrowCanDelegate,
   findDelegation,
   parseDelegationForm,
+  serverNowSeconds,
   supportsDelegation,
 } from "./delegation-form";
 
@@ -205,5 +209,95 @@ describe("confirmsDelegateKey (review S3-9)", () => {
   });
   it.each(["", "469", "469b", "9469a", "e469"])("refuses %p", (typed) => {
     expect(confirmsDelegateKey(typed, KEY)).toBe(false);
+  });
+});
+
+/** REGRESSION (BUG-D1-05): "30 days" was counted from when the page loaded. */
+describe("serverNowSeconds", () => {
+  const read = "2026-10-12T12:17:17.000Z";
+  const readAt = Date.parse("2026-10-12T12:17:17.000Z") + 3_000; // browser 3 s ahead
+
+  it("carries the server's instant forward by the time elapsed since it was read", () => {
+    const fifteenMinutesLater = readAt + 15 * 60_000;
+    expect(serverNowSeconds(read, readAt, fifteenMinutesLater)).toBe(
+      Date.parse(read) / 1000 + 15 * 60,
+    );
+  });
+
+  it("so a sheet signed later expires later, by exactly that much", () => {
+    const form = { maxVoucherAmount: "0.5", maxPerWindow: "2", validDays: "30" };
+    const at = (ms: number) =>
+      parseDelegationForm(form, ESCROW, DELEGATE, serverNowSeconds(read, readAt, ms));
+    const early = at(readAt);
+    const late = at(readAt + 15 * 60_000);
+    if (!early.ok || !late.ok) throw new Error("expected valid forms");
+    expect(Number(late.body.validUntil) - Number(early.body.validUntil)).toBe(15 * 60);
+  });
+
+  it("falls back to the browser clock without a server reading", () => {
+    expect(serverNowSeconds(undefined, 0, 1_800_000_000_000)).toBe(1_800_000_000);
+  });
+});
+
+/** REGRESSION (BUG-D1-05): an error stayed under a field after the field was fixed. */
+describe("errorsAfterEdit", () => {
+  it("clears the edited field's error, and the cross-check either amount can fix", () => {
+    const errors = {
+      maxVoucherAmount: "Cannot be more than the per-window cap.",
+      validDays: "Between 1 and 365 days.",
+    };
+    expect(errorsAfterEdit(errors, "maxVoucherAmount")).toEqual({
+      validDays: "Between 1 and 365 days.",
+    });
+    expect(errorsAfterEdit(errors, "maxPerWindow")).toEqual({
+      validDays: "Between 1 and 365 days.",
+    });
+    expect(errorsAfterEdit(errors, "validDays")).toEqual({
+      maxVoucherAmount: "Cannot be more than the per-window cap.",
+    });
+  });
+});
+
+/** BUG-D1-04: "Edit limits" starts from the standing grant. */
+describe("editDelegationForm", () => {
+  it("prefills the grant's caps and the days it has left", () => {
+    const grant = {
+      maxVoucherAmount: usdg("500000"),
+      maxPerWindow: usdg("2000000"),
+      validUntil: new Date((NOW + 29.2 * 86_400) * 1000).toISOString(),
+    };
+    expect(editDelegationForm(grant, NOW)).toEqual({
+      maxVoucherAmount: "0.5",
+      maxPerWindow: "2",
+      validDays: "30",
+    });
+  });
+
+  it("never offers fewer than one day", () => {
+    const lapsed = {
+      maxVoucherAmount: usdg("1"),
+      maxPerWindow: usdg("1"),
+      validUntil: new Date((NOW - 86_400) * 1000).toISOString(),
+    };
+    expect(editDelegationForm(lapsed, NOW).validDays).toBe("1");
+  });
+});
+
+/** BUG-D1-03: a grant made under higher escrow limits, after the limits were lowered. */
+describe("capsAboveEscrow", () => {
+  const grant = { maxVoucherAmount: usdg("500000"), maxPerWindow: usdg("2000000") };
+
+  it("names each cap the escrow no longer allows", () => {
+    expect(capsAboveEscrow(grant, { ...ESCROW, maxVoucherAmount: usdg("50000") })).toEqual({
+      maxVoucherAmount: usdg("50000"),
+    });
+    expect(
+      capsAboveEscrow(grant, { maxVoucherAmount: usdg("50000"), maxPerWindow: usdg("1000000") }),
+    ).toEqual({ maxVoucherAmount: usdg("50000"), maxPerWindow: usdg("1000000") });
+  });
+
+  it("is empty while the escrow allows both", () => {
+    expect(capsAboveEscrow(grant, ESCROW)).toEqual({});
+    expect(capsAboveEscrow(grant, null)).toEqual({});
   });
 });

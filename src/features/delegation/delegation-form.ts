@@ -236,3 +236,82 @@ export function confirmsDelegateKey(
   const t = typed.trim().toLowerCase();
   return t.length === 4 && t === keyFingerprint(delegateAccount);
 }
+
+/**
+ * The server's clock NOW, in unix seconds, from the `serverTime` an earlier
+ * read carried and when that read arrived (BUG-D1-05).
+ *
+ * The expiry is "N days from when you sign", on the chain's clock. Taking
+ * `serverTime` as-is froze "now" at the moment the escrow was read — page
+ * load — so after a long session "30 days" was shorter than chosen. The
+ * browser's own clock may be wrong, but the time ELAPSED since the read is
+ * not, so the server's instant is carried forward by it.
+ */
+export function serverNowSeconds(
+  serverTime: string | null | undefined,
+  receivedAtMs: number,
+  nowMs: number,
+): number {
+  const server = serverTime ? Date.parse(serverTime) : Number.NaN;
+  if (!Number.isFinite(server) || !receivedAtMs) return Math.floor(nowMs / 1000);
+  return Math.floor((server + Math.max(0, nowMs - receivedAtMs)) / 1000);
+}
+
+/**
+ * The errors still true after `field` changed (BUG-D1-05): a field's own error
+ * goes, and so does the per-payment error that compared it with the window
+ * cap, which either amount can fix. The rest are re-checked on Sign.
+ */
+export function errorsAfterEdit(
+  errors: DelegationFormErrors,
+  field: keyof DelegationFormInput,
+): DelegationFormErrors {
+  const next = { ...errors };
+  delete next[field];
+  if (field === "maxPerWindow") delete next.maxVoucherAmount;
+  return next;
+}
+
+/**
+ * The form for EDITING a standing grant (BUG-D1-04): its own caps, and the
+ * days it has left (at least 1), so signing without a change to the expiry
+ * keeps roughly the one it has. Every rule of {@link parseDelegationForm}
+ * applies — the escrow's CURRENT limits included.
+ */
+export function editDelegationForm(
+  delegation: Pick<EscrowDelegate, "maxVoucherAmount" | "maxPerWindow" | "validUntil">,
+  nowSeconds: number,
+): DelegationFormInput {
+  const left = Math.ceil((Date.parse(delegation.validUntil) / 1000 - nowSeconds) / SECONDS_PER_DAY);
+  return {
+    maxVoucherAmount: toDecimal(delegation.maxVoucherAmount).toString(),
+    maxPerWindow: toDecimal(delegation.maxPerWindow).toString(),
+    validDays: String(Math.min(MAX_DELEGATION_DAYS, Math.max(1, Number.isFinite(left) ? left : 1))),
+  };
+}
+
+/**
+ * A grant's caps that are above the escrow's CURRENT limits (BUG-D1-03). The
+ * chain refuses caps above the limits when a grant is made, but the payer can
+ * lower the escrow's limits afterwards; the escrow's limits keep binding, so a
+ * payment above them is refused whatever the grant says.
+ */
+export function capsAboveEscrow(
+  delegation: Pick<EscrowDelegate, "maxVoucherAmount" | "maxPerWindow">,
+  escrow: EscrowCaps | null | undefined,
+): { maxVoucherAmount?: Money; maxPerWindow?: Money } {
+  const above: { maxVoucherAmount?: Money; maxPerWindow?: Money } = {};
+  if (
+    escrow?.maxVoucherAmount &&
+    toDecimal(delegation.maxVoucherAmount).greaterThan(toDecimal(escrow.maxVoucherAmount))
+  ) {
+    above.maxVoucherAmount = escrow.maxVoucherAmount;
+  }
+  if (
+    escrow?.maxPerWindow &&
+    toDecimal(delegation.maxPerWindow).greaterThan(toDecimal(escrow.maxPerWindow))
+  ) {
+    above.maxPerWindow = escrow.maxPerWindow;
+  }
+  return above;
+}
