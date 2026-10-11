@@ -14,22 +14,27 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
+  capsAboveEscrow,
   confirmsDelegateKey,
   type DelegateBinding,
   defaultDelegationForm,
   type DelegationFormErrors,
   type DelegationFormInput,
   delegationRows,
+  editDelegationForm,
+  errorsAfterEdit,
   escrowCanDelegate,
   findDelegation,
   keyFingerprint,
   parseDelegationForm,
+  serverNowSeconds,
   supportsDelegation,
 } from "@/features/delegation/delegation-form";
 import {
   type ExpectedDomain,
   submitRelayedDelegation,
 } from "@/features/delegation/relayed-delegation";
+import { isRelayedRefusal, relayedRefusal } from "@/features/escrow/relayed-refusal";
 import { useChains } from "@/hooks/useChains";
 import { isUserRejection, type Signer, useSigner } from "@/hooks/useSigner";
 import type { BuyerEscrow, EscrowDelegate } from "@/interfaces";
@@ -141,8 +146,46 @@ function useDelegationContext(account: string | undefined, version: number) {
 function explain(error: unknown, fallback: string): string {
   if (isUserRejection(error))
     return "Nothing was signed — the wallet prompt was closed or declined.";
+  // A relay refusal in words, with when to retry (BUG-D1-06) — never a raw account string.
+  if (isRelayedRefusal(error)) return relayedRefusal(error).text;
   if (error instanceof ApiError || error instanceof Error) return error.message;
   return fallback;
+}
+
+/** Who the authorise / edit sheet is for. `current` set means editing that standing grant. */
+interface SheetTarget {
+  delegateAccount: string;
+  boundAt?: string | null;
+  current?: EscrowDelegate | null;
+}
+
+/** "The escrow's own limit is lower" — a grant whose caps the escrow no longer allows (BUG-D1-03). */
+function EscrowLimitWarning({
+  delegation,
+  escrow,
+  unit,
+}: {
+  delegation: EscrowDelegate;
+  escrow: BuyerEscrow | undefined;
+  unit: string;
+}) {
+  const above = capsAboveEscrow(delegation, escrow);
+  if (!above.maxVoucherAmount && !above.maxPerWindow) return null;
+  const parts = [
+    above.maxVoucherAmount ? `${exact(above.maxVoucherAmount, unit)} a payment` : null,
+    above.maxPerWindow ? `${exact(above.maxPerWindow, unit)} per 24 hours` : null,
+  ].filter(Boolean);
+  return (
+    <span
+      className="flex items-start gap-1 text-body-xs text-warning-700"
+      data-testid="delegate-above-escrow-limits"
+    >
+      <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+      Your escrow now allows only {parts.join(" and ")}. Its limits keep applying, so this
+      agent’s payments above them are refused. Edit the agent’s limits, or raise the
+      escrow’s.
+    </span>
+  );
 }
 
 /** Full precision: a cap of 0.005 must not read as 0.01 (review S3-11). */
@@ -167,6 +210,7 @@ export function PayerDelegationsPanel({
 }) {
   const ctx = useDelegationContext(account, version);
   const [revoking, setRevoking] = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState<SheetTarget | null>(null);
   if (!ctx.enabled) return null;
 
   const rows = delegationRows(ctx.delegatesQuery.data?.delegates, bindings);
@@ -247,6 +291,11 @@ export function PayerDelegationsPanel({
                     </span>
                   ))
                 : null}
+              <EscrowLimitWarning
+                delegation={delegation}
+                escrow={ctx.escrowQuery.data}
+                unit={ctx.unit}
+              />
               {!bound ? (
                 <span
                   className="flex items-center gap-1 text-body-xs text-warning-700"
@@ -269,6 +318,22 @@ export function PayerDelegationsPanel({
                 variant="secondary"
                 size="sm"
                 type="button"
+                data-testid="edit-delegate"
+                disabled={!escrowCanDelegate(ctx.escrowQuery.data)}
+                onClick={() =>
+                  setEditing({
+                    delegateAccount: delegation.delegate,
+                    boundAt: matched.find((b) => !b.revokedAt)?.delegateBoundAt ?? null,
+                    current: delegation,
+                  })
+                }
+              >
+                Edit limits
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                type="button"
                 className="text-danger-600"
                 data-testid="revoke-delegate"
                 loading={revoking === delegation.delegate}
@@ -280,6 +345,19 @@ export function PayerDelegationsPanel({
           </div>
         ))
       )}
+      <AuthorizeSheet
+        target={editing}
+        escrow={ctx.escrowQuery.data}
+        escrowReceivedAt={ctx.escrowQuery.dataUpdatedAt}
+        unit={ctx.unit}
+        onClose={() => setEditing(null)}
+        onFinished={() => {
+          setEditing(null);
+          onChanged();
+        }}
+        signer={ctx.signer}
+        domain={ctx.domain}
+      />
     </div>
   );
 }
@@ -297,8 +375,7 @@ export function AgentPaymentDelegation({
   onChanged: () => void;
 }) {
   const ctx = useDelegationContext(agentAccount, version);
-  const [authorizing, setAuthorizing] =
-    React.useState<DelegationCredential | null>(null);
+  const [authorizing, setAuthorizing] = React.useState<SheetTarget | null>(null);
   if (!ctx.enabled) return null;
 
   const bound = credentials.filter((c) => !c.revokedAt && c.delegateAccount);
@@ -358,12 +435,35 @@ export function AgentPaymentDelegation({
                   type="button"
                   data-testid="authorize-delegate"
                   disabled={!escrowCanDelegate(ctx.escrowQuery.data)}
-                  onClick={() => setAuthorizing(credential)}
+                  onClick={() =>
+                    setAuthorizing({
+                      delegateAccount: credential.delegateAccount as string,
+                      boundAt: credential.delegateBoundAt ?? null,
+                    })
+                  }
                 >
                   Authorize agent to pay
                 </Button>
               ) : (
-                <StatusPill label="AUTHORISED" tone="teal" />
+                <div className="flex items-center gap-2">
+                  <StatusPill label="AUTHORISED" tone="teal" />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    data-testid="edit-agent-delegate"
+                    disabled={!escrowCanDelegate(ctx.escrowQuery.data)}
+                    onClick={() =>
+                      setAuthorizing({
+                        delegateAccount: credential.delegateAccount as string,
+                        boundAt: credential.delegateBoundAt ?? null,
+                        current: delegation,
+                      })
+                    }
+                  >
+                    Edit limits
+                  </Button>
+                </div>
               )}
             </div>
           );
@@ -378,8 +478,9 @@ export function AgentPaymentDelegation({
       ) : null}
 
       <AuthorizeSheet
-        credential={authorizing}
+        target={authorizing}
         escrow={ctx.escrowQuery.data}
+        escrowReceivedAt={ctx.escrowQuery.dataUpdatedAt}
         unit={ctx.unit}
         onClose={() => setAuthorizing(null)}
         onFinished={() => {
@@ -394,16 +495,19 @@ export function AgentPaymentDelegation({
 }
 
 function AuthorizeSheet({
-  credential,
+  target,
   escrow,
+  escrowReceivedAt,
   unit,
   onClose,
   onFinished,
   signer,
   domain,
 }: {
-  credential: DelegationCredential | null;
+  target: SheetTarget | null;
   escrow: BuyerEscrow | undefined;
+  /** When `escrow` (and its `serverTime`) arrived, in epoch ms. */
+  escrowReceivedAt: number;
   unit: string;
   onClose: () => void;
   onFinished: () => void;
@@ -414,28 +518,60 @@ function AuthorizeSheet({
   const [errors, setErrors] = React.useState<DelegationFormErrors>({});
   const [confirm, setConfirm] = React.useState("");
   const [busy, setBusy] = React.useState(false);
-
+  // Re-rendered every second while open, so the expiry shown — and signed — is
+  // "N days from now" on the server's clock, never from when the page loaded
+  // (BUG-D1-05).
+  const [, setTick] = React.useState(0);
+  const open = target !== null;
   React.useEffect(() => {
-    setForm(credential ? defaultDelegationForm(escrow ?? null) : null);
+    if (!open) return;
+    const timer = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [open]);
+
+  const current = target?.current ?? null;
+  const editing = current !== null;
+  // The server's clock, carried forward from the escrow read by the time elapsed
+  // since (BUG-D1-05; review S3-11: the chain checks `validUntil` against its own).
+  const nowSeconds = serverNowSeconds(escrow?.serverTime, escrowReceivedAt, Date.now());
+
+  // Seeded when the sheet opens for a target — not on every escrow refetch, which
+  // would wipe what the person typed.
+  const seededFor = React.useRef<SheetTarget | null>(null);
+  React.useEffect(() => {
+    if (seededFor.current === target) return;
+    seededFor.current = target;
+    setForm(
+      target === null
+        ? null
+        : target.current
+          ? editDelegationForm(target.current, nowSeconds)
+          : defaultDelegationForm(escrow ?? null),
+    );
     setErrors({});
     setConfirm("");
-  }, [credential, escrow]);
+  }, [target, escrow, nowSeconds]);
+  React.useEffect(() => {
+    // An escrow read that arrives after the sheet opened can seed a fresh form.
+    if (target && !target.current && form === null && escrow) {
+      setForm(defaultDelegationForm(escrow));
+    }
+  }, [target, escrow, form]);
 
-  const delegate = credential?.delegateAccount ?? "";
-  // The server's clock, not the browser's: the chain checks `validUntil` against its own
-  // (review S3-11). `serverTime` comes with the escrow read this sheet already holds.
-  const nowSeconds = escrow?.serverTime
-    ? Date.parse(escrow.serverTime) / 1000
-    : Date.now() / 1000;
+  const delegate = target?.delegateAccount ?? "";
   const preview =
     form && escrow
-      ? parseDelegationForm(
-          form,
-          escrow,
-          addressOfAccount(delegate),
-          nowSeconds,
-        )
+      ? parseDelegationForm(form, escrow, addressOfAccount(delegate), nowSeconds)
       : null;
+  // Editing re-authorises the very key the grant already names, so there is no
+  // key to confirm; a NEW grant still needs the last four characters (review S3-9).
+  const keyConfirmed = editing || confirmsDelegateKey(confirm, delegate);
+
+  const change = (field: keyof DelegationFormInput, value: string) => {
+    if (!form) return;
+    setForm({ ...form, [field]: value });
+    setErrors((previous) => errorsAfterEdit(previous, field));
+  };
 
   const authorize = async () => {
     if (!form || !escrow || !preview) return;
@@ -443,19 +579,27 @@ function AuthorizeSheet({
       setErrors(preview.errors);
       return;
     }
-    if (!confirmsDelegateKey(confirm, delegate)) return;
+    if (!keyConfirmed) return;
+    // Exactly what the sheet shows this second, computed on the server's clock.
+    const body = preview.body;
     setBusy(true);
     try {
-      const intent = await createDelegateIntent(preview.body);
+      const intent = await createDelegateIntent(body);
       await submitRelayedDelegation(
         intent,
         signer(),
-        { ...preview.body, delegate, domain: domain(escrow) },
+        { ...body, delegate, domain: domain(escrow) },
         submitDelegate,
       );
-      toast.success("Authorised. The agent can now pay within these caps.");
+      toast.success(
+        editing
+          ? "Updated. The new caps apply from the agent’s next payment."
+          : "Authorised. The agent can now pay within these caps.",
+      );
     } catch (error) {
-      toast.error(explain(error, "The agent could not be authorised"));
+      toast.error(
+        explain(error, editing ? "The limits could not be updated" : "The agent could not be authorised"),
+      );
     } finally {
       setBusy(false);
       onFinished();
@@ -468,20 +612,18 @@ function AuthorizeSheet({
     asset: escrow?.maxVoucherAmount?.asset ?? "",
     decimals,
   });
+  const isoSeconds = (seconds: number) =>
+    new Date(seconds * 1000).toISOString().replace(".000Z", "Z");
 
   return (
-    <Sheet
-      open={credential !== null}
-      onOpenChange={(open) => !open && onClose()}
-    >
+    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
       <SheetContent data-testid="authorize-delegate-sheet">
         <SheetHeader>
-          <SheetTitle>Authorize agent to pay</SheetTitle>
+          <SheetTitle>{editing ? "Edit agent limits" : "Authorize agent to pay"}</SheetTitle>
           <SheetDescription>
-            One signature from your wallet lets this agent’s key sign payments
-            from your escrow, within these caps, until the expiry. It cannot
-            withdraw, change your limits or authorise anyone. Your escrow limits
-            keep applying. No gas is needed.
+            {editing
+              ? "One signature from your wallet replaces this key’s caps and expiry. What it has already spent this window still counts. No gas is needed."
+              : "One signature from your wallet lets this agent’s key sign payments from your escrow, within these caps, until the expiry. It cannot withdraw, change your limits or authorise anyone. Your escrow limits keep applying. No gas is needed."}
           </SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
@@ -493,9 +635,14 @@ function AuthorizeSheet({
             >
               {addressOfAccount(delegate)}
             </span>
-            {credential?.delegateBoundAt ? (
-              <span className="text-body-xs text-03">
-                bound {relativeTime(credential.delegateBoundAt)}
+            {target?.boundAt ? (
+              <span className="text-body-xs text-03">bound {relativeTime(target.boundAt)}</span>
+            ) : null}
+            {current ? (
+              <span className="text-body-xs text-03" data-testid="edit-delegate-current">
+                Now: up to {exact(current.maxVoucherAmount, unit)} a payment and{" "}
+                {exact(current.maxPerWindow, unit)} per 24 hours, until{" "}
+                {current.validUntil.replace(".000Z", "Z")}.
               </span>
             ) : null}
           </div>
@@ -508,9 +655,7 @@ function AuthorizeSheet({
                 value={form.maxVoucherAmount}
                 error={errors.maxVoucherAmount}
                 inputMode="decimal"
-                onChange={(e) =>
-                  setForm({ ...form, maxVoucherAmount: e.target.value })
-                }
+                onChange={(e) => change("maxVoucherAmount", e.target.value)}
               />
               <Field
                 label="Most per 24 hours"
@@ -519,62 +664,51 @@ function AuthorizeSheet({
                 value={form.maxPerWindow}
                 error={errors.maxPerWindow}
                 inputMode="decimal"
-                onChange={(e) =>
-                  setForm({ ...form, maxPerWindow: e.target.value })
-                }
+                onChange={(e) => change("maxPerWindow", e.target.value)}
               />
               <Field
-                label="Expires after"
+                label={editing ? "Expires after (from now)" : "Expires after"}
                 id="delegate-valid-days"
                 suffix="days"
                 value={form.validDays}
                 error={errors.validDays}
                 inputMode="numeric"
-                onChange={(e) =>
-                  setForm({ ...form, validDays: e.target.value })
-                }
+                onChange={(e) => change("validDays", e.target.value)}
               />
-              <Field
-                label="Last 4 characters of the agent’s key"
-                id="delegate-confirm-key"
-                value={confirm}
-                hint="As `agent-cli address` prints it on the agent’s machine. This is what proves the key is yours."
-                error={
-                  confirm.length >= 4 && !confirmsDelegateKey(confirm, delegate)
-                    ? "That is not this key."
-                    : undefined
-                }
-                onChange={(e) => setConfirm(e.target.value)}
-              />
+              {editing ? null : (
+                <Field
+                  label="Last 4 characters of the agent’s key"
+                  id="delegate-confirm-key"
+                  value={confirm}
+                  hint="As `agent-cli address` prints it on the agent’s machine. This is what proves the key is yours."
+                  error={
+                    confirm.length >= 4 && !confirmsDelegateKey(confirm, delegate)
+                      ? "That is not this key."
+                      : undefined
+                  }
+                  onChange={(e) => setConfirm(e.target.value)}
+                />
+              )}
               {preview?.ok ? (
-                <p
-                  className="text-body-13 text-02"
-                  data-testid="authorize-delegate-summary"
-                >
-                  You will sign: up to{" "}
-                  {exact(asMoney(preview.body.maxVoucherAmount), unit)} a
-                  payment and {exact(asMoney(preview.body.maxPerWindow), unit)}{" "}
-                  per 24 hours, until{" "}
-                  {new Date(Number(preview.body.validUntil) * 1000)
-                    .toISOString()
-                    .replace(".000Z", "Z")}
-                  .
+                <p className="text-body-13 text-02" data-testid="authorize-delegate-summary">
+                  You will sign: up to {exact(asMoney(preview.body.maxVoucherAmount), unit)} a
+                  payment and {exact(asMoney(preview.body.maxPerWindow), unit)} per 24 hours, until{" "}
+                  {isoSeconds(Number(preview.body.validUntil))}.
                 </p>
               ) : null}
               <Button
                 type="button"
                 data-testid="sign-authorize-delegate"
                 loading={busy}
-                disabled={!confirmsDelegateKey(confirm, delegate)}
+                disabled={!keyConfirmed}
                 onClick={() => void authorize()}
               >
-                Sign and authorise
+                {editing ? "Sign and update" : "Sign and authorise"}
               </Button>
             </>
           ) : (
             <p className="text-body-13 text-02">
-              Set your escrow limits first — an agent’s caps can only narrow
-              them.
+              Set your escrow limits first — an agent’s caps can only narrow them.
             </p>
           )}
         </div>
