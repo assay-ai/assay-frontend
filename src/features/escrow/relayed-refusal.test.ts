@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { chainRefusalIn, isRelayedRefusal, relayedRefusal } from "./relayed-refusal";
+import { chainRefusalIn, isRelayedRefusal, relayedRefusal, relayRetryAt } from "./relayed-refusal";
 
 import { ApiError } from "@/libs/ApiClient";
 
@@ -31,7 +31,8 @@ const FOR_ANOTHER_BUYER = new ApiError(
 
 const RATE_LIMITED = new ApiError(
   "SETTLEMENT_RELAYED_INTENT_RATE_LIMITED",
-  "Too many relayed escrow requests for account: 11 in the last 3600 seconds against a limit of 10",
+  "You have reached the limit of 20 escrow changes the platform relays for this account per " +
+    "hour. Nothing was submitted. You can make the next one from 2026-10-12T13:17:14.000Z.",
   429,
 );
 
@@ -173,5 +174,26 @@ describe("isRelayedRefusal", () => {
     );
     expect(isRelayedRefusal(new Error("boom"))).toBe(false);
     expect(isRelayedRefusal(null)).toBe(false);
+  });
+});
+
+/**
+ * REGRESSION (BUG-D1-06): the person was told only "wait a few minutes"; the
+ * server now says when the budget frees, and the sentence says it in their
+ * own time.
+ */
+describe("relayedRefusal — rate limited, with the time it frees up", () => {
+  it("reads the instant out of the server's sentence", () => {
+    expect(relayRetryAt(RATE_LIMITED.message)?.toISOString()).toBe("2026-10-12T13:17:14.000Z");
+    expect(relayRetryAt("Too many requests")).toBeNull();
+  });
+
+  it("says how long to wait, and never shows a raw account string", () => {
+    const now = Date.parse("2026-10-12T13:05:00.000Z");
+    const refusal = relayedRefusal(RATE_LIMITED, now);
+    expect(refusal.retry).toBe("wait");
+    expect(refusal.text).toContain("(in 13 minutes)");
+    expect(refusal.text).not.toContain("eip155:");
+    expect(refusal.text).not.toContain("seconds");
   });
 });

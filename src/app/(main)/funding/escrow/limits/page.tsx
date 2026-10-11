@@ -32,7 +32,11 @@ import {
   type LimitsFormErrors,
 } from "@/features/escrow/limits-form";
 import { RelayedDoneNotice, RelayedRefusalNotice } from "@/features/escrow/relayed-notices";
-import { relayedRefusal, type RelayedRefusal } from "@/features/escrow/relayed-refusal";
+import {
+  isRelayedRefusal,
+  relayedRefusal,
+  type RelayedRefusal,
+} from "@/features/escrow/relayed-refusal";
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
 import { isUserRejection, useSigner } from "@/hooks/useSigner";
 import type { EscrowIntent, EscrowLimitsBody, RelayedEscrowIntent } from "@/interfaces";
@@ -570,9 +574,12 @@ function EscrowLimitsPageContent() {
 
                 {setLimits.isError ? (
                   <p className="text-body-13 text-danger-600">
-                    {setLimits.error instanceof ApiError
-                      ? `${setLimits.error.code} · ${setLimits.error.message}`
-                      : "That request was refused."}
+                    {isRelayedRefusal(setLimits.error)
+                      ? // Rate limited before anything was signed (BUG-D1-06).
+                        relayedRefusal(setLimits.error).text
+                      : setLimits.error instanceof ApiError
+                        ? `${setLimits.error.code} · ${setLimits.error.message}`
+                        : "That request was refused."}
                   </p>
                 ) : null}
               </form>
