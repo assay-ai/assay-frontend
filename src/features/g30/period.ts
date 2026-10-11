@@ -90,6 +90,8 @@ export function groupKeyLabel(
   if (dimension === "agent") {
     const label = agentLabels?.get(key);
     if (label) return label;
+    // A row from before calls named their credential: keyed by its agent.
+    if (key.startsWith(AGENT_KEY_PREFIX)) key = key.slice(AGENT_KEY_PREFIX.length);
   }
   if (dimension === "tool" || dimension === "provider" || dimension === "agent") {
     return key.length > 12 ? `${key.slice(0, 8)}…` : key;
@@ -98,4 +100,36 @@ export function groupKeyLabel(
     return presentVerdict(key).shownAs;
   }
   return key;
+}
+
+/** How a `groupBy=credential` row with no credential (written before the column) is keyed. */
+export const AGENT_KEY_PREFIX = "agent:";
+
+/**
+ * The `groupBy` the summary is asked for, per dimension (U02). "Agent" means
+ * the agent credential that paid: two credentials of one agent hold two
+ * delegate keys (two machines), and grouping by `agent_id` made them one row.
+ */
+export function summaryGroupBy(dimension: string): string {
+  return dimension === "agent" ? "credential" : dimension;
+}
+
+/**
+ * Labels for `groupBy=credential` keys: "agent label · credential name" by
+ * credential id, and the agent label alone for `agent:<id>` keys.
+ */
+export function credentialGroupLabels(
+  agents: readonly { agentId: string; label?: string | null }[],
+  credentialsByAgent: Readonly<Record<string, readonly { id: string; name?: string | null }[]>>,
+): Map<string, string> {
+  const labels = new Map<string, string>();
+  for (const agent of agents) {
+    const agentLabel = agent.label || agent.agentId;
+    labels.set(agent.agentId, agentLabel);
+    labels.set(`${AGENT_KEY_PREFIX}${agent.agentId}`, agentLabel);
+    for (const credential of credentialsByAgent[agent.agentId] ?? []) {
+      labels.set(credential.id, credential.name ? `${agentLabel} · ${credential.name}` : agentLabel);
+    }
+  }
+  return labels;
 }
