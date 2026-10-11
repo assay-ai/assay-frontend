@@ -20,12 +20,12 @@ import {
 } from "@/components/ui/panel";
 import { percentOf, timestamp } from "@/components/g31/format";
 import { UNREADABLE_NOTE } from "@/features/chain-read/chain-read";
+import { applyLimitsSubmitted, escrowQueryKey, readEscrow } from "@/features/escrow/after-set-limits";
 import { escrowPresence } from "@/features/escrow/escrow-presence";
 import { ErrorBlock, KeyValueRow, NoteBox, PageHeader, PendingBlock } from "@/features/g30/ui";
 import {
   ESCROW_LIMITS_DECIMALS,
   isEscrowDisarmed,
-  limitsLanded,
   limitsLandingInterval,
   parseLimitsForm,
   submitLimitsForm,
@@ -40,7 +40,7 @@ import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import { ApiError } from "@/libs/ApiClient";
 import { useChains } from "@/hooks/useChains";
 import { settlementSymbol } from "@/services/chains.service";
-import { createEscrowLimitsIntent, getEscrow } from "@/services/escrow.service";
+import { createEscrowLimitsIntent } from "@/services/escrow.service";
 import { unsignedPayloadSummary } from "@/libs/chains/unsigned-summary";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { formatMoney, toDecimal } from "@/utils/money";
@@ -112,8 +112,8 @@ function EscrowLimitsPageContent() {
     since: number;
   } | null>(null);
   const escrowQuery = useQuery({
-    queryKey: ["escrow", requestedChain],
-    queryFn: () => getEscrow(requestedChain),
+    queryKey: escrowQueryKey(requestedChain),
+    queryFn: () => readEscrow(requestedChain, awaitingLimits),
     retry: 0,
     networkMode: "always" as const,
     refetchInterval: (query) => limitsLandingInterval(query.state.data, awaitingLimits, Date.now()),
@@ -282,19 +282,24 @@ function EscrowLimitsPageContent() {
       const result = await runEscrowAction(intent, signerState.signer);
       if (result.kind === "relayed") {
         setRelayed(result.relayed);
-        // The relayer's own post-transaction read, when it already shows the
-        // new limits, is the freshest answer there is — use it straight away.
-        if (signed && limitsLanded(result.relayed.escrow, signed)) {
-          queryClient.setQueryData(["escrow", requestedChain], result.relayed.escrow);
-        }
       } else {
         setSignature(result.signature);
       }
-      // Takes effect the moment it lands; refetch so the meter and the
-      // "currently set" figures below stop reading the pre-write state, and
-      // keep polling until a read actually shows the signed limits.
-      if (signed) setAwaitingLimits({ body: signed, since: Date.now() });
-      queryClient.invalidateQueries({ queryKey: ["escrow"] });
+      // Takes effect the moment it lands. Seed or re-read past the browser's
+      // HTTP cache so the meter and the "currently set" figures below stop
+      // reading the pre-write state, and keep polling until a read actually
+      // shows the signed limits. See `applyLimitsSubmitted`.
+      if (signed) {
+        setAwaitingLimits({ body: signed, since: Date.now() });
+        void applyLimitsSubmitted(
+          queryClient,
+          requestedChain,
+          signed,
+          result.kind === "relayed" ? result.relayed.escrow : null,
+        );
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+      }
     } catch (e) {
       if (isUserRejection(e)) {
         setSignError("Nothing was signed — the wallet prompt was closed or declined.");

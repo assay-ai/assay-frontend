@@ -86,6 +86,17 @@ export function getEscrow(chainId: string | null): Promise<BuyerEscrow> {
 }
 
 /**
+ * `GET /escrow`, revalidated past the browser's HTTP cache — for the reads
+ * right after a write that changed the escrow. The route is served
+ * `private, max-age=10, stale-while-revalidate=3600`, so a plain refetch in
+ * the next ten seconds is answered with the pre-write body without ever
+ * reaching the API.
+ */
+export function revalidateEscrow(chainId: string | null): Promise<BuyerEscrow> {
+  return api.getRevalidated<BuyerEscrow>("/escrow", chainId === null ? undefined : { chainId });
+}
+
+/**
  * `POST /escrow/withdrawals/request-intent` — builds `request_withdraw(amount)`.
  * Step 1 of 2.
  *
