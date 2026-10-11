@@ -32,7 +32,7 @@ import {
 import { Chip, ErrorBlock, PageHeader, PendingBlock } from "@/features/g30/ui";
 import type { ReceiptsSummary, SummaryGroup } from "@/features/g30/wire";
 import { ApiError } from "@/libs/ApiClient";
-import { getReceiptsSummary, listToolCalls, type ToolCall } from "@/services";
+import { getReceiptsSummary, listAgents, listToolCalls, type ToolCall } from "@/services";
 import { cn } from "@/utils";
 import { formatDecimal, formatMoney, toDecimal } from "@/utils/money";
 
@@ -160,7 +160,7 @@ function callToRow(call: ToolCall): Row {
  * first half is reproduced exactly; the second half branches, and the
  * price-moved branch is our wording, not the design's.
  */
-function changeReading(rows: Row[], dimension: string): string | null {
+function changeReading(rows: Row[]): string | null {
   const withDelta = rows.filter((r) => r.comparison);
   if (withDelta.length === 0) return null;
 
@@ -192,7 +192,8 @@ function changeReading(rows: Row[], dimension: string): string | null {
     ? toDecimal(biggest.comparison!.chargedTotal).div(biggest.comparison!.calls)
     : null;
 
-  const name = groupKeyLabel(biggest.key, dimension);
+  // The row already carries its label, resolved once (an agent id to its name).
+  const name = biggest.label;
   const head = `${name} is ${share}% of the ${direction}.`;
 
   if (nowEach && wasEach && nowEach.eq(wasEach)) {
@@ -245,6 +246,24 @@ export default function SpendPage() {
   });
 
   const summary = query.data;
+
+  // Agent group keys are ids; name them from `GET /agents` (the key `/agents`
+  // itself reads, so the list is shared). Fetched only while grouping by agent.
+  const agentsQuery = useQuery({
+    queryKey: ["agents"],
+    enabled: dimension.id === "agent",
+    retry: false,
+    queryFn: () => listAgents({ limit: 50 }),
+  });
+  const agentLabels = React.useMemo(
+    () =>
+      new Map(
+        (agentsQuery.data?.items ?? [])
+          .filter((agent) => agent.label)
+          .map((agent) => [agent.agentId, agent.label as string]),
+      ),
+    [agentsQuery.data],
+  );
 
   const canDrill = DRILLABLE.has(dimension.id);
 
@@ -299,11 +318,11 @@ export default function SpendPage() {
         return {
           ...g,
           id: g.key,
-          label: groupKeyLabel(g.key, dimension.id),
+          label: groupKeyLabel(g.key, dimension.id, agentLabels),
           drill,
         };
       }),
-    [summary, dimension.id, canDrill, drillQuery.data],
+    [summary, dimension.id, canDrill, drillQuery.data, agentLabels],
   );
 
   // The comparison table is not drillable — it answers "what moved", and a
@@ -323,7 +342,7 @@ export default function SpendPage() {
 
   const asset = summary?.asset ?? "";
   const decimals = summary?.totals.chargedTotal.decimals ?? 6;
-  const reading = React.useMemo(() => changeReading(changeRows, dimension.id), [changeRows, dimension.id]);
+  const reading = React.useMemo(() => changeReading(changeRows), [changeRows]);
 
   const changedTotal = summary?.totals.chargedTotal;
   const totalDelta = React.useMemo(() => {
