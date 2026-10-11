@@ -106,7 +106,7 @@ export function chainRefusalIn(message: string): RelayedChainRefusal | null {
  * none of these may suggest they need gas, because they need none for either
  * relayed door and the whole point of the pair is that the platform pays.
  */
-export function relayedRefusal(error: ApiError): RelayedRefusal {
+export function relayedRefusal(error: ApiError, nowMs: number = Date.now()): RelayedRefusal {
   switch (error.code) {
     case "SETTLEMENT_RELAYED_INTENT_FOR_ANOTHER_BUYER":
       return {
@@ -143,7 +143,7 @@ export function relayedRefusal(error: ApiError): RelayedRefusal {
           "You have used this account's share of the relayer's gas budget for now. This is a " +
           "limit on how often the platform will pay to submit for you, not a limit on your " +
           "escrow: nothing was submitted, nothing was charged, and your money is where it was. " +
-          "Wait a few minutes and send the same request again.",
+          retryWhen(relayRetryAt(error.message), nowMs),
       };
 
     case "SETTLEMENT_RELAYED_INTENT_UNAVAILABLE":
@@ -182,6 +182,26 @@ export function relayedRefusal(error: ApiError): RelayedRefusal {
         text: `${error.message} Quote ${error.code} if you contact support.`,
       };
   }
+}
+
+/**
+ * When the relay budget frees up, from the server's sentence ("… You can make
+ * the next one from 2026-10-12T13:17:14.000Z."), or `null` when it names none
+ * (BUG-D1-06).
+ */
+export function relayRetryAt(message: string): Date | null {
+  const match = /from (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)/.exec(message);
+  if (!match) return null;
+  const at = new Date(match[1]);
+  return Number.isNaN(at.getTime()) ? null : at;
+}
+
+/** "You can try again at 13:17 (in 12 minutes)." — in the person's own time zone. */
+function retryWhen(at: Date | null, nowMs: number): string {
+  if (!at) return "Wait a few minutes and try again.";
+  const minutes = Math.max(1, Math.ceil((at.getTime() - nowMs) / 60_000));
+  const clock = at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return `You can try again at ${clock} (in ${minutes} minute${minutes === 1 ? "" : "s"}).`;
 }
 
 /** The 409 branch: the chain refused, and it said why. */
@@ -281,8 +301,10 @@ function chainRefusal(error: ApiError): RelayedRefusal {
  *
  * The escrow screens already have a refusal table for the `*-intent` routes,
  * and the two must not silently overlap: a `SETTLEMENT_WITHDRAWALS_FROZEN` on a
- * *build* is the same sentence either way, but every `…RELAYED…` code can only
- * come from a submit. The page asks this before choosing which table to read.
+ * *build* is the same sentence either way. Every `…RELAYED…` code comes from a
+ * submit, except `…RATE_LIMITED`, which the intent routes now also answer
+ * BEFORE anything is signed (BUG-D1-06). The page asks this before choosing
+ * which table to read.
  */
 export function isRelayedRefusal(error: unknown): error is ApiError {
   return error instanceof ApiError && error.code.startsWith("SETTLEMENT_RELAYED_INTENT_");
