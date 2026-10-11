@@ -222,21 +222,24 @@ function EscrowLimitsPageContent() {
     so lowering them below what these need leaves them unredeemable. Read past
     the browser cache on every refresh, because "wait for them to settle" polls.
   */
-  const [unsettledRead, setUnsettledRead] = React.useState(0);
   const unsettledQuery = useQuery({
-    queryKey: ["escrow-unsettled", requestedChain, unsettledRead],
+    // One key: re-reading for "wait for them to settle" adds no cache entries,
+    // and a refetch in flight is joined, not restarted (review finding 10).
+    queryKey: ["escrow-unsettled", requestedChain],
     enabled: Boolean(escrow?.exists),
     retry: 0,
-    placeholderData: (previous) => previous,
-    queryFn: () => getEscrowUnsettled(unsettledRead),
+    staleTime: 0,
+    queryFn: () => getEscrowUnsettled(Date.now()),
   });
   const unsettled = unsettledQuery.data?.unsettled;
-  const refreshUnsettled = React.useCallback(() => setUnsettledRead(Date.now()), []);
-  const settle = useSettleWait(unsettled?.count, refreshUnsettled, UNSETTLED_POLL_MS);
-  const strand =
+  const { refetch: refetchUnsettled } = unsettledQuery;
+  const refreshUnsettled = React.useCallback(() => {
+    void refetchUnsettled({ cancelRefetch: false });
+  }, [refetchUnsettled]);
+  const strandsWith = (figures: typeof unsettled) =>
     preview.ok && escrow?.maxVoucherAmount && escrow.maxPerWindow
       ? strandReasons(
-          unsettled,
+          figures,
           {
             maxVoucherAmount: escrow.maxVoucherAmount.amount,
             maxPerWindow: escrow.maxPerWindow.amount,
@@ -244,7 +247,13 @@ function EscrowLimitsPageContent() {
           preview.body,
         )
       : [];
-  const atRisk = strand.length > 0 || (settle.refused && (unsettled?.count ?? 1) > 0);
+  const strand = strandsWith(unsettled);
+  const settle = useSettleWait(
+    { count: unsettled?.count, strands: strand.length > 0, readAt: unsettledQuery.dataUpdatedAt },
+    refreshUnsettled,
+    UNSETTLED_POLL_MS,
+  );
+  const atRisk = strand.length > 0 || settle.refused;
   /* Whether the request in hand was built accepting that it strands them. */
   const [acknowledged, setAcknowledged] = React.useState(false);
 
@@ -259,10 +268,7 @@ function EscrowLimitsPageContent() {
       setRefusal(null);
     },
     onError: (error) => {
-      if (isUnsettledRefusal(error)) {
-        settle.markRefused();
-        refreshUnsettled();
-      }
+      if (isUnsettledRefusal(error)) settle.markRefused();
     },
   });
 
@@ -290,6 +296,12 @@ function EscrowLimitsPageContent() {
     // Lowering the limits below what payments still being settled need is
     // offered only through the warning's two buttons (BUG-D1-07).
     if (atRisk) return;
+    // Read them again first: the figures on the page can predate a payment made
+    // since it loaded (BUG-D1-08). The backend still refuses at build time.
+    if (escrow?.exists) {
+      const fresh = await refetchUnsettled({ cancelRefetch: false });
+      if (strandsWith(fresh.data?.unsettled).length > 0) return;
+    }
     await buildRequest(false);
   }
 
@@ -377,10 +389,7 @@ function EscrowLimitsPageContent() {
         setSignError("Nothing was signed — the wallet prompt was closed or declined.");
       } else if (e instanceof ApiError) {
         // Payments arrived while this was signed (BUG-D1-07): the warning comes back.
-        if (isUnsettledRefusal(e)) {
-          settle.markRefused();
-          refreshUnsettled();
-        }
+        if (isUnsettledRefusal(e)) settle.markRefused();
         /*
           The platform refused to relay, and it said which of five reasons. The
           sentence and the instruction both come from `relayedRefusal` — a
@@ -643,6 +652,7 @@ function EscrowLimitsPageContent() {
                   reasons={strand}
                   waiting={settle.waiting}
                   settled={settle.settled}
+                  stalled={settle.stalled}
                   onWait={settle.wait}
                   onProceed={() => void buildRequest(true)}
                   proceedLabel="Continue anyway"

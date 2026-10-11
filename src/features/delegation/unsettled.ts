@@ -1,7 +1,7 @@
 import Decimal from "decimal.js";
 
-import type { DelegationFormInput } from "@/features/delegation/delegation-form";
-import type { Money, UnsettledVouchers } from "@/interfaces";
+import { type DelegationFormInput, findDelegation } from "@/features/delegation/delegation-form";
+import type { EscrowDelegate, Money, UnsettledVouchers } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { formatMoney } from "@/utils/money";
 
@@ -20,6 +20,13 @@ import { formatMoney } from "@/utils/money";
 
 /** How often a screen waiting for payments to settle reads them again. */
 export const UNSETTLED_POLL_MS = 5_000;
+
+/**
+ * How long "Wait for them to settle" waits before saying the agent is still
+ * paying (review finding 9): an agent that keeps paying keeps adding payments
+ * under the old caps, so the count may never reach zero on its own.
+ */
+export const UNSETTLED_WAIT_MAX_MS = 120_000;
 
 /** The backend's refusal of a change that would strand payments still being settled. */
 export const UNSETTLED_AT_RISK_CODE = "SETTLEMENT_UNSETTLED_VOUCHERS_AT_RISK";
@@ -114,7 +121,11 @@ export function isUnsettledRefusal(error: unknown): boolean {
 export function editIsUnchanged(
   seeded: DelegationFormInput | null,
   form: DelegationFormInput | null,
+  { expired = false }: { expired?: boolean } = {},
 ): boolean {
+  // An expired grant signs nothing today: re-activating it with the same caps
+  // is a change (review finding 11).
+  if (expired) return false;
   if (!seeded || !form) return false;
   const same = (a: string, b: string) => {
     try {
@@ -128,4 +139,126 @@ export function editIsUnchanged(
     same(seeded.maxPerWindow, form.maxPerWindow) &&
     same(seeded.validDays, form.validDays)
   );
+}
+
+/**
+ * The "wait for them to settle" state (review finding 9), as a pure step run
+ * on every read of the figures.
+ *
+ * - After a refusal (`refusedAt`), a read answered before it proves nothing —
+ *   it is the very figure the backend just contradicted — so only a read
+ *   answered AFTER the refusal can end it.
+ * - The wait ends when the figures no longer strand anything (`strands`
+ *   false), not only at zero: a payment that still fits is no reason to wait.
+ * - It gives up after {@link UNSETTLED_WAIT_MAX_MS} (`stalled`): an agent that
+ *   keeps paying keeps the count up.
+ */
+export interface SettleWaitState {
+  waiting: boolean;
+  startedAt: number | null;
+  /** The person waited, or was refused, and a later read shows nothing left at risk. */
+  settled: boolean;
+  /** When the backend last refused for payments still being settled. */
+  refusedAt: number | null;
+  /** The wait ran out with payments still at risk. */
+  stalled: boolean;
+}
+
+export const SETTLE_WAIT_IDLE: SettleWaitState = {
+  waiting: false,
+  startedAt: null,
+  settled: false,
+  refusedAt: null,
+  stalled: false,
+};
+
+export interface SettleRead {
+  /** How many are still being settled; undefined until a read has answered. */
+  count: number | undefined;
+  /** The change on the screen would strand them, by these figures. */
+  strands: boolean;
+  /** When this read was answered (epoch ms; react-query's `dataUpdatedAt`). */
+  readAt: number;
+}
+
+export function settleWaitAfterRead(
+  state: SettleWaitState,
+  read: SettleRead,
+  nowMs: number,
+  maxWaitMs: number = UNSETTLED_WAIT_MAX_MS,
+): SettleWaitState {
+  const active = state.waiting || state.refusedAt !== null;
+  if (!active) return state;
+  const fresh = state.refusedAt === null || read.readAt > state.refusedAt;
+  if (fresh && read.count !== undefined && (read.count === 0 || !read.strands)) {
+    return { ...SETTLE_WAIT_IDLE, settled: true };
+  }
+  if (state.waiting && state.startedAt !== null && nowMs - state.startedAt >= maxWaitMs) {
+    return { ...state, waiting: false, startedAt: null, stalled: true };
+  }
+  return state;
+}
+
+/** What the screen says when the wait ran out. */
+export const SETTLE_STALLED_TEXT =
+  "Your agent is still paying, so new payments keep arriving under the current limits. " +
+  "Pause the agent and wait again, or sign anyway.";
+
+/**
+ * The grant a sheet shows and checks against (BUG-D1-08, review finding 10):
+ * only a read of the list answered AFTER the sheet opened counts — the page's
+ * list can predate a payment made since. Until it arrives the grant the sheet
+ * opened with stands, but the sheet is not `ready` to sign (unless the read
+ * failed: the backend still refuses at intent build). A delegate the fresh
+ * list no longer has is `gone` (revoked or replaced elsewhere).
+ */
+export function liveDelegation(args: {
+  opened: EscrowDelegate | null;
+  delegate: string;
+  list: readonly EscrowDelegate[] | undefined;
+  /** When the list was answered (`dataUpdatedAt`). */
+  readAt: number;
+  /** The `dataUpdatedAt` the cache held when the sheet opened: a read must be later. */
+  openedAt: number;
+  failed: boolean;
+}): { live: EscrowDelegate | null; ready: boolean; gone: boolean } {
+  const fresh = args.list !== undefined && args.readAt > args.openedAt;
+  if (!fresh) return { live: args.opened, ready: args.failed, gone: false };
+  const found = findDelegation(args.list, args.delegate);
+  return found ? { live: found, ready: true, gone: false } : { live: null, ready: true, gone: true };
+}
+
+/** Why a signed request held back for a re-submit can no longer be submitted. */
+export type HeldStale = "deadline" | "nonce";
+
+/** Seconds before its deadline that a held request is treated as expired: the relay needs time. */
+export const HELD_DEADLINE_MARGIN_SECONDS = 30;
+
+/**
+ * Whether a signed request held for a re-submit (review finding 8) is stale:
+ * its `deadline` (chain clock) is within {@link HELD_DEADLINE_MARGIN_SECONDS},
+ * or the escrow's `authNonce` has moved past the one it was signed at (another
+ * revoke or limits change landed). `currentNonce` is the nonce a fresh request
+ * would be built at, when known.
+ */
+export function heldIsStale(
+  held: Record<string, unknown>,
+  nowSeconds: number,
+  currentNonce?: string | null,
+): HeldStale | null {
+  const deadline = Number(held.deadline);
+  if (!Number.isFinite(deadline) || deadline - nowSeconds <= HELD_DEADLINE_MARGIN_SECONDS) {
+    return "deadline";
+  }
+  if (currentNonce !== undefined && currentNonce !== null && String(held.nonce) !== currentNonce) {
+    return "nonce";
+  }
+  return null;
+}
+
+/** What the sheet says when it had to drop the signed request and sign again. */
+export function heldStaleText(reason: HeldStale): string {
+  return reason === "deadline"
+    ? "The change you signed has expired (a signature is valid for 5 minutes), so your wallet will ask you to sign it again."
+    : "Another change to your escrow landed since you signed, so that signature can no longer be used. Your wallet will ask you to sign again.";
 }
