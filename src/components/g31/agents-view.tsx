@@ -25,6 +25,10 @@ import {
 } from "@/services/account.service";
 import { toast } from "@/utils/toast";
 
+import type { DelegateBinding } from "@/features/delegation/delegation-form";
+import { supportsDelegation } from "@/features/delegation/delegation-form";
+
+import { AgentPaymentDelegation, PayerDelegationsPanel } from "./agent-payment-delegation";
 import { MicroLabel, PageHeader, StatusPill } from "./chrome";
 import { dateOnly, relativeTime } from "./format";
 
@@ -43,7 +47,10 @@ import { dateOnly, relativeTime } from "./format";
  * visible with its history rather than vanishing.
  *
  * Two sections of the design have no endpoint and are not drawn: the session
- * signer (no signer resource) and browser sessions (no session resource).
+ * signer (no signer resource) and browser sessions (no session resource). What
+ * stands in for a session signer is agent payment delegation: the agent's own
+ * key, bound to its credential, authorised by the person's wallet on chain —
+ * see `agent-payment-delegation.tsx`.
  * Both would have had to be invented wholesale on a screen whose subject is
  * "what currently has authority over your money" — the worst place in the
  * product to show a made-up grant.
@@ -59,6 +66,9 @@ interface Credential {
   expiresAt: string | null;
   revokedAt: string | null;
   rotatedFromId: string | null;
+  /** CAIP-10 of the delegate key this credential proved it holds (agent payment delegation). */
+  delegateAccount?: string | null;
+  delegateBoundAt?: string | null;
   createdAt: string;
 }
 
@@ -168,6 +178,9 @@ export function AgentsView() {
   });
 
   const agents = React.useMemo(() => agentsQuery.data?.items ?? [], [agentsQuery.data]);
+  /** Bumped after every delegation write, success or failure, so the chain is read again. */
+  const [delegationVersion, setDelegationVersion] = React.useState(0);
+  const bumpDelegations = React.useCallback(() => setDelegationVersion((n) => n + 1), []);
 
   const agentIds = React.useMemo(() => agents.map((agent) => agent.agentId), [agents]);
 
@@ -199,6 +212,30 @@ export function AgentsView() {
       >;
     },
   });
+
+  /**
+   * The payer whose on-chain grants the page lists: an agent's spending account on
+   * eip155 (every agent of a person spends from the same wallet).
+   */
+  const payerAccount = agents.find((agent) => supportsDelegation(agent.agentAccount))?.agentAccount;
+  /** Every credential that ever bound a key — revoked ones included, so their grants stay visible. */
+  const delegateBindings = React.useMemo<DelegateBinding[]>(
+    () =>
+      agents.flatMap((agent) =>
+        (credentialsQuery.data?.[agent.agentId] ?? [])
+          .filter((credential) => credential.delegateAccount)
+          .map((credential) => ({
+            agentId: agent.agentId,
+            agentLabel: agent.label ?? agent.agentId,
+            credentialId: credential.id,
+            credentialName: credential.name,
+            delegateAccount: credential.delegateAccount as string,
+            delegateBoundAt: credential.delegateBoundAt ?? null,
+            revokedAt: credential.revokedAt,
+          }))
+      ),
+    [agents, credentialsQuery.data]
+  );
 
   const createMutation = useMutation({
     mutationFn: (input: { agentId: string; name: string }) =>
@@ -261,6 +298,15 @@ export function AgentsView() {
           Permissions ship no manager UI, AP2 has no user-initiated revocation.
         </p>
       </div>
+
+      {payerAccount ? (
+        <PayerDelegationsPanel
+          account={payerAccount}
+          bindings={delegateBindings}
+          version={delegationVersion}
+          onChanged={bumpDelegations}
+        />
+      ) : null}
 
       {agentsQuery.isPending ? (
         <p className="font-mono text-mono-13 text-03">Loading agents…</p>
@@ -330,6 +376,12 @@ export function AgentsView() {
                     spends from {agent.agentAccount}
                   </p>
                 ) : null}
+                <AgentPaymentDelegation
+                  agentAccount={agent.agentAccount}
+                  credentials={credentials}
+                  version={delegationVersion}
+                  onChanged={bumpDelegations}
+                />
               </PanelBody>
             </Panel>
           );
@@ -337,9 +389,10 @@ export function AgentsView() {
       )}
 
       <p className="text-body-xs text-03">
-        The design also draws a session signer and a browser-session table here. Neither has an
-        endpoint on this API, so neither is shown rather than invented — on a screen about what has
-        authority over your money, an invented grant is worse than a missing one.
+        The design also draws a browser-session table here. It has no endpoint on this API, so it is
+        not shown rather than invented — on a screen about what has authority over your money, an
+        invented grant is worse than a missing one. An agent’s authority to pay is listed above,
+        read from the chain.
       </p>
 
       {/* Create */}
