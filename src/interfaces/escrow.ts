@@ -162,6 +162,8 @@ export interface EscrowLimitsBody {
   maxVoucherAmount: string;
   /** Same encoding, same "0 means refuse" rule. */
   maxPerWindow: string;
+  /** Accept that lower limits strand payments still being settled (BUG-D1-07). */
+  acknowledgeUnsettled?: boolean;
 }
 
 /**
@@ -338,6 +340,8 @@ export interface SubmitSetLimitsBody {
   deadline: string;
   /** `r || s || v` — 65 bytes, `0x`-prefixed, 130 hex digits. */
   signature: string;
+  /** Not signed: accept that lower limits strand payments still being settled (BUG-D1-07). */
+  acknowledgeUnsettled?: boolean;
 }
 
 /** Body of `POST /escrow/withdrawals/request` — `SubmitRequestWithdrawBodyDto`. */
