@@ -24,15 +24,23 @@ import {
   DEFAULT_WINDOW_ID,
   SPEND_DIMENSIONS,
   SPEND_WINDOWS,
+  credentialGroupLabels,
   dimensionById,
   groupKeyLabel,
+  summaryGroupBy,
   windowById,
   windowRange,
 } from "@/features/g30/period";
 import { Chip, ErrorBlock, PageHeader, PendingBlock } from "@/features/g30/ui";
 import type { ReceiptsSummary, SummaryGroup } from "@/features/g30/wire";
 import { ApiError } from "@/libs/ApiClient";
-import { getReceiptsSummary, listAgents, listToolCalls, type ToolCall } from "@/services";
+import {
+  getReceiptsSummary,
+  listAgents,
+  listCredentials,
+  listToolCalls,
+  type ToolCall,
+} from "@/services";
 import { cn } from "@/utils";
 import { formatDecimal, formatMoney, toDecimal } from "@/utils/money";
 
@@ -227,7 +235,7 @@ export default function SpendPage() {
       getReceiptsSummary({
         from: range.from,
         to: range.to,
-        groupBy: dimension.id,
+        groupBy: summaryGroupBy(dimension.id),
         compareTo: "previous_period",
       } as Record<string, string>) as Promise<ReceiptsSummary>,
     // One retry, not three. A money screen that cannot load must SAY so
@@ -247,22 +255,41 @@ export default function SpendPage() {
 
   const summary = query.data;
 
-  // Agent group keys are ids; name them from `GET /agents` (the key `/agents`
-  // itself reads, so the list is shared). Fetched only while grouping by agent.
+  // Agent group keys are credential ids (U02); name them from `GET /agents` and
+  // each agent's credentials. Fetched only while grouping by agent.
   const agentsQuery = useQuery({
     queryKey: ["agents"],
     enabled: dimension.id === "agent",
     retry: false,
     queryFn: () => listAgents({ limit: 50 }),
   });
+  const agentIds = (agentsQuery.data?.items ?? []).map((agent) => agent.agentId);
+  const credentialsQuery = useQuery({
+    queryKey: ["spend-agent-credentials", agentIds],
+    enabled: dimension.id === "agent" && agentIds.length > 0,
+    retry: false,
+    queryFn: async () => {
+      const lists = await Promise.all(
+        agentIds.map(
+          (id) =>
+            listCredentials(id, { limit: 50 }) as Promise<{
+              items: { id: string; name?: string | null }[];
+            }>,
+        ),
+      );
+      return Object.fromEntries(agentIds.map((id, i) => [id, lists[i].items]));
+    },
+  });
   const agentLabels = React.useMemo(
     () =>
-      new Map(
-        (agentsQuery.data?.items ?? [])
-          .filter((agent) => agent.label)
-          .map((agent) => [agent.agentId, agent.label as string]),
+      credentialGroupLabels(
+        (agentsQuery.data?.items ?? []).map((agent) => ({
+          agentId: agent.agentId,
+          label: agent.label ?? null,
+        })),
+        credentialsQuery.data ?? {},
       ),
-    [agentsQuery.data],
+    [agentsQuery.data, credentialsQuery.data],
   );
 
   const canDrill = DRILLABLE.has(dimension.id);
