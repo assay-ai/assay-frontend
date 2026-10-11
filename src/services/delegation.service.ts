@@ -1,6 +1,7 @@
 import type {
   CreateDelegateIntentBody,
   DelegateIntent,
+  EscrowUnsettled,
   ListEscrowDelegates,
   RelayedDelegate,
 } from "@/interfaces";
@@ -46,4 +47,13 @@ export function submitRevokeDelegate(
   body: Record<string, unknown>,
 ): Promise<RelayedDelegate> {
   return api.post<RelayedDelegate>("/escrow/delegates/revoke", body);
+}
+
+/**
+ * `GET /escrow/unsettled` — the payer's payments still being settled, beside
+ * the escrow's own window (BUG-D1-07). `bust` defeats the browser cache for a
+ * screen that polls while waiting for them to settle.
+ */
+export function getEscrowUnsettled(bust = 0): Promise<EscrowUnsettled> {
+  return api.get<EscrowUnsettled>("/escrow/unsettled", { v: String(bust) });
 }

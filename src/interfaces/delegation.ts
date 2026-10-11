@@ -12,6 +12,23 @@ import type { UnsignedChainTransaction } from "./chain-transaction";
  */
 export type EscrowDelegateStatus = "ACTIVE" | "EXPIRED";
 
+/**
+ * Payments the platform served and the chain has not redeemed yet (BUG-D1-07).
+ * The chain applies the caps standing AT REDEMPTION, so lowering a cap below
+ * what these need, or revoking the key, leaves them unredeemable.
+ */
+export interface UnsettledVouchers {
+  count: number;
+  /** Their sum. */
+  amount: Money;
+  /** The largest single one: a per-payment cap below it strands it. */
+  largest: Money;
+  /** What the 24-hour cap must hold for all of them: the chain's counter plus these. */
+  windowNeeds: Money;
+  /** ISO-8601: the last instant the chain still redeems one of them, or null. */
+  redeemableUntil: string | null;
+}
+
 export interface EscrowDelegate {
   /** CAIP-10. */
   delegate: string;
@@ -22,11 +39,20 @@ export interface EscrowDelegate {
   /** ISO-8601. */
   validUntil: string;
   status: EscrowDelegateStatus;
+  /** Payments this key signed that are still being settled; absent from an older API. */
+  unsettled?: UnsettledVouchers;
 }
 
 export interface ListEscrowDelegates {
   account: string;
   delegates: EscrowDelegate[];
+}
+
+/** `GET /escrow/unsettled`: every signer's unsettled payments, beside the escrow's own window. */
+export interface EscrowUnsettled {
+  account: string;
+  /** null when the chain could not be read: unknown, not none. */
+  unsettled: UnsettledVouchers | null;
 }
 
 export type DelegationKind = "AUTHORIZE_DELEGATE" | "REVOKE_DELEGATE";
@@ -52,4 +78,6 @@ export interface CreateDelegateIntentBody {
   maxVoucherAmount: string;
   maxPerWindow: string;
   validUntil: string;
+  /** Accept that the new caps strand payments still being settled (BUG-D1-07). */
+  acknowledgeUnsettled?: boolean;
 }

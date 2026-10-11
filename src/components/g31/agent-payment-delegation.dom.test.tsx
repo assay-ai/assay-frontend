@@ -50,6 +50,13 @@ function client(escrowMaxVoucher: string): QueryClient {
         spentInWindow: usdg("1436032"),
         validUntil: "2026-11-11T12:33:36.000Z",
         status: "ACTIVE",
+        unsettled: {
+          count: 1,
+          amount: usdg("100000"),
+          largest: usdg("100000"),
+          windowNeeds: usdg("1536032"),
+          redeemableUntil: "2026-10-12T12:34:00.000Z",
+        },
       },
     ],
   });
@@ -96,6 +103,16 @@ describe("PayerDelegationsPanel", () => {
       <PayerDelegationsPanel account={PAYER} bindings={[]} version={0} onChanged={() => {}} />,
     );
     expect(fine).not.toContain("delegate-above-escrow-limits");
+  });
+});
+
+describe("PayerDelegationsPanel — payments still being settled (BUG-D1-07)", () => {
+  it("lists them on the grant they will be redeemed under", () => {
+    const html = render(
+      <PayerDelegationsPanel account={PAYER} bindings={[]} version={0} onChanged={() => {}} />,
+    );
+    expect(html).toContain('data-testid="delegate-unsettled"');
+    expect(html).toContain("1 payment (0.100000 USDG) still being settled");
   });
 });
 
