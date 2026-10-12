@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleCheck, CircleX, Play, RefreshCw, TriangleAlert } from "lucide-react";
 import { useParams } from "next/navigation";
 import * as React from "react";
@@ -28,15 +28,18 @@ import type {
   BindingTestLayerStatus,
   BindingTestReport,
   ToolBindingDetail,
+  ToolCatalogue,
 } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import {
   getToolBinding,
+  listToolCatalogue,
   testToolBinding,
   validateToolMapping,
 } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
 import { presentVerdict } from "@/utils/verdict";
+import { argumentsProblem } from "@/features/provider-binding/tester-arguments";
 
 import {
   byteSize,
@@ -410,8 +413,23 @@ export default function MappingTesterPage() {
     }
   }, [binding, requestMappingQuery.data, args]);
 
+  // The tool's input schema, to name the arguments a run would be refused for.
+  // Same key and freshness as the other catalogue readers, so usually cached.
+  const catalogueQuery = useQuery<ToolCatalogue, ApiError>({
+    queryKey: ["provider", "tool-catalogue"],
+    queryFn: listToolCatalogue,
+    retry: 0,
+    staleTime: 5 * 60 * 1000,
+  });
+  const inputSchema = catalogueQuery.data?.tools.find((tool) => tool.id === binding?.toolId)?.inputSchema;
+
+  const queryClient = useQueryClient();
   const run = useMutation({
     mutationFn: (input: Record<string, unknown>) => testToolBinding(bindingId, { input }),
+    // A run is what the publish gate's tester rows read: the checklist cached
+    // from an earlier visit is out of date the moment one lands.
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: ["provider", "tool-binding", bindingId, "publish-check"] }),
   });
   const report = run.data ?? null;
 
@@ -427,9 +445,16 @@ export default function MappingTesterPage() {
       setArgsError("The arguments must be a JSON object.");
       return;
     }
+    // The seeded skeleton is all nulls: say which fields to fill rather than
+    // spend a run on a TOOL_MAPPING_NULL_VALUE refusal.
+    const problem = argumentsProblem(parsed as Record<string, unknown>, inputSchema);
+    if (problem) {
+      setArgsError(problem);
+      return;
+    }
     setArgsError(null);
     run.mutate(parsed as Record<string, unknown>);
-  }, [args, run]);
+  }, [args, run, inputSchema]);
 
   if (bindingQuery.isPending) {
     return <p className="font-mono text-mono-13 text-03">Loading binding…</p>;
