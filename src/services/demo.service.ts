@@ -88,12 +88,25 @@ export async function pollDemoVerdict(intentId: string): Promise<DemoVerdict> {
   return api.get<DemoVerdict>(`/public/demo/verdict/${intentId}`);
 }
 
-/** `null` when no slash is pinned — the strip then does not render at all. */
-export async function getDemoCompensation(): Promise<DemoCompensation | null> {
+/**
+ * Whether this deployment runs the demo at all, and the pinned slash if any.
+ *
+ * The backend mounts `/public/demo/*` only when a demo credential is
+ * provisioned, so a 404 here means "no demo", while a 200 `null` means "demo,
+ * no slash pinned" (the strip then does not render). Asking before the visitor
+ * presses Run is what keeps the page from offering a button that cannot work.
+ */
+export async function getDemoStatus(): Promise<{
+  configured: boolean;
+  compensation: DemoCompensation | null;
+}> {
   try {
-    return await api.get<DemoCompensation | null>("/public/demo/compensation");
+    const compensation = await api.get<DemoCompensation | null>("/public/demo/compensation");
+    return { configured: true, compensation: compensation ?? null };
   } catch (error) {
-    if (error instanceof ApiError && error.status === 404) return null;
+    if (error instanceof ApiError && error.status === 404) {
+      return { configured: false, compensation: null };
+    }
     throw error;
   }
 }

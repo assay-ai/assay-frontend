@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Minus, Play, X } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { Banner } from "@/components/ui/banner";
@@ -12,7 +13,7 @@ import {
   DemoRunResult,
   DemoVerdict,
   DemoVerdictState,
-  getDemoCompensation,
+  getDemoStatus,
   pollDemoVerdict,
   runDemo,
 } from "@/services/demo.service";
@@ -83,11 +84,11 @@ export default function DemoPage() {
 
   React.useEffect(() => {
     let cancelled = false;
-    getDemoCompensation()
-      .then((value) => {
+    getDemoStatus()
+      .then((status) => {
         if (cancelled) return;
-        setConfigured(true);
-        setCompensation(value);
+        setConfigured(status.configured);
+        setCompensation(status.compensation);
       })
       .catch(() => {
         if (!cancelled) setConfigured(false);
@@ -153,6 +154,17 @@ export default function DemoPage() {
           title="The live demo is not configured on this deployment"
           description="No demo credential has been provisioned here, so there is nothing to run. This is a configuration state, not a fault."
         />
+        <p className="text-body-13 text-02">
+          You can still read{" "}
+          <Link href="/how-it-works" className="text-primary-500 underline">
+            how a call is checked before it is charged
+          </Link>{" "}
+          or browse{" "}
+          <Link href="/catalogue" className="text-primary-500 underline">
+            the tools and prices
+          </Link>
+          .
+        </p>
       </Shell>
     );
   }

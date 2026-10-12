@@ -1,4 +1,4 @@
-import { Check, CircleCheck, Info, Lock, Play, ScanSearch, Split, Terminal } from "lucide-react";
+import { Check, CircleCheck, Info, Lock, ScanSearch, Split, Terminal } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
@@ -12,6 +12,8 @@ import {
   PanelTitle,
   PanelTitles,
 } from "@/components/ui/panel";
+
+import { DemoCta } from "./demo-cta";
 
 /**
  * How it works — route `/how-it-works`.
@@ -128,13 +130,7 @@ export default function HowItWorksPage() {
 
         {/* CTAs */}
         <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
-          <Link
-            href="/demo"
-            className="flex items-center gap-[7px] rounded-md bg-primary-500 px-[18px] py-3 text-label-sm text-on-color shadow-hair hover:bg-primary-600"
-          >
-            <Play aria-hidden="true" className="h-[15px] w-[15px]" />
-            Watch it refuse to charge
-          </Link>
+          <DemoCta />
           <Link
             href="/catalogue"
             className="flex items-center rounded-md border border-02 bg-01 px-[18px] py-3 text-label-sm text-01 shadow-hair hover:bg-02"
