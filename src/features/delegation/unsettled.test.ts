@@ -125,14 +125,27 @@ describe("editIsUnchanged", () => {
   );
 
   it("is unchanged as prefilled, and with the same amounts written differently", () => {
-    expect(seeded).toEqual({ maxVoucherAmount: "0.5", maxPerWindow: "2", validDays: "30" });
+    expect(seeded).toEqual({
+      maxVoucherAmount: "0.5",
+      maxPerWindow: "2",
+      validDays: "30",
+      keepExpiry: true,
+    });
     expect(editIsUnchanged(seeded, { ...seeded })).toBe(true);
     expect(editIsUnchanged(seeded, { ...seeded, maxVoucherAmount: "0.50 " })).toBe(true);
   });
 
   it("is changed by any cap or by the expiry", () => {
     expect(editIsUnchanged(seeded, { ...seeded, maxPerWindow: "5" })).toBe(false);
-    expect(editIsUnchanged(seeded, { ...seeded, validDays: "29" })).toBe(false);
+    // While the expiry is kept the days field is not what is signed.
+    expect(editIsUnchanged(seeded, { ...seeded, validDays: "29" })).toBe(true);
+    expect(editIsUnchanged(seeded, { ...seeded, keepExpiry: false })).toBe(false);
+    expect(
+      editIsUnchanged(
+        { ...seeded, keepExpiry: false },
+        { ...seeded, keepExpiry: false, validDays: "29" },
+      ),
+    ).toBe(false);
     expect(editIsUnchanged(seeded, { ...seeded, maxVoucherAmount: "abc" })).toBe(false);
   });
 

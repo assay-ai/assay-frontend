@@ -26,7 +26,19 @@ export interface DelegationFormInput {
   maxVoucherAmount: string;
   maxPerWindow: string;
   validDays: string;
+  /**
+   * Editing only (BUG-J-POST-01): sign the grant's CURRENT `validUntil`
+   * instead of "`validDays` from now". `validDays` is then ignored.
+   */
+  keepExpiry?: boolean;
 }
+
+/**
+ * `REDEEM_GRACE_SECONDS` on chain: a voucher stays redeemable this long after it
+ * expires, and the backend refuses a delegate voucher whose grant ends inside
+ * that window (D1-P05). A kept expiry closer than this could cover no payment.
+ */
+export const REDEEM_GRACE_SECONDS = 1_800;
 
 export interface DelegationFormErrors {
   maxVoucherAmount?: string;
@@ -93,6 +105,8 @@ export function parseDelegationForm(
   escrow: EscrowCaps,
   delegate: string,
   nowSeconds: number,
+  /** The standing grant's `validUntil`, unix seconds — what `keepExpiry` signs. */
+  currentValidUntil?: number,
 ): ParsedDelegationForm {
   const errors: DelegationFormErrors = {};
   const decimals =
@@ -127,7 +141,13 @@ export function parseDelegationForm(
   }
 
   const days = input.validDays.trim();
-  if (
+  const keep = input.keepExpiry === true && currentValidUntil !== undefined;
+  if (keep) {
+    if (currentValidUntil <= Math.floor(nowSeconds) + REDEEM_GRACE_SECONDS) {
+      errors.validDays =
+        "The current expiry is less than 30 minutes away — choose a number of days instead.";
+    }
+  } else if (
     !/^\d+$/.test(days) ||
     Number(days) < 1 ||
     Number(days) > MAX_DELEGATION_DAYS
@@ -143,9 +163,9 @@ export function parseDelegationForm(
       delegate,
       maxVoucherAmount: toAtomic(perCall.value, decimals),
       maxPerWindow: toAtomic(perWindow.value, decimals),
-      validUntil: String(
-        Math.floor(nowSeconds) + Number(days) * SECONDS_PER_DAY,
-      ),
+      validUntil: keep
+        ? String(currentValidUntil)
+        : String(Math.floor(nowSeconds) + Number(days) * SECONDS_PER_DAY),
     },
   };
 }
@@ -264,7 +284,7 @@ export function serverNowSeconds(
  */
 export function errorsAfterEdit(
   errors: DelegationFormErrors,
-  field: keyof DelegationFormInput,
+  field: keyof DelegationFormErrors,
 ): DelegationFormErrors {
   const next = { ...errors };
   delete next[field];
@@ -273,21 +293,31 @@ export function errorsAfterEdit(
 }
 
 /**
- * The form for EDITING a standing grant (BUG-D1-04): its own caps, and the
- * days it has left (at least 1), so signing without a change to the expiry
- * keeps roughly the one it has. Every rule of {@link parseDelegationForm}
- * applies — the escrow's CURRENT limits included.
+ * The form for EDITING a standing grant (BUG-D1-04): its own caps, and its
+ * own expiry KEPT exactly (BUG-J-POST-01) — a cap edit no longer moves
+ * `validUntil` to "N whole days from now". `validDays` is pre-filled with the
+ * days it has left (at least 1) for a person who chooses a new expiry. A grant
+ * already past, or within the redeem grace of, its expiry starts on days, since
+ * keeping that expiry could cover no payment. Every rule of
+ * {@link parseDelegationForm} applies — the escrow's CURRENT limits included.
  */
 export function editDelegationForm(
   delegation: Pick<EscrowDelegate, "maxVoucherAmount" | "maxPerWindow" | "validUntil">,
   nowSeconds: number,
 ): DelegationFormInput {
-  const left = Math.ceil((Date.parse(delegation.validUntil) / 1000 - nowSeconds) / SECONDS_PER_DAY);
+  const validUntil = validUntilSeconds(delegation.validUntil);
+  const left = Math.ceil((validUntil - nowSeconds) / SECONDS_PER_DAY);
   return {
     maxVoucherAmount: toDecimal(delegation.maxVoucherAmount).toString(),
     maxPerWindow: toDecimal(delegation.maxPerWindow).toString(),
     validDays: String(Math.min(MAX_DELEGATION_DAYS, Math.max(1, Number.isFinite(left) ? left : 1))),
+    keepExpiry: Number.isFinite(validUntil) && validUntil > nowSeconds + REDEEM_GRACE_SECONDS,
   };
+}
+
+/** A grant's ISO `validUntil` as the unix seconds the chain stores. */
+export function validUntilSeconds(validUntil: string): number {
+  return Math.floor(Date.parse(validUntil) / 1000);
 }
 
 /**

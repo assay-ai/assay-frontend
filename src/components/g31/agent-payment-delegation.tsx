@@ -5,6 +5,7 @@ import { TriangleAlert, Wallet } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import {
   Sheet,
@@ -29,6 +30,7 @@ import {
   parseDelegationForm,
   serverNowSeconds,
   supportsDelegation,
+  validUntilSeconds,
 } from "@/features/delegation/delegation-form";
 import {
   type ExpectedDomain,
@@ -742,7 +744,13 @@ function AuthorizeSheet({
   const delegate = target?.delegateAccount ?? "";
   const preview =
     form && escrow
-      ? parseDelegationForm(form, escrow, addressOfAccount(delegate), nowSeconds)
+      ? parseDelegationForm(
+          form,
+          escrow,
+          addressOfAccount(delegate),
+          nowSeconds,
+          current ? validUntilSeconds(current.validUntil) : undefined,
+        )
       : null;
   // Editing re-authorises the very key the grant already names, so there is no
   // key to confirm; a NEW grant still needs the last four characters (review S3-9).
@@ -781,10 +789,16 @@ function AuthorizeSheet({
   const heldStale = held ? heldIsStale(held, nowSeconds) : null;
   const heldUsable = held !== null && heldStale === null;
 
-  const change = (field: keyof DelegationFormInput, value: string) => {
+  const change = (
+    field: "maxVoucherAmount" | "maxPerWindow" | "validDays" | "keepExpiry",
+    value: string | boolean,
+  ) => {
     if (!form) return;
     setForm({ ...form, [field]: value });
-    setErrors((previous) => errorsAfterEdit(previous, field));
+    // The days error is about whichever expiry is signed, so a toggle clears it too.
+    setErrors((previous) =>
+      errorsAfterEdit(previous, field === "keepExpiry" ? "validDays" : field),
+    );
     // A request signed for other values is not what the form now says.
     setHeld(null);
     setHeldNote(null);
@@ -936,15 +950,32 @@ function AuthorizeSheet({
                 inputMode="decimal"
                 onChange={(e) => change("maxPerWindow", e.target.value)}
               />
-              <Field
-                label={editing ? "Expires after (from now)" : "Expires after"}
-                id="delegate-valid-days"
-                suffix="days"
-                value={form.validDays}
-                error={errors.validDays}
-                inputMode="numeric"
-                onChange={(e) => change("validDays", e.target.value)}
-              />
+              {current ? (
+                // A cap edit keeps the grant's own expiry unless the person
+                // picks a new one (BUG-J-POST-01).
+                <div className="flex flex-col gap-1">
+                  <Checkbox
+                    data-testid="edit-delegate-keep-expiry"
+                    checked={form.keepExpiry === true}
+                    onChange={(e) => change("keepExpiry", e.target.checked)}
+                    label={`Keep the current expiry (${current.validUntil.replace(".000Z", "Z")})`}
+                  />
+                  {form.keepExpiry && errors.validDays ? (
+                    <span className="text-body-xs text-danger-500">{errors.validDays}</span>
+                  ) : null}
+                </div>
+              ) : null}
+              {current && form.keepExpiry ? null : (
+                <Field
+                  label={editing ? "Expires after (from now)" : "Expires after"}
+                  id="delegate-valid-days"
+                  suffix="days"
+                  value={form.validDays}
+                  error={errors.validDays}
+                  inputMode="numeric"
+                  onChange={(e) => change("validDays", e.target.value)}
+                />
+              )}
               {editing ? null : (
                 <Field
                   label="Last 4 characters of the agent’s key"
