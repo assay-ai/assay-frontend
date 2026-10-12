@@ -257,11 +257,20 @@ export default function ProviderSetupPage() {
                 body="Any shape. JSON in, JSON out."
               />
               <NeedRow icon={<Wallet />} title="A wallet" body="Proved once, by signature." />
-              <NeedRow
-                icon={<Shield />}
-                title="An allowlist entry for our egress IPs"
-                body="Shown in step 3, with a one-click check that we can reach you."
-              />
+              {/* Only when there ARE fixed egress IPs — step 3 says so when there are none. */}
+              {egressIps.length > 0 ? (
+                <NeedRow
+                  icon={<Shield />}
+                  title="An allowlist entry for our egress IPs"
+                  body="Shown in step 3, with a one-click check that we can reach you."
+                />
+              ) : (
+                <NeedRow
+                  icon={<Shield />}
+                  title="A reachable endpoint"
+                  body="No IPs to allowlist here. Step 3 has a one-click check that we can reach you."
+                />
+              )}
             </PanelBody>
           </Panel>
         </div>
