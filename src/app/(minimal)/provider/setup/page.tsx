@@ -70,6 +70,7 @@ export default function ProviderSetupPage() {
     steps,
     allDone,
     save,
+    accountDirty,
     saveBlockedBy,
     attempted,
     saving,
@@ -103,7 +104,12 @@ export default function ProviderSetupPage() {
           <Button
             icon={<ArrowRight />}
             loading={saving}
-            onClick={allDone ? () => router.push("/provider") : save}
+            onClick={() => {
+              // Nothing to save on a finished setup: go on. Otherwise save —
+              // which validates — and go on only once that succeeded.
+              if (allDone && !accountDirty) router.push("/provider");
+              else save(allDone ? () => router.push("/provider") : undefined);
+            }}
           >
             Save and continue
           </Button>
