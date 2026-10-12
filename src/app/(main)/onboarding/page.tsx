@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import { Field } from "@/components/ui/field";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
+import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
 import { ApiError } from "@/libs/ApiClient";
 import { createCredential, listAgents } from "@/services";
 import { cn } from "@/utils";
@@ -39,19 +40,16 @@ const STEPS = [
   { n: 4, label: "Try a call" },
 ] as const;
 
-const SAMPLE_CONFIG = `"x402": {
-  "url": "https://mcp.example.com/v1",
-  "headers": { "Authorization": "Bearer x402_sk_live_a91f4c2e…" }
-}
-// This key does not expire. Revoke or rotate it at any time under Agents.`;
-
+/** The same endpoint `/connect` prints (`NEXT_PUBLIC_MCP_URL`) — never a sample host. */
 function configFor(token: string): string {
   return `"x402": {
-  "url": "https://mcp.example.com/v1",
+  "url": "${mcpEndpointUrl()}",
   "headers": { "Authorization": "Bearer ${token}" }
 }
 // This key does not expire. Revoke or rotate it at any time under Agents.`;
 }
+
+const SAMPLE_CONFIG = configFor("x402_sk_live_a91f4c2e…");
 
 function Stepper({ current }: { current: number }) {
   return (
