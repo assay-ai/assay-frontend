@@ -254,7 +254,9 @@ export default function ProviderVerdictFeedPage() {
   const bodiesChip = React.useMemo(() => {
     if (nowMs === null) return null;
     const hours = scopedItems
-      .map((item) => retentionHoursRemaining(item.retentionState, item.createdAt, nowMs))
+      .map((item) =>
+        retentionHoursRemaining(item.retentionState, item.createdAt, nowMs, item.bodiesExpireAt)
+      )
       .filter((h): h is number => h !== null);
     if (hours.length === 0) return null;
     return Math.floor(Math.min(...hours));
@@ -357,7 +359,9 @@ export default function ProviderVerdictFeedPage() {
       key: "bodies",
       header: "Bodies",
       cell: (r) =>
-        nowMs === null ? DASH : retentionLabel(r.item.retentionState, r.item.createdAt, nowMs),
+        nowMs === null
+          ? DASH
+          : retentionLabel(r.item.retentionState, r.item.createdAt, nowMs, r.item.bodiesExpireAt),
       width: 130,
       mono: true,
       align: "end",

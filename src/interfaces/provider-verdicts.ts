@@ -108,6 +108,8 @@ export interface ProviderVerdictListItem {
   windowId: string | null;
   countedTowardWindow: boolean | null;
   retentionState: RetentionState | null;
+  /** When the raw bodies stop being kept; `null` unless `retentionState` is `RAW`. */
+  bodiesExpireAt?: string | null;
   createdAt: string;
 }
 

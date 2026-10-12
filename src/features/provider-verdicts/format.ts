@@ -72,13 +72,13 @@ export function countedText(counted: boolean | null): string {
 export function retentionLabel(
   retentionState: RetentionState | null,
   createdAtIso: string,
-  nowMs: number
+  nowMs: number,
+  bodiesExpireAtIso?: string | null
 ): string {
   if (retentionState === null) return DASH;
   if (retentionState === "DIGESTED") return "hashes only";
-  const createdMs = new Date(createdAtIso).getTime();
-  if (Number.isNaN(createdMs)) return DASH;
-  const remainingHours = RETENTION_HOURS - (nowMs - createdMs) / 3_600_000;
+  const remainingHours = hoursUntilExpiry(createdAtIso, nowMs, bodiesExpireAtIso);
+  if (remainingHours === null) return DASH;
   return remainingHours > 0 ? `available ${Math.ceil(remainingHours)}h` : "expiring";
 }
 
@@ -86,11 +86,27 @@ export function retentionLabel(
 export function retentionHoursRemaining(
   retentionState: RetentionState | null,
   createdAtIso: string,
-  nowMs: number
+  nowMs: number,
+  bodiesExpireAtIso?: string | null
 ): number | null {
   if (retentionState !== "RAW") return null;
-  const createdMs = new Date(createdAtIso).getTime();
-  if (Number.isNaN(createdMs)) return null;
-  const remaining = RETENTION_HOURS - (nowMs - createdMs) / 3_600_000;
+  const remaining = hoursUntilExpiry(createdAtIso, nowMs, bodiesExpireAtIso);
+  if (remaining === null) return null;
   return remaining > 0 ? remaining : 0;
+}
+
+/**
+ * Bodies are kept 72h from SEALING, which can be a day after the verdict's
+ * `createdAt`. `bodiesExpireAt` is the server's own figure and wins; the
+ * `createdAt` estimate is only for a response that does not carry it.
+ */
+function hoursUntilExpiry(
+  createdAtIso: string,
+  nowMs: number,
+  bodiesExpireAtIso?: string | null
+): number | null {
+  const expiresMs = bodiesExpireAtIso
+    ? new Date(bodiesExpireAtIso).getTime()
+    : new Date(createdAtIso).getTime() + RETENTION_HOURS * 3_600_000;
+  return Number.isNaN(expiresMs) ? null : (expiresMs - nowMs) / 3_600_000;
 }
