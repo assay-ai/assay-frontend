@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/panel";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { formatCount } from "@/features/buyer/period";
+import { earnedTileSub } from "@/features/provider-earnings/earned-tile";
 import type { Money, ProviderEarningsGroup, ProviderPayout } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { listProviderPayouts } from "@/services/provider-payouts.service";
@@ -404,7 +405,7 @@ export default function ProviderMoneyPage() {
           // figure reads as money that went missing.
           label="Earned this month"
           value={money(totals?.earned)}
-          sub="already in your wallet — paid at each redemption"
+          sub={earnedTileSub(totals, (value) => money(value))}
         />
         <MetricTile
           label="Paid today"
