@@ -145,6 +145,13 @@ export interface ProviderEarningsFigures {
   /** Σ provider_amount the provider would have earned had verification not withheld it. */
   withheld: Money | null;
   withheldCalls: number;
+  /**
+   * The part of `earned` the platform credited from its own funds because the
+   * voucher could never be redeemed. Owed by the platform, not in the wallet.
+   * Optional: older backends do not send it.
+   */
+  absorbed?: Money | null;
+  absorbedCalls?: number;
 }
 
 export interface ProviderEarningsGroup extends ProviderEarningsFigures {
