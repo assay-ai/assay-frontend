@@ -1,5 +1,6 @@
 "use client";
 
+import { DisplayAssetSelect } from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
 import { Copy, Info } from "lucide-react";
 import { useMemo } from "react";
@@ -291,6 +292,8 @@ export default function ProviderPortfolioPage() {
           </Button>
         </div>
       </header>
+
+      <DisplayAssetSelect scope="provider" />
 
       {error ? (
         <Banner
