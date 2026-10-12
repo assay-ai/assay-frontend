@@ -94,6 +94,16 @@ export function parseLimitsForm(
   if (!window.ok) errors.maxPerWindow = window.error;
   if (!voucher.ok || !window.ok) return { ok: false, errors };
 
+  // A single call can never be charged more than the window allows, so a
+  // per-call ceiling above it is a typo, not a setting. A zero window is the
+  // "refuse everything" case and has its own confirmation below.
+  if (!window.value.isZero() && voucher.value.gt(window.value)) {
+    return {
+      ok: false,
+      errors: { maxVoucherAmount: "Cannot be more than the per-window limit." },
+    };
+  }
+
   const zeroFields: LimitsFormField[] = [];
   if (voucher.value.isZero()) zeroFields.push("maxVoucherAmount");
   if (window.value.isZero()) zeroFields.push("maxPerWindow");

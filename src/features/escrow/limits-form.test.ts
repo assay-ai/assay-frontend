@@ -205,3 +205,17 @@ describe("limitsLanded / limitsLandingInterval — the screen catches up with th
     expect(limitsLandingInterval(before, awaiting, 1_000 + LIMITS_LANDING_TIMEOUT_MS + 1)).toBe(false);
   });
 });
+
+describe("parseLimitsForm — per call against the window (BUG-R2-REAL-01)", () => {
+  it("refuses a per-call limit above the window limit", () => {
+    const result = parseLimitsForm(input({ maxVoucherAmount: "20", maxPerWindow: "10" }), DECIMALS);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.maxVoucherAmount).toMatch(/per-window/);
+  });
+
+  it("accepts equal limits", () => {
+    expect(parseLimitsForm(input({ maxVoucherAmount: "10", maxPerWindow: "10" }), DECIMALS).ok).toBe(
+      true,
+    );
+  });
+});

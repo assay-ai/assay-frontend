@@ -405,6 +405,16 @@ function EscrowLimitsPageContent() {
     }
   }
 
+  /**
+   * A built request describes the figures typed when it was built. Editing a
+   * field before signing discards it, so what is signed is always what the
+   * form shows (BUG-R2-REAL-02). Once signed, the request is on its way and
+   * stays on screen.
+   */
+  function discardUnsignedRequest() {
+    if (intent && !signature && !relayed) rebuildRequest();
+  }
+
   /** Throws the dead signature away and asks for a fresh request to sign. */
   function rebuildRequest() {
     setIntent(null);
@@ -605,7 +615,10 @@ function EscrowLimitsPageContent() {
                   inputMode="decimal"
                   suffix={assetSymbol}
                   value={maxVoucherAmount}
-                  onChange={(event) => setMaxVoucherAmount(event.target.value)}
+                  onChange={(event) => {
+                    setMaxVoucherAmount(event.target.value);
+                    discardUnsignedRequest();
+                  }}
                   error={errors.maxVoucherAmount}
                   hint={
                     !errors.maxVoucherAmount
@@ -619,7 +632,10 @@ function EscrowLimitsPageContent() {
                   inputMode="decimal"
                   suffix={assetSymbol}
                   value={maxPerWindow}
-                  onChange={(event) => setMaxPerWindow(event.target.value)}
+                  onChange={(event) => {
+                    setMaxPerWindow(event.target.value);
+                    discardUnsignedRequest();
+                  }}
                   error={errors.maxPerWindow}
                   hint={
                     !errors.maxPerWindow
@@ -637,7 +653,10 @@ function EscrowLimitsPageContent() {
                     <Checkbox
                       label="I understand — set it to 0 anyway"
                       checked={confirmZero}
-                      onChange={(event) => setConfirmZero(event.target.checked)}
+                      onChange={(event) => {
+                    setConfirmZero(event.target.checked);
+                    discardUnsignedRequest();
+                  }}
                     />
                     {errors.confirmZero ? (
                       <p className="text-body-xs text-danger-700">{errors.confirmZero}</p>
