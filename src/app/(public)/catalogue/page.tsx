@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, Target } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,11 @@ import {
 } from "@/components/ui/panel";
 import { Table, type TableColumn } from "@/components/ui/table";
 
-import { CATALOGUE_DEMAND_FIXTURE, type CatalogueDemandRow } from "./catalogue-fixture";
+import {
+  CATALOGUE_DEMAND_FIXTURE,
+  TOOLS_WITH_CONTRACT_PAGE,
+  type CatalogueDemandRow,
+} from "./catalogue-fixture";
 
 /**
  * Catalogue and demand — route `/catalogue`.
@@ -27,20 +32,16 @@ import { CATALOGUE_DEMAND_FIXTURE, type CatalogueDemandRow } from "./catalogue-f
  * before touching anything here — it names the exact endpoint that would have
  * to exist.
  *
- * Three things the design draws that this page therefore cannot do:
+ * Two things the design draws that this page handles its own way, and one it
+ * cannot do:
  *
- * 1. **No row links to `/catalogue/[toolId]`.** Three reasons, in
- *    order of weight. The design draws no link affordance on any row — no
- *    caret, no chevron, no underline, no `href` on the tool-name text node.
- *    There is no tool id to link with: `toolId` is a bare UUID the API never
- *    returns alongside a name, so the fixture's `id` is the tool NAME, which
- *    is a fabricated route parameter. And the tool contract screen as built resolves exactly one
- *    slug — `/catalogue/search_web` — and `notFound()`s every other, so
- *    linking all seven rows would ship six 404s.
- * 2. **"Request a tool" has no destination.** The design draws the button
- *    (a secondary the design with a `plus` icon) but no target frame and
- *    no endpoint exists to receive a request. It is rendered as drawn and does
- *    nothing.
+ * 1. **A row links to `/catalogue/[toolId]` only where that page exists.** The
+ *    tool contract screen resolves `TOOLS_WITH_CONTRACT_PAGE` and `notFound()`s
+ *    every other id, so the remaining rows stay plain text and say on hover
+ *    that no contract is published yet.
+ * 2. **"Request a tool" goes to the provider console's request queue**
+ *    (`/provider/tool-requests`), the one screen that takes a tool request. A
+ *    signed-out visitor is sent through sign-in first.
  * 3. **No empty state.** The design draws none for this screen — no the design
  *    ref anywhere in the design — and with a static fixture no empty path is
  *    reachable. The nearest thing the design does draw is a *row-level* empty:
@@ -57,7 +58,16 @@ export default function CataloguePage() {
         // figure to its right is `$text-02` at normal weight. Table's own
         // `valueClass` paints all cells `text-01`/normal, so the tone is set
         // per cell here rather than by patching a shared component.
-        cell: (row) => <span className="font-semibold">{row.tool}</span>,
+        cell: (row) =>
+          TOOLS_WITH_CONTRACT_PAGE.includes(row.id) ? (
+            <Link href={`/catalogue/${row.id}`} className="font-semibold underline">
+              {row.tool}
+            </Link>
+          ) : (
+            <span className="font-semibold" title="No contract page is published for this tool yet">
+              {row.tool}
+            </span>
+          ),
       },
       {
         key: "paidCalls30d",
@@ -131,8 +141,11 @@ export default function CataloguePage() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2.5">
-          <Button variant="secondary" icon={<Plus />}>
-            Request a tool
+          <Button asChild variant="secondary">
+            <Link href="/provider/tool-requests">
+              <Plus className="size-[15px]" />
+              Request a tool
+            </Link>
           </Button>
         </div>
       </div>
