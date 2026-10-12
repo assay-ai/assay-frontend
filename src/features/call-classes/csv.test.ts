@@ -65,3 +65,15 @@ describe("PLATFORM_ABSORBED", () => {
     expect(observedTakeRate(rows).summary).toBe("observed 10%");
   });
 });
+
+describe("foldClasses — settled with no credit recorded (BUG-R2-V3-03)", () => {
+  it("credits nothing for a settled row the export marks PENDING", () => {
+    const table = foldClasses([
+      row({ callId: "a" }),
+      row({ callId: "b", classification: "PENDING", platformFee: "0" }),
+    ]);
+
+    expect(table.totalCredited?.amount).toBe("900000");
+    expect(table.totalWithheld?.amount).toBe("0");
+  });
+});
