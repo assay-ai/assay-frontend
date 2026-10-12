@@ -107,6 +107,7 @@ const MONTH_SHORT = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: 
 const CLASS_NOTE: Record<string, string> = {
   PAID_CREDITED: "settled to you",
   PAID_AWAITING_REDEMPTION: "passed · credited once the voucher is redeemed on chain",
+  PLATFORM_ABSORBED: "voucher could not be redeemed · owed to you by the platform, no fee",
   PAID_UNCREDITED: "DATA_RESULT → FAIL · see verdicts",
   FREE: "relay path, no payment machinery",
   EXPLORATION: "NEW-binding traffic, we paid for it",

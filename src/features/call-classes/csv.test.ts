@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { type CallRow, foldClasses } from "./csv";
+import { type CallRow, foldClasses, observedTakeRate } from "./csv";
 
 const ASSET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/token:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
@@ -36,5 +36,32 @@ describe("foldClasses — rail B awaiting redemption", () => {
     expect(awaiting?.withheld?.amount ?? "0").toBe("0");
     expect(table.totalCredited?.amount).toBe("900000");
     expect(table.unexplained).toBe(0);
+  });
+});
+
+describe("PLATFORM_ABSORBED", () => {
+  const rows = [
+    row({ callId: "a" }),
+    row({
+      callId: "b",
+      classification: "PLATFORM_ABSORBED",
+      reason: "DelegateIsRevoked",
+      platformFee: "0",
+    }),
+  ];
+
+  it("gets its own bucket: credited, no fee, not unexplained", () => {
+    const table = foldClasses(rows);
+    const absorbed = table.buckets.find((b) => b.className === "PLATFORM_ABSORBED");
+    expect(absorbed?.calls).toBe(1);
+    expect(absorbed?.credited?.amount).toBe("900000");
+    expect(absorbed?.fee?.amount).toBe("0");
+    expect(table.totalCredited?.amount).toBe("1800000");
+    expect(table.totalFee?.amount).toBe("100000");
+    expect(table.unexplained).toBe(0);
+  });
+
+  it("does not read as a 0% take rate", () => {
+    expect(observedTakeRate(rows).summary).toBe("observed 10%");
   });
 });
