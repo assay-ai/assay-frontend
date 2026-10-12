@@ -204,6 +204,7 @@ function ReceiptPageContent() {
 
   /* ------------------------------------------------------------- timeline */
 
+  const releasedLabel = state === "EXPIRED" ? "Expired, hold released" : "Hold released";
   const events: TimelineEvent[] = [
     { time: clock(receipt.createdAt), label: "Created", tone: "neutral" },
     {
@@ -229,14 +230,14 @@ function ReceiptPageContent() {
     const charged = receipt.chargedPrice.amount !== "0";
     events.push({
       time: clock(receipt.settledAt),
-      label: charged ? "Settled" : "Hold released",
+      label: charged ? "Settled" : releasedLabel,
       meta: charged ? `charged ${paid}` : "you were not charged",
       tone: charged ? "success" : "teal",
     });
   } else if (receipt.holdReleasedAt) {
     events.push({
       time: clock(receipt.holdReleasedAt),
-      label: "Hold released",
+      label: releasedLabel,
       meta: "you were not charged",
       tone: "teal",
     });
@@ -245,6 +246,9 @@ function ReceiptPageContent() {
   /* --------------------------------------------------------------- header */
 
   const notCharged = receipt.chargedPrice.amount === "0";
+  // "Our check was wrong" only makes sense when a check rejected the result —
+  // not on an expired, voided or errored call, where none ran.
+  const checkRejected = state === "NOT_CHARGED" || state === "MISAPPLIED";
 
   const meta = [
     { label: "Provider", value: providerQuery.data?.legalName ?? short(receipt.providerId ?? "—") },
@@ -446,7 +450,7 @@ function ReceiptPageContent() {
             </PanelBody>
           </Panel>
 
-          {notCharged ? (
+          {checkRejected ? (
             <div className="flex w-full flex-col gap-2.5 rounded-xl border border-01 bg-01 p-[18px]">
               <Button variant="secondary" className="w-full justify-center">
                 <Flag aria-hidden="true" />
