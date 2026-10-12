@@ -191,10 +191,15 @@ export function AuditLogView() {
                   description="The search looks at the actor, the action and the object's type and id."
                 />
               ) : (
+                /*
+                  BUG-R2-B4-01: no product write records an audit event yet, so
+                  an empty log does NOT mean nothing changed. Say where the
+                  changes that are recorded can be read.
+                */
                 <EmptyState
                   icon={null}
-                  title="Nothing has been changed yet"
-                  description="An audit event is somebody changing what is allowed — a limit, a credential, an approval, a movement of money. Nothing has happened on this account, which is why the log is empty rather than broken."
+                  title="No audit events are recorded yet"
+                  description="Changes to limits, credentials and alert channels are not written to this log yet, so an empty log does not mean nothing changed. Limit changes are listed with who made them under Change history on Limits; credentials and their revocations are listed under Agents."
                 />
               )}
             </div>

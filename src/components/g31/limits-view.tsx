@@ -861,7 +861,7 @@ export function LimitsView() {
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>Change history</PanelTitle>
-            <PanelDescription>every write is audited with an actor</PanelDescription>
+            <PanelDescription>every policy version, with who changed it</PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="gap-2.5 px-5 pb-[18px] pt-3.5">
