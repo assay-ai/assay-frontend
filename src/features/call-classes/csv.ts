@@ -126,7 +126,12 @@ export function parseCallsCsv(csv: string): CallRow[] {
 function isCredited(row: CallRow): boolean {
   // A rail-B call the verdict settled is credited only once its voucher is
   // redeemed on chain; until then the export says PAID_AWAITING_REDEMPTION.
-  return row.status === "SETTLED" && row.classification !== "PAID_AWAITING_REDEMPTION";
+  // PENDING on a settled row is the export saying no credit was written for it.
+  return (
+    row.status === "SETTLED" &&
+    row.classification !== "PAID_AWAITING_REDEMPTION" &&
+    row.classification !== "PENDING"
+  );
 }
 
 /** A call still in flight has neither earned nor withheld anything yet. */
