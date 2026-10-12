@@ -5,7 +5,9 @@ import { ApiError } from "@/libs/ApiClient";
 const get = vi.fn();
 vi.mock("@/services/api", () => ({ api: { get: (...args: unknown[]) => get(...args) } }));
 
-const { getProviderEarnings } = await import("./provider-reports.service");
+const { getProviderEarnings, providerEarningAssets } = await import(
+  "./provider-reports.service"
+);
 
 const EVM = "eip155:46630/erc20:0xDbbC";
 const SOL = "solana:EtWT/token:4zMM";
@@ -28,5 +30,21 @@ describe("getProviderEarnings — a window spanning two assets (BUG-R2-V2-01)", 
   it("leaves every other failure alone", async () => {
     get.mockImplementation(() => Promise.reject(new ApiError("PROVIDER_INVALID_RANGE", "no", 422)));
     await expect(getProviderEarnings(query)).rejects.toMatchObject({ code: "PROVIDER_INVALID_RANGE" });
+  });
+});
+
+describe("providerEarningAssets — whether to offer the asset selector", () => {
+  it("offers nothing to a provider paid in one asset", async () => {
+    get.mockImplementation(() => Promise.resolve({}));
+    expect(await providerEarningAssets()).toEqual([]);
+  });
+
+  it("offers the deployment's settlement assets when earnings span several", async () => {
+    get.mockImplementation((path: string) =>
+      path === "/chains"
+        ? Promise.resolve({ chains: [{ settlementAsset: EVM }, { settlementAsset: SOL }] })
+        : Promise.reject(new ApiError("PROVIDER_MULTIPLE_ASSETS", "spans more than one", 422))
+    );
+    expect(await providerEarningAssets()).toEqual([EVM, SOL]);
   });
 });
