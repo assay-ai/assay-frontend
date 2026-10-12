@@ -401,8 +401,8 @@ export function AgentsView() {
           <SheetHeader>
             <SheetTitle>New credential</SheetTitle>
             <SheetDescription>
-              The secret is returned exactly once. Give it a name you will recognise in the audit
-              log when you come to revoke it.
+              The secret is returned exactly once. Give it a name you will recognise in this list
+              when you come to revoke it.
             </SheetDescription>
           </SheetHeader>
           <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
