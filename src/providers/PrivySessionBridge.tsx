@@ -18,6 +18,8 @@ import {
   setSessionToken,
 } from "@/libs/ApiClient";
 
+import { settleCacheForIdentity } from "./identity-cache";
+
 /**
  * Bridges Privy's client-side auth state onto the axios session used by
  * `ApiClient`. Five jobs, no more:
@@ -29,10 +31,12 @@ import {
  *     after about an hour and signed everyone out. On a 401 `ApiClient`
  *     refreshes through the same provider and retries once before calling
  *     the handler in (5).
- *  2. Clear the React Query cache whenever the identity changes (login,
+ *  2. Reset the React Query cache whenever the identity changes (login,
  *     logout, or a different user) — the token names a tenant, and cached
  *     data from another tenant must not survive the switch. Same reasoning
- *     as the persona switch this replaced.
+ *     as the persona switch this replaced. The first identity a page load
+ *     resolves to only refetches; see `identity-cache.ts` for both, and for
+ *     why neither is `queryClient.clear()`.
  *  3. On logout, clear the stored token so the next request goes out
  *     unauthenticated instead of replaying a dead one.
  *  4. Start the wallet link the moment a token exists, and clear the whole
@@ -60,9 +64,10 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
 
   // Tracks the identity this bridge last reacted to, so a re-render that
-  // changes nothing (e.g. an unrelated Privy field updating) does not clear
-  // the cache again. `null` covers both "not ready yet" and "signed out".
-  const lastIdentityRef = useRef<string | null>(null);
+  // changes nothing (e.g. an unrelated Privy field updating) does not reset
+  // the cache again. `undefined` is "this page load has not resolved one
+  // yet"; `null` is "signed out".
+  const lastIdentityRef = useRef<string | null | undefined>(undefined);
 
   // Read inside the 401 handler instead of closed over, so a stale closure
   // from an earlier render can't see a stale pathname.
@@ -105,10 +110,12 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
     if (!ready) return;
 
     const identity = authenticated ? (user?.id ?? "authenticated") : null;
-    if (identity === lastIdentityRef.current) return;
+    const previous = lastIdentityRef.current;
     lastIdentityRef.current = identity;
+    // A signed-out page load is not a change: nothing to reset or clear.
+    if (identity === (previous ?? null)) return;
 
-    queryClient.clear();
+    settleCacheForIdentity(queryClient, previous === undefined ? "boot" : "switch");
     // Whose wallet was being linked is part of who was signed in.
     resetWalletLink();
 
