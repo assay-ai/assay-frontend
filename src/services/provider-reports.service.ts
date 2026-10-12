@@ -10,7 +10,11 @@ import type {
   ProviderTrafficQuery,
 } from "@/interfaces";
 
+import { ApiError } from "@/libs/ApiClient";
+
 import { api } from "./api";
+import { getChains } from "./chains.service";
+import { pickDisplayAsset, storedDisplayAsset } from "./display-asset";
 
 /**
  * The report sub-resources of `providers/me`.
@@ -63,11 +67,25 @@ export function getProviderQuality(query: ProviderQualityQuery): Promise<Provide
  * `PROVIDER_MULTIPLE_ASSETS`. `null` money means the window matched nothing
  * and no asset narrowed it — there is then no asset to denominate a zero in.
  */
-export function getProviderEarnings(query: ProviderEarningsQuery): Promise<ProviderEarnings> {
-  return api.get<ProviderEarnings>(
-    "/providers/me/earnings",
-    query as unknown as Record<string, unknown>
-  );
+export async function getProviderEarnings(query: ProviderEarningsQuery): Promise<ProviderEarnings> {
+  const fetch = (q: ProviderEarningsQuery) =>
+    api.get<ProviderEarnings>("/providers/me/earnings", q as unknown as Record<string, unknown>);
+  try {
+    return await fetch(query);
+  } catch (error) {
+    // A provider paid in two assets has no single total, and a caller that
+    // named none gets one of them rather than an error page: the asset picked
+    // on a buyer screen if any, else the first chain's settlement asset.
+    const multiple = error instanceof ApiError && error.code === "PROVIDER_MULTIPLE_ASSETS";
+    if (!multiple || query.asset) throw error;
+    const { chains } = await getChains();
+    const asset = pickDisplayAsset(
+      chains.map((chain) => chain.settlementAsset),
+      storedDisplayAsset()
+    );
+    if (!asset) throw error;
+    return fetch({ ...query, asset });
+  }
 }
 
 /**
