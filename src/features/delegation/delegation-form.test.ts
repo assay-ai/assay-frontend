@@ -270,6 +270,7 @@ describe("editDelegationForm", () => {
       maxVoucherAmount: "0.5",
       maxPerWindow: "2",
       validDays: "30",
+      keepExpiry: true,
     });
   });
 
@@ -280,6 +281,58 @@ describe("editDelegationForm", () => {
       validUntil: new Date((NOW - 86_400) * 1000).toISOString(),
     };
     expect(editDelegationForm(lapsed, NOW).validDays).toBe("1");
+    // A lapsed expiry is not one to keep.
+    expect(editDelegationForm(lapsed, NOW).keepExpiry).toBe(false);
+  });
+});
+
+/** BUG-J-POST-01: a cap edit keeps the grant's exact expiry unless a new one is picked. */
+describe("keeping the current expiry", () => {
+  // 2026-11-11 16:32:52 UTC, the grant the journey edited.
+  const VALID_UNTIL = NOW + 29 * 86_400 + 12_345;
+  const grant = {
+    maxVoucherAmount: usdg("500000"),
+    maxPerWindow: usdg("2000000"),
+    validUntil: new Date(VALID_UNTIL * 1000).toISOString(),
+  };
+
+  it("signs the grant's own validUntil, to the second, when the cap changes", () => {
+    const form = { ...editDelegationForm(grant, NOW), maxPerWindow: "3" };
+    const parsed = parseDelegationForm(form, ESCROW, DELEGATE, NOW + 600, VALID_UNTIL);
+    expect(parsed).toEqual({
+      ok: true,
+      body: {
+        delegate: DELEGATE,
+        maxVoucherAmount: "500000",
+        maxPerWindow: "3000000",
+        validUntil: String(VALID_UNTIL),
+      },
+    });
+  });
+
+  it("ignores the days field while the expiry is kept", () => {
+    const form = { ...editDelegationForm(grant, NOW), validDays: "" };
+    const parsed = parseDelegationForm(form, ESCROW, DELEGATE, NOW, VALID_UNTIL);
+    expect(parsed.ok && parsed.body.validUntil).toBe(String(VALID_UNTIL));
+  });
+
+  it("uses the days again once keeping is turned off", () => {
+    const form = { ...editDelegationForm(grant, NOW), keepExpiry: false, validDays: "10" };
+    const parsed = parseDelegationForm(form, ESCROW, DELEGATE, NOW, VALID_UNTIL);
+    expect(parsed.ok && parsed.body.validUntil).toBe(String(NOW + 10 * 86_400));
+  });
+
+  it("refuses to keep an expiry inside the 30-minute redeem grace (D1-P05)", () => {
+    const soon = NOW + 1_800;
+    const form = { ...editDelegationForm(grant, NOW), keepExpiry: true };
+    const parsed = parseDelegationForm(form, ESCROW, DELEGATE, NOW, soon);
+    expect(parsed.ok).toBe(false);
+    expect(!parsed.ok && parsed.errors.validDays).toMatch(/less than 30 minutes/);
+    // And a grant that close to its end does not start on "keep".
+    expect(
+      editDelegationForm({ ...grant, validUntil: new Date(soon * 1000).toISOString() }, NOW)
+        .keepExpiry,
+    ).toBe(false);
   });
 });
 

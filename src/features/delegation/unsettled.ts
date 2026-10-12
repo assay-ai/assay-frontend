@@ -134,10 +134,13 @@ export function editIsUnchanged(
       return a.trim() === b.trim();
     }
   };
+  const keep = form.keepExpiry === true;
   return (
     same(seeded.maxVoucherAmount, form.maxVoucherAmount) &&
     same(seeded.maxPerWindow, form.maxPerWindow) &&
-    same(seeded.validDays, form.validDays)
+    keep === (seeded.keepExpiry === true) &&
+    // A kept expiry is the grant's own, whatever the days field says.
+    (keep || same(seeded.validDays, form.validDays))
   );
 }
 
