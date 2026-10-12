@@ -1,5 +1,5 @@
 import type { StageCheck, StageCheckStatus } from "@/components/ui/stage-list";
-import { formatMoney } from "@/utils/money";
+import { formatMoney, toDecimal } from "@/utils/money";
 import { presentVerdict } from "@/utils/verdict";
 
 import type { Receipt, ReceiptStage, WireStageName, WireStageStatus } from "./wire";
@@ -267,7 +267,12 @@ export function samplingExplainerCopy(
       tail: "",
     };
   }
+  // The default tail says tools at $0.05 and above are judged on every call.
+  // This call is at least that price and WAS sampled, so the tail would
+  // contradict the paragraph above it (BUG-R2-B1-02).
+  const tail = toDecimal(receipt.listedPrice).gte("0.05") ? { tail: "" } : {};
   return {
+    ...tail,
     body: `Relevance judgement is the only sampled stage. At ${listed} a call, judging every one would cost more than the call itself. Instead we sample, and the provider’s stake covers the rest: if their measured quality falls below what they published, they are slashed and you are compensated for what you spent in that window.`,
   };
 }
