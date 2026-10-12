@@ -1,5 +1,6 @@
 "use client";
 
+import { DisplayAssetSelect } from "@/components/display-asset-select";
 import { ArrowRight, Calendar, Info } from "lucide-react";
 import { useMemo } from "react";
 
@@ -218,6 +219,8 @@ export default function GuaranteePage() {
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
+
+      <DisplayAssetSelect />
 
       {isWalletNotLinked(error) ? <WalletSetupBanner onLinked={reload} /> : null}
 

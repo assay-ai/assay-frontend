@@ -1,5 +1,6 @@
 "use client";
 
+import { DisplayAssetSelect } from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { ChevronDown, Download, Info } from "lucide-react";
@@ -577,6 +578,7 @@ export default function SpendPage() {
       </div>
 
       {query.isPending ? <PendingBlock label="Loading spend…" /> : null}
+      <DisplayAssetSelect />
       {query.error ? <ErrorBlock code={query.error.code} message={query.error.message} /> : null}
 
       {summary && !isEmpty ? (

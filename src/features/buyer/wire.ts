@@ -79,11 +79,15 @@ export interface HoldRow {
   expiresAt: string;
 }
 
-/** Narrows the loosely-typed `getWithheld()` result to the real shape. */
-export function readWithheld(raw: unknown): WithheldForAsset | null {
+/**
+ * Narrows the loosely-typed `getWithheld()` result to the real shape.
+ *
+ * `GET /withheld` answers one entry per asset. `asset` is the one the screen's
+ * summary came back in, so both halves of the page are the same money; with no
+ * summary to match, the first entry stands.
+ */
+export function readWithheld(raw: unknown, asset?: string | null): WithheldForAsset | null {
   const list = (raw as WithheldWire | undefined)?.withheld;
   if (!Array.isArray(list) || list.length === 0) return null;
-  // The MVP settles in one asset; a second one would need an asset selector
-  // rather than a silent pick, so this deliberately reads the first only.
-  return list[0] ?? null;
+  return list.find((entry) => entry.withheld?.asset === asset) ?? list[0] ?? null;
 }

@@ -83,7 +83,9 @@ const Banner = React.forwardRef<HTMLDivElement, BannerProps>(
         )}
         <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
           <p className="text-label-sm text-01">{title}</p>
-          {description && <p className="text-body-13 text-02">{description}</p>}
+          {description && (
+            <p className="text-body-13 text-02 [overflow-wrap:anywhere]">{description}</p>
+          )}
         </div>
         {action}
       </div>

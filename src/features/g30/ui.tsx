@@ -209,8 +209,8 @@ export function ErrorBlock({ code, message }: { code: string; message: string })
       className="flex w-full flex-col gap-1 rounded-xl border border-danger-20 bg-danger-10 px-5 py-4"
     >
       <p className="text-label-sm text-01">We could not load this.</p>
-      <p className="text-body-13 text-02">{message}</p>
-      <p className="font-mono text-mono-12 text-03">{code}</p>
+      <p className="text-body-13 text-02 [overflow-wrap:anywhere]">{message}</p>
+      <p className="font-mono text-mono-12 text-03 [overflow-wrap:anywhere]">{code}</p>
     </div>
   );
 }
