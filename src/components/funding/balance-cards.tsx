@@ -18,7 +18,7 @@ import { hasMultipleChains, zeroLike, type FullBalance } from "@/features/g30/ba
 import { KeyValueRow } from "@/features/g30/ui";
 import type { Chain } from "@/interfaces/chain";
 import { shortAddress } from "@/libs/chains/format";
-import { chainDisplayName } from "@/services/chains.service";
+import { assetName, chainDisplayName } from "@/services/chains.service";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -163,12 +163,23 @@ export function BalanceCards({
       .filter((chainId, index, all) => all.indexOf(chainId) !== index),
   );
 
+  /*
+    Accounts carrying more than one card: one account, two assets. `GET
+    /balances` is one row per (account, asset), so those cards name the asset —
+    otherwise the same account reads as two different balances.
+  */
+  const sharedAccounts = new Set(
+    balances
+      .map((balance) => balance.accountId)
+      .filter((accountId, index, all) => all.indexOf(accountId) !== index),
+  );
+
   return (
     <div className="flex w-full flex-col gap-3">
       <div className="grid w-full grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
         {balances.map((balance) => (
           <Panel
-            key={balance.accountId}
+            key={`${balance.accountId}|${balance.asset}`}
             data-testid="balance-card"
             data-chain-id={balance.chainId}
             className="min-w-0"
@@ -179,6 +190,9 @@ export function BalanceCards({
                 <PanelDescription>
                   {sharedChains.has(balance.chainId)
                     ? `${accountLabel(balance)} · `
+                    : null}
+                  {sharedAccounts.has(balance.accountId)
+                    ? `${assetName(chains, balance.asset)} · `
                     : null}
                   held on this chain and spent on this chain
                 </PanelDescription>

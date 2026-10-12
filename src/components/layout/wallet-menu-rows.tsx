@@ -8,6 +8,7 @@ import { useSigner } from "@/hooks/useSigner";
 import type { Chain } from "@/interfaces/chain";
 import { explorerAddressUrl } from "@/libs/chains/explorer";
 import { shortAddress } from "@/libs/chains/format";
+import { assetName } from "@/services/chains.service";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -177,7 +178,7 @@ export function BalanceRows({
   return (
     <>
       {rows.map((row) => (
-        <React.Fragment key={row.accountId}>
+        <React.Fragment key={`${row.accountId}|${row.asset}`}>
           {/*
             One chain reads exactly as it always has; the label appears only
             when there is something to tell apart. The name is the API's own
@@ -189,6 +190,10 @@ export function BalanceRows({
             <div className="px-2.5 pt-1.5">
               <span className="font-mono text-mono-xs text-03">
                 {chains.find((chain) => chain.chainId === row.chainId)?.displayName ?? row.chainId}
+                {/* One account, two assets: say which one this row is. */}
+                {rows.some((other) => other !== row && other.accountId === row.accountId)
+                  ? ` · ${assetName(chains, row.asset)}`
+                  : null}
               </span>
             </div>
           ) : null}

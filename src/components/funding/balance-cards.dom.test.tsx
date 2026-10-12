@@ -424,4 +424,23 @@ describe("BalanceCards — the empty ledger is not an empty account", () => {
     expect(html).not.toContain("SHOULD NOT APPEAR");
     expect(html.match(/data-testid="balance-card"/g)).toHaveLength(2);
   });
+
+  it("gives one account holding two assets two cards that name their asset (BUG-R2-B2-01)", () => {
+    const other = `${SOLANA}/token:9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin`;
+    const second: FullBalance = {
+      ...EVM_ROW,
+      asset: other,
+      available: { amount: "499000000", asset: other, decimals: 6 },
+    };
+    const errors: unknown[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => errors.push(args[0]);
+    const html = markup([EVM_ROW, second]);
+    console.error = original;
+
+    expect(errors.filter((e) => String(e).includes("same key"))).toEqual([]);
+    expect(html.match(/data-testid="balance-card"/g)).toHaveLength(2);
+    expect(html).toContain("USDG · ");
+    expect(html).toContain("9xQeWvG8… · ");
+  });
 });
