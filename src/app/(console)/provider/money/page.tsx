@@ -1,5 +1,6 @@
 "use client";
 
+import { DisplayAssetSelect } from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { Download } from "lucide-react";
@@ -386,6 +387,8 @@ export default function ProviderMoneyPage() {
         </div>
       </header>
 
+      <DisplayAssetSelect scope="provider" />
+
       {error ? (
         <Banner
           tone="danger"
@@ -464,6 +467,13 @@ export default function ProviderMoneyPage() {
               total={withheldTotal}
               caption="Rejected calls, itemised"
             />
+          ) : earningsByTool.isError ? (
+            /* A failed read is not a zero (BUG-R2-V3-02). */
+            <p className="px-3 py-6 text-body-13 text-danger-600">
+              Rejected calls could not be loaded, so this table is unknown, not empty.
+            </p>
+          ) : earningsByTool.isPending ? (
+            <p className="px-3 py-6 font-mono text-mono-13 text-03">Loading…</p>
           ) : (
             /* Ours — the frame draws no empty state. This is also the
                `?persona=new-provider` branch: 200 with no groups, not a 404. */
