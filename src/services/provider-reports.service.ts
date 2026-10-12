@@ -89,6 +89,26 @@ export async function getProviderEarnings(query: ProviderEarningsQuery): Promise
 }
 
 /**
+ * The assets a provider's earnings can be shown in, for the asset selector:
+ * this deployment's settlement assets when the last 31 days of earnings span
+ * more than one, else `[]` (one asset, nothing to choose).
+ */
+export async function providerEarningAssets(now: Date = new Date()): Promise<string[]> {
+  try {
+    await api.get("/providers/me/earnings", {
+      from: new Date(now.getTime() - 31 * 86_400_000).toISOString(),
+      to: now.toISOString(),
+      groupBy: "tool",
+    });
+    return [];
+  } catch (error) {
+    if (!(error instanceof ApiError && error.code === "PROVIDER_MULTIPLE_ASSETS")) return [];
+    const { chains } = await getChains();
+    return chains.map((chain) => chain.settlementAsset);
+  }
+}
+
+/**
  * `GET /providers/me/calls/export` — one CSV row per call served.
  *
  * ## Why this one does not go through `ApiClient.get`

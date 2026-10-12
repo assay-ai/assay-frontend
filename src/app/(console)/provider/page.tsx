@@ -1,5 +1,6 @@
 "use client";
 
+import { DisplayAssetSelect } from "@/components/display-asset-select";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Gauge, Inbox, Landmark, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
@@ -531,6 +532,8 @@ export default function ProviderHomePage() {
           </Button>
         </div>
       </header>
+
+      <DisplayAssetSelect scope="provider" />
 
       {error ? (
         <Banner

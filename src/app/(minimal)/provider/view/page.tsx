@@ -1,5 +1,6 @@
 "use client";
 
+import { DisplayAssetSelect } from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { CircleCheck, Download, Info } from "lucide-react";
@@ -488,6 +489,8 @@ export default function ProviderViewPage() {
           Per-call CSV
         </Button>
       </header>
+
+      <DisplayAssetSelect scope="provider" />
 
       {error ? (
         <Banner
