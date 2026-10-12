@@ -357,6 +357,15 @@ export default function NewToolBindingPage() {
     response: ToolMapping | null;
   }>({ request: null, response: null });
   const [asJson, setAsJson] = React.useState(false);
+  /*
+    JSON that does not parse, per editor. The editor keeps handing up the last
+    document that DID parse, so without this Create stayed live and saved a
+    mapping the provider could no longer see (BUG-R2-V2-02).
+  */
+  const [unparsed, setUnparsed] = React.useState<{ request: string | null; response: string | null }>(
+    { request: null, response: null }
+  );
+  const mappingBlocked = unparsed.request ?? unparsed.response;
 
   const catalogueQuery = useQuery<ToolCatalogue, ApiError>({
     // The same key the configuration screen and the binding list use, so
@@ -559,9 +568,10 @@ export default function NewToolBindingPage() {
             </Button>
             <Button
               icon={<Plug aria-hidden="true" />}
-              disabled={!body}
+              disabled={!body || mappingBlocked !== null}
+              title={mappingBlocked ? `Fix this first: ${mappingBlocked}` : undefined}
               loading={create.isPending}
-              onClick={() => body && create.mutate(body)}
+              onClick={() => body && !mappingBlocked && create.mutate(body)}
             >
               Create draft
             </Button>
@@ -757,6 +767,9 @@ export default function NewToolBindingPage() {
                 schema={tool.inputSchema}
                 json={asJson}
                 onChange={(next) => setMappings((current) => ({ ...current, request: next }))}
+                onStatus={(status) =>
+                  setUnparsed((current) => ({ ...current, request: status.editing }))
+                }
               />
               <p className="px-1 font-mono text-mono-12 text-03">
                 seeded from {tool.name}&rsquo;s inputSchema — every field read as a query parameter
@@ -781,6 +794,9 @@ export default function NewToolBindingPage() {
                 schema={tool.outputSchema}
                 json={asJson}
                 onChange={(next) => setMappings((current) => ({ ...current, response: next }))}
+                onStatus={(status) =>
+                  setUnparsed((current) => ({ ...current, response: status.editing }))
+                }
               />
               <p className="px-1 font-mono text-mono-12 text-03">
                 seeded from {tool.name}&rsquo;s outputSchema — each field written from a response
