@@ -1,5 +1,6 @@
 "use client";
 
+import { DisplayAssetSelect } from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
 import { Download, Info, List } from "lucide-react";
 import * as React from "react";
@@ -93,6 +94,8 @@ export function StatementsView() {
           </>
         }
       />
+
+      <DisplayAssetSelect />
 
       <Panel>
         <PanelHeader>
