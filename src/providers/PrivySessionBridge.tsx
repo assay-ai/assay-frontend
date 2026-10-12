@@ -11,15 +11,24 @@ import {
   startWalletLink,
   subscribeWalletLink,
 } from "@/features/auth/wallet-link";
-import { clearSessionToken, onUnauthorized, setSessionToken } from "@/libs/ApiClient";
+import {
+  clearSessionToken,
+  onUnauthorized,
+  registerSessionTokenProvider,
+  setSessionToken,
+} from "@/libs/ApiClient";
 
 /**
  * Bridges Privy's client-side auth state onto the axios session used by
  * `ApiClient`. Five jobs, no more:
  *
- *  1. Once Privy is `ready` and `authenticated`, fetch the access token and
- *     write it with `setSessionToken` so every request carries it as
- *     `Authorization: Bearer …`.
+ *  1. Register Privy's `getAccessToken` as `ApiClient`'s session token
+ *     provider, so every request asks for the token as it goes out and
+ *     carries it as `Authorization: Bearer …`. Privy refreshes the token
+ *     itself near expiry; a token read once at login and stored went stale
+ *     after about an hour and signed everyone out. On a 401 `ApiClient`
+ *     refreshes through the same provider and retries once before calling
+ *     the handler in (5).
  *  2. Clear the React Query cache whenever the identity changes (login,
  *     logout, or a different user) — the token names a tenant, and cached
  *     data from another tenant must not survive the switch. Same reasoning
@@ -70,6 +79,11 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
   }, [pathname]);
 
   useEffect(() => {
+    registerSessionTokenProvider(() => getAccessToken());
+    return () => registerSessionTokenProvider(null);
+  }, [getAccessToken]);
+
+  useEffect(() => {
     onUnauthorized(() => {
       // Already on /login, or a redirect is already in flight from an
       // earlier 401 in the same burst: do nothing:
@@ -106,6 +120,8 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
     let cancelled = false;
     void getAccessToken().then((token) => {
       if (cancelled || !token) return;
+      // Requests get their token from the provider registered above; this
+      // write is for code that reads `localStorage` directly.
       setSessionToken(token);
       // Strictly after the token is stored: the request carries it.
       startWalletLink();

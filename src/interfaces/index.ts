@@ -28,3 +28,6 @@ export * from "./escrow";
 // them. The enabled set lives here and NOWHERE in the bundle;
 // `libs/chains/registry.ts` deliberately holds no table of chains.
 export * from "./chain";
+
+// Agent payment delegation (`/escrow/delegates`).
+export * from "./delegation";

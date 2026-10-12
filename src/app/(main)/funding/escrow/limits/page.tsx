@@ -19,28 +19,39 @@ import {
   PanelTitles,
 } from "@/components/ui/panel";
 import { percentOf, timestamp } from "@/components/g31/format";
+import { UnsettledPayments, useSettleWait } from "@/components/g31/unsettled-payments";
+import {
+  isUnsettledRefusal,
+  strandReasons,
+  UNSETTLED_POLL_MS,
+} from "@/features/delegation/unsettled";
 import { UNREADABLE_NOTE } from "@/features/chain-read/chain-read";
+import { applyLimitsSubmitted, escrowQueryKey, readEscrow } from "@/features/escrow/after-set-limits";
 import { escrowPresence } from "@/features/escrow/escrow-presence";
 import { ErrorBlock, KeyValueRow, NoteBox, PageHeader, PendingBlock } from "@/features/g30/ui";
 import {
   ESCROW_LIMITS_DECIMALS,
   isEscrowDisarmed,
-  limitsLanded,
   limitsLandingInterval,
   parseLimitsForm,
   submitLimitsForm,
   type LimitsFormErrors,
 } from "@/features/escrow/limits-form";
 import { RelayedDoneNotice, RelayedRefusalNotice } from "@/features/escrow/relayed-notices";
-import { relayedRefusal, type RelayedRefusal } from "@/features/escrow/relayed-refusal";
-import { runEscrowAction } from "@/features/escrow/relayed-submission";
+import {
+  isRelayedRefusal,
+  relayedRefusal,
+  type RelayedRefusal,
+} from "@/features/escrow/relayed-refusal";
+import { ESCROW_SUBMITTERS, runEscrowAction } from "@/features/escrow/relayed-submission";
 import { isUserRejection, useSigner } from "@/hooks/useSigner";
 import type { EscrowIntent, EscrowLimitsBody, RelayedEscrowIntent } from "@/interfaces";
 import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import { ApiError } from "@/libs/ApiClient";
 import { useChains } from "@/hooks/useChains";
 import { settlementSymbol } from "@/services/chains.service";
-import { createEscrowLimitsIntent, getEscrow } from "@/services/escrow.service";
+import { getEscrowUnsettled } from "@/services/delegation.service";
+import { createEscrowLimitsIntent, submitEscrowLimits } from "@/services/escrow.service";
 import { unsignedPayloadSummary } from "@/libs/chains/unsigned-summary";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { formatMoney, toDecimal } from "@/utils/money";
@@ -112,8 +123,8 @@ function EscrowLimitsPageContent() {
     since: number;
   } | null>(null);
   const escrowQuery = useQuery({
-    queryKey: ["escrow", requestedChain],
-    queryFn: () => getEscrow(requestedChain),
+    queryKey: escrowQueryKey(requestedChain),
+    queryFn: () => readEscrow(requestedChain, awaitingLimits),
     retry: 0,
     networkMode: "always" as const,
     refetchInterval: (query) => limitsLandingInterval(query.state.data, awaitingLimits, Date.now()),
@@ -205,20 +216,63 @@ function EscrowLimitsPageContent() {
   const zeroFields = preview.ok ? preview.zeroFields : [];
   const needsZeroConfirm = zeroFields.length > 0;
 
+  /*
+    Payments served and not yet redeemed (BUG-D1-07). The chain applies the
+    limits standing at REDEMPTION, to the payer's own key and every delegate's,
+    so lowering them below what these need leaves them unredeemable. Read past
+    the browser cache on every refresh, because "wait for them to settle" polls.
+  */
+  const unsettledQuery = useQuery({
+    // One key: re-reading for "wait for them to settle" adds no cache entries,
+    // and a refetch in flight is joined, not restarted (review finding 10).
+    queryKey: ["escrow-unsettled", requestedChain],
+    enabled: Boolean(escrow?.exists),
+    retry: 0,
+    staleTime: 0,
+    queryFn: () => getEscrowUnsettled(Date.now()),
+  });
+  const unsettled = unsettledQuery.data?.unsettled;
+  const { refetch: refetchUnsettled } = unsettledQuery;
+  const refreshUnsettled = React.useCallback(() => {
+    void refetchUnsettled({ cancelRefetch: false });
+  }, [refetchUnsettled]);
+  const strandsWith = (figures: typeof unsettled) =>
+    preview.ok && escrow?.maxVoucherAmount && escrow.maxPerWindow
+      ? strandReasons(
+          figures,
+          {
+            maxVoucherAmount: escrow.maxVoucherAmount.amount,
+            maxPerWindow: escrow.maxPerWindow.amount,
+          },
+          preview.body,
+        )
+      : [];
+  const strand = strandsWith(unsettled);
+  const settle = useSettleWait(
+    { count: unsettled?.count, strands: strand.length > 0, readAt: unsettledQuery.dataUpdatedAt },
+    refreshUnsettled,
+    UNSETTLED_POLL_MS,
+  );
+  const atRisk = strand.length > 0 || settle.refused;
+  /* Whether the request in hand was built accepting that it strands them. */
+  const [acknowledged, setAcknowledged] = React.useState(false);
+
   const setLimits = useMutation({
-    mutationFn: (body: { maxVoucherAmount: string; maxPerWindow: string }) =>
-      createEscrowLimitsIntent(body),
-    onSuccess: (result) => {
+    mutationFn: (body: EscrowLimitsBody) => createEscrowLimitsIntent(body),
+    onSuccess: (result, body) => {
       setIntent(result);
+      setAcknowledged(body.acknowledgeUnsettled === true);
       setSignature(null);
       setRelayed(null);
       setSignError(null);
       setRefusal(null);
     },
+    onError: (error) => {
+      if (isUnsettledRefusal(error)) settle.markRefused();
+    },
   });
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
+  async function buildRequest(acknowledgeUnsettled: boolean) {
     setIntent(null);
     setSignature(null);
     setRelayed(null);
@@ -227,11 +281,28 @@ function EscrowLimitsPageContent() {
 
     const result = await submitLimitsForm(
       { maxVoucherAmount, maxPerWindow, confirmZero },
-      (body) => setLimits.mutateAsync(body),
+      (body) =>
+        setLimits
+          .mutateAsync(acknowledgeUnsettled ? { ...body, acknowledgeUnsettled: true } : body)
+          .catch(() => undefined),
       decimals,
     );
 
     setErrors(result.ok ? {} : result.errors);
+  }
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    // Lowering the limits below what payments still being settled need is
+    // offered only through the warning's two buttons (BUG-D1-07).
+    if (atRisk) return;
+    // Read them again first: the figures on the page can predate a payment made
+    // since it loaded (BUG-D1-08). The backend still refuses at build time.
+    if (escrow?.exists) {
+      const fresh = await refetchUnsettled({ cancelRefetch: false });
+      if (strandsWith(fresh.data?.unsettled).length > 0) return;
+    }
+    await buildRequest(false);
   }
 
   /**
@@ -279,26 +350,46 @@ function EscrowLimitsPageContent() {
     setBroadcasting(true);
     try {
       const signed = setLimits.variables;
-      const result = await runEscrowAction(intent, signerState.signer);
+      const result = await runEscrowAction(
+        intent,
+        signerState.signer,
+        acknowledged
+          ? {
+              ...ESCROW_SUBMITTERS,
+              SET_LIMITS: (body) =>
+                submitEscrowLimits({
+                  ...(body as unknown as Parameters<typeof submitEscrowLimits>[0]),
+                  acknowledgeUnsettled: true,
+                }),
+            }
+          : ESCROW_SUBMITTERS,
+      );
       if (result.kind === "relayed") {
         setRelayed(result.relayed);
-        // The relayer's own post-transaction read, when it already shows the
-        // new limits, is the freshest answer there is — use it straight away.
-        if (signed && limitsLanded(result.relayed.escrow, signed)) {
-          queryClient.setQueryData(["escrow", requestedChain], result.relayed.escrow);
-        }
       } else {
         setSignature(result.signature);
       }
-      // Takes effect the moment it lands; refetch so the meter and the
-      // "currently set" figures below stop reading the pre-write state, and
-      // keep polling until a read actually shows the signed limits.
-      if (signed) setAwaitingLimits({ body: signed, since: Date.now() });
-      queryClient.invalidateQueries({ queryKey: ["escrow"] });
+      // Takes effect the moment it lands. Seed or re-read past the browser's
+      // HTTP cache so the meter and the "currently set" figures below stop
+      // reading the pre-write state, and keep polling until a read actually
+      // shows the signed limits. See `applyLimitsSubmitted`.
+      if (signed) {
+        setAwaitingLimits({ body: signed, since: Date.now() });
+        void applyLimitsSubmitted(
+          queryClient,
+          requestedChain,
+          signed,
+          result.kind === "relayed" ? result.relayed.escrow : null,
+        );
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+      }
     } catch (e) {
       if (isUserRejection(e)) {
         setSignError("Nothing was signed — the wallet prompt was closed or declined.");
       } else if (e instanceof ApiError) {
+        // Payments arrived while this was signed (BUG-D1-07): the warning comes back.
+        if (isUnsettledRefusal(e)) settle.markRefused();
         /*
           The platform refused to relay, and it said which of five reasons. The
           sentence and the instruction both come from `relayedRefusal` — a
@@ -554,20 +645,37 @@ function EscrowLimitsPageContent() {
                   </div>
                 ) : null}
 
+                <UnsettledPayments
+                  unsettled={unsettled}
+                  unit={assetSymbol}
+                  atRisk={atRisk}
+                  reasons={strand}
+                  waiting={settle.waiting}
+                  settled={settle.settled}
+                  stalled={settle.stalled}
+                  onWait={settle.wait}
+                  onProceed={() => void buildRequest(true)}
+                  proceedLabel="Continue anyway"
+                  busy={setLimits.isPending}
+                />
+
                 <Button
                   type="submit"
                   icon={<PenLine />}
                   loading={setLimits.isPending}
-                  disabled={setLimits.isPending}
+                  disabled={setLimits.isPending || atRisk}
                 >
                   Build the transaction
                 </Button>
 
                 {setLimits.isError ? (
                   <p className="text-body-13 text-danger-600">
-                    {setLimits.error instanceof ApiError
-                      ? `${setLimits.error.code} · ${setLimits.error.message}`
-                      : "That request was refused."}
+                    {isRelayedRefusal(setLimits.error)
+                      ? // Rate limited before anything was signed (BUG-D1-06).
+                        relayedRefusal(setLimits.error).text
+                      : setLimits.error instanceof ApiError
+                        ? `${setLimits.error.code} · ${setLimits.error.message}`
+                        : "That request was refused."}
                   </p>
                 ) : null}
               </form>

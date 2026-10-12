@@ -105,7 +105,7 @@ export interface SummaryComparison extends SummaryFigures {
 }
 
 export interface SummaryGroup extends SummaryFigures {
-  /** Tool id, provider id or a `YYYY-MM-DD` day, depending on `groupBy`. */
+  /** Tool id, provider id, agent id or a `YYYY-MM-DD` day, depending on `groupBy`. */
   key: string;
   comparison: SummaryComparison | null;
 }

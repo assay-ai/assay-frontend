@@ -42,8 +42,9 @@ export function windowRange(win: SpendWindow, now = Date.now()): { from: string;
 /**
  * The dimensions the Group-by control offers.
  *
- * `agent` is drawn disabled in the design and stays disabled: nothing on the
- * wire groups by agent. The design's third segment reads "hour"; the wire's
+ * `agent` groups by `payment_intents.agent_id`, the agent whose credential
+ * made the call, so a call an agent paid for with its own delegate key lands
+ * under that agent. The design's third segment reads "hour"; the wire's
  * `groupBy` enum has `day` and no finer grain, so this build offers `day` under
  * the design's own "upstream/hour" vocabulary. Reported as a divergence.
  */
@@ -62,7 +63,7 @@ export const SPEND_DIMENSIONS: SpendDimension[] = [
   { id: "day", label: "day", header: "Day" },
   { id: "status", label: "status", header: "Status" },
   { id: "verdict", label: "verdict", header: "Verdict" },
-  { id: "agent", label: "agent", header: "Agent", disabled: true },
+  { id: "agent", label: "agent", header: "Agent" },
 ];
 
 export function dimensionById(id: string): SpendDimension {
@@ -70,7 +71,8 @@ export function dimensionById(id: string): SpendDimension {
 }
 
 /**
- * Group keys are ids for `tool`/`provider` and already human for the rest.
+ * Group keys are ids for `tool`/`provider`/`agent` and already human for the
+ * rest. An agent id is named from `GET /agents` when the caller passes its labels.
  * There is no endpoint that resolves a tool id to `scrape_url`, so an id is
  * shortened rather than invented.
  *
@@ -80,12 +82,54 @@ export function dimensionById(id: string): SpendDimension {
  * every other verdict on this product, which is also why three of the labels
  * this can produce are `provisional` wordings.
  */
-export function groupKeyLabel(key: string, dimension: string): string {
-  if (dimension === "tool" || dimension === "provider") {
+export function groupKeyLabel(
+  key: string,
+  dimension: string,
+  agentLabels?: ReadonlyMap<string, string>,
+): string {
+  if (dimension === "agent") {
+    const label = agentLabels?.get(key);
+    if (label) return label;
+    // A row from before calls named their credential: keyed by its agent.
+    if (key.startsWith(AGENT_KEY_PREFIX)) key = key.slice(AGENT_KEY_PREFIX.length);
+  }
+  if (dimension === "tool" || dimension === "provider" || dimension === "agent") {
     return key.length > 12 ? `${key.slice(0, 8)}…` : key;
   }
   if (dimension === "verdict") {
     return presentVerdict(key).shownAs;
   }
   return key;
+}
+
+/** How a `groupBy=credential` row with no credential (written before the column) is keyed. */
+export const AGENT_KEY_PREFIX = "agent:";
+
+/**
+ * The `groupBy` the summary is asked for, per dimension (U02). "Agent" means
+ * the agent credential that paid: two credentials of one agent hold two
+ * delegate keys (two machines), and grouping by `agent_id` made them one row.
+ */
+export function summaryGroupBy(dimension: string): string {
+  return dimension === "agent" ? "credential" : dimension;
+}
+
+/**
+ * Labels for `groupBy=credential` keys: "agent label · credential name" by
+ * credential id, and the agent label alone for `agent:<id>` keys.
+ */
+export function credentialGroupLabels(
+  agents: readonly { agentId: string; label?: string | null }[],
+  credentialsByAgent: Readonly<Record<string, readonly { id: string; name?: string | null }[]>>,
+): Map<string, string> {
+  const labels = new Map<string, string>();
+  for (const agent of agents) {
+    const agentLabel = agent.label || agent.agentId;
+    labels.set(agent.agentId, agentLabel);
+    labels.set(`${AGENT_KEY_PREFIX}${agent.agentId}`, agentLabel);
+    for (const credential of credentialsByAgent[agent.agentId] ?? []) {
+      labels.set(credential.id, credential.name ? `${agentLabel} · ${credential.name}` : agentLabel);
+    }
+  }
+  return labels;
 }

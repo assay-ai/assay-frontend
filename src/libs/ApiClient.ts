@@ -1,4 +1,4 @@
-import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
+import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from "axios";
 
 import type { ApiEnvelope, ApiErrorBody } from "@/interfaces";
 import { demoEnabled, demoResponse } from "@/libs/demo/demo-api";
@@ -52,6 +52,71 @@ export function clearSessionToken(): void {
   }
 }
 
+/**
+ * Where the shared client gets a fresh session token, asked once per request.
+ *
+ * Registered by `PrivySessionBridge` as Privy's `getAccessToken`, which
+ * returns the cached token and refreshes it itself when it is near expiry.
+ * Reading a token once at login and storing it signed every user out after
+ * about an hour (Privy's access-token TTL): nothing ever refreshed it.
+ *
+ * Unregistered (no Privy session mounted) or answering `null`, the client
+ * falls back to the token stored in `localStorage["accessToken"]`, so a token
+ * placed there by hand still works.
+ */
+export type SessionTokenProvider = () => Promise<string | null>;
+
+let sessionTokenProvider: SessionTokenProvider | null = null;
+let refreshInFlight: Promise<string | null> | null = null;
+
+export function registerSessionTokenProvider(provider: SessionTokenProvider | null): void {
+  sessionTokenProvider = provider;
+  refreshInFlight = null;
+}
+
+/**
+ * The current session token: the provider's when it has one — written back to
+ * `localStorage` for anything that still reads it there — else the stored one.
+ * A provider that throws is treated as having no token.
+ */
+async function resolveSessionToken(): Promise<string | null> {
+  if (sessionTokenProvider) {
+    try {
+      const token = await sessionTokenProvider();
+      if (token) {
+        if (token !== getSessionToken()) setSessionToken(token);
+        return token;
+      }
+    } catch {
+      /* fall back to the stored token; a dead one 401s and is handled there */
+    }
+  }
+  return getSessionToken();
+}
+
+/**
+ * Asks the provider again after a 401. Single-flight: a screen fires many
+ * requests in parallel, so their 401s arrive together and must share one
+ * refresh rather than each starting its own. `null` when there is no provider
+ * or it could not produce a token — the 401 then stands.
+ */
+function refreshSessionToken(): Promise<string | null> {
+  const provider = sessionTokenProvider;
+  if (!provider) return Promise.resolve(null);
+  if (!refreshInFlight) {
+    refreshInFlight = provider()
+      .then((token) => {
+        if (token) setSessionToken(token);
+        return token || null;
+      })
+      .catch(() => null)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
 type UnauthorizedHandler = () => void;
 
 let unauthorizedHandler: UnauthorizedHandler | null = null;
@@ -88,7 +153,9 @@ function toApiError(error: AxiosError): ApiError {
 export interface ApiClientOptions {
   /**
    * Where this instance's bearer token comes from. Defaults to the Privy
-   * session token in `localStorage["accessToken"]`.
+   * session token: the registered `SessionTokenProvider`, else
+   * `localStorage["accessToken"]`. Only that default refreshes and retries
+   * once on a 401.
    *
    * The operator console passes its own reader: that surface is a second
    * authentication path by decision, and the two tokens must not be able to
@@ -123,13 +190,18 @@ export interface ApiClientOptions {
  *    from a Server Component without crashing the render.
  */
 
+/** Set on a request that already got its one post-401 retry. */
+type RetriableConfig = InternalAxiosRequestConfig & { _authRetried?: boolean };
+
 class ApiClient {
   private readonly instance: AxiosInstance;
-  private readonly getToken: () => string | null;
+  private readonly getToken: () => string | null | Promise<string | null>;
+  private readonly usesSessionToken: boolean;
   private readonly triggerGlobalUnauthorized: boolean;
 
   constructor(baseURL?: string, options: ApiClientOptions = {}) {
-    this.getToken = options.getToken ?? getSessionToken;
+    this.usesSessionToken = !options.getToken;
+    this.getToken = options.getToken ?? resolveSessionToken;
     this.triggerGlobalUnauthorized = options.triggerGlobalUnauthorized ?? true;
     this.instance = axios.create({
       baseURL: baseURL || process.env.NEXT_PUBLIC_API_BASE_URL || "",
@@ -163,15 +235,28 @@ class ApiClient {
       },
     });
 
-    this.instance.interceptors.request.use((config) => {
-      const token = this.getToken();
+    this.instance.interceptors.request.use(async (config) => {
+      const token = await this.getToken();
       if (token) config.headers.Authorization = `Bearer ${token}`;
       return config;
     });
 
     this.instance.interceptors.response.use(
       (response) => response,
-      (error: AxiosError) => {
+      async (error: AxiosError) => {
+        /*
+          An expired session token is the expected 401: Privy may not have
+          refreshed it yet. Refresh once and retry the request once with the
+          new token before treating the session as dead. A retry that 401s
+          again comes back through here marked, and falls through below.
+        */
+        const config = error.config as RetriableConfig | undefined;
+        if (error.response?.status === 401 && this.usesSessionToken && config && !config._authRetried) {
+          config._authRetried = true;
+          const fresh = await refreshSessionToken();
+          if (fresh) return this.instance.request(config);
+        }
+
         // 401 only — a 424 (AUTH_WALLET_NOT_LINKED) is an authenticated
         // caller with no linked wallet yet, not an invalid session, and must
         // fall straight through to the caller as an ApiError untouched.
@@ -232,6 +317,13 @@ class ApiClient {
    * body. `no-cache` means "revalidate before serving", and the ETag turns an
    * unchanged body into a 304. Only `Cache-Control` is sent — this is not a
    * per-call header escape hatch.
+   *
+   * Belt and braces since BUG-SYS-01: the backend now sends every GET that does
+   * not opt in with `@CacheHeader` as `private, no-cache`, so a plain `get`
+   * already revalidates and is never served stale. This helper (and
+   * `revalidateEscrow` / `revalidateProviderStake`, which go through it) is
+   * kept because it is harmless and still protects against an older backend
+   * or a route that later opts in to a freshness window.
    */
   getRevalidated<T>(url: string, params?: Record<string, unknown>): Promise<T> {
     return this.request<T>({ method: "GET", url, params, headers: { "Cache-Control": "no-cache" } });
