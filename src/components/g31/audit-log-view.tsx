@@ -173,11 +173,30 @@ export function AuditLogView() {
             <p className="p-3 font-mono text-mono-13 text-03">Loading…</p>
           ) : visible.length === 0 ? (
             <div className="p-3">
-              <EmptyState
-                icon={null}
-                title="Nothing has been changed yet"
-                description="An audit event is somebody changing what is allowed — a limit, a credential, an approval, a movement of money. Nothing has happened on this account, which is why the log is empty rather than broken."
-              />
+              {/* Three different empties: the account's, the search's and the class filter's. */}
+              {entries.length > 0 ? (
+                <EmptyState
+                  icon={null}
+                  title={`No ${filter} events in the entries loaded so far`}
+                  description={
+                    log.hasNextPage
+                      ? "Other classes have entries. Choose All to see them, or load more below."
+                      : "Other classes have entries. Choose All to see them."
+                  }
+                />
+              ) : query ? (
+                <EmptyState
+                  icon={null}
+                  title="No audit event matches this search"
+                  description="The search looks at the actor, the action and the object's type and id."
+                />
+              ) : (
+                <EmptyState
+                  icon={null}
+                  title="Nothing has been changed yet"
+                  description="An audit event is somebody changing what is allowed — a limit, a credential, an approval, a movement of money. Nothing has happened on this account, which is why the log is empty rather than broken."
+                />
+              )}
             </div>
           ) : (
             <div className="w-full overflow-x-auto">
