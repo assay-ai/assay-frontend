@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Code2, Eye, Filter as FilterIcon, ShieldCheck } from "lucide-react";
+import { Code2, Filter as FilterIcon, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
@@ -40,6 +40,11 @@ import {
   scoreText,
 } from "@/features/provider-verdicts/format";
 import {
+  DEFAULT_VERDICT_SEGMENT,
+  verdictEmptyState,
+  type VerdictSegmentValue,
+} from "@/features/provider-verdicts/empty-state";
+import {
   fromDayToIso,
   toDayToIso,
   validateVerdictFilters,
@@ -62,8 +67,9 @@ import { presentVerdict } from "@/utils/verdict";
  * so it needs the feed scoped to that binding's calls, and the API gives it
  * exactly one way to do that exactly: **`windowId`**. An SLA window belongs to
  * one binding, so `windowId=<this binding's current window>` scopes
- * the feed precisely — which is also what the design's own default asks for
- * ("failures in the current window").
+ * the feed precisely. The feed opens on every verdict in that window, not on
+ * failures only: a binding with only passed calls must not look empty
+ * (BUG-R3-J-01).
  *
  * Toggling to "all time" has no such lever: the feed then reads the whole
  * provider's verdicts (every binding) and this screen filters the page to
@@ -107,8 +113,6 @@ import { presentVerdict } from "@/utils/verdict";
  */
 
 const REFRESH_MS = 60_000;
-
-type VerdictSegmentValue = "failed" | "passed" | "degraded" | "all";
 
 const VERDICT_SEGMENTS: {
   value: VerdictSegmentValue;
@@ -178,7 +182,7 @@ export default function ProviderVerdictFeedPage() {
   const windowItems = windowsQuery.data?.items ?? [];
   const currentWindow = windowItems.find((w) => w.status === "OPEN") ?? windowItems[0] ?? null;
 
-  const [segment, setSegment] = React.useState<VerdictSegmentValue>("failed");
+  const [segment, setSegment] = React.useState<VerdictSegmentValue>(DEFAULT_VERDICT_SEGMENT);
   const [scope, setScope] = React.useState<"current" | "all">("current");
   const [search, setSearch] = React.useState("");
   const searchRef = React.useRef<HTMLInputElement>(null);
@@ -391,8 +395,8 @@ export default function ProviderVerdictFeedPage() {
             Verdicts · {bindingLabel}
           </h1>
           <p className="text-body-13 text-02">
-            default view: failures in the current window · also available as an API stream so
-            you can mirror it into your own observability
+            every judged call in the current window · also available as an API stream so you can
+            mirror it into your own observability
           </p>
         </div>
 
@@ -481,10 +485,7 @@ export default function ProviderVerdictFeedPage() {
                   }`
                 : "Verdicts"}
             </PanelTitle>
-            <PanelDescription>
-              the same rows the evidence pack shows — if the case view had a column this one does
-              not, that column would be a surprise
-            </PanelDescription>
+            <PanelDescription>the same rows the evidence pack shows</PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="px-2.5 pb-2.5 pt-1.5">
@@ -500,22 +501,13 @@ export default function ProviderVerdictFeedPage() {
             <div className="p-3">
               <EmptyState
                 icon={<ShieldCheck aria-hidden="true" width={22} height={22} />}
-                title={
-                  scopedItems.length === 0
-                    ? activeFilterCount(applied) > 0
-                      ? "No verdicts match these filters"
-                      : effectiveScope === "current"
-                        ? "No verdicts in the current window"
-                        : "No verdicts yet"
-                    : "No verdicts match this filter"
-                }
-                description={
-                  scopedItems.length === 0
-                    ? activeFilterCount(applied) > 0
-                      ? "Nothing in this scope matches the applied filters. Change or clear them to see more."
-                      : "A verdict appears here the moment a call against this binding is judged. Nothing has been judged in this scope yet."
-                    : "Try another verdict filter, clear the search, or switch to all time."
-                }
+                {...verdictEmptyState({
+                  segment,
+                  windowLabel:
+                    effectiveScope === "current" && currentWindow ? currentWindow.label : null,
+                  filtersApplied: activeFilterCount(applied) > 0,
+                  searching: scopedItems.length > 0,
+                })}
               />
             </div>
           ) : (
@@ -536,16 +528,6 @@ export default function ProviderVerdictFeedPage() {
           Load more
         </Button>
       ) : null}
-
-      {/* ── Note — verbatim from the design ──────────────────────────────── */}
-      <div className="flex w-full items-start gap-2.5 rounded-lg border border-primary-20 bg-primary-10 p-[15px]">
-        <Eye aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-primary-600" />
-        <p className="min-w-0 flex-1 text-body-13 leading-[1.6] text-primary-700">
-          A provider who has read a hundred verdicts on good days will read the hundred and first
-          as a diagnosis. A provider whose first verdict view is an accusation reads it as an
-          ambush, regardless of its contents.
-        </p>
-      </div>
 
       {/* ── Filter sheet ─────────────────────────────────────────────────── */}
       <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
