@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { type CallRow, foldClasses, observedTakeRate, pendingNote, rowsInAsset } from "./csv";
+import {
+  type CallRow,
+  callsOnDay,
+  foldClasses,
+  foldNotCredited,
+  observedTakeRate,
+  pendingNote,
+  rowsInAsset,
+} from "./csv";
 
 const ASSET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/token:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
@@ -90,6 +98,26 @@ describe("rowsInAsset — one money figure, one asset", () => {
 
   it("keeps every row when no asset is selected (a one-asset provider)", () => {
     expect(rowsInAsset(rows, undefined)).toHaveLength(2);
+  });
+
+  // /provider/view (R3 retest item 5): the failed-calls table summed both assets.
+  it("scopes the failed-calls money and the day count the provider view shows", () => {
+    const failed = [
+      row({ callId: "c", classification: "SYSTEM_ERROR", status: "VOIDED", providerAmount: "90000" }),
+      row({
+        callId: "d",
+        classification: "SYSTEM_ERROR",
+        status: "VOIDED",
+        asset: OTHER,
+        providerAmount: "45000",
+      }),
+    ];
+    const scoped = rowsInAsset(failed, OTHER);
+    expect(foldNotCredited(scoped)).toMatchObject({
+      calls: 1,
+      notCredited: { amount: "45000", asset: OTHER },
+    });
+    expect(callsOnDay(scoped, "2026-10-11")).toBe(1);
   });
 });
 
