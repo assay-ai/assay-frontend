@@ -5,10 +5,10 @@ import * as React from "react";
 import { Toaster } from "sonner";
 
 import { AlertFill, CheckCircle } from "@/components/icons";
-import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Tag } from "@/components/ui/tag";
+import { OperatorRefusal, SuspendedBanner } from "@/features/operator/operator-refusal";
 import { OperatorSessionContext } from "@/features/operator/session-context";
 import { ApiError } from "@/libs/ApiClient";
 import {
@@ -31,9 +31,10 @@ import { getOperatorIdentity } from "@/services/operator.service";
  * The consequence lands here. `operatorApi` is built with
  * `triggerGlobalUnauthorized: false` precisely so an expired operator token
  * cannot sign a buyer out — which means **nothing else in the app catches a
- * 401 from these endpoints**. The `isError` branch below is the only place a
- * refused operator token is ever handled; without it the console would sit on
- * an error state forever with a dead token still in storage.
+ * 401 from these endpoints**. The 401 effect and the `isError` branch below are
+ * the only places a refused operator token is ever handled; without them the
+ * console would sit on an error state forever with a dead token still in
+ * storage.
  *
  * ## Why the token is read in an effect
  *
@@ -141,32 +142,23 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
   } else if (isLoading) {
     body = <p className="text-body-13 text-03">Loading…</p>;
   } else if (isError) {
-    // A 401 has already been turned into the form above by the effect; anything
-    // that reaches here is a different failure and is reported as itself.
-    const detail =
-      error instanceof ApiError ? `${error.code} · ${error.message}` : String(error);
-    body = (
-      <p className="text-body-13 text-danger-500" role="alert">
-        The operator console could not confirm this token. {detail}
-      </p>
-    );
+    // A 401 has already been turned into the form above by the effect. What
+    // reaches here is a different refusal — a suspended operator's 403 among
+    // them — and the token is still stored, so each one offers Sign out.
+    body = <OperatorRefusal error={error} onSignOut={signOut} />;
   } else if (!data) {
     body = <p className="text-body-13 text-03">Loading…</p>;
   } else if (data.status === "SUSPENDED") {
     /*
-      `children` is deliberately NOT rendered. A suspended operator's token is
-      still accepted by `/operator/me` — the guard refuses the actions, not the
-      identity — so the console would otherwise draw a full queue of decide,
-      second and reverse buttons that every backend call would then refuse.
+      Not what the backend does today: it refuses `/operator/me` for a
+      suspended operator, which is the branch above. Kept so that an identity
+      that ever does arrive as suspended draws the same banner and never the
+      queue of decide, second and compensate buttons.
     */
     body = (
-      <Banner
-        tone="danger"
-        title="This operator account is suspended"
-        description={
-          `${data.displayName} (${data.subject}) cannot adjudicate. ` +
-          "Contact the adjudication lead to have the suspension lifted."
-        }
+      <SuspendedBanner
+        detail={`Operator is suspended: ${data.subject}`}
+        onSignOut={signOut}
       />
     );
   } else {
