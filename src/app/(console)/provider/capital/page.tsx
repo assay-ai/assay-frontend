@@ -792,7 +792,7 @@ export default function ProviderCapitalPage() {
         tone="primary"
         icon={<Fuel />}
         className="items-start [&>div>p]:whitespace-normal [&>div>p]:text-body-13"
-        title="Deposit preflight, before any signature: required USDC, the network fee for gas, your current balance of both, and one sentence on why gas is not sponsored — sponsoring it would make the stake meaningless as a cost."
+        title="Before you sign a deposit you are shown what it needs: the stake amount, the network fee for gas, and your balance of both. Gas is not sponsored for providers; you pay the network fee yourself."
       />
 
       {/*
