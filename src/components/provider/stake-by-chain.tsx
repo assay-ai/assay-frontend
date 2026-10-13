@@ -179,8 +179,10 @@ export function StakeByChain({ stake, chains, status }: StakeByChainProps) {
                     data-chain-id={entry.chainId}
                     className="text-body-xs leading-[1.55] text-03"
                   >
-                    No stake authority has been proved on this chain, so there is no stake account
-                    to read. Proving one is a wallet signature, on the Leaving screen.
+                    {entry.staked && entry.staked.amount !== "0"
+                      ? "No stake authority has been proved on this chain yet, so this stake cannot be managed from here."
+                      : "No stake authority has been proved on this chain, so there is no stake account to read."}{" "}
+                    Proving one is a wallet signature, on the Leaving screen.
                   </p>
                 ) : null}
               </div>
