@@ -63,9 +63,22 @@ const CLASS_BY_PREFIX: Record<string, ClassName> = {
   compensation: "Money",
   payout: "Money",
   payment_intent: "Money",
+  // Where alerts go and which are sent is part of how the account is governed.
+  notification_channel: "Policy",
+  notification_preference: "Policy",
 };
 
-function classOf(action: string): ClassName {
+/**
+ * What the backend records today (BUG-R2-B4-01), and what it does not. Shown
+ * with the log whether or not it has entries, so an absent event is never read
+ * as "it did not happen".
+ */
+export const RECORDED_EVENTS_NOTE =
+  "Recorded here: limit changes including pause and resume, agent credentials created or revoked, alert channel and alert preference changes, and escrow limit changes and agent payment authorisations or revocations that GoAssay.AI relayed for you.";
+export const UNRECORDED_EVENTS_NOTE =
+  "Not recorded here yet: deposits, withdrawals and refunds, approvals, an agent binding its signing key, credentials that expired on their own, and any change made before recording began.";
+
+export function classOf(action: string): ClassName {
   const prefix = action.split(".")[0];
   return CLASS_BY_PREFIX[prefix] ?? "Other";
 }
@@ -189,15 +202,11 @@ export function AuditLogView() {
                   description="The search looks at the actor, the action and the object's type and id."
                 />
               ) : (
-                /*
-                  BUG-R2-B4-01: no product write records an audit event yet, so
-                  an empty log does NOT mean nothing changed. Say where the
-                  changes that are recorded can be read.
-                */
+                /* An empty log is only "nothing changed" for the events listed below the panel. */
                 <EmptyState
                   icon={null}
-                  title="No audit events are recorded yet"
-                  description="Changes to limits, credentials and alert channels are not shown in this log yet. Limit changes are listed with who made them under Change history on Limits; credentials and their revocations are listed under Agents."
+                  title="No audit events yet"
+                  description="None of the recorded changes has been made on this account. Change a limit, create or revoke a credential, or edit an alert channel and it appears here."
                 />
               )}
             </div>
@@ -248,6 +257,11 @@ export function AuditLogView() {
           )}
         </PanelBody>
       </Panel>
+
+      <div className="flex flex-col gap-1 px-1">
+        <p className="text-body-xs text-03">{RECORDED_EVENTS_NOTE}</p>
+        <p className="text-body-xs text-03">{UNRECORDED_EVENTS_NOTE}</p>
+      </div>
 
       {log.hasNextPage ? (
         <Button
