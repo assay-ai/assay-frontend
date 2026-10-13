@@ -37,7 +37,7 @@ import {
 } from "@/features/buyer/use-guarantee";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
 import type { WithheldBucket } from "@/features/buyer/wire";
-import { formatMoney } from "@/utils/money";
+import { formatMoney, formatMoneyNonZero } from "@/utils/money";
 
 /**
  * Guarantee — "what we did not charge you for" (design).
@@ -308,10 +308,10 @@ export default function GuaranteePage() {
         <Banner
           tone="danger"
           title="This month does not reconcile to the ledger"
-          description={`The released holds differ from the withheld total by ${formatMoney(
-            { ...data.withheld.holdReleaseTotal, amount: data.withheld.difference.replace(/^-/, "") },
-            // To the atomic unit: a one-unit gap must not read as $0.00.
-            { decimals: data.withheld.holdReleaseTotal.decimals }
+          description={`The released holds differ from the withheld total by ${formatMoneyNonZero(
+            // Two decimals like the rest of the page; a gap below one cent is
+            // written out in full so it never reads as $0.00.
+            { ...data.withheld.holdReleaseTotal, amount: data.withheld.difference.replace(/^-/, "") }
           )}. ${
             data.withheld.orphanedHoldIds.length
           } releases have no matching call. Contact support with this month's statement.`}
