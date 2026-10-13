@@ -17,6 +17,7 @@ import type {
 } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { applyPublished, isAlreadyLive, isPublishedState } from "@/features/provider-binding/after-publish";
+import { BindingNav } from "@/features/provider-binding/binding-nav";
 import { requirementChain, unreadableChains } from "@/features/provider-stake/chain-stake";
 import { getProviderStake } from "@/services/provider-stake.service";
 import {
@@ -321,6 +322,8 @@ export function PublishChecklistView({ bindingId }: { bindingId: string }) {
           </Button>
         </div>
       </div>
+
+      <BindingNav bindingId={bindingId} />
 
       {/* Checklist. */}
       <Panel>

@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { bindingScreens } from "./screens";
@@ -19,5 +22,22 @@ describe("bindingScreens", () => {
       "/provider/bindings/b1/verdicts",
     ]);
     expect(screens.find((s) => s.href.endsWith("/free-tier"))?.label).toBe("Free tier");
+  });
+
+  // BUG-R4-D-01: the Publish screen was the one screen without the link row.
+  it("has the link row on every one of those screens", () => {
+    const root = join(process.cwd(), "src/app/(console)/provider/bindings/[bindingId]");
+    for (const screen of screens) {
+      const dir = join(root, screen.href.replace("/provider/bindings/b1", ""));
+      const sources = [join(dir, "page.tsx")];
+      try {
+        const parts = join(dir, "_components");
+        sources.push(...readdirSync(parts).map((file) => join(parts, file)));
+      } catch {
+        // No `_components` folder: the page file is the whole screen.
+      }
+      const rendersNav = sources.some((file) => readFileSync(file, "utf8").includes("<BindingNav"));
+      expect(rendersNav, screen.label).toBe(true);
+    }
   });
 });
