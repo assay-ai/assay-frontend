@@ -42,4 +42,18 @@ describe("verdict feed empty state", () => {
       verdictEmptyState({ segment: "passed", windowLabel: "w_2", filtersApplied: false, searching: true }).title
     ).toBe("No verdicts match this search");
   });
+
+  // BUG-R4-D-04: the SLA page counted 400 verified calls in a window whose feed was empty.
+  it("never says nothing was judged in a window that counts verified calls", () => {
+    const state = verdictEmptyState({
+      segment: "all",
+      windowLabel: "w_54",
+      windowVerifiedCalls: 400,
+      filtersApplied: false,
+      searching: false,
+    });
+    expect(state.title).toBe("No verdict rows for window w_54");
+    expect(state.description).not.toMatch(/nothing has been judged/i);
+    expect(state.description).toMatch(/400 verified calls/);
+  });
 });

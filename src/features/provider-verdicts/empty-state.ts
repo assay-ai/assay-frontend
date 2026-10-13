@@ -7,6 +7,8 @@ export interface VerdictEmptyStateInput {
   segment: VerdictSegmentValue;
   /** The window the feed is scoped to (`w_1`), or `null` when it reads all time. */
   windowLabel: string | null;
+  /** Verified calls the scoped window counts — the figure the Live SLA page shows. */
+  windowVerifiedCalls?: number;
   /** Any filter from the Filter sheet (agent, rule, dates) is applied. */
   filtersApplied: boolean;
   /** Rows came back but the search box hides all of them. */
@@ -42,6 +44,16 @@ export function verdictEmptyState(input: VerdictEmptyStateInput): {
       description: `Only ${input.segment} verdicts are shown. Choose "all" to see every judged call${
         input.windowLabel ? ", or switch to all time" : ""
       }.`,
+    };
+  }
+  // The window's own counter says calls were judged: the rows are missing, not the judging.
+  if (input.windowLabel && (input.windowVerifiedCalls ?? 0) > 0) {
+    const calls = input.windowVerifiedCalls!.toLocaleString("en-US");
+    return {
+      title: `No verdict rows for window ${input.windowLabel}`,
+      description: `This window counts ${calls} verified call${
+        input.windowVerifiedCalls === 1 ? "" : "s"
+      }, but their verdict rows are not available here. The Live SLA page has the window's totals; switch to all time to see the verdicts we hold.`,
     };
   }
   return {
