@@ -140,7 +140,9 @@ describe("assayMatchFor", () => {
   });
 
   it("never claims not-known when the lookup could not run", async () => {
-    const index = await lookupAssayCases([ID as HexString]);
+    const index = await lookupAssayCases([ID as HexString], () =>
+      Promise.reject(new Error("offline")),
+    );
     expect(index.status).toBe("unavailable");
     expect(assayMatchFor(row(1), index)).toEqual({ kind: "unchecked" });
     expect(assayMatchFor(row(1), null)).toEqual({ kind: "unchecked" });

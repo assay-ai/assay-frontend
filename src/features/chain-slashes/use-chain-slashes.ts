@@ -12,8 +12,18 @@ import { lookupAssayCases } from "./assay-match";
 /**
  * The page's two reads. The first goes to the chain and IS the list; the
  * second goes to Assay and only decorates it — if it fails, the list stands.
+ *
+ * `matchAgainstAssay` is true only when `provider` is the signed-in provider's
+ * own stake wallet. The lookup answers for the signed-in provider's cases, so
+ * asking it about an address someone pasted would mark that address's every
+ * pending penalty "Not known to Assay" — true of this provider, and meaningless
+ * about the address. Off, the lookup does not run and every row is unchecked.
  */
-export function useChainSlashes(deployment: StakeDeployment, provider: HexString | null) {
+export function useChainSlashes(
+  deployment: StakeDeployment,
+  provider: HexString | null,
+  matchAgainstAssay: boolean,
+) {
   const reader = React.useMemo(() => createStakeChainReader(deployment), [deployment]);
 
   const chain = useQuery({
@@ -30,9 +40,9 @@ export function useChainSlashes(deployment: StakeDeployment, provider: HexString
   );
 
   const assay = useQuery({
-    queryKey: ["chain-slashes", "assay-match", requestIds],
+    queryKey: ["chain-slashes", "assay-match", provider?.toLowerCase(), requestIds],
     queryFn: () => lookupAssayCases(requestIds),
-    enabled: requestIds.length > 0,
+    enabled: matchAgainstAssay && requestIds.length > 0,
     retry: 0,
   });
 
