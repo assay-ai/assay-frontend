@@ -32,7 +32,7 @@ import {
 } from "@/features/call-classes/use-calls-export";
 import type { Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { listProviderPayouts } from "@/services/provider-payouts.service";
+import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
@@ -210,9 +210,9 @@ export default function ReconciliationPage() {
   const observedTake = useMemo(() => observedTakeRate(rows), [rows]);
 
   const batchCount = new Set(
-    (payouts.data?.items ?? [])
-      .filter((p) => !displayAsset || p.amount.asset === displayAsset)
-      .map((p) => p.batchId)
+    (assetPending ? [] : payoutsInAsset(payouts.data?.items ?? [], displayAsset)).map(
+      (p) => p.batchId
+    )
   ).size;
 
   const gross = classes.totalGross;

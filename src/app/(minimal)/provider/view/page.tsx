@@ -43,7 +43,7 @@ import {
 } from "@/features/call-classes/use-calls-export";
 import type { Money, ProviderPayout } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { listProviderPayouts } from "@/services/provider-payouts.service";
+import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
 import { getProviderEarnings, getProviderQuality } from "@/services/provider-reports.service";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { formatMoney } from "@/utils/money";
@@ -240,6 +240,11 @@ export default function ProviderViewPage() {
     [calls.rows, assetPending, displayAsset]
   );
   const callsLoading = calls.isLoading || assetPending;
+  // The payout batches are money too: only the display asset's are listed.
+  const payoutItems = useMemo(
+    () => (assetPending ? [] : payoutsInAsset(payouts.data?.items ?? [], displayAsset)),
+    [payouts.data, assetPending, displayAsset]
+  );
 
   // ── Tiles ────────────────────────────────────────────────────────────────
 
@@ -402,7 +407,7 @@ export default function ProviderViewPage() {
     on the wire, so the same id recurs across runs and grouping on it would
     merge two payout runs into one row — the same call the earnings screen makes.
   */
-  const batchRows: BatchRow[] = (payouts.data?.items ?? []).map((payout: ProviderPayout) => ({
+  const batchRows: BatchRow[] = payoutItems.map((payout: ProviderPayout) => ({
     id: payout.id,
     batch: payout.batchId.slice(0, 8),
     period: DASH,
@@ -447,7 +452,7 @@ export default function ProviderViewPage() {
   ];
 
   const monthLabel = `${new Date(period.from).getUTCDate()} – ${new Date(now).getUTCDate()} ${now.toLocaleString("en-US", { month: "short", timeZone: "UTC" })}`;
-  const batchCount = new Set((payouts.data?.items ?? []).map((p) => p.batchId)).size;
+  const batchCount = new Set(payoutItems.map((p) => p.batchId)).size;
   const totals = earnings.data?.totals;
   const grossTotal =
     totals?.earned && totals?.platformFee

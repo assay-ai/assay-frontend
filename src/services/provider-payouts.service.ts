@@ -19,3 +19,15 @@ export function listProviderPayouts(
     query as Record<string, unknown>
   );
 }
+
+/**
+ * The payouts paid in `asset` — the provider's display asset. `undefined` means
+ * a one-asset provider, and every payout stays. Money in two assets must never
+ * be listed or summed together, so a screen scopes its payouts with this first.
+ */
+export function payoutsInAsset(
+  payouts: readonly ProviderPayout[],
+  asset: string | undefined
+): ProviderPayout[] {
+  return asset ? payouts.filter((payout) => payout.amount.asset === asset) : [...payouts];
+}

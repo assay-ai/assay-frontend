@@ -1,6 +1,6 @@
 "use client";
 
-import { DisplayAssetSelect } from "@/components/display-asset-select";
+import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Gauge, Inbox, Landmark, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
@@ -31,7 +31,7 @@ import type {
   ToolBindingSummary,
 } from "@/interfaces";
 import { getUnreadCount } from "@/services/account.service";
-import { listProviderPayouts } from "@/services/provider-payouts.service";
+import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
 import { getProviderRegistration } from "@/services/provider-registration.service";
 import { getProviderEarnings } from "@/services/provider-reports.service";
 import { listSlaWindows } from "@/services/provider-sla-windows.service";
@@ -409,7 +409,10 @@ export default function ProviderHomePage() {
 
   // ── Earnings panel ────────────────────────────────────────────────────────
 
-  const payoutRows = payouts.data?.items ?? [];
+  // One money figure, one asset: only the display asset's payouts are counted.
+  const { current: displayAsset, isPending: assetPending } = useDisplayAsset("provider");
+  const allPayouts = payouts.data?.items ?? [];
+  const payoutRows = assetPending ? [] : payoutsInAsset(allPayouts, displayAsset);
   const todayPayouts = payoutRows.filter((p) => within(p, windowToday));
   const monthPayouts = payoutRows.filter((p) => within(p, windowMonth));
 
@@ -419,9 +422,10 @@ export default function ProviderHomePage() {
     inside the bucket, the sum would be a floor wearing the shape of a total —
     which is what `—` is for.
   */
-  const oldestOnPage = payoutRows.length > 0 ? payoutRows[payoutRows.length - 1].createdAt : null;
+  const oldestOnPage = allPayouts.length > 0 ? allPayouts[allPayouts.length - 1].createdAt : null;
   const pageCovers = (window: { from: string }) =>
-    !payouts.data?.pageInfo.hasMore || (oldestOnPage !== null && oldestOnPage < window.from);
+    !assetPending &&
+    (!payouts.data?.pageInfo.hasMore || (oldestOnPage !== null && oldestOnPage < window.from));
 
   const paidToday = pageCovers(windowToday) ? sumPayouts(todayPayouts) : null;
   const paidMonth = pageCovers(windowMonth) ? sumPayouts(monthPayouts) : null;

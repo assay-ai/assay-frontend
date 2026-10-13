@@ -1,6 +1,6 @@
 "use client";
 
-import { DisplayAssetSelect } from "@/components/display-asset-select";
+import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { Download } from "lucide-react";
@@ -23,7 +23,7 @@ import { formatCount } from "@/features/buyer/period";
 import { earnedTileSub } from "@/features/provider-earnings/earned-tile";
 import type { Money, ProviderEarningsGroup, ProviderPayout } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { listProviderPayouts } from "@/services/provider-payouts.service";
+import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
 import { exportProviderCalls, getProviderEarnings } from "@/services/provider-reports.service";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { formatMoney } from "@/utils/money";
@@ -271,7 +271,13 @@ export default function ProviderMoneyPage() {
     } as Partial<Record<string, React.ReactNode>>,
   };
 
-  const payoutItems = payouts.data?.items ?? [];
+  /*
+    One money figure, one asset. The earnings tiles are already the display
+    asset's, so the payouts beside them — the history rows and both "Paid"
+    tiles — are scoped to it too, never summed across assets.
+  */
+  const { current: displayAsset, isPending: assetPending } = useDisplayAsset("provider");
+  const payoutItems = assetPending ? [] : payoutsInAsset(payouts.data?.items ?? [], displayAsset);
 
   /*
     A page that says `hasMore` is a page that cannot be summed: a window
@@ -279,7 +285,8 @@ export default function ProviderMoneyPage() {
     cannot narrow the window for us (see the query above), so the honest answer
     for both money tiles is then the unknown treatment.
   */
-  const payoutsComplete = Boolean(payouts.data) && !payouts.data!.pageInfo.hasMore;
+  const payoutsComplete =
+    Boolean(payouts.data) && !assetPending && !payouts.data!.pageInfo.hasMore;
 
   function within(payout: ProviderPayout, w: { from: string; to: string }): boolean {
     return payout.createdAt >= w.from && payout.createdAt < w.to;
