@@ -126,7 +126,12 @@ export function parseCallsCsv(csv: string): CallRow[] {
 function isCredited(row: CallRow): boolean {
   // A rail-B call the verdict settled is credited only once its voucher is
   // redeemed on chain; until then the export says PAID_AWAITING_REDEMPTION.
-  return row.status === "SETTLED" && row.classification !== "PAID_AWAITING_REDEMPTION";
+  // PENDING on a settled row is the export saying no credit was written for it.
+  return (
+    row.status === "SETTLED" &&
+    row.classification !== "PAID_AWAITING_REDEMPTION" &&
+    row.classification !== "PENDING"
+  );
 }
 
 /** A call still in flight has neither earned nor withheld anything yet. */
@@ -158,6 +163,32 @@ function sum(
   return { amount: total.toFixed(0), asset: denom[0].asset, decimals: denom[0].decimals };
 }
 
+/**
+ * The rows denominated in `asset` — the provider's display asset. `undefined`
+ * means a one-asset provider, and every row stays. Money in two assets must
+ * never be folded into one figure, so a screen scopes its rows with this first.
+ */
+export function rowsInAsset(rows: CallRow[], asset: string | undefined): CallRow[] {
+  return asset ? rows.filter((row) => row.asset === asset) : rows;
+}
+
+/**
+ * The note for the PENDING class, from why its rows are pending.
+ *
+ * The export marks two different things PENDING: a call still being judged,
+ * and a SETTLED call with no credit written for it (reason "settled, no credit
+ * recorded"). Only the first is in flight.
+ */
+export function pendingNote(rows: CallRow[]): string {
+  const pending = rows.filter((row) => row.classification === "PENDING");
+  const settled = pending.filter((row) => row.status === "SETTLED").length;
+  const inFlight = pending.length - settled;
+  if (settled === 0) return "still in flight — no money has moved";
+  if (inFlight === 0) return "settled, no credit recorded · not paid to you";
+  const count = (n: number) => n.toLocaleString("en-US");
+  return `${count(settled)} settled, no credit recorded · ${count(inFlight)} still in flight`;
+}
+
 // ── Call classes ───────────────────────────────────────────────────────────
 
 /**
@@ -175,6 +206,8 @@ function sum(
  *
  * PAID_AWAITING_REDEMPTION is ours too: a rail-B call that passed and is
  * credited once its voucher is redeemed on chain. Listed beside PAID_CREDITED.
+ * So is PLATFORM_ABSORBED: credited from platform funds because the voucher
+ * could never be redeemed (the `reason` column names why), with no fee taken.
  *
  * PENDING is the mirror image: the wire emits it and **neither design draws it**.
  * It is listed last because the totals have to add up — a screen whose job is
@@ -183,6 +216,7 @@ function sum(
 export const CLASS_ORDER = [
   "PAID_CREDITED",
   "PAID_AWAITING_REDEMPTION",
+  "PLATFORM_ABSORBED",
   "PAID_UNCREDITED",
   "FREE",
   "EXPLORATION",
@@ -305,7 +339,8 @@ export interface ObservedTake {
 export function observedTakeRate(rows: CallRow[]): ObservedTake {
   const exact = new Map<string, Decimal>();
   for (const row of rows) {
-    if (!isCredited(row)) continue;
+    // An absorbed call is credited but took no fee: it carries no rate.
+    if (!isCredited(row) || row.classification === "PLATFORM_ABSORBED") continue;
     const price = new Decimal(row.priceAmount || "0");
     if (price.isZero()) continue;
     const rate = new Decimal(row.platformFee || "0").div(price).mul(100);

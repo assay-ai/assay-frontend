@@ -1,7 +1,14 @@
 import Decimal from "decimal.js";
 import { describe, expect, it } from "vitest";
 
-import { exceedsScale, formatDecimal, formatMoney, toAtomic, toDecimal } from "./money";
+import {
+  exceedsScale,
+  formatDecimal,
+  formatMoney,
+  formatMoneyNonZero,
+  toAtomic,
+  toDecimal,
+} from "./money";
 
 /**
  * `toAtomic` is the last thing that touches a buyer's amount before it becomes
@@ -184,5 +191,26 @@ describe("the rounding convention — truncate, never round", () => {
     // The direction that matters: $9.999 must not read as $10.00 on a screen
     // one click from a withdrawal the chain would refuse.
     expect(formatDecimal(new Decimal("9.999"))).toBe("$9.99");
+  });
+});
+
+describe("formatMoneyNonZero — two decimals, more only below one cent", () => {
+  const usd = (amount: string) => ({ amount, asset: "x", decimals: 6 });
+
+  it("writes an ordinary amount like every other figure", () => {
+    expect(formatMoneyNonZero(usd("350000"))).toBe("$0.35");
+    expect(formatMoneyNonZero(usd("1234567890"))).toBe("$1,234.56");
+    expect(formatMoneyNonZero(usd("10000"))).toBe("$0.01");
+  });
+
+  it("never lets a sub-cent amount read as $0.00", () => {
+    expect(formatMoneyNonZero(usd("1"))).toBe("$0.000001");
+    expect(formatMoneyNonZero(usd("5000"))).toBe("$0.005");
+    expect(formatMoneyNonZero(usd("9999"))).toBe("$0.009999");
+  });
+
+  it("keeps zero and nothing as plain zero", () => {
+    expect(formatMoneyNonZero(usd("0"))).toBe("$0.00");
+    expect(formatMoneyNonZero(null)).toBe("$0.00");
   });
 });

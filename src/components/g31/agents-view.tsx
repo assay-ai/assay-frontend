@@ -292,10 +292,7 @@ export function AgentsView() {
       <div className="flex w-full items-start gap-2.5 rounded-lg border border-primary-20 bg-primary-10 p-3.5 tablet:p-[15px]">
         <ShieldCheck aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-primary-600" />
         <p className="text-body-13 text-primary-700">
-          Revocation is immediate. There is no grace period and no cached-token window. A console
-          that lists live grants with their remaining allowance and a one-click revoke is the
-          largest open gap in the market — Stripe SPTs are revoke-by-API only, Coinbase Spend
-          Permissions ship no manager UI, AP2 has no user-initiated revocation.
+          Revocation is immediate. There is no grace period and no cached-token window.
         </p>
       </div>
 
@@ -389,10 +386,7 @@ export function AgentsView() {
       )}
 
       <p className="text-body-xs text-03">
-        The design also draws a browser-session table here. It has no endpoint on this API, so it is
-        not shown rather than invented — on a screen about what has authority over your money, an
-        invented grant is worse than a missing one. An agent’s authority to pay is listed above,
-        read from the chain.
+        An agent’s authority to pay is listed above, read from the chain.
       </p>
 
       {/* Create */}
@@ -401,8 +395,8 @@ export function AgentsView() {
           <SheetHeader>
             <SheetTitle>New credential</SheetTitle>
             <SheetDescription>
-              The secret is returned exactly once. Give it a name you will recognise in the audit
-              log when you come to revoke it.
+              The secret is returned exactly once. Give it a name you will recognise in this list
+              when you come to revoke it.
             </SheetDescription>
           </SheetHeader>
           <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">

@@ -5,6 +5,8 @@ import { CircleCheck, CircleX, Play, RefreshCw, TriangleAlert } from "lucide-rea
 import { useParams } from "next/navigation";
 import * as React from "react";
 
+import { BindingNav } from "@/features/provider-binding/binding-nav";
+
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -61,6 +63,7 @@ import {
   verdictRows,
   type VerdictRow,
 } from "./report-view";
+import { createRunGuard } from "./run-guard";
 
 /**
  * Mapping tester.
@@ -424,12 +427,18 @@ export default function MappingTesterPage() {
   const inputSchema = catalogueQuery.data?.tools.find((tool) => tool.id === binding?.toolId)?.inputSchema;
 
   const queryClient = useQueryClient();
+  // Enter and the Run button both go through `onRun`; see `createRunGuard`.
+  const [runGuard] = React.useState(createRunGuard);
   const run = useMutation({
     mutationFn: (input: Record<string, unknown>) => testToolBinding(bindingId, { input }),
     // A run is what the publish gate's tester rows read: the checklist cached
     // from an earlier visit is out of date the moment one lands.
-    onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: ["provider", "tool-binding", bindingId, "publish-check"] }),
+    onSettled: () => {
+      runGuard.leave();
+      return queryClient.invalidateQueries({
+        queryKey: ["provider", "tool-binding", bindingId, "publish-check"],
+      });
+    },
   });
   const report = run.data ?? null;
 
@@ -453,8 +462,9 @@ export default function MappingTesterPage() {
       return;
     }
     setArgsError(null);
+    if (!runGuard.enter()) return;
     run.mutate(parsed as Record<string, unknown>);
-  }, [args, run, inputSchema]);
+  }, [args, run, runGuard, inputSchema]);
 
   if (bindingQuery.isPending) {
     return <p className="font-mono text-mono-13 text-03">Loading binding…</p>;
@@ -507,8 +517,8 @@ export default function MappingTesterPage() {
             </TooltipTrigger>
             <TooltipContent className="max-w-[280px] border border-01 shadow-soft">
               <span className="text-body-13 text-02">
-                There is no re-map route. Every run dials your endpoint again, so a
-                mapping change is tested by running it.
+                Every run calls your endpoint again, so a mapping change is tested by running
+                it.
               </span>
             </TooltipContent>
           </Tooltip>
@@ -518,6 +528,8 @@ export default function MappingTesterPage() {
           </Button>
         </div>
       </header>
+
+      <BindingNav bindingId={bindingId} />
 
       {/* Case. The design's case picker has no data source; the slot
           carries the arguments document the run actually posts. */}
@@ -530,7 +542,8 @@ export default function MappingTesterPage() {
             value={args ?? ""}
             onChange={(event) => setArgs(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && !run.isPending) onRun();
+              // A held key repeats; one press is one run.
+              if (event.key === "Enter" && !event.repeat) onRun();
             }}
             spellCheck={false}
             aria-label="Tool arguments, as JSON"
@@ -710,9 +723,9 @@ export default function MappingTesterPage() {
               <PanelDescription>
                 {report.verification
                   ? report.verification.policySource === "STORED_POLICY"
-                    ? `policy ${report.verification.policyId} v${report.verification.policyVersion} — decomposed per rule, never a bare score`
+                    ? `policy ${report.verification.policyId} v${report.verification.policyVersion} — one result per rule`
                     : "no stored policy — judged against this tool's outputSchema alone, which is stricter than production"
-                  : "verification was never reached — decomposed per rule, never a bare score"}
+                  : "verification was not reached"}
               </PanelDescription>
             </PanelTitles>
           </PanelHeader>

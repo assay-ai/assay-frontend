@@ -5,6 +5,8 @@ import { Check, Info, TriangleAlert, X } from "lucide-react";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
+import { BindingNav } from "@/features/provider-binding/binding-nav";
+
 import { Button } from "@/components/ui/button";
 import {
   Panel,
@@ -312,19 +314,19 @@ export default function SlaWorkbenchPage() {
       id: "proposals",
       name: "Expected proposals",
       value: DASH,
-      derivation: "no endpoint publishes the penalty size or the slash cap",
+      derivation: "not available yet",
     },
     {
       id: "worstWindow",
       name: "Worst case per window",
       value: DASH,
-      derivation: "the penalty size is not exposed to this API",
+      derivation: "not available yet",
     },
     {
       id: "worst24",
       name: "Worst case per 24h",
       value: DASH,
-      derivation: "the daily slash cap is not exposed to this API",
+      derivation: "not available yet",
     },
     {
       id: "agents",
@@ -339,7 +341,7 @@ export default function SlaWorkbenchPage() {
       id: "routing",
       name: "Routing weight",
       value: DASH,
-      derivation: "the router's weights are not exposed to this API",
+      derivation: "not available yet",
     },
   ];
 
@@ -418,10 +420,11 @@ export default function SlaWorkbenchPage() {
         }
       />
 
+      <BindingNav bindingId={bindingId} />
+
       <Note tone="warning" icon={<TriangleAlert aria-hidden="true" className="size-[15px]" />}>
-        This screen assumes the declared SLA is published to agents and carries a routing term.
-        If it is not, this workbench should not exist — a “commitment” nobody can see is not a
-        commitment, and dressing it up here would make the platform complicit in the fiction.
+        The failure rate you declare here is published to agents on the tool page, and you are
+        measured against it.
       </Note>
 
       {save.isError ? (
@@ -450,8 +453,8 @@ export default function SlaWorkbenchPage() {
             <div className="flex min-w-0 flex-1 flex-col gap-2">
               <p className="text-label-13 text-01">Backtest — no run to draw</p>
               <p className="text-body-13 text-03">
-                There is no backtest endpoint. The tester makes one live call and its report is
-                not readable afterwards, so there is no replay over recorded pairs to interval.
+                Backtests are not available yet. The tester makes one live call at a time, so there
+                is no recorded set to estimate a rate from.
               </p>
             </div>
 
@@ -533,13 +536,12 @@ export default function SlaWorkbenchPage() {
                   : `You are declaring ${percent(draftRate, 1)} against a measured ${percent(measured.observedFailureRate, 1)}. Declaring tighter than your own 99% lower bound of ${percent(liveInterval?.[0] ?? null, 1)} would make a breach likely.${
                       sla?.peers.p90 != null
                         ? ` Declaring above the peer p90 of ${percent(sla.peers.p90, 1)} would make you the loosest binding on this tool.`
-                        : " The peer p90 has no source yet, so nothing here can tell you whether you would be the loosest binding on this tool."
+                        : " The peer p90 is not available yet, so we cannot tell you whether you would be the loosest binding on this tool."
                     }`}
             </Note>
 
             <p className="text-body-xs text-03">
-              Measured on the wire: writing a declared rate leaves this binding&apos;s revision
-              where it is, so it does not invalidate a tester run or require a republish.
+              Saving a declared rate does not invalidate a tester run or require a republish.
             </p>
           </PanelBody>
         </Panel>

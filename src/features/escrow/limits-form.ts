@@ -94,6 +94,16 @@ export function parseLimitsForm(
   if (!window.ok) errors.maxPerWindow = window.error;
   if (!voucher.ok || !window.ok) return { ok: false, errors };
 
+  // A single call can never be charged more than the window allows, so a
+  // per-call ceiling above it is a typo, not a setting. A zero window is the
+  // "refuse everything" case and has its own confirmation below.
+  if (!window.value.isZero() && voucher.value.gt(window.value)) {
+    return {
+      ok: false,
+      errors: { maxVoucherAmount: "Cannot be more than the per-window limit." },
+    };
+  }
+
   const zeroFields: LimitsFormField[] = [];
   if (voucher.value.isZero()) zeroFields.push("maxVoucherAmount");
   if (window.value.isZero()) zeroFields.push("maxPerWindow");
@@ -116,6 +126,26 @@ export function parseLimitsForm(
     },
     zeroFields,
   };
+}
+
+/**
+ * The errors still worth showing after an edit: of the fields the last submit
+ * marked, those the current values still fail, with the current message. A
+ * corrected field loses its error at once; a field that had none gets none
+ * until the next submit.
+ */
+export function errorsStillTrue(
+  shown: LimitsFormErrors,
+  input: LimitsFormInput,
+  decimals: number = ESCROW_LIMITS_DECIMALS,
+): LimitsFormErrors {
+  const now = parseLimitsForm(input, decimals);
+  if (now.ok) return {};
+  const still: LimitsFormErrors = {};
+  for (const field of ["maxVoucherAmount", "maxPerWindow", "confirmZero"] as const) {
+    if (shown[field] && now.errors[field]) still[field] = now.errors[field];
+  }
+  return still;
 }
 
 /**

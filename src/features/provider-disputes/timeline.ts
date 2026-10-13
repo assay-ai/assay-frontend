@@ -6,6 +6,7 @@ import type {
 } from "@/interfaces/provider-disputes";
 
 import type { TimelineEvent } from "@/components/ui/timeline";
+import { eventLabel, eventSummary } from "@/features/provider-slash-case/labels";
 
 /**
  * The case timeline's case timeline, built two different ways depending on how much of
@@ -13,12 +14,6 @@ import type { TimelineEvent } from "@/components/ui/timeline";
  * header for why. Neither path invents a timestamp; both state plainly what
  * they could not show.
  */
-
-/** "BREACH_PROPOSED" → "Breach proposed". A generic transform, not a lookup table — holds for any `kind` the backend adds later. */
-function titleCaseKind(kind: string): string {
-  const words = kind.toLowerCase().replace(/_/g, " ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
 
 /**
  * The timeline endpoint is HTTP-cached for ~10s server-side, so a refetch right
@@ -66,8 +61,12 @@ export function buildRichTimeline(
   const rows: TimelineEvent[] = all.map((event, index) => ({
     id: event.id,
     time: stampUtc(event.occurredAt),
-    label: titleCaseKind(event.kind),
-    meta: event.summary,
+    label: eventLabel(event.kind),
+    meta: eventSummary(event.summary, {
+      ...proposal.penaltyAmount,
+      toolName: proposal.toolName,
+      bindingId: proposal.bindingId,
+    }),
     // The most recent real event is "in progress" until something newer
     // supersedes it; everything before it already happened.
     tone: index === all.length - 1 ? "primary" : "success",

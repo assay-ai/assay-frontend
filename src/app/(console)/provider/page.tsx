@@ -1,5 +1,6 @@
 "use client";
 
+import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Gauge, Inbox, Landmark, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
@@ -30,7 +31,7 @@ import type {
   ToolBindingSummary,
 } from "@/interfaces";
 import { getUnreadCount } from "@/services/account.service";
-import { listProviderPayouts } from "@/services/provider-payouts.service";
+import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
 import { getProviderRegistration } from "@/services/provider-registration.service";
 import { getProviderEarnings } from "@/services/provider-reports.service";
 import { listSlaWindows } from "@/services/provider-sla-windows.service";
@@ -160,10 +161,6 @@ function sumPayouts(payouts: ProviderPayout[]): Money | null {
     payouts.map((payout) => payout.amount),
     null,
   );
-}
-
-function batchCount(payouts: ProviderPayout[]): number {
-  return new Set(payouts.map((p) => p.batchId)).size;
 }
 
 /** `0.02` → `"2.00%"`. */
@@ -408,7 +405,10 @@ export default function ProviderHomePage() {
 
   // ── Earnings panel ────────────────────────────────────────────────────────
 
-  const payoutRows = payouts.data?.items ?? [];
+  // One money figure, one asset: only the display asset's payouts are counted.
+  const { current: displayAsset, isPending: assetPending } = useDisplayAsset("provider");
+  const allPayouts = payouts.data?.items ?? [];
+  const payoutRows = assetPending ? [] : payoutsInAsset(allPayouts, displayAsset);
   const todayPayouts = payoutRows.filter((p) => within(p, windowToday));
   const monthPayouts = payoutRows.filter((p) => within(p, windowMonth));
 
@@ -418,9 +418,10 @@ export default function ProviderHomePage() {
     inside the bucket, the sum would be a floor wearing the shape of a total —
     which is what `—` is for.
   */
-  const oldestOnPage = payoutRows.length > 0 ? payoutRows[payoutRows.length - 1].createdAt : null;
+  const oldestOnPage = allPayouts.length > 0 ? allPayouts[allPayouts.length - 1].createdAt : null;
   const pageCovers = (window: { from: string }) =>
-    !payouts.data?.pageInfo.hasMore || (oldestOnPage !== null && oldestOnPage < window.from);
+    !assetPending &&
+    (!payouts.data?.pageInfo.hasMore || (oldestOnPage !== null && oldestOnPage < window.from));
 
   const paidToday = pageCovers(windowToday) ? sumPayouts(todayPayouts) : null;
   const paidMonth = pageCovers(windowMonth) ? sumPayouts(monthPayouts) : null;
@@ -457,7 +458,7 @@ export default function ProviderHomePage() {
       align: "end",
       mono: true,
       cell: () => (
-        <span title="No per-binding quality exists: /providers/me/quality has no binding split, and its three rate fields are null in the backend.">
+        <span title="Quality per binding is not available yet.">
           {DASH}
         </span>
       ),
@@ -470,7 +471,7 @@ export default function ProviderHomePage() {
       mono: true,
       noTruncate: true,
       cell: () => (
-        <span title="SLA windows are per binding now, but this row is not fetched per binding (N+1 on top of the existing N+1); the most recent window across any binding is in Needs attention.">
+        <span title="The SLA window is not shown per row yet. Your most recent window is under Needs attention.">
           {DASH}
         </span>
       ),
@@ -482,7 +483,7 @@ export default function ProviderHomePage() {
       align: "end",
       mono: true,
       cell: (row) => (
-        <span title="Observed p50 is null in the backend; the second figure is the binding's declared timeout.">
+        <span title="Observed latency is not available yet; the second figure is the binding's declared timeout.">
           {row.latency}
         </span>
       ),
@@ -531,6 +532,8 @@ export default function ProviderHomePage() {
           </Button>
         </div>
       </header>
+
+      <DisplayAssetSelect scope="provider" />
 
       {error ? (
         <Banner
@@ -581,8 +584,7 @@ export default function ProviderHomePage() {
               mismatch.
             */}
             <PanelDescription>
-              the window column carries the sufficiency gate on ordinary days — that repetition is
-              the whole trust strategy
+              one row per binding — open one for its live SLA window and verdicts
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
@@ -608,21 +610,19 @@ export default function ProviderHomePage() {
             // batch in 22m" has no source. `earned − paid` is a different
             // quantity wearing this one's shape.
             value={DASH}
-            sub="no accrued-balance endpoint"
+            sub="not available yet"
           />
           <MetricTile
             className="p-4"
             label="Paid today"
             value={paidToday ? formatMoney(paidToday, { decimals: 2 }) : DASH}
-            sub={`${formatCount(batchCount(todayPayouts))} batch${
-              batchCount(todayPayouts) === 1 ? "" : "es"
-            }`}
+            sub={`${formatCount(todayPayouts.length)} payment${todayPayouts.length === 1 ? "" : "s"}`}
           />
           <MetricTile
             className="p-4"
-            label="Withheld this month"
+            label="Not credited this month"
             value={withheldMonth ? formatMoney(withheldMonth, { decimals: 2 }) : DASH}
-            sub="see verdicts"
+            sub="rejected or failed calls"
           />
         </div>
       </section>
@@ -647,31 +647,27 @@ export default function ProviderHomePage() {
           <PanelBody className="px-5 pb-[18px] pt-2">
             <EarningsRow
               label="Pending"
-              sub="no accrued-balance endpoint"
+              sub="not available yet"
               value={DASH}
-              title="No provider route returns an accrued, unpaid balance, and none publishes the payout schedule. Deriving it from earned − paid would put a real-looking number under a label that means something else."
+              title="Earnings are paid as each call settles, so a pending balance is not shown."
             />
             <EarningsRow
               label="Paid today"
-              sub={`${formatCount(batchCount(todayPayouts))} batch${
-                batchCount(todayPayouts) === 1 ? "" : "es"
-              }`}
+              sub={`${formatCount(todayPayouts.length)} payment${todayPayouts.length === 1 ? "" : "s"}`}
               value={paidToday ? formatMoney(paidToday, { decimals: 2 }) : DASH}
             />
             <EarningsRow
               label="Paid this month"
-              sub={`${formatCount(batchCount(monthPayouts))} batch${
-                batchCount(monthPayouts) === 1 ? "" : "es"
-              } · reconciles`}
+              sub={`${formatCount(monthPayouts.length)} payment${monthPayouts.length === 1 ? "" : "s"}`}
               value={paidMonth ? formatMoney(paidMonth, { decimals: 2 }) : DASH}
             />
             <EarningsRow
-              label="Withheld this month"
+              label="Not credited this month"
               // Verbatim from the design. It names a classification and a verdict
               // as a mechanism — "money withheld because DATA_RESULT reached
               // FAIL" — rather than reporting one call's verdict, which is what
               // Foundations rule 03 forbids.
-              sub="DATA_RESULT → FAIL · see verdicts"
+              sub="calls rejected by our checks or failed with an error · see Earnings"
               value={withheldMonth ? formatMoney(withheldMonth, { decimals: 2 }) : DASH}
               danger
             />

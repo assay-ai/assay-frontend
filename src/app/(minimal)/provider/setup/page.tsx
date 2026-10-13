@@ -70,6 +70,7 @@ export default function ProviderSetupPage() {
     steps,
     allDone,
     save,
+    accountDirty,
     saveBlockedBy,
     attempted,
     saving,
@@ -103,7 +104,12 @@ export default function ProviderSetupPage() {
           <Button
             icon={<ArrowRight />}
             loading={saving}
-            onClick={allDone ? () => router.push("/provider") : save}
+            onClick={() => {
+              // Nothing to save on a finished setup: go on. Otherwise save —
+              // which validates — and go on only once that succeeded.
+              if (allDone && !accountDirty) router.push("/provider");
+              else save(allDone ? () => router.push("/provider") : undefined);
+            }}
           >
             Save and continue
           </Button>
@@ -182,8 +188,8 @@ export default function ProviderSetupPage() {
                 </>
               ) : (
                 <>
-                  This deployment does not call from a fixed set of egress IPs, so there is nothing
-                  to allowlist. Run the check here rather than finding out after you go live.
+                  We do not call you from a fixed set of IP addresses, so there is nothing to
+                  allowlist. Run the check here rather than finding out after you go live.
                 </>
               )}
             </Outcome>
@@ -230,7 +236,7 @@ export default function ProviderSetupPage() {
               <NextStep
                 ordinal="4"
                 title="You get paid, and you can be slashed"
-                body="Paid on-chain to your own token account when the buyer's voucher is redeemed. A rejected response costs stake once slashing is live — the verdicts and flags screen shows you the amount during shadow mode first."
+                body="Paid on-chain to your own token account when the buyer's voucher is redeemed. A rejected response is not credited and counts against your SLA window — if a window closes in breach, a penalty against your stake is proposed, and you can dispute it before it is applied."
               />
             </PanelBody>
           </Panel>
@@ -251,11 +257,20 @@ export default function ProviderSetupPage() {
                 body="Any shape. JSON in, JSON out."
               />
               <NeedRow icon={<Wallet />} title="A wallet" body="Proved once, by signature." />
-              <NeedRow
-                icon={<Shield />}
-                title="An allowlist entry for our egress IPs"
-                body="Shown in step 3, with a one-click check that we can reach you."
-              />
+              {/* Only when there ARE fixed egress IPs — step 3 says so when there are none. */}
+              {egressIps.length > 0 ? (
+                <NeedRow
+                  icon={<Shield />}
+                  title="An allowlist entry for our egress IPs"
+                  body="Shown in step 3, with a one-click check that we can reach you."
+                />
+              ) : (
+                <NeedRow
+                  icon={<Shield />}
+                  title="A reachable endpoint"
+                  body="No IPs to allowlist here. Step 3 has a one-click check that we can reach you."
+                />
+              )}
             </PanelBody>
           </Panel>
         </div>

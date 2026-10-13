@@ -235,3 +235,32 @@ describe("escrowChainProps — which chain the page hands the block", () => {
     expect(escrowChainProps([], EVM.chainId).chain).toBeNull();
   });
 });
+
+// UX note R4: an EVM escrow showed the same 0x address twice, under a Solana term ("PDA").
+describe("EscrowOnChain — one contract row on an EVM chain", () => {
+  const CONTRACT = "0x915Ef7c9F9f80a69e3BE47A38EE0Bb47607103ec";
+  const escrow = {
+    escrowPda: CONTRACT,
+    escrowTokenAccount: CONTRACT,
+    observedAt: "2026-09-12T00:00:00.000Z",
+  } as unknown as BuyerEscrow;
+
+  it("shows the address once, as the escrow contract", () => {
+    const markup = renderToStaticMarkup(
+      <EscrowOnChain escrow={escrow} chain={EVM} chainName={EVM.displayName} />,
+    );
+    const text = textOf(markup);
+    expect(text).toContain("Escrow contract");
+    expect(text).not.toContain("PDA");
+    expect(text).not.toContain("Token account");
+    expect(text.split(CONTRACT).length - 1).toBe(1);
+  });
+
+  it("never says PDA on Solana either", () => {
+    const markup = renderToStaticMarkup(
+      <EscrowOnChain escrow={SOLANA_ESCROW} chain={SOLANA} chainName={SOLANA.displayName} />,
+    );
+    expect(textOf(markup)).not.toContain("PDA");
+    expect(textOf(markup)).toContain("Token account holding the balance");
+  });
+});

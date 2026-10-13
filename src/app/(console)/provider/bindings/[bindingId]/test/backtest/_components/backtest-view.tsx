@@ -273,7 +273,7 @@ export function BacktestView({ bindingId }: { bindingId: string }) {
         <Banner
           tone="primary"
           title="No backtest has run against this binding"
-          description="Backtest jobs are not built yet, so there is no corpus, no verdict distribution and no implied failure rate to read. The mapping tester runs one case at a time and is a different measurement."
+          description="Backtests are not available yet. Use the mapping tester to run one case at a time against your endpoint."
         />
       )}
 
@@ -374,7 +374,7 @@ export function BacktestView({ bindingId }: { bindingId: string }) {
               className="m-2.5 max-w-none"
               icon={<FlaskConical width={22} height={22} />}
               title="No cases to rank"
-              description="The worst cases are the tail of a corpus run. Until a backtest exists there is no tail — and a zero here would read as a clean tail rather than an unmeasured one."
+              description="The worst cases of a backtest run are listed here. Backtests are not available yet."
             />
           )}
         </PanelBody>

@@ -20,6 +20,7 @@ import { SamplingExplainer } from "@/components/ui/sampling-explainer";
 import { StageList } from "@/components/ui/stage-list";
 import { Timeline, type TimelineEvent } from "@/components/ui/timeline";
 import {
+  Amount,
   ChargedHeadline,
   CodePane,
   MetaBar,
@@ -28,6 +29,7 @@ import {
   StateCardBlock,
 } from "@/features/g30/receipt-parts";
 import {
+  canContestRejection,
   STATE_CARDS,
   STATE_CARD_ORDER,
   chargedHeadline,
@@ -44,6 +46,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { getReceipt } from "@/services";
 import { getProviderVerification } from "@/services/providers.service";
 import { getVerdictEvidence, resolveVerdictIdForIntent } from "@/services/verdicts.service";
+import { responseClassText } from "@/features/call-classes/labels";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -204,6 +207,7 @@ function ReceiptPageContent() {
 
   /* ------------------------------------------------------------- timeline */
 
+  const releasedLabel = state === "EXPIRED" ? "Expired, hold released" : "Hold released";
   const events: TimelineEvent[] = [
     { time: clock(receipt.createdAt), label: "Created", tone: "neutral" },
     {
@@ -229,14 +233,14 @@ function ReceiptPageContent() {
     const charged = receipt.chargedPrice.amount !== "0";
     events.push({
       time: clock(receipt.settledAt),
-      label: charged ? "Settled" : "Hold released",
+      label: charged ? "Settled" : releasedLabel,
       meta: charged ? `charged ${paid}` : "you were not charged",
       tone: charged ? "success" : "teal",
     });
   } else if (receipt.holdReleasedAt) {
     events.push({
       time: clock(receipt.holdReleasedAt),
-      label: "Hold released",
+      label: releasedLabel,
       meta: "you were not charged",
       tone: "teal",
     });
@@ -245,6 +249,9 @@ function ReceiptPageContent() {
   /* --------------------------------------------------------------- header */
 
   const notCharged = receipt.chargedPrice.amount === "0";
+  // "Our check was wrong" only makes sense when a check ran and rejected the
+  // result — not on an expired, voided or errored call, where none ran.
+  const checkRejected = canContestRejection(receipt);
 
   const meta = [
     { label: "Provider", value: providerQuery.data?.legalName ?? short(receipt.providerId ?? "—") },
@@ -260,7 +267,10 @@ function ReceiptPageContent() {
           : "—",
     },
     { label: "Sample rate", value: receipt.sampling.display ?? "—" },
-    { label: "Response class", value: receipt.classification ?? "—" },
+    {
+      label: "Response",
+      value: receipt.classification ? responseClassText(receipt.classification) : "—",
+    },
     // No settlement signature is on the receipt wire.
     { label: "Transaction", value: "—", accent: true },
   ];
@@ -321,19 +331,29 @@ function ReceiptPageContent() {
           <div className="min-w-0 flex-1">
             <StateCardBlock card={stateCard} receipt={receipt} current />
           </div>
-          <div className="flex shrink-0 items-end gap-8">
-            <div className="flex flex-col items-end gap-[3px]">
-              <span className="text-body-13 text-03">Listed price</span>
-              <span className="font-mono text-mono-xl text-01">{listed}</span>
-            </div>
-            <div className="flex flex-col items-end gap-[3px]">
-              <span className="text-body-13 text-03">You paid</span>
-              <span className="font-mono text-mono-xl text-01">{paid}</span>
-            </div>
-            <div className="flex flex-col items-end gap-[3px]">
-              <span className="text-body-13 text-03">Not charged</span>
-              <span className="font-mono text-mono-xl text-teal-600">{withheld}</span>
-            </div>
+          {/* Same three figures, same layout, as the charged and not-charged
+              headlines: a row that shares the width at 390 instead of three
+              fixed 26px figures that push the page sideways. */}
+          <div className="flex w-full items-end gap-3 tablet:w-auto tablet:shrink-0 tablet:gap-8">
+            <Amount
+              label="Listed price"
+              value={listed}
+              align="start"
+              className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
+            />
+            <Amount
+              label="You paid"
+              value={paid}
+              align="start"
+              className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
+            />
+            <Amount
+              label="Not charged"
+              value={withheld}
+              teal
+              align="start"
+              className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
+            />
           </div>
         </section>
       ) : null}
@@ -446,15 +466,15 @@ function ReceiptPageContent() {
             </PanelBody>
           </Panel>
 
-          {notCharged ? (
+          {checkRejected ? (
             <div className="flex w-full flex-col gap-2.5 rounded-xl border border-01 bg-01 p-[18px]">
               <Button variant="secondary" className="w-full justify-center">
                 <Flag aria-hidden="true" />
                 This result was actually fine
               </Button>
               <p className="text-body-13 text-02">
-                You keep the money either way. This tells us our check was wrong, and it is how we
-                measure the false-positive rate this release exists to learn.
+                You keep the money either way. This tells us our check was wrong, so we can fix
+                it.
               </p>
             </div>
           ) : null}
@@ -468,10 +488,9 @@ function ReceiptPageContent() {
         <Panel>
           <PanelHeader>
             <PanelTitles>
-              <PanelTitle>The other states this screen has to render</PanelTitle>
+              <PanelTitle>Other outcomes a call can have</PanelTitle>
               <PanelDescription>
-                Response classes and verdicts — each gets its own sentence, because
-                collapsing them into one “error” is a three-year support tax
+                what each outcome means for your money
               </PanelDescription>
             </PanelTitles>
           </PanelHeader>
@@ -482,6 +501,9 @@ function ReceiptPageContent() {
                 card={STATE_CARDS[key]}
                 receipt={receipt}
                 current={state === key}
+                // A real basis, so the five cards wrap two-up at 390 instead of
+                // squeezing into one row.
+                className="basis-[140px]"
               />
             ))}
           </PanelBody>
@@ -491,8 +513,8 @@ function ReceiptPageContent() {
       {!notCharged ? (
         <section className="flex w-full flex-col gap-5 rounded-lg border border-01 bg-01 px-5 py-4 tablet:flex-row tablet:items-center">
           <p className="min-w-0 flex-1 text-body-13 text-02">
-            This does not change the charge. It is how we measure our own false-positive rate, which
-            is one of the four things this release exists to learn.
+            This does not change the charge. It tells us when our checks may have judged a call
+            wrongly, so we can fix them.
           </p>
           <Button variant="secondary" className="w-full shrink-0 justify-center tablet:w-auto">
             <Flag aria-hidden="true" />

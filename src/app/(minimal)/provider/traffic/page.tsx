@@ -387,7 +387,7 @@ function BindingAndTrafficPageContent() {
             variant="secondary"
             icon={<Flag aria-hidden="true" />}
             disabled
-            title="Filing a mapping problem needs POST /disputes, which has no service in this app yet."
+            title="Flagging a mapping problem from here is not available yet."
           >
             Flag a mapping problem
           </Button>
@@ -561,8 +561,7 @@ function BindingAndTrafficPageContent() {
                   floor so it can build a record before it has one.
                 </p>
                 <p className="text-body-xs leading-[1.4] text-03">
-                  No endpoint publishes the other bindings on this tool, so the share and the
-                  peers below cannot be shown.
+                  Your share and the other bindings on this tool are not available yet.
                 </p>
               </div>
 

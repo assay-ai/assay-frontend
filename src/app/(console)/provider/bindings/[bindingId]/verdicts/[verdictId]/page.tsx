@@ -289,7 +289,7 @@ export default function ProviderVerdictDetailPage() {
         title={notFound ? "This verdict could not be found" : "This verdict could not be loaded"}
         description={
           notFound
-            ? "It may not exist, or it may not be a call this provider served — the two look the same on purpose."
+            ? "It may not exist, or it may not be a call you served."
             : query.error instanceof ApiError
               ? query.error.message
               : "The request failed."
@@ -354,8 +354,8 @@ export default function ProviderVerdictDetailPage() {
             </TooltipTrigger>
             <TooltipContent className="max-w-[280px] border border-01 shadow-soft">
               <span className="text-body-13 text-02">
-                Filing a dispute takes a slash proposal id, not a verdict id — no route maps one
-                to the other yet, so this call cannot be flagged from here.
+                Flagging a single call from here is not available yet. A dispute is filed against a
+                penalty proposal, from its case page.
               </span>
             </TooltipContent>
           </Tooltip>
@@ -370,8 +370,8 @@ export default function ProviderVerdictDetailPage() {
       <div className="flex w-full items-start gap-2.5 rounded-lg border border-primary-20 bg-primary-10 p-[15px]">
         <LayoutGrid aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-primary-600" />
         <p className="min-w-0 flex-1 text-body-13 leading-[1.6] text-primary-700">
-          Deliberately the same five panes as the tester. A provider debugging production should
-          be looking at a screen they already knew before they launched.
+          The same five panes as the tester, for a real call: what we sent, what your endpoint
+          returned, and what each check concluded.
         </p>
       </div>
 

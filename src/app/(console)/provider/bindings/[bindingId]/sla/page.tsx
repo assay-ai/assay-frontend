@@ -3,6 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChartSpline, List, Pause, Play } from "lucide-react";
 import Link from "next/link";
+
+import { BindingNav } from "@/features/provider-binding/binding-nav";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
@@ -26,6 +28,7 @@ import {
 } from "@/components/ui/panel";
 import { WindowGauge } from "@/components/ui/window-gauge";
 import { DASH, count, elapsed, percent, stampUtc } from "@/features/g34a/stats";
+import { openWindowStanding } from "@/features/provider-sla/standing";
 import type {
   SlaWindow,
   SlaWindowEvidence,
@@ -181,13 +184,8 @@ function statePillFor(window: SlaWindow, position: SlaWindowPosition | undefined
 
   if (!position) return { label: "WINDOW IN FLIGHT", tone: "primary" as const };
 
-  if (position.state === "PROJECTED_BREACH") {
-    return { label: "SLASHABLE · PROJECTED BREACH", tone: "danger" as const };
-  }
-  if (position.state === "WITHIN_SLA") {
-    return { label: "SLASHABLE · WITHIN SLA", tone: "success" as const };
-  }
-  return { label: "NOT YET SLASHABLE", tone: "primary" as const };
+  const standing = openWindowStanding(position);
+  return { label: standing.label, tone: standing.tone };
 }
 
 const pillTone: Record<"primary" | "success" | "danger", string> = {
@@ -302,13 +300,7 @@ export default function LiveSlaPositionPage() {
     if (!position) {
       return `${count(current.verifiedCalls)} of ${count(current.minVerifiedCalls)} verified calls in this window.`;
     }
-    if (position.state === "BELOW_SAMPLE_GATE") {
-      return `${count(position.verifiedCalls)} of ${count(position.minVerifiedCalls)} verified calls carry a quality verdict. Below the gate, this window cannot be slashed at all — whatever the observed rate looks like.`;
-    }
-    if (position.state === "PROJECTED_BREACH") {
-      return `This window has reached the sample gate and, held to close, the current rate would breach the effective threshold.`;
-    }
-    return `This window has reached the sample gate and is within its effective threshold.`;
+    return openWindowStanding(position).sentence;
   })();
 
   const windowClosed = current?.status === "CLOSED";
@@ -320,12 +312,7 @@ export default function LiveSlaPositionPage() {
         current!.outcome ? ` · ${current!.outcome.replace(/_/g, " ").toLowerCase()}` : ""
       }`
     : position
-    ? `projected at close ${percent(position.projectedFailureRate)} (± ${percent(
-        position.toleranceAtClose,
-        1
-      )} tolerance) · effective threshold ${percent(position.effectiveThresholdAtClose, 1)} at ${count(
-        position.projectedSampleAtClose
-      )} calls → breach ${position.projectedBreach ? "likely" : "unlikely"}`
+    ? openWindowStanding(position).projection
     : `projected at close ${DASH}`;
 
   if (bindingQuery.isError) {
@@ -407,6 +394,8 @@ export default function LiveSlaPositionPage() {
           {pauseButton()}
         </div>
       </header>
+
+      <BindingNav bindingId={bindingId} />
 
       {/* ── State ────────────────────────────────────── */}
       <section className="flex w-full flex-col items-start gap-2.5 rounded-lg border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:gap-3.5 tablet:rounded-xl tablet:px-5 tablet:py-4">

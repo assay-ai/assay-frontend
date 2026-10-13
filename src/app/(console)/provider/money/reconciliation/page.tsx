@@ -5,6 +5,7 @@ import { Download, EyeOff, Upload } from "lucide-react";
 import * as React from "react";
 import { useMemo, useState } from "react";
 
+import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
 import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -18,7 +19,13 @@ import {
 } from "@/components/ui/panel";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { formatCount } from "@/features/buyer/period";
-import { foldClasses, observedTakeRate } from "@/features/call-classes/csv";
+import {
+  foldClasses,
+  observedTakeRate,
+  pendingNote,
+  rowsInAsset,
+} from "@/features/call-classes/csv";
+import { ClassName } from "@/features/call-classes/class-name";
 import {
   downloadCallsCsv,
   exportErrorMessage,
@@ -26,7 +33,7 @@ import {
 } from "@/features/call-classes/use-calls-export";
 import type { Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { listProviderPayouts } from "@/services/provider-payouts.service";
+import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
@@ -101,20 +108,20 @@ const MONTH_SHORT = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: 
  *   - TEST reads "your own dry runs · 8 sessions" on the frame. The session
  *     count has no endpoint, and TEST has no producer at all today, so the
  *     count is dropped rather than invented.
- *   - PENDING is emitted by the wire and drawn by neither frame. That sentence
- *     is OURS.
+ *   - PENDING is emitted by the wire and drawn by neither frame. Its note is
+ *     OURS and depends on why the rows are pending: see `pendingNote`.
  */
 const CLASS_NOTE: Record<string, string> = {
   PAID_CREDITED: "settled to you",
   PAID_AWAITING_REDEMPTION: "passed · credited once the voucher is redeemed on chain",
-  PAID_UNCREDITED: "DATA_RESULT → FAIL · see verdicts",
-  FREE: "relay path, no payment machinery",
-  EXPLORATION: "NEW-binding traffic, we paid for it",
-  EXCLUDED: "excluded from the SLA window by an operator decision",
+  PLATFORM_ABSORBED: "voucher could not be redeemed · owed to you by the platform, no fee",
+  PAID_UNCREDITED: "our checks rejected the response · see verdicts",
+  FREE: "free-tier call · nothing charged, nothing paid",
+  EXPLORATION: "trial traffic for a new binding, paid for by us",
+  EXCLUDED: "excluded from the SLA window by our team",
   TEST: "your own dry runs",
-  SYSTEM_ERROR: "upstream 5xx / timeout",
+  SYSTEM_ERROR: "your endpoint timed out or returned 5xx",
   REQUEST_ERROR: "4xx from your endpoint",
-  PENDING: "still in flight — no money has moved",
 };
 
 interface ClassRow {
@@ -173,7 +180,20 @@ export default function ReconciliationPage() {
     queryFn: () => listProviderPayouts({ ...period, limit: 50 }),
   });
 
-  const classes = useMemo(() => foldClasses(calls.rows), [calls.rows]);
+  /*
+    One money figure, one asset. A provider paid in two assets picks one with
+    the same selector as the earnings screens, and every figure below — calls,
+    classes, settlement, batches — is that asset's. The CSV download stays the
+    whole file: it carries an `asset` column of its own.
+  */
+  const { current: displayAsset, isPending: assetPending } = useDisplayAsset("provider");
+  const rows = useMemo(
+    () => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)),
+    [calls.rows, assetPending, displayAsset]
+  );
+  const loading = calls.isLoading || assetPending;
+
+  const classes = useMemo(() => foldClasses(rows), [rows]);
   /*
     DELIBERATE DEPARTURE from the design's copy, and the same derivation the
     provider view uses so the two screens cannot disagree.
@@ -188,9 +208,13 @@ export default function ReconciliationPage() {
     this window — and it is labelled "observed" so it reads as measured rather
     than declared.
   */
-  const observedTake = useMemo(() => observedTakeRate(calls.rows), [calls.rows]);
+  const observedTake = useMemo(() => observedTakeRate(rows), [rows]);
 
-  const batchCount = new Set((payouts.data?.items ?? []).map((p) => p.batchId)).size;
+  const batchCount = new Set(
+    (assetPending ? [] : payoutsInAsset(payouts.data?.items ?? [], displayAsset)).map(
+      (p) => p.batchId
+    )
+  ).size;
 
   const gross = classes.totalGross;
   const fee = classes.totalFee;
@@ -202,7 +226,8 @@ export default function ReconciliationPage() {
     calls: formatCount(bucket.calls),
     share: `${(bucket.share * 100).toFixed(1)}%`,
     credited: money(bucket.credited),
-    note: CLASS_NOTE[bucket.className] ?? "",
+    note:
+      bucket.className === "PENDING" ? pendingNote(rows) : (CLASS_NOTE[bucket.className] ?? ""),
   }));
 
   const classColumns: TableColumn<ClassRow>[] = [
@@ -210,7 +235,8 @@ export default function ReconciliationPage() {
       key: "class",
       header: "Class",
       mono: true,
-      cell: (r) => <span className="font-semibold">{r.className}</span>,
+      noTruncate: true,
+      cell: (r) => <ClassName name={r.className} />,
     },
     { key: "calls", header: "Calls", width: 140, align: "end", mono: true, cell: (r) => r.calls },
     { key: "share", header: "Share", width: 110, align: "end", mono: true, cell: (r) => r.share },
@@ -324,6 +350,8 @@ export default function ReconciliationPage() {
         </div>
       </header>
 
+      <DisplayAssetSelect scope="provider" />
+
       {error ? (
         <Banner
           tone="danger"
@@ -362,9 +390,7 @@ export default function ReconciliationPage() {
         <JoinStat label="Your log" value={DASH} caption="no access log has been uploaded" />
         <JoinStat
           label="Our ledger"
-          value={
-            calls.isLoading ? DASH : `${formatCount(classes.totalCalls)} calls`
-          }
+          value={loading ? DASH : `${formatCount(classes.totalCalls)} calls`}
           caption={`as of ${stamp(period.to)}`}
         />
         {/*
@@ -385,7 +411,7 @@ export default function ReconciliationPage() {
           <PanelTitles>
             <PanelTitle>Why we credited less than you served</PanelTitle>
             <PanelDescription>
-              call classes are exhaustive by construction — every row has exactly one
+              every call falls into exactly one class
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
@@ -476,11 +502,9 @@ export default function ReconciliationPage() {
           className="mt-0.5 shrink-0 text-warning-600"
         />
         <p className="min-w-0 flex-1 text-body-13 text-warning-700">
-          Canary calls are included in PAID_CREDITED and are not labelled — labelling them would
-          let a provider identify them. {MONTH_SHORT.format(new Date(period.from))} canary volume
-          on your bindings: {DASH} calls. This is the one place the “you see everything” stance is
-          deliberately traded, and the documentation says so rather than leaving it to be
-          discovered.
+          Canary calls (our own test calls) are included in “Paid and credited” and are not labelled, so
+          they cannot be told apart from real traffic. {MONTH_SHORT.format(new Date(period.from))} canary volume
+          on your bindings: {DASH} calls.
         </p>
       </div>
     </>

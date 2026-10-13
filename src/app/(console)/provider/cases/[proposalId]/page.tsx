@@ -22,6 +22,7 @@ import {
   WhatIsNotHappening,
 } from "@/features/provider-slash-case/assurances";
 import { CaseContext } from "@/features/provider-slash-case/context";
+import { eventLabel, eventSummary } from "@/features/provider-slash-case/labels";
 import { Measurement } from "@/features/provider-slash-case/measurement";
 import { StatusHeader } from "@/features/provider-slash-case/status-header";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
@@ -143,7 +144,7 @@ export default function SlashProposalCasePage() {
       <Banner
         tone="danger"
         title="No case with this id."
-        description="Either no slash proposal has this id, or it does not belong to your organisation. Both answer the same way, so there is nothing more this screen can tell you."
+        description="Either no slash proposal has this id, or it does not belong to your organisation. We cannot say which."
       />
     );
   }
@@ -194,7 +195,7 @@ export default function SlashProposalCasePage() {
       {/* ── Page header ──────────────────────────────────────────────── */}
       <header className="flex w-full min-w-0 flex-col gap-0.5">
         <h1 className="truncate text-heading-sm text-01 tablet:text-heading-md">
-          Proposed penalty · {proposal.bindingLabel}
+          Proposed penalty · {proposal.toolName}
         </h1>
         <p className="font-mono text-mono-12 text-03">
           case {proposal.id} · proposed {stampUtc(proposal.clocks.proposedAt)} UTC
@@ -236,7 +237,7 @@ export default function SlashProposalCasePage() {
             } sealed in this window's evidence pack. ${
               data.evidenceVerdictCount === 0
                 ? "Nothing has been sealed for it, so there is no pack to open."
-                : "No route opens a whole window's pack yet — the binding's SLA screen is the nearest view of it."
+                : "Opening a whole window's pack is not available yet — the binding's Live SLA page is the nearest view of it."
             }`}
           </p>
         </div>
@@ -321,11 +322,19 @@ export default function SlashProposalCasePage() {
                   <span className="shrink-0 font-mono text-mono-12 text-03">
                     {stampUtc(event.occurredAt)}
                   </span>
-                  <span className="w-[150px] shrink-0 font-mono text-mono-12 font-semibold text-01">
-                    {event.kind}
+                  {/* The event in words; the API's own code stays under it, small. */}
+                  <span className="flex w-[190px] shrink-0 flex-col">
+                    <span className="text-label-13 text-01">{eventLabel(event.kind)}</span>
+                    <span className="font-mono text-mono-2xs text-03">{event.kind}</span>
                   </span>
-                  {/* Backend-produced sentence — rendered as sent, never reconstructed. */}
-                  <span className="min-w-0 flex-1 text-body-13 text-02">{event.summary}</span>
+                  {/* The stored sentence, with its amounts as money and its ids as names. */}
+                  <span className="min-w-0 flex-1 text-body-13 text-02">
+                    {eventSummary(event.summary, {
+                      ...proposal.penaltyAmount,
+                      toolName: proposal.toolName,
+                      bindingId: proposal.bindingId,
+                    })}
+                  </span>
                 </li>
               ))}
             </ol>

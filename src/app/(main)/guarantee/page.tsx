@@ -1,5 +1,6 @@
 "use client";
 
+import { DisplayAssetSelect } from "@/components/display-asset-select";
 import { ArrowRight, Calendar, Info } from "lucide-react";
 import { useMemo } from "react";
 
@@ -36,7 +37,7 @@ import {
 } from "@/features/buyer/use-guarantee";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
 import type { WithheldBucket } from "@/features/buyer/wire";
-import { formatMoney } from "@/utils/money";
+import { formatMoney, formatMoneyNonZero } from "@/utils/money";
 
 /**
  * Guarantee — "what we did not charge you for" (design).
@@ -195,7 +196,7 @@ export default function GuaranteePage() {
         <div className="flex min-w-0 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">What we did not charge you for</h1>
           <p className="font-mono text-mono-12 text-03">
-            {period.label} · withheld == Σ HOLD_RELEASE · checkable against the ledger
+            {period.label} · every amount here is a hold we released back to you
           </p>
         </div>
 
@@ -218,6 +219,8 @@ export default function GuaranteePage() {
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
+
+      <DisplayAssetSelect />
 
       {isWalletNotLinked(error) ? <WalletSetupBanner onLinked={reload} /> : null}
 
@@ -245,7 +248,7 @@ export default function GuaranteePage() {
         <Banner
           tone="danger"
           title="The withheld figure is unavailable for this month"
-          description={`${data.withheldError.code} · ${data.withheldError.message}. Nothing else is shown in its place — this number is the ledger's, and no other endpoint may stand in for it.`}
+          description={`${data.withheldError.message}. No figure is shown until it can be read.`}
         />
       ) : null}
 
@@ -305,9 +308,13 @@ export default function GuaranteePage() {
         <Banner
           tone="danger"
           title="This month does not reconcile to the ledger"
-          description={`Σ HOLD_RELEASE differs from the withheld total by ${data.withheld.difference}. ${
+          description={`The released holds differ from the withheld total by ${formatMoneyNonZero(
+            // Two decimals like the rest of the page; a gap below one cent is
+            // written out in full so it never reads as $0.00.
+            { ...data.withheld.holdReleaseTotal, amount: data.withheld.difference.replace(/^-/, "") }
+          )}. ${
             data.withheld.orphanedHoldIds.length
-          } releases have no matching intent.`}
+          } releases have no matching call. Contact support with this month's statement.`}
         />
       ) : null}
 
@@ -317,7 +324,7 @@ export default function GuaranteePage() {
           className="border-01 bg-01"
           icon={<Info className="h-full w-full text-03" />}
           title={`Separately, you made ${formatCount(data.freeTier.calls)} free-tier calls this month, listed at ${formatMoney(data.freeTier.listed)}`}
-          description="Those are not counted above — you were never going to be charged for them. Counting them would inflate the guarantee with marketing."
+          description="Those are not counted above — you were never going to be charged for them."
         />
       ) : null}
 
@@ -328,7 +335,7 @@ export default function GuaranteePage() {
               <PanelHeader>
                 <PanelTitles>
                   <PanelTitle>Why calls failed</PanelTitle>
-                  <PanelDescription>named reasons, not internal rule ids</PanelDescription>
+                  <PanelDescription>grouped by the reason each call failed</PanelDescription>
                 </PanelTitles>
               </PanelHeader>
               <PanelBody className="px-2.5 pb-2.5 pt-1.5">

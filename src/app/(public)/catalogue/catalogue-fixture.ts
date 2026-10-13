@@ -55,6 +55,12 @@ export interface CatalogueDemandRow {
 }
 
 /** Verbatim from the design's catalogue rows R0–R6. Fiction. */
+/**
+ * The tools `/catalogue/[toolId]` can render — its `FIXTURES` keys. Only these
+ * rows link to a contract page; every other id 404s there.
+ */
+export const TOOLS_WITH_CONTRACT_PAGE: readonly string[] = ["search_web"];
+
 export const CATALOGUE_DEMAND_FIXTURE: CatalogueDemandRow[] = [
   {
     id: "scrape_url",

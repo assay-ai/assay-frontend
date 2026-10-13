@@ -78,3 +78,14 @@ export function chainDisplayName(chains: readonly Chain[], chainId: string): str
 export function settlementSymbol(chains: readonly Chain[], chainId: string): string | null {
   return findChain(chains, chainId)?.settlementAssetSymbol ?? null;
 }
+
+/**
+ * A CAIP-19 asset, short enough for a card: the ticker when it is a chain's
+ * settlement asset, else the start of its own id — never another asset's name.
+ */
+export function assetName(chains: readonly Chain[], asset: string): string {
+  const chain = chains.find((c) => c.settlementAsset === asset);
+  if (chain) return chain.settlementAssetSymbol;
+  const reference = asset.slice(asset.lastIndexOf(":") + 1);
+  return reference.length > 10 ? `${reference.slice(0, 8)}…` : reference;
+}

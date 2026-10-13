@@ -4,6 +4,7 @@ import { useConnectWallet } from "@privy-io/react-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { ArrowUpFromLine, Fuel, PenLine, Plus, Wallet } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { Banner } from "@/components/ui/banner";
@@ -39,6 +40,8 @@ import {
 } from "@/features/provider-stake/chain-stake";
 import { runStakeIntent } from "@/features/provider-stake/run-stake-intent";
 import { useChains } from "@/hooks/useChains";
+import type { Chain } from "@/interfaces/chain";
+import { readableDerivation } from "@/features/provider-stake/derivation";
 import { isUserRejection, useSigner, type UseSignerResult } from "@/hooks/useSigner";
 import type {
   ProviderStake,
@@ -210,7 +213,8 @@ interface RequirementRow {
  */
 function requirementRows(
   bindings: ToolBindingSummary[],
-  requirement: ProviderStakeRequirementItem[]
+  requirement: ProviderStakeRequirementItem[],
+  chains: readonly Chain[]
 ): RequirementRow[] {
   const byBinding = new Map(requirement.map((item) => [item.bindingId, item]));
 
@@ -224,9 +228,9 @@ function requirementRows(
         binding: label,
         mode: item.pricingMode,
         price: money(item.price, 4),
-        // Verbatim from the wire. This is the arithmetic the figure to its
-        // right is claimed from, printed at the point of the claim.
-        derivation: item.derivation,
+        // The wire's arithmetic, printed at the point of the claim; an asset
+        // mismatch is said in plain words instead of ids and a reason code.
+        derivation: readableDerivation(item.derivation, chains),
         // `minimum: null` means "priced in an asset the floor is not
         // denominated in" — the gate refuses it rather than converting. Not a
         // zero.
@@ -320,7 +324,7 @@ export default function ProviderCapitalPage() {
   const rule = data?.requirementRule ?? "max";
   const openWindows = windows.data?.items ?? [];
 
-  const rows = requirementRows(bindings.data?.items ?? [], data?.requirement ?? []);
+  const rows = requirementRows(bindings.data?.items ?? [], data?.requirement ?? [], chains);
 
   const columns: TableColumn<RequirementRow>[] = [
     {
@@ -792,7 +796,7 @@ export default function ProviderCapitalPage() {
         tone="primary"
         icon={<Fuel />}
         className="items-start [&>div>p]:whitespace-normal [&>div>p]:text-body-13"
-        title="Deposit preflight, before any signature: required USDC, the network fee for gas, your current balance of both, and one sentence on why gas is not sponsored — sponsoring it would make the stake meaningless as a cost."
+        title="Before you sign a deposit you are shown what it needs: the stake amount, the network fee for gas, and your balance of both. Gas is not sponsored for providers; you pay the network fee yourself."
       />
 
       {/*
@@ -812,14 +816,20 @@ export default function ProviderCapitalPage() {
         */
         <p data-testid="stake-chain-ambiguous" className="text-body-13 text-03">
           You have stake authority on more than one chain, and this header can only act on one.
-          Opening and funding a stake account is per chain — use the Leaving screen, which builds
-          the same transactions against the chain you name.
+          Opening and funding a stake account is per chain — use the{" "}
+          <Link href="/provider/exit" className="underline">
+            Leaving
+          </Link>{" "}
+          screen, which builds the same transactions against the chain you name.
         </p>
       ) : data && noAuthority ? (
         <p className="text-body-13 text-03">
-          No stake authority has been proved on this chain yet, so nothing can be
-          opened or funded — every stake intent answers PROVIDER_STAKE_AUTHORITY_UNPROVEN.
-          Proving one is a wallet signature, on the Leaving screen.
+          No stake authority has been proved on this chain yet, so a stake account cannot be
+          opened or funded from here. Proving one is a wallet signature, on the{" "}
+          <Link href="/provider/exit" className="underline">
+            Leaving
+          </Link>{" "}
+          screen.
         </p>
       ) : data && !signerReady ? (
         <p className="text-body-13 text-03">
@@ -1062,7 +1072,7 @@ function StakeActionSheet({
           <SheetDescription>
             {deposit
               ? opensAccount
-                ? "Moves stake in from the wallet that holds your stake authority. The account has to exist first — a deposit into one that does not answers PROVIDER_STAKE_ACCOUNT_NOT_OPEN."
+                ? "Moves stake in from the wallet that holds your stake authority. The account has to exist first — a deposit into one that does not exist is refused."
                 : "Moves stake in from the wallet that holds your stake authority. There is no account to open on this chain — your first deposit creates your stake. Your wallet asks twice: once to approve the stake contract for this amount, then for the deposit itself."
               : "Creates the on-chain account your stake lives in. It carries no amount and moves no tokens; you pay its rent, quoted below before you sign."}
           </SheetDescription>
@@ -1127,7 +1137,7 @@ function StakeActionSheet({
                 refusal.code === "PROVIDER_STAKE_ACCOUNT_ALREADY_OPEN"
                   ? "Nothing was built and nothing was charged. Close this and use Deposit."
                   : refusal.code === "PROVIDER_STAKE_ACCOUNT_NOT_OPEN"
-                    ? "Close this and use Open stake account first. It is deliberately not created on demand — you pay its rent, so the platform does not open it behind your back."
+                    ? "Close this and use Open stake account first. It is not created automatically, because you pay its rent."
                     : refusal.code === "PROVIDER_STAKE_ACCOUNT_NOT_NEEDED"
                       ? "Nothing was built. Close this and use Deposit — your first deposit creates your stake."
                       : `${refusal.code} · ${refusal.message}`
@@ -1149,8 +1159,7 @@ function StakeActionSheet({
                 Sign in your wallet and broadcast
               </Button>
               <p className="text-body-13 text-03">
-                Your wallet broadcasts this. The platform holds no key of yours, has no submit
-                endpoint, and never sees the signed bytes.
+                Your wallet broadcasts this. The platform holds no key of yours and never sees the signed transaction.
               </p>
             </>
           ) : null}

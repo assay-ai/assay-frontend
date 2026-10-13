@@ -692,7 +692,6 @@ export default function KitchenSinkPage() {
               sessionSpend="$1.04"
               balanceAfter="$0.02"
               scopedLimit="$5"
-              declineErrorCode="STAKE_INSUFFICIENT"
               disabled
               className="w-[380px]"
             />

@@ -78,6 +78,23 @@ export function formatMoney(money: Money | null | undefined, options: FormatMone
   return formatDecimal(toDecimal(money), options);
 }
 
+/**
+ * Money at normal currency precision (two decimals) — except an amount that is
+ * not zero and below one cent, which is written out to the asset's own scale
+ * with trailing zeros dropped (`$0.000001`, `$0.005`). For the places where
+ * the point is that a gap exists at all: a one-unit difference must never
+ * read as `$0.00`.
+ */
+export function formatMoneyNonZero(
+  money: Money | null | undefined,
+  options: Omit<FormatMoneyOptions, "decimals"> = {},
+): string {
+  if (!money) return formatMoney(money, options);
+  const value = toDecimal(money);
+  if (value.isZero() || value.abs().gte("0.01")) return formatDecimal(value, options);
+  return formatDecimal(value, { ...options, decimals: money.decimals }).replace(/0+$/, "");
+}
+
 /** True when the two sides differ — the counterfactual actually has a gap. */
 export function differs(a: Money | null | undefined, b: Money | null | undefined): boolean {
   if (!a || !b) return Boolean(a) !== Boolean(b);

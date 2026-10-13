@@ -277,8 +277,7 @@ export function ProvidersView() {
             <span className="font-mono text-mono-12 text-03">{providers.length}</span>
           </div>
           <p className="px-2.5 pb-1 pt-2 text-body-xs text-03">
-            The API publishes no category taxonomy, so there is nothing else to file providers
-            under yet.
+            Browsing providers by category is not available yet.
           </p>
         </aside>
 

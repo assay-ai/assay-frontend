@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -11,6 +12,7 @@ import { MobileTopBar } from "@/components/layout/mobile-top-bar";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { DEFAULT_NAV_ITEMS, TopBar } from "@/components/layout/top-bar";
 import { WalletMenu } from "@/components/layout/wallet-menu";
+import { getUnreadCount } from "@/services";
 
 /**
  * The buyer shell.
@@ -79,6 +81,15 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const router = useRouter();
   const [environment, setEnvironment] = useState("prod");
+  // The bell's badge. A failed read shows no badge rather than a wrong one.
+  const unread = useQuery({
+    queryKey: ["notifications", "unread-count"],
+    queryFn: getUnreadCount,
+    refetchInterval: 60_000,
+    retry: 0,
+  });
+  const alertCount = unread.data?.count ?? 0;
+  const openAlerts = () => router.push("/alerts");
 
   /*
     Longest href first, so /explore/providers beats /explore, and "/" only wins
@@ -99,7 +110,8 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
           activeNavId={activeNavId}
           environment={environment}
           onEnvironmentChange={setEnvironment}
-          alertCount={0}
+          alertCount={alertCount}
+          onAlertsClick={openAlerts}
           avatar={<WalletMenu />}
           actions={<ThemeToggle />}
         />
@@ -108,8 +120,8 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
       <div className="md:hidden">
         <MobileTopBar
           title={titleFor(pathname)}
-          alertCount={0}
-          onAlertsClick={() => router.push("/alerts")}
+          alertCount={alertCount}
+          onAlertsClick={openAlerts}
           onSearch={() => router.push("/spend")}
           avatar={<WalletMenu />}
         />

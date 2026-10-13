@@ -85,13 +85,13 @@ export function addFundsTile(depositable: DepositableChains): AddFundsTile {
   if (depositable.kind === "not-offered") {
     return {
       title: "Add funds",
-      sub: "this account's chain is not one this deployment takes deposits on",
+      sub: "this account's chain is not one we take deposits on",
     };
   }
 
   const chains = offeredChains(depositable);
   if (chains.length === 0) {
-    return { title: "Add funds", sub: "reading which chains this deployment accepts…" };
+    return { title: "Add funds", sub: "reading which chains we accept deposits on…" };
   }
 
   const symbols = symbolsOf(chains);
@@ -119,7 +119,7 @@ export function addFundsTile(depositable: DepositableChains): AddFundsTile {
  * on-ramp, withdrawable — and names the asset only when there is one to name.
  */
 export function fundingAssetNote(depositable: DepositableChains): string {
-  const head = "There is no card and no fiat on-ramp in this release.";
+  const head = "There is no card and no fiat on-ramp yet.";
   const symbols = symbolsOf(offeredChains(depositable));
 
   if (symbols.length === 0 || symbols.length > 2) {

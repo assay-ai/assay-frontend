@@ -72,12 +72,22 @@ export function EscrowOnChain({
     the list and the list itself cannot then disagree — which is exactly how the
     EVM case broke: prose that said "below" over an empty space.
   */
-  const addresses = [
-    escrow.escrowPda ? { title: "Escrow account (PDA)", value: escrow.escrowPda } : null,
-    escrow.escrowTokenAccount
-      ? { title: "Token account holding the balance", value: escrow.escrowTokenAccount }
-      : null,
-  ].filter((row): row is { title: string; value: string } => row !== null);
+  // On an EVM chain one contract is both the escrow and the holder of the
+  // balance: the API then sends the same address in both fields. One row.
+  const isContract =
+    chain?.namespace === "eip155" ||
+    (escrow.escrowPda !== null && escrow.escrowPda === escrow.escrowTokenAccount);
+  const contractAddress = escrow.escrowPda ?? escrow.escrowTokenAccount;
+  const addresses = (
+    isContract
+      ? [contractAddress ? { title: "Escrow contract", value: contractAddress } : null]
+      : [
+          escrow.escrowPda ? { title: "Escrow account", value: escrow.escrowPda } : null,
+          escrow.escrowTokenAccount
+            ? { title: "Token account holding the balance", value: escrow.escrowTokenAccount }
+            : null,
+        ]
+  ).filter((row): row is { title: string; value: string } => row !== null);
 
   const explorer = chain ? (
     <a
@@ -101,7 +111,7 @@ export function EscrowOnChain({
           Your balance is not a row in our database.{" "}
           {addresses.length > 0 ? (
             <>
-              It sits in the token account below, owned by an escrow only your wallet can withdraw
+              It sits in the {isContract ? "escrow contract" : "token account"} below, {isContract ? "an" : "owned by an"} escrow only your wallet can withdraw
               from — so you can look it up on {explorer} and check the figures on this page for
               yourself, without asking us.
             </>
@@ -125,7 +135,7 @@ export function EscrowOnChain({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 self-start text-body-xs text-02 underline"
             >
-              Open this account on {chainName}&rsquo;s explorer
+              Open this {isContract ? "contract" : "account"} on {chainName}&rsquo;s explorer
               <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
             </a>
           ) : null}

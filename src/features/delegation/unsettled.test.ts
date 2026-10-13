@@ -8,6 +8,7 @@ import type { EscrowDelegate } from "@/interfaces";
 
 import {
   editIsUnchanged,
+  editedToast,
   HELD_DEADLINE_MARGIN_SECONDS,
   heldIsStale,
   isUnsettledRefusal,
@@ -275,5 +276,27 @@ describe("heldIsStale", () => {
     expect(heldIsStale(held, now + 300 - HELD_DEADLINE_MARGIN_SECONDS)).toBe("deadline");
     expect(heldIsStale({ ...held, deadline: undefined }, now)).toBe("deadline");
     expect(heldIsStale(held, now, "27")).toBe("nonce");
+  });
+});
+
+// BUG-R3-J-04: lowering a cap pauses the agent's payments for about 30 s, and
+// the toast said only "The new caps apply from the agent's next payment."
+describe("editedToast", () => {
+  const current = { maxVoucherAmount: "500000", maxPerWindow: "3000000", validUntil: "1794397106" };
+
+  it("says payments are paused briefly when a cap goes down", () => {
+    expect(editedToast(current, { ...current, maxVoucherAmount: "40000" })).toBe(
+      "Updated. The agent’s payments are paused for about 30 seconds while the change settles; then the new caps apply.",
+    );
+    expect(editedToast(current, { ...current, validUntil: "1794000000" })).toMatch(/paused for about 30 seconds/);
+  });
+
+  it("promises the next payment only when nothing was lowered", () => {
+    expect(editedToast(current, { ...current, maxPerWindow: "5000000" })).toBe(
+      "Updated. The new caps apply from the agent’s next payment.",
+    );
+    expect(editedToast(null, current)).toBe(
+      "Updated. The new caps apply from the agent’s next payment.",
+    );
   });
 });

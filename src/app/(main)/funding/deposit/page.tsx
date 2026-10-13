@@ -372,7 +372,7 @@ function DepositPageContent() {
         kind: "blocked",
         message:
           choice.kind === "none-offered"
-            ? "We could not read which chains this deployment accepts, so there is nowhere to deposit to yet."
+            ? "We could not read which chains we accept deposits on, so there is nowhere to deposit to yet."
             : "Choose the chain you are depositing on first.",
       });
       return;
@@ -644,12 +644,12 @@ function DepositPageContent() {
               send a buyer to reload a page that is working.
             */}
             {depositable.kind === "not-offered"
-              ? `This account is on ${depositable.accountChainId}, which this deployment does not take deposits on. Nothing else is offered instead — a deposit on a chain you hold no account on is refused, and it would be refused after you had priced it.`
+              ? `This account is on ${depositable.accountChainId}, which we do not take deposits on. Nothing else is offered instead — a deposit on a chain you hold no account on is refused, and it would be refused after you had priced it.`
               : depositable.kind === "reading-account"
                 ? "Reading which chain this account is on…"
                 : chainsStatus === "loading"
-                  ? "Reading which chains this deployment accepts…"
-                  : "We could not read which chains this deployment accepts. Reload, or try again in a moment."}
+                  ? "Reading which chains we accept deposits on…"
+                  : "We could not read which chains we accept deposits on. Reload, or try again in a moment."}
           </NoteBox>
         ) : (
           <DepositChainChoice

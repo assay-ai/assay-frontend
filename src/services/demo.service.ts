@@ -1,6 +1,7 @@
 import { ApiError } from "@/libs/ApiClient";
 
 import { api } from "./api";
+import { getPublicFeatures } from "./public-features.service";
 
 /**
  * The public live demo — two real, paid calls run from the browser.
@@ -88,14 +89,22 @@ export async function pollDemoVerdict(intentId: string): Promise<DemoVerdict> {
   return api.get<DemoVerdict>(`/public/demo/verdict/${intentId}`);
 }
 
-/** `null` when no slash is pinned — the strip then does not render at all. */
-export async function getDemoCompensation(): Promise<DemoCompensation | null> {
-  try {
-    return await api.get<DemoCompensation | null>("/public/demo/compensation");
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 404) return null;
-    throw error;
-  }
+/**
+ * Whether this deployment runs the demo at all, and the pinned slash if any.
+ *
+ * The backend mounts `/public/demo/*` only when a demo credential is
+ * provisioned, and `GET /public/features` says whether it did, so the route is
+ * never called where it does not exist. A 200 `null` means "demo, no slash
+ * pinned" (the strip then does not render). Asking before the visitor presses
+ * Run is what keeps the page from offering a button that cannot work.
+ */
+export async function getDemoStatus(): Promise<{
+  configured: boolean;
+  compensation: DemoCompensation | null;
+}> {
+  if (!(await getPublicFeatures()).demo) return { configured: false, compensation: null };
+  const compensation = await api.get<DemoCompensation | null>("/public/demo/compensation");
+  return { configured: true, compensation: compensation ?? null };
 }
 
 /**
