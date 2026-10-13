@@ -1,0 +1,50 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import * as React from "react";
+
+import type { HexString } from "@/libs/chains/evm/stake-slashes/address";
+import type { StakeDeployment } from "@/libs/chains/evm/stake-slashes/deployments";
+import { createStakeChainReader, loadChainSlashes } from "@/libs/chains/evm/stake-slashes/load";
+
+import { lookupAssayCases } from "./assay-match";
+
+/**
+ * The page's two reads. The first goes to the chain and IS the list; the
+ * second goes to Assay and only decorates it — if it fails, the list stands.
+ */
+export function useChainSlashes(deployment: StakeDeployment, provider: HexString | null) {
+  const reader = React.useMemo(() => createStakeChainReader(deployment), [deployment]);
+
+  const chain = useQuery({
+    queryKey: ["chain-slashes", deployment.chainId, deployment.stakeContract, provider?.toLowerCase()],
+    queryFn: () => loadChainSlashes(reader, deployment, provider as HexString),
+    enabled: provider !== null,
+    retry: 0,
+    refetchOnWindowFocus: false,
+  });
+
+  const requestIds = React.useMemo(
+    () => (chain.data?.rows ?? []).map((row) => row.requestId),
+    [chain.data],
+  );
+
+  const assay = useQuery({
+    queryKey: ["chain-slashes", "assay-match", requestIds],
+    queryFn: () => lookupAssayCases(requestIds),
+    enabled: requestIds.length > 0,
+    retry: 0,
+  });
+
+  return { chain, assay };
+}
+
+/** Unix seconds, re-read every 30s so countdowns and "can be executed" move on their own. */
+export function useNowSeconds(): number {
+  const [now, setNow] = React.useState(() => Math.floor(Date.now() / 1000));
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
