@@ -1,5 +1,7 @@
 import type { BadgeVariant } from "@/components/ui/badge";
+import type { Money } from "@/interfaces/api";
 import type { OperatorRole, SlashProposalStatus } from "@/interfaces/operator";
+import { formatMoney } from "@/utils/money";
 
 import { SWEEPABLE_OUTCOMES } from "./reason-codes";
 
@@ -131,7 +133,7 @@ export function isLegalInStatus(
  *
  *  - it would **offer `AWAITING_SECOND`**, where the proposal's `outcome` is
  *    still null — `decide` keeps the decision on the dispute until the second
- *    signature lands — so `openSweep` refuses there with a 422;
+ *    signature lands — so `openSweep` refuses there;
  *  - it would **offer `UPHELD`**, which is only ever produced by the two
  *    upholding outcomes, both of which have `opensFleetSweep: false`. The
  *    button would render and 422 every time.
@@ -163,3 +165,32 @@ export const TWO_PERSON_ACTIONS: readonly OperatorAction[] = Object.freeze([
   "sweep",
   "compensate",
 ]);
+
+/**
+ * Whether an action on `amountMinor` is above the operator's authority limit.
+ *
+ * `GET /operator/me` returns the limit and the backend refuses a `decide`,
+ * `second` or `suspend` whose amount is above it with
+ * `OPERATOR_AUTHORITY_EXCEEDED` — strictly above, so an amount equal to the
+ * limit is allowed, and a null limit is unbounded. Compared as `BigInt` in
+ * minor units, the way the backend compares it.
+ *
+ * An amount this cannot read is not blocked here: the backend still decides,
+ * and a screen that guessed would withhold an action it had no grounds to.
+ */
+export function exceedsAuthority(limit: Money | null, amountMinor: string): boolean {
+  if (limit === null) return false;
+  if (!/^\d+$/.test(limit.amount) || !/^\d+$/.test(amountMinor)) return false;
+  return BigInt(amountMinor) > BigInt(limit.amount);
+}
+
+/** Why an action above the authority limit is withheld — in money, not minor units. */
+export function authorityRefusal(limit: Money, amount: Money): string {
+  return `the penalty is ${formatMoney(amount)} and this token's authority limit is ${formatMoney(limit)}`;
+}
+
+/**
+ * A recalculated penalty: minor units, digits only, positive, no leading zero.
+ * The same pattern the backend's `DecideCaseBodyDto` enforces.
+ */
+export const RECALCULATED_AMOUNT_PATTERN = /^[1-9]\d{0,39}$/;
