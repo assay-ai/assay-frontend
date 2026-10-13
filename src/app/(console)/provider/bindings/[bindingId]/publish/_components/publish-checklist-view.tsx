@@ -19,6 +19,8 @@ import { ApiError } from "@/libs/ApiClient";
 import { applyPublished, isAlreadyLive, isPublishedState } from "@/features/provider-binding/after-publish";
 import { BindingNav } from "@/features/provider-binding/binding-nav";
 import { requirementChain, unreadableChains } from "@/features/provider-stake/chain-stake";
+import { readableDerivation } from "@/features/provider-stake/derivation";
+import { useChains } from "@/hooks/useChains";
 import { getProviderStake } from "@/services/provider-stake.service";
 import {
   getPublishCheck,
@@ -212,9 +214,9 @@ function stakeSentence(
     line: clauses.join(", ") + (gap ? ` — ${gap}, we recommend 1.5×` : ""),
     derivation: itemised?.derivation ?? null,
     note: !itemised
-      ? "this binding is not in the itemised requirement — it lists ACTIVE bindings only"
+      ? "no stake requirement is listed for this binding — only active bindings have one"
       : !met && !isShort
-        ? "the itemised requirement covers ACTIVE bindings only, so no shortfall is reported against this one"
+        ? "only active bindings have a stake requirement, so no shortfall is shown for this one"
         : null,
   };
 }
@@ -301,6 +303,7 @@ export function PublishChecklistView({ bindingId }: { bindingId: string }) {
   const stakeMet =
     requirements.find((requirement) => requirement.requirement === "STAKE_AT_MINIMUM_ON_EVERY_CHAIN")?.met ?? true;
   const stakeCopy = stakeSentence(stake.data, binding.data, stakeMet);
+  const { chains } = useChains();
 
   return (
     <>
@@ -350,7 +353,7 @@ export function PublishChecklistView({ bindingId }: { bindingId: string }) {
                     <StakeDetail
                       requirement={requirement}
                       line={stakeCopy.line}
-                      derivation={stakeCopy.derivation}
+                      derivation={stakeCopy.derivation ? readableDerivation(stakeCopy.derivation, chains) : null}
                       note={stakeCopy.note}
                       /*
                         Per chain. `stake.data.chainReadable` was a top-level

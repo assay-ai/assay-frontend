@@ -39,6 +39,8 @@ import {
 } from "@/features/provider-stake/chain-stake";
 import { runStakeIntent } from "@/features/provider-stake/run-stake-intent";
 import { useChains } from "@/hooks/useChains";
+import type { Chain } from "@/interfaces/chain";
+import { readableDerivation } from "@/features/provider-stake/derivation";
 import { isUserRejection, useSigner, type UseSignerResult } from "@/hooks/useSigner";
 import type {
   ProviderStake,
@@ -210,7 +212,8 @@ interface RequirementRow {
  */
 function requirementRows(
   bindings: ToolBindingSummary[],
-  requirement: ProviderStakeRequirementItem[]
+  requirement: ProviderStakeRequirementItem[],
+  chains: readonly Chain[]
 ): RequirementRow[] {
   const byBinding = new Map(requirement.map((item) => [item.bindingId, item]));
 
@@ -224,9 +227,9 @@ function requirementRows(
         binding: label,
         mode: item.pricingMode,
         price: money(item.price, 4),
-        // Verbatim from the wire. This is the arithmetic the figure to its
-        // right is claimed from, printed at the point of the claim.
-        derivation: item.derivation,
+        // The wire's arithmetic, printed at the point of the claim; an asset
+        // mismatch is said in plain words instead of ids and a reason code.
+        derivation: readableDerivation(item.derivation, chains),
         // `minimum: null` means "priced in an asset the floor is not
         // denominated in" — the gate refuses it rather than converting. Not a
         // zero.
@@ -320,7 +323,7 @@ export default function ProviderCapitalPage() {
   const rule = data?.requirementRule ?? "max";
   const openWindows = windows.data?.items ?? [];
 
-  const rows = requirementRows(bindings.data?.items ?? [], data?.requirement ?? []);
+  const rows = requirementRows(bindings.data?.items ?? [], data?.requirement ?? [], chains);
 
   const columns: TableColumn<RequirementRow>[] = [
     {
@@ -817,9 +820,8 @@ export default function ProviderCapitalPage() {
         </p>
       ) : data && noAuthority ? (
         <p className="text-body-13 text-03">
-          No stake authority has been proved on this chain yet, so nothing can be
-          opened or funded — every stake intent answers PROVIDER_STAKE_AUTHORITY_UNPROVEN.
-          Proving one is a wallet signature, on the Leaving screen.
+          No stake authority has been proved on this chain yet, so a stake account cannot be
+          opened or funded from here. Proving one is a wallet signature, on the Leaving screen.
         </p>
       ) : data && !signerReady ? (
         <p className="text-body-13 text-03">

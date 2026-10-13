@@ -127,6 +127,15 @@ describe("StakeByChain — three states, visually distinct", () => {
     expect(html).toContain('data-testid="stake-chain-no-authority"');
     expect(html).not.toContain('data-testid="stake-chain-unreadable"');
   });
+
+  // BUG-R4-D-05: "Staked $500.00" stood next to "no stake account to read".
+  it("never says there is no stake account next to a staked figure", () => {
+    const staked = markup([chain({ stakeAuthority: null })]);
+    expect(staked).toContain("$500.00");
+    expect(staked).not.toContain("no stake account to read");
+    const empty = markup([chain({ stakeAuthority: null, staked: null })]);
+    expect(empty).toContain("no stake account to read");
+  });
 });
 
 describe("StakeByChain — a list, never a sum", () => {
