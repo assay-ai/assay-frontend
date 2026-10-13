@@ -10,8 +10,13 @@ describe("slashStatusOf", () => {
     expect(slashStatusOf(3)).toMatchObject({ key: "cancelled", label: "Cancelled", needsAttention: false });
   });
 
-  it("shows 4 as Disputed, ready for the value being appended after Cancelled", () => {
-    expect(slashStatusOf(4)).toEqual({ key: "disputed", code: 4, label: "Disputed", needsAttention: true });
+  it("shows 4 as Disputed, awaiting the arbiter", () => {
+    expect(slashStatusOf(4)).toEqual({
+      key: "disputed",
+      code: 4,
+      label: "Disputed on chain — awaiting arbiter",
+      needsAttention: true,
+    });
   });
 
   it("accepts a bigint, as some decoders return", () => {
@@ -27,10 +32,12 @@ describe("slashStatusOf", () => {
 });
 
 describe("cancelReasonLabel", () => {
-  it("names the three CancelReason values", () => {
+  it("names the four CancelReason values", () => {
     expect(cancelReasonLabel(0)).toMatch(/withdrawn/i);
     expect(cancelReasonLabel(1)).toMatch(/expired/i);
     expect(cancelReasonLabel(2)).toMatch(/verifier/i);
+    expect(cancelReasonLabel(3)).toBe("Dispute unresolved (30 days)");
+    expect(cancelReasonLabel(BigInt(3))).toBe("Dispute unresolved (30 days)");
   });
 
   it("says when it does not know a reason, and is null when there is none", () => {

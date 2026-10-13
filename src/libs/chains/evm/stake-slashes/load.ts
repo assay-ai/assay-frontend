@@ -65,6 +65,7 @@ export function createStakeChainReader(deployment: StakeDeployment): StakeChainR
         reserved: record.reserved,
         applied: record.applied,
         executedAt: record.executedAt,
+        disputedAt: record.disputedAt,
       };
     },
 

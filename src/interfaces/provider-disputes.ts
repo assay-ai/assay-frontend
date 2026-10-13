@@ -178,7 +178,15 @@ export interface SlashProposalClocks {
    */
   chainExecutableAt?: string | null;
   /** The mirrored on-chain lifecycle. `undefined` on older backends. */
-  chainStatus?: "NONE" | "PROPOSING" | "PENDING" | "EXECUTED" | "CANCELLED" | "REFUSED";
+  chainStatus?:
+    | "NONE"
+    | "PROPOSING"
+    | "PENDING"
+    | "CANCEL_REQUESTED"
+    | "DISPUTED"
+    | "EXECUTED"
+    | "CANCELLED"
+    | "REFUSED";
   secondsRemaining: number | null;
   runningClock: SlashProposalRunningClock;
 }

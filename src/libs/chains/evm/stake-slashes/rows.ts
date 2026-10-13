@@ -1,6 +1,6 @@
 import { decodeEventLog, type Address, type Hex } from "viem";
 
-import { STAKE_EVENTS_ABI } from "./abi";
+import { DISPUTE_TIMEOUT_SECONDS, STAKE_EVENTS_ABI } from "./abi";
 import type { RawLog } from "./scan";
 import { cancelReasonLabel, slashStatusOf, type SlashStatusInfo } from "./status";
 
@@ -46,11 +46,31 @@ export type ParsedStakeLog =
       readonly cancelledAt: bigint;
       readonly txHash: Hex | null;
       readonly blockNumber: bigint | null;
+    }
+  | {
+      /** `SlashDisputed`: the provider's `disputeSlash` moved the record to `Disputed`. */
+      readonly kind: "disputed";
+      readonly requestId: Hex;
+      readonly provider: Address;
+      readonly disputedAt: bigint;
+      readonly executableAt: bigint;
+      readonly txHash: Hex | null;
+      readonly blockNumber: bigint | null;
+    }
+  | {
+      /** `SlashUpheld`: the arbiter ruled against the provider; back to `Pending`, executable from `executableAt`. */
+      readonly kind: "upheld";
+      readonly requestId: Hex;
+      readonly provider: Address;
+      readonly arbiter: Address;
+      readonly executableAt: bigint;
+      readonly txHash: Hex | null;
+      readonly blockNumber: bigint | null;
     };
 
 /**
- * One raw log → a typed event, or `null` for a log this page does not know
- * (a `SlashDisputed` from the upcoming contract, or anything else). Never throws.
+ * One raw log → a typed event, or `null` for a log this page does not know.
+ * Never throws.
  */
 export function parseStakeLog(log: RawLog): ParsedStakeLog | null {
   let decoded;
@@ -101,6 +121,26 @@ export function parseStakeLog(log: RawLog): ParsedStakeLog | null {
         txHash,
         blockNumber,
       };
+    case "SlashDisputed":
+      return {
+        kind: "disputed",
+        requestId: decoded.args.requestId,
+        provider: decoded.args.provider,
+        disputedAt: decoded.args.disputedAt,
+        executableAt: decoded.args.executableAt,
+        txHash,
+        blockNumber,
+      };
+    case "SlashUpheld":
+      return {
+        kind: "upheld",
+        requestId: decoded.args.requestId,
+        provider: decoded.args.provider,
+        arbiter: decoded.args.arbiter,
+        executableAt: decoded.args.executableAt,
+        txHash,
+        blockNumber,
+      };
     default:
       return null;
   }
@@ -117,6 +157,8 @@ export interface SlashRecordState {
   readonly reserved: bigint;
   readonly applied: bigint;
   readonly executedAt: bigint;
+  /** Unix seconds; 0 when never disputed. */
+  readonly disputedAt: bigint;
 }
 
 export interface ChainSlashRow {
@@ -133,8 +175,23 @@ export interface ChainSlashRow {
   readonly beneficiary: Address;
   /** Unix seconds. */
   readonly proposedAt: number;
-  /** Unix seconds: the dispute window ends and execution may start here. */
+  /**
+   * Unix seconds: the dispute window ends and execution may start here. The
+   * chain's own value — the slash delay is a Config parameter, never assumed
+   * to be 72 hours — and moved to the ruling time by an arbiter's uphold.
+   */
   readonly executableAt: number;
+  /** Unix seconds the provider disputed it on chain, or `null` if it never was. */
+  readonly disputedAt: number | null;
+  /**
+   * Unix seconds from which an unruled dispute can be expired (`disputedAt` +
+   * 30 days), releasing the stake. Only while the record is `Disputed`.
+   */
+  readonly disputeExpiresAt: number | null;
+  /** True once the arbiter upheld a dispute: a record is disputed at most once. */
+  readonly upheld: boolean;
+  /** The `disputeSlash` transaction, when its event was seen. */
+  readonly disputeTx: Hex | null;
   readonly proposeTx: Hex | null;
   /** The execute or cancel transaction, whichever closed the record. */
   readonly closeTx: Hex | null;
@@ -171,6 +228,8 @@ export function buildChainSlashRows(
     const proposed = group.find((log) => log.kind === "proposed");
     const executed = group.find((log) => log.kind === "executed");
     const cancelled = group.find((log) => log.kind === "cancelled");
+    const lastDisputed = latest(group, "disputed");
+    const lastUpheld = latest(group, "upheld");
     const rawRecord = records.get(id);
     const record =
       rawRecord && rawRecord.status !== 0 && sameAddress(rawRecord.provider, provider)
@@ -179,9 +238,26 @@ export function buildChainSlashRows(
 
     if (!proposed && !record) continue;
 
-    const eventCode = cancelled ? 3 : executed ? 2 : 1;
+    /*
+      From the events alone: a closing event wins; otherwise the later of the
+      dispute and the uphold decides between Disputed and Pending.
+    */
+    const ruledAfterDispute =
+      lastUpheld !== null && (lastDisputed === null || isAfter(lastUpheld, lastDisputed));
+    const eventCode = cancelled ? 3 : executed ? 2 : lastDisputed && !ruledAfterDispute ? 4 : 1;
     const status = slashStatusOf(record ? record.status : eventCode);
     const executedApplied = executed?.kind === "executed" ? executed.applied : null;
+
+    const eventExecutableAt =
+      lastUpheld?.kind === "upheld"
+        ? lastUpheld.executableAt
+        : proposed?.kind === "proposed"
+          ? proposed.executableAt
+          : BigInt(0);
+    const recordDisputedAt = record && record.disputedAt > BigInt(0) ? record.disputedAt : null;
+    const eventDisputedAt = lastDisputed?.kind === "disputed" ? lastDisputed.disputedAt : null;
+    const disputedAtRaw = recordDisputedAt ?? eventDisputedAt;
+    const disputedAt = disputedAtRaw === null ? null : Number(disputedAtRaw);
 
     rows.push({
       requestId: id as Hex,
@@ -199,15 +275,34 @@ export function buildChainSlashRows(
       proposedAt: Number(
         record?.proposedAt ?? (proposed?.kind === "proposed" ? proposed.proposedAt : BigInt(0)),
       ),
-      executableAt: Number(
-        record?.executableAt ?? (proposed?.kind === "proposed" ? proposed.executableAt : BigInt(0)),
-      ),
+      executableAt: Number(record?.executableAt ?? eventExecutableAt),
+      disputedAt,
+      disputeExpiresAt:
+        status.key === "disputed" && disputedAt !== null ? disputedAt + DISPUTE_TIMEOUT_SECONDS : null,
+      upheld: lastUpheld !== null,
+      disputeTx: lastDisputed?.txHash ?? null,
       proposeTx: proposed?.txHash ?? null,
       closeTx: executed?.txHash ?? cancelled?.txHash ?? null,
       stateSource: record ? "record" : "events",
     });
   }
   return rows;
+}
+
+/** The last log of one kind in a group, by block (and by scan order within a block). */
+function latest(group: readonly ParsedStakeLog[], kind: ParsedStakeLog["kind"]): ParsedStakeLog | null {
+  let found: ParsedStakeLog | null = null;
+  for (const log of group) {
+    if (log.kind !== kind) continue;
+    if (found === null || !isAfter(found, log)) found = log;
+  }
+  return found;
+}
+
+/** True when `a` was mined strictly after `b`. Equal or unknown blocks are not "after". */
+function isAfter(a: ParsedStakeLog, b: ParsedStakeLog): boolean {
+  if (a.blockNumber === null || b.blockNumber === null) return false;
+  return a.blockNumber > b.blockNumber;
 }
 
 /** The distinct request ids in a set of parsed logs, lower-case. */

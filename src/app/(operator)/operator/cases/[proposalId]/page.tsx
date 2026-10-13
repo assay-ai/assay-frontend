@@ -21,6 +21,7 @@ import { Timeline, type TimelineEvent } from "@/components/ui/timeline";
 import { DASH, stampUtc } from "@/features/g34a/stats";
 import { asProposalStatus, caseBadgeVariant } from "@/features/operator/state";
 import { SLASH_DELAY_HOURS } from "@/libs/chains/solana/delays";
+import { chainStatusLabel } from "@/libs/chains/status-labels";
 import { CaseContext } from "@/features/provider-slash-case/context";
 import { Measurement } from "@/features/provider-slash-case/measurement";
 import { remaining } from "@/features/provider-slash-case/status-header";
@@ -247,6 +248,12 @@ export default function OperatorCasePage() {
           <span className="font-semibold text-01">{formatMoney(proposal.penaltyAmount)}</span>
           <span className="text-03"> · </span>
           proposed {stampUtc(clocks.proposedAt)} UTC
+          {brief.chainStatus ? (
+            <>
+              <span className="text-03"> · </span>
+              on chain: <span className="font-semibold text-01">{chainStatusLabel(brief.chainStatus)}</span>
+            </>
+          ) : null}
         </p>
       </header>
 

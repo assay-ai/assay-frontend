@@ -58,7 +58,7 @@ describe("loadChainSlashes", () => {
     expect(result.asset).toEqual({ decimals: 6, symbol: "USDG", fromChain: true });
     expect(result.recordReadFailures).toBe(0);
     const byId = new Map(result.rows.map((row) => [row.requestId, row]));
-    expect(byId.get(requestId(1))?.status.label).toBe("Disputed");
+    expect(byId.get(requestId(1))?.status.label).toBe("Disputed on chain — awaiting arbiter");
     expect(byId.get(requestId(2))?.applied).toBe(BigInt(500_000));
     expect(byId.get(requestId(3))?.cancelReason).toMatch(/expired/i);
   });

@@ -36,6 +36,7 @@ import type {
   StakeIntent,
 } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
+import { describeChainRefusal } from "@/libs/chains/status-labels";
 import { getProviderRegistration } from "@/services/provider-registration.service";
 import { exportProviderCalls } from "@/services/provider-reports.service";
 import { listSlaWindows } from "@/services/provider-sla-windows.service";
@@ -668,7 +669,7 @@ export default function ProviderExitPage() {
         <Banner
           tone="danger"
           title="The exit checklist could not be loaded in full"
-          description={`${loadError.code} · ${loadError.message}`}
+          description={describeChainRefusal(loadError)}
         />
       ) : null}
 
@@ -693,7 +694,7 @@ export default function ProviderExitPage() {
         <Banner
           tone="danger"
           title="That request was refused"
-          description={`${actionError.code} · ${actionError.message}`}
+          description={describeChainRefusal(actionError)}
         />
       ) : null}
 
