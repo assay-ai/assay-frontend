@@ -57,6 +57,7 @@ import { getOperatorIdentity } from "@/services/operator.service";
 const CONSOLE_NAV: readonly { href: string; label: string }[] = [
   { href: "/operator", label: "Queue" },
   { href: "/operator/blocks", label: "Blocks" },
+  { href: "/operator/arbiter", label: "Arbiter" },
   { href: "/operator/override-log", label: "Override log" },
 ];
 
