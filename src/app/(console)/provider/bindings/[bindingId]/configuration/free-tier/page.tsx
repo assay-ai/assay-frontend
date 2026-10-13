@@ -166,7 +166,7 @@ export default function FreeTierPage() {
     <>
       <PageHeader
         title={`Free tier · ${bindingId}`}
-        sub="the freemium funnel: agents try before funding, you build a published quality record without capital at risk"
+        sub="agents try your tool before funding, and you build a published quality record without staking"
         actions={
           <Button
             icon={<Check />}
@@ -204,13 +204,13 @@ export default function FreeTierPage() {
 
             <Field
               id="free-quota-per-agent"
-              label="Per-agent daily quota"
+              label="Free calls per agent, per day"
               inputMode="numeric"
               value={quotaInput}
               onChange={(event) => setQuotaInput(event.target.value)}
               suffix="calls"
               error={quota.error ?? undefined}
-              hint="platform-wide free budget applies on top"
+              hint="resets at 00:00 UTC · the platform-wide free budget applies on top"
               disabled={!binding}
             />
 
@@ -224,7 +224,7 @@ export default function FreeTierPage() {
             */}
             <Field
               id="free-daily-budget"
-              label="Platform free budget"
+              label="Daily free budget"
               inputMode="decimal"
               value={budgetInput}
               onChange={(event) => setBudgetInput(event.target.value)}
@@ -234,8 +234,8 @@ export default function FreeTierPage() {
                 budget.error
                   ? undefined
                   : savedBudget
-                    ? `saved as ${formatMoney(savedBudget, { decimals: 4 })} per day · At exhaustion agents see FREE_BUDGET_EXHAUSTED with your paid alternative and its price. That is our cost control, not your fault, and the copy says so.`
-                    : "At exhaustion agents see FREE_BUDGET_EXHAUSTED with your paid alternative and its price. That is our cost control, not your fault, and the copy says so."
+                    ? `saved as ${formatMoney(savedBudget, { decimals: 4 })} per day, across all agents · When it runs out, agents are told the free budget is used up and are offered your paid option with its price.`
+                    : "Per day, across all agents. When it runs out, agents are told the free budget is used up and are offered your paid option with its price."
               }
               disabled={!binding}
             />
@@ -246,15 +246,15 @@ export default function FreeTierPage() {
           <PanelHeader>
             <PanelTitles>
               <PanelTitle>Consumption</PanelTitle>
-              <PanelDescription>platform-funded · relay path, no payment machinery</PanelDescription>
+              <PanelDescription>free calls are funded by the platform</PanelDescription>
             </PanelTitles>
           </PanelHeader>
           <PanelBody className="p-5">
             <EmptyState
               className="max-w-none"
               icon={null}
-              title="Free-tier consumption is not measured"
-              description="No provider endpoint reports free calls served today or free budget consumed, so neither meter can be drawn — and a bar at zero would read as a measurement. The rule still holds: at exhaustion agents see FREE_BUDGET_EXHAUSTED with your paid alternative and its price. That is our cost control, not your fault, and the copy says so."
+              title="Free-tier usage is not available yet"
+              description="Free calls served today and free budget used are not shown yet. The limits you set still apply: when one runs out, agents are told so and are offered your paid option with its price."
             />
           </PanelBody>
         </Panel>

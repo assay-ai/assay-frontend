@@ -143,7 +143,7 @@ export default function SlashProposalCasePage() {
       <Banner
         tone="danger"
         title="No case with this id."
-        description="Either no slash proposal has this id, or it does not belong to your organisation. Both answer the same way, so there is nothing more this screen can tell you."
+        description="Either no slash proposal has this id, or it does not belong to your organisation. We cannot say which."
       />
     );
   }
@@ -236,7 +236,7 @@ export default function SlashProposalCasePage() {
             } sealed in this window's evidence pack. ${
               data.evidenceVerdictCount === 0
                 ? "Nothing has been sealed for it, so there is no pack to open."
-                : "No route opens a whole window's pack yet — the binding's SLA screen is the nearest view of it."
+                : "Opening a whole window's pack is not available yet — the binding's Live SLA page is the nearest view of it."
             }`}
           </p>
         </div>

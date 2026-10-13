@@ -603,11 +603,9 @@ export function LimitsView() {
       <div className="flex w-full items-start gap-2.5 rounded-lg border border-primary-20 bg-primary-10 p-3.5 tablet:p-[15px]">
         <ShieldCheck aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-primary-600" />
         <p className="text-body-13 text-primary-700">
-          Every ceiling below is checked by the payment gateway before a call is priced or a hold is
-          placed. There is no separate embedded-wallet enforcement layer in this product yet, so a
-          bug in our software can defeat these — they are a control, not a guarantee. What is true
-          today is narrower and still real: a call cannot spend past what is written here without
-          going through this backend&rsquo;s own pre-flight check first.
+          Every ceiling below is checked by our payment gateway before a call is priced or a hold is
+          placed. These limits are enforced by our software, not by your wallet, so treat them as a
+          control and not as a guarantee.
         </p>
       </div>
 
@@ -660,7 +658,7 @@ export function LimitsView() {
               ? `Amounts are in ${bootstrap.symbol} on ${bootstrap.chainName}, the asset your agent settles in.`
               : bootstrap.kind === "reading"
                 ? "Reading which asset your agent settles in…"
-                : `A policy cannot be created here yet: ${bootstrap.reason}.`}
+                : `A policy cannot be created right now: ${bootstrap.reason}.`}
           </p>
           <Button
             icon={<Plus />}
@@ -769,9 +767,9 @@ export function LimitsView() {
             <Panel>
               <PanelHeader>
                 <PanelTitles>
-                  <PanelTitle>ASK — refused until approvals exist</PanelTitle>
+                  <PanelTitle>Approval threshold</PanelTitle>
                   <PanelDescription className="whitespace-normal">
-                    a call above this amount is refused, because nobody can approve it yet
+                    approvals are not available yet, so a call above this amount is refused
                   </PanelDescription>
                 </PanelTitles>
                 <StatusPill label="REFUSES ABOVE" tone="warning" />
@@ -788,11 +786,9 @@ export function LimitsView() {
                 <div className="flex items-start gap-2 pt-2.5">
                   <Info aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-03" />
                   <p className="text-body-xs text-03">
-                    There is no approval flow yet — no <code>AWAITING_APPROVAL</code> state and no
-                    approval link — so a call priced above this amount is refused with{" "}
-                    <code>MCP_APPROVAL_REQUIRED</code> instead of being held for a human. An approval
-                    nobody can give resolves to deny, never allow. Raise or clear the value to let
-                    such calls through.
+                    Approving a call by hand is not available yet, so a call priced above this amount is
+                    refused instead of being held for you. Raise or clear the value to let such
+                    calls through.
                   </p>
                 </div>
               </PanelBody>
@@ -835,18 +831,16 @@ export function LimitsView() {
                   <Checkbox key={item.label} label={item.label} checked={item.checked} disabled readOnly />
                 ))}
               </div>
-              <Checkbox label="Velocity anomaly (velocity.anomaly)" checked disabled readOnly />
+              <Checkbox label="Unusual spending rate" checked disabled readOnly />
               <div className="flex flex-col gap-1">
-                <Checkbox label="Refund on a single call (payment_intent.refunded)" checked={false} disabled readOnly />
+                <Checkbox label="Refund on a single call" checked={false} disabled readOnly />
                 <p className="text-body-xs text-03">
                   rolls into the daily digest instead of one alert per call
                 </p>
               </div>
               <p className="text-body-13 text-02">
-                Choosing where these are delivered (email, push, Slack, webhook) and muting an
-                event is a real, saved setting now — just not on this screen. Saving a destination
-                is not the same as being reachable at it: no vendor is wired behind any channel
-                yet, so today every one of these lands in the in-app inbox and nowhere else.{" "}
+                Today every one of these is delivered to your in-app inbox only. Email, push, Slack and
+                webhook delivery is not available yet; you can already save where each should go.{" "}
                 <Link href="/alerts" className="font-semibold text-primary-600 underline">
                   Manage channels on Alerts →
                 </Link>
@@ -970,11 +964,11 @@ export function LimitsView() {
               label="Approval required above"
               id="edit-approval-above"
               placeholder="never"
-              suffix="ASK threshold"
+              suffix="approval threshold"
               value={requireApprovalAboveText}
               onChange={(event) => setRequireApprovalAboveText(event.target.value)}
               error={formErrors.requireApprovalAbove}
-              hint="stored only — see the ASK panel; nothing enforces this yet"
+              hint="approvals are not available yet — a call above this amount is refused"
             />
 
             <div className="flex w-full flex-col gap-1.5">
@@ -1003,8 +997,8 @@ export function LimitsView() {
               ) : (
                 <p className="text-body-xs text-03">
                   {allowedToolsMode === "all"
-                    ? "null on the wire — every tool is allowed"
-                    : "an explicit array on the wire — only these tool ids may be called. The " +
+                    ? "Every tool is allowed."
+                    : "Only these tool ids may be called. The " +
                       "gateway matches the tool's id, a UUID, not its name; copy it from Tools. A " +
                       "name typed here matches nothing, which refuses every call."}
                 </p>

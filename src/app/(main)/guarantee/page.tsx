@@ -196,7 +196,7 @@ export default function GuaranteePage() {
         <div className="flex min-w-0 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">What we did not charge you for</h1>
           <p className="font-mono text-mono-12 text-03">
-            {period.label} · withheld == Σ HOLD_RELEASE · checkable against the ledger
+            {period.label} · every amount here is a hold we released back to you
           </p>
         </div>
 
@@ -248,7 +248,7 @@ export default function GuaranteePage() {
         <Banner
           tone="danger"
           title="The withheld figure is unavailable for this month"
-          description={`${data.withheldError.code} · ${data.withheldError.message}. Nothing else is shown in its place — this number is the ledger's, and no other endpoint may stand in for it.`}
+          description={`${data.withheldError.message}. No figure is shown until it can be read.`}
         />
       ) : null}
 
@@ -308,9 +308,9 @@ export default function GuaranteePage() {
         <Banner
           tone="danger"
           title="This month does not reconcile to the ledger"
-          description={`Σ HOLD_RELEASE differs from the withheld total by ${data.withheld.difference}. ${
+          description={`The released holds differ from the withheld total by ${data.withheld.difference}. ${
             data.withheld.orphanedHoldIds.length
-          } releases have no matching intent.`}
+          } releases have no matching call. Contact support with this month's statement.`}
         />
       ) : null}
 

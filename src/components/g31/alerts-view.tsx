@@ -290,7 +290,7 @@ export function AlertsView() {
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
       <PageHeader
         title="Alerts and notifications"
-        subtitle="the aggregation rule is part of the event definition, not a user setting"
+        subtitle="choose where each alert is delivered"
         actions={
           <>
             <Button variant="secondary" icon={<List />} type="button" onClick={() => setLogOpen(true)}>
@@ -308,17 +308,15 @@ export function AlertsView() {
           <PanelTitles>
             <PanelTitle>Channels</PanelTitle>
             <PanelDescription className="whitespace-normal">
-              every non-suppressible event is a consent or account-takeover path
+              alerts about withdrawals and credentials cannot be switched off
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="gap-3 p-5">
           <div className="flex w-full items-start gap-2.5 rounded-lg border border-warning-20 bg-warning-10 p-3.5">
             <p className="text-body-13 text-warning-700">
-              No channel below reaches a person yet. EMAIL, PUSH, SLACK and WEBHOOK all run through a
-              placeholder sender that logs what it would deliver and reports success — nothing here has a
-              real mail, push, Slack or webhook vendor behind it. Saving an address does not put it on any
-              send list.
+              Email, push, Slack and webhook delivery is not available yet. You can save a destination
+              now, but today alerts are delivered to your in-app inbox only.
             </p>
           </div>
 
@@ -385,8 +383,7 @@ export function AlertsView() {
             <StatusPill label="ALWAYS ON" tone="success" />
           </div>
           <p className="text-body-xs text-03">
-            In-app needs no destination and cannot be disabled — the API refuses a write to it before it
-            reaches storage, so this row is not a rendering choice.
+            In-app needs no destination and cannot be disabled.
           </p>
         </PanelBody>
       </Panel>
@@ -441,7 +438,7 @@ export function AlertsView() {
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-[7px]">
                       <span className="font-mono text-mono-12 font-semibold text-01">{event}</span>
                       {def.nonSuppressible ? <StatusPill label="NOT SUPPRESSIBLE" tone="danger" /> : null}
-                      {!def.hasProducer ? <StatusPill label="NO PRODUCER YET" dot={false} tone="neutral" /> : null}
+                      {!def.hasProducer ? <StatusPill label="NOT SENT YET" dot={false} tone="neutral" /> : null}
                     </div>
                     <div className="w-[100px] text-right">
                       <span
@@ -510,18 +507,15 @@ export function AlertsView() {
             <p className="flex items-start gap-1.5 text-body-xs text-03">
               <Lock aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
               <span>
-                A locked channel cannot be switched off — not here and not through the API, which
-                refuses the whole save. These are the withdrawal and credential-expiry events: the
+                A locked channel cannot be switched off. These are the withdrawal and credential-expiry events: the
                 only warning you would get that somebody else is moving your money or holding your
                 credential. Muting them is how that becomes silent, so the account keeps the choice
                 away from you on purpose.
               </span>
             </p>
             <p className="text-body-xs text-03">
-              <span className="font-mono text-mono-2xs text-03">NO PRODUCER YET</span> means nothing
-              in the platform emits that event today, whatever this row is set to. It is listed
-              because its urgency and aggregation are already decided and waiting for the code that
-              will raise it.
+              <span className="font-mono text-mono-2xs text-03">NOT SENT YET</span> means this alert is
+              not available yet: nothing is sent for it today, whatever this row is set to.
             </p>
           </div>
         </PanelBody>
@@ -532,8 +526,8 @@ export function AlertsView() {
           <DialogHeader>
             <DialogTitle>{configuringMeta ? `Configure ${configuringMeta.name}` : "Configure channel"}</DialogTitle>
             <DialogDescription>
-              This only tells the platform&apos;s own pipeline where it would send — no vendor is wired up
-              behind {configuringMeta?.name ?? "this channel"} yet, so nothing here reaches you off-platform.
+              Delivery by {configuringMeta?.name ?? "this channel"} is not available yet. The destination is
+              saved now and will be used once it is; until then alerts reach your in-app inbox only.
             </DialogDescription>
           </DialogHeader>
           <Field
@@ -578,8 +572,7 @@ export function AlertsView() {
               </p>
             ) : (feed.data?.items.length ?? 0) === 0 ? (
               <p className="text-body-13 text-02">
-                Nothing has been delivered yet. A quiet log is an account nothing has gone wrong on,
-                not a broken feed.
+                Nothing has been delivered yet.
               </p>
             ) : (
               feed.data?.items.map((item) => {

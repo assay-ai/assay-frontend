@@ -157,9 +157,7 @@ export function ApprovalLinkView({ approvalId }: { approvalId: string }) {
         disabled
       />
       <p className="text-body-xs text-03">
-        The decision cannot be submitted yet: no approve or decline endpoint exists in the API. Both
-        outcomes are shown because an approval must always offer both — never a single
-        acknowledgement.
+        Approving or declining a call is not available yet, so these buttons are disabled.
       </p>
     </div>
   );

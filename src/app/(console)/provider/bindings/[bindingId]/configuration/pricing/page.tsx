@@ -400,7 +400,7 @@ export default function PricingAndTierPage() {
               label="Tier"
               value={meQuery.data?.tier ?? ""}
               disabled
-              hint="Earned, never chosen — no endpoint writes it."
+              hint="Earned from your record — it cannot be chosen."
               onChange={() => undefined}
             >
               <option value="">{UNKNOWN}</option>

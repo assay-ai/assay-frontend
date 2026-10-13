@@ -124,7 +124,7 @@ describe("ApprovalLinkView — balance after is one chain's, or nothing", () => 
     // disabled one, because the call then expires unanswered.
     const html = markup([SOLANA_ROW]);
     expect(html).toContain("Decline");
-    expect(html).toContain("no approve or decline endpoint exists in the API");
+    expect(html).toContain("Approving or declining a call is not available yet");
     expect(html.match(/disabled=""/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
 });

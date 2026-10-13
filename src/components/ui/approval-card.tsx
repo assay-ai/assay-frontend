@@ -39,8 +39,6 @@ export interface ApprovalCardProps
   sessionSpend: string;
   /** "Balance after" fact value, e.g. "$9.90". */
   balanceAfter: string;
-  /** Error code named in the decline consequence sentence. */
-  declineErrorCode?: string;
   /** Tool name used in the scoped-approve button label. Defaults to `toolName`. */
   scopedToolName?: string;
   /** Limit named in the scoped-approve button label, e.g. "$10". */
@@ -65,7 +63,6 @@ export const ApprovalCard = React.forwardRef<HTMLDivElement, ApprovalCardProps>(
       spentToday,
       sessionSpend,
       balanceAfter,
-      declineErrorCode = "POLICY_LIMIT_EXCEEDED",
       scopedToolName,
       scopedLimit,
       onApprove,
@@ -133,8 +130,8 @@ export const ApprovalCard = React.forwardRef<HTMLDivElement, ApprovalCardProps>(
           </dl>
 
           <p className="text-body-13 text-02">
-            If you decline, this call fails with {declineErrorCode}. The agent
-            decides what to do next; nothing else is stopped.
+            If you decline, this call is refused. The agent decides what to do next; nothing
+            else is stopped.
           </p>
 
           <div className="flex flex-col gap-2">

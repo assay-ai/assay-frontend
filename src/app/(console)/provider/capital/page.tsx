@@ -1064,7 +1064,7 @@ function StakeActionSheet({
           <SheetDescription>
             {deposit
               ? opensAccount
-                ? "Moves stake in from the wallet that holds your stake authority. The account has to exist first — a deposit into one that does not answers PROVIDER_STAKE_ACCOUNT_NOT_OPEN."
+                ? "Moves stake in from the wallet that holds your stake authority. The account has to exist first — a deposit into one that does not exist is refused."
                 : "Moves stake in from the wallet that holds your stake authority. There is no account to open on this chain — your first deposit creates your stake. Your wallet asks twice: once to approve the stake contract for this amount, then for the deposit itself."
               : "Creates the on-chain account your stake lives in. It carries no amount and moves no tokens; you pay its rent, quoted below before you sign."}
           </SheetDescription>
@@ -1129,7 +1129,7 @@ function StakeActionSheet({
                 refusal.code === "PROVIDER_STAKE_ACCOUNT_ALREADY_OPEN"
                   ? "Nothing was built and nothing was charged. Close this and use Deposit."
                   : refusal.code === "PROVIDER_STAKE_ACCOUNT_NOT_OPEN"
-                    ? "Close this and use Open stake account first. It is deliberately not created on demand — you pay its rent, so the platform does not open it behind your back."
+                    ? "Close this and use Open stake account first. It is not created automatically, because you pay its rent."
                     : refusal.code === "PROVIDER_STAKE_ACCOUNT_NOT_NEEDED"
                       ? "Nothing was built. Close this and use Deposit — your first deposit creates your stake."
                       : `${refusal.code} · ${refusal.message}`
@@ -1151,8 +1151,7 @@ function StakeActionSheet({
                 Sign in your wallet and broadcast
               </Button>
               <p className="text-body-13 text-03">
-                Your wallet broadcasts this. The platform holds no key of yours, has no submit
-                endpoint, and never sees the signed bytes.
+                Your wallet broadcasts this. The platform holds no key of yours and never sees the signed transaction.
               </p>
             </>
           ) : null}

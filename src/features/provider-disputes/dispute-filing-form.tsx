@@ -164,8 +164,8 @@ function ChangeOverlayPanel({ data }: { data: SlashProposalCase }) {
       <PanelBody className="gap-3 p-4 tablet:p-5">
         <Table columns={columns} rows={rows} caption="Failures before and after the binding change" />
         <p className="text-body-xs text-03">
-          Affected calls identified: {count(overlay.failuresAfter)}. Per-call selection is not wired
-          on this screen — see the report.
+          Affected calls identified: {count(overlay.failuresAfter)}. Selecting individual calls is not available yet — the
+          full list is in the report.
         </p>
       </PanelBody>
     </Panel>

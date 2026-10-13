@@ -317,8 +317,7 @@ export default function EvidencePackBrowserPage() {
           <PanelTitles>
             <PanelTitle>Pipeline stages</PanelTitle>
             <PanelDescription>
-              all four, always, in pipeline order — a stage that did not run reads as &quot;not
-              reached&quot;, never as passed
+              all four stages, in order — a stage that did not run is shown as &quot;not reached&quot;, never as passed
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>

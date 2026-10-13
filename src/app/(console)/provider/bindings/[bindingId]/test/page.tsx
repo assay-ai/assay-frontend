@@ -517,8 +517,8 @@ export default function MappingTesterPage() {
             </TooltipTrigger>
             <TooltipContent className="max-w-[280px] border border-01 shadow-soft">
               <span className="text-body-13 text-02">
-                There is no re-map route. Every run dials your endpoint again, so a
-                mapping change is tested by running it.
+                Every run calls your endpoint again, so a mapping change is tested by running
+                it.
               </span>
             </TooltipContent>
           </Tooltip>
@@ -723,9 +723,9 @@ export default function MappingTesterPage() {
               <PanelDescription>
                 {report.verification
                   ? report.verification.policySource === "STORED_POLICY"
-                    ? `policy ${report.verification.policyId} v${report.verification.policyVersion} — decomposed per rule, never a bare score`
+                    ? `policy ${report.verification.policyId} v${report.verification.policyVersion} — one result per rule`
                     : "no stored policy — judged against this tool's outputSchema alone, which is stricter than production"
-                  : "verification was never reached — decomposed per rule, never a bare score"}
+                  : "verification was not reached"}
               </PanelDescription>
             </PanelTitles>
           </PanelHeader>
