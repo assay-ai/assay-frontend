@@ -1,6 +1,7 @@
 import { Check, CircleAlert, CircleDot, FileX, Loader, Minus, ServerCrash, X } from "lucide-react";
 import * as React from "react";
 
+import { receiptStateLabel } from "@/features/call-classes/labels";
 import { cn } from "@/utils";
 
 import type { StateCard, StateTone } from "./receipt-state";
@@ -192,6 +193,7 @@ export interface StateCardBlockProps {
   receipt: Receipt;
   /** Marks the card that describes THIS call rather than a sibling state. */
   current?: boolean;
+  className?: string;
 }
 
 /**
@@ -200,7 +202,7 @@ export interface StateCardBlockProps {
  * into that panel's own subtitle: collapsing them into one "error" is a
  * three-year support tax.
  */
-export function StateCardBlock({ card, receipt, current }: StateCardBlockProps) {
+export function StateCardBlock({ card, receipt, current, className }: StateCardBlockProps) {
   const Icon = STATE_ICON[card.icon];
   return (
     <div
@@ -209,18 +211,21 @@ export function StateCardBlock({ card, receipt, current }: StateCardBlockProps) 
       className={cn(
         "flex min-w-0 flex-1 flex-col gap-2.5 rounded-lg border bg-02 p-4",
         current ? "border-primary-20" : "border-01",
+        className,
       )}
     >
-      <div className="flex w-full items-center gap-2">
-        <Icon aria-hidden="true" className={cn("size-[15px] shrink-0", TONE_ICON[card.tone])} />
-        <span
-          className={cn(
-            "min-w-0 flex-1 font-mono text-mono-2xs font-semibold tracking-[0.8px]",
-            TONE_CODE[card.tone],
-          )}
-        >
-          {card.code}
-        </span>
+      {/* The name in words; the API's own value stays beside it as a small code. */}
+      <div className="flex w-full items-start gap-2">
+        <Icon
+          aria-hidden="true"
+          className={cn("mt-0.5 size-[15px] shrink-0", TONE_ICON[card.tone])}
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className={cn("text-label-13", TONE_CODE[card.tone])}>
+            {receiptStateLabel(card.code)}
+          </span>
+          <span className="break-all font-mono text-mono-2xs text-03">{card.code}</span>
+        </div>
       </div>
       <p className="w-full text-body-13 text-01">{card.sentence}</p>
       <p

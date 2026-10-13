@@ -37,6 +37,21 @@ export function responseClassText(name: string): string {
   return label ? `${label} · ${name}` : name;
 }
 
+/** A receipt's outcome (`ReceiptState`), for the state cards on a buyer's receipt. */
+const RECEIPT_STATE_LABEL: Record<string, string> = {
+  CHECKING: "Still being checked",
+  EMPTY_CONFIRMED: "No results, confirmed",
+  MISAPPLIED: "Outside the tool's scope",
+  SYSTEM_ERROR: RESPONSE_CLASS_LABEL.SYSTEM_ERROR,
+  REQUEST_ERROR: RESPONSE_CLASS_LABEL.REQUEST_ERROR,
+  EXPIRED: "Expired",
+};
+
+/** The card's title; the raw value is shown beside it as the small code. */
+export function receiptStateLabel(code: string): string {
+  return RECEIPT_STATE_LABEL[code] ?? code;
+}
+
 /** The sentences the settlement path writes into the CSV's `reason` column. */
 const REASON_LABEL: Record<string, string> = {
   "verification: judged and settled by the worker": "Passed our checks",
