@@ -78,7 +78,7 @@ export function TeamView() {
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>Members</PanelTitle>
-            <PanelDescription>role changes are audited with an actor</PanelDescription>
+            <PanelDescription>roles and invitations are not available yet</PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="p-5">

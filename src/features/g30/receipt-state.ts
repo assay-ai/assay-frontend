@@ -77,6 +77,17 @@ export function toStageChecks(receipt: Receipt): StageCheck[] {
   });
 }
 
+/**
+ * Whether the "This result was actually fine" block may be shown.
+ *
+ * It tells us a check was wrong, so it needs a check that ran and rejected the
+ * result. A voided, expired or errored call is also "not charged", but every
+ * stage on it is "not reached" and there is nothing to contest (BUG-R2-B1-02).
+ */
+export function canContestRejection(receipt: Receipt): boolean {
+  return receipt.stages.some((stage) => stageStatus(stage) === "failed");
+}
+
 /* ------------------------------------------------------------- screen states */
 
 /**

@@ -28,6 +28,7 @@ import {
   StateCardBlock,
 } from "@/features/g30/receipt-parts";
 import {
+  canContestRejection,
   STATE_CARDS,
   STATE_CARD_ORDER,
   chargedHeadline,
@@ -246,9 +247,9 @@ function ReceiptPageContent() {
   /* --------------------------------------------------------------- header */
 
   const notCharged = receipt.chargedPrice.amount === "0";
-  // "Our check was wrong" only makes sense when a check rejected the result —
-  // not on an expired, voided or errored call, where none ran.
-  const checkRejected = state === "NOT_CHARGED" || state === "MISAPPLIED";
+  // "Our check was wrong" only makes sense when a check ran and rejected the
+  // result — not on an expired, voided or errored call, where none ran.
+  const checkRejected = canContestRejection(receipt);
 
   const meta = [
     { label: "Provider", value: providerQuery.data?.legalName ?? short(receipt.providerId ?? "—") },
