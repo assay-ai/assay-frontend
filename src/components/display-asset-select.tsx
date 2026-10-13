@@ -18,21 +18,36 @@ export function displayAssetLabel(asset: string, chains: readonly Chain[]): stri
   return `${assetName(chains, asset)} on ${chainDisplayName(chains, asset.split("/")[0])}`;
 }
 
+type Scope = "buyer" | "provider";
+
 /**
- * Which asset this page's period figures are in — shown only to an account
- * with more than one, because the summary APIs answer in one asset at a time.
- * `scope` says whose assets: what a buyer holds, or what a provider earned in.
- * Picking reloads the page: every figure on it was fetched for the old asset.
+ * The asset the selector shows as picked, for a page that scopes its own rows
+ * by it. `current` is `undefined` for a one-asset account; `isPending` is true
+ * until that is known.
  */
-export function DisplayAssetSelect({ scope = "buyer" }: { scope?: "buyer" | "provider" }) {
-  const { chains } = useChains();
+export function useDisplayAsset(scope: Scope) {
   const query = useQuery({
     queryKey: ["display-assets", scope],
     queryFn: () => (scope === "buyer" ? heldAssets() : providerEarningAssets()),
     staleTime: 60_000,
   });
   const assets = query.data ?? [];
-  const current = pickDisplayAsset(assets, storedDisplayAsset());
+  return {
+    assets,
+    current: pickDisplayAsset(assets, storedDisplayAsset()),
+    isPending: query.isPending,
+  };
+}
+
+/**
+ * Which asset this page's period figures are in — shown only to an account
+ * with more than one, because the summary APIs answer in one asset at a time.
+ * `scope` says whose assets: what a buyer holds, or what a provider earned in.
+ * Picking reloads the page: every figure on it was fetched for the old asset.
+ */
+export function DisplayAssetSelect({ scope = "buyer" }: { scope?: Scope }) {
+  const { chains } = useChains();
+  const { assets, current } = useDisplayAsset(scope);
   if (!current) return null;
 
   return (

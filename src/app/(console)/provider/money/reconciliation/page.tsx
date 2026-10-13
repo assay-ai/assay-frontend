@@ -5,6 +5,7 @@ import { Download, EyeOff, Upload } from "lucide-react";
 import * as React from "react";
 import { useMemo, useState } from "react";
 
+import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
 import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -18,7 +19,12 @@ import {
 } from "@/components/ui/panel";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { formatCount } from "@/features/buyer/period";
-import { foldClasses, observedTakeRate } from "@/features/call-classes/csv";
+import {
+  foldClasses,
+  observedTakeRate,
+  pendingNote,
+  rowsInAsset,
+} from "@/features/call-classes/csv";
 import {
   downloadCallsCsv,
   exportErrorMessage,
@@ -101,8 +107,8 @@ const MONTH_SHORT = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: 
  *   - TEST reads "your own dry runs · 8 sessions" on the frame. The session
  *     count has no endpoint, and TEST has no producer at all today, so the
  *     count is dropped rather than invented.
- *   - PENDING is emitted by the wire and drawn by neither frame. That sentence
- *     is OURS.
+ *   - PENDING is emitted by the wire and drawn by neither frame. Its note is
+ *     OURS and depends on why the rows are pending: see `pendingNote`.
  */
 const CLASS_NOTE: Record<string, string> = {
   PAID_CREDITED: "settled to you",
@@ -115,7 +121,6 @@ const CLASS_NOTE: Record<string, string> = {
   TEST: "your own dry runs",
   SYSTEM_ERROR: "upstream 5xx / timeout",
   REQUEST_ERROR: "4xx from your endpoint",
-  PENDING: "still in flight — no money has moved",
 };
 
 interface ClassRow {
@@ -174,7 +179,20 @@ export default function ReconciliationPage() {
     queryFn: () => listProviderPayouts({ ...period, limit: 50 }),
   });
 
-  const classes = useMemo(() => foldClasses(calls.rows), [calls.rows]);
+  /*
+    One money figure, one asset. A provider paid in two assets picks one with
+    the same selector as the earnings screens, and every figure below — calls,
+    classes, settlement, batches — is that asset's. The CSV download stays the
+    whole file: it carries an `asset` column of its own.
+  */
+  const { current: displayAsset, isPending: assetPending } = useDisplayAsset("provider");
+  const rows = useMemo(
+    () => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)),
+    [calls.rows, assetPending, displayAsset]
+  );
+  const loading = calls.isLoading || assetPending;
+
+  const classes = useMemo(() => foldClasses(rows), [rows]);
   /*
     DELIBERATE DEPARTURE from the design's copy, and the same derivation the
     provider view uses so the two screens cannot disagree.
@@ -189,9 +207,13 @@ export default function ReconciliationPage() {
     this window — and it is labelled "observed" so it reads as measured rather
     than declared.
   */
-  const observedTake = useMemo(() => observedTakeRate(calls.rows), [calls.rows]);
+  const observedTake = useMemo(() => observedTakeRate(rows), [rows]);
 
-  const batchCount = new Set((payouts.data?.items ?? []).map((p) => p.batchId)).size;
+  const batchCount = new Set(
+    (payouts.data?.items ?? [])
+      .filter((p) => !displayAsset || p.amount.asset === displayAsset)
+      .map((p) => p.batchId)
+  ).size;
 
   const gross = classes.totalGross;
   const fee = classes.totalFee;
@@ -203,7 +225,8 @@ export default function ReconciliationPage() {
     calls: formatCount(bucket.calls),
     share: `${(bucket.share * 100).toFixed(1)}%`,
     credited: money(bucket.credited),
-    note: CLASS_NOTE[bucket.className] ?? "",
+    note:
+      bucket.className === "PENDING" ? pendingNote(rows) : (CLASS_NOTE[bucket.className] ?? ""),
   }));
 
   const classColumns: TableColumn<ClassRow>[] = [
@@ -325,6 +348,8 @@ export default function ReconciliationPage() {
         </div>
       </header>
 
+      <DisplayAssetSelect scope="provider" />
+
       {error ? (
         <Banner
           tone="danger"
@@ -363,9 +388,7 @@ export default function ReconciliationPage() {
         <JoinStat label="Your log" value={DASH} caption="no access log has been uploaded" />
         <JoinStat
           label="Our ledger"
-          value={
-            calls.isLoading ? DASH : `${formatCount(classes.totalCalls)} calls`
-          }
+          value={loading ? DASH : `${formatCount(classes.totalCalls)} calls`}
           caption={`as of ${stamp(period.to)}`}
         />
         {/*

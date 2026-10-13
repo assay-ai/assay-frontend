@@ -163,6 +163,32 @@ function sum(
   return { amount: total.toFixed(0), asset: denom[0].asset, decimals: denom[0].decimals };
 }
 
+/**
+ * The rows denominated in `asset` — the provider's display asset. `undefined`
+ * means a one-asset provider, and every row stays. Money in two assets must
+ * never be folded into one figure, so a screen scopes its rows with this first.
+ */
+export function rowsInAsset(rows: CallRow[], asset: string | undefined): CallRow[] {
+  return asset ? rows.filter((row) => row.asset === asset) : rows;
+}
+
+/**
+ * The note for the PENDING class, from why its rows are pending.
+ *
+ * The export marks two different things PENDING: a call still being judged,
+ * and a SETTLED call with no credit written for it (reason "settled, no credit
+ * recorded"). Only the first is in flight.
+ */
+export function pendingNote(rows: CallRow[]): string {
+  const pending = rows.filter((row) => row.classification === "PENDING");
+  const settled = pending.filter((row) => row.status === "SETTLED").length;
+  const inFlight = pending.length - settled;
+  if (settled === 0) return "still in flight — no money has moved";
+  if (inFlight === 0) return "settled, no credit recorded · not paid to you";
+  const count = (n: number) => n.toLocaleString("en-US");
+  return `${count(settled)} settled, no credit recorded · ${count(inFlight)} still in flight`;
+}
+
 // ── Call classes ───────────────────────────────────────────────────────────
 
 /**
