@@ -10,7 +10,9 @@ import { getAccountBlockStatus } from "@/services/account-block.service";
 import {
   getAccountBlockSnapshot,
   getServerAccountBlockSnapshot,
+  hasBlockStatusSession,
   setAccountBlockConfirmed,
+  settleBlockStatus,
   subscribeAccountBlock,
 } from "./state";
 
@@ -21,8 +23,10 @@ export const ACCOUNT_BLOCK_STATUS_KEY = ["account", "block-status"] as const;
  * whole app. Mounted by the signed-in shells, never by `/login` or the public
  * pages: without a session the request would 401, and a 401 signs out.
  *
- * Refetched every minute and on focus so a lifted block lifts the banner, and
- * a fresh block shows it, without a reload.
+ * Asked once a session exists (see `hasBlockStatusSession`). Refetched every
+ * minute and on focus so a lifted block lifts the banner — the refusal-derived
+ * one too, see `settleBlockStatus` — and a fresh block shows it, without a
+ * reload.
  */
 export function useAccountBlockStatus() {
   const { ready, authenticated } = usePrivy();
@@ -31,8 +35,15 @@ export function useAccountBlockStatus() {
 
   const query = useQuery({
     queryKey: ACCOUNT_BLOCK_STATUS_KEY,
-    queryFn: getAccountBlockStatus,
-    enabled: ready && (authenticated || hasStoredToken),
+    queryFn: async () => {
+      const requestedAt = Date.now();
+      const status = await getAccountBlockStatus();
+      // Before the `confirmed` effect below: a lifted confirmed block clears its refusals.
+      settleBlockStatus(status.blocked === true, requestedAt);
+      return status;
+    },
+    // Not `ready` alone: on a token-based session Privy may never become ready.
+    enabled: hasBlockStatusSession({ ready, authenticated, hasStoredToken }),
     staleTime: 30_000,
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,

@@ -96,6 +96,15 @@ describe("ApiClient on a blocked account", () => {
     },
   );
 
+  it("words an organization refusal as blocked, like the banner, never suspended", async () => {
+    const { adapter } = refusing(403, "AUTH_ORGANIZATION_SUSPENDED");
+    const error = (await client(adapter).patch("/spend-policy", {}).catch((e: unknown) => e)) as ApiError;
+    expect(error.code).toBe("AUTH_ORGANIZATION_SUSPENDED");
+    expect(error.message).toMatch(/blocked/);
+    expect(error.message).not.toMatch(/suspended/i);
+    expect(blocked.mock.calls[0][0].message).toBe(error.message);
+  });
+
   it("does not refresh the session token on a blocked refusal, even a 401-shaped one", async () => {
     const provider = vi.fn(async () => "t");
     registerSessionTokenProvider(provider);

@@ -199,6 +199,19 @@ export function registerWriteGuard(guard: WriteGuard | null): void {
   writeGuard = guard;
 }
 
+/**
+ * What a toast says for an organization refusal. The backend's message for
+ * `AUTH_ORGANIZATION_SUSPENDED` says "suspended"; the banner says "blocked".
+ * One word for one state: the message is reworded here, the code is kept.
+ */
+export const ORGANIZATION_BLOCKED_MESSAGE =
+  "Your organization is blocked by Assay. You can view your data, but you cannot make payments or changes.";
+
+function withBlockedWording(error: ApiError): ApiError {
+  if (error.code !== "AUTH_ORGANIZATION_SUSPENDED") return error;
+  return new ApiError(error.code, ORGANIZATION_BLOCKED_MESSAGE, error.status, error.path);
+}
+
 const READ_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD"]);
 
 function toApiError(error: AxiosError): ApiError {
@@ -325,8 +338,9 @@ class ApiClient {
           here — its refusals are about the operator, not a buyer.
         */
         if (failure === "account-blocked") {
-          if (this.triggerGlobalUnauthorized) accountBlockedHandler?.(apiError);
-          return Promise.reject(apiError);
+          const refusal = withBlockedWording(apiError);
+          if (this.triggerGlobalUnauthorized) accountBlockedHandler?.(refusal);
+          return Promise.reject(refusal);
         }
 
         if (failure === "sign-out" && this.usesSessionToken && config && !config._authRetried) {
