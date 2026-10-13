@@ -666,8 +666,7 @@ export default function SpendPage() {
               <PanelTitles>
                 <PanelTitle>What changed</PanelTitle>
                 <PanelDescription>
-                  per-group delta in amount and calls, sorted by absolute amount — two columns
-                  separate volume from price from mix
+                  change in amount and calls per group, largest change first
                 </PanelDescription>
               </PanelTitles>
             </PanelHeader>
@@ -781,7 +780,7 @@ export default function SpendPage() {
             icon={<Info className="h-full w-full" />}
             className="border-01 bg-01"
             title="Grouping goes as far as tool × upstream × hour"
-            description="Attributing spend to a specific task or code path needs a correlation id, which is not yet supported. This is stated here rather than implied to be one more click away."
+            description="Attributing spend to a specific task or code path is not available yet."
           />
         </>
       ) : null}
@@ -789,7 +788,7 @@ export default function SpendPage() {
       {isEmpty ? (
         <EmptyState
           title="No calls yet"
-          description="When a call fails our checks you are not charged for it, and the amount appears here. Never render a zero — a zero reads as a broken guarantee rather than an unused one."
+          description="Your agent has not made a call in this period. Calls appear here as they are made; a call that fails our checks is not charged."
         />
       ) : null}
     </div>

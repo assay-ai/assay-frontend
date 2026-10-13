@@ -473,10 +473,9 @@ function ReceiptPageContent() {
         <Panel>
           <PanelHeader>
             <PanelTitles>
-              <PanelTitle>The other states this screen has to render</PanelTitle>
+              <PanelTitle>Other outcomes a call can have</PanelTitle>
               <PanelDescription>
-                Response classes and verdicts — each gets its own sentence, because
-                collapsing them into one “error” is a three-year support tax
+                what each outcome means for your money
               </PanelDescription>
             </PanelTitles>
           </PanelHeader>

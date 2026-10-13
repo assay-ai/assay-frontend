@@ -319,8 +319,7 @@ export function ToolsView() {
       <div className="flex w-full flex-col items-start gap-2.5 rounded-lg border border-primary-20 bg-primary-10 px-4 py-3 tablet:flex-row tablet:items-center">
         <ShieldCheck aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-primary-600" />
         <p className="flex-1 text-body-13 text-primary-700">
-          The allowlist is enforced by the gateway, on the way into a paid call — a tool outside it
-          is refused with MCP_TOOL_NOT_ALLOWED before any money moves. It is our software doing the
+          The allowlist is enforced by the gateway, on the way into a paid call — a tool outside it is refused before any money moves. It is our software doing the
           refusing, not a signer, so treat it as a control and not as a guarantee. The list itself
           lives on the spend policy and is edited on Limits; this screen shows every tool the
           platform can serve, whether or not you have called it.

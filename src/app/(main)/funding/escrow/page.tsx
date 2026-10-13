@@ -148,7 +148,7 @@ const REFUSALS: Record<string, string> = {
   CHAIN_PROGRAM_NOT_CONFIGURED:
     "This deployment is not pointed at a settlement program, so no transaction can be built. Your escrow is untouched; this is ours to fix.",
   CHAIN_ACCOUNT_LAYOUT_UNEXPECTED:
-    "The escrow account on chain does not have the shape this server expects, so it refused to build a transaction against it rather than guess. Your escrow is untouched; this is ours to fix.",
+    "We could not read your escrow account on chain correctly, so no transaction was built. Your escrow is untouched; this is ours to fix — please contact support.",
 };
 
 function refusalSentence(error: ApiError): string {
@@ -515,8 +515,7 @@ function EscrowPageContent() {
           <p className="text-body-sm leading-[1.6] text-02">
             {UNREADABLE_NOTE} We do not know whether you have an escrow on{" "}
             {chainId === null ? "this chain" : chainDisplayName(chains, chainId)}, what it holds,
-            or whether a withdrawal is standing — so this page is showing you none of those
-            rather than guessing at them. Nothing has changed on chain, and your money is where
+            or whether a withdrawal is standing — so none of those is shown. Nothing has changed on chain, and your money is where
             it was. Try again in a moment.
           </p>
           <div>

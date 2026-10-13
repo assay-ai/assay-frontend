@@ -595,7 +595,7 @@ export default function ProviderExitPage() {
       */
       setExportNote(
         file.meta === null
-          ? "The export was downloaded, but the API did not say whether it was capped. Treat it as possibly incomplete."
+          ? "The export was downloaded, but we could not confirm it is complete. Treat it as possibly incomplete."
           : file.meta.truncated
             ? `The export was capped at ${file.meta.rowCount} of ${file.meta.totalMatching} rows. It is not your whole record.`
             : null,
@@ -682,7 +682,7 @@ export default function ProviderExitPage() {
         <Banner
           tone="warning"
           title="You cannot withdraw stake yet — no stake authority has been proved"
-          description="The platform derives your stake account from the wallet that signs a challenge, and will never take that address from a request body. Until one is proved, both buttons above answer PROVIDER_STAKE_AUTHORITY_UNPROVEN."
+          description="Your stake account is identified by the wallet that signs a challenge, never by an address you type. Until one is proved, both buttons above are refused."
           action={
             <BannerAction onClick={() => setProving(true)}>Prove stake authority</BannerAction>
           }
@@ -1009,7 +1009,7 @@ function ProveAuthoritySheet({
             id="stake-authority-chain"
             value={chainId}
             onChange={(event) => setChainId(event.target.value)}
-            hint="CAIP-2. Suggested from your proved payout address; no endpoint publishes the deployment's chain id."
+            hint="The chain id, in CAIP-2 form. Suggested from your proved payout address."
           />
           <Field
             label="Wallet address"

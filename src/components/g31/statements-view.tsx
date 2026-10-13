@@ -113,20 +113,20 @@ export function StatementsView() {
           ) : summary.isError ? (
             <p className="py-2 text-body-13 text-danger-600">
               This period could not be read:{" "}
-              {summary.error instanceof ApiError ? summary.error.message : "the request failed"}. A
-              statement that silently showed zeros here would reconcile to nothing.
+              {summary.error instanceof ApiError ? summary.error.message : "the request failed"}. No
+              figures are shown until it can be read.
             </p>
           ) : (
             <>
               <KeyValueRow
                 label="Opening balance"
-                sub="no historical-balance endpoint exists yet"
+                sub="not available yet"
                 value="—"
                 valueClassName="text-03"
               />
               <KeyValueRow
                 label="Deposits"
-                sub="deposits are not folded into this statement yet"
+                sub="not included in this statement yet — see Funding"
                 value="—"
                 valueClassName="text-03"
               />
@@ -151,13 +151,13 @@ export function StatementsView() {
               />
               <KeyValueRow
                 label="Withdrawals"
-                sub="withdrawals are not folded into this statement yet"
+                sub="not included in this statement yet — see Funding"
                 value="—"
                 valueClassName="text-03"
               />
               <KeyValueRow
                 label="Closing balance"
-                sub="requires a balance as at the month boundary, which the API cannot answer"
+                sub="not available yet"
                 value="—"
                 valueClassName="text-03"
                 divider={false}
@@ -172,8 +172,7 @@ export function StatementsView() {
           <PanelTitles>
             <PanelTitle>By tool</PanelTitle>
             <PanelDescription className="whitespace-normal">
-              the same endpoint serves the dashboard, the export and the statement, so the three
-              cannot disagree in front of a finance approver
+              the same figures as the dashboard and the CSV export
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
@@ -256,7 +255,7 @@ export function StatementsView() {
       <div className="flex w-full items-start gap-2.5 rounded-lg border border-01 bg-02 p-3.5 tablet:p-[15px]">
         <Info aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-03" />
         <p className="text-body-13 text-02">
-          CSV export ships at MVP on the Spend explorer; this document is Phase 2.
+          A downloadable statement is not available yet. You can export your calls as CSV from Spend.
         </p>
       </div>
     </div>

@@ -157,8 +157,7 @@ export function AuditLogView() {
           <PanelTitles>
             <PanelTitle>Events</PanelTitle>
             <PanelDescription className="whitespace-normal">
-              deliberately not here: individual tool calls — mixing 15,000 of them into an audit log
-              destroys the log
+              individual tool calls are not listed here — see Spend for those
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
@@ -166,8 +165,7 @@ export function AuditLogView() {
           {log.isError ? (
             <p className="p-3 text-body-13 text-danger-600">
               The audit log could not be read:{" "}
-              {log.error instanceof ApiError ? log.error.message : "the request failed"}. An empty
-              log and an unreachable one are not the same claim.
+              {log.error instanceof ApiError ? log.error.message : "the request failed"}. This is not an empty log.
             </p>
           ) : log.isPending ? (
             <p className="p-3 font-mono text-mono-13 text-03">Loading…</p>
@@ -199,7 +197,7 @@ export function AuditLogView() {
                 <EmptyState
                   icon={null}
                   title="No audit events are recorded yet"
-                  description="Changes to limits, credentials and alert channels are not written to this log yet, so an empty log does not mean nothing changed. Limit changes are listed with who made them under Change history on Limits; credentials and their revocations are listed under Agents."
+                  description="Changes to limits, credentials and alert channels are not shown in this log yet. Limit changes are listed with who made them under Change history on Limits; credentials and their revocations are listed under Agents."
                 />
               )}
             </div>

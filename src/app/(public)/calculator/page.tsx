@@ -293,7 +293,7 @@ export default function EconomicsCalculatorPage() {
           <PanelTitles>
             <PanelTitle>unverified vs verified</PanelTitle>
             <PanelDescription>
-              the comparison is the screen — a single column hides the trade
+              the two listing paths side by side
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>

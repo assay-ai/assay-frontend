@@ -124,7 +124,7 @@ function Tester() {
         <Banner
           tone="warning"
           title="The in-app tester cannot run a call yet"
-          description="Nothing in the API runs a tool call from the console — an agent calls tools over MCP. Use the config above, then watch the call arrive on the Overview."
+          description="A test call cannot be run from here yet. Connect your agent with the config above, then watch its first call arrive on the Overview."
         />
       ) : null}
     </div>

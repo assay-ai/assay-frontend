@@ -126,8 +126,8 @@ export default function AutoTopUpPage() {
     }
     setSaved(
       enabled
-        ? `Auto top-up is on, capped at ${money(capValue!)} per calendar month. Nothing is stored yet — this API has no auto top-up endpoint.`
-        : "Auto top-up is off. Your balance is a hard ceiling again. Nothing is stored yet — this API has no auto top-up endpoint.",
+        ? `Auto top-up is not available yet, so this setting (on, capped at ${money(capValue!)} per calendar month) was not saved.`
+        : "Auto top-up is not available yet, so there is nothing to switch off. Your balance is a hard ceiling.",
     );
   }
 
@@ -242,7 +242,7 @@ export default function AutoTopUpPage() {
             label="Used this month"
             amount={`${money(new Decimal(0))} of ${money(capValue)}`}
             percent={0}
-            note="When the cap is reached, reloads stop and we tell you. Calls then fail with PAYMENT_INSUFFICIENT_FUNDS rather than spending more of your money."
+            note="When the cap is reached, reloads stop and we tell you. Calls are then refused for insufficient funds rather than spending more of your money."
           />
         ) : null}
 

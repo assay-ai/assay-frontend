@@ -409,7 +409,7 @@ export default function ReconciliationPage() {
           <PanelTitles>
             <PanelTitle>Why we credited less than you served</PanelTitle>
             <PanelDescription>
-              call classes are exhaustive by construction — every row has exactly one
+              every call falls into exactly one class
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
@@ -500,11 +500,9 @@ export default function ReconciliationPage() {
           className="mt-0.5 shrink-0 text-warning-600"
         />
         <p className="min-w-0 flex-1 text-body-13 text-warning-700">
-          Canary calls are included in PAID_CREDITED and are not labelled — labelling them would
-          let a provider identify them. {MONTH_SHORT.format(new Date(period.from))} canary volume
-          on your bindings: {DASH} calls. This is the one place the “you see everything” stance is
-          deliberately traded, and the documentation says so rather than leaving it to be
-          discovered.
+          Canary calls (our own test calls) are included in PAID_CREDITED and are not labelled, so
+          they cannot be told apart from real traffic. {MONTH_SHORT.format(new Date(period.from))} canary volume
+          on your bindings: {DASH} calls.
         </p>
       </div>
     </>

@@ -282,8 +282,8 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
                 divider={false}
               />
               <p className="pt-2 text-body-xs text-03">
-                Upstream, region, licence, stake and slash history are only exposed on
-                /providers/me/*. A buyer cannot read them about somebody else yet.
+                Upstream, region, licence, stake and penalty history are not published for other
+                providers yet.
               </p>
             </PanelBody>
           </Panel>

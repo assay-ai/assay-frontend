@@ -308,7 +308,7 @@ function ProviderTrafficPageContent() {
           variant="secondary"
           icon={<Download aria-hidden="true" />}
           disabled
-          title="No endpoint exports this aggregated per-agent view — only the per-call CSV export (GET /providers/me/calls/export), which is a different shape."
+          title="Exporting this per-agent view is not available yet. The per-call CSV export is on Reconciliation."
         >
           Export
         </Button>
@@ -350,7 +350,7 @@ function ProviderTrafficPageContent() {
           </div>
           {validationError ? (
             <p role="alert" className="text-body-13 text-danger-600">
-              That is not a valid agent id — `payment_intents.agent_id` is a UUID.
+              That is not a valid agent id. An agent id is a UUID.
             </p>
           ) : null}
         </PanelBody>
@@ -366,12 +366,12 @@ function ProviderTrafficPageContent() {
         <MetricTile
           label="p50 latency"
           value={DASH}
-          sub="not measured — payment_intents has no latency column"
+          sub="not available yet"
         />
         <MetricTile
           label="p95 latency"
           value={DASH}
-          sub="not measured — payment_intents has no latency column"
+          sub="not available yet"
         />
       </section>
 
@@ -396,7 +396,7 @@ function ProviderTrafficPageContent() {
               description={
                 appliedAgentId
                   ? "This agent has not called any of your bindings in the last 30 days."
-                  : "No agent has called your bindings in the last 30 days. Nothing here means no callers yet, not a broken counter."
+                  : "No agent has called your bindings in the last 30 days."
               }
             />
           ) : (

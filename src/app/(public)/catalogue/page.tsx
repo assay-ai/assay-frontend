@@ -136,8 +136,7 @@ export default function CataloguePage() {
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">Where the demand is</h1>
           <p className="text-mono-12 font-mono text-03">
-            30-day volume across all bindings · absence of supply is the most interesting thing
-            on this page
+            30-day volume across all bindings
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2.5">

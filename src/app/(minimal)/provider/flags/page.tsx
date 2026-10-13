@@ -298,7 +298,7 @@ export default function VerdictsAndFlagsPage() {
           variant="secondary"
           icon={<Flag aria-hidden="true" />}
           disabled
-          title="Filing a flag needs POST /disputes, which has no service in this app yet."
+          title="Flagging a verdict from here is not available yet."
         >
           Flag
         </Button>
@@ -344,7 +344,7 @@ export default function VerdictsAndFlagsPage() {
             variant="secondary"
             icon={<Webhook aria-hidden="true" />}
             disabled
-            title="A binding carries no webhook URL field, and no endpoint registers a stream."
+            title="A webhook stream is not available yet."
           >
             Webhook stream
           </Button>
@@ -353,7 +353,7 @@ export default function VerdictsAndFlagsPage() {
 
       {/* ── Note ───────────────────────────────────────────────── */}
       <Note tone="teal" icon={<ShieldCheck aria-hidden="true" className="size-[15px]" />}>
-        A failed verdict costs you money: on DATA_FAIL your stake is slashed and the buyer is
+        A failed verdict costs you money: when our checks reject a response your stake is slashed and the buyer is
         compensated out of the penalty. That is why every verdict here carries its evidence
         pack, why you can dispute one, and why we publish our own false-positive rate against
         the gate.
@@ -448,7 +448,7 @@ export default function VerdictsAndFlagsPage() {
             <PanelBody className="gap-3.5 p-5">
               <EmptyState
                 title="You have not flagged a verdict"
-                description="Flagging needs a disputes service this app does not have yet, and the disputes a provider files are not readable back on this persona."
+                description="Flagging a verdict from here is not available yet. A dispute you file from a case page is listed under Disputes."
               />
             </PanelBody>
           </Panel>
@@ -464,8 +464,7 @@ export default function VerdictsAndFlagsPage() {
               <div className="flex w-full flex-col gap-1">
                 <p className="font-mono text-mono-2xl text-teal-600">{DASH}</p>
                 <p className="text-body-13 leading-[1.55] text-02">
-                  No endpoint publishes the false-positive rate or the gate it is measured
-                  against, so neither figure is shown.
+                  Our false-positive rate is not published yet.
                 </p>
               </div>
 

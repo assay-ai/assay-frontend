@@ -414,8 +414,7 @@ export default function ProviderVerdictFeedPage() {
                 <DialogTitle>This feed as an API stream</DialogTitle>
               </DialogHeader>
               <p className="text-body-13 text-02">
-                The exact request this screen is making, with your current filters applied. Point
-                your own observability at this route rather than scraping the console.
+                The request behind this feed, with your current filters applied. Use it to mirror the feed into your own monitoring.
               </p>
               <CodeBlock title="curl" code={apiSnippet} />
             </DialogContent>

@@ -51,7 +51,7 @@ export function SettingsView() {
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
       <PageHeader
         title="Settings"
-        subtitle="thin at MVP — everything here is also a documented endpoint"
+        subtitle="your account, wallet and preferences"
         actions={
           <Button icon={<Check />} type="button" disabled>
             Save
@@ -104,13 +104,12 @@ export function SettingsView() {
             <KeyValueRow label="Time zone" value="UTC" />
             <KeyValueRow
               label="Currency display"
-              sub="the MVP settles in one stablecoin; the asset id is never shown"
+              sub="amounts are shown in US dollars"
               value="USD"
               divider={false}
             />
             <p className="pt-2 text-body-xs text-03">
-              No user, session or organization endpoint exists on this API yet, so nothing above can
-              be read or changed from here.
+              Editing these details is not available yet.
             </p>
           </PanelBody>
         </Panel>
@@ -119,7 +118,7 @@ export function SettingsView() {
           <PanelHeader>
             <PanelTitles>
               <PanelTitle>Preferences</PanelTitle>
-              <PanelDescription>no preferences endpoint exists yet</PanelDescription>
+              <PanelDescription>not available yet</PanelDescription>
             </PanelTitles>
           </PanelHeader>
           <PanelBody className="gap-4 p-5">
@@ -149,8 +148,7 @@ export function SettingsView() {
               </div>
             ))}
             <p className="text-body-xs text-03">
-              Read-only. A switch that flips and forgets would be worse than one that says it cannot
-              save.
+              Read-only for now: preferences cannot be changed yet.
             </p>
           </PanelBody>
         </Panel>
@@ -161,7 +159,7 @@ export function SettingsView() {
           <PanelTitles>
             <PanelTitle>Close account</PanelTitle>
             <PanelDescription className="whitespace-normal">
-              export is forced before deactivation; credentials and the signer are revoked last
+              you export your records first; credentials are revoked last
             </PanelDescription>
           </PanelTitles>
           <Button variant="secondary" size="sm" asChild>

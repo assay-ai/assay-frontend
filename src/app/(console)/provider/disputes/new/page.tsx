@@ -42,7 +42,7 @@ function DisputeFilingPageContent() {
       <Banner
         tone="danger"
         title="No slash proposal named."
-        description="This page must be reached from a slash case's Dispute action, which supplies ?subjectId= as the proposal id."
+        description="Open this page from the Dispute button on a case page, so we know which penalty proposal you are disputing."
       />
     );
   }
