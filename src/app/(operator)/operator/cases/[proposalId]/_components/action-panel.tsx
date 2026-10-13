@@ -17,6 +17,8 @@ import {
   PanelTitles,
 } from "@/components/ui/panel";
 import { Radio } from "@/components/ui/radio";
+import { signerRoleLabel } from "@/features/chain-calls/send-contract-call";
+import { ContractCallPanel } from "@/features/operator/contract-call-panel";
 import {
   ALL_OUTCOMES,
   DECISION_NOTE_MIN_LENGTH,
@@ -67,7 +69,9 @@ import type {
   SlashProposalStatus,
   SuspendProposalBody,
 } from "@/interfaces/operator";
+import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
+import { chainStatusLabel } from "@/libs/chains/status-labels";
 import {
   claimCase,
   createCancelIntent,
@@ -764,7 +768,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
       roles.length > 0 ? roles.join(", ") : "no roles"
     }`;
   } else if (!cancelLegal) {
-    cancelBlockedBecause = `only while the on-chain record is waiting for the settlement admin's cancel (CANCEL_REQUESTED) — it is ${brief.chainStatus ?? "not reported"}`;
+    cancelBlockedBecause = `only while the on-chain record is waiting for its cancel (${chainStatusLabel("CANCEL_REQUESTED")}) — it is ${chainStatusLabel(brief.chainStatus)}`;
   }
   /*
     Shown to every operator on the case, not only the roles that may build the
@@ -1830,12 +1834,29 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                   >
                     Build the cancellation transaction
                   </Button>
+                ) : cancelIntent.to ? (
+                  /*
+                    EVM: `transaction` is the `cancelSlash` calldata for `to`,
+                    and the signer is the arbiter when the Config has one
+                    (D-19), else the admin — `signerRole` says which. Signed
+                    through the same panel the arbiter page uses.
+                  */
+                  <ContractCallPanel
+                    call={evmCancelCall(cancelIntent, casePenalty.asset)}
+                    title={`cancelSlash for ${cancelIntent.requestId}`}
+                    afterSend="The case moves to cancelled once the reconcile sweep reads the record back off the chain."
+                    onSent={setCancelSignature}
+                  />
                 ) : (
                   <>
                     <div className="flex w-full flex-col gap-1.5 rounded-md border border-01 bg-02 p-3">
                       <IntentRow label="Provider" value={cancelIntent.provider} />
                       <IntentRow label="Request id" value={cancelIntent.requestId} />
                       <IntentRow label="Must be signed by" value={cancelIntent.admin} />
+                      <IntentRow
+                        label="Signer role"
+                        value={signerRoleLabel(cancelIntent.signerRole ?? "ADMIN")}
+                      />
                     </div>
                     <CodeBlock
                       title="cancel_slash (unsigned, base64)"
@@ -1939,6 +1960,24 @@ function Section({
  * copies the transaction, not these — so they are read-only text rather than
  * disabled fields, which would imply an edit that was withheld.
  */
+/**
+ * An EVM `CancelIntent` as the generic unsigned call. The chain is the case
+ * penalty's own (`eip155:46630/erc20:0x…` → `eip155:46630`): the route does
+ * not repeat it, and the penalty is on the record's chain by construction.
+ */
+function evmCancelCall(intent: CancelIntent, penaltyAsset: string): SlashContractCall {
+  return {
+    chainId: penaltyAsset.split("/")[0] ?? penaltyAsset,
+    to: intent.to ?? "",
+    data: intent.transaction,
+    value: "0",
+    signer: intent.admin,
+    signerRole: intent.signerRole ?? "ADMIN",
+    functionName: "cancelSlash",
+    requestIds: [intent.requestId.startsWith("0x") ? intent.requestId : `0x${intent.requestId}`],
+  };
+}
+
 function IntentRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex w-full flex-col gap-0.5">

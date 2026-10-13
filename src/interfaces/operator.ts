@@ -49,6 +49,30 @@ export interface PlatformHealth {
   providersWithStake: number;
   openDisputes: number;
   oldestOpenDisputeAgeSeconds: number | null;
+  /** The EVM chain-state cache, one row per chain. Absent on an older backend. */
+  chainState?: ChainStateHealth[];
+}
+
+/**
+ * `ChainStateHealthDto` — what the EVM chain-state indexer last read of one
+ * chain's `X402Config`. `stale` when the indexer never caught up or lags more
+ * than `EVM_CHAIN_STATE_MAX_LAG_MS` (five minutes by default).
+ */
+export interface ChainStateHealth {
+  chainId: string;
+  paused: boolean;
+  /** Whether the Config has the dispute upgrade; `null` until first reconciled. */
+  upgraded: boolean | null;
+  /** `X402Config.arbiter()`, lower-case, or `null`. */
+  arbiter: string | null;
+  /** The live slash delay — the dispute window. */
+  slashDelaySeconds: number | null;
+  blockedCount: number;
+  indexedBlock: string | null;
+  headBlock: string | null;
+  lagSeconds: number | null;
+  stale: boolean;
+  reconciledAt: string | null;
 }
 
 /**
@@ -76,7 +100,7 @@ export type SlashProposalStatus =
 
 /** assay-backend `src/modules/slash/domain/chain-slash-outcome.ts` `ChainProposalStatus`. */
 export type ChainProposalStatus =
-  | "NONE" | "PROPOSING" | "PENDING" | "CANCEL_REQUESTED"
+  | "NONE" | "PROPOSING" | "PENDING" | "CANCEL_REQUESTED" | "DISPUTED"
   | "EXECUTED" | "CANCELLED" | "REFUSED";
 
 /** assay-backend `src/modules/slash/domain/arbitration.ts` `ArbitrationOutcome`. */
@@ -317,10 +341,20 @@ export interface RecordCompensationBody {
  * moves the case to `CANCELLED`, so the screen's job ends at the broadcast.
  */
 export interface CancelIntent {
-  /** Unsigned wire bytes, base64. Fee payer is `Config.admin`. */
+  /**
+   * Solana: unsigned wire bytes, base64, fee payer `Config.admin`. EVM: the
+   * `cancelSlash` calldata, `0x`-hex, sent to {@link CancelIntent.to}.
+   */
   transaction: string;
-  /** `Config.admin` — the only key that can sign this. **Bare base58**, not CAIP-10. */
+  /**
+   * The only key that can sign this. Solana: `Config.admin`, **bare base58**.
+   * EVM: the ARBITER when the Config has one (D-19), else the admin — see `signerRole`.
+   */
   admin: string;
+  /** Who `admin` is. Absent on Solana and on an older backend, which means the admin. */
+  signerRole?: "ADMIN" | "ARBITER";
+  /** EVM only: the X402Stake proxy the calldata is sent to. */
+  to?: string;
   /** The slash request id the record PDA is seeded by. 32 bytes, lower-case hex. */
   requestId: string;
   /** The provider whose reservation the cancellation releases. **Bare base58**, not CAIP-10. */
@@ -422,4 +456,69 @@ export interface ListOverrideLogQuery {
   targetId?: string;
   ticketRef?: string;
   q?: string;
+}
+
+// ── D-19 · The arbiter page ─────────────────────────────────────────────────
+
+/** `GET /operator/arbiter/terms?chainId=` — the Config's dispute terms, read live from the chain. */
+export interface ArbiterTerms {
+  chainId: string;
+  /** False on a Config that predates the dispute upgrade: no dispute, arbiter or blocklist. */
+  upgraded: boolean;
+  paused: boolean;
+  /** `X402Config.arbiter()`, checksummed, or `null` for none appointed. */
+  arbiter: string | null;
+  /** `X402Config.admin()`, checksummed. */
+  admin: string;
+  /** The delay a proposal made now would freeze into its `executableAt`. */
+  slashDelaySeconds: number;
+}
+
+/** One row of `GET /operator/arbiter/disputes` (`{ items }`), oldest dispute first. */
+export interface ArbiterDispute {
+  /** `0x` + 64 lower-case hex. */
+  requestId: string;
+  proposalId: string;
+  providerId: string;
+  chainId: string;
+  caseStatus: string;
+  caseChainStatus: string;
+  /** Atomic units of the stake asset, as a decimal string. */
+  penaltyAmount: string;
+  reservedAmount: string | null;
+  disputedAt: string | null;
+  executableAt: string | null;
+  /** `disputedAt + 30 d`: from then `expireSlash` releases it with `DisputeUnresolved`. */
+  expiresAt: string | null;
+  /**
+   * PLACEHOLDER — the provider's upheld violations in the last 30 days. Being
+   * added on the backend; the field name is not confirmed yet, so it is read
+   * through `upheldLast30dOf` (features/operator/arbiter.ts), which accepts the
+   * likely spellings. Absent on the backend at aa501c2.
+   */
+  upheldViolationsLast30d?: number | null;
+}
+
+export type ArbiterRuling = "UPHOLD" | "CANCEL";
+
+/** `POST /operator/arbiter/ruling-intent` — `S-13`. */
+export interface ArbiterRulingBody {
+  chainId: string;
+  ruling: ArbiterRuling;
+  /** 1 to 64, `0x` + 64 hex. */
+  requestIds: string[];
+  reasonCode: string;
+  /** At least 20 characters. */
+  note: string;
+  ticketRef?: string;
+}
+
+/** `POST /operator/arbiter/block-intent` — `A-11`. Block only. */
+export interface ArbiterBlockBody {
+  chainId: string;
+  /** `0x` + 40 hex. */
+  account: string;
+  reasonCode: string;
+  note: string;
+  ticketRef?: string;
 }

@@ -1,6 +1,8 @@
 import type { CursorPage } from "@/interfaces/api";
+import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import type {
-  AccountBlock, AdjudicationQueueRow, CancelIntent, CreateAccountBlockBody,
+  AccountBlock, AdjudicationQueueRow, ArbiterBlockBody, ArbiterDispute, ArbiterRulingBody,
+  ArbiterTerms, CancelIntent, CreateAccountBlockBody,
   ListAccountBlocksQuery, ListOverrideLogQuery, OverrideLogEntry, UnblockAccountBody, CompensationIntent, DecideCaseBody,
   ExtendDeadlineBody, FleetSweep, ListQueueQuery, OpenFleetSweepBody,
   OperatorCaseBrief, OperatorIdentity, PlatformHealth, RecordCompensationBody,
@@ -228,4 +230,31 @@ export function listOverrideLog(
     "/operator/override-log",
     query as Record<string, unknown>,
   );
+}
+
+// ── D-19 · The arbiter page ─────────────────────────────────────────────────
+
+/** `GET /operator/arbiter/terms?chainId=` — read live from the chain. Any operator. */
+export function getArbiterTerms(chainId: string): Promise<ArbiterTerms> {
+  return operatorApi.get<ArbiterTerms>(`/operator/arbiter/terms?chainId=${encodeURIComponent(chainId)}`);
+}
+
+/** `GET /operator/arbiter/disputes` — every record disputed on chain, oldest dispute first. */
+export async function listArbiterDisputes(): Promise<ArbiterDispute[]> {
+  const page = await operatorApi.get<{ items: ArbiterDispute[] }>("/operator/arbiter/disputes");
+  return page.items;
+}
+
+/**
+ * `POST /operator/arbiter/ruling-intent` — `S-13`, `ADJL` or `TRE`. The
+ * arbiter's unsigned `upholdSlashBatch` or `cancelSlashBatch` over 1 to 64
+ * records. Builds and logs; the case moves when the arbiter's transaction lands.
+ */
+export function createArbiterRulingIntent(body: ArbiterRulingBody): Promise<SlashContractCall> {
+  return operatorApi.post<SlashContractCall>("/operator/arbiter/ruling-intent", body);
+}
+
+/** `POST /operator/arbiter/block-intent` — `A-11`, `ADJL`, `SRE` or `TRE`. The arbiter's unsigned `setBlocked(account, true)`. */
+export function createArbiterBlockIntent(body: ArbiterBlockBody): Promise<SlashContractCall> {
+  return operatorApi.post<SlashContractCall>("/operator/arbiter/block-intent", body);
 }
