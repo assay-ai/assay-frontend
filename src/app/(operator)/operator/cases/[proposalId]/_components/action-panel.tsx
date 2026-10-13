@@ -44,7 +44,10 @@ import {
   isSweepable,
   may,
   RECALCULATED_AMOUNT_PATTERN,
+  COMPENSATION_APPROVER_ROLES,
   suspendedNotice,
+  suspendNeedsApprover,
+  SUSPEND_APPROVER_ROLES,
   SWEEP_APPROVER_ROLES,
   type OperatorAction,
   type StatusGatedAction,
@@ -487,7 +490,17 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
   });
 
   const suspend = useMutation({
-    mutationFn: (body: SuspendProposalBody) => suspendCase(proposalId, body),
+    /*
+      Same rule as the sweep: the approver token is closed over, not a
+      mutation variable, so it never sits in the mutation cache. Sent only in
+      the statuses where the backend needs it.
+    */
+    mutationFn: (body: SuspendProposalBody) =>
+      suspendCase(
+        proposalId,
+        body,
+        status && suspendNeedsApprover(status) ? approverToken.trim() : undefined,
+      ),
     onSuccess: () => {
       /*
         A suspension closes the case and only REQUESTS the on-chain cancel. The
@@ -501,6 +514,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
       setSuspendReasonCode("");
       setSuspendNote("");
       setSuspendTicketRef("");
+      setApproverToken("");
       invalidateCase();
     },
     onError: reportError,
@@ -867,6 +881,13 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
     if (suspendNoteLength < SHORT_NOTE_MIN_LENGTH) {
       setFormError(
         `The note must be at least ${SHORT_NOTE_MIN_LENGTH} characters — it is ${suspendNoteLength}.`,
+      );
+      return;
+    }
+    if (status && suspendNeedsApprover(status) && approverToken.trim().length === 0) {
+      setFormError(
+        "A second operator's token is required: this case has been upheld or is awaiting a "
+        + "second signature, so it cannot be suspended alone.",
       );
       return;
     }
@@ -1440,6 +1461,13 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                   maxLength={128}
                   placeholder="e.g. OPS-1187"
                 />
+                {status && suspendNeedsApprover(status) ? (
+                  <ApproverField
+                    value={approverToken}
+                    onChange={setApproverToken}
+                    hint={`This case has been upheld or is awaiting a second signature, so suspending it needs a second operator. The approver must hold ${joinWithOr(SUSPEND_APPROVER_ROLES)}, with an authority limit that covers the penalty, and cannot be you.`}
+                  />
+                ) : null}
                 {formError ? <p className="text-body-xs text-danger-600">{formError}</p> : null}
                 <Button
                   type="button"
@@ -1532,8 +1560,13 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                     <span className="font-mono text-mono-12 text-01">
                       OPERATOR_APPROVER_ROLE_REQUIRED
                     </span>{" "}
-                    (403) and no sweep is opened. A compensation may be approved by any other
-                    active operator.
+                    (403) and no sweep is opened. A compensation&rsquo;s approver must hold{" "}
+                    {joinWithOr(COMPENSATION_APPROVER_ROLES)}, and every approver&rsquo;s authority
+                    limit must cover the amount (
+                    <span className="font-mono text-mono-12 text-01">
+                      OPERATOR_APPROVER_AUTHORITY_EXCEEDED
+                    </span>{" "}
+                    otherwise).
                   </li>
                   <li className="text-body-xs text-02">
                     An unknown proposal id returns <strong className="text-01">404</strong>, because
@@ -1746,7 +1779,11 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                         undoes this.
                       </p>
                     </div>
-                    <ApproverField value={approverToken} onChange={setApproverToken} />
+                    <ApproverField
+                      value={approverToken}
+                      onChange={setApproverToken}
+                      hint={`A second operator's own credential. The approver of a compensation must hold ${joinWithOr(COMPENSATION_APPROVER_ROLES)} with an authority limit that covers the amount, and cannot be you.`}
+                    />
                     {formError ? <p className="text-body-xs text-danger-600">{formError}</p> : null}
                     <Button
                       type="button"

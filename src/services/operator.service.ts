@@ -80,10 +80,16 @@ export function secondCase(proposalId: string, body: SecondSignatureBody): Promi
   );
 }
 
-/** `POST /operator/cases/:id/suspend`. `ADJ`, `ADJL` or `SRE`. Legal wherever `CANCELLED` is reachable. */
-export function suspendCase(proposalId: string, body: SuspendProposalBody): Promise<unknown> {
+/**
+ * `POST /operator/cases/:id/suspend`. `ADJ`, `ADJL` or `SRE`. Legal wherever `CANCELLED` is reachable.
+ * From `AWAITING_SECOND` and `UPHELD` it is two-person: pass the approver's token.
+ */
+export function suspendCase(
+  proposalId: string, body: SuspendProposalBody, approverToken?: string,
+): Promise<unknown> {
   return operatorApi.post<unknown>(
     `/operator/cases/${encodeURIComponent(proposalId)}/suspend`, body,
+    approverToken ? { "X-Operator-Approver": approverToken } : undefined,
   );
 }
 

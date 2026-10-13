@@ -7,7 +7,10 @@ import {
   isCancelRequested,
   may,
   RECALCULATED_AMOUNT_PATTERN,
+  COMPENSATION_APPROVER_ROLES,
   suspendedNotice,
+  suspendNeedsApprover,
+  SUSPEND_APPROVER_ROLES,
   SWEEP_APPROVER_ROLES,
 } from "./state";
 
@@ -184,5 +187,24 @@ describe("what a suspension tells the operator about the chain", () => {
 describe("the fleet sweep approver", () => {
   it("must hold ADJ or ADJL, as the backend's S-11 register row demands", () => {
     expect(SWEEP_APPROVER_ROLES).toEqual(["ADJ", "ADJL"]);
+  });
+});
+
+/**
+ * A suspension of a case a second person confirmed, or is confirming, is
+ * two-person on the backend (`S-1` raised from AWAITING_SECOND and UPHELD).
+ */
+describe("who may suspend alone", () => {
+  it.each(["PROPOSED", "DISPUTED", "UNDER_REVIEW"] as const)("alone from %s", (status) => {
+    expect(suspendNeedsApprover(status)).toBe(false);
+  });
+
+  it.each(["AWAITING_SECOND", "UPHELD"] as const)("needs an approver from %s", (status) => {
+    expect(suspendNeedsApprover(status)).toBe(true);
+  });
+
+  it("names the approver roles each two-person action accepts", () => {
+    expect(SUSPEND_APPROVER_ROLES).toEqual(["ADJ", "ADJL"]);
+    expect(COMPENSATION_APPROVER_ROLES).toEqual(["ADJL", "TRE"]);
   });
 });

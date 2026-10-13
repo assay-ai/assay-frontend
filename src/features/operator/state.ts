@@ -222,6 +222,22 @@ export function suspendedNotice(chainStatus: string | null | undefined): string 
  */
 export const SWEEP_APPROVER_ROLES: readonly OperatorRole[] = ["ADJ", "ADJL"];
 
+/** `S-5`'s approver roles: the action's own — whoever records a treasury payment. */
+export const COMPENSATION_APPROVER_ROLES: readonly OperatorRole[] = ["ADJL", "TRE"];
+
+/** `S-1`'s approver roles, when a suspension is raised to two-person. */
+export const SUSPEND_APPROVER_ROLES: readonly OperatorRole[] = ["ADJ", "ADJL"];
+
+/**
+ * Whether a Suspend needs a second operator. From `AWAITING_SECOND` and
+ * `UPHELD` a second person has confirmed the penalty or is confirming it, so
+ * the backend raises `S-1` to two-person; in the earlier statuses one operator
+ * suspends alone.
+ */
+export function suspendNeedsApprover(status: SlashProposalStatus): boolean {
+  return status === "AWAITING_SECOND" || status === "UPHELD";
+}
+
 /**
  * `sweep` is the one action gated on the **outcome**, not the status.
  *
