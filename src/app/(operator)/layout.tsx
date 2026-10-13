@@ -1,6 +1,8 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import * as React from "react";
 import { Toaster } from "sonner";
 
@@ -51,12 +53,20 @@ import { getOperatorIdentity } from "@/services/operator.service";
  * load-bearing, not decoration.
  */
 
+/** The console's screens. Case pages are reached from the queue. */
+const CONSOLE_NAV: readonly { href: string; label: string }[] = [
+  { href: "/operator", label: "Queue" },
+  { href: "/operator/blocks", label: "Blocks" },
+  { href: "/operator/override-log", label: "Override log" },
+];
+
 const TOKEN_COPY =
   "This surface authenticates separately from the platform login — paste an " +
   "operator credential to continue. It is not a Privy account.";
 
 export default function OperatorLayout({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
+  const pathname = usePathname();
 
   /** `null` = no token. `undefined` = storage not read yet (first render / SSR). */
   const [token, setToken] = React.useState<string | null | undefined>(undefined);
@@ -178,11 +188,31 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
             ))}
           </div>
 
+          <nav aria-label="Operator console" className="ml-auto flex flex-wrap items-center gap-3">
+            {CONSOLE_NAV.map((item) => {
+              const active =
+                item.href === "/operator" ? pathname === "/operator" : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={
+                    active
+                      ? "text-label-13 text-01 underline underline-offset-4"
+                      : "text-label-13 text-02 hover:text-01 hover:underline"
+                  }
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+
           <Button
             type="button"
             variant="secondary"
             size="sm"
-            className="ml-auto"
             onClick={signOut}
           >
             Sign out

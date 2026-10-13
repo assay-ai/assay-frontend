@@ -1,6 +1,7 @@
 import type { CursorPage } from "@/interfaces/api";
 import type {
-  AdjudicationQueueRow, CancelIntent, CompensationIntent, DecideCaseBody,
+  AccountBlock, AdjudicationQueueRow, CancelIntent, CreateAccountBlockBody,
+  ListAccountBlocksQuery, ListOverrideLogQuery, OverrideLogEntry, UnblockAccountBody, CompensationIntent, DecideCaseBody,
   ExtendDeadlineBody, FleetSweep, ListQueueQuery, OpenFleetSweepBody,
   OperatorCaseBrief, OperatorIdentity, PlatformHealth, RecordCompensationBody,
   SecondSignatureBody, SuspendProposalBody,
@@ -178,5 +179,53 @@ export function recordCompensation(
 export function createCancelIntent(proposalId: string): Promise<CancelIntent> {
   return operatorApi.post<CancelIntent>(
     `/operator/cases/${encodeURIComponent(proposalId)}/cancel-intent`,
+  );
+}
+
+/**
+ * `GET /operator/blocks` — the account blocklist, newest first. Any operator.
+ *
+ * A wallet `subject` filter matches the way enforcement does, on any chain of
+ * its namespace. An unparseable subject is `400 OPERATOR_BLOCK_SUBJECT_INVALID`.
+ */
+export function listAccountBlocks(
+  query: ListAccountBlocksQuery = {},
+): Promise<CursorPage<AccountBlock>> {
+  return operatorApi.get<CursorPage<AccountBlock>>(
+    "/operator/blocks",
+    query as Record<string, unknown>,
+  );
+}
+
+/**
+ * `POST /operator/blocks` — override `A-9`. `ADJL` or `SRE`, single person.
+ * One standing block per subject: a second is `409 OPERATOR_BLOCK_ALREADY_ACTIVE`.
+ */
+export function createAccountBlock(body: CreateAccountBlockBody): Promise<AccountBlock> {
+  return operatorApi.post<AccountBlock>("/operator/blocks", body);
+}
+
+/**
+ * `POST /operator/blocks/:id/unblock` — override `A-10`. `ADJL` or `SRE`, plus
+ * a second operator holding `ADJL`, whose own token goes in
+ * `X-Operator-Approver`. The same identity in both positions is
+ * `OPERATOR_SELF_APPROVAL_REFUSED`.
+ */
+export function unblockAccount(
+  blockId: string, body: UnblockAccountBody, approverToken: string,
+): Promise<AccountBlock> {
+  return operatorApi.post<AccountBlock>(
+    `/operator/blocks/${encodeURIComponent(blockId)}/unblock`, body,
+    { "X-Operator-Approver": approverToken },
+  );
+}
+
+/** `GET /operator/override-log` — every manual intervention, newest first. Any operator. */
+export function listOverrideLog(
+  query: ListOverrideLogQuery = {},
+): Promise<CursorPage<OverrideLogEntry>> {
+  return operatorApi.get<CursorPage<OverrideLogEntry>>(
+    "/operator/override-log",
+    query as Record<string, unknown>,
   );
 }
