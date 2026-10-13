@@ -60,8 +60,8 @@ import { addressOfAccount } from "@/utils/chain";
  *   the wrong wallet is visible rather than silent.
  * - the case lookup (`assay-match.ts`) — whether a Pending record matches a
  *   case Assay knows. A Pending record that Assay does not know is the
- *   signature of a forged slash. That lookup is not available yet; see the
- *   module docstring there.
+ *   signature of a forged slash. It runs only when the page shows the
+ *   signed-in provider's own stake wallet, never a pasted address.
  *
  * Under Capital because it is about the stake, and it is linked from the case
  * screen and the dispute list, where a provider reading Assay's account of a
@@ -114,7 +114,8 @@ function PenaltiesOnChainContent() {
   };
 
   // ── The chain read ────────────────────────────────────────────────────────
-  const { chain, assay } = useChainSlashes(DEPLOYMENT, checking);
+  // Matched against Assay's cases only on the provider's own stake wallet.
+  const { chain, assay } = useChainSlashes(DEPLOYMENT, checking, viewingOwnStake);
   const [filters, setFilters] = React.useState<SlashFilters>(DEFAULT_FILTERS);
 
   const rows = React.useMemo(() => chain.data?.rows ?? [], [chain.data]);
@@ -304,9 +305,18 @@ function PenaltiesOnChainContent() {
                 </label>
               </div>
 
-              {assay.data?.status === "unavailable" && rows.some((row) => row.status.needsAttention) ? (
+              {viewingOwnStake &&
+              assay.data?.status === "unavailable" &&
+              rows.some((row) => row.status.needsAttention) ? (
                 <p className="text-body-xs text-03">
                   Not checked against Assay: {assay.data.reason} The list itself is unaffected.
+                </p>
+              ) : null}
+              {!viewingOwnStake && rows.some((row) => row.status.needsAttention) ? (
+                <p className="text-body-xs text-03">
+                  Not checked against Assay: these rows belong to an address you entered, and Assay
+                  only matches penalties against your own cases on your own stake wallet. The list
+                  itself is unaffected.
                 </p>
               ) : null}
 
@@ -350,7 +360,7 @@ function PenaltiesOnChainContent() {
                       deployment={DEPLOYMENT}
                       asset={chain.data!.asset}
                       nowSeconds={nowSeconds}
-                      match={assayMatchFor(row, assay.data ?? null)}
+                      match={assayMatchFor(row, viewingOwnStake ? (assay.data ?? null) : null)}
                       viewingOwnStake={viewingOwnStake}
                     />
                   ))}

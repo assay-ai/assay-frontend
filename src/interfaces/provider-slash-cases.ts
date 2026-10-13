@@ -100,3 +100,21 @@ export interface SlashProposalCaseDetail extends SlashProposalCase {
   /** Failures by rule. `failuresByAgent` is inherited. */
   failuresByRule: SlashAttributionRow[];
 }
+
+/** One hit of `POST /providers/me/slash-requests/lookup`. */
+export interface SlashRequestMatch {
+  /** `0x` + lower-case hex. */
+  requestId: string;
+  /** The Assay case it belongs to. */
+  proposalId: string;
+  /** Set when the id is one agent's pro-rata part of the case, not the case itself. */
+  partId?: string;
+}
+
+/**
+ * The lookup's answer. An id that is not one of this provider's cases —
+ * unknown, or another provider's — is simply absent.
+ */
+export interface SlashRequestLookup {
+  matches: SlashRequestMatch[];
+}

@@ -1,5 +1,10 @@
 import type { HexString } from "@/libs/chains/evm/stake-slashes/address";
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
+import type { SlashRequestLookup } from "@/interfaces/provider-slash-cases";
+import {
+  SLASH_REQUEST_LOOKUP_MAX,
+  lookupSlashRequests,
+} from "@/services/provider-slash-cases.service";
 
 /**
  * Does Assay's backend know about this on-chain penalty?
@@ -10,23 +15,21 @@ import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
  * the signature of a forged slash** (a leaked verifier key proposing penalties
  * that no Assay process decided). That row is marked "Not known to Assay".
  *
- * ## The gap, stated
+ * ## The lookup
  *
- * No provider endpoint returns a case's on-chain request ids today. The
- * backend derives them (`deriveChainRequestId` in
- * `assay-backend/src/modules/slash/services/slash-proposal.service.ts`, and
- * `slashPartRequestId` for pro-rata parts) and keeps them in
- * `slash_proposals.chain_request_id` / `slash_proposal_parts.chain_request_id`,
- * but `SlashProposalCaseDto` does not carry them and there is no list route.
- * They cannot be re-derived here either: a part's id needs the window, the
- * epoch and the agent account.
+ * `POST /providers/me/slash-requests/lookup {requestIds}` answers which of the
+ * ids are a case (or a pro-rata part of a case) of the signed-in provider. It
+ * takes at most 200 ids, so the list is sent in chunks of 200. The ids are
+ * matched lower-cased on both sides.
  *
- * So the production lookup answers `unavailable`, and every row reads
- * "Not checked against Assay" rather than a false "Not known to Assay" on
- * every penalty — an alarm that fires on everything teaches people to ignore
- * it. The matching itself is built and tested; wiring it is replacing
- * `lookupAssayCases` with a call to an endpoint that, given request ids,
- * answers which ones belong to a case of this provider and which case.
+ * Any failure — the network, a refusal, a blocked account — answers
+ * `unavailable`, and every row then reads "Not checked against Assay" rather
+ * than a false "Not known to Assay": an alarm that fires on everything teaches
+ * people to ignore it. One failed chunk fails the whole lookup, for the same
+ * reason: a partial index would mark the unlooked-up rows as forged.
+ *
+ * The backend answers for the signed-in provider's own cases, so the page only
+ * asks when it shows that provider's own stake wallet — see `useChainSlashes`.
  */
 
 export type AssayCaseIndex =
@@ -43,15 +46,48 @@ export type AssayMatch =
   | { readonly kind: "unchecked" };
 
 export const LOOKUP_UNAVAILABLE_REASON =
-  "Assay does not yet publish the on-chain ids of its cases to providers, so these rows could not be matched to a case.";
+  "Assay could not be asked which of these penalties are its cases, so these rows could not be matched to a case.";
+
+/** The most ids one lookup call may carry — the backend's `SLASH_REQUEST_LOOKUP_MAX`. */
+export const LOOKUP_CHUNK_SIZE = SLASH_REQUEST_LOOKUP_MAX;
+
+export type SlashRequestLookupFn = (requestIds: readonly string[]) => Promise<SlashRequestLookup>;
+
+/** Splits `items` into runs of at most `size`, in order. */
+export function chunk<T>(items: readonly T[], size: number): T[][] {
+  if (!Number.isInteger(size) || size < 1) throw new Error(`chunk size must be a positive integer, got ${size}`);
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 
 /**
- * The backend lookup. Answers `unavailable` until an endpoint exists — see the
- * module docstring for what it must return. Kept async so the call site does
- * not change when it is wired.
+ * The backend lookup, chunked. `lookup` is injectable for tests; the page uses
+ * the real service.
+ *
+ * Ids are de-duplicated (case-insensitively) before they are chunked, so a
+ * list that repeats an id never costs an extra call.
  */
-export async function lookupAssayCases(_requestIds: readonly HexString[]): Promise<AssayCaseIndex> {
-  return { status: "unavailable", reason: LOOKUP_UNAVAILABLE_REASON };
+export async function lookupAssayCases(
+  requestIds: readonly HexString[],
+  lookup: SlashRequestLookupFn = lookupSlashRequests,
+): Promise<AssayCaseIndex> {
+  const unique = [...new Set(requestIds.map((id) => id.toLowerCase()))];
+  const known = new Map<string, { readonly proposalId: string }>();
+  if (unique.length === 0) return { status: "checked", known };
+
+  try {
+    const answers = await Promise.all(chunk(unique, LOOKUP_CHUNK_SIZE).map((ids) => lookup(ids)));
+    for (const answer of answers) {
+      for (const match of answer?.matches ?? []) {
+        if (typeof match?.requestId !== "string" || typeof match.proposalId !== "string") continue;
+        known.set(match.requestId.toLowerCase(), { proposalId: match.proposalId });
+      }
+    }
+  } catch {
+    return { status: "unavailable", reason: LOOKUP_UNAVAILABLE_REASON };
+  }
+  return { status: "checked", known };
 }
 
 /**
