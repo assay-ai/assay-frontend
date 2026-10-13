@@ -19,7 +19,16 @@ import { cn } from "@/utils";
 
 import type { AssayMatch } from "./assay-match";
 import { CopyValue } from "./copy-value";
-import { formatAtomic, isoFromSeconds, pendingPhase, shortRequestId } from "./format";
+import {
+  countdownUrgency,
+  executableAtLabel,
+  formatAtomic,
+  isoFromSeconds,
+  pendingPhase,
+  reservedLabel,
+  shortRequestId,
+  type CountdownUrgency,
+} from "./format";
 
 const STATUS_TONE: Record<SlashStatusKey, string> = {
   pending: "bg-danger-10 text-danger-700",
@@ -29,6 +38,44 @@ const STATUS_TONE: Record<SlashStatusKey, string> = {
   none: "bg-03 text-02",
   unknown: "bg-warning-10 text-warning-700",
 };
+
+const URGENCY_TONE: Record<CountdownUrgency, string> = {
+  normal: "border-01 bg-02 text-01",
+  warning: "border-warning-20 bg-warning-10 text-warning-700",
+  danger: "border-danger-20 bg-danger-10 text-danger-700",
+};
+
+/**
+ * Where to dispute, for a Pending row inside its window. On-chain dispute is
+ * not built yet (see `DisputeOnChainSlot`), so the way to dispute is in Assay:
+ * from the case page when the row matches a case, otherwise from Disputes or
+ * through Assay support.
+ */
+function HowToDispute({ match }: { match: AssayMatch }) {
+  if (match.kind === "known") {
+    return (
+      <p className="text-body-13 text-02">
+        To dispute it, open{" "}
+        <Link
+          href={`/provider/cases/${encodeURIComponent(match.proposalId)}`}
+          className="text-primary-600 underline"
+        >
+          its Assay case
+        </Link>{" "}
+        and dispute it there, or contact Assay support.
+      </p>
+    );
+  }
+  return (
+    <p className="text-body-13 text-02">
+      To dispute it, open the case from your{" "}
+      <Link href="/provider/disputes" className="text-primary-600 underline">
+        Assay disputes
+      </Link>{" "}
+      and dispute it from its case page, or contact Assay support.
+    </p>
+  );
+}
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -152,10 +199,22 @@ export function SlashRowCard({
 
       {/* The clock, while it matters */}
       {phase?.phase === "disputable" ? (
-        <p className="text-body-13 text-01">
-          <span className="font-semibold">{formatRemaining(phase.secondsLeft * 1000)}</span> left to
-          dispute. After that anyone can execute it.
-        </p>
+        <div className="flex w-full min-w-0 flex-col gap-1.5">
+          <p
+            className={cn(
+              "rounded-md border px-3 py-2 text-body-13",
+              URGENCY_TONE[countdownUrgency(phase.secondsLeft)],
+            )}
+          >
+            <span className="font-semibold">{formatRemaining(phase.secondsLeft * 1000)}</span> left to
+            dispute. Dispute before{" "}
+            <span className="font-mono font-semibold">
+              {stampUtc(isoFromSeconds(row.executableAt))} UTC
+            </span>
+            ; from then on anyone can execute it and the penalty is taken from your stake.
+          </p>
+          <HowToDispute match={match} />
+        </div>
       ) : phase?.phase === "executable" ? (
         <p className="text-body-13 text-danger-700">
           The dispute window has closed. This penalty can be executed now; if nobody executes it in
@@ -172,7 +231,7 @@ export function SlashRowCard({
         <Fact label="Penalty">
           <span className="font-mono">{money(row.penalty)}</span>
         </Fact>
-        <Fact label="Reserved from your stake">
+        <Fact label={reservedLabel(row.status.key)}>
           <span className="font-mono">{money(row.reserved)}</span>
         </Fact>
         <Fact label="Applied">
@@ -201,7 +260,7 @@ export function SlashRowCard({
         <Fact label="Proposed">
           <span className="font-mono">{stampUtc(isoFromSeconds(row.proposedAt))} UTC</span>
         </Fact>
-        <Fact label="Can be executed from">
+        <Fact label={executableAtLabel(row, nowSeconds)}>
           <span className="font-mono">{stampUtc(isoFromSeconds(row.executableAt))} UTC</span>
         </Fact>
       </dl>

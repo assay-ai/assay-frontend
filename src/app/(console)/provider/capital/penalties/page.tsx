@@ -37,6 +37,7 @@ import { normaliseEvmAddress, type HexString } from "@/libs/chains/evm/stake-sla
 import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
 import { shortAddress } from "@/libs/chains/format";
 import { getProviderStake } from "@/services/provider-stake.service";
+import { cn } from "@/utils";
 import { addressOfAccount } from "@/utils/chain";
 
 /**
@@ -122,6 +123,10 @@ function PenaltiesOnChainContent() {
     [rows, filters, nowSeconds],
   );
   const openCount = attentionCount(rows);
+  // The address box holds something that is not an address: the list below is
+  // still the previous address's, so it is dimmed and says so.
+  const listIsStale = draftError !== null;
+  const refreshing = chain.isFetching && !chain.isLoading;
 
   return (
     <>
@@ -142,7 +147,7 @@ function PenaltiesOnChainContent() {
             loading={chain.isFetching}
             onClick={() => void chain.refetch()}
           >
-            Refresh from chain
+            {chain.isFetching ? "Refreshing…" : "Refresh from chain"}
           </Button>
         ) : null}
       </header>
@@ -176,7 +181,7 @@ function PenaltiesOnChainContent() {
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>Stake wallet</PanelTitle>
-            <PanelDescription>
+            <PanelDescription className="whitespace-normal [overflow-wrap:anywhere]">
               {viewingOwnStake
                 ? "your stake wallet, as Assay reports it — check it is the wallet you staked from"
                 : pasted
@@ -227,7 +232,7 @@ function PenaltiesOnChainContent() {
 
       {/* ── The list ───────────────────────────────────────────────────── */}
       {checking ? (
-        <Panel className="w-full">
+        <Panel className="w-full" aria-busy={chain.isFetching}>
           <PanelHeader>
             <PanelTitles>
               <PanelTitle>Penalties</PanelTitle>
@@ -239,105 +244,126 @@ function PenaltiesOnChainContent() {
             </PanelTitles>
           </PanelHeader>
           <PanelBody className="flex flex-col gap-4 p-4 tablet:p-5">
-            {/* Filters */}
-            <div className="grid w-full grid-cols-1 gap-3 min-[480px]:grid-cols-2 tablet:grid-cols-3">
-              <Select
-                label="Status"
-                value={filters.status}
-                onChange={(event) =>
-                  setFilters((f) => ({ ...f, status: event.target.value as StatusFilter }))
-                }
-              >
-                {STATUS_FILTERS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-              <Select
-                label="Proposed"
-                value={filters.range}
-                onChange={(event) =>
-                  setFilters((f) => ({ ...f, range: event.target.value as TimeRange }))
-                }
-              >
-                {TIME_RANGES.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-              <label className="flex w-full min-w-0 flex-col gap-1.5 min-[480px]:col-span-2 tablet:col-span-1">
-                <span className="text-label-13 text-01">Search</span>
-                <Search
-                  value={filters.query}
-                  onChange={(event) => setFilters((f) => ({ ...f, query: event.target.value }))}
-                  placeholder="Request id or beneficiary"
-                  aria-label="Search by request id or beneficiary"
-                  shortcut={null}
-                />
-              </label>
-            </div>
-
-            {assay.data?.status === "unavailable" && rows.some((row) => row.status.needsAttention) ? (
-              <p className="text-body-xs text-03">
-                Not checked against Assay: {assay.data.reason} The list itself is unaffected.
+            {listIsStale ? (
+              <p className="text-body-13 text-warning-700" role="status">
+                The address you entered is not valid, so nothing new was checked. This list still
+                belongs to the previous address,{" "}
+                <span className="font-mono [overflow-wrap:anywhere]">{checking}</span>.
+              </p>
+            ) : null}
+            {refreshing ? (
+              <p className="text-body-13 text-03" role="status">
+                Refreshing… reading the latest state from the chain.
               </p>
             ) : null}
 
-            {chain.isLoading ? (
-              <p className="text-body-13 text-03">
-                Reading the chain… this scans every block since the stake contract was deployed, so
-                the first read can take a few seconds.
-              </p>
-            ) : chain.isError ? (
-              <Banner
-                tone="danger"
-                title="The chain could not be read."
-                description={`We do not know whether there are penalties on this wallet — this is not the same as none. ${
-                  chain.error instanceof Error ? chain.error.message.split("\n")[0] : ""
-                }`}
-                action={<BannerAction onClick={() => void chain.refetch()}>Try again</BannerAction>}
-              />
-            ) : rows.length === 0 ? (
-              <EmptyState
-                title="No penalties on chain"
-                description={`The chain holds no penalty, past or pending, against ${shortAddress(
-                  DEPLOYMENT.chainId,
-                  checking,
-                )}.`}
-              />
-            ) : visible.length === 0 ? (
-              <EmptyState
-                title="Nothing matches these filters"
-                description={
-                  filters.status === "attention"
-                    ? "No penalty needs your attention right now. Choose “All” to see past ones."
-                    : "Try another status, a longer time range, or clear the search."
-                }
-              />
-            ) : (
-              <ul className="flex w-full min-w-0 flex-col gap-3">
-                {visible.map((row) => (
-                  <SlashRowCard
-                    key={row.requestId}
-                    row={row}
-                    deployment={DEPLOYMENT}
-                    asset={chain.data!.asset}
-                    nowSeconds={nowSeconds}
-                    match={assayMatchFor(row, assay.data ?? null)}
-                    viewingOwnStake={viewingOwnStake}
+            <div
+              className={cn(
+                "flex w-full min-w-0 flex-col gap-4 transition-opacity",
+                (listIsStale || refreshing) && "opacity-50",
+              )}
+              inert={listIsStale}
+            >
+              {/* Filters */}
+              <div className="grid w-full grid-cols-1 gap-3 min-[480px]:grid-cols-2 tablet:grid-cols-3">
+                <Select
+                  label="Status"
+                  value={filters.status}
+                  onChange={(event) =>
+                    setFilters((f) => ({ ...f, status: event.target.value as StatusFilter }))
+                  }
+                >
+                  {STATUS_FILTERS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  label="Proposed"
+                  value={filters.range}
+                  onChange={(event) =>
+                    setFilters((f) => ({ ...f, range: event.target.value as TimeRange }))
+                  }
+                >
+                  {TIME_RANGES.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+                <label className="flex w-full min-w-0 flex-col gap-1.5 min-[480px]:col-span-2 tablet:col-span-1">
+                  <span className="text-label-13 text-01">Search</span>
+                  <Search
+                    value={filters.query}
+                    onChange={(event) => setFilters((f) => ({ ...f, query: event.target.value }))}
+                    placeholder="Request id or beneficiary"
+                    aria-label="Search by request id or beneficiary"
+                    shortcut={null}
                   />
-                ))}
-              </ul>
-            )}
+                </label>
+              </div>
 
-            {chain.data && !chain.data.asset.fromChain ? (
-              <p className="text-body-xs text-03">
-                The stake token could not be read, so amounts assume {DEPLOYMENT.fallbackAssetSymbol} with{" "}
-                {DEPLOYMENT.fallbackAssetDecimals} decimals, as in the deployment record.
-              </p>
-            ) : null}
+              {assay.data?.status === "unavailable" && rows.some((row) => row.status.needsAttention) ? (
+                <p className="text-body-xs text-03">
+                  Not checked against Assay: {assay.data.reason} The list itself is unaffected.
+                </p>
+              ) : null}
+
+              {chain.isLoading ? (
+                <p className="text-body-13 text-03">
+                  Reading the chain… this scans every block since the stake contract was deployed, so
+                  the first read can take a few seconds.
+                </p>
+              ) : chain.isError ? (
+                <Banner
+                  tone="danger"
+                  title="The chain could not be read."
+                  description={`We do not know whether there are penalties on this wallet — this is not the same as none. ${
+                    chain.error instanceof Error ? chain.error.message.split("\n")[0] : ""
+                  }`}
+                  action={<BannerAction onClick={() => void chain.refetch()}>Try again</BannerAction>}
+                />
+              ) : rows.length === 0 ? (
+                <EmptyState
+                  title="No penalties on chain"
+                  description={`The chain holds no penalty, past or pending, against ${shortAddress(
+                    DEPLOYMENT.chainId,
+                    checking,
+                  )}.`}
+                />
+              ) : visible.length === 0 ? (
+                <EmptyState
+                  title="Nothing matches these filters"
+                  description={
+                    filters.status === "attention"
+                      ? "No penalty needs your attention right now. Choose “All” to see past ones."
+                      : "Try another status, a longer time range, or clear the search."
+                  }
+                />
+              ) : (
+                <ul className="flex w-full min-w-0 flex-col gap-3">
+                  {visible.map((row) => (
+                    <SlashRowCard
+                      key={row.requestId}
+                      row={row}
+                      deployment={DEPLOYMENT}
+                      asset={chain.data!.asset}
+                      nowSeconds={nowSeconds}
+                      match={assayMatchFor(row, assay.data ?? null)}
+                      viewingOwnStake={viewingOwnStake}
+                    />
+                  ))}
+                </ul>
+              )}
+
+              {chain.data && !chain.data.asset.fromChain ? (
+                <p className="text-body-xs text-03">
+                  The stake token could not be read, so amounts assume {DEPLOYMENT.fallbackAssetSymbol} with{" "}
+                  {DEPLOYMENT.fallbackAssetDecimals} decimals, as in the deployment record.
+                </p>
+              ) : null}
+            </div>
           </PanelBody>
         </Panel>
       ) : null}
