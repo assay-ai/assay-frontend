@@ -8,9 +8,11 @@ import {
   blockedWriteGuard,
   dismissBlockedRefusal,
   getAccountBlockSnapshot,
+  hasBlockStatusSession,
   reportBlockedRefusal,
   resetAccountBlock,
   setAccountBlockConfirmed,
+  settleBlockStatus,
   subscribeAccountBlock,
 } from "./state";
 
@@ -93,6 +95,83 @@ describe("blockedWriteGuard", () => {
     expect(blockedWriteGuard(true, "HEAD", "/x")).toBeNull();
     expect(blockedWriteGuard(true, "POST", "/auth/wallet/link")).toBeNull();
     expect(blockedWriteGuard(true, "POST", "http://api.test/api/v1/auth/wallet/link")).toBeNull();
+  });
+
+  it("never refuses the read-only penalties lookup POST, and only that exact route", () => {
+    expect(blockedWriteGuard(true, "POST", "/providers/me/slash-requests/lookup")).toBeNull();
+    expect(blockedWriteGuard(true, "POST", "http://api.test/api/v1/providers/me/slash-requests/lookup")).toBeNull();
+    expect(blockedWriteGuard(true, "POST", "/providers/me/slash-requests/lookup/x")?.code).toBe("ACCOUNT_BLOCKED");
+    expect(blockedWriteGuard(true, "DELETE", "/providers/me/slash-requests/lookup")?.code).toBe("ACCOUNT_BLOCKED");
+    expect(blockedWriteGuard(true, "POST", "/providers/me/slash-requests")?.code).toBe("ACCOUNT_BLOCKED");
+  });
+});
+
+describe("hasBlockStatusSession", () => {
+  it("is a session once Privy is ready and signed in", () => {
+    expect(hasBlockStatusSession({ ready: true, authenticated: true, hasStoredToken: false })).toBe(true);
+  });
+
+  it("is a session with a stored token even while Privy never becomes ready (token-based sessions)", () => {
+    expect(hasBlockStatusSession({ ready: false, authenticated: false, hasStoredToken: true })).toBe(true);
+  });
+
+  it("is no session for a signed-out visitor with no token", () => {
+    expect(hasBlockStatusSession({ ready: false, authenticated: false, hasStoredToken: false })).toBe(false);
+    expect(hasBlockStatusSession({ ready: true, authenticated: false, hasStoredToken: false })).toBe(false);
+    // Privy not ready yet: `authenticated` is not to be trusted.
+    expect(hasBlockStatusSession({ ready: false, authenticated: true, hasStoredToken: false })).toBe(false);
+  });
+});
+
+describe("settleBlockStatus", () => {
+  const SUSPENDED = { code: "AUTH_ORGANIZATION_SUSPENDED", message: "m" };
+
+  it("a fresh blocked:false clears an organization refusal, and a later refusal sets it again", () => {
+    vi.useFakeTimers({ now: 1_000 });
+    try {
+      reportBlockedRefusal(SUSPENDED);
+      vi.setSystemTime(2_000);
+      settleBlockStatus(false, Date.now());
+      expect(getAccountBlockSnapshot().refusal).toBeNull();
+      expect(bannerStateFor({ blocked: false, blocks: [] }, getAccountBlockSnapshot().refusal)).toEqual({ kind: "none" });
+
+      vi.setSystemTime(3_000);
+      reportBlockedRefusal(SUSPENDED);
+      expect(getAccountBlockSnapshot().refusal).toEqual(SUSPENDED);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a status asked for before the refusal does not clear it", () => {
+    vi.useFakeTimers({ now: 5_000 });
+    try {
+      reportBlockedRefusal(SUSPENDED);
+      settleBlockStatus(false, 4_000);
+      expect(getAccountBlockSnapshot().refusal).toEqual(SUSPENDED);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("blocked:true keeps the refusal", () => {
+    reportBlockedRefusal(SUSPENDED);
+    settleBlockStatus(true, Date.now() + 1);
+    expect(getAccountBlockSnapshot().refusal).toEqual(SUSPENDED);
+  });
+
+  it("keeps another party's refusal while this account was never blocked", () => {
+    const refusal = { code: "ACCOUNT_BLOCKED", message: "payee" };
+    reportBlockedRefusal(refusal);
+    settleBlockStatus(false, Date.now() + 1);
+    expect(getAccountBlockSnapshot().refusal).toEqual(refusal);
+  });
+
+  it("clears every refusal when a confirmed block is lifted", () => {
+    setAccountBlockConfirmed(true);
+    reportBlockedRefusal({ code: "ACCOUNT_BLOCKED", message: "own wallet" });
+    settleBlockStatus(false, Date.now() + 1);
+    expect(getAccountBlockSnapshot().refusal).toBeNull();
   });
 });
 

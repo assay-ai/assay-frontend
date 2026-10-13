@@ -62,8 +62,12 @@ export function setAccountBlockConfirmed(confirmed: boolean): void {
   set({ confirmed });
 }
 
+/** When the latest refusal arrived (`Date.now()`), kept out of the snapshot. */
+let refusalAt = 0;
+
 /** Fed from `ApiClient`'s interceptor, for every blocked refusal. */
 export function reportBlockedRefusal(error: Pick<ApiError, "code" | "message">): void {
+  refusalAt = Date.now();
   const current = snapshot.refusal;
   if (current && current.code === error.code && current.message === error.message) return;
   set({ refusal: { code: error.code, message: error.message } });
@@ -79,11 +83,53 @@ export function resetAccountBlock(): void {
 }
 
 /**
+ * Fed from each block-status answer, with the time its request was SENT, so
+ * that an answer already on its way when a refusal arrived cannot clear it.
+ *
+ * A fresh `blocked: false` clears the refusal when that refusal was about this
+ * account: an `AUTH_ORGANIZATION_SUSPENDED` (always this account's own
+ * organization), or any refusal while the block was confirmed — the block was
+ * lifted, so the banner goes without a reload. Another party's
+ * `ACCOUNT_BLOCKED`, on an account that was never blocked, stays until it is
+ * dismissed. A later refusal sets the state again.
+ */
+export function settleBlockStatus(blocked: boolean, requestedAt: number): void {
+  if (blocked) return;
+  const { refusal, confirmed } = snapshot;
+  if (!refusal || requestedAt < refusalAt) return;
+  if (confirmed || refusal.code === "AUTH_ORGANIZATION_SUSPENDED") set({ refusal: null });
+}
+
+/**
+ * Whether a session exists to ask the block status for — the same rule
+ * `ApiClient` uses to attach auth: Privy's token once it is ready and signed
+ * in, else the token stored in `localStorage` (token-based sessions, where
+ * Privy may never become ready). Neither: a signed-out visitor, and the
+ * request is never sent — it would 401, and a 401 signs out.
+ */
+export function hasBlockStatusSession(session: {
+  readonly ready: boolean;
+  readonly authenticated: boolean;
+  readonly hasStoredToken: boolean;
+}): boolean {
+  return (session.ready && session.authenticated) || session.hasStoredToken;
+}
+
+/**
  * Paths a blocked person may still write to. `POST /auth/wallet/link` links
  * the Privy wallet at sign-in; the backend lets it through because it moves
  * nothing, and refusing it here would break sign-in for a blocked person.
  */
 const WRITE_ALLOWED_PREFIXES: readonly string[] = ["/auth/"];
+
+/**
+ * `POST`s that only read, matched exactly. The backend marks the same routes
+ * read-only (`@BlockedSessionReadOnly`) and lets a blocked session through.
+ * `POST /providers/me/slash-requests/lookup` is a POST only for its body: the
+ * penalties page uses it to match on-chain penalties to Assay cases, which a
+ * blocked provider needs most.
+ */
+const READ_ONLY_POSTS: ReadonlySet<string> = new Set(["/providers/me/slash-requests/lookup"]);
 
 export const BLOCKED_WRITE_MESSAGE =
   "Your account is blocked by Assay. You can view your data, but you cannot make payments or changes. Contact Assay support.";
@@ -103,6 +149,7 @@ export function blockedWriteGuard(
   if (upper === "GET" || upper === "HEAD") return null;
   const path = url.replace(/^https?:\/\/[^/]+/, "").replace(/^\/api\/v\d+/, "");
   if (WRITE_ALLOWED_PREFIXES.some((prefix) => path.startsWith(prefix))) return null;
+  if (upper === "POST" && READ_ONLY_POSTS.has(path.split("?")[0])) return null;
   return new ApiError("ACCOUNT_BLOCKED", BLOCKED_WRITE_MESSAGE, 403, url);
 }
 
