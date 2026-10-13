@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  errorsStillTrue,
   LIMITS_LANDING_POLL_MS,
   LIMITS_LANDING_TIMEOUT_MS,
   isEscrowDisarmed,
@@ -217,5 +218,28 @@ describe("parseLimitsForm — per call against the window (BUG-R2-REAL-01)", () 
     expect(parseLimitsForm(input({ maxVoucherAmount: "10", maxPerWindow: "10" }), DECIMALS).ok).toBe(
       true,
     );
+  });
+});
+
+// UX note R4: the red per-call error stayed after the value was corrected.
+describe("errorsStillTrue — an error goes away once the value is fixed", () => {
+  const shown = { maxVoucherAmount: "Cannot be more than the per-window limit." };
+
+  it("drops the error when the corrected value is valid", () => {
+    expect(
+      errorsStillTrue(shown, { maxVoucherAmount: "0.05", maxPerWindow: "1", confirmZero: false }),
+    ).toEqual({});
+  });
+
+  it("keeps it while the value is still wrong", () => {
+    expect(
+      errorsStillTrue(shown, { maxVoucherAmount: "5", maxPerWindow: "1", confirmZero: false }),
+    ).toEqual(shown);
+  });
+
+  it("never shows an error on a field that had none before the next submit", () => {
+    expect(
+      errorsStillTrue({}, { maxVoucherAmount: "abc", maxPerWindow: "", confirmZero: false }),
+    ).toEqual({});
   });
 });
