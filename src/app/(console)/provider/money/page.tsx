@@ -156,11 +156,9 @@ function sumMoney(values: Money[]): Money | null {
 
 interface WithheldRow {
   id: string;
-  reason: string;
   calls: string;
   gross: string;
   binding: string;
-  link: string;
 }
 
 interface PayoutRow {
@@ -227,47 +225,29 @@ export default function ProviderMoneyPage() {
     .filter((group: ProviderEarningsGroup) => group.withheldCalls > 0)
     .map((group) => ({
       id: group.key,
-      // No endpoint breaks withheld money down by the rule that rejected the
-      // call. Deriving one from `verdictMix` would put a verdict status under a
-      // header that means a rule name.
-      reason: DASH,
       calls: formatCount(group.withheldCalls),
       gross: money(group.withheld),
       binding: labelByTool.get(group.key) ?? DASH,
-      // The design writes "see verdicts" here. A provider cannot reach their own
-      // verdicts — the verdict screens are payer-org scoped and out of scope
-      // for this wave — so the cell would point at nothing.
-      link: DASH,
     }));
 
   const withheldColumns: TableColumn<WithheldRow>[] = [
-    {
-      key: "reason",
-      header: "Reason",
-      mono: true,
-      cell: (row) => <span className="font-semibold">{row.reason}</span>,
-    },
-    { key: "calls", header: "Calls", width: 130, align: "end", mono: true, cell: (r) => r.calls },
-    { key: "gross", header: "Gross", width: 130, align: "end", mono: true, cell: (r) => r.gross },
+    // One row per binding. The API does not split these calls by reason, so
+    // there is no Reason column: the description says what the rows include.
     {
       key: "binding",
       header: "Binding",
-      width: 200,
-      align: "end",
       mono: true,
-      cell: (r) => r.binding,
+      cell: (row) => <span className="font-semibold">{row.binding}</span>,
     },
-    // The frame's fifth header is deliberately blank (the design has no content there).
-    { key: "link", header: "", width: 130, align: "end", mono: true, cell: (r) => r.link },
+    { key: "calls", header: "Calls", width: 130, align: "end", mono: true, cell: (r) => r.calls },
+    { key: "gross", header: "Not credited", width: 130, align: "end", mono: true, cell: (r) => r.gross },
   ];
 
   const withheldTotal = {
-    label: "Total withheld",
+    label: "Total not credited",
     values: {
       calls: totals ? formatCount(totals.withheldCalls) : DASH,
       gross: money(totals?.withheld),
-      binding: DASH,
-      link: DASH,
     } as Partial<Record<string, React.ReactNode>>,
   };
 
@@ -379,8 +359,7 @@ export default function ProviderMoneyPage() {
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">Earnings</h1>
           <p className="font-mono text-mono-12 text-03">
-            paid to your wallet as each call settles · a payout that cannot be decomposed
-            into calls is not a statement
+            paid to your wallet as each call settles
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2.5">
@@ -425,7 +404,7 @@ export default function ProviderMoneyPage() {
               ? `${formatCount(batchesToday)} batch${batchesToday === 1 ? "" : "es"}`
               : // Ours. More payouts exist than were read, so neither the sum
                 // nor the count of the window is knowable from one page.
-                "more payouts than one page — window not summable"
+                "too many payouts to total here"
           }
         />
         <MetricTile
@@ -434,7 +413,7 @@ export default function ProviderMoneyPage() {
           sub={
             payoutsComplete
               ? `${formatCount(batchesMonth)} batch${batchesMonth === 1 ? "" : "es"}`
-              : "more payouts than one page — window not summable"
+              : "too many payouts to total here"
           }
         />
         <MetricTile
@@ -442,7 +421,7 @@ export default function ProviderMoneyPage() {
           // "Not credited". The label is what ships.
           label="Not credited"
           value={money(totals?.withheld)}
-          sub="calls our checks rejected — shadow mode, no stake taken yet"
+          sub="rejected by our checks or failed with an error — no stake is taken yet"
           // `$danger-600` on the value. MetricTile's tone vocabulary is
           // `default | teal`, so the value node is reached the way the
           // binding-detail screen already reaches it. A known gap.
@@ -454,10 +433,10 @@ export default function ProviderMoneyPage() {
       <Panel>
         <PanelHeader>
           <PanelTitles>
-            <PanelTitle>Rejected calls, itemised</PanelTitle>
+            <PanelTitle>Calls not credited, by binding</PanelTitle>
             <PanelDescription>
-              not credited to you · in shadow mode no stake is touched, and each line shows
-              what the penalty would have been
+              calls our checks rejected, and calls that failed with a system or request error ·
+              the split by class is on Reconciliation · no stake is taken yet
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
@@ -468,16 +447,16 @@ export default function ProviderMoneyPage() {
         <PanelBody className="overflow-x-auto px-2.5 pb-2.5 pt-1.5">
           {withheldRows.length > 0 ? (
             <Table
-              className="min-w-[880px]"
+              className="min-w-[520px]"
               columns={withheldColumns}
               rows={withheldRows}
               total={withheldTotal}
-              caption="Rejected calls, itemised"
+              caption="Calls not credited, by binding"
             />
           ) : earningsByTool.isError ? (
             /* A failed read is not a zero (BUG-R2-V3-02). */
             <p className="px-3 py-6 text-body-13 text-danger-600">
-              Rejected calls could not be loaded, so this table is unknown, not empty.
+              These calls could not be loaded, so this table is unknown, not empty.
             </p>
           ) : earningsByTool.isPending ? (
             <p className="px-3 py-6 font-mono text-mono-13 text-03">Loading…</p>
@@ -485,8 +464,7 @@ export default function ProviderMoneyPage() {
             /* Ours — the frame draws no empty state. This is also the
                `?persona=new-provider` branch: 200 with no groups, not a 404. */
             <p className="px-3 py-6 text-body-13 text-02">
-              No call was rejected this month. A zero here is the absence of a withheld
-              payment, not an unused counter.
+              Every call this month was credited: none was rejected and none failed.
             </p>
           )}
         </PanelBody>
@@ -498,11 +476,9 @@ export default function ProviderMoneyPage() {
           <PanelTitles>
             <PanelTitle>Payout history</PanelTitle>
             <PanelDescription>
-              Earnings are no longer paid out on a schedule, and there is nothing to
-              withdraw: each redemption pays your own wallet directly, on chain, in the
-              same transaction that settles the call. The rows below are frozen history
-              from the retired batch · we do not claw back a payment and hold no reserve
-              against your account.
+              Earnings are paid to your own wallet, on chain, as each call settles, so there is
+              nothing to withdraw. The rows below are earlier scheduled payouts · we do not
+              claw back a payment and hold no reserve against your account.
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
@@ -589,10 +565,9 @@ export default function ProviderMoneyPage() {
         per-batch decomposition the header promises cannot be drawn yet.
       */}
       <p className="text-body-13 text-03">
-        Period, Calls, Gross and Take are not carried on a payout entry, and no join
-        reconstructs them — a payout records an amount, a batch and a transaction. Use
-        Export CSV for the per-call detail, which is also the per-payment detail: there
-        is one on-chain payment per settled call.
+        Period, Calls, Gross and Take are not available for these payouts. Use Export CSV for
+        the per-call detail, which is also the per-payment detail: there is one on-chain
+        payment per settled call.
       </p>
     </>
   );

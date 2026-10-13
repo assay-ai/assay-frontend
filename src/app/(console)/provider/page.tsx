@@ -163,10 +163,6 @@ function sumPayouts(payouts: ProviderPayout[]): Money | null {
   );
 }
 
-function batchCount(payouts: ProviderPayout[]): number {
-  return new Set(payouts.map((p) => p.batchId)).size;
-}
-
 /** `0.02` → `"2.00%"`. */
 function ratePercent(rate: number): string {
   return `${(rate * 100).toFixed(2)}%`;
@@ -462,7 +458,7 @@ export default function ProviderHomePage() {
       align: "end",
       mono: true,
       cell: () => (
-        <span title="No per-binding quality exists: /providers/me/quality has no binding split, and its three rate fields are null in the backend.">
+        <span title="Quality per binding is not available yet.">
           {DASH}
         </span>
       ),
@@ -487,7 +483,7 @@ export default function ProviderHomePage() {
       align: "end",
       mono: true,
       cell: (row) => (
-        <span title="Observed p50 is null in the backend; the second figure is the binding's declared timeout.">
+        <span title="Observed latency is not available yet; the second figure is the binding's declared timeout.">
           {row.latency}
         </span>
       ),
@@ -620,15 +616,13 @@ export default function ProviderHomePage() {
             className="p-4"
             label="Paid today"
             value={paidToday ? formatMoney(paidToday, { decimals: 2 }) : DASH}
-            sub={`${formatCount(batchCount(todayPayouts))} batch${
-              batchCount(todayPayouts) === 1 ? "" : "es"
-            }`}
+            sub={`${formatCount(todayPayouts.length)} payment${todayPayouts.length === 1 ? "" : "s"}`}
           />
           <MetricTile
             className="p-4"
-            label="Withheld this month"
+            label="Not credited this month"
             value={withheldMonth ? formatMoney(withheldMonth, { decimals: 2 }) : DASH}
-            sub="see verdicts"
+            sub="rejected or failed calls"
           />
         </div>
       </section>
@@ -655,29 +649,25 @@ export default function ProviderHomePage() {
               label="Pending"
               sub="not available yet"
               value={DASH}
-              title="No provider route returns an accrued, unpaid balance, and none publishes the payout schedule. Deriving it from earned − paid would put a real-looking number under a label that means something else."
+              title="Earnings are paid as each call settles, so a pending balance is not shown."
             />
             <EarningsRow
               label="Paid today"
-              sub={`${formatCount(batchCount(todayPayouts))} batch${
-                batchCount(todayPayouts) === 1 ? "" : "es"
-              }`}
+              sub={`${formatCount(todayPayouts.length)} payment${todayPayouts.length === 1 ? "" : "s"}`}
               value={paidToday ? formatMoney(paidToday, { decimals: 2 }) : DASH}
             />
             <EarningsRow
               label="Paid this month"
-              sub={`${formatCount(batchCount(monthPayouts))} batch${
-                batchCount(monthPayouts) === 1 ? "" : "es"
-              } · reconciles`}
+              sub={`${formatCount(monthPayouts.length)} payment${monthPayouts.length === 1 ? "" : "s"}`}
               value={paidMonth ? formatMoney(paidMonth, { decimals: 2 }) : DASH}
             />
             <EarningsRow
-              label="Withheld this month"
+              label="Not credited this month"
               // Verbatim from the design. It names a classification and a verdict
               // as a mechanism — "money withheld because DATA_RESULT reached
               // FAIL" — rather than reporting one call's verdict, which is what
               // Foundations rule 03 forbids.
-              sub="calls that failed verification · see verdicts"
+              sub="calls rejected by our checks or failed with an error · see Earnings"
               value={withheldMonth ? formatMoney(withheldMonth, { decimals: 2 }) : DASH}
               danger
             />
