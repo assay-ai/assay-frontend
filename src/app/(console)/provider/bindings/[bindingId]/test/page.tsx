@@ -61,6 +61,7 @@ import {
   verdictRows,
   type VerdictRow,
 } from "./report-view";
+import { createRunGuard } from "./run-guard";
 
 /**
  * Mapping tester.
@@ -424,12 +425,18 @@ export default function MappingTesterPage() {
   const inputSchema = catalogueQuery.data?.tools.find((tool) => tool.id === binding?.toolId)?.inputSchema;
 
   const queryClient = useQueryClient();
+  // Enter and the Run button both go through `onRun`; see `createRunGuard`.
+  const [runGuard] = React.useState(createRunGuard);
   const run = useMutation({
     mutationFn: (input: Record<string, unknown>) => testToolBinding(bindingId, { input }),
     // A run is what the publish gate's tester rows read: the checklist cached
     // from an earlier visit is out of date the moment one lands.
-    onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: ["provider", "tool-binding", bindingId, "publish-check"] }),
+    onSettled: () => {
+      runGuard.leave();
+      return queryClient.invalidateQueries({
+        queryKey: ["provider", "tool-binding", bindingId, "publish-check"],
+      });
+    },
   });
   const report = run.data ?? null;
 
@@ -453,8 +460,9 @@ export default function MappingTesterPage() {
       return;
     }
     setArgsError(null);
+    if (!runGuard.enter()) return;
     run.mutate(parsed as Record<string, unknown>);
-  }, [args, run, inputSchema]);
+  }, [args, run, runGuard, inputSchema]);
 
   if (bindingQuery.isPending) {
     return <p className="font-mono text-mono-13 text-03">Loading binding…</p>;
@@ -530,7 +538,8 @@ export default function MappingTesterPage() {
             value={args ?? ""}
             onChange={(event) => setArgs(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && !run.isPending) onRun();
+              // A held key repeats; one press is one run.
+              if (event.key === "Enter" && !event.repeat) onRun();
             }}
             spellCheck={false}
             aria-label="Tool arguments, as JSON"
