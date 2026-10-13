@@ -1,16 +1,18 @@
+import { DISPUTED_ON_CHAIN_LABEL, chainCancelReasonCodeLabel } from "@/libs/chains/status-labels";
+
 /**
  * `SlashStatus` and `CancelReason` from `assay-evm/src/Types.sol`, in words.
  *
  * ```text
- *  enum SlashStatus  { None, Pending, Executed, Cancelled }   // today
- *                    { …, Cancelled, Disputed }                // being added: 4
- *  enum CancelReason { Withdrawn, Expired, VerifierUnavailable }
+ *  enum SlashStatus  { None, Pending, Executed, Cancelled, Disputed }
+ *  enum CancelReason { Withdrawn, Expired, VerifierUnavailable, DisputeUnresolved }
  * ```
  *
- * `Disputed` is mapped already, so the day the contract starts writing 4 this
- * page says "Disputed" without a release. Any value after that is "Unknown
- * status (n)" — shown, never thrown, and never folded into a known state,
- * because a page that guessed would be guessing about someone's stake.
+ * `Disputed` (4) and `DisputeUnresolved` (3) come with the dispute upgrade
+ * (D-19); a contract without it never writes them. Any value after those is
+ * "Unknown status (n)" — shown, never thrown, and never folded into a known
+ * state, because a page that guessed would be guessing about someone's stake.
+ * The words themselves are shared with the case pages: `status-labels.ts`.
  */
 
 export type SlashStatusKey = "none" | "pending" | "executed" | "cancelled" | "disputed" | "unknown";
@@ -29,7 +31,7 @@ const KNOWN: Record<number, { key: SlashStatusKey; label: string; needsAttention
   1: { key: "pending", label: "Pending", needsAttention: true },
   2: { key: "executed", label: "Executed", needsAttention: false },
   3: { key: "cancelled", label: "Cancelled", needsAttention: false },
-  4: { key: "disputed", label: "Disputed", needsAttention: true },
+  4: { key: "disputed", label: DISPUTED_ON_CHAIN_LABEL, needsAttention: true },
 };
 
 export function slashStatusOf(code: number | bigint): SlashStatusInfo {
@@ -43,15 +45,8 @@ export function slashStatusOf(code: number | bigint): SlashStatusInfo {
   return { key: "unknown", code: n, label: `Unknown status (${String(code)})`, needsAttention: true };
 }
 
-const CANCEL_REASONS: Record<number, string> = {
-  0: "Withdrawn by Assay",
-  1: "Expired: nobody executed it in time",
-  2: "Verifier key no longer valid",
-};
-
 /** A `SlashCancelled.reason`, in words. An unknown value says so rather than guessing. */
 export function cancelReasonLabel(reason: number | bigint | null | undefined): string | null {
   if (reason === null || reason === undefined) return null;
-  const n = typeof reason === "bigint" ? Number(reason) : reason;
-  return CANCEL_REASONS[n] ?? `Unknown reason (${String(reason)})`;
+  return chainCancelReasonCodeLabel(typeof reason === "bigint" ? Number(reason) : reason);
 }

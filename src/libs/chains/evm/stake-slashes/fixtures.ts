@@ -13,6 +13,7 @@ export const CONTRACT: Address = getAddress("0x0af4d08f97b4fa8ba3e47cb025ae8cad5
 export const PROVIDER: Address = getAddress("0xa271a3407d3302f4b4fbe469b9188487cedd7d45");
 export const OTHER_PROVIDER: Address = getAddress("0x1111111111111111111111111111111111111111");
 export const VERIFIER: Address = getAddress("0x18a508c9af1c6fc512015276f6ca2e9aabd74680");
+export const ARBITER: Address = getAddress("0x2222222222222222222222222222222222222222");
 export const BENEFICIARY: Address = getAddress("0x64fecbe18e8998cb2990bce631a042f8e2be1659");
 
 export const requestId = (n: number): Hex => pad(numberToHex(n), { size: 32 });
@@ -134,7 +135,33 @@ export function cancelledLog(n: number, opts: { reason?: number; block?: number 
   return rawLog(topics, data, opts.block ?? 300, txHash("c", n));
 }
 
-/** A log from an event this page does not know — e.g. the upcoming `SlashDisputed`. */
+export function disputedLog(
+  n: number,
+  opts: { disputedAt?: number; executableAt?: number; block?: number } = {},
+): RawLog {
+  const topics = encodeEventTopics({
+    abi: STAKE_EVENTS_ABI,
+    eventName: "SlashDisputed",
+    args: { requestId: requestId(n), provider: PROVIDER },
+  }) as Hex[];
+  const data = encodeAbiParameters(
+    [{ type: "uint64" }, { type: "uint64" }],
+    [BigInt(opts.disputedAt ?? 1_100_000), BigInt(opts.executableAt ?? 1_000_000 + 72 * 3600)],
+  );
+  return rawLog(topics, data, opts.block ?? 250, txHash("d", n + 3_000));
+}
+
+export function upheldLog(n: number, opts: { executableAt?: number; block?: number } = {}): RawLog {
+  const topics = encodeEventTopics({
+    abi: STAKE_EVENTS_ABI,
+    eventName: "SlashUpheld",
+    args: { requestId: requestId(n), provider: PROVIDER, arbiter: ARBITER },
+  }) as Hex[];
+  const data = encodeAbiParameters([{ type: "uint64" }], [BigInt(opts.executableAt ?? 1_200_000)]);
+  return rawLog(topics, data, opts.block ?? 270, txHash("u", n + 4_000));
+}
+
+/** A log from an event this page does not know. */
 export function unknownLog(n: number): RawLog {
   return rawLog(
     [pad("0xdead", { size: 32 }), requestId(n), pad(PROVIDER.toLowerCase() as Hex, { size: 32 })],
@@ -155,6 +182,8 @@ export function record(overrides: Partial<SlashRecordState> = {}): SlashRecordSt
     reserved: BigInt(1_000_000),
     applied: BigInt(0),
     executedAt: BigInt(0),
+    disputedAt: BigInt(0),
     ...overrides,
   };
 }
+

@@ -38,7 +38,7 @@ export function isoFromSeconds(seconds: number): string {
 export const SLASH_EXECUTION_GRACE_SECONDS = 7 * 86_400;
 
 export type PendingPhase =
-  /** The 72h wait is running: the provider can still dispute. */
+  /** The slash delay (to the record's own `executableAt`) is running: the provider can still dispute. */
   | { readonly phase: "disputable"; readonly secondsLeft: number }
   /** The wait is over: anybody may execute it, until the grace ends. */
   | { readonly phase: "executable"; readonly secondsLeft: number }
@@ -54,6 +54,21 @@ export function pendingPhase(row: ChainSlashRow, nowSeconds: number): PendingPha
   const closes = row.executableAt + SLASH_EXECUTION_GRACE_SECONDS;
   if (nowSeconds < closes) return { phase: "executable", secondsLeft: closes - nowSeconds };
   return { phase: "expirable" };
+}
+
+export type DisputedPhase =
+  /** The arbiter has until `disputeExpiresAt` to rule. */
+  | { readonly phase: "awaiting-ruling"; readonly secondsLeft: number }
+  /** 30 days without a ruling: anyone can expire it, which releases the stake. */
+  | { readonly phase: "unresolved" };
+
+/** Where a Disputed record is on its 30-day clock. `null` for any other status, or with no dispute time. */
+export function disputedPhase(row: ChainSlashRow, nowSeconds: number): DisputedPhase | null {
+  if (row.status.key !== "disputed" || row.disputeExpiresAt === null) return null;
+  if (nowSeconds < row.disputeExpiresAt) {
+    return { phase: "awaiting-ruling", secondsLeft: row.disputeExpiresAt - nowSeconds };
+  }
+  return { phase: "unresolved" };
 }
 
 /**
@@ -85,6 +100,7 @@ export function reservedLabel(status: SlashStatusKey): string {
  * label says both.
  */
 export function executableAtLabel(row: ChainSlashRow, nowSeconds: number): string {
+  if (row.status.key === "disputed") return "Executable from · frozen while disputed";
   return pendingPhase(row, nowSeconds)?.phase === "disputable"
     ? "Dispute before · can be executed from"
     : "Can be executed from";

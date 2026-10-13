@@ -50,6 +50,7 @@ import type {
   ToolBindingSummary,
 } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
+import { describeChainRefusal } from "@/libs/chains/status-labels";
 import { isEvmChain } from "@/libs/chains/registry";
 import { listSlaWindows } from "@/services/provider-sla-windows.service";
 import {
@@ -496,7 +497,7 @@ export default function ProviderCapitalPage() {
         <Banner
           tone="danger"
           title="Your stake position could not be loaded"
-          description={`${error.code} · ${error.message}`}
+          description={describeChainRefusal(error)}
         />
       ) : null}
 
@@ -1143,7 +1144,7 @@ function StakeActionSheet({
                     ? "Close this and use Open stake account first. It is not created automatically, because you pay its rent."
                     : refusal.code === "PROVIDER_STAKE_ACCOUNT_NOT_NEEDED"
                       ? "Nothing was built. Close this and use Deposit — your first deposit creates your stake."
-                      : `${refusal.code} · ${refusal.message}`
+                      : describeChainRefusal(refusal)
               }
             />
           ) : null}

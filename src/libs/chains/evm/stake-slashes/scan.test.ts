@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { SLASH_CANCELLED_TOPIC, SLASH_EXECUTED_TOPIC, SLASH_PROPOSED_TOPIC } from "./abi";
+import {
+  SLASH_CANCELLED_TOPIC,
+  SLASH_DISPUTED_TOPIC,
+  SLASH_EXECUTED_TOPIC,
+  SLASH_PROPOSED_TOPIC,
+  SLASH_UPHELD_TOPIC,
+} from "./abi";
 import { CONTRACT, PROVIDER, proposedLog } from "./fixtures";
 import {
   REORG_MARGIN,
@@ -110,9 +116,15 @@ describe("isRangeRefusal", () => {
 });
 
 describe("providerSlashTopics", () => {
-  it("ORs the three events and filters topic2 on the provider", () => {
+  it("ORs all five events and filters topic2 on the provider", () => {
     const topics = providerSlashTopics(PROVIDER);
-    expect(topics[0]).toEqual([SLASH_PROPOSED_TOPIC, SLASH_EXECUTED_TOPIC, SLASH_CANCELLED_TOPIC]);
+    expect(topics[0]).toEqual([
+      SLASH_PROPOSED_TOPIC,
+      SLASH_EXECUTED_TOPIC,
+      SLASH_CANCELLED_TOPIC,
+      SLASH_DISPUTED_TOPIC,
+      SLASH_UPHELD_TOPIC,
+    ]);
     expect(topics[1]).toBeNull();
     expect(topics[2]).toBe(addressTopic(PROVIDER));
     expect(addressTopic(PROVIDER)).toBe(`0x000000000000000000000000${PROVIDER.slice(2).toLowerCase()}`);
