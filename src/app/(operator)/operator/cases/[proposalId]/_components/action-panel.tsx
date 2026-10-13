@@ -38,11 +38,13 @@ import {
   authorityRefusal,
   caseStatusLabel,
   exceedsAuthority,
+  isCancelRequested,
   isLegalInStatus,
   isSweepable,
   may,
   RECALCULATED_AMOUNT_PATTERN,
   type OperatorAction,
+  type StatusGatedAction,
 } from "@/features/operator/state";
 import { isUserRejection, useSigner } from "@/hooks/useSigner";
 import type {
@@ -183,7 +185,7 @@ function rolesPermitting(action: OperatorAction): OperatorRole[] {
 }
 
 /** Which statuses this action is legal in — asked of `state.ts`, not copied from it. */
-function statusesAllowing(action: Exclude<OperatorAction, "sweep">): SlashProposalStatus[] {
+function statusesAllowing(action: StatusGatedAction): SlashProposalStatus[] {
   return PROPOSAL_STATUSES.filter((status) => isLegalInStatus(action, status));
 }
 
@@ -659,7 +661,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
   }
 
   /** Both gates plus the sentence for failing either. Every action goes through this. */
-  const gate = (action: Exclude<OperatorAction, "sweep">): Gate => {
+  const gate = (action: StatusGatedAction): Gate => {
     const permitted = may(roles, action);
     const legal = isLegalInStatus(action, status);
     let blockedBecause: string | null = null;
@@ -725,7 +727,28 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
       : baseExtendGate;
 
   const compensateGate = gate("compensate");
-  const cancelGate = gate("cancel");
+
+  /*
+    `cancel` is gated on the on-chain record, not the case status: that is the
+    one thing the backend's cancel-intent guard checks, and an overturned case
+    waiting for the settlement admin still reads OVERTURNED.
+  */
+  const cancelPermitted = may(roles, "cancel");
+  const cancelLegal = isCancelRequested(brief.chainStatus);
+  let cancelBlockedBecause: string | null = null;
+  if (!cancelPermitted) {
+    cancelBlockedBecause = `needs ${joinWithOr(rolesPermitting("cancel"))}; this token holds ${
+      roles.length > 0 ? roles.join(", ") : "no roles"
+    }`;
+  } else if (!cancelLegal) {
+    cancelBlockedBecause = `only while the on-chain record is waiting for the settlement admin's cancel (CANCEL_REQUESTED) — it is ${brief.chainStatus ?? "not reported"}`;
+  }
+  const cancelGate: Gate = {
+    permitted: cancelPermitted,
+    legal: cancelLegal,
+    offered: cancelPermitted && cancelLegal,
+    blockedBecause: cancelBlockedBecause,
+  };
 
   /*
     `sweep` is gated on the OUTCOME, not the status — the only action here

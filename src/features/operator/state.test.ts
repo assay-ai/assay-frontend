@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { authorityRefusal, exceedsAuthority, RECALCULATED_AMOUNT_PATTERN } from "./state";
+import {
+  authorityRefusal,
+  exceedsAuthority,
+  isCancelRequested,
+  may,
+  RECALCULATED_AMOUNT_PATTERN,
+} from "./state";
 
 import type { Money } from "@/interfaces/api";
 
@@ -53,5 +59,35 @@ describe("RECALCULATED_AMOUNT_PATTERN", () => {
 
   it.each(["", "0", "-5", "284.7", "abc", "028470000", " 1"])("refuses %j", (value) => {
     expect(RECALCULATED_AMOUNT_PATTERN.test(value)).toBe(false);
+  });
+});
+
+/**
+ * `POST /operator/cases/:id/cancel-intent` is guarded on the ON-CHAIN record's
+ * status and on nothing else about the case. The console used to wait for a
+ * case status `CANCEL_REQUESTED`, which the backend never reports: an
+ * overturned case waiting for the settlement admin still reads `OVERTURNED`.
+ */
+describe("cancel the judgement on chain", () => {
+  it("is legal exactly while the on-chain record is CANCEL_REQUESTED", () => {
+    expect(isCancelRequested("CANCEL_REQUESTED")).toBe(true);
+  });
+
+  it.each(["NONE", "PROPOSING", "PENDING", "EXECUTED", "CANCELLED", "REFUSED"])(
+    "is not legal while the on-chain record is %s",
+    (chainStatus) => {
+      expect(isCancelRequested(chainStatus)).toBe(false);
+    },
+  );
+
+  it("is not legal when the brief carries no chain status (an older backend)", () => {
+    expect(isCancelRequested(undefined)).toBe(false);
+  });
+
+  it("is offered to the two roles the backend guard accepts", () => {
+    expect(may(["ADJL"], "cancel")).toBe(true);
+    expect(may(["TRE"], "cancel")).toBe(true);
+    expect(may(["ADJ"], "cancel")).toBe(false);
+    expect(may(["SRE"], "cancel")).toBe(false);
   });
 });
