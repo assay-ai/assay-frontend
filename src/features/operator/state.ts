@@ -1,4 +1,5 @@
 import type { BadgeVariant } from "@/components/ui/badge";
+import { stampUtc } from "@/features/g34a/stats";
 import type { Money } from "@/interfaces/api";
 import type { OperatorRole, SlashProposalStatus } from "@/interfaces/operator";
 import { formatMoney } from "@/utils/money";
@@ -133,6 +134,93 @@ export function isLegalInStatus(action: StatusGatedAction, status: SlashProposal
 export function isCancelRequested(chainStatus: string | null | undefined): boolean {
   return chainStatus === "CANCEL_REQUESTED";
 }
+
+/**
+ * The deadline that comes with a requested on-chain cancel, in plain words.
+ *
+ * `CANCEL_REQUESTED` means the platform has asked for the cancel and nothing
+ * more: the record still stands on chain until the settlement admin signs, and
+ * from its executable time **anyone** can execute the penalty. The brief
+ * carries that time (`chainExecutableAt`); an older backend does not, and the
+ * warning is then given without it rather than dropped.
+ *
+ * `null` for every other chain status — there is no cancel waiting.
+ */
+export function cancelDeadlineNotice(
+  chainStatus: string | null | undefined,
+  chainExecutableAt: string | null | undefined,
+  now: Date,
+): { overdue: boolean; text: string } | null {
+  if (!isCancelRequested(chainStatus)) return null;
+
+  const at = chainExecutableAt ? new Date(chainExecutableAt).getTime() : Number.NaN;
+  if (!chainExecutableAt || Number.isNaN(at)) {
+    return {
+      overdue: false,
+      text:
+        "The cancel must be signed by the settlement admin before the on-chain record becomes "
+        + "executable. After that anyone can execute the penalty.",
+    };
+  }
+  if (now.getTime() >= at) {
+    return {
+      overdue: true,
+      text:
+        `The on-chain record became executable at ${stampUtc(chainExecutableAt)} UTC and the `
+        + "cancel has not landed: anyone can execute the penalty now. Get the settlement admin's "
+        + "signature immediately.",
+    };
+  }
+  return {
+    overdue: false,
+    text:
+      `The cancel must be signed by the settlement admin before ${stampUtc(chainExecutableAt)} `
+      + "UTC. After that anyone can execute the penalty.",
+  };
+}
+
+/**
+ * What a successful Suspend tells the operator about the chain.
+ *
+ * `chainStatus` is the on-chain record's status **before** the suspension. The
+ * backend closes the case and then requests the cancel of a standing record
+ * (`PENDING` → `CANCEL_REQUESTED`); it signs nothing, so the suspension is not
+ * finished until the settlement admin has signed.
+ */
+export function suspendedNotice(chainStatus: string | null | undefined): string {
+  switch (chainStatus) {
+    case "PENDING":
+    case "CANCEL_REQUESTED":
+      return (
+        "Proposal suspended. The on-chain cancel has been requested and still needs the "
+        + "settlement admin's signature."
+      );
+    case "PROPOSING":
+      return (
+        "Proposal suspended. A proposal was being written on chain; its cancel is requested when "
+        + "it lands and will need the settlement admin's signature."
+      );
+    case "NONE":
+    case "REFUSED":
+    case "CANCELLED":
+      return "Proposal suspended. Nothing stands on chain for it, so there is nothing to cancel.";
+    default:
+      return (
+        "Proposal suspended. If a record stands on chain, its cancel has been requested and "
+        + "still needs the settlement admin's signature."
+      );
+  }
+}
+
+/**
+ * The roles a fleet sweep's **second approver** must hold — at least one.
+ *
+ * Mirrors `approverRoles` on the backend's `S-11` register row; any other
+ * approver is refused with `403 OPERATOR_APPROVER_ROLE_REQUIRED`. The other
+ * two-person action (recording a compensation, `S-5`) names none: any other
+ * active operator may approve it.
+ */
+export const SWEEP_APPROVER_ROLES: readonly OperatorRole[] = ["ADJ", "ADJL"];
 
 /**
  * `sweep` is the one action gated on the **outcome**, not the status.

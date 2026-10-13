@@ -36,6 +36,7 @@ import { useOperatorSession } from "@/features/operator/session-context";
 import {
   asProposalStatus,
   authorityRefusal,
+  cancelDeadlineNotice,
   caseStatusLabel,
   exceedsAuthority,
   isCancelRequested,
@@ -43,6 +44,8 @@ import {
   isSweepable,
   may,
   RECALCULATED_AMOUNT_PATTERN,
+  suspendedNotice,
+  SWEEP_APPROVER_ROLES,
   type OperatorAction,
   type StatusGatedAction,
 } from "@/features/operator/state";
@@ -486,7 +489,13 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
   const suspend = useMutation({
     mutationFn: (body: SuspendProposalBody) => suspendCase(proposalId, body),
     onSuccess: () => {
-      toast.success("Proposal suspended.");
+      /*
+        A suspension closes the case and only REQUESTS the on-chain cancel. The
+        record stands until the settlement admin signs, so the confirmation
+        says so instead of reading as finished. `brief.chainStatus` is still the
+        status from before the suspension here — the refetch below replaces it.
+      */
+      toast.success(suspendedNotice(brief.chainStatus));
       setOpenSection(null);
       setFormError(null);
       setSuspendReasonCode("");
@@ -743,6 +752,16 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
   } else if (!cancelLegal) {
     cancelBlockedBecause = `only while the on-chain record is waiting for the settlement admin's cancel (CANCEL_REQUESTED) — it is ${brief.chainStatus ?? "not reported"}`;
   }
+  /*
+    Shown to every operator on the case, not only the roles that may build the
+    cancel: whoever suspended or overturned it has to know the on-chain record
+    is still standing and when it becomes anyone's to execute.
+  */
+  const cancelDeadline = cancelDeadlineNotice(
+    brief.chainStatus,
+    brief.chainExecutableAt,
+    new Date(),
+  );
   const cancelGate: Gate = {
     permitted: cancelPermitted,
     legal: cancelLegal,
@@ -1131,6 +1150,27 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
         </PanelTitles>
       </PanelHeader>
       <PanelBody className="p-4 tablet:p-5">
+        {cancelDeadline ? (
+          <div
+            role="alert"
+            className={cn(
+              "mb-3 flex w-full flex-col gap-1 rounded-md border p-3",
+              cancelDeadline.overdue
+                ? "border-danger-20 bg-danger-10"
+                : "border-warning-20 bg-warning-10",
+            )}
+          >
+            <p
+              className={cn(
+                "text-label-13",
+                cancelDeadline.overdue ? "text-danger-600" : "text-warning-600",
+              )}
+            >
+              The on-chain cancel has been requested, not signed
+            </p>
+            <p className="text-body-xs text-02">{cancelDeadline.text}</p>
+          </div>
+        ) : null}
         {offered.length === 0 ? (
           <div className="flex w-full flex-col gap-2">
             <p className="text-body-13 text-02">
@@ -1373,7 +1413,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
             {suspendGate.offered ? (
               <Section
                 title="Suspend"
-                description="Cancels the proposal. Not a pause and not reversible from here: the penalty is dropped and the case ends as cancelled."
+                description="Cancels the proposal. Not a pause and not reversible from here: the penalty is dropped and the case ends as cancelled. If a record already stands on chain, its cancel is requested — and it is not cancelled until the settlement admin signs."
                 open={openSection === "suspend"}
                 onToggle={() => toggleSection("suspend")}
               >
@@ -1487,6 +1527,15 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                     compensable.
                   </li>
                   <li className="text-body-xs text-02">
+                    The approver of a <strong className="text-01">fleet sweep</strong> must hold{" "}
+                    {joinWithOr(SWEEP_APPROVER_ROLES)}. Any other approver is refused with{" "}
+                    <span className="font-mono text-mono-12 text-01">
+                      OPERATOR_APPROVER_ROLE_REQUIRED
+                    </span>{" "}
+                    (403) and no sweep is opened. A compensation may be approved by any other
+                    active operator.
+                  </li>
+                  <li className="text-body-xs text-02">
                     An unknown proposal id returns <strong className="text-01">404</strong>, because
                     the tenant is resolved first.
                   </li>
@@ -1557,7 +1606,11 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                     cases are resolved by this form, not by their own.
                   </p>
                 </div>
-                <ApproverField value={approverToken} onChange={setApproverToken} />
+                <ApproverField
+                  value={approverToken}
+                  onChange={setApproverToken}
+                  hint={`A second operator's own credential. The approver of a fleet sweep must hold ${joinWithOr(SWEEP_APPROVER_ROLES)}, and the platform refuses the same identity in both roles.`}
+                />
                 {formError ? <p className="text-body-xs text-danger-600">{formError}</p> : null}
                 <Button
                   type="button"
@@ -1711,7 +1764,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
             {cancelGate.offered ? (
               <Section
                 title="Cancel the judgement on chain"
-                description="This case has been decided against the penalty, and the on-chain record is still standing. Only the program admin's key can retire it — this screen builds the transaction and nothing more."
+                description="This case was overturned or suspended, and the on-chain record is still standing. Only the program admin's key can retire it — this screen builds the transaction and nothing more."
                 open={openSection === "cancel"}
                 onToggle={() => toggleSection("cancel")}
               >
@@ -1723,8 +1776,9 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                     The decision is recorded, but the slash record still holds the provider&rsquo;s
                     collateral and stays executable by anyone once its timelock passes. Building the
                     transaction changes nothing; the admin&rsquo;s signature is what retires it. The
-                    case moves to <span className="font-mono text-mono-12 text-01">CANCELLED</span>{" "}
-                    on its own, when the reconcile sweep sees the record leave{" "}
+                    on-chain record status moves to{" "}
+                    <span className="font-mono text-mono-12 text-01">CANCELLED</span> on its own,
+                    when the reconcile sweep sees the record leave{" "}
                     <span className="font-mono text-mono-12 text-01">Pending</span> — there is
                     nothing to record here afterwards.
                   </p>
@@ -1872,9 +1926,12 @@ function IntentRow({ label, value }: { label: string; value: string }) {
 function ApproverField({
   value,
   onChange,
+  hint = "A second operator's own credential. The platform refuses the same identity in both roles.",
 }: {
   value: string;
   onChange: (next: string) => void;
+  /** Who may approve differs per action; the sweep names roles, the compensation does not. */
+  hint?: string;
 }) {
   return (
     <Field
@@ -1884,7 +1941,7 @@ function ApproverField({
       onChange={(e) => onChange(e.target.value)}
       autoComplete="off"
       spellCheck={false}
-      hint="A second operator's own credential. The platform refuses the same identity in both roles."
+      hint={hint}
     />
   );
 }

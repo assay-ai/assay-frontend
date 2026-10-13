@@ -184,6 +184,13 @@ export interface OperatorCaseBrief {
    * `cancel_slash` reads `OVERTURNED` here and `CANCEL_REQUESTED` there.
    */
   chainStatus: ChainProposalStatus;
+  /**
+   * When the on-chain record becomes executable (`chain_executable_at`),
+   * read-only. From this moment anyone can execute the penalty, so it is the
+   * deadline for a requested cancel. Null while nothing stands on chain;
+   * absent from a backend that predates the field.
+   */
+  chainExecutableAt?: string | null;
 }
 
 /** `POST /operator/cases/:id/decide`. */

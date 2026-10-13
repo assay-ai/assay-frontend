@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   authorityRefusal,
+  cancelDeadlineNotice,
   exceedsAuthority,
   isCancelRequested,
   may,
   RECALCULATED_AMOUNT_PATTERN,
+  suspendedNotice,
+  SWEEP_APPROVER_ROLES,
 } from "./state";
 
 import type { Money } from "@/interfaces/api";
@@ -89,5 +92,97 @@ describe("cancel the judgement on chain", () => {
     expect(may(["TRE"], "cancel")).toBe(true);
     expect(may(["ADJ"], "cancel")).toBe(false);
     expect(may(["SRE"], "cancel")).toBe(false);
+  });
+});
+
+/**
+ * A requested cancel is not a cancel. Until the settlement admin signs it the
+ * on-chain record stands, and from its executable time anyone can execute the
+ * penalty — so the console has to say when that is.
+ */
+describe("the deadline of a requested on-chain cancel", () => {
+  const NOW = new Date("2026-10-14T08:00:00Z");
+
+  it.each(["NONE", "PROPOSING", "PENDING", "EXECUTED", "CANCELLED", "REFUSED", undefined, null])(
+    "says nothing while the on-chain record is %s",
+    (chainStatus) => {
+      expect(cancelDeadlineNotice(chainStatus, "2026-10-17T09:15:00.000Z", NOW)).toBeNull();
+    },
+  );
+
+  it("names the deadline while it is still ahead", () => {
+    expect(cancelDeadlineNotice("CANCEL_REQUESTED", "2026-10-17T09:15:00.000Z", NOW)).toEqual({
+      overdue: false,
+      text:
+        "The cancel must be signed by the settlement admin before 2026-10-17 09:15 UTC. "
+        + "After that anyone can execute the penalty.",
+    });
+  });
+
+  it("says anyone can execute now once the deadline has passed", () => {
+    expect(cancelDeadlineNotice("CANCEL_REQUESTED", "2026-10-14T07:59:00.000Z", NOW)).toEqual({
+      overdue: true,
+      text:
+        "The on-chain record became executable at 2026-10-14 07:59 UTC and the cancel has not "
+        + "landed: anyone can execute the penalty now. Get the settlement admin's signature "
+        + "immediately.",
+    });
+  });
+
+  it("treats the deadline itself as passed", () => {
+    expect(cancelDeadlineNotice("CANCEL_REQUESTED", NOW.toISOString(), NOW)?.overdue).toBe(true);
+  });
+
+  it.each([null, undefined, "not a date"])(
+    "still warns, without a time, when the brief carries %s (an older backend)",
+    (chainExecutableAt) => {
+      expect(cancelDeadlineNotice("CANCEL_REQUESTED", chainExecutableAt, NOW)).toEqual({
+        overdue: false,
+        text:
+          "The cancel must be signed by the settlement admin before the on-chain record becomes "
+          + "executable. After that anyone can execute the penalty.",
+      });
+    },
+  );
+});
+
+describe("what a suspension tells the operator about the chain", () => {
+  it.each(["PENDING", "CANCEL_REQUESTED"])(
+    "says the cancel is requested and still needs a signature when the record is %s",
+    (chainStatus) => {
+      expect(suspendedNotice(chainStatus)).toBe(
+        "Proposal suspended. The on-chain cancel has been requested and still needs the "
+        + "settlement admin's signature.",
+      );
+    },
+  );
+
+  it("says the cancel follows when a proposal was being written on chain", () => {
+    expect(suspendedNotice("PROPOSING")).toBe(
+      "Proposal suspended. A proposal was being written on chain; its cancel is requested when "
+      + "it lands and will need the settlement admin's signature.",
+    );
+  });
+
+  it.each(["NONE", "REFUSED", "CANCELLED"])(
+    "says there is nothing to cancel when the record is %s",
+    (chainStatus) => {
+      expect(suspendedNotice(chainStatus)).toBe(
+        "Proposal suspended. Nothing stands on chain for it, so there is nothing to cancel.",
+      );
+    },
+  );
+
+  it("does not claim either way when the brief carries no chain status", () => {
+    expect(suspendedNotice(undefined)).toBe(
+      "Proposal suspended. If a record stands on chain, its cancel has been requested and "
+      + "still needs the settlement admin's signature.",
+    );
+  });
+});
+
+describe("the fleet sweep approver", () => {
+  it("must hold ADJ or ADJL, as the backend's S-11 register row demands", () => {
+    expect(SWEEP_APPROVER_ROLES).toEqual(["ADJ", "ADJL"]);
   });
 });
