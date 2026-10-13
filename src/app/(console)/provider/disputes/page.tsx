@@ -103,6 +103,12 @@ export default function DisputesListPage() {
       <header className="flex w-full flex-col items-start gap-0.5">
         <h1 className="text-heading-md text-01">Disputes</h1>
         <p className="text-body-sm text-03">Objections you have filed against a proposed penalty or a verdict</p>
+        <p className="text-body-13 text-02">
+          <Link href="/provider/capital/penalties" className="underline">
+            Penalties on chain
+          </Link>{" "}
+          lists every penalty against your stake, read from the blockchain rather than from Assay.
+        </p>
       </header>
 
       <Panel className="w-full">

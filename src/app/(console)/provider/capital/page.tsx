@@ -442,6 +442,9 @@ export default function ProviderCapitalPage() {
               ? `chain is authoritative · last observed ${utcStamp(observedAt)}`
               : "chain is authoritative · nothing observed yet"}
           </p>
+          <Link href="/provider/capital/penalties" className="self-start text-body-13 text-02 underline">
+            Penalties on chain
+          </Link>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           {/*

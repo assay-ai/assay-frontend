@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, FolderOpen, Scale, X } from "lucide-react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import * as React from "react";
 
@@ -213,6 +214,15 @@ export default function SlashProposalCasePage() {
         </span>
         . Every deadline this case runs on has passed by then, so this is the date to plan
         against — the wait can be longer than it, never shorter.
+      </p>
+
+      {/* The independent check: the same penalty, read from the chain and not from us. */}
+      <p className="text-body-13 text-02">
+        This page is Assay&apos;s account of the case.{" "}
+        <Link href="/provider/capital/penalties" className="underline">
+          Check the penalties on chain
+        </Link>{" "}
+        to see what the stake contract itself holds against your stake.
       </p>
 
       {/* ── The two panels the frame puts before the arithmetic ───────── */}

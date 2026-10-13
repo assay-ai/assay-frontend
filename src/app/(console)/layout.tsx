@@ -74,6 +74,7 @@ const TITLES: Record<string, string> = {
   "/provider/register": "Registration",
   "/provider/listing-path": "Listing path",
   "/provider/capital": "Capital",
+  "/provider/capital/penalties": "Penalties on chain",
   "/provider/money": "Money",
   "/provider/money/reconciliation": "Reconciliation",
   "/provider/policy-changes": "Policy changes",
