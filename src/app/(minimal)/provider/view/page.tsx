@@ -638,9 +638,10 @@ export default function ProviderViewPage() {
                 className="mt-0.5 shrink-0 text-teal-600"
               />
               <p className="min-w-0 flex-1 text-body-13 text-01">
-                A rejected call is not charged to the buyer and not credited to you. Once slashing
-                is live it also costs part of your stake — during shadow mode you see that amount
-                before any of it is real. Flag anything you think is wrong.
+                A rejected call is not charged to the buyer and not credited to you. It also counts
+                against your SLA window: if a window closes in breach, a penalty against your stake
+                is proposed, and you can dispute it before it is applied. Flag anything you think is
+                wrong.
               </p>
             </div>
           </PanelBody>

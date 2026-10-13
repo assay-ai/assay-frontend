@@ -236,7 +236,7 @@ export default function ProviderSetupPage() {
               <NextStep
                 ordinal="4"
                 title="You get paid, and you can be slashed"
-                body="Paid on-chain to your own token account when the buyer's voucher is redeemed. A rejected response costs stake once slashing is live — the verdicts and flags screen shows you the amount during shadow mode first."
+                body="Paid on-chain to your own token account when the buyer's voucher is redeemed. A rejected response is not credited and counts against your SLA window — if a window closes in breach, a penalty against your stake is proposed, and you can dispute it before it is applied."
               />
             </PanelBody>
           </Panel>

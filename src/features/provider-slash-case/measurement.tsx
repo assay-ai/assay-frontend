@@ -16,6 +16,7 @@ import { stampUtc } from "@/features/g34a/stats";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
 import { formatMoney } from "@/utils/money";
 
+import { presentArithmeticRow } from "./labels";
 import {
   SLASH_AGENT_BPS,
   SLASH_PLATFORM_BPS,
@@ -35,7 +36,8 @@ import {
  * moved) and without the constants file (which may have been tuned). The
  * server renders that freeze into a fixed row list and this component prints
  * it. Nothing here recomputes a rate, a tolerance, a threshold or a penalty,
- * and no row is added that the response did not send.
+ * and no row is added that the response did not send. The field names and
+ * minor units it arrives in are put into words by `./labels`.
  *
  * Two rows are worth knowing about because they look like gaps and are not:
  *
@@ -48,7 +50,7 @@ import {
  *   per-window ceiling and the 10%-of-stake daily cap are enforced on chain
  *   against a signed attestation, and the backend deliberately keeps no second
  *   unsigned copy of a consensus rule. So the capped figure is genuinely not
- *   known off chain, and the row says so in the server's own words.
+ *   known off chain; `./labels` shows a dash and says so in a user sentence.
  *
  * `arithmetic` is `[]` for a `DATA_FAIL` proposal — there is no strike, so
  * there is nothing frozen to render. That is an empty state, not an error.
@@ -97,12 +99,10 @@ function subtitleFor(data: SlashProposalCaseDetail): string {
 }
 
 export function Measurement({ data }: { data: SlashProposalCaseDetail }) {
+  // The server's field names, minor units and ids, in words — see `./labels`.
   const rows: ArithmeticRow[] = data.arithmetic.map((row) => ({
     id: row.key,
-    label: row.key,
-    expression: row.expression ?? undefined,
-    value: row.value,
-    note: row.note ?? undefined,
+    ...presentArithmeticRow(row, data.proposal.penaltyAmount),
     valueTone: toneMap[row.tone],
   }));
 

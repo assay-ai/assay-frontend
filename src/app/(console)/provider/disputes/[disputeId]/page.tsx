@@ -27,6 +27,8 @@ import {
   providerDeadlineLine,
 } from "@/features/provider-disputes/state";
 import { buildDisputeOnlyTimeline, buildRichTimeline } from "@/features/provider-disputes/timeline";
+import { restorationValue } from "@/features/provider-slash-case/labels";
+import type { Money } from "@/interfaces/api";
 import type { SlashRestorationRow } from "@/interfaces/provider-disputes";
 import {
   getDispute,
@@ -46,7 +48,7 @@ import { formatMoney } from "@/utils/money";
  * file header for the confirmed reason (`DisputeService`'s `toDto` mapper is
  * an explicit whitelist that omits `platformDueAt`/`outcome`/`resolutionKind`
  * entirely). The frame's full content — both clocks, the six-row restoration
- * table, the de-minimis banner — only exists for a dispute whose
+ * table — only exists for a dispute whose
  * `subjectType` is `SLASH_PROPOSAL` (a value the public `DisputeSubjectType`
  * enum omits but the column actually holds), because only then can this page
  * also read `GET /providers/me/slash-proposals/{subjectId}` and `.../timeline`
@@ -80,7 +82,7 @@ const RESTORATION_STATUS_LABEL: Record<SlashRestorationRow["status"], string> = 
   NOT_APPLICABLE: "not applicable",
 };
 
-function RestorationTable({ rows }: { rows: SlashRestorationRow[] }) {
+function RestorationTable({ rows, money }: { rows: SlashRestorationRow[]; money: Money }) {
   const columns: TableColumn<RestorationTableRow>[] = [
     { key: "label", header: "What is restored", cell: (r) => r.label, noTruncate: true },
     { key: "value", header: "Value", width: 220, mono: true, noTruncate: true, cell: (r) => r.value },
@@ -89,7 +91,7 @@ function RestorationTable({ rows }: { rows: SlashRestorationRow[] }) {
   const tableRows: RestorationTableRow[] = rows.map((row, index) => ({
     id: `${row.label}-${index}`,
     label: row.label,
-    value: row.value,
+    value: restorationValue(row.value, money),
     status: RESTORATION_STATUS_LABEL[row.status],
   }));
   return <Table columns={columns} rows={tableRows} caption="Restoration record" />;
@@ -139,7 +141,7 @@ export default function DisputeCaseStatePage() {
   const richTimeline = rich && timelineQuery.data ? timelineQuery.data : null;
 
   const caseLabel = rich
-    ? (rich.proposal.windowLabel ?? rich.proposal.bindingLabel)
+    ? rich.proposal.toolName
     : `${dispute.subjectType.toLowerCase().replace(/_/g, " ")} ${dispute.subjectId.slice(0, 8)}…`;
 
   const timelineEvents =
@@ -214,7 +216,10 @@ export default function DisputeCaseStatePage() {
         </PanelHeader>
         <PanelBody className="p-4 tablet:p-5">
           {rich && richTimeline ? (
-            <RestorationTable rows={richTimeline.restoration} />
+            <RestorationTable
+              rows={richTimeline.restoration}
+              money={rich.proposal.penaltyAmount}
+            />
           ) : (
             <p className="text-body-13 text-02">
               {dispute.restoredAmount
@@ -226,14 +231,6 @@ export default function DisputeCaseStatePage() {
           )}
         </PanelBody>
       </Panel>
-
-      {rich ? (
-        <Banner
-          tone="warning"
-          title="A $5 penalty that requires a case view, an evidence browser, a dispute form and a human reviewer costs both sides two orders of magnitude more than its subject."
-          description="The screens are correct and the policy is wrong: a de-minimis floor below $25 — record the breach, raise sampling to 100%, do not execute — removes most traffic from this flow permanently."
-        />
-      ) : null}
     </>
   );
 }

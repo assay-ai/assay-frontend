@@ -302,7 +302,7 @@ export function DisputeFilingForm({
       <header className="flex w-full flex-col items-stretch gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h1 className="truncate text-heading-md text-01">
-            Dispute · {proposal.windowLabel ?? proposal.bindingLabel} · proposed penalty{" "}
+            Dispute · {proposal.toolName} · proposed penalty{" "}
             {formatMoney(proposal.penaltyAmount)}
           </h1>
           <p className="text-body-xs text-03">
