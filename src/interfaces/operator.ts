@@ -74,6 +74,11 @@ export type SlashProposalStatus =
   | "UPHELD" | "OVERTURNED" | "EXECUTING" | "EXECUTED"
   | "REVERSED" | "WAIVED" | "CANCEL_REQUESTED" | "CANCELLED";
 
+/** assay-backend `src/modules/slash/domain/chain-slash-outcome.ts` `ChainProposalStatus`. */
+export type ChainProposalStatus =
+  | "NONE" | "PROPOSING" | "PENDING" | "CANCEL_REQUESTED"
+  | "EXECUTED" | "CANCELLED" | "REFUSED";
+
 /** assay-backend `src/modules/slash/domain/arbitration.ts` `ArbitrationOutcome`. */
 export type ArbitrationOutcome =
   | "UPHELD"
@@ -173,6 +178,12 @@ export interface OperatorCaseBrief {
   restoration: SlashRestorationRow[];
   /** True exactly when the proposal is `AWAITING_SECOND`. */
   requiresSecondSignature: boolean;
+  /**
+   * The on-chain record's status (`slash_proposals.chain_status`), read-only.
+   * Not the case status: an overturned case waiting for the settlement admin's
+   * `cancel_slash` reads `OVERTURNED` here and `CANCEL_REQUESTED` there.
+   */
+  chainStatus: ChainProposalStatus;
 }
 
 /** `POST /operator/cases/:id/decide`. */

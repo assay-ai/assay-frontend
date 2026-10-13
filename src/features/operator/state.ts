@@ -103,25 +103,35 @@ export function may(roles: readonly OperatorRole[], action: OperatorAction): boo
  * `compensate` keeps `reverse`'s `EXECUTED`: nothing was taken from a provider
  * whose penalty never executed, so there is nothing to put back.
  *
- * `cancel` is legal in `CANCEL_REQUESTED` and nowhere else. That status exists
- * precisely because the backend cannot cancel on chain by itself any more — it
- * records the overturn and parks the case there until the admin signs.
+ * `cancel` is not here: it is gated on the on-chain record, see
+ * {@link isCancelRequested}.
  */
-const ACTION_STATUSES: Record<Exclude<OperatorAction, "sweep">, readonly SlashProposalStatus[]> = {
+export type StatusGatedAction = Exclude<OperatorAction, "sweep" | "cancel">;
+
+const ACTION_STATUSES: Record<StatusGatedAction, readonly SlashProposalStatus[]> = {
   claim: ["DISPUTED", "UNDER_REVIEW", "AWAITING_SECOND"],
   decide: ["DISPUTED", "UNDER_REVIEW"],
   second: ["AWAITING_SECOND"],
   suspend: ["PROPOSED", "DISPUTED", "UNDER_REVIEW", "AWAITING_SECOND", "UPHELD"],
   extendDeadline: ["PROPOSED"],
   compensate: ["EXECUTED"],
-  cancel: ["CANCEL_REQUESTED"],
 };
 
-export function isLegalInStatus(
-  action: Exclude<OperatorAction, "sweep">,
-  status: SlashProposalStatus,
-): boolean {
+export function isLegalInStatus(action: StatusGatedAction, status: SlashProposalStatus): boolean {
   return ACTION_STATUSES[action].includes(status);
+}
+
+/**
+ * `cancel` is gated on the **on-chain record**, not the case status.
+ *
+ * The backend's `buildCancelIntent` checks `chain_status === CANCEL_REQUESTED`
+ * and nothing else about the case. That value is never a case status — an
+ * overturned case waiting for the settlement admin still reads `OVERTURNED` —
+ * so a status gate could never offer the action. The brief carries the chain
+ * status for exactly this question.
+ */
+export function isCancelRequested(chainStatus: string | null | undefined): boolean {
+  return chainStatus === "CANCEL_REQUESTED";
 }
 
 /**
