@@ -76,6 +76,25 @@ export function strandReasons(
   return reasons;
 }
 
+/**
+ * The toast after an edit landed. The backend pauses the delegate's payments
+ * for about 30 seconds after any cap, or the expiry, goes DOWN (it refuses
+ * them with PAYMENT_VOUCHER_ADMISSION_PAUSED), so the toast must not promise
+ * "the next payment" then (BUG-R3-J-04).
+ */
+export function editedToast(current: AtomicCaps | null, next: AtomicCaps): string {
+  const lowered =
+    current !== null &&
+    (BigInt(next.maxVoucherAmount) < BigInt(current.maxVoucherAmount) ||
+      BigInt(next.maxPerWindow) < BigInt(current.maxPerWindow) ||
+      (next.validUntil !== undefined &&
+        current.validUntil !== undefined &&
+        BigInt(next.validUntil) < BigInt(current.validUntil)));
+  return lowered
+    ? "Updated. The agent’s payments are paused for about 30 seconds while the change settles; then the new caps apply."
+    : "Updated. The new caps apply from the agent’s next payment.";
+}
+
 /** "2 payments (0.600000 USDG) still being settled", or null when there are none. */
 export function unsettledLine(
   unsettled: UnsettledVouchers | null | undefined,

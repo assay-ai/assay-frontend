@@ -21,6 +21,7 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Table, type TableColumn, type TableRowData } from "@/components/ui/table";
 import { DASH, clockUtc, count, percent } from "@/features/g34a/stats";
 import { isCredited, rowsOf, utcDay, utcDayStart, type ProviderCallRow } from "@/features/g34a/calls";
+import { reasonLabel } from "@/features/call-classes/labels";
 import { exportProviderCalls, getProviderQuality } from "@/services";
 import { formatMoney } from "@/utils/money";
 import { presentVerdict } from "@/utils/verdict";
@@ -203,7 +204,7 @@ export default function VerdictsAndFlagsPage() {
           ? true
           : row.callId.toLowerCase().includes(needle) ||
             row.intentId.toLowerCase().includes(needle) ||
-            row.reason.toLowerCase().includes(needle) ||
+            reasonLabel(row.reason).toLowerCase().includes(needle) ||
             row.classification.toLowerCase().includes(needle)
       )
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
@@ -251,7 +252,10 @@ export default function VerdictsAndFlagsPage() {
     {
       key: "why",
       header: "Why it failed",
-      cell: (r) => <span title={r.call.reason || undefined}>{r.call.reason || DASH}</span>,
+      cell: (r) => {
+        const reason = reasonLabel(r.call.reason);
+        return <span title={reason || undefined}>{reason || DASH}</span>;
+      },
     },
     { key: "agent", header: "Agent", cell: () => DASH, width: 80, align: "start", mono: true },
     {
@@ -298,7 +302,7 @@ export default function VerdictsAndFlagsPage() {
           variant="secondary"
           icon={<Flag aria-hidden="true" />}
           disabled
-          title="Filing a flag needs POST /disputes, which has no service in this app yet."
+          title="Flagging a verdict from here is not available yet."
         >
           Flag
         </Button>
@@ -315,8 +319,8 @@ export default function VerdictsAndFlagsPage() {
         <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
           <h1 className="truncate text-heading-lg text-01">Verdicts</h1>
           <p className="text-body-sm leading-[1.55] text-02">
-            Every call we checked, and what we decided. If we got one wrong, say so — that is
-            the only way the number below improves.
+            Every call we checked, and what we decided. Flagging a verdict from here and the
+            webhook stream are not available yet.
           </p>
         </div>
 
@@ -344,17 +348,18 @@ export default function VerdictsAndFlagsPage() {
             variant="secondary"
             icon={<Webhook aria-hidden="true" />}
             disabled
-            title="A binding carries no webhook URL field, and no endpoint registers a stream."
+            title="A webhook stream is not available yet."
           >
-            Webhook stream
+            Webhook stream · not available yet
           </Button>
         </div>
       </header>
 
       {/* ── Note ───────────────────────────────────────────────── */}
       <Note tone="teal" icon={<ShieldCheck aria-hidden="true" className="size-[15px]" />}>
-        A failed verdict costs you money: on DATA_FAIL your stake is slashed and the buyer is
-        compensated out of the penalty. That is why every verdict here carries its evidence
+        A failed verdict costs you money: when our checks reject a response the call is not
+        credited, and it counts against your SLA window. If a window closes in breach, a penalty
+        against your stake is proposed and the buyer is compensated out of it. That is why every verdict here carries its evidence
         pack, why you can dispute one, and why we publish our own false-positive rate against
         the gate.
       </Note>
@@ -448,7 +453,7 @@ export default function VerdictsAndFlagsPage() {
             <PanelBody className="gap-3.5 p-5">
               <EmptyState
                 title="You have not flagged a verdict"
-                description="Flagging needs a disputes service this app does not have yet, and the disputes a provider files are not readable back on this persona."
+                description="Flagging a verdict from here is not available yet. A dispute you file from a case page is listed under Disputes."
               />
             </PanelBody>
           </Panel>
@@ -464,8 +469,7 @@ export default function VerdictsAndFlagsPage() {
               <div className="flex w-full flex-col gap-1">
                 <p className="font-mono text-mono-2xl text-teal-600">{DASH}</p>
                 <p className="text-body-13 leading-[1.55] text-02">
-                  No endpoint publishes the false-positive rate or the gate it is measured
-                  against, so neither figure is shown.
+                  Our false-positive rate is not published yet.
                 </p>
               </div>
 

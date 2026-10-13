@@ -217,8 +217,7 @@ export default function ToolRequestsPage() {
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">Request a tool</h1>
           <p className="text-body-sm text-03">
-            MVP is a queue with a named owner and a two-working-day first response — not a proposal
-            workflow
+            every request gets a named owner and a first response within two working days
           </p>
         </div>
         <Button
@@ -234,7 +233,7 @@ export default function ToolRequestsPage() {
       <Banner
         tone="warning"
         title="We author tools today."
-        description="A provider who writes a schema and hears nothing is a worse outcome than one who was told no, so the proposal workflow does not ship before the reviewers exist."
+        description="You cannot publish your own tool definition yet. Tell us what you need below and we will review your request."
       />
 
       <section className="flex w-full flex-col items-start gap-4 tablet:flex-row">
@@ -269,14 +268,13 @@ export default function ToolRequestsPage() {
               <label className="flex w-full flex-col gap-1.5">
                 <FieldLabel>Why a per-call price is truthful for it</FieldLabel>
                 <Textarea
-                  placeholder="Priced per minute of audio — this is a metered tool and needs PricingModel before it can be listed honestly."
+                  placeholder="Priced per minute of audio — this is a metered tool, so a single per-call price would not be fair."
                   value={pricingRationale}
                   onChange={(e) => setPricingRationale(e.target.value)}
                   rows={3}
                 />
                 <p className="text-body-xs text-03">
-                  Metered tools are excluded from the catalogue rather than shown with a misleading
-                  scalar.
+                  Metered tools are not listed in the catalogue yet, because a single per-call price would mislead.
                 </p>
               </label>
 

@@ -1,6 +1,5 @@
-import { ApiError } from "@/libs/ApiClient";
-
 import { api } from "./api";
+import { getPublicFeatures } from "./public-features.service";
 
 /**
  * Proof of reserves — the one anonymous read in this app.
@@ -76,21 +75,14 @@ export interface PublicReserves {
 }
 
 /**
- * `null` means the deployment has no `PUBLIC_RESERVES_ASSET`, so the route is
- * not registered and the fetch 404s.
+ * `null` means this deployment publishes no reserves page: the route is not
+ * registered, which `GET /public/features` says without it being called.
  *
- * That is a configuration state, not an error: the page says "not configured on
- * this deployment". Letting the 404 throw would render an error boundary, and
- * rendering zeros would say this deployment holds no reserves — the page would
+ * That is not an error: the page says proof of reserves is not available yet.
+ * Rendering zeros would say this deployment holds no reserves — the page would
  * be making the one kind of false claim it exists to prevent.
  */
 export async function getPublicReserves(): Promise<PublicReserves | null> {
-  try {
-    return await api.get<PublicReserves>("/public/reserves");
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 404) {
-      return null;
-    }
-    throw error;
-  }
+  if (!(await getPublicFeatures()).reserves) return null;
+  return api.get<PublicReserves>("/public/reserves");
 }

@@ -103,7 +103,7 @@ export default function PolicyChangesPage() {
         <EmptyState
           icon={<FileCog width={22} height={22} aria-hidden="true" />}
           title="No pending policy changes"
-          description="None of your bindings have a SHADOW verification policy pending right now. When an engineer proposes a new version for a tool you're bound to, it appears here with the structural diff against the version currently in force and every one of your bindings it would touch — you will see it before it takes effect, not after."
+          description="None of your bindings have a new verification policy version pending right now. When an engineer proposes a new version for a tool you're bound to, it appears here with the structural diff against the version currently in force and every one of your bindings it would touch — you will see it before it takes effect, not after."
           className="max-w-[560px]"
         />
       ) : (

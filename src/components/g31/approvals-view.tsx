@@ -50,7 +50,7 @@ export function ApprovalsView() {
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
       <PageHeader
         title="Approvals"
-        subtitle={`${waiting} waiting · the queue inside the app; the signed one-shot link is the same decision out of band`}
+        subtitle={`${waiting} waiting`}
         actions={
           <Button variant="secondary" icon={<Settings />} asChild>
             <Link href="/limits">Policy</Link>
@@ -62,12 +62,11 @@ export function ApprovalsView() {
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <EmptyState
             title="Nothing is waiting on you"
-            description="An approval holds a call open until a person decides. Nothing is holding right now, so your agent is spending inside its policy without asking. A limit refusing a call never appears here — that is Limits."
+            description="An approval holds a call open until a person decides. Nothing is holding right now, so your agent is spending inside its policy without asking. A call refused by a limit does not appear here — see Limits."
           />
           <p className="text-body-xs text-03">
-            No approvals endpoint exists yet, so this queue cannot fill even when a call does ask.
-            When one lands, it opens at /approvals/&lt;id&gt;, which is the same decision the signed
-            link shows on a phone.
+            Approving a call by hand is not available yet. Until it is, a call above your approval
+            threshold is refused instead of waiting here.
           </p>
         </div>
 

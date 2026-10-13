@@ -169,7 +169,12 @@ export function rowsOf(exported: ProviderCallsExport | undefined): ProviderCallR
  * figures (see `docs` rule 01: listed and charged, always both).
  */
 export function isCredited(row: ProviderCallRow): boolean {
-  return row.status === "SETTLED";
+  // Settled, but the export says the credit is not written (yet).
+  return (
+    row.status === "SETTLED" &&
+    row.classification !== "PENDING" &&
+    row.classification !== "PAID_AWAITING_REDEMPTION"
+  );
 }
 
 /** UTC-day-precise start of the day `ms` falls in. */

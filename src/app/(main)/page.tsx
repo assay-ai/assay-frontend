@@ -1,5 +1,6 @@
 "use client";
 
+import { DisplayAssetSelect } from "@/components/display-asset-select";
 import { ChartNoAxesColumn, Gauge, Info, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, type ReactNode } from "react";
@@ -164,6 +165,8 @@ export default function OverviewPage() {
           </Button>
         </div>
       </header>
+
+      <DisplayAssetSelect />
 
       {/* A brand-new account's first requests fail for one specific, temporary
           reason — Privy records the wallet after issuing the token — and that

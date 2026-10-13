@@ -164,8 +164,8 @@ function ChangeOverlayPanel({ data }: { data: SlashProposalCase }) {
       <PanelBody className="gap-3 p-4 tablet:p-5">
         <Table columns={columns} rows={rows} caption="Failures before and after the binding change" />
         <p className="text-body-xs text-03">
-          Affected calls identified: {count(overlay.failuresAfter)}. Per-call selection is not wired
-          on this screen — see the report.
+          Affected calls identified: {count(overlay.failuresAfter)}. Selecting individual calls is not available yet — the
+          full list is in the report.
         </p>
       </PanelBody>
     </Panel>
@@ -302,7 +302,7 @@ export function DisputeFilingForm({
       <header className="flex w-full flex-col items-stretch gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h1 className="truncate text-heading-md text-01">
-            Dispute · {proposal.windowLabel ?? proposal.bindingLabel} · proposed penalty{" "}
+            Dispute · {proposal.toolName} · proposed penalty{" "}
             {formatMoney(proposal.penaltyAmount)}
           </h1>
           <p className="text-body-xs text-03">

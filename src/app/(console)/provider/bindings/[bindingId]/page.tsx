@@ -3,6 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info, Pause, Play, Settings } from "lucide-react";
 import Link from "next/link";
+
+import { BindingNav } from "@/features/provider-binding/binding-nav";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
@@ -506,6 +508,8 @@ export default function BindingOverviewPage() {
           </Button>
         </div>
       </header>
+
+      <BindingNav bindingId={bindingId} />
 
       {/* ── Tiles ───────────────────────────────────────────────── */}
       {/*

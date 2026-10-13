@@ -1,0 +1,34 @@
+import { describe, expect, it } from "vitest";
+
+import { CLASS_ORDER } from "./csv";
+import { classLabel, reasonLabel, responseClassText } from "./labels";
+
+describe("call class labels (BUG-R5-03)", () => {
+  it("names every class the tables draw in plain language", () => {
+    for (const name of CLASS_ORDER) {
+      expect(classLabel(name)).not.toBe(name);
+      expect(classLabel(name)).not.toMatch(/[A-Z]_[A-Z]/);
+    }
+    expect(classLabel("PAID_UNCREDITED")).toBe("Rejected by our checks");
+  });
+
+  it("shows a class it does not know as it is, rather than hiding it", () => {
+    expect(classLabel("SOMETHING_NEW")).toBe("SOMETHING_NEW");
+  });
+
+  it("names the response classes on a receipt", () => {
+    expect(responseClassText("DATA_RESULT")).toBe("Data returned · DATA_RESULT");
+    expect(responseClassText("LATER_CLASS")).toBe("LATER_CLASS");
+  });
+
+  it("puts the settlement path's sentences in user words", () => {
+    expect(reasonLabel("verification: judged and refunded by the worker")).toBe(
+      "Failed our checks — the buyer was refunded"
+    );
+    expect(reasonLabel("mcp: provider outcome was not a DATA_RESULT")).not.toContain("DATA_RESULT");
+  });
+
+  it("leaves a reason it does not know untouched", () => {
+    expect(reasonLabel("settled, no credit written")).toBe("settled, no credit written");
+  });
+});

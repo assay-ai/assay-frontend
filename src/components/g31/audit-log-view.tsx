@@ -157,8 +157,7 @@ export function AuditLogView() {
           <PanelTitles>
             <PanelTitle>Events</PanelTitle>
             <PanelDescription className="whitespace-normal">
-              deliberately not here: individual tool calls — mixing 15,000 of them into an audit log
-              destroys the log
+              individual tool calls are not listed here — see Spend for those
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
@@ -166,18 +165,41 @@ export function AuditLogView() {
           {log.isError ? (
             <p className="p-3 text-body-13 text-danger-600">
               The audit log could not be read:{" "}
-              {log.error instanceof ApiError ? log.error.message : "the request failed"}. An empty
-              log and an unreachable one are not the same claim.
+              {log.error instanceof ApiError ? log.error.message : "the request failed"}. This is not an empty log.
             </p>
           ) : log.isPending ? (
             <p className="p-3 font-mono text-mono-13 text-03">Loading…</p>
           ) : visible.length === 0 ? (
             <div className="p-3">
-              <EmptyState
-                icon={null}
-                title="Nothing has been changed yet"
-                description="An audit event is somebody changing what is allowed — a limit, a credential, an approval, a movement of money. Nothing has happened on this account, which is why the log is empty rather than broken."
-              />
+              {/* Three different empties: the account's, the search's and the class filter's. */}
+              {entries.length > 0 ? (
+                <EmptyState
+                  icon={null}
+                  title={`No ${filter} events in the entries loaded so far`}
+                  description={
+                    log.hasNextPage
+                      ? "Other classes have entries. Choose All to see them, or load more below."
+                      : "Other classes have entries. Choose All to see them."
+                  }
+                />
+              ) : query ? (
+                <EmptyState
+                  icon={null}
+                  title="No audit event matches this search"
+                  description="The search looks at the actor, the action and the object's type and id."
+                />
+              ) : (
+                /*
+                  BUG-R2-B4-01: no product write records an audit event yet, so
+                  an empty log does NOT mean nothing changed. Say where the
+                  changes that are recorded can be read.
+                */
+                <EmptyState
+                  icon={null}
+                  title="No audit events are recorded yet"
+                  description="Changes to limits, credentials and alert channels are not shown in this log yet. Limit changes are listed with who made them under Change history on Limits; credentials and their revocations are listed under Agents."
+                />
+              )}
             </div>
           ) : (
             <div className="w-full overflow-x-auto">

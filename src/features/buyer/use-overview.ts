@@ -153,7 +153,7 @@ export function useOverview(anchor: Date): OverviewState {
           month,
           balances: balances.balances ?? [],
           holds: holds.items ?? [],
-          withheld: readWithheld(withheldRaw),
+          withheld: readWithheld(withheldRaw, monthSummary.asset),
           monthListed: monthSummary.totals?.listedTotal ?? null,
           todayCharged: todayGroup?.chargedTotal ?? null,
           todayCalls: todayGroup?.calls ?? 0,

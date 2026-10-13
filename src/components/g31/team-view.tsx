@@ -57,7 +57,7 @@ export function TeamView() {
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
       <PageHeader
         title="Team"
-        subtitle="Phase 2 · roles, invitations and ownership transfer"
+        subtitle="roles, invitations and ownership transfer"
         actions={
           <Button icon={<UserPlus />} type="button" disabled>
             Invite
@@ -78,14 +78,14 @@ export function TeamView() {
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>Members</PanelTitle>
-            <PanelDescription>role changes are audited with an actor</PanelDescription>
+            <PanelDescription>roles and invitations are not available yet</PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="p-5">
           <EmptyState
             icon={null}
             title="Nobody else has been invited"
-            description="Roles, invitations and ownership transfer are Phase 2. No members endpoint exists yet, so this list cannot fill — and an invented colleague on a screen about who can raise a limit would be an invented authority."
+            description="Inviting team members, roles and ownership transfer are not available yet. Today the account has one owner."
           />
         </PanelBody>
       </Panel>
@@ -142,9 +142,8 @@ export function TeamView() {
             </div>
           )}
           <p className="px-3 pt-3 text-body-xs text-03">
-            The API returns one policy per session — the agent&apos;s, falling back to the
-            organization default — so the design&apos;s organization-versus-sum-of-agents comparison
-            cannot be assembled yet.
+            A comparison of the organization limit with the sum of your agents&apos; limits is not
+            available yet.
           </p>
         </PanelBody>
       </Panel>

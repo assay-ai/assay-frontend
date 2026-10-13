@@ -6,6 +6,8 @@ import { Check, ClockFading, TriangleAlert, X } from "lucide-react";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
+import { BindingNav } from "@/features/provider-binding/binding-nav";
+
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import {
@@ -350,6 +352,8 @@ export default function PricingAndTierPage() {
         }
       />
 
+      <BindingNav bindingId={bindingId} />
+
       {save.isError ? (
         <p role="alert" className="text-body-13 text-danger-500">
           {save.error instanceof ApiError ? save.error.message : "Could not save the price."}
@@ -396,7 +400,7 @@ export default function PricingAndTierPage() {
               label="Tier"
               value={meQuery.data?.tier ?? ""}
               disabled
-              hint="Earned, never chosen — no endpoint writes it."
+              hint="Earned from your record — it cannot be chosen."
               onChange={() => undefined}
             >
               <option value="">{UNKNOWN}</option>

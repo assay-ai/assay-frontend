@@ -1,5 +1,6 @@
 "use client";
 
+import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { CircleCheck, Download, Info } from "lucide-react";
@@ -32,8 +33,10 @@ import {
   foldNotCredited,
   foldTraffic,
   observedTakeRate,
+  rowsInAsset,
   type CallRow,
 } from "@/features/call-classes/csv";
+import { ClassName } from "@/features/call-classes/class-name";
 import {
   downloadCallsCsv,
   exportErrorMessage,
@@ -41,7 +44,7 @@ import {
 } from "@/features/call-classes/use-calls-export";
 import type { Money, ProviderPayout } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { listProviderPayouts } from "@/services/provider-payouts.service";
+import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
 import { getProviderEarnings, getProviderQuality } from "@/services/provider-reports.service";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { formatMoney } from "@/utils/money";
@@ -153,11 +156,12 @@ function axisTicks(max: number): { ticks: string[]; scaleMax: number } {
 const CLASS_NOTE: Record<string, string> = {
   PAID_CREDITED: "passed our checks and settled to you",
   PAID_AWAITING_REDEMPTION: "passed our checks — credited once the voucher is redeemed on chain",
+  PLATFORM_ABSORBED: "passed our checks — voucher not redeemable, the platform owes you this (no fee)",
   PAID_UNCREDITED:
     "our checks rejected the response — not charged to the buyer, not credited to you",
-  FREE: "relay path, no payment machinery",
-  EXPLORATION: "NEW-binding traffic, we paid for it",
-  EXCLUDED: "excluded from the SLA window by an operator decision",
+  FREE: "free-tier call — nothing is charged and nothing is paid",
+  EXPLORATION: "trial traffic for a new binding, paid for by us",
+  EXCLUDED: "excluded from the SLA window by our team",
   TEST: "our own dry runs against your endpoint",
   SYSTEM_ERROR: "your endpoint timed out or returned 5xx",
   REQUEST_ERROR: "4xx from your endpoint",
@@ -224,7 +228,24 @@ export default function ProviderViewPage() {
     queryFn: () => listProviderPayouts({ ...period, limit: 20 }),
   });
 
-  const rows: CallRow[] = calls.rows;
+  /*
+    One money figure, one asset — the same rule and helper as the reconciliation
+    screen. Everything folded from the per-call file (calls today, the traffic
+    bars, the class table and the failed-calls table with its money column) is
+    the display asset's. The CSV download stays the whole file: it carries an
+    `asset` column of its own.
+  */
+  const { current: displayAsset, isPending: assetPending } = useDisplayAsset("provider");
+  const rows: CallRow[] = useMemo(
+    () => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)),
+    [calls.rows, assetPending, displayAsset]
+  );
+  const callsLoading = calls.isLoading || assetPending;
+  // The payout batches are money too: only the display asset's are listed.
+  const payoutItems = useMemo(
+    () => (assetPending ? [] : payoutsInAsset(payouts.data?.items ?? [], displayAsset)),
+    [payouts.data, assetPending, displayAsset]
+  );
 
   // ── Tiles ────────────────────────────────────────────────────────────────
 
@@ -325,7 +346,8 @@ export default function ProviderViewPage() {
       key: "class",
       header: "Class",
       mono: true,
-      cell: (r) => <span className="font-semibold">{r.className}</span>,
+      noTruncate: true,
+      cell: (r) => <ClassName name={r.className} />,
     },
     {
       key: "calls",
@@ -369,7 +391,8 @@ export default function ProviderViewPage() {
       key: "reason",
       header: "Reason a call failed",
       mono: true,
-      cell: (r) => <span className="font-semibold">{r.reason}</span>,
+      noTruncate: true,
+      cell: (r) => <ClassName name={r.reason} />,
     },
     { key: "calls", header: "Calls", width: 120, align: "end", mono: true, cell: (r) => r.calls },
     {
@@ -387,7 +410,7 @@ export default function ProviderViewPage() {
     on the wire, so the same id recurs across runs and grouping on it would
     merge two payout runs into one row — the same call the earnings screen makes.
   */
-  const batchRows: BatchRow[] = (payouts.data?.items ?? []).map((payout: ProviderPayout) => ({
+  const batchRows: BatchRow[] = payoutItems.map((payout: ProviderPayout) => ({
     id: payout.id,
     batch: payout.batchId.slice(0, 8),
     period: DASH,
@@ -432,7 +455,7 @@ export default function ProviderViewPage() {
   ];
 
   const monthLabel = `${new Date(period.from).getUTCDate()} – ${new Date(now).getUTCDate()} ${now.toLocaleString("en-US", { month: "short", timeZone: "UTC" })}`;
-  const batchCount = new Set((payouts.data?.items ?? []).map((p) => p.batchId)).size;
+  const batchCount = new Set(payoutItems.map((p) => p.batchId)).size;
   const totals = earnings.data?.totals;
   const grossTotal =
     totals?.earned && totals?.platformFee
@@ -488,6 +511,8 @@ export default function ProviderViewPage() {
         </Button>
       </header>
 
+      <DisplayAssetSelect scope="provider" />
+
       {error ? (
         <Banner
           tone="danger"
@@ -521,8 +546,8 @@ export default function ProviderViewPage() {
       <div className="grid w-full grid-cols-[repeat(2,minmax(0,1fr))] gap-3.5 tablet:flex [&>*]:min-w-0 [&>*]:break-words">
         <MetricTile
           label="Calls today"
-          value={calls.isLoading ? DASH : formatCount(callsToday)}
-          sub={calls.isLoading ? DASH : trend(callsToday, callsYesterday)}
+          value={callsLoading ? DASH : formatCount(callsToday)}
+          sub={callsLoading ? DASH : trend(callsToday, callsYesterday)}
         />
         <MetricTile
           label="Quality rate"
@@ -530,7 +555,11 @@ export default function ProviderViewPage() {
           sub={
             quality.isLoading
               ? DASH
-              : `${formatCount(passed)} verified, ${formatCount(failed)} failed`
+              : // `/providers/me/quality` takes no asset, so with two assets the
+                // tile says what it counts instead of implying the selected one.
+                `${formatCount(passed)} verified, ${formatCount(failed)} failed${
+                  displayAsset ? " · all assets" : ""
+                }`
           }
         />
         {/*
@@ -609,9 +638,10 @@ export default function ProviderViewPage() {
                 className="mt-0.5 shrink-0 text-teal-600"
               />
               <p className="min-w-0 flex-1 text-body-13 text-01">
-                A rejected call is not charged to the buyer and not credited to you. Once slashing
-                is live it also costs part of your stake — during shadow mode you see that amount
-                before any of it is real. Flag anything you think is wrong.
+                A rejected call is not charged to the buyer and not credited to you. It also counts
+                against your SLA window: if a window closes in breach, a penalty against your stake
+                is proposed, and you can dispute it before it is applied. Flag anything you think is
+                wrong.
               </p>
             </div>
           </PanelBody>
@@ -733,9 +763,9 @@ export default function ProviderViewPage() {
           className="mt-0.5 shrink-0 text-03"
         />
         <p className="min-w-0 flex-1 text-body-13 text-02">
-          Slashing is not live yet. These calls were not credited and, once slashing turns on,
-          would also have cost stake — the amount is shown on your verdict feed so you can see it
-          before it is real. Flag anything you think is wrong.
+          These calls were not credited. They also count against your SLA window: if a window
+          closes in breach, a penalty against your stake is proposed, and you can dispute it
+          before it is applied.
         </p>
       </div>
     </div>

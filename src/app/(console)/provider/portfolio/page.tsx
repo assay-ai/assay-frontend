@@ -1,5 +1,6 @@
 "use client";
 
+import { DisplayAssetSelect } from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
 import { Copy, Info } from "lucide-react";
 import { useMemo } from "react";
@@ -292,6 +293,8 @@ export default function ProviderPortfolioPage() {
         </div>
       </header>
 
+      <DisplayAssetSelect scope="provider" />
+
       {error ? (
         <Banner
           tone="danger"
@@ -341,9 +344,8 @@ export default function ProviderPortfolioPage() {
       <div className="flex w-full items-start gap-2.5 rounded-lg border border-01 bg-02 p-[15px]">
         <Info width={15} height={15} strokeWidth={1.5} aria-hidden="true" className="mt-0.5 shrink-0 text-03" />
         <p className="min-w-0 flex-1 text-body-13 text-02">
-          Cloning bnd_7QK for a second tool re-uses its mapping shape and constraints but not its
-          quality record. A new binding starts on the exploration floor and is sampled at 100% until
-          it has a record of its own.
+          Each binding has its own quality record. A new binding starts on the exploration floor and
+          is sampled at 100% until it has a record of its own.
         </p>
       </div>
     </>

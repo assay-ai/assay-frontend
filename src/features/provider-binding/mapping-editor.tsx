@@ -700,8 +700,7 @@ function RowEditor({
         <div className="flex items-center gap-2">
           <span className="text-label-13 text-01">$transform</span>
           <span className="font-mono text-mono-12 text-03">
-            named, pure and total — a step that rejects its input raises
-            TOOL_MAPPING_TRANSFORM_FAILED
+            each step is applied in order — a step that rejects its input fails the call as a mapping error
           </span>
         </div>
         {row.transforms.map((step, index) => {
@@ -1240,9 +1239,7 @@ export function MappingEditor({
 
           <p className="px-1 text-body-13 text-02">
             <span className="font-mono text-mono-12 text-01">$optional</span> is a declaration,
-            never an inference: it says the field may legitimately be absent, so it is left out of
-            the document instead of raising TOOL_MAPPING_PATH_NOT_FOUND. Nothing infers it from a
-            selector that failed once.
+            never an inference: it says the field may legitimately be absent, so it is left out of the document instead of failing the call as a missing path.
           </p>
 
           {optionalAtRequired.length > 0 ? (

@@ -33,6 +33,7 @@ import {
   ESCROW_LIMITS_DECIMALS,
   isEscrowDisarmed,
   limitsLandingInterval,
+  errorsStillTrue,
   parseLimitsForm,
   submitLimitsForm,
   type LimitsFormErrors,
@@ -173,7 +174,7 @@ function EscrowLimitsPageContent() {
   const [maxVoucherAmount, setMaxVoucherAmount] = React.useState("");
   const [maxPerWindow, setMaxPerWindow] = React.useState("");
   const [confirmZero, setConfirmZero] = React.useState(false);
-  const [errors, setErrors] = React.useState<LimitsFormErrors>({});
+  const [submitErrors, setErrors] = React.useState<LimitsFormErrors>({});
   const [intent, setIntent] = React.useState<EscrowIntent | null>(null);
   const [signature, setSignature] = React.useState<string | null>(null);
   /*
@@ -212,6 +213,12 @@ function EscrowLimitsPageContent() {
 
   // Live-previews whether the currently typed amounts would need the zero
   // confirmation, without waiting for a submit press.
+  // An error leaves as soon as the value it complained about is corrected.
+  const errors = errorsStillTrue(
+    submitErrors,
+    { maxVoucherAmount, maxPerWindow, confirmZero },
+    decimals,
+  );
   const preview = parseLimitsForm({ maxVoucherAmount, maxPerWindow, confirmZero: true }, decimals);
   const zeroFields = preview.ok ? preview.zeroFields : [];
   const needsZeroConfirm = zeroFields.length > 0;
@@ -405,6 +412,16 @@ function EscrowLimitsPageContent() {
     }
   }
 
+  /**
+   * A built request describes the figures typed when it was built. Editing a
+   * field before signing discards it, so what is signed is always what the
+   * form shows (BUG-R2-REAL-02). Once signed, the request is on its way and
+   * stays on screen.
+   */
+  function discardUnsignedRequest() {
+    if (intent && !signature && !relayed) rebuildRequest();
+  }
+
   /** Throws the dead signature away and asks for a fresh request to sign. */
   function rebuildRequest() {
     setIntent(null);
@@ -496,7 +513,7 @@ function EscrowLimitsPageContent() {
           <PanelBody className="gap-3.5 p-5">
             <p className="text-body-sm text-02">
               {UNREADABLE_NOTE} We do not know whether you have an escrow on this chain or what
-              its limits are, so this screen is showing you neither rather than guessing. Nothing
+              its limits are, so neither is shown. Nothing
               has changed on chain. Try again in a moment.
             </p>
             <Button
@@ -605,7 +622,10 @@ function EscrowLimitsPageContent() {
                   inputMode="decimal"
                   suffix={assetSymbol}
                   value={maxVoucherAmount}
-                  onChange={(event) => setMaxVoucherAmount(event.target.value)}
+                  onChange={(event) => {
+                    setMaxVoucherAmount(event.target.value);
+                    discardUnsignedRequest();
+                  }}
                   error={errors.maxVoucherAmount}
                   hint={
                     !errors.maxVoucherAmount
@@ -619,7 +639,10 @@ function EscrowLimitsPageContent() {
                   inputMode="decimal"
                   suffix={assetSymbol}
                   value={maxPerWindow}
-                  onChange={(event) => setMaxPerWindow(event.target.value)}
+                  onChange={(event) => {
+                    setMaxPerWindow(event.target.value);
+                    discardUnsignedRequest();
+                  }}
                   error={errors.maxPerWindow}
                   hint={
                     !errors.maxPerWindow
@@ -637,7 +660,10 @@ function EscrowLimitsPageContent() {
                     <Checkbox
                       label="I understand — set it to 0 anyway"
                       checked={confirmZero}
-                      onChange={(event) => setConfirmZero(event.target.checked)}
+                      onChange={(event) => {
+                    setConfirmZero(event.target.checked);
+                    discardUnsignedRequest();
+                  }}
                     />
                     {errors.confirmZero ? (
                       <p className="text-body-xs text-danger-700">{errors.confirmZero}</p>

@@ -357,6 +357,15 @@ export default function NewToolBindingPage() {
     response: ToolMapping | null;
   }>({ request: null, response: null });
   const [asJson, setAsJson] = React.useState(false);
+  /*
+    JSON that does not parse, per editor. The editor keeps handing up the last
+    document that DID parse, so without this Create stayed live and saved a
+    mapping the provider could no longer see (BUG-R2-V2-02).
+  */
+  const [unparsed, setUnparsed] = React.useState<{ request: string | null; response: string | null }>(
+    { request: null, response: null }
+  );
+  const mappingBlocked = unparsed.request ?? unparsed.response;
 
   const catalogueQuery = useQuery<ToolCatalogue, ApiError>({
     // The same key the configuration screen and the binding list use, so
@@ -559,9 +568,10 @@ export default function NewToolBindingPage() {
             </Button>
             <Button
               icon={<Plug aria-hidden="true" />}
-              disabled={!body}
+              disabled={!body || mappingBlocked !== null}
+              title={mappingBlocked ? `Fix this first: ${mappingBlocked}` : undefined}
               loading={create.isPending}
-              onClick={() => body && create.mutate(body)}
+              onClick={() => body && !mappingBlocked && create.mutate(body)}
             >
               Create draft
             </Button>
@@ -573,9 +583,17 @@ export default function NewToolBindingPage() {
         A binding is your implementation of one catalogue tool: an endpoint, a price and the two
         mappings between the tool&rsquo;s schema and your own API. It is created as a{" "}
         <span className="font-mono text-mono-12 text-01">DRAFT</span> and takes no traffic until you
-        have tested the mapping and published it. Ceilings and the free tier have their own screens
-        on the binding.
+        have tested the mapping and published it. Ceilings and the free tier have their own screens,
+        linked at the top of the binding once the draft exists.
       </Note>
+
+      {/* Why the button above is disabled, as text: a tooltip alone is
+          invisible to touch and keyboard users. */}
+      {mappingBlocked ? (
+        <Note tone="warning" icon={<Wrench width={15} height={15} aria-hidden="true" />}>
+          Create draft is disabled. Fix this first: {mappingBlocked}.
+        </Note>
+      ) : null}
 
       {errorNote}
 
@@ -619,7 +637,7 @@ export default function NewToolBindingPage() {
             <EmptyState
               icon={<Wrench width={22} height={22} />}
               title="No tools to implement"
-              description="The catalogue is empty on this deployment, so there is no tool a binding could name yet."
+              description="The catalogue is empty, so there is no tool to bind yet."
             />
           ) : (
             <>
@@ -669,7 +687,7 @@ export default function NewToolBindingPage() {
               <Select
                 label="pricingMode"
                 value={draft.pricingMode}
-                hint="FREEMIUM's per-agent quota and daily budget are set on the free-tier screen"
+                hint="FREEMIUM's per-agent quota and daily budget are set on the binding's Free tier screen, after the draft is created"
                 onChange={(event) =>
                   setDraft((current) => ({
                     ...current,
@@ -757,6 +775,9 @@ export default function NewToolBindingPage() {
                 schema={tool.inputSchema}
                 json={asJson}
                 onChange={(next) => setMappings((current) => ({ ...current, request: next }))}
+                onStatus={(status) =>
+                  setUnparsed((current) => ({ ...current, request: status.editing }))
+                }
               />
               <p className="px-1 font-mono text-mono-12 text-03">
                 seeded from {tool.name}&rsquo;s inputSchema — every field read as a query parameter
@@ -781,6 +802,9 @@ export default function NewToolBindingPage() {
                 schema={tool.outputSchema}
                 json={asJson}
                 onChange={(next) => setMappings((current) => ({ ...current, response: next }))}
+                onStatus={(status) =>
+                  setUnparsed((current) => ({ ...current, response: status.editing }))
+                }
               />
               <p className="px-1 font-mono text-mono-12 text-03">
                 seeded from {tool.name}&rsquo;s outputSchema — each field written from a response

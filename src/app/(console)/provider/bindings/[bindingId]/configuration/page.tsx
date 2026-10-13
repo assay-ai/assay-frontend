@@ -3,6 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileCode, FlaskConical, GitBranch, Rocket, Save, TriangleAlert } from "lucide-react";
 import Link from "next/link";
+
+import { BindingNav } from "@/features/provider-binding/binding-nav";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
@@ -474,7 +476,7 @@ export default function BindingConfigurationPage() {
           error={parsed?.timeoutMs.error ?? null}
         />
       ),
-      ceiling: "SYSTEM_ERROR · availability metric only, never a strike",
+      ceiling: "a timeout counts as a system error · it affects availability only, never a penalty",
     },
     {
       id: "maxRps",
@@ -502,7 +504,7 @@ export default function BindingConfigurationPage() {
           placeholder={UNKNOWN}
         />
       ),
-      ceiling: "shed with an upstream_ceiling_warning at 80%",
+      ceiling: "calls above it are refused · you are warned at 80%",
     },
     // the binding editor design also draws `monthlyCeiling` and `retentionPolicy` rows; the
     // API has neither field (`UpdateToolBindingBody` takes `timeoutMs`,
@@ -593,6 +595,8 @@ export default function BindingConfigurationPage() {
           </>
         }
       />
+
+      <BindingNav bindingId={binding.id} />
 
       {/*
         the binding editor design ends this note with a sentence advertising an `x402

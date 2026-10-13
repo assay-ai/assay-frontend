@@ -411,7 +411,7 @@ export default function ProviderAccountPage() {
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">Account</h1>
           <p className="font-mono text-mono-12 text-03">
-            seats are Phase 2 · machine tokens are available today
+            team seats are not available yet · machine tokens are available today
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2.5">
@@ -484,9 +484,8 @@ export default function ProviderAccountPage() {
                 the rows, so it goes away with them. */}
             {seatRows.length > 0 ? (
             <p className="px-3 pt-3 text-body-xs text-03">
-              These are the two contacts typed at registration, not seats. Seats, roles and
-              per-person activity are Phase 2 and have no endpoint yet, so “Contact for” and “Last
-              active” have nothing to read.
+              These are the two contacts given at registration. Team seats, roles and per-person
+              activity are not available yet, so “Contact for” and “Last active” are empty.
             </p>
             ) : null}
           </PanelBody>

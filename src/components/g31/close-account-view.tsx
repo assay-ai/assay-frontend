@@ -87,7 +87,7 @@ export function CloseAccountView() {
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
       <PageHeader
         title="Close account"
-        subtitle="Phase 2 · export is forced before deactivation; credentials and the signer are revoked last"
+        subtitle="not available yet · you export your records first; credentials are revoked last"
         actions={
           <Button variant="secondary" icon={<Download />} type="button" disabled>
             Export everything
@@ -100,7 +100,7 @@ export function CloseAccountView() {
           <PanelTitles>
             <PanelTitle>What is blocking closure</PanelTitle>
             <PanelDescription className="whitespace-normal">
-              enumerated with intent ids and expiry — never a bare “you have open holds”
+              every open hold, with its id and when it expires
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
@@ -225,7 +225,7 @@ export function CloseAccountView() {
                 </div>
                 <div className="w-[140px] text-right font-mono text-mono-12 text-03">—</div>
                 <div className="w-[220px] text-right font-mono text-mono-12 text-03">
-                  no endpoint
+                  not shown here yet
                 </div>
                 <div className="w-[240px] text-right font-mono text-mono-12 text-03">—</div>
               </div>
@@ -239,7 +239,7 @@ export function CloseAccountView() {
           <PanelTitles>
             <PanelTitle>Order of operations</PanelTitle>
             <PanelDescription className="whitespace-normal">
-              the sequence matters: revoking authority first would strand the holds
+              the order matters: open holds have to settle before access is revoked
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
@@ -258,10 +258,8 @@ export function CloseAccountView() {
       <div className="flex w-full items-start gap-2.5 rounded-lg border border-warning-20 bg-warning-10 p-3.5 tablet:p-[15px]">
         <TriangleAlert aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-warning-600" />
         <p className="text-body-13 text-warning-700">
-          Promotional credit is not withdrawable and is forfeited when the account closes. The API
-          does not yet split promotional from withdrawable balance, so if any is held on this
-          account it is not shown above — that is a gap to close before this screen can be trusted
-          at closure time.
+          Promotional credit is not withdrawable and is forfeited when the account closes. It is not
+          shown separately from your withdrawable balance yet.
         </p>
       </div>
 
@@ -271,7 +269,7 @@ export function CloseAccountView() {
         </Button>
       </div>
       <p className="text-body-xs text-03">
-        No deactivation endpoint exists yet, so nothing on this screen can close an account.
+        Closing an account is not available yet. Contact support if you need your account closed.
       </p>
     </div>
   );

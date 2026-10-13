@@ -261,13 +261,45 @@ export const NOTIFICATION_EVENT_ORDER: readonly NotificationEvent[] = Object.key
 ) as NotificationEvent[];
 
 /**
+ * What each event is, in words. The id beside it on the Alerts screen stays
+ * the value a webhook payload and the API carry, so it is shown as a code and
+ * not replaced.
+ */
+export const NOTIFICATION_EVENT_LABEL: Readonly<Record<NotificationEvent, string>> = {
+  "balance.low": "Balance is low",
+  "balance.zero": "Balance is empty",
+  "deposit.credited": "Deposit credited",
+  "deposit.failed": "Deposit failed",
+  "withdrawal.initiated": "Withdrawal started",
+  "withdrawal.completed": "Withdrawal completed",
+  "withdrawal_destination.added": "Withdrawal address added",
+  "spend.threshold_crossed": "Spend limit threshold reached",
+  "velocity.anomaly": "Unusual spending speed",
+  "agent.paused": "Agent paused",
+  "session.expiring": "Agent credential expiring soon",
+  "session.expired": "Agent credential expired",
+  "free_quota.exhausted": "Free calls used up",
+  "payment_intent.refunded": "Call refunded",
+  "slash.compensation_received": "Compensation received",
+  "provider.stake_headroom_low": "Stake is close to the minimum",
+  "provider.stake_grace_opened": "Stake below the minimum — grace period started",
+  "provider.stake_grace_expired": "Stake grace period ended",
+  "provider.stake_grace_cured": "Stake back above the minimum",
+  "provider.slash_proposed": "Penalty proposed against your stake",
+  "provider.sla_breach_proposed": "SLA breach recorded",
+  "provider.sla_window_warning": "SLA window at risk",
+  "provider.payout_sent": "Payout sent",
+  "digest.daily": "Daily summary",
+};
+
+/**
  * A short, mechanical gloss of the aggregation enum — not a per-event
  * invented sentence. `ONCE_PER_INCIDENT`'s window (~1h) is the backend's own
  * `NOTIFICATION_INCIDENT_WINDOW_SECONDS` constant, transcribed, not guessed.
  */
 export const AGGREGATION_LABEL: Readonly<Record<NotificationAggregation, string>> = {
   PER_EVENT: "every occurrence",
-  ONCE: "once, ever (per dedupe key)",
+  ONCE: "once only",
   ONCE_PER_UTC_DAY: "once per UTC day",
   ONCE_PER_UTC_MONTH: "once per UTC month",
   ONCE_PER_INCIDENT: "once, then quiet for ~1h",

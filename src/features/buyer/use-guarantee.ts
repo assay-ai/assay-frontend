@@ -228,7 +228,8 @@ export function useGuarantee(anchor: Date, monthsBack = 3): GuaranteeState {
 
         setData({
           period,
-          withheld: withheldR.status === "fulfilled" ? readWithheld(withheldR.value) : null,
+          withheld:
+            withheldR.status === "fulfilled" ? readWithheld(withheldR.value, summary?.asset) : null,
           withheldError: withheldR.status === "rejected" ? asApiError(withheldR.reason) : null,
           listed: summary?.totals?.listedTotal ?? null,
           charged: summary?.totals?.chargedTotal ?? null,

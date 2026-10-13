@@ -24,6 +24,7 @@ import {
   updateProviderRegistration,
 } from "@/services";
 
+import { accountDiffers, type AccountForm } from "./account-form";
 import { justProvedAccountId, payoutStepIsDone, provedChainIsNew } from "./payout-accounts";
 import { resolveTerms } from "./terms";
 
@@ -61,15 +62,6 @@ export type WalletState =
   | "declined"
   | "proved"
   | "rejected";
-
-export interface AccountForm {
-  legalName: string;
-  technicalName: string;
-  technicalEmail: string;
-  ownerName: string;
-  ownerEmail: string;
-  timezone: string;
-}
 
 const EMPTY_ACCOUNT: AccountForm = {
   legalName: "",
@@ -248,10 +240,26 @@ export function useProviderSetup() {
       ? "Step 4 is not finished — the terms above have to be accepted."
       : null;
 
-  function save() {
+  /**
+   * Whether step 1 holds an edit the registration does not. A registered
+   * provider's "Save and continue" must save that edit, not walk past it.
+   */
+  const savedAccount: AccountForm | null = state
+    ? {
+        legalName: state.registration.legalName,
+        technicalName: state.registration.technicalContact.name,
+        technicalEmail: state.registration.technicalContact.email,
+        ownerName: state.registration.ownerContact.name,
+        ownerEmail: state.registration.ownerContact.email,
+        timezone: state.registration.timezone,
+      }
+    : null;
+  const accountDirty = accountDiffers(account, savedAccount);
+
+  function save(onSaved?: () => void) {
     setAttempted(true);
     if (saveBlockedBy) return;
-    saveMutation.mutate();
+    saveMutation.mutate(undefined, { onSuccess: onSaved });
   }
 
   // ── step 2 · payout wallet ────────────────────────────────────────────
@@ -601,6 +609,7 @@ export function useProviderSetup() {
     setAccepted,
     // save
     save,
+    accountDirty,
     saveBlockedBy,
     saving: saveMutation.isPending,
     saveError: saveMutation.error ?? null,

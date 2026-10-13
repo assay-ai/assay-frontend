@@ -69,9 +69,13 @@ export * from "./provider-slash-cases.service";
 // client beside the shared `api` is how one gets picked by accident.
 export * from "./operator.service";
 
+// Which optional public pages this deployment serves, asked before either of
+// the two below so neither calls a route that is not registered.
+export * from "./public-features.service";
+
 // Proof of reserves. The one anonymous read on this surface: it
-// carries no tenant, and `getPublicReserves` returns null rather than throwing
-// on a 404, which is the deployment saying it publishes no reserves page.
+// carries no tenant, and `getPublicReserves` returns null where the
+// deployment publishes no reserves page.
 export * from "./reserves.service";
 
 // The public live demo. Anonymous like the reserves read, but this
@@ -82,3 +86,4 @@ export * from "./demo.service";
 // Which chains this deployment offers. Read at runtime, never
 // baked into the bundle; every money screen's chain list starts here.
 export * from "./chains.service";
+export * from "./display-asset";

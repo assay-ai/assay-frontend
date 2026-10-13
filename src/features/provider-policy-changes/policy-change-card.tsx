@@ -132,7 +132,7 @@ export function PolicyChangeCard({ change, toolLabel }: PolicyChangeCardProps) {
     <Panel className="w-full">
       <PanelHeader>
         <PanelTitles>
-          <PanelTitle>{`V${change.pendingVersion} SHADOW on ${toolLabel}`}</PanelTitle>
+          <PanelTitle>{`Version ${change.pendingVersion} pending on ${toolLabel}`}</PanelTitle>
           <PanelDescription>
             {change.inForceVersion === null
               ? "no version currently in force for this tool"

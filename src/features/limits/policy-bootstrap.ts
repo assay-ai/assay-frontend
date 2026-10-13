@@ -63,7 +63,7 @@ export function policyBootstrapAsset(
 
   const chain = findChain(chains, chainIds[0]);
   if (!chain) {
-    return { kind: "unknown", reason: `${chainIds[0]} is not a chain this deployment offers` };
+    return { kind: "unknown", reason: `${chainIds[0]} is not a chain we offer` };
   }
   return {
     kind: "ready",
