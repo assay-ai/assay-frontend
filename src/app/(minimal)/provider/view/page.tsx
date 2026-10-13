@@ -1,6 +1,6 @@
 "use client";
 
-import { DisplayAssetSelect } from "@/components/display-asset-select";
+import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { CircleCheck, Download, Info } from "lucide-react";
@@ -33,6 +33,7 @@ import {
   foldNotCredited,
   foldTraffic,
   observedTakeRate,
+  rowsInAsset,
   type CallRow,
 } from "@/features/call-classes/csv";
 import {
@@ -226,7 +227,19 @@ export default function ProviderViewPage() {
     queryFn: () => listProviderPayouts({ ...period, limit: 20 }),
   });
 
-  const rows: CallRow[] = calls.rows;
+  /*
+    One money figure, one asset — the same rule and helper as the reconciliation
+    screen. Everything folded from the per-call file (calls today, the traffic
+    bars, the class table and the failed-calls table with its money column) is
+    the display asset's. The CSV download stays the whole file: it carries an
+    `asset` column of its own.
+  */
+  const { current: displayAsset, isPending: assetPending } = useDisplayAsset("provider");
+  const rows: CallRow[] = useMemo(
+    () => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)),
+    [calls.rows, assetPending, displayAsset]
+  );
+  const callsLoading = calls.isLoading || assetPending;
 
   // ── Tiles ────────────────────────────────────────────────────────────────
 
@@ -525,8 +538,8 @@ export default function ProviderViewPage() {
       <div className="grid w-full grid-cols-[repeat(2,minmax(0,1fr))] gap-3.5 tablet:flex [&>*]:min-w-0 [&>*]:break-words">
         <MetricTile
           label="Calls today"
-          value={calls.isLoading ? DASH : formatCount(callsToday)}
-          sub={calls.isLoading ? DASH : trend(callsToday, callsYesterday)}
+          value={callsLoading ? DASH : formatCount(callsToday)}
+          sub={callsLoading ? DASH : trend(callsToday, callsYesterday)}
         />
         <MetricTile
           label="Quality rate"
@@ -534,7 +547,11 @@ export default function ProviderViewPage() {
           sub={
             quality.isLoading
               ? DASH
-              : `${formatCount(passed)} verified, ${formatCount(failed)} failed`
+              : // `/providers/me/quality` takes no asset, so with two assets the
+                // tile says what it counts instead of implying the selected one.
+                `${formatCount(passed)} verified, ${formatCount(failed)} failed${
+                  displayAsset ? " · all assets" : ""
+                }`
           }
         />
         {/*
