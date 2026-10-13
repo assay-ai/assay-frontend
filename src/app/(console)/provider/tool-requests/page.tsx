@@ -233,7 +233,7 @@ export default function ToolRequestsPage() {
       <Banner
         tone="warning"
         title="We author tools today."
-        description="A provider who writes a schema and hears nothing is a worse outcome than one who was told no, so the proposal workflow does not ship before the reviewers exist."
+        description="You cannot publish your own tool definition yet. Tell us what you need below and we will review your request."
       />
 
       <section className="flex w-full flex-col items-start gap-4 tablet:flex-row">

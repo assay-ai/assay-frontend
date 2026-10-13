@@ -1,3 +1,4 @@
+import Link from "next/link";
 import * as React from "react";
 
 import {
@@ -182,7 +183,11 @@ export function StakeByChain({ stake, chains, status }: StakeByChainProps) {
                     {entry.staked && entry.staked.amount !== "0"
                       ? "No stake authority has been proved on this chain yet, so this stake cannot be managed from here."
                       : "No stake authority has been proved on this chain, so there is no stake account to read."}{" "}
-                    Proving one is a wallet signature, on the Leaving screen.
+                    Proving one is a wallet signature, on the{" "}
+                    <Link href="/provider/exit" className="underline">
+                      Leaving
+                    </Link>{" "}
+                    screen.
                   </p>
                 ) : null}
               </div>

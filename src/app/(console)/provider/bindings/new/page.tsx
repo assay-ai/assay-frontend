@@ -637,7 +637,7 @@ export default function NewToolBindingPage() {
             <EmptyState
               icon={<Wrench width={22} height={22} />}
               title="No tools to implement"
-              description="The catalogue is empty on this deployment, so there is no tool a binding could name yet."
+              description="The catalogue is empty, so there is no tool to bind yet."
             />
           ) : (
             <>

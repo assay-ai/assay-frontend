@@ -229,7 +229,7 @@ export default function OnboardingPage() {
               <p className="text-body-md text-02">
                 {provisioning
                   ? "This takes a few seconds. You can keep reading while it finishes."
-                  : "Done. Nothing to install, no seed phrase, no chain to pick."}
+                  : "Done. Your account is ready, and there is nothing to install."}
               </p>
             </>
           ) : null}

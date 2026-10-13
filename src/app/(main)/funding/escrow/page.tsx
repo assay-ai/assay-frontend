@@ -146,7 +146,7 @@ const REFUSALS: Record<string, string> = {
   PAYMENT_ESCROW_BALANCE_UNAVAILABLE:
     "The chain could not be read, so no figure here can be trusted right now. Nothing was built and nothing was signed. Try again in a moment.",
   CHAIN_PROGRAM_NOT_CONFIGURED:
-    "This deployment is not pointed at a settlement program, so no transaction can be built. Your escrow is untouched; this is ours to fix.",
+    "Escrow is not set up on this chain yet, so no transaction can be built. Your escrow is untouched; this is ours to fix.",
   CHAIN_ACCOUNT_LAYOUT_UNEXPECTED:
     "We could not read your escrow account on chain correctly, so no transaction was built. Your escrow is untouched; this is ours to fix — please contact support.",
 };

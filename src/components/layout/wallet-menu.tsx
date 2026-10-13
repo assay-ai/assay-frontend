@@ -198,8 +198,8 @@ export function WalletMenu({ className }: { className?: string }) {
             */
             <p className="px-2.5 py-2 text-body-sm text-02">
               {chainsResult.status === "error"
-                ? "We could not read which chains this deployment offers."
-                : "This deployment offers no chains."}
+                ? "We could not read which chains are available."
+                : "No chains are available yet."}
             </p>
           ) : (
             <WalletChainRows chains={chainsResult.chains} />

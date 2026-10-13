@@ -188,8 +188,8 @@ export default function ProviderSetupPage() {
                 </>
               ) : (
                 <>
-                  This deployment does not call from a fixed set of egress IPs, so there is nothing
-                  to allowlist. Run the check here rather than finding out after you go live.
+                  We do not call you from a fixed set of IP addresses, so there is nothing to
+                  allowlist. Run the check here rather than finding out after you go live.
                 </>
               )}
             </Outcome>

@@ -271,7 +271,7 @@ export default function ReservesPage() {
       {never && (
         <Banner
           tone="primary"
-          title="No reconciliation has run yet on this deployment"
+          title="No reserve check has run yet"
           description="The figures below are absent rather than zero. Nothing has been checked, so nothing is being claimed."
         />
       )}

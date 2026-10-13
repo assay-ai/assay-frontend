@@ -471,7 +471,7 @@ export default function ProviderHomePage() {
       mono: true,
       noTruncate: true,
       cell: () => (
-        <span title="SLA windows are per binding now, but this row is not fetched per binding (N+1 on top of the existing N+1); the most recent window across any binding is in Needs attention.">
+        <span title="The SLA window is not shown per row yet. Your most recent window is under Needs attention.">
           {DASH}
         </span>
       ),

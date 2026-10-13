@@ -103,7 +103,7 @@ describe("addFundsTile", () => {
 
   it("says so when the buyer's chain takes no deposits, rather than offering another", () => {
     const tile = addFundsTile({ kind: "not-offered", accountChainId: "eip155:1" });
-    expect(tile.sub).toContain("not one this deployment takes deposits on");
+    expect(tile.sub).toContain("not one we take deposits on");
     expect(tile.title + tile.sub).not.toContain("USDC");
   });
 });

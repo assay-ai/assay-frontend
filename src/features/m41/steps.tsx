@@ -33,6 +33,7 @@ import { cn } from "@/utils";
 import { isEvmChain } from "@/libs/chains/registry";
 import { chainLabel } from "@/utils/chain";
 
+import { termValue } from "./terms";
 import type { ProviderSetup } from "./use-setup";
 
 /**
@@ -576,7 +577,7 @@ export function TermsBody({ setup }: { setup: ProviderSetup }) {
           >
             <span className="w-60 shrink-0 text-body-13 text-01">{term.label}</span>
             <span className="w-[180px] shrink-0 font-mono text-mono-13 font-semibold text-01">
-              {term.value}
+              {termValue(term)}
             </span>
             <span className="min-w-0 flex-1 text-body-xs text-03">{term.caption}</span>
           </div>
