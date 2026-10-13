@@ -4,9 +4,11 @@ import { usePrivy } from "@privy-io/react-auth";
 import { ArrowRight, Lock, ScanSearch, Split } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+
+import { startReadyTimeout } from "./ready-timeout";
 
 /**
  * Login — the only sign-in screen the product has.
@@ -91,6 +93,16 @@ export default function LoginPage() {
   // Don't flash a sign-in form at someone who is already signed in.
   const signedIn = ready && authenticated;
 
+  // Privy that never becomes ready (origin refused, outage) would otherwise
+  // leave the spinner up forever (BUG-R8-L-01). `ready` arriving late still
+  // wins: `stuck` is false again and the normal button returns.
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    if (ready) return;
+    return startReadyTimeout(() => setTimedOut(true));
+  }, [ready]);
+  const stuck = !ready && timedOut;
+
   return (
     <div className="flex min-h-full w-full flex-1 flex-col tablet:flex-row">
       {/* Brand pane — marketing only, so it is dropped below tablet rather
@@ -165,18 +177,29 @@ export default function LoginPage() {
                 previous behaviour) showed a blank page for that beat; a
                 disabled button in the finished layout keeps the screen from
                 moving under the cursor when it resolves. */}
-            <Button
-              className="w-full py-3"
-              disabled={!ready || signedIn}
-              loading={!ready || signedIn}
-              onClick={() => login()}
-            >
-              {!ready
-                ? "Checking your session"
-                : signedIn
-                  ? "Signing you in"
-                  : "Continue with email or wallet"}
-            </Button>
+            {stuck ? (
+              <>
+                <p role="alert" className="text-body-sm text-01">
+                  Sign-in is taking longer than expected.
+                </p>
+                <Button className="w-full py-3" onClick={() => window.location.reload()}>
+                  Reload
+                </Button>
+              </>
+            ) : (
+              <Button
+                className="w-full py-3"
+                disabled={!ready || signedIn}
+                loading={!ready || signedIn}
+                onClick={() => login()}
+              >
+                {!ready
+                  ? "Checking your session"
+                  : signedIn
+                    ? "Signing you in"
+                    : "Continue with email or wallet"}
+              </Button>
+            )}
             <p className="text-body-xs text-03">
               A secure window from Privy opens to finish signing in. Allow pop-ups for this site if
               nothing appears.
