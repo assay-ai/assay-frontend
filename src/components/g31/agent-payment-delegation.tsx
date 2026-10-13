@@ -46,6 +46,7 @@ import {
   strandReasons,
   UNSETTLED_POLL_MS,
   unsettledLine,
+  editedToast,
 } from "@/features/delegation/unsettled";
 import { isRelayedRefusal, relayedRefusal } from "@/features/escrow/relayed-refusal";
 import { useChains } from "@/hooks/useChains";
@@ -808,7 +809,10 @@ function AuthorizeSheet({
     if (success) {
       toast.success(
         editing
-          ? "Updated. The new caps apply from the agent’s next payment."
+          ? editedToast(
+              current ? capsOf(grant ?? current) : null,
+              preview?.ok ? preview.body : capsOf(grant ?? current!),
+            )
           : "Authorised. The agent can now pay within these caps.",
       );
     }
