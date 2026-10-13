@@ -63,49 +63,71 @@ export function getProviderQuality(query: ProviderQualityQuery): Promise<Provide
  * `GET /providers/me/earnings` — earned vs platform fee vs withheld, grouped
  * by day or by tool.
  *
- * Pass `asset` when the window spans more than one, or this answers
- * `PROVIDER_MULTIPLE_ASSETS`. `null` money means the window matched nothing
- * and no asset narrowed it — there is then no asset to denominate a zero in.
+ * The API answers in one asset and refuses (422 `PROVIDER_MULTIPLE_ASSETS`) a
+ * window that spans two unless `asset` names one. A caller that names none
+ * gets the provider's display asset, learned first from requests that succeed
+ * (`providerEarningAssets`), so a page never fires a request that fails.
+ * `null` money means the window matched nothing and no asset narrowed it —
+ * there is then no asset to denominate a zero in.
  */
 export async function getProviderEarnings(query: ProviderEarningsQuery): Promise<ProviderEarnings> {
   const fetch = (q: ProviderEarningsQuery) =>
     api.get<ProviderEarnings>("/providers/me/earnings", q as unknown as Record<string, unknown>);
+  const asset =
+    query.asset ?? pickDisplayAsset(await providerEarningAssets(), storedDisplayAsset());
   try {
-    return await fetch(query);
+    return await fetch(asset ? { ...query, asset } : query);
   } catch (error) {
-    // A provider paid in two assets has no single total, and a caller that
-    // named none gets one of them rather than an error page: the asset picked
-    // on a buyer screen if any, else the first chain's settlement asset.
+    // Only a window wider than the look-back below can still span two assets
+    // here: it is answered in the first chain's settlement asset rather than
+    // with an error page.
     const multiple = error instanceof ApiError && error.code === "PROVIDER_MULTIPLE_ASSETS";
-    if (!multiple || query.asset) throw error;
+    if (!multiple || asset) throw error;
     const { chains } = await getChains();
-    const asset = pickDisplayAsset(
+    const fallback = pickDisplayAsset(
       chains.map((chain) => chain.settlementAsset),
       storedDisplayAsset()
     );
-    if (!asset) throw error;
-    return fetch({ ...query, asset });
+    if (!fallback) throw error;
+    return fetch({ ...query, asset: fallback });
   }
 }
 
+let earningAssets: { at: number; value: Promise<string[]> } | null = null;
+
 /**
  * The assets a provider's earnings can be shown in, for the asset selector:
- * this deployment's settlement assets when the last 31 days of earnings span
- * more than one, else `[]` (one asset, nothing to choose).
+ * the settlement assets with calls in the last 31 days when there is more than
+ * one, else `[]` (one asset, nothing to choose).
+ *
+ * Each settlement asset is asked about by name, because the unnamed question
+ * is the one the API refuses. Memoised for a few seconds: one screen fires
+ * several earnings requests at once and they must all name the same asset.
  */
-export async function providerEarningAssets(now: Date = new Date()): Promise<string[]> {
-  try {
-    await api.get("/providers/me/earnings", {
-      from: new Date(now.getTime() - 31 * 86_400_000).toISOString(),
-      to: now.toISOString(),
-      groupBy: "tool",
-    });
-    return [];
-  } catch (error) {
-    if (!(error instanceof ApiError && error.code === "PROVIDER_MULTIPLE_ASSETS")) return [];
-    const { chains } = await getChains();
-    return chains.map((chain) => chain.settlementAsset);
+export function providerEarningAssets(): Promise<string[]> {
+  const now = Date.now();
+  if (!earningAssets || now - earningAssets.at > 10_000) {
+    earningAssets = { at: now, value: lookUpEarningAssets(new Date(now)).catch(() => []) };
   }
+  return earningAssets.value;
+}
+
+async function lookUpEarningAssets(now: Date): Promise<string[]> {
+  const { chains } = await getChains();
+  const candidates = [...new Set(chains.map((chain) => chain.settlementAsset))];
+  if (candidates.length < 2) return [];
+  const window = {
+    from: new Date(now.getTime() - 31 * 86_400_000).toISOString(),
+    to: now.toISOString(),
+    groupBy: "tool",
+  };
+  const reports = await Promise.all(
+    candidates.map((asset) =>
+      api.get<ProviderEarnings>("/providers/me/earnings", { ...window, asset })
+    )
+  );
+  const earned = candidates.filter((_, index) => reports[index].totals.calls > 0);
+  return earned.length > 1 ? earned : [];
 }
 
 /**
