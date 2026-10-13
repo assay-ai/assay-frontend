@@ -738,6 +738,13 @@ export function LimitsView() {
                   <p className="break-all text-body-xs text-03">{policy.allowedTools.join(", ")}</p>
                 ) : null}
 
+                {/* BUG-R3-J-02: this stop has no control here, so it was unexplained. */}
+                <p className="text-body-xs text-03">
+                  Separately from these limits, a call repeated with the same tool and the same
+                  arguments is refused as a duplicate from the fifth time within one minute, for
+                  the rest of that minute. It uses up no limit and nothing is charged.
+                </p>
+
                 {!usingUsageBlock && (todaySpend.isError || monthSpend.isError) ? (
                   <p className="text-body-xs text-danger-600">
                     Spend against these caps could not be read, so the meters are absent rather
@@ -806,21 +813,15 @@ export function LimitsView() {
               <PanelTitles>
                 <PanelTitle>TELL — nothing is blocked</PanelTitle>
                 <PanelDescription className="whitespace-normal">
-                  a notification, never a refusal — collapsing this into a limit is the exact bug
-                  Foundations rule 04 exists to prevent
+                  a notification, never a refusal
                 </PanelDescription>
               </PanelTitles>
               <StatusPill label="TELL" tone="warning" />
             </PanelHeader>
             <PanelBody className="gap-3.5 p-5">
               <p className="text-body-xs text-03">
-                The bands below are fixed by the <code>SPEND_THRESHOLD_CROSSED</code>{" "}
-                event definition, not by a per-user setting — there is no row anywhere that stores
-                &ldquo;80%&rdquo;, only the producer&rsquo;s own dedupe key. They are drawn
-                disabled because they are reference, not a control. The design also draws a
-                &ldquo;First use of a new tool&rdquo; alert; no such event exists in the
-                catalogue and nothing can emit one, so a checked box for it would promise an
-                alert that can never arrive — the row is omitted rather than faked.
+                The bands below are fixed for every account and cannot be changed here. They are
+                shown for reference.
               </p>
               <div className="flex flex-wrap items-center gap-[18px]">
                 <span className="text-body-13 text-01">Daily at</span>
@@ -838,8 +839,7 @@ export function LimitsView() {
               <div className="flex flex-col gap-1">
                 <Checkbox label="Refund on a single call (payment_intent.refunded)" checked={false} disabled readOnly />
                 <p className="text-body-xs text-03">
-                  rolls into the daily digest — 4.5M events/month delivered raw trains you to
-                  ignore us
+                  rolls into the daily digest instead of one alert per call
                 </p>
               </div>
               <p className="text-body-13 text-02">

@@ -584,8 +584,7 @@ export default function ProviderHomePage() {
               mismatch.
             */}
             <PanelDescription>
-              the window column carries the sufficiency gate on ordinary days — that repetition is
-              the whole trust strategy
+              one row per binding — open one for its live SLA window and verdicts
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
@@ -611,7 +610,7 @@ export default function ProviderHomePage() {
             // batch in 22m" has no source. `earned − paid` is a different
             // quantity wearing this one's shape.
             value={DASH}
-            sub="no accrued-balance endpoint"
+            sub="not available yet"
           />
           <MetricTile
             className="p-4"
@@ -650,7 +649,7 @@ export default function ProviderHomePage() {
           <PanelBody className="px-5 pb-[18px] pt-2">
             <EarningsRow
               label="Pending"
-              sub="no accrued-balance endpoint"
+              sub="not available yet"
               value={DASH}
               title="No provider route returns an accrued, unpaid balance, and none publishes the payout schedule. Deriving it from earned − paid would put a real-looking number under a label that means something else."
             />
@@ -674,7 +673,7 @@ export default function ProviderHomePage() {
               // as a mechanism — "money withheld because DATA_RESULT reached
               // FAIL" — rather than reporting one call's verdict, which is what
               // Foundations rule 03 forbids.
-              sub="DATA_RESULT → FAIL · see verdicts"
+              sub="calls that failed verification · see verdicts"
               value={withheldMonth ? formatMoney(withheldMonth, { decimals: 2 }) : DASH}
               danger
             />
