@@ -45,6 +45,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { getReceipt } from "@/services";
 import { getProviderVerification } from "@/services/providers.service";
 import { getVerdictEvidence, resolveVerdictIdForIntent } from "@/services/verdicts.service";
+import { responseClassText } from "@/features/call-classes/labels";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -265,7 +266,10 @@ function ReceiptPageContent() {
           : "—",
     },
     { label: "Sample rate", value: receipt.sampling.display ?? "—" },
-    { label: "Response class", value: receipt.classification ?? "—" },
+    {
+      label: "Response",
+      value: receipt.classification ? responseClassText(receipt.classification) : "—",
+    },
     // No settlement signature is on the receipt wire.
     { label: "Transaction", value: "—", accent: true },
   ];
@@ -458,8 +462,8 @@ function ReceiptPageContent() {
                 This result was actually fine
               </Button>
               <p className="text-body-13 text-02">
-                You keep the money either way. This tells us our check was wrong, and it is how we
-                measure the false-positive rate this release exists to learn.
+                You keep the money either way. This tells us our check was wrong, so we can fix
+                it.
               </p>
             </div>
           ) : null}
@@ -495,8 +499,8 @@ function ReceiptPageContent() {
       {!notCharged ? (
         <section className="flex w-full flex-col gap-5 rounded-lg border border-01 bg-01 px-5 py-4 tablet:flex-row tablet:items-center">
           <p className="min-w-0 flex-1 text-body-13 text-02">
-            This does not change the charge. It is how we measure our own false-positive rate, which
-            is one of the four things this release exists to learn.
+            This does not change the charge. It tells us when our checks may have judged a call
+            wrongly, so we can fix them.
           </p>
           <Button variant="secondary" className="w-full shrink-0 justify-center tablet:w-auto">
             <Flag aria-hidden="true" />

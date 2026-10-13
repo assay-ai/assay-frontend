@@ -505,7 +505,7 @@ export default function ProviderExitPage() {
       // No endpoint states what is earned and not yet paid. See the docstring.
       state: DASH,
       when: payoutCadence ?? DASH,
-      why: "paid on the normal schedule, not held",
+      why: "paid as usual, not held",
     },
     {
       id: "export",

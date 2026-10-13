@@ -25,6 +25,7 @@ import {
   pendingNote,
   rowsInAsset,
 } from "@/features/call-classes/csv";
+import { ClassName } from "@/features/call-classes/class-name";
 import {
   downloadCallsCsv,
   exportErrorMessage,
@@ -115,11 +116,11 @@ const CLASS_NOTE: Record<string, string> = {
   PAID_AWAITING_REDEMPTION: "passed · credited once the voucher is redeemed on chain",
   PLATFORM_ABSORBED: "voucher could not be redeemed · owed to you by the platform, no fee",
   PAID_UNCREDITED: "our checks rejected the response · see verdicts",
-  FREE: "relay path, no payment machinery",
-  EXPLORATION: "NEW-binding traffic, we paid for it",
-  EXCLUDED: "excluded from the SLA window by an operator decision",
+  FREE: "free-tier call · nothing charged, nothing paid",
+  EXPLORATION: "trial traffic for a new binding, paid for by us",
+  EXCLUDED: "excluded from the SLA window by our team",
   TEST: "your own dry runs",
-  SYSTEM_ERROR: "upstream 5xx / timeout",
+  SYSTEM_ERROR: "your endpoint timed out or returned 5xx",
   REQUEST_ERROR: "4xx from your endpoint",
 };
 
@@ -234,7 +235,8 @@ export default function ReconciliationPage() {
       key: "class",
       header: "Class",
       mono: true,
-      cell: (r) => <span className="font-semibold">{r.className}</span>,
+      noTruncate: true,
+      cell: (r) => <ClassName name={r.className} />,
     },
     { key: "calls", header: "Calls", width: 140, align: "end", mono: true, cell: (r) => r.calls },
     { key: "share", header: "Share", width: 110, align: "end", mono: true, cell: (r) => r.share },
@@ -500,7 +502,7 @@ export default function ReconciliationPage() {
           className="mt-0.5 shrink-0 text-warning-600"
         />
         <p className="min-w-0 flex-1 text-body-13 text-warning-700">
-          Canary calls (our own test calls) are included in PAID_CREDITED and are not labelled, so
+          Canary calls (our own test calls) are included in “Paid and credited” and are not labelled, so
           they cannot be told apart from real traffic. {MONTH_SHORT.format(new Date(period.from))} canary volume
           on your bindings: {DASH} calls.
         </p>

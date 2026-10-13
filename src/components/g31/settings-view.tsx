@@ -82,21 +82,21 @@ export function SettingsView() {
             <PanelTitles>
               <PanelTitle>Identity</PanelTitle>
               <PanelDescription className="whitespace-normal">
-                provisioned by Privy · no seed phrase, no chain selector, no gas token
+                your sign-in and wallet are provided by Privy
               </PanelDescription>
             </PanelTitles>
           </PanelHeader>
           <PanelBody className="px-5 pb-[18px] pt-2">
-            <KeyValueRow label="Email" value="not published" valueClassName="text-03" />
-            <KeyValueRow label="Login method" value="not published" valueClassName="text-03" />
-            <KeyValueRow label="Organization" value="not published" valueClassName="text-03" />
+            <KeyValueRow label="Email" value="not shown here yet" valueClassName="text-03" />
+            <KeyValueRow label="Login method" value="not shown here yet" valueClassName="text-03" />
+            <KeyValueRow label="Organization" value="not shown here yet" valueClassName="text-03" />
             <KeyValueRow
               label="Wallet"
               value={
                 first?.agentAccount ? (
                   <span className="break-all">{first.agentAccount}</span>
                 ) : (
-                  "not published"
+                  "not shown here yet"
                 )
               }
               valueClassName={first?.agentAccount ? undefined : "text-03"}

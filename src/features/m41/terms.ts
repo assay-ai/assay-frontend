@@ -36,7 +36,7 @@ export const DESIGN_TERMS: ProviderTermsSummary = {
     "I accept the provider agreement v1.0, the payout terms v1.0 and the slash policy v1.0",
   commercialTerms: [
     { key: "takeRate", label: "Take rate", value: "10%", caption: "flat, no per-call fee floor" },
-    { key: "payouts", label: "Payouts", value: "hourly above $10", caption: "on-chain and final" },
+    { key: "payouts", label: "Payouts", value: "as each call settles", caption: "on-chain and final" },
     {
       key: "reserveHeld",
       label: "Reserve held",
@@ -53,7 +53,7 @@ export const DESIGN_TERMS: ProviderTermsSummary = {
     {
       key: "slashedWhen",
       label: "Slashed when",
-      value: "DATA_FAIL only",
+      value: "failed data checks only",
       caption: "never for upstream failure or a bad request from the agent",
     },
     {
@@ -64,6 +64,14 @@ export const DESIGN_TERMS: ProviderTermsSummary = {
     },
   ],
 };
+
+/**
+ * A term's value for display. The slash trigger is published as an enum name,
+ * which is not a sentence a provider should have to decode.
+ */
+export function termValue(term: { value: string }): string {
+  return term.value === "DATA_FAIL only" ? "failed data checks only" : term.value;
+}
 
 /** The server's published terms whenever there are any; the design's otherwise. */
 export function resolveTerms(terms: ProviderTermsSummary | undefined): {

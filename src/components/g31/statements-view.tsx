@@ -85,9 +85,6 @@ export function StatementsView() {
             <Button variant="secondary" icon={<List />} type="button" disabled>
               Usage view
             </Button>
-            <Button variant="secondary" icon={<Download />} type="button" disabled>
-              Download PDF
-            </Button>
             <Button icon={<Download />} type="button" disabled>
               Export CSV
             </Button>

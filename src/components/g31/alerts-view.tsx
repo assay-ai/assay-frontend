@@ -51,7 +51,12 @@ import {
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
 
-import { AGGREGATION_LABEL, NOTIFICATION_CATALOGUE, NOTIFICATION_EVENT_ORDER } from "./notification-catalogue";
+import {
+  AGGREGATION_LABEL,
+  NOTIFICATION_CATALOGUE,
+  NOTIFICATION_EVENT_LABEL,
+  NOTIFICATION_EVENT_ORDER,
+} from "./notification-catalogue";
 import { MicroLabel, PageHeader, StatusPill } from "./chrome";
 import { timestamp } from "./format";
 
@@ -436,7 +441,8 @@ export function AlertsView() {
                     className="flex items-center gap-3 border-b border-01 px-3 py-2.5 last:border-b-0"
                   >
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-[7px]">
-                      <span className="font-mono text-mono-12 font-semibold text-01">{event}</span>
+                      <span className="text-label-sm text-01">{NOTIFICATION_EVENT_LABEL[event]}</span>
+                      <code className="font-mono text-mono-xs text-03">{event}</code>
                       {def.nonSuppressible ? <StatusPill label="NOT SUPPRESSIBLE" tone="danger" /> : null}
                       {!def.hasProducer ? <StatusPill label="NOT SENT YET" dot={false} tone="neutral" /> : null}
                     </div>

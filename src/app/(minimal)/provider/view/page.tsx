@@ -36,6 +36,7 @@ import {
   rowsInAsset,
   type CallRow,
 } from "@/features/call-classes/csv";
+import { ClassName } from "@/features/call-classes/class-name";
 import {
   downloadCallsCsv,
   exportErrorMessage,
@@ -158,9 +159,9 @@ const CLASS_NOTE: Record<string, string> = {
   PLATFORM_ABSORBED: "passed our checks — voucher not redeemable, the platform owes you this (no fee)",
   PAID_UNCREDITED:
     "our checks rejected the response — not charged to the buyer, not credited to you",
-  FREE: "relay path, no payment machinery",
-  EXPLORATION: "NEW-binding traffic, we paid for it",
-  EXCLUDED: "excluded from the SLA window by an operator decision",
+  FREE: "free-tier call — nothing is charged and nothing is paid",
+  EXPLORATION: "trial traffic for a new binding, paid for by us",
+  EXCLUDED: "excluded from the SLA window by our team",
   TEST: "our own dry runs against your endpoint",
   SYSTEM_ERROR: "your endpoint timed out or returned 5xx",
   REQUEST_ERROR: "4xx from your endpoint",
@@ -345,7 +346,8 @@ export default function ProviderViewPage() {
       key: "class",
       header: "Class",
       mono: true,
-      cell: (r) => <span className="font-semibold">{r.className}</span>,
+      noTruncate: true,
+      cell: (r) => <ClassName name={r.className} />,
     },
     {
       key: "calls",
@@ -389,7 +391,8 @@ export default function ProviderViewPage() {
       key: "reason",
       header: "Reason a call failed",
       mono: true,
-      cell: (r) => <span className="font-semibold">{r.reason}</span>,
+      noTruncate: true,
+      cell: (r) => <ClassName name={r.reason} />,
     },
     { key: "calls", header: "Calls", width: 120, align: "end", mono: true, cell: (r) => r.calls },
     {
@@ -759,9 +762,9 @@ export default function ProviderViewPage() {
           className="mt-0.5 shrink-0 text-03"
         />
         <p className="min-w-0 flex-1 text-body-13 text-02">
-          Slashing is not live yet. These calls were not credited and, once slashing turns on,
-          would also have cost stake — the amount is shown on your verdict feed so you can see it
-          before it is real. Flag anything you think is wrong.
+          These calls were not credited. They also count against your SLA window: if a window
+          closes in breach, a penalty against your stake is proposed, and you can dispute it
+          before it is applied.
         </p>
       </div>
     </div>

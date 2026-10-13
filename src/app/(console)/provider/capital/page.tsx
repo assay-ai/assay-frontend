@@ -4,6 +4,7 @@ import { useConnectWallet } from "@privy-io/react-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { ArrowUpFromLine, Fuel, PenLine, Plus, Wallet } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { Banner } from "@/components/ui/banner";
@@ -815,13 +816,20 @@ export default function ProviderCapitalPage() {
         */
         <p data-testid="stake-chain-ambiguous" className="text-body-13 text-03">
           You have stake authority on more than one chain, and this header can only act on one.
-          Opening and funding a stake account is per chain — use the Leaving screen, which builds
-          the same transactions against the chain you name.
+          Opening and funding a stake account is per chain — use the{" "}
+          <Link href="/provider/exit" className="underline">
+            Leaving
+          </Link>{" "}
+          screen, which builds the same transactions against the chain you name.
         </p>
       ) : data && noAuthority ? (
         <p className="text-body-13 text-03">
           No stake authority has been proved on this chain yet, so a stake account cannot be
-          opened or funded from here. Proving one is a wallet signature, on the Leaving screen.
+          opened or funded from here. Proving one is a wallet signature, on the{" "}
+          <Link href="/provider/exit" className="underline">
+            Leaving
+          </Link>{" "}
+          screen.
         </p>
       ) : data && !signerReady ? (
         <p className="text-body-13 text-03">

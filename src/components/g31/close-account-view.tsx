@@ -225,7 +225,7 @@ export function CloseAccountView() {
                 </div>
                 <div className="w-[140px] text-right font-mono text-mono-12 text-03">—</div>
                 <div className="w-[220px] text-right font-mono text-mono-12 text-03">
-                  no endpoint
+                  not shown here yet
                 </div>
                 <div className="w-[240px] text-right font-mono text-mono-12 text-03">—</div>
               </div>
