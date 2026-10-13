@@ -583,8 +583,8 @@ export default function NewToolBindingPage() {
         A binding is your implementation of one catalogue tool: an endpoint, a price and the two
         mappings between the tool&rsquo;s schema and your own API. It is created as a{" "}
         <span className="font-mono text-mono-12 text-01">DRAFT</span> and takes no traffic until you
-        have tested the mapping and published it. Ceilings and the free tier have their own screens
-        on the binding.
+        have tested the mapping and published it. Ceilings and the free tier have their own screens,
+        linked at the top of the binding once the draft exists.
       </Note>
 
       {/* Why the button above is disabled, as text: a tooltip alone is
@@ -687,7 +687,7 @@ export default function NewToolBindingPage() {
               <Select
                 label="pricingMode"
                 value={draft.pricingMode}
-                hint="FREEMIUM's per-agent quota and daily budget are set on the free-tier screen"
+                hint="FREEMIUM's per-agent quota and daily budget are set on the binding's Free tier screen, after the draft is created"
                 onChange={(event) =>
                   setDraft((current) => ({
                     ...current,

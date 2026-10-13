@@ -6,6 +6,8 @@ import { Check, ClockFading, TriangleAlert, X } from "lucide-react";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
+import { BindingNav } from "@/features/provider-binding/binding-nav";
+
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import {
@@ -349,6 +351,8 @@ export default function PricingAndTierPage() {
           </>
         }
       />
+
+      <BindingNav bindingId={bindingId} />
 
       {save.isError ? (
         <p role="alert" className="text-body-13 text-danger-500">

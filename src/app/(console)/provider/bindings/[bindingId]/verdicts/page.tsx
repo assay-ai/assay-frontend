@@ -3,6 +3,8 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Code2, Filter as FilterIcon, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+
+import { BindingNav } from "@/features/provider-binding/binding-nav";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
@@ -432,6 +434,8 @@ export default function ProviderVerdictFeedPage() {
           </Button>
         </div>
       </header>
+
+      <BindingNav bindingId={bindingId} />
 
       {/* ── Filter row ─────────────────────────────────────────────────── */}
       <div className="flex w-full flex-wrap items-center gap-2.5">
