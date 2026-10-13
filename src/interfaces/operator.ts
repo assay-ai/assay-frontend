@@ -326,3 +326,100 @@ export interface CancelIntent {
   /** The provider whose reservation the cancellation releases. **Bare base58**, not CAIP-10. */
   provider: string;
 }
+
+// ── A-9 / A-10 · The account blocklist ─────────────────────────────────────
+
+/** assay-backend `src/modules/blocklist/domain/account-block.ts` `BlockSubjectKind`. */
+export type BlockSubjectKind = "ORGANIZATION" | "WALLET";
+
+/**
+ * `AccountBlockDto` — one row of `GET /operator/blocks`, and the answer of
+ * both writes. The row is the record: a lifted block keeps its row, and a
+ * later block of the same subject is a new one.
+ */
+export interface AccountBlock {
+  id: string;
+  subjectKind: BlockSubjectKind;
+  /** Normalised: uuid lower-case, EVM address lower-case. */
+  subject: string;
+  /** What enforcement matches on: the uuid, or `namespace:address` (no chain reference). */
+  subjectKey: string;
+  active: boolean;
+  reasonCode: string;
+  /** Internal. Never shown to the blocked account. */
+  note: string;
+  ticketRef: string | null;
+  /** Operator subject, e.g. `ops-sre`. */
+  blockedBy: string;
+  blockedAt: string;
+  unblockedBy: string | null;
+  unblockApprovedBy: string | null;
+  unblockedAt: string | null;
+  unblockNote: string | null;
+}
+
+/** `GET /operator/blocks` filters. Any operator may read. */
+export interface ListAccountBlocksQuery {
+  cursor?: string;
+  limit?: number;
+  subjectKind?: BlockSubjectKind;
+  /** A uuid or a CAIP-10 account; a wallet matches on any chain of its namespace. */
+  subject?: string;
+  /** `true` standing blocks only, `false` lifted ones only, absent both. */
+  active?: boolean;
+  reasonCode?: string;
+}
+
+/** `POST /operator/blocks` — `A-9`, `ADJL` or `SRE`, single person. */
+export interface CreateAccountBlockBody {
+  subjectKind: BlockSubjectKind;
+  /** An organization uuid, or a CAIP-10 account. */
+  subject: string;
+  reasonCode: string;
+  /** 20 to 4096 characters. Internal. */
+  note: string;
+  ticketRef?: string;
+}
+
+/**
+ * `POST /operator/blocks/:id/unblock` — `A-10`, `ADJL` or `SRE`, two person:
+ * the approver's token goes in `X-Operator-Approver` and must hold `ADJL`.
+ */
+export interface UnblockAccountBody {
+  reasonCode: string;
+  /** 20 to 4096 characters. */
+  note: string;
+  ticketRef?: string;
+}
+
+/** `OverrideLogEntryDto` — one row of `GET /operator/override-log`. */
+export interface OverrideLogEntry {
+  id: string;
+  createdAt: string;
+  family: string;
+  code: string;
+  label: string;
+  action: string;
+  actorSubject: string;
+  approverSubject: string | null;
+  approvalMode: string;
+  targetType: string;
+  targetId: string;
+  organizationId: string | null;
+  reasonCode: string;
+  reason: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  ticketRef: string | null;
+  breakGlass: boolean;
+}
+
+/** `GET /operator/override-log` filters. */
+export interface ListOverrideLogQuery {
+  cursor?: string;
+  limit?: number;
+  targetType?: string;
+  targetId?: string;
+  ticketRef?: string;
+  q?: string;
+}
