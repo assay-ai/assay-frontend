@@ -587,6 +587,14 @@ export default function NewToolBindingPage() {
         on the binding.
       </Note>
 
+      {/* Why the button above is disabled, as text: a tooltip alone is
+          invisible to touch and keyboard users. */}
+      {mappingBlocked ? (
+        <Note tone="warning" icon={<Wrench width={15} height={15} aria-hidden="true" />}>
+          Create draft is disabled. Fix this first: {mappingBlocked}.
+        </Note>
+      ) : null}
+
       {errorNote}
 
       {tool && chainNotEnrolled && !error ? (
