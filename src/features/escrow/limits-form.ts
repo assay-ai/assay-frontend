@@ -129,6 +129,26 @@ export function parseLimitsForm(
 }
 
 /**
+ * The errors still worth showing after an edit: of the fields the last submit
+ * marked, those the current values still fail, with the current message. A
+ * corrected field loses its error at once; a field that had none gets none
+ * until the next submit.
+ */
+export function errorsStillTrue(
+  shown: LimitsFormErrors,
+  input: LimitsFormInput,
+  decimals: number = ESCROW_LIMITS_DECIMALS,
+): LimitsFormErrors {
+  const now = parseLimitsForm(input, decimals);
+  if (now.ok) return {};
+  const still: LimitsFormErrors = {};
+  for (const field of ["maxVoucherAmount", "maxPerWindow", "confirmZero"] as const) {
+    if (shown[field] && now.errors[field]) still[field] = now.errors[field];
+  }
+  return still;
+}
+
+/**
  * What the page's submit button actually calls. `createIntent` is injected —
  * never imported and called directly here — so the "a blank field must not
  * reach `createEscrowLimitsIntent`" rule is checkable without mounting a

@@ -33,6 +33,7 @@ import {
   ESCROW_LIMITS_DECIMALS,
   isEscrowDisarmed,
   limitsLandingInterval,
+  errorsStillTrue,
   parseLimitsForm,
   submitLimitsForm,
   type LimitsFormErrors,
@@ -173,7 +174,7 @@ function EscrowLimitsPageContent() {
   const [maxVoucherAmount, setMaxVoucherAmount] = React.useState("");
   const [maxPerWindow, setMaxPerWindow] = React.useState("");
   const [confirmZero, setConfirmZero] = React.useState(false);
-  const [errors, setErrors] = React.useState<LimitsFormErrors>({});
+  const [submitErrors, setErrors] = React.useState<LimitsFormErrors>({});
   const [intent, setIntent] = React.useState<EscrowIntent | null>(null);
   const [signature, setSignature] = React.useState<string | null>(null);
   /*
@@ -212,6 +213,12 @@ function EscrowLimitsPageContent() {
 
   // Live-previews whether the currently typed amounts would need the zero
   // confirmation, without waiting for a submit press.
+  // An error leaves as soon as the value it complained about is corrected.
+  const errors = errorsStillTrue(
+    submitErrors,
+    { maxVoucherAmount, maxPerWindow, confirmZero },
+    decimals,
+  );
   const preview = parseLimitsForm({ maxVoucherAmount, maxPerWindow, confirmZero: true }, decimals);
   const zeroFields = preview.ok ? preview.zeroFields : [];
   const needsZeroConfirm = zeroFields.length > 0;
@@ -506,7 +513,7 @@ function EscrowLimitsPageContent() {
           <PanelBody className="gap-3.5 p-5">
             <p className="text-body-sm text-02">
               {UNREADABLE_NOTE} We do not know whether you have an escrow on this chain or what
-              its limits are, so this screen is showing you neither rather than guessing. Nothing
+              its limits are, so neither is shown. Nothing
               has changed on chain. Try again in a moment.
             </p>
             <Button
