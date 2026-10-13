@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { type CallRow, foldClasses, observedTakeRate } from "./csv";
+import { type CallRow, foldClasses, observedTakeRate, pendingNote, rowsInAsset } from "./csv";
 
 const ASSET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/token:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
@@ -75,5 +75,39 @@ describe("foldClasses — settled with no credit recorded (BUG-R2-V3-03)", () =>
 
     expect(table.totalCredited?.amount).toBe("900000");
     expect(table.totalWithheld?.amount).toBe("0");
+  });
+});
+
+describe("rowsInAsset — one money figure, one asset", () => {
+  const OTHER = "eip155:46630/erc20:0xDbbC";
+  const rows = [row({ callId: "a" }), row({ callId: "b", asset: OTHER, providerAmount: "180000" })];
+
+  it("keeps only the rows in the display asset", () => {
+    const table = foldClasses(rowsInAsset(rows, OTHER));
+    expect(table.totalCalls).toBe(1);
+    expect(table.totalCredited).toMatchObject({ amount: "180000", asset: OTHER });
+  });
+
+  it("keeps every row when no asset is selected (a one-asset provider)", () => {
+    expect(rowsInAsset(rows, undefined)).toHaveLength(2);
+  });
+});
+
+describe("pendingNote — true to why the rows are pending", () => {
+  const settled = row({ classification: "PENDING", reason: "settled, no credit recorded" });
+  const inFlight = row({ classification: "PENDING", status: "VERIFYING" });
+
+  it("does not call a settled, uncredited call in flight", () => {
+    expect(pendingNote([settled, row({})])).toBe("settled, no credit recorded · not paid to you");
+  });
+
+  it("says in flight only when the calls are", () => {
+    expect(pendingNote([inFlight])).toBe("still in flight — no money has moved");
+  });
+
+  it("splits a mixed bucket by count", () => {
+    expect(pendingNote([settled, settled, inFlight])).toBe(
+      "2 settled, no credit recorded · 1 still in flight"
+    );
   });
 });
