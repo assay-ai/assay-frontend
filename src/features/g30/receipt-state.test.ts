@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { STATE_CARDS, deriveReceiptState, samplingExplainerCopy } from "./receipt-state";
+import {
+  STATE_CARDS,
+  canContestRejection,
+  deriveReceiptState,
+  samplingExplainerCopy,
+} from "./receipt-state";
 import type { Receipt } from "./wire";
 
 const receipt = (sampling: Receipt["sampling"], listed = "1000") =>
@@ -46,5 +51,25 @@ describe("deriveReceiptState — expired intents", () => {
     expect(STATE_CARDS.EXPIRED.sentence).toMatch(/not charged/i);
     expect(STATE_CARDS.EXPIRED.sentence).toMatch(/released/i);
     expect(STATE_CARDS.EXPIRED.sentence).not.toMatch(/malformed/i);
+  });
+});
+
+describe("canContestRejection — the 'This result was actually fine' block", () => {
+  const stages = (...statuses: string[]) =>
+    ({ stages: statuses.map((status) => ({ stage: "SCHEMA", status })) }) as unknown as Receipt;
+
+  it("is offered when a check ran and failed", () => {
+    expect(canContestRejection(stages("PASSED", "FAILED", "NOT_REACHED"))).toBe(true);
+  });
+
+  it("is not offered on a voided receipt where every check is not reached", () => {
+    // BUG-R2-B1-02: VOIDED, verdict NOT_CHARGED, nothing ran — no check to call wrong.
+    expect(canContestRejection(stages("NOT_REACHED", "NOT_REACHED", "NOT_REACHED"))).toBe(false);
+  });
+
+  it("is not offered when no check failed", () => {
+    expect(canContestRejection(stages("PASSED", "SKIPPED"))).toBe(false);
+    expect(canContestRejection(stages("MISAPPLIED", "UNAVAILABLE"))).toBe(false);
+    expect(canContestRejection(stages())).toBe(false);
   });
 });

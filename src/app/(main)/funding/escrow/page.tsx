@@ -21,6 +21,7 @@ import { relayedRefusal, type RelayedRefusal } from "@/features/escrow/relayed-r
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
 import { withdrawGasGrantNote } from "@/features/escrow/withdraw-gas-grant-note";
 import { withdrawGasNote } from "@/features/escrow/withdraw-gas-note";
+import { WITHDRAWAL_COPY } from "@/features/escrow/withdrawal-copy";
 import { withdrawalFigures } from "@/features/escrow/withdrawal-figures";
 import { ErrorBlock, KeyValueRow, NoteBox, PageHeader, PendingBlock } from "@/features/g30/ui";
 import { useCountdown } from "@/hooks/useCountdown";
@@ -53,9 +54,9 @@ import { exceedsScale, formatMoney, toAtomic, toDecimal } from "@/utils/money";
  * ## Two steps, and the reason for the gap between them
  *
  * `request_withdraw(amount)` writes a **ceiling** onto `BuyerEscrow` and starts
- * a clock. It reserves nothing: the escrow keeps serving calls the whole time,
- * so a provider holding a voucher signed before the request can still redeem
- * it. That is what the wait is for — it is a settlement window, not a
+ * a clock. It reserves nothing: the escrow keeps redeeming vouchers signed before
+ * the request, while the gateway refuses every NEW paid call until the request
+ * is claimed or cancelled (see `features/escrow/withdrawal-copy.ts`). That is what the wait is for — it is a settlement window, not a
  * cooling-off period aimed at the buyer. Then `withdraw()` pays
  * `min(requested, escrow_ata.amount)`.
  *
@@ -672,7 +673,7 @@ function EscrowPageContent() {
                     label={figures.qualifier ? "You will receive at most" : "You will receive"}
                     sub={
                       figures.cappedByBalance
-                        ? "the balance, not the request — calls have been paid since you asked"
+                        ? "the balance, not the request — earlier calls have settled since you asked"
                         : "the request, in full"
                     }
                     value={formatMoney(figures.payout, { decimals: 2 })}
@@ -695,9 +696,7 @@ function EscrowPageContent() {
                       />
                     </div>
                     <p className="text-body-xs leading-[1.55] text-02">
-                      {matured
-                        ? "Claim whenever you like — the request does not expire. The amount is still settled at the moment you claim."
-                        : "Your escrow keeps serving calls until you claim, which is why the figure above is a ceiling and not a promise."}
+                      {matured ? WITHDRAWAL_COPY.whenMatured : WITHDRAWAL_COPY.whilePending}
                     </p>
                   </div>
                 </div>
@@ -738,9 +737,7 @@ function EscrowPageContent() {
                   </Button>
                 </div>
                 <p className="text-body-xs leading-[1.55] text-03">
-                  Cancelling withdraws nothing and costs nothing but a signature. It clears the
-                  standing request so the escrow can go back to paying for calls; nothing else on
-                  this page changes.
+                  {WITHDRAWAL_COPY.cancel}
                 </p>
               </>
             ) : null}
@@ -796,7 +793,7 @@ function EscrowPageContent() {
                   */}
                   {figures.pending
                     ? "A new request replaces the one above rather than adding to it, and the wait starts again from zero — including for the amount you have already waited for."
-                    : "Name a ceiling. Nothing is reserved and your calls keep being paid; once the settlement window has passed you can claim whatever the escrow still holds, up to that ceiling."}
+                    : WITHDRAWAL_COPY.beforeRequest}
                 </p>
               </div>
 
