@@ -509,6 +509,7 @@ export default function ProviderVerdictFeedPage() {
                   segment,
                   windowLabel:
                     effectiveScope === "current" && currentWindow ? currentWindow.label : null,
+                  windowVerifiedCalls: currentWindow?.verifiedCalls,
                   filtersApplied: activeFilterCount(applied) > 0,
                   searching: scopedItems.length > 0,
                 })}
