@@ -20,6 +20,7 @@ import { SamplingExplainer } from "@/components/ui/sampling-explainer";
 import { StageList } from "@/components/ui/stage-list";
 import { Timeline, type TimelineEvent } from "@/components/ui/timeline";
 import {
+  Amount,
   ChargedHeadline,
   CodePane,
   MetaBar,
@@ -330,19 +331,29 @@ function ReceiptPageContent() {
           <div className="min-w-0 flex-1">
             <StateCardBlock card={stateCard} receipt={receipt} current />
           </div>
-          <div className="flex shrink-0 items-end gap-8">
-            <div className="flex flex-col items-end gap-[3px]">
-              <span className="text-body-13 text-03">Listed price</span>
-              <span className="font-mono text-mono-xl text-01">{listed}</span>
-            </div>
-            <div className="flex flex-col items-end gap-[3px]">
-              <span className="text-body-13 text-03">You paid</span>
-              <span className="font-mono text-mono-xl text-01">{paid}</span>
-            </div>
-            <div className="flex flex-col items-end gap-[3px]">
-              <span className="text-body-13 text-03">Not charged</span>
-              <span className="font-mono text-mono-xl text-teal-600">{withheld}</span>
-            </div>
+          {/* Same three figures, same layout, as the charged and not-charged
+              headlines: a row that shares the width at 390 instead of three
+              fixed 26px figures that push the page sideways. */}
+          <div className="flex w-full items-end gap-3 tablet:w-auto tablet:shrink-0 tablet:gap-8">
+            <Amount
+              label="Listed price"
+              value={listed}
+              align="start"
+              className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
+            />
+            <Amount
+              label="You paid"
+              value={paid}
+              align="start"
+              className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
+            />
+            <Amount
+              label="Not charged"
+              value={withheld}
+              teal
+              align="start"
+              className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
+            />
           </div>
         </section>
       ) : null}
@@ -490,6 +501,9 @@ function ReceiptPageContent() {
                 card={STATE_CARDS[key]}
                 receipt={receipt}
                 current={state === key}
+                // A real basis, so the five cards wrap two-up at 390 instead of
+                // squeezing into one row.
+                className="basis-[140px]"
               />
             ))}
           </PanelBody>
