@@ -35,10 +35,13 @@ import {
 import { useOperatorSession } from "@/features/operator/session-context";
 import {
   asProposalStatus,
+  authorityRefusal,
   caseStatusLabel,
+  exceedsAuthority,
   isLegalInStatus,
   isSweepable,
   may,
+  RECALCULATED_AMOUNT_PATTERN,
   type OperatorAction,
 } from "@/features/operator/state";
 import { isUserRejection, useSigner } from "@/hooks/useSigner";
@@ -442,12 +445,32 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
     queryClient.invalidateQueries({ queryKey: ["operator", "queue"] });
   }, [queryClient, proposalId]);
 
+  const authorityLimit = identity.authorityLimit;
+  const casePenalty = brief.case.proposal.penaltyAmount;
+
   /** The server channel. Every mutation in this file, in 7a, 7b and 7c, uses it. */
-  const reportError = React.useCallback((e: unknown) => {
-    toast.error(
-      e instanceof ApiError ? `${e.code} · ${e.message}` : "The action could not be completed.",
-    );
-  }, []);
+  const reportError = React.useCallback(
+    (e: unknown) => {
+      if (!(e instanceof ApiError)) {
+        toast.error("The action could not be completed.");
+        return;
+      }
+      /*
+        The one refusal restated here. The API's message carries both amounts
+        as raw minor units with no currency ("of 0, requested 28470000"), which
+        is not something an operator can read a decision off. The code stays,
+        so the refusal can still be quoted into a ticket.
+      */
+      if (e.code === "OPERATOR_AUTHORITY_EXCEEDED" && authorityLimit) {
+        toast.error(
+          `${e.code} · This action is above your authority limit: ${authorityRefusal(authorityLimit, casePenalty)}.`,
+        );
+        return;
+      }
+      toast.error(`${e.code} · ${e.message}`);
+    },
+    [authorityLimit, casePenalty],
+  );
 
   const claim = useMutation({
     mutationFn: () => claimCase(proposalId),
@@ -652,10 +675,30 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
     return { permitted, legal, offered: permitted && legal, blockedBecause };
   };
 
+  /*
+    The authority limit, read off `GET /operator/me`.
+
+    `suspend` and `second` are checked by the backend against the case's
+    penalty, so a penalty above the limit is a refusal this screen can already
+    see — an SRE with a limit of 0 was offered a Suspend form that could never
+    succeed. Both are withheld with the reason. `decide` is not withheld: a
+    recalculated amount may be within the limit when the penalty is not, so it
+    is checked at submit against the amount the decision would bind.
+  */
+  const overAuthority = exceedsAuthority(authorityLimit, casePenalty.amount);
+  const withinAuthority = (base: Gate): Gate =>
+    base.offered && overAuthority && authorityLimit
+      ? {
+          ...base,
+          offered: false,
+          blockedBecause: `above this token's authority limit — ${authorityRefusal(authorityLimit, casePenalty)}`,
+        }
+      : base;
+
   const claimGate = gate("claim");
   const decideGate = gate("decide");
-  const secondGate = gate("second");
-  const suspendGate = gate("suspend");
+  const secondGate = withinAuthority(gate("second"));
+  const suspendGate = withinAuthority(gate("suspend"));
 
   /*
     `extendDeadline` is the one action with a THIRD gate, and it is not a role
@@ -753,6 +796,13 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
     ["cancel", cancelGate],
   ];
   const offered = gates.filter(([, g]) => g.offered);
+  /* Withheld for the authority limit alone — said even when other actions are offered. */
+  const withheldForAuthority = overAuthority
+    ? gates.filter(
+        ([action, g]) =>
+          (action === "second" || action === "suspend") && g.permitted && g.legal && !g.offered,
+      )
+    : [];
 
   /*
     Claiming reads like one action but is two different ones. On `DISPUTED` it
@@ -835,8 +885,10 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
         setFormError("A recalculated amount is required for this outcome.");
         return;
       }
-      if (!/^\d+$/.test(amount)) {
-        setFormError("The recalculated amount must be minor units — digits only, no decimal point.");
+      if (!RECALCULATED_AMOUNT_PATTERN.test(amount)) {
+        setFormError(
+          "The recalculated amount must be a positive whole number of minor units — digits only, no decimal point, no leading zero.",
+        );
         return;
       }
       /*
@@ -851,6 +903,17 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
         );
         return;
       }
+    }
+    /*
+      The amount the backend checks this decision against: the recalculated
+      figure when there is one, the proposed penalty otherwise.
+    */
+    const bindingAmount = isRecalculated ? { ...penalty, amount } : penalty;
+    if (authorityLimit && exceedsAuthority(authorityLimit, bindingAmount.amount)) {
+      setFormError(
+        `This decision is above your authority limit — ${authorityRefusal(authorityLimit, bindingAmount)}. It needs an operator with a higher limit.`,
+      );
+      return;
     }
     setFormError(null);
     decide.mutate({
@@ -1061,6 +1124,16 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
           </div>
         ) : (
           <div className="flex w-full flex-col">
+            {withheldForAuthority.length > 0 ? (
+              <ul className="flex w-full flex-col gap-1 pb-3">
+                {withheldForAuthority.map(([action, g]) => (
+                  <li key={action} className="text-body-xs text-03">
+                    <span className="text-02">{ACTION_LABEL[action] ?? action}</span> is not
+                    offered — {g.blockedBecause}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {claimGate.offered ? (
               <Section
                 title="Claim"
