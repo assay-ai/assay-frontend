@@ -29,6 +29,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { fileSlashDispute, getSlashProposalCase } from "@/services/provider-disputes.service";
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
+import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 
 /**
  * Dispute filing.
@@ -214,6 +215,8 @@ export function DisputeFilingForm({
   onCancel,
   className,
 }: DisputeFilingFormProps) {
+  // Blocked by Assay: the main write action is disabled (the API refuses it anyway).
+  const readOnly = useAccountReadOnly();
   const [claim, setClaim] = React.useState<SlashDisputeClaimType | null>(null);
   const [claimTouched, setClaimTouched] = React.useState(false);
   const [reason, setReason] = React.useState("");
@@ -317,7 +320,7 @@ export function DisputeFilingForm({
           <Button
             icon={<Send aria-hidden="true" />}
             loading={file.isPending}
-            disabled={!claim}
+            disabled={readOnly || !claim}
             onClick={() => file.mutate()}
             type="button"
           >

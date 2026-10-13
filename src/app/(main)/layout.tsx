@@ -12,6 +12,7 @@ import { MobileTopBar } from "@/components/layout/mobile-top-bar";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { DEFAULT_NAV_ITEMS, TopBar } from "@/components/layout/top-bar";
 import { WalletMenu } from "@/components/layout/wallet-menu";
+import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
 import { getUnreadCount } from "@/services";
 
 /**
@@ -129,6 +130,8 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
 
       {/* pb-24 keeps the last row clear of the fixed tab bar at mobile widths. */}
       <main className="flex w-full flex-1 flex-col pb-24 md:pb-0">
+        {/* Shell level, above every buyer screen: see `features/account-block`. */}
+        <AccountBlockBanner wrapperClassName="w-full px-4 pt-4 md:px-6" />
         {children}
       </main>
 

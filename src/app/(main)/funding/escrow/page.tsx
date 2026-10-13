@@ -39,6 +39,7 @@ import { chainDisplayName, settlementSymbol } from "@/services/chains.service";
 import { useChains } from "@/hooks/useChains";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { exceedsScale, formatMoney, toAtomic, toDecimal } from "@/utils/money";
+import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 
 /**
  * The buyer's escrow, and the two-step withdrawal out of it.
@@ -183,6 +184,8 @@ const PURPOSE_DONE: Record<Purpose, string> = {
 /* --------------------------------------------------------------------- page */
 
 function EscrowPageContent() {
+  // Blocked by Assay: the main write action is disabled (the API refuses it anyway).
+  const readOnly = useAccountReadOnly();
   const queryClient = useQueryClient();
 
   /*
@@ -721,7 +724,7 @@ function EscrowPageContent() {
 
                 <div className="flex flex-wrap items-center gap-2.5">
                   <Button
-                    disabled={busy || !matured}
+                    disabled={readOnly || busy || !matured}
                     onClick={() => build.mutate({ purpose: "CLAIM" })}
                   >
                     <ArrowUpFromLine aria-hidden="true" />
@@ -729,7 +732,7 @@ function EscrowPageContent() {
                   </Button>
                   <Button
                     variant="secondary"
-                    disabled={busy}
+                    disabled={readOnly || busy}
                     onClick={() => build.mutate({ purpose: "CANCEL", atomic: "0" })}
                   >
                     Cancel the pending request
@@ -825,7 +828,7 @@ function EscrowPageContent() {
                 <Button
                   type="submit"
                   variant={figures.pending ? "secondary" : "primary"}
-                  disabled={busy || atomic === null}
+                  disabled={readOnly || busy || atomic === null}
                 >
                   {cancelsByAmount && figures.pending
                     ? "Cancel the pending request"

@@ -137,6 +137,70 @@ export function onUnauthorized(handler: UnauthorizedHandler): void {
   unauthorizedHandler = handler;
 }
 
+/**
+ * The two refusals that mean "this account is blocked by Assay".
+ *
+ * `AUTH_ORGANIZATION_SUSPENDED` is a blocked (or suspended) organization's own
+ * session; `ACCOUNT_BLOCKED` is a blocked wallet — the session's own, or
+ * another party to the request (a provider's payout wallet, say). Both are
+ * 403s: the caller IS signed in, and signing in again changes nothing. So
+ * neither may ever sign the user out or send them to `/login` — a blocked
+ * person keeps read-only access by decision, precisely so they can see that
+ * and why they are blocked.
+ */
+export const ACCOUNT_BLOCKED_CODES: ReadonlySet<string> = new Set([
+  "ACCOUNT_BLOCKED",
+  "AUTH_ORGANIZATION_SUSPENDED",
+]);
+
+export function isAccountBlockedError(error: unknown): error is ApiError {
+  return error instanceof ApiError && ACCOUNT_BLOCKED_CODES.has(error.code);
+}
+
+/**
+ * What a failed response means for the session, decided on the status AND the
+ * code. A blocked code wins over the status, whatever it is: a gateway that
+ * ever rewrote one of these to a 401 must still not sign anybody out.
+ */
+export type AuthFailure = "sign-out" | "account-blocked" | "none";
+
+export function classifyAuthFailure(status: number, code: string | undefined): AuthFailure {
+  if (code !== undefined && ACCOUNT_BLOCKED_CODES.has(code)) return "account-blocked";
+  if (status === 401) return "sign-out";
+  return "none";
+}
+
+type AccountBlockedHandler = (error: ApiError) => void;
+
+let accountBlockedHandler: AccountBlockedHandler | null = null;
+
+/**
+ * Registered by `AccountBlockBridge`. Called for every `ACCOUNT_BLOCKED` /
+ * `AUTH_ORGANIZATION_SUSPENDED` refusal on the shared (Privy) client, so the
+ * blocked-account banner appears whichever screen made the request. It is
+ * never the unauthorized handler: see `ACCOUNT_BLOCKED_CODES`.
+ */
+export function onAccountBlocked(handler: AccountBlockedHandler | null): void {
+  accountBlockedHandler = handler;
+}
+
+/**
+ * A client-side refusal of writes, consulted before a non-`GET`/`HEAD` request
+ * on the shared client leaves the browser. Returns the error to fail with, or
+ * `null` to let the request go. Registered by `AccountBlockBridge` while the
+ * account is known to be blocked; the backend refuses those writes anyway, so
+ * this only saves the round trip and keeps the refusal uniform.
+ */
+export type WriteGuard = (method: string, url: string) => ApiError | null;
+
+let writeGuard: WriteGuard | null = null;
+
+export function registerWriteGuard(guard: WriteGuard | null): void {
+  writeGuard = guard;
+}
+
+const READ_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD"]);
+
 function toApiError(error: AxiosError): ApiError {
   const body = error.response?.data as Partial<ApiErrorBody> | undefined;
   const inner = body?.error;
@@ -251,7 +315,21 @@ class ApiClient {
           again comes back through here marked, and falls through below.
         */
         const config = error.config as RetriableConfig | undefined;
-        if (error.response?.status === 401 && this.usesSessionToken && config && !config._authRetried) {
+        const apiError = toApiError(error);
+        const failure = classifyAuthFailure(error.response?.status ?? apiError.status, apiError.code);
+
+        /*
+          A blocked account. Never the sign-out path, never a token refresh:
+          the session is valid, it is the account that may not act. The
+          handler only shows the banner. The operator client does not report
+          here — its refusals are about the operator, not a buyer.
+        */
+        if (failure === "account-blocked") {
+          if (this.triggerGlobalUnauthorized) accountBlockedHandler?.(apiError);
+          return Promise.reject(apiError);
+        }
+
+        if (failure === "sign-out" && this.usesSessionToken && config && !config._authRetried) {
           config._authRetried = true;
           const fresh = await refreshSessionToken();
           if (fresh) return this.instance.request(config);
@@ -275,10 +353,10 @@ class ApiClient {
           screen explaining why. The request still fails; only the eviction is
           suppressed.
         */
-        if (error.response?.status === 401 && this.triggerGlobalUnauthorized && !demoEnabled()) {
+        if (failure === "sign-out" && this.triggerGlobalUnauthorized && !demoEnabled()) {
           unauthorizedHandler?.();
         }
-        return Promise.reject(toApiError(error));
+        return Promise.reject(apiError);
       },
     );
   }
@@ -300,6 +378,20 @@ class ApiClient {
     */
     const canned = demoResponse(config.method, config.url, config.params);
     if (canned !== undefined) return canned as T;
+
+    /*
+      The blocked-account guard. Only on the shared client — the operator
+      console's writes are an operator's, not the blocked account's — and only
+      for writes: reads stay open for a blocked person, by decision.
+    */
+    const method = (config.method ?? "GET").toUpperCase();
+    if (this.usesSessionToken && writeGuard && !READ_METHODS.has(method)) {
+      const refusal = writeGuard(method, config.url ?? "");
+      if (refusal) {
+        if (this.triggerGlobalUnauthorized) accountBlockedHandler?.(refusal);
+        throw refusal;
+      }
+    }
 
     const response = await this.instance.request<ApiEnvelope<T>>(config);
     return response.data.data;
