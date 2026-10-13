@@ -19,8 +19,10 @@ import { cn } from "@/utils";
 
 import type { AssayMatch } from "./assay-match";
 import { CopyValue } from "./copy-value";
+import type { NotSelectableReason } from "./dispute-selection";
 import {
   countdownUrgency,
+  disputedPhase,
   executableAtLabel,
   formatAtomic,
   isoFromSeconds,
@@ -46,16 +48,19 @@ const URGENCY_TONE: Record<CountdownUrgency, string> = {
 };
 
 /**
- * Where to dispute, for a Pending row inside its window. On-chain dispute is
- * not built yet (see `DisputeOnChainSlot`), so the way to dispute is in Assay:
- * from the case page when the row matches a case, otherwise from Disputes or
- * through Assay support.
+ * Where to dispute, for a Pending row inside its window. On the provider's own
+ * stake wallet the row can be selected and disputed on chain (the checkbox
+ * below); the Assay case page and support remain the way when it cannot —
+ * a pasted address, or a chain without the dispute upgrade.
  */
-function HowToDispute({ match }: { match: AssayMatch }) {
+function HowToDispute({ match, onChain }: { match: AssayMatch; onChain: boolean }) {
+  const lead = onChain
+    ? "To dispute it, select it below and choose “Dispute selected on chain”. You can also"
+    : "To dispute it,";
   if (match.kind === "known") {
     return (
       <p className="text-body-13 text-02">
-        To dispute it, open{" "}
+        {lead} open{" "}
         <Link
           href={`/provider/cases/${encodeURIComponent(match.proposalId)}`}
           className="text-primary-600 underline"
@@ -68,7 +73,7 @@ function HowToDispute({ match }: { match: AssayMatch }) {
   }
   return (
     <p className="text-body-13 text-02">
-      To dispute it, open the case from your{" "}
+      {lead} open the case from your{" "}
       <Link href="/provider/disputes" className="text-primary-600 underline">
         Assay disputes
       </Link>{" "}
@@ -127,25 +132,77 @@ function AssayMatchTag({ match }: { match: AssayMatch }) {
   return null;
 }
 
+/** The per-row half of "Dispute selected on chain"; the button and the send are the page's. */
+export interface DisputeSelectionProps {
+  /** `null` when the row may be selected; otherwise why it has no checkbox. */
+  readonly notSelectable: NotSelectableReason | null;
+  readonly selected: boolean;
+  /** The 64-row limit is reached and this row is not one of them. */
+  readonly limitReached: boolean;
+  /** A dispute is being prepared or sent: the selection is frozen. */
+  readonly locked: boolean;
+  readonly onToggle: () => void;
+}
+
 /**
- * ─── DISPUTE ON CHAIN: RESERVED SLOT ─────────────────────────────────────────
+ * DISPUTE ON CHAIN — the row's checkbox, its refusal and its success.
  *
- * NOT BUILT IN THIS TASK. The contract's `disputeSlash(requestId)` is being
- * added in parallel; until its ABI is deployed this renders nothing.
- *
- * To build it: render a button here when `canDisputeOnChain` is true (a
- * Pending row inside its 72h window, and the page is checking the signed-in
- * provider's own stake wallet, not a pasted address). On click, sign and send
- * `disputeSlash(row.requestId)` to `deployment.stakeContract` from that wallet
- * (`useSigner({ chainId: deployment.chainId, address: provider })`), then
- * refetch the page's query so the row reads "Disputed" from `slashRecordOf`.
+ * Only on the signed-in provider's own stake wallet, only on a Pending row
+ * still inside its window (by its own `executableAt`). Selecting is all it
+ * does: the page's "Dispute selected on chain" asks the backend for the
+ * unsigned `disputeSlashBatch`, and the provider's stake wallet sends it.
  */
-function DisputeOnChainSlot(_props: {
+function DisputeOnChainSlot({
+  row,
+  selection,
+  refusals,
+  justDisputed,
+}: {
   row: ChainSlashRow;
-  deployment: StakeDeployment;
-  canDisputeOnChain: boolean;
+  selection: DisputeSelectionProps | null;
+  refusals: readonly string[];
+  justDisputed: boolean;
 }) {
-  return null;
+  const id = `dispute-${row.requestId}`;
+  const showCheckbox = selection !== null && selection.notSelectable === null && !justDisputed;
+  if (!showCheckbox && refusals.length === 0 && !justDisputed) return null;
+
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-2 border-t border-01 pt-3">
+      {justDisputed ? (
+        <p className="rounded-md border border-primary-20 bg-primary-10 px-3 py-2 text-body-13 text-primary-700" role="status">
+          Disputed — awaiting Assay&apos;s arbiter. The penalty cannot be executed while the dispute
+          stands.
+        </p>
+      ) : null}
+      {showCheckbox ? (
+        <label htmlFor={id} className="inline-flex cursor-pointer items-center gap-2 text-label-13 text-01">
+          <input
+            id={id}
+            type="checkbox"
+            className="size-4 accent-primary-600"
+            checked={selection.selected}
+            disabled={selection.locked || (!selection.selected && selection.limitReached)}
+            onChange={selection.onToggle}
+          />
+          Select to dispute on chain
+          {!selection.selected && selection.limitReached ? (
+            <span className="text-body-xs text-03">(64 selected, the most one transaction takes)</span>
+          ) : null}
+        </label>
+      ) : null}
+      {refusals.length > 0 ? (
+        <div className="flex flex-col gap-1 rounded-md border border-danger-20 bg-danger-10 px-3 py-2" role="alert">
+          <p className="text-label-13 text-danger-700">The chain would refuse this one:</p>
+          {refusals.map((text) => (
+            <p key={text} className="text-body-13 text-danger-700">
+              {text}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function SlashRowCard({
@@ -155,6 +212,9 @@ export function SlashRowCard({
   nowSeconds,
   match,
   viewingOwnStake,
+  selection = null,
+  refusals = [],
+  justDisputed = false,
 }: {
   row: ChainSlashRow;
   deployment: StakeDeployment;
@@ -162,23 +222,30 @@ export function SlashRowCard({
   nowSeconds: number;
   match: AssayMatch;
   viewingOwnStake: boolean;
+  /** `null` when on-chain dispute is not offered on this page at all. */
+  selection?: DisputeSelectionProps | null;
+  /** Plain-words reasons the chain would refuse this row in the last attempted dispute. */
+  refusals?: readonly string[];
+  /** This row was just disputed and the list has not yet read it back as Disputed. */
+  justDisputed?: boolean;
 }) {
   const money = (amount: bigint) => formatAtomic(amount, asset.decimals, asset.symbol);
   const phase = pendingPhase(row, nowSeconds);
+  const dispute = disputedPhase(row, nowSeconds);
   const beneficiaryHref = explorerAddressLink(deployment, row.beneficiary);
 
   return (
     <li
       className={cn(
         "flex w-full min-w-0 flex-col gap-3 rounded-lg border bg-01 p-4",
-        match.kind === "not-known" ? "border-danger-20" : "border-01",
+        selection?.selected ? "border-primary-500" : match.kind === "not-known" ? "border-danger-20" : "border-01",
       )}
     >
       {/* Status, id, Assay match */}
       <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
         <span
           className={cn(
-            "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-[9px] py-1 font-mono text-mono-xs font-semibold uppercase tracking-[0.6px]",
+            "inline-flex max-w-full items-center rounded-full px-[9px] py-1 font-mono text-mono-xs font-semibold uppercase tracking-[0.6px]",
             STATUS_TONE[row.status.key],
           )}
         >
@@ -213,8 +280,29 @@ export function SlashRowCard({
             </span>
             ; from then on anyone can execute it and the penalty is taken from your stake.
           </p>
-          <HowToDispute match={match} />
+          <HowToDispute match={match} onChain={viewingOwnStake && selection !== null} />
         </div>
+      ) : dispute?.phase === "awaiting-ruling" ? (
+        <p className="rounded-md border border-primary-20 bg-primary-10 px-3 py-2 text-body-13 text-primary-700">
+          Disputed on{" "}
+          <span className="font-mono font-semibold">{stampUtc(isoFromSeconds(row.disputedAt as number))} UTC</span>.
+          It cannot be executed while Assay&apos;s arbiter decides. If there is no ruling by{" "}
+          <span className="font-mono font-semibold">
+            {stampUtc(isoFromSeconds(row.disputeExpiresAt as number))} UTC
+          </span>{" "}
+          ({formatRemaining(dispute.secondsLeft * 1000)} from now), anyone can expire it and the reserved
+          stake is released.
+        </p>
+      ) : dispute?.phase === "unresolved" ? (
+        <p className="text-body-13 text-02">
+          Disputed on {stampUtc(isoFromSeconds(row.disputedAt as number))} UTC and not ruled on for 30
+          days. It can no longer be upheld, only expired, which releases the reserved stake.
+        </p>
+      ) : row.status.key === "disputed" ? (
+        <p className="text-body-13 text-02">
+          Disputed on chain. It cannot be executed while Assay&apos;s arbiter decides; the dispute time
+          could not be read.
+        </p>
       ) : phase?.phase === "executable" ? (
         <p className="text-body-13 text-danger-700">
           The dispute window has closed. This penalty can be executed now; if nobody executes it in
@@ -263,10 +351,27 @@ export function SlashRowCard({
         <Fact label={executableAtLabel(row, nowSeconds)}>
           <span className="font-mono">{stampUtc(isoFromSeconds(row.executableAt))} UTC</span>
         </Fact>
+        {row.disputedAt !== null ? (
+          <Fact label="Disputed on chain">
+            <span className="font-mono">{stampUtc(isoFromSeconds(row.disputedAt))} UTC</span>
+          </Fact>
+        ) : null}
+        {row.disputeExpiresAt !== null ? (
+          <Fact label="Dispute expires (unruled)">
+            <span className="font-mono">{stampUtc(isoFromSeconds(row.disputeExpiresAt))} UTC</span>
+          </Fact>
+        ) : null}
       </dl>
+      {row.upheld && row.status.key !== "disputed" ? (
+        <p className="text-body-13 text-02">
+          This penalty was disputed and Assay&apos;s arbiter upheld it. A penalty can be disputed on
+          chain only once.
+        </p>
+      ) : null}
 
       <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1.5">
         <TxLink deployment={deployment} hash={row.proposeTx} label="Proposal tx" />
+        <TxLink deployment={deployment} hash={row.disputeTx} label="Dispute tx" />
         <TxLink
           deployment={deployment}
           hash={row.closeTx}
@@ -281,8 +386,9 @@ export function SlashRowCard({
 
       <DisputeOnChainSlot
         row={row}
-        deployment={deployment}
-        canDisputeOnChain={viewingOwnStake && phase?.phase === "disputable"}
+        selection={selection}
+        refusals={refusals}
+        justDisputed={justDisputed}
       />
     </li>
   );

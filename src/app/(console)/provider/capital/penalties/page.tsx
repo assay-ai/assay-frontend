@@ -19,7 +19,18 @@ import {
 } from "@/components/ui/panel";
 import { Search } from "@/components/ui/search";
 import { Select } from "@/components/ui/select";
+import { connectedSpelling, sendSlashContractCall } from "@/features/chain-calls/send-contract-call";
+import { refusalsById, refusalsOf } from "@/features/chain-calls/refusals";
 import { assayMatchFor } from "@/features/chain-slashes/assay-match";
+import {
+  MAX_DISPUTE_SELECTION,
+  disputeErrorMessage,
+  isDisputeSelectable,
+  notSelectableReason,
+  pruneDisputeSelection,
+  selectAllDisputable,
+  toggleDisputeSelection,
+} from "@/features/chain-slashes/dispute-selection";
 import {
   DEFAULT_FILTERS,
   STATUS_FILTERS,
@@ -33,9 +44,12 @@ import {
 import { SlashRowCard } from "@/features/chain-slashes/slash-row-card";
 import { useChainSlashes, useNowSeconds } from "@/features/chain-slashes/use-chain-slashes";
 import { stakeChains } from "@/features/provider-stake/chain-stake";
+import { isUserRejection, useConnectedAddresses, useSigner } from "@/hooks/useSigner";
 import { normaliseEvmAddress, type HexString } from "@/libs/chains/evm/stake-slashes/address";
+import { disputeCallMismatch } from "@/libs/chains/evm/stake-slashes/dispute-call";
 import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
 import { shortAddress } from "@/libs/chains/format";
+import { createSlashDisputeIntent } from "@/services/provider-slash-cases.service";
 import { getProviderStake } from "@/services/provider-stake.service";
 import { cn } from "@/utils";
 import { addressOfAccount } from "@/utils/chain";
@@ -66,7 +80,29 @@ import { addressOfAccount } from "@/utils/chain";
  * Under Capital because it is about the stake, and it is linked from the case
  * screen and the dispute list, where a provider reading Assay's account of a
  * penalty is one click from the chain's.
+ *
+ * ## Dispute on chain
+ *
+ * On the provider's own stake wallet, Pending rows still inside their window
+ * (their own `executableAt`, never a fixed 72 hours) can be selected, up to 64,
+ * and disputed in one `disputeSlashBatch`. The backend builds the unsigned call
+ * (`POST /providers/me/slash-requests/dispute-intent`); before the provider's
+ * stake wallet signs it, the page checks it is exactly that call to the pinned
+ * contract (`dispute-call.ts`). It works while the account is blocked and while
+ * the contracts are paused: the chain allows a dispute in both, because it only
+ * protects the provider.
  */
+
+type DisputeStage = "idle" | "building" | "sending" | "refreshing";
+
+/**
+ * How an executed penalty is split: `ParamSet.slashAgentBps` /
+ * `slashPlatformBps` on `X402Config`, the rest to the provider. This page
+ * reads only the stake contract (no Config read exists on this path), so the
+ * owner-decided split is stated: 6000 / 3000 bps, 10% kept. If the Config
+ * params ever become part of this page's read, take them from there.
+ */
+const PENALTY_SPLIT = { agentPercent: 60, platformPercent: 30, providerPercent: 10 } as const;
 
 const DEPLOYMENT = ROBINHOOD_TESTNET_STAKE;
 
@@ -124,6 +160,113 @@ function PenaltiesOnChainContent() {
     [rows, filters, nowSeconds],
   );
   const openCount = attentionCount(rows);
+
+  // ── Dispute on chain ──────────────────────────────────────────────────────
+  /*
+    The provider's own stake wallet is the only account the contract takes a
+    dispute from, so the signer is asked for that address and no other.
+  */
+  const connected = useConnectedAddresses();
+  const signerState = useSigner({
+    chainId: DEPLOYMENT.chainId,
+    address: ownAddress ? connectedSpelling(connected, ownAddress) : undefined,
+  });
+  const [selected, setSelected] = React.useState<ReadonlySet<string>>(() => new Set());
+  const [refusals, setRefusals] = React.useState<ReadonlyMap<string, readonly string[]>>(() => new Map());
+  const [justDisputed, setJustDisputed] = React.useState<ReadonlySet<string>>(() => new Set());
+  const [disputeError, setDisputeError] = React.useState<string | null>(null);
+  const [disputeNotice, setDisputeNotice] = React.useState<string | null>(null);
+  const [stage, setStage] = React.useState<DisputeStage>("idle");
+  const busy = stage !== "idle";
+
+  // A window that closes while the page is open, or a row that now reads Disputed, leaves the selection.
+  React.useEffect(() => {
+    setSelected((current) => pruneDisputeSelection(current, rows, nowSeconds, viewingOwnStake));
+  }, [rows, nowSeconds, viewingOwnStake]);
+
+  // Another address: nothing from the last one's dispute applies.
+  React.useEffect(() => {
+    setRefusals(new Map());
+    setJustDisputed(new Set());
+    setDisputeError(null);
+    setDisputeNotice(null);
+  }, [checking]);
+
+  const selectableRows = React.useMemo(
+    () => visible.filter((row) => isDisputeSelectable(row, nowSeconds, viewingOwnStake)),
+    [visible, nowSeconds, viewingOwnStake],
+  );
+  const offerDispute = viewingOwnStake && ownAddress !== null;
+  const limitReached = selected.size >= MAX_DISPUTE_SELECTION;
+
+  const toggle = (row: (typeof rows)[number]) => {
+    const result = toggleDisputeSelection(selected, row, nowSeconds, viewingOwnStake);
+    setSelected(result.selected);
+    setDisputeNotice(null);
+  };
+
+  const disputeSelected = async () => {
+    if (!ownAddress || selected.size === 0) return;
+    const requestIds = [...selected];
+    setDisputeError(null);
+    setDisputeNotice(null);
+    setRefusals(new Map());
+
+    setStage("building");
+    let call;
+    try {
+      call = await createSlashDisputeIntent({ chainId: DEPLOYMENT.chainId, requestIds });
+    } catch (error) {
+      const refused = refusalsOf(error);
+      if (refused && refused.length > 0) setRefusals(refusalsById(refused, "provider"));
+      setDisputeError(disputeErrorMessage(error, DEPLOYMENT.displayName));
+      setStage("idle");
+      return;
+    }
+
+    const mismatch = disputeCallMismatch(call, DEPLOYMENT, ownAddress, requestIds);
+    if (mismatch) {
+      setDisputeError(
+        `Nothing was sent: the transaction Assay prepared is not the dispute you asked for — ${mismatch}. Dispute from the case page or contact Assay support, and check this page again.`,
+      );
+      setStage("idle");
+      return;
+    }
+    if (signerState.status !== "ready") {
+      setDisputeError(
+        signerState.status === "hydrating"
+          ? "Your wallets are still loading. Nothing was sent; try again in a moment."
+          : `Nothing was sent: connect your stake wallet ${ownAddress}. It is the only account the contract accepts a dispute from.`,
+      );
+      setStage("idle");
+      return;
+    }
+
+    setStage("sending");
+    try {
+      await sendSlashContractCall(call, signerState.signer);
+    } catch (error) {
+      setDisputeError(
+        isUserRejection(error)
+          ? "Nothing was sent: the wallet prompt was closed or declined."
+          : `The dispute did not go through. ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
+      );
+      setStage("idle");
+      return;
+    }
+
+    setJustDisputed(new Set(requestIds));
+    setSelected(new Set());
+    setDisputeNotice(
+      `Disputed — awaiting Assay's arbiter. ${requestIds.length === 1 ? "The penalty" : `All ${requestIds.length} penalties`} can no longer be executed while the dispute stands.`,
+    );
+    setStage("refreshing");
+    try {
+      await chain.refetch();
+    } finally {
+      setStage("idle");
+    }
+  };
   // The address box holds something that is not an address: the list below is
   // still the previous address's, so it is dimmed and says so.
   const listIsStale = draftError !== null;
@@ -165,8 +308,21 @@ function PenaltiesOnChainContent() {
           </p>
           <p>
             A pending penalty only reserves part of your stake. It can be executed, and the money
-            taken, once its timer ends — 72 hours after it was proposed. If you think a penalty is
-            wrong, dispute it before then.
+            taken, once its timer ends — at the time shown on each penalty, which the chain fixed when
+            it was proposed. If you think a penalty is wrong, dispute it before then.
+          </p>
+          <p>
+            When a penalty is executed, {PENALTY_SPLIT.agentPercent}% goes to the harmed buyers,{" "}
+            {PENALTY_SPLIT.platformPercent}% to Assay and {PENALTY_SPLIT.providerPercent}% stays with you.
+            Every penalty is public on the blockchain, and you can dispute it to a person at Assay, not an
+            automated system, before it can be executed.
+          </p>
+          <p>
+            On your own stake wallet you can dispute pending penalties on chain: select them, up to{" "}
+            {MAX_DISPUTE_SELECTION} at once, and choose &quot;Dispute selected on chain&quot;. Your
+            stake wallet signs the transaction. A disputed penalty cannot be executed until Assay&apos;s
+            arbiter rules; if nobody rules within 30 days, it can be expired and the stake released.
+            This works even while your account is blocked or the contracts are paused.
           </p>
           <p>
             If this list ever disagrees with what Assay shows you elsewhere — in emails, in the case
@@ -320,6 +476,70 @@ function PenaltiesOnChainContent() {
                 </p>
               ) : null}
 
+              {offerDispute && chain.data && (selectableRows.length > 0 || selected.size > 0 || disputeError || disputeNotice) ? (
+                <div className="flex w-full min-w-0 flex-col gap-2 rounded-lg border border-01 bg-02 p-3">
+                  <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2">
+                    <span className="text-label-13 text-01" aria-live="polite">
+                      {selected.size} of {MAX_DISPUTE_SELECTION} selected
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy || selectableRows.length === 0 || limitReached}
+                      onClick={() =>
+                        setSelected(selectAllDisputable(selected, selectableRows, nowSeconds, viewingOwnStake))
+                      }
+                    >
+                      Select all open
+                    </Button>
+                    {selected.size > 0 ? (
+                      <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setSelected(new Set())}>
+                        Clear
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="ml-auto"
+                      disabled={selected.size === 0 || busy}
+                      loading={busy}
+                      onClick={() => void disputeSelected()}
+                    >
+                      {stage === "building"
+                        ? "Preparing…"
+                        : stage === "sending"
+                          ? "Confirm in your wallet…"
+                          : stage === "refreshing"
+                            ? "Reading the chain…"
+                            : "Dispute selected on chain"}
+                    </Button>
+                  </div>
+                  {stage === "sending" ? (
+                    <p className="text-body-xs text-02" role="status">
+                      Sign the dispute in your stake wallet, then wait while the chain confirms it.
+                    </p>
+                  ) : null}
+                  {signerState.status === "address-not-connected" || signerState.status === "no-wallet" ? (
+                    <p className="text-body-xs text-03">
+                      To dispute on chain, connect your stake wallet{" "}
+                      <span className="font-mono [overflow-wrap:anywhere]">{ownAddress}</span>: it is the
+                      only account the contract accepts a dispute from.
+                    </p>
+                  ) : null}
+                  {disputeError ? (
+                    <p className="text-body-13 text-danger-600" role="alert">
+                      {disputeError}
+                    </p>
+                  ) : null}
+                  {disputeNotice ? (
+                    <p className="text-body-13 text-primary-700" role="status">
+                      {disputeNotice}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
               {chain.isLoading ? (
                 <p className="text-body-13 text-03">
                   Reading the chain… this scans every block since the stake contract was deployed, so
@@ -362,6 +582,19 @@ function PenaltiesOnChainContent() {
                       nowSeconds={nowSeconds}
                       match={assayMatchFor(row, viewingOwnStake ? (assay.data ?? null) : null)}
                       viewingOwnStake={viewingOwnStake}
+                      selection={
+                        offerDispute
+                          ? {
+                              notSelectable: notSelectableReason(row, nowSeconds, viewingOwnStake),
+                              selected: selected.has(row.requestId.toLowerCase()),
+                              limitReached,
+                              locked: busy,
+                              onToggle: () => toggle(row),
+                            }
+                          : null
+                      }
+                      refusals={refusals.get(row.requestId.toLowerCase()) ?? []}
+                      justDisputed={justDisputed.has(row.requestId.toLowerCase())}
                     />
                   ))}
                 </ul>

@@ -104,6 +104,16 @@ describe("blockedWriteGuard", () => {
     expect(blockedWriteGuard(true, "DELETE", "/providers/me/slash-requests/lookup")?.code).toBe("ACCOUNT_BLOCKED");
     expect(blockedWriteGuard(true, "POST", "/providers/me/slash-requests")?.code).toBe("ACCOUNT_BLOCKED");
   });
+
+  it("lets a blocked provider build an on-chain dispute, which the chain allows", () => {
+    expect(blockedWriteGuard(true, "POST", "/providers/me/slash-requests/dispute-intent")).toBeNull();
+    expect(
+      blockedWriteGuard(true, "POST", "http://api.test/api/v1/providers/me/slash-requests/dispute-intent"),
+    ).toBeNull();
+    expect(blockedWriteGuard(true, "PUT", "/providers/me/slash-requests/dispute-intent")?.code).toBe(
+      "ACCOUNT_BLOCKED",
+    );
+  });
 });
 
 describe("hasBlockStatusSession", () => {

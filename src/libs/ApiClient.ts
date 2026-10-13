@@ -15,13 +15,22 @@ export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
   readonly path?: string;
+  /** `error.context` from the body, when the backend sends one (see `ApiErrorBody`). */
+  readonly context?: Readonly<Record<string, unknown>>;
 
-  constructor(code: string, message: string, status: number, path?: string) {
+  constructor(
+    code: string,
+    message: string,
+    status: number,
+    path?: string,
+    context?: Readonly<Record<string, unknown>>,
+  ) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.status = status;
     this.path = path;
+    this.context = context;
   }
 }
 
@@ -218,7 +227,17 @@ function toApiError(error: AxiosError): ApiError {
   const body = error.response?.data as Partial<ApiErrorBody> | undefined;
   const inner = body?.error;
   if (inner?.code) {
-    return new ApiError(inner.code, inner.message, inner.statusCode ?? error.response?.status ?? 0, inner.path);
+    const context =
+      inner.context && typeof inner.context === "object" && !Array.isArray(inner.context)
+        ? inner.context
+        : undefined;
+    return new ApiError(
+      inner.code,
+      inner.message,
+      inner.statusCode ?? error.response?.status ?? 0,
+      inner.path,
+      context,
+    );
   }
   return new ApiError(
     error.code ?? "NETWORK_ERROR",
