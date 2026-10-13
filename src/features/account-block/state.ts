@@ -127,9 +127,14 @@ const WRITE_ALLOWED_PREFIXES: readonly string[] = ["/auth/"];
  * read-only (`@BlockedSessionReadOnly`) and lets a blocked session through.
  * `POST /providers/me/slash-requests/lookup` is a POST only for its body: the
  * penalties page uses it to match on-chain penalties to Assay cases, which a
- * blocked provider needs most.
+ * blocked provider needs most. `POST /providers/me/slash-requests/dispute-intent`
+ * only builds an unsigned transaction: the chain lets a blocked provider
+ * dispute a penalty, and so does the backend.
  */
-const READ_ONLY_POSTS: ReadonlySet<string> = new Set(["/providers/me/slash-requests/lookup"]);
+const READ_ONLY_POSTS: ReadonlySet<string> = new Set([
+  "/providers/me/slash-requests/lookup",
+  "/providers/me/slash-requests/dispute-intent",
+]);
 
 export const BLOCKED_WRITE_MESSAGE =
   "Your account is blocked by Assay. You can view your data, but you cannot make payments or changes. Contact Assay support.";

@@ -2,6 +2,7 @@ import type {
   SlashProposalCaseDetail,
   SlashRequestLookup,
 } from "@/interfaces/provider-slash-cases";
+import type { DisputeSlashRequestsBody, SlashContractCall } from "@/interfaces/slash-dispute";
 
 import { api } from "./api";
 
@@ -74,4 +75,19 @@ export function lookupSlashRequests(requestIds: readonly string[]): Promise<Slas
   return api.post<SlashRequestLookup>("/providers/me/slash-requests/lookup", {
     requestIds,
   });
+}
+
+/**
+ * `POST /providers/me/slash-requests/dispute-intent` — the unsigned
+ * `disputeSlashBatch` for the signed-in provider's own stake wallet, 1 to 64
+ * ids. Builds only: nothing changes until the provider's wallet sends it.
+ *
+ * Open to a blocked provider (`@BlockedSessionReadOnly` on the backend, and in
+ * `READ_ONLY_POSTS` here), because the chain lets a blocked provider dispute.
+ *
+ * - `422 SLASH_CHAIN_BATCH_REFUSED` — one or more ids would revert the batch;
+ *   see `features/chain-calls/refusals.ts`.
+ */
+export function createSlashDisputeIntent(body: DisputeSlashRequestsBody): Promise<SlashContractCall> {
+  return api.post<SlashContractCall>("/providers/me/slash-requests/dispute-intent", body);
 }

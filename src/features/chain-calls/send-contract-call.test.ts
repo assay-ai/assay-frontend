@@ -1,0 +1,98 @@
+import { describe, expect, it, vi } from "vitest";
+
+import type { Signer } from "@/hooks/useSigner";
+import type { Eip155UnsignedTransaction } from "@/interfaces/chain-transaction";
+import type { SlashContractCall } from "@/interfaces/slash-dispute";
+
+import { connectedSpelling, sendSlashContractCall, signerMatches, signerRoleLabel } from "./send-contract-call";
+
+const ARBITER = "0x2222222222222222222222222222222222222222";
+const CHECKSUMMED = "0x18A508C9AF1c6fc512015276F6ca2E9aaBd74680";
+
+const call = (overrides: Partial<SlashContractCall> = {}): SlashContractCall => ({
+  chainId: "eip155:46630",
+  to: "0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c",
+  data: "0xabcdef",
+  value: "0",
+  signer: ARBITER,
+  signerRole: "ARBITER",
+  functionName: "upholdSlashBatch",
+  requestIds: [`0x${"1".repeat(64)}`],
+  ...overrides,
+});
+
+function signer(address: string) {
+  const signAndSend = vi.fn(async (_tx: Eip155UnsignedTransaction) => `0x${"f".repeat(64)}`);
+  return { signer: { address, signAndSend } as unknown as Signer, signAndSend };
+}
+
+const filled: Eip155UnsignedTransaction = {
+  namespace: "eip155",
+  chainId: "eip155:46630",
+  kind: "transaction",
+  from: ARBITER,
+  to: "0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c",
+  data: "0xabcdef",
+  value: "0",
+  nonce: "1",
+  gasLimit: "100000",
+  maxFeePerGas: "1",
+  maxPriorityFeePerGas: "1",
+};
+
+describe("signerMatches", () => {
+  it("matches the same address whatever its case", () => {
+    expect(signerMatches(CHECKSUMMED.toLowerCase(), { signer: CHECKSUMMED })).toBe(true);
+    expect(signerMatches(CHECKSUMMED, { signer: CHECKSUMMED.toLowerCase() })).toBe(true);
+  });
+
+  it("refuses another address, no wallet, and anything that is not an address", () => {
+    expect(signerMatches(ARBITER, { signer: CHECKSUMMED })).toBe(false);
+    expect(signerMatches(null, { signer: CHECKSUMMED })).toBe(false);
+    expect(signerMatches("7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU", { signer: CHECKSUMMED })).toBe(false);
+  });
+});
+
+describe("connectedSpelling", () => {
+  it("returns the connected wallet's own spelling of the wanted address", () => {
+    expect(connectedSpelling(["0xabc", CHECKSUMMED.toLowerCase()], CHECKSUMMED)).toBe(CHECKSUMMED.toLowerCase());
+    expect(connectedSpelling([], CHECKSUMMED)).toBe(CHECKSUMMED);
+  });
+});
+
+describe("signerRoleLabel", () => {
+  it("names the three roles", () => {
+    expect(signerRoleLabel("PROVIDER")).toMatch(/stake wallet/);
+    expect(signerRoleLabel("ARBITER")).toBe("The arbiter");
+    expect(signerRoleLabel("ADMIN")).toBe("The settlement admin");
+    expect(signerRoleLabel("OTHER")).toMatch(/Unknown/);
+  });
+});
+
+describe("sendSlashContractCall", () => {
+  it("fills, sends from the signer and waits for the receipt", async () => {
+    const { signer: s, signAndSend } = signer(ARBITER);
+    const fill = vi.fn(async () => filled);
+    const wait = vi.fn(async () => undefined);
+    await expect(sendSlashContractCall(call(), s, { fill, wait })).resolves.toBe(`0x${"f".repeat(64)}`);
+    expect(fill).toHaveBeenCalledWith({ chainId: "eip155:46630", from: ARBITER, to: call().to, data: "0xabcdef" });
+    expect(signAndSend).toHaveBeenCalledWith(filled);
+    expect(wait).toHaveBeenCalledWith("eip155:46630", `0x${"f".repeat(64)}`, "upholdSlashBatch");
+  });
+
+  it("refuses, before the wallet is asked, a wallet that is not the signer", async () => {
+    const { signer: s, signAndSend } = signer(CHECKSUMMED);
+    const fill = vi.fn(async () => filled);
+    await expect(sendSlashContractCall(call(), s, { fill, wait: vi.fn() })).rejects.toThrow(/must be sent from/);
+    expect(fill).not.toHaveBeenCalled();
+    expect(signAndSend).not.toHaveBeenCalled();
+  });
+
+  it("refuses a call that carries value", async () => {
+    const { signer: s, signAndSend } = signer(ARBITER);
+    await expect(
+      sendSlashContractCall(call({ value: "1" }), s, { fill: vi.fn(async () => filled), wait: vi.fn() }),
+    ).rejects.toThrow(/takes no value/);
+    expect(signAndSend).not.toHaveBeenCalled();
+  });
+});
