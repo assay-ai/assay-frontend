@@ -151,8 +151,8 @@ export default function DemoPage() {
       <Shell>
         <Banner
           tone="primary"
-          title="The live demo is not configured on this deployment"
-          description="No demo credential has been provisioned here, so there is nothing to run. This is a configuration state, not a fault."
+          title="The live demo is not available yet"
+          description="There is nothing to run here yet. Nothing is broken."
         />
         <p className="text-body-13 text-02">
           You can still read{" "}

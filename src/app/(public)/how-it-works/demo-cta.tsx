@@ -33,11 +33,11 @@ export function DemoCta() {
     return (
       <span
         aria-disabled="true"
-        title="The live demo is not set up on this deployment"
+        title="The live demo is not available yet"
         className={`${BASE} cursor-not-allowed bg-03 text-03`}
       >
         <Play aria-hidden="true" className="h-[15px] w-[15px]" />
-        Live demo not available here
+        Live demo not available yet
       </span>
     );
   }

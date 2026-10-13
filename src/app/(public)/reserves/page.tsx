@@ -1,6 +1,7 @@
 "use client";
 
 import { Code2, ExternalLink } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { Banner } from "@/components/ui/banner";
@@ -45,7 +46,7 @@ import { formatMoney } from "@/utils/money";
  *
  * | Condition                  | What the page says                          |
  * |----------------------------|---------------------------------------------|
- * | fetch 404s                 | not configured on this deployment           |
+ * | not served here            | proof of reserves is not available yet      |
  * | `NO_RECONCILIATION`        | no reconciliation has run yet               |
  * | `LAST_CHECK_FAILED`        | the last check failed; figures not current  |
  *
@@ -166,16 +167,27 @@ export default function ReservesPage() {
     );
   }
 
-  // Not an error state — the deployment simply names no asset, so the route is
-  // not registered. Rendering empty tiles here would read as zero reserves.
+  // Not an error state — this deployment publishes no reserves page. Rendering
+  // empty tiles here would read as zero reserves.
   if (configured === false || data === null) {
     return (
       <Shell>
         <Banner
           tone="primary"
-          title="Proof of reserves is not configured on this deployment"
-          description="No asset has been named for this page, so there is nothing to publish. This is a configuration state, not a shortfall."
+          title="Proof of reserves is not available yet"
+          description="We are not publishing reserve figures here yet, so there is nothing to show. That is not a shortfall."
         />
+        <p className="text-body-13 text-02">
+          You can still read{" "}
+          <Link href="/how-it-works" className="text-primary-500 underline">
+            how a call is checked before it is charged
+          </Link>{" "}
+          or browse{" "}
+          <Link href="/catalogue" className="text-primary-500 underline">
+            the tools and prices
+          </Link>
+          .
+        </p>
       </Shell>
     );
   }
