@@ -5,6 +5,8 @@ import { Check, Info, TriangleAlert, X } from "lucide-react";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
+import { BindingNav } from "@/features/provider-binding/binding-nav";
+
 import { Button } from "@/components/ui/button";
 import {
   Panel,
@@ -417,6 +419,8 @@ export default function SlaWorkbenchPage() {
           </>
         }
       />
+
+      <BindingNav bindingId={bindingId} />
 
       <Note tone="warning" icon={<TriangleAlert aria-hidden="true" className="size-[15px]" />}>
         This screen assumes the declared SLA is published to agents and carries a routing term.

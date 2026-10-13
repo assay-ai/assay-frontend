@@ -3,6 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChartSpline, List, Pause, Play } from "lucide-react";
 import Link from "next/link";
+
+import { BindingNav } from "@/features/provider-binding/binding-nav";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
@@ -392,6 +394,8 @@ export default function LiveSlaPositionPage() {
           {pauseButton()}
         </div>
       </header>
+
+      <BindingNav bindingId={bindingId} />
 
       {/* ── State ────────────────────────────────────── */}
       <section className="flex w-full flex-col items-start gap-2.5 rounded-lg border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:gap-3.5 tablet:rounded-xl tablet:px-5 tablet:py-4">

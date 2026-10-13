@@ -5,6 +5,8 @@ import { Check, Rocket, TriangleAlert } from "lucide-react";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
+import { BindingNav } from "@/features/provider-binding/binding-nav";
+
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
@@ -176,6 +178,8 @@ export default function FreeTierPage() {
           </Button>
         }
       />
+
+      <BindingNav bindingId={bindingId} />
 
       <div className="flex w-full flex-col items-start gap-4 desktop:flex-row">
         <Panel className="flex-1">

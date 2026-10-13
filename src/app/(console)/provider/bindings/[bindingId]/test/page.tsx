@@ -5,6 +5,8 @@ import { CircleCheck, CircleX, Play, RefreshCw, TriangleAlert } from "lucide-rea
 import { useParams } from "next/navigation";
 import * as React from "react";
 
+import { BindingNav } from "@/features/provider-binding/binding-nav";
+
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -526,6 +528,8 @@ export default function MappingTesterPage() {
           </Button>
         </div>
       </header>
+
+      <BindingNav bindingId={bindingId} />
 
       {/* Case. The design's case picker has no data source; the slot
           carries the arguments document the run actually posts. */}

@@ -3,6 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileCode, FlaskConical, GitBranch, Rocket, Save, TriangleAlert } from "lucide-react";
 import Link from "next/link";
+
+import { BindingNav } from "@/features/provider-binding/binding-nav";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
@@ -593,6 +595,8 @@ export default function BindingConfigurationPage() {
           </>
         }
       />
+
+      <BindingNav bindingId={binding.id} />
 
       {/*
         the binding editor design ends this note with a sentence advertising an `x402
