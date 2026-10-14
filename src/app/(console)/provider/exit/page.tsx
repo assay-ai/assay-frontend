@@ -958,7 +958,7 @@ function ProveAuthoritySheet({
       const result = await proveStakeAuthority({
         challengeId: issued.challengeId,
         // Typed data on eip155 (hex back), the message on Solana (base58 back).
-        signature: await signProofChallenge(signer, issued),
+        signature: await signProofChallenge(signer, issued, "STAKE_AUTHORITY"),
       });
       setWallet("idle");
       setSignature("");
