@@ -178,7 +178,24 @@ export interface SlashProposalClocks {
    */
   chainExecutableAt?: string | null;
   /** The mirrored on-chain lifecycle. `undefined` on older backends. */
-  chainStatus?: "NONE" | "PROPOSING" | "PENDING" | "EXECUTED" | "CANCELLED" | "REFUSED";
+  chainStatus?:
+    | "NONE"
+    | "PROPOSING"
+    | "PENDING"
+    | "CANCEL_REQUESTED"
+    | "DISPUTED"
+    | "EXECUTED"
+    | "CANCELLED"
+    | "REFUSED";
+  /**
+   * The chain's `disputedAt`, mirrored: when the provider disputed the record
+   * on chain. A record is disputed at most once, so it stays set after an
+   * uphold — `PENDING` with this set is an upheld dispute. `undefined` on
+   * older backends.
+   */
+  chainDisputedAt?: string | null;
+  /** How many of the case's current parts are `Disputed` on chain. `undefined` on older backends. */
+  chainDisputedParts?: number;
   secondsRemaining: number | null;
   runningClock: SlashProposalRunningClock;
 }

@@ -52,6 +52,33 @@ export interface ProviderMe {
   status: ProviderStatus;
   tier: ProviderTier;
   stats: ProviderStats;
+  /**
+   * The chains this provider is on a slash hold on: its paid bindings are not
+   * routed there while its penalties cannot be collected. Empty when none;
+   * absent from a backend before the hold existed.
+   */
+  slashHolds?: ProviderSlashHold[];
+}
+
+/**
+ * assay-backend `src/modules/provider/domain/slash-hold.ts` `SlashHoldReason`.
+ *
+ * - `SLASH_WINDOW_FULL`: the rolling slash window (the provider's or the
+ *   verifier key's) is full and an upheld penalty is waiting to execute.
+ * - `STAKE_FULLY_RESERVED`: pending penalties reserve the stake that could
+ *   back another one.
+ * - `BONDED_BELOW_MINIMUM`: the bonded stake is below `minimumStake`.
+ */
+export type SlashHoldReason = "SLASH_WINDOW_FULL" | "STAKE_FULLY_RESERVED" | "BONDED_BELOW_MINIMUM";
+
+/** `ProviderSlashHoldDto` — one chain's hold, for the provider console's banner. */
+export interface ProviderSlashHold {
+  /** CAIP-2, e.g. `eip155:46630`. */
+  chainId: string;
+  /** A newer backend may add a reason; it is shown as it came. */
+  reasons: (SlashHoldReason | string)[];
+  /** ISO-8601. */
+  heldSince: string;
 }
 
 /** `ProviderContactDto` — a human, typed. Not a role alias, not free text. */

@@ -40,6 +40,7 @@ import {
 import { cn } from "@/utils";
 import { getProviderRegistration } from "@/services/provider-registration.service";
 import { chainIdOfAsset, chainLabel } from "@/utils/chain";
+import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 
 /**
  * `/provider/bindings/new` — the screen that creates a binding.
@@ -347,6 +348,8 @@ function ToolOption({
 // ── The screen ─────────────────────────────────────────────────────────────
 
 export default function NewToolBindingPage() {
+  // Blocked by Assay: the main write action is disabled (the API refuses it anyway).
+  const readOnly = useAccountReadOnly();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -568,7 +571,7 @@ export default function NewToolBindingPage() {
             </Button>
             <Button
               icon={<Plug aria-hidden="true" />}
-              disabled={!body || mappingBlocked !== null}
+              disabled={readOnly || !body || mappingBlocked !== null}
               title={mappingBlocked ? `Fix this first: ${mappingBlocked}` : undefined}
               loading={create.isPending}
               onClick={() => body && !mappingBlocked && create.mutate(body)}

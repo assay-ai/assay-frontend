@@ -1,6 +1,8 @@
 import type { BadgeVariant } from "@/components/ui/badge";
+import { stampUtc } from "@/features/g34a/stats";
 import type { Money } from "@/interfaces/api";
 import type { OperatorRole, SlashProposalStatus } from "@/interfaces/operator";
+import { cancelSignerOf } from "@/libs/chains/status-labels";
 import { formatMoney } from "@/utils/money";
 
 import { SWEEPABLE_OUTCOMES } from "./reason-codes";
@@ -66,7 +68,7 @@ export function caseStatusLabel(status: SlashProposalStatus): string {
 }
 
 /**
- * What this token may do.
+ * What this operator may do.
  *
  * Read off `GET /operator/me` rather than assumed, so the console never offers
  * an action the guard will refuse. Mirrors the `@RequireRoles` decorators on
@@ -82,8 +84,7 @@ const ACTION_ROLES = {
   /*
     `compensate` inherits `reverse`'s roles unchanged — the act it replaces is
     the same act, and `TRE` is here because the treasury is the account that
-    actually pays. What it no longer inherits is the second operator token: see
-    `TWO_PERSON_ACTIONS` below.
+    actually pays. Its record half is two-person: see `TWO_PERSON_ACTIONS`.
   */
   compensate: ["ADJL", "TRE"],
   /* `cancel-intent` guards the same pair as `compensation-intent`. */
@@ -103,25 +104,146 @@ export function may(roles: readonly OperatorRole[], action: OperatorAction): boo
  * `compensate` keeps `reverse`'s `EXECUTED`: nothing was taken from a provider
  * whose penalty never executed, so there is nothing to put back.
  *
- * `cancel` is legal in `CANCEL_REQUESTED` and nowhere else. That status exists
- * precisely because the backend cannot cancel on chain by itself any more — it
- * records the overturn and parks the case there until the admin signs.
+ * `cancel` is not here: it is gated on the on-chain record, see
+ * {@link isCancelRequested}.
  */
-const ACTION_STATUSES: Record<Exclude<OperatorAction, "sweep">, readonly SlashProposalStatus[]> = {
+export type StatusGatedAction = Exclude<OperatorAction, "sweep" | "cancel">;
+
+const ACTION_STATUSES: Record<StatusGatedAction, readonly SlashProposalStatus[]> = {
   claim: ["DISPUTED", "UNDER_REVIEW", "AWAITING_SECOND"],
   decide: ["DISPUTED", "UNDER_REVIEW"],
   second: ["AWAITING_SECOND"],
   suspend: ["PROPOSED", "DISPUTED", "UNDER_REVIEW", "AWAITING_SECOND", "UPHELD"],
   extendDeadline: ["PROPOSED"],
   compensate: ["EXECUTED"],
-  cancel: ["CANCEL_REQUESTED"],
 };
 
-export function isLegalInStatus(
-  action: Exclude<OperatorAction, "sweep">,
-  status: SlashProposalStatus,
-): boolean {
+export function isLegalInStatus(action: StatusGatedAction, status: SlashProposalStatus): boolean {
   return ACTION_STATUSES[action].includes(status);
+}
+
+/**
+ * `cancel` is gated on the **on-chain record**, not the case status.
+ *
+ * The backend's `buildCancelIntent` checks `chain_status === CANCEL_REQUESTED`
+ * and nothing else about the case. That value is never a case status — an
+ * overturned case waiting for the settlement admin still reads `OVERTURNED` —
+ * so a status gate could never offer the action. The brief carries the chain
+ * status for exactly this question.
+ */
+export function isCancelRequested(chainStatus: string | null | undefined): boolean {
+  return chainStatus === "CANCEL_REQUESTED";
+}
+
+/**
+ * How many of the case's parts are disputed on chain (`chainDisputedParts`,
+ * audit E-4), in words, or `null` when none is. A dispute freezes only its own
+ * part: while any part is still pending the case reads `PENDING` on chain and
+ * those parts keep executing.
+ */
+export function disputedPartsNote(
+  chainStatus: string | null | undefined,
+  chainDisputedParts: number | null | undefined,
+): string | null {
+  if (!chainDisputedParts || chainDisputedParts <= 0) return null;
+  const parts = `${chainDisputedParts} part${chainDisputedParts === 1 ? "" : "s"}`;
+  if (chainStatus === "PENDING") {
+    return `partly disputed: ${parts} disputed on chain, the other parts keep executing`;
+  }
+  return `${parts} disputed on chain`;
+}
+
+/**
+ * The deadline that comes with a requested on-chain cancel, in plain words.
+ *
+ * `CANCEL_REQUESTED` means the platform has asked for the cancel and nothing
+ * more: the record still stands on chain until its signer signs — the arbiter
+ * on EVM, the program admin on Solana (`cancelSignerOf`; `chain` is the case
+ * penalty's CAIP-19 asset or a CAIP-2 chain id) — and
+ * from its executable time **anyone** can execute the penalty. The brief
+ * carries that time (`chainExecutableAt`); an older backend does not, and the
+ * warning is then given without it rather than dropped.
+ *
+ * `null` for every other chain status — there is no cancel waiting.
+ */
+export function cancelDeadlineNotice(
+  chainStatus: string | null | undefined,
+  chainExecutableAt: string | null | undefined,
+  now: Date,
+  chain?: string | null,
+): { overdue: boolean; text: string } | null {
+  if (!isCancelRequested(chainStatus)) return null;
+  const signer = cancelSignerOf(chain);
+
+  const at = chainExecutableAt ? new Date(chainExecutableAt).getTime() : Number.NaN;
+  if (!chainExecutableAt || Number.isNaN(at)) {
+    return {
+      overdue: false,
+      text:
+        `The cancel must be signed by ${signer} before the on-chain record becomes `
+        + "executable. After that anyone can execute the penalty.",
+    };
+  }
+  if (now.getTime() >= at) {
+    return {
+      overdue: true,
+      text:
+        `The on-chain record became executable at ${stampUtc(chainExecutableAt)} UTC and the `
+        + `cancel has not landed: anyone can execute the penalty now. Get ${signer}'s `
+        + "signature immediately.",
+    };
+  }
+  return {
+    overdue: false,
+    text:
+      `The cancel must be signed by ${signer} before ${stampUtc(chainExecutableAt)} `
+      + "UTC. After that anyone can execute the penalty.",
+  };
+}
+
+/**
+ * What a successful Suspend tells the operator about the chain.
+ *
+ * `chainStatus` is the on-chain record's status **before** the suspension. The
+ * backend closes the case and then requests the cancel of a standing record
+ * (`PENDING` → `CANCEL_REQUESTED`); it signs nothing, so the suspension is not
+ * finished until the cancel's signer has signed: the arbiter on EVM, the
+ * program admin on Solana (`cancelSignerOf`).
+ */
+export function suspendedNotice(chainStatus: string | null | undefined, chain?: string | null): string {
+  const signer = cancelSignerOf(chain);
+  switch (chainStatus) {
+    case "PENDING":
+    case "CANCEL_REQUESTED":
+      return (
+        "Proposal suspended. The on-chain cancel has been requested and still needs "
+        + `${signer}'s signature.`
+      );
+    case "PROPOSING":
+      return (
+        "Proposal suspended. A proposal was being written on chain; its cancel is requested when "
+        + `it lands and will need ${signer}'s signature.`
+      );
+    case "NONE":
+    case "REFUSED":
+    case "CANCELLED":
+      return "Proposal suspended. Nothing stands on chain for it, so there is nothing to cancel.";
+    default:
+      return (
+        "Proposal suspended. If a record stands on chain, its cancel has been requested and "
+        + `still needs ${signer}'s signature.`
+      );
+  }
+}
+
+/**
+ * Whether a Suspend is two-person. From `AWAITING_SECOND` and `UPHELD` a
+ * second person has confirmed the penalty or is confirming it, so the backend
+ * raises `S-1` to two-person and answers `202 { approvalId }`; in the earlier
+ * statuses one operator suspends alone.
+ */
+export function suspendIsTwoPerson(status: SlashProposalStatus): boolean {
+  return status === "AWAITING_SECOND" || status === "UPHELD";
 }
 
 /**
@@ -144,22 +266,11 @@ export function isSweepable(outcome: string | null): boolean {
 }
 
 /**
- * The actions that need a second operator's token in `X-Operator-Approver`.
- *
- * `compensate` is here because it inherited `reverse`'s override-register row
- * `S-5` — but only **half** of it does. The action is two calls with different
- * guards: `compensation-intent` is `@OverrideExempt` (unsigned bytes nobody has
- * signed change nothing, so there is nothing for a maker/checker pair to
- * guard), and `compensated` is the `S-5` write that closes the case.
- *
- * The chain signature and the approver token answer different questions, which
- * is why the multisig does not make the token redundant: the signature says the
- * treasury moved the money, the token says two of our people agreed to close
- * the case on the strength of it. Neither substitutes for the other.
- *
- * A per-action list cannot express "the second call only", so the panel is
- * where that lives — the approver field renders on the record step and not on
- * the build step.
+ * The case actions that are two-person on the backend: answered
+ * `202 { approvalId }` and run once a second operator approves them in the
+ * approvals inbox. For `compensate` only the record half (`compensated`,
+ * `S-5`) is; building the deposit is `@OverrideExempt`, because unsigned bytes
+ * change nothing.
  */
 export const TWO_PERSON_ACTIONS: readonly OperatorAction[] = Object.freeze([
   "sweep",
@@ -186,7 +297,7 @@ export function exceedsAuthority(limit: Money | null, amountMinor: string): bool
 
 /** Why an action above the authority limit is withheld — in money, not minor units. */
 export function authorityRefusal(limit: Money, amount: Money): string {
-  return `the penalty is ${formatMoney(amount)} and this token's authority limit is ${formatMoney(limit)}`;
+  return `the penalty is ${formatMoney(amount)} and your authority limit is ${formatMoney(limit)}`;
 }
 
 /**

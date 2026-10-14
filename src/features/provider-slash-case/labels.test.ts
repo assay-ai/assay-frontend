@@ -73,7 +73,7 @@ describe("presentArithmeticRow", () => {
       money,
     );
     expect(out.value).toBe("—");
-    expect(out.note).toMatch(/applied when the penalty is taken/);
+    expect(out.note).toMatch(/never pays less.*paid in full\.$/);
   });
 
   it("puts the excluded agent's id behind words", () => {

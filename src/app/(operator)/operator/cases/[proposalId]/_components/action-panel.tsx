@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,9 @@ import {
   PanelTitles,
 } from "@/components/ui/panel";
 import { Radio } from "@/components/ui/radio";
+import { signerRoleLabel } from "@/features/chain-calls/send-contract-call";
+import { arbiterErrorMessage } from "@/features/operator/arbiter";
+import { ContractCallPanel } from "@/features/operator/contract-call-panel";
 import {
   ALL_OUTCOMES,
   DECISION_NOTE_MIN_LENGTH,
@@ -32,20 +36,29 @@ import {
   runOperatorIntent,
   signerIsHolder,
 } from "@/features/operator/run-operator-intent";
+import { approverRolesFor } from "@/features/operator/approvals";
+import { QueuedNotice } from "@/features/operator/queued-notice";
 import { useOperatorSession } from "@/features/operator/session-context";
 import {
   asProposalStatus,
   authorityRefusal,
+  cancelDeadlineNotice,
   caseStatusLabel,
   exceedsAuthority,
+  isCancelRequested,
   isLegalInStatus,
   isSweepable,
   may,
   RECALCULATED_AMOUNT_PATTERN,
+  suspendedNotice,
+  suspendIsTwoPerson,
   type OperatorAction,
+  type StatusGatedAction,
 } from "@/features/operator/state";
+import { queuedMessage } from "@/features/operator/two-person";
 import { isUserRejection, useSigner } from "@/hooks/useSigner";
 import type {
+  ApprovalQueued,
   ArbitrationOutcome,
   CancelIntent,
   CompensationIntent,
@@ -59,7 +72,9 @@ import type {
   SlashProposalStatus,
   SuspendProposalBody,
 } from "@/interfaces/operator";
+import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
+import { chainStatusLabel } from "@/libs/chains/status-labels";
 import {
   claimCase,
   createCancelIntent,
@@ -82,7 +97,7 @@ import { toast } from "@/utils/toast";
  * eventually moves money on chain. So the panel offers an action only when
  * **both** gates say yes:
  *
- *  - `may(roles, action)` — what this token's roles permit. Read off
+ *  - `may(roles, action)` — what your roles permit. Read off
  *    `GET /operator/me` via the session context, never a hardcoded role test.
  *  - `isLegalInStatus(action, status)` — what the proposal's current status
  *    permits. Those lists were read off the backend's own state machine.
@@ -114,21 +129,15 @@ import { toast } from "@/utils/toast";
  * cancellation, because the reconcile sweep mirrors the on-chain record and
  * moves the case to `CANCELLED` by itself.
  *
- * ## The approver's token is held, never kept
+ * ## Two-person actions are queued, not run
  *
- * `sweep` and the **record half** of `compensate` collect one. The build halves
- * of `compensate` and `cancel` do not, and that asymmetry is the backend's:
- * both intent routes are `@OverrideExempt` because unsigned bytes change
- * nothing, while `compensated` is override-register row `S-5` — the same row
- * the `reverse` it replaces occupied. So the field renders on the record step
- * and not on the build step, rather than once for the whole section.
- *
- * It is written nowhere else:
- * not `localStorage`, not the query cache, not a query key, not a log line, not
- * a toast, and deliberately **not** a react-query mutation variable (those
- * outlive the call on the mutation object). Both `mutationFn`s close over the
- * state instead. It is cleared on every section toggle, on success, and on
- * unmount.
+ * `sweep`, the **record half** of `compensate`, and `suspend` from `UPHELD` or
+ * `AWAITING_SECOND` are two-person. Submitted here they run nothing: the
+ * backend answers `202 { approvalId }` and the action waits in the approvals
+ * inbox for a different operator, who approves it with their own sign-in. The
+ * panel then shows "Sent for approval" with a link, never a result. The build
+ * halves of `compensate` and `cancel` are `@OverrideExempt`: unsigned bytes
+ * change nothing.
  *
  * ## What the panel deliberately does NOT predict
  *
@@ -168,7 +177,7 @@ import { toast } from "@/utils/toast";
 */
 const OPERATOR_ROLES = Object.keys({
   SRE: 0, ADJ: 0, ADJL: 0, POL: 0, POLA: 0, TRE: 0, TREA: 0,
-  BD: 0, SUP: 0, CMP: 0, SEC: 0,
+  BD: 0, SUP: 0, CMP: 0, SEC: 0, OPS_ADMIN: 0,
 } satisfies Record<OperatorRole, 0>) as OperatorRole[];
 
 const PROPOSAL_STATUSES = Object.keys({
@@ -183,7 +192,7 @@ function rolesPermitting(action: OperatorAction): OperatorRole[] {
 }
 
 /** Which statuses this action is legal in — asked of `state.ts`, not copied from it. */
-function statusesAllowing(action: Exclude<OperatorAction, "sweep">): SlashProposalStatus[] {
+function statusesAllowing(action: StatusGatedAction): SlashProposalStatus[] {
   return PROPOSAL_STATUSES.filter((status) => isLegalInStatus(action, status));
 }
 
@@ -194,7 +203,7 @@ function joinWithOr(parts: readonly string[]): string {
 }
 
 interface Gate {
-  /** True when the token's roles permit it. */
+  /** True when your roles permit it. */
   permitted: boolean;
   /** True when the proposal's status permits it. */
   legal: boolean;
@@ -367,41 +376,12 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
   const [signError, setSignError] = React.useState<string | null>(null);
   const [signing, setSigning] = React.useState(false);
 
-  /*
-    ONE approver token, for `sweep` and for the record step of `compensate`.
+  /** The last two-person action this panel sent for approval. */
+  const [queued, setQueued] = React.useState<ApprovalQueued | null>(null);
 
-    It belongs to a different person than the one signed in, and it is the
-    only credential this screen ever holds that is not the session's own. It
-    lives here and nowhere else: no `localStorage`, no query cache, no query
-    key, no log line, no toast echo, and no mutation variable. The `mutationFn`
-    below close over this value rather than receiving it, because react-query
-    keeps `variables` on the mutation object after the call settles — a place a
-    credential must not be readable from.
-  */
-  const [approverToken, setApproverToken] = React.useState("");
-
-  /*
-    Cleared when the panel unmounts.
-
-    React drops component state on unmount by itself, so this is the second
-    line rather than the only one — but it is the line that also runs on a Fast
-    Refresh remount in development, and it is the one a reader can point at.
-    A credential belonging to another person must not outlive the form that
-    collected it.
-  */
-  React.useEffect(() => () => setApproverToken(""), []);
-
-  /*
-    Toggling ANY section drops the approver token too.
-
-    Only one section is open at a time, so a token pasted into the sweep form
-    and left there would be submitted, unseen, by the compensation form — a
-    two-person control silently reusing an approval given for something else.
-  */
   const toggleSection = React.useCallback((action: OperatorAction) => {
     setFormError(null);
     setSignError(null);
-    setApproverToken("");
     setOpenSection((current) => (current === action ? null : action));
   }, []);
 
@@ -467,6 +447,14 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
         );
         return;
       }
+      /*
+        Only the cancel build meets this: on EVM Assay builds `cancelSlash`
+        for the arbiter alone, so with none appointed there is nothing to build.
+      */
+      if (e.code === "CHAIN_ARBITER_NOT_SET") {
+        toast.error(arbiterErrorMessage(e, "cancel"));
+        return;
+      }
       toast.error(`${e.code} · ${e.message}`);
     },
     [authorityLimit, casePenalty],
@@ -483,13 +471,25 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
 
   const suspend = useMutation({
     mutationFn: (body: SuspendProposalBody) => suspendCase(proposalId, body),
-    onSuccess: () => {
-      toast.success("Proposal suspended.");
+    onSuccess: (answer) => {
       setOpenSection(null);
       setFormError(null);
       setSuspendReasonCode("");
       setSuspendNote("");
       setSuspendTicketRef("");
+      if (answer.kind === "queued") {
+        setQueued(answer.approval);
+        toast.success(queuedMessage(answer.approval));
+        return;
+      }
+      /*
+        A suspension closes the case and only REQUESTS the on-chain cancel. The
+        record stands until the cancel's signer signs (the arbiter on EVM, the
+        program admin on Solana), so the confirmation
+        says so instead of reading as finished. `brief.chainStatus` is still the
+        status from before the suspension here — the refetch below replaces it.
+      */
+      toast.success(suspendedNotice(brief.chainStatus, casePenalty.asset));
       invalidateCase();
     },
     onError: reportError,
@@ -549,16 +549,21 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
     onError: reportError,
   });
 
-  /*
-    The approver token is NOT a mutation variable — `mutationFn` closes over
-    the state, which `useMutation` re-reads on every render. Passing it as a
-    variable would park another operator's credential on `sweep.variables`,
-    readable for as long as this component lives.
-  */
   const sweep = useMutation({
-    mutationFn: (body: OpenFleetSweepBody) =>
-      openFleetSweep(proposalId, body, approverToken.trim()),
-    onSuccess: (result) => {
+    mutationFn: (body: OpenFleetSweepBody) => openFleetSweep(proposalId, body),
+    onSuccess: (answer) => {
+      setOpenSection(null);
+      setFormError(null);
+      setSweepDefectKey("");
+      setSweepLookbackHours("");
+      setSweepReasonCode("");
+      setSweepNote("");
+      if (answer.kind === "queued") {
+        setQueued(answer.approval);
+        toast.success(queuedMessage(answer.approval));
+        return;
+      }
+      const result = answer.result;
       /*
         BOTH counts, always.
 
@@ -570,13 +575,6 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
       toast.success(
         `Fleet sweep opened — ${result.matchedCount} matched, ${result.appliedCount} applied.`,
       );
-      setOpenSection(null);
-      setFormError(null);
-      setSweepDefectKey("");
-      setSweepLookbackHours("");
-      setSweepReasonCode("");
-      setSweepNote("");
-      setApproverToken("");
       invalidateCase();
     },
     onError: reportError,
@@ -600,17 +598,15 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
     onError: reportError,
   });
 
-  /*
-    The approver token is NOT a mutation variable here either — same reason as
-    `sweep`: react-query keeps `variables` on the mutation object after the
-    call settles, and another person's credential must not be readable from
-    there. The `mutationFn` closes over the state instead.
-  */
   const confirmCompensation = useMutation({
-    mutationFn: (body: RecordCompensationBody) =>
-      recordCompensation(proposalId, body, approverToken.trim()),
-    onSuccess: () => {
-      toast.success("Deposit verified on chain. The case is now recorded as compensated.");
+    mutationFn: (body: RecordCompensationBody) => recordCompensation(proposalId, body),
+    onSuccess: (answer) => {
+      if (answer.kind === "queued") {
+        setQueued(answer.approval);
+        toast.success(queuedMessage(answer.approval));
+      } else {
+        toast.success("Deposit verified on chain. The case is now recorded as compensated.");
+      }
       setOpenSection(null);
       setFormError(null);
       setSignError(null);
@@ -619,7 +615,6 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
       setCompensationReasonCode("");
       setCompensationNote("");
       setCompensationTicketRef("");
-      setApproverToken("");
       invalidateCase();
     },
     onError: reportError,
@@ -632,7 +627,11 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
       setCancelSignature(null);
       setSignError(null);
       setFormError(null);
-      toast.success("Transaction built. The judgement is still live until the admin signs it.");
+      toast.success(
+        result.to
+          ? "Transaction built. The judgement is still live until the arbiter signs it."
+          : "Transaction built. The judgement is still live until the admin signs it.",
+      );
     },
     onError: reportError,
   });
@@ -643,7 +642,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>Actions</PanelTitle>
-            <PanelDescription>what this token may do to this case</PanelDescription>
+            <PanelDescription>what you may do to this case</PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="p-4 tablet:p-5">
@@ -659,12 +658,12 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
   }
 
   /** Both gates plus the sentence for failing either. Every action goes through this. */
-  const gate = (action: Exclude<OperatorAction, "sweep">): Gate => {
+  const gate = (action: StatusGatedAction): Gate => {
     const permitted = may(roles, action);
     const legal = isLegalInStatus(action, status);
     let blockedBecause: string | null = null;
     if (!permitted) {
-      blockedBecause = `needs ${joinWithOr(rolesPermitting(action))}; this token holds ${
+      blockedBecause = `needs ${joinWithOr(rolesPermitting(action))}; you hold ${
         roles.length > 0 ? roles.join(", ") : "no roles"
       }`;
     } else if (!legal) {
@@ -691,7 +690,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
       ? {
           ...base,
           offered: false,
-          blockedBecause: `above this token's authority limit — ${authorityRefusal(authorityLimit, casePenalty)}`,
+          blockedBecause: `above your authority limit — ${authorityRefusal(authorityLimit, casePenalty)}`,
         }
       : base;
 
@@ -725,7 +724,39 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
       : baseExtendGate;
 
   const compensateGate = gate("compensate");
-  const cancelGate = gate("cancel");
+
+  /*
+    `cancel` is gated on the on-chain record, not the case status: that is the
+    one thing the backend's cancel-intent guard checks, and an overturned case
+    waiting for the settlement admin still reads OVERTURNED.
+  */
+  const cancelPermitted = may(roles, "cancel");
+  const cancelLegal = isCancelRequested(brief.chainStatus);
+  let cancelBlockedBecause: string | null = null;
+  if (!cancelPermitted) {
+    cancelBlockedBecause = `needs ${joinWithOr(rolesPermitting("cancel"))}; you hold ${
+      roles.length > 0 ? roles.join(", ") : "no roles"
+    }`;
+  } else if (!cancelLegal) {
+    cancelBlockedBecause = `only while the on-chain record is waiting for its cancel (${chainStatusLabel("CANCEL_REQUESTED", casePenalty.asset)}) — it is ${chainStatusLabel(brief.chainStatus, casePenalty.asset)}`;
+  }
+  /*
+    Shown to every operator on the case, not only the roles that may build the
+    cancel: whoever suspended or overturned it has to know the on-chain record
+    is still standing and when it becomes anyone's to execute.
+  */
+  const cancelDeadline = cancelDeadlineNotice(
+    brief.chainStatus,
+    brief.chainExecutableAt,
+    new Date(),
+    casePenalty.asset,
+  );
+  const cancelGate: Gate = {
+    permitted: cancelPermitted,
+    legal: cancelLegal,
+    offered: cancelPermitted && cancelLegal,
+    blockedBecause: cancelBlockedBecause,
+  };
 
   /*
     `sweep` is gated on the OUTCOME, not the status — the only action here
@@ -751,7 +782,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
   const sweepLegal = isSweepable(sourceOutcome);
   const sweepBlockedBecause = (): string | null => {
     if (!sweepPermitted) {
-      return `needs ${joinWithOr(rolesPermitting("sweep"))}; this token holds ${
+      return `needs ${joinWithOr(rolesPermitting("sweep"))}; you hold ${
         roles.length > 0 ? roles.join(", ") : "no roles"
       }`;
     }
@@ -969,13 +1000,6 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
     });
   };
 
-  /*
-    Trimmed for the presence check, and trimmed again in the `mutationFn` that
-    sends it: surrounding whitespace on a pasted bearer token is a paste
-    artefact, and a token that looks present here must be the token that goes
-    on the wire.
-  */
-  const approverTokenValue = approverToken.trim();
   const sweepNoteLength = sweepNote.trim().length;
 
   const submitSweep = () => {
@@ -1001,10 +1025,6 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
       setFormError(
         `The note must be at least ${DECISION_NOTE_MIN_LENGTH} characters — it is ${sweepNoteLength}.`,
       );
-      return;
-    }
-    if (approverTokenValue.length === 0) {
-      setFormError("A second operator's token is required. This action cannot be taken alone.");
       return;
     }
     setFormError(null);
@@ -1082,10 +1102,6 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
       );
       return;
     }
-    if (approverTokenValue.length === 0) {
-      setFormError("A second operator's token is required. This action cannot be taken alone.");
-      return;
-    }
     setFormError(null);
     confirmCompensation.mutate({
       signature,
@@ -1103,15 +1119,41 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
         <PanelTitles>
           <PanelTitle>Actions</PanelTitle>
           <PanelDescription>
-            what this token may do to this case, given its roles and the case&rsquo;s status
+            what you may do to this case, given your roles and the case&rsquo;s status
           </PanelDescription>
         </PanelTitles>
       </PanelHeader>
       <PanelBody className="p-4 tablet:p-5">
+        {queued ? (
+          <div className="mb-3">
+            <QueuedNotice approval={queued} onDismiss={() => setQueued(null)} />
+          </div>
+        ) : null}
+        {cancelDeadline ? (
+          <div
+            role="alert"
+            className={cn(
+              "mb-3 flex w-full flex-col gap-1 rounded-md border p-3",
+              cancelDeadline.overdue
+                ? "border-danger-20 bg-danger-10"
+                : "border-warning-20 bg-warning-10",
+            )}
+          >
+            <p
+              className={cn(
+                "text-label-13",
+                cancelDeadline.overdue ? "text-danger-600" : "text-warning-600",
+              )}
+            >
+              The on-chain cancel has been requested, not signed
+            </p>
+            <p className="text-body-xs text-02">{cancelDeadline.text}</p>
+          </div>
+        ) : null}
         {offered.length === 0 ? (
           <div className="flex w-full flex-col gap-2">
             <p className="text-body-13 text-02">
-              No action is available on this case from this token.
+              No action is available to you on this case.
             </p>
             <ul className="flex w-full flex-col gap-1">
               {gates.map(([action, g]) => (
@@ -1350,7 +1392,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
             {suspendGate.offered ? (
               <Section
                 title="Suspend"
-                description="Cancels the proposal. Not a pause and not reversible from here: the penalty is dropped and the case ends as cancelled."
+                description="Cancels the proposal. Not a pause and not reversible from here: the penalty is dropped and the case ends as cancelled. If a record already stands on chain, its cancel is requested — and it is not cancelled until the settlement admin signs."
                 open={openSection === "suspend"}
                 onToggle={() => toggleSection("suspend")}
               >
@@ -1377,6 +1419,9 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                   maxLength={128}
                   placeholder="e.g. OPS-1187"
                 />
+                {status && suspendIsTwoPerson(status) ? (
+                  <TwoPersonNote code="S-1" extra="with an authority limit that covers the penalty" />
+                ) : null}
                 {formError ? <p className="text-body-xs text-danger-600">{formError}</p> : null}
                 <Button
                   type="button"
@@ -1385,7 +1430,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                   onClick={submitSuspend}
                   className="self-start"
                 >
-                  Suspend proposal
+                  {status && suspendIsTwoPerson(status) ? "Send the suspension for approval" : "Suspend proposal"}
                 </Button>
               </Section>
             ) : null}
@@ -1446,34 +1491,20 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
 
             {sweepGate.offered || compensateGate.offered ? (
               <div className="mt-3 flex w-full flex-col gap-1.5 rounded-md border border-01 bg-02 p-3">
-                <p className="text-label-13 text-01">The next action needs two people</p>
+                <p className="text-label-13 text-01">The next actions need two people</p>
                 <p className="text-body-xs text-02">
-                  This action needs two people. You are authenticated above; a second
-                  operator&rsquo;s credential goes here. The platform refuses the same identity in
-                  both roles.
+                  Submitting one sends it to the{" "}
+                  <Link href="/operator/approvals" className="text-primary-600 hover:underline">
+                    approvals inbox
+                  </Link>
+                  . Nothing runs until a different operator approves it there with their own
+                  sign-in; it is re-checked against the case as it is then. A request nobody
+                  approves expires after 24 hours. A{" "}
+                  <strong className="text-01">409</strong> on a compensation means the slash was
+                  never executed, or was already compensated. Only the <em>recording</em> step is
+                  two-person — building the transaction is exempt, because unsigned bytes change
+                  nothing.
                 </p>
-                <p className="pt-1.5 text-label-13 text-01">The order the platform checks in</p>
-                <ul className="flex w-full flex-col gap-1">
-                  <li className="text-body-xs text-02">
-                    The approver is resolved <strong className="text-01">before</strong> the
-                    case&rsquo;s status is looked at. Pasting your own token returns{" "}
-                    <span className="font-mono text-mono-12 text-01">
-                      OPERATOR_SELF_APPROVAL_REFUSED
-                    </span>{" "}
-                    in any status — that refusal is not evidence the case was sweepable or
-                    compensable.
-                  </li>
-                  <li className="text-body-xs text-02">
-                    An unknown proposal id returns <strong className="text-01">404</strong>, because
-                    the tenant is resolved first.
-                  </li>
-                  <li className="text-body-xs text-02">
-                    A <strong className="text-01">409</strong> on a compensation means the slash was
-                    never executed, or was already compensated. Note that only the{" "}
-                    <em>recording</em> step is two-person — building the transaction is exempt,
-                    because unsigned bytes change nothing.
-                  </li>
-                </ul>
               </div>
             ) : null}
 
@@ -1534,7 +1565,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                     cases are resolved by this form, not by their own.
                   </p>
                 </div>
-                <ApproverField value={approverToken} onChange={setApproverToken} />
+                <TwoPersonNote code="S-11" />
                 {formError ? <p className="text-body-xs text-danger-600">{formError}</p> : null}
                 <Button
                   type="button"
@@ -1567,7 +1598,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                     applied amount into this provider&rsquo;s stake, and only then marks the case
                     compensated. A signature that paid the wrong account is refused, not believed.
                     That step is two-person — the chain signature says the money moved, the note and
-                    the second operator&rsquo;s token say we agreed to close the case on it.
+                    the second operator&rsquo;s approval say we agreed to close the case on it.
                   </p>
                 </div>
 
@@ -1670,7 +1701,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                         undoes this.
                       </p>
                     </div>
-                    <ApproverField value={approverToken} onChange={setApproverToken} />
+                    <TwoPersonNote code="S-5" extra="with an authority limit that covers the amount" />
                     {formError ? <p className="text-body-xs text-danger-600">{formError}</p> : null}
                     <Button
                       type="button"
@@ -1678,7 +1709,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                       onClick={submitCompensated}
                       className="self-start"
                     >
-                      Record the deposit
+                      Send the record for approval
                     </Button>
                   </>
                 )}
@@ -1688,7 +1719,11 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
             {cancelGate.offered ? (
               <Section
                 title="Cancel the judgement on chain"
-                description="This case has been decided against the penalty, and the on-chain record is still standing. Only the program admin's key can retire it — this screen builds the transaction and nothing more."
+                description={
+                  isEvmAsset(casePenalty.asset)
+                    ? "This case was overturned or suspended, and the on-chain record is still standing. Only the arbiter's key can retire it — this screen builds the transaction and nothing more."
+                    : "This case was overturned or suspended, and the on-chain record is still standing. Only the program admin's key can retire it — this screen builds the transaction and nothing more."
+                }
                 open={openSection === "cancel"}
                 onToggle={() => toggleSection("cancel")}
               >
@@ -1700,8 +1735,9 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                     The decision is recorded, but the slash record still holds the provider&rsquo;s
                     collateral and stays executable by anyone once its timelock passes. Building the
                     transaction changes nothing; the admin&rsquo;s signature is what retires it. The
-                    case moves to <span className="font-mono text-mono-12 text-01">CANCELLED</span>{" "}
-                    on its own, when the reconcile sweep sees the record leave{" "}
+                    on-chain record status moves to{" "}
+                    <span className="font-mono text-mono-12 text-01">CANCELLED</span> on its own,
+                    when the reconcile sweep sees the record leave{" "}
                     <span className="font-mono text-mono-12 text-01">Pending</span> — there is
                     nothing to record here afterwards.
                   </p>
@@ -1716,12 +1752,34 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                   >
                     Build the cancellation transaction
                   </Button>
+                ) : cancelIntent.to ? (
+                  /*
+                    EVM: `transaction` is the `cancelSlash` calldata for `to`,
+                    and the signer is always the arbiter (D-19); without one
+                    the build is refused with CHAIN_ARBITER_NOT_SET. Signed
+                    through the same panel the arbiter page uses.
+                  */
+                  <ContractCallPanel
+                    call={evmCancelCall(cancelIntent, casePenalty.asset)}
+                    title={`cancelSlash for ${cancelIntent.requestId}`}
+                    afterSend="The case moves to cancelled once the reconcile sweep reads the record back off the chain."
+                    onSent={setCancelSignature}
+                  />
                 ) : (
                   <>
                     <div className="flex w-full flex-col gap-1.5 rounded-md border border-01 bg-02 p-3">
                       <IntentRow label="Provider" value={cancelIntent.provider} />
                       <IntentRow label="Request id" value={cancelIntent.requestId} />
                       <IntentRow label="Must be signed by" value={cancelIntent.admin} />
+                      {/* Solana: `cancel_slash` is `Config.admin`'s; the backend states no role here. */}
+                      <IntentRow
+                        label="Signer role"
+                        value={
+                          cancelIntent.signerRole
+                            ? signerRoleLabel(cancelIntent.signerRole)
+                            : "The program admin (Config.admin)"
+                        }
+                      />
                     </div>
                     <CodeBlock
                       title="cancel_slash (unsigned, base64)"
@@ -1825,6 +1883,29 @@ function Section({
  * copies the transaction, not these — so they are read-only text rather than
  * disabled fields, which would imply an edit that was withheld.
  */
+/**
+ * An EVM `CancelIntent` as the generic unsigned call. The chain is the case
+ * penalty's own (`eip155:46630/erc20:0x…` → `eip155:46630`): the route does
+ * not repeat it, and the penalty is on the record's chain by construction.
+ */
+function isEvmAsset(asset: string): boolean {
+  return asset.startsWith("eip155:");
+}
+
+function evmCancelCall(intent: CancelIntent, penaltyAsset: string): SlashContractCall {
+  return {
+    chainId: penaltyAsset.split("/")[0] ?? penaltyAsset,
+    to: intent.to ?? "",
+    data: intent.transaction,
+    value: "0",
+    signer: intent.admin,
+    // Always the arbiter on EVM: the backend builds `cancelSlash` for no one else.
+    signerRole: "ARBITER",
+    functionName: "cancelSlash",
+    requestIds: [intent.requestId.startsWith("0x") ? intent.requestId : `0x${intent.requestId}`],
+  };
+}
+
 function IntentRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex w-full flex-col gap-0.5">
@@ -1835,34 +1916,17 @@ function IntentRow({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * The second operator's own bearer token, for the one maker/checker action.
- *
- * `type="password"` so it is not readable over a shoulder or in a screen
- * share, and `autoComplete="off"` / `spellCheck={false}` so the browser's own
- * credential store never offers to keep it — this token belongs to the person
- * standing next to the operator, not to this browser profile.
- *
- * Stateless on purpose: the value lives in the panel's single `approverToken`
- * state, which is cleared on section toggle, on success and on unmount. This
- * component adds no second copy.
+ * Says, next to a two-person submit button, that it queues the action and who
+ * must approve it. The roles come from the inbox's own table.
  */
-function ApproverField({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (next: string) => void;
-}) {
+function TwoPersonNote({ code, extra }: { code: string; extra?: string }) {
+  const roles = approverRolesFor(code) ?? [];
   return (
-    <Field
-      label="Approver's operator token"
-      type="password"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      autoComplete="off"
-      spellCheck={false}
-      hint="A second operator's own credential. The platform refuses the same identity in both roles."
-    />
+    <p className="text-body-xs text-02">
+      Two-person ({code}): submitting sends this for approval. A different operator holding{" "}
+      {joinWithOr(roles)}
+      {extra ? `, ${extra},` : ""} approves it in the approvals inbox, and only then does it run.
+    </p>
   );
 }
 

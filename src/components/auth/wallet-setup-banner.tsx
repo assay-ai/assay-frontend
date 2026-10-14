@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import { Banner, BannerAction } from "@/components/ui/banner";
+import { useAccountBlockSnapshot } from "@/features/account-block/use-account-block";
 import { retryWalletLink, useWalletLink } from "@/features/auth/wallet-link";
 
 export interface WalletSetupBannerProps {
@@ -30,6 +31,9 @@ export interface WalletSetupBannerProps {
 export function WalletSetupBanner({ onLinked }: WalletSetupBannerProps) {
   const status = useWalletLink();
   const notified = useRef(false);
+  // A blocked account's refusal is not a missing wallet; the shell's
+  // blocked-account banner says what is wrong, so this one stays out of it.
+  const block = useAccountBlockSnapshot();
 
   useEffect(() => {
     if (status !== "linked" || notified.current) return;
@@ -38,6 +42,7 @@ export function WalletSetupBanner({ onLinked }: WalletSetupBannerProps) {
   }, [status, onLinked]);
 
   if (status === "linked") return null;
+  if (block.confirmed || block.refusal?.code === "AUTH_ORGANIZATION_SUSPENDED") return null;
 
   if (status === "unavailable") {
     return (

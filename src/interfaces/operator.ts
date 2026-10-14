@@ -17,18 +17,119 @@ import type { SlashProposalCaseDetail } from "./provider-slash-cases";
 /** assay-backend `src/modules/operator/domain/override-register.ts` `OperatorRole`. */
 export type OperatorRole =
   | "SRE" | "ADJ" | "ADJL" | "POL" | "POLA" | "TRE" | "TREA"
-  | "BD" | "SUP" | "CMP" | "SEC";
+  | "BD" | "SUP" | "CMP" | "SEC" | "OPS_ADMIN";
 
-/** `GET /operator/me`. Who holds this token, re-read from the row. */
+export type OperatorStatus = "ACTIVE" | "SUSPENDED" | "REMOVED";
+
+/** `GET /operator/me` (`OperatorDto`). Who is signed in, re-read from the row. */
 export interface OperatorIdentity {
   id: string;
-  /** The SSO subject, e.g. `ops-adjl`. */
+  /** A short handle, e.g. `dan@`. */
   subject: string;
   displayName: string;
+  /** The EVM address the operator signs in with, lower-case. */
+  walletAddress: string | null;
   roles: OperatorRole[];
   /** Per-action ceiling. Null means unbounded — correct for roles that move no money. */
   authorityLimit: Money | null;
-  status: "ACTIVE" | "SUSPENDED";
+  status: OperatorStatus;
+}
+
+// ── Wallet sign-in ──────────────────────────────────────────────────────────
+
+/** `POST /operator/auth/challenge` → the EIP-4361 message to sign, verbatim. */
+export interface OperatorChallenge {
+  message: string;
+  nonce: string;
+  /** Five minutes after issue. */
+  expiresAt: string;
+}
+
+/** `POST /operator/auth/verify` → the session. */
+export interface OperatorSignIn {
+  /** Send as `Authorization: Bearer <token>` on operator calls only. */
+  token: string;
+  expiresAt: string;
+  operator: OperatorIdentity;
+}
+
+// ── The directory ───────────────────────────────────────────────────────────
+
+/** `OperatorDirectoryEntryDto` — one row of `GET /operator/operators`. */
+export interface OperatorDirectoryEntry extends OperatorIdentity {
+  email: string;
+  lastSeenAt: string | null;
+  createdAt: string;
+}
+
+/** `POST /operator/operators` — `A-12`. Always answered 202. */
+export interface AddOperatorBody {
+  walletAddress: string;
+  subject: string;
+  displayName?: string;
+  roles: OperatorRole[];
+  /** Minor units of the platform asset. Absent: 0. Null: unbounded. */
+  authorityLimitMinor?: string | null;
+  reasonCode: string;
+  /** 10 to 2048 characters. */
+  note: string;
+}
+
+/** `PATCH /operator/operators/:id` — `A-13`. Lowering: 200. Raising: 202. */
+export interface ChangeOperatorBody {
+  /** The full new set. Absent keeps it. */
+  roles?: OperatorRole[];
+  authorityLimitMinor?: string | null;
+  reasonCode: string;
+  note: string;
+}
+
+/** `POST /operator/operators/:id/remove` — `A-14`, at once. */
+export interface RemoveOperatorBody {
+  reasonCode: string;
+  note: string;
+}
+
+// ── Two-person approvals ────────────────────────────────────────────────────
+
+export type OperatorApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+
+/** What a two-person route answers, with HTTP 202, when it queued the action. */
+export interface ApprovalQueued {
+  approvalId: string;
+  status: "PENDING";
+  /** e.g. `account.unblock`. */
+  action: string;
+  expiresAt: string;
+}
+
+/** `OperatorApprovalDto` — one row of `GET /operator/approvals`. */
+export interface OperatorApproval {
+  id: string;
+  /** e.g. `slash.suspend`, `account.unblock`, `operator.add`. */
+  action: string;
+  /** The register row the action writes, e.g. `A-10`. */
+  code: string;
+  /** `<type>:<id>` of what the action is about. */
+  target: string;
+  /** The original request, exactly as it will be re-run. */
+  payload: Record<string, unknown>;
+  status: OperatorApprovalStatus;
+  /** Subject of the operator who asked. */
+  requestedBy: string;
+  requestedById: string;
+  approvedBy: string | null;
+  rejectedBy: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+  expiresAt: string;
+}
+
+/** `POST /operator/approvals/:id/approve|reject`. */
+export interface ApprovalDecision {
+  approval: OperatorApproval;
+  /** On approve: what the action's own route would have answered. */
+  result?: unknown;
 }
 
 /** `GET /operator/health` — the six tiles across the top of the operator console. */
@@ -49,6 +150,42 @@ export interface PlatformHealth {
   providersWithStake: number;
   openDisputes: number;
   oldestOpenDisputeAgeSeconds: number | null;
+  /** The EVM chain-state cache, one row per chain. Absent on an older backend. */
+  chainState?: ChainStateHealth[];
+  /** Every provider on a slash hold, one row per provider and chain. Absent on an older backend. */
+  slashHolds?: SlashHoldHealth[];
+}
+
+/** `SlashHoldHealthDto` — a provider whose paid calls are not routed on one chain. */
+export interface SlashHoldHealth {
+  /** The provider's organization id. */
+  providerId: string;
+  chainId: string;
+  /** `SLASH_WINDOW_FULL`, `STAKE_FULLY_RESERVED`, `BONDED_BELOW_MINIMUM`, or a newer one as it came. */
+  reasons: string[];
+  heldSince: string;
+  /** When the monitor last re-checked it; `null` if never. */
+  checkedAt: string | null;
+}
+
+/**
+ * `ChainStateHealthDto` — what the EVM chain-state indexer last read of one
+ * chain's `X402Config`. `stale` when the indexer never caught up or lags more
+ * than `EVM_CHAIN_STATE_MAX_LAG_MS` (five minutes by default).
+ */
+export interface ChainStateHealth {
+  chainId: string;
+  paused: boolean;
+  /** `X402Config.arbiter()`, lower-case, or `null`. */
+  arbiter: string | null;
+  /** The live slash delay — the dispute window. */
+  slashDelaySeconds: number | null;
+  blockedCount: number;
+  indexedBlock: string | null;
+  headBlock: string | null;
+  lagSeconds: number | null;
+  stale: boolean;
+  reconciledAt: string | null;
 }
 
 /**
@@ -73,6 +210,11 @@ export type SlashProposalStatus =
   | "PROPOSED" | "DISPUTED" | "UNDER_REVIEW" | "AWAITING_SECOND"
   | "UPHELD" | "OVERTURNED" | "EXECUTING" | "EXECUTED"
   | "REVERSED" | "WAIVED" | "CANCEL_REQUESTED" | "CANCELLED";
+
+/** assay-backend `src/modules/slash/domain/chain-slash-outcome.ts` `ChainProposalStatus`. */
+export type ChainProposalStatus =
+  | "NONE" | "PROPOSING" | "PENDING" | "CANCEL_REQUESTED" | "DISPUTED"
+  | "EXECUTED" | "CANCELLED" | "REFUSED";
 
 /** assay-backend `src/modules/slash/domain/arbitration.ts` `ArbitrationOutcome`. */
 export type ArbitrationOutcome =
@@ -173,6 +315,25 @@ export interface OperatorCaseBrief {
   restoration: SlashRestorationRow[];
   /** True exactly when the proposal is `AWAITING_SECOND`. */
   requiresSecondSignature: boolean;
+  /**
+   * The on-chain record's status (`slash_proposals.chain_status`), read-only.
+   * Not the case status: an overturned case waiting for the settlement admin's
+   * `cancel_slash` reads `OVERTURNED` here and `CANCEL_REQUESTED` there.
+   */
+  chainStatus: ChainProposalStatus;
+  /**
+   * When the on-chain record becomes executable (`chain_executable_at`),
+   * read-only. From this moment anyone can execute the penalty, so it is the
+   * deadline for a requested cancel. Null while nothing stands on chain;
+   * absent from a backend that predates the field.
+   */
+  chainExecutableAt?: string | null;
+  /**
+   * How many of the case's current parts are disputed on chain (audit E-4).
+   * With `chainStatus: PENDING` and a non-zero count the case is partly
+   * disputed: the other parts keep executing. Absent from an older backend.
+   */
+  chainDisputedParts?: number;
 }
 
 /** `POST /operator/cases/:id/decide`. */
@@ -273,8 +434,8 @@ export interface CompensationIntent {
  *
  * **Two independent authorisations, and the body is why neither is redundant.**
  * The signature proves the treasury's multisig moved the money; the note and
- * reason code — countersigned by a second operator's token in
- * `X-Operator-Approver` — are two of our people agreeing to close the case on
+ * reason code — approved by a second operator from the approvals inbox — are
+ * two of our people agreeing to close the case on
  * the strength of it. A chain signature cannot record why we accepted it, and
  * an override row cannot prove anything was paid.
  */
@@ -299,12 +460,214 @@ export interface RecordCompensationBody {
  * moves the case to `CANCELLED`, so the screen's job ends at the broadcast.
  */
 export interface CancelIntent {
-  /** Unsigned wire bytes, base64. Fee payer is `Config.admin`. */
+  /**
+   * Solana: unsigned wire bytes, base64, fee payer `Config.admin`. EVM: the
+   * `cancelSlash` calldata, `0x`-hex, sent to {@link CancelIntent.to}.
+   */
   transaction: string;
-  /** `Config.admin` — the only key that can sign this. **Bare base58**, not CAIP-10. */
+  /**
+   * The only key that can sign this. Solana: `Config.admin`, **bare base58**.
+   * EVM: always `X402Config.arbiter()` (D-19); without an arbiter the build is
+   * refused with `409 CHAIN_ARBITER_NOT_SET`.
+   */
   admin: string;
+  /** EVM: always `ARBITER`. Absent on Solana, where `admin` is `Config.admin`. */
+  signerRole?: "ARBITER";
+  /** EVM only: the X402Stake proxy the calldata is sent to. */
+  to?: string;
   /** The slash request id the record PDA is seeded by. 32 bytes, lower-case hex. */
   requestId: string;
   /** The provider whose reservation the cancellation releases. **Bare base58**, not CAIP-10. */
   provider: string;
+}
+
+// ── A-9 / A-10 · The account blocklist ─────────────────────────────────────
+
+/** assay-backend `src/modules/blocklist/domain/account-block.ts` `BlockSubjectKind`. */
+export type BlockSubjectKind = "ORGANIZATION" | "WALLET";
+
+/**
+ * `AccountBlockDto` — one row of `GET /operator/blocks`, and the answer of
+ * both writes. The row is the record: a lifted block keeps its row, and a
+ * later block of the same subject is a new one.
+ */
+export interface AccountBlock {
+  id: string;
+  subjectKind: BlockSubjectKind;
+  /** Normalised: uuid lower-case, EVM address lower-case. */
+  subject: string;
+  /** What enforcement matches on: the uuid, or `namespace:address` (no chain reference). */
+  subjectKey: string;
+  active: boolean;
+  reasonCode: string;
+  /** Internal. Never shown to the blocked account. */
+  note: string;
+  ticketRef: string | null;
+  /** Operator subject, e.g. `ops-sre`. */
+  blockedBy: string;
+  blockedAt: string;
+  unblockedBy: string | null;
+  unblockApprovedBy: string | null;
+  unblockedAt: string | null;
+  unblockNote: string | null;
+}
+
+/** `GET /operator/blocks` filters. Any operator may read. */
+export interface ListAccountBlocksQuery {
+  cursor?: string;
+  limit?: number;
+  subjectKind?: BlockSubjectKind;
+  /** A uuid or a CAIP-10 account; a wallet matches on any chain of its namespace. */
+  subject?: string;
+  /** `true` standing blocks only, `false` lifted ones only, absent both. */
+  active?: boolean;
+  reasonCode?: string;
+}
+
+/** `POST /operator/blocks` — `A-9`, `ADJL` or `SRE`, single person. */
+export interface CreateAccountBlockBody {
+  subjectKind: BlockSubjectKind;
+  /** An organization uuid, or a CAIP-10 account. */
+  subject: string;
+  reasonCode: string;
+  /** 20 to 4096 characters. Internal. */
+  note: string;
+  ticketRef?: string;
+}
+
+/**
+ * `POST /operator/blocks/:id/unblock` — `A-10`, `ADJL` or `SRE`, two person:
+ * answered `202 { approvalId }`, and lifted once a second operator holding
+ * `ADJL` approves it in the approvals inbox.
+ */
+export interface UnblockAccountBody {
+  reasonCode: string;
+  /** 20 to 4096 characters. */
+  note: string;
+  ticketRef?: string;
+}
+
+/** `OverrideLogEntryDto` — one row of `GET /operator/override-log`. */
+export interface OverrideLogEntry {
+  id: string;
+  createdAt: string;
+  family: string;
+  code: string;
+  label: string;
+  action: string;
+  actorSubject: string;
+  approverSubject: string | null;
+  approvalMode: string;
+  targetType: string;
+  targetId: string;
+  organizationId: string | null;
+  reasonCode: string;
+  reason: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  ticketRef: string | null;
+  breakGlass: boolean;
+}
+
+/** `GET /operator/override-log` filters. */
+export interface ListOverrideLogQuery {
+  cursor?: string;
+  limit?: number;
+  targetType?: string;
+  targetId?: string;
+  ticketRef?: string;
+  q?: string;
+}
+
+// ── D-19 · The arbiter page ─────────────────────────────────────────────────
+
+/** `GET /operator/arbiter/terms?chainId=` — the Config's dispute terms, read live from the chain. */
+export interface ArbiterTerms {
+  chainId: string;
+  paused: boolean;
+  /** `X402Config.arbiter()`, checksummed, or `null` for none appointed. */
+  arbiter: string | null;
+  /** `X402Config.admin()`, checksummed. */
+  admin: string;
+  /** The delay a proposal made now would freeze into its `executableAt`. */
+  slashDelaySeconds: number;
+  /** `params().slashAgentBps`: the beneficiary's share of an executed slash, in basis points. */
+  slashAgentBps: number;
+}
+
+/**
+ * Follow-up C5: whether the beneficiary of a disputed record is a payer of the
+ * window's failed calls, and whether the record's part stays within that
+ * payer's pro-rata share of the formula penalty (`beneficiaryEvidence` in
+ * assay-backend `slash-beneficiary-evidence.ts`). Amounts are atomic units of
+ * the stake asset, as decimal strings.
+ */
+export interface ArbiterBeneficiaryEvidence {
+  /** The payer of the failed calls' vouchers, CAIP-10, or `null` when none was found. */
+  payer: string | null;
+  failedCalls: number;
+  /** What the payer signed for the failed calls (refunded off chain). */
+  paidAmount: string;
+  /**
+   * The payer's pro-rata share, by failed spend, of the case penalty: the most
+   * the record's part may be (plus one atomic unit of rounding). Absent from a
+   * backend before c3440d7.
+   */
+  formulaShareAmount?: string;
+  /** The part of it whose intent was redeemed. */
+  redeemedAmount: string;
+  /** The beneficiary's payout if executed: `penalty × slashAgentBps / 10 000`, floored. */
+  shareAmount: string;
+  /** The beneficiary is the payer, and the part is within its formula share. */
+  ok: boolean;
+  /** Why the check fails, in the backend's words; `null` when `ok`. */
+  reason: string | null;
+}
+
+/** One row of `GET /operator/arbiter/disputes` (`{ items }`), oldest dispute first. */
+export interface ArbiterDispute {
+  /** `0x` + 64 lower-case hex. */
+  requestId: string;
+  proposalId: string;
+  providerId: string;
+  chainId: string;
+  caseStatus: string;
+  caseChainStatus: string;
+  /** Atomic units of the stake asset, as a decimal string. */
+  penaltyAmount: string;
+  reservedAmount: string | null;
+  disputedAt: string | null;
+  executableAt: string | null;
+  /** `disputedAt + 30 d`: from then `expireSlash` releases it with `DisputeUnresolved`. */
+  expiresAt: string | null;
+  /** The provider's slash cases upheld or executed in the last 30 days (follow-up C4). */
+  upheldViolations30d: number;
+  /** CAIP-10: who the record pays its agent share to. */
+  beneficiary: string;
+  /** `null` when the backend could not check it (no window, or the chain's terms unreadable). */
+  beneficiaryEvidence: ArbiterBeneficiaryEvidence | null;
+}
+
+export type ArbiterRuling = "UPHOLD" | "CANCEL";
+
+/** `POST /operator/arbiter/ruling-intent` — `S-13`. */
+export interface ArbiterRulingBody {
+  chainId: string;
+  ruling: ArbiterRuling;
+  /** 1 to 64, `0x` + 64 hex. */
+  requestIds: string[];
+  reasonCode: string;
+  /** At least 20 characters. */
+  note: string;
+  ticketRef?: string;
+}
+
+/** `POST /operator/arbiter/block-intent` — `A-11`. Block only. */
+export interface ArbiterBlockBody {
+  chainId: string;
+  /** `0x` + 40 hex. */
+  account: string;
+  reasonCode: string;
+  note: string;
+  ticketRef?: string;
 }
