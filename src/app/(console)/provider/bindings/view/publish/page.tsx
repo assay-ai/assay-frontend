@@ -1,11 +1,10 @@
+"use client";
+
+import { useSearchParam } from "@/hooks/useSearchParam";
+
 import { PublishChecklistView } from "./_components/publish-checklist-view";
 
-/** Publish checklist. */
-export default async function PublishChecklistPage({
-  params,
-}: {
-  params: Promise<{ bindingId: string }>;
-}) {
-  const { bindingId } = await params;
-  return <PublishChecklistView bindingId={bindingId} />;
+/** Publish checklist. The binding id rides in `?binding=` (see `libs/routes.ts`). */
+export default function PublishChecklistPage() {
+  return <PublishChecklistView bindingId={useSearchParam("binding")} />;
 }
