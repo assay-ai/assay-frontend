@@ -34,6 +34,7 @@ import {
 
 const STATUS_TONE: Record<SlashStatusKey, string> = {
   pending: "bg-danger-10 text-danger-700",
+  upheld: "bg-danger-10 text-danger-700",
   disputed: "bg-primary-10 text-primary-700",
   executed: "bg-03 text-02",
   cancelled: "bg-success-10 text-success-700",
@@ -79,6 +80,27 @@ function HowToDispute({ match, onChain }: { match: AssayMatch; onChain: boolean 
       </Link>{" "}
       and dispute it from its case page, or contact Assay support.
     </p>
+  );
+}
+
+/**
+ * The first sentence on an upheld row: when it was disputed and, if the
+ * `SlashUpheld` block time was read, when the arbiter upheld it.
+ */
+function UpheldLead({ row }: { row: ChainSlashRow }) {
+  return (
+    <>
+      <span className="font-semibold">Upheld by Assay&apos;s arbiter</span>
+      {row.upheldAt !== null ? (
+        <>
+          {" on "}
+          <span className="font-mono font-semibold">{stampUtc(isoFromSeconds(row.upheldAt))} UTC</span>
+        </>
+      ) : null}
+      {row.disputedAt !== null
+        ? `, after your dispute on ${stampUtc(isoFromSeconds(row.disputedAt))} UTC.`
+        : "."}
+    </>
   );
 }
 
@@ -282,6 +304,26 @@ export function SlashRowCard({
           </p>
           <HowToDispute match={match} onChain={viewingOwnStake && selection !== null} />
         </div>
+      ) : phase?.phase === "upheld-waiting" ? (
+        <p
+          className={cn(
+            "rounded-md border px-3 py-2 text-body-13",
+            URGENCY_TONE[countdownUrgency(phase.secondsLeft)],
+          )}
+        >
+          <UpheldLead row={row} /> A penalty can be disputed on chain only once, so this one cannot
+          be disputed again. It can be executed from{" "}
+          <span className="font-mono font-semibold">
+            {stampUtc(isoFromSeconds(row.executableAt))} UTC
+          </span>{" "}
+          ({formatRemaining(phase.secondsLeft * 1000)} from now); from then on anyone can execute it
+          and the penalty is taken from your stake.
+        </p>
+      ) : row.status.key === "upheld" && phase?.phase === "executable" ? (
+        <p className="text-body-13 text-danger-700">
+          <UpheldLead row={row} /> It can be executed now; if nobody executes it in the next{" "}
+          {formatRemaining(phase.secondsLeft * 1000)}, it expires and the stake is released.
+        </p>
       ) : dispute?.phase === "awaiting-ruling" ? (
         <p className="rounded-md border border-primary-20 bg-primary-10 px-3 py-2 text-body-13 text-primary-700">
           Disputed on{" "}
@@ -352,7 +394,12 @@ export function SlashRowCard({
         <Fact label={executableAtLabel(row, nowSeconds)}>
           <span className="font-mono">{stampUtc(isoFromSeconds(row.executableAt))} UTC</span>
         </Fact>
-        {row.disputedAt !== null ? (
+        {row.status.key === "upheld" && row.upheldAt !== null ? (
+          <Fact label="Upheld by the arbiter">
+            <span className="font-mono">{stampUtc(isoFromSeconds(row.upheldAt))} UTC</span>
+          </Fact>
+        ) : null}
+        {row.disputedAt !== null && row.status.key !== "upheld" ? (
           <Fact label="Disputed on chain">
             <span className="font-mono">{stampUtc(isoFromSeconds(row.disputedAt))} UTC</span>
           </Fact>
@@ -363,7 +410,7 @@ export function SlashRowCard({
           </Fact>
         ) : null}
       </dl>
-      {row.upheld && row.status.key !== "disputed" ? (
+      {row.upheld && row.status.key !== "disputed" && row.status.key !== "upheld" ? (
         <p className="text-body-13 text-02">
           This penalty was disputed and Assay&apos;s arbiter upheld it. A penalty can be disputed on
           chain only once.
@@ -373,6 +420,7 @@ export function SlashRowCard({
       <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1.5">
         <TxLink deployment={deployment} hash={row.proposeTx} label="Proposal tx" />
         <TxLink deployment={deployment} hash={row.disputeTx} label="Dispute tx" />
+        <TxLink deployment={deployment} hash={row.upheldTx} label="Uphold tx" />
         <TxLink
           deployment={deployment}
           hash={row.closeTx}

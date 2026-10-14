@@ -2,7 +2,7 @@ import { decodeEventLog, type Address, type Hex } from "viem";
 
 import { DISPUTE_TIMEOUT_SECONDS, STAKE_EVENTS_ABI } from "./abi";
 import type { RawLog } from "./scan";
-import { cancelReasonLabel, slashStatusOf, type SlashStatusInfo } from "./status";
+import { cancelReasonLabel, slashRecordStatusOf, type SlashStatusInfo } from "./status";
 
 /**
  * Logs plus `slashRecordOf` reads → one row per slash request.
@@ -188,8 +188,19 @@ export interface ChainSlashRow {
    * 30 days), releasing the stake. Only while the record is `Disputed`.
    */
   readonly disputeExpiresAt: number | null;
-  /** True once the arbiter upheld a dispute: a record is disputed at most once. */
+  /**
+   * True once the arbiter upheld a dispute: a record is disputed at most once.
+   * Read from the record (`Pending` or `Executed` with a `disputedAt`) as well
+   * as from a scanned `SlashUpheld`, so a missed event does not hide it.
+   */
   readonly upheld: boolean;
+  /**
+   * Unix seconds of the block that carried `SlashUpheld`, when that event was
+   * scanned and its block time could be read. The event itself has no time.
+   */
+  readonly upheldAt: number | null;
+  /** The `upholdSlash` transaction, when its event was seen. */
+  readonly upheldTx: Hex | null;
   /** The `disputeSlash` transaction, when its event was seen. */
   readonly disputeTx: Hex | null;
   readonly proposeTx: Hex | null;
@@ -213,6 +224,8 @@ export function buildChainSlashRows(
   provider: Address,
   logs: readonly ParsedStakeLog[],
   records: ReadonlyMap<string, SlashRecordState>,
+  /** Unix seconds by block number (decimal string), for the blocks of `SlashUpheld` logs. */
+  blockTimes: ReadonlyMap<string, number> = new Map(),
 ): ChainSlashRow[] {
   const groups = new Map<string, ParsedStakeLog[]>();
   for (const log of logs) {
@@ -245,7 +258,11 @@ export function buildChainSlashRows(
     const ruledAfterDispute =
       lastUpheld !== null && (lastDisputed === null || isAfter(lastUpheld, lastDisputed));
     const eventCode = cancelled ? 3 : executed ? 2 : lastDisputed && !ruledAfterDispute ? 4 : 1;
-    const status = slashStatusOf(record ? record.status : eventCode);
+    const eventDisputedAtRaw = lastDisputed?.kind === "disputed" ? lastDisputed.disputedAt : null;
+    /* Pending with a dispute behind it is an upheld record (see `status.ts`). */
+    const everDisputed =
+      (record !== undefined && record.disputedAt > BigInt(0)) || lastDisputed !== null || lastUpheld !== null;
+    const status = slashRecordStatusOf(record ? record.status : eventCode, everDisputed);
     const executedApplied = executed?.kind === "executed" ? executed.applied : null;
 
     const eventExecutableAt =
@@ -255,8 +272,7 @@ export function buildChainSlashRows(
           ? proposed.executableAt
           : BigInt(0);
     const recordDisputedAt = record && record.disputedAt > BigInt(0) ? record.disputedAt : null;
-    const eventDisputedAt = lastDisputed?.kind === "disputed" ? lastDisputed.disputedAt : null;
-    const disputedAtRaw = recordDisputedAt ?? eventDisputedAt;
+    const disputedAtRaw = recordDisputedAt ?? eventDisputedAtRaw;
     const disputedAt = disputedAtRaw === null ? null : Number(disputedAtRaw);
 
     rows.push({
@@ -279,7 +295,15 @@ export function buildChainSlashRows(
       disputedAt,
       disputeExpiresAt:
         status.key === "disputed" && disputedAt !== null ? disputedAt + DISPUTE_TIMEOUT_SECONDS : null,
-      upheld: lastUpheld !== null,
+      upheld:
+        lastUpheld !== null ||
+        status.key === "upheld" ||
+        (status.key === "executed" && disputedAt !== null),
+      upheldAt:
+        lastUpheld?.blockNumber !== null && lastUpheld?.blockNumber !== undefined
+          ? (blockTimes.get(lastUpheld.blockNumber.toString()) ?? null)
+          : null,
+      upheldTx: lastUpheld?.txHash ?? null,
       disputeTx: lastDisputed?.txHash ?? null,
       proposeTx: proposed?.txHash ?? null,
       closeTx: executed?.txHash ?? cancelled?.txHash ?? null,

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { HexString } from "@/libs/chains/evm/stake-slashes/address";
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
-import { slashStatusOf } from "@/libs/chains/evm/stake-slashes/status";
+import { slashRecordStatusOf, slashStatusOf } from "@/libs/chains/evm/stake-slashes/status";
 import { ApiError } from "@/libs/ApiClient";
 
 import {
@@ -31,6 +31,8 @@ function row(n: number, status = 1, executableAt = NOW + 3_600): ChainSlashRow {
     disputedAt: null,
     disputeExpiresAt: null,
     upheld: false,
+    upheldAt: null,
+    upheldTx: null,
     disputeTx: null,
     proposeTx: null,
     closeTx: null,
@@ -139,5 +141,26 @@ describe("disputeErrorMessage", () => {
 
   it("passes a wallet or network error's own message through", () => {
     expect(disputeErrorMessage(new Error("boom"), "x")).toBe("boom");
+  });
+});
+
+describe("an upheld record cannot be disputed again", () => {
+  const upheld = (n: number): ChainSlashRow => ({
+    ...row(n),
+    status: slashRecordStatusOf(1, true),
+    disputedAt: NOW - 600,
+    upheld: true,
+  });
+
+  it("is refused as already disputed, even inside its executableAt", () => {
+    expect(notSelectableReason(upheld(1), NOW, true)).toBe("already-disputed");
+    expect(isDisputeSelectable(upheld(1), NOW, true)).toBe(false);
+  });
+
+  it("is never picked by select-all, toggled on, or kept by a prune", () => {
+    expect(selectAllDisputable(new Set(), [upheld(1), row(2)], NOW, true)).toEqual(new Set([row(2).requestId]));
+    expect(toggleDisputeSelection(new Set(), upheld(1), NOW, true)).toMatchObject({ ok: false, reason: "not-selectable" });
+    const id = upheld(1).requestId.toLowerCase();
+    expect(pruneDisputeSelection(new Set([id]), [upheld(1)], NOW, true).size).toBe(0);
   });
 });

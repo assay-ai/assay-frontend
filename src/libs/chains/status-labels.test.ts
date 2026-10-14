@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   cancelRequestedLabel,
   cancelSignerOf,
+  caseChainDisputePhase,
+  caseChainStatusLabel,
   chainCancelReasonCodeLabel,
   chainCancelReasonLabel,
   chainErrorLabel,
@@ -83,5 +85,37 @@ describe("chain refusals", () => {
     expect(describeChainRefusal({ code: "X", message: "setBlocked reverts ArbiterCannotUnblock" })).toMatch(
       /^The arbiter can only block\./,
     );
+  });
+});
+
+describe("caseChainDisputePhase and caseChainStatusLabel", () => {
+  const disputedAt = "2026-10-15T08:58:08.000Z";
+
+  it("reads PENDING with a disputedAt and no disputed part as upheld", () => {
+    const mirror = { chainStatus: "PENDING", chainDisputedAt: disputedAt, chainDisputedParts: 0 };
+    expect(caseChainDisputePhase(mirror)).toBe("upheld");
+    expect(caseChainStatusLabel(mirror, "eip155:46630")).toBe("Upheld by Assay's arbiter");
+  });
+
+  it("keeps a never-disputed PENDING record Pending", () => {
+    const mirror = { chainStatus: "PENDING", chainDisputedAt: null, chainDisputedParts: 0 };
+    expect(caseChainDisputePhase(mirror)).toBe("none");
+    expect(caseChainStatusLabel(mirror)).toBe("Pending on chain");
+  });
+
+  it("names DISPUTED and a partly disputed PENDING case", () => {
+    expect(caseChainDisputePhase({ chainStatus: "DISPUTED", chainDisputedAt: disputedAt, chainDisputedParts: 1 })).toBe(
+      "disputed",
+    );
+    expect(caseChainStatusLabel({ chainStatus: "DISPUTED" })).toBe("Disputed on chain — awaiting arbiter");
+    expect(caseChainDisputePhase({ chainStatus: "PENDING", chainDisputedAt: disputedAt, chainDisputedParts: 2 })).toBe(
+      "partly-disputed",
+    );
+  });
+
+  it("leaves closed records and an older backend alone", () => {
+    expect(caseChainStatusLabel({ chainStatus: "EXECUTED", chainDisputedAt: disputedAt })).toBe("Executed on chain");
+    expect(caseChainDisputePhase({})).toBe("none");
+    expect(caseChainStatusLabel({})).toBe("Not reported");
   });
 });

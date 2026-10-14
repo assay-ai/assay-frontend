@@ -2,7 +2,17 @@ import type { Hex } from "viem";
 import { describe, expect, it, vi } from "vitest";
 
 import { ROBINHOOD_TESTNET_STAKE } from "./deployments";
-import { PROVIDER, cancelledLog, executedLog, proposedLog, record, requestId, unknownLog } from "./fixtures";
+import {
+  PROVIDER,
+  cancelledLog,
+  disputedLog,
+  executedLog,
+  proposedLog,
+  record,
+  requestId,
+  unknownLog,
+  upheldLog,
+} from "./fixtures";
 import { loadChainSlashes, type StakeChainReader } from "./load";
 import { SlashLogCache, type RawLog } from "./scan";
 
@@ -90,5 +100,35 @@ describe("loadChainSlashes", () => {
     });
     expect(result.rows).toEqual([]);
     expect(result.scannedTo).toBe(DEPLOY + BigInt(10_000));
+  });
+});
+
+describe("loadChainSlashes — when a dispute was upheld", () => {
+  it("reads the uphold's block time, once per block, and puts it on the row", async () => {
+    const r: StakeChainReader = {
+      ...reader(
+        [proposedLog(1, { block: at(1) }), disputedLog(1, { block: at(2) }), upheldLog(1, { block: at(3) })],
+        { [requestId(1).toLowerCase()]: record({ status: 1, disputedAt: BigInt(1_100_000) }) },
+      ),
+      readBlockTimestamp: vi.fn(async () => BigInt(1_150_000)),
+    };
+    const result = await loadChainSlashes(r, ROBINHOOD_TESTNET_STAKE, PROVIDER, { cache: new SlashLogCache() });
+    expect(r.readBlockTimestamp).toHaveBeenCalledTimes(1);
+    expect(r.readBlockTimestamp).toHaveBeenCalledWith(BigInt(at(3)));
+    expect(result.rows[0]).toMatchObject({ status: { key: "upheld" }, upheldAt: 1_150_000 });
+  });
+
+  it("still loads when the block time cannot be read", async () => {
+    const r: StakeChainReader = {
+      ...reader(
+        [proposedLog(1, { block: at(1) }), upheldLog(1, { block: at(3) })],
+        { [requestId(1).toLowerCase()]: record({ status: 1, disputedAt: BigInt(1_100_000) }) },
+      ),
+      readBlockTimestamp: vi.fn(async () => {
+        throw new Error("rpc down");
+      }),
+    };
+    const result = await loadChainSlashes(r, ROBINHOOD_TESTNET_STAKE, PROVIDER, { cache: new SlashLogCache() });
+    expect(result.rows[0]).toMatchObject({ status: { key: "upheld" }, upheldAt: null });
   });
 });

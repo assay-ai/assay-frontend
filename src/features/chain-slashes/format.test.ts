@@ -7,7 +7,7 @@ import {
   stakeDeploymentFor,
 } from "@/libs/chains/evm/stake-slashes/deployments";
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
-import { slashStatusOf } from "@/libs/chains/evm/stake-slashes/status";
+import { slashRecordStatusOf, slashStatusOf } from "@/libs/chains/evm/stake-slashes/status";
 
 import { assayMatchFor, lookupAssayCases, type AssayCaseIndex } from "./assay-match";
 import {
@@ -36,6 +36,8 @@ function row(status: number, executableAt = 1_000): ChainSlashRow {
     disputedAt: null,
     disputeExpiresAt: null,
     upheld: false,
+    upheldAt: null,
+    upheldTx: null,
     disputeTx: null,
     proposeTx: null,
     closeTx: null,
@@ -160,5 +162,31 @@ describe("config", () => {
     expect(explorerTxLink(ROBINHOOD_TESTNET_STAKE, "0xabc")).toBe(
       "https://explorer.testnet.chain.robinhood.com/tx/0xabc",
     );
+  });
+});
+
+describe("an upheld record (Pending with a disputedAt)", () => {
+  const upheld = (executableAt: number): ChainSlashRow => ({
+    ...row(1, executableAt),
+    status: slashRecordStatusOf(1, true),
+    disputedAt: 400,
+    upheld: true,
+  });
+
+  it("waits for its executableAt with no dispute window", () => {
+    expect(pendingPhase(upheld(1_000), 600)).toEqual({ phase: "upheld-waiting", secondsLeft: 400 });
+  });
+
+  it("is executable from executableAt and expirable after the grace, like any Pending record", () => {
+    expect(pendingPhase(upheld(1_000), 1_000)?.phase).toBe("executable");
+    expect(pendingPhase(upheld(1_000), 1_000 + SLASH_EXECUTION_GRACE_SECONDS)).toEqual({ phase: "expirable" });
+  });
+
+  it("labels executableAt as when it can be executed, never as a dispute deadline", () => {
+    expect(executableAtLabel(upheld(1_000), 600)).toBe("Can be executed from");
+  });
+
+  it("still reserves stake", () => {
+    expect(reservedLabel("upheld")).toBe("Reserved from your stake");
   });
 });

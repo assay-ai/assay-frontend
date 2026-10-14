@@ -78,7 +78,7 @@ describe("buildChainSlashRows — disputes", () => {
       new Map(),
     );
     expect(rows[0]).toMatchObject({
-      status: { key: "pending" },
+      status: { key: "upheld", code: 1, label: "Upheld by Assay's arbiter", needsAttention: true },
       executableAt: 1_300_000,
       upheld: true,
       disputeExpiresAt: null,
@@ -108,5 +108,72 @@ describe("buildChainSlashRows — disputes", () => {
   it("has no dispute time on a record that was never disputed", () => {
     const rows = buildChainSlashRows(PROVIDER, parse(proposedLog(1)), new Map([[requestId(1), record()]]));
     expect(rows[0]).toMatchObject({ disputedAt: null, disputeExpiresAt: null, upheld: false, disputeTx: null });
+  });
+});
+
+describe("buildChainSlashRows — an upheld record (Pending with disputedAt)", () => {
+  it("reads a Pending record with a disputedAt as upheld even without any dispute event (R13 id1)", () => {
+    // The arbiter upheld before the original executableAt, so it stays the original.
+    const rows = buildChainSlashRows(
+      PROVIDER,
+      parse(proposedLog(1, { executableAt: 1_259_200 })),
+      new Map([
+        [requestId(1), record({ status: 1, executableAt: BigInt(1_259_200), disputedAt: BigInt(1_100_000) })],
+      ]),
+    );
+    expect(rows[0]).toMatchObject({
+      status: { key: "upheld", code: 1 },
+      executableAt: 1_259_200,
+      disputedAt: 1_100_000,
+      disputeExpiresAt: null,
+      upheld: true,
+      upheldAt: null,
+      upheldTx: null,
+    });
+  });
+
+  it("keeps a never-disputed Pending record plain Pending", () => {
+    const rows = buildChainSlashRows(PROVIDER, parse(proposedLog(1)), new Map([[requestId(1), record({ status: 1 })]]));
+    expect(rows[0]).toMatchObject({ status: { key: "pending", label: "Pending" }, upheld: false });
+  });
+
+  it("carries the uphold transaction and, when its block time is known, when it was upheld", () => {
+    const rows = buildChainSlashRows(
+      PROVIDER,
+      parse(proposedLog(1), disputedLog(1, { block: 250 }), upheldLog(1, { block: 270 })),
+      new Map([[requestId(1), record({ status: 1, disputedAt: BigInt(1_100_000) })]]),
+      new Map([["270", 1_150_000]]),
+    );
+    expect(rows[0].status.key).toBe("upheld");
+    expect(rows[0].upheldAt).toBe(1_150_000);
+    expect(rows[0].upheldTx).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(rows[0].upheldTx).not.toBe(rows[0].disputeTx);
+  });
+
+  it("leaves the uphold time out when the block time was not read", () => {
+    const rows = buildChainSlashRows(
+      PROVIDER,
+      parse(proposedLog(1), disputedLog(1, { block: 250 }), upheldLog(1, { block: 270 })),
+      new Map([[requestId(1), record({ status: 1, disputedAt: BigInt(1_100_000) })]]),
+    );
+    expect(rows[0]).toMatchObject({ status: { key: "upheld" }, upheldAt: null });
+  });
+
+  it("still marks an executed record that had been disputed as upheld, with status Executed", () => {
+    const rows = buildChainSlashRows(
+      PROVIDER,
+      parse(proposedLog(1)),
+      new Map([[requestId(1), record({ status: 2, disputedAt: BigInt(1_100_000) })]]),
+    );
+    expect(rows[0]).toMatchObject({ status: { key: "executed" }, upheld: true });
+  });
+
+  it("keeps a record that is Disputed now Disputed, whatever its disputedAt", () => {
+    const rows = buildChainSlashRows(
+      PROVIDER,
+      parse(proposedLog(1), disputedLog(1)),
+      new Map([[requestId(1), record({ status: 4, disputedAt: BigInt(1_100_000) })]]),
+    );
+    expect(rows[0].status.key).toBe("disputed");
   });
 });

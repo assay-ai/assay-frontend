@@ -15,8 +15,9 @@ import { describeChainRefusal } from "@/libs/chains/status-labels";
  *
  * - the page shows the signed-in provider's OWN stake wallet — a pasted
  *   address is read-only, and nobody else's wallet can sign for it;
- * - it is `Pending` (a `Disputed` row was already disputed; a record is
- *   disputed at most once, and an upheld one has its window closed);
+ * - it is `Pending` and was never disputed (a `Disputed` row already is; a
+ *   record is disputed at most once, so an upheld one — `Pending` with a
+ *   `disputedAt` — is refused with `SlashAlreadyDisputed`);
  * - its window is still open, by its own `executableAt` — never a fixed 72 hours.
  *
  * At most {@link MAX_DISPUTE_SELECTION} (`MAX_SLASH_BATCH`, 64) at once.
@@ -29,7 +30,7 @@ import { describeChainRefusal } from "@/libs/chains/status-labels";
 export const MAX_DISPUTE_SELECTION = MAX_SLASH_BATCH;
 
 /** Why a row has no checkbox, or `null` when it may be selected. */
-export type NotSelectableReason = "not-own-wallet" | "not-pending" | "window-closed";
+export type NotSelectableReason = "not-own-wallet" | "not-pending" | "already-disputed" | "window-closed";
 
 export function notSelectableReason(
   row: ChainSlashRow,
@@ -37,6 +38,8 @@ export function notSelectableReason(
   viewingOwnStake: boolean,
 ): NotSelectableReason | null {
   if (!viewingOwnStake) return "not-own-wallet";
+  /* Upheld: Pending again, but the chain refuses a second dispute (`SlashAlreadyDisputed`). */
+  if (row.status.key === "upheld") return "already-disputed";
   if (row.status.key !== "pending") return "not-pending";
   if (nowSeconds >= row.executableAt) return "window-closed";
   return null;

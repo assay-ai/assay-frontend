@@ -2,7 +2,7 @@ import type { HexString } from "@/libs/chains/evm/stake-slashes/address";
 import { describe, expect, it } from "vitest";
 
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
-import { slashStatusOf } from "@/libs/chains/evm/stake-slashes/status";
+import { slashRecordStatusOf, slashStatusOf } from "@/libs/chains/evm/stake-slashes/status";
 
 import { DEFAULT_FILTERS, applyFilters, attentionCount, compareRows } from "./filters";
 
@@ -23,6 +23,8 @@ function row(id: string, status: number, opts: Partial<ChainSlashRow> = {}): Cha
     disputedAt: null,
     disputeExpiresAt: null,
     upheld: false,
+    upheldAt: null,
+    upheldTx: null,
     disputeTx: null,
     proposeTx: null,
     closeTx: null,
@@ -101,5 +103,20 @@ describe("compareRows", () => {
 describe("attentionCount", () => {
   it("counts Pending and Disputed", () => {
     expect(attentionCount(ROWS)).toBe(3);
+  });
+});
+
+describe("filters with an upheld record", () => {
+  const upheld = { ...row("b1", 1, { disputedAt: NOW - DAY, upheld: true }), status: slashRecordStatusOf(1, true) };
+  const rows = [...ROWS, upheld];
+
+  it("needs attention and counts in the header", () => {
+    expect(ids(applyFilters(rows, DEFAULT_FILTERS, NOW))).toContain("b1");
+    expect(attentionCount(rows)).toBe(attentionCount(ROWS) + 1);
+  });
+
+  it("is listed under Pending, which it still is on chain, and alone under Upheld", () => {
+    expect(ids(applyFilters(rows, { ...DEFAULT_FILTERS, status: "pending" }, NOW))).toContain("b1");
+    expect(ids(applyFilters(rows, { ...DEFAULT_FILTERS, status: "upheld" }, NOW))).toEqual(["b1"]);
   });
 });

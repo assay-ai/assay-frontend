@@ -1,4 +1,8 @@
-import { DISPUTED_ON_CHAIN_LABEL, chainCancelReasonCodeLabel } from "@/libs/chains/status-labels";
+import {
+  DISPUTED_ON_CHAIN_LABEL,
+  UPHELD_ON_CHAIN_LABEL,
+  chainCancelReasonCodeLabel,
+} from "@/libs/chains/status-labels";
 
 /**
  * `SlashStatus` and `CancelReason` from `assay-evm/src/Types.sol`, in words.
@@ -15,7 +19,22 @@ import { DISPUTED_ON_CHAIN_LABEL, chainCancelReasonCodeLabel } from "@/libs/chai
  * The words themselves are shared with the case pages: `status-labels.ts`.
  */
 
-export type SlashStatusKey = "none" | "pending" | "executed" | "cancelled" | "disputed" | "unknown";
+/**
+ * `upheld` is not a contract status: it is `Pending` (1) with a non-zero
+ * `disputedAt`. The arbiter's `upholdSlash` moves a `Disputed` record back to
+ * `Pending` and keeps `disputedAt`, and a record can be disputed only once
+ * (`SlashAlreadyDisputed`), so such a record has no dispute window left: it
+ * waits for its `executableAt` and is then executed. It is told apart because
+ * a page that called it plain "Pending" would offer a dispute the chain refuses.
+ */
+export type SlashStatusKey =
+  | "none"
+  | "pending"
+  | "upheld"
+  | "executed"
+  | "cancelled"
+  | "disputed"
+  | "unknown";
 
 export interface SlashStatusInfo {
   readonly key: SlashStatusKey;
@@ -43,6 +62,22 @@ export function slashStatusOf(code: number | bigint): SlashStatusInfo {
     this page cannot read, and the safe direction for a provider is to look.
   */
   return { key: "unknown", code: n, label: `Unknown status (${String(code)})`, needsAttention: true };
+}
+
+const UPHELD: { key: SlashStatusKey; label: string; needsAttention: boolean } = {
+  key: "upheld",
+  label: UPHELD_ON_CHAIN_LABEL,
+  needsAttention: true,
+};
+
+/**
+ * A record's status, told whether it was ever disputed (a non-zero
+ * `disputedAt`, or a `SlashDisputed`/`SlashUpheld` log): `Pending` with a
+ * dispute behind it is `upheld`. Every other status reads as {@link slashStatusOf}.
+ */
+export function slashRecordStatusOf(code: number | bigint, everDisputed: boolean): SlashStatusInfo {
+  const status = slashStatusOf(code);
+  return status.key === "pending" && everDisputed ? { ...UPHELD, code: status.code } : status;
 }
 
 /** A `SlashCancelled.reason`, in words. An unknown value says so rather than guessing. */
