@@ -79,3 +79,21 @@ export function chainIdOfAsset(assetId: string | null | undefined): string | nul
   if (slash < 0) return null;
   return chainIdOfAccount(`${assetId.slice(0, slash)}:x`);
 }
+
+/**
+ * The chain's name for people — `Solana devnet`, `Robinhood Chain testnet`.
+ *
+ * The name comes from `GET /chains` (`useChains()`), never from a table in
+ * this bundle; pass that list in. A chain the list does not name (or a list
+ * that has not loaded) falls back to {@link chainLabel}, so a row is never
+ * blank and never names the wrong chain. In a component, `useChainName()`
+ * (`hooks/useChainName.ts`) wires the list in for you.
+ */
+export function chainName(
+  chainId: string | null | undefined,
+  chains: readonly { chainId: string; displayName: string }[] = [],
+): string {
+  if (!chainId) return "—";
+  const named = chains.find((chain) => chain.chainId === chainId)?.displayName;
+  return named && named.trim() ? named : chainLabel(chainId);
+}

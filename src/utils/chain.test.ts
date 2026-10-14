@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addressOfAccount, chainIdOfAccount, chainIdOfAsset } from "./chain";
+import { addressOfAccount, chainIdOfAccount, chainIdOfAsset, chainName } from "./chain";
 
 const EVM = "eip155:46630:0x7FD9A17dE9fd64b35081FbAbaa9f3bb85e59F8d1";
 const SOLANA = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1:9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
@@ -60,5 +60,23 @@ describe("chainIdOfAsset", () => {
     expect(chainIdOfAsset("eip155:46630")).toBeNull();
     expect(chainIdOfAsset("")).toBeNull();
     expect(chainIdOfAsset(undefined)).toBeNull();
+  });
+});
+
+describe("chainName", () => {
+  const chains = [{ chainId: "eip155:46630", displayName: "Robinhood Chain testnet" }];
+
+  it("uses the served display name", () => {
+    expect(chainName("eip155:46630", chains)).toBe("Robinhood Chain testnet");
+  });
+
+  it("falls back to the short CAIP-2 label for a chain the list does not name", () => {
+    expect(chainName("eip155:1", chains)).toBe("eip155:1");
+    expect(chainName("solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1")).toBe("solana:EtWT…");
+  });
+
+  it("never renders blank", () => {
+    expect(chainName(null)).toBe("—");
+    expect(chainName("eip155:5", [{ chainId: "eip155:5", displayName: " " }])).toBe("eip155:5");
   });
 });
