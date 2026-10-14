@@ -50,6 +50,27 @@ const DEPOSIT_ABI = parseAbi([
  */
 const GAS_MARGIN_PERCENT = 120n;
 
+/**
+ * Upper bounds on what the RPC may ask a wallet to pay (frontend review
+ * 2026-10-15, F4). The RPC comes from `GET /chains`; a hostile one could
+ * answer a fee that burns the embedded wallet's whole balance. Every call this
+ * app sends costs well under a million gas, and the pinned chain's fees are a
+ * fraction of a gwei, so a value above these is refused, not signed.
+ */
+export const MAX_FEE_PER_GAS_WEI = 50_000_000_000n; // 50 gwei
+export const MAX_GAS_LIMIT = 3_000_000n;
+
+/** Throws when a filled transaction's gas limit or fees exceed the bounds above. */
+export function assertSaneFees(tx: Pick<Eip155UnsignedTransaction, "gasLimit" | "maxFeePerGas" | "maxPriorityFeePerGas">): void {
+  const fee = BigInt(tx.maxFeePerGas);
+  if (BigInt(tx.gasLimit) > MAX_GAS_LIMIT || fee > MAX_FEE_PER_GAS_WEI || BigInt(tx.maxPriorityFeePerGas) > fee) {
+    throw new Error(
+      `The network asked for a gas limit of ${tx.gasLimit} at up to ${tx.maxFeePerGas} wei per gas, ` +
+        "more than any transaction here needs. Nothing was sent; try again later.",
+    );
+  }
+}
+
 export function encodeApprove(spender: string, amountAtomic: bigint): `0x${string}` {
   return encodeFunctionData({
     abi: DEPOSIT_ABI,
@@ -138,7 +159,7 @@ export async function fillTransaction(input: {
     client.estimateGas({ account: from, to, data: input.data }),
     client.estimateFeesPerGas(),
   ]);
-  return {
+  const filled: Eip155UnsignedTransaction = {
     namespace: "eip155",
     chainId: input.chainId,
     kind: "transaction",
@@ -151,6 +172,8 @@ export async function fillTransaction(input: {
     maxFeePerGas: String(fees.maxFeePerGas),
     maxPriorityFeePerGas: String(fees.maxPriorityFeePerGas),
   };
+  assertSaneFees(filled);
+  return filled;
 }
 
 /** The most this transaction can cost in gas, wei. */
