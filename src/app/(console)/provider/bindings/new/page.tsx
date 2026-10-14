@@ -708,7 +708,7 @@ export default function NewToolBindingPage() {
               {draft.pricingMode === "FREE" ? (
                 <p className="self-center font-mono text-mono-12 text-03">
                   a FREE binding has no price — {asset.symbol} 0 is sent and the server holds it
-                  there
+                  there. It only ever serves free calls; paid calls go to staked paid bindings
                 </p>
               ) : (
                 <Field
