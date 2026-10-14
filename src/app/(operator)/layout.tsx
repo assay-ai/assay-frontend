@@ -12,7 +12,7 @@ import { Tag } from "@/components/ui/tag";
 import { pendingBadge } from "@/features/operator/approvals";
 import { OperatorRefusal, SuspendedBanner } from "@/features/operator/operator-refusal";
 import { OperatorSessionContext } from "@/features/operator/session-context";
-import { msUntilExpiry } from "@/features/operator/sign-in";
+import { msUntilExpiry, signOutOperator } from "@/features/operator/sign-in";
 import { OperatorSignInScreen } from "@/features/operator/sign-in-screen";
 import { ApiError } from "@/libs/ApiClient";
 import { toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
@@ -110,14 +110,11 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
     ? pendingBadge(pendingQuery.data.items.length, pendingQuery.data.pageInfo.hasMore)
     : null;
 
-  const signOut = React.useCallback(async () => {
-    try {
-      await logoutOperator();
-    } catch {
-      /* the session is dropped here whatever the backend answered */
-    }
-    clearOperatorSession("signed-out");
-  }, []);
+  // Ends the operator session only; the Privy login stays signed in.
+  const signOut = React.useCallback(
+    () => signOutOperator({ logout: logoutOperator, clear: () => clearOperatorSession("signed-out") }),
+    [],
+  );
 
   let body: React.ReactNode;
 

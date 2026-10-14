@@ -80,3 +80,58 @@ export function msUntilExpiry(expiresAt: string, now: number = Date.now()): numb
   if (Number.isNaN(at)) return 0;
   return Math.min(Math.max(at - now, 0), 2_147_483_647);
 }
+
+/** The 403 that means "signed correctly, but not an active operator". */
+export function isNotAnOperator(error: unknown): boolean {
+  return error instanceof ApiError && (error.code === "OPERATOR_NOT_AUTHORIZED" || error.status === 403);
+}
+
+/**
+ * "Sign in with Privy": what to do next with the user's Privy embedded EVM
+ * wallet. Pure, so the one-click flow can be tested without Privy.
+ *
+ *  - `login`: not signed in with Privy yet; open Privy's own modal.
+ *  - `wait`: Privy is still loading, or the embedded wallet exists on the
+ *    account but has not reached the wallet list yet.
+ *  - `create`: signed in, and the account has no embedded EVM wallet (someone
+ *    who logged in with an external wallet). Created the way the app does on
+ *    login (`createOnLogin: "users-without-wallets"`), with `createWallet()`.
+ *  - `sign`: sign the challenge with this wallet.
+ */
+export type PrivyWalletStep<W> =
+  | { readonly step: "login" }
+  | { readonly step: "wait" }
+  | { readonly step: "create" }
+  | { readonly step: "sign"; readonly wallet: W };
+
+export function privyWalletStep<W extends { walletClientType: string; address: string }>(input: {
+  readonly ready: boolean;
+  readonly authenticated: boolean;
+  readonly walletsReady: boolean;
+  readonly wallets: readonly W[];
+  /** The Privy account lists an embedded EVM wallet (`linkedAccounts`). */
+  readonly accountHasEmbeddedWallet: boolean;
+}): PrivyWalletStep<W> {
+  if (!input.ready) return { step: "wait" };
+  if (!input.authenticated) return { step: "login" };
+  const embedded = input.wallets.find((wallet) => wallet.walletClientType === "privy");
+  if (embedded) return { step: "sign", wallet: embedded };
+  if (!input.walletsReady || input.accountHasEmbeddedWallet) return { step: "wait" };
+  return { step: "create" };
+}
+
+/**
+ * Operator sign-out. Ends the operator session only: the Privy login, and the
+ * buyer or provider session that goes with it, are not touched.
+ */
+export async function signOutOperator(deps: {
+  readonly logout: () => Promise<void>;
+  readonly clear: () => void;
+}): Promise<void> {
+  try {
+    await deps.logout();
+  } catch {
+    /* the session is dropped here whatever the backend answered */
+  }
+  deps.clear();
+}
