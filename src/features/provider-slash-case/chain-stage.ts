@@ -77,19 +77,126 @@ export function caseChainStageOf(clocks: SlashProposalClocks): CaseChainStage {
 }
 
 /**
+ * How a closed case ended, for the provider:
+ *
+ * - `executed` — the penalty was taken from stake (the record was executed);
+ * - `compensated` — executed, then Assay deposited it back (`REVERSED`);
+ * - `overturned` — Assay ruled for the provider, nothing taken;
+ * - `waived` — below the de-minimis floor, never levied;
+ * - `released` — the on-chain record was cancelled or expired, its
+ *   reservation released, nothing taken;
+ * - `cancelled` — closed without a penalty (suspended, or voided by the chain).
+ */
+export type ClosedOutcome = "executed" | "compensated" | "overturned" | "waived" | "released" | "cancelled";
+
+/**
+ * A case nothing more happens to: no deadline runs, nothing is executed, and
+ * the provider has nothing to do.
+ */
+export interface ClosedStage {
+  readonly kind: "closed";
+  readonly outcome: ClosedOutcome;
+  /** When the penalty was executed on chain, for `executed` and `compensated`. */
+  readonly executedAt: string | null;
+  /**
+   * The decision is final but the on-chain record still stands (`PENDING`,
+   * `DISPUTED` or `CANCEL_REQUESTED`): its cancellation has not landed yet.
+   */
+  readonly recordStanding: boolean;
+}
+
+export type CaseStage = CaseChainStage | ClosedStage;
+
+/** The case statuses that are final: nothing moves a case out of them but a compensation. */
+export const TERMINAL_CASE_STATUSES: readonly string[] = [
+  "OVERTURNED",
+  "EXECUTED",
+  "REVERSED",
+  "WAIVED",
+  "CANCELLED",
+];
+
+const STANDING_CHAIN_STATUSES: readonly string[] = ["PENDING", "DISPUTED", "CANCEL_REQUESTED"];
+
+/**
+ * The case's stage: `closed` when the case status is final or the on-chain
+ * record is closed (`EXECUTED`, or `CANCELLED` — cancelled by the arbiter or
+ * expired), else the on-chain stage ({@link caseChainStageOf}).
+ */
+export function caseStageOf(proposal: SlashProposalSummary): CaseStage {
+  const { status, clocks } = proposal;
+  const chain = clocks.chainStatus;
+  const terminal = TERMINAL_CASE_STATUSES.includes(status);
+  if (!terminal && chain !== "EXECUTED" && chain !== "CANCELLED") return caseChainStageOf(clocks);
+
+  const executed = status === "EXECUTED" || chain === "EXECUTED" || proposal.executedAt !== null;
+  const outcome: ClosedOutcome =
+    status === "REVERSED"
+      ? "compensated"
+      : executed
+        ? "executed"
+        : status === "WAIVED"
+          ? "waived"
+          : status === "OVERTURNED"
+            ? "overturned"
+            : chain === "CANCELLED"
+              ? "released"
+              : "cancelled";
+  return {
+    kind: "closed",
+    outcome,
+    executedAt: proposal.executedAt,
+    recordStanding: chain !== undefined && STANDING_CHAIN_STATUSES.includes(chain),
+  };
+}
+
+/**
  * Whether "Respond by" is still a deadline the provider is running against.
  * Not once the case is disputed (on chain or in the app) or decided: the
  * provider's response is in, or no longer matters.
  */
-export function respondByApplies(proposal: SlashProposalSummary, stage: CaseChainStage): boolean {
+export function respondByApplies(proposal: SlashProposalSummary, stage: CaseStage): boolean {
   return stage.kind === "open" && proposal.status === "PROPOSED";
 }
 
 /**
  * Whether to offer "Acknowledge". It only records that the case was seen, so
- * it is not offered once the provider disputed on chain: they have plainly
- * seen the case, and the button would read like a step still to take.
+ * it is not offered once the provider disputed on chain (they have plainly
+ * seen the case) or once the case is closed: the button would read like a
+ * step still to take.
  */
-export function mayAcknowledge(proposal: SlashProposalSummary, stage: CaseChainStage): boolean {
+export function mayAcknowledge(proposal: SlashProposalSummary, stage: CaseStage): boolean {
   return proposal.clocks.acknowledgedAt === null && stage.kind === "open";
+}
+
+/** The one word for a closed case, as the header's figure shows it. */
+export const CLOSED_HEADLINE: Readonly<Record<ClosedOutcome, string>> = {
+  executed: "Executed",
+  compensated: "Compensated",
+  overturned: "Overturned",
+  waived: "Waived",
+  released: "Released",
+  cancelled: "Closed",
+};
+
+/**
+ * What happened, in a sentence, and that nothing more will. `when` formats a
+ * timestamp (the screen's `stampUtc`), so this stays free of the screen's
+ * formatting module.
+ */
+export function closedSentence(stage: ClosedStage, when: (iso: string) => string): string {
+  const executedOn = stage.executedAt ? ` on ${when(stage.executedAt)} UTC` : "";
+  const base: Record<ClosedOutcome, string> = {
+    executed: `This case is closed. The penalty was executed on chain${executedOn} and taken from your stake.`,
+    compensated: `This case is closed. The penalty was executed on chain${executedOn}, and Assay has since deposited it back into your stake.`,
+    overturned: "This case is closed. Assay overturned the penalty in your favour, so nothing is taken from your stake.",
+    waived: "This case is closed. The penalty was below the minimum Assay levies, so it was waived and nothing is taken.",
+    released:
+      "This case is closed. Its on-chain record was cancelled or expired, the reserved stake is released, and nothing is taken.",
+    cancelled: "This case is closed without a penalty. Nothing is taken from your stake.",
+  };
+  const standing = stage.recordStanding
+    ? " Its on-chain record still stands until its cancellation lands; the penalties on chain page shows it."
+    : "";
+  return `${base[stage.outcome]}${standing} There is no deadline and nothing for you to do.`;
 }

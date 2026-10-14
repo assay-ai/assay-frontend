@@ -7,7 +7,13 @@ import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases"
 import { caseChainStatusLabel } from "@/libs/chains/status-labels";
 import { formatMoney } from "@/utils/money";
 
-import { caseChainStageOf, respondByApplies, type CaseChainStage } from "./chain-stage";
+import {
+  CLOSED_HEADLINE,
+  TERMINAL_CASE_STATUSES,
+  caseStageOf,
+  respondByApplies,
+  type CaseStage,
+} from "./chain-stage";
 
 /**
  * `dObK1`'s status header — the pill, the two identities, both delivery
@@ -119,9 +125,16 @@ interface FigureCopy {
 }
 
 /** The second figure: the provider's deadline while it binds, else what the case waits on. */
-export function waitingFigure(data: SlashProposalCaseDetail, stage: CaseChainStage): FigureCopy {
+export function waitingFigure(data: SlashProposalCaseDetail, stage: CaseStage): FigureCopy {
   const { proposal } = data;
   const clocks = proposal.clocks;
+  if (stage.kind === "closed") {
+    return {
+      label: "Case",
+      value: "Closed",
+      caption: `${CLOSED_HEADLINE[stage.outcome].toLowerCase()}; no deadline runs and there is nothing for you to do`,
+    };
+  }
   if (stage.kind === "disputed") {
     return {
       label: "Awaiting Assay's arbiter",
@@ -169,7 +182,20 @@ export function waitingFigure(data: SlashProposalCaseDetail, stage: CaseChainSta
 }
 
 /** The third figure: when stake can be taken, read from the on-chain record once there is one. */
-export function executesFigure(stage: CaseChainStage): FigureCopy {
+export function executesFigure(stage: CaseStage): FigureCopy {
+  if (stage.kind === "closed") {
+    if (stage.outcome === "executed" || stage.outcome === "compensated") {
+      return {
+        label: "Executed",
+        value: stage.executedAt ? `${stampUtc(stage.executedAt)} UTC` : DASH,
+        caption:
+          stage.outcome === "compensated"
+            ? "taken from stake, then deposited back by Assay"
+            : "taken from stake; nothing more will be",
+      };
+    }
+    return { label: "Execution", value: "None", caption: "nothing will be taken from your stake" };
+  }
   if (stage.kind === "disputed") {
     return {
       label: "Executes",
@@ -192,14 +218,33 @@ export function executesFigure(stage: CaseChainStage): FigureCopy {
   };
 }
 
+/**
+ * The pill follows the on-chain state where it is further along than the
+ * case status: an upheld record reads UPHELD although the case still says
+ * DISPUTED, and a record executed or released on chain reads EXECUTED or
+ * CANCELLED although the case status has not caught up.
+ */
+export function statusChipOf(
+  proposalStatus: string,
+  stage: CaseStage,
+): { label: string; tone: "danger" | "primary" | "success" } {
+  const ownStatus = STATUS_COPY[proposalStatus] ?? {
+    label: proposalStatus.replace(/_/g, " "),
+    tone: "primary" as const,
+  };
+  if (stage.kind === "upheld") return STATUS_COPY.UPHELD;
+  if (stage.kind === "closed" && !TERMINAL_CASE_STATUSES.includes(proposalStatus)) {
+    if (stage.outcome === "executed") return STATUS_COPY.EXECUTED;
+    return STATUS_COPY.CANCELLED;
+  }
+  return ownStatus;
+}
+
 export function StatusHeader({ data }: { data: SlashProposalCaseDetail }) {
   const { proposal } = data;
   const clocks = proposal.clocks;
-  const status = STATUS_COPY[proposal.status] ?? {
-    label: proposal.status.replace(/_/g, " "),
-    tone: "primary" as const,
-  };
-  const stage = caseChainStageOf(clocks);
+  const stage = caseStageOf(proposal);
+  const status = statusChipOf(proposal.status, stage);
   const waiting = waitingFigure(data, stage);
   const executes = executesFigure(stage);
   const onChain =
