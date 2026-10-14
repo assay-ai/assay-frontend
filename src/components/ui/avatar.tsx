@@ -30,7 +30,8 @@ const avatarVariants = cva(
         xl: "h-10 w-10",
       },
       color: {
-        primary: "bg-primary-500",
+        // Lime fill, so the initials take the dark on-primary label instead of white.
+        primary: "bg-primary-400 [&>span]:text-on-primary",
         indigo: "bg-indigo-500", // design default
         pink: "bg-pink-500",
         teal: "bg-teal-500",

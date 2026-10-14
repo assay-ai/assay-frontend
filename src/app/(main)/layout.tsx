@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
 import { Toaster } from "sonner";
 
 import { AlertFill, CheckCircle } from "@/components/icons";
@@ -14,6 +13,7 @@ import { DEFAULT_NAV_ITEMS, TopBar } from "@/components/layout/top-bar";
 import { WalletMenu } from "@/components/layout/wallet-menu";
 import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
 import { getUnreadCount } from "@/services";
+import { useTheme } from "@/providers/ThemeProvider";
 
 /**
  * The buyer shell.
@@ -63,7 +63,7 @@ function titleFor(pathname: string): string {
     .sort((a, b) => b.length - a.length)[0];
   if (match) return TITLES[match];
   if (pathname.startsWith("/receipts/")) return "Receipt";
-  return "GoAssay.AI";
+  return "Assay";
 }
 
 const TAB_FOR_PATH: { prefix: string; id: TabBarTabId }[] = [
@@ -79,9 +79,9 @@ function tabFor(pathname: string): TabBarTabId {
 }
 
 export default function BuyerLayout({ children }: { children: React.ReactNode }) {
+  const { themeType } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
-  const [environment, setEnvironment] = useState("prod");
   // The bell's badge. A failed read shows no badge rather than a wrong one.
   const unread = useQuery({
     queryKey: ["notifications", "unread-count"],
@@ -109,8 +109,6 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
         <TopBar
           linkAs={Link}
           activeNavId={activeNavId}
-          environment={environment}
-          onEnvironmentChange={setEnvironment}
           alertCount={alertCount}
           onAlertsClick={openAlerts}
           avatar={<WalletMenu />}
@@ -150,6 +148,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
       </div>
 
       <Toaster
+        theme={themeType}
         position="top-center"
         icons={{
           success: <CheckCircle className="mt-2 text-xl" />,

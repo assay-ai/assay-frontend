@@ -74,7 +74,7 @@ const CLASS_BY_PREFIX: Record<string, ClassName> = {
  * as "it did not happen".
  */
 export const RECORDED_EVENTS_NOTE =
-  "Recorded here: limit changes including pause and resume, agent credentials created or revoked, alert channel and alert preference changes, and escrow limit changes and agent payment authorisations or revocations that GoAssay.AI relayed for you.";
+  "Recorded here: limit changes including pause and resume, agent credentials created or revoked, alert channel and alert preference changes, and escrow limit changes and agent payment authorisations or revocations that Assay relayed for you.";
 export const UNRECORDED_EVENTS_NOTE =
   "Not recorded here yet: deposits, withdrawals and refunds, approvals, an agent binding its signing key, credentials that expired on their own, and any change made before recording began.";
 
