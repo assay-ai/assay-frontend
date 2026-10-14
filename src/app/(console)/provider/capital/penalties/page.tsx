@@ -326,11 +326,14 @@ function PenaltiesOnChainContent() {
             automated system, before it can be executed.
           </p>
           <p>
-            On your own stake wallet you can dispute pending penalties on chain: select them, up to{" "}
-            {MAX_DISPUTE_SELECTION} at once, and choose &quot;Dispute selected on chain&quot;. Your
-            stake wallet signs the transaction. A disputed penalty cannot be executed until Assay&apos;s
-            arbiter rules; if nobody rules within 30 days, it can be expired and the stake released.
-            This works even while your account is blocked or the contracts are paused.
+            {/* One string: the count must never lose the space beside it ("64at once"). */}
+            {`On your own stake wallet you can dispute pending penalties on chain: select them, up to ${MAX_DISPUTE_SELECTION} at once, and choose "Dispute selected on chain". Your stake wallet signs the transaction. A disputed penalty cannot be executed until Assay's arbiter rules; if nobody rules within 30 days, it can be expired and the stake released. This works even while your account is blocked or the contracts are paused.`}
+          </p>
+          <p>
+            A penalty can be disputed on chain only once. If Assay&apos;s arbiter upholds your
+            dispute, the penalty is marked &quot;Upheld by Assay&apos;s arbiter&quot;: it cannot be
+            disputed again, and it can be executed from the time shown on it. If the arbiter cancels
+            it, the reserved stake is released.
           </p>
           <p>
             If this list ever disagrees with what Assay shows you elsewhere — in emails, in the case
@@ -488,7 +491,7 @@ function PenaltiesOnChainContent() {
                 <div className="flex w-full min-w-0 flex-col gap-2 rounded-lg border border-01 bg-02 p-3">
                   <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2">
                     <span className="text-label-13 text-01" aria-live="polite">
-                      {selected.size} of {MAX_DISPUTE_SELECTION} selected
+                      {`${selected.size} of ${MAX_DISPUTE_SELECTION} selected`}
                     </span>
                     <Button
                       type="button"
