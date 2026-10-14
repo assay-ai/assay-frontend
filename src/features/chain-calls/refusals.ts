@@ -1,5 +1,6 @@
 import type { SlashIdRefusal } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
+import { contractErrorText } from "@/libs/chains/evm/contract-errors";
 
 /**
  * `422 SLASH_CHAIN_BATCH_REFUSED`: the batch is atomic on chain, so the backend
@@ -8,15 +9,17 @@ import { ApiError } from "@/libs/ApiClient";
  *
  * ## Where the refusals come from
  *
- * The backend keeps the structured list in `AppError.context.refusals`, and its
- * exception filter does NOT put `context` on the wire — only `code` and
- * `message`. The message carries the same list,
- * `"… nothing was built: 0x<64 hex> (SlashNotPending), 0x<64 hex> (DisputeWindowClosed)"`,
- * so it is parsed from there. A `context.refusals` array is read first, so a
- * backend that starts sending it is used as is.
+ * The backend sends them as `error.context` (`publicContext: ['functionName',
+ * 'refusals']` on `SlashErrors.chainBatchRefused`): `refusals` is a list of
+ * `{ requestId, reason, detail }`, `requestId` bare hex, and `functionName`
+ * the batch it would revert. That is read first. The message carries the same
+ * list, `"… revert the whole upholdSlashBatch; nothing was built: 0x<64 hex>
+ * (SlashNotPending), …"`, and is parsed only as a fallback, for a backend
+ * that does not send the context.
  */
 
 const REFUSAL_IN_MESSAGE = /0x([0-9a-fA-F]{64})\s*\(([A-Za-z]+)\)/g;
+const FUNCTION_IN_MESSAGE = /revert the whole ([A-Za-z][A-Za-z0-9]*);/;
 
 function normaliseId(id: string): string {
   const bare = id.trim().toLowerCase().replace(/^0x/, "");
@@ -47,6 +50,18 @@ export function refusalsOf(error: unknown): SlashIdRefusal[] | null {
   return out;
 }
 
+/**
+ * The batch a `SLASH_CHAIN_BATCH_REFUSED` would have reverted
+ * (`disputeSlashBatch`, `upholdSlashBatch`, `cancelSlashBatch`), from
+ * `context.functionName`, else from the message; `null` for any other error.
+ */
+export function refusedFunctionOf(error: unknown): string | null {
+  if (!(error instanceof ApiError) || error.code !== "SLASH_CHAIN_BATCH_REFUSED") return null;
+  const fromContext = error.context?.functionName;
+  if (typeof fromContext === "string" && /^[A-Za-z][A-Za-z0-9]*$/.test(fromContext)) return fromContext;
+  return FUNCTION_IN_MESSAGE.exec(error.message)?.[1] ?? null;
+}
+
 /** Who is reading: the provider about their own penalties, or the arbiter's operator. */
 export type RefusalAudience = "provider" | "arbiter";
 
@@ -71,10 +86,13 @@ export function refusalReasonText(reason: string, audience: RefusalAudience): st
       return "This penalty is not disputed on chain, so there is nothing to uphold. Cancel it instead, or leave it.";
     case "ArbiterIsVerifier":
       return "The arbiter is the key that proposed this penalty, and may not rule on its own judgement.";
-    case "DisputeTimedOut":
-      return "This dispute went 30 days without a ruling. It can no longer be upheld, only expired, which releases the stake.";
+    case "SlashAlreadyDisputed":
+      return audience === "provider"
+        ? "You already disputed this penalty once; a penalty can be disputed only one time."
+        : "This penalty was already disputed once; a penalty can be disputed only one time.";
     default:
-      return `The chain would refuse this id (${reason}).`;
+      // `DisputeTimedOut` and the other contract errors with a sentence.
+      return contractErrorText(reason) ?? `The chain would refuse this id (${reason}).`;
   }
 }
 

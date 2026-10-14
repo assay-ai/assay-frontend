@@ -61,10 +61,10 @@ describe("connectedSpelling", () => {
 });
 
 describe("signerRoleLabel", () => {
-  it("names the three roles", () => {
+  it("names the two roles a built call can have; the admin signs none of them", () => {
     expect(signerRoleLabel("PROVIDER")).toMatch(/stake wallet/);
     expect(signerRoleLabel("ARBITER")).toBe("The arbiter");
-    expect(signerRoleLabel("ADMIN")).toBe("The settlement admin");
+    expect(signerRoleLabel("ADMIN")).toMatch(/Unknown/);
     expect(signerRoleLabel("OTHER")).toMatch(/Unknown/);
   });
 });
@@ -86,6 +86,33 @@ describe("sendSlashContractCall", () => {
     await expect(sendSlashContractCall(call(), s, { fill, wait: vi.fn() })).rejects.toThrow(/must be sent from/);
     expect(fill).not.toHaveBeenCalled();
     expect(signAndSend).not.toHaveBeenCalled();
+  });
+
+  it("names a known contract error the gas estimate reverts with, and sends nothing", async () => {
+    const { signer: s, signAndSend } = signer(ARBITER);
+    const revert = Object.assign(new Error("Execution reverted for an unknown reason."), {
+      cause: { message: "execution reverted", data: "0x6a3f467f" /* SlashWindowNotDrained() */ },
+    });
+    const fill = vi.fn(async () => {
+      throw revert;
+    });
+    await expect(sendSlashContractCall(call(), s, { fill, wait: vi.fn() })).rejects.toThrow(
+      /^The chain would refuse this upholdSlashBatch: Waiting for the daily cap to free up.*\(SlashWindowNotDrained\)\. Nothing was sent\.$/,
+    );
+    expect(signAndSend).not.toHaveBeenCalled();
+  });
+
+  it("passes an unknown estimate failure through unchanged", async () => {
+    const { signer: s } = signer(ARBITER);
+    const failure = new Error("nonce too low");
+    await expect(
+      sendSlashContractCall(call(), s, {
+        fill: vi.fn(async () => {
+          throw failure;
+        }),
+        wait: vi.fn(),
+      }),
+    ).rejects.toBe(failure);
   });
 
   it("refuses a call that carries value", async () => {
