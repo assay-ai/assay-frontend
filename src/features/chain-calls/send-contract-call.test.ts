@@ -1,20 +1,16 @@
-import { encodeFunctionData, parseAbi } from "viem";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Signer } from "@/hooks/useSigner";
 import type { Eip155UnsignedTransaction } from "@/interfaces/chain-transaction";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
+import { encodeCall } from "@/libs/chains/evm/calldata-fixtures";
 
 import { connectedSpelling, sendSlashContractCall, signerMatches, signerRoleLabel } from "./send-contract-call";
 
 const ARBITER = "0x2222222222222222222222222222222222222222";
 const CHECKSUMMED = "0x18A508C9AF1c6fc512015276F6ca2E9aaBd74680";
 const ID = `0x${"1".repeat(64)}` as const;
-const DATA = encodeFunctionData({
-  abi: parseAbi(["function upholdSlashBatch(bytes32[] requestIds)"]),
-  functionName: "upholdSlashBatch",
-  args: [[ID]],
-});
+const DATA = encodeCall("upholdSlashBatch(bytes32[])", [[ID]]);
 /** What the arbiter chose on the screen. */
 const EXPECTED = { contract: "stake" as const, functionName: "upholdSlashBatch", args: [[ID]] };
 
@@ -165,11 +161,7 @@ describe("sendSlashContractCall", () => {
     await expect(
       sendSlashContractCall(call(), s, { ...EXPECTED, args: [[`0x${"2".repeat(64)}`]] }, deps),
     ).rejects.toThrow(/arguments/);
-    const setBlocked = encodeFunctionData({
-      abi: parseAbi(["function setBlocked(address account, bool value)"]),
-      functionName: "setBlocked",
-      args: [CHECKSUMMED, true],
-    });
+    const setBlocked = encodeCall("setBlocked(address,bool)", [CHECKSUMMED, true]);
     await expect(
       sendSlashContractCall(
         call({ to: "0xCf6592A3a053d9714D16d176A86fA039Fe7B6a43", data: setBlocked, functionName: "setBlocked" }),

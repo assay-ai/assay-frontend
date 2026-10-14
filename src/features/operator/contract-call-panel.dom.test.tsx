@@ -1,6 +1,5 @@
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { encodeFunctionData, parseAbi } from "viem";
 import { describe, expect, it, vi } from "vitest";
 
 const ARBITER = "0x2222222222222222222222222222222222222222";
@@ -12,19 +11,16 @@ vi.mock("@/hooks/useSigner", () => ({
 }));
 
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
+import { encodeCall } from "@/libs/chains/evm/calldata-fixtures";
 
 import { ContractCallPanel } from "./contract-call-panel";
 
 const ID = `0x${"1".repeat(64)}` as const;
-const STAKE_ABI = parseAbi([
-  "function upholdSlashBatch(bytes32[] requestIds)",
-  "function cancelSlashBatch(bytes32[] requestIds)",
-]);
 
 const call = (functionName: "upholdSlashBatch" | "cancelSlashBatch"): SlashContractCall => ({
   chainId: "eip155:46630",
   to: "0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c",
-  data: encodeFunctionData({ abi: STAKE_ABI, functionName, args: [[ID]] }),
+  data: encodeCall(`${functionName}(bytes32[])`, [[ID]]),
   value: "0",
   signer: ARBITER,
   signerRole: "ARBITER",
