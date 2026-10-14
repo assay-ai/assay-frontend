@@ -488,8 +488,9 @@ export default function AccountBlocksPage() {
               />
 
               <p className="text-body-xs text-02">
-                Two-person (A-10): submitting sends this for approval. A different operator holding
-                ADJL approves it in the approvals inbox, and only then is the block lifted.
+                Two-person (A-10): submitting sends this for approval. You cannot approve your own
+                request: a different operator holding ADJL approves it in the approvals inbox, and
+                only then is the block lifted.
               </p>
 
               {unblockServerError ? (

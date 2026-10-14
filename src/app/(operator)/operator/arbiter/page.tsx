@@ -93,7 +93,12 @@ function duration(seconds: number | null | undefined): string {
   const hours = Math.floor((seconds % 86_400) / 3_600);
   const minutes = Math.floor((seconds % 3_600) / 60);
   const parts = [days ? `${days}d` : "", hours ? `${hours}h` : "", minutes ? `${minutes}m` : ""].filter(Boolean);
-  return `${parts.length > 0 ? parts.join(" ") : `${seconds}s`} (${seconds.toLocaleString()} s)`;
+  const short = parts.length > 0 ? parts.join(" ") : `${seconds}s`;
+  // Whole hours past a day read as hours too, the unit the dispute copy uses.
+  if (days > 0 && seconds % 3_600 === 0) {
+    return `${(seconds / 3_600).toLocaleString()} h (${short}, ${seconds.toLocaleString()} s)`;
+  }
+  return `${short} (${seconds.toLocaleString()} s)`;
 }
 
 /** Atomic units at the chain's stake asset scale, when this build pins one; raw otherwise. */

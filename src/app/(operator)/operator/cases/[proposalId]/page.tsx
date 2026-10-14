@@ -216,7 +216,11 @@ export default function OperatorCasePage() {
     clock `runningClock` names, so it is drawn against that row alone —
     repeating it on all three would be a wrong number on two of them.
   */
-  const left = remaining(clocks.secondsRemaining);
+  // A clock at zero has passed its deadline; "0h remaining" read as a live one.
+  const left =
+    clocks.secondsRemaining !== null && clocks.secondsRemaining <= 0
+      ? "deadline passed"
+      : remaining(clocks.secondsRemaining);
   const runningCopy =
     clocks.runningClock === "PROVIDER"
       ? "the provider's clock is running"

@@ -149,6 +149,18 @@ export default function OperatorsPage() {
     onError: (error) => setAddServerError(directoryErrorMessage(error)),
   });
 
+  // Editing a field drops its stale error: it was about the old value.
+  function editAdd<K extends keyof AddOperatorInput>(key: K, value: AddOperatorInput[K]) {
+    setAddForm((f) => ({ ...f, [key]: value }));
+    setAddErrors((errors) => {
+      if (!(key in errors)) return errors;
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+  }
+  const addErrorCount = Object.keys(addErrors).length;
+
   function submitAdd(event: React.FormEvent) {
     event.preventDefault();
     setAddServerError(null);
@@ -350,7 +362,7 @@ export default function OperatorsPage() {
               <Field
                 label="Wallet address"
                 value={addForm.walletAddress}
-                onChange={(e) => setAddForm((f) => ({ ...f, walletAddress: e.target.value }))}
+                onChange={(e) => editAdd("walletAddress", e.target.value)}
                 placeholder="0x…"
                 autoComplete="off"
                 spellCheck={false}
@@ -364,7 +376,7 @@ export default function OperatorsPage() {
               <Field
                 label="Subject"
                 value={addForm.subject}
-                onChange={(e) => setAddForm((f) => ({ ...f, subject: e.target.value }))}
+                onChange={(e) => editAdd("subject", e.target.value)}
                 placeholder="dan@"
                 autoComplete="off"
                 spellCheck={false}
@@ -374,7 +386,7 @@ export default function OperatorsPage() {
               <Field
                 label="Display name (optional)"
                 value={addForm.displayName}
-                onChange={(e) => setAddForm((f) => ({ ...f, displayName: e.target.value }))}
+                onChange={(e) => editAdd("displayName", e.target.value)}
                 placeholder="Dan Smith"
                 autoComplete="off"
                 error={addErrors.displayName}
@@ -382,18 +394,18 @@ export default function OperatorsPage() {
               />
               <RolesField
                 value={addForm.roles}
-                onChange={(roles) => setAddForm((f) => ({ ...f, roles }))}
+                onChange={(roles) => editAdd("roles", roles)}
                 error={addErrors.roles}
               />
               <LimitField
                 value={addForm.limit}
-                onChange={(limit) => setAddForm((f) => ({ ...f, limit }))}
+                onChange={(limit) => editAdd("limit", limit)}
                 error={addErrors.limit}
               />
               <Field
                 label="Reason code"
                 value={addForm.reasonCode}
-                onChange={(e) => setAddForm((f) => ({ ...f, reasonCode: e.target.value }))}
+                onChange={(e) => editAdd("reasonCode", e.target.value)}
                 maxLength={64}
                 placeholder="NEW_HIRE"
                 autoComplete="off"
@@ -402,13 +414,19 @@ export default function OperatorsPage() {
               <NoteBox
                 id="add-note"
                 value={addForm.note}
-                onChange={(note) => setAddForm((f) => ({ ...f, note }))}
+                onChange={(note) => editAdd("note", note)}
                 error={addErrors.note}
                 placeholder="Who they are and why they need these roles."
               />
               {addServerError ? (
                 <p className="text-body-13 text-danger-600" role="alert">
                   {addServerError}
+                </p>
+              ) : null}
+              {addErrorCount > 0 ? (
+                <p className="text-body-13 text-danger-600" role="alert">
+                  Nothing was sent. Fix the {addErrorCount === 1 ? "field" : `${addErrorCount} fields`} marked
+                  above.
                 </p>
               ) : null}
               <div className="flex flex-wrap gap-2.5">
