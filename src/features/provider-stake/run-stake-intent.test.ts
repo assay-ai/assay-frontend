@@ -1,3 +1,4 @@
+import { encodeFunctionData, parseAbi } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /*
@@ -161,7 +162,7 @@ describe("runStakeIntent", () => {
     */
     const { signer, calls } = recordingSigner();
     const intent = stakeIntent();
-    await runStakeIntent(intent, signer);
+    await runStakeIntent(intent, signer, { kind: "OPEN_STAKE", amount: null });
 
     expect(calls).toHaveLength(1);
     /* The SAME object, by identity — not a copy and not a decode. */
@@ -176,7 +177,7 @@ describe("runStakeIntent", () => {
       thing that was actually built for a chain.
     */
     const { signer, calls } = recordingSigner();
-    await runStakeIntent(stakeIntent(), signer);
+    await runStakeIntent(stakeIntent(), signer, { kind: "OPEN_STAKE", amount: null });
 
     expect(calls[0].transaction.chainId).toBe(DEVNET);
   });
@@ -186,13 +187,13 @@ describe("runStakeIntent", () => {
     const elsewhere = stakeIntent({
       transaction: { ...stakeIntent().transaction!, chainId: "eip155:46630" },
     });
-    await expect(runStakeIntent(elsewhere, signer)).rejects.toThrow(/bound to/);
+    await expect(runStakeIntent(elsewhere, signer, { kind: "OPEN_STAKE", amount: null })).rejects.toThrow(/bound to/);
     expect(calls).toHaveLength(0);
   });
 
   it("returns the signature the wallet reported", async () => {
     const { signer } = recordingSigner();
-    await expect(runStakeIntent(stakeIntent(), signer)).resolves.toEqual({ signature: SIGNATURE });
+    await expect(runStakeIntent(stakeIntent(), signer, { kind: "OPEN_STAKE", amount: null })).resolves.toEqual({ signature: SIGNATURE });
   });
 
   it("refuses a null transaction with a readable error instead of dereferencing it", async () => {
@@ -204,9 +205,9 @@ describe("runStakeIntent", () => {
       blockedBy: "UNBONDING_NOT_MATURED",
     });
 
-    await expect(runStakeIntent(blocked, signer)).rejects.toThrow(/no transaction/i);
+    await expect(runStakeIntent(blocked, signer, { kind: "WITHDRAW", amount: null })).rejects.toThrow(/no transaction/i);
     /* Not a TypeError about reading a property of null. */
-    await expect(runStakeIntent(blocked, signer)).rejects.not.toThrow(TypeError);
+    await expect(runStakeIntent(blocked, signer, { kind: "WITHDRAW", amount: null })).rejects.not.toThrow(TypeError);
     expect(calls).toHaveLength(0);
   });
 });
@@ -219,8 +220,10 @@ describe("runStakeIntent", () => {
 describe("runStakeIntent on eip155", () => {
   const TESTNET = "eip155:46630";
   const PROVIDER = "0x31b1DF6F36ec62075a3BE03a5C0BebB06534bA72";
-  const STAKE = "0xF80b7d295f8F62f6a2ade0477823A20374815E3f";
-  const USDG = "0x915Ef7c9F9f80a69e3BE47A38EE0Bb47607103ec";
+  const STAKE = "0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c";
+  const USDG = "0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
+  const STAKE_ABI = parseAbi(["function depositStake(uint64)", "function requestUnstake(uint64)"]);
+  const DEPOSIT = { kind: "DEPOSIT" as const, amount: "50000000" };
 
   function evmDeposit(): StakeIntent {
     return stakeIntent({
@@ -233,7 +236,7 @@ describe("runStakeIntent on eip155", () => {
         kind: "transaction",
         from: PROVIDER,
         to: STAKE,
-        data: "0x208d4960",
+        data: encodeFunctionData({ abi: STAKE_ABI, functionName: "depositStake", args: [50_000_000n] }),
         value: "0",
         nonce: "0",
         gasLimit: "350000",
@@ -271,7 +274,7 @@ describe("runStakeIntent on eip155", () => {
   it("approves the stake contract for the amount, waits for it, then deposits", async () => {
     const { signer, order } = evmSigner();
 
-    await expect(runStakeIntent(evmDeposit(), signer)).resolves.toEqual({ signature: "0xdep" });
+    await expect(runStakeIntent(evmDeposit(), signer, DEPOSIT)).resolves.toEqual({ signature: "0xdep" });
 
     expect(evmRpc.calls).toEqual([
       `readiness:${PROVIDER}:${USDG}:${STAKE}`,
@@ -288,7 +291,7 @@ describe("runStakeIntent on eip155", () => {
     // them, so the approval must go through `signAndSend` like the deposit.
     const { signer, order } = evmSigner("external");
 
-    await expect(runStakeIntent(evmDeposit(), signer)).resolves.toEqual({ signature: "0xdep" });
+    await expect(runStakeIntent(evmDeposit(), signer, DEPOSIT)).resolves.toEqual({ signature: "0xdep" });
 
     expect(signer.signTransaction).not.toHaveBeenCalled();
     expect(order).toEqual([`send:${USDG}`, `send:${STAKE}`]);
@@ -302,18 +305,59 @@ describe("runStakeIntent on eip155", () => {
     evmRpc.allowance = 50_000_000n;
     const { signer, order } = evmSigner();
 
-    await runStakeIntent(evmDeposit(), signer);
+    await runStakeIntent(evmDeposit(), signer, DEPOSIT);
 
     expect(order).toEqual([`send:${STAKE}`]);
   });
 
   it("never approves for an unstake — nothing is pulled from the wallet", async () => {
     const { signer, order } = evmSigner();
-    const unstake = { ...evmDeposit(), kind: "UNSTAKE" as const };
+    const deposit = evmDeposit();
+    const unstake = {
+      ...deposit,
+      kind: "UNSTAKE" as const,
+      transaction: {
+        ...deposit.transaction!,
+        data: encodeFunctionData({ abi: STAKE_ABI, functionName: "requestUnstake", args: [50_000_000n] }),
+      },
+    };
 
-    await runStakeIntent(unstake, signer);
+    await runStakeIntent(unstake, signer, { kind: "UNSTAKE", amount: "50000000" });
 
     expect(evmRpc.calls).toEqual([]);
     expect(order).toEqual([`send:${STAKE}`]);
+  });
+
+  /* Frontend review 2026-10-15, F1: the intent is the API's, so it is checked against the screen. */
+  it("refuses a deposit that calls anything but depositStake(amount) on the pinned stake contract", async () => {
+    const { signer, order } = evmSigner();
+    const deposit = evmDeposit();
+    const ATTACKER = "0x000000000000000000000000000000000000dEaD";
+    const elsewhere = { ...deposit, transaction: { ...deposit.transaction!, to: ATTACKER } };
+    const more = {
+      ...deposit,
+      transaction: {
+        ...deposit.transaction!,
+        data: encodeFunctionData({ abi: STAKE_ABI, functionName: "depositStake", args: [60_000_000n] }),
+      },
+    };
+
+    await expect(runStakeIntent(elsewhere, signer, DEPOSIT)).rejects.toThrow(/none of this app's contracts/);
+    await expect(runStakeIntent(more, signer, DEPOSIT)).rejects.toThrow(/arguments/);
+    await expect(runStakeIntent(deposit, signer, { kind: "DEPOSIT", amount: "1" })).rejects.toThrow(/amount/);
+    await expect(runStakeIntent(deposit, signer, { kind: "WITHDRAW", amount: "50000000" })).rejects.toThrow(
+      /asked for WITHDRAW/,
+    );
+    expect(order).toEqual([]);
+    expect(evmRpc.calls).toEqual([]);
+  });
+
+  it("refuses to approve a token other than the pinned settlement token", async () => {
+    const { signer, order } = evmSigner();
+    const deposit = evmDeposit();
+    const fake = { ...deposit, amount: { ...deposit.amount!, asset: `${TESTNET}/erc20:0x000000000000000000000000000000000000dEaD` } };
+
+    await expect(runStakeIntent(fake, signer, DEPOSIT)).rejects.toThrow(/settlement token/);
+    expect(order).toEqual([]);
   });
 });
