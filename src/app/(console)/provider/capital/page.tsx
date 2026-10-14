@@ -38,7 +38,7 @@ import {
   stakeChains,
   stakeDecimals,
 } from "@/features/provider-stake/chain-stake";
-import { runStakeIntent } from "@/features/provider-stake/run-stake-intent";
+import { runStakeIntent, type StakeExpectation } from "@/features/provider-stake/run-stake-intent";
 import { useChains } from "@/hooks/useChains";
 import type { Chain } from "@/interfaces/chain";
 import { readableDerivation } from "@/features/provider-stake/derivation";
@@ -969,6 +969,8 @@ function StakeActionSheet({
   const [amount, setAmount] = React.useState("");
   const [phase, setPhase] = React.useState<SheetPhase>("idle");
   const [intent, setIntent] = React.useState<StakeIntent | null>(null);
+  /* What was asked for when `intent` was built; it is signed only if it says this. */
+  const [requested, setRequested] = React.useState<StakeExpectation | null>(null);
   /** A refusal the platform stated. Its own code and sentence, never reworded. */
   const [refusal, setRefusal] = React.useState<ApiError | null>(null);
   /** Anything the wallet or the browser said. Never blank when it is set. */
@@ -1023,12 +1025,17 @@ function StakeActionSheet({
     setWalletDetail(null);
     setDeclined(false);
     try {
-      const built =
+      const ask: StakeExpectation =
         action === "OPEN_STAKE"
+          ? { kind: "OPEN_STAKE", amount: null }
+          : { kind: "DEPOSIT", amount: toAtomic(parsed!, decimals) };
+      const built =
+        ask.amount === null
           ? // No argument, not an empty object — `open_stake` carries no amount
             // and moves no tokens.
             await createOpenStakeIntent()
-          : await createStakeDepositIntent({ amount: toAtomic(parsed!, decimals) });
+          : await createStakeDepositIntent({ amount: ask.amount });
+      setRequested(ask);
       setIntent(built);
       setPhase("preflight");
     } catch (e) {
@@ -1043,12 +1050,12 @@ function StakeActionSheet({
   }
 
   async function sign() {
-    if (intent === null || signerState.status !== "ready") return;
+    if (intent === null || requested === null || signerState.status !== "ready") return;
     setPhase("signing");
     setWalletDetail(null);
     setDeclined(false);
     try {
-      const { signature } = await runStakeIntent(intent, signerState.signer);
+      const { signature } = await runStakeIntent(intent, signerState.signer, requested);
       setPhase("done");
       onSigned({ kind: intent.kind === "OPEN_STAKE" ? "OPEN_STAKE" : "DEPOSIT", signature, amount: intent.amount });
       onOpenChange(false);
