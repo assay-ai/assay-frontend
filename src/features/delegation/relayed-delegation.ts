@@ -2,6 +2,7 @@ import type { DelegateIntent, RelayedDelegate } from "@/interfaces";
 import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import type { Signer } from "@/hooks/useSigner";
 import { relayedSubmitBody } from "@/features/escrow/relayed-submission";
+import { assertTypedData } from "@/libs/chains/evm/signing-guard";
 
 export const DELEGATION_SUBMISSION_REFUSED = "DELEGATION_SUBMISSION_REFUSED";
 
@@ -12,7 +13,8 @@ const PRIMARY_TYPE: Record<DelegateIntent["kind"], string> = {
 
 /**
  * The escrow's EIP-712 domain as THIS app knows it: the chain from the payer's
- * account, the contract from `GET /escrow`. Never taken from the request.
+ * account, the contract from `GET /escrow`. Never taken from the request, and
+ * the request must also match the contracts pinned in the bundle.
  */
 export interface ExpectedDomain {
   /** EVM chain id, decimal. */
@@ -20,31 +22,6 @@ export interface ExpectedDomain {
   /** The escrow proxy's 0x address. */
   verifyingContract: string;
 }
-
-export const ESCROW_DOMAIN_NAME = "Assay Settlement";
-export const ESCROW_DOMAIN_VERSION = "2";
-
-/** The canonical field lists, as assay-evm `src/Types.sol` declares them. */
-export const DELEGATION_TYPES: Record<
-  string,
-  readonly { name: string; type: string }[]
-> = {
-  AuthorizeDelegate: [
-    { name: "payer", type: "address" },
-    { name: "delegate", type: "address" },
-    { name: "maxVoucherAmount", type: "uint64" },
-    { name: "maxPerWindow", type: "uint64" },
-    { name: "validUntil", type: "uint64" },
-    { name: "nonce", type: "uint64" },
-    { name: "deadline", type: "uint64" },
-  ],
-  RevokeDelegate: [
-    { name: "payer", type: "address" },
-    { name: "delegate", type: "address" },
-    { name: "nonce", type: "uint64" },
-    { name: "deadline", type: "uint64" },
-  ],
-};
 
 /** What the person chose on the screen; the request must say exactly this before it is signed. */
 export interface ExpectedDelegation {
@@ -97,36 +74,17 @@ export async function submitRelayedDelegation(
       `${DELEGATION_SUBMISSION_REFUSED}: a ${intent.kind} request must sign ${PRIMARY_TYPE[intent.kind]}, not ${tx.primaryType}.`,
     );
   }
-  const domainProblems: string[] = [];
-  if (tx.domain.name !== ESCROW_DOMAIN_NAME) domainProblems.push("name");
-  if (tx.domain.version !== ESCROW_DOMAIN_VERSION)
-    domainProblems.push("version");
-  if (String(tx.domain.chainId) !== expected.domain.chainId)
-    domainProblems.push("chainId");
-  if (
-    !sameAddress(tx.domain.verifyingContract, expected.domain.verifyingContract)
-  ) {
-    domainProblems.push("verifyingContract");
-  }
-  if ((tx.domain as { salt?: unknown }).salt !== undefined)
-    domainProblems.push("salt");
-  const fields = tx.types[tx.primaryType];
-  const canonical = DELEGATION_TYPES[tx.primaryType];
-  if (
-    !fields ||
-    fields.length !== canonical.length ||
-    fields.some(
-      (f, i) => f.name !== canonical[i].name || f.type !== canonical[i].type,
-    ) ||
-    Object.keys(tx.types).some(
-      (t) => t !== tx.primaryType && t !== "EIP712Domain",
-    )
-  ) {
-    domainProblems.push("types");
-  }
-  if (domainProblems.length > 0) {
+  // The pinned escrow domain and the canonical struct, the check every
+  // signing path shares (`libs/chains/evm/signing-guard.ts`).
+  assertTypedData(
+    tx,
+    { chainId: `eip155:${expected.domain.chainId}`, primaryTypes: [PRIMARY_TYPE[intent.kind]], message: {} },
+    DELEGATION_SUBMISSION_REFUSED,
+  );
+  // The escrow `GET /escrow` served must be that same pinned contract.
+  if (!sameAddress(tx.domain.verifyingContract, expected.domain.verifyingContract)) {
     throw new Error(
-      `${DELEGATION_SUBMISSION_REFUSED}: the request to sign is not for this escrow (${domainProblems.join(", ")}). Nothing was signed.`,
+      `${DELEGATION_SUBMISSION_REFUSED}: the request to sign is not for this escrow (verifyingContract). Nothing was signed.`,
     );
   }
 

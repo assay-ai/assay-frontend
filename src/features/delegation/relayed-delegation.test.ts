@@ -171,7 +171,7 @@ describe("submitRelayedDelegation", () => {
       const signer = signerSpy();
       await expect(
         submitRelayedDelegation(tampered, signer, EXPECTED, vi.fn()),
-      ).rejects.toThrow(/not for this escrow/);
+      ).rejects.toThrow(/not for this (escrow|app.s escrow contract)/);
       expect(signer.signTypedData).not.toHaveBeenCalled();
     },
   );
