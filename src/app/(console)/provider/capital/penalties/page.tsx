@@ -252,7 +252,11 @@ function PenaltiesOnChainContent() {
 
     setStage("sending");
     try {
-      await sendSlashContractCall(call, signerState.signer);
+      await sendSlashContractCall(call, signerState.signer, {
+        contract: "stake",
+        functionName: "disputeSlashBatch",
+        args: [requestIds],
+      });
     } catch (error) {
       setDisputeError(
         isUserRejection(error)

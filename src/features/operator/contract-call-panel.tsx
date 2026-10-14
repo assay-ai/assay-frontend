@@ -12,6 +12,15 @@ import {
 } from "@/features/chain-calls/send-contract-call";
 import { isUserRejection, useConnectedAddresses, useSigner } from "@/hooks/useSigner";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
+import { assertContractCall, formatCallArg, type ExpectedCall } from "@/libs/chains/evm/signing-guard";
+
+/** The pinned contracts, by the name the panel shows. */
+const CONTRACT_LABEL: Record<ExpectedCall["contract"], string> = {
+  escrow: "X402Escrow",
+  stake: "X402Stake",
+  config: "X402Config",
+  token: "settlement token",
+};
 
 /**
  * One unsigned contract call the operator console built for someone else's
@@ -23,14 +32,23 @@ import type { SlashContractCall } from "@/interfaces/slash-dispute";
  * this browser is `signer` (case-insensitive, as EVM addresses are), and goes
  * through the same `useSigner` → `signAndSend` path as every other
  * transaction in the app. The backend never signs any of these.
+ *
+ * The server's `functionName` and `requestIds` are labels, and `data` is what
+ * is signed (operator review 2026-10-15, F1). So the calldata is decoded here
+ * against the pinned contract and must be exactly `expected` — what the
+ * operator selected on this screen. The panel shows the decoded call, and
+ * offers neither the wallet nor the Safe JSON when it does not match.
  */
 export function ContractCallPanel({
   call,
+  expected,
   title,
   afterSend,
   onSent,
 }: {
   call: SlashContractCall;
+  /** The call the operator chose here; anything else is refused. */
+  expected: ExpectedCall;
   title: string;
   /** What happens once it lands, in a sentence: who mirrors it, and when. */
   afterSend: string;
@@ -42,7 +60,15 @@ export function ContractCallPanel({
     address: connectedSpelling(connected, call.signer),
   });
   const walletAddress = signerState.status === "ready" ? signerState.signer.address : null;
-  const canSignHere = signerMatches(walletAddress, call);
+  const checked = React.useMemo(() => {
+    try {
+      return { decoded: assertContractCall(call, expected), refusal: null };
+    } catch (e) {
+      return { decoded: null, refusal: e instanceof Error ? e.message : String(e) };
+    }
+  }, [call, expected]);
+  const decoded = checked.decoded;
+  const canSignHere = decoded !== null && signerMatches(walletAddress, call);
 
   const [sending, setSending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -66,7 +92,7 @@ export function ContractCallPanel({
     setError(null);
     setSending(true);
     try {
-      const sent = await sendSlashContractCall(call, signerState.signer);
+      const sent = await sendSlashContractCall(call, signerState.signer, expected);
       setHash(sent);
       onSent?.(sent);
     } catch (e) {
@@ -85,37 +111,41 @@ export function ContractCallPanel({
   return (
     <div className="flex w-full min-w-0 flex-col gap-3 rounded-lg border border-01 bg-02 p-3 tablet:p-4">
       <p className="text-label-13 text-01">{title}</p>
-      <dl className="grid w-full grid-cols-1 gap-x-5 gap-y-2 tablet:grid-cols-2">
-        <Row label="Function" value={call.functionName} />
-        <Row label="Chain" value={call.chainId} />
-        <Row label="To (contract)" value={call.to} />
-        <Row label="Value" value={call.value} />
-        <Row label="Must be signed by" value={call.signer} />
-        <Row label="Signer role" value={`${signerRoleLabel(call.signerRole)} (${call.signerRole})`} />
-        {call.requestIds.length > 0 ? (
-          <Row label="Penalties" value={`${call.requestIds.length} request id${call.requestIds.length === 1 ? "" : "s"}`} />
-        ) : null}
-      </dl>
-      {call.requestIds.length > 0 ? (
-        <details className="text-body-xs text-02">
-          <summary className="cursor-pointer">Request ids, in calldata order</summary>
-          <ul className="mt-1 flex flex-col gap-0.5 font-mono text-mono-12 text-01">
-            {call.requestIds.map((id) => (
-              <li key={id} className="break-all">
-                {id}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-      <CodeBlock title={`${call.functionName} calldata (unsigned)`} code={call.data} />
-      <CodeBlock title="Safe Transaction Builder JSON" code={safeJson} />
+      {decoded === null ? (
+        <p className="text-body-13 text-danger-600" role="alert">
+          This is not the transaction you asked for, so it is not offered for signing or copying.{" "}
+          {checked.refusal}
+        </p>
+      ) : (
+        <>
+          <dl className="grid w-full grid-cols-1 gap-x-5 gap-y-2 tablet:grid-cols-2">
+            <Row label="Function (decoded from the calldata)" value={decoded.functionName} />
+            <Row label="Chain" value={call.chainId} />
+            <Row label="To (contract)" value={`${decoded.to} (${CONTRACT_LABEL[decoded.contract]})`} />
+            <Row label="Value" value={call.value} />
+            <Row label="Must be signed by" value={call.signer} />
+            <Row label="Signer role" value={`${signerRoleLabel(call.signerRole)} (${call.signerRole})`} />
+          </dl>
+          <div className="flex flex-col gap-0.5 text-body-xs text-02">
+            <span className="text-label-13 text-02">Arguments (decoded from the calldata)</span>
+            <ul className="flex flex-col gap-0.5 font-mono text-mono-12 text-01">
+              {decoded.args.map((arg, i) => (
+                <li key={i} className="break-all">
+                  {formatCallArg(arg)}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <CodeBlock title={`${decoded.functionName} calldata (unsigned)`} code={call.data} />
+          <CodeBlock title="Safe Transaction Builder JSON" code={safeJson} />
+        </>
+      )}
 
       {hash ? (
         <p className="text-body-13 text-02" role="status">
           Sent and mined as <span className="break-all font-mono text-mono-12 text-01">{hash}</span>. {afterSend}
         </p>
-      ) : canSignHere ? (
+      ) : decoded === null ? null : canSignHere ? (
         <Button type="button" variant="secondary" className="self-start" loading={sending} onClick={() => void send()}>
           Sign and send with the connected wallet
         </Button>

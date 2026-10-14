@@ -427,10 +427,16 @@ export default function ArbiterPage() {
                     : "Prepare ruling"}
               </Button>
             </form>
-            {rulingCall ? (
+            {rulingCall && prepareRuling.variables ? (
               <div className="mt-4">
                 <ContractCallPanel
                   call={rulingCall}
+                  expected={{
+                    contract: "stake",
+                    functionName:
+                      prepareRuling.variables.ruling === "UPHOLD" ? "upholdSlashBatch" : "cancelSlashBatch",
+                    args: [prepareRuling.variables.requestIds],
+                  }}
                   title="The arbiter's unsigned ruling"
                   afterSend="The cases move once the chain watcher sees it land; this list refreshes then."
                   onSent={refreshAll}
@@ -510,10 +516,15 @@ export default function ArbiterPage() {
                 Prepare on-chain block
               </Button>
             </form>
-            {blockCall ? (
+            {blockCall && prepareBlock.variables ? (
               <div className="mt-4">
                 <ContractCallPanel
                   call={blockCall}
+                  expected={{
+                    contract: "config",
+                    functionName: "setBlocked",
+                    args: [prepareBlock.variables.account, true],
+                  }}
                   title="The arbiter's unsigned block"
                   afterSend="The indexer counts it in the blocked addresses once it lands."
                   onSent={refreshAll}

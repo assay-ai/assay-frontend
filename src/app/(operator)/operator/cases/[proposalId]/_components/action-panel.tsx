@@ -1761,6 +1761,16 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                   */
                   <ContractCallPanel
                     call={evmCancelCall(cancelIntent, casePenalty.asset)}
+                    /*
+                      The request id is the intent's own: the case brief carries
+                      no on-chain id to compare it with. The function, the
+                      pinned contract and the single id are still checked.
+                    */
+                    expected={{
+                      contract: "stake",
+                      functionName: "cancelSlash",
+                      args: evmCancelCall(cancelIntent, casePenalty.asset).requestIds,
+                    }}
                     title={`cancelSlash for ${cancelIntent.requestId}`}
                     afterSend="The case moves to cancelled once the reconcile sweep reads the record back off the chain."
                     onSent={setCancelSignature}
