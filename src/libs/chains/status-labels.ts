@@ -11,6 +11,8 @@
  * (`src/modules/chains/errors/chains.errors.ts`).
  */
 
+import { contractErrorNameInText, contractErrorText } from "./evm/contract-errors";
+
 export const DISPUTED_ON_CHAIN_LABEL = "Disputed on chain — awaiting arbiter";
 export const CANCEL_REQUESTED_LABEL = "Cancel requested — arbiter/admin to sign";
 export const DISPUTE_UNRESOLVED_LABEL = "Dispute unresolved (30 days)";
@@ -85,5 +87,8 @@ export function chainErrorLabel(code: string | null | undefined): string | null 
  */
 export function describeChainRefusal(error: { code: string; message: string }): string {
   const label = chainErrorLabel(error.code);
-  return label ? `${label} · ${error.code} · ${error.message}` : `${error.code} · ${error.message}`;
+  const base = label ? `${label} · ${error.code} · ${error.message}` : `${error.code} · ${error.message}`;
+  // A revert the backend names in its message (e.g. `… reverts SlashWindowNotDrained`), in words first.
+  const revert = contractErrorText(contractErrorNameInText(error.message));
+  return revert ? `${revert} · ${base}` : base;
 }

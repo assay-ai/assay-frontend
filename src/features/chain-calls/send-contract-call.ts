@@ -2,6 +2,8 @@ import type { Signer } from "@/hooks/useSigner";
 import type { Eip155UnsignedTransaction } from "@/interfaces/chain-transaction";
 import type { SlashCallSignerRole, SlashContractCall } from "@/interfaces/slash-dispute";
 import { sameEvmAddress, waitForContractCall } from "@/libs/chains/evm/contract-call";
+import { contractErrorNameOf } from "@/libs/chains/evm/contract-error-selectors";
+import { contractErrorText } from "@/libs/chains/evm/contract-errors";
 import { fillTransaction } from "@/libs/chains/evm/deposit-transaction";
 
 /**
@@ -17,7 +19,9 @@ import { fillTransaction } from "@/libs/chains/evm/deposit-transaction";
  *
  * It refuses, before the wallet is asked anything, a call from another
  * account than `signer`, a call carrying value, and (inside `signAndSend`) a
- * call for another chain than the one the signer is bound to.
+ * call for another chain than the one the signer is bound to. A gas estimate
+ * that reverts with a contract error this app knows (`contract-errors.ts`) is
+ * refused in plain words, with the error's name.
  */
 
 /** True when the wallet connected here is the account the call must come from. */
@@ -41,8 +45,6 @@ export function signerRoleLabel(role: SlashCallSignerRole | string | undefined):
       return "The provider's stake wallet";
     case "ARBITER":
       return "The arbiter";
-    case "ADMIN":
-      return "The settlement admin";
     default:
       return role ? `Unknown signer role (${role})` : "Not stated";
   }
@@ -80,12 +82,24 @@ export async function sendSlashContractCall(
   if (!/^0x[0-9a-fA-F]*$/.test(call.data)) {
     throw new Error(`The ${call.functionName} calldata is not hex. Nothing was sent.`);
   }
-  const tx = await deps.fill({
-    chainId: call.chainId,
-    from: signer.address,
-    to: call.to,
-    data: call.data as `0x${string}`,
-  });
+  let tx: Eip155UnsignedTransaction;
+  try {
+    tx = await deps.fill({
+      chainId: call.chainId,
+      from: signer.address,
+      to: call.to,
+      data: call.data as `0x${string}`,
+    });
+  } catch (error) {
+    const name = contractErrorNameOf(error);
+    const text = contractErrorText(name);
+    if (name && text) {
+      throw new Error(`The chain would refuse this ${call.functionName}: ${text} (${name}). Nothing was sent.`, {
+        cause: error,
+      });
+    }
+    throw error;
+  }
   const hash = (await signer.signAndSend(tx)) as `0x${string}`;
   await deps.wait(call.chainId, hash, call.functionName);
   return hash;

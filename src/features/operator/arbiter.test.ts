@@ -130,6 +130,12 @@ describe("arbiterErrorMessage", () => {
     expect(arbiterErrorMessage(new ApiError("CHAIN_ADDRESS_ALREADY_BLOCKED", "m", 409), "block")).toMatch(/already blocked/);
     expect(arbiterErrorMessage(new ApiError("CHAIN_PROGRAM_PAUSED", "m", 503), "ruling")).toMatch(/^Contracts paused/);
     expect(arbiterErrorMessage(new ApiError("SLASH_CHAIN_BATCH_REFUSED", "m", 422), "ruling")).toMatch(/marked in the list/);
+    expect(
+      arbiterErrorMessage(
+        new ApiError("SLASH_CHAIN_BATCH_REFUSED", "m", 422, undefined, { functionName: "upholdSlashBatch" }),
+        "ruling",
+      ),
+    ).toMatch(/refuse the whole upholdSlashBatch\./);
     expect(arbiterErrorMessage(new ApiError("OPERATOR_ROLE_REQUIRED", "m", 403), "block")).toMatch(/ADJL, SRE or TRE/);
     expect(arbiterErrorMessage(new ApiError("SOMETHING_ELSE", "the backend says", 500), "ruling")).toBe(
       "SOMETHING_ELSE · the backend says",

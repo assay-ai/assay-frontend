@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ApiError } from "@/libs/ApiClient";
 
-import { refusalReasonText, refusalsById, refusalsOf } from "./refusals";
+import { refusalReasonText, refusalsById, refusalsOf, refusedFunctionOf } from "./refusals";
 
 const A = "a".repeat(64);
 const B = "B".repeat(64);
@@ -13,7 +13,21 @@ const MESSAGE =
   `0x${A} (SlashNotPending), 0x${B} (DisputeWindowClosed)`;
 
 describe("refusalsOf", () => {
-  it("parses the refusals from the message, which is all the backend puts on the wire", () => {
+  it("reads error.context as the backend sends it: bare-hex ids, the contract reason, its detail", () => {
+    const error = new ApiError("SLASH_CHAIN_BATCH_REFUSED", "not parsed", 422, undefined, {
+      functionName: "upholdSlashBatch",
+      refusals: [
+        { requestId: A, reason: "DisputeTimedOut", detail: "disputed more than 30 days ago" },
+        { requestId: B, reason: "SlashAlreadyDisputed", detail: "already disputed once" },
+      ],
+    });
+    expect(refusalsOf(error)).toEqual([
+      { requestId: `0x${A}`, reason: "DisputeTimedOut", detail: "disputed more than 30 days ago" },
+      { requestId: `0x${B.toLowerCase()}`, reason: "SlashAlreadyDisputed", detail: "already disputed once" },
+    ]);
+  });
+
+  it("falls back to parsing the message when the backend sends no context", () => {
     const refusals = refusalsOf(new ApiError("SLASH_CHAIN_BATCH_REFUSED", MESSAGE, 422));
     expect(refusals).toEqual([
       { requestId: `0x${A}`, reason: "SlashNotPending" },
@@ -52,6 +66,7 @@ describe("refusalReasonText", () => {
       "SlashNotDisputed",
       "ArbiterIsVerifier",
       "DisputeTimedOut",
+      "SlashAlreadyDisputed",
     ];
     for (const reason of reasons) {
       const text = refusalReasonText(reason, "provider");
@@ -61,10 +76,33 @@ describe("refusalReasonText", () => {
     expect(refusalReasonText("DisputeWindowClosed", "provider")).toMatch(/window has closed/);
     expect(refusalReasonText("NotSlashedProvider", "provider")).toMatch(/not your stake wallet/);
     expect(refusalReasonText("DisputeTimedOut", "arbiter")).toMatch(/30 days/);
+    expect(refusalReasonText("SlashAlreadyDisputed", "provider")).toMatch(/already disputed this penalty once/);
+  });
+
+  it("uses the contract-error sentence for a reason it has no case for", () => {
+    expect(refusalReasonText("SlashWindowNotDrained", "arbiter")).toMatch(/^Waiting for the daily cap to free up/);
   });
 
   it("names an unknown reason rather than guessing", () => {
     expect(refusalReasonText("SomethingNew", "arbiter")).toBe("The chain would refuse this id (SomethingNew).");
+  });
+});
+
+describe("refusedFunctionOf", () => {
+  it("prefers context.functionName and falls back to the message", () => {
+    const withContext = new ApiError("SLASH_CHAIN_BATCH_REFUSED", MESSAGE, 422, undefined, {
+      functionName: "cancelSlashBatch",
+    });
+    expect(refusedFunctionOf(withContext)).toBe("cancelSlashBatch");
+    expect(refusedFunctionOf(new ApiError("SLASH_CHAIN_BATCH_REFUSED", MESSAGE, 422))).toBe("disputeSlashBatch");
+    expect(
+      refusedFunctionOf(new ApiError("SLASH_CHAIN_BATCH_REFUSED", MESSAGE, 422, undefined, { functionName: "x y" })),
+    ).toBe("disputeSlashBatch");
+  });
+
+  it("is null for another error, or a message that names none", () => {
+    expect(refusedFunctionOf(new ApiError("CHAIN_PROGRAM_PAUSED", MESSAGE, 503))).toBeNull();
+    expect(refusedFunctionOf(new ApiError("SLASH_CHAIN_BATCH_REFUSED", "nope", 422))).toBeNull();
   });
 });
 

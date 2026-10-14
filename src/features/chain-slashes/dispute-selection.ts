@@ -1,3 +1,4 @@
+import { refusedFunctionOf } from "@/features/chain-calls/refusals";
 import { MAX_SLASH_BATCH } from "@/libs/chains/evm/stake-slashes/abi";
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
 import { ApiError } from "@/libs/ApiClient";
@@ -127,7 +128,7 @@ export function disputeErrorMessage(error: unknown, chainName: string): string {
   }
   switch (error.code) {
     case "SLASH_CHAIN_BATCH_REFUSED":
-      return "Nothing was sent: the chain would refuse the whole batch. The penalties it would refuse are marked below; unselect them and try again.";
+      return `Nothing was sent: the chain would refuse the whole ${refusedFunctionOf(error) ?? "batch"}. The penalties it would refuse are marked below; unselect them and try again.`;
     case "PROVIDER_STAKE_AUTHORITY_UNPROVEN":
       return `Assay has no proved stake wallet for you on ${chainName}, so it cannot name the wallet that disputes. Nothing was sent. Dispute from the case page, or contact Assay support.`;
     case "SLASH_CHAIN_UNAVAILABLE":

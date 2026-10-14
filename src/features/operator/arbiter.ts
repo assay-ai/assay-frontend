@@ -20,6 +20,7 @@ import type {
   ArbiterRulingBody,
   OperatorRole,
 } from "@/interfaces/operator";
+import { refusedFunctionOf } from "@/features/chain-calls/refusals";
 import { ApiError } from "@/libs/ApiClient";
 import { MAX_SLASH_BATCH } from "@/libs/chains/evm/stake-slashes/abi";
 import { normaliseEvmAddress } from "@/libs/chains/evm/stake-slashes/address";
@@ -293,8 +294,8 @@ const MESSAGES: Readonly<Record<string, string | ((action: ArbiterAction, e: Api
   CHAIN_ADDRESS_ALREADY_BLOCKED: "This address is already blocked on chain. Nothing to do.",
   CHAIN_PROGRAM_PAUSED: (_a, e) => `Contracts paused — try after unpause. ${e.message}.`,
   CHAIN_ADDRESS_BLOCKED: (_a, e) => `Blocked on chain. ${e.message}.`,
-  SLASH_CHAIN_BATCH_REFUSED:
-    "Nothing was built: the chain would refuse the whole batch. The penalties it would refuse are marked in the list; unselect them and try again.",
+  SLASH_CHAIN_BATCH_REFUSED: (_a, e) =>
+    `Nothing was built: the chain would refuse the whole ${refusedFunctionOf(e) ?? "batch"}. The penalties it would refuse are marked in the list; unselect them and try again.`,
   SLASH_CHAIN_UNAVAILABLE: "The backend has no EVM settlement contracts configured, so nothing can be read or built here.",
   CHAIN_UNSUPPORTED: "The backend does not support this chain.",
   CHAIN_PAYLOAD_MALFORMED: (_a, e) => `The request was not accepted: ${e.message}.`,

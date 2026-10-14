@@ -123,6 +123,11 @@ describe("disputeErrorMessage", () => {
     );
   });
 
+  it("names the refused batch from error.context", () => {
+    const error = new ApiError("SLASH_CHAIN_BATCH_REFUSED", "x", 422, undefined, { functionName: "disputeSlashBatch" });
+    expect(disputeErrorMessage(error, "x")).toMatch(/refuse the whole disputeSlashBatch\./);
+  });
+
   it("labels a pause and an on-chain block", () => {
     expect(disputeErrorMessage(new ApiError("CHAIN_PROGRAM_PAUSED", "paused", 503), "x")).toMatch(
       /^Contracts paused — try after unpause/,

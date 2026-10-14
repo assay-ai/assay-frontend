@@ -12,7 +12,7 @@
  */
 
 /** Who must sign a built call. */
-export type SlashCallSignerRole = "PROVIDER" | "ARBITER" | "ADMIN";
+export type SlashCallSignerRole = "PROVIDER" | "ARBITER";
 
 export interface SlashContractCall {
   /** CAIP-2, e.g. `eip155:46630`. */
@@ -47,7 +47,8 @@ export type SlashIdRefusalReason =
   | "DisputeWindowClosed"
   | "SlashNotDisputed"
   | "ArbiterIsVerifier"
-  | "DisputeTimedOut";
+  | "DisputeTimedOut"
+  | "SlashAlreadyDisputed";
 
 export interface SlashIdRefusal {
   /** `0x` + lower-case hex. */
