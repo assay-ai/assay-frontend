@@ -60,7 +60,9 @@ export function OperatorSignInScreen({
   const { ready, authenticated, user } = usePrivy();
   const { ready: walletsReady, wallets } = useWallets();
   const { connectWallet } = useConnectWallet();
-  const { createWallet } = useCreateWallet();
+  // Privy v3 registers these callbacks on the provider; calling the hook with no
+  // argument crashes PrivyProvider ("Cannot destructure property 'onSuccess'").
+  const { createWallet } = useCreateWallet({ onSuccess: () => {}, onError: () => {} });
 
   /** The user chose "Sign in with Privy" and the flow is not finished. */
   const [privyPending, setPrivyPending] = React.useState(false);
