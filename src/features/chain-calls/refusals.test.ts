@@ -64,7 +64,6 @@ describe("refusalReasonText", () => {
       "SlashNotPending",
       "DisputeWindowClosed",
       "SlashNotDisputed",
-      "ArbiterIsVerifier",
       "DisputeTimedOut",
       "SlashAlreadyDisputed",
     ];
@@ -80,7 +79,7 @@ describe("refusalReasonText", () => {
   });
 
   it("uses the contract-error sentence for a reason it has no case for", () => {
-    expect(refusalReasonText("SlashWindowNotDrained", "arbiter")).toMatch(/^Waiting for the daily cap to free up/);
+    expect(refusalReasonText("SlashWindowNotDrained", "arbiter")).toMatch(/^Waiting until today's penalty limit has room; it will be paid in full\./);
   });
 
   it("names an unknown reason rather than guessing", () => {

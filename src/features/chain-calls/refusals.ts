@@ -84,8 +84,6 @@ export function refusalReasonText(reason: string, audience: RefusalAudience): st
       return "The dispute window has closed: this penalty can already be executed.";
     case "SlashNotDisputed":
       return "This penalty is not disputed on chain, so there is nothing to uphold. Cancel it instead, or leave it.";
-    case "ArbiterIsVerifier":
-      return "The arbiter is the key that proposed this penalty, and may not rule on its own judgement.";
     case "SlashAlreadyDisputed":
       return audience === "provider"
         ? "You already disputed this penalty once; a penalty can be disputed only one time."

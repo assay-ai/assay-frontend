@@ -97,7 +97,7 @@ describe("sendSlashContractCall", () => {
       throw revert;
     });
     await expect(sendSlashContractCall(call(), s, { fill, wait: vi.fn() })).rejects.toThrow(
-      /^The chain would refuse this upholdSlashBatch: Waiting for the daily cap to free up.*\(SlashWindowNotDrained\)\. Nothing was sent\.$/,
+      /^The chain would refuse this upholdSlashBatch: Waiting until today's penalty limit has room; it will be paid in full\..*\(SlashWindowNotDrained\)\. Nothing was sent\.$/,
     );
     expect(signAndSend).not.toHaveBeenCalled();
   });

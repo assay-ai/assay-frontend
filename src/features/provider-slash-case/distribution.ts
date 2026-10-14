@@ -44,13 +44,12 @@ import type { Money } from "@/interfaces";
  *
  * ## What it splits, and what it does not
  *
- * `penaltyAmount` is the **uncapped** formula result. The per-window ceiling
- * and the 10%-of-stake daily cap are applied on chain against a signed
- * attestation, and the backend deliberately does not compute them — the
- * `per_window_cap` row of the measurement says so in as many words. So this
- * splits the proposed penalty, and the screen says it is what happens *if the
- * proposal is applied in full*. Splitting a number the caps may reduce and
- * calling it the outcome would be the same invention in the other direction.
+ * `penaltyAmount` is the **uncapped** formula result. On EVM the amount
+ * reserved at proposal (at most the stake cap allows) is what an executed
+ * penalty takes, always whole: since assay-evm 9f036a3 a penalty that does not
+ * fit today's limit waits (`SlashWindowNotDrained`) and is never paid in part.
+ * The backend does not compute the reservation, so this splits the proposed
+ * penalty, and the screen says so.
  */
 
 /** `Config.slash_agent_bps` — the harmed agent's share. */

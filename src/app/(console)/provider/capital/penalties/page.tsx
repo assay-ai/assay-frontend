@@ -97,12 +97,20 @@ type DisputeStage = "idle" | "building" | "sending" | "refreshing";
 
 /**
  * How an executed penalty is split: `ParamSet.slashAgentBps` /
- * `slashPlatformBps` on `X402Config`, the rest to the provider. This page
- * reads only the stake contract (no Config read exists on this path), so the
- * owner-decided split is stated: 6000 / 3000 bps, 10% kept. If the Config
- * params ever become part of this page's read, take them from there.
+ * `slashPlatformBps` on `X402Config`; the provider keeps the rest,
+ * `10 000 − agentBps − platformBps` (the contract has no `slashProviderBps`
+ * since assay-evm 9f036a3). This page reads only the stake contract (no
+ * Config read exists on this path), so the owner-decided split is stated:
+ * 6000 / 3000 bps. If the Config params ever become part of this page's read,
+ * take them from there.
  */
-const PENALTY_SPLIT = { agentPercent: 60, platformPercent: 30, providerPercent: 10 } as const;
+const SLASH_AGENT_BPS = 6000;
+const SLASH_PLATFORM_BPS = 3000;
+const PENALTY_SPLIT = {
+  agentPercent: SLASH_AGENT_BPS / 100,
+  platformPercent: SLASH_PLATFORM_BPS / 100,
+  providerPercent: (10_000 - SLASH_AGENT_BPS - SLASH_PLATFORM_BPS) / 100,
+} as const;
 
 const DEPLOYMENT = ROBINHOOD_TESTNET_STAKE;
 
