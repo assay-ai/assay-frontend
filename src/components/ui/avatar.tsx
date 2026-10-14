@@ -5,6 +5,8 @@ import * as React from "react";
 
 import { cn } from "@/utils";
 
+import { avatarArtUri } from "./avatar-art";
+
 /**
  * Avatar.
  *
@@ -107,14 +109,22 @@ export interface AvatarProps
   initials?: string;
   /** Overrides the color computed from `name`. */
   color?: AvatarColor;
+  /**
+   * Draws an illustrated person seeded from this string (a wallet address),
+   * so the same identity always shows the same face. Ignored when `src` is
+   * given; initials remain the fallback for an empty seed.
+   */
+  seed?: string;
 }
 
 const Avatar = React.forwardRef<HTMLSpanElement, AvatarProps>(
-  ({ className, size, color, src, name = "", initials, ...props }, ref) => {
+  ({ className, size, color, src, name = "", initials, seed, ...props }, ref) => {
     const [imageError, setImageError] = React.useState(false);
+    const art = React.useMemo(() => (!src && seed ? avatarArtUri(seed) : undefined), [src, seed]);
+    const imageSrc = src ?? art;
     const resolvedInitials = initials ?? getInitials(name);
     const resolvedColor = color ?? getColorFromString(name || initials || "");
-    const showImage = Boolean(src) && !imageError;
+    const showImage = Boolean(imageSrc) && !imageError;
 
     return (
       <span
@@ -127,7 +137,7 @@ const Avatar = React.forwardRef<HTMLSpanElement, AvatarProps>(
         {showImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={src}
+            src={imageSrc}
             alt=""
             className="h-full w-full object-cover"
             /*

@@ -430,6 +430,21 @@ export default function KitchenSinkPage() {
             <Avatar name="QA Runner" src="/images/does-not-exist-xyz.png" />
             <Avatar initials="X4" color="pink" />
           </Spec>
+          <Spec name="avatar · seeded by wallet address (sm / md / xl)">
+            {[
+              "0x52908400098527886E0F7030069857D2E4169EE7",
+              "0x8617e340b3d01fa5f11f306f4090fd50e238070d",
+              "0xde709f2102306220921060314715629080e2fb77",
+              "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+              "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+            ].map((address) => (
+              <React.Fragment key={address}>
+                <Avatar name={address} seed={address} size="sm" />
+                <Avatar name={address} seed={address} size="md" />
+                <Avatar name={address} seed={address} size="xl" />
+              </React.Fragment>
+            ))}
+          </Spec>
 
           <Spec name="checkbox">
             <Checkbox label="38% of monthly budget" defaultChecked />
