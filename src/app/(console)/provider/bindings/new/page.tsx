@@ -41,6 +41,7 @@ import { cn } from "@/utils";
 import { getProviderRegistration } from "@/services/provider-registration.service";
 import { chainIdOfAsset, chainLabel } from "@/utils/chain";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
+import { routes } from "@/libs/routes";
 
 /**
  * `/provider/bindings/new` — the screen that creates a binding.
@@ -334,7 +335,7 @@ function ToolOption({
         <p className="font-mono text-mono-12 text-warning-700">
           you already implement this tool ·{" "}
           <Link
-            href={`/provider/bindings/${existingBindingId}/configuration`}
+            href={routes.binding(existingBindingId, "configuration")}
             className="underline"
           >
             edit that binding
@@ -477,7 +478,7 @@ export default function NewToolBindingPage() {
       queryClient.invalidateQueries({ queryKey: ["provider", "tool-bindings"] });
       // The next thing anybody does with a new binding is test the mapping,
       // and that is reached from the configuration screen.
-      router.push(`/provider/bindings/${saved.id}/configuration`);
+      router.push(routes.binding(saved.id, "configuration"));
     },
   });
 
@@ -505,7 +506,7 @@ export default function NewToolBindingPage() {
       one binding per tool, so this one cannot be created twice.{" "}
       {conflictBindingId ? (
         <Link
-          href={`/provider/bindings/${conflictBindingId}/configuration`}
+          href={routes.binding(conflictBindingId, "configuration")}
           className="underline"
         >
           Edit the existing binding

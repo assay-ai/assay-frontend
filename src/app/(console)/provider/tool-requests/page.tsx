@@ -27,6 +27,7 @@ import type { ToolRequest } from "@/interfaces/provider-tool-requests";
 import { ApiError } from "@/libs/ApiClient";
 import { createToolRequest, listToolRequests } from "@/services/provider-tool-requests.service";
 import { toast } from "@/utils/toast";
+import { routes } from "@/libs/routes";
 
 /**
  * Tool request (MVP) — route `/provider/tool-requests`.
@@ -190,7 +191,7 @@ export default function ToolRequestsPage() {
       key: "request",
       header: "Request",
       cell: (row) => (
-        <Link href={`/provider/tool-requests/${row.id}`} className="font-mono text-mono-13 text-01 hover:underline">
+        <Link href={routes.toolRequest(row.id)} className="font-mono text-mono-13 text-01 hover:underline">
           {row.title}
         </Link>
       ),

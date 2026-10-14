@@ -1,40 +1,9 @@
 import "@/styles/index.scss";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import type { Metadata, Viewport } from "next";
-import type { Chain } from "@/interfaces/chain";
 import { THEME_STORAGE_KEY } from "@/providers/theme-storage";
 
 import { Providers } from "../providers";
-
-/**
- * `GET /chains`, fetched on the SERVER so `Providers` has it on the first
- * render.
- *
- * Privy reads `supportedChains` once when it mounts and an eip155 chain
- * missing from it makes the embedded wallet open no prompt at all — no modal,
- * no error, measured on the deposit screen. A client-side fetch is therefore
- * too late, and a `NEXT_PUBLIC_*` value would freeze the list at build time.
- *
- * `no-store`: the enabled chain list is a deployment fact that changes with a
- * configuration edit, and a cached list is one a page would render a chain from
- * after the API stopped offering it.
- *
- * Failure is an EMPTY LIST, never a thrown layout: the API being unreachable
- * must not take the login screen down with it. EVM signing then refuses by
- * name, which is what every other absent-chain path already does.
- */
-async function fetchChains(): Promise<readonly Chain[]> {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!base) return [];
-  try {
-    const response = await fetch(`${base}/chains`, { cache: "no-store" });
-    if (!response.ok) return [];
-    const body = (await response.json()) as { data?: { chains?: Chain[] } };
-    return body?.data?.chains ?? [];
-  } catch {
-    return [];
-  }
-}
 
 // Inter, as on the landing page, so the two read as one product.
 const inter = Inter({
@@ -91,12 +60,11 @@ export const viewport: Viewport = {
   ],
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const chains = await fetchChains();
   // next/font's `variable` classes must sit on <html>, not <body>. theme.scss
   // composes --font-sans and --font-mono on :root, and a custom property whose
   // var() reference is undefined at that level becomes invalid at
@@ -121,7 +89,7 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className={inter.className}>
-        <Providers chains={chains}>{children}</Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

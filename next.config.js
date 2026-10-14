@@ -23,6 +23,12 @@ const getLatestCommit = () => {
 };
 
 module.exports = {
+  // A static export: `next build` writes plain HTML/JS/CSS to `out/`, served
+  // as-is from Cloudflare Pages (see .github/workflows/deploy.yml). Nothing
+  // renders on a server, so there is no `next start`.
+  output: "export",
+  // No image optimisation server either.
+  images: { unoptimized: true },
   turbopack: {
     rules: {
       "*.svg": {

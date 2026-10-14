@@ -30,6 +30,7 @@ import { fileSlashDispute, getSlashProposalCase } from "@/services/provider-disp
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
+import { routes } from "@/libs/routes";
 
 /**
  * Dispute filing.
@@ -285,7 +286,7 @@ export function DisputeFilingForm({
           proposal.disputeId ? (
             <>
               A second dispute cannot be filed.{" "}
-              <Link href={`/provider/disputes/${proposal.disputeId}`} className="underline">
+              <Link href={routes.dispute(proposal.disputeId)} className="underline">
                 Open the existing dispute
               </Link>
               .
