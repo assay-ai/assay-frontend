@@ -8,6 +8,7 @@ import { AlertFill, CheckCircle } from "@/components/icons";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
 import { Sidebar, type SidebarBindingItem } from "@/components/layout/sidebar";
 import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
+import { SlashHoldBanner } from "@/features/slash-hold/slash-hold-banner";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { labelForEndpoint } from "@/utils/provider-label";
 
@@ -171,6 +172,8 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
       <main className="flex min-w-0 flex-1 flex-col gap-3.5 p-4 tablet:gap-4 tablet:px-[26px] tablet:py-[22px]">
         {/* Shell level, above every console screen: see `features/account-block`. */}
         <AccountBlockBanner wrapperClassName="w-full" />
+        {/* Shell level too: a slash hold stops routing on every binding at once. */}
+        <SlashHoldBanner wrapperClassName="w-full" />
         {children}
       </main>
 

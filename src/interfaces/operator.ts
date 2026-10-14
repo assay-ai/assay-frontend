@@ -51,6 +51,20 @@ export interface PlatformHealth {
   oldestOpenDisputeAgeSeconds: number | null;
   /** The EVM chain-state cache, one row per chain. Absent on an older backend. */
   chainState?: ChainStateHealth[];
+  /** Every provider on a slash hold, one row per provider and chain. Absent on an older backend. */
+  slashHolds?: SlashHoldHealth[];
+}
+
+/** `SlashHoldHealthDto` — a provider whose paid calls are not routed on one chain. */
+export interface SlashHoldHealth {
+  /** The provider's organization id. */
+  providerId: string;
+  chainId: string;
+  /** `SLASH_WINDOW_FULL`, `STAKE_FULLY_RESERVED`, `BONDED_BELOW_MINIMUM`, or a newer one as it came. */
+  reasons: string[];
+  heldSince: string;
+  /** When the monitor last re-checked it; `null` if never. */
+  checkedAt: string | null;
 }
 
 /**

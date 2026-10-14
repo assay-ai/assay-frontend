@@ -2,6 +2,7 @@ import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, InternalAxiosRequ
 
 import type { ApiEnvelope, ApiErrorBody } from "@/interfaces";
 import { demoEnabled, demoResponse } from "@/libs/demo/demo-api";
+import { SLASH_HOLD_ERROR_CODES, slashHoldAudienceOf, slashHoldErrorText } from "@/libs/slash-hold";
 
 const SESSION_TOKEN_KEY = "accessToken";
 
@@ -223,6 +224,23 @@ function withBlockedWording(error: ApiError): ApiError {
 
 const READ_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD"]);
 
+/**
+ * A slash-hold refusal (`TOOL_PROVIDER_SLASH_HOLD`, `PAYMENT_PROVIDER_SLASH_HOLD`)
+ * in the words of whoever made the request: the provider console's own routes
+ * speak to the held provider, every other route to the buyer. The code,
+ * status, path and context are kept; only the sentence changes.
+ */
+export function withSlashHoldWording(error: ApiError, requestUrl: string | null | undefined): ApiError {
+  if (!SLASH_HOLD_ERROR_CODES.has(error.code)) return error;
+  const chainId = error.context?.chainId;
+  const text = slashHoldErrorText(
+    error.code,
+    slashHoldAudienceOf(requestUrl ?? error.path),
+    typeof chainId === "string" ? chainId : null,
+  );
+  return text ? new ApiError(error.code, text, error.status, error.path, error.context) : error;
+}
+
 function toApiError(error: AxiosError): ApiError {
   const body = error.response?.data as Partial<ApiErrorBody> | undefined;
   const inner = body?.error;
@@ -347,7 +365,7 @@ class ApiClient {
           again comes back through here marked, and falls through below.
         */
         const config = error.config as RetriableConfig | undefined;
-        const apiError = toApiError(error);
+        const apiError = withSlashHoldWording(toApiError(error), error.config?.url);
         const failure = classifyAuthFailure(error.response?.status ?? apiError.status, apiError.code);
 
         /*
