@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { SlashRequestLookup } from "@/interfaces/provider-slash-cases";
 import type { HexString } from "@/libs/chains/evm/stake-slashes/address";
 
-import { LOOKUP_CHUNK_SIZE, chunk, lookupAssayCases } from "./assay-match";
+import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
+
+import { LOOKUP_CHUNK_SIZE, chunk, lookupAssayCases, rowsOfCase } from "./assay-match";
 
 /** `0x` + 64 hex, from a counter, upper-cased so the lower-casing is exercised. */
 function id(n: number): HexString {
@@ -99,5 +101,27 @@ describe("lookupAssayCases", () => {
     const index = await lookupAssayCases(ids, lookup);
 
     expect(index.status).toBe("unavailable");
+  });
+});
+
+describe("rowsOfCase", () => {
+  const rows = [id(1), id(2), id(3)].map((requestId) => ({ requestId }) as unknown as ChainSlashRow);
+
+  it("keeps the records the lookup matched to the case, and only those", () => {
+    const index = {
+      status: "checked" as const,
+      known: new Map([
+        [id(1).toLowerCase(), { proposalId: "case-a" }],
+        [id(2).toLowerCase(), { proposalId: "case-b" }],
+        [id(3).toLowerCase(), { proposalId: "case-a" }],
+      ]),
+    };
+    expect(rowsOfCase(rows, index, "case-a").map((row) => row.requestId)).toEqual([id(1), id(3)]);
+    expect(rowsOfCase(rows, index, "case-c")).toEqual([]);
+  });
+
+  it("selects nothing on a guess when the lookup did not answer", () => {
+    expect(rowsOfCase(rows, null, "case-a")).toEqual([]);
+    expect(rowsOfCase(rows, { status: "unavailable", reason: "down" }, "case-a")).toEqual([]);
   });
 });

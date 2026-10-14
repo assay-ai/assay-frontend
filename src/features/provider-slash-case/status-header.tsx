@@ -11,6 +11,8 @@ import {
   CLOSED_HEADLINE,
   TERMINAL_CASE_STATUSES,
   caseStageOf,
+  disputeDeadlineOf,
+  disputesOnChain,
   respondByApplies,
   type CaseStage,
 } from "./chain-stage";
@@ -153,6 +155,30 @@ export function waitingFigure(data: SlashProposalCaseDetail, stage: CaseStage): 
         : "Assay's arbiter upheld your on-chain dispute; a penalty can be disputed on chain only once",
       tone: "danger",
     };
+  }
+  if (disputesOnChain(clocks)) {
+    // The one deadline on EVM: the record's executableAt. No in-app clock.
+    const by = disputeDeadlineOf(clocks);
+    if (proposal.status !== "PROPOSED") {
+      return {
+        label: "Dispute on chain by",
+        value: by ? `${stampUtc(by)} UTC` : DASH,
+        caption: "the case is past the point of a dispute",
+      };
+    }
+    const left = clocks.runningClock === "PROVIDER" ? remaining(clocks.secondsRemaining) : null;
+    return by
+      ? {
+          label: "Dispute on chain by",
+          value: `${stampUtc(by)} UTC`,
+          caption: `${left ? `${left} · ` : ""}disputing freezes the penalty on chain until the arbiter decides`,
+          tone: "danger",
+        }
+      : {
+          label: "Dispute on chain by",
+          value: DASH,
+          caption: "you can dispute once the penalty's record is on chain",
+        };
   }
   const respondBy = clocks.respondByAt;
   if (!respondBy) {

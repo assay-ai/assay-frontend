@@ -21,7 +21,7 @@ import { Search } from "@/components/ui/search";
 import { Select } from "@/components/ui/select";
 import { connectedSpelling, sendSlashContractCall } from "@/features/chain-calls/send-contract-call";
 import { refusalsById, refusalsOf } from "@/features/chain-calls/refusals";
-import { assayMatchFor } from "@/features/chain-slashes/assay-match";
+import { assayMatchFor, rowsOfCase } from "@/features/chain-slashes/assay-match";
 import {
   MAX_DISPUTE_SELECTION,
   disputeErrorMessage,
@@ -192,6 +192,28 @@ function PenaltiesOnChainContent() {
     setSelected((current) => pruneDisputeSelection(current, rows, nowSeconds, viewingOwnStake));
   }, [rows, nowSeconds, viewingOwnStake]);
 
+  // Opened from a case's "Dispute on chain" (`?case=`): select that case's
+  // disputable records once, when the chain and the case lookup have answered.
+  const caseToDispute = searchParams.get("case");
+  const casePreselected = React.useRef(false);
+  React.useEffect(() => {
+    if (!caseToDispute || casePreselected.current || !viewingOwnStake) return;
+    if (!chain.data || !assay.data) return;
+    casePreselected.current = true;
+    const ofCase = rowsOfCase(rows, assay.data, caseToDispute);
+    const next = selectAllDisputable(new Set(), ofCase, nowSeconds, viewingOwnStake);
+    if (next.size > 0) {
+      setSelected(next);
+      setDisputeNotice(
+        `Selected ${next.size === 1 ? "the penalty" : `the ${next.size} penalties`} of this case that can still be disputed. Disputing freezes the penalty on chain until the arbiter decides; dispute before the time shown on each.`,
+      );
+    } else {
+      setDisputeError(
+        "None of this case's penalties can be disputed on chain now: their dispute window has closed, they are already disputed, or Assay could not match them to the case.",
+      );
+    }
+  }, [caseToDispute, viewingOwnStake, chain.data, assay.data, rows, nowSeconds]);
+
   // Another address: nothing from the last one's dispute applies.
   React.useEffect(() => {
     setRefusals(new Map());
@@ -235,7 +257,7 @@ function PenaltiesOnChainContent() {
     const mismatch = disputeCallMismatch(call, DEPLOYMENT, ownAddress, requestIds);
     if (mismatch) {
       setDisputeError(
-        `Nothing was sent: the transaction Assay prepared is not the dispute you asked for — ${mismatch}. Dispute from the case page or contact Assay support, and check this page again.`,
+        `Nothing was sent: the transaction Assay prepared is not the dispute you asked for — ${mismatch}. Contact Assay support, and check this page again before the time shown on the penalty.`,
       );
       setStage("idle");
       return;
@@ -321,7 +343,9 @@ function PenaltiesOnChainContent() {
           <p>
             A pending penalty only reserves part of your stake. It can be executed, and the money
             taken, once its timer ends — at the time shown on each penalty, which the chain fixed when
-            it was proposed. If you think a penalty is wrong, dispute it before then.
+            it was proposed. If you think a penalty is wrong, dispute it before then: disputing
+            freezes the penalty on chain until the arbiter decides, and this is the only way to
+            dispute it.
           </p>
           <p>
             When a penalty is executed, {PENALTY_SPLIT.agentPercent}% goes to the harmed buyers,{" "}

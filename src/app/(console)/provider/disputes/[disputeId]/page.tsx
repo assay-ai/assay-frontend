@@ -27,6 +27,7 @@ import {
   providerDeadlineLine,
 } from "@/features/provider-disputes/state";
 import { buildDisputeOnlyTimeline, buildRichTimeline } from "@/features/provider-disputes/timeline";
+import { disputesOnChain } from "@/features/provider-slash-case/chain-stage";
 import { restorationValue } from "@/features/provider-slash-case/labels";
 import type { Money } from "@/interfaces/api";
 import type { SlashRestorationRow } from "@/interfaces/provider-disputes";
@@ -151,7 +152,9 @@ export default function DisputeCaseStatePage() {
 
   const clockNote =
     isSlashProposal && rich
-      ? "both clocks are visible, including ours"
+      ? disputesOnChain(rich.proposal.clocks)
+        ? "disputed on chain; Assay's arbiter rules on chain, and unruled it expires after 30 days"
+        : "both clocks are visible, including ours"
       : isSlashProposal
         ? "loading the linked case…"
         : "this dispute has no linked slash-proposal case, so only your own deadline is available";

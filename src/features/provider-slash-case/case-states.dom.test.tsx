@@ -29,11 +29,19 @@ describe("a fresh case, record pending on chain", () => {
     );
   });
 
-  it("counts down the provider's own response window", () => {
+  it("counts down to the record's executableAt, the one deadline to dispute on chain", () => {
     const header = render(<StatusHeader data={data} />);
+    expect(header).toContain("Dispute on chain by 2026-10-15 09:37 UTC");
+    expect(header).toContain("1h 0m remaining");
+    expect(header).toContain("disputing freezes the penalty on chain until the arbiter decides");
+    expect(header).not.toContain("Respond by");
+    expect(header).toContain("On chain: Pending on chain");
+  });
+
+  it("keeps the in-app response window on a Solana case", () => {
+    const header = render(<StatusHeader data={caseOf("PROPOSED", { disputeOnChain: false })} />);
     expect(header).toContain("Respond by 2026-10-17 08:36 UTC");
     expect(header).toContain("1h 0m remaining");
-    expect(header).toContain("On chain: Pending on chain");
   });
 });
 
