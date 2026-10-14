@@ -1,8 +1,8 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -21,18 +21,25 @@ import { Select } from "@/components/ui/select";
 import {
   actionLabel,
   approvalErrorMessage,
+  approverRolesFor,
   approveBlockedBecause,
   approvedResultSentence,
+  describeApproval,
   isOwnRequest,
-  payloadSummary,
   rejectMode,
   showApprove,
-  targetOf,
+  type ApprovalContext,
 } from "@/features/operator/approvals";
 import { useOperatorSession } from "@/features/operator/session-context";
 import type { OperatorApproval, OperatorApprovalStatus } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
-import { approveApproval, listApprovals, rejectApproval } from "@/services/operator.service";
+import {
+  approveApproval,
+  listAccountBlocks,
+  listApprovals,
+  listOperators,
+  rejectApproval,
+} from "@/services/operator.service";
 import { cn } from "@/utils";
 
 /**
@@ -48,6 +55,8 @@ type Tab = "pending" | "history";
 type HistoryFilter = "" | Exclude<OperatorApprovalStatus, "PENDING">;
 
 const LIST_LIMIT = 50;
+/** The API's page ceiling. Enough to name what a pending request is about. */
+const LOOKUP_LIMIT = 100;
 
 function when(iso: string | null): string {
   if (!iso) return "—";
@@ -65,9 +74,23 @@ interface Outcome {
 function ApprovalsInbox() {
   const me = useOperatorSession();
   const queryClient = useQueryClient();
-  const highlight = useSearchParams().get("id");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const highlight = searchParams.get("id");
 
-  const [tab, setTab] = React.useState<Tab>("pending");
+  // The tab lives in the URL, so a reload or a shared link keeps it.
+  const tab: Tab = searchParams.get("tab") === "history" ? "history" : "pending";
+  const setTab = React.useCallback(
+    (next: Tab) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (next === "history") params.set("tab", "history");
+      else params.delete("tab");
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
   const [historyFilter, setHistoryFilter] = React.useState<HistoryFilter>("");
   const [outcome, setOutcome] = React.useState<Outcome | null>(null);
 
@@ -87,6 +110,33 @@ function ApprovalsInbox() {
     // "All" history is the unfiltered list without what is still pending.
     return tab === "history" ? all.filter((row) => row.status !== "PENDING") : all;
   }, [list.data, tab]);
+
+  // What the cards' targets name: a block's subject, an operator's name and
+  // wallet. Read only when a listed request needs them; a miss falls back to
+  // the id.
+  const needsBlocks = rows.some((row) => row.action === "account.unblock");
+  const needsOperators = rows.some((row) => row.action === "operator.change" || row.action === "operator.add");
+  const blocksQuery = useQuery({
+    queryKey: ["operator", "approvals", "lookup", "blocks"],
+    queryFn: () => listAccountBlocks({ limit: LOOKUP_LIMIT }),
+    enabled: needsBlocks,
+    retry: 0,
+  });
+  const operatorsQuery = useQuery({
+    queryKey: ["operator", "approvals", "lookup", "operators"],
+    queryFn: () => listOperators({ limit: LOOKUP_LIMIT }),
+    enabled: needsOperators,
+    retry: 0,
+  });
+  const context = React.useMemo<ApprovalContext>(() => {
+    const operators = operatorsQuery.data?.items ?? [];
+    const withLimit = operators.find((op) => op.authorityLimit !== null)?.authorityLimit ?? me.authorityLimit;
+    return {
+      blocks: new Map((blocksQuery.data?.items ?? []).map((block) => [block.id, block])),
+      operators: new Map(operators.map((op) => [op.id, op])),
+      asset: withLimit ? { asset: withLimit.asset, decimals: withLimit.decimals } : null,
+    };
+  }, [blocksQuery.data, operatorsQuery.data, me.authorityLimit]);
 
   const invalidate = React.useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["operator", "approvals"] });
@@ -201,6 +251,7 @@ function ApprovalsInbox() {
             <ApprovalCard
               key={row.id}
               row={row}
+              context={context}
               highlighted={row.id === highlight}
               own={isOwnRequest(row, me)}
               canApprove={showApprove(row, me)}
@@ -238,6 +289,7 @@ function ApprovalsInbox() {
 
 function ApprovalCard({
   row,
+  context,
   highlighted,
   own,
   canApprove,
@@ -250,6 +302,7 @@ function ApprovalCard({
   onReject,
 }: {
   row: OperatorApproval;
+  context: ApprovalContext;
   highlighted: boolean;
   own: boolean;
   canApprove: boolean;
@@ -261,8 +314,8 @@ function ApprovalCard({
   onApprove: () => void;
   onReject: () => void;
 }) {
-  const target = targetOf(row.target);
-  const summary = payloadSummary(row.payload);
+  const { sentence, target, fields } = describeApproval(row, context);
+  const approverRoles = approverRolesFor(row.code);
   return (
     <Panel id={`approval-${row.id}`} className={cn("w-full", highlighted && "ring-2 ring-primary-500")}>
       <PanelHeader>
@@ -274,9 +327,10 @@ function ApprovalCard({
         </PanelTitles>
       </PanelHeader>
       <PanelBody className="flex flex-col gap-3 p-4 tablet:p-5">
+        <p className="text-body-13 text-01 [overflow-wrap:anywhere]">{sentence}</p>
         <dl className="grid w-full grid-cols-1 gap-x-6 gap-y-1.5 text-body-13 tablet:grid-cols-[160px_1fr]">
           <dt className="text-label-13 text-02">Target</dt>
-          <dd className="break-all font-mono text-mono-12 text-01">
+          <dd className="break-all text-01">
             {target.href ? (
               <Link href={target.href} className="text-primary-600 hover:underline">
                 {target.label}
@@ -306,13 +360,23 @@ function ApprovalCard({
               </dd>
             </>
           )}
-          {summary.map((line) => (
-            <React.Fragment key={line.key}>
-              <dt className="text-label-13 text-02">{line.key}</dt>
+          {fields.map((line) => (
+            <React.Fragment key={line.label}>
+              <dt className="text-label-13 text-02">{line.label}</dt>
               <dd className="text-01 [overflow-wrap:anywhere]">{line.value}</dd>
             </React.Fragment>
           ))}
         </dl>
+
+        <details className="w-full">
+          <summary className="cursor-pointer text-label-13 text-02 hover:text-01">Details</summary>
+          <div className="mt-2">
+            <CodeBlock
+              title={`${row.action} · ${row.target}`}
+              code={JSON.stringify({ id: row.id, target: row.target, payload: row.payload }, null, 2)}
+            />
+          </div>
+        </details>
 
         {row.status === "PENDING" ? (
           <div className="flex flex-wrap items-center gap-2.5">
@@ -338,7 +402,8 @@ function ApprovalCard({
             ) : null}
             {own ? (
               <span className="text-body-xs text-03">
-                You asked for this, so a different operator must approve it.
+                You asked for this, so a different operator must approve it
+                {approverRoles ? `: one who holds ${approverRoles.join(" or ")}` : ""}.
               </span>
             ) : approveBlocked ? (
               <span className="text-body-xs text-03">{approveBlocked}</span>
