@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { OperatorApproval, OperatorIdentity } from "@/interfaces/operator";
+import type { OperatorApproval, OperatorIdentity, OperatorRole } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 
 import {
@@ -8,11 +8,11 @@ import {
   approvalErrorMessage,
   approveBlockedBecause,
   approvedResultSentence,
-  payloadSummary,
+  describeApproval,
   pendingBadge,
   rejectMode,
   showApprove,
-  targetOf,
+  type ApprovalContext,
 } from "./approvals";
 
 const me: Pick<OperatorIdentity, "id" | "roles"> = { id: "me", roles: ["ADJ"] };
@@ -89,27 +89,151 @@ describe("how a row reads", () => {
     expect(actionLabel("something.new")).toBe("something.new");
   });
 
-  it("links the target", () => {
-    expect(targetOf("slash_proposal:p1")).toEqual({ label: "Case p1", href: "/operator/cases/p1" });
-    expect(targetOf("operator:o1").href).toBe("/operator/operators");
-    expect(targetOf("operator_wallet:0xabc").label).toBe("Wallet 0xabc");
-    expect(targetOf("account_block:b1").href).toMatch(/targetType=account_block&targetId=b1/);
-    expect(targetOf("weird")).toEqual({ label: "weird", href: null });
-  });
+  // BUG-R15-OP-01: the payloads below are the ones R15 queued, verbatim.
+  describe("describeApproval", () => {
+    const BLOCK_ID = "7b2acf05-2b3e-4846-8908-1d3d40f55e60";
+    const OP_ID = "c39c364e-21f2-49dd-af75-7d05d537285e";
+    const context: ApprovalContext = {
+      blocks: new Map([
+        [
+          BLOCK_ID,
+          {
+            subjectKind: "WALLET" as const,
+            subject: "eip155:1:0x0000000000000000000000000000000000000abc",
+            active: true,
+            reasonCode: "R15_TEST",
+            blockedBy: "jordan-privy@",
+          },
+        ],
+      ]),
+      operators: new Map([
+        [
+          OP_ID,
+          {
+            subject: "test-op-b@",
+            displayName: "Test Op B",
+            walletAddress: "0x07cd29d00e0f6f86b9e061f5d15c65d5edf4d711",
+            roles: ["POL", "TRE"] as OperatorRole[],
+            authorityLimit: { amount: "0", asset: "USDC", decimals: 6 },
+          },
+        ],
+      ]),
+      asset: { asset: "USDC", decimals: 6 },
+    };
 
-  it("summarises the payload's body and leaves the ids to the target", () => {
-    expect(payloadSummary(approval().payload)).toEqual([
-      { key: "defectKey", value: "D-1" },
-      { key: "lookbackHours", value: "24" },
-      { key: "reasonCode", value: "R" },
-      { key: "note", value: "n" },
-    ]);
-    expect(
-      payloadSummary({ operatorId: "o1", body: { roles: ["ADJ", "ADJL"], authorityLimitMinor: null } }),
-    ).toEqual([
-      { key: "roles", value: "ADJ, ADJL" },
-      { key: "authorityLimitMinor", value: "none (unbounded)" },
-    ]);
+    it("names the wallet a lift is for, not the block uuid", () => {
+      const d = describeApproval(
+        {
+          action: "account.unblock",
+          target: `account_block:${BLOCK_ID}`,
+          payload: { body: { note: "R15 e2e lifting throwaway block again", reasonCode: "R15_DONE" }, blockId: BLOCK_ID },
+        },
+        context,
+      );
+      expect(d.sentence).toBe("Lift the block on wallet 0x0000…0aBc (reason R15_DONE).");
+      expect(d.target).toEqual({ label: "Wallet 0x0000…0aBc", href: "/operator/blocks" });
+      expect(d.fields.map((f) => f.label)).toEqual(["Blocked", "Reason code", "Note"]);
+      expect(JSON.stringify(d)).not.toContain(BLOCK_ID);
+    });
+
+    it("falls back to a short block id when the block is not loaded", () => {
+      const d = describeApproval({
+        action: "account.unblock",
+        target: `account_block:${BLOCK_ID}`,
+        payload: { body: { reasonCode: "R" }, blockId: BLOCK_ID },
+      });
+      expect(d.sentence).toBe("Lift the block on block 7b2acf05… (reason R).");
+    });
+
+    it("spells out an operator add with labels, a checksummed wallet and money", () => {
+      const d = describeApproval(
+        {
+          action: "operator.add",
+          target: "operator_wallet:0x07cd29d00e0f6f86b9e061f5d15c65d5edf4d711",
+          payload: {
+            body: {
+              note: "R15 e2e throwaway operator, removed afterwards",
+              roles: ["POL"],
+              subject: "r15-throwaway@example.test",
+              reasonCode: "E2E_TEST",
+              displayName: "R15 Throwaway",
+              walletAddress: "0x07cd29d00E0F6f86B9e061F5d15c65D5edf4D711",
+              authorityLimitMinor: "0",
+            },
+          },
+        },
+        context,
+      );
+      expect(d.sentence).toBe(
+        "Add operator r15-throwaway@example.test with wallet 0x07cd…D711, roles POL, limit $0.00 (reason E2E_TEST).",
+      );
+      expect(d.target.label).toBe("Wallet 0x07cd29d00E0F6f86B9e061F5d15c65D5edf4D711");
+      expect(d.fields).toEqual([
+        { label: "Operator", value: "R15 Throwaway (r15-throwaway@example.test)" },
+        { label: "Wallet", value: "0x07cd29d00E0F6f86B9e061F5d15c65D5edf4D711" },
+        { label: "Roles", value: "POL (Policy author)" },
+        { label: "Authority limit", value: "$0.00" },
+        { label: "Reason code", value: "E2E_TEST" },
+        { label: "Note", value: "R15 e2e throwaway operator, removed afterwards" },
+      ]);
+      expect(JSON.stringify(d.fields)).not.toMatch(/authorityLimitMinor|walletAddress|displayName|reasonCode/);
+    });
+
+    it("names the operator a change raises, with roles before and after", () => {
+      const d = describeApproval(
+        {
+          action: "operator.change",
+          target: `operator:${OP_ID}`,
+          payload: { body: { note: "R14 temp ADJL for unblock", roles: ["POL", "TRE", "ADJL"], reasonCode: "R14_ADJL" }, operatorId: OP_ID },
+        },
+        context,
+      );
+      expect(d.sentence).toBe("Raise the roles of Test Op B (test-op-b@) to POL, TRE, ADJL (reason R14_ADJL).");
+      expect(d.target.label).toBe("Operator test-op-b@");
+      expect(d.fields.slice(0, 3)).toEqual([
+        { label: "Wallet", value: "0x07cd29d00E0F6f86B9e061F5d15c65D5edf4D711" },
+        { label: "Roles now", value: "POL, TRE" },
+        { label: "New roles", value: "POL (Policy author), TRE (Treasury), ADJL (Adjudication lead)" },
+      ]);
+    });
+
+    it("states an unbounded limit raise", () => {
+      const d = describeApproval({
+        action: "operator.change",
+        target: `operator:${OP_ID}`,
+        payload: { body: { authorityLimitMinor: null, reasonCode: "R" }, operatorId: OP_ID },
+      });
+      expect(d.sentence).toBe("Raise the authority limit of operator c39c364e… to unbounded (reason R).");
+    });
+
+    it("links a case and words suspend, sweep and compensation", () => {
+      const id = "a337cb6d-5917-4c3c-be7e-f1463a385ab8";
+      const suspend = describeApproval({
+        action: "slash.suspend",
+        target: `slash_proposal:${id}`,
+        payload: { body: { note: "n", reasonCode: "R15_TEST" }, proposalId: id },
+      });
+      expect(suspend.sentence).toBe("Suspend case a337cb6d…, which cancels its penalty (reason R15_TEST).");
+      expect(suspend.target).toEqual({ label: "Case a337cb6d…", href: `/operator/cases/${id}` });
+
+      const sweep = describeApproval(approval());
+      expect(sweep.sentence).toBe("Sweep every case with defect D-1 over the last 24 h, decided like case p1 (reason R).");
+      expect(sweep.fields.map((f) => f.label)).toEqual(["Defect", "Look back", "Reason code", "Note"]);
+
+      const comp = describeApproval({
+        action: "slash.compensated",
+        target: "slash_proposal:p1",
+        payload: { proposalId: "p1", body: { signature: "5sig", reasonCode: "R", note: "n" } },
+      });
+      expect(comp.sentence).toBe("Record compensation for case p1 and close it as compensated (reason R).");
+      expect(comp.fields[0]).toEqual({ label: "Deposit signature", value: "5sig" });
+    });
+
+    it("keeps an unknown action readable", () => {
+      const d = describeApproval({ action: "x.y", target: "weird", payload: { body: { someField: 3 } } });
+      expect(d.target).toEqual({ label: "weird", href: null });
+      expect(d.fields).toEqual([{ label: "Some field", value: "3" }]);
+    });
   });
 
   it("states what an approval did, from the result", () => {
