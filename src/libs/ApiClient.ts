@@ -285,6 +285,18 @@ export interface ApiClientOptions {
    * browser. Its own shell reads the `ApiError` and re-prompts.
    */
   readonly triggerGlobalUnauthorized?: boolean;
+  /**
+   * Called on every 401 from this instance, with the refused request's URL.
+   * The operator client uses it to end its own session and send the operator
+   * back to sign-in, whichever operator call was refused.
+   */
+  readonly onUnauthorized?: (error: ApiError, url: string) => void;
+}
+
+/** A body together with the HTTP status that carried it. */
+export interface StatusAnswer<T> {
+  readonly status: number;
+  readonly data: T;
 }
 
 /**
@@ -312,11 +324,13 @@ class ApiClient {
   private readonly getToken: () => string | null | Promise<string | null>;
   private readonly usesSessionToken: boolean;
   private readonly triggerGlobalUnauthorized: boolean;
+  private readonly onInstanceUnauthorized?: (error: ApiError, url: string) => void;
 
   constructor(baseURL?: string, options: ApiClientOptions = {}) {
     this.usesSessionToken = !options.getToken;
     this.getToken = options.getToken ?? resolveSessionToken;
     this.triggerGlobalUnauthorized = options.triggerGlobalUnauthorized ?? true;
+    this.onInstanceUnauthorized = options.onUnauthorized;
     this.instance = axios.create({
       baseURL: baseURL || process.env.NEXT_PUBLIC_API_BASE_URL || "",
       timeout: 30000,
@@ -407,12 +421,17 @@ class ApiClient {
         if (failure === "sign-out" && this.triggerGlobalUnauthorized && !demoEnabled()) {
           unauthorizedHandler?.();
         }
+        if (failure === "sign-out") this.onInstanceUnauthorized?.(apiError, error.config?.url ?? "");
         return Promise.reject(apiError);
       },
     );
   }
 
   private async request<T>(config: AxiosRequestConfig): Promise<T> {
+    return (await this.requestWithStatus<T>(config)).data;
+  }
+
+  private async requestWithStatus<T>(config: AxiosRequestConfig): Promise<StatusAnswer<T>> {
     /*
       DEMO ONLY — both branches are `undefined` unless `NEXT_PUBLIC_DEMO_CHAINS`
       is set at build time, in which case this is the whole of the demo data
@@ -428,7 +447,7 @@ class ApiClient {
       stage is not a stage set.
     */
     const canned = demoResponse(config.method, config.url, config.params);
-    if (canned !== undefined) return canned as T;
+    if (canned !== undefined) return { status: 200, data: canned as T };
 
     /*
       The blocked-account guard. Only on the shared client — the operator
@@ -445,7 +464,7 @@ class ApiClient {
     }
 
     const response = await this.instance.request<ApiEnvelope<T>>(config);
-    return response.data.data;
+    return { status: response.status, data: response.data?.data as T };
   }
 
   get<T>(url: string, params?: Record<string, unknown>): Promise<T> {
@@ -472,15 +491,21 @@ class ApiClient {
     return this.request<T>({ method: "GET", url, params, headers: { "Cache-Control": "no-cache" } });
   }
 
+  post<T>(url: string, data?: unknown): Promise<T> {
+    return this.request<T>({ method: "POST", url, data });
+  }
+
   /**
-   * `headers` exists for exactly one caller: the operator console's two
-   * two-person actions, which carry the approver's own bearer token in
-   * `X-Operator-Approver`. Deliberately not on `get`/`put`/`patch` — a
-   * per-call header escape hatch on every verb is how a token ends up
-   * somewhere nobody expects it.
+   * A write whose HTTP status means something: a two-person operator route
+   * answers `202 { approvalId }` when it queued the action instead of running
+   * it, with the same envelope as a `200`.
    */
-  post<T>(url: string, data?: unknown, headers?: Record<string, string>): Promise<T> {
-    return this.request<T>({ method: "POST", url, data, headers });
+  postWithStatus<T>(url: string, data?: unknown): Promise<StatusAnswer<T>> {
+    return this.requestWithStatus<T>({ method: "POST", url, data });
+  }
+
+  patchWithStatus<T>(url: string, data?: unknown): Promise<StatusAnswer<T>> {
+    return this.requestWithStatus<T>({ method: "PATCH", url, data });
   }
 
   put<T>(url: string, data?: unknown): Promise<T> {

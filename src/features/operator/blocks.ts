@@ -20,8 +20,6 @@ import { ApiError } from "@/libs/ApiClient";
 
 /** `A-9` and `A-10` are open to these roles (the maker). */
 export const BLOCK_ROLES: readonly OperatorRole[] = Object.freeze(["ADJL", "SRE"]);
-/** The second operator of an `A-10` must hold this. */
-export const UNBLOCK_APPROVER_ROLES: readonly OperatorRole[] = Object.freeze(["ADJL"]);
 
 export const BLOCK_NOTE_MIN = 20;
 export const BLOCK_NOTE_MAX = 4096;
@@ -119,7 +117,6 @@ export interface UnblockFormInput {
   reasonCode: string;
   note: string;
   ticketRef: string;
-  approverToken: string;
 }
 
 export type FormErrors<K extends string> = Partial<Record<K, string>>;
@@ -181,26 +178,21 @@ export function validateBlockForm(
 
 export function validateUnblockForm(
   input: UnblockFormInput,
-): Validated<UnblockAccountBody & { approverToken: string }, keyof UnblockFormInput> {
+): Validated<UnblockAccountBody, keyof UnblockFormInput> {
   const reasonCode = input.reasonCode.trim();
   const note = input.note.trim();
   const ticketRef = input.ticketRef.trim();
-  const approverToken = input.approverToken.trim();
 
   const errors = compact<keyof UnblockFormInput>({
     reasonCode: reasonCodeError(reasonCode),
     note: noteError(note),
     ticketRef: ticketError(ticketRef),
-    approverToken:
-      approverToken.length === 0
-        ? "Lifting a block takes a second operator: paste their own operator token."
-        : undefined,
   });
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
   return {
     ok: true,
-    body: { reasonCode, note, ...(ticketRef ? { ticketRef } : {}), approverToken },
+    body: { reasonCode, note, ...(ticketRef ? { ticketRef } : {}) },
   };
 }
 
@@ -221,26 +213,16 @@ const MESSAGES: Readonly<Record<string, string | ((action: BlockAction, e: ApiEr
     `This subject is already blocked; there is one standing block per subject. ${e.message}.`,
   OPERATOR_BLOCK_ALREADY_LIFTED: "This block has already been lifted. Reload the list to see who lifted it.",
   OPERATOR_SECOND_APPROVER_REQUIRED:
-    "Lifting a block needs a second operator. Paste the approver's own operator token.",
-  OPERATOR_SELF_APPROVAL_REFUSED:
-    "The approver token is your own. A second, different operator must approve.",
-  OPERATOR_APPROVER_ROLE_REQUIRED:
-    "The approver does not hold ADJL. Only an ADJL operator can approve lifting a block.",
-  OPERATOR_APPROVER_AUTHORITY_EXCEEDED: "The approver's authority does not cover this action.",
+    "Lifting a block needs a second operator, who approves it in the approvals inbox.",
   OPERATOR_ROLE_REQUIRED: (action) =>
     action === "unblock"
       ? "Lifting a block needs the ADJL or SRE role, and you hold neither."
       : "Blocking needs the ADJL or SRE role, and you hold neither.",
   OPERATOR_AUTHORITY_EXCEEDED: "This action is above your authority.",
-  OPERATOR_CREDENTIAL_INVALID: (action) =>
-    action === "unblock"
-      ? "An operator token was refused: either the approver's token is wrong or expired, or your own session has ended. Check the approver's token, or sign in again."
-      : "Your operator token was refused. Sign out and sign in again.",
-  OPERATOR_SUSPENDED: (action) =>
-    action === "unblock"
-      ? "An operator in this action is suspended, you or the approver. A suspended operator cannot act or approve."
-      : "Your operator account is suspended.",
-  OPERATOR_AUTH_RATE_LIMITED: "Too many attempts with operator tokens. Wait a minute and try again.",
+  OPERATOR_CREDENTIAL_INVALID: "Your operator session has ended. Sign in again.",
+  OPERATOR_NOT_AUTHORIZED: "This wallet is no longer an active operator.",
+  OPERATOR_SUSPENDED: "Your operator account is suspended.",
+  OPERATOR_AUTH_RATE_LIMITED: "Too many sign-in attempts. Wait a few minutes and try again.",
   OPERATOR_OVERRIDE_NOT_IMPLEMENTED: "The backend does not have this action switched on yet.",
   OPERATOR_UNKNOWN_OVERRIDE_CODE: "The backend does not know this override. Report it to engineering.",
   VALIDATION_FAILED: (_action, e) => `The request was not accepted: ${e.message}.`,

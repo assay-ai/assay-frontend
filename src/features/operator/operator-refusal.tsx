@@ -6,12 +6,12 @@ import { ApiError } from "@/libs/ApiClient";
 
 /**
  * What the shell shows when `GET /operator/me` is refused with something other
- * than a 401 (a 401 drops the token and returns to the form).
+ * than a 401 (a 401 ends the session and returns to sign-in).
  *
- * A suspended operator lands here, not on a `status: "SUSPENDED"` identity:
- * the backend refuses every operator route for them, `/operator/me` included,
- * with `403 OPERATOR_SUSPENDED`. The token is still in storage either way, so
- * Sign out is always offered — it is the only way to drop the credential.
+ * An operator removed or suspended since signing in lands here: the backend
+ * re-reads the row on every request and answers `403 OPERATOR_NOT_AUTHORIZED`
+ * (older builds: `OPERATOR_SUSPENDED`). The session is still in storage, so
+ * Sign out is always offered.
  */
 export function OperatorRefusal({
   error,
@@ -23,12 +23,24 @@ export function OperatorRefusal({
   if (error instanceof ApiError && error.code === "OPERATOR_SUSPENDED") {
     return <SuspendedBanner detail={error.message} onSignOut={onSignOut} />;
   }
+  if (error instanceof ApiError && error.code === "OPERATOR_NOT_AUTHORIZED") {
+    return (
+      <div className="flex flex-col items-start gap-3">
+        <p className="text-body-13 text-danger-500" role="alert">
+          This wallet is not an Assay operator any more: its access was removed or suspended.
+        </p>
+        <Button type="button" variant="secondary" size="sm" onClick={onSignOut}>
+          Sign out
+        </Button>
+      </div>
+    );
+  }
 
   const detail = error instanceof ApiError ? `${error.code} · ${error.message}` : String(error);
   return (
     <div className="flex flex-col items-start gap-3">
       <p className="text-body-13 text-danger-500" role="alert">
-        The operator console could not confirm this token. {detail}
+        The operator console could not confirm your session. {detail}
       </p>
       <Button type="button" variant="secondary" size="sm" onClick={onSignOut}>
         Sign out

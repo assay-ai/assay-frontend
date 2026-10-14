@@ -8,11 +8,9 @@ import {
   isCancelRequested,
   may,
   RECALCULATED_AMOUNT_PATTERN,
-  COMPENSATION_APPROVER_ROLES,
   suspendedNotice,
-  suspendNeedsApprover,
-  SUSPEND_APPROVER_ROLES,
-  SWEEP_APPROVER_ROLES,
+  suspendIsTwoPerson,
+  TWO_PERSON_ACTIONS,
 } from "./state";
 
 import type { Money } from "@/interfaces/api";
@@ -54,7 +52,7 @@ describe("exceedsAuthority", () => {
 describe("authorityRefusal", () => {
   it("states both amounts as money, not minor units", () => {
     const sentence = authorityRefusal(money("0"), money("28470000"));
-    expect(sentence).toBe("the penalty is $28.47 and this token's authority limit is $0.00");
+    expect(sentence).toBe("the penalty is $28.47 and your authority limit is $0.00");
     expect(sentence).not.toContain("28470000");
   });
 });
@@ -201,9 +199,9 @@ describe("what a suspension tells the operator about the chain", () => {
   );
 });
 
-describe("the fleet sweep approver", () => {
-  it("must hold ADJ or ADJL, as the backend's S-11 register row demands", () => {
-    expect(SWEEP_APPROVER_ROLES).toEqual(["ADJ", "ADJL"]);
+describe("the two-person case actions", () => {
+  it("are the sweep and the record half of compensate", () => {
+    expect(TWO_PERSON_ACTIONS).toEqual(["sweep", "compensate"]);
   });
 });
 
@@ -213,16 +211,11 @@ describe("the fleet sweep approver", () => {
  */
 describe("who may suspend alone", () => {
   it.each(["PROPOSED", "DISPUTED", "UNDER_REVIEW"] as const)("alone from %s", (status) => {
-    expect(suspendNeedsApprover(status)).toBe(false);
+    expect(suspendIsTwoPerson(status)).toBe(false);
   });
 
-  it.each(["AWAITING_SECOND", "UPHELD"] as const)("needs an approver from %s", (status) => {
-    expect(suspendNeedsApprover(status)).toBe(true);
-  });
-
-  it("names the approver roles each two-person action accepts", () => {
-    expect(SUSPEND_APPROVER_ROLES).toEqual(["ADJ", "ADJL"]);
-    expect(COMPENSATION_APPROVER_ROLES).toEqual(["ADJL", "TRE"]);
+  it.each(["AWAITING_SECOND", "UPHELD"] as const)("goes to the approvals inbox from %s", (status) => {
+    expect(suspendIsTwoPerson(status)).toBe(true);
   });
 });
 

@@ -17,18 +17,119 @@ import type { SlashProposalCaseDetail } from "./provider-slash-cases";
 /** assay-backend `src/modules/operator/domain/override-register.ts` `OperatorRole`. */
 export type OperatorRole =
   | "SRE" | "ADJ" | "ADJL" | "POL" | "POLA" | "TRE" | "TREA"
-  | "BD" | "SUP" | "CMP" | "SEC";
+  | "BD" | "SUP" | "CMP" | "SEC" | "OPS_ADMIN";
 
-/** `GET /operator/me`. Who holds this token, re-read from the row. */
+export type OperatorStatus = "ACTIVE" | "SUSPENDED" | "REMOVED";
+
+/** `GET /operator/me` (`OperatorDto`). Who is signed in, re-read from the row. */
 export interface OperatorIdentity {
   id: string;
-  /** The SSO subject, e.g. `ops-adjl`. */
+  /** A short handle, e.g. `dan@`. */
   subject: string;
   displayName: string;
+  /** The EVM address the operator signs in with, lower-case. */
+  walletAddress: string | null;
   roles: OperatorRole[];
   /** Per-action ceiling. Null means unbounded — correct for roles that move no money. */
   authorityLimit: Money | null;
-  status: "ACTIVE" | "SUSPENDED";
+  status: OperatorStatus;
+}
+
+// ── Wallet sign-in ──────────────────────────────────────────────────────────
+
+/** `POST /operator/auth/challenge` → the EIP-4361 message to sign, verbatim. */
+export interface OperatorChallenge {
+  message: string;
+  nonce: string;
+  /** Five minutes after issue. */
+  expiresAt: string;
+}
+
+/** `POST /operator/auth/verify` → the session. */
+export interface OperatorSignIn {
+  /** Send as `Authorization: Bearer <token>` on operator calls only. */
+  token: string;
+  expiresAt: string;
+  operator: OperatorIdentity;
+}
+
+// ── The directory ───────────────────────────────────────────────────────────
+
+/** `OperatorDirectoryEntryDto` — one row of `GET /operator/operators`. */
+export interface OperatorDirectoryEntry extends OperatorIdentity {
+  email: string;
+  lastSeenAt: string | null;
+  createdAt: string;
+}
+
+/** `POST /operator/operators` — `A-12`. Always answered 202. */
+export interface AddOperatorBody {
+  walletAddress: string;
+  subject: string;
+  displayName?: string;
+  roles: OperatorRole[];
+  /** Minor units of the platform asset. Absent: 0. Null: unbounded. */
+  authorityLimitMinor?: string | null;
+  reasonCode: string;
+  /** 10 to 2048 characters. */
+  note: string;
+}
+
+/** `PATCH /operator/operators/:id` — `A-13`. Lowering: 200. Raising: 202. */
+export interface ChangeOperatorBody {
+  /** The full new set. Absent keeps it. */
+  roles?: OperatorRole[];
+  authorityLimitMinor?: string | null;
+  reasonCode: string;
+  note: string;
+}
+
+/** `POST /operator/operators/:id/remove` — `A-14`, at once. */
+export interface RemoveOperatorBody {
+  reasonCode: string;
+  note: string;
+}
+
+// ── Two-person approvals ────────────────────────────────────────────────────
+
+export type OperatorApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+
+/** What a two-person route answers, with HTTP 202, when it queued the action. */
+export interface ApprovalQueued {
+  approvalId: string;
+  status: "PENDING";
+  /** e.g. `account.unblock`. */
+  action: string;
+  expiresAt: string;
+}
+
+/** `OperatorApprovalDto` — one row of `GET /operator/approvals`. */
+export interface OperatorApproval {
+  id: string;
+  /** e.g. `slash.suspend`, `account.unblock`, `operator.add`. */
+  action: string;
+  /** The register row the action writes, e.g. `A-10`. */
+  code: string;
+  /** `<type>:<id>` of what the action is about. */
+  target: string;
+  /** The original request, exactly as it will be re-run. */
+  payload: Record<string, unknown>;
+  status: OperatorApprovalStatus;
+  /** Subject of the operator who asked. */
+  requestedBy: string;
+  requestedById: string;
+  approvedBy: string | null;
+  rejectedBy: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+  expiresAt: string;
+}
+
+/** `POST /operator/approvals/:id/approve|reject`. */
+export interface ApprovalDecision {
+  approval: OperatorApproval;
+  /** On approve: what the action's own route would have answered. */
+  result?: unknown;
 }
 
 /** `GET /operator/health` — the six tiles across the top of the operator console. */
@@ -333,8 +434,8 @@ export interface CompensationIntent {
  *
  * **Two independent authorisations, and the body is why neither is redundant.**
  * The signature proves the treasury's multisig moved the money; the note and
- * reason code — countersigned by a second operator's token in
- * `X-Operator-Approver` — are two of our people agreeing to close the case on
+ * reason code — approved by a second operator from the approvals inbox — are
+ * two of our people agreeing to close the case on
  * the strength of it. A chain signature cannot record why we accepted it, and
  * an override row cannot prove anything was paid.
  */
@@ -436,7 +537,8 @@ export interface CreateAccountBlockBody {
 
 /**
  * `POST /operator/blocks/:id/unblock` — `A-10`, `ADJL` or `SRE`, two person:
- * the approver's token goes in `X-Operator-Approver` and must hold `ADJL`.
+ * answered `202 { approvalId }`, and lifted once a second operator holding
+ * `ADJL` approves it in the approvals inbox.
  */
 export interface UnblockAccountBody {
   reasonCode: string;
