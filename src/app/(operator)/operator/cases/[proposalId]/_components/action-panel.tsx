@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/panel";
 import { Radio } from "@/components/ui/radio";
 import { signerRoleLabel } from "@/features/chain-calls/send-contract-call";
+import { arbiterErrorMessage } from "@/features/operator/arbiter";
 import { ContractCallPanel } from "@/features/operator/contract-call-panel";
 import {
   ALL_OUTCOMES,
@@ -479,6 +480,14 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
         );
         return;
       }
+      /*
+        Only the cancel build meets this: on EVM Assay builds `cancelSlash`
+        for the arbiter alone, so with none appointed there is nothing to build.
+      */
+      if (e.code === "CHAIN_ARBITER_NOT_SET") {
+        toast.error(arbiterErrorMessage(e, "cancel"));
+        return;
+      }
       toast.error(`${e.code} · ${e.message}`);
     },
     [authorityLimit, casePenalty],
@@ -661,7 +670,11 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
       setCancelSignature(null);
       setSignError(null);
       setFormError(null);
-      toast.success("Transaction built. The judgement is still live until the admin signs it.");
+      toast.success(
+        result.to
+          ? "Transaction built. The judgement is still live until the arbiter signs it."
+          : "Transaction built. The judgement is still live until the admin signs it.",
+      );
     },
     onError: reportError,
   });
@@ -1805,7 +1818,11 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
             {cancelGate.offered ? (
               <Section
                 title="Cancel the judgement on chain"
-                description="This case was overturned or suspended, and the on-chain record is still standing. Only the program admin's key can retire it — this screen builds the transaction and nothing more."
+                description={
+                  isEvmAsset(casePenalty.asset)
+                    ? "This case was overturned or suspended, and the on-chain record is still standing. Only the arbiter's key can retire it — this screen builds the transaction and nothing more."
+                    : "This case was overturned or suspended, and the on-chain record is still standing. Only the program admin's key can retire it — this screen builds the transaction and nothing more."
+                }
                 open={openSection === "cancel"}
                 onToggle={() => toggleSection("cancel")}
               >
@@ -1837,8 +1854,8 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                 ) : cancelIntent.to ? (
                   /*
                     EVM: `transaction` is the `cancelSlash` calldata for `to`,
-                    and the signer is the arbiter when the Config has one
-                    (D-19), else the admin — `signerRole` says which. Signed
+                    and the signer is always the arbiter (D-19); without one
+                    the build is refused with CHAIN_ARBITER_NOT_SET. Signed
                     through the same panel the arbiter page uses.
                   */
                   <ContractCallPanel
@@ -1853,9 +1870,14 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                       <IntentRow label="Provider" value={cancelIntent.provider} />
                       <IntentRow label="Request id" value={cancelIntent.requestId} />
                       <IntentRow label="Must be signed by" value={cancelIntent.admin} />
+                      {/* Solana: `cancel_slash` is `Config.admin`'s; the backend states no role here. */}
                       <IntentRow
                         label="Signer role"
-                        value={signerRoleLabel(cancelIntent.signerRole ?? "ADMIN")}
+                        value={
+                          cancelIntent.signerRole
+                            ? signerRoleLabel(cancelIntent.signerRole)
+                            : "The program admin (Config.admin)"
+                        }
                       />
                     </div>
                     <CodeBlock
@@ -1965,6 +1987,10 @@ function Section({
  * penalty's own (`eip155:46630/erc20:0x…` → `eip155:46630`): the route does
  * not repeat it, and the penalty is on the record's chain by construction.
  */
+function isEvmAsset(asset: string): boolean {
+  return asset.startsWith("eip155:");
+}
+
 function evmCancelCall(intent: CancelIntent, penaltyAsset: string): SlashContractCall {
   return {
     chainId: penaltyAsset.split("/")[0] ?? penaltyAsset,
@@ -1972,7 +1998,8 @@ function evmCancelCall(intent: CancelIntent, penaltyAsset: string): SlashContrac
     data: intent.transaction,
     value: "0",
     signer: intent.admin,
-    signerRole: intent.signerRole ?? "ADMIN",
+    // Always the arbiter on EVM: the backend builds `cancelSlash` for no one else.
+    signerRole: "ARBITER",
     functionName: "cancelSlash",
     requestIds: [intent.requestId.startsWith("0x") ? intent.requestId : `0x${intent.requestId}`],
   };

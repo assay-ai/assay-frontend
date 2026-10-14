@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   authorityRefusal,
   cancelDeadlineNotice,
+  disputedPartsNote,
   exceedsAuthority,
   isCancelRequested,
   may,
@@ -206,5 +207,23 @@ describe("who may suspend alone", () => {
   it("names the approver roles each two-person action accepts", () => {
     expect(SUSPEND_APPROVER_ROLES).toEqual(["ADJ", "ADJL"]);
     expect(COMPENSATION_APPROVER_ROLES).toEqual(["ADJL", "TRE"]);
+  });
+});
+
+describe("disputedPartsNote", () => {
+  it("says nothing when no part is disputed, or the backend does not report it", () => {
+    expect(disputedPartsNote("PENDING", 0)).toBeNull();
+    expect(disputedPartsNote("DISPUTED", undefined)).toBeNull();
+  });
+
+  it("calls a pending case with disputed parts partly disputed", () => {
+    expect(disputedPartsNote("PENDING", 2)).toBe(
+      "partly disputed: 2 parts disputed on chain, the other parts keep executing",
+    );
+    expect(disputedPartsNote("PENDING", 1)).toMatch(/^partly disputed: 1 part disputed/);
+  });
+
+  it("counts the parts of a wholly disputed case", () => {
+    expect(disputedPartsNote("DISPUTED", 3)).toBe("3 parts disputed on chain");
   });
 });

@@ -113,28 +113,48 @@ export function sortDisputesOldestFirst(rows: readonly ArbiterDispute[]): Arbite
   return [...rows].sort((a, b) => at(a) - at(b) || a.requestId.localeCompare(b.requestId));
 }
 
-/**
- * PLACEHOLDER: the provider's upheld violations in the last 30 days, if the
- * backend sends it on a dispute row. The field is being added and its name is
- * not confirmed, so the likely spellings are read; `null` means "not reported
- * by this backend". Replace with the one confirmed name once it lands.
- */
-const UPHELD_LAST_30D_FIELDS = [
-  "upheldViolationsLast30d",
-  "upheldViolationsLast30Days",
-  "upheldLast30d",
-  "upheldLast30Days",
-  "providerUpheldLast30d",
-] as const;
+/** `slashAgentBps` in words: `6000` → `60% (6000 bps)`. */
+export function agentShareText(bps: number | null | undefined): string {
+  if (bps === null || bps === undefined || !Number.isFinite(bps)) return "Not reported";
+  const percent = bps / 100;
+  return `${Number.isInteger(percent) ? percent : percent.toFixed(2)}% (${bps} bps)`;
+}
 
-export function upheldLast30dOf(row: ArbiterDispute): number | null {
-  const record = row as unknown as Record<string, unknown>;
-  for (const field of UPHELD_LAST_30D_FIELDS) {
-    const value = record[field];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
+export type BeneficiaryCheckStatus = "ok" | "failed" | "unchecked";
+
+/**
+ * Follow-up C5, as the arbiter reads it: is the beneficiary of this record a
+ * payer of the window's failed calls, and is the record's part within that
+ * payer's share of the formula penalty? The backend decides
+ * (`beneficiaryEvidence.ok`); this only puts it in words.
+ */
+export function beneficiaryCheck(row: ArbiterDispute): {
+  readonly status: BeneficiaryCheckStatus;
+  readonly headline: string;
+  readonly reason: string | null;
+} {
+  const evidence = row.beneficiaryEvidence;
+  if (!evidence) {
+    return {
+      status: "unchecked",
+      headline:
+        "Not checked: the backend could not match this record to its window's payments, or could not read the chain's agent share. Check the beneficiary by hand.",
+      reason: null,
+    };
   }
-  return null;
+  if (evidence.ok) {
+    return {
+      status: "ok",
+      headline: `The beneficiary paid for ${evidence.failedCalls} failed call${evidence.failedCalls === 1 ? "" : "s"}, and this penalty is within its share of the formula penalty.`,
+      reason: null,
+    };
+  }
+  return {
+    status: "failed",
+    headline:
+      "The beneficiary check fails: upholding would pay an account that did not pay for these failed calls, or more than its share of the penalty.",
+    reason: evidence.reason,
+  };
 }
 
 // ── Forms ───────────────────────────────────────────────────────────────────
@@ -254,7 +274,8 @@ export function validateChainBlockForm(
 
 // ── Refusals ────────────────────────────────────────────────────────────────
 
-export type ArbiterAction = "terms" | "disputes" | "ruling" | "block";
+/** `cancel` is the case page's `cancelSlash` build, which is the arbiter's too. */
+export type ArbiterAction = "terms" | "disputes" | "ruling" | "block" | "cancel";
 
 /**
  * Every refusal the four routes can answer, in words. The code is always kept
@@ -266,7 +287,9 @@ const MESSAGES: Readonly<Record<string, string | ((action: ArbiterAction, e: Api
   CHAIN_ARBITER_NOT_SET: (action) =>
     action === "block"
       ? "No arbiter is appointed on this chain, so nobody can block on chain. The admin appoints one with setArbiter."
-      : "No arbiter is appointed on this chain, so nobody can uphold. The admin appoints one with setArbiter; a cancel is then the admin's.",
+      : action === "cancel"
+        ? "No arbiter is appointed on this chain, so the cancellation cannot be built: Assay builds cancelSlash for the arbiter only. The admin appoints one with setArbiter; build it again then."
+        : "No arbiter is appointed on this chain, so nobody can rule on a dispute. The admin appoints one with setArbiter.",
   CHAIN_ADDRESS_ALREADY_BLOCKED: "This address is already blocked on chain. Nothing to do.",
   CHAIN_PROGRAM_PAUSED: (_a, e) => `Contracts paused — try after unpause. ${e.message}.`,
   CHAIN_ADDRESS_BLOCKED: (_a, e) => `Blocked on chain. ${e.message}.`,
