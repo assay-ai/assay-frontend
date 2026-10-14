@@ -3,14 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OperatorSignIn } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { personalSign } from "@/libs/chains/evm/operator-wallet";
-import { getOperatorToken, OPERATOR_SESSION_KEY } from "@/libs/operator-session";
+import { clearOperatorSession, getOperatorToken, OPERATOR_SESSION_KEY } from "@/libs/operator-session";
 import { operatorApi } from "@/services/operator-api";
 import { requestOperatorChallenge, verifyOperatorSignature } from "@/services/operator.service";
 
 import { envelope, failure, memoryStorage, scriptedAdapter } from "./operator-test-kit";
 import {
   NOT_AN_OPERATOR_MESSAGE,
+  isNotAnOperator,
   msUntilExpiry,
+  privyWalletStep,
+  signOutOperator,
   sessionEndMessage,
   signInErrorMessage,
   signInWithWallet,
@@ -200,5 +203,65 @@ describe("the end of a session", () => {
     expect(msUntilExpiry("2026-10-15T18:00:00.000Z", now)).toBe(8 * 3600 * 1000);
     expect(msUntilExpiry("2026-10-15T09:00:00.000Z", now)).toBe(0);
     expect(msUntilExpiry("garbage", now)).toBe(0);
+  });
+});
+
+describe("Sign in with Privy: the embedded wallet step", () => {
+  const embedded = { walletClientType: "privy", address: "0xembedded" };
+  const metamask = { walletClientType: "metamask", address: "0xmetamask" };
+  const base = { ready: true, authenticated: true, walletsReady: true, wallets: [], accountHasEmbeddedWallet: false };
+
+  it("opens Privy's login when the user is not signed in with Privy", () => {
+    expect(privyWalletStep({ ...base, authenticated: false })).toEqual({ step: "login" });
+  });
+
+  it("waits while Privy loads", () => {
+    expect(privyWalletStep({ ...base, ready: false })).toEqual({ step: "wait" });
+  });
+
+  it("signs with the embedded wallet, never an external one, when both are connected", () => {
+    expect(privyWalletStep({ ...base, wallets: [metamask, embedded] })).toEqual({ step: "sign", wallet: embedded });
+  });
+
+  it("creates the embedded wallet when the account has none", () => {
+    expect(privyWalletStep({ ...base, wallets: [metamask] })).toEqual({ step: "create" });
+  });
+
+  it("waits, rather than creating a second one, when the account has it but the list does not yet", () => {
+    expect(privyWalletStep({ ...base, accountHasEmbeddedWallet: true })).toEqual({ step: "wait" });
+    expect(privyWalletStep({ ...base, walletsReady: false })).toEqual({ step: "wait" });
+  });
+
+  it("signs in as the embedded wallet's address: that address is the operator", async () => {
+    const server = scriptedAdapter((call) =>
+      call.url.endsWith("challenge")
+        ? [200, envelope({ message: MESSAGE, nonce: "n", expiresAt: EXPIRES })]
+        : [403, failure("OPERATOR_NOT_AUTHORIZED", 403)],
+    );
+    operatorApi.raw().defaults.adapter = server.adapter;
+    const wallet = mockWallet();
+    const failed = await signInWithWallet(ADDRESS, {
+      challenge: requestOperatorChallenge,
+      sign: (message) => personalSign(wallet.provider, ADDRESS, message),
+      verify: verifyOperatorSignature,
+    }).catch((e: unknown) => e);
+    expect(server.calls[0].body).toEqual({ address: ADDRESS });
+    // The 403 is recognised, so the screen can show this address to send to an OPS_ADMIN.
+    expect(isNotAnOperator(failed)).toBe(true);
+    expect(isNotAnOperator(new ApiError("OPERATOR_CREDENTIAL_INVALID", "x", 401))).toBe(false);
+  });
+});
+
+describe("operator sign-out", () => {
+  it("ends the operator session only, and leaves the Privy session alone", async () => {
+    storage.setItem("accessToken", "privy-buyer-token");
+    storage.setItem(OPERATOR_SESSION_KEY, JSON.stringify({ token: "op", expiresAt: EXPIRES }));
+    const logout = vi.fn(async () => {
+      throw new ApiError("NETWORK_ERROR", "down", 0);
+    });
+    await signOutOperator({ logout, clear: () => clearOperatorSession("signed-out") });
+    expect(logout).toHaveBeenCalledTimes(1);
+    expect(storage.getItem(OPERATOR_SESSION_KEY)).toBeNull();
+    expect(storage.getItem("accessToken")).toBe("privy-buyer-token");
   });
 });
