@@ -36,7 +36,7 @@ const RAMP_STEPS = ["5", "10", "20", "300", "400", "500", "600", "700"];
 const RAMP_COLORS = RAMPS.flatMap((r) => [r, ...RAMP_STEPS.map((s) => `${r}-${s}`)]);
 const CHART_COLORS = ["chart-1", "chart-2", "chart-3", "chart-4", "chart-5", "chart-6"];
 
-const TEXT_COLORS = ["01", "02", "03", "inverse", "on-color", ...RAMP_COLORS, ...CHART_COLORS];
+const TEXT_COLORS = ["01", "02", "03", "inverse", "on-color", "on-primary", ...RAMP_COLORS, ...CHART_COLORS];
 const BORDER_COLORS = ["01", "02", "03", ...RAMP_COLORS, ...CHART_COLORS];
 const BG_COLORS = [
   "01", "02", "03", "04", "inverse",

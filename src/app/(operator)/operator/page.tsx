@@ -26,6 +26,7 @@ import type { AdjudicationQueueRow } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { formatMoney } from "@/utils/money";
 import { getPlatformHealth, listAdjudicationQueue } from "@/services/operator.service";
+import { routes } from "@/libs/routes";
 
 /**
  * The adjudication queue, route `/operator`.
@@ -122,7 +123,7 @@ export default function AdjudicationQueuePage() {
       header: "Case",
       noTruncate: true,
       cell: (row) => (
-        <Link href={`/operator/cases/${row.proposalId}`} className="hover:underline">
+        <Link href={routes.operatorCase(row.proposalId)} className="hover:underline">
           {row.caseLabel}
         </Link>
       ),

@@ -24,9 +24,17 @@ Radix UI and `sonner` are used as npm dependencies and are not copied.
 
 | Component | How | Licence |
 | --------- | --- | ------- |
-| Funnel Sans, JetBrains Mono | `next/font/google` (downloaded from Google Fonts during the build and self-hosted from the build output) | SIL Open Font License 1.1 (<https://openfontlicense.org>) |
+| Inter, JetBrains Mono | `next/font/google` (downloaded from Google Fonts during the build and self-hosted from the build output) | SIL Open Font License 1.1 (<https://openfontlicense.org>) |
 
 The font files are not stored in this repository.
+
+## Avatar artwork
+
+Account avatars are drawn in the browser by [DiceBear](https://www.dicebear.com)
+(`@dicebear/core`, MIT) with the `@dicebear/notionists` style. Its artwork is
+"Notionists" by Zoish (<https://heyzoish.gumroad.com/l/notionists>), released
+under CC0 1.0 (<https://creativecommons.org/publicdomain/zero/1.0/>). Nothing is
+fetched from a DiceBear server.
 
 ## Dependencies
 

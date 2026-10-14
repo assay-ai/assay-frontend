@@ -120,6 +120,8 @@ export interface SidebarProps extends React.HTMLAttributes<HTMLElement> {
   policyChangesHref?: string;
   policyChangesCount?: number;
   accountHref?: string;
+  /** Pinned to the bottom of the rail, below the nav rows — the shell's theme toggle. */
+  footer?: React.ReactNode;
 }
 
 const Sidebar = React.forwardRef<HTMLElement, SidebarProps>(
@@ -139,6 +141,7 @@ const Sidebar = React.forwardRef<HTMLElement, SidebarProps>(
       policyChangesHref,
       policyChangesCount = 0,
       accountHref,
+      footer,
       ...props
     },
     ref
@@ -213,6 +216,7 @@ const Sidebar = React.forwardRef<HTMLElement, SidebarProps>(
           active={activeItemId === "account"}
           onClick={() => onNavigate?.("account")}
         />
+        {footer ? <div className="mt-auto flex justify-center pt-3 desktop:justify-start">{footer}</div> : null}
       </nav>
     );
   }

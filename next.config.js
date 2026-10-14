@@ -96,9 +96,22 @@ const SECURITY_HEADERS = [
 ];
 
 module.exports = {
-  async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
-  },
+  // A static export: `next build` writes plain HTML/JS/CSS to `out/`, served
+  // as-is from Cloudflare Pages (see .github/workflows/deploy.yml). Nothing
+  // renders on a server, so there is no `next start`.
+  output: "export",
+  // No image optimisation server either.
+  images: { unoptimized: true },
+  // A static export sends no headers of its own: in production they come from
+  // `public/_headers` (Cloudflare Pages), which carries the enforced set below.
+  // `next dev` still serves them, so local runs behave the same.
+  ...(process.env.NODE_ENV === "production"
+    ? {}
+    : {
+        async headers() {
+          return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+        },
+      }),
   turbopack: {
     rules: {
       "*.svg": {

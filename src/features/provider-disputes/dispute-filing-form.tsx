@@ -36,6 +36,7 @@ import {
   onChainDisputeHref,
   onChainDisputeSentence,
 } from "@/features/provider-slash-case/chain-stage";
+import { routes } from "@/libs/routes";
 
 /**
  * Dispute filing — the in-app objection, for Solana cases only.
@@ -315,7 +316,7 @@ export function DisputeFilingForm({
           proposal.disputeId ? (
             <>
               A second dispute cannot be filed.{" "}
-              <Link href={`/provider/disputes/${proposal.disputeId}`} className="underline">
+              <Link href={routes.dispute(proposal.disputeId)} className="underline">
                 Open the existing dispute
               </Link>
               .

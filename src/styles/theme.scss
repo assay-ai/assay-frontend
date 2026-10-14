@@ -1,39 +1,47 @@
 /**
  * Design tokens — extracted from the product design's Foundations page.
- * The primary ramp follows the current logo rather than the original design palette.
+ * Colours follow the landing page (assay-landing-page/public/assets/site.css):
+ * warm neutrals instead of the original cool greys, and its lime accent as the
+ * primary ramp.
  *
  * Token names are kept VERBATIM from the design file. Do not rename them to
  * match a component's needs; rename the component.
  *
- * Themed tokens (backgrounds, borders, text, shadows, chart-6) resolve through
- * the `mode` axis the design declares: light is the `:root` default, dark is
- * `[data-theme='dark']`. Every other token is mode-independent by design — the
- * accent ramps are chosen to hold contrast on both grounds.
+ * Themed tokens resolve through the `mode` axis: light is the `:root` default,
+ * dark is `[data-theme='dark']`. Backgrounds, borders, text, shadows and chart-6
+ * are themed, and so are the accent steps used as TEXT (600/700, and the whole
+ * primary ramp): the light values are dark shades that fall to ~2.5:1 on the
+ * dark ground, so dark swaps in the ramp's lighter steps. Steps used as fills
+ * (500 and the 10/20 tints) are mode-independent.
  */
 
 :root {
+  color-scheme: light;
+
   /* Background */
   --bg-01: #ffffff;
-  --bg-02: #f7f8fa;
-  --bg-03: #eff1f4;
-  --bg-04: #e1e5ea;
-  --bg-inverse: #0b0d10;
+  --bg-02: #f7f6f1;
+  --bg-03: #efede4;
+  --bg-04: #e3e0d3;
+  --bg-inverse: #1c180d;
 
   /* Border */
-  --border-01: #eceef2;
-  --border-02: #dee3e9;
-  --border-03: #c2c9d2;
+  --border-01: #ecebe4;
+  --border-02: #dfddd2;
+  --border-03: #c6c2b2;
 
   /* Text */
-  --text-01: #0b0d11;
-  --text-02: #58616e;
-  --text-03: #7a8494;
-  --text-inverse: #f4f6f8;
+  --text-01: #1c180d;
+  --text-02: #625d4c;
+  --text-03: #7a7564;
+  --text-inverse: #efede4;
   --text-on-color: #ffffff;
+  /* Label on a lime primary fill — the landing's dark ground, as on its filled button. */
+  --text-on-primary: #1c180d;
 
   /* Elevation */
-  --shadow-hair: #0b0d110a;
-  --shadow-soft: #0b0d1114;
+  --shadow-hair: #1c180d0a;
+  --shadow-soft: #1c180d14;
 
   /* Chart — 6 is the "other"/rest series and follows the ground */
   --chart-1: var(--primary-500);
@@ -41,19 +49,22 @@
   --chart-3: #12a594;
   --chart-4: #8e4ec6;
   --chart-5: #f5a524;
-  --chart-6: #c2c9d2;
+  --chart-6: #c6c2b2;
 
-  /* Primary — lavender from public/images/logo.png (#9284d9).
-   * Filled controls use a darker shade for readable white labels.
+  /* Primary — the landing's lime (#ccff02) and the olive it darkens to.
+   * Lime reads at ~1.2:1 on white, so it is only a FILL (400, with 300 as its
+   * hover) under a --text-on-primary label, exactly like the landing's filled
+   * button. 500–700 are olive so text, borders, rings and indicator marks stay
+   * readable on the light ground (500 ≥ 4.5:1 on white).
    */
-  --primary-5: #9284d90d;
-  --primary-10: #9284d914;
-  --primary-20: #9284d92e;
-  --primary-300: #b5abe6;
-  --primary-400: #9284d9;
-  --primary-500: #7866bf;
-  --primary-600: #6553aa;
-  --primary-700: #52438c;
+  --primary-5: #9fc4000f;
+  --primary-10: #9fc4001f;
+  --primary-20: #9fc40040;
+  --primary-300: #e3ff6e;
+  --primary-400: #ccff02;
+  --primary-500: #647d00;
+  --primary-600: #566b00;
+  --primary-700: #3f4f00;
 
   /* Success */
   --success-10: #12a47214;
@@ -139,29 +150,51 @@
   --radius-full: 999px;
 
   /* Type */
-  --font-sans: var(--font-funnel-sans), "Funnel Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 }
 
 [data-theme="dark"] {
-  --bg-01: #0b0d10;
-  --bg-02: #101317;
-  --bg-03: #171b21;
-  --bg-04: #232a33;
-  --bg-inverse: #f3f5f7;
+  color-scheme: dark;
 
-  --border-01: #1c222a;
-  --border-02: #29313b;
-  --border-03: #3c4653;
+  --bg-01: #1c180d;
+  --bg-02: #211d14;
+  --bg-03: #26221a;
+  --bg-04: #342f24;
+  --bg-inverse: #efede4;
 
-  --text-01: #f4f6f8;
-  --text-02: #9aa5b2;
-  --text-03: #69737f;
-  --text-inverse: #0b0d11;
+  --border-01: #2e2a20;
+  --border-02: #423f33;
+  --border-03: #5c5949;
+
+  --text-01: #efede4;
+  --text-02: #b6b2a2;
+  --text-03: #979382;
+  --text-inverse: #1c180d;
   --text-on-color: #ffffff;
+  --text-on-primary: #1c180d;
 
   --shadow-hair: #00000040;
   --shadow-soft: #00000059;
 
-  --chart-6: #3c4653;
+  --chart-6: #5c5949;
+
+  /* Primary on dark is the landing's own use of lime: marks, borders, rings
+   * and text are lime itself, tints are lime washes. */
+  --primary-5: #ccff020a;
+  --primary-10: #ccff0214;
+  --primary-20: #ccff022e;
+  --primary-500: #ccff02;
+  --primary-600: #d8ff3a;
+  --primary-700: #e3ff6e;
+
+  /* Text steps of the other ramps, lifted to their 300/400 values (≥ 5.9:1). */
+  --success-600: #35be90;
+  --success-700: #7bd9b6;
+  --danger-600: #ee6e6e;
+  --danger-700: #f6a9a9;
+  --warning-600: #f5a524;
+  --warning-700: #fbd38d;
+  --info-600: #38bdf8;
+  --teal-600: #34d3c4;
 }

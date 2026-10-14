@@ -58,7 +58,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Timeline, type TimelineEvent } from "@/components/ui/timeline";
 import { WindowGauge } from "@/components/ui/window-gauge";
 
-import { AgentSwitcher, type AgentEnvironment } from "@/components/layout/agent-switcher";
 import { BottomTabBar } from "@/components/layout/bottom-tab-bar";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
 import { PublicTopBar } from "@/components/layout/public-top-bar";
@@ -157,7 +156,7 @@ function Spec({
 }
 
 /* ------------------------------------------------------------------------
- * Sample data — plausible GoAssay.AI product content.
+ * Sample data — plausible Assay product content.
  * ---------------------------------------------------------------------- */
 
 const arithmeticRows: ArithmeticRow[] = [
@@ -308,12 +307,6 @@ const codeSampleB = `{
   }
 }`;
 
-const customEnvironments: AgentEnvironment[] = [
-  { id: "prod", label: "prod", status: "success" },
-  { id: "canary", label: "canary", status: "danger" },
-  { id: "shadow", label: "shadow", status: "neutral" },
-];
-
 const sidebarBindings: SidebarBindingItem[] = [
   { id: "search_web", label: "search_web", status: "live", href: "#" },
   { id: "get_token_price", label: "get_token_price", status: "live", href: "#" },
@@ -352,8 +345,6 @@ const cardRowFiguresB: CardRowFigure[] = [
 export default function KitchenSinkPage() {
   const [theme, setTheme] = React.useState<"light" | "dark">("light");
   const [expandedRows, setExpandedRows] = React.useState<string[]>(["search_web"]);
-  const [environment, setEnvironment] = React.useState("prod");
-  const [customEnv, setCustomEnv] = React.useState("canary");
   const [sliderValue, setSliderValue] = React.useState(220);
   const [activeTab, setActiveTab] = React.useState("overview");
 
@@ -378,7 +369,7 @@ export default function KitchenSinkPage() {
     <div className="min-h-screen w-full bg-01 pb-24">
       <div className="sticky top-0 z-[60] flex w-full items-center justify-between gap-3 border-b border-01 bg-01/95 px-4 py-3 backdrop-blur sm:px-6 lg:px-10">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <h1 className="truncate text-label-md text-01">GoAssay.AI design system — kitchen sink</h1>
+          <h1 className="truncate text-label-md text-01">Assay design system — kitchen sink</h1>
           <p className="truncate font-mono text-mono-xs text-03">Acceptance surface — every component, every state</p>
         </div>
         <button
@@ -438,6 +429,21 @@ export default function KitchenSinkPage() {
             <Avatar name="Agent Prod" src="/images/favicon.png" />
             <Avatar name="QA Runner" src="/images/does-not-exist-xyz.png" />
             <Avatar initials="X4" color="pink" />
+          </Spec>
+          <Spec name="avatar · seeded by wallet address (sm / md / xl)">
+            {[
+              "0x52908400098527886E0F7030069857D2E4169EE7",
+              "0x8617e340b3d01fa5f11f306f4090fd50e238070d",
+              "0xde709f2102306220921060314715629080e2fb77",
+              "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+              "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+            ].map((address) => (
+              <React.Fragment key={address}>
+                <Avatar name={address} seed={address} size="sm" />
+                <Avatar name={address} seed={address} size="md" />
+                <Avatar name={address} seed={address} size="xl" />
+              </React.Fragment>
+            ))}
           </Spec>
 
           <Spec name="checkbox">
@@ -835,8 +841,6 @@ export default function KitchenSinkPage() {
             <TopBar
               className="min-w-[900px]"
               activeNavId="spend"
-              environment={environment}
-              onEnvironmentChange={setEnvironment}
               alertCount={3}
               onAlertsClick={() => {}}
               avatarName="Agent Prod"
@@ -846,9 +850,6 @@ export default function KitchenSinkPage() {
             <TopBar
               className="min-w-[900px]"
               activeNavId="guarantee"
-              environments={customEnvironments}
-              environment={customEnv}
-              onEnvironmentChange={setCustomEnv}
               alertCount={0}
               avatarName="QA Runner"
               search={<Search placeholder="Receipt, ULID, tool or tx…" wrapperClassName="hidden w-[240px] desktop:flex" />}
@@ -870,11 +871,6 @@ export default function KitchenSinkPage() {
               accountHref="#"
               className="h-[420px]"
             />
-          </Spec>
-
-          <Spec name="agent-switcher · default / custom environments">
-            <AgentSwitcher value={environment} onValueChange={setEnvironment} />
-            <AgentSwitcher environments={customEnvironments} value={customEnv} onValueChange={setCustomEnv} />
           </Spec>
 
           <Spec name="alert-badge · zero / default / overflow">
