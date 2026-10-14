@@ -35,7 +35,7 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
           className={cn(
             "relative flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-sm",
             "border border-03 bg-01 transition-colors",
-            "peer-checked:border-primary-500 peer-checked:bg-primary-500",
+            "peer-checked:border-primary-500 peer-checked:bg-primary-400",
             "peer-checked:[&>svg]:opacity-100",
             "peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary-500"
           )}
@@ -43,7 +43,7 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
           <Check
             aria-hidden="true"
             strokeWidth={3}
-            className="h-3 w-3 text-on-color opacity-0 transition-opacity"
+            className="h-3 w-3 text-on-primary opacity-0 transition-opacity"
           />
         </span>
         {label !== undefined && (

@@ -44,6 +44,7 @@ import {
 } from "@/services";
 import { cn } from "@/utils";
 import { formatDecimal, formatMoney, toDecimal } from "@/utils/money";
+import { routes } from "@/libs/routes";
 
 /**
  * Spend explorer.
@@ -436,7 +437,7 @@ export default function SpendPage() {
       header: dimension.header,
       cell: (r) =>
         r.intentId ? (
-          <Link href={`/receipts/${r.intentId}`} className="text-primary-500 hover:underline">
+          <Link href={routes.receipt(r.intentId)} className="text-primary-500 hover:underline">
             {r.label}
           </Link>
         ) : (
@@ -757,7 +758,7 @@ export default function SpendPage() {
                       >
                         {sub.intentId ? (
                           <Link
-                            href={`/receipts/${sub.intentId}`}
+                            href={routes.receipt(sub.intentId)}
                             className="font-mono text-mono-12 text-primary-500"
                           >
                             {sub.label}

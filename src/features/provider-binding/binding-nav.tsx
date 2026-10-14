@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { pathOf } from "@/libs/routes";
 import { cn } from "@/utils";
 
 import { bindingScreens } from "./screens";
@@ -20,10 +21,10 @@ export function BindingNav({ bindingId }: { bindingId: string }) {
         <Link
           key={screen.href}
           href={screen.href}
-          aria-current={pathname === screen.href ? "page" : undefined}
+          aria-current={pathname === pathOf(screen.href) ? "page" : undefined}
           className={cn(
             "text-label-13 hover:underline",
-            pathname === screen.href ? "text-01" : "text-primary-600"
+            pathname === pathOf(screen.href) ? "text-01" : "text-primary-600"
           )}
         >
           {screen.label}

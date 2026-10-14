@@ -31,6 +31,7 @@ import {
   shortRequestId,
   type CountdownUrgency,
 } from "./format";
+import { routes } from "@/libs/routes";
 
 const STATUS_TONE: Record<SlashStatusKey, string> = {
   pending: "bg-danger-10 text-danger-700",
@@ -63,7 +64,7 @@ function HowToDispute({ match, onChain }: { match: AssayMatch; onChain: boolean 
       <p className="text-body-13 text-02">
         {lead} open{" "}
         <Link
-          href={`/provider/cases/${encodeURIComponent(match.proposalId)}`}
+          href={routes.providerCase(match.proposalId)}
           className="text-primary-600 underline"
         >
           its Assay case
@@ -134,7 +135,7 @@ function AssayMatchTag({ match }: { match: AssayMatch }) {
   if (match.kind === "known") {
     return (
       <Link
-        href={`/provider/cases/${encodeURIComponent(match.proposalId)}`}
+        href={routes.providerCase(match.proposalId)}
         className="text-label-13 text-primary-600 hover:underline"
       >
         Open Assay case

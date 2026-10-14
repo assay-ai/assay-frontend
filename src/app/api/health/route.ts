@@ -1,18 +1,13 @@
 import { NextResponse } from "next/server";
 
 /**
- * Liveness/readiness probe for the Kubernetes deployment (`.deploy/*.yaml`).
+ * Build marker, written to `out/api/health` by the static export.
  *
- * Deliberately shallow: it answers "is this Next.js server accepting
- * requests", nothing more. It must NOT reach the backend API — a probe that
- * fails when a dependency is down turns one backend outage into a restart loop
- * on every frontend pod, and takes down the pages that do not need the API at
- * all.
- *
- * `force-dynamic` because a statically rendered probe is a cached 200 that
- * keeps answering after the process is no longer healthy.
+ * There is no Next.js server any more, so this is not a liveness probe: it is
+ * a file that says which build is deployed. `next dev` still serves it, which
+ * is what the local e2e stack (`up.sh`) waits on.
  */
-export const dynamic = "force-dynamic";
+export const dynamic = "force-static";
 
 export function GET() {
   return NextResponse.json({
