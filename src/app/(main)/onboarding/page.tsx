@@ -195,7 +195,7 @@ export default function OnboardingPage() {
   return (
     <div className="flex w-full flex-col bg-02">
       {/*
-        The design gives onboarding its own chrome — a bar carrying the GoAssay.AI
+        The design gives onboarding its own chrome — a bar carrying the Assay
         mark, the wordmark and the step label. The buyer Top Bar above already
         carries the first two, so only the step label survives here.
       */}

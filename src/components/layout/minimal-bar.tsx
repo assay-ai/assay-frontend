@@ -27,7 +27,7 @@ import { ThemeToggle } from "./theme-toggle";
  * Geometry is verbatim from the five copies: `height 56`, `fill $bg-01`,
  * `stroke $border-01` at `strokeWidth {bottom: 1}` inner, `gap 14`,
  * `padding [0, 26]`, `alignItems center`. Children in order: Mark (22×22,
- * `$text-01`, `$radius-md`), the fixed word mark "GoAssay.AI" (mono 15/600,
+ * `$text-01`, `$radius-md`), the fixed word mark "Assay" (Inter 17/500, as on the landing page;
  * `$text-01`), the left slot (sans 13.5, `$text-03`, `fill_container`), the
  * right slot (mono 12.5, `$text-03`) and an Avatar instance (indigo,
  * initials "MT" in all five).
@@ -81,7 +81,7 @@ const MinimalBar = React.forwardRef<HTMLElement, MinimalBarProps>(
         {...props}
       >
         <img src="/images/logo.png" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 rounded-md object-cover" />
-        <span className="shrink-0 text-mono-sm font-mono font-semibold text-01">GoAssay.AI</span>
+        <span className="shrink-0 text-[17px] font-medium leading-none tracking-[-0.025em] text-01">Assay</span>
 
         <span className="min-w-0 flex-1 truncate font-sans text-body-13 text-03">{context}</span>
 

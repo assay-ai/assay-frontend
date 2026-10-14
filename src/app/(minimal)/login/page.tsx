@@ -74,7 +74,7 @@ function BrandLockup({ className }: { className?: string }) {
         aria-hidden="true"
         className="h-[22px] w-[22px] shrink-0 rounded-md object-cover"
       />
-      <span className="text-mono-sm font-mono font-semibold">GoAssay.AI</span>
+      <span className="text-[17px] font-medium leading-none tracking-[-0.025em]">Assay</span>
     </div>
   );
 }
@@ -169,7 +169,7 @@ export default function LoginPage() {
           <div className="flex flex-col gap-2">
             <h1 className="text-heading-lg text-01">Sign in</h1>
             <p className="text-body-sm text-02">
-              Continue to your GoAssay.AI account. Email or wallet — there is no password to remember.
+              Continue to your Assay account. Email or wallet — there is no password to remember.
             </p>
           </div>
 
@@ -214,7 +214,7 @@ export default function LoginPage() {
               href="/how-it-works"
               className="group inline-flex items-center gap-1.5 text-label-13 text-02 hover:text-01"
             >
-              New to GoAssay.AI? See how it works
+              New to Assay? See how it works
               <ArrowRight
                 aria-hidden="true"
                 className="h-[13px] w-[13px] transition-transform group-hover:translate-x-0.5"

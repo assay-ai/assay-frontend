@@ -63,7 +63,7 @@ function titleFor(pathname: string): string {
     .sort((a, b) => b.length - a.length)[0];
   if (match) return TITLES[match];
   if (pathname.startsWith("/receipts/")) return "Receipt";
-  return "GoAssay.AI";
+  return "Assay";
 }
 
 const TAB_FOR_PATH: { prefix: string; id: TabBarTabId }[] = [

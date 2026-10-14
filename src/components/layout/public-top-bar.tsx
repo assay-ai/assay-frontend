@@ -75,7 +75,7 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
       >
         <div className="flex shrink-0 items-center gap-2 py-[10px] tablet:py-0">
           <img src="/images/logo.png" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 rounded-md object-cover" />
-          <span className="text-mono-sm font-mono font-semibold text-01">GoAssay.AI</span>
+          <span className="text-[17px] font-medium leading-none tracking-[-0.025em] text-01">Assay</span>
         </div>
 
         <nav

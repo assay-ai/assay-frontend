@@ -156,7 +156,7 @@ function Spec({
 }
 
 /* ------------------------------------------------------------------------
- * Sample data — plausible GoAssay.AI product content.
+ * Sample data — plausible Assay product content.
  * ---------------------------------------------------------------------- */
 
 const arithmeticRows: ArithmeticRow[] = [
@@ -369,7 +369,7 @@ export default function KitchenSinkPage() {
     <div className="min-h-screen w-full bg-01 pb-24">
       <div className="sticky top-0 z-[60] flex w-full items-center justify-between gap-3 border-b border-01 bg-01/95 px-4 py-3 backdrop-blur sm:px-6 lg:px-10">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <h1 className="truncate text-label-md text-01">GoAssay.AI design system — kitchen sink</h1>
+          <h1 className="truncate text-label-md text-01">Assay design system — kitchen sink</h1>
           <p className="truncate font-mono text-mono-xs text-03">Acceptance surface — every component, every state</p>
         </div>
         <button
