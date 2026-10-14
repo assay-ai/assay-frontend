@@ -196,6 +196,13 @@ const SCHEMA_COLUMNS: TableColumn<SchemaField>[] = [
   },
 ];
 
+/** Static export: one page per fixture, written at build time; any other id is a 404. */
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return Object.keys(FIXTURES).map((toolId) => ({ toolId }));
+}
+
 export default async function ToolContractPage({
   params,
 }: {

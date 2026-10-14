@@ -33,8 +33,16 @@ describe("security headers", () => {
   });
 
   it("adds HSTS in production only", async () => {
-    const headers = await headersFor("production");
-    expect(headers["Strict-Transport-Security"]).toMatch(/^max-age=\d+/);
-    expect(headers["Content-Security-Policy-Report-Only"]).not.toContain("'unsafe-eval'");
+    // Production is a static export: next.config sends nothing there, and
+    // Cloudflare Pages serves `public/_headers` instead.
+    const config = (await import("node:fs")).readFileSync(
+      require.resolve("../../public/_headers"),
+      "utf8",
+    );
+    expect(config).toContain("Content-Security-Policy: frame-ancestors 'none'");
+    expect(config).toContain("X-Frame-Options: DENY");
+    expect(config).toContain("X-Content-Type-Options: nosniff");
+    expect(config).toMatch(/Strict-Transport-Security: max-age=\d+/);
+    expect((await headersFor("development"))["Strict-Transport-Security"]).toBeUndefined();
   });
 });

@@ -1,0 +1,89 @@
+# Deploying the app
+
+The app is a static export: `next build` (`output: "export"` in
+`next.config.js`) writes plain HTML, JS and CSS to `out/`. Nothing renders on a
+server, so it is served from Cloudflare Pages. Record screens take their id in
+the query string (`/receipts/view?id=…`, see `src/libs/routes.ts`) because a
+static export cannot have run-time dynamic segments.
+
+`.github/workflows/deploy.yml` builds and deploys on every push. Each branch
+has its own GitHub environment and its own Cloudflare Pages project:
+
+| Branch    | GitHub environment | Cloudflare Pages project |
+| --------- | ------------------ | ------------------------ |
+| `main`    | `production`       | the production project   |
+| `develop` | `develop`          | the develop project      |
+
+Every deploy is a **production** deployment of its project, never a preview:
+the workflow reads the project's production branch from the Cloudflare API and
+deploys under that branch name, so the project's root `<project>.pages.dev`
+and its custom domains always serve the latest push.
+
+## One-time setup
+
+### 1. Cloudflare Pages projects
+
+Create two direct-upload Pages projects (the workflow uploads `out/`;
+Cloudflare does not build), one per environment:
+
+```sh
+npx wrangler@4.147.0 pages project create <project>
+```
+
+Their production branch can be named anything; the workflow uses whatever it
+is. Give each project its custom domain under **Custom domains**.
+
+### 2. Cloudflare API token
+
+Create an API token with **Account → Cloudflare Pages → Edit** for the account
+that owns the projects.
+
+### 3. GitHub environments
+
+In the repository settings, create two environments, `develop` and
+`production`. In each one set:
+
+| Kind     | Name                       | Value                                           |
+| -------- | -------------------------- | ----------------------------------------------- |
+| Variable | `NEXT_PUBLIC_BASE_URL`     | the app's public URL, e.g. `https://app.example.com` |
+| Variable | `NEXT_PUBLIC_API_BASE_URL` | the backend API, e.g. `https://api.example.com/api/v1` |
+| Variable | `NEXT_PUBLIC_PRIVY_APP_ID` | the Privy app id (25 characters)                |
+| Variable | `NEXT_PUBLIC_MCP_URL`      | optional: the MCP endpoint shown on `/connect`  |
+| Variable | `CLOUDFLARE_PAGES_PROJECT` | this environment's Pages project name           |
+| Secret   | `CLOUDFLARE_API_TOKEN`     | the token from step 2                           |
+| Secret   | `CLOUDFLARE_ACCOUNT_ID`    | the Cloudflare account id                       |
+
+The workflow reads each value from the environment's Variables first and its
+Secrets second, so either tab works. `NEXT_PUBLIC_*` values are inlined into
+the JavaScript every visitor downloads, so they need no secrecy; as Variables
+they stay readable in the run logs, as Secrets they are masked there. Changing one takes effect on the
+next deploy, not before: re-run the workflow (it has a manual
+`workflow_dispatch` trigger) after editing them.
+
+Optionally, protect `production` with required reviewers so a push to `main`
+waits for approval before it deploys.
+
+### 4. Privy allowed origins
+
+In the Privy dashboard, add every origin the app is served from to the app's
+allowed origins: each project's custom domain and its
+`https://<project>.pages.dev`. An origin Privy does not allow leaves
+the sign-in page waiting on "Checking your session".
+
+### 5. Backend
+
+The API must accept requests from the app's origin. `assay-backend` enables
+CORS for every origin, so nothing needs changing there.
+
+## Checking a build locally
+
+```sh
+pnpm build                                   # writes out/
+npx wrangler@4.147.0 pages dev out --port 4020 --ip localhost
+```
+
+`wrangler pages dev` serves `out/` the way Pages does, including `_headers`
+and `404.html`. `next dev` is unchanged for day-to-day work.
+
+The `Dockerfile` still runs `next start`, which a static export does not
+support; it is not part of this deployment.

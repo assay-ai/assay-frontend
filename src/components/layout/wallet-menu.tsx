@@ -154,7 +154,12 @@ export function WalletMenu({ className }: { className?: string }) {
             className,
           )}
         >
-          <Avatar name={mounted ? (email ?? addresses[0] ?? "") : ""} size="md" />
+          <Avatar
+            name={mounted ? (email ?? addresses[0] ?? "") : ""}
+            // The face is the wallet's: seeded by address, so it never changes with the email.
+            seed={mounted ? addresses[0] : undefined}
+            size="md"
+          />
         </button>
       </DropdownMenuPrimitive.Trigger>
 

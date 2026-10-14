@@ -295,7 +295,7 @@ describe("how a row reads", () => {
         payload: { body: { note: "n", reasonCode: "R15_TEST" }, proposalId: id },
       });
       expect(suspend.sentence).toBe("Suspend case a337cb6d…, which cancels its penalty (reason R15_TEST).");
-      expect(suspend.target).toEqual({ label: "Case a337cb6d…", href: `/operator/cases/${id}` });
+      expect(suspend.target).toEqual({ label: "Case a337cb6d…", href: `/operator/cases/view?id=${id}` });
 
       const sweep = describeApproval(approval());
       expect(sweep.sentence).toBe("Sweep every case with defect D-1 over the last 24 h, decided like case p1 (reason R).");

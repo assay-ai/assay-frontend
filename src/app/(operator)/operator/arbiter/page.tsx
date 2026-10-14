@@ -68,6 +68,7 @@ import {
 } from "@/services/operator.service";
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
+import { routes } from "@/libs/routes";
 
 /**
  * The arbiter page, route `/operator/arbiter` (assay-evm D-19).
@@ -684,7 +685,7 @@ function DisputeRow({
         ) : null}
         <span className="text-body-xs text-03">case {row.caseStatus.toLowerCase().replace(/_/g, " ")}</span>
         <Link
-          href={`/operator/cases/${encodeURIComponent(row.proposalId)}`}
+          href={routes.operatorCase(row.proposalId)}
           className="ml-auto text-label-13 text-primary-600 hover:underline"
         >
           Open case

@@ -12,6 +12,7 @@ import { shortAddress } from "@/libs/chains/format";
 import { formatMoney } from "@/utils/money";
 
 import { ROLE_OPTIONS } from "./directory";
+import { routes } from "@/libs/routes";
 
 /**
  * The approvals inbox's rules, kept out of the page so they can be tested.
@@ -225,7 +226,7 @@ function extraFields(body: Record<string, unknown>): { label: string; value: str
 }
 
 function caseTarget(id: string) {
-  return { label: `Case ${shortId(id)}`, href: `/operator/cases/${encodeURIComponent(id)}` };
+  return { label: `Case ${shortId(id)}`, href: routes.operatorCase(id) };
 }
 
 /**

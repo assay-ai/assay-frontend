@@ -43,7 +43,7 @@ export function DemoCta() {
   }
 
   return (
-    <Link href="/demo" className={`${BASE} bg-primary-500 text-on-color shadow-hair hover:bg-primary-600`}>
+    <Link href="/demo" className={`${BASE} bg-primary-400 text-on-primary shadow-hair hover:bg-primary-300`}>
       <Play aria-hidden="true" className="h-[15px] w-[15px]" />
       Watch it refuse to charge
     </Link>

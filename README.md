@@ -52,16 +52,17 @@ git clone <this repository> assay-frontend
 cd assay-frontend
 pnpm install --frozen-lockfile
 cp .env.local.example .env.local      # then edit the values
-pnpm build
-pnpm start --port 4000
+pnpm dev --port 4000
 ```
 
 Open <http://localhost:4000>. The app expects the backend API at the URL in
-`NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:3000/api/v1`).
+`NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:3000/api/v1`). Keep the
+port in sync with `NEXT_PUBLIC_BASE_URL`, because absolute URLs are built from
+it.
 
-For development with hot reload you can use `pnpm dev --port 4000` instead of
-`build` + `start`. Keep the port in sync with `NEXT_PUBLIC_BASE_URL`, because
-absolute URLs are built from it.
+The app is a **static export**: `pnpm build` writes plain files to `out/`, and
+deployment uploads them to Cloudflare Pages from GitHub Actions. See
+[DEPLOY.md](DEPLOY.md), which also shows how to serve `out/` locally.
 
 ### Environment variables
 
@@ -81,8 +82,7 @@ changing them. See `.env.local.example` for the full list and comments.
 | Command                | What it does                                        |
 | ---------------------- | --------------------------------------------------- |
 | `pnpm dev`             | Development server (Turbopack)                      |
-| `pnpm build`           | Production build                                    |
-| `pnpm start`           | Serve the production build                          |
+| `pnpm build`           | Static export to `out/` (see DEPLOY.md)             |
 | `pnpm lint`            | ESLint                                              |
 | `pnpm typecheck`       | `next typegen` + `tsc --noEmit` (covers test files, which `next build` does not) |
 | `pnpm test`            | Unit tests (Vitest)                                 |
@@ -90,6 +90,9 @@ changing them. See `.env.local.example` for the full list and comments.
 | `pnpm check:refusals`  | Compares gas-grant refusal reasons with a backend checkout (needs `X402_BACKEND_SRC`) |
 
 ## Docker
+
+Not used by the Cloudflare Pages deployment, and out of date: the image runs
+`next start`, which a static export does not support.
 
 ```bash
 docker build \

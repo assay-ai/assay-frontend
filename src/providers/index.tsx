@@ -1,5 +1,7 @@
 "use client";
 
+import { Suspense } from "react";
+
 import { PrivyProvider } from "@privy-io/react-auth";
 import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
 import type { Chain } from "@/interfaces/chain";
@@ -11,20 +13,21 @@ import { AccountBlockBridge } from "@/features/account-block/account-block-bridg
 import { PrivySessionBridge } from "@/providers/PrivySessionBridge";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useChains } from "@/hooks/useChains";
 
-interface ProvidersProps {
+interface PrivyShellProps {
   children: React.ReactNode;
   /**
-   * `GET /chains`, fetched by the SERVER in `app/layout.tsx`.
+   * `GET /chains`, read by `ChainsGate` BEFORE Privy mounts.
    *
-   * It has to be here, before the first render: Privy reads `supportedChains`
-   * once when it mounts, and an eip155 chain missing from that list makes the
-   * embedded wallet open no prompt at all — measured, the deposit screen hung
-   * on "Approving the token in your wallet…" with no modal and no error.
-   * Empty when the API could not be reached; EVM signing then refuses by name
-   * and the rest of the app still loads.
+   * It has to be known before Privy's first render: Privy reads
+   * `supportedChains` once when it mounts, and an eip155 chain missing from
+   * that list makes the embedded wallet open no prompt at all — measured, the
+   * deposit screen hung on "Approving the token in your wallet…" with no modal
+   * and no error. Empty when the API could not be reached; EVM signing then
+   * refuses by name and the rest of the app still loads.
    */
-  chains?: readonly Chain[];
+  chains: readonly Chain[];
 }
 
 type PrivyConfig = NonNullable<
@@ -89,7 +92,7 @@ const queryClient = new QueryClient({
   },
 });
 
-export function Providers({ children, chains = [] }: ProvidersProps) {
+function PrivyShell({ children, chains }: PrivyShellProps) {
   /*
     Seeded before the tree renders, so the first screen that builds an eip155
     transaction already has the endpoint. Idempotent: re-running it with the
@@ -100,8 +103,6 @@ export function Providers({ children, chains = [] }: ProvidersProps) {
   const evmChains = evmChainsFrom(chains);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
         <PrivyProvider
           appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? ""}
           config={{
@@ -208,6 +209,43 @@ export function Providers({ children, chains = [] }: ProvidersProps) {
             <AccountBlockBridge>{children}</AccountBlockBridge>
           </PrivySessionBridge>
         </PrivyProvider>
+  );
+}
+
+/**
+ * Holds the app until `GET /chains` has answered, then mounts Privy with it.
+ *
+ * The app is a static export, so there is no server to read the list before
+ * the first render (the root layout used to). Waiting here keeps the one
+ * guarantee that mattered — Privy never mounts with a partial chain list —
+ * and the query it waits on is the same `["chains"]` every screen reads, so
+ * nothing asks twice. A failed read mounts with an empty list, as before.
+ */
+function ChainsGate({ children }: { children: React.ReactNode }) {
+  const result = useChains();
+  if (result.status === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-01" role="status" aria-label="Loading">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/logo.png" alt="" aria-hidden="true" className="h-8 w-8 animate-pulse rounded-md" />
+      </div>
+    );
+  }
+  return <PrivyShell chains={result.chains}>{children}</PrivyShell>;
+}
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <ChainsGate>
+          {/*
+            The one Suspense boundary every screen and layout needs for
+            `useSearchParams` in a static export — record ids ride in the
+            query string (see libs/routes.ts).
+          */}
+          <Suspense fallback={null}>{children}</Suspense>
+        </ChainsGate>
       </ThemeProvider>
     </QueryClientProvider>
   );

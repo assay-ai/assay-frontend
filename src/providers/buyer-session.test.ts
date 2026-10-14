@@ -25,7 +25,7 @@ describe("isOperatorConsolePath", () => {
   it("matches the console and every page under it", () => {
     expect(isOperatorConsolePath("/operator")).toBe(true);
     expect(isOperatorConsolePath("/operator/approvals")).toBe(true);
-    expect(isOperatorConsolePath("/operator/cases/a337cb6d")).toBe(true);
+    expect(isOperatorConsolePath("/operator/cases/view")).toBe(true);
   });
 
   it("does not match buyer, provider or look-alike paths", () => {

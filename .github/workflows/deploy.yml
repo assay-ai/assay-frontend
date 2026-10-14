@@ -1,0 +1,94 @@
+name: Deploy
+
+# The app is a static export (`output: "export"`): `pnpm build` writes plain
+# files to `out/`, which go to Cloudflare Pages. No server runs the app.
+#
+#   push to develop -> GitHub environment "develop"
+#   push to main    -> GitHub environment "production"
+#
+# Each GitHub environment holds the values below. Every one is read from the
+# environment's Variables first and its Secrets second, so either tab works.
+# NEXT_PUBLIC_* end up in the browser bundle anyway; a Variable keeps them
+# readable in the logs, a Secret masks them.
+#   Values
+#     NEXT_PUBLIC_BASE_URL       e.g. https://app.example.com
+#     NEXT_PUBLIC_API_BASE_URL   e.g. https://api.example.com/api/v1
+#     NEXT_PUBLIC_PRIVY_APP_ID   the Privy app id (25 characters)
+#     NEXT_PUBLIC_MCP_URL        optional, shown in the /connect snippet
+#     CLOUDFLARE_PAGES_PROJECT   the Pages project to deploy to
+#   Credentials (keep these as Secrets)
+#     CLOUDFLARE_API_TOKEN       a token with "Cloudflare Pages: Edit"
+#     CLOUDFLARE_ACCOUNT_ID
+#
+# See DEPLOY.md for the one-time setup.
+
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref_name == 'main' || github.ref_name == 'develop'
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || 'develop' }}
+      url: ${{ vars.NEXT_PUBLIC_BASE_URL }}
+    env:
+      NEXT_PUBLIC_BASE_URL: ${{ vars.NEXT_PUBLIC_BASE_URL || secrets.NEXT_PUBLIC_BASE_URL }}
+      NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL || secrets.NEXT_PUBLIC_API_BASE_URL }}
+      NEXT_PUBLIC_PRIVY_APP_ID: ${{ vars.NEXT_PUBLIC_PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+      NEXT_PUBLIC_MCP_URL: ${{ vars.NEXT_PUBLIC_MCP_URL || secrets.NEXT_PUBLIC_MCP_URL }}
+      CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || secrets.CLOUDFLARE_PAGES_PROJECT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          # wrangler 4 needs Node 22+.
+          node-version: 24
+          cache: pnpm
+
+      - name: Check the environment is configured
+        env:
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        run: |
+          missing=0
+          for name in NEXT_PUBLIC_BASE_URL NEXT_PUBLIC_API_BASE_URL NEXT_PUBLIC_PRIVY_APP_ID CLOUDFLARE_PAGES_PROJECT; do
+            if [ -z "${!name}" ]; then echo "::error::$name is not set in this environment (neither as a Variable nor as a Secret)"; missing=1; fi
+          done
+          [ "$HAS_TOKEN" = true ] || { echo "::error::Secret CLOUDFLARE_API_TOKEN is not set"; missing=1; }
+          [ "$HAS_ACCOUNT" = true ] || { echo "::error::Secret CLOUDFLARE_ACCOUNT_ID is not set"; missing=1; }
+          [ ${#NEXT_PUBLIC_PRIVY_APP_ID} -eq 25 ] || { echo "::error::NEXT_PUBLIC_PRIVY_APP_ID must be 25 characters"; missing=1; }
+          exit $missing
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
+
+      # Each environment has its own Pages project, so every deploy is that
+      # project's production deployment: deploy under the project's own
+      # production branch, whatever it is named, never as a preview.
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          branch=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PAGES_PROJECT" \
+            | jq -r '.result.production_branch // empty')
+          [ -n "$branch" ] || { echo "::error::Could not read the production branch of Pages project $CLOUDFLARE_PAGES_PROJECT"; exit 1; }
+          echo "Deploying as production (branch $branch)"
+          pnpm dlx wrangler@4.147.0 pages deploy out \
+            --project-name "$CLOUDFLARE_PAGES_PROJECT" \
+            --branch "$branch" \
+            --commit-hash "${{ github.sha }}" \
+            --commit-message "${{ github.ref_name }} ${{ github.sha }}"

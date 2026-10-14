@@ -5,6 +5,7 @@ import * as React from "react";
 
 import { Banner } from "@/components/ui/banner";
 import { DisputeFilingForm } from "@/features/provider-disputes/dispute-filing-form";
+import { routes } from "@/libs/routes";
 
 /**
  * the dispute filing screen — dispute filing, route `/provider/disputes/new?subjectType=&subjectId=`.
@@ -54,7 +55,7 @@ function DisputeFilingPageContent() {
       onFiled={(result) => {
         const disputeId = result.proposal.disputeId;
         if (disputeId) {
-          router.push(`/provider/disputes/${disputeId}`);
+          router.push(routes.dispute(disputeId));
         } else {
           router.push("/provider/disputes");
         }

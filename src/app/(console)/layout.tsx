@@ -1,16 +1,19 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Toaster } from "sonner";
 
 import { AlertFill, CheckCircle } from "@/components/icons";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
 import { Sidebar, type SidebarBindingItem } from "@/components/layout/sidebar";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
 import { SlashHoldBanner } from "@/features/slash-hold/slash-hold-banner";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { labelForEndpoint } from "@/utils/provider-label";
+import { useTheme } from "@/providers/ThemeProvider";
+import { routes } from "@/libs/routes";
 
 /**
  * The provider console shell — the design's "Sidebar" component, used by
@@ -49,9 +52,9 @@ import { labelForEndpoint } from "@/utils/provider-label";
  */
 
 /** `/provider/bindings/<id>/…` → `<id>`, else null. */
-function bindingIdFrom(pathname: string): string | null {
-  const match = /^\/provider\/bindings\/([^/]+)/.exec(pathname);
-  return match ? match[1] : null;
+/** The binding a screen is about: its id rides in `?binding=` (see `libs/routes.ts`). */
+function bindingIdFrom(pathname: string, bindingParam: string | null): string | null {
+  return pathname.startsWith("/provider/bindings/view") && bindingParam ? bindingParam : null;
 }
 
 const SECTIONS: { prefix: string; id: string }[] = [
@@ -62,9 +65,9 @@ const SECTIONS: { prefix: string; id: string }[] = [
   { prefix: "/provider/account", id: "account" },
 ];
 
-function activeItemFor(pathname: string): string | undefined {
+function activeItemFor(pathname: string, bindingParam: string | null): string | undefined {
   if (pathname === "/provider") return "home";
-  const binding = bindingIdFrom(pathname);
+  const binding = bindingIdFrom(pathname, bindingParam);
   if (binding) return binding;
   return SECTIONS.find((s) => pathname.startsWith(s.prefix))?.id;
 }
@@ -96,7 +99,7 @@ function titleFor(pathname: string): string {
   const match = Object.keys(TITLES)
     .filter((href) => href !== "/provider" && pathname.startsWith(href))
     .sort((a, b) => b.length - a.length)[0];
-  return match ? TITLES[match] : "GoAssay.AI";
+  return match ? TITLES[match] : "Assay";
 }
 
 /**
@@ -118,7 +121,9 @@ function titleFor(pathname: string): string {
  */
 
 export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
+  const { themeType } = useTheme();
   const pathname = usePathname();
+  const bindingParam = useSearchParams().get("binding");
 
   /*
     The rail's binding list is shell data, so it is fetched once here rather
@@ -146,7 +151,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
     id: binding.id,
     label: labelForEndpoint(binding.endpoint),
     status: binding.status === "ACTIVE" ? "live" : "paused",
-    href: `/provider/bindings/${binding.id}`,
+    href: routes.binding(binding.id),
   }));
 
   return (
@@ -157,7 +162,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
 
       <Sidebar
         className="rounded-none border-0 border-r bg-01"
-        activeItemId={activeItemFor(pathname)}
+        activeItemId={activeItemFor(pathname, bindingParam)}
         homeHref="/provider"
         inboxHref="/provider/inbox"
         capitalHref="/provider/capital"
@@ -165,6 +170,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
         policyChangesHref="/provider/policy-changes"
         accountHref="/provider/account"
         bindings={bindings}
+        footer={<ThemeToggle />}
       />
 
       {/* Desktop Main: gap 16, padding [22, 26]. Mobile Content
@@ -181,6 +187,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
           silent no-op — BUG-J-PROV-02's "Publish gives no feedback" was this.
           Same props as `(main)` and `(operator)`. */}
       <Toaster
+        theme={themeType}
         position="top-center"
         icons={{
           success: <CheckCircle className="mt-2 text-xl" />,
