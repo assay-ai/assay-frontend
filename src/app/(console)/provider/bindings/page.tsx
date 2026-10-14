@@ -23,6 +23,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { listToolBindings, listToolCatalogue } from "@/services/provider-tool-bindings.service";
 import { formatMoney } from "@/utils/money";
 import { shortBindingId } from "@/utils/provider-label";
+import { routes } from "@/libs/routes";
 
 /**
  * The binding list, route `/provider/bindings`.
@@ -150,7 +151,7 @@ export default function ProviderBindingsListPage() {
       header: "Tool",
       mono: true,
       cell: (row) => (
-        <Link href={`/provider/bindings/${row.binding.id}`} className="min-w-0 truncate hover:underline">
+        <Link href={routes.binding(row.binding.id)} className="min-w-0 truncate hover:underline">
           {row.tool ? (
             <span className="font-semibold">{row.tool.name}</span>
           ) : (

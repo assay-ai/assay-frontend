@@ -62,7 +62,7 @@ function titleFor(pathname: string): string {
     .filter((href) => href !== "/" && pathname.startsWith(href))
     .sort((a, b) => b.length - a.length)[0];
   if (match) return TITLES[match];
-  if (pathname.startsWith("/receipts/")) return "Receipt";
+  if (pathname.startsWith("/receipts/view")) return "Receipt";
   return "Assay";
 }
 
