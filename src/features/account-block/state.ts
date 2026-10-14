@@ -129,12 +129,27 @@ const WRITE_ALLOWED_PREFIXES: readonly string[] = ["/auth/"];
  * penalties page uses it to match on-chain penalties to Assay cases, which a
  * blocked provider needs most. `POST /providers/me/slash-requests/dispute-intent`
  * only builds an unsigned transaction: the chain lets a blocked provider
- * dispute a penalty, and so does the backend.
+ * dispute a penalty, and so does the backend. The revoke writes a blocked
+ * account may still make are in `ALLOWED_WHILE_BLOCKED` below.
  */
 const READ_ONLY_POSTS: ReadonlySet<string> = new Set([
   "/providers/me/slash-requests/lookup",
   "/providers/me/slash-requests/dispute-intent",
 ]);
+
+/**
+ * Writes a blocked person must still be able to make, matched on method and
+ * the exact route shape. The backend marks the same routes `@AllowedWhileBlocked`
+ * (`shared/auth/blocked-session-read-only.decorator.ts`): they write, but only
+ * to take authority AWAY from the account — revoking an escrow delegate and
+ * revoking an agent credential — so a leaked delegate or credential cannot
+ * come back to life on unblock.
+ */
+const ALLOWED_WHILE_BLOCKED: readonly { readonly method: string; readonly path: RegExp }[] = [
+  { method: "POST", path: /^\/escrow\/delegates\/revoke-intent$/ },
+  { method: "POST", path: /^\/escrow\/delegates\/revoke$/ },
+  { method: "DELETE", path: /^\/agents\/[^/]+\/credentials\/[^/]+$/ },
+];
 
 export const BLOCKED_WRITE_MESSAGE =
   "Your account is blocked by Assay. You can view your data, but you cannot make payments or changes. Contact Assay support.";
@@ -154,7 +169,9 @@ export function blockedWriteGuard(
   if (upper === "GET" || upper === "HEAD") return null;
   const path = url.replace(/^https?:\/\/[^/]+/, "").replace(/^\/api\/v\d+/, "");
   if (WRITE_ALLOWED_PREFIXES.some((prefix) => path.startsWith(prefix))) return null;
-  if (upper === "POST" && READ_ONLY_POSTS.has(path.split("?")[0])) return null;
+  const route = path.split("?")[0];
+  if (upper === "POST" && READ_ONLY_POSTS.has(route)) return null;
+  if (ALLOWED_WHILE_BLOCKED.some((allowed) => allowed.method === upper && allowed.path.test(route))) return null;
   return new ApiError("ACCOUNT_BLOCKED", BLOCKED_WRITE_MESSAGE, 403, url);
 }
 

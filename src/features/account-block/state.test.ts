@@ -114,6 +114,23 @@ describe("blockedWriteGuard", () => {
       "ACCOUNT_BLOCKED",
     );
   });
+
+  it("lets a blocked account revoke its delegates and agent credentials (@AllowedWhileBlocked)", () => {
+    expect(blockedWriteGuard(true, "POST", "/escrow/delegates/revoke-intent")).toBeNull();
+    expect(blockedWriteGuard(true, "POST", "http://api.test/api/v1/escrow/delegates/revoke")).toBeNull();
+    expect(blockedWriteGuard(true, "DELETE", "/agents/a1/credentials/c1")).toBeNull();
+    expect(blockedWriteGuard(true, "DELETE", "http://api.test/api/v1/agents/a1/credentials/c1?x=1")).toBeNull();
+  });
+
+  it("allows only those exact revoke routes and methods", () => {
+    expect(blockedWriteGuard(true, "POST", "/escrow/delegates/intent")?.code).toBe("ACCOUNT_BLOCKED");
+    expect(blockedWriteGuard(true, "POST", "/escrow/delegates")?.code).toBe("ACCOUNT_BLOCKED");
+    expect(blockedWriteGuard(true, "DELETE", "/escrow/delegates/revoke")?.code).toBe("ACCOUNT_BLOCKED");
+    expect(blockedWriteGuard(true, "POST", "/agents/a1/credentials")?.code).toBe("ACCOUNT_BLOCKED");
+    expect(blockedWriteGuard(true, "POST", "/agents/a1/credentials/c1")?.code).toBe("ACCOUNT_BLOCKED");
+    expect(blockedWriteGuard(true, "DELETE", "/agents/a1/credentials/c1/x")?.code).toBe("ACCOUNT_BLOCKED");
+    expect(blockedWriteGuard(true, "DELETE", "/agents/a1")?.code).toBe("ACCOUNT_BLOCKED");
+  });
 });
 
 describe("hasBlockStatusSession", () => {
