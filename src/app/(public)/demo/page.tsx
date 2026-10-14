@@ -251,7 +251,7 @@ export default function DemoPage() {
       */}
       <a
         href="/login"
-        className="fixed inset-x-4 bottom-4 z-10 block rounded-lg bg-primary px-4 py-3 text-center text-label-sm text-white shadow-lg lg:hidden"
+        className="fixed inset-x-4 bottom-4 z-10 block rounded-lg bg-primary-400 px-4 py-3 text-center text-label-sm text-on-primary shadow-lg lg:hidden"
       >
         Start with 1,000 free calls a day
       </a>
