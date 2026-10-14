@@ -1,0 +1,130 @@
+"use client";
+
+import Decimal from "decimal.js";
+import * as React from "react";
+
+import { formatLimit } from "@/components/g31/format";
+import type { Money } from "@/interfaces";
+import { formatLocalDateTime, utcTitle, type LocalTimeOptions } from "@/libs/local-time";
+import { cn } from "@/utils";
+import { toDecimal } from "@/utils/money";
+
+/**
+ * How much of a cap is used, how much is left, and when it fills again — as a
+ * bar and one sentence. Shared by escrow caps, agent grants and budgets.
+ *
+ *   <CapMeter label="Today" used={spentToday} limit={dailyCap} refillsAt={nextMidnight} />
+ *   → "$0.46 left of $2.00 · full again ~14:20"
+ *
+ * Over or at the limit, the sentence says what that means for calls instead
+ * of showing a red bar and leaving the reader to work it out.
+ */
+
+export interface CapSentenceInput {
+  used: Money;
+  limit: Money;
+  /** ISO instant when the cap is full again (window reset). */
+  refillsAt?: string | null;
+  /** What happens at the limit. Default "Paid calls are refused". */
+  consequence?: string;
+}
+
+export type CapLevel = "ok" | "high" | "full" | "over" | "none";
+
+export interface CapReading {
+  level: CapLevel;
+  /** 0–100, clamped. */
+  percent: number;
+  sentence: string;
+}
+
+/** Pure: the sentence and level, so every screen says the same words. */
+export function capReading(input: CapSentenceInput, options: LocalTimeOptions = {}): CapReading {
+  const used = toDecimal(input.used);
+  const limit = toDecimal(input.limit);
+  // "~14:20" for today; "Tomorrow 00:00" / "Oct 20, 14:20" read better without the tilde.
+  const at = input.refillsAt ? formatLocalDateTime(input.refillsAt, options) : null;
+  const when = at && !at.includes(" ") ? `~${at}` : at?.replace(/^(Yesterday|Tomorrow)/, (word) => word.toLowerCase()) ?? null;
+  const consequence = input.consequence ?? "Paid calls are refused";
+  const money = (value: Decimal): string =>
+    formatLimit({ amount: value.mul(new Decimal(10).pow(input.limit.decimals)).toFixed(0), asset: input.limit.asset, decimals: input.limit.decimals });
+
+  if (limit.lte(0)) {
+    return {
+      level: "none",
+      percent: 0,
+      sentence: `The limit is $0.00, so nothing can be spent. ${consequence} until it is raised.`,
+    };
+  }
+
+  const percent = Math.min(100, Math.max(0, used.div(limit).mul(100).toNumber()));
+  const until = when ? `until it refills ${when}` : "until the limit is raised";
+
+  if (used.gt(limit)) {
+    return {
+      level: "over",
+      percent: 100,
+      sentence: `${money(used.minus(limit))} over the limit (${money(used)} of ${money(limit)}). ${consequence} ${until}.`,
+    };
+  }
+  if (used.eq(limit)) {
+    return {
+      level: "full",
+      percent: 100,
+      sentence: `All ${money(limit)} used. ${consequence} ${until}.`,
+    };
+  }
+  const left = `${money(limit.minus(used))} left of ${money(limit)}`;
+  return {
+    level: percent >= 80 ? "high" : "ok",
+    percent,
+    sentence: when ? `${left} · full again ${when}` : left,
+  };
+}
+
+const FILL: Record<CapLevel, string> = {
+  ok: "bg-primary-500",
+  high: "bg-warning-500",
+  full: "bg-danger-500",
+  over: "bg-danger-500",
+  none: "bg-danger-500",
+};
+
+export interface CapMeterProps extends CapSentenceInput {
+  /** "Per day", "Per call", "This month". */
+  label: React.ReactNode;
+  className?: string;
+}
+
+export function CapMeter({ label, used, limit, refillsAt, consequence, className }: CapMeterProps) {
+  // Local time only after mount: the static export has no time zone.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+  const reading = capReading({ used, limit, refillsAt, consequence }, mounted ? {} : { timeZone: "UTC" });
+  const alarm = reading.level === "full" || reading.level === "over" || reading.level === "none";
+
+  return (
+    <div className={cn("flex w-full flex-col gap-2", className)}>
+      <div className="flex w-full items-baseline justify-between gap-3">
+        <span className="text-label-13 text-01">{label}</span>
+        <span className="font-mono text-mono-13 text-02">
+          {formatLimit(used)} <span className="text-03">of</span> {formatLimit(limit)}
+        </span>
+      </div>
+      <div
+        role="meter"
+        aria-label={typeof label === "string" ? label : "Limit used"}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(reading.percent)}
+        aria-valuetext={reading.sentence}
+        className="h-2 w-full overflow-hidden rounded-full bg-03"
+      >
+        <div className={cn("h-full rounded-full transition-[width] duration-500", FILL[reading.level])} style={{ width: `${reading.percent}%` }} />
+      </div>
+      <p className={cn("text-body-xs", alarm ? "text-danger-600" : "text-03")} title={refillsAt ? utcTitle(refillsAt) : undefined}>
+        {reading.sentence}
+      </p>
+    </div>
+  );
+}
