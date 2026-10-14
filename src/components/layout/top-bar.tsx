@@ -1,12 +1,11 @@
-import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
-import { ChevronDown, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import * as React from "react";
 
 import { AlertBadge } from "@/components/ui/alert-badge";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/utils";
 
-import { BUYER_NAV_ITEMS, type NavTier } from "./nav-config";
+import { BUYER_NAV_ITEMS } from "./nav-config";
 
 /**
  * Top Bar: 56px tall, `$bg-01` fill, 1px `$border-01` bottom hairline.
@@ -17,10 +16,9 @@ import { BUYER_NAV_ITEMS, type NavTier } from "./nav-config";
  *
  * Responsive behaviour (Foundations "Breakpoints", Navigation row):
  * - mobile (<768): the shell hides this bar for the bottom tab bar.
- * - 768–1439: as many nav items as fit, in tiers (see `nav-config.ts`); the
- *   rest sit behind a "More" menu so no section is ever unreachable. Search
- *   stays hidden (not enough room for a 240px field).
- * - desktop (1440+): full nav (all 8 items) + search, exactly as designed.
+ * - from 768: the five buyer sections inline (see `nav-config.ts`) — five
+ *   short labels fit at every width, so there is no overflow menu. Search
+ *   shows from desktop (1440), where there is room for a 240px field.
  */
 
 function DefaultSearchField({ placeholder }: { placeholder: string }) {
@@ -37,28 +35,9 @@ export interface TopBarNavItem {
   id: string;
   label: string;
   href: string;
-  /** Width tier at which the item is inline; absent means desktop only. */
-  tier?: NavTier;
 }
 
 const DEFAULT_NAV_ITEMS: TopBarNavItem[] = BUYER_NAV_ITEMS;
-
-/*
-  Literal class names, one per tier, because Tailwind only emits classes it can
-  read in source. They mirror `TOP_BAR_TIERS` (768 / 834 / 1100 / 1440).
-*/
-const INLINE_CLASS: Record<NavTier, string> = {
-  0: "md:inline-flex",
-  1: "tablet:inline-flex",
-  2: "min-[1100px]:inline-flex",
-  3: "desktop:inline-flex",
-};
-const OVERFLOW_HIDDEN_CLASS: Record<NavTier, string> = {
-  0: "md:hidden",
-  1: "tablet:hidden",
-  2: "min-[1100px]:hidden",
-  3: "desktop:hidden",
-};
 
 export interface TopBarProps extends React.HTMLAttributes<HTMLElement> {
   navItems?: TopBarNavItem[];
@@ -126,7 +105,6 @@ const TopBar = React.forwardRef<HTMLElement, TopBarProps>(
         <nav aria-label="Primary" className="flex min-w-0 flex-1 items-center gap-1">
           {navItems.map((item) => {
             const active = item.id === activeNavId;
-            const tier = item.tier ?? 3;
             return (
               <LinkComponent
                 key={item.id}
@@ -134,55 +112,14 @@ const TopBar = React.forwardRef<HTMLElement, TopBarProps>(
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "rounded-md px-[11px] py-[7px] text-label-13 font-sans transition-colors",
-                  active ? "bg-03 text-01" : "text-02 hover:bg-03",
-                  "hidden",
-                  INLINE_CLASS[tier]
+                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500",
+                  active ? "bg-03 text-01" : "text-02 hover:bg-03"
                 )}
               >
                 {item.label}
               </LinkComponent>
             );
           })}
-          <DropdownMenuPrimitive.Root>
-            <DropdownMenuPrimitive.Trigger asChild>
-              <button
-                type="button"
-                className={cn(
-                  "hidden items-center gap-1 rounded-md px-[11px] py-[7px] text-label-13 font-sans text-02 transition-colors hover:bg-03 md:inline-flex desktop:hidden",
-                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500"
-                )}
-              >
-                More
-                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            </DropdownMenuPrimitive.Trigger>
-            <DropdownMenuPrimitive.Portal>
-              <DropdownMenuPrimitive.Content
-                align="start"
-                sideOffset={6}
-                className="z-50 min-w-[168px] overflow-hidden rounded-lg border border-01 bg-01 p-1 shadow-soft"
-              >
-                {navItems.map((item) => {
-                  const active = item.id === activeNavId;
-                  return (
-                    <DropdownMenuPrimitive.Item
-                      key={item.id}
-                      asChild
-                      className={cn(
-                        "flex w-full cursor-pointer select-none items-center rounded-md px-2.5 py-2 text-body-sm outline-none data-[highlighted]:bg-02",
-                        active ? "text-01" : "text-02",
-                        OVERFLOW_HIDDEN_CLASS[item.tier ?? 3]
-                      )}
-                    >
-                      <LinkComponent href={item.href} aria-current={active ? "page" : undefined}>
-                        {item.label}
-                      </LinkComponent>
-                    </DropdownMenuPrimitive.Item>
-                  );
-                })}
-              </DropdownMenuPrimitive.Content>
-            </DropdownMenuPrimitive.Portal>
-          </DropdownMenuPrimitive.Root>
         </nav>
 
         <div className="flex shrink-0 items-center gap-2.5">

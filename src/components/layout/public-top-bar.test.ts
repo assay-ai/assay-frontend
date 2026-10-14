@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_PUBLIC_NAV_ITEMS } from "./public-top-bar";
+import { DEFAULT_PUBLIC_NAV_ITEMS, flattenPublicNav } from "./public-top-bar";
 
 const APP_DIR = join(__dirname, "../../app");
 
@@ -36,10 +36,24 @@ describe("public top bar links", () => {
   });
 
   it.each([
-    ...DEFAULT_PUBLIC_NAV_ITEMS.map((i) => i.href),
+    ...flattenPublicNav(DEFAULT_PUBLIC_NAV_ITEMS)
+      .filter((i) => !i.external)
+      .map((i) => i.href),
     "/login",
     "/provider/setup",
   ])("%s resolves to an existing app route", (href) => {
     expect(routes.some((route) => matches(route, href))).toBe(true);
+  });
+
+  it("has the agreed items, providers' pages grouped", () => {
+    expect(DEFAULT_PUBLIC_NAV_ITEMS.map((i) => i.label).slice(0, 4)).toEqual([
+      "How it works",
+      "Explore",
+      "Demo",
+      "For providers",
+    ]);
+    expect(flattenPublicNav(DEFAULT_PUBLIC_NAV_ITEMS).map((i) => i.href)).toEqual(
+      expect.arrayContaining(["/why-list-here", "/calculator", "/catalogue", "/demo", "/how-it-works"]),
+    );
   });
 });

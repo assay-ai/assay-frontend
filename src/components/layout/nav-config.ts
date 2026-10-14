@@ -1,68 +1,138 @@
 /**
- * The buyer shell's navigation, and the one place that says which chrome
- * shows which item at which width.
+ * The buyer shell's navigation — five sections, their in-section tabs, and
+ * the account menu. One file, so the top bar, the bottom tab bar, the section
+ * tabs and the account menu can never disagree about where a page lives.
  *
- * Three chromes cover the widths, and the union of what they reach must be
- * every section at every width (`nav-config.test.ts` asserts it):
+ *   Overview   /                       (Get started lives here for new accounts)
+ *   Activity   /spend                  Spend · Calls · Not charged
+ *   Money      /funding                Funding · Statements
+ *   Controls   /agents                 Agents & keys · Connect · Budgets
+ *   Explore    /explore
  *
- *  - below `md` (768): the bottom tab bar shows `MOBILE_TAB_IDS` plus "More";
- *    "More" is /settings, which lists the rest (`mobileMoreItems`), and the
- *    mobile top bar carries the account menu.
- *  - from `md`: the top bar shows the first `tier` groups of items inline and
- *    puts the others behind its own "More" menu.
- *  - from `desktop` (1440): everything is inline, no "More".
+ * Rare pages (Alerts settings, Activity log, Settings, Help) sit in the
+ * account menu, on desktop and on mobile alike. Pages with no working
+ * backend action (Approvals, Team) are deliberately absent: an unbuilt
+ * feature is hidden, never a dead link. Re-add them here when they can act.
  *
- * The CSS in `TopBar` mirrors `TOP_BAR_TIERS` through literal class names
- * (Tailwind cannot see a computed one); keep the two in step.
+ * The same five items show at every width: inline in the top bar from 768,
+ * as the bottom tab bar below it. `nav-config.test.ts` asserts every route
+ * named here exists and every buyer page is reachable.
  */
 
+export type BuyerSectionId = "overview" | "activity" | "money" | "controls" | "explore";
+
 export interface BuyerNavItem {
+  id: BuyerSectionId;
+  label: string;
+  href: string;
+  /** Path prefixes that belong to this section (for the active state). "/" matches only itself. */
+  match: string[];
+}
+
+export const BUYER_NAV_ITEMS: BuyerNavItem[] = [
+  { id: "overview", label: "Overview", href: "/", match: ["/", "/overview", "/onboarding"] },
+  {
+    id: "activity",
+    label: "Activity",
+    href: "/spend",
+    match: ["/spend", "/guarantee", "/receipts"],
+  },
+  { id: "money", label: "Money", href: "/funding", match: ["/funding", "/statements"] },
+  {
+    id: "controls",
+    label: "Controls",
+    href: "/agents",
+    match: ["/agents", "/limits", "/connect", "/approvals"],
+  },
+  { id: "explore", label: "Explore", href: "/explore", match: ["/explore"] },
+];
+
+export interface SectionTab {
   id: string;
   label: string;
   href: string;
+  /** Extra paths that count as this tab (sub-pages). Defaults to `[href]`. */
+  match?: string[];
 }
 
-/** Widths (px) at which each tier of top-bar items becomes inline. */
-export const TOP_BAR_TIERS = [768, 834, 1100, 1440] as const;
-export type NavTier = 0 | 1 | 2 | 3;
+/** The tabs at the top of each multi-page section. */
+export const BUYER_SECTION_TABS: Partial<Record<BuyerSectionId, SectionTab[]>> = {
+  activity: [
+    { id: "spend", label: "Spend", href: "/spend" },
+    { id: "calls", label: "Calls", href: "/spend/calls", match: ["/spend/calls", "/receipts"] },
+    { id: "not-charged", label: "Not charged", href: "/guarantee" },
+  ],
+  money: [
+    { id: "funding", label: "Funding", href: "/funding" },
+    { id: "statements", label: "Statements", href: "/statements" },
+  ],
+  controls: [
+    { id: "agents", label: "Agents & keys", href: "/agents" },
+    { id: "connect", label: "Connect", href: "/connect" },
+    { id: "budgets", label: "Budgets", href: "/limits" },
+  ],
+};
 
-/** Width below which the bottom tab bar replaces the top bar. */
-export const MOBILE_MAX_WIDTH = 767;
+export interface AccountMenuLink {
+  id: string;
+  label: string;
+  href: string;
+  external?: boolean;
+}
 
-export const BUYER_NAV_ITEMS: (BuyerNavItem & { tier: NavTier })[] = [
-  { id: "overview", label: "Overview", href: "/", tier: 0 },
-  { id: "spend", label: "Spend", href: "/spend", tier: 0 },
-  { id: "guarantee", label: "Guarantee", href: "/guarantee", tier: 1 },
-  { id: "funding", label: "Funding", href: "/funding", tier: 2 },
-  { id: "limits", label: "Limits", href: "/limits", tier: 2 },
-  { id: "approvals", label: "Approvals", href: "/approvals", tier: 3 },
-  { id: "explore", label: "Explore", href: "/explore/providers", tier: 3 },
-  { id: "agents", label: "Agents", href: "/agents", tier: 3 },
+/**
+ * Optional public docs site. When it is not configured, "Help & docs" goes to
+ * the in-app explainer rather than to a link that leads nowhere.
+ */
+export const DOCS_URL: string | null = process.env.NEXT_PUBLIC_DOCS_URL?.trim() || null;
+
+/** The account (avatar) menu's links, after the wallet and balance block. */
+export const ACCOUNT_MENU_LINKS: AccountMenuLink[] = [
+  { id: "get-started", label: "Get started", href: "/onboarding" },
+  { id: "alerts", label: "Alert settings", href: "/alerts" },
+  { id: "audit-log", label: "Activity log", href: "/audit-log" },
+  { id: "settings", label: "Settings", href: "/settings" },
+  DOCS_URL
+    ? { id: "help", label: "Help & docs", href: DOCS_URL, external: true }
+    : { id: "help", label: "Help & docs", href: "/how-it-works" },
 ];
 
-/** Items with a slot of their own in the bottom tab bar. */
-export const MOBILE_TAB_IDS: readonly string[] = ["overview", "spend", "funding", "limits"];
-
-/** Items the mobile "More" screen (/settings) has to list. */
-export function mobileMoreItems(): BuyerNavItem[] {
-  return BUYER_NAV_ITEMS.filter((item) => !MOBILE_TAB_IDS.includes(item.id));
+function matchesPath(pathname: string, prefix: string): boolean {
+  if (prefix === "/") return pathname === "/";
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
-/** Which items the top bar shows inline, and which sit behind "More", at a width (>= 768). */
-export function topBarPlacement(width: number): { inline: BuyerNavItem[]; overflow: BuyerNavItem[] } {
-  const inline: BuyerNavItem[] = [];
-  const overflow: BuyerNavItem[] = [];
+/** The section a path belongs to, or null for pages outside the five (Settings, Alerts…). */
+export function sectionFor(pathname: string): BuyerSectionId | null {
+  let best: { id: BuyerSectionId; length: number } | null = null;
   for (const item of BUYER_NAV_ITEMS) {
-    (width >= TOP_BAR_TIERS[item.tier] ? inline : overflow).push(item);
+    for (const prefix of item.match) {
+      if (matchesPath(pathname, prefix) && (!best || prefix.length > best.length)) {
+        best = { id: item.id, length: prefix.length };
+      }
+    }
   }
-  return { inline, overflow };
+  return best?.id ?? null;
 }
 
-/** Every section reachable from the nav chrome at a width. */
-export function reachableNavIds(width: number): string[] {
-  if (width <= MOBILE_MAX_WIDTH) {
-    return [...MOBILE_TAB_IDS, ...mobileMoreItems().map((item) => item.id)];
+/** The active tab of a section at a path: the longest matching tab path wins. */
+export function activeTabFor(tabs: readonly SectionTab[], pathname: string): string | null {
+  let best: { id: string; length: number } | null = null;
+  for (const tab of tabs) {
+    for (const prefix of tab.match ?? [tab.href]) {
+      if (matchesPath(pathname, prefix) && (!best || prefix.length > best.length)) {
+        best = { id: tab.id, length: prefix.length };
+      }
+    }
   }
-  const { inline, overflow } = topBarPlacement(width);
-  return [...inline, ...overflow].map((item) => item.id);
+  return best?.id ?? null;
+}
+
+/** Every href the buyer chrome links to (sections, tabs, account menu). */
+export function allBuyerNavHrefs(): string[] {
+  return [
+    ...BUYER_NAV_ITEMS.map((item) => item.href),
+    ...Object.values(BUYER_SECTION_TABS).flatMap((tabs) => (tabs ?? []).map((tab) => tab.href)),
+    ...ACCOUNT_MENU_LINKS.filter((link) => !link.external).map((link) => link.href),
+  ];
 }

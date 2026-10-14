@@ -3,11 +3,12 @@
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { usePrivy } from "@privy-io/react-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LogOut, Wallet } from "lucide-react";
+import { ExternalLink, LogOut, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 
+import { ACCOUNT_MENU_LINKS } from "@/components/layout/nav-config";
 import { BalanceRows, WalletChainRows } from "@/components/layout/wallet-menu-rows";
 import { Avatar } from "@/components/ui/avatar";
 import type { FullBalance } from "@/features/g30/balance";
@@ -168,7 +169,7 @@ export function WalletMenu({ className }: { className?: string }) {
           align="end"
           sideOffset={6}
           className={cn(
-            "z-50 w-[264px] overflow-hidden rounded-lg border border-01 bg-01 p-1 shadow-soft",
+            "z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] w-[264px] overflow-y-auto rounded-lg border border-01 bg-01 p-1 shadow-soft",
             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
             "data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
             "data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2",
@@ -232,6 +233,29 @@ export function WalletMenu({ className }: { className?: string }) {
               <span className="flex-1">Add funds</span>
             </Link>
           </DropdownMenuPrimitive.Item>
+
+          <div className="-mx-1 my-1 h-px bg-03" role="separator" />
+
+          {/*
+            The rare pages: the top bar keeps to the five sections, and these
+            live here on every width (the mobile top bar carries this menu too).
+          */}
+          {ACCOUNT_MENU_LINKS.map((link) => (
+            <DropdownMenuPrimitive.Item key={link.id} asChild className={ITEM_CLASS}>
+              {link.external ? (
+                <a href={link.href} target="_blank" rel="noopener noreferrer">
+                  <span className="flex-1">{link.label}</span>
+                  <ExternalLink className="h-3.5 w-3.5 text-03" aria-hidden="true" />
+                </a>
+              ) : (
+                <Link href={link.href}>
+                  <span className="flex-1">{link.label}</span>
+                </Link>
+              )}
+            </DropdownMenuPrimitive.Item>
+          ))}
+
+          <div className="-mx-1 my-1 h-px bg-03" role="separator" />
 
           <DropdownMenuPrimitive.Item
             onSelect={() => void signOut()}

@@ -1,42 +1,34 @@
 "use client";
 
-import { ChartNoAxesColumn, Ellipsis, Gauge, House, Wallet } from "lucide-react";
+import { ChartNoAxesColumn, Compass, House, SlidersHorizontal, Wallet } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/utils";
 
+import { BUYER_NAV_ITEMS, type BuyerSectionId } from "./nav-config";
+
 /**
- * Bottom Tab Bar.
- *
- * The bench's default content ("Guarantee" / shield-check, "Approvals" /
- * user-check with a notification dot) is placeholder: all three screens that
- * instance this component (Overview, Spend, Limits — all mobile 390) override it identically to "Funding" / wallet and "Limits" /
- * gauge, with the dot disabled every time. This build ships the real,
- * reconciled 5-slot navigation rather than the bench's stale labels.
+ * Bottom Tab Bar: the buyer shell's five sections below 768px, the same five
+ * the top bar shows from 768 up (`nav-config.ts`). The rarer pages live in
+ * the account menu in the mobile top bar, so there is no "More" tab.
  */
 
-export type TabBarTabId = "overview" | "spend" | "funding" | "limits" | "more";
+export type TabBarTabId = BuyerSectionId;
 
-function MoreIcon(props: React.SVGProps<SVGSVGElement>) {
-  return <Ellipsis fill="currentColor" stroke="none" {...props} />;
-}
+const ICONS: Record<BuyerSectionId, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
+  overview: House,
+  activity: ChartNoAxesColumn,
+  money: Wallet,
+  controls: SlidersHorizontal,
+  explore: Compass,
+};
 
-const TABS: {
-  id: TabBarTabId;
-  label: string;
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-}[] = [
-  { id: "overview", label: "Overview", icon: House },
-  { id: "spend", label: "Spend", icon: ChartNoAxesColumn },
-  { id: "funding", label: "Funding", icon: Wallet },
-  { id: "limits", label: "Limits", icon: Gauge },
-  { id: "more", label: "More", icon: MoreIcon },
-];
+const TABS = BUYER_NAV_ITEMS.map((item) => ({ id: item.id, label: item.label, icon: ICONS[item.id] }));
 
 export interface BottomTabBarProps
   extends Omit<React.HTMLAttributes<HTMLElement>, "onChange"> {
-  /** Currently active tab. */
-  active: TabBarTabId;
+  /** Currently active tab; null on a page outside the five sections. */
+  active: TabBarTabId | null;
   /** Called when a tab without an `href` is activated. */
   onTabChange?: (id: TabBarTabId) => void;
   /** Render a tab as a real link instead of a button. */
