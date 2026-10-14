@@ -232,9 +232,11 @@ function caseTarget(id: string) {
  * so an approver could not tell which account a lift was for.
  */
 export function describeApproval(
-  approval: Pick<OperatorApproval, "action" | "target" | "payload">,
+  approval: Pick<OperatorApproval, "action" | "target" | "payload"> & Partial<Pick<OperatorApproval, "status">>,
   context: ApprovalContext = EMPTY_APPROVAL_CONTEXT,
 ): ApprovalDescription {
+  // Absent status: treat as pending, the only state where "now" is the point.
+  const pending = (approval.status ?? "PENDING") === "PENDING";
   const payload = approval.payload ?? {};
   const body =
     payload.body && typeof payload.body === "object" && !Array.isArray(payload.body)
@@ -298,15 +300,33 @@ export function describeApproval(
               : `Change the access of ${who}`;
       const fields: { label: string; value: string }[] = [];
       if (operator?.walletAddress) fields.push({ label: "Wallet", value: toChecksumAddress(operator.walletAddress) });
-      if (operator) fields.push({ label: "Roles now", value: rolesText(operator.roles) });
-      if (roles) fields.push({ label: "New roles", value: rolesLong(roles) });
-      if (operator && hasLimit) {
-        fields.push({
-          label: "Limit now",
-          value: operator.authorityLimit === null ? "unbounded" : formatMoney(operator.authorityLimit),
-        });
+      if (pending) {
+        // Pending: the live row is what approving would change.
+        if (operator) fields.push({ label: "Roles now", value: rolesText(operator.roles) });
+        if (roles) fields.push({ label: "New roles", value: rolesLong(roles) });
+        if (operator && hasLimit) {
+          fields.push({
+            label: "Limit now",
+            value: operator.authorityLimit === null ? "unbounded" : formatMoney(operator.authorityLimit),
+          });
+        }
+        if (limit) fields.push({ label: "New limit", value: limit });
+      } else {
+        // Decided: the live row says nothing about this request. Show what was
+        // asked for, and what it replaced when the payload recorded that.
+        const before =
+          payload.before && typeof payload.before === "object" && !Array.isArray(payload.before)
+            ? (payload.before as Record<string, unknown>)
+            : {};
+        const rolesBefore = rolesOf(before.roles);
+        const limitBefore = Object.prototype.hasOwnProperty.call(before, "authorityLimitMinor")
+          ? limitText(before.authorityLimitMinor, context.asset)
+          : null;
+        if (rolesBefore) fields.push({ label: "Roles before (at request time)", value: rolesText(rolesBefore) });
+        if (roles) fields.push({ label: "Roles requested (at request time)", value: rolesLong(roles) });
+        if (limitBefore) fields.push({ label: "Limit before (at request time)", value: limitBefore });
+        if (limit) fields.push({ label: "Limit requested (at request time)", value: limit });
       }
-      if (limit) fields.push({ label: "New limit", value: limit });
       return {
         sentence: `${sentence}${because}.`,
         target: { label: operator ? `Operator ${operator.subject}` : `Operator ${shortId(operatorId)}`, href: "/operator/operators" },
@@ -358,6 +378,28 @@ export function describeApproval(
         fields: [...commonFields(body), ...extraFields(body)],
       };
   }
+}
+
+/** A requester rejecting their own request withdrew it. */
+export function isWithdrawn(approval: Pick<OperatorApproval, "status" | "rejectedBy" | "requestedBy">): boolean {
+  return approval.status === "REJECTED" && approval.rejectedBy !== null && approval.rejectedBy === approval.requestedBy;
+}
+
+/** The status word on a card: `withdrawn` for a request its requester took back. */
+export function statusWord(approval: Pick<OperatorApproval, "status" | "rejectedBy" | "requestedBy">): string {
+  return isWithdrawn(approval) ? "withdrawn" : approval.status.toLowerCase();
+}
+
+/** Who decided a row, in words: "Approved by x", "Withdrawn by x", "Rejected by x", "Expired". */
+export function decisionText(
+  approval: Pick<OperatorApproval, "status" | "approvedBy" | "rejectedBy" | "requestedBy">,
+): string {
+  if (approval.approvedBy) return `Approved by ${approval.approvedBy}`;
+  if (approval.rejectedBy) {
+    return isWithdrawn(approval) ? `Withdrawn by ${approval.rejectedBy}` : `Rejected by ${approval.rejectedBy}`;
+  }
+  const word = approval.status.toLowerCase();
+  return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
 /** One sentence for what an approval did, from the action's own result. */

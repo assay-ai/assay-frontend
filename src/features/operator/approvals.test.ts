@@ -8,10 +8,13 @@ import {
   approvalErrorMessage,
   approveBlockedBecause,
   approvedResultSentence,
+  decisionText,
   describeApproval,
+  isWithdrawn,
   pendingBadge,
   rejectMode,
   showApprove,
+  statusWord,
   type ApprovalContext,
 } from "./approvals";
 
@@ -197,6 +200,53 @@ describe("how a row reads", () => {
       ]);
     });
 
+    it("shows a decided change as requested at the time, never the live row", () => {
+      const d = describeApproval(
+        {
+          action: "operator.change",
+          target: `operator:${OP_ID}`,
+          status: "APPROVED",
+          payload: { body: { roles: ["POL", "TRE", "ADJL"], authorityLimitMinor: "5000000", reasonCode: "R" }, operatorId: OP_ID },
+        },
+        context,
+      );
+      const labels = d.fields.map((f) => f.label);
+      expect(labels).not.toContain("Roles now");
+      expect(labels).not.toContain("Limit now");
+      expect(d.fields).toContainEqual({
+        label: "Roles requested (at request time)",
+        value: "POL (Policy author), TRE (Treasury), ADJL (Adjudication lead)",
+      });
+      expect(d.fields).toContainEqual({ label: "Limit requested (at request time)", value: "$5.00" });
+      expect(labels).not.toContain("Roles before (at request time)");
+    });
+
+    it("shows the before values of a decided change when the payload has them", () => {
+      const d = describeApproval(
+        {
+          action: "operator.change",
+          target: `operator:${OP_ID}`,
+          status: "REJECTED",
+          payload: {
+            body: { roles: ["POL", "ADJL"], reasonCode: "R" },
+            before: { roles: ["POL"], authorityLimitMinor: "0" },
+            operatorId: OP_ID,
+          },
+        },
+        context,
+      );
+      expect(d.fields).toContainEqual({ label: "Roles before (at request time)", value: "POL" });
+      expect(d.fields).toContainEqual({ label: "Limit before (at request time)", value: "$0.00" });
+    });
+
+    it("keeps the live row on a pending change", () => {
+      const d = describeApproval(
+        { action: "operator.change", target: `operator:${OP_ID}`, status: "PENDING", payload: { body: { roles: ["ADJ"] }, operatorId: OP_ID } },
+        context,
+      );
+      expect(d.fields.map((f) => f.label)).toEqual(["Wallet", "Roles now", "New roles"]);
+    });
+
     it("states an unbounded limit raise", () => {
       const d = describeApproval({
         action: "operator.change",
@@ -274,5 +324,28 @@ describe("the approve and reject refusals", () => {
     );
     expect(message).toMatch(/re-checked against the current state and refused: The proposal is CANCELLED/);
     expect(message).toMatch(/still pending/);
+  });
+
+  // R15 retest: a request its own requester withdrew read "rejected by".
+  describe("withdrawn vs rejected", () => {
+    it("reads a requester's own reject as withdrawn", () => {
+      const row = approval({ status: "REJECTED", rejectedBy: "alice@", requestedBy: "alice@" });
+      expect(isWithdrawn(row)).toBe(true);
+      expect(statusWord(row)).toBe("withdrawn");
+      expect(decisionText(row)).toBe("Withdrawn by alice@");
+    });
+
+    it("reads another operator's reject as rejected", () => {
+      const row = approval({ status: "REJECTED", rejectedBy: "bob@", requestedBy: "alice@" });
+      expect(isWithdrawn(row)).toBe(false);
+      expect(statusWord(row)).toBe("rejected");
+      expect(decisionText(row)).toBe("Rejected by bob@");
+    });
+
+    it("words approved and expired rows", () => {
+      expect(decisionText(approval({ status: "APPROVED", approvedBy: "bob@" }))).toBe("Approved by bob@");
+      expect(decisionText(approval({ status: "EXPIRED" }))).toBe("Expired");
+      expect(statusWord(approval({ status: "EXPIRED" }))).toBe("expired");
+    });
   });
 });
