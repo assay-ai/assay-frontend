@@ -6,37 +6,37 @@ server, so it is served from Cloudflare Pages. Record screens take their id in
 the query string (`/receipts/view?id=…`, see `src/libs/routes.ts`) because a
 static export cannot have run-time dynamic segments.
 
-`.github/workflows/deploy.yml` builds and deploys on every push:
+`.github/workflows/deploy.yml` builds and deploys on every push. Each branch
+has its own GitHub environment and its own Cloudflare Pages project:
 
-| Branch    | GitHub environment | Cloudflare Pages deployment                        |
-| --------- | ------------------ | -------------------------------------------------- |
-| `main`    | `production`       | production (`<project>.pages.dev`)                 |
-| `develop` | `develop`          | branch alias (`develop.<project>.pages.dev`)       |
+| Branch    | GitHub environment | Cloudflare Pages project |
+| --------- | ------------------ | ------------------------ |
+| `main`    | `production`       | the production project   |
+| `develop` | `develop`          | the develop project      |
+
+Every deploy is a **production** deployment of its project, never a preview:
+the workflow reads the project's production branch from the Cloudflare API and
+deploys under that branch name, so the project's root `<project>.pages.dev`
+and its custom domains always serve the latest push.
 
 ## One-time setup
 
-### 1. Cloudflare Pages project
+### 1. Cloudflare Pages projects
 
-Create a Pages project with **`main` as its production branch**, as a
-direct-upload project (the workflow uploads `out/`; Cloudflare does not build):
+Create two direct-upload Pages projects (the workflow uploads `out/`;
+Cloudflare does not build), one per environment:
 
 ```sh
-npx wrangler@4.147.0 pages project create <project> --production-branch main
+npx wrangler@4.147.0 pages project create <project>
 ```
 
-Deploys from `develop` then land on the stable alias
-`develop.<project>.pages.dev`. To give either one a custom domain, add it under
-the project's **Custom domains**; for the develop alias, point a CNAME at
-`develop.<project>.pages.dev`.
-
-If develop should be a separate project instead, create a second project and
-set `CLOUDFLARE_PAGES_PROJECT` to it in the `develop` environment. The
-workflow deploys whatever project each environment names.
+Their production branch can be named anything; the workflow uses whatever it
+is. Give each project its custom domain under **Custom domains**.
 
 ### 2. Cloudflare API token
 
 Create an API token with **Account → Cloudflare Pages → Edit** for the account
-that owns the project.
+that owns the projects.
 
 ### 3. GitHub environments
 
@@ -49,7 +49,7 @@ In the repository settings, create two environments, `develop` and
 | Variable | `NEXT_PUBLIC_API_BASE_URL` | the backend API, e.g. `https://api.example.com/api/v1` |
 | Variable | `NEXT_PUBLIC_PRIVY_APP_ID` | the Privy app id (25 characters)                |
 | Variable | `NEXT_PUBLIC_MCP_URL`      | optional: the MCP endpoint shown on `/connect`  |
-| Variable | `CLOUDFLARE_PAGES_PROJECT` | the Pages project name                          |
+| Variable | `CLOUDFLARE_PAGES_PROJECT` | this environment's Pages project name           |
 | Secret   | `CLOUDFLARE_API_TOKEN`     | the token from step 2                           |
 | Secret   | `CLOUDFLARE_ACCOUNT_ID`    | the Cloudflare account id                       |
 
@@ -66,8 +66,8 @@ waits for approval before it deploys.
 ### 4. Privy allowed origins
 
 In the Privy dashboard, add every origin the app is served from to the app's
-allowed origins: the custom domain(s), `https://<project>.pages.dev` and
-`https://develop.<project>.pages.dev`. An origin Privy does not allow leaves
+allowed origins: each project's custom domain and its
+`https://<project>.pages.dev`. An origin Privy does not allow leaves
 the sign-in page waiting on "Checking your session".
 
 ### 5. Backend
