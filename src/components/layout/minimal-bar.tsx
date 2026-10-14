@@ -3,6 +3,8 @@ import * as React from "react";
 import { Avatar, type AvatarColor } from "@/components/ui/avatar";
 import { cn } from "@/utils";
 
+import { ThemeToggle } from "./theme-toggle";
+
 /**
  * Minimal Bar — the provider console's 56px chrome for screens that carry no
  * sidebar.
@@ -90,6 +92,7 @@ const MinimalBar = React.forwardRef<HTMLElement, MinimalBarProps>(
         {avatarName || avatarInitials || avatarSrc ? (
           <Avatar name={avatarName} initials={avatarInitials} src={avatarSrc} color={avatarColor} size="md" />
         ) : null}
+        <ThemeToggle />
       </header>
     );
   }
