@@ -1,3 +1,4 @@
+import { encodeFunctionData, parseAbi } from "viem";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -42,7 +43,7 @@ function setLimitsRequest(
       name: "Assay Settlement",
       version: "2",
       chainId: "46630",
-      verifyingContract: "0xf04BD9909697876D8a0E1e110536F80e5Fa1dF97",
+      verifyingContract: "0x1D2625efD87c2fc10b8563f3F0890072845Fcf41",
     },
     types: {
       SetLimits: [
@@ -176,7 +177,8 @@ describe("submitRelayedEscrowIntent", () => {
     const result = await submitRelayedEscrowIntent(
       { kind: "SET_LIMITS", transaction },
       signer,
-      submitters,
+      { kind: "SET_LIMITS", maxVoucherAmount: "2500000", maxPerWindow: "9000000" },
+submitters,
     );
 
     // The wallet is handed the server's own request object, not a rebuild.
@@ -203,7 +205,8 @@ describe("submitRelayedEscrowIntent", () => {
       submitRelayedEscrowIntent(
         { kind: "SET_LIMITS", transaction: setLimitsRequest() },
         signer,
-        submitters,
+        { kind: "SET_LIMITS", maxVoucherAmount: "2500000", maxPerWindow: "9000000" },
+submitters,
       ),
     ).rejects.toThrow(/0x7FD9A17dE9fd64b35081FbAbaa9f3bb85e59F8d1/);
 
@@ -218,7 +221,8 @@ describe("submitRelayedEscrowIntent", () => {
     await submitRelayedEscrowIntent(
       { kind: "SET_LIMITS", transaction: setLimitsRequest() },
       signer,
-      submitters,
+      { kind: "SET_LIMITS", maxVoucherAmount: "2500000", maxPerWindow: "9000000" },
+submitters,
     );
     expect(SET_LIMITS).toHaveBeenCalledTimes(1);
   });
@@ -230,7 +234,8 @@ describe("submitRelayedEscrowIntent", () => {
     await submitRelayedEscrowIntent(
       { kind: "REQUEST_WITHDRAW", transaction: requestWithdrawRequest() },
       signer,
-      submitters,
+      { kind: "REQUEST_WITHDRAW", amount: "55000000" },
+submitters,
     );
 
     expect(REQUEST_WITHDRAW).toHaveBeenCalledTimes(1);
@@ -253,7 +258,8 @@ describe("submitRelayedEscrowIntent", () => {
       submitRelayedEscrowIntent(
         { kind: "WITHDRAW", transaction: setLimitsRequest() },
         signer,
-        submitters,
+        { kind: "WITHDRAW" },
+submitters,
       ),
     ).rejects.toThrow(/msg\.sender-only/);
 
@@ -283,7 +289,8 @@ describe("submitRelayedEscrowIntent", () => {
     };
 
     await expect(
-      submitRelayedEscrowIntent({ kind: "SET_LIMITS", transaction: solana }, signer, submitters),
+      submitRelayedEscrowIntent({ kind: "SET_LIMITS", transaction: solana }, signer, { kind: "SET_LIMITS", maxVoucherAmount: "2500000", maxPerWindow: "9000000" },
+submitters),
     ).rejects.toThrow(/not a relayed signature request/);
     expect(SET_LIMITS).not.toHaveBeenCalled();
   });
@@ -297,7 +304,8 @@ describe("runEscrowAction", () => {
     const result = await runEscrowAction(
       { kind: "SET_LIMITS", account: `${CHAIN}:${BUYER}`, transaction: setLimitsRequest() },
       signer,
-      submitters,
+      { kind: "SET_LIMITS", maxVoucherAmount: "2500000", maxPerWindow: "9000000" },
+submitters,
     );
 
     if (result.kind !== "relayed") throw new Error(`expected relayed, got ${result.kind}`);
@@ -324,7 +332,8 @@ describe("runEscrowAction", () => {
     const result = await runEscrowAction(
       { kind: "SET_LIMITS", account: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1:Own1", transaction },
       signer,
-      submitters,
+      { kind: "SET_LIMITS", maxVoucherAmount: "2500000", maxPerWindow: "9000000" },
+submitters,
     );
 
     if (result.kind !== "broadcast") throw new Error(`expected broadcast, got ${result.kind}`);
@@ -338,5 +347,140 @@ describe("runEscrowAction", () => {
     */
     expect(SET_LIMITS).not.toHaveBeenCalled();
     expect(REQUEST_WITHDRAW).not.toHaveBeenCalled();
+  });
+});
+
+/*
+  Frontend review 2026-10-15, F1: a compromised or buggy backend must not be
+  able to make these screens sign or send anything but what the buyer chose.
+  Each case below was signed or sent before the guard existed.
+*/
+describe("a payload the buyer did not choose is refused before the wallet is asked", () => {
+  const ATTACKER = "0x000000000000000000000000000000000000dEaD";
+  const MAX = "18446744073709551615";
+
+  it("refuses an AuthorizeDelegate behind the request-withdrawal button, on any domain", async () => {
+    const { signer, signTypedData } = signerSpy();
+    const { submitters } = submitterSpies();
+    const grant: Eip155TypedDataRequest = {
+      ...requestWithdrawRequest(),
+      domain: { name: "Assay Settlement", version: "2", chainId: "1", verifyingContract: ATTACKER },
+      types: {
+        AuthorizeDelegate: [
+          { name: "payer", type: "address" },
+          { name: "delegate", type: "address" },
+          { name: "maxVoucherAmount", type: "uint64" },
+          { name: "maxPerWindow", type: "uint64" },
+          { name: "validUntil", type: "uint64" },
+          { name: "nonce", type: "uint64" },
+          { name: "deadline", type: "uint64" },
+        ],
+      },
+      primaryType: "AuthorizeDelegate",
+      message: {
+        buyer: BUYER,
+        payer: BUYER,
+        delegate: ATTACKER,
+        maxVoucherAmount: MAX,
+        maxPerWindow: MAX,
+        validUntil: "4102444800",
+        nonce: "0",
+        deadline: "4102444800",
+      },
+    };
+    for (const domain of [grant.domain, requestWithdrawRequest().domain]) {
+      await expect(
+        submitRelayedEscrowIntent(
+          { kind: "REQUEST_WITHDRAW", transaction: { ...grant, domain } },
+          signer,
+          { kind: "REQUEST_WITHDRAW", amount: "55000000" },
+          submitters,
+        ),
+      ).rejects.toThrow(RELAYED_SUBMISSION_REFUSED);
+    }
+    expect(signTypedData).not.toHaveBeenCalled();
+  });
+
+  it("refuses a withdrawal request for another amount than the one typed", async () => {
+    const { signer, signTypedData } = signerSpy();
+    await expect(
+      submitRelayedEscrowIntent(
+        { kind: "REQUEST_WITHDRAW", transaction: requestWithdrawRequest() },
+        signer,
+        { kind: "REQUEST_WITHDRAW", amount: "1000000" },
+        submitterSpies().submitters,
+      ),
+    ).rejects.toThrow(/amount/);
+    expect(signTypedData).not.toHaveBeenCalled();
+  });
+
+  it("refuses limits other than the ones typed", async () => {
+    const { signer, signTypedData } = signerSpy();
+    await expect(
+      submitRelayedEscrowIntent(
+        { kind: "SET_LIMITS", transaction: setLimitsRequest() },
+        signer,
+        { kind: "SET_LIMITS", maxVoucherAmount: "2500000", maxPerWindow: "1" },
+        submitterSpies().submitters,
+      ),
+    ).rejects.toThrow(/maxPerWindow/);
+    expect(signTypedData).not.toHaveBeenCalled();
+  });
+
+  it("refuses a payload of another kind than the screen asked for", async () => {
+    const { signer, signTypedData } = signerSpy();
+    await expect(
+      submitRelayedEscrowIntent(
+        { kind: "SET_LIMITS", transaction: setLimitsRequest() },
+        signer,
+        { kind: "REQUEST_WITHDRAW", amount: "0" },
+        submitterSpies().submitters,
+      ),
+    ).rejects.toThrow(/asked for REQUEST_WITHDRAW/);
+    expect(signTypedData).not.toHaveBeenCalled();
+  });
+
+  const evmTx = (to: string, data: string) => ({
+    kind: "WITHDRAW",
+    account: `${CHAIN}:${BUYER}`,
+    transaction: {
+      namespace: "eip155" as const,
+      chainId: CHAIN,
+      kind: "transaction" as const,
+      from: BUYER,
+      to,
+      data,
+      value: "0",
+      nonce: "0",
+      gasLimit: "1",
+      maxFeePerGas: "1",
+      maxPriorityFeePerGas: "1",
+    },
+  });
+  const ESCROW = "0x1D2625efD87c2fc10b8563f3F0890072845Fcf41";
+  const USDG = "0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
+
+  it("sends withdraw() to the pinned escrow", async () => {
+    const { signer, signAndSend } = signerSpy();
+    const data = encodeFunctionData({ abi: parseAbi(["function withdraw()"]), functionName: "withdraw" });
+    await runEscrowAction(evmTx(ESCROW, data), signer, { kind: "WITHDRAW" });
+    expect(signAndSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a withdraw button that sends a token transfer, or withdraw() to another contract", async () => {
+    const { signer, signAndSend } = signerSpy();
+    const transfer = encodeFunctionData({
+      abi: parseAbi(["function transfer(address to, uint256 amount)"]),
+      functionName: "transfer",
+      args: [ATTACKER, 10n ** 12n],
+    });
+    const withdraw = encodeFunctionData({ abi: parseAbi(["function withdraw()"]), functionName: "withdraw" });
+    await expect(runEscrowAction(evmTx(USDG, transfer), signer, { kind: "WITHDRAW" })).rejects.toThrow(
+      RELAYED_SUBMISSION_REFUSED,
+    );
+    await expect(runEscrowAction(evmTx(ATTACKER, withdraw), signer, { kind: "WITHDRAW" })).rejects.toThrow(
+      /none of this app's contracts/,
+    );
+    expect(signAndSend).not.toHaveBeenCalled();
   });
 });
