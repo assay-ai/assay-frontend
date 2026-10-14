@@ -56,7 +56,7 @@ export const UPHELD_CLOCKS: Partial<SlashProposalClocks> = {
 export function caseOf(
   status: string,
   clocks: Partial<SlashProposalClocks> = {},
-  extra: { disputeId?: string | null } = {},
+  extra: { disputeId?: string | null; executedAt?: string | null } = {},
 ): SlashProposalCaseDetail {
   return {
     proposal: {
@@ -76,7 +76,7 @@ export function caseOf(
       outcome: null,
       resolutionKind: null,
       resolvedAt: null,
-      executedAt: null,
+      executedAt: extra.executedAt ?? null,
     },
     changeOverlay: null,
     failuresByAgent: [],

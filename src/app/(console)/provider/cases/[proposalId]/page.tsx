@@ -19,11 +19,12 @@ import {
 import { count, stampUtc } from "@/features/g34a/stats";
 import { DisputeFilingForm } from "@/features/provider-disputes/dispute-filing-form";
 import {
+  CaseClosed,
   WhatHappensIfYouDoNothing,
   WhatHappensNext,
   WhatIsNotHappening,
 } from "@/features/provider-slash-case/assurances";
-import { caseChainStageOf, mayAcknowledge } from "@/features/provider-slash-case/chain-stage";
+import { caseStageOf, mayAcknowledge } from "@/features/provider-slash-case/chain-stage";
 import { CaseContext } from "@/features/provider-slash-case/context";
 import { eventLabel, eventSummary } from "@/features/provider-slash-case/labels";
 import { Measurement } from "@/features/provider-slash-case/measurement";
@@ -167,9 +168,11 @@ export default function SlashProposalCasePage() {
     (`executionFloorOf`, which can only overstate the wait). Once the provider
     disputed on chain the record cannot be executed at all until the arbiter
     rules, and after an uphold the record's own time is the one that binds —
-    so the stage decides what the screen says (`chain-stage.ts`).
+    so the stage decides what the screen says (`chain-stage.ts`). A closed
+    case (cancelled or expired on chain, executed, overturned, compensated,
+    waived) has no deadline, no execution ahead and no action left.
   */
-  const stage = caseChainStageOf(proposal.clocks);
+  const stage = caseStageOf(proposal);
   /* Disputed on chain or upheld after it: a record is disputed at most once. */
   const canDispute =
     DISPUTABLE.includes(proposal.status) && proposal.disputeId === null && stage.kind === "open";
@@ -190,7 +193,7 @@ export default function SlashProposalCasePage() {
       <StatusHeader data={data} />
 
       {/* ── The one deadline that binds your stake ────────────────────── */}
-      {stage.kind === "disputed" ? (
+      {stage.kind === "closed" ? null : stage.kind === "disputed" ? (
         <p className="text-body-13 leading-[1.55] text-02">
           You disputed this penalty on chain. Nothing can be taken from your stake while the
           dispute stands: it waits for Assay&apos;s arbiter to rule
@@ -238,11 +241,17 @@ export default function SlashProposalCasePage() {
       {/* ── The two panels the frame puts before the arithmetic ───────── */}
       <div className="flex w-full flex-col gap-5 tablet:flex-row tablet:items-start">
         <div className="flex w-full min-w-0 flex-1 flex-col gap-5">
-          <WhatIsNotHappening data={data} />
-          {stage.kind === "open" ? (
-            <WhatHappensIfYouDoNothing data={data} />
+          {stage.kind === "closed" ? (
+            <CaseClosed stage={stage} />
           ) : (
-            <WhatHappensNext data={data} stage={stage} />
+            <>
+              <WhatIsNotHappening data={data} />
+              {stage.kind === "open" ? (
+                <WhatHappensIfYouDoNothing data={data} />
+              ) : (
+                <WhatHappensNext data={data} stage={stage} />
+              )}
+            </>
           )}
         </div>
         <div className="w-full min-w-0 flex-1">

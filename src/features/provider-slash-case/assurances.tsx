@@ -15,7 +15,13 @@ import { stampUtc } from "@/features/g34a/stats";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
 import { formatMoney, toDecimal } from "@/utils/money";
 
-import { caseChainStageOf, executionFloorOf, type CaseChainStage } from "./chain-stage";
+import {
+  caseStageOf,
+  closedSentence,
+  executionFloorOf,
+  type CaseChainStage,
+  type ClosedStage,
+} from "./chain-stage";
 
 /**
  * The two panels the design puts **above** the arithmetic, in that order and
@@ -103,24 +109,27 @@ export function WhatIsNotHappening({ data }: { data: SlashProposalCaseDetail }) 
     );
   }
 
-  const stage = caseChainStageOf(proposal.clocks);
-  claims.push(
-    stage.kind === "disputed" ? (
-      <Claim key="timelock">
-        Nothing executes while your on-chain dispute stands.{" "}
-        <span className="text-02">
-          The stake contract refuses to execute a disputed penalty until Assay&apos;s arbiter rules.
-        </span>
-      </Claim>
-    ) : (
-      <Claim key="timelock">
-        Nothing executes before the deadline above, even if you do nothing.{" "}
-        <span className="text-02">
-          The earliest anything can execute is {stampUtc(stage.executableAt)} UTC.
-        </span>
-      </Claim>
-    )
-  );
+  const stage = caseStageOf(proposal);
+  /* A closed case has no execution ahead of it to promise anything about. */
+  if (stage.kind !== "closed") {
+    claims.push(
+      stage.kind === "disputed" ? (
+        <Claim key="timelock">
+          Nothing executes while your on-chain dispute stands.{" "}
+          <span className="text-02">
+            The stake contract refuses to execute a disputed penalty until Assay&apos;s arbiter rules.
+          </span>
+        </Claim>
+      ) : (
+        <Claim key="timelock">
+          Nothing executes before the deadline above, even if you do nothing.{" "}
+          <span className="text-02">
+            The earliest anything can execute is {stampUtc(stage.executableAt)} UTC.
+          </span>
+        </Claim>
+      )
+    );
+  }
 
   return (
     <Panel>
@@ -274,6 +283,27 @@ export function WhatHappensNext({
             </Outcome>
           </ul>
         )}
+      </PanelBody>
+    </Panel>
+  );
+}
+
+/**
+ * In place of the open case's panels once the case is closed — cancelled or
+ * expired on chain, executed, overturned, compensated, waived or suspended.
+ * It says what happened and that no deadline, execution or action is left.
+ */
+export function CaseClosed({ stage }: { stage: ClosedStage }) {
+  return (
+    <Panel>
+      <PanelHeader>
+        <PanelTitles>
+          <PanelTitle>Case closed</PanelTitle>
+          <PanelDescription>nothing more happens on this case</PanelDescription>
+        </PanelTitles>
+      </PanelHeader>
+      <PanelBody className="px-5 py-4">
+        <p className="text-body-sm leading-[1.55] text-01">{closedSentence(stage, stampUtc)}</p>
       </PanelBody>
     </Panel>
   );
