@@ -3,10 +3,11 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { ArrowRight, Lock, ScanSearch, Split } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { safeNextPath } from "@/libs/login-redirect";
 
 import { startReadyTimeout } from "./ready-timeout";
 
@@ -82,10 +83,15 @@ function BrandLockup({ className }: { className?: string }) {
 export default function LoginPage() {
   const { ready, authenticated, login } = usePrivy();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Where to go after signing in: the page a 401 sent us from, or Overview
+  // (where a brand-new account finds its Get started checklist).
+  const next = safeNextPath(searchParams.get("next"));
+  const expired = searchParams.get("reason") === "expired";
 
   useEffect(() => {
-    if (ready && authenticated) router.replace("/");
-  }, [ready, authenticated, router]);
+    if (ready && authenticated) router.replace(next);
+  }, [ready, authenticated, router, next]);
 
   // Don't flash a sign-in form at someone who is already signed in.
   const signedIn = ready && authenticated;
@@ -166,6 +172,15 @@ export default function LoginPage() {
         <div className="flex w-full max-w-[368px] flex-col gap-8">
           <BrandLockup className="flex items-center gap-2 text-01 tablet:hidden" />
 
+          {expired ? (
+            <p
+              role="status"
+              className="rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5 text-body-13 text-warning-700"
+            >
+              Your session expired. Sign in again.
+            </p>
+          ) : null}
+
           <div className="flex flex-col gap-2">
             <h1 className="text-heading-lg text-01">Sign in</h1>
             <p className="text-body-sm text-02">
@@ -196,15 +211,15 @@ export default function LoginPage() {
                 onClick={() => login()}
               >
                 {!ready
-                  ? "Checking your session"
+                  ? "Loading sign-in…"
                   : signedIn
                     ? "Signing you in"
                     : "Continue with email or wallet"}
               </Button>
             )}
             <p className="text-body-xs text-03">
-              A secure window from Privy opens to finish signing in. Allow pop-ups for this site if
-              nothing appears.
+              Sign-in opens on this page, through Privy. You can use an email code or connect a
+              wallet.
             </p>
           </div>
 

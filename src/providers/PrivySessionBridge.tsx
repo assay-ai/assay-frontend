@@ -18,6 +18,8 @@ import {
   setSessionToken,
 } from "@/libs/ApiClient";
 
+import { loginHref } from "@/libs/login-redirect";
+
 import { applyIdentityChange, isOperatorConsolePath } from "./buyer-session";
 
 /**
@@ -108,7 +110,9 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
       // Privy session too. Best-effort: the redirect must not wait on it or
       // get blocked by it failing.
       void logout().catch(() => {});
-      router.replace("/login");
+      // Back to the same page after signing in again, with the reason shown.
+      const search = typeof window === "undefined" ? "" : window.location.search;
+      router.replace(loginHref({ next: `${pathnameRef.current}${search}`, reason: "expired" }));
     });
   }, [queryClient, router, logout]);
 
