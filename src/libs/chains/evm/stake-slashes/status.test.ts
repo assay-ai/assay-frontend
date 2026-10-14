@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cancelReasonLabel, slashStatusOf } from "./status";
+import { cancelReasonLabel, slashRecordStatusOf, slashStatusOf } from "./status";
 
 describe("slashStatusOf", () => {
   it("names today's four SlashStatus values", () => {
@@ -44,5 +44,26 @@ describe("cancelReasonLabel", () => {
     expect(cancelReasonLabel(7)).toBe("Unknown reason (7)");
     expect(cancelReasonLabel(null)).toBeNull();
     expect(cancelReasonLabel(undefined)).toBeNull();
+  });
+});
+
+describe("slashRecordStatusOf", () => {
+  it("reads Pending with a dispute behind it as upheld by the arbiter", () => {
+    expect(slashRecordStatusOf(1, true)).toEqual({
+      key: "upheld",
+      code: 1,
+      label: "Upheld by Assay's arbiter",
+      needsAttention: true,
+    });
+  });
+
+  it("leaves a never-disputed Pending record Pending", () => {
+    expect(slashRecordStatusOf(1, false)).toEqual(slashStatusOf(1));
+  });
+
+  it("never changes any other status, disputed or not", () => {
+    for (const code of [0, 2, 3, 4, 9]) {
+      expect(slashRecordStatusOf(code, true)).toEqual(slashStatusOf(code));
+    }
   });
 });

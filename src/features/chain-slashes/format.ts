@@ -40,16 +40,27 @@ export const SLASH_EXECUTION_GRACE_SECONDS = 7 * 86_400;
 export type PendingPhase =
   /** The slash delay (to the record's own `executableAt`) is running: the provider can still dispute. */
   | { readonly phase: "disputable"; readonly secondsLeft: number }
+  /**
+   * Upheld by the arbiter, before its `executableAt`: nothing can be done on
+   * chain — a record is disputed at most once — so this is a wait, not a window.
+   */
+  | { readonly phase: "upheld-waiting"; readonly secondsLeft: number }
   /** The wait is over: anybody may execute it, until the grace ends. */
   | { readonly phase: "executable"; readonly secondsLeft: number }
   /** The grace is over: it can only be expired, which releases the stake. */
   | { readonly phase: "expirable" };
 
-/** Where a Pending record is on its clock. `null` for any other status. */
+/**
+ * Where a Pending record (plain or upheld) is on its clock. `null` for any
+ * other status. An upheld record never has a dispute window.
+ */
 export function pendingPhase(row: ChainSlashRow, nowSeconds: number): PendingPhase | null {
-  if (row.status.key !== "pending") return null;
+  if (row.status.key !== "pending" && row.status.key !== "upheld") return null;
   if (nowSeconds < row.executableAt) {
-    return { phase: "disputable", secondsLeft: row.executableAt - nowSeconds };
+    return {
+      phase: row.status.key === "upheld" ? "upheld-waiting" : "disputable",
+      secondsLeft: row.executableAt - nowSeconds,
+    };
   }
   const closes = row.executableAt + SLASH_EXECUTION_GRACE_SECONDS;
   if (nowSeconds < closes) return { phase: "executable", secondsLeft: closes - nowSeconds };

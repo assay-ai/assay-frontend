@@ -14,6 +14,11 @@
 import { contractErrorNameInText, contractErrorText } from "./evm/contract-errors";
 
 export const DISPUTED_ON_CHAIN_LABEL = "Disputed on chain — awaiting arbiter";
+/**
+ * `Pending` again after a dispute: the arbiter's `upholdSlash` ruled against
+ * the provider. A record is disputed at most once, so it can only be executed.
+ */
+export const UPHELD_ON_CHAIN_LABEL = "Upheld by Assay's arbiter";
 export const DISPUTE_UNRESOLVED_LABEL = "Dispute unresolved (30 days)";
 export const PROGRAM_PAUSED_LABEL = "Contracts paused — try after unpause";
 export const ADDRESS_BLOCKED_LABEL = "Blocked on chain";
@@ -60,6 +65,42 @@ export function chainStatusLabel(status: string | null | undefined, chain?: stri
   if (!status) return "Not reported";
   if (status === "CANCEL_REQUESTED") return cancelRequestedLabel(chain);
   return CHAIN_STATUS_LABELS[status] ?? status;
+}
+
+/** The backend's mirror of a case's on-chain record, as the case clocks carry it. */
+export interface CaseChainMirror {
+  readonly chainStatus?: string | null;
+  readonly chainDisputedAt?: string | null;
+  readonly chainDisputedParts?: number | null;
+}
+
+/**
+ * Where a case's on-chain record stands on the dispute path:
+ *
+ * - `disputed` — every live part is `Disputed`, awaiting the arbiter;
+ * - `partly-disputed` — `PENDING` with some parts `Disputed`; the others keep executing;
+ * - `upheld` — `PENDING` again with a `disputedAt` and no part disputed: the
+ *   arbiter upheld the dispute (`upholdSlash`), and since a record is disputed
+ *   at most once (`SlashAlreadyDisputed`) it can now only be executed;
+ * - `none` — anything else, including an older backend that does not mirror it.
+ */
+export type CaseChainDisputePhase = "disputed" | "partly-disputed" | "upheld" | "none";
+
+export function caseChainDisputePhase(mirror: CaseChainMirror): CaseChainDisputePhase {
+  const parts = mirror.chainDisputedParts ?? 0;
+  if (mirror.chainStatus === "DISPUTED") return "disputed";
+  if (mirror.chainStatus === "PENDING" && parts > 0) return "partly-disputed";
+  if (mirror.chainStatus === "PENDING" && mirror.chainDisputedAt) return "upheld";
+  return "none";
+}
+
+/**
+ * {@link chainStatusLabel}, told about an uphold: `PENDING` with a dispute
+ * behind it reads as {@link UPHELD_ON_CHAIN_LABEL}, not as a fresh "Pending".
+ */
+export function caseChainStatusLabel(mirror: CaseChainMirror, chain?: string | null): string {
+  if (caseChainDisputePhase(mirror) === "upheld") return UPHELD_ON_CHAIN_LABEL;
+  return chainStatusLabel(mirror.chainStatus, chain);
 }
 
 /** Why a record was cancelled, as the backend names it (`WITHDRAWN`, …). */

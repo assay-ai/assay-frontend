@@ -5,12 +5,20 @@ import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
  * run the same code.
  */
 
-export type StatusFilter = "attention" | "pending" | "disputed" | "executed" | "cancelled" | "all";
+export type StatusFilter =
+  | "attention"
+  | "pending"
+  | "upheld"
+  | "disputed"
+  | "executed"
+  | "cancelled"
+  | "all";
 
 export const STATUS_FILTERS: readonly { value: StatusFilter; label: string }[] = [
   { value: "attention", label: "Needs attention" },
   { value: "pending", label: "Pending" },
   { value: "disputed", label: "Disputed" },
+  { value: "upheld", label: "Upheld" },
   { value: "executed", label: "Executed" },
   { value: "cancelled", label: "Cancelled" },
   { value: "all", label: "All" },
@@ -41,6 +49,9 @@ function matchesStatus(row: ChainSlashRow, status: StatusFilter): boolean {
       return row.status.needsAttention;
     case "all":
       return true;
+    case "pending":
+      /* An upheld record is Pending on chain too: it still reserves stake and can be executed. */
+      return row.status.key === "pending" || row.status.key === "upheld";
     default:
       return row.status.key === status;
   }

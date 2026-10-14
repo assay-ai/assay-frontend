@@ -21,6 +21,11 @@ export interface AssetMeta {
 export interface StakeChainReader extends LogSource {
   readSlashRecord(requestId: Hex): Promise<SlashRecordState>;
   readAssetMeta(): Promise<{ decimals: number; symbol: string }>;
+  /**
+   * A block's timestamp in unix seconds. Optional: only used to say when an
+   * arbiter upheld a dispute (`SlashUpheld` carries no time of its own).
+   */
+  readBlockTimestamp?(blockNumber: bigint): Promise<bigint>;
 }
 
 /** The real reader: viem over the pinned public RPC. */
@@ -67,6 +72,11 @@ export function createStakeChainReader(deployment: StakeDeployment): StakeChainR
         executedAt: record.executedAt,
         disputedAt: record.disputedAt,
       };
+    },
+
+    async readBlockTimestamp(blockNumber) {
+      const block = await client.getBlock({ blockNumber });
+      return block.timestamp;
     },
 
     async readAssetMeta() {
@@ -155,8 +165,32 @@ export async function loadChainSlashes(
     else failures += 1;
   }
 
+  /*
+    When each uphold happened: the time of its block. Few, and each allowed to
+    fail on its own — a missing time only drops the "upheld on" line.
+  */
+  const upheldBlocks = [
+    ...new Set(
+      parsed
+        .filter((log) => log.kind === "upheld" && log.blockNumber !== null)
+        .map((log) => (log.blockNumber as bigint).toString()),
+    ),
+  ];
+  const blockTimes = new Map<string, number>();
+  const readBlockTimestamp = reader.readBlockTimestamp?.bind(reader);
+  if (readBlockTimestamp && upheldBlocks.length > 0) {
+    const times = await mapLimited(upheldBlocks, options.concurrency ?? 4, async (block) => {
+      try {
+        return [block, Number(await readBlockTimestamp(BigInt(block)))] as const;
+      } catch {
+        return [block, null] as const;
+      }
+    });
+    for (const [block, time] of times) if (time !== null) blockTimes.set(block, time);
+  }
+
   return {
-    rows: buildChainSlashRows(provider, parsed, records),
+    rows: buildChainSlashRows(provider, parsed, records, blockTimes),
     scannedTo: scan.scannedTo,
     asset,
     recordReadFailures: failures,
