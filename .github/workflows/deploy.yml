@@ -74,13 +74,21 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+      # Each environment has its own Pages project, so every deploy is that
+      # project's production deployment: deploy under the project's own
+      # production branch, whatever it is named, never as a preview.
       - name: Deploy to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: >
-          pnpm dlx wrangler@4.147.0 pages deploy out
-          --project-name "$CLOUDFLARE_PAGES_PROJECT"
-          --branch "${{ github.ref_name }}"
-          --commit-hash "${{ github.sha }}"
-          --commit-message "${{ github.ref_name }} ${{ github.sha }}"
+        run: |
+          branch=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PAGES_PROJECT" \
+            | jq -r '.result.production_branch // empty')
+          [ -n "$branch" ] || { echo "::error::Could not read the production branch of Pages project $CLOUDFLARE_PAGES_PROJECT"; exit 1; }
+          echo "Deploying as production (branch $branch)"
+          pnpm dlx wrangler@4.147.0 pages deploy out \
+            --project-name "$CLOUDFLARE_PAGES_PROJECT" \
+            --branch "$branch" \
+            --commit-hash "${{ github.sha }}" \
+            --commit-message "${{ github.ref_name }} ${{ github.sha }}"
