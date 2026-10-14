@@ -61,3 +61,6 @@ node_modules/
 
 # local caches written by scripts/
 scripts/.icon-update-cache.json
+
+# wrangler pages dev scratch
+/.wrangler/

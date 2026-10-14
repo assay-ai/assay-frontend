@@ -5,6 +5,8 @@ import * as React from "react";
 
 import { cn } from "@/utils";
 
+import { ThemeToggle } from "./theme-toggle";
+
 /**
  * Public Top Bar: 60px tall,
  * `$bg-01` fill, 1px `$border-01` bottom hairline. This is the marketing
@@ -73,7 +75,7 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
       >
         <div className="flex shrink-0 items-center gap-2 py-[10px] tablet:py-0">
           <img src="/images/logo.png" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 rounded-md object-cover" />
-          <span className="text-mono-sm font-mono font-semibold text-01">GoAssay.AI</span>
+          <span className="text-[17px] font-medium leading-none tracking-[-0.025em] text-01">Assay</span>
         </div>
 
         <nav
@@ -94,6 +96,7 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-2.5 py-[10px] tablet:py-0">
+          <ThemeToggle />
           <a
             href={signInHref}
             onClick={onSignInClick}
@@ -104,7 +107,7 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
           <a
             href={listToolHref}
             onClick={onListToolClick}
-            className="flex items-center gap-[7px] rounded-md bg-primary-500 px-[14px] py-[9px] text-label-sm font-sans text-on-color shadow-hair hover:bg-primary-600"
+            className="flex items-center gap-[7px] rounded-md bg-primary-400 px-[14px] py-[9px] text-label-sm font-sans text-on-primary shadow-hair hover:bg-primary-300"
           >
             <Plus className="h-[15px] w-[15px]" />
             List a tool

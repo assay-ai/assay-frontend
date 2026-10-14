@@ -13,6 +13,7 @@ import { initialsOf, MicroLabel, PageHeader, StatusPill } from "./chrome";
 import { ExploreNav } from "./explore-nav";
 import { formatPrice, stakeLines, type ChainStake } from "./format";
 import { useCatalogue, type ProviderRow } from "./use-catalogue";
+import { routes } from "@/libs/routes";
 
 /**
  * Providers explorer.
@@ -121,7 +122,7 @@ function ProviderStake({ stake }: { stake: ChainStake[] }) {
 export function ProviderCard({ provider }: { provider: ProviderRow }) {
   return (
     <Link
-      href={`/explore/providers/${provider.providerId}`}
+      href={routes.exploreProvider(provider.providerId)}
       data-testid="provider-card"
       data-verified={provider.verified ? "true" : "false"}
       className="flex min-w-0 flex-col gap-3 rounded-xl border border-01 bg-01 p-[18px] transition-colors hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"

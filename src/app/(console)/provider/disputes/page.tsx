@@ -22,6 +22,7 @@ import { disputeBadgeVariant } from "@/features/provider-disputes/state";
 import type { Dispute } from "@/interfaces/provider-disputes";
 import { ApiError } from "@/libs/ApiClient";
 import { listDisputes } from "@/services/provider-disputes.service";
+import { routes } from "@/libs/routes";
 
 /**
  * The dispute list, route `/provider/disputes`.
@@ -78,7 +79,7 @@ export default function DisputesListPage() {
       width: 220,
       mono: true,
       cell: (row) => (
-        <Link href={`/provider/disputes/${row.id}`} className="hover:underline">
+        <Link href={routes.dispute(row.id)} className="hover:underline">
           {subjectLabel(row)}
         </Link>
       ),

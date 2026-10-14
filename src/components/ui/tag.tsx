@@ -79,7 +79,7 @@ const tagVariants = cva(
         variant: "secondary",
         type: "tonal",
         state: "selected",
-        className: "bg-03 text-inverse",
+        className: "bg-03 text-01",
       },
       {
         variant: "secondary",
@@ -98,7 +98,7 @@ const tagVariants = cva(
         variant: "secondary",
         type: "outline",
         state: "selected",
-        className: "border-secondary bg-03 text-inverse",
+        className: "border-secondary bg-03 text-01",
       },
       {
         variant: "secondary",

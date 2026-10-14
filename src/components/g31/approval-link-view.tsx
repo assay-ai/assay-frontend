@@ -80,7 +80,7 @@ export function ApprovalLinkView({ approvalId }: { approvalId: string }) {
     <div className="mx-auto flex w-full max-w-[390px] flex-1 flex-col">
       <div className="flex w-full items-center gap-2.5 border-b border-01 bg-01 px-4 py-3.5">
         <img src="/images/logo.png" alt="" aria-hidden="true" className="h-5 w-5 shrink-0 rounded-md object-cover" />
-        <span className="font-mono text-mono-sm font-semibold text-01">GoAssay.AI</span>
+        <span className="text-[17px] font-medium leading-none tracking-[-0.025em] text-01">Assay</span>
         <StatusPill label="ONE-TIME LINK" tone="success" />
       </div>
       <div className="flex w-full flex-1 flex-col px-4 pt-4">{children}</div>

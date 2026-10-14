@@ -251,7 +251,7 @@ export default function DemoPage() {
       */}
       <a
         href="/login"
-        className="fixed inset-x-4 bottom-4 z-10 block rounded-lg bg-primary px-4 py-3 text-center text-label-sm text-white shadow-lg lg:hidden"
+        className="fixed inset-x-4 bottom-4 z-10 block rounded-lg bg-primary-400 px-4 py-3 text-center text-label-sm text-on-primary shadow-lg lg:hidden"
       >
         Start with 1,000 free calls a day
       </a>
@@ -300,7 +300,7 @@ function CallCard(props: {
           <Button
             onClick={props.onRun}
             disabled={state.running}
-            className={`shrink-0 ${teal ? "bg-teal-600 hover:bg-teal-600/90" : ""}`}
+            className={`shrink-0 ${teal ? "bg-teal-600 text-on-color hover:bg-teal-600/90 dark:text-on-primary" : ""}`}
           >
             <Play className="mr-2 h-4 w-4" />
             {state.running ? "Running…" : "Run"}

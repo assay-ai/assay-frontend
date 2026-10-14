@@ -22,7 +22,7 @@ import type { DemoFixture } from "./fixtures";
  * DEMO ONLY — see `demo-api.ts` for the rules. **The marketplace surface.**
  *
  * What a visitor is shown when they open `/explore/providers`,
- * `/explore/providers/[id]`, `/explore/tools` and `/connect` on a deployment
+ * `/explore/providers/view?id=`, `/explore/tools` and `/connect` on a deployment
  * whose catalogue tables are empty: a market with depth, priced in a single
  * settlement asset on Robinhood Chain testnet (`eip155:46630`).
  *
@@ -35,7 +35,7 @@ import type { DemoFixture } from "./fixtures";
  * the quote is the dearest. So a reader who adds the cards up cannot catch us,
  * and an edit to one price cannot leave a stale total behind somewhere else.
  *
- * The same rule covers identity: `/explore/providers/[id]` answers for exactly
+ * The same rule covers identity: `/explore/providers/view?id=` answers for exactly
  * the ids the list shows, by looking the id up out of the path. An id that is
  * **not** ours returns `undefined`, which the demo layer reads as "leave the
  * real outcome alone" — so a genuine 404 still reaches the screen and still
@@ -530,7 +530,7 @@ function verification(provider: DemoProvider): ProviderVerification {
 
   return {
     verified: true,
-    verifiedBy: "GoAssay.AI compliance",
+    verifiedBy: "Assay compliance",
     verifiedAt: daysAgo(provider.verifiedDaysAgo ?? 0),
     method: "DOMAIN_CONTROL",
     checks,
@@ -609,7 +609,7 @@ export const EXPLORE_FIXTURES: readonly DemoFixture[] = [
     },
   },
   /*
-    Identity, which gates the whole of `/explore/providers/[id]`: the page draws
+    Identity, which gates the whole of `/explore/providers/view?id=`: the page draws
     its empty state when this call fails, whatever the catalogue says.
 
     `me` is excluded explicitly. Nothing calls `/providers/me/verification`

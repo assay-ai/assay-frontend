@@ -40,6 +40,7 @@ import { getProviderStake } from "@/services/provider-stake.service";
 import { getToolBinding, listToolBindings } from "@/services/provider-tool-bindings.service";
 import { toDecimal, formatMoney } from "@/utils/money";
 import { labelForEndpoint } from "@/utils/provider-label";
+import { routes } from "@/libs/routes";
 
 /**
  * Provider home — desktop (1440) and tablet (834) designs. One page, two compositions; the shell, its padding and its 16px gap
@@ -772,7 +773,7 @@ function BindingCard({ row }: { row: BindingRow }) {
 
   return (
     <Link
-      href={`/provider/bindings/${row.id}`}
+      href={routes.binding(row.id)}
       className="flex w-full flex-col gap-3 rounded-lg border border-01 bg-01 p-4 outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
     >
       <div className="flex w-full items-center gap-2.5">
