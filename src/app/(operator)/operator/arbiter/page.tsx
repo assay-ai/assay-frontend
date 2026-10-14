@@ -50,7 +50,7 @@ import { useOperatorSession } from "@/features/operator/session-context";
 import type { ArbiterDispute, ArbiterRuling, ArbiterTerms, ChainStateHealth } from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ROBINHOOD_TESTNET_STAKE, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
-import { chainStatusLabel } from "@/libs/chains/status-labels";
+import { DISPUTED_ON_CHAIN_LABEL, chainStatusLabel } from "@/libs/chains/status-labels";
 import {
   createArbiterBlockIntent,
   createArbiterRulingIntent,
@@ -622,9 +622,21 @@ function DisputeRow({
         <label htmlFor={selectable ? id : undefined} className="font-mono text-mono-13 text-01" title={row.requestId}>
           {shortRequestId(row.requestId)}
         </label>
+        {/*
+          Every row here is a record that is Disputed on chain (the backend lists
+          DISPUTED parts only). The case's mirror can still read PENDING — the
+          case's other parts are pending — so it is shown beside, not instead.
+        */}
         <span className="rounded-full bg-primary-10 px-[9px] py-0.5 text-label-13 text-primary-700">
-          {chainStatusLabel(row.caseChainStatus, row.chainId)}
+          {DISPUTED_ON_CHAIN_LABEL}
         </span>
+        {row.caseChainStatus === "PENDING" ? (
+          <span className="text-body-xs text-03">case partly disputed: its other parts are pending on chain</span>
+        ) : row.caseChainStatus !== "DISPUTED" ? (
+          <span className="text-body-xs text-03">
+            {`case on chain: ${chainStatusLabel(row.caseChainStatus, row.chainId)}`}
+          </span>
+        ) : null}
         <span className="text-body-xs text-03">case {row.caseStatus.toLowerCase().replace(/_/g, " ")}</span>
         <Link
           href={`/operator/cases/${encodeURIComponent(row.proposalId)}`}

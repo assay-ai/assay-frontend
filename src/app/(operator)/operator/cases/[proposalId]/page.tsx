@@ -21,7 +21,8 @@ import { Timeline, type TimelineEvent } from "@/components/ui/timeline";
 import { DASH, stampUtc } from "@/features/g34a/stats";
 import { asProposalStatus, caseBadgeVariant, disputedPartsNote } from "@/features/operator/state";
 import { SLASH_DELAY_HOURS } from "@/libs/chains/solana/delays";
-import { chainStatusLabel } from "@/libs/chains/status-labels";
+import { caseChainStatusLabel } from "@/libs/chains/status-labels";
+import { caseChainStageOf } from "@/features/provider-slash-case/chain-stage";
 import { CaseContext } from "@/features/provider-slash-case/context";
 import { Measurement } from "@/features/provider-slash-case/measurement";
 import { remaining } from "@/features/provider-slash-case/status-header";
@@ -196,6 +197,18 @@ export default function OperatorCasePage() {
   const { proposal } = brief.case;
   const clocks = proposal.clocks;
   const disputedParts = disputedPartsNote(brief.chainStatus, brief.chainDisputedParts);
+  /*
+    The brief's own chain fields win over the clocks' copies (the same mirror,
+    read by the same request), so an older backend without the clocks' copies
+    still reads its chain state. `chainDisputedAt` exists only on the clocks.
+  */
+  const chainMirror = {
+    ...clocks,
+    chainStatus: brief.chainStatus ?? clocks.chainStatus,
+    chainExecutableAt: brief.chainExecutableAt ?? clocks.chainExecutableAt ?? null,
+    chainDisputedParts: brief.chainDisputedParts ?? clocks.chainDisputedParts,
+  };
+  const chainStage = caseChainStageOf(chainMirror);
   const dispute = brief.dispute;
 
   /*
@@ -252,7 +265,7 @@ export default function OperatorCasePage() {
           {brief.chainStatus ? (
             <>
               <span className="text-03"> · </span>
-              on chain: <span className="font-semibold text-01">{chainStatusLabel(brief.chainStatus, proposal.penaltyAmount.asset)}</span>
+              on chain: <span className="font-semibold text-01">{caseChainStatusLabel(chainMirror, proposal.penaltyAmount.asset)}</span>
             </>
           ) : null}
           {disputedParts ? (
@@ -277,9 +290,11 @@ export default function OperatorCasePage() {
             label="Provider responds by"
             at={clocks.respondByAt}
             caption={
-              clocks.respondByAt
-                ? "their window to object, opened when the notification was delivered"
-                : "their window has not opened — delivery of the notification is not confirmed yet"
+              chainStage.kind !== "open"
+                ? "no longer running — the provider disputed on chain"
+                : clocks.respondByAt
+                  ? "their window to object, opened when the notification was delivered"
+                  : "their window has not opened — delivery of the notification is not confirmed yet"
             }
             left={clocks.runningClock === "PROVIDER" ? left : null}
           />
@@ -303,11 +318,28 @@ export default function OperatorCasePage() {
             printing `Invalid Date` beside the word "anyone" is worse than no
             row — hence the conditional.
           */}
-          {clocks.chainExecutableAt ? (
+          {chainStage.kind === "disputed" ? (
+            <>
+              <ClockRow
+                label="Disputed on chain"
+                at={chainStage.disputedAt}
+                caption="the provider disputed the record (disputeSlash); it cannot be executed until the arbiter rules"
+              />
+              <ClockRow
+                label="Dispute expires unruled"
+                at={chainStage.expiresAt}
+                caption="30 days after the dispute: without a ruling by then, anyone can expire it and the stake is released"
+              />
+            </>
+          ) : chainMirror.chainExecutableAt ? (
             <ClockRow
-              label="Executable on chain"
-              at={clocks.chainExecutableAt}
-              caption="after this, anyone can execute the judgement — cancelling is no longer possible"
+              label={chainStage.kind === "upheld" ? "Executable on chain (upheld)" : "Executable on chain"}
+              at={chainMirror.chainExecutableAt}
+              caption={
+                chainStage.kind === "upheld"
+                  ? `the arbiter upheld the provider's on-chain dispute${chainStage.disputedAt ? ` of ${stampUtc(chainStage.disputedAt)} UTC` : ""}; it cannot be disputed again, and after this anyone can execute it`
+                  : "after this, anyone can execute the judgement — cancelling is no longer possible"
+              }
             />
           ) : null}
           <p className="border-t border-01 px-5 py-3.5 text-body-xs leading-[1.55] text-02">

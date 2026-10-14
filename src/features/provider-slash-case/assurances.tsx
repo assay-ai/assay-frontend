@@ -15,6 +15,8 @@ import { stampUtc } from "@/features/g34a/stats";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
 import { formatMoney, toDecimal } from "@/utils/money";
 
+import { caseChainStageOf, executionFloorOf, type CaseChainStage } from "./chain-stage";
+
 /**
  * The two panels the design puts **above** the arithmetic, in that order and
  * for that reason — "read this before the arithmetic".
@@ -101,13 +103,23 @@ export function WhatIsNotHappening({ data }: { data: SlashProposalCaseDetail }) 
     );
   }
 
+  const stage = caseChainStageOf(proposal.clocks);
   claims.push(
-    <Claim key="timelock">
-      Nothing executes before the deadline above, even if you do nothing.{" "}
-      <span className="text-02">
-        The earliest anything can execute is {stampUtc(proposal.clocks.earliestExecutionAt)} UTC.
-      </span>
-    </Claim>
+    stage.kind === "disputed" ? (
+      <Claim key="timelock">
+        Nothing executes while your on-chain dispute stands.{" "}
+        <span className="text-02">
+          The stake contract refuses to execute a disputed penalty until Assay&apos;s arbiter rules.
+        </span>
+      </Claim>
+    ) : (
+      <Claim key="timelock">
+        Nothing executes before the deadline above, even if you do nothing.{" "}
+        <span className="text-02">
+          The earliest anything can execute is {stampUtc(stage.executableAt)} UTC.
+        </span>
+      </Claim>
+    )
   );
 
   return (
@@ -127,6 +139,12 @@ export function WhatIsNotHappening({ data }: { data: SlashProposalCaseDetail }) 
 
 export function WhatHappensIfYouDoNothing({ data }: { data: SlashProposalCaseDetail }) {
   const { inaction } = data;
+  /*
+    `inaction.executesAt` is Assay's off-chain promise. The on-chain record
+    can open later than that, and nothing is taken before both have passed, so
+    the sentence names the later of the two (`executionFloorOf`).
+  */
+  const executesAt = laterOf(inaction.executesAt, executionFloorOf(data.proposal.clocks));
 
   const floorSentence = inaction.fallsBelowMinimum
     ? `below your ${formatMoney(inaction.minimumRequired)} minimum. ` +
@@ -153,7 +171,7 @@ export function WhatHappensIfYouDoNothing({ data }: { data: SlashProposalCaseDet
       </PanelHeader>
       <PanelBody className="gap-3.5 px-5 py-4">
         <p className="text-body-sm leading-[1.55] text-01">
-          On {stampUtc(inaction.executesAt)} UTC the penalty is taken from stake. Your stake falls
+          On {stampUtc(executesAt)} UTC the penalty is taken from stake. Your stake falls
           to {formatMoney(inaction.stakeAfter)}, {floorSentence}
         </p>
 
@@ -167,6 +185,95 @@ export function WhatHappensIfYouDoNothing({ data }: { data: SlashProposalCaseDet
             </p>
           </div>
         ) : null}
+      </PanelBody>
+    </Panel>
+  );
+}
+
+/** The later of two ISO instants; an unparseable one loses. */
+function laterOf(a: string, b: string): string {
+  const ta = new Date(a).getTime();
+  const tb = new Date(b).getTime();
+  if (!Number.isFinite(ta)) return b;
+  if (!Number.isFinite(tb)) return a;
+  return tb > ta ? b : a;
+}
+
+function Outcome({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <li className="flex w-full flex-col gap-0.5 border-t border-01 px-5 py-3 first:border-t-0">
+      <span className="text-label-13 text-01">{title}</span>
+      <span className="text-body-13 leading-[1.55] text-02">{children}</span>
+    </li>
+  );
+}
+
+/**
+ * "What happens next", in place of "What happens if you do nothing" once the
+ * provider disputed on chain. Doing nothing is no longer the decision in
+ * front of them: the dispute is in, and the case waits on Assay's arbiter
+ * (`disputed`) or on the record's `executableAt` after an uphold (`upheld`).
+ * Every date is the on-chain record's, mirrored by the backend.
+ */
+export function WhatHappensNext({
+  data,
+  stage,
+}: {
+  data: SlashProposalCaseDetail;
+  stage: Exclude<CaseChainStage, { kind: "open" }>;
+}) {
+  const { inaction } = data;
+  return (
+    <Panel>
+      <PanelHeader>
+        <PanelTitles>
+          <PanelTitle>What happens next</PanelTitle>
+          <PanelDescription>
+            {stage.kind === "disputed"
+              ? "disputed on chain, awaiting Assay's arbiter"
+              : "your dispute was upheld by Assay's arbiter"}
+          </PanelDescription>
+        </PanelTitles>
+      </PanelHeader>
+      <PanelBody>
+        {stage.kind === "disputed" ? (
+          <ul className="flex w-full flex-col">
+            <Outcome title="Now">
+              {stage.disputedAt
+                ? `You disputed this penalty on chain on ${stampUtc(stage.disputedAt)} UTC. `
+                : "You disputed this penalty on chain. "}
+              It cannot be executed while Assay&apos;s arbiter decides. You do not need to do
+              anything else.
+            </Outcome>
+            <Outcome title="If the arbiter upholds it">
+              The penalty can be executed from its on-chain time, or from the ruling if that is
+              later, and the penalty is taken from stake: your stake falls to{" "}
+              {formatMoney(inaction.stakeAfter)}. A penalty can be disputed on chain only once, so
+              it cannot be disputed again.
+            </Outcome>
+            <Outcome title="If the arbiter cancels it">
+              The penalty is cancelled on chain and the reserved stake is released. Nothing is
+              taken.
+            </Outcome>
+            <Outcome title="If there is no ruling">
+              {stage.expiresAt
+                ? `From ${stampUtc(stage.expiresAt)} UTC, 30 days after the dispute, anyone can expire it, which releases the reserved stake.`
+                : "Thirty days after the dispute, anyone can expire it, which releases the reserved stake."}
+            </Outcome>
+          </ul>
+        ) : (
+          <ul className="flex w-full flex-col">
+            <Outcome title="The ruling">
+              {stage.disputedAt
+                ? `You disputed this penalty on chain on ${stampUtc(stage.disputedAt)} UTC, and Assay's arbiter upheld it. `
+                : "Assay's arbiter upheld your on-chain dispute. "}
+              A penalty can be disputed on chain only once, so it cannot be disputed again.
+            </Outcome>
+            <Outcome title="Next">
+              {`From ${stampUtc(stage.executableAt)} UTC anyone can execute it, and the penalty is taken from stake. Your stake falls to ${formatMoney(inaction.stakeAfter)}.`}
+            </Outcome>
+          </ul>
+        )}
       </PanelBody>
     </Panel>
   );
