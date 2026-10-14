@@ -140,15 +140,17 @@ export function pinnedAddress(deployment: StakeDeployment, contract: PinnedContr
   }
 }
 
-/** Equal as the chain reads them: addresses and hex case-insensitive, numbers by value. */
+/**
+ * Equal as the chain reads them: addresses and hex case-insensitive, numbers
+ * by value. An array argument is only ever a batch of request ids, an atomic
+ * set, so it compares in any order (but with the same count of each).
+ */
 function sameValue(left: unknown, right: unknown): boolean {
   if (Array.isArray(left) || Array.isArray(right)) {
-    return (
-      Array.isArray(left) &&
-      Array.isArray(right) &&
-      left.length === right.length &&
-      left.every((value, i) => sameValue(value, right[i]))
-    );
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    const sorted = (values: unknown[]) => values.map((value) => String(value).toLowerCase()).sort();
+    const [a, b] = [sorted(left), sorted(right)];
+    return a.every((value, i) => value === b[i]);
   }
   if (left === undefined || left === null || right === undefined || right === null) return false;
   return String(left).toLowerCase() === String(right).toLowerCase();
@@ -283,7 +285,10 @@ export function assertContractCall(
   if (decoded.functionName !== expected.functionName) {
     refuse(prefix, `the call is ${decoded.functionName}, not ${expected.functionName}`);
   }
-  if (!sameValue([...decoded.args], [...expected.args])) {
+  if (
+    decoded.args.length !== expected.args.length ||
+    decoded.args.some((value, i) => !sameValue(value, expected.args[i]))
+  ) {
     refuse(prefix, `the ${decoded.functionName} arguments are not what you chose`);
   }
   return decoded;
