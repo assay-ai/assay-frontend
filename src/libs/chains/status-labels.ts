@@ -14,26 +14,51 @@
 import { contractErrorNameInText, contractErrorText } from "./evm/contract-errors";
 
 export const DISPUTED_ON_CHAIN_LABEL = "Disputed on chain — awaiting arbiter";
-export const CANCEL_REQUESTED_LABEL = "Cancel requested — arbiter/admin to sign";
 export const DISPUTE_UNRESOLVED_LABEL = "Dispute unresolved (30 days)";
 export const PROGRAM_PAUSED_LABEL = "Contracts paused — try after unpause";
 export const ADDRESS_BLOCKED_LABEL = "Blocked on chain";
+
+/**
+ * Who signs an on-chain cancel, by chain. `chain` is a CAIP-2 chain id or a
+ * CAIP-19 asset id (only its namespace is read):
+ *
+ *  - EVM (`eip155:`): the arbiter. Assay builds `cancelSlash` for the arbiter
+ *    only (assay-evm D-19); without one the build is `CHAIN_ARBITER_NOT_SET`.
+ *  - Solana (`solana:`): the program admin, `Config.admin`.
+ *
+ * An unknown or missing chain names both rather than guess.
+ */
+export function cancelSignerOf(chain: string | null | undefined): string {
+  if (chain?.startsWith("eip155:")) return "the arbiter";
+  if (chain?.startsWith("solana:")) return "the program admin";
+  return "the arbiter (EVM) or the program admin (Solana)";
+}
+
+/** `CANCEL_REQUESTED` in words, naming who has to sign on this chain. */
+export function cancelRequestedLabel(chain: string | null | undefined): string {
+  if (chain?.startsWith("eip155:")) return "Cancel requested — arbiter to sign";
+  if (chain?.startsWith("solana:")) return "Cancel requested — program admin to sign";
+  return "Cancel requested — arbiter (EVM) or program admin (Solana) to sign";
+}
 
 /** The backend's mirror of the on-chain record, `chainStatus`, as a case reads it. */
 const CHAIN_STATUS_LABELS: Readonly<Record<string, string>> = {
   NONE: "Not on chain",
   PROPOSING: "Being proposed on chain",
   PENDING: "Pending on chain",
-  CANCEL_REQUESTED: CANCEL_REQUESTED_LABEL,
   DISPUTED: DISPUTED_ON_CHAIN_LABEL,
   EXECUTED: "Executed on chain",
   CANCELLED: "Cancelled on chain",
   REFUSED: "Refused by the chain",
 };
 
-/** `chainStatus` in words. An unknown value is printed as it came, never guessed at. */
-export function chainStatusLabel(status: string | null | undefined): string {
+/**
+ * `chainStatus` in words. An unknown value is printed as it came, never
+ * guessed at. `chain` (CAIP-2 or CAIP-19) names who signs a requested cancel.
+ */
+export function chainStatusLabel(status: string | null | undefined, chain?: string | null): string {
   if (!status) return "Not reported";
+  if (status === "CANCEL_REQUESTED") return cancelRequestedLabel(chain);
   return CHAIN_STATUS_LABELS[status] ?? status;
 }
 

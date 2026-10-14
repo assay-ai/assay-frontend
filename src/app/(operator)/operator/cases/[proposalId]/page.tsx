@@ -252,7 +252,7 @@ export default function OperatorCasePage() {
           {brief.chainStatus ? (
             <>
               <span className="text-03"> · </span>
-              on chain: <span className="font-semibold text-01">{chainStatusLabel(brief.chainStatus)}</span>
+              on chain: <span className="font-semibold text-01">{chainStatusLabel(brief.chainStatus, proposal.penaltyAmount.asset)}</span>
             </>
           ) : null}
           {disputedParts ? (
