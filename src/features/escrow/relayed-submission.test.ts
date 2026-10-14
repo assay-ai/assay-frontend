@@ -1,4 +1,3 @@
-import { encodeFunctionData, parseAbi } from "viem";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -11,6 +10,7 @@ import {
 
 import type { Signer } from "@/hooks/useSigner";
 import type { RelayedEscrowIntent } from "@/interfaces";
+import { encodeCall } from "@/libs/chains/evm/calldata-fixtures";
 import type {
   Eip155TypedDataRequest,
   UnsignedChainTransaction,
@@ -462,19 +462,15 @@ describe("a payload the buyer did not choose is refused before the wallet is ask
 
   it("sends withdraw() to the pinned escrow", async () => {
     const { signer, signAndSend } = signerSpy();
-    const data = encodeFunctionData({ abi: parseAbi(["function withdraw()"]), functionName: "withdraw" });
+    const data = encodeCall("withdraw()");
     await runEscrowAction(evmTx(ESCROW, data), signer, { kind: "WITHDRAW" });
     expect(signAndSend).toHaveBeenCalledTimes(1);
   });
 
   it("refuses a withdraw button that sends a token transfer, or withdraw() to another contract", async () => {
     const { signer, signAndSend } = signerSpy();
-    const transfer = encodeFunctionData({
-      abi: parseAbi(["function transfer(address to, uint256 amount)"]),
-      functionName: "transfer",
-      args: [ATTACKER, 10n ** 12n],
-    });
-    const withdraw = encodeFunctionData({ abi: parseAbi(["function withdraw()"]), functionName: "withdraw" });
+    const transfer = encodeCall("transfer(address,uint256)", [ATTACKER, 10n ** 12n]);
+    const withdraw = encodeCall("withdraw()");
     await expect(runEscrowAction(evmTx(USDG, transfer), signer, { kind: "WITHDRAW" })).rejects.toThrow(
       RELAYED_SUBMISSION_REFUSED,
     );

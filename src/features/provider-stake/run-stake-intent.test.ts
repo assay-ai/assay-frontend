@@ -1,4 +1,3 @@
-import { encodeFunctionData, parseAbi } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /*
@@ -49,6 +48,7 @@ import { caip2Of, runStakeIntent } from "@/features/provider-stake/run-stake-int
 import { assertChainMatches, type Signer } from "@/hooks/useSigner";
 import type { UnsignedChainTransaction } from "@/interfaces/chain-transaction";
 import type { StakeIntent } from "@/interfaces/provider-stake";
+import { encodeCall } from "@/libs/chains/evm/calldata-fixtures";
 
 /*
   The runner is two beats now — refuse a null transaction, and hand the rest to
@@ -222,7 +222,6 @@ describe("runStakeIntent on eip155", () => {
   const PROVIDER = "0x31b1DF6F36ec62075a3BE03a5C0BebB06534bA72";
   const STAKE = "0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c";
   const USDG = "0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
-  const STAKE_ABI = parseAbi(["function depositStake(uint64)", "function requestUnstake(uint64)"]);
   const DEPOSIT = { kind: "DEPOSIT" as const, amount: "50000000" };
 
   function evmDeposit(): StakeIntent {
@@ -236,7 +235,7 @@ describe("runStakeIntent on eip155", () => {
         kind: "transaction",
         from: PROVIDER,
         to: STAKE,
-        data: encodeFunctionData({ abi: STAKE_ABI, functionName: "depositStake", args: [50_000_000n] }),
+        data: encodeCall("depositStake(uint64)", [50_000_000n]),
         value: "0",
         nonce: "0",
         gasLimit: "350000",
@@ -318,7 +317,7 @@ describe("runStakeIntent on eip155", () => {
       kind: "UNSTAKE" as const,
       transaction: {
         ...deposit.transaction!,
-        data: encodeFunctionData({ abi: STAKE_ABI, functionName: "requestUnstake", args: [50_000_000n] }),
+        data: encodeCall("requestUnstake(uint64)", [50_000_000n]),
       },
     };
 
@@ -338,7 +337,7 @@ describe("runStakeIntent on eip155", () => {
       ...deposit,
       transaction: {
         ...deposit.transaction!,
-        data: encodeFunctionData({ abi: STAKE_ABI, functionName: "depositStake", args: [60_000_000n] }),
+        data: encodeCall("depositStake(uint64)", [60_000_000n]),
       },
     };
 
