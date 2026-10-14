@@ -18,7 +18,7 @@ import {
   setSessionToken,
 } from "@/libs/ApiClient";
 
-import { settleCacheForIdentity } from "./identity-cache";
+import { applyIdentityChange, isOperatorConsolePath } from "./buyer-session";
 
 /**
  * Bridges Privy's client-side auth state onto the axios session used by
@@ -54,6 +54,9 @@ import { settleCacheForIdentity } from "./identity-cache";
  *     this handler: `ApiClient` only calls it for 401, and a brand-new
  *     signup with no wallet yet must not be signed out over a condition
  *     that resolves itself within about a minute.
+ *
+ * None of (2)–(5) runs on the operator console (`/operator…`), which has its
+ * own session and must never touch the buyer one — see `buyer-session.ts`.
  *
  * Pure side effect: it always renders `children` unchanged.
  */
@@ -93,6 +96,9 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
       // Already on /login, or a redirect is already in flight from an
       // earlier 401 in the same burst: do nothing:
       if (pathnameRef.current === "/login" || redirectingRef.current) return;
+      // The operator console never calls the buyer API and must not sign its
+      // Privy login out over one; its own 401s are handled by its layout.
+      if (isOperatorConsolePath(pathnameRef.current)) return;
       redirectingRef.current = true;
 
       clearSessionToken();
@@ -106,38 +112,32 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
     });
   }, [queryClient, router, logout]);
 
+  // The operator console has its own session: on its pages the buyer login
+  // path (token write, wallet link, cache reset) does not run at all.
+  const onOperatorConsole = isOperatorConsolePath(pathname);
+
   useEffect(() => {
     if (!ready) return;
 
-    const identity = authenticated ? (user?.id ?? "authenticated") : null;
-    const previous = lastIdentityRef.current;
-    lastIdentityRef.current = identity;
-    // A signed-out page load is not a change: nothing to reset or clear.
-    if (identity === (previous ?? null)) return;
-
-    settleCacheForIdentity(queryClient, previous === undefined ? "boot" : "switch");
-    // Whose wallet was being linked is part of who was signed in.
-    resetWalletLink();
-
-    if (!authenticated) {
-      clearSessionToken();
-      return;
-    }
-
-    let cancelled = false;
-    void getAccessToken().then((token) => {
-      if (cancelled || !token) return;
-      // Requests get their token from the provider registered above; this
-      // write is for code that reads `localStorage` directly.
-      setSessionToken(token);
-      // Strictly after the token is stored: the request carries it.
-      startWalletLink();
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [ready, authenticated, user?.id, getAccessToken, queryClient]);
+    const { reacted, cancel } = applyIdentityChange(
+      {
+        onOperatorConsole,
+        authenticated,
+        identity: authenticated ? (user?.id ?? "authenticated") : null,
+        previous: lastIdentityRef.current,
+      },
+      {
+        queryClient,
+        resetWalletLink,
+        clearSessionToken,
+        getAccessToken,
+        setSessionToken,
+        startWalletLink,
+      },
+    );
+    lastIdentityRef.current = reacted;
+    return cancel;
+  }, [ready, authenticated, user?.id, getAccessToken, queryClient, onOperatorConsole]);
 
   /*
     A screen that mounted before the wallet linked is holding a failed request
