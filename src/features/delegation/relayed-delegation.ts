@@ -21,7 +21,7 @@ export interface ExpectedDomain {
   verifyingContract: string;
 }
 
-export const ESCROW_DOMAIN_NAME = "x402 Settlement";
+export const ESCROW_DOMAIN_NAME = "Assay Settlement";
 export const ESCROW_DOMAIN_VERSION = "2";
 
 /** The canonical field lists, as assay-evm `src/Types.sol` declares them. */

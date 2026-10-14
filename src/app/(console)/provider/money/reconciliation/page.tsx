@@ -60,7 +60,7 @@ import { toast } from "@/utils/toast";
  * The half of the reconciliation that lives on our side: how many calls we
  * recorded in the window, what class each fell into, and how the credited
  * classes add up to the money that left. Every row is joinable to the
- * provider's own log on `X-X402-Call-Id`, which is the CSV's first column —
+ * provider's own log on `X-Assay-Call-Id`, which is the CSV's first column —
  * so the provider can complete the join themselves with the file the button
  * hands them, which is exactly what they would upload here if there were
  * anywhere to upload it to.
@@ -330,7 +330,7 @@ export default function ReconciliationPage() {
             Reconciliation · {MONTH.format(new Date(period.from))} · all bindings
           </h1>
           <p className="font-mono text-mono-12 text-03">
-            joined on X-X402-Call-Id · the unexplained bucket must be zero, and a non-zero one is
+            joined on X-Assay-Call-Id · the unexplained bucket must be zero, and a non-zero one is
             our bug report, not your support ticket
           </p>
         </div>
@@ -457,7 +457,7 @@ export default function ReconciliationPage() {
               className="m-2.5"
               icon={null}
               title="No calls this month"
-              description="There is nothing to reconcile yet. Once a call reaches your endpoint it appears here with its class and its X-X402-Call-Id."
+              description="There is nothing to reconcile yet. Once a call reaches your endpoint it appears here with its class and its X-Assay-Call-Id."
             />
           )}
         </PanelBody>

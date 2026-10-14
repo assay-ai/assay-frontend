@@ -39,7 +39,7 @@ function setLimitsRequest(
     chainId: CHAIN,
     kind: "typed-data",
     domain: {
-      name: "x402 Settlement",
+      name: "Assay Settlement",
       version: "2",
       chainId: "46630",
       verifyingContract: "0xf04BD9909697876D8a0E1e110536F80e5Fa1dF97",

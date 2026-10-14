@@ -15,7 +15,7 @@ import type { Signer } from "@/hooks/useSigner";
 */
 const TYPED = {
   domain: {
-    name: "x402 Settlement",
+    name: "Assay Settlement",
     version: "2",
     chainId: "46630",
     verifyingContract: "0x3333333333333333333333333333333333333333",

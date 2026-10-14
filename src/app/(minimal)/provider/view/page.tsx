@@ -64,7 +64,7 @@ import { toast } from "@/utils/toast";
  *
  * A provider counts N requests in their access log and we count M. The
  * "Why our count differs from your access log" panel is the answer, and every
- * row in it is joinable to their log line by line on `X-X402-Call-Id` — the
+ * row in it is joinable to their log line by line on `X-Assay-Call-Id` — the
  * per-call CSV's first column, and the header the router puts on every upstream
  * request. That panel is the screen; the three above it are context.
  *
@@ -690,7 +690,7 @@ export default function ProviderViewPage() {
           <PanelTitles>
             <PanelTitle>Why our count differs from your access log</PanelTitle>
             <PanelDescription>
-              every upstream request carries X-X402-Call-Id · the per-call CSV carries the same id
+              every upstream request carries X-Assay-Call-Id · the per-call CSV carries the same id
               and one of these classes, so the two can be joined line by line
             </PanelDescription>
           </PanelTitles>
@@ -747,7 +747,7 @@ export default function ProviderViewPage() {
               className="m-2.5"
               icon={null}
               title="No calls this month"
-              description="Once a call reaches your endpoint it appears here with its class and its X-X402-Call-Id, and the same id is on the request we sent you."
+              description="Once a call reaches your endpoint it appears here with its class and its X-Assay-Call-Id, and the same id is on the request we sent you."
             />
           )}
         </PanelBody>

@@ -42,14 +42,14 @@ const STEPS = [
 
 /** The same endpoint `/connect` prints (`NEXT_PUBLIC_MCP_URL`) — never a sample host. */
 function configFor(token: string): string {
-  return `"x402": {
+  return `"assay": {
   "url": "${mcpEndpointUrl()}",
   "headers": { "Authorization": "Bearer ${token}" }
 }
 // This key does not expire. Revoke or rotate it at any time under Agents.`;
 }
 
-const SAMPLE_CONFIG = configFor("x402_sk_live_a91f4c2e…");
+const SAMPLE_CONFIG = configFor("assay_sk_live_a91f4c2e…");
 
 function Stepper({ current }: { current: number }) {
   return (
