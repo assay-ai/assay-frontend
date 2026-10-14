@@ -200,3 +200,42 @@ export function closedSentence(stage: ClosedStage, when: (iso: string) => string
     : "";
   return `${base[stage.outcome]}${standing} There is no deadline and nothing for you to do.`;
 }
+
+/**
+ * Whether the case's dispute is the on-chain one (EVM): the provider sends
+ * `disputeSlash` from its own stake wallet and Assay's arbiter rules on chain.
+ * There is no in-app objection, extension or platform deadline for it. An
+ * older backend that does not say is read as on chain.
+ */
+export function disputesOnChain(clocks: SlashProposalClocks): boolean {
+  return clocks.disputeOnChain !== false;
+}
+
+/** The one deadline to dispute on chain: the record's `executableAt`. Null when none stands. */
+export function disputeDeadlineOf(clocks: SlashProposalClocks): string | null {
+  return clocks.disputeBy ?? clocks.chainExecutableAt ?? null;
+}
+
+/**
+ * Whether the provider can still dispute on chain: the case is `PROPOSED`, its
+ * record stands `PENDING` and was never disputed, and its door has not opened.
+ */
+export function mayDisputeOnChain(proposal: SlashProposalSummary, stage: CaseStage, nowMs: number): boolean {
+  if (!disputesOnChain(proposal.clocks) || stage.kind !== "open" || proposal.status !== "PROPOSED") return false;
+  if (proposal.clocks.chainStatus !== "PENDING" || proposal.clocks.chainDisputedAt) return false;
+  const by = disputeDeadlineOf(proposal.clocks);
+  const byMs = by ? new Date(by).getTime() : Number.NaN;
+  return Number.isFinite(byMs) && byMs > nowMs;
+}
+
+/** The penalties-on-chain page, with this case's records selected for the dispute. */
+export function onChainDisputeHref(proposalId: string): string {
+  return `/provider/capital/penalties?case=${encodeURIComponent(proposalId)}`;
+}
+
+/** The plain rule, said everywhere a provider can dispute. `when` formats a timestamp. */
+export function onChainDisputeSentence(deadline: string | null, when: (iso: string) => string): string {
+  return deadline
+    ? `Disputing freezes the penalty on chain until the arbiter decides; you must dispute before ${when(deadline)} UTC.`
+    : "Disputing freezes the penalty on chain until the arbiter decides; you can dispute once its record is on chain, and you must dispute before the time the record can execute.";
+}
