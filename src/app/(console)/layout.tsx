@@ -98,7 +98,7 @@ function titleFor(pathname: string): string {
   const match = Object.keys(TITLES)
     .filter((href) => href !== "/provider" && pathname.startsWith(href))
     .sort((a, b) => b.length - a.length)[0];
-  return match ? TITLES[match] : "GoAssay.AI";
+  return match ? TITLES[match] : "Assay";
 }
 
 /**
