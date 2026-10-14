@@ -53,8 +53,10 @@ In the repository settings, create two environments, `develop` and
 | Secret   | `CLOUDFLARE_API_TOKEN`     | the token from step 2                           |
 | Secret   | `CLOUDFLARE_ACCOUNT_ID`    | the Cloudflare account id                       |
 
-`NEXT_PUBLIC_*` values are inlined into the JavaScript every visitor
-downloads, so they are Variables, not Secrets. Changing one takes effect on the
+The workflow reads each value from the environment's Variables first and its
+Secrets second, so either tab works. `NEXT_PUBLIC_*` values are inlined into
+the JavaScript every visitor downloads, so they need no secrecy; as Variables
+they stay readable in the run logs, as Secrets they are masked there. Changing one takes effect on the
 next deploy, not before: re-run the workflow (it has a manual
 `workflow_dispatch` trigger) after editing them.
 
