@@ -24,10 +24,12 @@ import {
   approverRolesFor,
   approveBlockedBecause,
   approvedResultSentence,
+  decisionText,
   describeApproval,
   isOwnRequest,
   rejectMode,
   showApprove,
+  statusWord,
   type ApprovalContext,
 } from "@/features/operator/approvals";
 import { useOperatorSession } from "@/features/operator/session-context";
@@ -219,7 +221,7 @@ function ApprovalsInbox() {
           >
             <option value="">All decided</option>
             <option value="APPROVED">Approved</option>
-            <option value="REJECTED">Rejected</option>
+            <option value="REJECTED">Rejected or withdrawn</option>
             <option value="EXPIRED">Expired</option>
           </Select>
         </div>
@@ -322,7 +324,7 @@ function ApprovalCard({
         <PanelTitles>
           <PanelTitle>{actionLabel(row.action)}</PanelTitle>
           <PanelDescription>
-            {row.code} · {row.action} · {row.status.toLowerCase()}
+            {row.code} · {row.action} · {statusWord(row)}
           </PanelDescription>
         </PanelTitles>
       </PanelHeader>
@@ -353,10 +355,7 @@ function ApprovalCard({
             <>
               <dt className="text-label-13 text-02">Decided</dt>
               <dd className="text-01">
-                {row.approvedBy ? `approved by ${row.approvedBy}` : null}
-                {row.rejectedBy ? `rejected by ${row.rejectedBy}` : null}
-                {!row.approvedBy && !row.rejectedBy ? row.status.toLowerCase() : null} ·{" "}
-                {when(row.decidedAt ?? row.expiresAt)}
+                {decisionText(row)} · {when(row.decidedAt ?? row.expiresAt)}
               </dd>
             </>
           )}
