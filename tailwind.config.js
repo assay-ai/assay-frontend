@@ -50,6 +50,7 @@ module.exports = {
         "03": "var(--text-03)",
         inverse: "var(--text-inverse)",
         "on-color": "var(--text-on-color)",
+        "on-primary": "var(--text-on-primary)",
       },
 
       // Accent ramps — available to bg/text/border alike.

@@ -181,7 +181,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
                   {item.label}
                   {item.href === "/operator/approvals" && badge ? (
                     <span
-                      className="rounded-full bg-primary-500 px-1.5 font-mono text-mono-12 text-on-color"
+                      className="rounded-full bg-primary-400 px-1.5 font-mono text-mono-12 text-on-primary"
                       aria-label={`${badge} pending`}
                     >
                       {badge}

@@ -104,7 +104,7 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
           <a
             href={listToolHref}
             onClick={onListToolClick}
-            className="flex items-center gap-[7px] rounded-md bg-primary-500 px-[14px] py-[9px] text-label-sm font-sans text-on-color shadow-hair hover:bg-primary-600"
+            className="flex items-center gap-[7px] rounded-md bg-primary-400 px-[14px] py-[9px] text-label-sm font-sans text-on-primary shadow-hair hover:bg-primary-300"
           >
             <Plus className="h-[15px] w-[15px]" />
             List a tool
