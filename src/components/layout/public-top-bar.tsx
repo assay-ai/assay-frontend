@@ -5,6 +5,8 @@ import * as React from "react";
 
 import { cn } from "@/utils";
 
+import { ThemeToggle } from "./theme-toggle";
+
 /**
  * Public Top Bar: 60px tall,
  * `$bg-01` fill, 1px `$border-01` bottom hairline. This is the marketing
@@ -94,6 +96,7 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-2.5 py-[10px] tablet:py-0">
+          <ThemeToggle />
           <a
             href={signInHref}
             onClick={onSignInClick}

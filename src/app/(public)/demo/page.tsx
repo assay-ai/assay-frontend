@@ -300,7 +300,7 @@ function CallCard(props: {
           <Button
             onClick={props.onRun}
             disabled={state.running}
-            className={`shrink-0 ${teal ? "bg-teal-600 hover:bg-teal-600/90" : ""}`}
+            className={`shrink-0 ${teal ? "bg-teal-600 text-on-color hover:bg-teal-600/90 dark:text-on-primary" : ""}`}
           >
             <Play className="mr-2 h-4 w-4" />
             {state.running ? "Running…" : "Run"}

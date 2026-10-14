@@ -7,6 +7,7 @@ import * as React from "react";
 import { Toaster } from "sonner";
 
 import { AlertFill, CheckCircle } from "@/components/icons";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Tag } from "@/components/ui/tag";
 import { pendingBadge } from "@/features/operator/approvals";
@@ -24,6 +25,7 @@ import {
   type OperatorSessionRecord,
 } from "@/libs/operator-session";
 import { getOperatorIdentity, listApprovals, logoutOperator } from "@/services/operator.service";
+import { useTheme } from "@/providers/ThemeProvider";
 
 /**
  * The operator console shell.
@@ -65,6 +67,7 @@ const CONSOLE_NAV: readonly { href: string; label: string }[] = [
 const PENDING_PAGE = 100;
 
 export default function OperatorLayout({ children }: { children: React.ReactNode }) {
+  const { themeType } = useTheme();
   const queryClient = useQueryClient();
   const pathname = usePathname();
 
@@ -192,6 +195,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
             })}
           </nav>
 
+          <ThemeToggle />
           <Button type="button" variant="secondary" size="sm" onClick={() => void signOut()}>
             Sign out
           </Button>
@@ -211,6 +215,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
       </main>
 
       <Toaster
+        theme={themeType}
         position="top-center"
         icons={{
           success: <CheckCircle className="mt-2 text-xl" />,

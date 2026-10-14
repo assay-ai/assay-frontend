@@ -1,6 +1,7 @@
 import "@/styles/index.scss";
-import { Funnel_Sans, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import type { Chain } from "@/interfaces/chain";
+import { THEME_STORAGE_KEY } from "@/providers/theme-storage";
 
 import { Providers } from "../providers";
 
@@ -34,10 +35,13 @@ async function fetchChains(): Promise<readonly Chain[]> {
   }
 }
 
-const funnelSans = Funnel_Sans({
+// Inter, as on the landing page, so the two read as one product.
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-funnel-sans",
+  variable: "--font-inter",
 });
+
+const THEME_SCRIPT = `try{var t=localStorage.getItem("${THEME_STORAGE_KEY}");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.setAttribute("data-theme",t)}catch(e){}`;
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
@@ -60,20 +64,18 @@ export default async function RootLayout({
     <html
       lang="en"
       data-theme="light"
-      className={`${funnelSans.variable} ${jetbrainsMono.variable}`}
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
+      // The pre-paint script below may change data-theme before hydration.
+      suppressHydrationWarning
     >
       <head>
         {/*
-          The app serves LIGHT ONLY (see `LOCKED_THEME` in ThemeProvider), so
-          <html> carries "light" and there is no pre-paint script: nothing can
-          disagree with the attribute, and a stored "dark" from before the lock
-          is ignored rather than read.
-
-          When the lock lifts, this is also where the flash-prevention script
-          comes back — the choice lives in localStorage and React cannot read
-          it until after hydration, so without a script the first paint of
-          every navigation uses the wrong theme.
+          Pre-paint theme. The choice lives in localStorage (see ThemeProvider)
+          and React cannot read it until after hydration, so without this the
+          first paint of every navigation would use the wrong theme. A stored
+          choice wins; otherwise the system setting decides.
         */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <title>GoAssay.AI</title>
         <link rel="icon" href="/images/favicon.png" sizes="any" />
         <link rel="apple-touch-icon" href="/images/apple-touch-icon.png" />
@@ -120,7 +122,7 @@ export default async function RootLayout({
         />
         <meta name="version" content={process.env.buildId || "unknown"} />
       </head>
-      <body className={funnelSans.className}>
+      <body className={inter.className}>
         <Providers chains={chains}>{children}</Providers>
       </body>
     </html>

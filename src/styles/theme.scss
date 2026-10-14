@@ -7,13 +7,17 @@
  * Token names are kept VERBATIM from the design file. Do not rename them to
  * match a component's needs; rename the component.
  *
- * Themed tokens (backgrounds, borders, text, shadows, chart-6) resolve through
- * the `mode` axis the design declares: light is the `:root` default, dark is
- * `[data-theme='dark']`. Every other token is mode-independent by design — the
- * accent ramps are chosen to hold contrast on both grounds.
+ * Themed tokens resolve through the `mode` axis: light is the `:root` default,
+ * dark is `[data-theme='dark']`. Backgrounds, borders, text, shadows and chart-6
+ * are themed, and so are the accent steps used as TEXT (600/700, and the whole
+ * primary ramp): the light values are dark shades that fall to ~2.5:1 on the
+ * dark ground, so dark swaps in the ramp's lighter steps. Steps used as fills
+ * (500 and the 10/20 tints) are mode-independent.
  */
 
 :root {
+  color-scheme: light;
+
   /* Background */
   --bg-01: #ffffff;
   --bg-02: #f7f6f1;
@@ -146,11 +150,13 @@
   --radius-full: 999px;
 
   /* Type */
-  --font-sans: var(--font-funnel-sans), "Funnel Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
+
   --bg-01: #1c180d;
   --bg-02: #211d14;
   --bg-03: #26221a;
@@ -172,4 +178,23 @@
   --shadow-soft: #00000059;
 
   --chart-6: #5c5949;
+
+  /* Primary on dark is the landing's own use of lime: marks, borders, rings
+   * and text are lime itself, tints are lime washes. */
+  --primary-5: #ccff020a;
+  --primary-10: #ccff0214;
+  --primary-20: #ccff022e;
+  --primary-500: #ccff02;
+  --primary-600: #d8ff3a;
+  --primary-700: #e3ff6e;
+
+  /* Text steps of the other ramps, lifted to their 300/400 values (≥ 5.9:1). */
+  --success-600: #35be90;
+  --success-700: #7bd9b6;
+  --danger-600: #ee6e6e;
+  --danger-700: #f6a9a9;
+  --warning-600: #f5a524;
+  --warning-700: #fbd38d;
+  --info-600: #38bdf8;
+  --teal-600: #34d3c4;
 }

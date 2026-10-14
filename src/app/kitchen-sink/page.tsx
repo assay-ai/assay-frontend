@@ -58,7 +58,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Timeline, type TimelineEvent } from "@/components/ui/timeline";
 import { WindowGauge } from "@/components/ui/window-gauge";
 
-import { AgentSwitcher, type AgentEnvironment } from "@/components/layout/agent-switcher";
 import { BottomTabBar } from "@/components/layout/bottom-tab-bar";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
 import { PublicTopBar } from "@/components/layout/public-top-bar";
@@ -308,12 +307,6 @@ const codeSampleB = `{
   }
 }`;
 
-const customEnvironments: AgentEnvironment[] = [
-  { id: "prod", label: "prod", status: "success" },
-  { id: "canary", label: "canary", status: "danger" },
-  { id: "shadow", label: "shadow", status: "neutral" },
-];
-
 const sidebarBindings: SidebarBindingItem[] = [
   { id: "search_web", label: "search_web", status: "live", href: "#" },
   { id: "get_token_price", label: "get_token_price", status: "live", href: "#" },
@@ -352,8 +345,6 @@ const cardRowFiguresB: CardRowFigure[] = [
 export default function KitchenSinkPage() {
   const [theme, setTheme] = React.useState<"light" | "dark">("light");
   const [expandedRows, setExpandedRows] = React.useState<string[]>(["search_web"]);
-  const [environment, setEnvironment] = React.useState("prod");
-  const [customEnv, setCustomEnv] = React.useState("canary");
   const [sliderValue, setSliderValue] = React.useState(220);
   const [activeTab, setActiveTab] = React.useState("overview");
 
@@ -835,8 +826,6 @@ export default function KitchenSinkPage() {
             <TopBar
               className="min-w-[900px]"
               activeNavId="spend"
-              environment={environment}
-              onEnvironmentChange={setEnvironment}
               alertCount={3}
               onAlertsClick={() => {}}
               avatarName="Agent Prod"
@@ -846,9 +835,6 @@ export default function KitchenSinkPage() {
             <TopBar
               className="min-w-[900px]"
               activeNavId="guarantee"
-              environments={customEnvironments}
-              environment={customEnv}
-              onEnvironmentChange={setCustomEnv}
               alertCount={0}
               avatarName="QA Runner"
               search={<Search placeholder="Receipt, ULID, tool or tx…" wrapperClassName="hidden w-[240px] desktop:flex" />}
@@ -870,11 +856,6 @@ export default function KitchenSinkPage() {
               accountHref="#"
               className="h-[420px]"
             />
-          </Spec>
-
-          <Spec name="agent-switcher · default / custom environments">
-            <AgentSwitcher value={environment} onValueChange={setEnvironment} />
-            <AgentSwitcher environments={customEnvironments} value={customEnv} onValueChange={setCustomEnv} />
           </Spec>
 
           <Spec name="alert-badge · zero / default / overflow">

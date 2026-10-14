@@ -6,14 +6,12 @@ import { AlertBadge } from "@/components/ui/alert-badge";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/utils";
 
-import { AgentSwitcher, type AgentEnvironment } from "./agent-switcher";
 import { BUYER_NAV_ITEMS, type NavTier } from "./nav-config";
 
 /**
  * Top Bar: 56px tall, `$bg-01` fill, 1px `$border-01` bottom hairline.
  *
- * Composes three other layout components (Agent Switcher, Alert
- * Badge, Avatar) plus a local, unexported search-field shell that stands in
+ * Composes two other layout components (Alert Badge, Avatar) plus a local, unexported search-field shell that stands in
  * for the design's `Search` component. Top Bar exposes a `search` slot:
  * pass the real Search component and this fallback is not rendered.
  *
@@ -67,9 +65,6 @@ export interface TopBarProps extends React.HTMLAttributes<HTMLElement> {
   activeNavId?: string;
   /** Rendered as an <a>; consumer supplies routing (Next Link, etc.) via `linkAs`. */
   linkAs?: React.ElementType;
-  environments?: AgentEnvironment[];
-  environment: string;
-  onEnvironmentChange?: (id: string) => void;
   alertCount: number;
   onAlertsClick?: () => void;
   avatarName?: string;
@@ -102,9 +97,6 @@ const TopBar = React.forwardRef<HTMLElement, TopBarProps>(
       navItems = DEFAULT_NAV_ITEMS,
       activeNavId,
       linkAs: LinkComponent = "a",
-      environments,
-      environment,
-      onEnvironmentChange,
       alertCount,
       onAlertsClick,
       avatarName = "",
@@ -194,7 +186,6 @@ const TopBar = React.forwardRef<HTMLElement, TopBarProps>(
         </nav>
 
         <div className="flex shrink-0 items-center gap-2.5">
-          <AgentSwitcher environments={environments} value={environment} onValueChange={onEnvironmentChange} />
           {search ?? <DefaultSearchField placeholder={searchPlaceholder} />}
           <AlertBadge count={alertCount} onClick={onAlertsClick} />
           {avatar ?? <Avatar name={avatarName} src={avatarSrc} size="md" />}

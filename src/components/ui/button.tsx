@@ -23,8 +23,8 @@ const buttonVariants = cva(
         secondary:
           "border border-02 bg-01 text-01 hover:bg-02 active:bg-03",
         ghost: "bg-transparent text-02 hover:bg-02 active:bg-03",
-        danger: "bg-danger-500 text-on-color hover:bg-danger-600 active:bg-danger-700",
-        success: "bg-success-500 text-on-color hover:bg-success-600 active:bg-success-700",
+        danger: "bg-danger-500 text-on-color hover:brightness-95 active:brightness-90",
+        success: "bg-success-500 text-on-color hover:brightness-95 active:brightness-90",
       },
       size: {
         default: "gap-[7px] px-3.5 py-[9px] text-label-sm [&_svg]:size-[15px]",

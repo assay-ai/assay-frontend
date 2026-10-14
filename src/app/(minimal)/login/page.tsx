@@ -25,18 +25,15 @@ import { startReadyTimeout } from "./ready-timeout";
  *
  * ## Layout
  *
- * Two panes from `tablet` (834) up: a `$bg-inverse` brand pane carrying the
+ * Two panes from `tablet` (834) up: a dark-scoped `$bg-02` brand pane carrying the
  * proposition, and a `$bg-01` form pane carrying the single action. Below
  * `tablet` the brand pane is dropped entirely — its content is marketing, and
  * stacking it above the form on a phone puts the one control the screen exists
  * for below the fold.
  *
- * The dark pane's surfaces are `$overlay-light-10` fills with **no borders**:
- * the border ramp (`$border-01..03`) is a light-ground ramp and every step of
- * it reads as a bright line on `$bg-inverse`. Text on that pane is
- * `$text-inverse` and `$text-03` only — `$text-02` (#58616e) sits at ~3:1
- * against #0b0d10 and fails contrast for body copy, which is why it appears
- * nowhere here.
+ * The brand pane carries `data-theme="dark"`, so every token inside it
+ * resolves to the dark (landing) palette in both app themes: `$text-01` and
+ * `$text-03` on `$bg-02`, `$overlay-light-10` fills for its surfaces.
  *
  * ## Route group
  *
@@ -107,12 +104,17 @@ export default function LoginPage() {
     <div className="flex min-h-full w-full flex-1 flex-col tablet:flex-row">
       {/* Brand pane — marketing only, so it is dropped below tablet rather
           than stacked above the form. */}
-      <aside className="hidden flex-col justify-between gap-10 bg-inverse px-10 py-11 tablet:flex tablet:w-[46%] tablet:max-w-[560px] desktop:px-14">
-        <BrandLockup className="flex items-center gap-2 text-inverse" />
+      {/* Always the landing's dark ground, whatever the app theme: the
+          pane scopes the dark tokens to itself. */}
+      <aside
+        data-theme="dark"
+        className="hidden flex-col justify-between gap-10 border-r border-01 bg-02 px-10 py-11 tablet:flex tablet:w-[46%] tablet:max-w-[560px] desktop:px-14"
+      >
+        <BrandLockup className="flex items-center gap-2 text-01" />
 
         <div className="flex flex-col gap-7">
           <div className="flex flex-col gap-3.5">
-            <h2 className="max-w-[420px] text-heading-lg text-inverse desktop:text-display-md">
+            <h2 className="max-w-[420px] text-heading-lg text-01 desktop:text-display-md">
               {"You don't pay for results you can't use."}
             </h2>
             <p className="max-w-[420px] text-body-sm text-03">
@@ -128,11 +130,11 @@ export default function LoginPage() {
           <div className="flex max-w-[420px] flex-col gap-2.5 rounded-xl bg-overlay-light px-5 py-[18px]">
             <div className="flex items-center justify-between gap-4">
               <span className="text-body-13 text-03">Listed price</span>
-              <span className="text-mono-13 font-mono font-semibold text-inverse">$0.0100</span>
+              <span className="text-mono-13 font-mono font-semibold text-01">$0.0100</span>
             </div>
             <div className="flex items-center justify-between gap-4">
               <span className="text-body-13 text-03">You paid</span>
-              <span className="text-mono-13 font-mono font-semibold text-inverse">$0.0000</span>
+              <span className="text-mono-13 font-mono font-semibold text-01">$0.0000</span>
             </div>
             <div className="flex items-center justify-between gap-4 pt-2.5">
               <span className="text-label-13 text-teal-400">Not charged</span>
@@ -147,10 +149,10 @@ export default function LoginPage() {
             return (
               <li key={point.title} className="flex items-start gap-3">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-overlay-light">
-                  <Icon aria-hidden="true" className="h-[15px] w-[15px] text-inverse" />
+                  <Icon aria-hidden="true" className="h-[15px] w-[15px] text-01" />
                 </span>
                 <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-label-13 text-inverse">{point.title}</span>
+                  <span className="text-label-13 text-01">{point.title}</span>
                   <span className="text-body-xs text-03">{point.detail}</span>
                 </span>
               </li>
