@@ -278,9 +278,17 @@ export function createArbiterRulingIntent(body: ArbiterRulingBody): Promise<Slas
   return operatorApi.post<SlashContractCall>("/operator/arbiter/ruling-intent", body);
 }
 
-/** `POST /operator/arbiter/block-intent` — `A-11`, `ADJL`, `SRE` or `TRE`. The arbiter's unsigned `setBlocked(account, true)`. */
-export function createArbiterBlockIntent(body: ArbiterBlockBody): Promise<SlashContractCall> {
-  return operatorApi.post<SlashContractCall>("/operator/arbiter/block-intent", body);
+/**
+ * `POST /operator/arbiter/block-intent` — `A-11`, `ADJL`, `SRE` or `TRE`. The
+ * arbiter's unsigned `setBlocked(account, true)`. Two-person: answered 202, and
+ * the approver gets the unsigned call as the approval's result.
+ */
+export async function createArbiterBlockIntent(
+  body: ArbiterBlockBody,
+): Promise<TwoPersonAnswer<SlashContractCall>> {
+  return toTwoPersonAnswer(
+    await operatorApi.postWithStatus<SlashContractCall | ApprovalQueued>("/operator/arbiter/block-intent", body),
+  );
 }
 
 // ── The operator directory (`OPS_ADMIN` writes) ─────────────────────────────
@@ -301,7 +309,10 @@ export async function addOperator(
   );
 }
 
-/** `PATCH /operator/operators/:id` — `A-13`. Lowering: 200, applied. Adding a role or raising the limit: 202. */
+/**
+ * `PATCH /operator/operators/:id` — `A-13`. Lowering: 200, applied. Adding a
+ * role, raising the limit or taking `OPS_ADMIN` away: 202.
+ */
 export async function changeOperator(
   operatorId: string, body: ChangeOperatorBody,
 ): Promise<TwoPersonAnswer<OperatorDirectoryEntry>> {
@@ -312,12 +323,17 @@ export async function changeOperator(
   );
 }
 
-/** `POST /operator/operators/:id/remove` — `A-14`, single-person; ends every session they hold. */
-export function removeOperator(
+/**
+ * `POST /operator/operators/:id/remove` — `A-14`; ends every session they
+ * hold. Single-person, except removing an `OPS_ADMIN`: answered 202.
+ */
+export async function removeOperator(
   operatorId: string, body: RemoveOperatorBody,
-): Promise<OperatorDirectoryEntry> {
-  return operatorApi.post<OperatorDirectoryEntry>(
-    `/operator/operators/${encodeURIComponent(operatorId)}/remove`, body,
+): Promise<TwoPersonAnswer<OperatorDirectoryEntry>> {
+  return toTwoPersonAnswer(
+    await operatorApi.postWithStatus<OperatorDirectoryEntry | ApprovalQueued>(
+      `/operator/operators/${encodeURIComponent(operatorId)}/remove`, body,
+    ),
   );
 }
 

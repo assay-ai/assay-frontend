@@ -33,7 +33,9 @@ import {
   type ApprovalContext,
 } from "@/features/operator/approvals";
 import { useOperatorSession } from "@/features/operator/session-context";
+import { ContractCallPanel } from "@/features/operator/contract-call-panel";
 import type { OperatorApproval, OperatorApprovalStatus } from "@/interfaces/operator";
+import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
 import {
   approveApproval,
@@ -71,6 +73,8 @@ interface Outcome {
   readonly tone: "success" | "error";
   readonly text: string;
   readonly result?: unknown;
+  /** The approved request, for a result that still needs a wallet (the arbiter's block). */
+  readonly approval?: OperatorApproval;
 }
 
 function ApprovalsInbox() {
@@ -148,7 +152,7 @@ function ApprovalsInbox() {
     mutationFn: (row: OperatorApproval) => approveApproval(row.id),
     onSuccess: (decision, row) => {
       const text = approvedResultSentence(row.action, decision.result);
-      setOutcome({ approvalId: row.id, tone: "success", text, result: decision.result });
+      setOutcome({ approvalId: row.id, tone: "success", text, result: decision.result, approval: row });
       toast.success(text);
       invalidate();
       // The action changed whatever it was about.
@@ -417,6 +421,7 @@ function ApprovalCard({
 }
 
 function OutcomeBox({ outcome }: { outcome: Outcome }) {
+  const arbiterBlock = arbiterBlockOf(outcome);
   return (
     <div
       role={outcome.tone === "error" ? "alert" : "status"}
@@ -428,11 +433,30 @@ function OutcomeBox({ outcome }: { outcome: Outcome }) {
       <p className={cn("text-body-13", outcome.tone === "error" ? "text-danger-600" : "text-01")}>
         {outcome.text}
       </p>
-      {outcome.result !== undefined ? (
+      {arbiterBlock ? (
+        /* A-11: the approval's result is the arbiter's unsigned setBlocked; its wallet signs here. */
+        <ContractCallPanel
+          call={arbiterBlock.call}
+          expected={{ contract: "config", functionName: "setBlocked", args: [arbiterBlock.account, true] }}
+          title="The arbiter's unsigned block"
+          afterSend="The indexer counts it in the blocked addresses once it lands."
+        />
+      ) : outcome.result !== undefined ? (
         <CodeBlock title="Result" code={JSON.stringify(outcome.result, null, 2)} />
       ) : null}
     </div>
   );
+}
+
+/** The approved arbiter block's unsigned call and the address it blocks, when that is the outcome. */
+function arbiterBlockOf(outcome: Outcome): { call: SlashContractCall; account: string } | null {
+  if (outcome.tone !== "success" || outcome.approval?.action !== "arbiter.block") return null;
+  const account = outcome.approval.payload.account;
+  const call = outcome.result as Partial<SlashContractCall> | undefined;
+  if (typeof account !== "string" || !call || typeof call.to !== "string" || typeof call.data !== "string") {
+    return null;
+  }
+  return { call: call as SlashContractCall, account };
 }
 
 export default function ApprovalsPage() {

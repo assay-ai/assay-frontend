@@ -30,7 +30,7 @@ export function QueuedNotice({
         Sent for approval (id <span className="font-mono text-mono-12">{approval.approvalId}</span>)
       </p>
       <p className="text-body-xs text-02">
-        Nothing has happened yet. A second operator must approve it in the approvals inbox before
+        Waiting for a second operator&apos;s approval. Nothing has happened yet. A second operator must approve it in the approvals inbox before
         it runs. It expires at {when(approval.expiresAt)} if nobody does.
       </p>
       <span className="flex flex-wrap items-center gap-3">
