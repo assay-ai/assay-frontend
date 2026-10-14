@@ -323,7 +323,8 @@ export function SlashRowCard({
           <span className="font-mono">{money(row.reserved)}</span>
         </Fact>
         <Fact label="Applied">
-          <span className="font-mono">{row.applied === null ? "Not taken" : money(row.applied)}</span>
+          {/* All or wait (assay-evm 9f036a3): an executed penalty takes exactly its reservation. */}
+          <span className="font-mono">{row.applied === null ? "Not taken yet" : money(row.applied)}</span>
         </Fact>
         <Fact label="Beneficiary">
           <span className="inline-flex min-w-0 items-center gap-1.5">

@@ -46,7 +46,6 @@ export type SlashIdRefusalReason =
   | "SlashNotPending"
   | "DisputeWindowClosed"
   | "SlashNotDisputed"
-  | "ArbiterIsVerifier"
   | "DisputeTimedOut"
   | "SlashAlreadyDisputed";
 

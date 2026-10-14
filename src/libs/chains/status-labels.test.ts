@@ -78,7 +78,7 @@ describe("chain refusals", () => {
     expect(
       describeChainRefusal({ code: "SLASH_EXECUTION_FAILED", message: "executeSlash reverts SlashWindowNotDrained" }),
     ).toBe(
-      "Waiting for the daily cap to free up: a rolling slash window would cut this payment, so the chain holds it until the window drains. The penalty stays pending; try again later. · SLASH_EXECUTION_FAILED · executeSlash reverts SlashWindowNotDrained",
+      "Waiting until today's penalty limit has room; it will be paid in full. The penalty stays pending until then. · SLASH_EXECUTION_FAILED · executeSlash reverts SlashWindowNotDrained",
     );
     expect(describeChainRefusal({ code: "X", message: "setBlocked reverts ArbiterCannotUnblock" })).toMatch(
       /^The arbiter can only block\./,
