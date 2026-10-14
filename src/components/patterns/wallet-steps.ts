@@ -1,0 +1,125 @@
+/**
+ * The logic behind `<SignAction>`, with no React in it: run an ordered list of
+ * wallet steps, report progress, and stop cleanly on the first refusal.
+ *
+ * Kept generic on purpose — a step is a label, a cost badge and a promise.
+ * Nothing here knows about chains, transactions or Privy; a caller wraps its
+ * own `signAndSend` in `run()`.
+ */
+
+export type WalletStepCost = "free" | "gas";
+
+export interface WalletStepResult {
+  /** A link to the transaction on an explorer, when there is one. */
+  explorerUrl?: string;
+  /** Anything the caller wants to hand to the next step. */
+  data?: unknown;
+}
+
+export interface WalletStep {
+  id: string;
+  /** What the person approves, in their words: "Approve USDG", "Deposit $20". */
+  label: string;
+  /** "free" for a signature only, "gas" when the person pays a network fee. */
+  cost: WalletStepCost;
+  /**
+   * Opens the wallet and resolves when this step is done. Receives what the
+   * earlier steps returned. Throw (or reject) to stop the sequence.
+   */
+  run: (context: { results: readonly (WalletStepResult | undefined)[] }) => Promise<WalletStepResult | void>;
+}
+
+export type StepStatus = "upcoming" | "active" | "done" | "declined" | "failed";
+
+export type WalletRunState =
+  | { phase: "idle"; results: (WalletStepResult | undefined)[] }
+  | { phase: "running"; index: number; results: (WalletStepResult | undefined)[] }
+  | { phase: "declined"; index: number; results: (WalletStepResult | undefined)[] }
+  | { phase: "failed"; index: number; error: unknown; results: (WalletStepResult | undefined)[] }
+  | { phase: "success"; results: (WalletStepResult | undefined)[] };
+
+export const IDLE: WalletRunState = { phase: "idle", results: [] };
+
+/**
+ * Whether an error is the person saying no in their wallet, as opposed to
+ * something breaking. Covers EIP-1193 (`4001`), viem's
+ * `UserRejectedRequestError`, Solana wallet adapters and Privy's wording.
+ * Walks `cause`, because viem wraps the provider error.
+ */
+export function isUserRejection(error: unknown, depth = 0): boolean {
+  if (!error || typeof error !== "object" || depth > 5) return false;
+  const e = error as { code?: unknown; name?: unknown; message?: unknown; cause?: unknown; shortMessage?: unknown };
+  if (e.code === 4001 || e.code === "ACTION_REJECTED" || e.code === "user_rejected") return true;
+  if (typeof e.name === "string" && /UserRejected|WalletSignTransactionError|user.?cancel/i.test(e.name)) return true;
+  const text = [e.message, e.shortMessage].filter((v) => typeof v === "string").join(" ");
+  if (/user (rejected|denied|declined|cancell?ed)|rejected the request|request (was )?rejected|declined by user|user_cancelled|closed the modal/i.test(text)) {
+    return true;
+  }
+  return isUserRejection(e.cause, depth + 1);
+}
+
+/** Per-step status for the tracker, from the run state. */
+export function stepStatuses(count: number, state: WalletRunState): StepStatus[] {
+  return Array.from({ length: count }, (_, i): StepStatus => {
+    if (state.phase === "success") return "done";
+    if (state.phase === "idle") return state.results[i] !== undefined ? "done" : "upcoming";
+    if (i < state.index) return "done";
+    if (i > state.index) return "upcoming";
+    if (state.phase === "running") return "active";
+    return state.phase === "declined" ? "declined" : "failed";
+  });
+}
+
+/**
+ * Runs `steps` from `startAt`, calling `onChange` on every transition, and
+ * returns the final state. A retry passes the previous state's `index` as
+ * `startAt` and its `results`, so steps that already went through are not
+ * signed twice.
+ */
+export async function runWalletSteps(
+  steps: readonly WalletStep[],
+  options: {
+    startAt?: number;
+    results?: (WalletStepResult | undefined)[];
+    onChange?: (state: WalletRunState) => void;
+    isRejection?: (error: unknown) => boolean;
+  } = {},
+): Promise<WalletRunState> {
+  const { startAt = 0, onChange, isRejection = isUserRejection } = options;
+  const results = [...(options.results ?? [])].slice(0, startAt);
+
+  for (let index = startAt; index < steps.length; index++) {
+    onChange?.({ phase: "running", index, results: [...results] });
+    try {
+      const result = await steps[index]!.run({ results: [...results] });
+      results[index] = result ?? {};
+    } catch (error) {
+      const state: WalletRunState = isRejection(error)
+        ? { phase: "declined", index, results: [...results] }
+        : { phase: "failed", index, error, results: [...results] };
+      onChange?.(state);
+      return state;
+    }
+  }
+
+  const done: WalletRunState = { phase: "success", results: [...results] };
+  onChange?.(done);
+  return done;
+}
+
+/** The last explorer link any step returned — the one a success screen links to. */
+export function lastExplorerUrl(results: readonly (WalletStepResult | undefined)[]): string | undefined {
+  for (let i = results.length - 1; i >= 0; i--) {
+    const url = results[i]?.explorerUrl;
+    if (url) return url;
+  }
+  return undefined;
+}
+
+/** "Signature 1 of 2" — the tracker headline. Single-step flows get no counter. */
+export function trackerHeadline(count: number, state: WalletRunState, noun = "Signature"): string | null {
+  if (count <= 1) return null;
+  if (state.phase === "success") return `${count} of ${count} done`;
+  const index = state.phase === "idle" ? 0 : state.index;
+  return `${noun} ${index + 1} of ${count}`;
+}
