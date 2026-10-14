@@ -1,12 +1,39 @@
 import type { CursorPage } from "@/interfaces/api";
+import type { SlashContractCall } from "@/interfaces/slash-dispute";
+import { toTwoPersonAnswer, type TwoPersonAnswer } from "@/features/operator/two-person";
 import type {
-  AdjudicationQueueRow, CancelIntent, CompensationIntent, DecideCaseBody,
-  ExtendDeadlineBody, FleetSweep, ListQueueQuery, OpenFleetSweepBody,
-  OperatorCaseBrief, OperatorIdentity, PlatformHealth, RecordCompensationBody,
-  SecondSignatureBody, SuspendProposalBody,
+  AccountBlock, AddOperatorBody, AdjudicationQueueRow, ApprovalDecision, ApprovalQueued,
+  ArbiterBlockBody, ArbiterDispute, ArbiterRulingBody, ArbiterTerms, CancelIntent,
+  ChangeOperatorBody, CreateAccountBlockBody, ListAccountBlocksQuery, ListOverrideLogQuery,
+  OperatorApproval, OperatorApprovalStatus, OperatorChallenge, OperatorDirectoryEntry,
+  OperatorSignIn, OperatorStatus, OverrideLogEntry, RemoveOperatorBody, UnblockAccountBody,
+  CompensationIntent, DecideCaseBody, ExtendDeadlineBody, FleetSweep, ListQueueQuery,
+  OpenFleetSweepBody, OperatorCaseBrief, OperatorIdentity, PlatformHealth,
+  RecordCompensationBody, SecondSignatureBody, SuspendProposalBody,
 } from "@/interfaces/operator";
 
 import { operatorApi } from "./operator-api";
+
+// ── Wallet sign-in ──────────────────────────────────────────────────────────
+
+/** `POST /operator/auth/challenge` — the EIP-4361 message for this wallet to sign. */
+export function requestOperatorChallenge(address: string): Promise<OperatorChallenge> {
+  return operatorApi.post<OperatorChallenge>("/operator/auth/challenge", { address });
+}
+
+/**
+ * `POST /operator/auth/verify`. 401 `OPERATOR_CREDENTIAL_INVALID`, 403
+ * `OPERATOR_NOT_AUTHORIZED` (signed correctly, not an active operator), 429
+ * `OPERATOR_AUTH_RATE_LIMITED`.
+ */
+export function verifyOperatorSignature(body: { message: string; signature: string }): Promise<OperatorSignIn> {
+  return operatorApi.post<OperatorSignIn>("/operator/auth/verify", body);
+}
+
+/** `POST /operator/auth/logout` — revokes the session in the Authorization header (204). */
+export async function logoutOperator(): Promise<void> {
+  await operatorApi.post<unknown>("/operator/auth/logout");
+}
 
 /**
  * The operator console's API surface.
@@ -80,10 +107,18 @@ export function secondCase(proposalId: string, body: SecondSignatureBody): Promi
   );
 }
 
-/** `POST /operator/cases/:id/suspend`. `ADJ`, `ADJL` or `SRE`. Legal wherever `CANCELLED` is reachable. */
-export function suspendCase(proposalId: string, body: SuspendProposalBody): Promise<unknown> {
-  return operatorApi.post<unknown>(
-    `/operator/cases/${encodeURIComponent(proposalId)}/suspend`, body,
+/**
+ * `POST /operator/cases/:id/suspend`. `ADJ`, `ADJL` or `SRE`. Legal wherever `CANCELLED` is reachable.
+ * From `AWAITING_SECOND` and `UPHELD` it is two-person (`S-1`): answered 202
+ * and run once a second operator approves it.
+ */
+export async function suspendCase(
+  proposalId: string, body: SuspendProposalBody,
+): Promise<TwoPersonAnswer<unknown>> {
+  return toTwoPersonAnswer(
+    await operatorApi.postWithStatus<unknown>(
+      `/operator/cases/${encodeURIComponent(proposalId)}/suspend`, body,
+    ),
   );
 }
 
@@ -97,18 +132,16 @@ export function extendCaseDeadline(
 }
 
 /**
- * `POST /operator/cases/:id/sweep`. `ADJL`, plus a second operator.
- *
- * `approverToken` is another operator's own bearer token, sent as
- * `X-Operator-Approver`. The same token in both positions is refused as
- * `OPERATOR_SELF_APPROVAL_REFUSED` — checked before any status check.
+ * `POST /operator/cases/:id/sweep`. `ADJL`, plus a second operator (`S-11`):
+ * answered 202 and opened once an `ADJ` or `ADJL` operator approves it.
  */
-export function openFleetSweep(
-  proposalId: string, body: OpenFleetSweepBody, approverToken: string,
-): Promise<FleetSweep> {
-  return operatorApi.post<FleetSweep>(
-    `/operator/cases/${encodeURIComponent(proposalId)}/sweep`, body,
-    { "X-Operator-Approver": approverToken },
+export async function openFleetSweep(
+  proposalId: string, body: OpenFleetSweepBody,
+): Promise<TwoPersonAnswer<FleetSweep>> {
+  return toTwoPersonAnswer(
+    await operatorApi.postWithStatus<FleetSweep | ApprovalQueued>(
+      `/operator/cases/${encodeURIComponent(proposalId)}/sweep`, body,
+    ),
   );
 }
 
@@ -122,7 +155,7 @@ export function openFleetSweep(
  * the identity of who must sign them, and nothing has happened on chain when
  * this resolves.
  *
- * **This route takes no second operator's token** — it is `@OverrideExempt`.
+ * **This route needs no second operator** — it is `@OverrideExempt`.
  * Building bytes nobody has signed changes nothing, so there is nothing for a
  * maker/checker pair to guard. The two-person control sits on `compensated`
  * below, which is the step that writes to the case and the override register.
@@ -145,18 +178,19 @@ export function createCompensationIntent(proposalId: string): Promise<Compensati
  * believed. A 409 means the slash was never executed, or was already
  * compensated.
  *
- * The chain signature and the operator token answer different questions and
+ * The chain signature and the second operator answer different questions and
  * neither substitutes for the other: the multisig's signature says the money
- * moved, the approver's token says two of our people agreed to close the case
- * on the strength of it. Self-approval is refused before the status is looked
- * at, exactly as on `sweep`.
+ * moved, the approval says two of our people agreed to close the case on the
+ * strength of it. Answered 202 and recorded once an `ADJL` or `TRE` operator
+ * approves it.
  */
-export function recordCompensation(
-  proposalId: string, body: RecordCompensationBody, approverToken: string,
-): Promise<unknown> {
-  return operatorApi.post<unknown>(
-    `/operator/cases/${encodeURIComponent(proposalId)}/compensated`, body,
-    { "X-Operator-Approver": approverToken },
+export async function recordCompensation(
+  proposalId: string, body: RecordCompensationBody,
+): Promise<TwoPersonAnswer<unknown>> {
+  return toTwoPersonAnswer(
+    await operatorApi.postWithStatus<unknown>(
+      `/operator/cases/${encodeURIComponent(proposalId)}/compensated`, body,
+    ),
   );
 }
 
@@ -172,5 +206,140 @@ export function recordCompensation(
 export function createCancelIntent(proposalId: string): Promise<CancelIntent> {
   return operatorApi.post<CancelIntent>(
     `/operator/cases/${encodeURIComponent(proposalId)}/cancel-intent`,
+  );
+}
+
+/**
+ * `GET /operator/blocks` — the account blocklist, newest first. Any operator.
+ *
+ * A wallet `subject` filter matches the way enforcement does, on any chain of
+ * its namespace. An unparseable subject is `400 OPERATOR_BLOCK_SUBJECT_INVALID`.
+ */
+export function listAccountBlocks(
+  query: ListAccountBlocksQuery = {},
+): Promise<CursorPage<AccountBlock>> {
+  return operatorApi.get<CursorPage<AccountBlock>>(
+    "/operator/blocks",
+    query as Record<string, unknown>,
+  );
+}
+
+/**
+ * `POST /operator/blocks` — override `A-9`. `ADJL` or `SRE`, single person.
+ * One standing block per subject: a second is `409 OPERATOR_BLOCK_ALREADY_ACTIVE`.
+ */
+export function createAccountBlock(body: CreateAccountBlockBody): Promise<AccountBlock> {
+  return operatorApi.post<AccountBlock>("/operator/blocks", body);
+}
+
+/**
+ * `POST /operator/blocks/:id/unblock` — override `A-10`. `ADJL` or `SRE`, plus
+ * a second operator holding `ADJL`: answered 202 and lifted once approved.
+ */
+export async function unblockAccount(
+  blockId: string, body: UnblockAccountBody,
+): Promise<TwoPersonAnswer<AccountBlock>> {
+  return toTwoPersonAnswer(
+    await operatorApi.postWithStatus<AccountBlock | ApprovalQueued>(
+      `/operator/blocks/${encodeURIComponent(blockId)}/unblock`, body,
+    ),
+  );
+}
+
+/** `GET /operator/override-log` — every manual intervention, newest first. Any operator. */
+export function listOverrideLog(
+  query: ListOverrideLogQuery = {},
+): Promise<CursorPage<OverrideLogEntry>> {
+  return operatorApi.get<CursorPage<OverrideLogEntry>>(
+    "/operator/override-log",
+    query as Record<string, unknown>,
+  );
+}
+
+// ── D-19 · The arbiter page ─────────────────────────────────────────────────
+
+/** `GET /operator/arbiter/terms?chainId=` — read live from the chain. Any operator. */
+export function getArbiterTerms(chainId: string): Promise<ArbiterTerms> {
+  return operatorApi.get<ArbiterTerms>(`/operator/arbiter/terms?chainId=${encodeURIComponent(chainId)}`);
+}
+
+/** `GET /operator/arbiter/disputes` — every record disputed on chain, oldest dispute first. */
+export async function listArbiterDisputes(): Promise<ArbiterDispute[]> {
+  const page = await operatorApi.get<{ items: ArbiterDispute[] }>("/operator/arbiter/disputes");
+  return page.items;
+}
+
+/**
+ * `POST /operator/arbiter/ruling-intent` — `S-13`, `ADJL` or `TRE`. The
+ * arbiter's unsigned `upholdSlashBatch` or `cancelSlashBatch` over 1 to 64
+ * records. Builds and logs; the case moves when the arbiter's transaction lands.
+ */
+export function createArbiterRulingIntent(body: ArbiterRulingBody): Promise<SlashContractCall> {
+  return operatorApi.post<SlashContractCall>("/operator/arbiter/ruling-intent", body);
+}
+
+/** `POST /operator/arbiter/block-intent` — `A-11`, `ADJL`, `SRE` or `TRE`. The arbiter's unsigned `setBlocked(account, true)`. */
+export function createArbiterBlockIntent(body: ArbiterBlockBody): Promise<SlashContractCall> {
+  return operatorApi.post<SlashContractCall>("/operator/arbiter/block-intent", body);
+}
+
+// ── The operator directory (`OPS_ADMIN` writes) ─────────────────────────────
+
+/** `GET /operator/operators[?status=]` — newest first. Any operator may read. */
+export function listOperators(
+  query: { status?: OperatorStatus; cursor?: string; limit?: number } = {},
+): Promise<CursorPage<OperatorDirectoryEntry>> {
+  return operatorApi.get<CursorPage<OperatorDirectoryEntry>>("/operator/operators", query);
+}
+
+/** `POST /operator/operators` — `A-12`, always two-person: answered 202. */
+export async function addOperator(
+  body: AddOperatorBody,
+): Promise<TwoPersonAnswer<OperatorDirectoryEntry>> {
+  return toTwoPersonAnswer(
+    await operatorApi.postWithStatus<OperatorDirectoryEntry | ApprovalQueued>("/operator/operators", body),
+  );
+}
+
+/** `PATCH /operator/operators/:id` — `A-13`. Lowering: 200, applied. Adding a role or raising the limit: 202. */
+export async function changeOperator(
+  operatorId: string, body: ChangeOperatorBody,
+): Promise<TwoPersonAnswer<OperatorDirectoryEntry>> {
+  return toTwoPersonAnswer(
+    await operatorApi.patchWithStatus<OperatorDirectoryEntry | ApprovalQueued>(
+      `/operator/operators/${encodeURIComponent(operatorId)}`, body,
+    ),
+  );
+}
+
+/** `POST /operator/operators/:id/remove` — `A-14`, single-person; ends every session they hold. */
+export function removeOperator(
+  operatorId: string, body: RemoveOperatorBody,
+): Promise<OperatorDirectoryEntry> {
+  return operatorApi.post<OperatorDirectoryEntry>(
+    `/operator/operators/${encodeURIComponent(operatorId)}/remove`, body,
+  );
+}
+
+// ── Two-person approvals ────────────────────────────────────────────────────
+
+/** `GET /operator/approvals[?status=]` — newest first. Any operator. */
+export function listApprovals(
+  query: { status?: OperatorApprovalStatus; cursor?: string; limit?: number } = {},
+): Promise<CursorPage<OperatorApproval>> {
+  return operatorApi.get<CursorPage<OperatorApproval>>("/operator/approvals", query);
+}
+
+/** `POST /operator/approvals/:id/approve` — by a different operator; re-runs the action now. */
+export function approveApproval(approvalId: string): Promise<ApprovalDecision> {
+  return operatorApi.post<ApprovalDecision>(
+    `/operator/approvals/${encodeURIComponent(approvalId)}/approve`,
+  );
+}
+
+/** `POST /operator/approvals/:id/reject` — by an eligible approver, or by the requester to withdraw. */
+export function rejectApproval(approvalId: string): Promise<ApprovalDecision> {
+  return operatorApi.post<ApprovalDecision>(
+    `/operator/approvals/${encodeURIComponent(approvalId)}/reject`,
   );
 }

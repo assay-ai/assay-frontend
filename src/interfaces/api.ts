@@ -30,6 +30,13 @@ export interface ApiErrorBody {
     statusCode: number;
     path: string;
     timestamp: string;
+    /**
+     * Structured detail, when a refusal carries one. Not sent by the current
+     * backend (`AllExceptionsFilter` keeps `AppError.context` off the wire), so
+     * every reader falls back to `message`; kept so a backend that starts
+     * sending it is read without a release.
+     */
+    context?: Record<string, unknown>;
   };
 }
 

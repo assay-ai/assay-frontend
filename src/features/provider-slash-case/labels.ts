@@ -103,14 +103,15 @@ export function presentArithmeticRow(
   }
 
   if (row.key === "per_window_cap") {
-    // The server sends a sentence where a figure would go: the cap is applied
-    // when the penalty is taken, so there is no capped amount to show yet.
+    // The server sends a sentence where a figure would go. Since assay-evm
+    // 9f036a3 the window never cuts a payment: a penalty that does not fit
+    // waits, and is then paid in full.
     return {
       label,
       value: DASH,
       note:
         row.note ??
-        "A cap per window is applied when the penalty is taken, so the amount finally taken may be lower.",
+        "A daily penalty limit applies on chain. A penalty never pays less because of it: when the limit has no room, the penalty waits until it has, and is then paid in full.",
     };
   }
 
@@ -138,7 +139,9 @@ const EVENT_LABEL: Record<string, string> = {
   SWEEP_APPLIED: "Cancelled after a wider review",
   CHAIN_PROPOSED: "Stake reserved",
   CHAIN_PROPOSAL_ADOPTED: "Stake reserved",
-  CHAIN_CANCEL_REQUESTED: "Reservation release requested",
+  CHAIN_CANCEL_REQUESTED: "Cancel requested — arbiter/admin to sign",
+  CHAIN_DISPUTED: "Disputed on chain — awaiting arbiter",
+  CHAIN_UPHELD: "Upheld on chain by the arbiter",
   CHAIN_CANCELLED: "Reservation released",
   CHAIN_VOIDED: "Reservation released",
   EXECUTED: "Penalty taken",

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/panel";
 import { Table, type TableColumn, type TableRowData } from "@/components/ui/table";
 import { DASH, count, percent } from "@/features/g34a/stats";
+import { SlashHoldsPanel } from "@/features/operator/slash-holds-panel";
 import { caseBadgeVariant } from "@/features/operator/state";
 import { remaining } from "@/features/provider-slash-case/status-header";
 import type { AdjudicationQueueRow } from "@/interfaces/operator";
@@ -277,6 +278,10 @@ export default function AdjudicationQueuePage() {
           ) : null}
         </PanelBody>
       </Panel>
+
+      {healthQuery.isError ? null : (
+        <SlashHoldsPanel holds={health?.slashHolds} loading={healthQuery.isLoading} />
+      )}
 
       <Panel className="w-full">
         <PanelHeader>

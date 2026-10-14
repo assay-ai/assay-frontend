@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, FolderOpen, Scale, X } from "lucide-react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import * as React from "react";
 
@@ -18,9 +19,12 @@ import {
 import { count, stampUtc } from "@/features/g34a/stats";
 import { DisputeFilingForm } from "@/features/provider-disputes/dispute-filing-form";
 import {
+  CaseClosed,
   WhatHappensIfYouDoNothing,
+  WhatHappensNext,
   WhatIsNotHappening,
 } from "@/features/provider-slash-case/assurances";
+import { caseStageOf, mayAcknowledge } from "@/features/provider-slash-case/chain-stage";
 import { CaseContext } from "@/features/provider-slash-case/context";
 import { eventLabel, eventSummary } from "@/features/provider-slash-case/labels";
 import { Measurement } from "@/features/provider-slash-case/measurement";
@@ -156,39 +160,22 @@ export default function SlashProposalCasePage() {
   }
 
   const { proposal } = data;
-  const canDispute = DISPUTABLE.includes(proposal.status) && proposal.disputeId === null;
   const events = withAcknowledgedEvent(timelineQuery.data?.events ?? [], proposal);
 
   /*
-    ONE instant, deliberately. There are two execution deadlines behind this
-    case — the platform's `earliestExecutionAt` and, once the backend mirrors it, the
-    chain's own `chainExecutableAt` — and they are not the same moment, because
-    the on-chain proposal is made after delivery stamps the response window. A
-    provider has no action keyed to the chain clock, and two dates minutes apart
-    would only invite planning against the earlier one.
-
-    So this takes the LATER of the two. `chainExecutableAt` is absent until the
-    backend mirrors it, and `NEGATIVE_INFINITY` is the sentinel that makes an absent chain
-    clock lose the comparison rather than win it — as does an unparseable one,
-    since every comparison against `NaN` is false. The consequence is the one
-    that matters: this date can only ever overstate the wait, never understate
-    it. Nothing is taken from stake before both deadlines have passed.
-
-    The winner is carried as the original string rather than re-serialised, so
-    an unparseable value reaches `stampUtc` and renders as a dash, exactly as it
-    would anywhere else on this screen, instead of throwing on `toISOString`.
-
-    Not a `useMemo` — this component returns early above, so a hook here would
-    change hook order between renders. It is two `Date` parses.
+    ONE instant to plan against, deliberately: the LATER of the platform's
+    `earliestExecutionAt` and the chain's own `chainExecutableAt`
+    (`executionFloorOf`, which can only overstate the wait). Once the provider
+    disputed on chain the record cannot be executed at all until the arbiter
+    rules, and after an uphold the record's own time is the one that binds —
+    so the stage decides what the screen says (`chain-stage.ts`). A closed
+    case (cancelled or expired on chain, executed, overturned, compensated,
+    waived) has no deadline, no execution ahead and no action left.
   */
-  const offChainExecutionMs = new Date(proposal.clocks.earliestExecutionAt).getTime();
-  const onChainExecutionMs = proposal.clocks.chainExecutableAt
-    ? new Date(proposal.clocks.chainExecutableAt).getTime()
-    : Number.NEGATIVE_INFINITY;
-  const nothingBeforeAt =
-    onChainExecutionMs > offChainExecutionMs && proposal.clocks.chainExecutableAt
-      ? proposal.clocks.chainExecutableAt
-      : proposal.clocks.earliestExecutionAt;
+  const stage = caseStageOf(proposal);
+  /* Disputed on chain or upheld after it: a record is disputed at most once. */
+  const canDispute =
+    DISPUTABLE.includes(proposal.status) && proposal.disputeId === null && stage.kind === "open";
 
   return (
     <>
@@ -206,20 +193,66 @@ export default function SlashProposalCasePage() {
       <StatusHeader data={data} />
 
       {/* ── The one deadline that binds your stake ────────────────────── */}
-      <p className="text-body-13 leading-[1.55] text-02">
-        Nothing can be taken from your stake before{" "}
-        <span className="font-mono text-mono-13 font-semibold text-01">
-          {stampUtc(nothingBeforeAt)} UTC
-        </span>
-        . Every deadline this case runs on has passed by then, so this is the date to plan
-        against — the wait can be longer than it, never shorter.
+      {stage.kind === "closed" ? null : stage.kind === "disputed" ? (
+        <p className="text-body-13 leading-[1.55] text-02">
+          You disputed this penalty on chain. Nothing can be taken from your stake while the
+          dispute stands: it waits for Assay&apos;s arbiter to rule
+          {stage.expiresAt ? (
+            <>
+              {", and unruled it can be expired from "}
+              <span className="font-mono text-mono-13 font-semibold text-01">
+                {stampUtc(stage.expiresAt)} UTC
+              </span>
+            </>
+          ) : null}
+          .
+        </p>
+      ) : stage.kind === "upheld" ? (
+        <p className="text-body-13 leading-[1.55] text-02">
+          Assay&apos;s arbiter upheld your on-chain dispute. The penalty can be executed from{" "}
+          <span className="font-mono text-mono-13 font-semibold text-01">
+            {stampUtc(stage.executableAt)} UTC
+          </span>
+          , and it cannot be disputed again.
+        </p>
+      ) : (
+        <p className="text-body-13 leading-[1.55] text-02">
+          Nothing can be taken from your stake before{" "}
+          <span className="font-mono text-mono-13 font-semibold text-01">
+            {stampUtc(stage.executableAt)} UTC
+          </span>
+          . Every deadline this case runs on has passed by then, so this is the date to plan
+          against — the wait can be longer than it, never shorter.
+          {stage.disputedParts > 0
+            ? ` ${stage.disputedParts === 1 ? "One part" : `${stage.disputedParts} parts`} of this case ${stage.disputedParts === 1 ? "is" : "are"} disputed on chain and cannot execute until the arbiter rules; the other parts are not affected.`
+            : null}
+        </p>
+      )}
+
+      {/* The independent check: the same penalty, read from the chain and not from us. */}
+      <p className="text-body-13 text-02">
+        This page is Assay&apos;s account of the case.{" "}
+        <Link href="/provider/capital/penalties" className="underline">
+          Check the penalties on chain
+        </Link>{" "}
+        to see what the stake contract itself holds against your stake.
       </p>
 
       {/* ── The two panels the frame puts before the arithmetic ───────── */}
       <div className="flex w-full flex-col gap-5 tablet:flex-row tablet:items-start">
         <div className="flex w-full min-w-0 flex-1 flex-col gap-5">
-          <WhatIsNotHappening data={data} />
-          <WhatHappensIfYouDoNothing data={data} />
+          {stage.kind === "closed" ? (
+            <CaseClosed stage={stage} />
+          ) : (
+            <>
+              <WhatIsNotHappening data={data} />
+              {stage.kind === "open" ? (
+                <WhatHappensIfYouDoNothing data={data} />
+              ) : (
+                <WhatHappensNext data={data} stage={stage} />
+              )}
+            </>
+          )}
         </div>
         <div className="w-full min-w-0 flex-1">
           <CaseContext data={data} />
@@ -242,7 +275,7 @@ export default function SlashProposalCasePage() {
           </p>
         </div>
 
-        {proposal.clocks.acknowledgedAt === null ? (
+        {mayAcknowledge(proposal, stage) ? (
           <Button
             variant="secondary"
             icon={<Check aria-hidden="true" />}

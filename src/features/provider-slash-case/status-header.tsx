@@ -4,7 +4,16 @@ import * as React from "react";
 
 import { DASH, stampUtc } from "@/features/g34a/stats";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
+import { caseChainStatusLabel } from "@/libs/chains/status-labels";
 import { formatMoney } from "@/utils/money";
+
+import {
+  CLOSED_HEADLINE,
+  TERMINAL_CASE_STATUSES,
+  caseStageOf,
+  respondByApplies,
+  type CaseStage,
+} from "./chain-stage";
 
 /**
  * `dObK1`'s status header — the pill, the two identities, both delivery
@@ -31,7 +40,16 @@ import { formatMoney } from "@/utils/money";
  * `secondsRemaining` counts down whichever clock is running and is `null` when
  * none is; `runningClock` names which. Both come from the server, so the
  * remaining time on this screen and the remaining time in the adjudication
- * queue cannot disagree.
+ * queue cannot disagree. The countdown is drawn under "Respond by" only while
+ * the PROVIDER clock is the one running — after a dispute the server counts
+ * down Assay's decision deadline, which is not the provider's.
+ *
+ * ## Once the chain is involved
+ *
+ * A case disputed on chain, or upheld after that dispute, is no longer
+ * waiting on the provider and no longer executes at the off-chain promise.
+ * The second figure then says what it is waiting for (the arbiter, or the
+ * upheld ruling) and the third reads the on-chain record (`chain-stage.ts`).
  */
 
 const STATUS_COPY: Record<string, { label: string; tone: "danger" | "primary" | "success" }> = {
@@ -99,16 +117,140 @@ function Figure({
   );
 }
 
+interface FigureCopy {
+  label: string;
+  value: string;
+  caption: string;
+  tone?: "danger";
+}
+
+/** The second figure: the provider's deadline while it binds, else what the case waits on. */
+export function waitingFigure(data: SlashProposalCaseDetail, stage: CaseStage): FigureCopy {
+  const { proposal } = data;
+  const clocks = proposal.clocks;
+  if (stage.kind === "closed") {
+    return {
+      label: "Case",
+      value: "Closed",
+      caption: `${CLOSED_HEADLINE[stage.outcome].toLowerCase()}; no deadline runs and there is nothing for you to do`,
+    };
+  }
+  if (stage.kind === "disputed") {
+    return {
+      label: "Awaiting Assay's arbiter",
+      value: stage.expiresAt ? `${stampUtc(stage.expiresAt)} UTC` : DASH,
+      caption: stage.disputedAt
+        ? `disputed on chain ${stampUtc(stage.disputedAt)} UTC; if the arbiter has not ruled by then, it can be expired and your stake released`
+        : "disputed on chain; unruled after 30 days, it can be expired and your stake released",
+    };
+  }
+  if (stage.kind === "upheld") {
+    return {
+      label: "Dispute",
+      value: "Upheld",
+      caption: stage.disputedAt
+        ? `you disputed on chain ${stampUtc(stage.disputedAt)} UTC and Assay's arbiter upheld it; a penalty can be disputed on chain only once`
+        : "Assay's arbiter upheld your on-chain dispute; a penalty can be disputed on chain only once",
+      tone: "danger",
+    };
+  }
+  const respondBy = clocks.respondByAt;
+  if (!respondBy) {
+    return {
+      label: "Respond by",
+      value: DASH,
+      caption:
+        "your clock starts when the notification is delivered, and delivery is not confirmed yet",
+    };
+  }
+  if (!respondByApplies(proposal, stage)) {
+    return {
+      label: "Respond by",
+      value: `${stampUtc(respondBy)} UTC`,
+      caption: proposal.disputeId
+        ? "your dispute is filed, so this deadline no longer applies"
+        : "this deadline no longer applies to the case as it stands",
+    };
+  }
+  const left = clocks.runningClock === "PROVIDER" ? remaining(clocks.secondsRemaining) : null;
+  return {
+    label: "Respond by",
+    value: `${stampUtc(respondBy)} UTC`,
+    caption: left ?? "the response window has closed",
+    tone: clocks.runningClock === "PROVIDER" ? "danger" : undefined,
+  };
+}
+
+/** The third figure: when stake can be taken, read from the on-chain record once there is one. */
+export function executesFigure(stage: CaseStage): FigureCopy {
+  if (stage.kind === "closed") {
+    if (stage.outcome === "executed" || stage.outcome === "compensated") {
+      return {
+        label: "Executed",
+        value: stage.executedAt ? `${stampUtc(stage.executedAt)} UTC` : DASH,
+        caption:
+          stage.outcome === "compensated"
+            ? "taken from stake, then deposited back by Assay"
+            : "taken from stake; nothing more will be",
+      };
+    }
+    return { label: "Execution", value: "None", caption: "nothing will be taken from your stake" };
+  }
+  if (stage.kind === "disputed") {
+    return {
+      label: "Executes",
+      value: "Not while disputed",
+      caption: "the on-chain record cannot be executed until the arbiter rules",
+    };
+  }
+  if (stage.kind === "upheld") {
+    return {
+      label: "Can be executed from",
+      value: `${stampUtc(stage.executableAt)} UTC`,
+      caption: "the on-chain record's own time; from then anyone can execute it",
+      tone: "danger",
+    };
+  }
+  return {
+    label: "Executes",
+    value: `${stampUtc(stage.executableAt)} UTC`,
+    caption: "never before that deadline, even if you do nothing",
+  };
+}
+
+/**
+ * The pill follows the on-chain state where it is further along than the
+ * case status: an upheld record reads UPHELD although the case still says
+ * DISPUTED, and a record executed or released on chain reads EXECUTED or
+ * CANCELLED although the case status has not caught up.
+ */
+export function statusChipOf(
+  proposalStatus: string,
+  stage: CaseStage,
+): { label: string; tone: "danger" | "primary" | "success" } {
+  const ownStatus = STATUS_COPY[proposalStatus] ?? {
+    label: proposalStatus.replace(/_/g, " "),
+    tone: "primary" as const,
+  };
+  if (stage.kind === "upheld") return STATUS_COPY.UPHELD;
+  if (stage.kind === "closed" && !TERMINAL_CASE_STATUSES.includes(proposalStatus)) {
+    if (stage.outcome === "executed") return STATUS_COPY.EXECUTED;
+    return STATUS_COPY.CANCELLED;
+  }
+  return ownStatus;
+}
+
 export function StatusHeader({ data }: { data: SlashProposalCaseDetail }) {
   const { proposal } = data;
   const clocks = proposal.clocks;
-  const status = STATUS_COPY[proposal.status] ?? {
-    label: proposal.status.replace(/_/g, " "),
-    tone: "primary" as const,
-  };
-
-  const respondBy = clocks.respondByAt;
-  const left = remaining(clocks.secondsRemaining);
+  const stage = caseStageOf(proposal);
+  const status = statusChipOf(proposal.status, stage);
+  const waiting = waitingFigure(data, stage);
+  const executes = executesFigure(stage);
+  const onChain =
+    clocks.chainStatus && clocks.chainStatus !== "NONE"
+      ? caseChainStatusLabel(clocks, proposal.penaltyAmount.asset)
+      : null;
 
   return (
     <section className="flex w-full flex-col gap-5 rounded-xl border border-01 bg-01 p-4 shadow-soft tablet:px-5 tablet:py-[18px]">
@@ -119,6 +261,11 @@ export function StatusHeader({ data }: { data: SlashProposalCaseDetail }) {
         >
           {status.label}
         </span>
+        {onChain ? (
+          <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-03 px-[9px] py-1 text-label-13 text-02">
+            {`On chain: ${onChain}`}
+          </span>
+        ) : null}
         <p className="min-w-0 flex-1 truncate font-mono text-mono-sm font-semibold text-01">
           {proposal.toolName}
           {proposal.windowLabel ? (
@@ -149,21 +296,8 @@ export function StatusHeader({ data }: { data: SlashProposalCaseDetail }) {
           value={formatMoney(proposal.penaltyAmount)}
           caption="taken from stake, not from earnings already paid"
         />
-        <Figure
-          label="Respond by"
-          value={respondBy ? `${stampUtc(respondBy)} UTC` : DASH}
-          caption={
-            respondBy
-              ? (left ?? "the response window has closed")
-              : "your clock starts when the notification is delivered, and delivery is not confirmed yet"
-          }
-          tone={respondBy && clocks.runningClock === "PROVIDER" ? "danger" : undefined}
-        />
-        <Figure
-          label="Executes"
-          value={`${stampUtc(clocks.earliestExecutionAt)} UTC`}
-          caption="never before that deadline, even if you do nothing"
-        />
+        <Figure {...waiting} />
+        <Figure {...executes} />
       </div>
     </section>
   );

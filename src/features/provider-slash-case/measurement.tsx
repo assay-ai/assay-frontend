@@ -162,9 +162,10 @@ export function Measurement({ data }: { data: SlashProposalCaseDetail }) {
             {(10_000 - SLASH_AGENT_BPS - SLASH_PLATFORM_BPS) / 100}% is not paid
             to anyone — it is never taken out of your stake, so a proposal of{" "}
             {formatMoney(data.proposal.penaltyAmount)} reduces your stake by{" "}
-            {formatMoney(split.taken)}. This is the split if the proposal is
-            applied in full; the per-window ceiling and the daily cap are
-            applied on chain, and what is finally taken may be less.
+            {formatMoney(split.taken)}. This is the split of the proposal as
+            made. On chain the amount reserved for a penalty is what it takes,
+            always in full: when today&rsquo;s penalty limit has no room, the
+            penalty waits until it has, and is then paid in full.
           </p>
           <p className="text-body-xs leading-[1.55] text-02">
             Split as published on {SLASH_SPLIT_SOURCE.readAt}. These

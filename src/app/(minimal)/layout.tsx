@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 
 import { MinimalBar } from "@/components/layout/minimal-bar";
+import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
 
 /**
  * The sidebar-less provider shell — the design's 56px "Bar", extracted into
@@ -83,6 +84,8 @@ export default function MinimalLayout({ children }: { children: React.ReactNode 
             : "flex w-full flex-1 flex-col gap-4 px-[26px] py-[22px]"
         }
       >
+        {/* Not on /login: no session there, and the status read would 401. */}
+        {!isLogin && <AccountBlockBanner wrapperClassName="w-full" />}
         {children}
       </main>
     </div>

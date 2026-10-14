@@ -902,6 +902,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         callsServed: TRAFFIC_TOTAL,
         upheldSlashes: 0,
       },
+      slashHolds: [],
     }),
   },
   {

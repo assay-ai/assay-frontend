@@ -7,6 +7,7 @@ import { evmChainsFrom, setEvmRpcUrls } from "@/libs/chains/evm/chains";
 import { solanaDevnetRpc } from "@/libs/chains/solana/rpc";
 import { demoEnabled } from "@/libs/demo/demo-api";
 
+import { AccountBlockBridge } from "@/features/account-block/account-block-bridge";
 import { PrivySessionBridge } from "@/providers/PrivySessionBridge";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -203,7 +204,9 @@ export function Providers({ children, chains = [] }: ProvidersProps) {
             },
           }}
         >
-          <PrivySessionBridge>{children}</PrivySessionBridge>
+          <PrivySessionBridge>
+            <AccountBlockBridge>{children}</AccountBlockBridge>
+          </PrivySessionBridge>
         </PrivyProvider>
       </ThemeProvider>
     </QueryClientProvider>

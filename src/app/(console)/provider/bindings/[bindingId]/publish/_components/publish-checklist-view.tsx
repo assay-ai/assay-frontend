@@ -31,6 +31,7 @@ import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
 import { labelForEndpoint } from "@/utils/provider-label";
+import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 
 /**
  * Publish checklist.
@@ -226,6 +227,8 @@ function stakeSentence(
 /** The rail labels a binding by its endpoint host; the page header agrees. */
 
 export function PublishChecklistView({ bindingId }: { bindingId: string }) {
+  // Blocked by Assay: the main write action is disabled (the API refuses it anyway).
+  const readOnly = useAccountReadOnly();
   const queryClient = useQueryClient();
 
   const binding = useQuery({
@@ -317,7 +320,7 @@ export function PublishChecklistView({ bindingId }: { bindingId: string }) {
         <div className="flex shrink-0 items-center gap-2.5">
           <Button
             icon={<Rocket aria-hidden="true" />}
-            disabled={!publishable || isLive || publish.isPending}
+            disabled={readOnly || !publishable || isLive || publish.isPending}
             loading={publish.isPending}
             onClick={() => publish.mutate()}
           >

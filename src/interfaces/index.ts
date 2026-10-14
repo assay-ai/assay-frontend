@@ -31,3 +31,6 @@ export * from "./chain";
 
 // Agent payment delegation (`/escrow/delegates`).
 export * from "./delegation";
+
+// The account blocklist, as the blocked account sees it.
+export * from "./account-block";

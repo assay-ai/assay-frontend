@@ -45,6 +45,7 @@ import {
 import { chainIdOfAccount } from "@/utils/chain";
 import { exceedsScale, formatDecimal, toAtomic, toDecimal } from "@/utils/money";
 import { toast } from "@/utils/toast";
+import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 
 /**
  * Deposit.
@@ -188,6 +189,8 @@ function TxReference({ chain, reference }: { chain: Chain | null; reference: str
 }
 
 function DepositPageContent() {
+  // Blocked by Assay: the main write action is disabled (the API refuses it anyway).
+  const readOnly = useAccountReadOnly();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -872,7 +875,7 @@ function DepositPageContent() {
           */}
           <Button
             type="submit"
-            disabled={Boolean(error) || busy || chainId === null || unavailable !== null}
+            disabled={readOnly || Boolean(error) || busy || chainId === null || unavailable !== null}
             loading={busy}
           >
             {buttonLabel}
