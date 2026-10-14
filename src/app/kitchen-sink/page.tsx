@@ -66,6 +66,8 @@ import { TopBar } from "@/components/layout/top-bar";
 
 import { cn } from "@/utils";
 
+import { PatternsGallery } from "./patterns-gallery";
+
 /* ------------------------------------------------------------------------
  * Local, page-only icons. The design-system components draw their own
  * icons internally; this page only needs a handful of generic glyphs to
@@ -840,7 +842,7 @@ export default function KitchenSinkPage() {
           <Spec name="top-bar · default nav, alerts">
             <TopBar
               className="min-w-[900px]"
-              activeNavId="spend"
+              activeNavId="activity"
               alertCount={3}
               onAlertsClick={() => {}}
               avatarName="Agent Prod"
@@ -849,7 +851,7 @@ export default function KitchenSinkPage() {
           <Spec name="top-bar · zero alerts, custom search slot">
             <TopBar
               className="min-w-[900px]"
-              activeNavId="guarantee"
+              activeNavId="controls"
               alertCount={0}
               avatarName="QA Runner"
               search={<Search placeholder="Receipt, ULID, tool or tx…" wrapperClassName="hidden w-[240px] desktop:flex" />}
@@ -900,10 +902,10 @@ export default function KitchenSinkPage() {
 
           <Spec name="bottom-tab-bar · active tab, badge, mixed href/onClick">
             <BottomTabBar
-              active="funding"
+              active="money"
               onTabChange={() => {}}
-              hrefs={{ overview: "#overview", spend: "#spend" }}
-              badges={{ more: true }}
+              hrefs={{ overview: "#overview", activity: "#activity" }}
+              badges={{ controls: true }}
               className="w-full max-w-[390px]"
             />
           </Spec>
@@ -997,6 +999,13 @@ export default function KitchenSinkPage() {
               />
             </section>
           </Spec>
+        </Group>
+
+        {/* ================================================================
+         * 8. Patterns (components/patterns)
+         * ============================================================== */}
+        <Group index="08" title="Patterns">
+          <PatternsGallery />
         </Group>
       </div>
     </div>
