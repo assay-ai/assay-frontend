@@ -68,7 +68,7 @@ export function caseStatusLabel(status: SlashProposalStatus): string {
 }
 
 /**
- * What this token may do.
+ * What this operator may do.
  *
  * Read off `GET /operator/me` rather than assumed, so the console never offers
  * an action the guard will refuse. Mirrors the `@RequireRoles` decorators on
@@ -84,8 +84,7 @@ const ACTION_ROLES = {
   /*
     `compensate` inherits `reverse`'s roles unchanged — the act it replaces is
     the same act, and `TRE` is here because the treasury is the account that
-    actually pays. What it no longer inherits is the second operator token: see
-    `TWO_PERSON_ACTIONS` below.
+    actually pays. Its record half is two-person: see `TWO_PERSON_ACTIONS`.
   */
   compensate: ["ADJL", "TRE"],
   /* `cancel-intent` guards the same pair as `compensation-intent`. */
@@ -238,28 +237,12 @@ export function suspendedNotice(chainStatus: string | null | undefined, chain?: 
 }
 
 /**
- * The roles a fleet sweep's **second approver** must hold — at least one.
- *
- * Mirrors `approverRoles` on the backend's `S-11` register row; any other
- * approver is refused with `403 OPERATOR_APPROVER_ROLE_REQUIRED`. The other
- * two-person action (recording a compensation, `S-5`) names none: any other
- * active operator may approve it.
+ * Whether a Suspend is two-person. From `AWAITING_SECOND` and `UPHELD` a
+ * second person has confirmed the penalty or is confirming it, so the backend
+ * raises `S-1` to two-person and answers `202 { approvalId }`; in the earlier
+ * statuses one operator suspends alone.
  */
-export const SWEEP_APPROVER_ROLES: readonly OperatorRole[] = ["ADJ", "ADJL"];
-
-/** `S-5`'s approver roles: the action's own — whoever records a treasury payment. */
-export const COMPENSATION_APPROVER_ROLES: readonly OperatorRole[] = ["ADJL", "TRE"];
-
-/** `S-1`'s approver roles, when a suspension is raised to two-person. */
-export const SUSPEND_APPROVER_ROLES: readonly OperatorRole[] = ["ADJ", "ADJL"];
-
-/**
- * Whether a Suspend needs a second operator. From `AWAITING_SECOND` and
- * `UPHELD` a second person has confirmed the penalty or is confirming it, so
- * the backend raises `S-1` to two-person; in the earlier statuses one operator
- * suspends alone.
- */
-export function suspendNeedsApprover(status: SlashProposalStatus): boolean {
+export function suspendIsTwoPerson(status: SlashProposalStatus): boolean {
   return status === "AWAITING_SECOND" || status === "UPHELD";
 }
 
@@ -283,22 +266,11 @@ export function isSweepable(outcome: string | null): boolean {
 }
 
 /**
- * The actions that need a second operator's token in `X-Operator-Approver`.
- *
- * `compensate` is here because it inherited `reverse`'s override-register row
- * `S-5` — but only **half** of it does. The action is two calls with different
- * guards: `compensation-intent` is `@OverrideExempt` (unsigned bytes nobody has
- * signed change nothing, so there is nothing for a maker/checker pair to
- * guard), and `compensated` is the `S-5` write that closes the case.
- *
- * The chain signature and the approver token answer different questions, which
- * is why the multisig does not make the token redundant: the signature says the
- * treasury moved the money, the token says two of our people agreed to close
- * the case on the strength of it. Neither substitutes for the other.
- *
- * A per-action list cannot express "the second call only", so the panel is
- * where that lives — the approver field renders on the record step and not on
- * the build step.
+ * The case actions that are two-person on the backend: answered
+ * `202 { approvalId }` and run once a second operator approves them in the
+ * approvals inbox. For `compensate` only the record half (`compensated`,
+ * `S-5`) is; building the deposit is `@OverrideExempt`, because unsigned bytes
+ * change nothing.
  */
 export const TWO_PERSON_ACTIONS: readonly OperatorAction[] = Object.freeze([
   "sweep",
@@ -325,7 +297,7 @@ export function exceedsAuthority(limit: Money | null, amountMinor: string): bool
 
 /** Why an action above the authority limit is withheld — in money, not minor units. */
 export function authorityRefusal(limit: Money, amount: Money): string {
-  return `the penalty is ${formatMoney(amount)} and this token's authority limit is ${formatMoney(limit)}`;
+  return `the penalty is ${formatMoney(amount)} and your authority limit is ${formatMoney(limit)}`;
 }
 
 /**

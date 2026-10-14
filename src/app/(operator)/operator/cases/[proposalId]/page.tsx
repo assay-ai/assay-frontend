@@ -483,7 +483,7 @@ export default function OperatorCasePage() {
         </PanelBody>
       </Panel>
 
-      {/* The actions. Gated on this token's roles and on the case's status,
+      {/* The actions. Gated on your roles and on the case's status,
           both inside the panel — this screen renders the case summary and
           decides nothing. */}
       <ActionPanel brief={brief} proposalId={proposalId} />

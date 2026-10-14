@@ -34,8 +34,16 @@ import {
   type FormErrors,
   type UnblockFormInput,
 } from "@/features/operator/blocks";
+import { QueuedNotice } from "@/features/operator/queued-notice";
 import { useOperatorSession } from "@/features/operator/session-context";
-import type { AccountBlock, BlockSubjectKind, ListAccountBlocksQuery } from "@/interfaces/operator";
+import { queuedMessage } from "@/features/operator/two-person";
+import type {
+  AccountBlock,
+  ApprovalQueued,
+  BlockSubjectKind,
+  ListAccountBlocksQuery,
+  UnblockAccountBody,
+} from "@/interfaces/operator";
 import {
   createAccountBlock,
   listAccountBlocks,
@@ -47,9 +55,9 @@ import {
  *
  * Built like the case screen's actions: reads by any operator, the block form
  * only for the roles that may use it (`A-9`: `ADJL`, `SRE`), and lifting as a
- * maker/checker act (`A-10`) with the second operator's own token in
- * `X-Operator-Approver` — held in component state only, cleared on success,
- * on close and on unmount, never a mutation variable.
+ * maker/checker act (`A-10`): submitting answers `202 { approvalId }` and the
+ * block is lifted once a second operator holding `ADJL` approves it in the
+ * approvals inbox.
  *
  * Client-side validation renders inline next to its field; server refusals
  * render inline under the form too, in words, with the code kept so it can be
@@ -99,7 +107,7 @@ const EMPTY_BLOCK_FORM: BlockFormInput = {
   ticketRef: "",
 };
 
-const EMPTY_UNBLOCK_FORM: Omit<UnblockFormInput, "approverToken"> = {
+const EMPTY_UNBLOCK_FORM: UnblockFormInput = {
   reasonCode: "",
   note: "",
   ticketRef: "",
@@ -165,28 +173,27 @@ export default function AccountBlocksPage() {
   // ── Unblock (A-10) ────────────────────────────────────────────────────────
   const [unblocking, setUnblocking] = React.useState<AccountBlock | null>(null);
   const [unblockForm, setUnblockForm] = React.useState(EMPTY_UNBLOCK_FORM);
-  /** Another operator's credential: state only, cleared on every exit. */
-  const [approverToken, setApproverToken] = React.useState("");
+  const [queued, setQueued] = React.useState<ApprovalQueued | null>(null);
   const [unblockErrors, setUnblockErrors] = React.useState<FormErrors<keyof UnblockFormInput>>({});
   const [unblockServerError, setUnblockServerError] = React.useState<string | null>(null);
-
-  React.useEffect(() => () => setApproverToken(""), []);
 
   const closeUnblock = React.useCallback(() => {
     setUnblocking(null);
     setUnblockForm(EMPTY_UNBLOCK_FORM);
-    setApproverToken("");
     setUnblockErrors({});
     setUnblockServerError(null);
   }, []);
 
   const unblock = useMutation({
-    // The token is closed over, not passed as a variable, so it never sits on
-    // `unblock.variables` for as long as this screen lives.
-    mutationFn: (args: { blockId: string; body: { reasonCode: string; note: string; ticketRef?: string } }) =>
-      unblockAccount(args.blockId, args.body, approverToken.trim()),
-    onSuccess: (result) => {
-      toast.success(`Lifted the block on ${result.subject}.`);
+    mutationFn: (args: { blockId: string; body: UnblockAccountBody }) =>
+      unblockAccount(args.blockId, args.body),
+    onSuccess: (answer) => {
+      if (answer.kind === "queued") {
+        setQueued(answer.approval);
+        toast.success(queuedMessage(answer.approval));
+      } else {
+        toast.success(`Lifted the block on ${answer.result.subject}.`);
+      }
       closeUnblock();
       invalidateList();
     },
@@ -197,14 +204,13 @@ export default function AccountBlocksPage() {
     event.preventDefault();
     if (!unblocking) return;
     setUnblockServerError(null);
-    const result = validateUnblockForm({ ...unblockForm, approverToken });
+    const result = validateUnblockForm(unblockForm);
     if (!result.ok) {
       setUnblockErrors(result.errors);
       return;
     }
     setUnblockErrors({});
-    const { approverToken: _token, ...body } = result.body;
-    unblock.mutate({ blockId: unblocking.id, body });
+    unblock.mutate({ blockId: unblocking.id, body: result.body });
   }
 
   // ── Table ─────────────────────────────────────────────────────────────────
@@ -437,6 +443,8 @@ export default function AccountBlocksPage() {
         />
       )}
 
+      {queued ? <QueuedNotice approval={queued} onDismiss={() => setQueued(null)} /> : null}
+
       {unblocking ? (
         <Panel className="w-full">
           <PanelHeader>
@@ -479,16 +487,10 @@ export default function AccountBlocksPage() {
                 error={unblockErrors.ticketRef}
               />
 
-              <Field
-                label="Approver's operator token"
-                type="password"
-                value={approverToken}
-                onChange={(e) => setApproverToken(e.target.value)}
-                autoComplete="off"
-                spellCheck={false}
-                error={unblockErrors.approverToken}
-                hint="A second operator's own credential. The approver must hold ADJL and cannot be you."
-              />
+              <p className="text-body-xs text-02">
+                Two-person (A-10): submitting sends this for approval. A different operator holding
+                ADJL approves it in the approvals inbox, and only then is the block lifted.
+              </p>
 
               {unblockServerError ? (
                 <p className="text-body-13 text-danger-600" role="alert">
@@ -498,7 +500,7 @@ export default function AccountBlocksPage() {
 
               <div className="flex flex-wrap gap-2.5">
                 <Button type="submit" loading={unblock.isPending}>
-                  Lift block
+                  Send for approval
                 </Button>
                 <Button type="button" variant="secondary" onClick={closeUnblock}>
                   Cancel

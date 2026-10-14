@@ -114,24 +114,24 @@ describe("validateBlockForm", () => {
 });
 
 describe("validateUnblockForm", () => {
-  it("demands the approver's token", () => {
-    const result = validateUnblockForm({
-      reasonCode: "KEY_ROTATED",
-      note: NOTE,
-      ticketRef: "",
-      approverToken: "  ",
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(Object.keys(result.errors)).toEqual(["approverToken"]);
+  it("asks for no second operator's credential: the second person approves in the inbox", () => {
+    const result = validateUnblockForm({ reasonCode: "KEY_ROTATED", note: NOTE, ticketRef: "" });
+    expect(result).toEqual({ ok: true, body: { reasonCode: "KEY_ROTATED", note: NOTE } });
   });
 
-  it("builds the body with a trimmed token", () => {
+  it("builds a trimmed body", () => {
     expect(
-      validateUnblockForm({ reasonCode: "KEY_ROTATED", note: NOTE, ticketRef: "INC-9", approverToken: " tok " }),
+      validateUnblockForm({ reasonCode: " KEY_ROTATED ", note: NOTE, ticketRef: " INC-9 " }),
     ).toEqual({
       ok: true,
-      body: { reasonCode: "KEY_ROTATED", note: NOTE, ticketRef: "INC-9", approverToken: "tok" },
+      body: { reasonCode: "KEY_ROTATED", note: NOTE, ticketRef: "INC-9" },
     });
+  });
+
+  it("refuses a missing reason code and a short note", () => {
+    const result = validateUnblockForm({ reasonCode: "", note: "short", ticketRef: "" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(Object.keys(result.errors).sort()).toEqual(["note", "reasonCode"]);
   });
 });
 
@@ -143,16 +143,13 @@ describe("blockErrorMessage", () => {
     ["OPERATOR_BLOCK_SUBJECT_INVALID", "list", /subject filter/],
     ["OPERATOR_BLOCK_NOT_FOUND", "unblock", /no longer exists/],
     ["OPERATOR_BLOCK_ALREADY_LIFTED", "unblock", /already been lifted/],
-    ["OPERATOR_SECOND_APPROVER_REQUIRED", "unblock", /second operator/],
-    ["OPERATOR_SELF_APPROVAL_REFUSED", "unblock", /your own/],
-    ["OPERATOR_APPROVER_ROLE_REQUIRED", "unblock", /does not hold ADJL/],
-    ["OPERATOR_APPROVER_AUTHORITY_EXCEEDED", "unblock", /approver's authority/],
+    ["OPERATOR_SECOND_APPROVER_REQUIRED", "unblock", /approvals inbox/],
     ["OPERATOR_ROLE_REQUIRED", "block", /Blocking needs the ADJL or SRE/],
     ["OPERATOR_ROLE_REQUIRED", "unblock", /Lifting a block needs the ADJL or SRE/],
-    ["OPERATOR_CREDENTIAL_INVALID", "unblock", /approver's token/],
-    ["OPERATOR_CREDENTIAL_INVALID", "block", /Your operator token was refused/],
+    ["OPERATOR_CREDENTIAL_INVALID", "block", /session has ended/],
+    ["OPERATOR_NOT_AUTHORIZED", "block", /no longer an active operator/],
     ["OPERATOR_SUSPENDED", "unblock", /suspended/],
-    ["OPERATOR_AUTH_RATE_LIMITED", "block", /Too many attempts/],
+    ["OPERATOR_AUTH_RATE_LIMITED", "block", /Too many sign-in attempts/],
     ["OPERATOR_OVERRIDE_NOT_IMPLEMENTED", "block", /not have this action/],
     ["VALIDATION_FAILED", "block", /not accepted: backend says/],
     ["NETWORK_ERROR", "list", /could not be reached/],
