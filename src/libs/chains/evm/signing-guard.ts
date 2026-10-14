@@ -169,7 +169,7 @@ export interface ExpectedTypedData {
  * the canonical field list and the chosen values. Returns the deployment.
  */
 export function assertTypedData(
-  request: Eip155TypedDataRequest,
+  request: Omit<Eip155TypedDataRequest, "relayed">,
   expected: ExpectedTypedData,
   prefix: string = SIGNING_REFUSED,
 ): StakeDeployment {
