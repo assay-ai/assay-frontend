@@ -1257,7 +1257,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         request: {
           method: "GET",
           url: `${binding.endpoint}?q=ETH-USD&limit=25`,
-          headerNames: ["accept", "x-api-version", "x-x402-call-id"],
+          headerNames: ["accept", "x-api-version", "x-assay-call-id"],
           body: null,
         },
         upstream: {
@@ -2031,7 +2031,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
           id: CONSOLE_CREDENTIAL,
           agentId,
           name: "console",
-          prefix: "x402_pk_8f3a",
+          prefix: "assay_pk_8f3a",
           scopes: [],
           lastUsedAt: minutesAgo(18),
           expiresAt: null,
@@ -2042,7 +2042,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
           id: "cred_51b9e207",
           agentId,
           name: "ci-deploy",
-          prefix: "x402_pk_51b9",
+          prefix: "assay_pk_51b9",
           scopes: [],
           lastUsedAt: minutesAgo(2160),
           expiresAt: inMinutes(129600),

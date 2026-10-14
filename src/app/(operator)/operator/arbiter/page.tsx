@@ -261,7 +261,7 @@ export default function ArbiterPage() {
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>Terms on chain</PanelTitle>
-            <PanelDescription>X402Config, read live · and what the chain-state indexer last saw</PanelDescription>
+            <PanelDescription>Config contract, read live · and what the chain-state indexer last saw</PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="flex flex-col gap-4 p-4 tablet:p-5">

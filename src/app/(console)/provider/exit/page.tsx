@@ -604,7 +604,7 @@ export default function ProviderExitPage() {
       const url = URL.createObjectURL(new Blob([file.csv], { type: "text/csv" }));
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = file.filename ?? "x402-calls.csv";
+      anchor.download = file.filename ?? "assay-calls.csv";
       anchor.click();
       URL.revokeObjectURL(url);
     },

@@ -301,7 +301,7 @@ const codeSampleA = `{
 
 const codeSampleB = `{
   "mcpServers": {
-    "x402": {
+    "assay": {
       "url": "https://mcp.example.com",
       "headers": { "Authorization": "Bearer sk_live_..." }
     }
