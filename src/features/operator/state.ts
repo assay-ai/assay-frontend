@@ -2,6 +2,7 @@ import type { BadgeVariant } from "@/components/ui/badge";
 import { stampUtc } from "@/features/g34a/stats";
 import type { Money } from "@/interfaces/api";
 import type { OperatorRole, SlashProposalStatus } from "@/interfaces/operator";
+import { cancelSignerOf } from "@/libs/chains/status-labels";
 import { formatMoney } from "@/utils/money";
 
 import { SWEEPABLE_OUTCOMES } from "./reason-codes";
@@ -157,7 +158,9 @@ export function disputedPartsNote(
  * The deadline that comes with a requested on-chain cancel, in plain words.
  *
  * `CANCEL_REQUESTED` means the platform has asked for the cancel and nothing
- * more: the record still stands on chain until the settlement admin signs, and
+ * more: the record still stands on chain until its signer signs — the arbiter
+ * on EVM, the program admin on Solana (`cancelSignerOf`; `chain` is the case
+ * penalty's CAIP-19 asset or a CAIP-2 chain id) — and
  * from its executable time **anyone** can execute the penalty. The brief
  * carries that time (`chainExecutableAt`); an older backend does not, and the
  * warning is then given without it rather than dropped.
@@ -168,15 +171,17 @@ export function cancelDeadlineNotice(
   chainStatus: string | null | undefined,
   chainExecutableAt: string | null | undefined,
   now: Date,
+  chain?: string | null,
 ): { overdue: boolean; text: string } | null {
   if (!isCancelRequested(chainStatus)) return null;
+  const signer = cancelSignerOf(chain);
 
   const at = chainExecutableAt ? new Date(chainExecutableAt).getTime() : Number.NaN;
   if (!chainExecutableAt || Number.isNaN(at)) {
     return {
       overdue: false,
       text:
-        "The cancel must be signed by the settlement admin before the on-chain record becomes "
+        `The cancel must be signed by ${signer} before the on-chain record becomes `
         + "executable. After that anyone can execute the penalty.",
     };
   }
@@ -185,14 +190,14 @@ export function cancelDeadlineNotice(
       overdue: true,
       text:
         `The on-chain record became executable at ${stampUtc(chainExecutableAt)} UTC and the `
-        + "cancel has not landed: anyone can execute the penalty now. Get the settlement admin's "
+        + `cancel has not landed: anyone can execute the penalty now. Get ${signer}'s `
         + "signature immediately.",
     };
   }
   return {
     overdue: false,
     text:
-      `The cancel must be signed by the settlement admin before ${stampUtc(chainExecutableAt)} `
+      `The cancel must be signed by ${signer} before ${stampUtc(chainExecutableAt)} `
       + "UTC. After that anyone can execute the penalty.",
   };
 }
@@ -203,20 +208,22 @@ export function cancelDeadlineNotice(
  * `chainStatus` is the on-chain record's status **before** the suspension. The
  * backend closes the case and then requests the cancel of a standing record
  * (`PENDING` → `CANCEL_REQUESTED`); it signs nothing, so the suspension is not
- * finished until the settlement admin has signed.
+ * finished until the cancel's signer has signed: the arbiter on EVM, the
+ * program admin on Solana (`cancelSignerOf`).
  */
-export function suspendedNotice(chainStatus: string | null | undefined): string {
+export function suspendedNotice(chainStatus: string | null | undefined, chain?: string | null): string {
+  const signer = cancelSignerOf(chain);
   switch (chainStatus) {
     case "PENDING":
     case "CANCEL_REQUESTED":
       return (
-        "Proposal suspended. The on-chain cancel has been requested and still needs the "
-        + "settlement admin's signature."
+        "Proposal suspended. The on-chain cancel has been requested and still needs "
+        + `${signer}'s signature.`
       );
     case "PROPOSING":
       return (
         "Proposal suspended. A proposal was being written on chain; its cancel is requested when "
-        + "it lands and will need the settlement admin's signature."
+        + `it lands and will need ${signer}'s signature.`
       );
     case "NONE":
     case "REFUSED":
@@ -225,7 +232,7 @@ export function suspendedNotice(chainStatus: string | null | undefined): string 
     default:
       return (
         "Proposal suspended. If a record stands on chain, its cancel has been requested and "
-        + "still needs the settlement admin's signature."
+        + `still needs ${signer}'s signature.`
       );
   }
 }

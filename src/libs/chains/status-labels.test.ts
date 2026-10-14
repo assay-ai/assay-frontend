@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  cancelRequestedLabel,
+  cancelSignerOf,
   chainCancelReasonCodeLabel,
   chainCancelReasonLabel,
   chainErrorLabel,
@@ -8,10 +10,30 @@ import {
   describeChainRefusal,
 } from "./status-labels";
 
+const SOLANA_ASSET =
+  "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1/token:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
+
 describe("chainStatusLabel", () => {
   it("says the two states that wait on someone else's signature", () => {
     expect(chainStatusLabel("DISPUTED")).toBe("Disputed on chain — awaiting arbiter");
-    expect(chainStatusLabel("CANCEL_REQUESTED")).toBe("Cancel requested — arbiter/admin to sign");
+  });
+
+  it("names who signs a requested cancel, by chain", () => {
+    expect(chainStatusLabel("CANCEL_REQUESTED", "eip155:46630")).toBe("Cancel requested — arbiter to sign");
+    expect(chainStatusLabel("CANCEL_REQUESTED", "eip155:46630/erc20:0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c")).toBe(
+      "Cancel requested — arbiter to sign",
+    );
+    expect(chainStatusLabel("CANCEL_REQUESTED", SOLANA_ASSET)).toBe("Cancel requested — program admin to sign");
+    expect(chainStatusLabel("CANCEL_REQUESTED")).toBe(
+      "Cancel requested — arbiter (EVM) or program admin (Solana) to sign",
+    );
+    expect(cancelRequestedLabel("cosmos:x")).toBe(chainStatusLabel("CANCEL_REQUESTED", null));
+  });
+
+  it("names the cancel signer, by chain", () => {
+    expect(cancelSignerOf("eip155:8453")).toBe("the arbiter");
+    expect(cancelSignerOf(SOLANA_ASSET)).toBe("the program admin");
+    expect(cancelSignerOf(undefined)).toBe("the arbiter (EVM) or the program admin (Solana)");
   });
 
   it("names the others, and prints an unknown value as it came", () => {

@@ -517,11 +517,12 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
     onSuccess: () => {
       /*
         A suspension closes the case and only REQUESTS the on-chain cancel. The
-        record stands until the settlement admin signs, so the confirmation
+        record stands until the cancel's signer signs (the arbiter on EVM, the
+        program admin on Solana), so the confirmation
         says so instead of reading as finished. `brief.chainStatus` is still the
         status from before the suspension here — the refetch below replaces it.
       */
-      toast.success(suspendedNotice(brief.chainStatus));
+      toast.success(suspendedNotice(brief.chainStatus, casePenalty.asset));
       setOpenSection(null);
       setFormError(null);
       setSuspendReasonCode("");
@@ -781,7 +782,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
       roles.length > 0 ? roles.join(", ") : "no roles"
     }`;
   } else if (!cancelLegal) {
-    cancelBlockedBecause = `only while the on-chain record is waiting for its cancel (${chainStatusLabel("CANCEL_REQUESTED")}) — it is ${chainStatusLabel(brief.chainStatus)}`;
+    cancelBlockedBecause = `only while the on-chain record is waiting for its cancel (${chainStatusLabel("CANCEL_REQUESTED", casePenalty.asset)}) — it is ${chainStatusLabel(brief.chainStatus, casePenalty.asset)}`;
   }
   /*
     Shown to every operator on the case, not only the roles that may build the
@@ -792,6 +793,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
     brief.chainStatus,
     brief.chainExecutableAt,
     new Date(),
+    casePenalty.asset,
   );
   const cancelGate: Gate = {
     permitted: cancelPermitted,

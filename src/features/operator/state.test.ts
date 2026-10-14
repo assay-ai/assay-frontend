@@ -100,89 +100,105 @@ describe("cancel the judgement on chain", () => {
 });
 
 /**
- * A requested cancel is not a cancel. Until the settlement admin signs it the
- * on-chain record stands, and from its executable time anyone can execute the
- * penalty — so the console has to say when that is.
+ * A requested cancel is not a cancel. Until its signer signs it — the arbiter
+ * on EVM, the program admin on Solana — the on-chain record stands, and from
+ * its executable time anyone can execute the penalty, so the console has to
+ * say when that is, and whose signature it waits for.
  */
+const EVM_ASSET = "eip155:46630/erc20:0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c";
+const SIGNERS = [
+  ["EVM", EVM_ASSET, "the arbiter"],
+  ["Solana", ASSET, "the program admin"],
+  ["an unknown chain", undefined, "the arbiter (EVM) or the program admin (Solana)"],
+] as const;
+
 describe("the deadline of a requested on-chain cancel", () => {
   const NOW = new Date("2026-10-14T08:00:00Z");
 
   it.each(["NONE", "PROPOSING", "PENDING", "EXECUTED", "CANCELLED", "REFUSED", undefined, null])(
     "says nothing while the on-chain record is %s",
     (chainStatus) => {
-      expect(cancelDeadlineNotice(chainStatus, "2026-10-17T09:15:00.000Z", NOW)).toBeNull();
+      expect(cancelDeadlineNotice(chainStatus, "2026-10-17T09:15:00.000Z", NOW, EVM_ASSET)).toBeNull();
     },
   );
 
-  it("names the deadline while it is still ahead", () => {
-    expect(cancelDeadlineNotice("CANCEL_REQUESTED", "2026-10-17T09:15:00.000Z", NOW)).toEqual({
-      overdue: false,
-      text:
-        "The cancel must be signed by the settlement admin before 2026-10-17 09:15 UTC. "
-        + "After that anyone can execute the penalty.",
+  describe.each(SIGNERS)("on %s", (_name, chain, signer) => {
+    it("names the deadline while it is still ahead", () => {
+      expect(cancelDeadlineNotice("CANCEL_REQUESTED", "2026-10-17T09:15:00.000Z", NOW, chain)).toEqual({
+        overdue: false,
+        text:
+          `The cancel must be signed by ${signer} before 2026-10-17 09:15 UTC. `
+          + "After that anyone can execute the penalty.",
+      });
     });
-  });
 
-  it("says anyone can execute now once the deadline has passed", () => {
-    expect(cancelDeadlineNotice("CANCEL_REQUESTED", "2026-10-14T07:59:00.000Z", NOW)).toEqual({
-      overdue: true,
-      text:
-        "The on-chain record became executable at 2026-10-14 07:59 UTC and the cancel has not "
-        + "landed: anyone can execute the penalty now. Get the settlement admin's signature "
-        + "immediately.",
+    it("says anyone can execute now once the deadline has passed", () => {
+      expect(cancelDeadlineNotice("CANCEL_REQUESTED", "2026-10-14T07:59:00.000Z", NOW, chain)).toEqual({
+        overdue: true,
+        text:
+          "The on-chain record became executable at 2026-10-14 07:59 UTC and the cancel has not "
+          + `landed: anyone can execute the penalty now. Get ${signer}'s signature `
+          + "immediately.",
+      });
     });
+
+    it.each([null, undefined, "not a date"])(
+      "still warns, without a time, when the brief carries %s (an older backend)",
+      (chainExecutableAt) => {
+        expect(cancelDeadlineNotice("CANCEL_REQUESTED", chainExecutableAt, NOW, chain)).toEqual({
+          overdue: false,
+          text:
+            `The cancel must be signed by ${signer} before the on-chain record becomes `
+            + "executable. After that anyone can execute the penalty.",
+        });
+      },
+    );
   });
 
   it("treats the deadline itself as passed", () => {
-    expect(cancelDeadlineNotice("CANCEL_REQUESTED", NOW.toISOString(), NOW)?.overdue).toBe(true);
+    expect(cancelDeadlineNotice("CANCEL_REQUESTED", NOW.toISOString(), NOW, EVM_ASSET)?.overdue).toBe(true);
   });
 
-  it.each([null, undefined, "not a date"])(
-    "still warns, without a time, when the brief carries %s (an older backend)",
-    (chainExecutableAt) => {
-      expect(cancelDeadlineNotice("CANCEL_REQUESTED", chainExecutableAt, NOW)).toEqual({
-        overdue: false,
-        text:
-          "The cancel must be signed by the settlement admin before the on-chain record becomes "
-          + "executable. After that anyone can execute the penalty.",
-      });
-    },
-  );
+  it("never names the settlement admin on EVM", () => {
+    const notice = cancelDeadlineNotice("CANCEL_REQUESTED", "2026-10-17T09:15:00.000Z", NOW, "eip155:46630");
+    expect(notice?.text).not.toMatch(/admin/);
+  });
 });
 
 describe("what a suspension tells the operator about the chain", () => {
-  it.each(["PENDING", "CANCEL_REQUESTED"])(
-    "says the cancel is requested and still needs a signature when the record is %s",
-    (chainStatus) => {
-      expect(suspendedNotice(chainStatus)).toBe(
-        "Proposal suspended. The on-chain cancel has been requested and still needs the "
-        + "settlement admin's signature.",
-      );
-    },
-  );
-
-  it("says the cancel follows when a proposal was being written on chain", () => {
-    expect(suspendedNotice("PROPOSING")).toBe(
-      "Proposal suspended. A proposal was being written on chain; its cancel is requested when "
-      + "it lands and will need the settlement admin's signature.",
+  describe.each(SIGNERS)("on %s", (_name, chain, signer) => {
+    it.each(["PENDING", "CANCEL_REQUESTED"])(
+      "says the cancel is requested and still needs a signature when the record is %s",
+      (chainStatus) => {
+        expect(suspendedNotice(chainStatus, chain)).toBe(
+          `Proposal suspended. The on-chain cancel has been requested and still needs ${signer}'s signature.`,
+        );
+      },
     );
+
+    it("says the cancel follows when a proposal was being written on chain", () => {
+      expect(suspendedNotice("PROPOSING", chain)).toBe(
+        "Proposal suspended. A proposal was being written on chain; its cancel is requested when "
+        + `it lands and will need ${signer}'s signature.`,
+      );
+    });
+
+    it("does not claim either way when the brief carries no chain status", () => {
+      expect(suspendedNotice(undefined, chain)).toBe(
+        "Proposal suspended. If a record stands on chain, its cancel has been requested and "
+        + `still needs ${signer}'s signature.`,
+      );
+    });
   });
 
   it.each(["NONE", "REFUSED", "CANCELLED"])(
     "says there is nothing to cancel when the record is %s",
     (chainStatus) => {
-      expect(suspendedNotice(chainStatus)).toBe(
+      expect(suspendedNotice(chainStatus, EVM_ASSET)).toBe(
         "Proposal suspended. Nothing stands on chain for it, so there is nothing to cancel.",
       );
     },
   );
-
-  it("does not claim either way when the brief carries no chain status", () => {
-    expect(suspendedNotice(undefined)).toBe(
-      "Proposal suspended. If a record stands on chain, its cancel has been requested and "
-      + "still needs the settlement admin's signature.",
-    );
-  });
 });
 
 describe("the fleet sweep approver", () => {

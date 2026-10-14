@@ -623,7 +623,7 @@ function DisputeRow({
           {shortRequestId(row.requestId)}
         </label>
         <span className="rounded-full bg-primary-10 px-[9px] py-0.5 text-label-13 text-primary-700">
-          {chainStatusLabel(row.caseChainStatus)}
+          {chainStatusLabel(row.caseChainStatus, row.chainId)}
         </span>
         <span className="text-body-xs text-03">case {row.caseStatus.toLowerCase().replace(/_/g, " ")}</span>
         <Link
