@@ -1,5 +1,6 @@
 import "@/styles/index.scss";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
 import type { Chain } from "@/interfaces/chain";
 import { THEME_STORAGE_KEY } from "@/providers/theme-storage";
 
@@ -48,6 +49,48 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
 });
 
+// Brand and wording follow the landing page (assay-landing-page/src/pages.mjs),
+// so a shared link reads the same wherever it points.
+const TITLE = "Assay — The credit layer for agentic payments";
+const DESCRIPTION =
+  "The credit layer for agentic payments. Assay measures what every paid endpoint actually delivers — then bonds it, so agents get recourse when it doesn’t.";
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
+
+export const metadata: Metadata = {
+  ...(BASE_URL ? { metadataBase: new URL(BASE_URL) } : {}),
+  title: { default: TITLE, template: "%s — Assay" },
+  description: DESCRIPTION,
+  applicationName: "Assay",
+  authors: [{ name: "Assay" }],
+  keywords: ["Assay", "agentic payments", "AI agents", "x402", "delivery guarantee", "bonded endpoints", "USDC"],
+  robots: { index: true, follow: true },
+  icons: { icon: "/images/favicon.png", apple: "/images/apple-touch-icon.png" },
+  openGraph: {
+    type: "website",
+    siteName: "Assay",
+    title: TITLE,
+    description: DESCRIPTION,
+    url: "/",
+    images: [{ url: "/thumbnail.png", width: 1200, height: 630, alt: TITLE }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ["/thumbnail.png"],
+  },
+  other: { version: process.env.buildId || "unknown" },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#1c180d" },
+  ],
+};
+
 export default async function RootLayout({
   children,
 }: {
@@ -76,51 +119,6 @@ export default async function RootLayout({
           choice wins; otherwise the system setting decides.
         */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-        <title>GoAssay.AI</title>
-        <link rel="icon" href="/images/favicon.png" sizes="any" />
-        <link rel="apple-touch-icon" href="/images/apple-touch-icon.png" />
-        <meta name="robots" content="index, follow" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta
-          name="description"
-          content="GoAssay.AI — verified payments for AI agents. Pay per call, get proof the work was real."
-        />
-        <meta
-          name="image"
-          content={`${process.env.NEXT_PUBLIC_BASE_URL}/thumbnail.png`}
-        />
-        <meta
-          name="keywords"
-          content="GoAssay.AI, x402, AI agents, verified payments, Solana, USDC"
-        />
-        <meta name="author" content="GoAssay.AI" />
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content={process.env.NEXT_PUBLIC_BASE_URL} />
-        <meta property="og:title" content="GoAssay.AI" />
-        <meta
-          property="og:description"
-          content="GoAssay.AI — verified payments for AI agents. Pay per call, get proof the work was real."
-        />
-        <meta
-          property="og:image"
-          content={`${process.env.NEXT_PUBLIC_BASE_URL}/thumbnail.png`}
-        />
-
-        <meta property="twitter:card" content="summary_large_image" />
-        <meta
-          property="twitter:url"
-          content={process.env.NEXT_PUBLIC_BASE_URL}
-        />
-        <meta property="twitter:title" content="GoAssay.AI" />
-        <meta
-          property="twitter:description"
-          content="GoAssay.AI — verified payments for AI agents. Pay per call, get proof the work was real."
-        />
-        <meta
-          property="twitter:image"
-          content={`${process.env.NEXT_PUBLIC_BASE_URL}/thumbnail.png`}
-        />
-        <meta name="version" content={process.env.buildId || "unknown"} />
       </head>
       <body className={inter.className}>
         <Providers chains={chains}>{children}</Providers>
