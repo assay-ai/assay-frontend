@@ -60,3 +60,12 @@ describe("explorerAddressUrl", () => {
     );
   });
 });
+
+/* Frontend review 2026-10-15, F5: the base is the API's, so only http(s) becomes a link. */
+describe("a base that is not http(s)", () => {
+  it.each(["javascript:alert(1)//", "data:text/html,x", "not a url"])("gives no link for %s", (base) => {
+    const chain = { ...EVM, explorerBaseUrl: base };
+    expect(explorerTxUrl(chain, "0xabc")).toBeUndefined();
+    expect(explorerAddressUrl(chain, "0xabc")).toBeUndefined();
+  });
+});
