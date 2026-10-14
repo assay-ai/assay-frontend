@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/panel";
 import { Timeline, type TimelineEvent } from "@/components/ui/timeline";
 import { DASH, stampUtc } from "@/features/g34a/stats";
-import { asProposalStatus, caseBadgeVariant } from "@/features/operator/state";
+import { asProposalStatus, caseBadgeVariant, disputedPartsNote } from "@/features/operator/state";
 import { SLASH_DELAY_HOURS } from "@/libs/chains/solana/delays";
 import { chainStatusLabel } from "@/libs/chains/status-labels";
 import { CaseContext } from "@/features/provider-slash-case/context";
@@ -195,6 +195,7 @@ export default function OperatorCasePage() {
 
   const { proposal } = brief.case;
   const clocks = proposal.clocks;
+  const disputedParts = disputedPartsNote(brief.chainStatus, brief.chainDisputedParts);
   const dispute = brief.dispute;
 
   /*
@@ -252,6 +253,12 @@ export default function OperatorCasePage() {
             <>
               <span className="text-03"> · </span>
               on chain: <span className="font-semibold text-01">{chainStatusLabel(brief.chainStatus)}</span>
+            </>
+          ) : null}
+          {disputedParts ? (
+            <>
+              <span className="text-03"> · </span>
+              <span className="font-semibold text-warning-700">{disputedParts}</span>
             </>
           ) : null}
         </p>

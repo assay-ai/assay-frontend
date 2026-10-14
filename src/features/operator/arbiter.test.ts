@@ -4,13 +4,14 @@ import type { ArbiterDispute } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 
 import {
+  agentShareText,
   arbiterErrorMessage,
+  beneficiaryCheck,
   mayBlockOnChain,
   mayRule,
   pruneArbiterSelection,
   sortDisputesOldestFirst,
   toggleArbiterSelection,
-  upheldLast30dOf,
   validateChainBlockForm,
   validateRulingForm,
 } from "./arbiter";
@@ -30,6 +31,9 @@ function dispute(n: number, opts: Partial<ArbiterDispute> = {}): ArbiterDispute 
     disputedAt: new Date(Date.UTC(2026, 9, n)).toISOString(),
     executableAt: null,
     expiresAt: null,
+    upheldViolations30d: 0,
+    beneficiary: "eip155:46630:0x64fecbe18e8998cb2990bce631a042f8e2be1659",
+    beneficiaryEvidence: null,
     ...opts,
   };
 }
@@ -133,9 +137,58 @@ describe("arbiterErrorMessage", () => {
   });
 });
 
-describe("upheldLast30dOf (placeholder)", () => {
-  it("reads the count when the backend sends it, and is null until then", () => {
-    expect(upheldLast30dOf(dispute(1))).toBeNull();
-    expect(upheldLast30dOf(dispute(1, { upheldViolationsLast30d: 3 }))).toBe(3);
+describe("arbiterErrorMessage for a missing arbiter", () => {
+  it("says what cannot be built, per action, and never offers the admin as a fallback", () => {
+    const error = new ApiError("CHAIN_ARBITER_NOT_SET", "m", 409);
+    expect(arbiterErrorMessage(error, "cancel")).toMatch(/cancellation cannot be built.*arbiter only.*setArbiter/);
+    expect(arbiterErrorMessage(error, "cancel")).toMatch(/\(CHAIN_ARBITER_NOT_SET\)$/);
+    expect(arbiterErrorMessage(error, "block")).toMatch(/nobody can block on chain/);
+    expect(arbiterErrorMessage(error, "ruling")).toMatch(/nobody can rule/);
+    for (const action of ["cancel", "ruling", "block"] as const) {
+      expect(arbiterErrorMessage(error, action)).not.toMatch(/admin's/);
+    }
+  });
+});
+
+describe("agentShareText", () => {
+  it("reads basis points as a percentage", () => {
+    expect(agentShareText(6000)).toBe("60% (6000 bps)");
+    expect(agentShareText(1234)).toBe("12.34% (1234 bps)");
+    expect(agentShareText(0)).toBe("0% (0 bps)");
+    expect(agentShareText(undefined)).toBe("Not reported");
+  });
+});
+
+describe("beneficiaryCheck", () => {
+  const evidence = {
+    payer: "eip155:46630:0x64fecbe18e8998cb2990bce631a042f8e2be1659",
+    failedCalls: 3,
+    paidAmount: "900000",
+    formulaShareAmount: "1000000",
+    redeemedAmount: "600000",
+    shareAmount: "600000",
+    ok: true,
+    reason: null,
+  };
+
+  it("is unchecked when the backend sends no evidence", () => {
+    expect(beneficiaryCheck(dispute(1))).toMatchObject({ status: "unchecked", reason: null });
+    expect(beneficiaryCheck(dispute(1)).headline).toMatch(/by hand/);
+  });
+
+  it("passes when the backend's check passes, counting the failed calls", () => {
+    const check = beneficiaryCheck(dispute(1, { beneficiaryEvidence: evidence }));
+    expect(check).toMatchObject({ status: "ok", reason: null });
+    expect(check.headline).toMatch(/paid for 3 failed calls/);
+    expect(beneficiaryCheck(dispute(1, { beneficiaryEvidence: { ...evidence, failedCalls: 1 } })).headline).toMatch(
+      /1 failed call,/,
+    );
+  });
+
+  it("fails with the backend's reason when its check fails", () => {
+    const reason = "eip155:46630:0x64fe…'s part 1000000 is more than the 400000 the penalty formula gives it for 3 failed call(s)";
+    const check = beneficiaryCheck(dispute(1, { beneficiaryEvidence: { ...evidence, ok: false, reason } }));
+    expect(check.status).toBe("failed");
+    expect(check.reason).toBe(reason);
   });
 });

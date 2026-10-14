@@ -29,14 +29,15 @@ import {
   CHAIN_BLOCK_REASON_SUGGESTIONS,
   RULING_LABEL,
   RULING_REASON_SUGGESTIONS,
+  agentShareText,
   arbiterErrorMessage,
+  beneficiaryCheck,
   mayBlockOnChain,
   mayRule,
   pruneArbiterSelection,
   selectionChain,
   sortDisputesOldestFirst,
   toggleArbiterSelection,
-  upheldLast30dOf,
   validateChainBlockForm,
   validateRulingForm,
   type ArbiterFormErrors,
@@ -372,7 +373,7 @@ export default function ArbiterPage() {
                   rulingErrors.ruling ? (
                     <span className="text-danger-600">{rulingErrors.ruling}</span>
                   ) : (
-                    "Uphold is the arbiter's only; a cancel is the arbiter's when one is appointed, else the admin's."
+                    "Both are the arbiter's: Assay builds an uphold or a cancel for the arbiter only."
                   )
                 }
               >
@@ -536,13 +537,14 @@ function TermsGrid({ terms }: { terms: ArbiterTerms }) {
   return (
     <dl className="grid w-full grid-cols-1 gap-x-5 gap-y-3 tablet:grid-cols-2 desktop:grid-cols-3">
       <Fact label="Arbiter" tone={terms.arbiter ? undefined : "warning"}>
-        {terms.arbiter ?? "None appointed — nobody can uphold or block; a cancel is the admin's"}
+        {terms.arbiter ?? "None appointed — Assay cannot build an uphold, a cancel or a block"}
       </Fact>
       <Fact label="Admin">{terms.admin}</Fact>
       <Fact label="Paused" tone={terms.paused ? "warning" : undefined}>
         {terms.paused ? "Yes — contracts paused" : "No"}
       </Fact>
       <Fact label="Slash delay (the dispute window)">{duration(terms.slashDelaySeconds)}</Fact>
+      <Fact label="Beneficiary share (slashAgentBps)">{agentShareText(terms.slashAgentBps)}</Fact>
       <Fact label="Chain">{terms.chainId}</Fact>
     </dl>
   );
@@ -598,7 +600,6 @@ function DisputeRow({
   nowMs: number;
 }) {
   const expired = row.expiresAt !== null && Date.parse(row.expiresAt) <= nowMs;
-  const upheldLast30d = upheldLast30dOf(row);
   const id = `arbiter-${row.requestId}`;
   return (
     <li
@@ -642,11 +643,11 @@ function DisputeRow({
           {expired ? " · past: it can only be expired now" : ""}
         </Fact>
         <Fact label="Chain">{row.chainId}</Fact>
-        {/* PLACEHOLDER until the backend's per-provider count lands; see `upheldLast30dOf`. */}
-        <Fact label="Provider: upheld, last 30 days">
-          {upheldLast30d === null ? "Not reported yet" : String(upheldLast30d)}
+        <Fact label="Provider: upheld, last 30 days" tone={row.upheldViolations30d > 0 ? "warning" : undefined}>
+          {String(row.upheldViolations30d)}
         </Fact>
       </dl>
+      <BeneficiaryEvidenceBlock row={row} />
       {refusals.length > 0 ? (
         <div className="flex flex-col gap-0.5 rounded-md border border-danger-20 bg-danger-10 px-3 py-2" role="alert">
           {refusals.map((text) => (
@@ -657,6 +658,62 @@ function DisputeRow({
         </div>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * Follow-up C5: the beneficiary of the record, whether it paid for the failed
+ * calls, and whether this penalty is within its share of the formula penalty.
+ * Upholding a record that fails this pays an account that was not harmed, or
+ * pays it too much.
+ */
+function BeneficiaryEvidenceBlock({ row }: { row: ArbiterDispute }) {
+  const check = beneficiaryCheck(row);
+  const evidence = row.beneficiaryEvidence;
+  return (
+    <div
+      className={cn(
+        "flex w-full min-w-0 flex-col gap-2 rounded-md border px-3 py-2",
+        check.status === "ok"
+          ? "border-01 bg-02"
+          : check.status === "failed"
+            ? "border-danger-20 bg-danger-10"
+            : "border-warning-20 bg-warning-10",
+      )}
+    >
+      <p
+        className={cn(
+          "text-label-13",
+          check.status === "ok" ? "text-01" : check.status === "failed" ? "text-danger-700" : "text-warning-700",
+        )}
+      >
+        Beneficiary check · {check.headline}
+      </p>
+      {check.reason ? <p className="text-body-13 text-danger-700">{check.reason}</p> : null}
+      <dl className="grid w-full grid-cols-1 gap-x-5 gap-y-1.5 tablet:grid-cols-2 desktop:grid-cols-3">
+        <Fact label="Beneficiary">{row.beneficiary}</Fact>
+        {evidence ? (
+          <>
+            <Fact
+              label="Payer of the failed calls"
+              tone={evidence.payer === null ? "warning" : undefined}
+            >
+              {evidence.payer ?? "None found in this window"}
+            </Fact>
+            <Fact label="Failed calls">{String(evidence.failedCalls)}</Fact>
+            <Fact label="Paid for them">{amount(row.chainId, evidence.paidAmount)}</Fact>
+            <Fact label="Of which redeemed">{amount(row.chainId, evidence.redeemedAmount)}</Fact>
+            <Fact label="Its share of the formula penalty" tone={evidence.ok ? undefined : "warning"}>
+              {evidence.formulaShareAmount === undefined
+                ? "Not reported"
+                : amount(row.chainId, evidence.formulaShareAmount)}
+            </Fact>
+            <Fact label="This penalty">{amount(row.chainId, row.penaltyAmount)}</Fact>
+            <Fact label="Paid to the beneficiary if executed">{amount(row.chainId, evidence.shareAmount)}</Fact>
+          </>
+        ) : null}
+      </dl>
+    </div>
   );
 }
 

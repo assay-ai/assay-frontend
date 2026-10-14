@@ -136,6 +136,24 @@ export function isCancelRequested(chainStatus: string | null | undefined): boole
 }
 
 /**
+ * How many of the case's parts are disputed on chain (`chainDisputedParts`,
+ * audit E-4), in words, or `null` when none is. A dispute freezes only its own
+ * part: while any part is still pending the case reads `PENDING` on chain and
+ * those parts keep executing.
+ */
+export function disputedPartsNote(
+  chainStatus: string | null | undefined,
+  chainDisputedParts: number | null | undefined,
+): string | null {
+  if (!chainDisputedParts || chainDisputedParts <= 0) return null;
+  const parts = `${chainDisputedParts} part${chainDisputedParts === 1 ? "" : "s"}`;
+  if (chainStatus === "PENDING") {
+    return `partly disputed: ${parts} disputed on chain, the other parts keep executing`;
+  }
+  return `${parts} disputed on chain`;
+}
+
+/**
  * The deadline that comes with a requested on-chain cancel, in plain words.
  *
  * `CANCEL_REQUESTED` means the platform has asked for the cancel and nothing

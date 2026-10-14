@@ -61,8 +61,6 @@ export interface PlatformHealth {
 export interface ChainStateHealth {
   chainId: string;
   paused: boolean;
-  /** Whether the Config has the dispute upgrade; `null` until first reconciled. */
-  upgraded: boolean | null;
   /** `X402Config.arbiter()`, lower-case, or `null`. */
   arbiter: string | null;
   /** The live slash delay — the dispute window. */
@@ -215,6 +213,12 @@ export interface OperatorCaseBrief {
    * absent from a backend that predates the field.
    */
   chainExecutableAt?: string | null;
+  /**
+   * How many of the case's current parts are disputed on chain (audit E-4).
+   * With `chainStatus: PENDING` and a non-zero count the case is partly
+   * disputed: the other parts keep executing. Absent from an older backend.
+   */
+  chainDisputedParts?: number;
 }
 
 /** `POST /operator/cases/:id/decide`. */
@@ -348,11 +352,12 @@ export interface CancelIntent {
   transaction: string;
   /**
    * The only key that can sign this. Solana: `Config.admin`, **bare base58**.
-   * EVM: the ARBITER when the Config has one (D-19), else the admin — see `signerRole`.
+   * EVM: always `X402Config.arbiter()` (D-19); without an arbiter the build is
+   * refused with `409 CHAIN_ARBITER_NOT_SET`.
    */
   admin: string;
-  /** Who `admin` is. Absent on Solana and on an older backend, which means the admin. */
-  signerRole?: "ADMIN" | "ARBITER";
+  /** EVM: always `ARBITER`. Absent on Solana, where `admin` is `Config.admin`. */
+  signerRole?: "ARBITER";
   /** EVM only: the X402Stake proxy the calldata is sent to. */
   to?: string;
   /** The slash request id the record PDA is seeded by. 32 bytes, lower-case hex. */
@@ -463,8 +468,6 @@ export interface ListOverrideLogQuery {
 /** `GET /operator/arbiter/terms?chainId=` — the Config's dispute terms, read live from the chain. */
 export interface ArbiterTerms {
   chainId: string;
-  /** False on a Config that predates the dispute upgrade: no dispute, arbiter or blocklist. */
-  upgraded: boolean;
   paused: boolean;
   /** `X402Config.arbiter()`, checksummed, or `null` for none appointed. */
   arbiter: string | null;
@@ -472,6 +475,37 @@ export interface ArbiterTerms {
   admin: string;
   /** The delay a proposal made now would freeze into its `executableAt`. */
   slashDelaySeconds: number;
+  /** `params().slashAgentBps`: the beneficiary's share of an executed slash, in basis points. */
+  slashAgentBps: number;
+}
+
+/**
+ * Follow-up C5: whether the beneficiary of a disputed record is a payer of the
+ * window's failed calls, and whether the record's part stays within that
+ * payer's pro-rata share of the formula penalty (`beneficiaryEvidence` in
+ * assay-backend `slash-beneficiary-evidence.ts`). Amounts are atomic units of
+ * the stake asset, as decimal strings.
+ */
+export interface ArbiterBeneficiaryEvidence {
+  /** The payer of the failed calls' vouchers, CAIP-10, or `null` when none was found. */
+  payer: string | null;
+  failedCalls: number;
+  /** What the payer signed for the failed calls (refunded off chain). */
+  paidAmount: string;
+  /**
+   * The payer's pro-rata share, by failed spend, of the case penalty: the most
+   * the record's part may be (plus one atomic unit of rounding). Absent from a
+   * backend before c3440d7.
+   */
+  formulaShareAmount?: string;
+  /** The part of it whose intent was redeemed. */
+  redeemedAmount: string;
+  /** The beneficiary's payout if executed: `penalty × slashAgentBps / 10 000`, floored. */
+  shareAmount: string;
+  /** The beneficiary is the payer, and the part is within its formula share. */
+  ok: boolean;
+  /** Why the check fails, in the backend's words; `null` when `ok`. */
+  reason: string | null;
 }
 
 /** One row of `GET /operator/arbiter/disputes` (`{ items }`), oldest dispute first. */
@@ -490,13 +524,12 @@ export interface ArbiterDispute {
   executableAt: string | null;
   /** `disputedAt + 30 d`: from then `expireSlash` releases it with `DisputeUnresolved`. */
   expiresAt: string | null;
-  /**
-   * PLACEHOLDER — the provider's upheld violations in the last 30 days. Being
-   * added on the backend; the field name is not confirmed yet, so it is read
-   * through `upheldLast30dOf` (features/operator/arbiter.ts), which accepts the
-   * likely spellings. Absent on the backend at aa501c2.
-   */
-  upheldViolationsLast30d?: number | null;
+  /** The provider's slash cases upheld or executed in the last 30 days (follow-up C4). */
+  upheldViolations30d: number;
+  /** CAIP-10: who the record pays its agent share to. */
+  beneficiary: string;
+  /** `null` when the backend could not check it (no window, or the chain's terms unreadable). */
+  beneficiaryEvidence: ArbiterBeneficiaryEvidence | null;
 }
 
 export type ArbiterRuling = "UPHOLD" | "CANCEL";
