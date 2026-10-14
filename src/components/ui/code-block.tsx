@@ -44,17 +44,20 @@ export const CodeBlock = React.forwardRef<HTMLDivElement, CodeBlockProps>(
     return (
       <div
         ref={ref}
-        className={cn("w-full overflow-hidden rounded-lg bg-inverse", className)}
+        // Code always sits on the landing's dark ground: the block scopes the
+        // dark tokens to itself, in either app theme.
+        data-theme="dark"
+        className={cn("w-full overflow-hidden rounded-lg border border-01 bg-02", className)}
         {...props}
       >
         <div className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5">
-          <span className="text-mono-12 font-mono text-inverse">{title}</span>
+          <span className="text-mono-12 font-mono text-01">{title}</span>
           {copyable ? (
             <button
               type="button"
               onClick={handleCopy}
               aria-label={copied ? `Copied ${title} to clipboard` : `Copy ${title} to clipboard`}
-              className="flex items-center gap-1.5 rounded-sm bg-overlay-light px-2 py-1 text-label-xs text-inverse dark:bg-overlay-dark"
+              className="flex items-center gap-1.5 rounded-sm bg-overlay-light px-2 py-1 text-label-xs text-01 dark:bg-overlay-dark"
             >
               {copied ? <Check width={13} height={13} /> : <Copy width={13} height={13} />}
               <span>{copied ? "Copied" : "Copy"}</span>
@@ -62,7 +65,7 @@ export const CodeBlock = React.forwardRef<HTMLDivElement, CodeBlockProps>(
           ) : null}
         </div>
         <div className="w-full overflow-x-auto px-3.5 pb-4">
-          <pre className="w-full whitespace-pre text-mono-12 font-mono text-inverse">{code}</pre>
+          <pre className="w-full whitespace-pre text-mono-12 font-mono text-01">{code}</pre>
         </div>
       </div>
     );

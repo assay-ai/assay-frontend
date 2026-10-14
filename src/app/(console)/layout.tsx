@@ -7,10 +7,12 @@ import { Toaster } from "sonner";
 import { AlertFill, CheckCircle } from "@/components/icons";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
 import { Sidebar, type SidebarBindingItem } from "@/components/layout/sidebar";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
 import { SlashHoldBanner } from "@/features/slash-hold/slash-hold-banner";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { labelForEndpoint } from "@/utils/provider-label";
+import { useTheme } from "@/providers/ThemeProvider";
 
 /**
  * The provider console shell — the design's "Sidebar" component, used by
@@ -96,7 +98,7 @@ function titleFor(pathname: string): string {
   const match = Object.keys(TITLES)
     .filter((href) => href !== "/provider" && pathname.startsWith(href))
     .sort((a, b) => b.length - a.length)[0];
-  return match ? TITLES[match] : "GoAssay.AI";
+  return match ? TITLES[match] : "Assay";
 }
 
 /**
@@ -118,6 +120,7 @@ function titleFor(pathname: string): string {
  */
 
 export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
+  const { themeType } = useTheme();
   const pathname = usePathname();
 
   /*
@@ -165,6 +168,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
         policyChangesHref="/provider/policy-changes"
         accountHref="/provider/account"
         bindings={bindings}
+        footer={<ThemeToggle />}
       />
 
       {/* Desktop Main: gap 16, padding [22, 26]. Mobile Content
@@ -181,6 +185,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
           silent no-op — BUG-J-PROV-02's "Publish gives no feedback" was this.
           Same props as `(main)` and `(operator)`. */}
       <Toaster
+        theme={themeType}
         position="top-center"
         icons={{
           success: <CheckCircle className="mt-2 text-xl" />,

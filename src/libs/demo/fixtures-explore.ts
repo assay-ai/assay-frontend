@@ -530,7 +530,7 @@ function verification(provider: DemoProvider): ProviderVerification {
 
   return {
     verified: true,
-    verifiedBy: "GoAssay.AI compliance",
+    verifiedBy: "Assay compliance",
     verifiedAt: daysAgo(provider.verifiedDaysAgo ?? 0),
     method: "DOMAIN_CONTROL",
     checks,
