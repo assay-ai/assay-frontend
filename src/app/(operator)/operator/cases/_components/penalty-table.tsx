@@ -11,7 +11,7 @@ import { routes } from "@/libs/routes";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
-import { Deadline } from "@/features/operator/deadline";
+import { Deadline, deadlineTitle } from "@/features/operator/deadline";
 
 /**
  * The Penalties table: provider, amount, status, what happens next, proposed.
@@ -117,7 +117,7 @@ function Next({ row, waiting, now, hideNone = false }: { row: PenaltyRow; waitin
   if (next.kind === "none") return hideNone ? null : <span className="text-body-xs text-03">—</span>;
   return (
     <span
-      title={next.until ? new Date(next.until).toISOString().slice(0, 16).replace("T", " ") + " UTC" : undefined}
+      title={next.until ? deadlineTitle("Ends", next.until) : undefined}
       className={cn("text-body-xs tabular-nums", next.urgent ? "text-danger-600" : "text-02")}
     >
       {next.text}

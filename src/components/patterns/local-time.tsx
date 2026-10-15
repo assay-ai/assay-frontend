@@ -11,6 +11,7 @@ import { cn } from "@/utils";
  *
  *   <LocalTime value={call.createdAt} />            // "14:20" / "Oct 16, 14:20"
  *   <LocalTime value={x.expiresAt} dateOnly />       // "Oct 16"
+ *   asked <LocalTime value={a.createdAt} midSentence /> // "asked yesterday 14:20"
  *
  * The first render prints the UTC form and the local one lands after mount:
  * the static export is rendered with no time zone, and printing the server's
@@ -23,23 +24,26 @@ export interface LocalTimeProps extends React.TimeHTMLAttributes<HTMLTimeElement
   withZone?: boolean;
   /** "4 min ago" within the hour, "Today 14:20" later today — for live lists. */
   relative?: boolean;
+  /** The time sits inside a sentence: "asked yesterday 14:20", not "asked Yesterday 14:20". */
+  midSentence?: boolean;
 }
 
-export function LocalTime({ value, dateOnly = false, withZone = false, relative = false, className, ...props }: LocalTimeProps) {
+export function LocalTime({ value, dateOnly = false, withZone = false, relative = false, midSentence = false, className, ...props }: LocalTimeProps) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
 
   const date = value === null || value === undefined || value === "" ? null : new Date(value);
   const iso = date && !Number.isNaN(date.getTime()) ? date.toISOString() : undefined;
+  const options = { midSentence };
   const text = !mounted
     ? (utcTitle(value) ?? "—")
     : dateOnly
       ? formatLocalDate(value)
       : withZone
-        ? `${formatLocalDateTime(value)} ${zoneLabel(value)}`.trim()
+        ? `${formatLocalDateTime(value, options)} ${zoneLabel(value)}`.trim()
         : relative
-          ? formatRelative(value)
-        : formatLocalDateTime(value);
+          ? formatRelative(value, options)
+          : formatLocalDateTime(value, options);
 
   return (
     <time dateTime={iso} title={utcTitle(value)} className={cn("tabular-nums", className)} {...props}>

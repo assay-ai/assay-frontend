@@ -233,14 +233,19 @@ function statusChip(row: Pick<PenaltyRow, "status" | "disputedAt" | "nextDeadlin
   }
 }
 
-/** "3 days", "17h", "45 min", "under a minute" — whole units, rounded up. */
+/**
+ * "3 days", "17h", "45 min", "under a minute" — whole units, rounded DOWN:
+ * the same reading as the `Deadline` chip and the penalty page's countdown
+ * ("in 3h 57m" there is "3h" here, never "4h"), so the list and the page
+ * never disagree about one deadline.
+ */
 export function durationLeft(ms: number): string {
   if (ms < 60_000) return "under a minute";
-  const minutes = Math.ceil(ms / 60_000);
+  const minutes = Math.floor(ms / 60_000);
   if (minutes < 60) return `${minutes} min`;
-  const hours = Math.ceil(ms / 3_600_000);
+  const hours = Math.floor(ms / 3_600_000);
   if (hours < 48) return `${hours}h`;
-  return `${Math.ceil(ms / 86_400_000)} days`;
+  return `${Math.floor(ms / 86_400_000)} days`;
 }
 
 export type PenaltyNext =

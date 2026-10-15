@@ -139,7 +139,9 @@ describe("what a row says", () => {
   it("rounds time left up, in whole units", () => {
     expect(durationLeft(30_000)).toBe("under a minute");
     expect(durationLeft(45 * 60_000)).toBe("45 min");
-    expect(durationLeft(17 * 3_600_000 + 1)).toBe("18h");
+    expect(durationLeft(17 * 3_600_000 + 1)).toBe("17h");
+    // The page's "in 3h 57m" is "3h" here, not "4h".
+    expect(durationLeft(3 * 3_600_000 + 57 * 60_000)).toBe("3h");
     expect(durationLeft(7 * DAY)).toBe("7 days");
   });
 });
