@@ -95,7 +95,7 @@ export function CancelSheet({
               signLabel="Sign and send the cancel"
               successTitle="Cancel sent"
               successDescription="The penalty shows as cancelled once the chain watcher reads it back, usually within a minute."
-              afterExport="Import the file in the Safe that holds the arbiter key and sign it there. The penalty shows as cancelled once it lands."
+              afterExport="Open the file in the wallet that holds the arbiter key and sign it there. The penalty shows as cancelled once it lands."
               onSigned={onSigned}
               onBusyChange={setSigning}
             />

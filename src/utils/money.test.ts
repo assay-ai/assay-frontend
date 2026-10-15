@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseAmountInput,
+  splitForDisplay,
   exceedsScale,
   formatDecimal,
   formatMoney,
@@ -249,5 +250,29 @@ describe("parseAmountInput", () => {
     expect(parseAmountInput("0.0000001", { decimals: 6 }).error).toBe("Use at most 6 decimal places.");
     expect(parseAmountInput("4", { decimals: 6, min: "5" }).error).toBe("The minimum is $5.00.");
     expect(parseAmountInput("60", { decimals: 6, max: "50" }).error).toBe("The most you can use here is $50.00.");
+  });
+});
+
+describe("splitForDisplay", () => {
+  const usd = (amount: string) => ({ amount, asset: "eip155:1/erc20:0x1", decimals: 6 });
+
+  it("gives the lost cent to the part that lost the most, so the parts add up", () => {
+    // $28.47 at 60 / 30 / 10: 17.082, 8.541, 2.847.
+    expect(splitForDisplay([usd("17082000"), usd("8541000"), usd("2847000")]).map((m) => m.amount)).toEqual([
+      "17080000",
+      "8540000",
+      "2850000",
+    ]);
+    // $3.75: 2.25, 1.125, 0.375 — a tie goes to the first: 2.25 + 1.13 + 0.37.
+    expect(splitForDisplay([usd("2250000"), usd("1125000"), usd("375000")]).map((m) => m.amount)).toEqual([
+      "2250000",
+      "1130000",
+      "370000",
+    ]);
+  });
+
+  it("leaves exact parts alone", () => {
+    expect(splitForDisplay([usd("1000000"), usd("2000000")]).map((m) => m.amount)).toEqual(["1000000", "2000000"]);
+    expect(splitForDisplay([])).toEqual([]);
   });
 });

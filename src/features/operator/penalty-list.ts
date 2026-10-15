@@ -70,6 +70,15 @@ export function tabById(tabs: readonly PenaltyTab[], id: string | null | undefin
   return tabs.find((tab) => tab.id === id) ?? tabs[0]!;
 }
 
+/**
+ * The tab the page opens on when the link names none: Needs ruling for whoever
+ * can rule, All for everyone else (Support, Admin) — a tab they cannot act on
+ * is an odd place to land. Without the list there is no All tab. Pure.
+ */
+export function defaultTab(canRule: boolean, listMissing: boolean): PenaltyTabId {
+  return canRule || listMissing ? "needs-ruling" : "all";
+}
+
 /** How many open rows each status tab holds; null for the closed tabs (not counted). */
 export function tabCounts(openRows: readonly Pick<PenaltyRow, "status">[]): Partial<Record<PenaltyTabId, number>> {
   const counts: Partial<Record<PenaltyTabId, number>> = {};
@@ -175,18 +184,39 @@ export function uniqueRows(rows: readonly PenaltyRow[]): PenaltyRow[] {
 
 // ── What the row says ───────────────────────────────────────────────────────
 
-/** The chip for a status, with the existing chip vocabulary. */
-export function penaltyChip(row: Pick<PenaltyRow, "status" | "disputedAt" | "nextDeadline">, now: number = Date.now()): {
+/** The chip's detail while a two-person request on the penalty waits: "Executed · pay-back pending". */
+const PENDING_DETAIL: Record<string, string> = {
+  "slash.suspend": "suspend pending",
+  "slash.compensated": "pay-back pending",
+  "slash.sweep": "sweep pending",
+};
+
+/**
+ * The chip for a status, with the existing chip vocabulary. With a request
+ * waiting on the penalty (`pendingAction`), the chip says so ("Penalty upheld ·
+ * suspend pending"), so Status and Next tell one story.
+ */
+export function penaltyChip(
+  row: Pick<PenaltyRow, "status" | "disputedAt" | "nextDeadline">,
+  now: number = Date.now(),
+  pendingAction: string | null = null,
+): {
   status: StatusChipKey;
   detail?: string;
 } {
+  const chip = statusChip(row, now);
+  return pendingAction ? { status: chip.status, detail: PENDING_DETAIL[pendingAction] ?? "request pending" } : chip;
+}
+
+function statusChip(row: Pick<PenaltyRow, "status" | "disputedAt" | "nextDeadline">, now: number): { status: StatusChipKey; detail?: string } {
   switch (row.status) {
     case "CHAIN_DISPUTED":
       return { status: "disputed" };
     case "DISPUTED":
       return { status: "waiting", detail: "old process" };
     case "CANCEL_REQUESTED":
-      return { status: "waiting-signature", detail: "cancel" };
+      // The chip stays short; Next says what is signed ("Arbiter signs the cancel · 9h left").
+      return { status: "waiting-signature" };
     case "PROPOSED": {
       if (row.disputedAt) return { status: "upheld" };
       const at = row.nextDeadline ? Date.parse(row.nextDeadline) : Number.NaN;
@@ -255,12 +285,6 @@ export function rowMatches(row: Pick<PenaltyRow, "providerName" | "toolName">, q
   return row.providerName.toLowerCase().includes(q) || (row.toolName ?? "").toLowerCase().includes(q);
 }
 
-const WAITING_VERB: Record<string, string> = {
-  "slash.suspend": "Suspend",
-  "slash.compensated": "Pay-back",
-  "slash.sweep": "Fleet sweep",
-};
-
 /** Register codes of the two-person actions on a penalty, by approval action. */
 export const PENALTY_APPROVAL_CODES: Record<string, string> = {
   "slash.suspend": "S-1",
@@ -268,11 +292,18 @@ export const PENALTY_APPROVAL_CODES: Record<string, string> = {
   "slash.sweep": "S-11",
 };
 
-/** "Suspend waiting for approval · Riley or Iris": a request on this penalty no one has decided yet. */
-export function waitingText(action: string, approverNames: readonly string[]): string {
-  const verb = WAITING_VERB[action] ?? "A request";
+/** A two-person request on a penalty no one has decided yet: what it is, and the Next column's words. */
+export interface PenaltyWaiting {
+  /** The approval action (`slash.suspend`, …): the chip names it. */
+  action: string;
+  /** "Waiting for Riley or Iris to approve". */
+  text: string;
+}
+
+/** "Waiting for Riley or Iris to approve": the Next column while a request waits (the chip says which request). */
+export function waitingText(approverNames: readonly string[]): string {
   const first = approverNames.map((name) => name.split(/\s+/)[0] ?? name);
-  const who =
-    first.length === 0 ? "" : first.length <= 2 ? ` · ${first.join(" or ")}` : ` · ${first.slice(0, 2).join(", ")} or others`;
-  return `${verb} waiting for approval${who}`;
+  if (first.length === 0) return "Waiting for approval";
+  const who = first.length <= 2 ? first.join(" or ") : `${first.slice(0, 2).join(", ")} or others`;
+  return `Waiting for ${who} to approve`;
 }

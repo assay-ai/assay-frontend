@@ -6,7 +6,7 @@ import * as React from "react";
 
 import { LocalTime } from "@/components/patterns/local-time";
 import { StatusChip } from "@/components/patterns/status-chip";
-import { penaltyChip, penaltyNext, type PenaltyRow } from "@/features/operator/penalty-list";
+import { penaltyChip, penaltyNext, type PenaltyRow, type PenaltyWaiting } from "@/features/operator/penalty-list";
 import { routes } from "@/libs/routes";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
@@ -26,7 +26,7 @@ export function PenaltyTable({
 }: {
   rows: readonly PenaltyRow[];
   /** A request waiting for approval on a penalty, by penalty id: it is what happens next. */
-  waitingBy: ReadonlyMap<string, string>;
+  waitingBy: ReadonlyMap<string, PenaltyWaiting>;
   now: number;
 }) {
   return (
@@ -41,7 +41,7 @@ export function PenaltyTable({
               <th scope="col" className="w-[112px] px-4 py-2.5 text-right font-normal">
                 Amount
               </th>
-              <th scope="col" className="w-[200px] px-4 py-2.5 font-normal">
+              <th scope="col" className="w-[248px] px-4 py-2.5 font-normal">
                 Status
               </th>
               <th scope="col" className="w-[30%] px-4 py-2.5 font-normal">
@@ -68,7 +68,7 @@ export function PenaltyTable({
                   {row.amount ? formatMoney(row.amount) : "—"}
                 </td>
                 <td className="px-4 py-2.5 align-middle">
-                  <Chip row={row} now={now} />
+                  <Chip row={row} waiting={waitingBy.get(row.id) ?? null} now={now} />
                 </td>
                 <td className="px-4 py-2.5 align-middle">
                   <Next row={row} waiting={waitingBy.get(row.id) ?? null} now={now} />
@@ -92,7 +92,7 @@ export function PenaltyTable({
                   <span className="shrink-0 text-body-13 font-medium tabular-nums text-01">{row.amount ? formatMoney(row.amount) : "—"}</span>
                 </span>
                 <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <Chip row={row} now={now} />
+                  <Chip row={row} waiting={waitingBy.get(row.id) ?? null} now={now} />
                   <Next row={row} waiting={waitingBy.get(row.id) ?? null} now={now} hideNone />
                 </span>
               </span>
@@ -105,13 +105,13 @@ export function PenaltyTable({
   );
 }
 
-function Chip({ row, now }: { row: PenaltyRow; now: number }) {
-  const chip = penaltyChip(row, now);
+function Chip({ row, waiting, now }: { row: PenaltyRow; waiting: PenaltyWaiting | null; now: number }) {
+  const chip = penaltyChip(row, now, waiting?.action ?? null);
   return <StatusChip status={chip.status} detail={chip.detail} />;
 }
 
-function Next({ row, waiting, now, hideNone = false }: { row: PenaltyRow; waiting: string | null; now: number; hideNone?: boolean }) {
-  if (waiting) return <span className="text-body-xs text-02">{waiting}</span>;
+function Next({ row, waiting, now, hideNone = false }: { row: PenaltyRow; waiting: PenaltyWaiting | null; now: number; hideNone?: boolean }) {
+  if (waiting) return <span className="text-body-xs text-02">{waiting.text}</span>;
   const next = penaltyNext(row, now);
   if (next.kind === "dispute") return <Deadline kind="dispute" until={next.until} from={next.from} />;
   if (next.kind === "none") return hideNone ? null : <span className="text-body-xs text-03">—</span>;

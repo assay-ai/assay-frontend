@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ban, History, Layers, Lock, MoreHorizontal, PauseCircle, Undo2 } from "lucide-react";
+import { Ban, Check, History, Layers, Link2, Lock, MoreHorizontal, PauseCircle, Undo2 } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -20,13 +20,14 @@ import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { approvalHref, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
 import { approvalNeeds, reasonText } from "@/features/operator/approvals";
-import { shortWhyNot, type CaseAuthority } from "@/features/operator/case-flow";
+import { alreadyWaiting, shortWhyNot, type CaseAuthority } from "@/features/operator/case-flow";
 import { eligibleApprovers } from "@/features/operator/inbox";
 import { operatorErrorSentence } from "@/features/operator/operator-errors";
 import { DECISION_NOTE_MIN_LENGTH, REASON_CODES, SHORT_NOTE_MIN_LENGTH } from "@/features/operator/reason-codes";
 import { ResultCard } from "@/features/operator/result-card";
 import { chainIdOf, runOperatorIntent, signerIsHolder } from "@/features/operator/run-operator-intent";
-import { whoCan, type ConsoleAction } from "@/features/operator/roles";
+import { checkAction, rolesPhrase, whoCan, type ConsoleAction } from "@/features/operator/roles";
+import { askLabel } from "@/features/operator/why-not";
 import { isSweepable, may } from "@/features/operator/state";
 import { useOperatorDirectory } from "@/features/operator/use-operator-lookups";
 import { isUserRejection, useSigner } from "@/hooks/useSigner";
@@ -41,8 +42,11 @@ import { formatMoney } from "@/utils/money";
  * The rare actions on a penalty, behind the header's ⋯ menu: suspend it,
  * block the provider, pay an executed penalty back (two-person), open a
  * fleet sweep (two-person), and its history in Activity. An action this
- * operator may not take is still listed, disabled, with a one-line reason
- * and who to ask — never hidden. The two forms open in sheets.
+ * operator may not take is still listed, disabled, with the same one-line
+ * reason as the page and an "Ask …" item under it that copies the request —
+ * never hidden. An action whose two-person request already waits is held
+ * back the same way, so it cannot be asked for twice. The two forms open in
+ * sheets.
  */
 
 const COMPENSATE_REASONS: readonly ReasonOption[] = [
@@ -58,12 +62,18 @@ export function MoreActions({
   proposalId,
   identity,
   authority,
+  penaltyName,
+  pendingActions,
   onSuspend,
 }: {
   brief: OperatorCaseBrief;
   proposalId: string;
   identity: OperatorIdentity;
   authority: CaseAuthority;
+  /** "Northwind Geo's $28.47 penalty", for the Ask message. */
+  penaltyName: string;
+  /** Approval actions already waiting on this penalty (`slash.suspend`, `slash.compensated`, …). */
+  pendingActions: readonly string[];
   /** Opens the suspend sheet; null when this operator may not suspend. */
   onSuspend: (() => void) | null;
 }) {
@@ -78,17 +88,29 @@ export function MoreActions({
   const names = (action: ConsoleAction, amount: Money | null) =>
     directory.isPending ? null : whoCan(action, directory.operators, { amount, exceptId: identity.id });
 
-  const suspendWhy = authority.suspend.open && !authority.suspend.allowed
-    ? (shortWhyNot(identity, "suspend", penalty, names("suspend", penalty)) ?? authority.suspend.reason)
-    : null;
-  const blockWhy = authority.block ? null : shortWhyNot(identity, "block", null, names("block", null));
-  const compensateWhy = executed && !authority.compensate ? shortWhyNot(identity, "compensate", penalty, names("compensate", penalty)) : null;
+  // The reason alone; who to ask is its own item under it, as on the page.
+  const ask = (action: ConsoleAction, amount: Money | null, message: string): Ask | null => {
+    const who = names(action, amount);
+    const check = checkAction(identity, action, amount);
+    return who === null || check.allowed ? null : { label: askLabel(who, rolesPhrase(check.roles)), message };
+  };
+  const suspendWaiting = alreadyWaiting("slash.suspend", pendingActions);
+  const suspendWhy =
+    suspendWaiting ??
+    (authority.suspend.open && !authority.suspend.allowed ? (shortWhyNot(identity, "suspend", penalty, null) ?? authority.suspend.reason) : null);
+  const suspendAsk = suspendWaiting ? null : ask("suspend", penalty, `Can you suspend ${penaltyName}?`);
+  const blockWhy = authority.block ? null : shortWhyNot(identity, "block", null, null);
+  const blockAsk = ask("block", null, `Can you block the provider behind ${penaltyName}?`);
+  const compensateWaiting = alreadyWaiting("slash.compensated", pendingActions);
+  const compensateWhy =
+    compensateWaiting ?? (executed && !authority.compensate ? shortWhyNot(identity, "compensate", penalty, null) : null);
+  const compensateAsk = compensateWaiting ? null : ask("compensate", penalty, `Can you pay back ${penaltyName}?`);
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="secondary" aria-label="More actions on this penalty" className="px-2.5">
+          <Button variant="secondary" aria-label="More actions on this penalty" className="touch-target px-2.5">
             <MoreHorizontal aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
@@ -97,8 +119,9 @@ export function MoreActions({
             <MenuItem
               icon={<PauseCircle />}
               label={authority.suspend.twoPerson ? "Suspend penalty (needs approval)" : "Suspend penalty"}
-              why={onSuspend ? null : suspendWhy}
-              onSelect={onSuspend ?? undefined}
+              why={onSuspend && !suspendWaiting ? null : suspendWhy}
+              ask={onSuspend ? null : suspendAsk}
+              onSelect={onSuspend && !suspendWaiting ? onSuspend : undefined}
             />
           ) : null}
           {authority.block ? (
@@ -109,14 +132,15 @@ export function MoreActions({
               </Link>
             </DropdownMenuItem>
           ) : (
-            <MenuItem icon={<Ban />} label="Block provider" why={blockWhy} />
+            <MenuItem icon={<Ban />} label="Block provider" why={blockWhy} ask={blockAsk} />
           )}
           {executed ? (
             <MenuItem
               icon={<Undo2 />}
               label="Pay the provider back"
-              why={authority.compensate ? null : compensateWhy}
-              onSelect={authority.compensate ? () => setOpen("compensate") : undefined}
+              why={authority.compensate && !compensateWaiting ? null : compensateWhy}
+              ask={authority.compensate ? null : compensateAsk}
+              onSelect={authority.compensate && !compensateWaiting ? () => setOpen("compensate") : undefined}
             />
           ) : null}
           {canSweep ? <MenuItem icon={<Layers />} label="Open a fleet sweep" why={null} onSelect={() => setOpen("sweep")} /> : null}
@@ -150,33 +174,72 @@ export function MoreActions({
   );
 }
 
+interface Ask {
+  /** "Ask Jordan or Riley". */
+  label: string;
+  /** What is asked, copied with a link to this page. */
+  message: string;
+}
+
 function MenuItem({
   icon,
   label,
   why,
+  ask = null,
   onSelect,
 }: {
   icon: React.ReactElement;
   label: string;
   /** Set when refused: the item is disabled and says why. */
   why: string | null;
+  /** Who to ask, under a refused item: the same Ask as the page's one-line why-not. */
+  ask?: Ask | null;
   onSelect?: () => void;
 }) {
   const disabled = why !== null || !onSelect;
   return (
-    <DropdownMenuItem disabled={disabled} onSelect={onSelect} className="items-start data-[disabled]:opacity-100">
-      <span aria-hidden="true" className={cn("mt-0.5 [&>svg]:size-4", disabled ? "text-03" : "text-02")}>
-        {icon}
-      </span>
-      <span className="flex min-w-0 flex-col">
-        <span className={cn("text-body-13", disabled ? "text-03" : "text-01")}>{label}</span>
-        {why ? (
-          <span className="flex items-start gap-1 text-body-xs text-03">
-            <Lock aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
-            {why}
-          </span>
-        ) : null}
-      </span>
+    <>
+      <DropdownMenuItem disabled={disabled} onSelect={onSelect} className="items-start data-[disabled]:opacity-100">
+        <span aria-hidden="true" className={cn("mt-0.5 [&>svg]:size-4", disabled ? "text-03" : "text-02")}>
+          {icon}
+        </span>
+        <span className="flex min-w-0 flex-col">
+          <span className={cn("text-body-13", disabled ? "text-03" : "text-01")}>{label}</span>
+          {why ? (
+            <span className="flex items-start gap-1 text-body-xs text-03">
+              <Lock aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
+              {why}
+            </span>
+          ) : null}
+        </span>
+      </DropdownMenuItem>
+      {disabled && why && ask ? <AskItem ask={ask} /> : null}
+    </>
+  );
+}
+
+/** "Ask Jordan or Riley": copies the request and this page's link, and stays open to say so. */
+function AskItem({ ask }: { ask: Ask }) {
+  const [copied, setCopied] = React.useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(`${ask.message} ${window.location.href}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard refused: the page link is still in the address bar */
+    }
+  };
+  return (
+    <DropdownMenuItem
+      onSelect={(event) => {
+        event.preventDefault();
+        void copy();
+      }}
+      className="-mt-1 pl-8 text-label-13 text-primary-700"
+    >
+      {copied ? <Check aria-hidden="true" className="size-3.5 text-success-500" /> : <Link2 aria-hidden="true" className="size-3.5" />}
+      {copied ? "Message and link copied" : ask.label}
     </DropdownMenuItem>
   );
 }
