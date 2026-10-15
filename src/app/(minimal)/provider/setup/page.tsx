@@ -1,327 +1,551 @@
 "use client";
 
-import { ArrowRight, CircleCheck, CircleX, Globe, Network, Shield, Wallet } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useConnectWallet } from "@privy-io/react-auth";
+import { ArrowRight, CircleCheck, CircleX, PartyPopper, TriangleAlert, Wallet } from "lucide-react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { PageState } from "@/components/patterns/page-state";
+import { SignAction } from "@/components/patterns/sign-action";
+import { Stepper, type StepperStep } from "@/components/patterns/stepper";
 import { Button } from "@/components/ui/button";
-import {
-  Panel,
-  PanelBody,
-  PanelDescription,
-  PanelHeader,
-  PanelTitle,
-  PanelTitles,
-} from "@/components/ui/panel";
-import {
-  AccountFields,
-  EndpointFields,
-  Outcome,
-  PayoutWalletFields,
-  Refusal,
-  StepCard,
-  TermsBody,
-} from "@/features/m41/steps";
-import { useProviderSetup } from "@/features/m41/use-setup";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field } from "@/components/ui/field";
+import { Outcome } from "@/features/m41/steps";
+import { termValue } from "@/features/m41/terms";
+import { addressFamily, useProviderSetup, type ProviderSetup } from "@/features/m41/use-setup";
+import { useChainName } from "@/hooks/useChainName";
+import { useConnectedAddresses } from "@/hooks/useSigner";
+import { ApiError } from "@/libs/ApiClient";
+import { knowsError, plainError } from "@/libs/plain-language";
+import { routes } from "@/libs/routes";
+import { cn } from "@/utils";
 
 /**
- * Provider setup — route `/provider/setup`.
+ * Provider setup — `/provider/setup`. Three steps on one page:
  *
- * The four steps — account, payout wallet, endpoint with a connectivity
- * check, terms — all live here, because the frame draws all four here. Its
- * companion registration screen (`/provider/register`) draws only the
- * first two, inside the console shell, and renders them from the same module
- * so the two routes cannot drift into two implementations.
+ *   1 You       business name, you, a second person for escalations, the terms
+ *   2 Get paid  connect a wallet, sign a message (free); the chain follows the wallet
+ *   3 Your API  the endpoint, checked as soon as you leave the field
  *
- * ## The terms are printed, not linked
+ * then one screen with one button: "Create your first tool listing", which
+ * carries the endpoint (and a price from the public calculator, if one came
+ * in on `?price=`) into the listing wizard.
  *
- * Step 4 is the full commercial table — take rate, payouts, reserve, clawback,
- * stake, what is slashable, where a penalty goes — followed by the acceptance
- * line. There is no link, no modal and no "see terms" affordance anywhere on
- * this screen, and there must not be one: the checkbox confirms text the
- * reader has in front of them, which is the only thing that makes an
- * acceptance mean anything.
- *
- * ## What the API forces about the ORDER
- *
- * The frame shows four cards side by side, not four pages, and that is right —
- * but they are not four independent writes:
- *
- *   - `POST /providers` takes the account AND the accepted terms in one body,
- *     so the header button writes steps 1 and 4 together. There is no route
- *     that does either alone.
- *   - Step 2's challenge and step 3's save both need that row to exist and
- *     say so until it does.
- *
- * ## The Bar
- *
- * "step 2 of 4" in the 56px bar is a static string in `(minimal)/layout.tsx`'s
- * pathname map, not this screen's live `currentStep`. The layout's own comment
- * names that map as the seam for live data; it is a shared file, so the
- * mismatch is left visible rather than patched from here.
+ * The order is the backend's: registering creates the provider record and
+ * needs the terms, and a payout proof and an endpoint are stored on that record.
  */
+
+type Stage = "you" | "paid" | "api" | "done";
+
+const STAGE_FROM_PARAM: Record<string, Stage> = { you: "you", account: "you", wallet: "paid", paid: "paid", api: "api", endpoint: "api" };
+
+/** Terms that the platform does not enforce are not shown as terms (business #10: no per-window cap). */
+const HIDDEN_TERMS = /penalty.?ceiling/i;
+
+function stageDone(setup: ProviderSetup, stage: Exclude<Stage, "done">): boolean {
+  const status = (key: string) => setup.steps.find((step) => step.key === key)?.status;
+  if (stage === "you") return setup.registered && status("account") === "DONE" && setup.accepted;
+  if (stage === "paid") return status("payoutWallet") === "DONE";
+  return status("endpoint") === "DONE";
+}
+
 export default function ProviderSetupPage() {
   const setup = useProviderSetup();
-  const router = useRouter();
-  const {
-    loading,
-    loadError,
-    registered,
-    steps,
-    allDone,
-    save,
-    accountDirty,
-    saveBlockedBy,
-    attempted,
-    saving,
-    saveError,
-    saved,
-    egressIps,
-    terms,
-  } = setup;
+  const params = useSearchParams();
+  const requested = STAGE_FROM_PARAM[params.get("step") ?? ""] ?? null;
+  const [stage, setStage] = React.useState<Stage | null>(null);
 
-  // Both come from the registration state, not from copy: the step count is
-  // what the server reports and the minimum is the published stake row.
-  const stepCount = steps.length;
-  const stepWord = ["", "One", "Two", "Three", "Four", "Five", "Six"][stepCount] ?? String(stepCount);
-  const stakeMinimum =
-    terms.commercialTerms.find((term) => term.key === "stakeRequired")?.value ?? null;
+  const done = {
+    you: stageDone(setup, "you"),
+    paid: stageDone(setup, "paid"),
+    api: stageDone(setup, "api"),
+  };
+  const firstOpen: Stage = !done.you ? "you" : !done.paid ? "paid" : !done.api ? "api" : "done";
 
-  const statusOf = (key: string) => steps.find((s) => s.key === key)?.status ?? "NOT_STARTED";
+  // Land on the asked-for step when it can be done now, else on the first unfinished one.
+  React.useEffect(() => {
+    if (stage !== null || setup.loading) return;
+    const order: Stage[] = ["you", "paid", "api", "done"];
+    const allowed = requested && order.indexOf(requested) <= order.indexOf(firstOpen) ? requested : firstOpen;
+    setStage(allowed);
+  }, [stage, setup.loading, requested, firstOpen]);
+
+  if (setup.loading || stage === null) {
+    return (
+      <SetupFrame>
+        <PageState kind="loading" rows={4} label="Loading your setup" />
+      </SetupFrame>
+    );
+  }
+  if (setup.loadError) {
+    return (
+      <SetupFrame>
+        <PageState
+          kind="error"
+          description="Your provider setup could not be loaded."
+          code={setup.loadError.code}
+          details={setup.loadError.message}
+          onRetry={() => window.location.reload()}
+        />
+      </SetupFrame>
+    );
+  }
+
+  const stepperSteps: StepperStep[] = (
+    [
+      { id: "you", label: "You" },
+      { id: "paid", label: "Get paid" },
+      { id: "api", label: "Your API" },
+    ] as const
+  ).map((step) => ({
+    ...step,
+    state: stage === step.id ? "current" : done[step.id] ? "done" : "upcoming",
+  }));
+
+  const price = params.get("price");
+  const wizardHref = (() => {
+    const base = routes.bindingWizard();
+    const extra = new URLSearchParams();
+    if (setup.savedEndpoint) extra.set("endpoint", setup.savedEndpoint);
+    if (price && /^\d*\.?\d+$/.test(price)) extra.set("price", price);
+    const query = extra.toString();
+    return query ? `${base}?${query}` : base;
+  })();
 
   return (
-    <>
-      {/* Header */}
-      <div className="flex w-full flex-col gap-4 tablet:flex-row tablet:items-center tablet:justify-between">
-        <div className="flex min-w-0 flex-col gap-[3px]">
-          <h1 className="text-heading-md text-01">Set up your provider account</h1>
-          <p className="text-body-sm text-02">
-            {stepCount > 0 ? `${stepWord} ${stepCount === 1 ? "step" : "steps"}` : "A few steps"}, then you write your binding and publish it yourself. You do not build
-            anything against our API — you need an endpoint and a wallet.
-          </p>
+    <SetupFrame>
+      {stage === "done" ? (
+        <DoneScreen href={wizardHref} />
+      ) : (
+        <>
+          <header className="flex flex-col gap-1">
+            <h1 className="text-heading-sm text-01 tablet:text-heading-md">Set up your provider account</h1>
+            <p className="text-body-13 text-02">
+              Three short steps, about five minutes. Then you list your first tool and publish it yourself: there is no
+              review queue.
+            </p>
+          </header>
+          <Stepper steps={stepperSteps} onSelect={(id) => setStage(id as Stage)} label="Setup progress" />
+          {stage === "you" ? <YouStep setup={setup} onNext={() => setStage(done.paid ? (done.api ? "done" : "api") : "paid")} /> : null}
+          {stage === "paid" ? <PaidStep setup={setup} onNext={() => setStage(done.api ? "done" : "api")} /> : null}
+          {stage === "api" ? <ApiStep setup={setup} onNext={() => setStage("done")} /> : null}
+        </>
+      )}
+    </SetupFrame>
+  );
+}
+
+/** A plain sentence for an API error; the server's own message when the dictionary has none. */
+function errorSentence(error: unknown): string {
+  if (error instanceof ApiError) return knowsError(error.code) ? plainError(error.code) : error.message;
+  return error instanceof Error && error.message ? error.message : "That did not go through. Try again.";
+}
+
+function SetupFrame({ children }: { children: React.ReactNode }) {
+  return <div className="mx-auto flex w-full max-w-[640px] flex-col gap-4">{children}</div>;
+}
+
+function Card({ title, description, children }: { title: string; description?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 p-4 tablet:p-6">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-label-md text-01">{title}</h2>
+        {description ? <p className="text-body-13 text-02">{description}</p> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ 1 · You */
+
+function YouStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }) {
+  const { account, setAccountField, accountErrors, touch, terms, accepted, setAccepted, registered } = setup;
+  const [editZone, setEditZone] = React.useState(false);
+  const sans = "font-sans text-body-sm";
+  const shownTerms = terms.commercialTerms.filter((term) => !HIDDEN_TERMS.test(`${term.key} ${term.label}`));
+  const clean = registered && !setup.accountDirty;
+
+  return (
+    <Card title="About you" description="Who buyers' payments go to, and who we contact if something breaks.">
+      <Field
+        label="Business or trading name"
+        className={sans}
+        placeholder="Acme Data Ltd"
+        value={account.legalName}
+        error={accountErrors.legalName}
+        autoComplete="organization"
+        onChange={(e) => setAccountField("legalName", e.target.value)}
+        onBlur={() => touch("legalName")}
+      />
+      <div className="grid w-full gap-4 tablet:grid-cols-2">
+        <Field
+          label="Your name"
+          className={sans}
+          placeholder="Alex Example"
+          value={account.technicalName}
+          error={accountErrors.technicalName}
+          autoComplete="name"
+          onChange={(e) => setAccountField("technicalName", e.target.value)}
+          onBlur={() => touch("technicalName")}
+        />
+        <Field
+          label="Your email"
+          type="email"
+          className={sans}
+          placeholder="alex@acme.example"
+          hint="Incidents and changes to your tools."
+          value={account.technicalEmail}
+          error={accountErrors.technicalEmail}
+          autoComplete="email"
+          onChange={(e) => setAccountField("technicalEmail", e.target.value)}
+          onBlur={() => touch("technicalEmail")}
+        />
+      </div>
+
+      <fieldset className="flex w-full flex-col gap-3 rounded-lg border border-01 bg-02 p-3.5">
+        <legend className="px-1 text-label-13 text-01">A second person</legend>
+        <p className="text-body-xs text-02">
+          Someone we can reach when you are away, with a different inbox. We only use it for escalations.
+        </p>
+        <div className="grid w-full gap-4 tablet:grid-cols-2">
+          <Field
+            label="Their name"
+            className={sans}
+            placeholder="Sam Example"
+            value={account.ownerName}
+            error={accountErrors.ownerName}
+            onChange={(e) => setAccountField("ownerName", e.target.value)}
+            onBlur={() => touch("ownerName")}
+          />
+          <Field
+            label="Their email"
+            type="email"
+            className={sans}
+            placeholder="sam@acme.example"
+            value={account.ownerEmail}
+            error={accountErrors.ownerEmail}
+            onChange={(e) => setAccountField("ownerEmail", e.target.value)}
+            onBlur={() => touch("ownerEmail")}
+          />
         </div>
-        <div className="flex shrink-0 items-center gap-2.5">
+      </fieldset>
+
+      {editZone || accountErrors.timezone || !account.timezone ? (
+        <Field
+          label="Time zone"
+          className={sans}
+          placeholder="Europe/London"
+          hint="Deadlines we give you are counted in this zone."
+          value={account.timezone}
+          error={accountErrors.timezone}
+          onChange={(e) => setAccountField("timezone", e.target.value)}
+          onBlur={() => touch("timezone")}
+        />
+      ) : (
+        <p className="text-body-13 text-02">
+          Deadlines are counted in <span className="font-semibold text-01">{account.timezone}</span>.{" "}
+          <button type="button" className="text-primary-600 underline-offset-2 hover:underline" onClick={() => setEditZone(true)}>
+            Change
+          </button>
+        </p>
+      )}
+
+      <div className="flex w-full flex-col gap-2 rounded-lg border border-primary-20 bg-primary-10 p-3.5 text-body-13 text-primary-700">
+        <p>
+          <span className="font-semibold">Free tools need no stake.</span> To charge per call you add stake: it backs the
+          failure rate you promise, and you get it back when you stop. You choose later, per tool.
+        </p>
+      </div>
+
+      <details className="group w-full text-body-13">
+        <summary className="cursor-pointer select-none text-label-13 text-primary-600">Key terms</summary>
+        <dl className="mt-2 flex w-full flex-col">
+          {shownTerms.map((term) => (
+            <div key={term.key} className="flex w-full flex-col gap-0.5 border-t border-01 py-2 tablet:flex-row tablet:gap-3">
+              <dt className="text-02 tablet:w-44 tablet:shrink-0">{term.label}</dt>
+              <dd className="flex flex-col gap-0.5">
+                <span className="font-semibold text-01">{termValue(term)}</span>
+                <span className="text-body-xs text-03">{term.caption}</span>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </details>
+
+      <Checkbox
+        checked={accepted}
+        disabled={registered}
+        onChange={(e) => setAccepted(e.target.checked)}
+        label={terms.acceptanceLine}
+        className="items-start [&>span:first-of-type]:mt-px"
+      />
+
+      {setup.saveError ? (
+        <Outcome tone="danger" icon={<CircleX />}>
+          {errorSentence(setup.saveError)}
+        </Outcome>
+      ) : null}
+      {setup.attempted && setup.saveBlockedBy ? (
+        <p role="status" className="text-body-xs text-danger-600">
+          {setup.saveBlockedBy.replace("Step 1 is not finished — every account field is required.", "Fill in every field above.").replace(
+            "Step 4 is not finished — the terms above have to be accepted.",
+            "Tick the box to accept the terms.",
+          )}
+        </p>
+      ) : null}
+
+      <Button
+        className="self-stretch tablet:self-end"
+        icon={<ArrowRight />}
+        loading={setup.saving}
+        onClick={() => (clean ? onNext() : setup.save(onNext))}
+      >
+        {registered ? (clean ? "Continue" : "Save and continue") : "Create account"}
+      </Button>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------- 2 · Get paid */
+
+function PaidStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }) {
+  const connected = useConnectedAddresses();
+  const { connectWallet } = useConnectWallet();
+  const chainName = useChainName();
+  const usable = connected.filter((address) => addressFamily(address) !== null);
+  const { address, setAddress } = setup;
+
+  // Follow the connected wallet: preselect it, and keep the choice valid when wallets change.
+  React.useEffect(() => {
+    if (usable.length > 0 && !usable.includes(address)) setAddress(usable[0]!);
+  }, [usable, address, setAddress]);
+
+  const active = setup.payoutAccounts.filter((account) => account.status === "ACTIVE");
+  const paidDone = stageDone(setup, "paid");
+
+  return (
+    <Card
+      title="Where you get paid"
+      description="Buyers' payments for your tool land in this wallet, on chain, as each call settles. Prove it is yours by signing a message: it is free and moves no money."
+    >
+      {active.map((account) => (
+        <Outcome key={account.chainId} tone="teal" icon={<CircleCheck />}>
+          Paid to <span className="font-mono text-mono-13 [overflow-wrap:anywhere]">{account.accountId}</span> on{" "}
+          {chainName(account.chainId)}.
+        </Outcome>
+      ))}
+      {setup.payoutAccounts
+        .filter((account) => account.status !== "ACTIVE")
+        .map((account) => (
+          <Outcome key={account.chainId} tone="warning" icon={<TriangleAlert />}>
+            Payouts on {chainName(account.chainId)} are stopped ({account.status === "UNBONDING" ? "you are leaving that network" : "suspended by Assay"}).
+            Contact support to restart them.
+          </Outcome>
+        ))}
+
+      {usable.length === 0 ? (
+        <div className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-02 p-3.5">
+          <p className="text-body-13 text-02">No wallet is connected in this browser yet.</p>
           <Button
-            icon={<ArrowRight />}
-            loading={saving}
-            onClick={() => {
-              // Nothing to save on a finished setup: go on. Otherwise save —
-              // which validates — and go on only once that succeeded.
-              if (allDone && !accountDirty) router.push("/provider");
-              else save(allDone ? () => router.push("/provider") : undefined);
-            }}
+            variant="secondary"
+            icon={<Wallet />}
+            className="self-start"
+            onClick={() => connectWallet({ walletChainType: "ethereum-and-solana" })}
           >
-            Save and continue
+            Connect wallet
           </Button>
         </div>
-      </div>
-
-      {loadError ? (
-        <Outcome tone="danger" icon={<CircleX />}>
-          {loadError.message}
-        </Outcome>
-      ) : null}
-
-      {/* Row */}
-      <div className="flex w-full flex-1 flex-col gap-4 tablet:flex-row">
-        {/* Left */}
-        <div className="flex min-w-0 flex-1 flex-col gap-4">
-          <StepCard
-            title="1 · Account"
-            caption="who we contact, and in which timezone"
-            status={statusOf("account")}
-          >
-            <AccountFields
-              setup={setup}
-              copy={{
-                technicalHint: "webhooks, incidents, binding changes",
-                ownerHint: "escalation — never the same inbox as technical",
-                timezoneHint: "any deadline we ever give you is counted in business days here",
-              }}
-            />
-            {saveError ? (
-              <Outcome tone="danger" icon={<CircleX />}>
-                {saveError.message}
-              </Outcome>
-            ) : null}
-            {saved && !saveError ? (
-              <Outcome tone="teal" icon={<CircleCheck />}>
-                Saved.
-              </Outcome>
-            ) : null}
-            {attempted && saveBlockedBy && !loading ? <Refusal>{saveBlockedBy}</Refusal> : null}
-          </StepCard>
-
-          <StepCard
-            title="2 · Payout wallet"
-            caption="where your earnings land"
-            status={statusOf("payoutWallet")}
-          >
-            <PayoutWalletFields
-              setup={setup}
-              addressPlaceholder="7xKX9mQ2vLpR4nT8jW1aZ6cE3bY5dF0gH2kM4pN7sV9u"
-              addressHint="Payouts are on-chain and final. We cannot reverse a payment sent to the wrong address."
-              buttonLabel="Sign a nonce to prove you control this wallet"
-            />
-            {/* Note */}
-            <Outcome tone="primary" icon={<Shield />}>
-              Console only. We will never ask you to submit a payout address over the CLI, by email
-              or in a support ticket — a path like that is a phishing surface and we do not want one
-              to exist.
-            </Outcome>
-          </StepCard>
-
-          <StepCard
-            title="3 · Endpoint"
-            caption="what we will call, and whether we can reach it"
-            status={statusOf("endpoint")}
-          >
-            <EndpointFields setup={setup} />
-            {/* Note — the addresses come off the wire, not the frame. */}
-            <Outcome tone="primary" icon={<Network />}>
-              {egressIps.length > 0 ? (
-                <>
-                  We call your endpoint from these fixed egress IPs —{" "}
-                  <span className="font-mono text-mono-13">{egressIps.join(", ")}</span>. Add them
-                  to your allowlist, then run the check here rather than finding out after you go
-                  live.
-                </>
-              ) : (
-                <>
-                  We do not call you from a fixed set of IP addresses, so there is nothing to
-                  allowlist. Run the check here rather than finding out after you go live.
-                </>
-              )}
-            </Outcome>
-          </StepCard>
-
-          <StepCard
-            title="4 · Terms"
-            caption="two documents, no second page of conditions"
-            status={statusOf("terms")}
-          >
-            <TermsBody setup={setup} />
-          </StepCard>
-        </div>
-
-        {/* Rail */}
-        <div className="flex w-full flex-col gap-4 tablet:w-[420px] tablet:shrink-0">
-          <Panel className="shadow-none">
-            <PanelHeader className="bg-02">
-              <PanelTitles>
-                <PanelTitle>What happens next</PanelTitle>
-                <PanelDescription className="whitespace-normal">
-                  after you finish {stepCount > 0 ? `these ${stepCount} steps` : "these steps"}
-                </PanelDescription>
-              </PanelTitles>
-            </PanelHeader>
-            <PanelBody className="gap-3.5 p-5">
-              <NextStep
-                ordinal="1"
-                title="You register and stake"
-                body={`Open registration. ${
-                  stakeMinimum ? `${stakeMinimum} stake` : "A minimum stake"
-                } before paid traffic; the free path needs none.`}
-              />
-              <NextStep
-                ordinal="2"
-                title="You write and test the binding"
-                body="The binding editor writes it; the mapping tester runs it against your real endpoint and shows you what each verification stage thinks of the response."
-              />
-              <NextStep
-                ordinal="3"
-                title="We publish it when your tester is green"
-                body="Publish is gated on a passing tester and stake at or above the minimum — not on a human reading your application."
-              />
-              <NextStep
-                ordinal="4"
-                title="You get paid, and you can be slashed"
-                body="Paid on-chain to your own token account when the buyer's voucher is redeemed. A rejected response is not credited and counts against your SLA window — if a window closes in breach, a penalty against your stake is proposed, and you can dispute it before it is applied."
-              />
-            </PanelBody>
-          </Panel>
-
-          <Panel className="shadow-none">
-            <PanelHeader className="bg-02">
-              <PanelTitles>
-                <PanelTitle>What we need from you</PanelTitle>
-                <PanelDescription className="whitespace-normal">
-                  the whole integration
-                </PanelDescription>
-              </PanelTitles>
-            </PanelHeader>
-            <PanelBody className="gap-3.5 p-5">
-              <NeedRow
-                icon={<Globe />}
-                title="An HTTP endpoint"
-                body="Any shape. JSON in, JSON out."
-              />
-              <NeedRow icon={<Wallet />} title="A wallet" body="Proved once, by signature." />
-              {/* Only when there ARE fixed egress IPs — step 3 says so when there are none. */}
-              {egressIps.length > 0 ? (
-                <NeedRow
-                  icon={<Shield />}
-                  title="An allowlist entry for our egress IPs"
-                  body="Shown in step 3, with a one-click check that we can reach you."
+      ) : (
+        <div className="flex w-full flex-col gap-2">
+          <span className="text-label-13 text-01">{paidDone ? "Pay me in a different wallet" : "Wallet to be paid in"}</span>
+          <div role="radiogroup" aria-label="Wallet to be paid in" className="flex w-full flex-col gap-1.5">
+            {usable.map((option) => (
+              <label
+                key={option}
+                className={cn(
+                  "flex w-full cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5",
+                  option === address ? "border-primary-500 bg-primary-10" : "border-01 bg-01 hover:bg-02",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="payout-wallet"
+                  className="accent-primary-500"
+                  checked={option === address}
+                  onChange={() => setAddress(option)}
                 />
-              ) : (
-                <NeedRow
-                  icon={<Shield />}
-                  title="A reachable endpoint"
-                  body="No IPs to allowlist here. Step 3 has a one-click check that we can reach you."
-                />
-              )}
-            </PanelBody>
-          </Panel>
+                <span className="min-w-0 flex-1 font-mono text-mono-12 text-01 [overflow-wrap:anywhere]">{option}</span>
+              </label>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-body-xs text-03">
+              {setup.chainId ? `Network: ${chainName(setup.chainId)}` : "Assay does not pay out on this wallet's network."}
+            </span>
+            <button
+              type="button"
+              className="text-label-xs text-primary-600 underline-offset-2 hover:underline"
+              onClick={() => connectWallet({ walletChainType: "ethereum-and-solana" })}
+            >
+              Use another wallet
+            </button>
+          </div>
+          <SignAction
+            label={paidDone ? "Sign a message to switch (free)" : "Sign a message (free)"}
+            resetKey={address}
+            disabled={Boolean(setup.walletBlockedBy)}
+            disabledReason={setup.walletBlockedBy}
+            steps={[
+              {
+                id: "prove",
+                label: "Sign a message (free)",
+                cost: "free",
+                run: () => setup.prove(),
+              },
+            ]}
+            successTitle="Wallet confirmed"
+            successDescription="Payments for your tools will land here."
+            describeError={errorSentence}
+          />
         </div>
-      </div>
+      )}
 
-      {registered && allDone ? (
-        <Outcome tone="teal" icon={<CircleCheck />}>
-          {stepCount > 0 ? `All ${stepCount} steps are done.` : "Setup is done."} You are registered as a provider.
-        </Outcome>
-      ) : null}
-    </>
+      <p className="text-body-xs text-03">
+        We will never ask for a payout address by email, chat or support ticket. Only change it here.
+      </p>
+
+      <Button className="self-stretch tablet:self-end" icon={<ArrowRight />} disabled={!paidDone} onClick={onNext}>
+        Continue
+      </Button>
+      {!paidDone ? <p className="-mt-2 text-right text-body-xs text-03">Sign the message above to continue.</p> : null}
+    </Card>
   );
 }
 
-/** One numbered row of "What happens next". */
-function NextStep({ ordinal, title, body }: { ordinal: string; title: string; body: string }) {
+/* ------------------------------------------------------------- 3 · Your API */
+
+function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }) {
+  const { endpoint, setEndpoint, probe, checking } = setup;
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const trimmed = endpoint.trim();
+  const checkedThis = probe && probe.endpoint === trimmed ? probe : null;
+  const savedThis = Boolean(trimmed) && setup.savedEndpoint === trimmed && checkedThis?.outcome === "REACHABLE";
+
+  const finish = async () => {
+    setError(null);
+    if (!trimmed) {
+      setError("Enter the address of your API.");
+      return;
+    }
+    if (savedThis) {
+      onNext();
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await setup.declareAsync(trimmed);
+      if (result.outcome === "REACHABLE") onNext();
+      else setError(null);
+    } catch (caught) {
+      setError(errorSentence(caught));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="flex w-full gap-3">
-      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-03 font-mono text-mono-xs font-semibold text-02">
-        {ordinal}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <span className="text-label-13 text-01">{title}</span>
-        <span className="text-body-xs text-02">{body}</span>
+    <Card
+      title="Your API"
+      description="The HTTPS address Assay calls for your tools. Any JSON API works: you map it onto the tool when you list it, and change nothing on your side."
+    >
+      <Field
+        label="API address"
+        className="font-sans text-body-sm"
+        placeholder="https://api.acme.example/v1"
+        inputMode="url"
+        autoComplete="url"
+        value={endpoint}
+        onChange={(e) => setEndpoint(e.target.value)}
+        onBlur={() => {
+          if (trimmed && (!probe || probe.endpoint !== trimmed)) setup.check();
+        }}
+      />
+      <div aria-live="polite" className="min-h-5">
+        {checking ? (
+          <p className="text-body-xs text-03">Checking we can reach it…</p>
+        ) : checkedThis?.outcome === "REACHABLE" ? (
+          <Outcome tone="teal" icon={<CircleCheck />}>
+            Reachable{checkedThis.latencyMs !== null ? ` in ${checkedThis.latencyMs} ms` : ""}. Any answer counts, even
+            &quot;not authorised&quot;: we only check that something is listening.
+          </Outcome>
+        ) : checkedThis?.outcome === "BLOCKED" ? (
+          <Outcome tone="danger" icon={<CircleX />}>
+            This address cannot be used: it must be a public <code>https://</code> address (not a private or local one).
+          </Outcome>
+        ) : checkedThis ? (
+          <Outcome tone="warning" icon={<TriangleAlert />}>
+            We could not reach it.
+            {setup.egressIps.length > 0 ? (
+              <>
+                {" "}
+                If you use an allowlist, add our addresses:{" "}
+                <span className="font-mono text-mono-12">{setup.egressIps.join(", ")}</span>.
+              </>
+            ) : null}
+          </Outcome>
+        ) : null}
+        {setup.checkError ? (
+          <Outcome tone="danger" icon={<CircleX />}>
+            {errorSentence(setup.checkError)}
+          </Outcome>
+        ) : null}
+        {error ? <p className="text-body-xs text-danger-600">{error}</p> : null}
       </div>
-    </div>
+      <Button className="self-stretch tablet:self-end" icon={<ArrowRight />} loading={saving} onClick={() => void finish()}>
+        Finish setup
+      </Button>
+    </Card>
   );
 }
 
-/** One row of "What we need from you" — 15px `$success-500` icon. */
-function NeedRow({
-  icon,
-  title,
-  body,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  body: string;
-}) {
+/* ------------------------------------------------------------------ The end */
+
+function DoneScreen({ href }: { href: string }) {
   return (
-    <div className="flex w-full gap-2.5">
-      <span
-        aria-hidden="true"
-        className="mt-0.5 flex size-[15px] shrink-0 items-center justify-center text-success-500 [&_svg]:size-[15px]"
-      >
-        {icon}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-label-13 text-01">{title}</span>
-        <span className="text-body-xs text-03">{body}</span>
+    <section className="flex w-full flex-col gap-5 rounded-xl border border-success-20 bg-01 p-5 tablet:p-8">
+      <div className="flex items-start gap-3">
+        <PartyPopper aria-hidden="true" className="mt-1 size-6 shrink-0 text-success-600" />
+        <div className="flex flex-col gap-1">
+          <h1 className="text-heading-sm text-01">You are set up</h1>
+          <p className="text-body-13 text-02">Your account, payout wallet and API are ready. Next, list your first tool.</p>
+        </div>
       </div>
-    </div>
+      <ol className="flex flex-col gap-3">
+        {[
+          ["Pick the tool your API answers", "and point it at your API. We fill in what we can."],
+          ["Run one test call", "We call your API and check the answer, so buyers never get a broken tool."],
+          ["Go live", "Free tools publish straight away. To charge per call, add stake first; you get it back when you stop."],
+        ].map(([title, body], index) => (
+          <li key={title} className="flex gap-3">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-03 font-mono text-mono-xs font-semibold text-02">
+              {index + 1}
+            </span>
+            <span className="text-body-13 text-02">
+              <span className="text-label-13 text-01">{title}</span> {body}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <Button asChild className="self-stretch tablet:self-start">
+        <Link href={href}>
+          Create your first tool listing
+          <ArrowRight aria-hidden="true" />
+        </Link>
+      </Button>
+    </section>
   );
 }
