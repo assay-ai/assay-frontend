@@ -5,11 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 
+import { LocalTime } from "@/components/patterns/local-time";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { DisputeLine } from "@/features/operator/dispute-line";
 import { sortDisputesByDaysLeft } from "@/features/operator/inbox";
+import { filterRecent, readRecentPenalties, type RecentPenalty } from "@/features/operator/recent-penalties";
 import { capabilitiesFor } from "@/features/operator/roles";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { useProviderNames } from "@/features/operator/use-operator-lookups";
@@ -23,8 +25,10 @@ import { formatMoney } from "@/utils/money";
  *
  * What the backend can list today: penalties disputed on chain (fewest days
  * left first), and any case still sitting in the retired off-chain queue.
- * A penalty nobody disputed has no list endpoint yet [backend]; it is reached
- * from its link, which the box at the top accepts.
+ * A penalty nobody disputed has no list endpoint yet [backend: open penalties
+ * by provider]. Until then there are two honest ways to one: the penalties
+ * this browser opened lately, and its link (from the provider's ticket or
+ * alert, or from Activity). One box filters both lists by provider.
  */
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -41,6 +45,9 @@ export default function PenaltiesPage() {
   }, []);
   const [lookup, setLookup] = React.useState("");
   const [lookupError, setLookupError] = React.useState<string | undefined>(undefined);
+  const [providerFilter, setProviderFilter] = React.useState("");
+  const [recent, setRecent] = React.useState<RecentPenalty[]>([]);
+  React.useEffect(() => setRecent(readRecentPenalties()), []);
 
   const disputes = useQuery({
     queryKey: ["operator", "arbiter", "disputes"],
@@ -56,7 +63,11 @@ export default function PenaltiesPage() {
     retry: 0,
   });
 
-  const rows = React.useMemo(() => sortDisputesByDaysLeft(disputes.data ?? []), [disputes.data]);
+  const allRows = React.useMemo(() => sortDisputesByDaysLeft(disputes.data ?? []), [disputes.data]);
+  const q = providerFilter.trim().toLowerCase();
+  const rows = q ? allRows.filter((row) => providers.name(row.providerId).toLowerCase().includes(q)) : allRows;
+  const disputedIds = new Set(allRows.map((row) => row.proposalId));
+  const recentShown = filterRecent(recent, providerFilter).filter((item) => !disputedIds.has(item.id));
   const legacyRows = (legacy.data?.pages ?? []).flatMap((page) => page.items);
 
   const open = (event: React.FormEvent) => {
@@ -79,6 +90,15 @@ export default function PenaltiesPage() {
           Penalties disputed on chain, fewest days left first. The arbiter has 30 days to rule; from day 20 they are red.
         </p>
       </header>
+
+      <Field
+        label="Provider"
+        value={providerFilter}
+        onChange={(e) => setProviderFilter(e.target.value)}
+        placeholder="Type a provider's name to narrow both lists"
+        autoComplete="off"
+        wrapperClassName="tablet:max-w-[480px]"
+      />
 
       <form onSubmit={open} className="flex w-full flex-col gap-2 tablet:flex-row tablet:items-start" noValidate>
         <Field
@@ -110,7 +130,11 @@ export default function PenaltiesPage() {
             code={disputes.error instanceof ApiError ? disputes.error.code : null}
           />
         ) : rows.length === 0 ? (
-          <PageState kind="empty" title="No penalty is disputed" description="When a provider disputes a penalty on chain, it appears here with its 30-day limit." />
+          <PageState
+            kind="empty"
+            title={q ? "No disputed penalty for this provider" : "No penalty is disputed"}
+            description={q ? "Check the name, or look under Opened recently below." : "When a provider disputes a penalty on chain, it appears here with its 30-day limit."}
+          />
         ) : (
           rows.map((row) => <DisputeLine key={row.requestId} row={row} providerName={providers.name(row.providerId)} now={now} canRule={caps.rule} />)
         )}
@@ -145,10 +169,43 @@ export default function PenaltiesPage() {
         </section>
       ) : null}
 
-      <p className="text-body-xs text-03">
-        Penalties nobody has disputed are not listed here yet; open one from its link. Penalties waiting for a cancel signature show on
-        their own page with the deadline.
-      </p>
+      <section aria-labelledby="recent" className="flex w-full flex-col gap-2.5">
+        <div className="flex flex-col gap-0.5">
+          <h2 id="recent" className="text-label-md text-01">
+            Opened recently in this browser{recentShown.length > 0 ? ` · ${recentShown.length}` : ""}
+          </h2>
+          <p className="text-body-xs text-03">
+            Penalties nobody disputed have no list yet. To find one: open it from the provider&rsquo;s ticket or alert link, or from{" "}
+            <Link href="/operator/override-log?kind=penalties" className="text-primary-600 hover:underline">
+              Activity
+            </Link>
+            ; once opened, it stays here.
+          </p>
+        </div>
+        {recentShown.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-02 px-3.5 py-2.5 text-body-13 text-03">
+            {q ? "None opened here for this provider." : "No penalty opened in this browser yet."}
+          </p>
+        ) : (
+          <ul className="flex w-full flex-col rounded-xl border border-01 bg-01">
+            {recentShown.map((item) => (
+              <li key={item.id} className="border-b border-01 last:border-b-0">
+                <Link
+                  href={routes.operatorCase(item.id)}
+                  className="flex w-full flex-col gap-0.5 px-4 py-3 hover:bg-02 tablet:flex-row tablet:items-center tablet:gap-4"
+                >
+                  <span className="min-w-0 flex-1 text-body-13 text-01">{item.label}</span>
+                  <span className="text-body-xs text-03">
+                    opened <LocalTime value={item.at} />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <p className="text-body-xs text-03">Penalties waiting for a cancel signature show on their own page with the deadline.</p>
     </>
   );
 }

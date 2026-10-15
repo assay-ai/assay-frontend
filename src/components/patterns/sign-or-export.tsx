@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { Check, Download, Link2 } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -63,7 +63,17 @@ export interface SignOrExportProps {
   resetKey?: string | number;
   /** The signing phase, so a sheet can refuse to close mid-signature. */
   onPhaseChange?: (phase: WalletRunState["phase"]) => void;
+  /**
+   * When this browser cannot sign: a link the signer opens (path or URL) and
+   * the message to send with it. Drawn as "Copy link for the signer".
+   */
+  handoff?: { link: string; message: string };
   className?: string;
+}
+
+function absolute(link: string): string {
+  if (/^https?:\/\//.test(link) || typeof window === "undefined") return link;
+  return `${window.location.origin}${link.startsWith("/") ? "" : "/"}${link}`;
 }
 
 export function SignOrExport({
@@ -85,8 +95,20 @@ export function SignOrExport({
   details = [],
   resetKey,
   onPhaseChange,
+  handoff,
   className,
 }: SignOrExportProps) {
+  const [linkCopied, setLinkCopied] = React.useState(false);
+  const copyHandoff = async () => {
+    if (!handoff) return;
+    try {
+      await navigator.clipboard.writeText(`${handoff.message} ${absolute(handoff.link)}`);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1500);
+    } catch {
+      /* clipboard refused: nothing else to do */
+    }
+  };
   const [downloaded, setDownloaded] = React.useState(false);
   // Kept per `resetKey`, so downloading twice does not build (and log) the same call twice.
   const [prepared, setPrepared] = React.useState<{ key: string | number | undefined; txs: readonly SafeBatchTransaction[] } | null>(null);
@@ -141,19 +163,33 @@ export function SignOrExport({
       ) : (
         <div className="flex w-full flex-col gap-2">
           <p className="text-body-13 text-02">
-            This must be signed by {signerLabel}. The wallet connected here is not that key, so download the batch and
-            sign it where the key lives.
+            <span className="text-label-13 text-01">Who signs: </span>
+            {signerLabel}. That is not the wallet connected here, so download the transaction file and have it signed in the
+            Safe that holds that key. Nothing changes until it is signed.
           </p>
-          <Button
-            type="button"
-            icon={<Download aria-hidden="true" />}
-            onClick={() => void download()}
-            loading={preparing}
-            disabled={disabled}
-            className="w-full tablet:w-auto tablet:self-start"
-          >
-            Download Safe batch
-          </Button>
+          <div className="flex w-full flex-col gap-2 tablet:flex-row tablet:items-center">
+            <Button
+              type="button"
+              icon={<Download aria-hidden="true" />}
+              onClick={() => void download()}
+              loading={preparing}
+              disabled={disabled}
+              className="w-full tablet:w-auto"
+            >
+              Download the file to sign
+            </Button>
+            {handoff ? (
+              <Button
+                type="button"
+                variant="secondary"
+                icon={linkCopied ? <Check aria-hidden="true" /> : <Link2 aria-hidden="true" />}
+                onClick={() => void copyHandoff()}
+                className="w-full tablet:w-auto"
+              >
+                {linkCopied ? "Link copied" : "Copy link for the signer"}
+              </Button>
+            ) : null}
+          </div>
           <p className={cn("min-h-[18px] text-body-xs", prepareError ? "text-danger-600" : "text-02")} role="status">
             {prepareError ?? (downloaded ? afterExport : disabled ? (disabledReason ?? "") : "")}
           </p>
@@ -192,7 +228,7 @@ export function SignOrExport({
                 disabled={disabled}
                 onClick={() => void download()}
               >
-                Download Safe batch instead
+                Download the file to sign in a Safe instead
               </Button>
               <p className={cn("min-h-[18px] pt-1 text-body-xs", prepareError ? "text-danger-600" : "text-02")} role="status">
                 {prepareError ?? (downloaded ? afterExport : "")}

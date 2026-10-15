@@ -11,7 +11,7 @@ import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
 import { disputeAmount } from "./arbiter";
-import { DISPUTE_RED_FROM_DAY, disputeUrgency } from "./inbox";
+import { DISPUTE_RED_FROM_DAY, disputeDayText, disputeUrgency } from "./inbox";
 
 /** The 30-day window of an on-chain dispute as a bar, red from day 20. */
 export function DisputeProgress({ row, now, className }: { row: Pick<ArbiterDispute, "disputedAt" | "expiresAt">; now: number; className?: string }) {
@@ -24,7 +24,7 @@ export function DisputeProgress({ row, now, className }: { row: Pick<ArbiterDisp
         aria-valuemin={0}
         aria-valuemax={30}
         aria-valuenow={urgency.day ?? undefined}
-        aria-valuetext={urgency.day === null ? urgency.label : `Day ${urgency.day + 1} of 30, ${urgency.label}`}
+        aria-valuetext={disputeDayText(row, now)}
         className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-03"
       >
         <span
@@ -35,7 +35,7 @@ export function DisputeProgress({ row, now, className }: { row: Pick<ArbiterDisp
         <span aria-hidden="true" className="absolute inset-y-0 w-px bg-04" style={{ left: `${(DISPUTE_RED_FROM_DAY / 30) * 100}%` }} />
       </div>
       <span className={cn("shrink-0 font-mono text-mono-12", urgency.urgent ? "text-danger-600" : "text-02")}>
-        {urgency.day === null ? urgency.label : `Day ${Math.min(30, urgency.day + 1)} of 30 · ${urgency.label}`}
+        {disputeDayText(row, now)}
       </span>
     </div>
   );
@@ -65,9 +65,9 @@ export function DisputeLine({
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <p className="text-body-sm text-01">
-          <span className="font-medium">{providerName}</span> disputed a{" "}
-          <span className="font-mono">{amount ? formatMoney(amount) : "penalty"}</span>
-          {amount ? " penalty" : ""}
+          <span className="font-medium">{providerName}</span> disputed its{" "}
+          <span className="font-mono">{amount ? formatMoney(amount) : ""}</span>
+          {amount ? " penalty" : "penalty"}
           {row.disputedAt ? (
             <span className="text-03">
               {" "}
