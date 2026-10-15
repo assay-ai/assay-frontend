@@ -35,26 +35,6 @@ export function getSlashProposalCaseDetail(proposalId: string): Promise<SlashPro
   );
 }
 
-/**
- * `POST /providers/me/slash-proposals/:id/acknowledge` — "I have seen this".
- *
- * Moves **no clock**. The controller's own docstring is explicit: the
- * provider's response window runs from delivery, not from reading, so a
- * provider who never opens the dashboard has exactly as long to object as one
- * who opens it immediately. The button therefore promises nothing about the
- * deadline, and this screen says so.
- *
- * Returns the whole case again, which is seeded straight into the cache
- * rather than triggering a refetch: provider `GET`s are HTTP-cached for 10s
- * with an hour of stale-while-revalidate, so a refetch here would be served
- * the pre-write body.
- */
-export function acknowledgeSlashProposal(proposalId: string): Promise<SlashProposalCaseDetail> {
-  return api.post<SlashProposalCaseDetail>(
-    `/providers/me/slash-proposals/${encodeURIComponent(proposalId)}/acknowledge`,
-    {}
-  );
-}
 
 /** The most ids `POST /providers/me/slash-requests/lookup` takes in one call. */
 export const SLASH_REQUEST_LOOKUP_MAX = 200;
