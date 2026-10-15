@@ -17,6 +17,7 @@ import { depositUnavailableOn, depositableChains, offeredChains } from "@/featur
 import { chainBalances } from "@/features/g30/balance";
 import { usePendingTransactions } from "@/hooks/usePendingTransactions";
 import { useSigner } from "@/hooks/useSigner";
+import { demoEnabled } from "@/libs/demo/demo-api";
 import { evmRpcUrl } from "@/libs/chains/evm/chains";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { shortAddress } from "@/libs/chains/format";
@@ -82,7 +83,8 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
 
   const unavailable = depositUnavailableOn(chainId, chainName, {
     kind: signerState.status === "ready" ? signerState.signer.kind : null,
-    rpcConfigured: chainId !== null && isEvmChain(chainId) && evmRpcUrl(chainId) !== null,
+    // DEMO ONLY: the sheet runs simulated steps that never build a transaction, so no RPC is needed.
+    rpcConfigured: demoEnabled() || (chainId !== null && isEvmChain(chainId) && evmRpcUrl(chainId) !== null),
   });
 
   // One run per attempt: created in the first step, read by the second.
