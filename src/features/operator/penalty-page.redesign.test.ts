@@ -107,6 +107,28 @@ describe("round 4: the penalty page tells one story", () => {
     expect(steps.at(-1)).toMatchObject({ label: "Cancelled", date: verdant.case.proposal.resolvedAt });
   });
 
+  it("never marks the window done before it ends while a cancel waits for its signature", async () => {
+    const { caseFacts, caseTimelineSteps } = await import("./case-flow");
+    const cobalt = await brief("c7a0e5f3-9d21-4b68-a4c9-3e8f1b6d2a07");
+    const now = Date.now();
+    const facts = caseFacts(cobalt, now);
+    expect(facts.stage).toBe("cancel-requested");
+    expect(Date.parse(facts.cancel!.deadline!)).toBeGreaterThan(now);
+    const steps = caseTimelineSteps(cobalt, facts, { now });
+    const window = steps.find((s) => s.id === "window")!;
+    expect(window.state).toBe("current");
+    expect(window.date).toBeFalsy();
+    expect(window.dateLabel).toBe("open until the signing deadline");
+    // The signature step carries the one date and the countdown: the window's end.
+    expect(steps.at(-1)).toMatchObject({ state: "current", date: facts.executableAt, dateLabel: "sign before", countdown: true });
+    // Once that instant has passed, the window is done at it.
+    const later = Date.parse(facts.executableAt!) + 60_000;
+    expect(caseTimelineSteps(cobalt, caseFacts(cobalt, later), { now: later }).find((s) => s.id === "window")).toMatchObject({
+      state: "done",
+      date: facts.executableAt,
+    });
+  });
+
   it("dates the ruling step once ruled or lapsed", async () => {
     const { caseFacts, caseTimelineSteps } = await import("./case-flow");
     const quanta = await brief("93d0e7b5-4c18-4a2f-8e61-7b5c0a9d2e13");
@@ -137,6 +159,7 @@ describe("round 4: the penalty page tells one story", () => {
 });
 
 describe("round 4: a request already waiting on the penalty", () => {
+  const ASKED_NOW = Date.parse("2026-10-16T09:00:00Z");
   const request = {
     action: "slash.compensated",
     requestedBy: "Riley Brooks",
@@ -149,15 +172,30 @@ describe("round 4: a request already waiting on the penalty", () => {
 
   it("is the next step: approve it when I can", async () => {
     const { pendingRequestStep } = await import("./case-flow");
-    expect(pendingRequestStep(request, (x) => x)).toMatchObject({ kind: "action", title: "Approve the pay-back", action: "approve" });
+    expect(pendingRequestStep(request, (x) => x, ASKED_NOW)).toMatchObject({ kind: "action", title: "Approve the pay-back", action: "approve" });
   });
 
   it("says who it waits for when I cannot", async () => {
     const { pendingRequestStep } = await import("./case-flow");
-    const step = pendingRequestStep({ ...request, canApprove: false }, (x) => x);
+    const step = pendingRequestStep({ ...request, canApprove: false }, (x) => x, ASKED_NOW);
     expect(step).toMatchObject({ kind: "waiting", title: "Pay-back waiting for approval", secondary: "open-request" });
     expect(step.description).toMatch(/Waiting for Jordan Blake or Iris Park to approve it/);
-    expect(pendingRequestStep({ ...request, canApprove: false, mine: true }, (x) => x).title).toBe("Your pay-back is waiting for approval");
+    expect(pendingRequestStep({ ...request, canApprove: false, mine: true }, (x) => x, ASKED_NOW).title).toBe("Your pay-back is waiting for approval");
+  });
+
+  it("says Expired, never 'Lapses <a past time>', once its deadline has gone", async () => {
+    const { pendingRequestStep } = await import("./case-flow");
+    const after = Date.parse(request.expiresAt) + 60_000;
+    const step = pendingRequestStep({ ...request, canApprove: false }, (x) => x, after);
+    expect(step).toMatchObject({ kind: "done", title: "Pay-back request expired", action: null, meta: `Expired ${request.expiresAt}.` });
+    expect(step.description).not.toMatch(/Waiting for/);
+  });
+
+  it("counts as waiting only while live, the same test Approvals uses", async () => {
+    const { isLiveApproval } = await import("./inbox");
+    expect(isLiveApproval({ status: "PENDING", expiresAt: request.expiresAt }, ASKED_NOW)).toBe(true);
+    expect(isLiveApproval({ status: "PENDING", expiresAt: request.expiresAt }, Date.parse(request.expiresAt))).toBe(false);
+    expect(isLiveApproval({ status: "APPROVED", expiresAt: request.expiresAt }, ASKED_NOW)).toBe(false);
   });
 
   it("holds the same ⋯ action back with a reason", async () => {
@@ -175,5 +213,17 @@ describe("round 4: ruling from the penalty page", () => {
     expect(rulingFromLink("UPHOLD")).toBe("UPHOLD");
     expect(rulingFromLink("other")).toBeNull();
     expect(rulingFromLink(null)).toBeNull();
+  });
+});
+
+describe("round 5: the Context tab reads time like the rest of the console", () => {
+  it("is local with its zone for operators, UTC for the provider page", async () => {
+    const { contextStamp } = await import("@/features/provider-slash-case/context");
+    const { zoneLabel } = await import("@/libs/local-time");
+    const iso = "2026-09-20T03:06:00Z";
+    expect(contextStamp("provider")(iso)).toBe("2026-09-20 03:06 UTC");
+    const local = contextStamp("operator")(iso);
+    expect(local).not.toMatch(/2026-09-20/);
+    expect(local.endsWith(zoneLabel(iso))).toBe(true);
   });
 });

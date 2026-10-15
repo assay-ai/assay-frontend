@@ -11,6 +11,7 @@ import {
   PanelTitles,
 } from "@/components/ui/panel";
 import { count, percent, stampUtc } from "@/features/g34a/stats";
+import { formatLocalDateTime, utcTitle, zoneLabel } from "@/libs/local-time";
 import { cn } from "@/utils";
 import type { SlashAttributionRow } from "@/interfaces/provider-disputes";
 import type { SlashProposalCaseDetail, SlashPriorWindow } from "@/interfaces/provider-slash-cases";
@@ -103,12 +104,23 @@ const COPY: Record<
   },
 };
 
+/**
+ * An instant as each audience reads times elsewhere: the provider page in UTC
+ * throughout; the operator console in the reader's local time with its zone
+ * (the exact UTC instant goes in a tooltip), like every other operator screen.
+ */
+export function contextStamp(audience: ContextAudience): (iso: string) => string {
+  return audience === "provider"
+    ? (iso) => `${stampUtc(iso)} UTC`
+    : (iso) => `${formatLocalDateTime(iso, { midSentence: true })} ${zoneLabel(iso)}`.trim();
+}
+
 /** The design's `ag_7K2`-width column, without inventing a new identifier. */
 function shortKey(key: string): string {
   return key.length > 18 ? `${key.slice(0, 8)}…` : key;
 }
 
-function Bars({ windows, mono }: { windows: SlashPriorWindow[]; mono: boolean }) {
+function Bars({ windows, mono, stamp }: { windows: SlashPriorWindow[]; mono: boolean; stamp: (iso: string) => string }) {
   if (windows.length === 0) {
     return (
       <p className="px-5 py-4 text-body-13 text-02">
@@ -138,10 +150,13 @@ function Bars({ windows, mono }: { windows: SlashPriorWindow[]; mono: boolean })
         {windows.map((window) => {
           const height = Math.max(6, Math.round((window.observedRate / peak) * 96));
           return (
-            <div key={window.windowId} className="flex flex-col items-center gap-1.5">
+            <div
+              key={window.windowId}
+              title={mono ? undefined : `Closed ${stamp(window.closedAt)} · ${utcTitle(window.closedAt) ?? ""}`}
+              className="flex flex-col items-center gap-1.5"
+            >
               <span className="sr-only">
-                {window.label}: {percent(window.observedRate)} observed failure rate, closed{" "}
-                {stampUtc(window.closedAt)} UTC
+                {window.label}: {percent(window.observedRate)} observed failure rate, closed {stamp(window.closedAt)}
               </span>
               <div
                 aria-hidden="true"
@@ -210,6 +225,7 @@ export function CaseContext({ data, audience = "provider" }: { data: SlashPropos
   const overlay = data.changeOverlay;
   const totalOverlayFailures = overlay ? overlay.failuresBefore + overlay.failuresAfter : 0;
   const prefilled = data.suggestedClaim === "PLATFORM_MAPPING_CHANGE";
+  const stamp = contextStamp(audience);
 
   return (
     <Panel>
@@ -223,14 +239,19 @@ export function CaseContext({ data, audience = "provider" }: { data: SlashPropos
       </PanelHeader>
 
       <PanelBody>
-        <Bars windows={data.priorWindows} mono={provider} />
+        <Bars windows={data.priorWindows} mono={provider} stamp={stamp} />
 
         {overlay ? (
           <div className="mx-5 mb-4 flex w-auto items-start gap-3 rounded-lg bg-warning-10 px-4 py-3.5">
             <GitCompare aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <p className="text-label-sm text-01">
-                {copy.overlayHead(count(overlay.failuresAfter), count(totalOverlayFailures), stampUtc(overlay.changedAt), overlay.changedBy)}
+              <p className="text-label-sm text-01" title={provider ? undefined : utcTitle(overlay.changedAt)}>
+                {copy.overlayHead(
+                  count(overlay.failuresAfter),
+                  count(totalOverlayFailures),
+                  provider ? stampUtc(overlay.changedAt) : stamp(overlay.changedAt),
+                  overlay.changedBy,
+                )}
               </p>
               <p className="text-body-13 leading-[1.55] text-02">
                 {percent(overlay.rateBefore, 1)} before the change ({count(overlay.verifiedBefore)}{" "}

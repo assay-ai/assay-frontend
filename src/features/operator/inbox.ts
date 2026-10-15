@@ -51,7 +51,13 @@ export interface ApprovalGroups {
   others: OperatorApproval[];
 }
 
-function isLive(approval: OperatorApproval, now: number): boolean {
+/**
+ * Still waiting for a decision: pending and not past its deadline. The one
+ * test for "waiting" everywhere (Approvals, the counts, the Penalties list and
+ * the penalty page), so a request never waits on one screen and is gone from
+ * another.
+ */
+export function isLiveApproval(approval: Pick<OperatorApproval, "status" | "expiresAt">, now: number = Date.now()): boolean {
   if (approval.status !== "PENDING") return false;
   const end = Date.parse(approval.expiresAt);
   return Number.isNaN(end) || end > now;
@@ -64,7 +70,7 @@ export function groupApprovals(
 ): ApprovalGroups {
   const groups: ApprovalGroups = { needsYou: [], yours: [], others: [] };
   for (const approval of approvals) {
-    if (!isLive(approval, now)) continue;
+    if (!isLiveApproval(approval, now)) continue;
     if (isOwnRequest(approval, me)) groups.yours.push(approval);
     else if (approveBlockedBecause(approval, me) === null) groups.needsYou.push(approval);
     else groups.others.push(approval);

@@ -20,6 +20,12 @@ export interface LocalTimeOptions {
   now?: number;
   /** "Today 14:20" rather than a bare "14:20", where a time alone could be any day (a timeline, a deadline). */
   alwaysDay?: boolean;
+  /**
+   * The time sits inside running text ("asked today 04:06", "sign before
+   * tomorrow 19:06"): the day words are lowercase. Off by default, for a time
+   * that stands alone or starts a sentence ("Today 14:20").
+   */
+  midSentence?: boolean;
 }
 
 const LOCALE = "en-US";
@@ -69,9 +75,15 @@ export function formatLocalDate(value: string | number | Date | null | undefined
   }).format(date);
 }
 
+/** "Today" / "today", as the position in the sentence wants it. */
+function dayWord(word: "Today" | "Yesterday" | "Tomorrow", options: LocalTimeOptions): string {
+  return options.midSentence ? word.toLowerCase() : word;
+}
+
 /**
  * A moment, as short as it can be while staying unambiguous:
  * "14:20" today, "Yesterday 14:20", "Tomorrow 14:20", else "Oct 16, 14:20".
+ * With `midSentence`, "yesterday 14:20" — for a time inside a sentence.
  */
 export function formatLocalDateTime(
   value: string | number | Date | null | undefined,
@@ -82,9 +94,9 @@ export function formatLocalDateTime(
   const now = options.now ?? Date.now();
   const clock = formatClock(date, options);
   const day = dayKey(date, options.timeZone);
-  if (day === dayKey(new Date(now), options.timeZone)) return options.alwaysDay ? `Today ${clock}` : clock;
-  if (day === dayKey(new Date(now - 86_400_000), options.timeZone)) return `Yesterday ${clock}`;
-  if (day === dayKey(new Date(now + 86_400_000), options.timeZone)) return `Tomorrow ${clock}`;
+  if (day === dayKey(new Date(now), options.timeZone)) return options.alwaysDay ? `${dayWord("Today", options)} ${clock}` : clock;
+  if (day === dayKey(new Date(now - 86_400_000), options.timeZone)) return `${dayWord("Yesterday", options)} ${clock}`;
+  if (day === dayKey(new Date(now + 86_400_000), options.timeZone)) return `${dayWord("Tomorrow", options)} ${clock}`;
   return `${formatLocalDate(date, options)}, ${clock}`;
 }
 
@@ -126,5 +138,5 @@ export function formatRelative(value: string | number | Date | null | undefined,
   if (minutes >= 0 && minutes < 1) return "just now";
   if (minutes >= 1 && minutes < 60) return `${minutes} min ago`;
   const text = formatLocalDateTime(date, options);
-  return dayKey(date, options.timeZone) === dayKey(new Date(now), options.timeZone) ? `Today ${text}` : text;
+  return dayKey(date, options.timeZone) === dayKey(new Date(now), options.timeZone) ? `${dayWord("Today", options)} ${text}` : text;
 }

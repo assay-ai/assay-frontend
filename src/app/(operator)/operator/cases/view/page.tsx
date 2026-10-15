@@ -25,7 +25,7 @@ import {
   type PendingRequest,
 } from "@/features/operator/case-flow";
 import { approvalNeeds, approvalTargetId, approveBlockedBecause, isOwnRequest, penaltyPhrase } from "@/features/operator/approvals";
-import { eligibleApprovers } from "@/features/operator/inbox";
+import { eligibleApprovers, isLiveApproval } from "@/features/operator/inbox";
 import { OperatorMeasurement } from "@/features/operator/operator-measurement";
 import { PENALTY_APPROVAL_CODES } from "@/features/operator/penalty-list";
 import { keptShareText, PenaltyMoney, stakeReduction } from "@/features/operator/penalty-money";
@@ -93,8 +93,8 @@ const WAITING_WHAT: Record<string, string> = {
   "slash.sweep": "A fleet sweep from this penalty",
 };
 
-/** Instants in sentences and on the timeline always carry their day ("Today 18:41"). */
-const when = (iso: string) => formatLocalDateTime(iso, { alwaysDay: true });
+/** Instants in sentences always carry their day, in running-text case ("before today 18:41"). */
+const when = (iso: string) => formatLocalDateTime(iso, { alwaysDay: true, midSentence: true });
 
 /** "If cancelled" only says something while the penalty can still be cancelled. */
 const RESTORATION_STAGES: readonly CaseStage[] = ["not-on-chain", "window-open", "executable", "disputed", "upheld", "cancel-requested"];
@@ -157,13 +157,11 @@ export default function OperatorCasePage() {
     refetchInterval: 30_000,
     retry: 0,
   });
-  const waitingSuspend =
-    pending.data?.items.find((a) => a.action === "slash.suspend" && a.status === "PENDING" && approvalTargetId(a) === proposalId) ?? null;
+  // Waiting means what Approvals means by it: pending and not past its deadline (`isLiveApproval`).
+  const live = (pending.data?.items ?? []).filter((a) => isLiveApproval(a, now) && approvalTargetId(a) === proposalId);
+  const waitingSuspend = live.find((a) => a.action === "slash.suspend") ?? null;
   // Any two-person request on this penalty (suspend, pay back, sweep) is said once, above the columns.
-  const waitingAny =
-    waitingSuspend ??
-    pending.data?.items.find((a) => a.action in PENALTY_APPROVAL_CODES && a.status === "PENDING" && approvalTargetId(a) === proposalId) ??
-    null;
+  const waitingAny = waitingSuspend ?? live.find((a) => a.action in PENALTY_APPROVAL_CODES) ?? null;
 
   // After an action, everything on the page is read again: status, next step, history.
   const refetch = React.useCallback(() => {
@@ -240,7 +238,7 @@ export default function OperatorCasePage() {
       }
     : null;
   const pendingInCard = pendingRequest !== null && baseNext.kind !== "action";
-  const next = pendingInCard ? pendingRequestStep(pendingRequest, when) : baseNext;
+  const next = pendingInCard ? pendingRequestStep(pendingRequest, when, now) : baseNext;
   const providerName = providers.name(proposal.providerId);
   const penaltyText = formatMoney(proposal.penaltyAmount);
   const penaltyName = penaltyPhrase(providerName, penaltyText);
@@ -286,9 +284,7 @@ export default function OperatorCasePage() {
   const reduction = stakeReduction(proposal.appliedAmount ?? proposal.penaltyAmount, terms.data?.slashAgentBps ?? null, true);
   const readOnlyRuling = facts.stage === "disputed" && !authority.rule;
   const restoration = showsRestoration(facts.stage, brief, facts.expired);
-  const pendingActions = (pending.data?.items ?? [])
-    .filter((a) => a.status === "PENDING" && approvalTargetId(a) === proposalId)
-    .map((a) => a.action);
+  const pendingActions = live.map((a) => a.action);
 
   return (
     <>
@@ -306,7 +302,7 @@ export default function OperatorCasePage() {
             <span>{proposal.toolName}</span>
             <span aria-hidden="true" className="text-03">·</span>
             <span>
-              proposed <LocalTime value={proposal.clocks.proposedAt} />
+              proposed <LocalTime value={proposal.clocks.proposedAt} midSentence />
             </span>
             <span aria-hidden="true" className="text-03">·</span>
             <CopyChip value={proposalId} label="penalty id" />
@@ -343,7 +339,7 @@ export default function OperatorCasePage() {
       {waitingAny && !pendingInCard && !result?.approvalId ? (
         <p role="status" className="w-full rounded-lg border border-01 bg-02 px-3.5 py-2.5 text-body-13 text-01">
           {WAITING_WHAT[waitingAny.action] ?? "A request on this penalty"} is waiting for approval: {directory.nameOf(waitingAny.requestedBy)} asked{" "}
-          <LocalTime value={waitingAny.createdAt} />.{" "}
+          <LocalTime value={waitingAny.createdAt} midSentence />.{" "}
           <Link href={approvalHref(waitingAny.id)} className="text-primary-700 underline-offset-2 hover:underline">
             Open the request
           </Link>

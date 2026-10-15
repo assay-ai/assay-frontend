@@ -26,7 +26,7 @@ import type { WalletRunState } from "./wallet-steps";
  *     functionName="cancelSlashBatch"
  *     chainId="eip155:46630"
  *     transactions={[{ to, value: "0", data }]}
- *     afterExport="Import it in the Safe that holds the arbiter key and sign there. The cases move once it lands."
+ *     afterExport="Import it in the arbiter's multi-signer wallet and sign there. The cases move once it lands."
  *   />
  *
  * When the transaction is only built on demand (a ruling is prepared by the
@@ -78,6 +78,11 @@ export interface SignOrExportProps {
    * technical details stay in place.
    */
   actionsContainer?: HTMLElement | null;
+  /**
+   * Where the downloaded file is signed, in plain words ("the arbiter's
+   * multi-signer wallet"). Default "the wallet that holds that key".
+   */
+  signerWallet?: string;
   /** Leave out the "Who signs" sentence, when the sheet already says it ("What happens"). */
   hideSigner?: boolean;
   className?: string;
@@ -111,6 +116,7 @@ export function SignOrExport({
   handoff,
   actionsContainer,
   hideSigner = false,
+  signerWallet = "the wallet that holds that key",
   className,
 }: SignOrExportProps) {
   const [linkCopied, setLinkCopied] = React.useState(false);
@@ -227,8 +233,8 @@ export function SignOrExport({
       {!canSign && !hideSigner ? (
         <p className="text-body-13 text-02">
           <span className="text-label-13 text-01">Who signs: </span>
-          {signerLabel}. That is not the wallet connected here, so download the transaction file and have it signed in the
-          Safe that holds that key. Nothing changes until it is signed.
+          {signerLabel}. That is not the wallet connected here, so download the transaction file and have it signed in{" "}
+          {signerWallet}. Nothing changes until it is signed.
         </p>
       ) : null}
       {actionsContainer ? createPortal(actions, actionsContainer) : actions}
