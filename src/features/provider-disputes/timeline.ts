@@ -61,7 +61,7 @@ export function buildRichTimeline(
   const rows: TimelineEvent[] = all.map((event, index) => ({
     id: event.id,
     time: stampUtc(event.occurredAt),
-    label: eventLabel(event.kind),
+    label: eventLabel(event.kind, event.detail),
     meta: eventSummary(event.summary, {
       ...proposal.penaltyAmount,
       toolName: proposal.toolName,

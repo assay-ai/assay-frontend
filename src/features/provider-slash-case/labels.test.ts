@@ -99,6 +99,18 @@ describe("eventLabel", () => {
     );
     expect(eventLabel("CHAIN_PART_READOPTED")).toBe("Late record adopted");
   });
+
+  it("R3-5: labels an automatic close by how it was resolved", () => {
+    expect(eventLabel("AUTO_CLOSED", { arbiterUpheld: false })).toBe("Closed without a dispute");
+    expect(eventLabel("AUTO_CLOSED")).toBe("Closed without a dispute");
+    expect(eventLabel("AUTO_CLOSED", { arbiterUpheld: true })).toBe(
+      "Upheld on chain by the arbiter",
+    );
+    // `recordChainStanding`: a record stood undisputed while a dispute was open.
+    expect(eventLabel("AUTO_CLOSED", { from: "DISPUTED" })).toBe(
+      "Upheld — an undisputed record stands",
+    );
+  });
 });
 
 describe("eventSummary", () => {

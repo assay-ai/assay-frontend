@@ -386,7 +386,7 @@ export default function SlashProposalCasePage() {
                   </span>
                   {/* The event in words; the API's own code stays under it, small. */}
                   <span className="flex w-[190px] shrink-0 flex-col">
-                    <span className="text-label-13 text-01">{eventLabel(event.kind)}</span>
+                    <span className="text-label-13 text-01">{eventLabel(event.kind, event.detail)}</span>
                     <span className="font-mono text-mono-2xs text-03">{event.kind}</span>
                   </span>
                   {/* The stored sentence, with its amounts as money and its ids as names. */}
