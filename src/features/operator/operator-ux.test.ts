@@ -295,7 +295,9 @@ describe("where a penalty stands", () => {
   it("marks a ruling late from day 20", () => {
     const b = brief({ chainStatus: "DISPUTED", disputedAt: iso(NOW - 21 * DAY), parts: 1 });
     const ruling = caseTimelineSteps(b, caseFacts(b, NOW), { now: NOW }).find((s) => s.id === "ruling");
-    expect(ruling).toMatchObject({ state: "current", urgent: true, countdown: true });
+    // The same "Day N of 30 · X days left" as Home and Arbiter, not a second countdown.
+    expect(ruling).toMatchObject({ state: "current", urgent: true, countdown: false });
+    expect(ruling?.dateLabel).toBe("Day 22 of 30 · 9 days left · ends");
   });
 });
 
@@ -360,8 +362,10 @@ describe("the next step for this operator", () => {
   });
 
   it("splits the money by the chain's current terms", () => {
-    expect(penaltySplit(USD("28470000"), 6000)).toEqual({ agents: USD("17082000"), treasury: USD("11388000") });
-    expect(penaltySplit(USD("1"), 6000)).toEqual({ agents: USD("0"), treasury: USD("1") });
+    // One split everywhere: 60% agents, 30% platform, 10% never taken (A6).
+    expect(penaltySplit(USD("28470000"), 6000)).toEqual({ agents: USD("17082000"), platform: USD("8541000"), neverTaken: USD("2847000") });
+    expect(penaltySplit(USD("1"), 6000)).toEqual({ agents: USD("0"), platform: USD("0"), neverTaken: USD("1") });
+    expect(penaltySplit(USD("100"), 8000)).toBeNull();
     expect(penaltySplit(USD("x"), 6000)).toBeNull();
   });
 });
@@ -422,8 +426,14 @@ describe("activity sentences", () => {
       activityText(activitySentence(entry({ code: "A-10", approverSubject: "dan@", reasonCode: "KEY_ROTATED" }), names)),
     ).toBe("Jordan lifted the block on Wallet 0x9f3C…F36c (Key rotated), approved by Dan.");
     const penalty = activitySentence(entry({ code: "S-1", targetType: "slash_proposal", targetId: "p1" }), { ...names, target: () => null });
-    expect(penalty.target).toBe("a penalty");
+    // Not yet read: a short id, never the vague "a penalty".
+    expect(penalty.target).toBe("penalty p1");
     expect(penalty.href).toBe("/operator/cases/view?id=p1");
+    const named = activitySentence(entry({ code: "S-1", targetType: "slash_proposal", targetId: "p1" }), {
+      ...names,
+      target: () => "Northwind Geo's $28.47 penalty",
+    });
+    expect(activityText(named)).toBe("Jordan suspended Northwind Geo's $28.47 penalty (Leaked key).");
   });
 
   it("filters by kind", () => {

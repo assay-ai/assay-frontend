@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import * as React from "react";
 
 import { ApprovalFooter } from "@/components/patterns/approval-footer";
@@ -13,8 +14,8 @@ import { operatorErrorSentence } from "@/features/operator/operator-errors";
 import { SUSPEND_REASONS } from "@/features/operator/reasons";
 import { SHORT_NOTE_MIN_LENGTH } from "@/features/operator/reason-codes";
 import { useOperatorDirectory } from "@/features/operator/use-operator-lookups";
-import type { OperatorIdentity } from "@/interfaces/operator";
-import type { TwoPersonAnswer } from "@/features/operator/two-person";
+import type { OperatorApproval, OperatorIdentity } from "@/interfaces/operator";
+import { approvalHref, type TwoPersonAnswer } from "@/features/operator/two-person";
 import { ApiError } from "@/libs/ApiClient";
 import { suspendCase } from "@/services/operator.service";
 
@@ -30,6 +31,7 @@ export function SuspendSheet({
   penaltyText,
   twoPerson,
   me,
+  waiting = null,
   onDone,
 }: {
   open: boolean;
@@ -38,7 +40,10 @@ export function SuspendSheet({
   penaltyText: string;
   twoPerson: boolean;
   me: Pick<OperatorIdentity, "id">;
-  onDone: (answer: TwoPersonAnswer<unknown>) => void;
+  /** A suspension of this penalty already waiting for approval: a second one is not sent. */
+  waiting?: OperatorApproval | null;
+  /** The answer, and the reason that was picked (so the result card says it back). */
+  onDone: (answer: TwoPersonAnswer<unknown>, reasonCode: string) => void;
 }) {
   const directory = useOperatorDirectory();
   const [reason, setReason] = React.useState("");
@@ -56,6 +61,7 @@ export function SuspendSheet({
   }, [open]);
 
   const submit = async () => {
+    if (waiting) return;
     const next = {
       reason: reason ? undefined : "Pick a reason.",
       note:
@@ -73,11 +79,12 @@ export function SuspendSheet({
         note: note.trim(),
         ticketRef: ticket.trim() || undefined,
       });
+      const picked = reason;
       setReason("");
       setNote("");
       setTicket("");
       onOpenChange(false);
-      onDone(answer);
+      onDone(answer, picked);
     } catch (error) {
       setFailure({ sentence: operatorErrorSentence(error), code: error instanceof ApiError ? error.code : null });
     } finally {
@@ -98,6 +105,14 @@ export function SuspendSheet({
           </SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pt-4">
+          {waiting ? (
+            <p role="status" className="w-full rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5 text-body-13 text-02">
+              A suspension of this penalty is already waiting for approval, so a second one is not sent.{" "}
+              <Link href={approvalHref(waiting.id)} className="text-primary-600 hover:underline">
+                Open the waiting request
+              </Link>
+            </p>
+          ) : null}
           <ReasonChips
             label="Why"
             options={SUSPEND_REASONS}
@@ -129,7 +144,7 @@ export function SuspendSheet({
                 Keep the penalty
               </Button>
             </SheetClose>
-            <Button variant="danger" loading={busy} onClick={() => void submit()}>
+            <Button variant="danger" loading={busy} disabled={waiting !== null} onClick={() => void submit()}>
               {twoPerson ? "Send for approval" : "Suspend penalty"}
             </Button>
           </div>

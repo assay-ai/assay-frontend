@@ -83,6 +83,7 @@ export function searchBlockTargets(query: string, providers: readonly NamedProvi
 
 /** What the picker says when nothing matches. */
 export function noTargetText(query: string): string {
+  if (!query.trim()) return "Type a wallet (0x…), a provider's name or an organization id.";
   if (query.includes("@")) return "Searching by email is not available yet. Paste the organization id or the wallet instead.";
   if (/^0x/i.test(query.trim())) return "A wallet is 0x followed by 40 hex characters.";
   return `No provider called “${query}”. Paste a wallet, or the organization id.`;
