@@ -5,6 +5,7 @@ import { ArrowRight, ChevronDown, Play } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import type { BindingTestReport, CatalogueTool, ToolBindingDetail, ToolMapping } from "@/interfaces";
@@ -16,7 +17,7 @@ import { cn } from "@/utils";
 import { documentsEqual, MappingEditor, schemaFields } from "../mapping-editor";
 import { requestMappingSummary, responseMappingSummary } from "../mapping-summary";
 import { argumentsProblem } from "../tester-arguments";
-import { testPipeline } from "../tester/pipeline";
+import { testGate, testPipeline } from "../tester/pipeline";
 import { TestPipelineView } from "../tester/pipeline-view";
 import { isStaleRun } from "../tester/report-view";
 import { createRunGuard } from "../tester/run-guard";
@@ -93,6 +94,13 @@ export function ConnectStage({
   const [phase, setPhase] = React.useState<"idle" | "saving" | "testing">("idle");
   const [error, setError] = React.useState<string | null>(null);
   const [report, setReport] = React.useState<BindingTestReport | null>(null);
+  // An empty result proves nothing: Continue needs the provider to say they know. Asked again per run.
+  const [emptyAck, setEmptyAck] = React.useState(false);
+  const [ackFor, setAckFor] = React.useState<BindingTestReport | null>(null);
+  if (ackFor !== report) {
+    setAckFor(report);
+    setEmptyAck(false);
+  }
   const [runGuard] = React.useState(createRunGuard);
 
   const parsedEndpoint = parseEndpoint(endpoint);
@@ -151,7 +159,8 @@ export function ConnectStage({
     !documentsEqual(binding.requestMapping, mappings.request) ||
     !documentsEqual(binding.responseMapping, mappings.response);
   const stale = report && binding ? isStaleRun(report, binding.version) || dirty : false;
-  const passed = report ? testPipeline(report).passed && !stale : testPassedBefore && !dirty;
+  const gate = report ? testGate(testPipeline(report), { stale: Boolean(stale), emptyAcknowledged: emptyAck }) : null;
+  const passed = gate ? gate.passed : testPassedBefore && !dirty;
 
   return (
     <section aria-labelledby="connect-stage-title" className="flex w-full flex-col gap-5">
@@ -296,6 +305,21 @@ export function ConnectStage({
         ) : null}
       </div>
 
+      {gate?.needsEmptyAck ? (
+        <div className="flex flex-col gap-2 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-3">
+          <p className="text-body-13 text-warning-700">
+            Your API answered, but the result was empty, so none of our checks ran. This test does not show that real
+            calls will pass. Try an input that returns data, or continue knowing that.
+          </p>
+          <Checkbox
+            checked={emptyAck}
+            onChange={(event) => setEmptyAck(event.target.checked)}
+            label="I understand this test proved nothing about whether real calls pass our checks."
+            className="items-start [&>span:first-of-type]:mt-px"
+          />
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={onContinue} disabled={!passed}>
           Continue to Go live
@@ -303,7 +327,9 @@ export function ConnectStage({
         </Button>
         {!passed ? (
           <span className="text-body-xs text-03">
-            {report && !stale
+            {gate?.needsEmptyAck
+              ? "Tick the box above, or run a test that returns data."
+              : report && !stale
               ? "Get a passing test to continue."
               : "Run a test to continue. Your draft is saved when you do."}
           </span>
