@@ -74,7 +74,7 @@ describe("failRateLabel", () => {
 describe("stakeSummary", () => {
   it("lists each chain, never a sum, and says when it is unknown", () => {
     const name = (id: string) => (id === "eip155:1" ? "Ethereum" : id);
-    expect(stakeSummary([], name)).toBe("Stake not known");
+    expect(stakeSummary([], name)).toBe("Could not be read just now");
     expect(
       stakeSummary(
         [

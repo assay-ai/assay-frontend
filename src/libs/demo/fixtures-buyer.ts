@@ -1571,7 +1571,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           id: "ntf_2fa9",
           event: "spend.threshold_crossed",
           severity: "INFO",
-          title: "This month's spend passed 10% of the monthly cap",
+          title: "This month's spend passed 10% of the monthly spending limit",
           body: "$127.15 charged of a $900.00 cap. This is a notice, not a refusal — a limit is what refuses.",
           subjectType: "spend_policy",
           subjectId: "sp_northwind",

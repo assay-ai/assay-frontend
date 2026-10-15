@@ -129,7 +129,9 @@ export function stakeSummary(
   stake: readonly (Money & { chainId: string })[],
   chainName: (chainId: string) => string,
 ): string {
-  if (stake.length === 0) return "Stake not known";
+  // An empty list is "the chain could not be read just now", never "no stake"
+  // and never a doubt about who the provider is (Verified is about identity).
+  if (stake.length === 0) return "Could not be read just now";
   return stake
     .map((entry) => `${formatDecimal(toDecimal(entry), { decimals: 2 })} on ${chainName(entry.chainId)}`)
     .join(" · ");
