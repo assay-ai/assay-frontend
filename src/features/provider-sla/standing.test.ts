@@ -25,7 +25,7 @@ describe("open SLA window standing", () => {
     expect(standing.label).toBe("NOT YET SLASHABLE");
     expect(standing.tone).toBe("primary");
     expect(standing.sentence).toMatch(/^6 of 400 verified calls/);
-    expect(standing.sentence).toMatch(/cannot be slashed/);
+    expect(standing.sentence).toMatch(/no penalty can come from this window/);
     expect(standing.sentence).not.toMatch(/has reached the sample gate/);
     expect(standing.projection).toMatch(/too few calls to judge$/);
     expect(standing.projection).not.toMatch(/breach likely/);

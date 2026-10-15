@@ -98,3 +98,15 @@ export function utcTitle(
   if (!date) return undefined;
   return `${date.toISOString().slice(0, options.seconds ? 23 : 16).replace("T", " ")} UTC`;
 }
+
+/**
+ * The zone a local time is shown in, as a short label ("GMT+1", "PDT") — put
+ * next to a deadline so nobody wonders whose afternoon it is.
+ */
+export function zoneLabel(value: string | number | Date | null | undefined, options: { timeZone?: string } = {}): string {
+  const date = toDate(value) ?? new Date();
+  const part = new Intl.DateTimeFormat(LOCALE, { timeZone: options.timeZone, timeZoneName: "short" })
+    .formatToParts(date)
+    .find((p) => p.type === "timeZoneName");
+  return part?.value ?? "";
+}

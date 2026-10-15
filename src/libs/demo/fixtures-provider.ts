@@ -1485,7 +1485,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         request: {
           method: "GET",
           url: binding.sample ? `${binding.endpoint}${binding.sample.query}` : `${binding.endpoint}?q=ETH-USD&limit=25`,
-          headerNames: ["accept", "x-api-version", "x-x402-call-id"],
+          headerNames: ["accept", "x-api-version", "x-assay-call-id"],
           body: null,
         },
         upstream: {

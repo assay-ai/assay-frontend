@@ -67,6 +67,11 @@ export function DeadlineChip({ row }: { row: PenaltyRow }) {
       <span className={cn(base, urgent ? "bg-danger-10 text-danger-700" : "bg-warning-10 text-warning-700")}>
         <Clock aria-hidden="true" className="size-3" />
         Dispute within {msLeft === null ? "…" : formatRemaining(msLeft)}
+        {row.executableAt ? (
+          <>
+            {" "}· by <LocalTime value={row.executableAt} withZone />
+          </>
+        ) : null}
       </span>
     );
   }
@@ -80,7 +85,7 @@ export function DeadlineChip({ row }: { row: PenaltyRow }) {
   if (row.tab === "needs-action") {
     return (
       <span className={cn(base, "bg-danger-10 text-danger-700")}>
-        Can be executed from <LocalTime value={row.executableAt} />
+        Can be executed from <LocalTime value={row.executableAt} withZone />
       </span>
     );
   }
@@ -135,7 +140,7 @@ export function PenaltyRowCard({
       <div className="flex flex-col gap-1 tablet:items-end">
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" icon={<HelpCircle aria-hidden="true" />} onClick={onWhy}>
-            Why?
+            Why this penalty?
           </Button>
           {row.canDispute ? (
             disputeBlocked && onConnect ? (
@@ -165,19 +170,21 @@ export function LossSentence({ row }: { row: PenaltyRow }) {
   }
   const basis: Money = row.applied ?? row.amount;
   const split = splitPenalty(basis);
-  const verb = row.closedAs === "executed" ? "You lost" : "If it is executed, you lose";
+  const executed = row.closedAs === "executed";
   return (
     <div className="flex flex-col gap-3">
       <p className="text-body-13 text-01">
-        {verb} <span className="font-semibold">{formatMoney(split.taken)}</span>;{" "}
-        {formatMoney(split.neverTaken)} of the {formatMoney(basis)} is never taken.
+        {executed ? "Of this " : "If it is executed, of this "}
+        {formatMoney(basis)} penalty <span className="font-semibold">{formatMoney(split.taken)}</span>{" "}
+        {executed ? "left" : "leaves"} your stake: {formatMoney(split.agent)} to the buyers whose calls failed and{" "}
+        {formatMoney(split.platform)} to Assay. The other {formatMoney(split.neverTaken)} is never taken.
       </p>
       <MoneySplit
         segments={[
           { label: "To the buyers whose calls failed", value: SLASH_AGENT_BPS, amount: formatMoney(split.agent), tone: "teal" },
           { label: "To Assay", value: SLASH_PLATFORM_BPS, amount: formatMoney(split.platform), tone: "indigo" },
           {
-            label: "Stays with you",
+            label: "Never taken (stays in your stake)",
             value: 10_000 - SLASH_AGENT_BPS - SLASH_PLATFORM_BPS,
             amount: formatMoney(split.neverTaken),
             tone: "neutral",
@@ -255,14 +262,14 @@ export function PenaltyDrawer({
                 </p>
               ) : row.canDispute ? (
                 <p className="text-body-13 text-02">
-                  Nothing is taken before <LocalTime value={row.executableAt} className="font-semibold text-01" />. If you
+                  Nothing is taken before <LocalTime value={row.executableAt} withZone className="font-semibold text-01" />. If you
                   think it is wrong, dispute it before then: one signature from your stake wallet, and a person at Assay
                   rules on it.
                 </p>
               ) : row.tab === "needs-action" ? (
                 <p className="text-body-13 text-02">
                   {row.upheld ? "Assay's arbiter upheld it. " : "The dispute window has closed. "}It can be executed from{" "}
-                  <LocalTime value={row.executableAt} className="font-semibold text-01" />.
+                  <LocalTime value={row.executableAt} withZone className="font-semibold text-01" />.
                 </p>
               ) : null}
 

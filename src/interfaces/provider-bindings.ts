@@ -565,7 +565,7 @@ export interface RunBindingTestBody {
  * Charges nobody, and writes no payment intent.
  */
 export interface BindingTestReport {
-  /** The `X-X402-Call-Id` this run actually sent upstream. Real, and unique. */
+  /** The `X-Assay-Call-Id` this run actually sent upstream. Real, and unique. */
   callId: string;
   outcome: BindingTestOutcome;
   failedLayer: BindingTestLayer | null;

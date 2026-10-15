@@ -93,7 +93,7 @@ export default function PenaltiesPage() {
       ? null
       : signerState.status === "hydrating" || signerState.status === "chain-unknown"
         ? "Reading the wallets connected in this browser…"
-        : `Connect your stake wallet (${penalties.ownAddress.slice(0, 6)}…${penalties.ownAddress.slice(-4)}) to dispute.`;
+        : `Only the wallet that holds your stake (${penalties.ownAddress.slice(0, 6)}…${penalties.ownAddress.slice(-4)}) can dispute on chain. Connect it in this browser.`;
 
   const { connectWallet } = useConnectWallet();
   const needsConnect =
@@ -170,6 +170,16 @@ export default function PenaltiesPage() {
           </button>
         ))}
       </div>
+
+      {caseParam && !requested && !penalties.isLoading && !penalties.isError ? (
+        <p role="status" className="w-full rounded-lg border border-01 bg-01 px-4 py-3 text-body-13 text-02">
+          That link points to a penalty that is not on your stake, so there is nothing to open. Your own penalties are
+          listed below.{" "}
+          <button type="button" className="text-primary-600 underline-offset-2 hover:underline" onClick={() => setQuery({ case: null })}>
+            Dismiss
+          </button>
+        </p>
+      ) : null}
 
       {penalties.isLoading ? (
         <PageState kind="loading" label="Reading your penalties from the chain" rows={3} />
