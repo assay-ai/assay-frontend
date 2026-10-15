@@ -9,12 +9,18 @@ describe("STATUS_CHIPS (operator redesign C5)", () => {
     expect(STATUS_CHIPS["needs-you"].tone).toBe("danger");
   });
 
-  it("has the waiting-for-signature state", () => {
-    expect(STATUS_CHIPS["waiting-signature"]).toMatchObject({ label: "Waiting for signature", tone: "warning" });
+  it("has the waiting-for-signature state, not in Disputed's amber", () => {
+    expect(STATUS_CHIPS["waiting-signature"]).toMatchObject({ label: "Waiting for signature", tone: "info" });
+    expect(STATUS_CHIPS["waiting-signature"].tone).not.toBe(STATUS_CHIPS.disputed.tone);
+  });
+
+  it("draws Executed as a final state, not in the red of Penalty upheld", () => {
+    expect(STATUS_CHIPS.executed.tone).toBe("ink");
+    expect(STATUS_CHIPS.upheld.tone).toBe("danger");
   });
 
   it("gives the scanned-for states an icon", () => {
-    for (const key of ["needs-you", "waiting", "blocked", "done", "disputed", "rejected", "withdrawn", "expired"] as const) {
+    for (const key of ["needs-you", "waiting", "blocked", "done", "disputed", "rejected", "withdrawn", "expired", "waiting-signature", "executed"] as const) {
       expect(STATUS_CHIPS[key]).toHaveProperty("icon");
     }
   });
