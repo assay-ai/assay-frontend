@@ -118,6 +118,16 @@ export function disputeUrgency(
   return { day, daysLeft, used, urgent, expired: false, label };
 }
 
+/**
+ * "Day 24 of 30 · 7 days left" — the one way the console says where a dispute
+ * stands. Home, Penalties, Arbiter and the penalty page all print this, from
+ * the same `disputeUrgency`, so they cannot disagree.
+ */
+export function disputeDayText(row: Pick<ArbiterDispute, "disputedAt" | "expiresAt">, now: number = Date.now()): string {
+  const urgency = disputeUrgency(row, now);
+  return urgency.day === null ? urgency.label : `Day ${Math.min(30, urgency.day + 1)} of 30 · ${urgency.label}`;
+}
+
 /** Fewest days left first; unknown expiry last. */
 export function sortDisputesByDaysLeft<T extends Pick<ArbiterDispute, "disputedAt" | "expiresAt" | "requestId">>(
   rows: readonly T[],

@@ -26,6 +26,14 @@ import { explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slas
  * account, a call with value, and a call for another chain before the wallet
  * is asked anything.
  */
+/** What a built call does, in words, for the message to its signer. */
+const CALL_WHAT: Readonly<Record<string, string>> = {
+  setBlocked: "the on-chain block of a wallet",
+  cancelSlash: "the cancel of a penalty",
+  cancelSlashBatch: "the cancel of disputed penalties",
+  upholdSlashBatch: "the ruling upholding disputed penalties",
+};
+
 export function ContractCallAction({
   call,
   signLabel,
@@ -34,6 +42,7 @@ export function ContractCallAction({
   successDescription,
   onSigned,
   onBusyChange,
+  handoff,
 }: {
   call: SlashContractCall;
   signLabel: string;
@@ -44,6 +53,8 @@ export function ContractCallAction({
   onSigned?: (hash: string | null) => void;
   /** True while the wallet is signing, so the sheet around it can refuse to close. */
   onBusyChange?: (busy: boolean) => void;
+  /** The link and message for the signer. Default: this page, and what is to be signed. */
+  handoff?: { link: string; message: string };
 }) {
   const connected = useConnectedAddresses();
   const signerState = useSigner({ chainId: call.chainId, address: connectedSpelling(connected, call.signer) });
@@ -73,7 +84,9 @@ export function ContractCallAction({
     [call, deployment, signLabel, signerState],
   );
 
-  const signer = `${signerRoleLabel(call.signerRole).toLowerCase()} (${shortId(call.signer)})`;
+  const signer = `${signerRoleLabel(call.signerRole).toLowerCase()} key ${shortId(call.signer)}`;
+  const what = CALL_WHAT[call.functionName] ?? "this transaction";
+  const here = typeof window === "undefined" ? "/operator" : `${window.location.pathname}${window.location.search}`;
 
   return (
     <SignOrExport
@@ -93,6 +106,7 @@ export function ContractCallAction({
       chainId={call.chainId}
       transactions={[{ to: call.to, value: call.value, data: call.data }]}
       afterExport={afterExport}
+      handoff={handoff ?? { link: here, message: `Please sign ${what} with the ${signerRoleLabel(call.signerRole).toLowerCase()} key. The file is attached; the record is here:` }}
       details={[
         { label: "Must be signed by", value: call.signer },
         ...(call.requestIds.length > 0 ? [{ label: "Penalty request ids", value: call.requestIds.join(", ") }] : []),

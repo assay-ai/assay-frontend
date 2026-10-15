@@ -74,7 +74,7 @@ export interface ActivitySentence {
 function fallbackTarget(entry: Pick<OverrideLogEntry, "targetType" | "targetId">): string {
   switch (entry.targetType) {
     case "slash_proposal":
-      return "a penalty";
+      return `penalty ${entry.targetId.length > 12 ? `${entry.targetId.slice(0, 8)}…` : entry.targetId}`;
     case "account_block":
       return "an account";
     case "operator":

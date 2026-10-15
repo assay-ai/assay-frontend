@@ -18,7 +18,7 @@ import {
 } from "@/features/operator/activity";
 import { blockSubjectLabel } from "@/features/operator/block-targets";
 import { operatorLabel } from "@/features/operator/inbox";
-import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-operator-lookups";
+import { useOperatorDirectory, usePenaltyNames, useProviderNames } from "@/features/operator/use-operator-lookups";
 import type { OverrideLogEntry } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { listAccountBlocks, listOverrideLog } from "@/services/operator.service";
@@ -90,6 +90,11 @@ function ActivityScreen() {
     [log.data, kind],
   );
 
+  // "Northwind Geo's $28.47 penalty", read from each penalty the page shows.
+  const penaltyIds = React.useMemo(() => rows.filter((row) => row.targetType === "slash_proposal").map((row) => row.targetId), [rows]);
+  const penalties = usePenaltyNames(penaltyIds);
+  const penaltiesKey = [...penalties.entries()].map(([id, name]) => `${id}=${name}`).join("|");
+
   const blockById = React.useMemo(() => new Map((blocks.data?.items ?? []).map((b) => [b.id, b])), [blocks.data]);
   const names = React.useMemo(
     () => ({
@@ -103,10 +108,13 @@ function ActivityScreen() {
           const op = directory.operators.find((o) => o.id === entry.targetId);
           return op ? operatorLabel(op) : null;
         }
+        if (entry.targetType === "slash_proposal") return penalties.get(entry.targetId) ?? null;
         return null;
       },
     }),
-    [blockById, directory, providers],
+    // `penalties` is rebuilt every render; its content is `penaltiesKey`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [blockById, directory, providers, penaltiesKey],
   );
 
   return (

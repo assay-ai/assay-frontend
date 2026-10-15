@@ -13,6 +13,7 @@ import { ReasonChips } from "@/components/patterns/reason-chips";
 import { SignOrExport } from "@/components/patterns/sign-or-export";
 import type { WalletStep } from "@/components/patterns/sign-action";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -39,6 +40,8 @@ import { sortDisputesByDaysLeft } from "@/features/operator/inbox";
 import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { mayBlock } from "@/features/operator/blocks";
+import { splitSharesText } from "@/features/operator/penalty-money";
+import { WhyNot } from "@/features/operator/why-not";
 import { useProviderNames } from "@/features/operator/use-operator-lookups";
 import { useConnectedAddresses, useSigner } from "@/hooks/useSigner";
 import type { ArbiterDispute, ArbiterRuling, ArbiterTerms, ChainStateHealth } from "@/interfaces/operator";
@@ -58,8 +61,10 @@ import { formatMoney } from "@/utils/money";
  * for 30 days, anyone can expire it. Each dispute is a card with its 30-day
  * bar, the evidence in one line and two buttons. The ruling sheet takes a
  * reason chip and a note, then signs in the same step when this browser holds
- * the arbiter's wallet — otherwise it downloads a Safe batch. Several disputes
- * can be ruled in one transaction.
+ * the arbiter's wallet — otherwise it says who signs, downloads the file for
+ * their Safe and copies a link for them. Several disputes can be ruled in one
+ * transaction; upholding one whose payee check did not pass needs an explicit
+ * acknowledgement, per row.
  *
  * `?focus=<requestId>` or `?case=<proposalId>` scrolls to one dispute.
  *
@@ -171,9 +176,12 @@ function ArbiterScreen() {
       />
 
       {!canRule ? (
-        <p className="w-full rounded-lg border border-01 bg-01 px-3.5 py-2.5 text-body-13 text-02">
-          You can read the disputes. Ruling needs a Lead adjudicator or Treasury.
-        </p>
+        <WhyNot
+          action="rule"
+          me={me}
+          title="You can read the disputes here"
+          ask="Can you rule on the disputed penalties on Arbiter? Some are getting close to their 30 days."
+        />
       ) : null}
 
       {result ? (
@@ -243,11 +251,12 @@ function ArbiterScreen() {
         <p className="text-body-xs text-03">
           {canBlock ? (
             <>
-              To block a wallet on chain, block it on{" "}
+              To block a wallet on chain, open{" "}
               <Link href="/operator/blocks" className="text-primary-600 hover:underline">
                 Blocks
-              </Link>{" "}
-              and turn on &ldquo;also block on chain&rdquo;.
+              </Link>
+              , choose &ldquo;Block an account&rdquo;, pick the wallet and turn on &ldquo;Also block on chain&rdquo;. A wallet that is
+              already blocked has &ldquo;Block on chain&rdquo; on its row.
             </>
           ) : (
             <>
@@ -315,7 +324,7 @@ function ArbiterStatus({
       ? { ok: false, text: "No arbiter appointed" }
       : arbiterConnected
         ? { ok: true, text: "Arbiter wallet connected" }
-        : { ok: true, text: `Arbiter is ${shortId(terms.arbiter)} (not this browser: you download a Safe batch)` },
+        : { ok: true, text: `Signed by the arbiter key ${shortId(terms.arbiter)}, not connected here: rulings go to it as a file` },
     chainState === null
       ? { ok: true, text: "Indexer not reported" }
       : chainState.stale
@@ -348,7 +357,7 @@ function ArbiterStatus({
       <dl className="grid w-full grid-cols-1 gap-x-5 gap-y-2.5 border-t border-01 px-3.5 py-3 text-body-13 min-[480px]:grid-cols-2 desktop:grid-cols-3">
         <Fact label="Dispute window">{durationText(terms.slashDelaySeconds)}</Fact>
         <Fact label="Time to rule">30 days from the dispute</Fact>
-        <Fact label="Agents' share of a penalty">{`${terms.slashAgentBps / 100}%`}</Fact>
+        <Fact label="Split of a penalty">{splitSharesText(terms.slashAgentBps)}</Fact>
         <Fact label="Arbiter">{terms.arbiter ? <CopyChip value={terms.arbiter} label="arbiter address" /> : "None"}</Fact>
         <Fact label="Admin">
           <CopyChip value={terms.admin} label="admin address" />
@@ -523,6 +532,7 @@ function RulingSheet({
   const [reason, setReason] = React.useState("");
   const [note, setNote] = React.useState("");
   const [ticket, setTicket] = React.useState("");
+  const [acknowledged, setAcknowledged] = React.useState(false);
   const kind = ruling?.kind ?? "CANCEL";
   const chainId = chainForSelection ?? FALLBACK_CHAIN;
   // The arbiter of the chain these penalties are on, not of the chain picked in the header.
@@ -540,14 +550,20 @@ function RulingSheet({
     setReason("");
     setNote("");
     setTicket("");
+    setAcknowledged(false);
   }, [rulingKey]);
+
+  // Upholding pays the beneficiary: every row whose payee check did not pass is named, and acknowledged first.
+  const unchecked = kind === "UPHOLD" ? rows.filter((row) => beneficiaryCheck(row).status !== "ok") : [];
 
   const connected = useConnectedAddresses();
   const signerState = useSigner({ chainId, address: arbiter ? connectedSpelling(connected, arbiter) : undefined });
   const canSign = arbiter !== null && signerState.status === "ready" && sameEvmAddress(signerState.signer.address, arbiter);
 
   const validated = validateRulingForm({ ruling: kind, reasonCode: reason, note, ticketRef: ticket }, chainForSelection, ruling?.ids ?? []);
-  const notReady = !validated.ok
+  const notReady = unchecked.length > 0 && !acknowledged
+    ? `Confirm the payee warning${unchecked.length === 1 ? "" : "s"} above first.`
+    : !validated.ok
     ? reason === ""
       ? "Pick a reason first."
       : note.trim().length < ARBITER_NOTE_MIN
@@ -608,14 +624,37 @@ function RulingSheet({
           <ul className="flex w-full flex-col rounded-lg border border-01">
             {rows.map((row) => {
               const amount = disputeAmount(row.chainId, row.penaltyAmount);
+              const check = beneficiaryCheck(row);
               return (
-                <li key={row.requestId} className="flex items-center justify-between gap-3 border-b border-01 px-3 py-2 text-body-13 last:border-b-0">
-                  <span className="min-w-0 truncate text-01">{providerName(row.providerId)}</span>
-                  <span className="shrink-0 font-mono text-mono-12 text-02">{amount ? formatMoney(amount) : ""}</span>
+                <li key={row.requestId} className="flex flex-col gap-0.5 border-b border-01 px-3 py-2 text-body-13 last:border-b-0">
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate text-01">{providerName(row.providerId)}</span>
+                    <span className="shrink-0 font-mono text-mono-12 text-02">{amount ? formatMoney(amount) : ""}</span>
+                  </span>
+                  {kind === "UPHOLD" && check.status !== "ok" ? (
+                    <span className={cn("flex items-start gap-1.5 text-body-xs", check.status === "failed" ? "text-danger-700" : "text-warning-700")}>
+                      <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+                      {check.status === "failed" ? "Who gets paid: the check fails." : "Who gets paid: not checked."} {check.reason ?? ""}
+                    </span>
+                  ) : null}
                 </li>
               );
             })}
           </ul>
+          {unchecked.length > 0 ? (
+            <div className="flex w-full flex-col gap-2 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5">
+              <p className="text-body-13 text-02">
+                Upholding pays the beneficiary of each penalty. For {unchecked.length === 1 ? "one of them" : `${unchecked.length} of them`}{" "}
+                ({unchecked.map((row) => providerName(row.providerId)).join(", ")}) Assay could not confirm the beneficiary paid for the failed
+                calls. Check it on the penalty before upholding, or leave {unchecked.length === 1 ? "it" : "them"} out of this batch.
+              </p>
+              <Checkbox
+                label={`I checked who gets paid on ${unchecked.length === 1 ? "this penalty" : `these ${unchecked.length} penalties`}`}
+                checked={acknowledged}
+                onChange={(e) => setAcknowledged(e.target.checked)}
+              />
+            </div>
+          ) : null}
           <ReasonChips
             label="Why"
             options={RULING_REASONS[kind]}
@@ -630,7 +669,11 @@ function RulingSheet({
           <Field label="Ticket (optional)" value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="INC-123" maxLength={128} />
           <SignOrExport
             canSign={canSign}
-            signerLabel={arbiter ? `the arbiter (${shortId(arbiter)})` : "the arbiter"}
+            signerLabel={arbiter ? `the arbiter key ${shortId(arbiter)}` : "the arbiter"}
+            handoff={{
+              link: `/operator/arbiter?focus=${encodeURIComponent(rows[0]?.requestId ?? "")}`,
+              message: `Please sign the ${kind === "UPHOLD" ? "uphold" : "cancel"} ruling for ${rows.map((row) => providerName(row.providerId)).join(", ")} with the arbiter key. The file is attached; the disputes are here:`,
+            }}
             signLabel={kind === "UPHOLD" ? `Uphold and sign` : `Cancel and sign`}
             steps={steps}
             disabled={notReady !== null}
@@ -648,7 +691,7 @@ function RulingSheet({
               const call = await prepare();
               return [{ to: call.to, value: call.value, data: call.data }];
             }}
-            afterExport="Import the file in the Safe that holds the arbiter key and sign it there. The penalties move once it lands."
+            afterExport="Downloaded. In the Safe that holds the arbiter key, open Transaction Builder, drop the file in and sign. The penalties move once it lands."
             details={rows.map((row) => ({ label: `${providerName(row.providerId)} request id`, value: row.requestId }))}
           />
         </div>
