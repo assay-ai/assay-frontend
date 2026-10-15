@@ -9,6 +9,5 @@ export function callPrice(money: Money | null | undefined): string {
   if (!money) return "Free";
   const value = toDecimal(money);
   if (value.isZero()) return "Free";
-  if (value.mul(100).isInteger()) return formatDecimal(value, { decimals: 2 });
-  return formatDecimal(value, { decimals: money.decimals }).replace(/0+$/, "");
+  return formatDecimal(value, { decimals: money.decimals });
 }

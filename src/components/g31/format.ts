@@ -1,6 +1,7 @@
 import Decimal from "decimal.js";
 
 import type { Money } from "@/interfaces";
+import { formatLocalDate } from "@/libs/local-time";
 import { chainLabel } from "@/utils/chain";
 import { formatMoney, toDecimal } from "@/utils/money";
 
@@ -67,7 +68,7 @@ export function stakeLines(stake: readonly ChainStake[]): StakeLine[] {
   }));
 }
 
-/** Per-call prices, which the design always writes at four decimals. */
+/** Per-call prices: up to four decimals, only as many as the price has ($0.0016, $0.012, $2.50). */
 export function formatPrice(money: Money | null | undefined): string {
   if (!money) return "—";
   return formatMoney(money, { decimals: 4 });
@@ -98,23 +99,9 @@ export function relativeTime(iso: string | null | undefined, now = Date.now()): 
   return `${Math.floor(elapsed / 86_400_000)}d ago`;
 }
 
-/** `2026-08-07 09:14` — the format the design's change-history rows use. */
-export function timestamp(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(
-    date.getUTCHours()
-  )}:${pad(date.getUTCMinutes())}`;
-}
-
-/** `2026-06-02` — a date with no time, as the design's "Listed since" writes it. */
+/** "Jun 2" (or "Jun 2, 2025") — a date with no time, in the reader's own zone. */
 export function dateOnly(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toISOString().slice(0, 10);
+  return formatLocalDate(iso);
 }
 
 /** Thousands-separated counts, as in the design's "512,900 calls measured". */

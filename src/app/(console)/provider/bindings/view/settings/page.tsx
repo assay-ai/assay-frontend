@@ -24,7 +24,7 @@ import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { updateToolBinding } from "@/services/provider-tool-bindings.service";
 import { labelForEndpoint } from "@/utils/provider-label";
-import { formatMoneyNonZero } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
 
 /**
@@ -300,8 +300,8 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
           {
             label: "Price",
             before:
-              binding.pricingMode === "FREE" ? "Free" : `${formatMoneyNonZero(binding.price)} a call`,
-            after: mode === "FREE" || !parsed.price ? "Free" : `${formatMoneyNonZero(parsed.price)} a call`,
+              binding.pricingMode === "FREE" ? "Free" : `${formatMoney(binding.price, { decimals: 6 })} a call`,
+            after: mode === "FREE" || !parsed.price ? "Free" : `${formatMoney(parsed.price, { decimals: 6 })} a call`,
           },
         ]}
         confirmLabel="Save new price"

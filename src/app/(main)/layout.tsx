@@ -12,9 +12,11 @@ import { MobileTopBar } from "@/components/layout/mobile-top-bar";
 import { BuyerSectionTabs } from "@/components/layout/section-tabs";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { BUYER_NAV_ITEMS, sectionFor } from "@/components/layout/nav-config";
+import { BuyerSearch } from "@/components/layout/buyer-search";
 import { TopBar } from "@/components/layout/top-bar";
 import { WalletMenu } from "@/components/layout/wallet-menu";
 import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
+import { routes } from "@/libs/routes";
 import { getUnreadCount } from "@/services";
 import { useTheme } from "@/providers/ThemeProvider";
 
@@ -86,6 +88,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
           activeNavId={activeNavId}
           alertCount={alertCount}
           onAlertsClick={openAlerts}
+          search={<BuyerSearch />}
           avatar={<WalletMenu />}
           actions={
             <div className="flex items-center gap-1.5">
@@ -101,7 +104,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
           title={titleFor(pathname)}
           alertCount={alertCount}
           onAlertsClick={openAlerts}
-          onSearch={() => router.push("/spend")}
+          onSearch={() => router.push(routes.calls())}
           avatar={<WalletMenu />}
         />
       </div>

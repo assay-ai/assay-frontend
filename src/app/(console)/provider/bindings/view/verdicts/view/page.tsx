@@ -17,7 +17,7 @@ import { useSearchParam } from "@/hooks/useSearchParam";
 import { routes } from "@/libs/routes";
 import { getProviderVerdict } from "@/services";
 import { cn } from "@/utils";
-import { formatMoneyNonZero } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 import { presentVerdict } from "@/utils/verdict";
 
 /**
@@ -42,13 +42,13 @@ function Outcome({ detail }: { detail: ProviderVerdictDetail }) {
     lines.push({
       tone: "danger",
       icon: <CircleX aria-hidden="true" className="size-4" />,
-      text: `You were not paid for this call${c.providerAmount ? ` (${formatMoneyNonZero(c.providerAmount)})` : ""}, and it counts as a failure against your promise.`,
+      text: `You were not paid for this call${c.providerAmount ? ` (${formatMoney(c.providerAmount)})` : ""}, and it counts as a failure against your promise.`,
     });
   } else if (c.strike === false) {
     lines.push({
       tone: "success",
       icon: <CircleCheck aria-hidden="true" className="size-4" />,
-      text: `You were paid for this call${c.providerAmount ? `: ${formatMoneyNonZero(c.providerAmount)}` : ""}.`,
+      text: `You were paid for this call${c.providerAmount ? `: ${formatMoney(c.providerAmount)}` : ""}.`,
     });
   } else {
     lines.push({ tone: "warning", icon: <TriangleAlert aria-hidden="true" className="size-4" />, text: "This call has not settled yet." });
@@ -206,7 +206,7 @@ export default function ProviderVerdictDetailPage() {
                 money ? (
                   <div key={label as string} className="flex items-center justify-between gap-3">
                     <dt className="text-body-13 text-02">{label as string}</dt>
-                    <dd className="font-mono text-mono-13 text-01">{formatMoneyNonZero(money as never)}</dd>
+                    <dd className="font-mono text-mono-13 text-01">{formatMoney(money as never)}</dd>
                   </div>
                 ) : null,
               )}

@@ -57,8 +57,6 @@ const SEVERITY_ICON = {
   INFO: { Icon: CircleCheck, tone: "text-success-500", border: "border-01" },
 } as const;
 
-/** `2026-08-01 00:12 UTC` — the mono line's format on the frame's third card. */
-
 /** The platform settles in 6-decimal stablecoins; the notification carries no scale. */
 const NOTIFICATION_ASSET_DECIMALS = 6;
 

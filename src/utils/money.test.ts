@@ -6,7 +6,6 @@ import {
   exceedsScale,
   formatDecimal,
   formatMoney,
-  formatMoneyNonZero,
   toAtomic,
   toDecimal,
 } from "./money";
@@ -195,24 +194,44 @@ describe("the rounding convention — truncate, never round", () => {
   });
 });
 
-describe("formatMoneyNonZero — two decimals, more only below one cent", () => {
+describe("the display rule — two decimals, more only when the value has them", () => {
   const usd = (amount: string) => ({ amount, asset: "x", decimals: 6 });
 
   it("writes an ordinary amount like every other figure", () => {
-    expect(formatMoneyNonZero(usd("350000"))).toBe("$0.35");
-    expect(formatMoneyNonZero(usd("1234567890"))).toBe("$1,234.56");
-    expect(formatMoneyNonZero(usd("10000"))).toBe("$0.01");
+    expect(formatMoney(usd("350000"))).toBe("$0.35");
+    expect(formatMoney(usd("1234567890"))).toBe("$1,234.56");
+    expect(formatMoney(usd("10000"))).toBe("$0.01");
   });
 
   it("never lets a sub-cent amount read as $0.00", () => {
-    expect(formatMoneyNonZero(usd("1"))).toBe("$0.000001");
-    expect(formatMoneyNonZero(usd("5000"))).toBe("$0.005");
-    expect(formatMoneyNonZero(usd("9999"))).toBe("$0.009999");
+    expect(formatMoney(usd("1"))).toBe("$0.000001");
+    expect(formatMoney(usd("5000"))).toBe("$0.005");
+    expect(formatMoney(usd("9999"))).toBe("$0.009999");
   });
 
   it("keeps zero and nothing as plain zero", () => {
-    expect(formatMoneyNonZero(usd("0"))).toBe("$0.00");
-    expect(formatMoneyNonZero(null)).toBe("$0.00");
+    expect(formatMoney(usd("0"))).toBe("$0.00");
+    expect(formatMoney(null)).toBe("$0.00");
+    expect(formatMoney(null, { decimals: 4 })).toBe("$0.00");
+    expect(formatMoney(usd("0"), { decimals: 4 })).toBe("$0.00");
+  });
+
+  it("treats `decimals` as the most it may show, dropping trailing zeros past two", () => {
+    expect(formatMoney(usd("2500000"), { decimals: 4 })).toBe("$2.50");
+    expect(formatMoney(usd("12000"), { decimals: 4 })).toBe("$0.012");
+    expect(formatMoney(usd("1600"), { decimals: 4 })).toBe("$0.0016");
+    expect(formatMoney(usd("900"), { decimals: 6 })).toBe("$0.0009");
+    expect(formatMoney(usd("6000000"), { decimals: 6 })).toBe("$6.00");
+  });
+
+  it("writes the exact ledger figure for exports when asked", () => {
+    expect(formatMoney(usd("1500"), { exact: true, decimals: 6, symbol: "", grouped: false })).toBe("0.001500");
+    expect(formatMoney(usd("0"), { exact: true, decimals: 6, symbol: "" })).toBe("0.000000");
+  });
+
+  it("keeps a sub-cent value non-zero even at the default two decimals", () => {
+    expect(formatMoney(usd("1600"))).toBe("$0.0016");
+    expect(formatMoney(usd("12000"))).toBe("$0.01");
   });
 });
 

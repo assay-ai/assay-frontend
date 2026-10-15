@@ -36,7 +36,7 @@ import { routes } from "@/libs/routes";
 import { SUPPORT_URL } from "@/libs/support";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
 import type { WithheldBucket } from "@/features/buyer/wire";
-import { formatMoney, formatMoneyNonZero, toDecimal } from "@/utils/money";
+import { formatMoney, toDecimal } from "@/utils/money";
 
 /**
  * Activity › Not charged (route `/guarantee`) — "prove the guarantee works for me".
@@ -272,7 +272,7 @@ export default function GuaranteePage() {
             <p className="text-label-sm text-warning-700">This month&apos;s figures do not add up yet</p>
             <p className="text-body-13 text-02">
               The released holds differ from the not-charged total by{" "}
-              {formatMoneyNonZero({ ...data.withheld.holdReleaseTotal, amount: data.withheld.difference.replace(/^-/, "") })}.
+              {formatMoney({ ...data.withheld.holdReleaseTotal, amount: data.withheld.difference.replace(/^-/, "") })}.
               Your money is not affected; keep this month&apos;s statement for reference.
             </p>
           </div>

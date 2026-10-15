@@ -14,6 +14,8 @@
 export interface LocalTimeOptions {
   /** IANA zone. Defaults to the browser's own. */
   timeZone?: string;
+  /** Add seconds ("14:20:07") — for a step-by-step timeline. Off by default. */
+  seconds?: boolean;
   /** "Now", for relative labels. Defaults to Date.now(). */
   now?: number;
 }
@@ -44,6 +46,7 @@ export function formatClock(value: string | number | Date | null | undefined, op
     timeZone: options.timeZone,
     hour: "2-digit",
     minute: "2-digit",
+    ...(options.seconds ? { second: "2-digit" as const } : {}),
     hourCycle: "h23",
   }).format(date);
 }
@@ -83,9 +86,15 @@ export function formatLocalDateTime(
   return `${formatLocalDate(date, options)}, ${clock}`;
 }
 
-/** "2026-10-15 07:20 UTC" — for a `title` attribute, so the exact instant is one hover away. */
-export function utcTitle(value: string | number | Date | null | undefined): string | undefined {
+/**
+ * "2026-10-15 07:20 UTC" — for a `title` attribute, so the exact instant is one
+ * hover away. `{ seconds: true }` gives "2026-10-15 07:20:05.123 UTC".
+ */
+export function utcTitle(
+  value: string | number | Date | null | undefined,
+  options: { seconds?: boolean } = {},
+): string | undefined {
   const date = toDate(value);
   if (!date) return undefined;
-  return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  return `${date.toISOString().slice(0, options.seconds ? 23 : 16).replace("T", " ")} UTC`;
 }

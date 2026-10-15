@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { CopyChip } from "@/components/patterns/copy-chip";
+import { EntityName } from "@/components/patterns/entity-name";
 import { LocalTime } from "@/components/patterns/local-time";
 import { MoneyFlow } from "@/components/patterns/money-flow";
 import { PageState } from "@/components/patterns/page-state";
@@ -50,6 +51,7 @@ import { getProviderVerification } from "@/services/providers.service";
 import { getVerdictEvidence, resolveVerdictIdForIntent } from "@/services/verdicts.service";
 import { responseClassLabel } from "@/features/call-classes/labels";
 import { useEntityNames } from "@/hooks/useEntityNames";
+import { formatClock, utcTitle } from "@/libs/local-time";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { formatMoney } from "@/utils/money";
@@ -86,13 +88,9 @@ const OVERRIDABLE: ReceiptState[] = [
 ];
 
 /** "11:42:07.221" — the Timeline's own format. */
-function clock(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number, w = 2) => String(n).padStart(w, "0");
-  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}.${pad(
-    d.getUTCMilliseconds(),
-    3,
-  )}`;
+/** A timeline stamp: local clock with seconds, the exact UTC instant on hover. */
+function stamp(iso: string): Pick<TimelineEvent, "time" | "timeTitle"> {
+  return { time: formatClock(iso, { seconds: true }), timeTitle: utcTitle(iso, { seconds: true }) };
 }
 
 function pretty(value: unknown): string {
@@ -220,25 +218,27 @@ function ReceiptPageContent() {
 
   const releasedLabel = state === "EXPIRED" ? "Did not finish in time, hold released" : "Hold released";
   const events: TimelineEvent[] = [
-    { time: clock(receipt.createdAt), label: "Call made", tone: "neutral" },
-    { time: clock(receipt.createdAt), label: "Money held", meta: listed, tone: "primary" },
+    { ...stamp(receipt.createdAt), label: "Call made", tone: "neutral" },
+    { ...stamp(receipt.createdAt), label: "Money held", meta: listed, tone: "primary" },
   ];
   if (receipt.evaluatedAt) {
-    events.push({ time: clock(receipt.evaluatedAt), label: "Result checked", tone: "neutral" });
+    events.push({ ...stamp(receipt.evaluatedAt), label: "Result checked", tone: "neutral" });
   }
   if (receipt.settledAt) {
     const charged = receipt.chargedPrice.amount !== "0";
     events.push({
-      time: clock(receipt.settledAt),
+      ...stamp(receipt.settledAt),
       label: charged ? "Charged" : releasedLabel,
       meta: charged ? paid : "not charged",
       tone: charged ? "success" : "teal",
     });
   } else if (receipt.holdReleasedAt) {
-    events.push({ time: clock(receipt.holdReleasedAt), label: releasedLabel, meta: "not charged", tone: "teal" });
+    events.push({ ...stamp(receipt.holdReleasedAt), label: releasedLabel, meta: "not charged", tone: "teal" });
   }
 
-  const providerName = providerQuery.data?.legalName ?? (receipt.providerId ? names.name("provider", receipt.providerId) : "—");
+  const providerName: React.ReactNode =
+    providerQuery.data?.legalName ??
+    (receipt.providerId ? <EntityName kind="provider" id={receipt.providerId} /> : "—");
   const details = [
     { label: "Provider", value: providerName },
     {
@@ -338,7 +338,7 @@ function ReceiptPageContent() {
           <PanelHeader>
             <PanelTitles>
               <PanelTitle>Timeline</PanelTitle>
-              <PanelDescription>UTC</PanelDescription>
+              <PanelDescription>Your local time</PanelDescription>
             </PanelTitles>
           </PanelHeader>
           <PanelBody className="px-5 pb-3.5 pt-1">

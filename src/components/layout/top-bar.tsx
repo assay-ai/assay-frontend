@@ -82,7 +82,7 @@ const TopBar = React.forwardRef<HTMLElement, TopBarProps>(
       onAlertsClick,
       avatarName = "",
       avatarSrc,
-      searchPlaceholder = "Receipt, ULID, tool or tx…",
+      searchPlaceholder = "Find a call by id or tool",
       search,
       avatar,
       actions,

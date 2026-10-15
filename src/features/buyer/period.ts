@@ -130,17 +130,6 @@ export function formatCount(n: number): string {
   return COUNT.format(n);
 }
 
-/** `2026-08-10 11:48 UTC` — the stamp the Overview header carries. */
-export function formatUtcStamp(at: Date): string {
-  const iso = at.toISOString();
-  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
-}
-
-/** `14:13` — the time a recent call was made, in UTC like every other stamp. */
-export function formatUtcTime(iso: string): string {
-  return `${new Date(iso).toISOString().slice(11, 16)} UTC`;
-}
-
 /** An age in the design's own shorthand: `12s`, `4m`, `2h`, `3d`. */
 export function formatAge(seconds: number): string {
   if (seconds < 60) return `${Math.floor(seconds)}s`;

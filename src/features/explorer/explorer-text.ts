@@ -17,8 +17,7 @@ export function formatCallPrice(money: Money | null | undefined): string {
   if (!money) return "—";
   const value = toDecimal(money);
   if (value.isZero()) return "Free";
-  if (value.abs().gte("0.01")) return formatDecimal(value, { decimals: 4 }).replace(/(\.\d\d)(\d*?)0+$/, "$1$2");
-  return formatDecimal(value, { decimals: money.decimals }).replace(/0+$/, "");
+  return formatDecimal(value, { decimals: money.decimals });
 }
 
 /** `FREE` / `FREEMIUM` / `PAID` / null → the mode a person reads. */

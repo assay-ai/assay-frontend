@@ -15,8 +15,8 @@ const receipt = (sampling: Receipt["sampling"], listed = "1000") =>
 
 describe("samplingExplainerCopy", () => {
   it("says the call was judged every time when the rate is 1 (no sampling paragraph)", () => {
-    const copy = samplingExplainerCopy(receipt({ rate: 1, display: "every call" }), "$0.2500");
-    expect(copy.body).toContain("every call at $0.2500");
+    const copy = samplingExplainerCopy(receipt({ rate: 1, display: "every call" }), "$0.25");
+    expect(copy.body).toContain("every call at $0.25");
     expect(copy.body).not.toMatch(/Instead we sample/);
     expect(copy.tail).toBe("");
   });
@@ -29,7 +29,7 @@ describe("samplingExplainerCopy", () => {
 
   it("drops the '$0.05 and above are judged on every call' tail on a sampled call at that price", () => {
     // BUG-R2-B1-02: a $0.10 call sampled at 80% printed both sentences.
-    const copy = samplingExplainerCopy(receipt({ rate: 0.8, display: "80%" }, "100000"), "$0.1000");
+    const copy = samplingExplainerCopy(receipt({ rate: 0.8, display: "80%" }, "100000"), "$0.10");
     expect(copy.body).toMatch(/Instead we sample/);
     expect(copy.tail).toBe("");
   });
@@ -88,9 +88,9 @@ describe("receiptFlow and relevanceReached", () => {
 
   it("draws held → check failed → released for a refused call", () => {
     expect(receiptFlow(r("0"), "NOT_CHARGED").map((n) => [n.label, n.amount ?? null])).toEqual([
-      ["Held", "$0.1000"],
+      ["Held", "$0.10"],
       ["Check failed", null],
-      ["Released to you", "$0.1000"],
+      ["Released to you", "$0.10"],
     ]);
   });
 

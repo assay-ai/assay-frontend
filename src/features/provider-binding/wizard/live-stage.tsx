@@ -21,7 +21,7 @@ import type {
 } from "@/interfaces";
 import { getPublishCheck } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
-import { formatMoney, formatMoneyNonZero, toDecimal } from "@/utils/money";
+import { formatMoney, toDecimal } from "@/utils/money";
 
 import { BuyerPreview } from "../buyer-preview";
 import { minorUnitsFromMajorInput, majorInputFromMoney } from "../chrome";
@@ -383,7 +383,7 @@ export function LiveStage({
               <p className="text-body-13 text-02">Free for every agent. No revenue, no stake needed, no penalty risk on money.</p>
             ) : priceMoney && youGet ? (
               <p className="text-body-13 text-01">
-                Buyers pay {formatMoneyNonZero(priceMoney)} → you get {formatMoneyNonZero(youGet)} a call
+                Buyers pay {formatMoney(priceMoney, { decimals: 6 })} → you get {formatMoney(youGet, { decimals: 6 })} a call
                 {mode === "FREEMIUM" && parsed.freeCalls ? ` after ${parsed.freeCalls.toLocaleString("en-US")} free calls per agent a day` : ""}.
               </p>
             ) : (

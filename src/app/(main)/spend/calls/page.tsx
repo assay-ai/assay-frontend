@@ -182,11 +182,13 @@ function CallsList() {
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-0.5">
                       <span className="font-mono text-mono-13 font-semibold text-01">
-                        {outcome === "free" ? "Free" : formatMoney(call.charged, { decimals: 4 })}
+                        {outcome === "free"
+                              ? "Free"
+                              : outcome === "checking"
+                                ? `${formatMoney(call.price, { decimals: 4 })} held`
+                                : formatMoney(call.charged, { decimals: 4 })}
                       </span>
-                      {outcome === "checking" ? (
-                        <span className="font-mono text-mono-xs text-03">{formatMoney(call.price, { decimals: 4 })} held</span>
-                      ) : toDecimal(uncharged).gt(0) ? (
+                      {outcome !== "checking" && toDecimal(uncharged).gt(0) ? (
                         <span className="font-mono text-mono-xs text-teal-600">
                           {formatMoney(uncharged, { decimals: 4 })} not charged
                         </span>

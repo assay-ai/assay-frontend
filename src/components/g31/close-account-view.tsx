@@ -83,7 +83,7 @@ export function CloseAccountView() {
                   </span>
                 </div>
                 <Button size="sm" asChild>
-                  <Link href="/funding/withdraw">Withdraw</Link>
+                  <Link href="/funding?action=withdraw">Withdraw</Link>
                 </Button>
               </li>
             ))}

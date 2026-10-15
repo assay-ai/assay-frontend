@@ -19,7 +19,7 @@ export function attentionAction(note: {
     case "balance.low":
     case "balance.zero":
     case "deposit.failed":
-      return { label: "Top up", href: "/funding/deposit" };
+      return { label: "Top up", href: "/funding?action=deposit" };
     case "spend.threshold_crossed":
       return { label: "Raise limit", href: "/limits" };
     case "velocity.anomaly":
@@ -29,7 +29,7 @@ export function attentionAction(note: {
     case "session.expired":
       return { label: "Renew key", href: "/agents" };
     case "free_quota.exhausted":
-      return { label: "Add funds", href: "/funding/deposit" };
+      return { label: "Add funds", href: "/funding?action=deposit" };
     case "payment_intent.refunded":
       return note.subjectId ? { label: "View receipt", href: routes.receipt(note.subjectId) } : { label: "View calls", href: routes.calls({ status: "not-charged" }) };
     case "withdrawal.initiated":

@@ -59,14 +59,15 @@ import {
  *
  * The ids are the ids: no buyer endpoint resolves a tool id to a name, so
  * every screen prints whatever is here, and `groupKeyLabel` truncates anything
- * over twelve characters.
+ * over twelve characters. Provider ids are the catalogue's (fixtures-explore),
+ * so `useEntityNames` resolves them to legal names as it would in production.
  */
 const TOOLS = {
-  deep_search: { provider: "prv_searchly", price: "6.00" },
-  ocr_extract: { provider: "prv_ocrlab", price: "4.50" },
-  kyc_lookup: { provider: "prv_veritas", price: "3.60" },
-  price_quote: { provider: "prv_quotes", price: "2.50" },
-  geocode: { provider: "prv_geomap", price: "1.25" },
+  deep_search: { provider: "9c1d4f60-3a77-4c18-9b02-6e5a1f2d8b41", price: "6.00" },
+  ocr_extract: { provider: "e41b7d93-2a58-4f60-b7c9-3d80f5a1e6c4", price: "4.50" },
+  kyc_lookup: { provider: "c9f35a82-6014-4d7b-8e93-2a1c7f06b5d8", price: "3.60" },
+  price_quote: { provider: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", price: "2.50" },
+  geocode: { provider: "b7e04c25-9d13-4a6f-bc80-1e5f3a7d9c62", price: "1.25" },
 } as const;
 
 type ToolId = keyof typeof TOOLS;

@@ -36,7 +36,7 @@ describe("spend headline", () => {
   it("says how much the spend moved", () => {
     expect(changePercent(m("1120000"), m("1000000"))).toBe("▲ 12%");
     expect(changePercent(m("900000"), m("1000000"))).toBe("▼ 10%");
-    expect(changePercent(m("1000000"), m("0"))).toBe("new this period");
+    expect(changePercent(m("1000000"), m("0"))).toBeNull();
     expect(changePercent(m("1000000"), null)).toBeNull();
   });
   it("rebuilds the previous total from the comparisons", () => {
@@ -50,7 +50,8 @@ describe("rankRows", () => {
     expect(rows.map((r) => r.label)).toEqual(["BIG", "SMALL", "FREE"]);
     expect(rows[0]!.chargedPct).toBe(80);
     expect(rows[0]!.notChargedPct).toBe(20);
-    expect(rows[0]!.delta).toBe("▲ +$0.00");
+    expect(rows[0]!.delta).toBe("▲ +$0.0003");
+    expect(rows[1]!.delta).toBeNull();
     expect(rows[2]!.free).toBe(true);
   });
 });
