@@ -43,7 +43,9 @@ export const CopyChip = React.forwardRef<HTMLButtonElement, CopyChipProps>(
 
     const copy = async (event: React.MouseEvent<HTMLButtonElement>) => {
       onClick?.(event);
-      // A chip inside a clickable row must not also open the row.
+      // A chip inside a clickable row or link must not also open it. Prefer
+      // `EntityName copyable={false}` inside links: a button in an <a> is invalid HTML.
+      event.preventDefault();
       event.stopPropagation();
       try {
         await navigator.clipboard.writeText(value);

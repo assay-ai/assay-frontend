@@ -28,9 +28,12 @@ import { cn } from "@/utils";
 
 /* ------------------------------------------------------------------ */
 
-/** A grey block that stands in for content while it loads. */
-export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div aria-hidden="true" className={cn("animate-pulse rounded-md bg-03", className)} {...props} />;
+/**
+ * A grey block that stands in for content while it loads. A `<span>` (block by
+ * class), so it is valid inside text and inline contexts too.
+ */
+export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) {
+  return <span aria-hidden="true" className={cn("block animate-pulse rounded-md bg-03", className)} {...props} />;
 }
 
 /** Rows of skeleton lines in the shape of a list. */
