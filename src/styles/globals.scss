@@ -47,6 +47,38 @@
     animation-direction: reverse;
   }
 
+  /*
+   * Touch sizes for the operator console (and any dense screen that opts in):
+   * below the tablet breakpoint, or on any coarse pointer, a control is at
+   * least 40x40. Desktop with a mouse keeps its compact size.
+   *
+   *   .touch-target  grows the control itself (buttons, chips, text links;
+   *                  give a text link inline-flex items-center).
+   *   .hit-area      keeps the drawn size and widens only what takes the tap,
+   *                  with an invisible ::after (a 16px checkbox, a 28px icon
+   *                  button). The element must not use ::after for itself.
+   */
+  @media (max-width: 833.98px), (pointer: coarse) {
+    .touch-target {
+      min-height: 40px;
+      min-width: 40px;
+    }
+
+    .hit-area {
+      position: relative;
+    }
+
+    .hit-area::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 40px);
+      height: max(100%, 40px);
+      transform: translate(-50%, -50%);
+    }
+  }
+
   /* Custom scrollbar styles */
   ::-webkit-scrollbar {
     width: 8px;
