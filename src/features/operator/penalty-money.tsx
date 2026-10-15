@@ -2,8 +2,7 @@
 
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
-import { MoneyFlow, MoneySplit } from "@/components/patterns/money-flow";
+import { MoneySplit } from "@/components/patterns/money-flow";
 import { SLASH_PLATFORM_BPS } from "@/features/provider-slash-case/distribution";
 import type { Money } from "@/interfaces/api";
 import { formatMoney, toDecimal } from "@/utils/money";
@@ -22,7 +21,7 @@ import type { CaseStage } from "./case-flow";
 export interface PenaltySplit {
   agents: Money;
   platform: Money;
-  /** Never taken from the provider's stake. */
+  /** Stays with the provider: never taken from its stake. */
   neverTaken: Money;
 }
 
@@ -44,89 +43,74 @@ function pct(bps: number): string {
   return `${Number.isInteger(value) ? value : value.toFixed(2)}%`;
 }
 
-/** "60% to the agents who paid · 30% to the platform · 10% never taken from the provider". */
+/** "60% to the agents who paid · 30% to the platform · 10% stays with the provider". */
 export function splitSharesText(agentBps: number, platformBps: number = SLASH_PLATFORM_BPS): string {
   const kept = Math.max(0, 10_000 - agentBps - platformBps);
-  return `${pct(agentBps)} to the agents who paid · ${pct(platformBps)} to the platform · ${pct(kept)} never taken from the provider`;
+  return `${pct(agentBps)} to the agents who paid · ${pct(platformBps)} to the platform · ${pct(kept)} stays with the provider`;
+}
+
+/** How much the provider's stake goes down if it executes: agents plus platform. Null while the split is unknown. */
+export function stakeReduction(penalty: Money, agentBps: number | null): Money | null {
+  const split = agentBps === null ? null : penaltySplit(penalty, agentBps);
+  return split ? { ...penalty, amount: (BigInt(split.agents.amount) + BigInt(split.platform.amount)).toString() } : null;
+}
+
+/** The card's title and its one meta line, by stage. Pure. */
+export function moneyHeading(stage: CaseStage, penaltyText: string): { title: string; meta: string; split: boolean } {
+  switch (stage) {
+    case "executed":
+      return { title: "Moved", meta: "Taken from the provider's stake.", split: true };
+    case "compensated":
+      return { title: "Paid back", meta: "Taken from the provider's stake, then paid back by the treasury.", split: false };
+    case "cancelled":
+      return { title: "Nothing taken", meta: "The reserved stake went back to the provider.", split: false };
+    case "cancel-requested":
+      return {
+        title: "Nothing moves",
+        meta: `Cancel requested: the reserved ${penaltyText} goes back to the provider once the arbiter signs.`,
+        split: false,
+      };
+    default:
+      return { title: "If upheld", meta: "Reserved in the provider's stake. Nothing has moved yet.", split: true };
+  }
 }
 
 export function PenaltyMoney({
   penalty,
   stage,
-  executableAt,
   agentBps,
 }: {
   penalty: Money;
   stage: CaseStage;
-  executableAt: string | null;
   /** From the chain's terms; null while unknown (the split is then not drawn). */
   agentBps: number | null;
 }) {
   const split = agentBps === null ? null : penaltySplit(penalty, agentBps);
-  const taken = stage === "executed";
-  const repaid = stage === "compensated";
-  const released = stage === "cancelled";
-  // Suspended here: the arbiter's cancel is pending, so the split below is what would have happened, not what will.
-  const cancelling = stage === "cancel-requested";
+  const total = formatMoney(penalty);
+  const heading = moneyHeading(stage, total);
   return (
-    <section aria-label="Where the money goes" className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 p-4 tablet:p-5">
+    <section aria-labelledby="penalty-money" className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 p-4 tablet:p-5">
       <div className="flex flex-col gap-0.5">
-        <h2 className="text-label-md text-01">Where the money goes</h2>
-        <p className="text-body-13 text-02">
-          {taken
-            ? "Taken from the provider's stake."
-            : repaid
-              ? "Taken from the provider's stake, then paid back by the treasury."
-              : released
-                ? "Nothing was taken: the reserved stake went back to the provider."
-                : cancelling
-                  ? `Cancel requested: the reserved ${formatMoney(penalty)} goes back to the provider once the arbiter signs. Nothing has moved.`
-                  : "Reserved in the provider's stake. Nothing has moved yet."}
-        </p>
-      </div>
-      <MoneyFlow
-        nodes={[
-          { label: "Provider's stake", tone: "neutral" },
-          {
-            label: taken || repaid ? "Penalty" : released ? "Released" : "Penalty reserved",
-            amount: formatMoney(penalty),
-            tone: released ? "teal" : taken || repaid ? "danger" : "warning",
-            note:
-              !taken && !repaid && !released && executableAt && stage !== "disputed" && stage !== "cancel-requested" ? (
-                <>
-                  executable from <LocalTime value={executableAt} />
-                </>
-              ) : undefined,
-          },
-          ...(released || repaid || cancelling
-            ? [
-                {
-                  label: repaid ? "Paid back by the treasury" : cancelling ? "Back to the provider, once signed" : "Back to the provider",
-                  amount: formatMoney(penalty),
-                  tone: "teal" as const,
-                },
-              ]
-            : split
-              ? [
-                  { label: "Agents who paid", amount: formatMoney(split.agents), tone: "primary" as const },
-                  { label: "Platform", amount: formatMoney(split.platform), tone: "indigo" as const },
-                ]
-              : []),
-        ]}
-      />
-      {split && agentBps !== null && !released && !repaid && !cancelling ? (
-        <div className="flex flex-col gap-2">
-          <MoneySplit
-            segments={[
-              { label: "To the agents who paid for the failed calls", value: toDecimal(split.agents).toNumber(), amount: formatMoney(split.agents), tone: "primary" },
-              { label: "To the platform", value: toDecimal(split.platform).toNumber(), amount: formatMoney(split.platform), tone: "indigo" },
-              { label: "Never taken from the provider", value: toDecimal(split.neverTaken).toNumber(), amount: formatMoney(split.neverTaken), tone: "teal" },
-            ]}
-          />
-          <p className="text-body-xs text-03">
-            Split on chain: {splitSharesText(agentBps)}. The stake goes down by {formatMoney({ ...penalty, amount: (BigInt(split.agents.amount) + BigInt(split.platform.amount)).toString() })}.
-          </p>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 id="penalty-money" className="text-label-md text-01">
+            {heading.title}
+          </h2>
+          <span className="text-body-13 tabular-nums text-02">
+            <span className="font-medium text-01">{total}</span> total
+          </span>
         </div>
+        <p className="text-body-xs text-03">{heading.meta}</p>
+      </div>
+      {heading.split && split ? (
+        <MoneySplit
+          segments={[
+            { label: "Agents who paid", value: toDecimal(split.agents).toNumber(), amount: formatMoney(split.agents), tone: "primary" },
+            { label: "Platform", value: toDecimal(split.platform).toNumber(), amount: formatMoney(split.platform), tone: "indigo" },
+            { label: "Stays with the provider", value: toDecimal(split.neverTaken).toNumber(), amount: formatMoney(split.neverTaken), tone: "teal" },
+          ]}
+        />
+      ) : heading.split ? (
+        <p className="text-body-13 text-02">The split is read from the chain&rsquo;s terms, which could not be read just now.</p>
       ) : null}
     </section>
   );

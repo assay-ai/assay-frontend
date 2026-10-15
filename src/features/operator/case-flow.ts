@@ -2,11 +2,13 @@ import type { StatusTimelineStep } from "@/components/patterns/status-timeline";
 import { caseChainStageOf } from "@/features/provider-slash-case/chain-stage";
 import type { Money } from "@/interfaces/api";
 import type { OperatorCaseBrief, OperatorIdentity, SlashProposalStatus } from "@/interfaces/operator";
+import { formatMoney } from "@/utils/money";
 import { DISPUTE_TIMEOUT_SECONDS } from "@/libs/chains/evm/stake-slashes/abi";
 
 import { DISPUTE_RED_FROM_DAY, disputeDayText } from "./inbox";
-import { capabilitiesFor, checkAction } from "./roles";
+import { capabilitiesFor, checkAction, rolesPhrase, type ConsoleAction } from "./roles";
 import { asProposalStatus, isLegalInStatus, may, suspendIsTwoPerson } from "./state";
+import { askLabel } from "./why-not";
 
 /**
  * The penalty's on-chain process, as the case screen draws it:
@@ -156,7 +158,7 @@ export function caseTimelineSteps(
       dateLabel: ruled ? undefined : `${disputeDayText({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }, now)} · ends`,
       countdown: false,
       urgent: !ruled && day !== null && day >= DISPUTE_RED_FROM_DAY,
-      description: ruled ? undefined : "Unruled by then, anyone can expire it and the stake is released.",
+      description: ruled ? undefined : "If nobody rules by then, the penalty lapses.",
     });
   } else {
     steps.push({
@@ -217,7 +219,7 @@ export interface CaseNextStep {
   secondary: CaseActionId | null;
   /** The instant the description points at, for a countdown. */
   until: string | null;
-  /** A short mono line under the description, e.g. "Day 24 of 30 · 7 days left". */
+  /** A short line under the description, e.g. who must approve. Never the deadline again. */
   meta?: string | null;
 }
 
@@ -278,28 +280,24 @@ export function caseNextStep(
         ? {
             kind: "action",
             title: "Rule on this dispute",
-            description: `The provider disputed this penalty on chain. Uphold it or cancel it before ${when(facts.disputeExpiresAt, format)}; unruled, anyone can expire it and the stake is released.`,
+            description: `Uphold or cancel by ${when(facts.disputeExpiresAt, format)}. Unruled, the stake is freed.`,
             action: "rule",
             secondary: null,
             until: facts.disputeExpiresAt,
-            meta: disputeDayText({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }),
           }
         : {
             kind: "waiting",
-            title: "Nothing for you",
-            description: `Waiting for the arbiter to rule, by ${when(facts.disputeExpiresAt, format)}.`,
+            title: "Waiting for the arbiter",
+            description: `The ruling is due by ${when(facts.disputeExpiresAt, format)}.`,
             action: null,
             secondary: null,
             until: facts.disputeExpiresAt,
-            meta: disputeDayText({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }),
           };
     case "window-open":
       return {
         kind: "waiting",
-        title: "Nothing needed from you",
-        description: `The provider can dispute on chain until ${when(facts.executableAt, format)}. Undisputed, it becomes executable then.${
-          suspendSecondary ? " Suspend it only if it was proposed in error." : ""
-        }`,
+        title: "Dispute window open",
+        description: `The provider can dispute until ${when(facts.executableAt, format)}; undisputed, it becomes executable then.`,
         action: null,
         secondary: suspendSecondary,
         until: facts.executableAt,
@@ -307,8 +305,8 @@ export function caseNextStep(
     case "upheld":
       return {
         kind: "waiting",
-        title: "Nothing needed from you",
-        description: `The arbiter upheld the penalty. It is executable from ${when(facts.executableAt, format)}, by anyone.`,
+        title: "Upheld by the arbiter",
+        description: `Anyone can execute it from ${when(facts.executableAt, format)}.`,
         action: null,
         secondary: suspendSecondary,
         until: facts.executableAt,
@@ -316,8 +314,8 @@ export function caseNextStep(
     case "executable":
       return {
         kind: "waiting",
-        title: "Nothing needed from you",
-        description: "The dispute window has closed. The penalty is executable now and executes when anyone sends it.",
+        title: "Executable now",
+        description: "The dispute window has closed; it executes when anyone sends it.",
         action: null,
         secondary: null,
         until: null,
@@ -325,8 +323,8 @@ export function caseNextStep(
     case "not-on-chain":
       return {
         kind: "waiting",
-        title: "Nothing needed from you",
-        description: "The penalty is being written on chain. The provider's dispute window starts once it lands.",
+        title: "Going on chain",
+        description: "The provider's dispute window starts once it lands.",
         action: null,
         secondary: suspendSecondary,
         until: null,
@@ -336,7 +334,7 @@ export function caseNextStep(
         kind: "done",
         title: "Penalty executed",
         description: authority.compensate
-          ? "The stake was taken. If it was wrong, compensate the provider under More actions."
+          ? "The stake was taken. If it was wrong, pay the provider back from the ⋯ menu."
           : "The stake was taken. Nothing is left to do on this penalty.",
         action: null,
         secondary: null,
@@ -363,8 +361,6 @@ export function caseNextStep(
   }
 }
 
-const CANCEL_TITLE = "Cancel requested — waiting for the arbiter's signature";
-
 /**
  * The sentence for what a missing cancel signature leads to, for the cancel
  * sheet and the next-step card. Never says "anyone can execute" for a record
@@ -382,13 +378,12 @@ function cancelNextStep(facts: CaseFacts, authority: CaseAuthority, format: (iso
   const deadline = facts.cancel?.deadline ?? null;
   const executes = facts.cancel?.ifUnsigned !== "expires";
   const passed = deadline !== null && Date.parse(deadline) <= Date.now();
-  const meta = executes ? null : disputeDayText({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt });
 
   if (passed && executes) {
     // Truly the on-chain state: a Pending record past its executable time.
     return {
       kind: authority.cancel ? "action" : "waiting",
-      title: authority.cancel ? "Get the cancel signed now" : "Nothing for you",
+      title: authority.cancel ? "Get the cancel signed now" : "Waiting for the cancel signature",
       description: authority.cancel
         ? "The deadline has passed: anyone can execute this penalty now. Have the arbiter sign the cancel as soon as possible."
         : "The deadline for the cancel has passed and anyone can execute the penalty. A Lead adjudicator or Treasury has to get the cancel signed now.",
@@ -410,20 +405,37 @@ function cancelNextStep(facts: CaseFacts, authority: CaseAuthority, format: (iso
   return authority.cancel
     ? {
         kind: "action",
-        title: CANCEL_TITLE,
-        description: `Suspended here; on chain the record stands until the arbiter key signs the cancel. ${cancelDeadlineSentence(facts, format)}`,
+        title: "Get the cancel signed",
+        description: `Suspended here; on chain it stands until the arbiter key signs the cancel. ${cancelDeadlineSentence(facts, format)}`,
         action: "cancel",
         secondary: null,
         until: deadline,
-        meta,
       }
     : {
         kind: "waiting",
-        title: CANCEL_TITLE,
-        description: `Nothing for you: a Lead adjudicator or Treasury gets the arbiter to sign it. ${cancelDeadlineSentence(facts, format)}`,
+        title: "Waiting for the cancel signature",
+        description: `A Lead adjudicator or Treasury gets the arbiter to sign it. ${cancelDeadlineSentence(facts, format)}`,
         action: null,
         secondary: null,
         until: deadline,
-        meta,
       };
 }
+
+/** "Your limit is $0 · Ask Jordan": why an action is refused, in one line. Pure. */
+export function shortWhyNot(
+  me: Pick<OperatorIdentity, "roles" | "authorityLimit">,
+  action: ConsoleAction,
+  amount: Money | null,
+  names: readonly string[] | null,
+): string | null {
+  const check = checkAction(me, action, amount);
+  if (check.allowed) return null;
+  const limit = me.authorityLimit;
+  const why = !check.limitOnly
+    ? `Needs ${rolesPhrase(check.roles)}`
+    : limit && limit.amount === "0"
+      ? "Your limit is $0"
+      : `Above your ${limit ? formatMoney(limit) : ""} limit`.replace("  ", " ");
+  return names === null ? why : `${why} · ${askLabel(names, rolesPhrase(check.roles))}`;
+}
+
