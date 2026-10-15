@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Chain } from "@/interfaces/chain";
 
-import { isAssetMismatch, missingRequirementNote, readableDerivation, stakeReason } from "./derivation";
+import { isAssetMismatch, missingRequirementNote, readableDerivation, stakeReason, requiredText } from "./derivation";
 
 const USDC = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1/token:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 const USDG = "eip155:46630/erc20:0xDbbC0000000000000000000000000000000000aa";
@@ -63,5 +63,13 @@ describe("isAssetMismatch", () => {
       isAssetMismatch(`priced in ${USDC}, stake floor in ${USDG} — not routable (STAKE_ASSET_MISMATCH)`)
     ).toBe(true);
     expect(isAssetMismatch("max(floor $500.00, 1000 × $0.0100) = $500.00")).toBe(false);
+  });
+});
+
+describe("requiredText (merge audit L3)", () => {
+  it("never prints $0.00 for a zero or missing minimum", () => {
+    expect(requiredText({ amount: "0", asset: "x", decimals: 6 })).toBe("—");
+    expect(requiredText(null)).toBe("—");
+    expect(requiredText({ amount: "50000000", asset: "x", decimals: 6 })).toBe("$50.00");
   });
 });
