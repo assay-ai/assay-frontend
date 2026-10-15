@@ -116,7 +116,7 @@ function AccountMenu({ identity, expiresAt, onSignOut, demo, onShortcuts }: Pick
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`Account: ${identity.displayName}`}
-        className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        className="-m-1.5 inline-flex size-10 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
         <Avatar name={identity.displayName} size="md" />
       </DropdownMenuTrigger>
@@ -194,9 +194,9 @@ export function OperatorTopBar({ identity, pathname, needsYou, expiresAt, onSign
   const items = operatorNavFor(identity.roles);
   const active = activeOperatorNav(pathname);
   return (
-    <header className="flex h-14 w-full items-center gap-6 border-b border-01 bg-01 px-5">
+    <header className="flex h-14 w-full items-center gap-4 border-b border-01 bg-01 px-5 lg:gap-6">
       <Brand />
-      <nav aria-label="Operator console" className="flex min-w-0 flex-1 items-center gap-1">
+      <nav aria-label="Operator console" className="flex min-w-0 flex-1 items-center gap-0.5 lg:gap-1">
         {items.map((item) => (
           <Link
             key={item.id}
@@ -215,10 +215,13 @@ export function OperatorTopBar({ identity, pathname, needsYou, expiresAt, onSign
       </nav>
       <div className="flex shrink-0 items-center gap-2.5">
         <SessionChip expiresAt={expiresAt} within={30} />
+        {/* The pill needs ~240px more than the nav leaves at tablet width
+            (768-1023px), where it would sit on top of the last nav items; the
+            account menu carries the role and "What can I do?" there. */}
         <RoleCapabilities identity={identity}>
           <button
             type="button"
-            className="max-w-[260px] truncate rounded-full border border-01 px-2.5 py-1 text-label-xs text-02 hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            className="hidden max-w-[260px] truncate rounded-full lg:inline-block border border-01 px-2.5 py-1 text-label-xs text-02 hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             {rolePillText(identity)}
           </button>
