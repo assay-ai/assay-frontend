@@ -23,8 +23,11 @@ import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
 import { DISPUTE_TIMEOUT_DAYS, describeDisputeError } from "./dispute";
-import { lossBasis, lossOf, penaltyTimeline, type PenaltyRow } from "./model";
+import { ARBITER_TARGET_SECONDS, lossBasis, lossOf, penaltyTimeline, type PenaltyRow } from "./model";
 import { failureSentence } from "./sentences";
+
+/** The arbiter's target (Business #21), in days, for the sentences below. */
+const ARBITER_TARGET_DAYS = ARBITER_TARGET_SECONDS / 86_400;
 
 /* ── small pieces ─────────────────────────────────────────────────────── */
 
@@ -79,7 +82,7 @@ export function DeadlineChip({ row }: { row: PenaltyRow }) {
   if (row.tab === "disputed") {
     return (
       <span className={cn(base, "bg-primary-10 text-primary-700")}>
-        Arbiter aims to rule by {row.arbiterTargetAt ? <LocalTime value={row.arbiterTargetAt} dateOnly /> : "7 days after the dispute"}
+        Arbiter aims to rule by {row.arbiterTargetAt ? <LocalTime value={row.arbiterTargetAt} dateOnly /> : `${ARBITER_TARGET_DAYS} days after the dispute`}
       </span>
     );
   }
@@ -267,7 +270,7 @@ export function PenaltyDrawer({
               {row.tab === "disputed" ? (
                 <p className="text-body-13 text-02">
                   You disputed this on chain, so it cannot be executed while Assay&apos;s <Term k="arbiter">arbiter</Term>{" "}
-                  reviews it. The arbiter aims to rule within 7 days
+                  reviews it. The arbiter aims to rule within {ARBITER_TARGET_DAYS} days
                   {row.arbiterTargetAt ? (
                     <>
                       {" "}(by <LocalTime value={row.arbiterTargetAt} dateOnly />)
@@ -395,7 +398,7 @@ export function DisputeSheet({
       resetKey={row?.id}
       describeError={describeDisputeError}
       successTitle="Disputed on chain"
-      successDescription="The penalty is frozen. The arbiter aims to rule within 7 days; the ruling shows on this page."
+      successDescription={`The penalty is frozen. The arbiter aims to rule within ${ARBITER_TARGET_DAYS} days; if nobody rules within ${DISPUTE_TIMEOUT_DAYS} days, it expires and nothing is taken. The ruling shows on this page.`}
       onSuccess={onDisputed}
       doneAction={{ label: "Done", onClick: () => onOpenChange(false) }}
     >
@@ -404,7 +407,9 @@ export function DisputeSheet({
           <dl className="flex flex-col gap-2.5 rounded-lg border border-01 bg-02 px-3.5 py-3 text-body-13">
             <div className="flex flex-col gap-0.5">
               <dt className="text-label-13 text-01">While the dispute stands</dt>
-              <dd className="text-02">Nothing can be taken from your stake.</dd>
+              <dd className="text-02">
+                Nothing can be taken from your stake. The arbiter aims to rule within {ARBITER_TARGET_DAYS} days.
+              </dd>
             </div>
             <div className="flex flex-col gap-0.5">
               <dt className="text-label-13 text-01">If the arbiter upholds it</dt>
