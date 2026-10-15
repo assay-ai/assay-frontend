@@ -4,7 +4,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
 import { shortId } from "@/components/patterns/copy-chip";
-import type { OperatorDirectoryEntry } from "@/interfaces/operator";
+import type { OperatorCaseBrief, OperatorDirectoryEntry } from "@/interfaces/operator";
 import { listCatalogueProviders, type CatalogueProvider } from "@/services/catalogue.service";
 import { getOperatorCase, listOperators } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
@@ -91,6 +91,22 @@ const CASE_LOOKUP_MAX = 30;
  */
 export function usePenaltyNames(ids: readonly string[]): ReadonlyMap<string, string> {
   const providers = useProviderNames();
+  const briefs = usePenaltyBriefs(ids);
+  // Cheap to rebuild: a handful of entries.
+  const map = new Map<string, string>();
+  briefs.forEach((brief, id) => {
+    const proposal = brief.case.proposal;
+    map.set(id, penaltyPhrase(providers.name(proposal.providerId), formatMoney(proposal.penaltyAmount)));
+  });
+  return map;
+}
+
+/**
+ * Each penalty id given, read whole (the penalty page's own query, so cached
+ * both ways); at most `CASE_LOOKUP_MAX`. An id still loading or not found has
+ * no entry.
+ */
+export function usePenaltyBriefs(ids: readonly string[]): ReadonlyMap<string, OperatorCaseBrief> {
   const unique = React.useMemo(() => [...new Set(ids.filter(Boolean))].slice(0, CASE_LOOKUP_MAX), [ids]);
   const results = useQueries({
     queries: unique.map((id) => ({
@@ -100,13 +116,10 @@ export function usePenaltyNames(ids: readonly string[]): ReadonlyMap<string, str
       retry: 0,
     })),
   });
-  // Cheap to rebuild: a handful of entries.
-  const map = new Map<string, string>();
+  const map = new Map<string, OperatorCaseBrief>();
   unique.forEach((id, index) => {
     const brief = results[index]?.data;
-    if (!brief) return;
-    const proposal = brief.case.proposal;
-    map.set(id, penaltyPhrase(providers.name(proposal.providerId), formatMoney(proposal.penaltyAmount)));
+    if (brief) map.set(id, brief);
   });
   return map;
 }
