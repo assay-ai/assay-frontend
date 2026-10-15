@@ -596,8 +596,8 @@ function AddSheet({
         <div className="flex w-full flex-col gap-3 px-[18px] pt-3">
           <WhatHappens
             lines={[
-              { icon: Users, text: soleAdmin ? "A second admin must approve it, and there is none yet" : `Nothing changes until ${firstNames(approvers)} approves`, tone: soleAdmin ? "warning" : "neutral" },
-              { icon: Wallet, text: "Then they sign in with the wallet you enter" },
+              { icon: Wallet, text: "Once a second admin approves, they sign in with the wallet you enter" },
+              { icon: Users, text: "Their role and limit decide what they can do" },
               { icon: ShieldCheck, text: "Recorded in Activity under your name" },
             ]}
           />

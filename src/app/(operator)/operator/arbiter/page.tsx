@@ -460,7 +460,12 @@ function DisputeRow({
   return (
     <li
       id={`dispute-${row.requestId}`}
-      className={cn("flex w-full min-w-0 flex-col gap-2 px-4 py-3", selected && "bg-primary-10", focused && "ring-2 ring-inset ring-primary-500")}
+      className={cn(
+        "relative flex w-full min-w-0 flex-col gap-2 px-4 py-3",
+        !canRule && "pr-14 tablet:pr-4",
+        selected && "bg-primary-10",
+        focused && "ring-2 ring-inset ring-primary-500",
+      )}
     >
       <div className="flex w-full min-w-0 flex-col gap-2 tablet:flex-row tablet:items-start tablet:gap-4">
         <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -483,7 +488,7 @@ function DisputeRow({
               </Link>
               <Deadline kind="dispute" until={row.expiresAt} from={row.disputedAt} now={now} />
             </p>
-            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-body-xs tabular-nums text-03">
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-xs tabular-nums text-03">
               <span>
                 {evidence ? (
                   <>
@@ -495,13 +500,12 @@ function DisputeRow({
                 )}
                 {" · "}
                 {row.upheldViolations30d === 0 ? "none upheld in 30 days" : `${row.upheldViolations30d} upheld in 30 days`}
-                {" ·"}
               </span>
               <PayeeChip row={row} />
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2 tablet:pl-0">
+        <div className={cn("flex shrink-0 items-center gap-2", !canRule && "absolute right-3 top-2.5 tablet:static")}>
           {canRule ? (
             <>
               <Button size="sm" variant="secondary" onClick={() => onRule("CANCEL")} className="flex-1 tablet:flex-none" aria-label={`Cancel ${possessive(providerName)} penalty`}>
@@ -514,7 +518,7 @@ function DisputeRow({
           ) : null}
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="ghost" aria-label={`More for ${possessive(providerName)} penalty`} className={canRule ? undefined : "ml-auto"}>
+              <Button size="sm" variant="ghost" aria-label={`More for ${possessive(providerName)} penalty`}>
                 <MoreHorizontal aria-hidden="true" />
               </Button>
             </DropdownMenuTrigger>

@@ -355,12 +355,6 @@ function BlocksScreen() {
 /** The desktop columns: account, kind, reason, who and when, actions. */
 const BLOCK_GRID = "tablet:grid-cols-[minmax(0,1.5fr)_100px_minmax(0,1fr)_minmax(0,1.2fr)_196px] tablet:gap-4";
 
-/** "Riley Brooks or Jordan Blake", "Riley Brooks, Jordan Blake or Iris Park" — for a sentence. */
-function askNamesOr(names: readonly string[]): string {
-  if (names.length <= 1) return names[0] ?? "";
-  return `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
-}
-
 /** "Riley or Jordan", "Riley Brooks" — who can approve, short. */
 function askNames(names: readonly string[]): string {
   if (names.length === 1) return names[0]!;
@@ -770,9 +764,8 @@ function LiftSheet({
         <div className="flex w-full flex-col gap-4 px-[18px] pt-3">
           <WhatHappens
             lines={[
-              { icon: Users, text: approvers && approvers.length > 0 ? `Nothing changes until ${askNamesOr(approvers)} approves` : "Nothing changes until a second Lead adjudicator approves" },
-              { icon: Undo2, text: `Then ${label} can use Assay again, within seconds` },
-              { icon: Clock, text: "The request expires after 24 hours if nobody approves it" },
+              { icon: Undo2, text: `Once approved, ${label} can use Assay again within seconds` },
+              { icon: Ban, text: "Until then it stays blocked" },
             ]}
           />
           {waiting ? (
