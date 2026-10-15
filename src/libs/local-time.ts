@@ -18,6 +18,8 @@ export interface LocalTimeOptions {
   seconds?: boolean;
   /** "Now", for relative labels. Defaults to Date.now(). */
   now?: number;
+  /** "Today 14:20" rather than a bare "14:20", where a time alone could be any day (a timeline, a deadline). */
+  alwaysDay?: boolean;
 }
 
 const LOCALE = "en-US";
@@ -80,7 +82,7 @@ export function formatLocalDateTime(
   const now = options.now ?? Date.now();
   const clock = formatClock(date, options);
   const day = dayKey(date, options.timeZone);
-  if (day === dayKey(new Date(now), options.timeZone)) return clock;
+  if (day === dayKey(new Date(now), options.timeZone)) return options.alwaysDay ? `Today ${clock}` : clock;
   if (day === dayKey(new Date(now - 86_400_000), options.timeZone)) return `Yesterday ${clock}`;
   if (day === dayKey(new Date(now + 86_400_000), options.timeZone)) return `Tomorrow ${clock}`;
   return `${formatLocalDate(date, options)}, ${clock}`;

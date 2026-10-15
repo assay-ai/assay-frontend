@@ -84,3 +84,94 @@ describe("a dispute nobody ruled on", () => {
     }
   });
 });
+
+describe("round 4: the penalty page tells one story", () => {
+  const brief = async (id: string) => {
+    const { demoResponse } = await import("@/libs/demo/demo-api");
+    process.env.NEXT_PUBLIC_DEMO_CHAINS = "robinhood";
+    try {
+      return demoResponse("GET", `/operator/cases/${id}`) as import("@/interfaces/operator").OperatorCaseBrief;
+    } finally {
+      delete process.env.NEXT_PUBLIC_DEMO_CHAINS;
+    }
+  };
+
+  it("ends the window at the cancel when a penalty is cancelled inside it", async () => {
+    const { caseFacts, caseTimelineSteps } = await import("./case-flow");
+    const verdant = await brief("6f2a8c41-0b93-4d7e-a5c2-1e9b7d3f0a64");
+    const steps = caseTimelineSteps(verdant, caseFacts(verdant));
+    const window = steps.find((s) => s.id === "window")!;
+    expect(window).toMatchObject({ date: verdant.case.proposal.resolvedAt, dateLabel: "ended early by the cancel" });
+    expect(steps.at(-1)).toMatchObject({ label: "Cancelled", date: verdant.case.proposal.resolvedAt });
+  });
+
+  it("dates the ruling step once ruled or lapsed", async () => {
+    const { caseFacts, caseTimelineSteps } = await import("./case-flow");
+    const quanta = await brief("93d0e7b5-4c18-4a2f-8e61-7b5c0a9d2e13");
+    const facts = caseFacts(quanta);
+    expect(caseTimelineSteps(quanta, facts).find((s) => s.id === "ruling")).toMatchObject({ date: facts.disputeExpiresAt, dateLabel: "lapsed" });
+    const lattice = await brief("f1b8d6a2-3e57-4c09-9b14-6a2e0d8c7f35");
+    expect(caseTimelineSteps(lattice, caseFacts(lattice)).find((s) => s.id === "ruling")?.date).toBeTruthy();
+  });
+
+  it("varies the measurement per penalty, and each one is a breach", async () => {
+    const { breachVerdict } = await import("./operator-measurement");
+    const northwind = await brief("8b3f2e9a-1c74-4d05-b6e2-7f0a9c3d5e18");
+    const meridian = await brief("0a6d3b9e-7c42-4e1f-8d05-9b3a6c1e4f78");
+    expect(breachVerdict(northwind.case.arithmetic)).not.toBe(breachVerdict(meridian.case.arithmetic));
+    for (const b of [northwind, meridian]) {
+      expect(breachVerdict(b.case.arithmetic)).toMatch(/^Breach/);
+      const failed = Number(/^(\d+) failed/.exec(b.case.arithmetic.find((r) => r.key === "observed_rate")!.expression!)![1]);
+      expect(b.case.failuresByRule.reduce((sum, r) => sum + r.count, 0)).toBe(failed);
+      expect(b.case.failuresByAgent.reduce((sum, r) => sum + r.count, 0)).toBe(failed);
+    }
+  });
+
+  it("draws the If-upheld split to the cent of the total", async () => {
+    const { displaySplit } = await import("./penalty-money");
+    const split = displaySplit(USD("28470000"), 6000)!;
+    expect(BigInt(split.agents.amount) + BigInt(split.platform.amount) + BigInt(split.neverTaken.amount)).toBe(BigInt(28470000));
+  });
+});
+
+describe("round 4: a request already waiting on the penalty", () => {
+  const request = {
+    action: "slash.compensated",
+    requestedBy: "Riley Brooks",
+    createdAt: "2026-10-16T03:39:00Z",
+    expiresAt: "2026-10-17T03:39:00Z",
+    mine: false,
+    canApprove: true,
+    approvers: ["Jordan Blake", "Iris Park"],
+  };
+
+  it("is the next step: approve it when I can", async () => {
+    const { pendingRequestStep } = await import("./case-flow");
+    expect(pendingRequestStep(request, (x) => x)).toMatchObject({ kind: "action", title: "Approve the pay-back", action: "approve" });
+  });
+
+  it("says who it waits for when I cannot", async () => {
+    const { pendingRequestStep } = await import("./case-flow");
+    const step = pendingRequestStep({ ...request, canApprove: false }, (x) => x);
+    expect(step).toMatchObject({ kind: "waiting", title: "Pay-back waiting for approval", secondary: "open-request" });
+    expect(step.description).toMatch(/Waiting for Jordan Blake or Iris Park to approve it/);
+    expect(pendingRequestStep({ ...request, canApprove: false, mine: true }, (x) => x).title).toBe("Your pay-back is waiting for approval");
+  });
+
+  it("holds the same ⋯ action back with a reason", async () => {
+    const { alreadyWaiting } = await import("./case-flow");
+    expect(alreadyWaiting("slash.compensated", ["slash.compensated"])).toBe("A pay-back request is already waiting");
+    expect(alreadyWaiting("slash.suspend", ["slash.compensated"])).toBeNull();
+  });
+});
+
+describe("round 4: ruling from the penalty page", () => {
+  it("links to the Arbiter with the sheet named", async () => {
+    const { rulingFromLink, rulingHref } = await import("./ruling-link");
+    expect(rulingHref("abc", "UPHOLD")).toBe("/operator/arbiter?case=abc&rule=uphold");
+    expect(rulingFromLink("cancel")).toBe("CANCEL");
+    expect(rulingFromLink("UPHOLD")).toBe("UPHOLD");
+    expect(rulingFromLink("other")).toBeNull();
+    expect(rulingFromLink(null)).toBeNull();
+  });
+});
