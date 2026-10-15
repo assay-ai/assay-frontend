@@ -8,7 +8,7 @@ import * as React from "react";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
-import { penaltyPhrase, approvalTargetId } from "@/features/operator/approvals";
+import { approvalTargetId } from "@/features/operator/approvals";
 import { eligibleApprovers } from "@/features/operator/inbox";
 import {
   FALLBACK_TABS,
@@ -320,7 +320,8 @@ export default function PenaltiesPage() {
 /** The remembered label, renamed when the provider's name is known now. */
 function labelOf(item: RecentPenalty, name: string | null): string {
   const amount = /\$[\d,.]+/.exec(item.label)?.[0];
-  return name && amount ? penaltyPhrase(name, amount).replace(/ penalty$/, "") : item.label.replace(/ penalty$/, "");
+  if (name && amount) return `${name} ${amount}`;
+  return item.label.replace(/'s? (\$[\d,.]+) penalty$/, " $1");
 }
 
 const EMPTY_TITLE: Record<PenaltyTabId, string> = {
