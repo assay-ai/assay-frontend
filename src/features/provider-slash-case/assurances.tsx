@@ -12,6 +12,7 @@ import {
   PanelTitles,
 } from "@/components/ui/panel";
 import { stampUtc } from "@/features/g34a/stats";
+import type { Money } from "@/interfaces";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
 import { formatMoney, toDecimal } from "@/utils/money";
 
@@ -146,6 +147,11 @@ export function WhatIsNotHappening({ data }: { data: SlashProposalCaseDetail }) 
   );
 }
 
+/** A minimum worth naming: present and above zero. */
+function minimumKnown(minimum: Money | null | undefined): minimum is Money {
+  return Boolean(minimum && toDecimal(minimum).gt(0));
+}
+
 export function WhatHappensIfYouDoNothing({ data }: { data: SlashProposalCaseDetail }) {
   const { inaction } = data;
   /*
@@ -168,7 +174,14 @@ export function WhatHappensIfYouDoNothing({ data }: { data: SlashProposalCaseDet
       (inaction.graceHours !== null
         ? `A ${inaction.graceHours}-hour grace period starts and routing continues, so you can top the stake back up without losing traffic.`
         : "Routing continues while the shortfall stands.")
-    : `still above your ${formatMoney(inaction.minimumRequired)} minimum, so no grace period opens and nothing changes about how you are routed.`;
+    : minimumKnown(inaction.minimumRequired)
+      ? `still above your ${formatMoney(inaction.minimumRequired)} minimum, so no grace period opens and nothing changes about how you are routed.`
+      : /*
+          A zero minimum is the API's stand-in for "no requirement computed"
+          (a binding priced in another asset than the stake floor, say), not a
+          floor of $0 — so no minimum is named (BUG-R16-V4-01).
+        */
+        "and no grace period opens because of it.";
 
   return (
     <Panel>

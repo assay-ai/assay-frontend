@@ -45,6 +45,26 @@ describe("a fresh case, record pending on chain", () => {
   });
 });
 
+// BUG-R16-V4-01: "still above your $0.00 minimum" when no requirement was computed.
+describe("what happens if you do nothing, with no known minimum", () => {
+  it("names the minimum when there is one", () => {
+    expect(render(<WhatHappensIfYouDoNothing data={caseOf("PROPOSED")} />)).toContain(
+      "still above your $0.50 minimum",
+    );
+  });
+
+  it("does not claim a $0.00 minimum", () => {
+    const data = caseOf("PROPOSED");
+    const zero = {
+      ...data,
+      inaction: { ...data.inaction, minimumRequired: { ...data.inaction.minimumRequired, amount: "0" } },
+    };
+    const text = render(<WhatHappensIfYouDoNothing data={zero} />);
+    expect(text).not.toMatch(/minimum/);
+    expect(text).toContain("and no grace period opens because of it.");
+  });
+});
+
 describe("a partly disputed case (review N-4)", () => {
   it("still offers the dispute of the parts nobody disputed, whatever the case status", () => {
     const data = caseOf("UPHELD", {
