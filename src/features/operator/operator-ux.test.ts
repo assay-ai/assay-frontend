@@ -177,7 +177,7 @@ describe("roles in plain words", () => {
   it("warns when a removal leaves a two-person action without approvers", () => {
     const team = [operator("jordan", ["ADJL"]), operator("riley", ["ADJL"]), operator("dan", ["OPS_ADMIN"])];
     expect(removalWarnings(team, "jordan")).toEqual([
-      "Only one other Adjudicator or Lead adjudicator would be left: their own requests for suspensions of upheld penalties and fleet sweeps could not be approved.",
+      "Only one other Adjudicator or Lead adjudicator would be left: their own requests for suspensions of upheld penalties and bulk decisions could not be approved.",
       "Only one other Lead adjudicator or Treasury would be left: their own requests for provider compensations could not be approved.",
       "Only one other Lead adjudicator would be left: their own requests for lifting account blocks could not be approved.",
     ]);

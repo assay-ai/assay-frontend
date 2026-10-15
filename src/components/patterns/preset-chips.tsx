@@ -115,7 +115,7 @@ export function PresetChips({
 
   const chip = (selected: boolean) =>
     cn(
-      "inline-flex min-h-9 flex-col items-center justify-center rounded-md border px-3.5 py-1 text-label-13 font-mono transition-colors",
+      "inline-flex min-h-9 flex-col items-center justify-center rounded-md border px-3.5 py-1 text-label-13 tabular-nums transition-colors",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-40",
       selected ? "border-primary-500 bg-primary-10 text-01" : "border-02 bg-01 text-02 hover:bg-02 hover:text-01",
     );
@@ -149,13 +149,13 @@ export function PresetChips({
               onKeyDown={onArrow}
               className={cn(
                 chip(selected),
-                option.description && "items-start font-sans",
+                option.description && "items-start",
                 cards && "h-full w-full justify-start gap-0.5 py-2.5 text-left",
               )}
             >
               {option.label}
               {option.description ? (
-                <span className={cards ? "text-body-xs font-normal text-03" : "font-mono text-mono-xs font-normal text-03"}>
+                <span className="text-body-xs font-normal text-03">
                   {option.description}
                 </span>
               ) : null}
@@ -175,7 +175,7 @@ export function PresetChips({
               requestAnimationFrame(() => inputRef.current?.focus());
             }}
             onKeyDown={onArrow}
-            className={cn(chip(custom), "font-sans")}
+            className={chip(custom)}
           >
             {customLabel}
           </button>
@@ -193,7 +193,7 @@ export function PresetChips({
               error ? "border-danger-500" : "border-02",
             )}
           >
-            <span aria-hidden="true" className="font-mono text-mono-sm text-03">
+            <span aria-hidden="true" className="text-body-sm text-03">
               {prefix}
             </span>
             <input

@@ -293,7 +293,7 @@ export function SignAction({
     <div className={cn("flex w-full flex-col gap-3", className)}>
       {steps.length > 1 ? (
         <div className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-02 px-3.5 py-3">
-          <span className="font-mono text-mono-xs uppercase tracking-[0.06em] text-03">{headline}</span>
+          <span className="text-label-13 text-02">{headline}</span>
           <ol className="flex flex-col gap-2">
             {steps.map((step, index) => (
               <li key={step.id} className="flex items-center gap-2.5">
