@@ -36,3 +36,11 @@ describe("one-line why-not", () => {
     expect(whyLine("Block an account needs Lead adjudicator or On-call (SRE).")).toBe("Block an account needs Lead adjudicator or On-call (SRE)");
   });
 });
+
+describe("possessive", () => {
+  it("adds only an apostrophe after a final s", async () => {
+    const { possessive } = await import("./arbiter");
+    expect(possessive("Tidewater Markets")).toBe("Tidewater Markets'");
+    expect(possessive("Northwind Geo")).toBe("Northwind Geo's");
+  });
+});

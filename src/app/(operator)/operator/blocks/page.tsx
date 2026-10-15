@@ -186,7 +186,6 @@ function BlocksScreen() {
         <WhyNot
           action="block"
           me={me}
-          why={me.roles.includes("OPS_ADMIN") ? "Admins manage the team; blocking and lifting needs Lead adjudicator or On-call (SRE)" : undefined}
           ask="Can you help with an account block on Assay? My role cannot block or lift accounts."
         />
       ) : null}
@@ -248,8 +247,8 @@ function BlocksScreen() {
               const noteOpen = openNote === block.id;
               return (
                 <li key={block.id} className="flex w-full min-w-0 flex-col gap-2 px-4 py-3">
-                  <div className={cn(BLOCK_GRID, "flex flex-col gap-2 tablet:grid tablet:items-center")}>
-                    <div className="flex min-w-0 flex-col gap-0.5">
+                  <div className={cn(BLOCK_GRID, "flex flex-wrap items-center gap-x-3 gap-y-1.5 tablet:grid")}>
+                    <div className="flex w-full min-w-0 flex-col gap-0.5 tablet:w-auto">
                       <span className="min-w-0 truncate text-label-13 text-01" title={label(block)}>
                         {label(block)}
                         <span className="text-body-xs text-03 tablet:hidden"> · {block.subjectKind === "ORGANIZATION" ? "Organization" : "Wallet"}</span>
@@ -280,7 +279,7 @@ function BlocksScreen() {
                         </>
                       )}
                     </span>
-                    <div className="flex min-w-0 flex-wrap items-center gap-2 tablet:justify-end">
+                    <div className="mt-1 flex w-full min-w-0 flex-wrap items-center gap-2 tablet:mt-0 tablet:w-auto tablet:justify-end">
                       {waiting ? (
                         <Button variant="secondary" size="sm" asChild className="min-w-0 flex-1 tablet:flex-none">
                           <Link href={approvalHref(waiting.id)}>Open lift request</Link>
@@ -354,7 +353,7 @@ function BlocksScreen() {
 }
 
 /** The desktop columns: account, kind, reason, who and when, actions. */
-const BLOCK_GRID = "tablet:grid-cols-[minmax(0,1.5fr)_100px_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,auto)] tablet:gap-4";
+const BLOCK_GRID = "tablet:grid-cols-[minmax(0,1.5fr)_100px_minmax(0,1fr)_minmax(0,1.2fr)_196px] tablet:gap-4";
 
 /** "Riley Brooks or Jordan Blake", "Riley Brooks, Jordan Blake or Iris Park" — for a sentence. */
 function askNamesOr(names: readonly string[]): string {

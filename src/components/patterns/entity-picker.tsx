@@ -197,8 +197,8 @@ export function EntityPicker({
           role="listbox"
           aria-label={label}
           className={cn(
-            "max-h-[280px] overflow-y-auto rounded-lg border border-01 bg-01 p-1",
-            inline ? "w-full" : "absolute inset-x-0 top-full z-50 mt-1 shadow-soft",
+            "overflow-y-auto rounded-lg border border-01 bg-01 p-1",
+            inline ? "max-h-[200px] w-full" : "absolute inset-x-0 top-full z-50 mt-1 max-h-[280px] shadow-soft",
           )}
         >
           {search && (remote.loading || stale) ? (
@@ -227,7 +227,12 @@ export function EntityPicker({
               >
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-body-sm text-01">{option.label}</span>
-                  {option.detail ? <span className="truncate font-mono text-mono-xs text-03">{option.detail}</span> : null}
+                  {option.detail ? (
+                    // An address or id is set in mono; words ("Provider organization") are not.
+                    <span className={cn("truncate text-03", /\s/.test(option.detail.trim()) ? "text-body-xs" : "font-mono text-mono-xs")}>
+                      {option.detail}
+                    </span>
+                  ) : null}
                 </span>
                 {option.id === value ? <Check aria-hidden="true" className="size-4 shrink-0 text-primary-500" /> : null}
               </li>
