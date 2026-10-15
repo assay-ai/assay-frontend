@@ -121,9 +121,11 @@ function CopyLinkButton({ link }: { link: string }) {
     }
   };
   return (
+    // Secondary: lime means "your action now", and a request that waits on someone else is not.
     <Button
       type="button"
       size="sm"
+      variant="secondary"
       data-primary=""
       className="touch-target"
       title={absolute(link)}
