@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { deadlineReading, timeLeftLabel } from "./deadline";
+import { deadlineReading, deadlineTitle, timeLeftLabel } from "./deadline";
 
 const NOW = Date.parse("2026-10-16T12:00:00Z");
 const HOUR = 3_600_000;
@@ -58,5 +58,12 @@ describe("deadlineReading: dispute", () => {
 
   it("says Expired without a date once past", () => {
     expect(deadlineReading("dispute", iso(NOW - HOUR), iso(NOW - 30 * DAY), NOW)).toMatchObject({ label: "Expired", expired: true });
+  });
+});
+
+describe("deadlineTitle", () => {
+  it("names the local end with its zone, then the UTC instant", () => {
+    const title = deadlineTitle("Rule by", "2026-11-11T03:06:00Z");
+    expect(title).toMatch(/^Rule by Nov 1[01], \d\d:\d\d .+ · 2026-11-11 03:06 UTC$/);
   });
 });
