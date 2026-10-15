@@ -2,6 +2,7 @@
 
 import { ChevronRight, Store } from "lucide-react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { FailsOftenChip, FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
@@ -13,8 +14,11 @@ import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import {
+  explorerHref,
   failRateLabel,
   failsOften,
+  hasFreeCalls,
+  readExplorerState,
   formatCallPrice,
   priceRange,
   freeTierLabel,
@@ -122,8 +126,20 @@ function ProviderRow({ provider, chainName }: { provider: PublicProvider; chainN
 }
 
 export default function CataloguePage() {
-  const [view, setView] = React.useState<"tools" | "providers">("tools");
-  const [query, setQuery] = React.useState("");
+  // View, search and the free filter live in the URL, so Back from a tool
+  // page lands on the same list. Local state keeps typing instant; the URL
+  // follows with `replace` (no history entry per keystroke).
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initial = React.useMemo(() => readExplorerState(searchParams), [searchParams]);
+  const [view, setView] = React.useState<"tools" | "providers">(initial.view);
+  const [query, setQuery] = React.useState(initial.q);
+  const [freeOnly, setFreeOnly] = React.useState(initial.free);
+  React.useEffect(() => {
+    const next = explorerHref({ view, q: query, free: freeOnly });
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (next !== current) router.replace(next, { scroll: false });
+  }, [view, query, freeOnly, router]);
   const tools = usePublicTools();
   const providers = usePublicProviders();
   const features = usePublicFeatures();
@@ -134,8 +150,9 @@ export default function CataloguePage() {
     const rows = [...(tools.data?.tools ?? [])].sort(
       (a, b) => Number(b.routable) - Number(a.routable) || b.providerCount - a.providerCount || a.name.localeCompare(b.name),
     );
-    return needle ? rows.filter((t) => matches(needle, t.name, t.description, t.id)) : rows;
-  }, [tools.data, needle]);
+    const free = freeOnly ? rows.filter((t) => hasFreeCalls(t.pricingMode)) : rows;
+    return needle ? free.filter((t) => matches(needle, t.name, t.description, t.id)) : free;
+  }, [tools.data, needle, freeOnly]);
 
   const providerRows = React.useMemo(() => {
     const rows = [...(providers.data?.providers ?? [])].sort((a, b) => b.toolIds.length - a.toolIds.length);
@@ -188,9 +205,23 @@ export default function CataloguePage() {
               <SegmentedItem value="tools">Tools</SegmentedItem>
               <SegmentedItem value="providers">Providers</SegmentedItem>
             </Segmented>
+            {view === "tools" ? (
+              <button
+                type="button"
+                aria-pressed={freeOnly}
+                onClick={() => setFreeOnly((on) => !on)}
+                className={
+                  freeOnly
+                    ? "rounded-full border border-primary-500 bg-primary-10 px-2.5 py-1 text-label-xs text-primary-700"
+                    : "rounded-full border border-02 bg-01 px-2.5 py-1 text-label-xs text-02 hover:text-01"
+                }
+              >
+                Free calls
+              </button>
+            ) : null}
             {active.isSuccess ? (
               <span className="text-body-xs text-03">
-                {needle ? `${visible} of ${total}` : total}
+                {needle || (freeOnly && view === "tools") ? `${visible} of ${total}` : total}
               </span>
             ) : null}
           </div>
@@ -228,9 +259,19 @@ export default function CataloguePage() {
         ) : visible === 0 ? (
           <PageState
             kind="empty"
-            title={`Nothing matches “${query.trim()}”`}
-            description={view === "tools" ? "Search looks at a tool's name and description." : "Search looks at a provider's name."}
-            action={{ label: "Clear the search", onClick: () => setQuery("") }}
+            title={needle ? `Nothing matches “${query.trim()}”` : "No tool has free calls right now"}
+            description={
+              view === "tools"
+                ? `Search looks at a tool's name and description${freeOnly ? ", among tools with free calls" : ""}.`
+                : "Search looks at a provider's name."
+            }
+            action={{
+              label: freeOnly && view === "tools" ? "Show all tools" : "Clear the search",
+              onClick: () => {
+                setQuery("");
+                setFreeOnly(false);
+              },
+            }}
           />
         ) : (
           <ul className="flex flex-col divide-y divide-01 overflow-hidden rounded-xl border border-01 bg-01">
