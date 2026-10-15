@@ -32,6 +32,7 @@ import {
   windowById,
   windowRange,
 } from "@/features/g30/period";
+import { uncollectedNotWithheld } from "@/features/buyer-debt/debt-copy";
 import { Chip, ErrorBlock, PageHeader, PendingBlock } from "@/features/g30/ui";
 import type { ReceiptsSummary, SummaryGroup } from "@/features/g30/wire";
 import { ApiError } from "@/libs/ApiClient";
@@ -143,8 +144,12 @@ function placeholderRow(key: string, label: string, money: SummaryGroup["charged
  * level that lets a person leave this screen for the receipt screen.
  */
 function callToRow(call: ToolCall): Row {
+  // listed − charged is the withheld figure only for an ordinary call: a call
+  // the provider forfeited, or whose debt was written off, was not charged but
+  // nothing was withheld for it (the summary's `withheldTotal` leaves it out).
+  const notWithheld = uncollectedNotWithheld(call);
   const withheld = {
-    amount: new Decimal(call.price.amount).minus(call.charged.amount).toFixed(0),
+    amount: notWithheld ? "0" : new Decimal(call.price.amount).minus(call.charged.amount).toFixed(0),
     asset: call.price.asset,
     decimals: call.price.decimals,
   };
@@ -154,7 +159,7 @@ function callToRow(call: ToolCall): Row {
     key: call.intentId,
     label: `${call.intentId.slice(0, 8)}…`,
     calls: 1,
-    refundedCalls: call.charged.amount === "0" ? 1 : 0,
+    refundedCalls: call.charged.amount === "0" && !notWithheld ? 1 : 0,
     listedTotal: call.price,
     chargedTotal: call.charged,
     withheldTotal: withheld,

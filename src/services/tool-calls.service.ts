@@ -8,7 +8,22 @@ export interface ToolCall {
   providerId: string | null;
   status: string;
   price: Money;
+  /**
+   * What the agent actually paid: zero until SETTLED, and zero for a SETTLED
+   * call the provider forfeited or whose debt was written off.
+   */
   charged: Money;
+  /**
+   * SETTLED, but the provider caused the payment to fail and forfeited it:
+   * not charged, nobody paid. Optional: older backends do not send it.
+   */
+  forfeited?: boolean;
+  /**
+   * Buyer debt: `OUTSTANDING` — the payment could not be collected, the price
+   * stays held and the payer must sign a replacement voucher before paid calls
+   * work again; `WRITTEN_OFF` — never settled, not charged, provider not paid.
+   */
+  debt?: "OUTSTANDING" | "WRITTEN_OFF" | null;
   /** Wider than the OpenAPI enum, and nullable. See @/utils/verdict. */
   verdict: WireVerdict;
   createdAt: string;

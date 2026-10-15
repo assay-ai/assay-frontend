@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  COLLECTION_STATES,
   STATE_CARDS,
   canContestRejection,
   deriveReceiptState,
@@ -86,5 +87,55 @@ describe("canContestRejection — the 'This result was actually fine' block", ()
     expect(canContestRejection(stages("PASSED", "SKIPPED"))).toBe(false);
     expect(canContestRejection(stages("MISAPPLIED", "UNAVAILABLE"))).toBe(false);
     expect(canContestRejection(stages())).toBe(false);
+  });
+});
+
+const usd = (amount: string) => ({ amount, asset: "eip155:46630/erc20:0x1", decimals: 6 });
+
+function settledReceipt(overrides: Partial<Receipt> = {}): Receipt {
+  return {
+    intentId: "int_1",
+    toolId: "tool",
+    providerId: "prv",
+    classification: "DATA_RESULT",
+    status: "SETTLED",
+    listedPrice: usd("2500000"),
+    chargedPrice: usd("2500000"),
+    withheld: usd("0"),
+    verdict: { status: "PASS" },
+    stages: [],
+    policy: {},
+    sampling: {},
+    createdAt: "2026-10-16T00:00:00.000Z",
+    expiresAt: "2026-10-16T00:05:00.000Z",
+    updatedAt: "2026-10-16T00:01:00.000Z",
+    ...overrides,
+  };
+}
+
+describe("deriveReceiptState — collection", () => {
+  it("keeps an ordinary settled call CHARGED", () => {
+    expect(deriveReceiptState(settledReceipt())).toBe("CHARGED");
+    expect(deriveReceiptState(settledReceipt({ forfeited: false, debt: null }))).toBe("CHARGED");
+  });
+
+  it("says an open debt is not collected yet, though it is charged", () => {
+    expect(deriveReceiptState(settledReceipt({ debt: "OUTSTANDING" }))).toBe("DEBT_OUTSTANDING");
+  });
+
+  // Forfeited and written-off calls have chargedPrice 0 AND withheld 0: they
+  // are not the guarantee's NOT_CHARGED (which says the checks failed).
+  it("does not read a forfeited or written-off call as failed checks", () => {
+    const zero = { chargedPrice: usd("0"), withheld: usd("0") };
+    expect(deriveReceiptState(settledReceipt({ ...zero, forfeited: true }))).toBe("FORFEITED");
+    expect(deriveReceiptState(settledReceipt({ ...zero, debt: "WRITTEN_OFF" }))).toBe("DEBT_WRITTEN_OFF");
+  });
+
+  it("has a card for every collection state", () => {
+    for (const state of COLLECTION_STATES) {
+      expect(STATE_CARDS[state as keyof typeof STATE_CARDS].sentence.length).toBeGreaterThan(0);
+    }
+    expect(STATE_CARDS.DEBT_OUTSTANDING.sentence).toMatch(/paid calls are paused/);
+    expect(STATE_CARDS.DEBT_WRITTEN_OFF.sentence).toMatch(/provider was not paid/);
   });
 });

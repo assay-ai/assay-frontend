@@ -71,8 +71,27 @@ export interface Receipt {
   status: string;
   listedPrice: Money;
   chargedPrice: Money;
-  /** listedPrice − chargedPrice, computed server-side. */
+  /**
+   * What the refund guarantee kept back (REFUNDED / VOIDED / EXPIRED with a
+   * hold). NOT `listedPrice − chargedPrice`: a SETTLED call the provider
+   * forfeited, or whose debt was written off, has both charged and withheld
+   * zero.
+   */
   withheld: Money;
+  /**
+   * SETTLED, but the provider caused the payment to fail and forfeited it: not
+   * charged, nobody paid. Optional: older backends do not send it.
+   */
+  forfeited?: boolean;
+  /**
+   * Buyer debt. `OUTSTANDING`: the payment could not be collected; the price
+   * stays held and is charged once the payer signs a replacement voucher — paid
+   * calls are refused until then. `WRITTEN_OFF`: never settled; not charged,
+   * provider not paid.
+   */
+  debt?: "OUTSTANDING" | "WRITTEN_OFF" | null;
+  /** The recorded cause behind `forfeited` or `debt`, e.g. `uncollected:DelegateIsRevoked`. */
+  chargeNote?: string | null;
   verdict: ReceiptVerdict;
   stages: ReceiptStage[];
   policy: ReceiptPolicy;
