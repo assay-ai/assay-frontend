@@ -269,7 +269,7 @@ export function OperatorBottomTabs({ identity, pathname, needsYou }: Pick<Operat
             <span className="relative flex size-5 items-center justify-center">
               <Icon aria-hidden="true" className={cn("size-5", isActive ? "text-primary-500" : "text-03")} />
               {item.id === "home" && needsYou > 0 ? (
-                <span className="absolute -right-2 -top-1.5 rounded-full bg-danger-500 px-1 text-[10px] font-semibold leading-[14px] tabular-nums text-on-color">
+                <span aria-hidden="true" className="absolute -right-2 -top-1.5 rounded-full bg-danger-500 px-1 text-[10px] font-semibold leading-[14px] tabular-nums text-on-color">
                   {needsYou > 9 ? "9+" : needsYou}
                 </span>
               ) : null}
