@@ -127,7 +127,7 @@ export function depositSteps(input: {
 
   const allow: WalletStep = {
     id: "approve",
-    label: `Allow the stake contract to take ${amountLabel}`,
+    label: `Step 1: approve. Let the stake contract move ${amountLabel} from your wallet`,
     cost: "gas",
     skip: !isEvm,
     run: async ({ report, previousAttempt }) => {
@@ -192,7 +192,7 @@ export function depositSteps(input: {
 
   const stake: WalletStep = {
     id: "deposit",
-    label: `Stake ${amountLabel}`,
+    label: isEvm ? `Step 2: deposit ${amountLabel} into your stake` : `Stake ${amountLabel}`,
     cost: "gas",
     run: async ({ report, previousAttempt }) => {
       const signer = need(input.signer);

@@ -1,7 +1,7 @@
 import { BUYER_FIXTURES } from "./fixtures-buyer";
 import { EXPLORE_FIXTURES } from "./fixtures-explore";
 import { OPERATOR_FIXTURES } from "./fixtures-operator";
-import { PROVIDER_FIXTURES } from "./fixtures-provider";
+import { PROVIDER_FIXTURES, providerNotifications } from "./fixtures-provider";
 import { PUBLIC_FIXTURES } from "./fixtures-public";
 
 /**
@@ -16,7 +16,8 @@ import { PUBLIC_FIXTURES } from "./fixtures-public";
 export interface DemoFixture {
   readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   readonly match: string | RegExp;
-  readonly body: (path: string, query: Record<string, unknown>) => unknown;
+  /** `data` is the request body of a write (empty for a read), so a stand-in can echo it. */
+  readonly body: (path: string, query: Record<string, unknown>, data?: Record<string, unknown>) => unknown;
   /**
    * Vestigial. It marked the routes whose real answer had to be overridden
    * rather than merely filled; every fixture now answers before the network
@@ -54,6 +55,24 @@ export function minutesAgo(minutes: number): string {
  * wins, so a specific path must be listed before a regex that also covers it.
  */
 export const DEMO_FIXTURES: readonly DemoFixture[] = [
+  {
+    /*
+      One organization's notifications serve two consoles. The provider Inbox
+      asks for `provider.*` events (the real server filters on `event`), so
+      that read gets the provider's notices; every other read falls through to
+      the buyer's.
+    */
+    method: "GET",
+    match: "/notifications",
+    body: (path, query) => {
+      const events = ([] as unknown[]).concat(query.event ?? []);
+      if (events.length > 0 && events.every((event) => typeof event === "string" && event.startsWith("provider."))) {
+        return providerNotifications();
+      }
+      const buyer = BUYER_FIXTURES.find((fixture) => fixture.method === "GET" && fixture.match === "/notifications");
+      return buyer ? buyer.body(path, query) : { items: [], pageInfo: { nextCursor: null, hasMore: false } };
+    },
+  },
   ...BUYER_FIXTURES,
   ...EXPLORE_FIXTURES,
   ...PROVIDER_FIXTURES,

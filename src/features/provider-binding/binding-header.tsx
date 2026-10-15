@@ -4,13 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
 import { SectionTabs } from "@/components/layout/section-tabs";
-import { CopyChip } from "@/components/patterns/copy-chip";
 import { StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
 import { Skeleton } from "@/components/patterns/page-state";
 import type { BindingStatus, ToolBindingDetail } from "@/interfaces";
 import { getToolBinding } from "@/services/provider-tool-bindings.service";
 import { labelForEndpoint } from "@/utils/provider-label";
 
+import { overlayJustPublished } from "./after-publish";
 import { bindingScreens, type BindingTabId } from "./screens";
 import { useProviderToolNames } from "./tool-name";
 
@@ -23,6 +23,8 @@ export function useBinding(bindingId: string, options: { refetchInterval?: numbe
   return useQuery<ToolBindingDetail>({
     queryKey: bindingQueryKey(bindingId),
     queryFn: () => getToolBinding(bindingId),
+    // A read older than a publish this tab just made must not undo it on screen.
+    select: overlayJustPublished,
     enabled: Boolean(bindingId),
     retry: 0,
     refetchInterval: options.refetchInterval,
@@ -44,7 +46,7 @@ export function bindingStatusChip(status: BindingStatus): StatusChipKey {
 
 /**
  * Every binding page's head: the tool's name as the title (never an id),
- * its status, the endpoint and the id as a copyable subtitle, the page's one
+ * its status, the endpoint as the subtitle (the listing id is on Settings, for support), the page's one
  * primary action, then the three tabs.
  */
 export function BindingHeader({
@@ -81,7 +83,6 @@ export function BindingHeader({
           {binding ? (
             <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-03">
               <span className="min-w-0 break-all font-mono">{labelForEndpoint(binding.endpoint)}</span>
-              <CopyChip value={binding.id} label="listing id" />
             </p>
           ) : null}
         </div>

@@ -87,3 +87,31 @@ export const WINDOW_OUTCOME: Record<SlaWindowOutcome, string> = {
   INSUFFICIENT_SAMPLE: "Too few calls to judge",
   BREACH_PROPOSED: "Over the promise · penalty proposed",
 };
+
+/**
+ * The windows one tool's Quality tab lists: only that tool's, newest first,
+ * and at most one open (the newest) — a list that mixed tools or showed two
+ * open windows would contradict the headline above it.
+ */
+export function recentWindows<W extends Pick<SlaWindow, "windowId" | "bindingId" | "status" | "openedAt">>(
+  windows: readonly W[],
+  bindingId: string,
+): W[] {
+  const own = windows
+    .filter((window) => !bindingId || window.bindingId === bindingId)
+    .sort((a, b) => Date.parse(b.openedAt) - Date.parse(a.openedAt));
+  let seenOpen = false;
+  return own.filter((window) => {
+    if (window.status !== "OPEN") return true;
+    if (seenOpen) return false;
+    seenOpen = true;
+    return true;
+  });
+}
+
+/** "1.4%" — the observed failure rate of a window, or null before any checked call. */
+export function windowRate(window: Pick<SlaWindow, "observedFailureRate" | "verifiedCalls">): string | null {
+  if (window.observedFailureRate === null || window.observedFailureRate === undefined || window.verifiedCalls === 0) return null;
+  const value = window.observedFailureRate * 100;
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)}%`;
+}

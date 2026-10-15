@@ -80,6 +80,7 @@ export function demoResponse(
   method: string | undefined,
   url: string | undefined,
   params?: Record<string, unknown>,
+  data?: unknown,
 ): unknown {
   if (!demoEnabled()) return undefined;
   const fixture = matchFixture(method ?? "GET", normalise(url));
@@ -91,7 +92,25 @@ export function demoResponse(
     same three totals under three different headings, which is the kind of
     detail a viewer notices.
   */
-  return fixture.body(normalise(url), params ?? queryOf(url));
+  /*
+    A write's body is handed over too, so a stand-in can ECHO what was sent —
+    a new draft answers as the tool that was picked, not as some other one.
+    Echoing is not remembering: nothing is kept between calls.
+  */
+  return fixture.body(normalise(url), params ?? queryOf(url), bodyOf(data));
+}
+
+/** A request body as a plain object, whether it was sent as one or as JSON text. */
+function bodyOf(data: unknown): Record<string, unknown> {
+  if (typeof data === "string") {
+    try {
+      const parsed: unknown = JSON.parse(data);
+      return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof data === "object" && data !== null ? (data as Record<string, unknown>) : {};
 }
 
 /** The query string as a plain object, for a caller that sent one in the URL. */

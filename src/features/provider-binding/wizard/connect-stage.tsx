@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Play } from "lucide-react";
+import { ArrowRight, ChevronDown, Play } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,10 @@ import type { BindingTestReport, CatalogueTool, ToolBindingDetail, ToolMapping }
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { testToolBinding } from "@/services/provider-tool-bindings.service";
+import { cn } from "@/utils";
 
 import { documentsEqual, MappingEditor, schemaFields } from "../mapping-editor";
+import { requestMappingSummary, responseMappingSummary } from "../mapping-summary";
 import { argumentsProblem } from "../tester-arguments";
 import { testPipeline } from "../tester/pipeline";
 import { TestPipelineView } from "../tester/pipeline-view";
@@ -74,6 +76,12 @@ export function ConnectStage({
   }));
   const [blocked, setBlocked] = React.useState<{ request: string | null; response: string | null }>({ request: null, response: null });
   const [asJson, setAsJson] = React.useState(false);
+  const [advanced, setAdvancedState] = React.useState(false);
+  const [advancedSeen, setAdvancedSeen] = React.useState(false);
+  const setAdvanced = (open: boolean) => {
+    if (open) setAdvancedSeen(true);
+    setAdvancedState(open);
+  };
 
   const fields = React.useMemo(() => schemaFields(tool.inputSchema), [tool.inputSchema]);
   const [args, setArgs] = React.useState<Record<string, string>>(() => seedArguments(tool.inputSchema));
@@ -97,6 +105,7 @@ export function ConnectStage({
       return;
     }
     if (mappingProblem) {
+      setAdvanced(true);
       setError(`Fix the mapping first: ${mappingProblem}`);
       return;
     }
@@ -151,7 +160,7 @@ export function ConnectStage({
           Connect {tool.name} to your API
         </h2>
         <p className="text-body-13 text-02">
-          We call your API whenever an agent uses this tool. Check the address and how the call maps, then run a test.
+          We call your API whenever an agent uses this tool. Check the address, then run a test.
         </p>
       </div>
 
@@ -169,36 +178,58 @@ export function ConnectStage({
       />
 
       <div className="flex w-full flex-col gap-3 rounded-lg border border-01 bg-01 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <h3 className="text-label-sm text-01">How a call reaches your API</h3>
-            <p className="text-body-xs text-03">
-              Each row says where a value comes from. We filled it in from the tool&apos;s fields; change the path or names to match your API.
-            </p>
-          </div>
-          <Switch checked={asJson} onChange={(event) => setAsJson(event.target.checked)} label="Edit as JSON" />
+        <div className="flex min-w-0 flex-col gap-1">
+          <h3 className="text-label-sm text-01">How we call your API</h3>
+          <p className="text-body-13 text-02">{requestMappingSummary(mappings.request)}</p>
+          <p className="text-body-13 text-02">{responseMappingSummary(mappings.response)}</p>
+          <p className="text-body-xs text-03">
+            We filled this in from the tool&apos;s fields. If your API uses other names or paths, change them under Advanced mapping. Most
+            people do not need to.
+          </p>
         </div>
-        <MappingEditor
-          key={`request:${tool.id}`}
-          direction="REQUEST"
-          toolId={tool.id}
-          mapping={mappings.request}
-          schema={tool.inputSchema}
-          json={asJson}
-          onChange={(next) => setMappings((current) => ({ ...current, request: next }))}
-          onStatus={(status) => setBlocked((current) => ({ ...current, request: status.editing }))}
-        />
-        <h3 className="pt-2 text-label-sm text-01">How your answer becomes the result</h3>
-        <MappingEditor
-          key={`response:${tool.id}`}
-          direction="RESPONSE"
-          toolId={tool.id}
-          mapping={mappings.response}
-          schema={tool.outputSchema}
-          json={asJson}
-          onChange={(next) => setMappings((current) => ({ ...current, response: next }))}
-          onStatus={(status) => setBlocked((current) => ({ ...current, response: status.editing }))}
-        />
+        <button
+          type="button"
+          aria-expanded={advanced}
+          aria-controls="advanced-mapping"
+          onClick={() => setAdvanced(!advanced)}
+          className="flex items-center gap-1.5 self-start text-label-13 text-02 hover:text-01"
+        >
+          <ChevronDown aria-hidden="true" className={cn("size-4 transition-transform", advanced && "rotate-180")} />
+          Advanced mapping
+        </button>
+        {/* Kept mounted once opened so a half-made edit survives closing it. */}
+        {advancedSeen ? (
+          <div id="advanced-mapping" hidden={!advanced} className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <h4 className="text-label-sm text-01">How a call reaches your API</h4>
+                <p className="text-body-xs text-03">Each row says where a value comes from.</p>
+              </div>
+              <Switch checked={asJson} onChange={(event) => setAsJson(event.target.checked)} label="Edit as JSON" />
+            </div>
+            <MappingEditor
+              key={`request:${tool.id}`}
+              direction="REQUEST"
+              toolId={tool.id}
+              mapping={mappings.request}
+              schema={tool.inputSchema}
+              json={asJson}
+              onChange={(next) => setMappings((current) => ({ ...current, request: next }))}
+              onStatus={(status) => setBlocked((current) => ({ ...current, request: status.editing }))}
+            />
+            <h4 className="pt-2 text-label-sm text-01">How your answer becomes the result</h4>
+            <MappingEditor
+              key={`response:${tool.id}`}
+              direction="RESPONSE"
+              toolId={tool.id}
+              mapping={mappings.response}
+              schema={tool.outputSchema}
+              json={asJson}
+              onChange={(next) => setMappings((current) => ({ ...current, response: next }))}
+              onStatus={(status) => setBlocked((current) => ({ ...current, response: status.editing }))}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="flex w-full flex-col gap-3 rounded-lg border border-01 bg-01 p-4">

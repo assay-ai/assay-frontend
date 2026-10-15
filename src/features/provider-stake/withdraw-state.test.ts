@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ProviderChainStake } from "@/interfaces";
 
-import { availableAfterRequest, periodLabel, withdrawStateOf } from "./withdraw-state";
+import { availableAfterRequest, periodLabel, toolsPausedAt, withdrawPlan, withdrawStateOf } from "./withdraw-state";
 
 const m = (amount: string) => ({ amount, asset: "usdg", decimals: 6 });
 const entry = (patch: Partial<ProviderChainStake>): ProviderChainStake => ({
@@ -44,5 +44,32 @@ describe("withdrawStateOf", () => {
     const state = withdrawStateOf(entry({}), NOW);
     expect(state.periodMs).toBeNull();
     expect(availableAfterRequest(state, NOW)).toBeNull();
+  });
+});
+
+describe("withdrawPlan", () => {
+  const req = [
+    { toolId: "fx-rates", bindingId: "b2", minimum: m("120000000") },
+    { toolId: "market-quote", bindingId: "b1", minimum: m("450000000") },
+  ];
+
+  it("frees only what is above the requirement and the penalty reserves", () => {
+    const plan = withdrawPlan({ staked: m("600000000"), required: m("450000000"), reserved: [m("28410000"), m("11040000")], requirement: req });
+    expect(plan.free?.amount).toBe("110550000");
+    expect(plan.reserved?.amount).toBe("39450000");
+    expect(plan.thresholds.map((t) => t.toolId)).toEqual(["market-quote", "fx-rates"]);
+  });
+
+  it("never goes below zero", () => {
+    const plan = withdrawPlan({ staked: m("100000000"), required: m("450000000"), reserved: [], requirement: req });
+    expect(plan.free?.amount).toBe("0");
+    expect(plan.reserved).toBeNull();
+  });
+
+  it("names the tools that pause below the stake left", () => {
+    const plan = withdrawPlan({ staked: m("600000000"), required: m("450000000"), reserved: [], requirement: req });
+    expect(toolsPausedAt(plan, 300_000_000n).map((t) => t.toolId)).toEqual(["market-quote"]);
+    expect(toolsPausedAt(plan, 100_000_000n)).toHaveLength(2);
+    expect(toolsPausedAt(plan, 450_000_000n)).toHaveLength(0);
   });
 });

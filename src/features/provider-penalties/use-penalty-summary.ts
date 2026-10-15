@@ -12,6 +12,8 @@ import { usePenalties } from "./use-penalties";
 export interface PenaltyNotice {
   /** Stable key: the on-chain request id (or the Assay proposal id). */
   id: string;
+  /** Assay's case id, when the chain record is matched to one. */
+  proposalId: string | null;
   /** The tool the penalty is about, by name; null when unknown. */
   toolName: string | null;
   amount: Money | null;
@@ -37,6 +39,7 @@ export function usePenaltySummary(): PenaltySummary {
     .filter((row) => row.canDispute)
     .map((row) => ({
       id: row.id,
+      proposalId: row.proposalId ?? null,
       toolName: penalties.caseFor(row)?.proposal.toolName ?? null,
       amount: row.amount,
       executableAt: row.executableAt,

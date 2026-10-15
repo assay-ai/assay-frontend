@@ -92,7 +92,7 @@ export default function PolicyChangesPage() {
   const subtitle =
     changes.length === 0
       ? "Nothing pending affects your tools right now"
-      : `${changes.length} pending change${changes.length === 1 ? "" : "s"} to the checks on your tools`;
+      : `${changes.length} upcoming change${changes.length === 1 ? "" : "s"} to how results of your tools are checked, and what each means for you`;
 
   return (
     <>
