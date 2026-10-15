@@ -6,9 +6,9 @@ import * as React from "react";
 
 import { FailsOftenChip, Fact, FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
+import { StartFreeCta } from "@/components/explorer/start-free";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
-import { Button } from "@/components/ui/button";
 import {
   checkSentences,
   failRateLabel,
@@ -30,7 +30,6 @@ import {
 import { useChainName } from "@/hooks/useChainName";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
-import { loginHref } from "@/libs/login-redirect";
 import { routes } from "@/libs/routes";
 
 /**
@@ -214,9 +213,7 @@ function ToolPage() {
               : "Sign up, create an agent key and add funds. You pay only for results that pass."}
           </p>
         </div>
-        <Button asChild>
-          <Link href={loginHref({ next: routes.exploreTool(tool.id) })}>Start free</Link>
-        </Button>
+        <StartFreeCta next={routes.exploreTool(tool.id)} className="tablet:items-end" />
       </section>
     </>
   );

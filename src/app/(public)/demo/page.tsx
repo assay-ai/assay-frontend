@@ -4,6 +4,7 @@ import { Check, Minus, Play, X } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { UnavailablePage } from "@/components/explorer/unavailable-page";
 import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -149,22 +150,23 @@ export default function DemoPage() {
   if (configured === false) {
     return (
       <Shell>
-        <Banner
-          tone="primary"
+        <UnavailablePage
+          eyebrow="Live demo"
           title="The live demo is not running on this site"
-          description="You can see the same thing with real data: the Explorer lists what our checks refused to charge."
+          wouldShow="It runs two real calls side by side, one to a deliberately broken provider, so you can watch the bad one not get charged. The same proof is on this site with real data."
+          destinations={[
+            {
+              href: "/catalogue",
+              title: "See what our checks refused to charge",
+              description: "Real calls that failed our checks, and every tool with its price and who serves it.",
+            },
+            {
+              href: "/how-it-works",
+              title: "How a call is checked before it is charged",
+              description: "The hold, the checks and the release, with a worked example.",
+            },
+          ]}
         />
-        <p className="text-body-13 text-02">
-          You can still read{" "}
-          <Link href="/how-it-works" className="text-primary-500 underline">
-            how a call is checked before it is charged
-          </Link>{" "}
-          or browse{" "}
-          <Link href="/catalogue" className="text-primary-500 underline">
-            the tools and prices
-          </Link>
-          .
-        </p>
       </Shell>
     );
   }
@@ -253,7 +255,7 @@ export default function DemoPage() {
         href="/login"
         className="fixed inset-x-4 bottom-4 z-10 block rounded-lg bg-primary-400 px-4 py-3 text-center text-label-sm text-on-primary shadow-lg lg:hidden"
       >
-        Start free: tools with a free tier need no deposit
+        Start free: no card, and tools with a free tier need no deposit
       </a>
     </Shell>
   );

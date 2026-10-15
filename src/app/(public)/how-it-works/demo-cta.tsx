@@ -3,6 +3,7 @@
 import { Play } from "lucide-react";
 import Link from "next/link";
 
+import { START_FREE_PROMISE, useSignedIn } from "@/components/explorer/start-free";
 import { usePublicFeatures } from "@/features/explorer/use-public-explorer";
 
 const PRIMARY =
@@ -17,8 +18,10 @@ const SECONDARY =
  */
 export function HeroCtas() {
   const { demo } = usePublicFeatures();
+  const signedIn = useSignedIn();
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+    <div className="flex flex-col items-center gap-2 pt-2">
+    <div className="flex flex-wrap items-center justify-center gap-2.5">
       {demo ? (
         <Link href="/demo" className={PRIMARY}>
           <Play aria-hidden="true" className="h-[15px] w-[15px]" />
@@ -28,11 +31,17 @@ export function HeroCtas() {
       <Link href="/catalogue" className={demo ? SECONDARY : PRIMARY}>
         See the tools and prices
       </Link>
-      {demo ? null : (
+      {signedIn ? (
+        <Link href="/" className={SECONDARY}>
+          Open app
+        </Link>
+      ) : demo ? null : (
         <Link href="/login" className={SECONDARY}>
           Start free
         </Link>
       )}
+    </div>
+    {signedIn ? null : <p className="text-body-xs text-03">{START_FREE_PROMISE}</p>}
     </div>
   );
 }

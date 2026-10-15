@@ -23,8 +23,9 @@ import { PageHeader } from "./chrome";
  *  1. Withdraw your money — the withdrawable total per asset (accounts on one
  *     chain merged; different assets never added), each with Withdraw;
  *  2. Export your records — Statement CSV, Calls, Activity log;
- *  3. Close — not possible in the app yet (no endpoint), said in one line,
- *     with a support link only when this deployment has one.
+ *  3. Close — not possible in the app (no endpoint), so the step ends on
+ *     what can be done: revoke agent keys, and ask support when this
+ *     deployment has a support link.
  */
 
 interface Hold {
@@ -124,18 +125,28 @@ export function CloseAccountView() {
       ),
     },
     {
+      // Closing has no endpoint, so this step ends on what a person CAN do:
+      // make the account unable to spend, and (when this deployment has one)
+      // ask support — never a greyed-out step with nowhere to go.
       id: "close",
-      title: "Close the account",
-      state: "blocked",
-      blockedReason: SUPPORT_URL ? (
-        <>
-          Closing an account is not available in the app yet.{" "}
-          <a href={SUPPORT_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary-600 underline">
-            Ask support to close it <ArrowRight aria-hidden="true" className="size-3" />
-          </a>
-        </>
-      ) : (
-        "Closing an account is not available in the app yet. Your account stays open and costs nothing while it holds no money."
+      title: SUPPORT_URL ? "Revoke agent keys, then ask us to close it" : "Revoke your agent keys",
+      state: withdrawn ? "current" : "todo",
+      description: SUPPORT_URL
+        ? "Closing is done by the Assay team. Revoke your agent keys so nothing can spend in the meantime, then send the request."
+        : "Closing is done by the Assay team, not in the app. Revoke your agent keys: with no money and no keys the account cannot spend and costs nothing, and you can sign in again any time.",
+      content: (
+        <div className="flex flex-wrap gap-2">
+          <Button variant={SUPPORT_URL ? "secondary" : "primary"} size="sm" asChild>
+            <Link href="/agents">Revoke agent keys</Link>
+          </Button>
+          {SUPPORT_URL ? (
+            <Button size="sm" asChild>
+              <a href={SUPPORT_URL} target="_blank" rel="noreferrer">
+                Ask support to close it <ArrowRight aria-hidden="true" className="size-3.5" />
+              </a>
+            </Button>
+          ) : null}
+        </div>
       ),
     },
   ];

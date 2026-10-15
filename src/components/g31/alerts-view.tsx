@@ -25,7 +25,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { LocalTime } from "@/components/patterns/local-time";
 import { PageState } from "@/components/patterns/page-state";
-import { StatusChip } from "@/components/patterns/status-chip";
 import {
   ALERT_PRESETS,
   BUYER_EVENTS,
@@ -279,7 +278,7 @@ export function AlertsView() {
               <span className="text-label-sm text-01">In-app</span>
               <span className="text-body-xs text-03">The bell at the top of every page</span>
             </div>
-            <StatusChip status="done" detail="always on" />
+            <span className="text-body-xs text-02">On</span>
           </div>
           {EDITABLE_CHANNELS.filter(({ channel }) => available.includes(channel)).map(({ channel, name, icon: Icon }) => {
             const row = channelByType.get(channel);
@@ -310,12 +309,7 @@ export function AlertsView() {
             );
           })}
           {available.length < EDITABLE_CHANNELS.length ? (
-            <p className="text-body-xs text-03">
-              {EDITABLE_CHANNELS.filter(({ channel }) => !available.includes(channel))
-                .map(({ name }) => name)
-                .join(", ")}{" "}
-              alerts can&apos;t be set up here yet.
-            </p>
+            <p className="text-body-xs text-03">More channels are coming.</p>
           ) : null}
         </PanelBody>
       </Panel>
@@ -327,15 +321,13 @@ export function AlertsView() {
           </PanelTitles>
         </PanelHeader>
         <PanelBody>
-          {ALERT_PRESETS.map((preset) => {
-            const live = preset.events.some((e) => NOTIFICATION_CATALOGUE[e].hasProducer);
-            return (
+          {/* A preset nothing can raise yet is left out rather than shown as "coming soon". */}
+          {ALERT_PRESETS.filter((preset) => preset.events.some((e) => NOTIFICATION_CATALOGUE[e].hasProducer)).map((preset) => (
               <div key={preset.id} className="flex w-full flex-col gap-2.5 border-b border-01 px-4 py-4 last:border-b-0 tablet:flex-row tablet:items-center tablet:gap-4 tablet:px-5">
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
                   <span className="flex flex-wrap items-center gap-2 text-label-sm text-01">
                     {preset.title}
                     {preset.alwaysOn ? <span className="text-body-xs font-normal text-03">always on</span> : null}
-                    {!live ? <StatusChip status="waiting" detail="coming soon" /> : null}
                   </span>
                   <span className="text-body-13 text-02">{preset.description}</span>
                 </div>
@@ -344,8 +336,7 @@ export function AlertsView() {
                     <Inbox aria-hidden="true" className="size-3" />
                     In-app
                   </span>
-                  {live
-                    ? configured.map((channel) => {
+                  {configured.map((channel) => {
                         const state = presetState(preset, channel, isEnabled);
                         const on = state !== "off";
                         return preset.alwaysOn ? (
@@ -369,12 +360,10 @@ export function AlertsView() {
                             {state === "mixed" ? " · some" : ""}
                           </button>
                         );
-                      })
-                    : null}
+                      })}
                 </div>
               </div>
-            );
-          })}
+          ))}
           <details className="group border-t border-01">
             <summary className="cursor-pointer select-none px-4 py-3 text-label-13 text-02 hover:text-01 tablet:px-5">
               Customise: every alert, how urgent and how often
