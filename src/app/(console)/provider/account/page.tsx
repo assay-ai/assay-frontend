@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { KeyRound, Plus, TriangleAlert } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { Banner } from "@/components/ui/banner";
@@ -24,9 +25,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { PageState } from "@/components/patterns/page-state";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { dateOnly, relativeTime } from "@/components/g31/format";
 import { ApiError } from "@/libs/ApiClient";
+import { plainError } from "@/libs/plain-language";
 import { createCredential, listAgents, listCredentials } from "@/services/account.service";
 import { getProviderRegistration } from "@/services/provider-registration.service";
 
@@ -98,7 +101,6 @@ import { getProviderRegistration } from "@/services/provider-registration.servic
  * deliberately not invented here.
  */
 
-const DASH = "—";
 
 interface Credential {
   id: string;
@@ -126,14 +128,11 @@ interface SeatRow {
   id: string;
   member: string;
   role: string;
-  contactFor: string;
-  lastActive: string;
 }
 
 interface TokenRow {
   id: string;
   token: string;
-  scope: string;
   lastUsed: string;
 }
 
@@ -141,7 +140,6 @@ interface TermRow {
   id: string;
   document: string;
   accepted: string;
-  version: string;
   inForce: string;
 }
 
@@ -167,41 +165,13 @@ interface TermRow {
 const SEAT_COLUMNS: TableColumn<SeatRow>[] = [
   {
     key: "member",
-    header: "Member",
-    mono: true,
+    header: "Contact",
     noTruncate: true,
-    cell: (row) => <span className="whitespace-nowrap font-semibold">{row.member}</span>,
+    cell: (row) => <span className="font-semibold [overflow-wrap:anywhere]">{row.member}</span>,
   },
-  { key: "role", header: "Role", width: 90, align: "end", mono: true, cell: (r) => r.role },
-  {
-    key: "contactFor",
-    header: "Contact for",
-    width: 90,
-    align: "end",
-    mono: true,
-    noTruncate: true,
-    cell: (r) => <span className="whitespace-nowrap">{r.contactFor}</span>,
-  },
-  {
-    key: "lastActive",
-    header: "Last active",
-    width: 90,
-    align: "end",
-    mono: true,
-    noTruncate: true,
-    cell: (r) => <span className="whitespace-nowrap">{r.lastActive}</span>,
-  },
+  { key: "role", header: "For", width: 150, align: "end", cell: (r) => r.role },
 ];
 
-/**
- * Same arithmetic, smaller margin: the design is a fixed 520 and its Scope 190 +
- * Last used 160 leave the token prefix 102px, where `x402_sk_live_8xifRJT…`
- * needs about 165. The frame gets away with it because a design-tool text node
- * overflows into the next column's slack; `truncate` here does not, and clipped
- * it to `x402_sk_liv…` — which is no longer a prefix you can disambiguate two
- * tokens by, i.e. the column's only job. Scope 120 / Last used 150 plus a
- * non-clipping cell restores it.
- */
 const TOKEN_COLUMNS: TableColumn<TokenRow>[] = [
   {
     key: "token",
@@ -210,16 +180,11 @@ const TOKEN_COLUMNS: TableColumn<TokenRow>[] = [
     noTruncate: true,
     cell: (row) => <span className="whitespace-nowrap font-semibold">{row.token}</span>,
   },
-  { key: "scope", header: "Scope", width: 120, align: "end", mono: true, cell: (r) => r.scope },
   {
     key: "lastUsed",
-    // 150, not the frame's 160: "revoked 2026-08-21" is the widest value this
-    // cell ever holds and it overran 130, printing straight over the Scope
-    // dash. Measured on screen, not estimated.
     header: "Last used",
     width: 150,
     align: "end",
-    mono: true,
     noTruncate: true,
     cell: (r) => <span className="whitespace-nowrap">{r.lastUsed}</span>,
   },
@@ -229,34 +194,10 @@ const TERM_COLUMNS: TableColumn<TermRow>[] = [
   {
     key: "document",
     header: "Document",
-    mono: true,
     cell: (row) => <span className="font-semibold">{row.document}</span>,
   },
-  {
-    key: "accepted",
-    header: "Accepted",
-    width: 210,
-    align: "end",
-    mono: true,
-    /* The frame's value is "2026-07-02 by founder@" and fits 210. `acceptedBy`
-       is the console CREDENTIAL that accepted, not a mail-truncated address —
-       "cred-demo-provider" — and the real string overruns. It bleeds left into
-       the Document column's slack, as the frame's own cells do. */
-    noTruncate: true,
-    cell: (r) => <span className="whitespace-nowrap">{r.accepted}</span>,
-  },
-  { key: "version", header: "Version", width: 160, align: "end", mono: true, cell: (r) => r.version },
-  {
-    key: "inForce",
-    header: "In force",
-    width: 190,
-    align: "end",
-    mono: true,
-    // "In force" can diverge from "Version", and when it does the row is the
-    // notice. Never ellipsise the half that says so.
-    noTruncate: true,
-    cell: (r) => r.inForce,
-  },
+  { key: "accepted", header: "Accepted", width: 130, align: "end", noTruncate: true, cell: (r) => r.accepted },
+  { key: "inForce", header: "Status", width: 190, align: "end", noTruncate: true, cell: (r) => r.inForce },
 ];
 
 export default function ProviderAccountPage() {
@@ -334,18 +275,14 @@ export default function ProviderAccountPage() {
   const seatRows: SeatRow[] = record
     ? [
         {
-          id: "owner",
-          member: record.ownerContact.email,
-          role: "Owner",
-          contactFor: DASH,
-          lastActive: DASH,
+          id: "technical",
+          member: `${record.technicalContact.name} · ${record.technicalContact.email}`,
+          role: "Main contact",
         },
         {
-          id: "technical",
-          member: record.technicalContact.email,
-          role: "Technical",
-          contactFor: DASH,
-          lastActive: DASH,
+          id: "owner",
+          member: `${record.ownerContact.name} · ${record.ownerContact.email}`,
+          role: "Escalations",
         },
       ]
     : [];
@@ -353,7 +290,6 @@ export default function ProviderAccountPage() {
   const tokenRows: TokenRow[] = (credentials.data ?? []).map((credential) => ({
     id: credential.id,
     token: `${credential.prefix}…`,
-    scope: credential.scopes.length > 0 ? credential.scopes.join(", ") : DASH,
     // A revoked credential is kept, not deleted, so its row stays readable —
     // and the cell says which it is rather than showing a stale "last used".
     lastUsed: credential.revokedAt
@@ -363,30 +299,18 @@ export default function ProviderAccountPage() {
         : "never used",
   }));
 
+  const termRow = (id: string, document: string, accepted: string, inForce: string): TermRow => ({
+    id,
+    document,
+    accepted: dateOnly(record!.acceptedTerms.acceptedAt),
+    inForce: accepted === inForce ? "Up to date" : `Version ${inForce} is now in force`,
+  });
   const termRows: TermRow[] =
     record && published
       ? [
-          {
-            id: "provider-agreement",
-            document: "Provider agreement",
-            accepted: `${dateOnly(record.acceptedTerms.acceptedAt)} by ${record.acceptedTerms.acceptedBy}`,
-            version: record.acceptedTerms.providerAgreementVersion,
-            inForce: published.providerAgreementVersion,
-          },
-          {
-            id: "payout-terms",
-            document: "Payout terms",
-            accepted: `${dateOnly(record.acceptedTerms.acceptedAt)} by ${record.acceptedTerms.acceptedBy}`,
-            version: record.acceptedTerms.payoutTermsVersion,
-            inForce: published.payoutTermsVersion,
-          },
-          {
-            id: "slash-policy",
-            document: "Slash policy",
-            accepted: `${dateOnly(record.acceptedTerms.acceptedAt)} by ${record.acceptedTerms.acceptedBy}`,
-            version: record.acceptedTerms.slashPolicyVersion,
-            inForce: published.slashPolicyVersion,
-          },
+          termRow("provider-agreement", "Provider agreement", record.acceptedTerms.providerAgreementVersion, published.providerAgreementVersion),
+          termRow("payout-terms", "Payout terms", record.acceptedTerms.payoutTermsVersion, published.payoutTermsVersion),
+          termRow("slash-policy", "Penalty policy", record.acceptedTerms.slashPolicyVersion, published.slashPolicyVersion),
         ]
       : [];
 
@@ -409,10 +333,8 @@ export default function ProviderAccountPage() {
       {/* Page Header — row, gap 16, space-between, centred. */}
       <header className="flex w-full items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <h1 className="text-heading-md text-01">Account</h1>
-          <p className="font-mono text-mono-12 text-03">
-            team seats are not available yet · machine tokens are available today
-          </p>
+          <h1 className="text-heading-sm text-01 tablet:text-heading-md">Account</h1>
+          <p className="text-body-13 text-03">Your contacts, machine tokens and the terms you accepted.</p>
         </div>
         <div className="flex shrink-0 items-center gap-2.5">
           <Button
@@ -439,8 +361,8 @@ export default function ProviderAccountPage() {
           }
           description={
             registrationError.code === "PROVIDER_NOT_FOUND"
-              ? "Contacts and terms appear here once registration is complete. Machine tokens below do not depend on it."
-              : `${registrationError.code} · ${registrationError.message}`
+              ? "Finish setup to add your contacts and accept the terms."
+              : plainError(registrationError.code)
           }
         />
       ) : null}
@@ -449,7 +371,7 @@ export default function ProviderAccountPage() {
         <Banner
           tone="danger"
           title="The machine token could not be created"
-          description={`${createMutation.error.code} · ${createMutation.error.message}`}
+          description={plainError(createMutation.error.code)}
         />
       ) : null}
 
@@ -459,10 +381,8 @@ export default function ProviderAccountPage() {
         <Panel className="min-w-0 flex-1">
           <PanelHeader>
             <PanelTitles>
-              <PanelTitle>Seats</PanelTitle>
-              <PanelDescription>
-                an enforcement notice must reach a person, so contacts are typed
-              </PanelDescription>
+              <PanelTitle>Contacts</PanelTitle>
+              <PanelDescription>who we reach about incidents and penalties</PanelDescription>
             </PanelTitles>
           </PanelHeader>
           {/* Body — padding [6, 10, 10, 10]. */}
@@ -478,15 +398,14 @@ export default function ProviderAccountPage() {
                 description="Registration types an owner and a technical contact. Until it completes, there is nobody for an enforcement notice to reach."
               />
             )}
-            {/* OUR sentence. The frame says "Seats" and there is no seats
-                resource; a provider reading two rows in this panel is owed the
-                reason there are exactly two and no invite button. It belongs to
-                the rows, so it goes away with them. */}
             {seatRows.length > 0 ? (
-            <p className="px-3 pt-3 text-body-xs text-03">
-              These are the two contacts given at registration. Team seats, roles and per-person
-              activity are not available yet, so “Contact for” and “Last active” are empty.
-            </p>
+              <p className="px-3 pt-3 text-body-xs text-03">
+                To change a contact,{" "}
+                <Link href="/provider/setup?step=you" className="text-primary-600 underline-offset-2 hover:underline">
+                  edit your account details
+                </Link>
+                .
+              </p>
             ) : null}
           </PanelBody>
         </Panel>
@@ -502,9 +421,7 @@ export default function ProviderAccountPage() {
           {/* Body — padding [6, 10, 10, 10]. */}
           <PanelBody className="px-2.5 pb-2.5 pt-1.5">
             {credentials.isPending && agentIds.length > 0 ? (
-              <p role="status" aria-live="polite" className="px-3 py-3 font-mono text-mono-13 text-03">
-                Loading tokens…
-              </p>
+              <PageState kind="loading" rows={2} bare label="Loading tokens" />
             ) : tokenRows.length > 0 ? (
               <Table columns={TOKEN_COLUMNS} rows={tokenRows} caption="Machine tokens" />
             ) : (
@@ -545,6 +462,19 @@ export default function ProviderAccountPage() {
         </PanelBody>
       </Panel>
 
+      {/* Policy changes live under Account in the nav. */}
+      <Panel>
+        <PanelBody className="flex flex-col gap-3 p-4 tablet:flex-row tablet:items-center tablet:p-5">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <p className="text-label-13 text-01">Policy changes</p>
+            <p className="text-body-xs text-02">Changes Assay makes to the checks on your tools, with the date each takes effect.</p>
+          </div>
+          <Button variant="secondary" asChild>
+            <Link href="/provider/policy-changes">See policy changes</Link>
+          </Button>
+        </PanelBody>
+      </Panel>
+
       {/* Create — not drawn on the design; the button on it has to lead somewhere. */}
       <Sheet open={creating} onOpenChange={setCreating}>
         <SheetContent>
@@ -561,7 +491,7 @@ export default function ProviderAccountPage() {
               placeholder="CI deploy"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              hint="No scope vocabulary is published, so this token is created with none."
+              hint="For a deploy pipeline or a script that manages your tools."
             />
             <Button
               type="button"
