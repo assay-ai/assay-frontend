@@ -59,7 +59,9 @@ export function stakeStatusOf(stake: ProviderStake | undefined): StakeStatus {
 
   let shortfall: Money | null = null;
   let enough: boolean | null = null;
-  if (!required) {
+  if (!stake) {
+    enough = null;
+  } else if (!required) {
     enough = true;
   } else if (staked) {
     const gap = toDecimal(required).minus(toDecimal(staked));

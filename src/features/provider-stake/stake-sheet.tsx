@@ -1,8 +1,21 @@
 "use client";
 
-import type * as React from "react";
+import { useConnectWallet } from "@privy-io/react-auth";
+import { useQueryClient } from "@tanstack/react-query";
+import Decimal from "decimal.js";
+import { Wallet } from "lucide-react";
+import * as React from "react";
 
-import type { Money } from "@/interfaces";
+import { PresetChips } from "@/components/patterns/preset-chips";
+import { WalletActionSheet } from "@/components/patterns/sign-action";
+import { Button } from "@/components/ui/button";
+import type { Money, ProviderStake } from "@/interfaces";
+import { formatDecimal, formatMoney, parseAmountInput, toDecimal } from "@/utils/money";
+
+import { withProvedStakeAuthority } from "./chain-stake";
+import { depositSteps, describeStakeError, proveWalletStep } from "./stake-steps";
+import { PROVIDER_STAKE_KEY, useStakeStatus } from "./use-stake-status";
+import { short, useStakeWallet, walletBlocker } from "./use-stake-wallet";
 
 /**
  * THE Stake sheet: one `WalletActionSheet` that every surface opens (Stake
@@ -24,7 +37,170 @@ export interface StakeSheetProps {
   onStaked?: () => void;
 }
 
-// STUB — the stake work replaces this with the real sheet.
-export function StakeSheet(_props: StakeSheetProps) {
-  return null;
+/** Major units for an input, rounded up to cents so a prefill always covers the need. */
+export function inputFromMoney(money: Money | null | undefined): string {
+  if (!money) return "";
+  const value = toDecimal(money);
+  if (value.lte(0)) return "";
+  return value.toDecimalPlaces(2, Decimal.ROUND_UP).toFixed();
+}
+
+export function StakeSheet({ open, onOpenChange, amount, reason, onStaked }: StakeSheetProps) {
+  const status = useStakeStatus();
+  const wallet = useStakeWallet(status);
+  const queryClient = useQueryClient();
+  const { connectWallet } = useConnectWallet();
+  const decimals = status.required?.decimals ?? status.staked?.decimals ?? 6;
+
+  const needed = amount ?? status.shortfall ?? null;
+  const recommendedTopUp = React.useMemo(() => {
+    if (!status.recommended) return null;
+    const gap = toDecimal(status.recommended).minus(status.staked ? toDecimal(status.staked) : 0);
+    return gap.gt(0) ? gap : null;
+  }, [status.recommended, status.staked]);
+
+  const [value, setValue] = React.useState("");
+  // Fixed while the sheet is open, so proving mid-run does not renumber the steps.
+  const [needsProof, setNeedsProof] = React.useState(!wallet.proved);
+  // Prefill once per opening: the need, else the recommended top-up.
+  React.useEffect(() => {
+    if (!open) return;
+    setNeedsProof(!wallet.proved);
+    setValue(inputFromMoney(needed) || (recommendedTopUp ? recommendedTopUp.toDecimalPlaces(2, Decimal.ROUND_UP).toFixed() : ""));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const parsed = parseAmountInput(value, { decimals });
+  const amountLabel = parsed.value ? formatDecimal(parsed.value) : "";
+
+  const presets = [
+    ...(needed && toDecimal(needed).gt(0)
+      ? [{ value: inputFromMoney(needed), label: formatMoney(needed), description: "Needed now" }]
+      : []),
+    ...(recommendedTopUp
+      ? [
+          {
+            value: recommendedTopUp.toDecimalPlaces(2, Decimal.ROUND_UP).toFixed(),
+            label: formatDecimal(recommendedTopUp.toDecimalPlaces(2, Decimal.ROUND_UP)),
+            description: "Recommended (1.5× what you need)",
+          },
+        ]
+      : []),
+  ].filter((p, i, all) => all.findIndex((q) => q.value === p.value) === i);
+
+  const steps = [
+    proveWalletStep({
+      chainId: wallet.chainId,
+      address: wallet.address,
+      signer: wallet.signer,
+      skip: !needsProof,
+      onProved: (stakeAuthority) =>
+        queryClient.setQueryData<ProviderStake>([...PROVIDER_STAKE_KEY], (previous) =>
+          withProvedStakeAuthority(previous, stakeAuthority),
+        ),
+    }),
+    ...depositSteps({
+      amountAtomic: parsed.atomic ?? "0",
+      amountLabel,
+      isEvm: wallet.isEvm,
+      signer: wallet.signer,
+      chain: wallet.chain,
+    }),
+  ];
+
+  const blocker = walletBlocker(wallet);
+  const after = parsed.value && status.staked ? toDecimal(status.staked).plus(parsed.value) : parsed.value;
+
+  return (
+    <WalletActionSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Add stake"
+      description={
+        reason ??
+        "Stake is the deposit that lets your tools take paid calls. It stays yours; it is only reduced by a penalty you did not dispute in time."
+      }
+      changes={
+        parsed.value
+          ? [
+              {
+                label: "Your stake",
+                before: status.staked ? formatMoney(status.staked) : "$0.00",
+                after: after ? formatDecimal(after) : "—",
+              },
+            ]
+          : undefined
+      }
+      steps={steps}
+      label={parsed.value ? `Stake ${amountLabel}` : "Stake"}
+      resetKey={`${value}|${wallet.address}`}
+      disabled={Boolean(parsed.error) || Boolean(blocker)}
+      disabledReason={parsed.error ?? blocker}
+      describeError={describeStakeError}
+      successTitle={`${amountLabel} staked`}
+      successDescription="Your stake updates here within about a minute, once Assay reads the chain."
+      onSuccess={() => {
+        void queryClient.invalidateQueries({ queryKey: [...PROVIDER_STAKE_KEY] });
+        onStaked?.();
+      }}
+      doneAction={{ label: "Done", onClick: () => onOpenChange(false) }}
+    >
+      <div className="flex flex-col gap-1.5 rounded-lg border border-01 bg-02 px-3.5 py-3">
+        <span className="text-label-13 text-01">From your wallet</span>
+        {wallet.address ? (
+          <span className="text-body-13 text-02">
+            <span className="font-mono text-mono-13 text-01">{short(wallet.address)}</span> on {wallet.chainName}
+            {wallet.proved ? " · your stake wallet" : ""}
+          </span>
+        ) : (
+          <span className="text-body-13 text-02">No wallet for {wallet.chainName} is connected in this browser.</span>
+        )}
+        {!wallet.proved && wallet.candidates.length > 1 ? (
+          <label className="flex flex-col gap-1 pt-1 text-body-xs text-03">
+            Use another connected wallet
+            <select
+              className="rounded-md border border-02 bg-01 px-2.5 py-2 font-mono text-mono-13 text-01"
+              value={wallet.address}
+              onChange={(event) => wallet.pick(event.target.value)}
+            >
+              {wallet.candidates.map((candidate) => (
+                <option key={candidate} value={candidate}>
+                  {short(candidate)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {!wallet.proved ? (
+          <span className="text-body-xs text-03">
+            The first signature is free: it proves this wallet is yours. Penalties and withdrawals then
+            only ever touch this wallet&apos;s stake.
+          </span>
+        ) : null}
+        {wallet.signerState.status === "no-wallet" || wallet.signerState.status === "address-not-connected" ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Wallet aria-hidden="true" />}
+            className="self-start"
+            onClick={() => connectWallet({ walletChainType: "ethereum-and-solana" })}
+          >
+            Connect a wallet
+          </Button>
+        ) : null}
+      </div>
+      <PresetChips
+        label="Amount to stake"
+        presets={presets}
+        value={value}
+        onChange={setValue}
+        error={value ? parsed.error : undefined}
+        hint={
+          status.required
+            ? `Your tools need ${formatMoney(status.required)} in total; you have ${status.staked ? formatMoney(status.staked) : "$0.00"}.`
+            : "You can stake before you list a paid tool."
+        }
+      />
+    </WalletActionSheet>
+  );
 }
