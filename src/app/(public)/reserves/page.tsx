@@ -4,6 +4,7 @@ import { ArrowLeft, Code2, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { StartFreeCta } from "@/components/explorer/start-free";
 import { UnavailablePage } from "@/components/explorer/unavailable-page";
 import { PageState } from "@/components/patterns/page-state";
 import { useChainName } from "@/hooks/useChainName";
@@ -182,7 +183,7 @@ export default function ReservesPage() {
         <UnavailablePage
           eyebrow="Reserves"
           title="Reserve figures are not published on this site"
-          wouldShow="This page would show the account that holds buyers' money and how it compares with what buyers are owed. This site does not publish it; that is not a shortfall. What you can check here:"
+          wouldShow="This page would show the account that holds buyers' money and how it compares with what buyers are owed. This site does not publish these figures. What you can check here:"
           destinations={[
             {
               href: "/how-it-works",
@@ -422,6 +423,7 @@ export default function ReservesPage() {
       </Panel>
 
       <Banner tone="warning" title={CUSTODIAL_NOTE} />
+      <StartFreeCta next="/" className="pt-2" />
     </Shell>
   );
 }

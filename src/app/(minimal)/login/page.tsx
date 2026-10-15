@@ -1,7 +1,7 @@
 "use client";
 
 import { usePrivy } from "@privy-io/react-auth";
-import { ArrowRight, Lock, ScanSearch, Split } from "lucide-react";
+import { ArrowLeft, ArrowRight, Lock, ScanSearch, Split } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { Button } from "@/components/ui/button";
 import { safeNextPath } from "@/libs/login-redirect";
+import { cn } from "@/utils";
 
 import { startReadyTimeout } from "./ready-timeout";
 
@@ -66,9 +67,17 @@ const PROOF_POINTS = [
   },
 ];
 
+/** The logo, as a link back to the public site (How it works). */
 function BrandLockup({ className }: { className?: string }) {
   return (
-    <div className={className}>
+    <Link
+      href="/how-it-works"
+      aria-label="Assay: back to the site"
+      className={cn(
+        "rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
+        className,
+      )}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/images/logo.png"
@@ -77,7 +86,7 @@ function BrandLockup({ className }: { className?: string }) {
         className="h-[22px] w-[22px] shrink-0 rounded-md object-cover"
       />
       <span className="text-[17px] font-medium leading-none tracking-[-0.025em]">Assay</span>
-    </div>
+    </Link>
   );
 }
 
@@ -173,9 +182,18 @@ export default function LoginPage() {
       {/* Form pane. */}
       <section className="flex flex-1 flex-col items-center justify-center bg-01 px-6 py-14 tablet:px-10">
         <div className="flex w-full max-w-[368px] flex-col gap-8">
-          <div className="flex items-center justify-between gap-3">
-            <BrandLockup className="flex items-center gap-2 text-01 tablet:hidden" />
-            <TestnetChip className="ml-auto" />
+          <div className="flex flex-col gap-4">
+            <Link
+              href="/how-it-works"
+              className="inline-flex min-h-10 items-center gap-1.5 self-start text-label-13 text-02 hover:text-01"
+            >
+              <ArrowLeft aria-hidden="true" className="size-3.5" />
+              Back to the site
+            </Link>
+            <div className="flex items-center justify-between gap-3">
+              <BrandLockup className="flex items-center gap-2 text-01 tablet:hidden" />
+              <TestnetChip className="ml-auto" />
+            </div>
           </div>
 
           {expired ? (

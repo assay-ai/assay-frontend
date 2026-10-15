@@ -1,13 +1,15 @@
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 
+import { StartFreeCta } from "@/components/explorer/start-free";
 import { cn } from "@/utils";
 
 /**
  * A public page this deployment does not run (/demo without a demo binding,
  * /reserves without published reserves). Not a dead end: one line on what the
  * page would show, then the places that show the same thing with real data,
- * the first one as the obvious next step.
+ * the first one as the obvious next step, and "Start free" for a visitor who
+ * has seen enough.
  */
 export interface UnavailableDestination {
   href: string;
@@ -52,6 +54,10 @@ export function UnavailablePage({
           </li>
         ))}
       </ul>
+      <div className="flex flex-col gap-2 rounded-xl border border-01 bg-01 p-4 tablet:p-5">
+        <p className="text-label-md text-01">Rather try it yourself?</p>
+        <StartFreeCta next="/" />
+      </div>
     </section>
   );
 }
