@@ -99,7 +99,12 @@ export function SettingsView() {
                   "not shown here yet"
                 )
               }
-              valueClassName={first?.agentAccount ? undefined : "text-03"}
+              /*
+                flex-1 from a zero basis, so a long CAIP-10 account takes the room
+                beside the label and breaks inside it, rather than overflowing
+                its shrink-0 box and drawing over "Wallet" at 390.
+              */
+              valueClassName={first?.agentAccount ? "min-w-0 flex-1" : "text-03"}
             />
             <KeyValueRow label="Time zone" value="UTC" />
             <KeyValueRow
