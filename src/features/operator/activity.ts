@@ -44,17 +44,30 @@ export function isOfKind(entry: Pick<OverrideLogEntry, "code" | "action" | "targ
   return entry.targetType === targetTypeOf(kind);
 }
 
+/*
+  S-13 and A-11 are logged when the call is BUILT (operator.service: "Builds
+  and logs; the case moves when the arbiter's transaction lands"), not when it
+  lands. So their verbs say "prepared", and `pending` says nothing changed on
+  chain from this entry alone (operator review 2026-10-16b, P0-3): a ruling
+  downloaded and never signed must not read as done.
+*/
 const VERBS: Readonly<Record<string, string>> = {
   "A-9": "blocked",
   "A-10": "lifted the block on",
-  "A-11": "blocked on chain",
+  "A-11": "prepared the on-chain block of",
   "A-12": "added",
   "A-13": "changed the access of",
   "A-14": "removed",
   "S-1": "suspended",
-  "S-5": "recorded a compensation for",
+  "S-5": "recorded the pay-back of",
   "S-11": "opened a bulk decision from",
-  "S-13": "ruled on",
+  "S-13": "prepared a ruling on",
+};
+
+/** The caveat of an entry logged when a transaction was built: it takes effect only once signed and landed. */
+const PENDING: Readonly<Record<string, string>> = {
+  "A-11": "file for the arbiter's signature; blocked on chain only once it lands",
+  "S-13": "file for the arbiter's signature; takes effect only once it lands (see the penalty for its state)",
 };
 
 /**
@@ -141,6 +154,8 @@ export interface ActivitySentence {
   reason: string | null;
   approver: string | null;
   href: string | null;
+  /** For an entry logged when a transaction was built: what it does not mean yet. */
+  pending: string | null;
 }
 
 function fallbackTarget(entry: Pick<OverrideLogEntry, "targetType" | "targetId"> & { after?: Record<string, unknown> }): string {
@@ -179,8 +194,8 @@ export function activityHref(entry: Pick<OverrideLogEntry, "targetType" | "targe
 
 function verbOf(entry: OverrideLogEntry): string {
   const ruling = rulingOf(entry);
-  if (ruling === "UPHOLD") return "upheld";
-  if (ruling === "CANCEL") return "cancelled";
+  if (ruling === "UPHOLD") return "prepared an uphold of";
+  if (ruling === "CANCEL") return "prepared a cancel of";
   return VERBS[entry.code] ?? entry.label.toLowerCase();
 }
 
@@ -192,6 +207,7 @@ export function activitySentence(entry: OverrideLogEntry, names: ActivityNames):
     reason: entry.reasonCode ? reasonLabel(entry.reasonCode) : null,
     approver: entry.approverSubject ? names.operator(entry.approverSubject) : null,
     href: activityHref(entry),
+    pending: PENDING[entry.code] ?? null,
   };
 }
 
@@ -199,5 +215,5 @@ export function activitySentence(entry: OverrideLogEntry, names: ActivityNames):
 export function activityText(sentence: ActivitySentence): string {
   return `${sentence.actor} ${sentence.verb} ${sentence.target}${sentence.reason ? ` (${sentence.reason})` : ""}${
     sentence.approver ? `, approved by ${sentence.approver}` : ""
-  }.`;
+  }${sentence.pending ? `: ${sentence.pending}` : ""}.`;
 }

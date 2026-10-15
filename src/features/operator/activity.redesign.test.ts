@@ -28,16 +28,27 @@ const entry = (overrides: Partial<OverrideLogEntry>): OverrideLogEntry => ({
 const names = { operator: (s: string | null | undefined) => (s === "riley@" ? "Riley Brooks" : (s ?? "")), target: () => "Lattice Retrieval's $41.20 penalty" };
 
 describe("arbiter rulings in Activity", () => {
-  it("says upheld or cancelled, never 'ruled on', when the entry or its reason tells", () => {
-    expect(activityText(activitySentence(entry({}), names))).toBe("Riley Brooks upheld Lattice Retrieval's $41.20 penalty (Evidence holds).");
-    expect(activitySentence(entry({ reasonCode: "PLATFORM_DEFECT" }), names).verb).toBe("cancelled");
+  /* Operator review 2026-10-16b, P0-3: S-13 is logged when the call is built, not when it lands. */
+  it("says which ruling was prepared, never that it was upheld or cancelled on chain", () => {
+    expect(activityText(activitySentence(entry({}), names))).toBe(
+      "Riley Brooks prepared an uphold of Lattice Retrieval's $41.20 penalty (Evidence holds): file for the arbiter's signature; takes effect only once it lands (see the penalty for its state).",
+    );
+    expect(activitySentence(entry({ reasonCode: "PLATFORM_DEFECT" }), names).verb).toBe("prepared a cancel of");
     expect(rulingOf(entry({ reasonCode: "OTHER", after: { ruling: "CANCEL" } }))).toBe("CANCEL");
     expect(rulingOf(entry({ reasonCode: "OTHER", after: { functionName: "upholdSlashBatch" } }))).toBe("UPHOLD");
   });
 
-  it("falls back to 'ruled on' only when nothing says which way", () => {
-    expect(activitySentence(entry({ reasonCode: "OTHER" }), names).verb).toBe("ruled on");
+  it("falls back to 'prepared a ruling on' only when nothing says which way", () => {
+    expect(activitySentence(entry({ reasonCode: "OTHER" }), names).verb).toBe("prepared a ruling on");
     expect(rulingOf(entry({ code: "A-9" }))).toBeNull();
+  });
+
+  it("never says an on-chain block happened when only its call was built", () => {
+    const block = entry({ code: "A-11", action: "arbiter.block", targetType: "chain_blocklist", reasonCode: "FRAUD", approverSubject: "jordan@" });
+    const sentence = activitySentence(block, { ...names, target: () => "Wallet 0x9f3C…F36c" });
+    expect(sentence.verb).toBe("prepared the on-chain block of");
+    expect(sentence.pending).toMatch(/blocked on chain only once it lands/);
+    expect(activitySentence(entry({ code: "A-9", reasonCode: "FRAUD" }), names).pending).toBeNull();
   });
 
   it("names a ruling batch by its penalties, not its type", () => {
