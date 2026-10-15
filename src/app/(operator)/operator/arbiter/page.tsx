@@ -530,7 +530,7 @@ function DisputeRow({
           ) : null}
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="ghost" aria-label={`More for ${possessive(providerName)} penalty`}>
+              <Button size="sm" variant="ghost" aria-label={`More for ${possessive(providerName)} penalty`} className="touch-target">
                 <MoreHorizontal aria-hidden="true" />
               </Button>
             </DropdownMenuTrigger>

@@ -295,7 +295,7 @@ function BlocksScreen() {
                       ) : null}
                       <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" aria-label={`More for ${label(block)}`} className="ml-auto tablet:ml-0">
+                          <Button variant="ghost" size="sm" aria-label={`More for ${label(block)}`} className="touch-target ml-auto tablet:ml-0">
                             <MoreHorizontal aria-hidden="true" />
                           </Button>
                         </DropdownMenuTrigger>
