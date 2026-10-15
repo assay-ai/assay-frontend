@@ -146,7 +146,8 @@ function StepDate({
       {step.dateLabel ? <span>{step.dateLabel}</span> : null}
       {step.date ? (
         <time dateTime={step.date} title={utcTitle(step.date)}>
-          {mounted ? formatLocalDateTime(step.date, { alwaysDay }) : utcTitle(step.date)}
+          {/* After a lead-in ("sign before today 19:06") the day word is mid-sentence; alone it starts the line ("Today 10:06"). */}
+          {mounted ? formatLocalDateTime(step.date, { alwaysDay, midSentence: Boolean(step.dateLabel) }) : utcTitle(step.date)}
         </time>
       ) : null}
       {step.countdown && msLeft !== null ? (

@@ -15,6 +15,15 @@ describe("local time", () => {
     expect(formatLocalDateTime("2026-10-16T14:20:00Z", UTC)).toBe("Tomorrow 14:20");
   });
 
+  it("writes the day words in lowercase inside a sentence", () => {
+    const mid = { ...UTC, midSentence: true };
+    expect(formatLocalDateTime("2026-10-15T07:20:00Z", { ...mid, alwaysDay: true })).toBe("today 07:20");
+    expect(formatLocalDateTime("2026-10-14T23:05:00Z", mid)).toBe("yesterday 23:05");
+    expect(formatLocalDateTime("2026-10-16T14:20:00Z", mid)).toBe("tomorrow 14:20");
+    expect(formatLocalDateTime("2026-10-20T14:20:00Z", mid)).toBe("Oct 20, 14:20");
+    expect(formatRelative("2026-10-15T08:05:00Z", mid)).toBe("today 08:05");
+  });
+
   it("adds the date further out, and the year only when it differs", () => {
     expect(formatLocalDateTime("2026-10-20T14:20:00Z", UTC)).toBe("Oct 20, 14:20");
     expect(formatLocalDate("2025-03-02T00:00:00Z", UTC)).toBe("Mar 2, 2025");
