@@ -20,7 +20,9 @@ import {
   debtBannerDescription,
   debtBannerTitle,
   debtRowText,
+  debtsToSign,
   settledToast,
+  settleDebtErrorSentence,
   splitDebts,
 } from "./debt-copy";
 import { settleDebt } from "./settle-debt";
@@ -31,12 +33,15 @@ export const BUYER_DEBTS_KEY = ["escrow", "debts"] as const;
  * The buyer-debt banner, mounted once in the buyer shell, so it is above the
  * console, the funding and escrow screens and the agents page alike.
  *
- * Reads `GET /escrow/debts`. Nothing shows while there is no open debt, or
- * when the read fails (an older backend has no such route). With a debt open,
- * it says in plain words what happened and what it blocks, and "Sign to
- * settle" settles the oldest one the session's wallet owes: the replacement
- * voucher is fetched, checked against the pinned escrow and the debt
- * (`settle-debt.ts`), signed by the payer's wallet, and sent back.
+ * Reads `GET /escrow/debts`. Nothing shows while there is no debt, or when
+ * the read fails (an older backend has no such route). Every debt listed
+ * pauses paid calls, whatever its state: `OPEN` and `WRITTEN_OFF` need a
+ * signature (settling a written-off one still pays the provider), `REPLACING`
+ * is signed and being collected, and paid calls resume once it lands. The
+ * banner says so in plain words, and "Sign to settle" settles the oldest one
+ * the session's wallet still has to sign: the replacement voucher is fetched,
+ * checked against the pinned escrow and the debt (`settle-debt.ts`), signed by
+ * the payer's wallet, and sent back.
  */
 export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: string }) {
   const { ready, authenticated } = usePrivy();
@@ -66,7 +71,9 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
   const { own, others } = splitDebts(query.data);
   const all = [...own, ...others];
   if (all.length === 0) return null;
-  const next = own[0] ?? null;
+  const ownToSign = debtsToSign(own);
+  const next = ownToSign[0] ?? null;
+  const othersToSign = debtsToSign(others);
 
   async function onSettle() {
     if (!next) return;
@@ -94,8 +101,8 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
       if (isUserRejection(e)) {
         setError("Nothing was signed — the wallet prompt was closed or declined.");
       } else if (e instanceof ApiError) {
-        setError(e.message);
-        if (e.code === "PAYMENT_DEBT_NOT_FOUND") {
+        setError(settleDebtErrorSentence(e) ?? e.message);
+        if (e.code === "PAYMENT_DEBT_NOT_FOUND" || e.code === "PAYMENT_DEBT_REPLACEMENT_PENDING") {
           void queryClient.invalidateQueries({ queryKey: BUYER_DEBTS_KEY });
         }
       } else {
@@ -128,11 +135,15 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
               ))}
             </ul>
           ) : null}
-          {others.length > 0 ? (
+          {othersToSign.length > 0 ? (
             <p className="text-body-13 text-02">
-              {others.length === all.length ? "These are" : `${others.length} of them ${others.length === 1 ? "is" : "are"}`}{" "}
+              {othersToSign.length === all.length
+                ? othersToSign.length === 1
+                  ? "It is"
+                  : "These are"
+                : `${othersToSign.length} of them ${othersToSign.length === 1 ? "is" : "are"}`}{" "}
               owed by another wallet of your organization: sign in with that wallet to settle{" "}
-              {others.length === 1 ? "it" : "them"}.
+              {othersToSign.length === 1 ? "it" : "them"}.
             </p>
           ) : null}
           {error ? (
@@ -149,7 +160,7 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
             loading={busy}
             disabled={busy || readOnly}
           >
-            {own.length > 1 ? `Sign to settle (1 of ${own.length})` : "Sign to settle"}
+            {ownToSign.length > 1 ? `Sign to settle (1 of ${ownToSign.length})` : "Sign to settle"}
           </Button>
         ) : null}
       </div>

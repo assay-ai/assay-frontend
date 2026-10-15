@@ -93,7 +93,7 @@ interface DemoCall {
    * `OUTSTANDING` keeps its charge (it is charged once the buyer settles) and
    * is the one debt `GET /escrow/debts` lists — see {@link DEMO_DEBT}.
    */
-  readonly debt?: "OUTSTANDING" | "WRITTEN_OFF";
+  readonly debt?: "OUTSTANDING" | "WRITTEN_OFF" | "VOIDED";
   /** The lapse cause recorded with a debt. */
   readonly debtCause?: string;
 }
@@ -683,7 +683,7 @@ function toolCallRow(call: DemoCall) {
 
 const WRITE_OFF_DAYS = 30;
 
-/** The one open debt, as `GET /escrow/debts` lists it. */
+/** The one open debt, as `GET /escrow/debts` lists it (`state: "OPEN"`). */
 function debtView(call: DemoCall) {
   const lapsedMinutes = Math.max(call.minutesAgo - 10, 0);
   return {
@@ -697,8 +697,11 @@ function debtView(call: DemoCall) {
     providerId: providerOf(call),
     toolId: call.toolId,
     cause: call.debtCause ?? null,
+    // Not signed yet: the banner offers "Sign to settle".
+    state: "OPEN" as const,
     lapsedAt: minutesAgo(lapsedMinutes),
     writeOffAt: minutesAgo(lapsedMinutes - WRITE_OFF_DAYS * 1440),
+    replacedAt: null,
     createdAt: minutesAgo(call.minutesAgo),
   };
 }

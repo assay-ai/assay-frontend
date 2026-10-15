@@ -24,8 +24,10 @@ const debt: BuyerDebt = {
   providerId: "prv_1",
   toolId: "tool_1",
   cause: "DelegateIsRevoked",
+  state: "OPEN",
   lapsedAt: "2026-10-16T00:00:00.000Z",
   writeOffAt: "2026-11-15T00:00:00.000Z",
+  replacedAt: null,
   createdAt: "2026-10-15T23:59:00.000Z",
 };
 
@@ -143,7 +145,7 @@ describe("settleDebt", () => {
     const issued = intent();
     const signTypedData = vi.fn(async () => "0xsig" as const);
     const signer = { ...signerOf(), signTypedData } as unknown as Signer;
-    const submit = vi.fn(async () => ({ intentId: "int_1", status: "REPLACED" as const, seq: "42", remainingDebts: 0 }));
+    const submit = vi.fn(async () => ({ intentId: "int_1", status: "REPLACING" as const, seq: "42", remainingDebts: 0 }));
 
     const result = await settleDebt(debt, signer, {
       createIntent: async () => issued,
