@@ -83,7 +83,6 @@ const NEXT: Readonly<Record<string, string>> = {
   "operator.add": "They can sign in with their wallet now.",
   "operator.change": "Their new access applies from their next request.",
   "slash.suspend": "If the record stands on chain, its cancel still needs the arbiter's signature: see the penalty.",
-  "slash.compensated": "The case is closed as compensated.",
   "slash.sweep": "Matching cases are decided in the background.",
 };
 
