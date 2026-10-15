@@ -192,13 +192,22 @@ function shortEvm(address: string): string {
   return shortAddress("eip155:1", toChecksumAddress(address));
 }
 
-/** Minor units off the wire → money, `unbounded`, or the bare count when the asset is unknown. */
+/**
+ * A limit as Team, its sheets and Approvals write it: whole dollars without
+ * cents ("$0", "$1,000"), cents only when there are some ("$2.50"). One rule
+ * for every authority limit in the console.
+ */
+export function limitMoney(money: Money): string {
+  return formatMoney(money).replace(/\.00$/, "");
+}
+
+/** Minor units off the wire → a limit as `limitMoney` writes it, `unbounded`, or the bare count when the asset is unknown. */
 export function limitText(minor: unknown, asset: ApprovalContext["asset"]): string | null {
   if (minor === null) return "unbounded";
   const amount = text(minor);
   if (amount === null || !/^[0-9]+$/.test(amount)) return null;
-  if (asset) return formatMoney({ amount, asset: asset.asset, decimals: asset.decimals });
-  return amount === "0" ? "$0.00" : `${amount} minor units`;
+  if (asset) return limitMoney({ amount, asset: asset.asset, decimals: asset.decimals });
+  return amount === "0" ? "$0" : `${amount} minor units`;
 }
 
 /** A block's subject in words: `wallet 0x0000…0abc` or `organization 1b2c3d4e…`. */
@@ -471,16 +480,18 @@ function describeLong(
       const wallet = text(body.walletAddress) ?? targetId;
       const subject = text(body.subject) ?? "a new operator";
       const name = text(body.displayName);
+      const fullEmail = /^[^@\s]+@[^@\s]+$/.test(subject);
       const roles = rolesOf(body.roles) ?? [];
       const limit = limitText(body.authorityLimitMinor === undefined ? "0" : body.authorityLimitMinor, context.asset);
       const fields = [
-        { label: "Operator", value: name && name !== subject ? `${name} (${subject})` : subject },
+        // A full email adds something after the name; a bare `noor@` handle is derived from it and does not.
+        { label: "Operator", value: name && name !== subject ? (fullEmail ? `${name} (${subject})` : name) : subject },
         { label: "Wallet", value: toChecksumAddress(wallet) },
         { label: "Roles", value: rolesLong(roles) },
         ...(limit ? [{ label: "Authority limit", value: limit }] : []),
       ];
       return {
-        sentence: `Add operator ${subject} with wallet ${shortEvm(wallet)}, roles ${rolesText(roles)}${limit ? `, limit ${limit}` : ""}${because}.`,
+        sentence: `Add operator ${fullEmail || !name ? subject : name} with wallet ${shortEvm(wallet)}, roles ${rolesText(roles)}${limit ? `, limit ${limit}` : ""}${because}.`,
         target: { label: `Wallet ${toChecksumAddress(wallet)}`, href: "/operator/operators" },
         fields: [...fields, ...commonFields(body), ...extraFields(body)],
       };
@@ -510,7 +521,7 @@ function describeLong(
         if (operator && hasLimit) {
           fields.push({
             label: "Limit now",
-            value: operator.authorityLimit === null ? "unbounded" : formatMoney(operator.authorityLimit),
+            value: operator.authorityLimit === null ? "unbounded" : limitMoney(operator.authorityLimit),
           });
         }
         if (limit) fields.push({ label: "New limit", value: limit });
@@ -725,7 +736,7 @@ export function approvalChanges(
       if (Object.prototype.hasOwnProperty.call(body, "authorityLimitMinor")) {
         changes.push({
           label: "Authority limit",
-          before: operator ? (operator.authorityLimit === null ? "unbounded" : formatMoney(operator.authorityLimit)) : "Unknown",
+          before: operator ? (operator.authorityLimit === null ? "unbounded" : limitMoney(operator.authorityLimit)) : "Unknown",
           after: limitText(body.authorityLimitMinor, context.asset) ?? "Unknown",
         });
       }

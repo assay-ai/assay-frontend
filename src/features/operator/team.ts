@@ -1,7 +1,6 @@
-import type { Money } from "@/interfaces/api";
 import type { OperatorApproval, OperatorDirectoryEntry, OperatorRole } from "@/interfaces/operator";
-import { formatMoney } from "@/utils/money";
 
+import { limitMoney } from "./approvals";
 import { eligibleApprovers } from "./inbox";
 import { actsOnMoney } from "./roles";
 
@@ -11,14 +10,9 @@ import { actsOnMoney } from "./roles";
  * the directory only lists them once they are added).
  */
 
-/**
- * A limit as Team and its sheets write it: whole dollars without cents
- * ("$0", "$1,000"), cents only when there are some ("$2.50"). One rule for
- * the table, the invite rows and the "After: …" line of Change access.
- */
-export function limitMoney(money: Money): string {
-  return formatMoney(money).replace(/\.00$/, "");
-}
+// A limit as Team, its sheets and Approvals write it ("$0", "$1,000", "$2.50").
+// It lives with the approvals' wording, which Team does not import otherwise.
+export { limitMoney };
 
 /** "$1,000", "No limit", or "—" for someone who cannot act on money at all. */
 export function limitCell(row: Pick<OperatorDirectoryEntry, "authorityLimit" | "roles">): string {
