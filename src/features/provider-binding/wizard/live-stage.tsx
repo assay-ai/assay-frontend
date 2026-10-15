@@ -301,9 +301,13 @@ export function LiveStage({
   const testMissing = unmet.find((r) => r.requirement === "TESTER_RUN" || r.requirement === "TESTER_PASSED");
   const payoutMissing = unmet.find((r) => r.requirement === "PAYOUT_ACCOUNT");
   const hasErrors = Object.keys(parsed.errors).length > 0;
+  // An empty price is not marked red before anything was typed; the button says what is missing instead.
+  const priceEmpty = form.price.trim() === "";
+  const onlyPriceMissing = priceEmpty && Object.keys(parsed.errors).every((key) => key === "price");
 
   let blockReason: React.ReactNode = null;
   if (readOnly) blockReason = "Your account is blocked, so publishing is paused.";
+  else if (hasErrors && onlyPriceMissing) blockReason = "Enter a price per call, like 0.10.";
   else if (hasErrors) blockReason = "Fix the fields marked above.";
   else if (testMissing)
     blockReason = (
@@ -374,7 +378,7 @@ export function LiveStage({
               value={form.price}
               disabled={readOnly}
               onChange={(event) => set({ price: event.target.value })}
-              error={parsed.errors.price}
+              error={priceEmpty ? undefined : parsed.errors.price}
               placeholder="0.10"
             />
           ) : null}
