@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import type { AgentReadiness } from "@/features/buyer-money/agent-readiness";
 import { capsToForm } from "@/features/buyer-money/caps";
+import { AGENT_CLI_SOURCE } from "@/features/buyer-money/get-started";
 import { permissionExpiry } from "@/features/buyer-money/permission-expiry";
 import { type DelegateBinding, supportsDelegation } from "@/features/delegation/delegation-form";
 import { ApiError } from "@/libs/ApiClient";
@@ -338,6 +339,7 @@ function AgentCard({
                 To pay, the agent makes its own payment key. Run this on the agent&apos;s machine:
               </p>
               <CodeBlock title="Terminal" code={BIND_COMMAND} />
+              <p className="text-body-xs text-03" data-testid="agent-cli-source">{AGENT_CLI_SOURCE}</p>
               <p className="flex items-center gap-1.5 text-body-xs text-03" aria-live="polite">
                 <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-primary-500 motion-reduce:animate-none" />
                 Waiting for the key. This updates by itself.

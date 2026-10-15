@@ -13,7 +13,7 @@ import { SetupChecklist, type SetupStep } from "@/components/patterns/setup-chec
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import { capsAreSet } from "@/features/buyer-money/caps";
-import { getStartedStates, payStage, type GetStartedFacts } from "@/features/buyer-money/get-started";
+import { AGENT_CLI_SOURCE, getStartedStates, payStage, type GetStartedFacts } from "@/features/buyer-money/get-started";
 import { supportsDelegation } from "@/features/delegation/delegation-form";
 
 import { CapsSheet } from "./caps-sheet";
@@ -255,6 +255,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
           <div className="flex min-w-0 flex-col gap-2.5">
             <p className="text-body-13 text-02">To pay, {agentName} makes its own payment key. Run this on its machine:</p>
             <CodeBlock title="Terminal" code={BIND_COMMAND} />
+            <p className="text-body-xs text-03" data-testid="agent-cli-source">{AGENT_CLI_SOURCE}</p>
             <Listening>Waiting for the key. This updates by itself.</Listening>
             {!facts.capsSet ? (
               <Button type="button" variant="secondary" className="self-start" onClick={() => setSheet("caps")}>
@@ -269,6 +270,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
             </Button>
             <p className="text-body-13 text-02">Then run this on {agentName}&apos;s machine so it gets its payment key:</p>
             <CodeBlock title="Terminal" code={BIND_COMMAND} />
+            <p className="text-body-xs text-03" data-testid="agent-cli-source">{AGENT_CLI_SOURCE}</p>
           </div>
         ) : stage === "caps" && !facts.needsDelegation ? (
           <Button type="button" onClick={() => setSheet("caps")}>
