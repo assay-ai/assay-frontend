@@ -157,7 +157,18 @@ function sentenceCase(kind: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-export function eventLabel(kind: string): string {
+/**
+ * The entry's label. `AUTO_CLOSED` is written by three paths, told apart by
+ * its `detail` (review R3-5): the undisputed sweep (`arbiterUpheld: false`),
+ * the same sweep after the arbiter upheld a disputed record on chain
+ * (`arbiterUpheld: true`), and a record standing undisputed while a dispute
+ * was open (`from`, the status it left).
+ */
+export function eventLabel(kind: string, detail?: Record<string, unknown>): string {
+  if (kind === "AUTO_CLOSED" && detail) {
+    if (detail.arbiterUpheld === true) return EVENT_LABEL.CHAIN_UPHELD;
+    if (typeof detail.from === "string") return "Upheld — an undisputed record stands";
+  }
   return EVENT_LABEL[kind] ?? sentenceCase(kind);
 }
 
