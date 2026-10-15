@@ -1,7 +1,18 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, ChevronDown, Wallet } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  Coins,
+  Info,
+  Lock,
+  MoreHorizontal,
+  PenLine,
+  Undo2,
+  Wallet,
+} from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -14,9 +25,16 @@ import { SignOrExport } from "@/components/patterns/sign-or-export";
 import type { WalletStep } from "@/components/patterns/sign-action";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { refusalsById, refusalsOf } from "@/features/chain-calls/refusals";
 import { connectedSpelling, sendSlashContractCall } from "@/features/chain-calls/send-contract-call";
 import {
@@ -27,23 +45,26 @@ import {
   beneficiaryCheck,
   disputeAmount,
   durationText,
-  mayBlockOnChain,
   mayRule,
+  possessive,
   pruneArbiterSelection,
+  rulingOutcome,
   selectionChain,
   toggleArbiterSelection,
   validateRulingForm,
 } from "@/features/operator/arbiter";
-import { BLOCK_NOTE_MAX } from "@/features/operator/blocks";
-import { DisputeProgress } from "@/features/operator/dispute-line";
-import { sortDisputesByDaysLeft } from "@/features/operator/inbox";
-import { ResultCard } from "@/features/operator/result-card";
-import { useOperatorSession } from "@/features/operator/session-context";
-import { mayBlock } from "@/features/operator/blocks";
+import { BLOCK_NOTE_MAX, mayBlock } from "@/features/operator/blocks";
+import { disputeUrgency, sortDisputesByDaysLeft } from "@/features/operator/inbox";
 import { splitSharesText } from "@/features/operator/penalty-money";
-import { WhyNot } from "@/features/operator/why-not";
+import { ResultCard } from "@/features/operator/result-card";
+import { checkAction } from "@/features/operator/roles";
+import { useOperatorSession } from "@/features/operator/session-context";
+import { OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
 import { useProviderNames } from "@/features/operator/use-operator-lookups";
+import { WhatHappens } from "@/features/operator/what-happens";
+import { WhyNot } from "@/features/operator/why-not";
 import { useConnectedAddresses, useSigner } from "@/hooks/useSigner";
+import type { Money } from "@/interfaces/api";
 import type { ArbiterDispute, ArbiterRuling, ArbiterTerms, ChainStateHealth } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { sameEvmAddress } from "@/libs/chains/evm/contract-call";
@@ -53,18 +74,22 @@ import { createArbiterRulingIntent, getArbiterTerms, getPlatformHealth, listArbi
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
+import { Deadline } from "./_components/deadline";
+
 /**
  * Arbiter, route `/operator/arbiter` (assay-evm D-19).
  *
  * A provider disputes a pending penalty on chain; only the arbiter rules:
  * uphold (the penalty executes) or cancel (the stake is released). Unruled
- * for 30 days, anyone can expire it. Each dispute is a card with its 30-day
- * bar, the evidence in one line and two buttons. The ruling sheet takes a
- * reason chip and a note, then signs in the same step when this browser holds
- * the arbiter's wallet — otherwise it says who signs, downloads the file for
- * their Safe and copies a link for them. Several disputes can be ruled in one
- * transaction; upholding one whose payee check did not pass needs an explicit
- * acknowledgement, per row.
+ * for 30 days, anyone can expire it. The disputes are one flat list, fewest
+ * days left first: who and how much, the deadline, the evidence in one line
+ * and the payee check as a chip. Uphold and Cancel weigh the same in the list
+ * — the list does not lean towards a verdict; the sheet says what each one
+ * does with the money. The sheet takes a reason chip and a note, then signs in
+ * the same step when this browser holds the arbiter's wallet — otherwise it
+ * downloads the file for their Safe and copies a link for them. Several
+ * disputes can be ruled in one transaction; upholding one whose payee check
+ * did not pass needs an explicit acknowledgement.
  *
  * `?focus=<requestId>` or `?case=<proposalId>` scrolls to one dispute.
  *
@@ -79,6 +104,7 @@ function ArbiterScreen() {
   const queryClient = useQueryClient();
   const canRule = mayRule(me.roles);
   const canBlock = mayBlock(me.roles);
+  const blockWhy = checkAction(me, "block").why;
   const providers = useProviderNames();
   const searchParams = useSearchParams();
   const focus = searchParams.get("focus")?.toLowerCase() ?? null;
@@ -148,23 +174,29 @@ function ArbiterScreen() {
     setRowRefusals(new Map());
     setRuling({ kind, ids });
   };
+  const soonest = rows[0] ? disputeUrgency(rows[0], now) : null;
 
   return (
     <>
-      <header className="flex w-full flex-wrap items-end justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <h1 className="text-heading-md text-01">Arbiter</h1>
-          <p className="text-body-13 text-03">Rule on disputed penalties before their 30 days run out. Fewest days left first.</p>
+      <header className="flex w-full flex-wrap items-end justify-between gap-x-4 gap-y-2">
+        <h1 className="text-heading-md text-01">Arbiter</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          {rows.length > 0 && soonest ? (
+            <p className="text-body-13 tabular-nums text-03">
+              {rows.length} dispute{rows.length === 1 ? "" : "s"} · {rows.length === 1 ? "" : "soonest "}
+              {soonest.label.toLowerCase()}
+            </p>
+          ) : null}
+          {chainIds.length > 1 ? (
+            <Select label="Chain" value={chainId} onChange={(e) => setChosenChain(e.target.value)}>
+              {chainIds.map((id) => (
+                <option key={id} value={id}>
+                  {stakeDeploymentFor(id)?.displayName ?? `Chain ${id.split(":")[1] ?? id}`}
+                </option>
+              ))}
+            </Select>
+          ) : null}
         </div>
-        {chainIds.length > 1 ? (
-          <Select label="Chain" value={chainId} onChange={(e) => setChosenChain(e.target.value)}>
-            {chainIds.map((id) => (
-              <option key={id} value={id}>
-                {stakeDeploymentFor(id)?.displayName ?? `Chain ${id.split(":")[1] ?? id}`}
-              </option>
-            ))}
-          </Select>
-        ) : null}
       </header>
 
       <ArbiterStatus
@@ -176,12 +208,7 @@ function ArbiterScreen() {
       />
 
       {!canRule ? (
-        <WhyNot
-          action="rule"
-          me={me}
-          title="You can read the disputes here"
-          ask="Can you rule on the disputed penalties on Arbiter? Some are getting close to their 30 days."
-        />
+        <WhyNot action="rule" me={me} ask="Can you rule on the disputed penalties on Arbiter? Some are getting close to their 30 days." />
       ) : null}
 
       {result ? (
@@ -195,8 +222,8 @@ function ArbiterScreen() {
       ) : null}
 
       {canRule && selected.size > 0 ? (
-        <div className="sticky top-2 z-10 flex w-full flex-wrap items-center gap-2 rounded-xl border border-primary-20 bg-primary-10 px-3.5 py-2.5 shadow-soft">
-          <span className="mr-auto text-label-13 text-01" aria-live="polite">
+        <div className="sticky top-2 z-10 flex w-full flex-wrap items-center gap-2 rounded-xl border border-02 bg-01 px-3.5 py-2.5 shadow-soft">
+          <span className="mr-auto text-label-13 tabular-nums text-01" aria-live="polite">
             {selected.size} selected
           </span>
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
@@ -205,7 +232,7 @@ function ArbiterScreen() {
           <Button size="sm" variant="secondary" onClick={() => openRuling("CANCEL", [...selected])}>
             Cancel {selected.size}
           </Button>
-          <Button size="sm" variant="danger" onClick={() => openRuling("UPHOLD", [...selected])}>
+          <Button size="sm" variant="secondary" onClick={() => openRuling("UPHOLD", [...selected])}>
             Uphold {selected.size}
           </Button>
         </div>
@@ -228,15 +255,16 @@ function ArbiterScreen() {
       ) : rows.length === 0 ? (
         <PageState kind="empty" title="Nothing to rule on" description="No penalty is disputed on chain. A new dispute appears here within a minute of the provider filing it." />
       ) : (
-        <ul className="flex w-full flex-col gap-2.5">
+        <ul className="flex w-full flex-col divide-y divide-01 overflow-hidden rounded-xl border border-01 bg-01">
           {rows.map((row) => (
-            <DisputeCard
+            <DisputeRow
               key={row.requestId}
               row={row}
               providerName={providers.name(row.providerId)}
               now={now}
               canRule={canRule}
               canBlock={canBlock}
+              blockWhy={blockWhy}
               selected={selected.has(row.requestId.toLowerCase())}
               focused={row.requestId.toLowerCase() === focus || (focusCase !== null && row.proposalId === focusCase)}
               refusals={rowRefusals.get(row.requestId.toLowerCase()) ?? []}
@@ -246,29 +274,6 @@ function ArbiterScreen() {
           ))}
         </ul>
       )}
-
-      {mayBlockOnChain(me.roles) ? (
-        <p className="text-body-xs text-03">
-          {canBlock ? (
-            <>
-              To block a wallet on chain, open{" "}
-              <Link href="/operator/blocks" className="text-primary-600 hover:underline">
-                Blocks
-              </Link>
-              , choose &ldquo;Block an account&rdquo;, pick the wallet and turn on &ldquo;Also block on chain&rdquo;. A wallet that is
-              already blocked has &ldquo;Block on chain&rdquo; on its row.
-            </>
-          ) : (
-            <>
-              To block a wallet on chain, open it on{" "}
-              <Link href="/operator/blocks" className="text-primary-600 hover:underline">
-                Blocks
-              </Link>{" "}
-              and use &ldquo;Block on chain&rdquo; on its row.
-            </>
-          )}
-        </p>
-      ) : null}
 
       {canRule ? (
         <RulingSheet
@@ -290,7 +295,7 @@ function ArbiterScreen() {
   );
 }
 
-// ── The status strip ────────────────────────────────────────────────────────
+// ── The status line ─────────────────────────────────────────────────────────
 
 function ArbiterStatus({
   terms,
@@ -319,55 +324,59 @@ function ArbiterStatus({
   if (!terms) return <PageState kind="loading" rows={1} label="Reading the chain's terms" />;
 
   const lagMin = chainState?.lagSeconds != null ? Math.round(chainState.lagSeconds / 60) : null;
-  const parts: { ok: boolean; text: string }[] = [
-    terms.arbiter === null
-      ? { ok: false, text: "No arbiter appointed" }
-      : arbiterConnected
-        ? { ok: true, text: "Arbiter wallet connected" }
-        : { ok: true, text: `Signed by the arbiter key ${shortId(terms.arbiter)}, not connected here: rulings go to it as a file` },
-    chainState === null
-      ? { ok: true, text: "Indexer not reported" }
-      : chainState.stale
-        ? { ok: false, text: lagMin === null ? "Indexer has not caught up" : `Indexer ${lagMin} min behind` }
-        : { ok: true, text: "Indexer up to date" },
-    terms.paused ? { ok: false, text: "Contracts paused" } : { ok: true, text: "Contracts running" },
+  // Only what is wrong is listed next to the signer; "all fine" stays under details.
+  const problems = [
+    ...(terms.arbiter === null ? ["No arbiter is appointed, so nobody can rule."] : []),
+    ...(chainState?.stale ? [lagMin === null ? "The indexer has not caught up." : `The indexer is ${lagMin} min behind.`] : []),
+    ...(terms.paused ? ["The contracts are paused."] : []),
   ];
-  const red = parts.some((p) => !p.ok);
+  const signer =
+    terms.arbiter === null
+      ? null
+      : arbiterConnected
+        ? "The arbiter's wallet is connected here, so rulings are signed in this browser."
+        : (
+          <>
+            Rulings are signed by the arbiter key <span className="font-mono text-mono-12">{shortId(terms.arbiter)}</span>. It isn&rsquo;t
+            connected here, so each ruling downloads as a file to sign.
+          </>
+        );
+  const warn = problems.length > 0;
 
   return (
-    <details className={cn("group w-full rounded-lg border", red ? "border-warning-20 bg-warning-10" : "border-01 bg-01")}>
-      <summary className="flex cursor-pointer list-none items-center gap-2.5 px-3.5 py-2.5 text-body-13">
-        {arbiterConnected ? (
-          <Wallet aria-hidden="true" className="size-4 shrink-0 text-success-500" />
-        ) : red ? (
-          <AlertTriangle aria-hidden="true" className="size-4 shrink-0 text-warning-600" />
+    <details className={cn("group w-full rounded-lg border", warn ? "border-warning-20 bg-warning-10" : "border-01 bg-02")}>
+      <summary className="flex cursor-pointer list-none items-start gap-2 px-3.5 py-2 text-body-13 text-02 [&::-webkit-details-marker]:hidden">
+        {warn ? (
+          <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
+        ) : arbiterConnected ? (
+          <Wallet aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success-500" />
         ) : (
-          <CheckCircle2 aria-hidden="true" className="size-4 shrink-0 text-success-500" />
+          <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-03" />
         )}
-        <span className="min-w-0 flex-1 text-02">
-          {parts.map((part, index) => (
-            <React.Fragment key={part.text}>
-              {index > 0 ? " · " : ""}
-              <span className={part.ok ? undefined : "text-warning-700"}>{part.text}</span>
-            </React.Fragment>
-          ))}
+        <span className="min-w-0 flex-1">
+          {warn ? <span className="text-warning-700">{problems.join(" ")} </span> : null}
+          {signer}
         </span>
-        <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-03 transition-transform group-open:rotate-180" />
+        <span className="flex shrink-0 items-center gap-1 text-label-13 text-03 group-hover:text-01">
+          Details
+          <ChevronDown aria-hidden="true" className="size-4 transition-transform group-open:rotate-180" />
+        </span>
       </summary>
       <dl className="grid w-full grid-cols-1 gap-x-5 gap-y-2.5 border-t border-01 px-3.5 py-3 text-body-13 min-[480px]:grid-cols-2 desktop:grid-cols-3">
         <Fact label="Dispute window">{durationText(terms.slashDelaySeconds)}</Fact>
         <Fact label="Time to rule">30 days from the dispute</Fact>
-        <Fact label="Split of a penalty">{splitSharesText(terms.slashAgentBps)}</Fact>
+        <Fact label="Split of a penalty">{splitSharesText(terms.slashAgentBps).replace("never taken from the provider", "stays with the provider")}</Fact>
         <Fact label="Arbiter">{terms.arbiter ? <CopyChip value={terms.arbiter} label="arbiter address" /> : "None"}</Fact>
         <Fact label="Admin">
           <CopyChip value={terms.admin} label="admin address" />
         </Fact>
         <Fact label="Chain">{stakeDeploymentFor(terms.chainId)?.displayName ?? `Chain ${terms.chainId.split(":")[1] ?? terms.chainId}`}</Fact>
+        <Fact label="Indexer">
+          {chainState === null ? "Not reported" : chainState.stale ? (lagMin === null ? "Not caught up" : `${lagMin} min behind`) : "Up to date"}
+        </Fact>
+        <Fact label="Contracts">{terms.paused ? "Paused" : "Running"}</Fact>
         {chainState ? (
-          <>
-            <Fact label="Blocked on chain">{String(chainState.blockedCount)}</Fact>
-            <Fact label="Last reconciled">{chainState.reconciledAt ? <LocalTime value={chainState.reconciledAt} /> : "never"}</Fact>
-          </>
+          <Fact label="Last reconciled">{chainState.reconciledAt ? <LocalTime value={chainState.reconciledAt} /> : "never"}</Fact>
         ) : null}
       </dl>
     </details>
@@ -385,12 +394,46 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 
 // ── One dispute ─────────────────────────────────────────────────────────────
 
-function DisputeCard({
+/** "✓ Payee checked" / "⚠ Payee not checked" / "⚠ Payee check fails", with the details one click away. */
+function PayeeChip({ row }: { row: ArbiterDispute }) {
+  const check = beneficiaryCheck(row);
+  const ok = check.status === "ok";
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-label-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
+            ok ? "bg-03 text-02 hover:text-01" : check.status === "failed" ? "bg-danger-10 text-danger-700" : "bg-warning-10 text-warning-700",
+          )}
+        >
+          {ok ? <CheckCircle2 aria-hidden="true" className="size-3" /> : <AlertTriangle aria-hidden="true" className="size-3" />}
+          {ok ? "Payee checked" : check.status === "failed" ? "Payee check fails" : "Payee not checked"}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="flex w-[320px] max-w-[calc(100vw-32px)] flex-col gap-2 border border-01 p-3 text-body-13">
+        <DropdownMenuLabel className="p-0 text-label-13 text-01">Who gets paid if it is upheld</DropdownMenuLabel>
+        <p className="text-02">{check.headline}</p>
+        {check.reason ? <p className="text-danger-700">{check.reason}</p> : null}
+        <p className="flex flex-wrap items-center gap-2 text-body-xs text-03">
+          Payee <CopyChip value={row.beneficiary} label="beneficiary" />
+        </p>
+        <p className="flex flex-wrap items-center gap-2 text-body-xs text-03">
+          Request <CopyChip value={row.requestId} label="request id" />
+        </p>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function DisputeRow({
   row,
   providerName,
   now,
   canRule,
   canBlock,
+  blockWhy,
   selected,
   focused,
   refusals,
@@ -402,6 +445,7 @@ function DisputeCard({
   now: number;
   canRule: boolean;
   canBlock: boolean;
+  blockWhy: string | null;
   selected: boolean;
   focused: boolean;
   refusals: readonly string[];
@@ -409,70 +453,93 @@ function DisputeCard({
   onRule: (kind: ArbiterRuling) => void;
 }) {
   const amount = disputeAmount(row.chainId, row.penaltyAmount);
-  const check = beneficiaryCheck(row);
   const evidence = row.beneficiaryEvidence;
   const paid = evidence ? disputeAmount(row.chainId, evidence.paidAmount) : null;
-  const share = evidence ? disputeAmount(row.chainId, evidence.shareAmount) : null;
   const checkboxId = `select-${row.requestId}`;
 
   return (
     <li
       id={`dispute-${row.requestId}`}
       className={cn(
-        "flex w-full min-w-0 flex-col gap-3 rounded-xl border bg-01 p-4",
-        selected ? "border-primary-500" : "border-01",
-        focused && "ring-2 ring-primary-500",
+        "relative flex w-full min-w-0 flex-col gap-2 px-4 py-3",
+        !canRule && "pr-14 tablet:pr-4",
+        selected && "bg-primary-10",
+        focused && "ring-2 ring-inset ring-primary-500",
       )}
     >
-      <div className="flex w-full min-w-0 items-start gap-3">
-        {canRule ? (
-          <input
-            id={checkboxId}
-            type="checkbox"
-            className="mt-1 size-4 shrink-0 accent-primary-600"
-            checked={selected}
-            onChange={onToggle}
-            aria-label={`Select ${providerName}'s penalty for a combined ruling`}
-          />
-        ) : null}
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <p className="text-body-sm text-01">
-            <span className="font-medium">{providerName}</span> · <span className="font-mono">{amount ? formatMoney(amount) : "penalty"}</span>
-            {row.disputedAt ? (
-              <span className="text-03">
-                {" "}
-                · disputed <LocalTime value={row.disputedAt} />
+      <div className="flex w-full min-w-0 flex-col gap-2 tablet:flex-row tablet:items-start tablet:gap-4">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          {canRule ? (
+            <input
+              id={checkboxId}
+              type="checkbox"
+              className="mt-[3px] size-4 shrink-0 accent-primary-600"
+              checked={selected}
+              onChange={onToggle}
+              aria-label={`Select ${possessive(providerName)} penalty for a combined ruling`}
+            />
+          ) : null}
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-sm text-01">
+              <Link href={routes.operatorCase(row.proposalId)} className="min-w-0 font-medium hover:underline">
+                {providerName}
+                <span className="text-03"> · </span>
+                <span className="tabular-nums">{amount ? formatMoney(amount) : "penalty"}</span>
+              </Link>
+              <Deadline kind="dispute" until={row.expiresAt} from={row.disputedAt} now={now} />
+            </p>
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-xs tabular-nums text-03">
+              <span>
+                {evidence ? (
+                  <>
+                    {evidence.failedCalls} failed call{evidence.failedCalls === 1 ? "" : "s"}
+                    {paid ? ` · ${formatMoney(paid)} paid for them` : ""}
+                  </>
+                ) : (
+                  "Payments for the failed calls not matched"
+                )}
+                {" · "}
+                {row.upheldViolations30d === 0 ? "none upheld in 30 days" : `${row.upheldViolations30d} upheld in 30 days`}
               </span>
-            ) : null}
-          </p>
-          <DisputeProgress row={row} now={now} />
+              <PayeeChip row={row} />
+            </p>
+          </div>
+        </div>
+        <div className={cn("flex shrink-0 items-center gap-2", !canRule && "absolute right-3 top-2.5 tablet:static")}>
+          {canRule ? (
+            <>
+              <Button size="sm" variant="secondary" onClick={() => onRule("CANCEL")} className="flex-1 tablet:flex-none" aria-label={`Cancel ${possessive(providerName)} penalty`}>
+                Cancel
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => onRule("UPHOLD")} className="flex-1 tablet:flex-none" aria-label={`Uphold ${possessive(providerName)} penalty`}>
+                Uphold
+              </Button>
+            </>
+          ) : null}
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="ghost" aria-label={`More for ${possessive(providerName)} penalty`}>
+                <MoreHorizontal aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[220px] border border-01">
+              <DropdownMenuItem asChild>
+                <Link href={routes.operatorCase(row.proposalId)}>Open penalty</Link>
+              </DropdownMenuItem>
+              {canBlock ? (
+                <DropdownMenuItem asChild>
+                  <Link href={`/operator/blocks?block=${encodeURIComponent(row.providerId)}&kind=ORGANIZATION`}>Block this provider</Link>
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem disabled className="flex-col items-start gap-0.5">
+                  <span>Block this provider</span>
+                  {blockWhy ? <span className="text-body-xs text-03">{blockWhy}</span> : null}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
-
-      <p className="text-body-13 text-02">
-        {evidence ? (
-          <>
-            {evidence.failedCalls} failed call{evidence.failedCalls === 1 ? "" : "s"}
-            {paid ? `, ${formatMoney(paid)} paid for them` : ""}
-          </>
-        ) : (
-          "Payments for the failed calls not matched"
-        )}
-        {" · "}
-        {row.upheldViolations30d === 0 ? "no penalty upheld in the last 30 days" : `${row.upheldViolations30d} upheld in the last 30 days`}
-        {share ? ` · agents get ${formatMoney(share)} if upheld` : ""}
-      </p>
-
-      <details className={cn("rounded-md border px-3 py-2", check.status === "ok" ? "border-01 bg-02" : check.status === "failed" ? "border-danger-20 bg-danger-10" : "border-warning-20 bg-warning-10")}>
-        <summary className={cn("cursor-pointer select-none text-label-13", check.status === "ok" ? "text-02" : check.status === "failed" ? "text-danger-700" : "text-warning-700")}>
-          Who gets paid: {check.status === "ok" ? "checked" : check.status === "failed" ? "check fails" : "not checked"}
-        </summary>
-        <p className="mt-1.5 text-body-13 text-02">{check.headline}</p>
-        {check.reason ? <p className="mt-1 text-body-13 text-danger-700">{check.reason}</p> : null}
-        <p className="mt-1.5 flex flex-wrap items-center gap-2 text-body-xs text-03">
-          Beneficiary <CopyChip value={row.beneficiary} label="beneficiary" /> · request <CopyChip value={row.requestId} label="request id" />
-        </p>
-      </details>
 
       {refusals.length > 0 ? (
         <div role="alert" className="flex flex-col gap-0.5 rounded-md border border-danger-20 bg-danger-10 px-3 py-2">
@@ -483,34 +550,19 @@ function DisputeCard({
           ))}
         </div>
       ) : null}
-
-      <div className="flex w-full flex-col gap-2 tablet:flex-row tablet:items-center">
-        <div className="flex gap-2 tablet:mr-auto">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href={routes.operatorCase(row.proposalId)}>Open penalty</Link>
-          </Button>
-          {canBlock ? (
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/operator/blocks?block=${encodeURIComponent(row.providerId)}&kind=ORGANIZATION`}>Block this provider</Link>
-            </Button>
-          ) : null}
-        </div>
-        {canRule ? (
-          <>
-            <Button variant="secondary" onClick={() => onRule("CANCEL")} className="w-full tablet:w-auto">
-              Cancel penalty
-            </Button>
-            <Button variant="danger" onClick={() => onRule("UPHOLD")} className="w-full tablet:w-auto">
-              Uphold penalty
-            </Button>
-          </>
-        ) : null}
-      </div>
     </li>
   );
 }
 
-// ── The ruling sheet: reason + note, then sign (or export) in one step ─────
+// ── The ruling sheet: what happens, reason + note, then sign (or export) ───
+
+function sumMoney(rows: readonly ArbiterDispute[]): Money | null {
+  if (!rows[0]) return null;
+  const total = rows.reduce((sum, row) => sum + BigInt(/^\d+$/.test(row.penaltyAmount) ? row.penaltyAmount : "0"), BigInt(0));
+  return disputeAmount(rows[0].chainId, total.toString());
+}
+
+const OUTCOME_ICON = { money: Coins, undo: Undo2, final: Lock, sign: PenLine } as const;
 
 function RulingSheet({
   ruling,
@@ -533,6 +585,7 @@ function RulingSheet({
   const [note, setNote] = React.useState("");
   const [ticket, setTicket] = React.useState("");
   const [acknowledged, setAcknowledged] = React.useState(false);
+  const [footer, setFooter] = React.useState<HTMLDivElement | null>(null);
   const kind = ruling?.kind ?? "CANCEL";
   const chainId = chainForSelection ?? FALLBACK_CHAIN;
   // The arbiter of the chain these penalties are on, not of the chain picked in the header.
@@ -562,7 +615,7 @@ function RulingSheet({
 
   const validated = validateRulingForm({ ruling: kind, reasonCode: reason, note, ticketRef: ticket }, chainForSelection, ruling?.ids ?? []);
   const notReady = unchecked.length > 0 && !acknowledged
-    ? `Confirm the payee warning${unchecked.length === 1 ? "" : "s"} above first.`
+    ? `Confirm the payee warning${unchecked.length === 1 ? "" : "s"} first.`
     : !validated.ok
     ? reason === ""
       ? "Pick a reason first."
@@ -582,16 +635,25 @@ function RulingSheet({
     }
   };
 
-  const total = rows.reduce((sum, row) => sum + BigInt(/^\d+$/.test(row.penaltyAmount) ? row.penaltyAmount : "0"), BigInt(0));
-  const totalMoney = rows[0] ? disputeAmount(rows[0].chainId, total.toString()) : null;
+  const totalMoney = sumMoney(rows);
   const count = rows.length;
+  const single = count === 1 ? rows[0] : undefined;
   const noun = `${count} penalt${count === 1 ? "y" : "ies"}`;
-  const title = kind === "UPHOLD" ? `Uphold ${count === 1 ? "this penalty" : noun}?` : `Cancel ${count === 1 ? "this penalty" : noun}?`;
+  const verb = kind === "UPHOLD" ? "Uphold" : "Cancel";
+  const title = single
+    ? `${verb} ${possessive(providerName(single.providerId))} ${totalMoney ? `${formatMoney(totalMoney)} ` : ""}penalty?`
+    : `${verb} ${noun}${totalMoney ? ` (${formatMoney(totalMoney)})` : ""}?`;
+  const signer = canSign
+    ? "Signed here, with the arbiter wallet connected in this browser"
+    : arbiter
+      ? `Signed by the arbiter key ${shortId(arbiter)}: download the file, sign it in the Safe`
+      : "Signed by the arbiter: download the file for their Safe";
+  const outcome = rulingOutcome({ kind, total: totalMoney, agentBps: terms.data?.slashAgentBps ?? null, count, signer });
 
   const steps: WalletStep[] = [
     {
       id: "rule",
-      label: kind === "UPHOLD" ? `Uphold ${noun}` : `Cancel ${noun}`,
+      label: `${verb} ${noun}`,
       cost: "gas",
       run: async ({ report }) => {
         if (signerState.status !== "ready") throw new Error("Connect the arbiter's wallet to sign here.");
@@ -611,42 +673,35 @@ function RulingSheet({
 
   return (
     <Sheet open={ruling !== null} onOpenChange={(open) => (!open && !signing ? onClose() : undefined)}>
-      <SheetContent showCloseButton={!signing}>
+      <SheetContent showCloseButton={!signing} aria-describedby={undefined}>
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">{title}</SheetTitle>
-          <SheetDescription>
-            {kind === "UPHOLD"
-              ? `${count === 1 ? "The penalty becomes" : "The penalties become"} executable at once: anyone can then execute it and the stake${totalMoney ? ` (${formatMoney(totalMoney)})` : ""} is taken. It cannot be disputed again.`
-              : `The reserved stake${totalMoney ? ` (${formatMoney(totalMoney)})` : ""} goes back to the provider${count === 1 ? "" : "s"}. Nothing is taken.`}
-          </SheetDescription>
         </SheetHeader>
-        <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
-          <ul className="flex w-full flex-col rounded-lg border border-01">
-            {rows.map((row) => {
-              const amount = disputeAmount(row.chainId, row.penaltyAmount);
-              const check = beneficiaryCheck(row);
-              return (
-                <li key={row.requestId} className="flex flex-col gap-0.5 border-b border-01 px-3 py-2 text-body-13 last:border-b-0">
-                  <span className="flex items-center justify-between gap-3">
+        <div className="flex w-full flex-col gap-4 px-[18px] pb-4 pt-3">
+          <WhatHappens lines={outcome.map((line) => ({ icon: OUTCOME_ICON[line.icon], text: line.text }))} />
+          {count > 1 ? (
+            <ul className="flex w-full flex-col rounded-lg border border-01">
+              {rows.map((row) => {
+                const amount = disputeAmount(row.chainId, row.penaltyAmount);
+                return (
+                  <li key={row.requestId} className="flex items-center justify-between gap-3 border-b border-01 px-3 py-2 text-body-13 last:border-b-0">
                     <span className="min-w-0 truncate text-01">{providerName(row.providerId)}</span>
-                    <span className="shrink-0 font-mono text-mono-12 text-02">{amount ? formatMoney(amount) : ""}</span>
-                  </span>
-                  {kind === "UPHOLD" && check.status !== "ok" ? (
-                    <span className={cn("flex items-start gap-1.5 text-body-xs", check.status === "failed" ? "text-danger-700" : "text-warning-700")}>
-                      <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-                      {check.status === "failed" ? "Who gets paid: the check fails." : "Who gets paid: not checked."} {check.reason ?? ""}
-                    </span>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+                    <span className="shrink-0 tabular-nums text-02">{amount ? formatMoney(amount) : ""}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
           {unchecked.length > 0 ? (
             <div className="flex w-full flex-col gap-2 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5">
-              <p className="text-body-13 text-02">
-                Upholding pays the beneficiary of each penalty. For {unchecked.length === 1 ? "one of them" : `${unchecked.length} of them`}{" "}
-                ({unchecked.map((row) => providerName(row.providerId)).join(", ")}) Assay could not confirm the beneficiary paid for the failed
-                calls. Check it on the penalty before upholding, or leave {unchecked.length === 1 ? "it" : "them"} out of this batch.
+              <p className="flex items-start gap-2 text-body-13 text-02">
+                <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
+                <span>
+                  Upholding pays the beneficiary of {single ? "the penalty" : "each penalty"}.{" "}
+                  {single
+                    ? `Assay could not confirm the beneficiary paid for the failed calls${beneficiaryCheck(single).reason ? ` (${beneficiaryCheck(single).reason})` : ""}. Check it on the penalty before upholding.`
+                    : `For ${unchecked.length} of them (${unchecked.map((row) => providerName(row.providerId)).join(", ")}) Assay could not confirm the beneficiary paid for the failed calls. Check them on their penalties, or leave them out of this batch.`}
+                </span>
               </p>
               <Checkbox
                 label={`I checked who gets paid on ${unchecked.length === 1 ? "this penalty" : `these ${unchecked.length} penalties`}`}
@@ -666,15 +721,24 @@ function RulingSheet({
             noteMax={BLOCK_NOTE_MAX}
             notePlaceholder="Why, and on what evidence. It is recorded in Activity."
           />
-          <Field label="Ticket (optional)" value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="INC-123" maxLength={128} />
+          <Field
+            label="Ticket (optional)"
+            value={ticket}
+            onChange={(e) => setTicket(e.target.value)}
+            placeholder="INC-123"
+            maxLength={128}
+          />
           <SignOrExport
             canSign={canSign}
             signerLabel={arbiter ? `the arbiter key ${shortId(arbiter)}` : "the arbiter"}
+            hideSigner
+            actionsContainer={footer}
+            exportVariant={kind === "UPHOLD" ? "danger" : "primary"}
             handoff={{
               link: `/operator/arbiter?focus=${encodeURIComponent(rows[0]?.requestId ?? "")}`,
               message: `Please sign the ${kind === "UPHOLD" ? "uphold" : "cancel"} ruling for ${rows.map((row) => providerName(row.providerId)).join(", ")} with the arbiter key. The file is attached; the disputes are here:`,
             }}
-            signLabel={kind === "UPHOLD" ? `Uphold and sign` : `Cancel and sign`}
+            signLabel={`${verb} and sign`}
             steps={steps}
             disabled={notReady !== null}
             disabledReason={notReady}
@@ -691,10 +755,11 @@ function RulingSheet({
               const call = await prepare();
               return [{ to: call.to, value: call.value, data: call.data }];
             }}
-            afterExport="Downloaded. In the Safe that holds the arbiter key, open Transaction Builder, drop the file in and sign. The penalties move once it lands."
+            afterExport={`Downloaded. In the Safe that holds the arbiter key, open Transaction Builder, drop the file in and sign. ${count === 1 ? "The penalty moves" : "The penalties move"} once it lands.`}
             details={rows.map((row) => ({ label: `${providerName(row.providerId)} request id`, value: row.requestId }))}
           />
         </div>
+        <div ref={setFooter} className={cn(OPERATOR_SHEET_FOOTER, "mt-auto flex w-full flex-col gap-2 px-[18px] pt-3")} />
       </SheetContent>
     </Sheet>
   );
