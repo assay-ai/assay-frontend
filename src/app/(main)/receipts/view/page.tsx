@@ -1,13 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Braces, ChevronRight, Flag } from "lucide-react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { ArrowLeft, Braces } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import { Button } from "@/components/ui/button";
-import { MoneyPair } from "@/components/ui/money-pair";
+import { CopyChip } from "@/components/patterns/copy-chip";
+import { LocalTime } from "@/components/patterns/local-time";
+import { MoneyFlow } from "@/components/patterns/money-flow";
+import { PageState } from "@/components/patterns/page-state";
 import {
   Panel,
   PanelBody,
@@ -23,13 +24,14 @@ import {
   Amount,
   ChargedHeadline,
   CodePane,
-  MetaBar,
   MobileStageList,
   NotChargedHeadline,
   StateCardBlock,
 } from "@/features/g30/receipt-parts";
 import {
-  canContestRejection,
+  isFinalNotCharged,
+  receiptFlow,
+  relevanceReached,
   STATE_CARDS,
   STATE_CARD_ORDER,
   chargedHeadline,
@@ -40,13 +42,16 @@ import {
   toStageChecks,
   type ReceiptState,
 } from "@/features/g30/receipt-state";
-import { ErrorBlock, PendingBlock } from "@/features/g30/ui";
+import { ErrorBlock } from "@/features/g30/ui";
 import type { Receipt } from "@/features/g30/wire";
 import { ApiError } from "@/libs/ApiClient";
 import { getReceipt } from "@/services";
 import { getProviderVerification } from "@/services/providers.service";
 import { getVerdictEvidence, resolveVerdictIdForIntent } from "@/services/verdicts.service";
-import { responseClassText } from "@/features/call-classes/labels";
+import { responseClassLabel } from "@/features/call-classes/labels";
+import { useEntityNames } from "@/hooks/useEntityNames";
+import { plainError } from "@/libs/plain-language";
+import { routes } from "@/libs/routes";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -80,21 +85,6 @@ const OVERRIDABLE: ReceiptState[] = [
   "EXPIRED",
 ];
 
-function short(id: string): string {
-  return id.length > 13 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
-}
-
-/** "2026-08-10 11:42:07.221 UTC", as the design writes it. */
-function utcStamp(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number, w = 2) => String(n).padStart(w, "0");
-  return (
-    `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
-    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}.` +
-    `${pad(d.getUTCMilliseconds(), 3)} UTC`
-  );
-}
-
 /** "11:42:07.221" — the Timeline's own format. */
 function clock(iso: string): string {
   const d = new Date(iso);
@@ -113,7 +103,7 @@ function pretty(value: unknown): string {
 function ReceiptPageContent() {
   const search = useSearchParams();
   const intentId = search.get("id") ?? "";
-  const [showRaw, setShowRaw] = React.useState(false);
+  const names = useEntityNames({ kinds: ["tool", "provider"] });
 
   const receiptQuery = useQuery<Receipt, ApiError>({
     queryKey: ["receipt", intentId],
@@ -174,19 +164,40 @@ function ReceiptPageContent() {
   if (receiptQuery.isPending) {
     return (
       <div className="w-full bg-02 px-4 py-5 tablet:px-7 tablet:py-[22px]">
-        <PendingBlock label="Loading receipt…" />
+        <PageState kind="loading" rows={5} label="Loading the receipt" />
       </div>
     );
   }
 
   if (receiptQuery.error || !receipt) {
     const err = receiptQuery.error;
+    if (err?.code === "AUTH_WALLET_NOT_LINKED") {
+      return (
+        <div className="w-full bg-02 px-4 py-5 tablet:px-7 tablet:py-[22px]">
+          <ErrorBlock code={err.code} message={err.message} />
+        </div>
+      );
+    }
     return (
-      <div className="w-full bg-02 px-4 py-5 tablet:px-7 tablet:py-[22px]">
-        <ErrorBlock
-          code={err?.code ?? "UNKNOWN"}
-          message={err?.message ?? "This receipt could not be read."}
-        />
+      <div className="flex w-full flex-col gap-4 bg-02 px-4 py-5 tablet:px-7 tablet:py-[22px]">
+        <BackButton />
+        {err?.status === 404 || !intentId ? (
+          <PageState
+            kind="empty"
+            title="We could not find this call"
+            description="The link may be incomplete. Your calls are all listed under Calls."
+            action={{ label: "Open Calls", href: routes.calls() }}
+          />
+        ) : (
+          <PageState
+            kind="error"
+            title="This receipt could not be loaded"
+            description={plainError(err?.code ?? "ERR_NETWORK")}
+            onRetry={() => void receiptQuery.refetch()}
+            code={err?.code ?? null}
+            details={err?.message ?? null}
+          />
+        )}
       </div>
     );
   }
@@ -203,105 +214,59 @@ function ReceiptPageContent() {
   const withheld = formatMoney(receipt.withheld, { decimals: 4 });
 
   const stateCard = state === "CHARGED" || state === "NOT_CHARGED" ? null : STATE_CARDS[state];
+  const finalNotCharged = isFinalNotCharged(state, receipt);
 
   /* ------------------------------------------------------------- timeline */
 
-  const releasedLabel = state === "EXPIRED" ? "Expired, hold released" : "Hold released";
+  const releasedLabel = state === "EXPIRED" ? "Did not finish in time, hold released" : "Hold released";
   const events: TimelineEvent[] = [
-    { time: clock(receipt.createdAt), label: "Created", tone: "neutral" },
-    {
-      time: clock(receipt.createdAt),
-      label: "Funds held",
-      meta: listed,
-      tone: "primary",
-    },
+    { time: clock(receipt.createdAt), label: "Call made", tone: "neutral" },
+    { time: clock(receipt.createdAt), label: "Money held", meta: listed, tone: "primary" },
   ];
   if (receipt.evaluatedAt) {
-    events.push({
-      time: clock(receipt.evaluatedAt),
-      label: "Checks evaluated",
-      // Deliberately no meta. The Timeline's meta column is 11.5px mono in a
-      // 400px panel and the design only ever puts a short fact there
-      // ("prv_pricefeed · verified · 175ms"). A verdict SENTENCE here wraps to
-      // eight lines and pushes the settlement row off the panel; the sentence
-      // already has a home in the headline.
-      tone: "neutral",
-    });
+    events.push({ time: clock(receipt.evaluatedAt), label: "Result checked", tone: "neutral" });
   }
   if (receipt.settledAt) {
     const charged = receipt.chargedPrice.amount !== "0";
     events.push({
       time: clock(receipt.settledAt),
-      label: charged ? "Settled" : releasedLabel,
-      meta: charged ? `charged ${paid}` : "you were not charged",
+      label: charged ? "Charged" : releasedLabel,
+      meta: charged ? paid : "not charged",
       tone: charged ? "success" : "teal",
     });
   } else if (receipt.holdReleasedAt) {
-    events.push({
-      time: clock(receipt.holdReleasedAt),
-      label: releasedLabel,
-      meta: "you were not charged",
-      tone: "teal",
-    });
+    events.push({ time: clock(receipt.holdReleasedAt), label: releasedLabel, meta: "not charged", tone: "teal" });
   }
 
-  /* --------------------------------------------------------------- header */
-
-  const notCharged = receipt.chargedPrice.amount === "0";
-  // "Our check was wrong" only makes sense when a check ran and rejected the
-  // result — not on an expired, voided or errored call, where none ran.
-  const checkRejected = canContestRejection(receipt);
-
-  const meta = [
-    { label: "Provider", value: providerQuery.data?.legalName ?? short(receipt.providerId ?? "—") },
+  const providerName = providerQuery.data?.legalName ?? (receipt.providerId ? names.name("provider", receipt.providerId) : "—");
+  const details = [
+    { label: "Provider", value: providerName },
     {
-      label: "Tier",
-      value: providerQuery.data ? (providerQuery.data.verification.verified ? "verified" : "unverified") : "—",
+      label: "Provider identity",
+      value: providerQuery.data ? (providerQuery.data.verification.verified ? "Verified" : "Not verified") : "—",
     },
-    {
-      label: "Spend policy",
-      value:
-        receipt.policy.decisionPolicyVersion != null
-          ? `v${receipt.policy.decisionPolicyVersion}`
-          : "—",
-    },
-    { label: "Sample rate", value: receipt.sampling.display ?? "—" },
-    {
-      label: "Response",
-      value: receipt.classification ? responseClassText(receipt.classification) : "—",
-    },
-    // No settlement signature is on the receipt wire.
-    { label: "Transaction", value: "—", accent: true },
+    { label: "Result type", value: receipt.classification ? responseClassLabel(receipt.classification) : "—" },
+    ...(relevanceReached(receipt) && receipt.sampling.display
+      ? [{ label: "Relevance checked on", value: receipt.sampling.display }]
+      : []),
   ];
 
   return (
     <div className="flex w-full flex-col gap-4 bg-02 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
-      <nav aria-label="Breadcrumb" className="flex items-center gap-2">
-        <Link href="/spend" className="text-body-13 text-03 hover:text-01">
-          Spend
-        </Link>
-        <ChevronRight aria-hidden="true" className="size-3 text-03" />
-        <span className="font-mono text-mono-12 text-03">{short(receipt.toolId)}</span>
-        <ChevronRight aria-hidden="true" className="size-3 text-03" />
-        <span className="text-body-13 text-01">Receipt {short(receipt.intentId)}</span>
-      </nav>
+      <BackButton />
 
-      <div className="flex w-full flex-col gap-4 tablet:flex-row tablet:items-center tablet:justify-between">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-heading-md text-01">Receipt {short(receipt.intentId)}</h1>
-          <p className="truncate font-mono text-mono-12 text-03">
-            {short(receipt.toolId)} · {utcStamp(receipt.createdAt)} · agent prod · {receipt.intentId}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2.5">
-          <Button variant="secondary" onClick={() => setShowRaw((v) => !v)}>
-            <Braces aria-hidden="true" />
-            Raw JSON
-          </Button>
-        </div>
+      <div className="flex min-w-0 flex-col gap-1">
+        <h1 className="break-all font-mono text-heading-md text-01">{names.name("tool", receipt.toolId)}</h1>
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-13 text-03">
+          <LocalTime value={receipt.createdAt} />
+          <span aria-hidden="true">·</span>
+          <span>{providerName}</span>
+          <span aria-hidden="true">·</span>
+          <CopyChip value={receipt.intentId} label="Call id" />
+        </p>
       </div>
 
-      {/* One headline per state — never one "error" for all of them. */}
+      {/* 1. One verdict banner per state — never one "error" for all of them. */}
       {state === "CHARGED" ? (
         <ChargedHeadline
           headline={chargedHeadline(receipt)}
@@ -330,198 +295,137 @@ function ReceiptPageContent() {
           <div className="min-w-0 flex-1">
             <StateCardBlock card={stateCard} receipt={receipt} current />
           </div>
-          {/* Same three figures, same layout, as the charged and not-charged
-              headlines: a row that shares the width at 390 instead of three
-              fixed 26px figures that push the page sideways. */}
           <div className="flex w-full items-end gap-3 tablet:w-auto tablet:shrink-0 tablet:gap-8">
-            <Amount
-              label="Listed price"
-              value={listed}
-              align="start"
-              className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
-            />
-            <Amount
-              label="You paid"
-              value={paid}
-              align="start"
-              className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
-            />
-            <Amount
-              label="Not charged"
-              value={withheld}
-              teal
-              align="start"
-              className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
-            />
+            <Amount label="Listed price" value={listed} align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
+            <Amount label="You paid" value={paid} align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
+            <Amount label="Not charged" value={withheld} teal align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
           </div>
         </section>
       ) : null}
 
-      {showRaw ? (
-        <pre className="w-full overflow-x-auto rounded-xl border border-01 bg-01 p-4 font-mono text-mono-12 text-01">
-          {pretty(receipt)}
-        </pre>
-      ) : null}
+      {/* 2. Where the money went. */}
+      <section className="flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 px-5 py-4">
+        <h2 className="text-label-13 text-02">Where the money went</h2>
+        <MoneyFlow nodes={receiptFlow(receipt, state)} />
+      </section>
 
+      {/* 3. The checks and the timeline. */}
       <div className="flex w-full flex-col gap-4 desktop:flex-row">
-        <div className="flex min-w-0 flex-1 flex-col gap-4">
-          <Panel>
-            <PanelHeader>
-              <PanelTitles>
-                <PanelTitle>Checks run on this call</PanelTitle>
-                <PanelDescription>
-                  {[
-                    receipt.policy.decisionPolicyId
-                      ? `policy ${receipt.policy.decisionPolicyId} v${receipt.policy.decisionPolicyVersion ?? 0}`
-                      : null,
-                    receipt.verdict?.score != null ? `score ${receipt.verdict.score}` : null,
-                    "checks stop at the first failure",
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </PanelDescription>
-              </PanelTitles>
-            </PanelHeader>
-            <PanelBody className="gap-3.5 px-5 pb-5 pt-2">
-              {/* Two layouts, not one responsive one — see MobileStageList. */}
-              <div className="hidden tablet:block">
-                <StageList checks={checks} />
-              </div>
-              <div className="tablet:hidden">
-                <MobileStageList checks={checks} />
-              </div>
-              {/*
-                The design's sentence, with ONE substitution: the design writes
-                "At $0.0010 a call" because $0.0010 is what its example call
-                cost. Quoting a price this call did not have, on a screen whose
-                whole job is to say what you were charged, would be a lie in the
-                one place it matters most — so the number is this call's listed
-                price and every other word is the design's.
-              */}
+        <Panel className="min-w-0 flex-1">
+          <PanelHeader>
+            <PanelTitles>
+              <PanelTitle>Checks run on this call</PanelTitle>
+              <PanelDescription>Checks stop at the first failure</PanelDescription>
+            </PanelTitles>
+          </PanelHeader>
+          <PanelBody className="gap-3.5 px-5 pb-5 pt-2">
+            <div className="hidden tablet:block">
+              <StageList checks={checks} />
+            </div>
+            <div className="tablet:hidden">
+              <MobileStageList checks={checks} />
+            </div>
+            {relevanceReached(receipt) ? (
               <SamplingExplainer
                 rate={receipt.sampling.display ?? "This tool publishes no sample rate."}
                 {...samplingExplainerCopy(receipt, listed)}
               />
-            </PanelBody>
-          </Panel>
+            ) : null}
+          </PanelBody>
+        </Panel>
 
-          <Panel>
-            <PanelHeader>
-              <PanelTitles>
-                <PanelTitle>Request and response</PanelTitle>
-                <PanelDescription>
-                  the bodies exactly as the checks saw them
-                </PanelDescription>
-              </PanelTitles>
-            </PanelHeader>
-            <PanelBody className="p-5">
-              {evidenceQuery.error ? (
-                <p className="text-body-13 text-03">
-                  The evidence pack could not be read, so the bodies cannot be shown.
-                </p>
-              ) : evidenceQuery.isPending ? (
-                <p className="text-body-13 text-03">Loading the evidence pack…</p>
-              ) : evidenceQuery.data ? (
-                <div className="flex w-full flex-col gap-3.5 tablet:flex-row">
-                  <CodePane label="REQUEST" body={pretty(evidenceQuery.data.request)} />
-                  <CodePane label="RESPONSE" body={pretty(evidenceQuery.data.response)} />
-                </div>
-              ) : (
-                <p className="text-body-13 text-03">
-                  No evidence pack is retained for this call, so the bodies cannot be shown.
-                </p>
-              )}
-            </PanelBody>
-          </Panel>
-        </div>
-
-        <div className="flex w-full flex-col gap-4 desktop:w-[400px] desktop:shrink-0">
-          <Panel>
-            <PanelHeader>
-              <PanelTitles>
-                <PanelTitle>What this call cost</PanelTitle>
-                <PanelDescription>listed and charged, always both</PanelDescription>
-              </PanelTitles>
-            </PanelHeader>
-            <PanelBody className="px-5 pb-4 pt-1.5">
-              <MoneyPair
-                className="border-transparent bg-transparent p-0 shadow-none"
-                listedValue={listed}
-                paidValue={paid}
-                notChargedValue={withheld}
-              />
-            </PanelBody>
-          </Panel>
-
-          <Panel>
-            <PanelHeader>
-              <PanelTitles>
-                <PanelTitle>Timeline</PanelTitle>
-                <PanelDescription>UTC, to the millisecond</PanelDescription>
-              </PanelTitles>
-            </PanelHeader>
-            <PanelBody className="px-5 pb-3.5 pt-1">
-              <Timeline events={events} />
-            </PanelBody>
-          </Panel>
-
-          {checkRejected ? (
-            <div className="flex w-full flex-col gap-2.5 rounded-xl border border-01 bg-01 p-[18px]">
-              <Button variant="secondary" className="w-full justify-center">
-                <Flag aria-hidden="true" />
-                This result was actually fine
-              </Button>
-              <p className="text-body-13 text-02">
-                You keep the money either way. This tells us our check was wrong, so we can fix
-                it.
-              </p>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      <MetaBar items={meta} />
-
-      {/* the not-charged receipt screen's states panel. The design draws it on the not-charged receipt. */}
-      {notCharged ? (
-        <Panel>
+        <Panel className="w-full desktop:w-[400px] desktop:shrink-0">
           <PanelHeader>
             <PanelTitles>
-              <PanelTitle>Other outcomes a call can have</PanelTitle>
-              <PanelDescription>
-                what each outcome means for your money
-              </PanelDescription>
+              <PanelTitle>Timeline</PanelTitle>
+              <PanelDescription>UTC</PanelDescription>
             </PanelTitles>
           </PanelHeader>
-          <PanelBody className="flex-row flex-wrap gap-3 p-5">
-            {STATE_CARD_ORDER.map((key) => (
+          <PanelBody className="px-5 pb-3.5 pt-1">
+            <Timeline events={events} />
+          </PanelBody>
+        </Panel>
+      </div>
+
+      <dl className="grid w-full grid-cols-1 gap-4 rounded-xl border border-01 bg-01 px-5 py-4 tablet:grid-cols-4">
+        {details.map((item) => (
+          <div key={item.label} className="flex min-w-0 flex-col gap-[3px]">
+            <dt className="text-body-xs text-03">{item.label}</dt>
+            <dd className="truncate text-body-13 text-01">{item.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {/* Only on a call that was not charged: what the other outcomes mean. */}
+      {finalNotCharged ? (
+        <details className="group rounded-xl border border-01 bg-01">
+          <summary className="cursor-pointer select-none px-5 py-3.5 text-label-13 text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500">
+            Other ways a call can end without a charge
+          </summary>
+          <div className="flex flex-row flex-wrap gap-3 px-5 pb-5">
+            {STATE_CARD_ORDER.filter((key) => key !== "CHECKING" && key !== "EMPTY_CONFIRMED").map((key) => (
               <StateCardBlock
                 key={key}
                 card={STATE_CARDS[key]}
                 receipt={receipt}
                 current={state === key}
-                // A real basis, so the five cards wrap two-up at 390 instead of
-                // squeezing into one row.
-                className="basis-[140px]"
+                className="basis-[160px]"
               />
             ))}
-          </PanelBody>
-        </Panel>
+          </div>
+        </details>
       ) : null}
 
-      {!notCharged ? (
-        <section className="flex w-full flex-col gap-5 rounded-lg border border-01 bg-01 px-5 py-4 tablet:flex-row tablet:items-center">
-          <p className="min-w-0 flex-1 text-body-13 text-02">
-            This does not change the charge. It tells us when our checks may have judged a call
-            wrongly, so we can fix them.
-          </p>
-          <Button variant="secondary" className="w-full shrink-0 justify-center tablet:w-auto">
-            <Flag aria-hidden="true" />
-            Report this verdict as wrong
-          </Button>
-        </section>
-      ) : null}
+      {/* 4. Request and response, collapsed. */}
+      <details className="group rounded-xl border border-01 bg-01">
+        <summary className="cursor-pointer select-none px-5 py-3.5 text-label-13 text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500">
+          Request and response, exactly as the checks saw them
+        </summary>
+        <div className="px-5 pb-5">
+          {evidenceQuery.error ? (
+            <p className="text-body-13 text-03">The request and response could not be loaded.</p>
+          ) : evidenceQuery.isPending ? (
+            <PageState kind="loading" rows={2} label="Loading the request and response" />
+          ) : evidenceQuery.data ? (
+            <div className="flex w-full flex-col gap-3.5 tablet:flex-row">
+              <CodePane label="REQUEST" body={pretty(evidenceQuery.data.request)} />
+              <CodePane label="RESPONSE" body={pretty(evidenceQuery.data.response)} />
+            </div>
+          ) : (
+            <p className="text-body-13 text-03">The request and response are not kept for this call.</p>
+          )}
+        </div>
+      </details>
+
+      {/* 5. Raw JSON, collapsed. */}
+      <details className="group rounded-xl border border-01 bg-01">
+        <summary className="flex cursor-pointer select-none items-center gap-2 px-5 py-3.5 text-label-13 text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500">
+          <Braces aria-hidden="true" className="size-3.5" />
+          Raw data
+        </summary>
+        <pre className="mx-5 mb-5 overflow-x-auto rounded-lg border border-01 bg-02 p-4 font-mono text-mono-12 text-01">
+          {pretty(receipt)}
+        </pre>
+      </details>
     </div>
+  );
+}
+
+/** Back to wherever the person came from (Overview, Calls, Spend); Calls when opened directly. */
+function BackButton() {
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (window.history.length > 1) router.back();
+        else router.push(routes.calls());
+      }}
+      className="inline-flex items-center gap-1.5 self-start rounded-md text-label-13 text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+    >
+      <ArrowLeft aria-hidden="true" className="size-3.5" />
+      Back
+    </button>
   );
 }
 

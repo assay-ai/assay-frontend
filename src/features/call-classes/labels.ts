@@ -31,6 +31,11 @@ const RESPONSE_CLASS_LABEL: Record<string, string> = {
   REQUEST_ERROR: "Request error",
 };
 
+/** `Data returned`: the plain name alone, for a buyer's receipt. */
+export function responseClassLabel(name: string): string {
+  return RESPONSE_CLASS_LABEL[name] ?? name.charAt(0) + name.slice(1).toLowerCase().replace(/_/g, " ");
+}
+
 /** `Data returned · DATA_RESULT`: the name, then the API's own value as the code. */
 export function responseClassText(name: string): string {
   const label = RESPONSE_CLASS_LABEL[name];
