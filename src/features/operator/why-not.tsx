@@ -76,7 +76,7 @@ export function AskButton({ label, message, link, look = "button" }: { label: st
       <button
         type="button"
         onClick={() => void copy()}
-        className="inline-flex items-center gap-1 rounded-sm text-label-13 text-primary-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        className="hit-area inline-flex items-center gap-1 rounded-sm text-label-13 text-primary-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
         {copied ? <Check aria-hidden="true" className="size-3.5 text-success-500" /> : <Link2 aria-hidden="true" className="size-3.5" />}
         {copied ? "Message and link copied" : label}
@@ -87,7 +87,7 @@ export function AskButton({ label, message, link, look = "button" }: { label: st
     <button
       type="button"
       onClick={() => void copy()}
-      className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-md border border-02 bg-01 px-2.5 py-1 text-label-xs text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+      className="touch-target inline-flex shrink-0 items-center gap-1.5 self-start rounded-md border border-02 bg-01 px-2.5 py-1 text-label-xs text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
     >
       {copied ? <Check aria-hidden="true" className="size-3.5 text-success-500" /> : <Link2 aria-hidden="true" className="size-3.5" />}
       {copied ? "Message and link copied" : label}

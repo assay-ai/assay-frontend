@@ -228,7 +228,7 @@ function ActivityScreen() {
       {targetId ? (
         <p className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-primary-20 bg-primary-10 px-3.5 py-2 text-body-13 text-01">
           Showing the history of one record.
-          <button type="button" onClick={() => setParams({ targetId: null })} className="text-label-13 text-primary-600 hover:underline">
+          <button type="button" onClick={() => setParams({ targetId: null })} className="hit-area text-label-13 text-primary-600 hover:underline">
             Show everything
           </button>
         </p>
@@ -285,7 +285,7 @@ function ActivityScreen() {
                         <p className="min-w-0 flex-1 text-body-13 text-01 [overflow-wrap:anywhere]">
                           <span className="font-medium">{sentence.actor}</span> {sentence.verb}{" "}
                           {sentence.href ? (
-                            <Link href={sentence.href} className="text-primary-700 hover:underline">
+                            <Link href={sentence.href} className="hit-area text-primary-700 hover:underline">
                               {sentence.target}
                             </Link>
                           ) : (

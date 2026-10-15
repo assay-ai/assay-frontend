@@ -182,7 +182,7 @@ function ExplorerLink({ href, label, className }: { href: string; label: string;
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={cn("inline-flex items-center gap-1 text-label-xs underline-offset-2 hover:underline", className)}
+      className={cn("hit-area inline-flex items-center gap-1 text-label-xs underline-offset-2 hover:underline", className)}
     >
       {label}
       <ExternalLink aria-hidden="true" className="size-3" />

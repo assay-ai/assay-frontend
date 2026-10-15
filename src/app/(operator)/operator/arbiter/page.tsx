@@ -434,7 +434,7 @@ function PayeeChip({ row }: { row: ArbiterDispute }) {
         <button
           type="button"
           className={cn(
-            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-label-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
+            "hit-area inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-label-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
             ok ? "bg-03 text-02 hover:text-01" : check.status === "failed" ? "bg-danger-10 text-danger-700" : "bg-warning-10 text-warning-700",
           )}
         >
@@ -517,7 +517,7 @@ function DisputeRow({
           ) : null}
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-sm text-01">
-              <Link href={routes.operatorCase(row.proposalId)} className="min-w-0 font-medium hover:underline">
+              <Link href={routes.operatorCase(row.proposalId)} className="hit-area min-w-0 font-medium hover:underline">
                 {providerName}
                 <span className="text-03"> · </span>
                 <span className="tabular-nums">{amount ? formatMoney(amount) : "penalty"}</span>
