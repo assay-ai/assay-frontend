@@ -1214,7 +1214,14 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
     match: "/operator/approvals",
     body: (_path, query) => {
       const status = typeof query.status === "string" ? query.status : null;
-      const rows = approvalsNow();
+      // History reads newest decision first, so a request decided in this demo tops it.
+      // Pending rows keep their order ahead of the decided ones.
+      const decidedAt = (a: OperatorApproval) => (a.status === "PENDING" ? null : Date.parse(a.decidedAt ?? a.expiresAt));
+      const rows = approvalsNow().sort((a, b) => {
+        const [x, y] = [decidedAt(a), decidedAt(b)];
+        if (x === null || y === null) return (x === null ? 0 : 1) - (y === null ? 0 : 1);
+        return y - x;
+      });
       return page(status ? rows.filter((a) => a.status === status) : rows);
     },
   },
