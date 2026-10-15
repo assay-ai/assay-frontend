@@ -130,14 +130,17 @@ function isCredited(row: CallRow): boolean {
   // PROVIDER_FORFEITED is SETTLED too, but the provider forfeited the voucher:
   // nothing was collected, credited or taken, so it is not earned. Nor is
   // PAID_BUYER_DEBT (the buyer has not paid it yet) or PAID_UNCOLLECTED (the
-  // buyer never did): the platform never pays a provider in their place.
+  // buyer never did): the platform never pays a provider in their place. A
+  // SETTLED PAID_UNCREDITED row is a buyer debt voided by a late failing
+  // verdict: nobody was credited (its amounts are zero).
   return (
     row.status === "SETTLED" &&
     row.classification !== "PAID_AWAITING_REDEMPTION" &&
     row.classification !== "PENDING" &&
     row.classification !== "PROVIDER_FORFEITED" &&
     row.classification !== "PAID_BUYER_DEBT" &&
-    row.classification !== "PAID_UNCOLLECTED"
+    row.classification !== "PAID_UNCOLLECTED" &&
+    row.classification !== "PAID_UNCREDITED"
   );
 }
 

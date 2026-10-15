@@ -1,4 +1,4 @@
-import type { CursorPage, ListQuery, Money, WireVerdict } from "@/interfaces";
+import type { CallDebt, CursorPage, ListQuery, Money, WireVerdict } from "@/interfaces";
 
 import { api } from "./api";
 
@@ -21,9 +21,12 @@ export interface ToolCall {
   /**
    * Buyer debt: `OUTSTANDING` — the payment could not be collected, the price
    * stays held and the payer must sign a replacement voucher before paid calls
-   * work again; `WRITTEN_OFF` — never settled, not charged, provider not paid.
+   * work again (also while a signed replacement is being collected);
+   * `WRITTEN_OFF` — never settled, not charged, provider not paid, and paid
+   * calls stay refused until it is signed; `VOIDED` — the call failed
+   * verification after it had become debt: not charged, provider not paid.
    */
-  debt?: "OUTSTANDING" | "WRITTEN_OFF" | null;
+  debt?: CallDebt | null;
   /** Wider than the OpenAPI enum, and nullable. See @/utils/verdict. */
   verdict: WireVerdict;
   createdAt: string;

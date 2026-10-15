@@ -129,6 +129,7 @@ describe("deriveReceiptState — collection", () => {
     const zero = { chargedPrice: usd("0"), withheld: usd("0") };
     expect(deriveReceiptState(settledReceipt({ ...zero, forfeited: true }))).toBe("FORFEITED");
     expect(deriveReceiptState(settledReceipt({ ...zero, debt: "WRITTEN_OFF" }))).toBe("DEBT_WRITTEN_OFF");
+    expect(deriveReceiptState(settledReceipt({ ...zero, debt: "VOIDED" }))).toBe("DEBT_VOIDED");
   });
 
   it("has a card for every collection state", () => {
@@ -137,5 +138,8 @@ describe("deriveReceiptState — collection", () => {
     }
     expect(STATE_CARDS.DEBT_OUTSTANDING.sentence).toMatch(/paid calls are paused/);
     expect(STATE_CARDS.DEBT_WRITTEN_OFF.sentence).toMatch(/provider was not paid/);
+    expect(STATE_CARDS.DEBT_WRITTEN_OFF.sentence).toMatch(/Paid calls stay paused until you settle it/);
+    expect(STATE_CARDS.DEBT_VOIDED.sentence).toMatch(/You were not charged.*provider was not paid/);
+    expect(COLLECTION_STATES.has("DEBT_VOIDED")).toBe(true);
   });
 });

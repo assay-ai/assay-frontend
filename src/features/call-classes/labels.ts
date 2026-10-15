@@ -49,6 +49,7 @@ const RECEIPT_STATE_LABEL: Record<string, string> = {
   EXPIRED: "Expired",
   DEBT_OUTSTANDING: "Payment not collected yet",
   DEBT_WRITTEN_OFF: "Written off, not charged",
+  DEBT_VOIDED: "Voided, not charged",
   FORFEITED: "Forfeited by the provider",
 };
 
@@ -84,10 +85,12 @@ const FORFEIT_CAUSE_LABEL: Record<string, string> = {
 
 /**
  * What a PAID_BUYER_DEBT row carries in `reason` (`buyer_debt:` and the lapse
- * cause) and a PAID_UNCOLLECTED row (`uncollected:` and the cause, or
- * `uncollected:legacy_platform_absorbed:` and the old absorb reason).
+ * cause), a PAID_UNCOLLECTED row (`uncollected:` and the cause, or
+ * `uncollected:legacy_platform_absorbed:` and the old absorb reason), and a
+ * voided debt's PAID_UNCREDITED row (`voided:` and the late verdict).
  */
 const BUYER_DEBT_PREFIX = "buyer_debt:";
+const VOIDED_PREFIX = "voided:";
 const UNCOLLECTED_PREFIX = "uncollected:";
 const LEGACY_ABSORBED_PREFIX = "legacy_platform_absorbed:";
 
@@ -103,6 +106,9 @@ export function reasonLabel(reason: string): string {
       return "Never collected from the buyer (an older call) — not paid, and nobody owes it";
     }
     return `Never collected: the buyer did not settle it in time (${debtCauseText(rest)}) — not paid, and nobody owes it`;
+  }
+  if (reason.startsWith(VOIDED_PREFIX)) {
+    return "The buyer's payment had lapsed, and the call then did not pass our checks — voided: not paid, and nobody owes it";
   }
   if (reason.startsWith(FORFEIT_PREFIX)) {
     const cause = reason.slice(FORFEIT_PREFIX.length).trim();

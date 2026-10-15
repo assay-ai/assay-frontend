@@ -81,6 +81,7 @@ const OVERRIDABLE: ReceiptState[] = [
   "EXPIRED",
   "DEBT_OUTSTANDING",
   "DEBT_WRITTEN_OFF",
+  "DEBT_VOIDED",
   "FORFEITED",
 ];
 

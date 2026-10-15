@@ -101,6 +101,37 @@ describe("PAID_UNCOLLECTED", () => {
   });
 });
 
+// A buyer debt voided by a late FAIL / REFUND / VOID verdict: still SETTLED,
+// but PAID_UNCREDITED with zero amounts — not earned, nothing withheld, and
+// its listed price is not gross revenue.
+describe("a voided buyer debt", () => {
+  const rows = [
+    row({ callId: "a" }),
+    row({
+      callId: "b",
+      classification: "PAID_UNCREDITED",
+      reason: "voided:FAIL",
+      providerAmount: "0",
+      platformFee: "0",
+    }),
+  ];
+
+  it("is neither earned nor gross, and withholds nothing", () => {
+    const table = foldClasses(rows);
+    const uncredited = table.buckets.find((b) => b.className === "PAID_UNCREDITED");
+    expect(uncredited?.calls).toBe(1);
+    expect(uncredited?.credited?.amount ?? "0").toBe("0");
+    expect(uncredited?.withheld?.amount ?? "0").toBe("0");
+    expect(table.totalCredited?.amount).toBe("900000");
+    expect(table.totalGross?.amount).toBe("1000000");
+    expect(table.totalWithheld?.amount ?? "0").toBe("0");
+  });
+
+  it("does not read as a 0% take rate", () => {
+    expect(observedTakeRate(rows).summary).toBe("observed 10%");
+  });
+});
+
 // Review 2026-10-15, M2: a voucher the provider forfeited (stake below the
 // minimum, or a block) is SETTLED but nobody was charged, credited or paid a fee.
 describe("PROVIDER_FORFEITED", () => {

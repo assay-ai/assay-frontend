@@ -42,4 +42,19 @@ describe("isCredited", () => {
     expect(isCredited(row({ classification: "PAID_BUYER_DEBT" }))).toBe(false);
     expect(isCredited(row({ classification: "PAID_UNCOLLECTED", providerAmount: money("0") }))).toBe(false);
   });
+
+  // A buyer debt voided by a late failing verdict stays SETTLED, but the export
+  // classes it PAID_UNCREDITED with zero amounts: nobody was credited.
+  it("does not count a voided buyer debt as earned", () => {
+    expect(
+      isCredited(
+        row({
+          classification: "PAID_UNCREDITED",
+          reason: "voided:FAIL",
+          providerAmount: money("0"),
+          platformFee: money("0"),
+        }),
+      ),
+    ).toBe(false);
+  });
 });

@@ -108,6 +108,7 @@ export type ReceiptState =
   | "EXPIRED"
   | "DEBT_OUTSTANDING"
   | "DEBT_WRITTEN_OFF"
+  | "DEBT_VOIDED"
   | "FORFEITED";
 
 /** PaymentIntentStatus values that mean the call has not finished. */
@@ -120,6 +121,7 @@ export function deriveReceiptState(receipt: Receipt): ReceiptState {
   if (receipt.status === "SETTLED") {
     if (receipt.debt === "OUTSTANDING") return "DEBT_OUTSTANDING";
     if (receipt.debt === "WRITTEN_OFF") return "DEBT_WRITTEN_OFF";
+    if (receipt.debt === "VOIDED") return "DEBT_VOIDED";
     if (receipt.forfeited) return "FORFEITED";
   }
   // An expired intent never completed, whatever classification a row carries.
@@ -209,16 +211,25 @@ export const STATE_CARDS: Record<Exclude<ReceiptState, "CHARGED" | "NOT_CHARGED"
     icon: "circle-alert",
     tone: "warning",
     sentence:
-      "This call was served and passed, but its payment could not be collected from your escrow. The price is still held there. Sign to settle it from the banner above: paid calls are paused until you do, and free calls still work.",
+      "This call was served and passed, but its payment could not be collected from your escrow. The price is still held there. Sign to settle it from the banner above (if you signed already, it is being collected): paid calls are paused until it is collected, and free calls still work.",
     money: (r) => `${price(r)} owed`,
     moneyTeal: false,
   },
   DEBT_WRITTEN_OFF: {
     code: "DEBT_WRITTEN_OFF",
     icon: "circle-alert",
+    tone: "warning",
+    sentence:
+      "This call was served, but its payment was never settled, so it was written off. You were not charged, the funds held for it were released, and the provider was not paid. Paid calls stay paused until you settle it from the banner above, and settling it pays the provider.",
+    money: (r) => charged(r),
+    moneyTeal: true,
+  },
+  DEBT_VOIDED: {
+    code: "DEBT_VOIDED",
+    icon: "circle-alert",
     tone: "neutral",
     sentence:
-      "This call was served, but its payment was never settled, so it was written off. You were not charged, the funds held for it were released, and the provider was not paid.",
+      "This call's payment had lapsed, and its check then finished without a pass, so the debt was voided. You were not charged, the funds held for it were released, and the provider was not paid.",
     money: (r) => charged(r),
     moneyTeal: true,
   },
@@ -237,6 +248,7 @@ export const STATE_CARDS: Record<Exclude<ReceiptState, "CHARGED" | "NOT_CHARGED"
 export const COLLECTION_STATES: ReadonlySet<ReceiptState> = new Set([
   "DEBT_OUTSTANDING",
   "DEBT_WRITTEN_OFF",
+  "DEBT_VOIDED",
   "FORFEITED",
 ]);
 

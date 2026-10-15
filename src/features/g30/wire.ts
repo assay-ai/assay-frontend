@@ -1,4 +1,4 @@
-import type { Money } from "@/interfaces";
+import type { CallDebt, Money } from "@/interfaces";
 
 /**
  * A local view of two wire shapes that `@/services` returns as `unknown`.
@@ -87,9 +87,11 @@ export interface Receipt {
    * Buyer debt. `OUTSTANDING`: the payment could not be collected; the price
    * stays held and is charged once the payer signs a replacement voucher — paid
    * calls are refused until then. `WRITTEN_OFF`: never settled; not charged,
-   * provider not paid.
+   * provider not paid, and paid calls stay refused until it is signed.
+   * `VOIDED`: the call failed verification after it had become debt; not
+   * charged, provider not paid.
    */
-  debt?: "OUTSTANDING" | "WRITTEN_OFF" | null;
+  debt?: CallDebt | null;
   /** The recorded cause behind `forfeited` or `debt`, e.g. `uncollected:DelegateIsRevoked`. */
   chargeNote?: string | null;
   verdict: ReceiptVerdict;
