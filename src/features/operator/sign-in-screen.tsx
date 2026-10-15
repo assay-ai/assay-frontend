@@ -55,10 +55,10 @@ function storage(): Storage | null {
   }
 }
 
-const DEMO_PRESETS: readonly { id: DemoOperatorPreset; label: string }[] = [
-  { id: "lead", label: "Lead adjudicator" },
-  { id: "support", label: "Support / on-call" },
-  { id: "admin", label: "Admin" },
+const DEMO_PRESETS: readonly { id: DemoOperatorPreset; label: string; sees: string }[] = [
+  { id: "lead", label: "Lead adjudicator", sees: "Rules disputes, approves lifts" },
+  { id: "support", label: "Support / on-call", sees: "Blocks accounts" },
+  { id: "admin", label: "Admin", sees: "Manages the team" },
 ];
 
 export function OperatorSignInScreen({
@@ -264,13 +264,11 @@ export function OperatorSignInScreen({
         <div className="flex w-full flex-col gap-2 rounded-lg border border-dashed border-02 p-3.5">
           <p className="text-label-13 text-01">Demo console</p>
           <p className="text-body-xs text-03">Sample data, no wallet. Pick a role to see the console as that person.</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid w-full grid-cols-1 gap-2 min-[480px]:grid-cols-3">
             {DEMO_PRESETS.map((preset) => (
-              <Button
+              <button
                 key={preset.id}
                 type="button"
-                size="sm"
-                variant="secondary"
                 onClick={() => {
                   saveOperatorSession({
                     token: `${DEMO_OPERATOR_TOKEN_PREFIX}${preset.id}`,
@@ -278,9 +276,11 @@ export function OperatorSignInScreen({
                   });
                   onSignedIn();
                 }}
+                className="flex min-w-0 flex-col items-start gap-0.5 rounded-lg border border-02 bg-01 px-3 py-2 text-left hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
               >
-                {preset.label}
-              </Button>
+                <span className="text-label-13 text-01">{preset.label}</span>
+                <span className="text-body-xs text-03">{preset.sees}</span>
+              </button>
             ))}
           </div>
         </div>
