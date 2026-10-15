@@ -641,12 +641,12 @@ function RowEditor({
       <div className="grid grid-cols-1 gap-3 tablet:grid-cols-2">
         {direction === "REQUEST" ? (
           <Select
-            label="Section"
+            label="Where it goes"
             value={row.section}
             onChange={(event) =>
               onPatch({ section: event.target.value as MappingRequestSection })
             }
-            hint="where the value lands on your own request"
+            hint="the part of the request your API receives it in"
           >
             {SECTIONS.map((section) => (
               <option key={section} value={section}>
@@ -657,37 +657,37 @@ function RowEditor({
         ) : null}
 
         <Select
-          label="Source"
+          label="Value"
           value={row.kind}
           onChange={(event) => onPatch({ kind: event.target.value as "selector" | "constant" })}
           hint={
             row.kind === "selector"
-              ? "$path — read a value out of the document"
-              : "$const — a fixed value, never read"
+              ? "read from the call or answer, by its path"
+              : "the same fixed value every time"
           }
         >
-          <option value="selector">selector ($path)</option>
-          <option value="constant">constant ($const)</option>
+          <option value="selector">Read a field</option>
+          <option value="constant">Fixed value</option>
         </Select>
 
         <Field
-          label={row.kind === "selector" ? "Selector" : "Constant"}
+          label={row.kind === "selector" ? "Field path" : "Fixed value"}
           value={row.text}
           spellCheck={false}
           onChange={(event) => onPatch({ text: event.target.value })}
           placeholder={row.kind === "selector" ? "$.current.temperature_2m" : "en"}
           hint={
             row.kind === "selector"
-              ? "$ is the root; $.a.b, $['a-b'] and $.items[0] address into it"
-              : "a JSON literal — 10, true, null, [\"a\"]. Anything else is text."
+              ? "$ is the whole document; $.a.b reads a nested field and $.items[0] the first item of a list"
+              : "a number, true/false, null, or text"
           }
         />
 
         <Select
-          label="$onNull"
+          label="If the value is empty (null)"
           value={row.onNull}
           onChange={(event) => onPatch({ onNull: event.target.value as MappingOnNull })}
-          hint="an explicit null in the response is not a missing field"
+          hint="an empty value is not the same as a missing field"
         >
           {NULL_POLICIES.map((policy) => (
             <option key={policy} value={policy}>
@@ -699,9 +699,9 @@ function RowEditor({
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-label-13 text-01">$transform</span>
-          <span className="font-mono text-mono-12 text-03">
-            each step is applied in order — a step that rejects its input fails the call as a mapping error
+          <span className="text-label-13 text-01">Changes</span>
+          <span className="text-body-xs text-03">
+            applied in order; if a step cannot handle the value, the call fails
           </span>
         </div>
         {row.transforms.map((step, index) => {
@@ -769,18 +769,18 @@ function RowEditor({
           checked={row.hasDefault}
           onChange={(event) => onPatch({ hasDefault: event.target.checked })}
           label={
-            <span className="font-mono text-mono-12">
-              declare a $default — used when the selector resolves to nothing
+            <span className="text-body-13">
+              Use a default value when the field is missing
             </span>
           }
         />
         {row.hasDefault ? (
           <Field
-            label="$default"
+            label="Default value"
             value={row.defaultText}
             spellCheck={false}
             onChange={(event) => onPatch({ defaultText: event.target.value })}
-            hint='a JSON literal. `null` is a real default, and is not "no default".'
+            hint="a number, true/false, null, or text"
           />
         ) : null}
       </div>
@@ -968,17 +968,17 @@ export function MappingEditor({
         // name the row as well, or a screen reader reads out one "optional"
         // per field with nothing to tell them apart. Same for the chain
         // button below, and the gear beside it.
-        aria-label={`$optional — ${row.target.trim() || "the new row"}`}
+        aria-label={`May be missing — ${row.target.trim() || "the new row"}`}
         checked={row.optional}
         onChange={(event) => patchRow(row.id, { optional: event.target.checked })}
         label={
           <span
             className={cn(
-              "font-mono text-mono-12",
+              "text-body-xs",
               row.required && row.optional && !row.hasDefault && "text-danger-500"
             )}
           >
-            optional
+            may be missing
           </span>
         }
       />
@@ -1001,7 +1001,7 @@ export function MappingEditor({
   const transformCell = (row: EditorRow) => (
     <button
       type="button"
-      aria-label={`Transform chain — ${row.target.trim() || "the new row"}`}
+      aria-label={`Changes applied — ${row.target.trim() || "the new row"}`}
       onClick={() => setOpenRowId((current) => (current === row.id ? null : row.id))}
       className="min-w-0 truncate rounded-sm px-1 font-mono text-mono-13 text-02 hover:text-01 hover:underline"
     >
@@ -1012,7 +1012,7 @@ export function MappingEditor({
   const requestColumns: TableColumn<EditorRow>[] = [
     {
       key: "toolField",
-      header: "Tool field",
+      header: "From the agent's call",
       mono: true,
       noTruncate: true,
       cell: (row) => (
@@ -1027,14 +1027,14 @@ export function MappingEditor({
     },
     {
       key: "transform",
-      header: "Transform",
+      header: "Change",
       width: 150,
       noTruncate: true,
       cell: transformCell,
     },
     {
       key: "upstream",
-      header: "Upstream field",
+      header: "Sent to your API as",
       width: 240,
       noTruncate: true,
       cell: (row) => (
@@ -1054,7 +1054,7 @@ export function MappingEditor({
     },
     {
       key: "status",
-      header: "Status",
+      header: "Options",
       width: 168,
       align: "end",
       noTruncate: true,
@@ -1065,7 +1065,7 @@ export function MappingEditor({
   const responseColumns: TableColumn<EditorRow>[] = [
     {
       key: "outputField",
-      header: "Output field",
+      header: "Result field",
       width: 220,
       // `Table` right-aligns any column that names a width, which is right for
       // a figure and wrong for the row's own label — the request table's first
@@ -1093,7 +1093,7 @@ export function MappingEditor({
     },
     {
       key: "from",
-      header: "From",
+      header: "Taken from your answer",
       noTruncate: true,
       cell: (row) => (
         <span className="flex w-full items-center gap-1.5">
@@ -1110,7 +1110,7 @@ export function MappingEditor({
     },
     {
       key: "status",
-      header: "Status",
+      header: "Options",
       width: 168,
       align: "end",
       noTruncate: true,
@@ -1181,7 +1181,7 @@ export function MappingEditor({
           {direction === "REQUEST" && opened.state ? (
             <div className="grid grid-cols-1 gap-3 px-1 tablet:grid-cols-[160px_1fr]">
               <Select
-                label="method"
+                label="Method"
                 value={opened.state.method ?? ""}
                 onChange={(event) =>
                   patchState((state) => ({ ...state, method: event.target.value || null }))
@@ -1192,14 +1192,14 @@ export function MappingEditor({
                 <option value="POST">POST</option>
               </Select>
               <Field
-                label="path"
+                label="Path on your API"
                 value={opened.state.path ?? ""}
                 spellCheck={false}
                 onChange={(event) =>
                   patchState((state) => ({ ...state, path: event.target.value || null }))
                 }
                 placeholder="/v1/cities/{$.cityId}/now"
-                hint="Added to your API's URL. {$.selector} parts are filled in from the request, URL-encoded."
+                hint="Added to your API's address. Parts like {$.cityId} are filled in from the agent's call."
               />
             </div>
           ) : null}
@@ -1207,18 +1207,18 @@ export function MappingEditor({
           <Table
             columns={direction === "REQUEST" ? requestColumns : responseColumns}
             rows={rows}
-            caption={`${label} rows`}
+            caption={direction === "REQUEST" ? "How a call reaches your API" : "How your answer becomes the result"}
           />
 
           <div className="flex items-center justify-between gap-3 px-1">
-            <p className="font-mono text-mono-12 text-03">
+            <p className="text-body-xs text-03">
               {direction === "REQUEST"
                 ? fields.length > 0
-                  ? `readable: ${fields
-                      .map((field) => `$.${field.name}${field.required ? "" : "?"}`)
-                      .join(" · ")}`
-                  : "this tool takes no input, so every value here is a constant"
-                : `${rows.filter(isPresent).length} of ${rows.length} fields mapped`}
+                  ? `Agents send: ${fields
+                      .map((field) => `${field.name}${field.required ? "" : " (optional)"}`)
+                      .join(", ")}`
+                  : "This tool takes no input, so every value here is fixed."
+                : `${rows.filter(isPresent).length} of ${rows.length} fields filled in`}
             </p>
             <Button variant="secondary" size="sm" icon={<Plus aria-hidden="true" />} onClick={addRow}>
               {direction === "REQUEST" ? "Add a parameter" : "Add a field"}
@@ -1239,24 +1239,22 @@ export function MappingEditor({
           ) : null}
 
           <p className="px-1 text-body-13 text-02">
-            <span className="font-mono text-mono-12 text-01">$optional</span> is a declaration,
-            never an inference: it says the field may legitimately be absent, so it is left out of the document instead of failing the call as a missing path.
+            Tick &ldquo;may be missing&rdquo; only for a field that is sometimes really absent: it is then left out instead
+            of failing the call.
           </p>
 
           {optionalAtRequired.length > 0 ? (
             <p role="alert" className="px-1 text-body-13 text-danger-500">
               {optionalAtRequired.map((row) => row.target).join(", ")} —{" "}
               {optionalAtRequired.length === 1 ? "this field is" : "these fields are"}{" "}
-              required by the tool&rsquo;s outputSchema, so $optional needs a $default beside it. Without one
-              the save is refused: a required field that may be omitted is a document that may
-              legally be invalid.
+              required by the tool, so if {optionalAtRequired.length === 1 ? "it" : "they"} may be missing, give a
+              default value too (open the row&rsquo;s settings). Without one it cannot be saved.
             </p>
           ) : null}
 
           {problems.length > 0 ? (
             <p role="alert" className="px-1 text-body-13 text-danger-500">
-              {problems[0]}. A half-filled row is not written at all, so it is
-              refused here rather than saved as a missing key.
+              {problems[0]}. Finish or remove that row to save.
             </p>
           ) : null}
 
@@ -1264,8 +1262,7 @@ export function MappingEditor({
             <p role="alert" className="px-1 text-body-13 text-danger-500">
               {unwritten.map((row) => row.target).join(", ")} —{" "}
               {unwritten.length === 1 ? "this field is" : "these fields are"}{" "}
-              required and nothing writes {unwritten.length === 1 ? "it" : "them"} yet, so no response can satisfy the
-              contract.
+              required by the tool and nothing fills {unwritten.length === 1 ? "it" : "them"} in yet.
             </p>
           ) : null}
         </>
@@ -1281,7 +1278,10 @@ export function MappingEditor({
             </p>
           </details>
         </div>
+      ) : validation.result && !jsonMode ? (
+        <p className="px-1 text-body-xs text-success-700">Checked: this mapping is valid.</p>
       ) : validation.result ? (
+        // The engine's own reading of the document, for whoever is editing JSON.
         <>
           <CodeBlock
             title={`canonical · ${label}`}
@@ -1299,7 +1299,7 @@ export function MappingEditor({
           </p>
         </>
       ) : validation.pending ? (
-        <p className="px-1 font-mono text-mono-12 text-03">checking this mapping…</p>
+        <p className="px-1 text-body-xs text-03">Checking this mapping…</p>
       ) : null}
     </div>
   );

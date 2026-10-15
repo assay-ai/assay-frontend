@@ -30,6 +30,7 @@ import { Table, type TableColumn } from "@/components/ui/table";
 import { dateOnly, relativeTime } from "@/components/g31/format";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
+import { termsVersionLabel } from "@/features/m41/terms";
 import { createCredential, listAgents, listCredentials } from "@/services/account.service";
 import { getProviderRegistration } from "@/services/provider-registration.service";
 
@@ -142,14 +143,17 @@ function maskedKey(prefix: string): string {
   return `••••${prefix.slice(-4)}`;
 }
 
-/** Terms versions are dated ("2026-06-15"); say them as a local date like every other date here. */
+/** Terms versions are dated ("2026-06-15"); said exactly as Setup says them ("Apr 1, 2026 version"). */
 function versionLabel(version: string): string {
-  return /^\d{4}-\d{2}-\d{2}$/.test(version) ? `The ${dateOnly(`${version}T12:00:00Z`)} version` : `Version ${version}`;
+  const label = termsVersionLabel(version);
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
 }
 
 interface TermRow {
   id: string;
   document: string;
+  /** The version accepted, "Apr 1, 2026 version" — what Setup calls it. */
+  version: string;
   accepted: string;
   inForce: string;
 }
@@ -211,7 +215,19 @@ const TERM_COLUMNS: TableColumn<TermRow>[] = [
     header: "Document",
     cell: (row) => <span className="font-semibold">{row.document}</span>,
   },
-  { key: "accepted", header: "Accepted", width: 130, align: "end", noTruncate: true, cell: (r) => r.accepted },
+  {
+    key: "accepted",
+    header: "You accepted",
+    width: 210,
+    align: "end",
+    noTruncate: true,
+    cell: (r) => (
+      <span className="flex flex-col items-end">
+        <span>{r.version}</span>
+        <span className="text-body-xs text-03">{r.accepted}</span>
+      </span>
+    ),
+  },
   { key: "inForce", header: "Status", width: 190, align: "end", noTruncate: true, cell: (r) => r.inForce },
 ];
 
@@ -318,7 +334,8 @@ export default function ProviderAccountPage() {
   const termRow = (id: string, document: string, accepted: string, inForce: string): TermRow => ({
     id,
     document,
-    accepted: dateOnly(record!.acceptedTerms.acceptedAt),
+    version: versionLabel(accepted),
+    accepted: `on ${dateOnly(record!.acceptedTerms.acceptedAt)}`,
     inForce: accepted === inForce ? "Up to date" : `${versionLabel(inForce)} is now in force`,
   });
   const termRows: TermRow[] =

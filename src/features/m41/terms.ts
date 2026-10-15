@@ -90,7 +90,18 @@ export function resolveTerms(terms: ProviderTermsSummary | undefined): {
 export function plainTermsLine(line: string): string {
   return line
     .replace(/\b(the )?slash policy\b/gi, (_match, the: string | undefined) => `${the ?? ""}Penalty Policy`)
-    .replace(/\((\d{4})-(\d{2})-(\d{2})\)/g, (_match, y: string, m: string, d: string) => `(${MONTHS[Number(m) - 1] ?? m} ${Number(d)}, ${y} version)`);
+    .replace(/\((\d{4}-\d{2}-\d{2})\)/g, (_match, version: string) => `(${termsVersionLabel(version)})`);
+}
+
+/**
+ * A terms document's version, said the same way on Setup and Account:
+ * "Apr 1, 2026 version". Versions are calendar dates, so no time zone applies.
+ */
+export function termsVersionLabel(version: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(version);
+  if (!match) return `version ${version}`;
+  const [, y, m, d] = match;
+  return `${MONTHS[Number(m) - 1] ?? m} ${Number(d)}, ${y} version`;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

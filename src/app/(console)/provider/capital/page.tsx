@@ -13,7 +13,8 @@ import { StakeGauge } from "@/components/provider/stake-gauge";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
-import { usePenaltySummary } from "@/features/provider-penalties/use-penalty-summary";
+import { openPenaltyHold, openPenaltyPhrase } from "@/features/provider-penalties/model";
+import { usePenalties } from "@/features/provider-penalties/use-penalties";
 import { stakeActionChain, unreadableChains } from "@/features/provider-stake/chain-stake";
 import { stakeReason } from "@/features/provider-stake/derivation";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
@@ -95,7 +96,8 @@ export default function ProviderStakePage() {
   const sheetParam = useSearchParam("sheet");
   const status = useStakeStatus();
   const names = useProviderToolNames();
-  const penalties = usePenaltySummary();
+  // The same rows and wording as the Withdraw sheet: every open penalty, disputed ones included.
+  const hold = openPenaltyHold(usePenalties({ withCases: "none" }).rows);
   const { chains } = useChains();
   const bindings = useQuery({
     queryKey: ["provider", "tool-bindings", "sidebar"],
@@ -229,14 +231,17 @@ export default function ProviderStakePage() {
               </Button>
             </div>
           ) : null}
-          {penalties.count > 0 ? (
+          {hold.count > 0 ? (
             <Link
-              href={routes.penalties("needs-action")}
+              href={routes.penalties(hold.needsAction > 0 ? "needs-action" : "disputed")}
               className="flex items-center gap-2 rounded-lg border border-danger-20 bg-danger-10 px-3.5 py-2.5 text-body-13 text-danger-700 hover:underline"
             >
               <Scale aria-hidden="true" className="size-4 shrink-0" />
-              {penalties.count === 1 ? "1 penalty is" : `${penalties.count} penalties are`} reserving part of this stake. Review
-              {penalties.count === 1 ? " it" : " them"} before the deadline.
+              <span>
+                {openPenaltyPhrase(hold)} hold {formatMoney(hold.total)} of this stake until they are settled; that part
+                cannot be withdrawn.
+                {hold.needsAction > 0 ? " Answer the ones that need you before their deadline." : ""}
+              </span>
             </Link>
           ) : null}
         </PanelBody>

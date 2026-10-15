@@ -4,7 +4,7 @@ import type { AssayCaseIndex } from "@/features/chain-slashes/assay-match";
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
 import { slashRecordStatusOf } from "@/libs/chains/evm/stake-slashes/status";
 
-import { countByTab, penaltyRowOf, penaltyTimeline, sortPenalties } from "./model";
+import { countByTab, openPenaltyHold, openPenaltyPhrase, penaltyRowOf, penaltyTimeline, sortPenalties } from "./model";
 import { failureSentence } from "./sentences";
 
 const NOW = 1_800_000_000;
@@ -99,5 +99,24 @@ describe("failureSentence", () => {
     expect(failureSentence("FRESHNESS_STALE", 21)).toBe("21 calls returned data older than allowed.");
     expect(failureSentence("VALUE_RANGE_OUT_OF_BOUNDS", 1)).toBe("1 call returned a value outside the plausible range.");
     expect(failureSentence("SOMETHING_NEW", 3)).not.toMatch(/SOMETHING_NEW/);
+  });
+});
+
+describe("openPenaltyHold", () => {
+  it("counts every open penalty, disputed included, and sums what they hold", () => {
+    const rows = [
+      penaltyRowOf(chainRow(1), ASSET, index, NOW),
+      penaltyRowOf(chainRow(4, { disputedAt: NOW - 10 }), ASSET, index, NOW),
+      penaltyRowOf(chainRow(2, { applied: BigInt(1) }), ASSET, index, NOW),
+    ];
+    const hold = openPenaltyHold(rows);
+    expect(hold).toMatchObject({ count: 2, needsAction: 1, disputed: 1 });
+    expect(hold.total?.amount).toBe((BigInt(rows[0]!.amount.amount) + BigInt(rows[1]!.amount.amount)).toString());
+    expect(openPenaltyPhrase(hold)).toBe("2 open penalties (1 needs your answer, 1 disputed)");
+  });
+
+  it("says nothing extra for one kind", () => {
+    expect(openPenaltyPhrase({ count: 1, needsAction: 1, disputed: 0, total: null })).toBe("1 open penalty");
+    expect(openPenaltyHold([]).total).toBeNull();
   });
 });

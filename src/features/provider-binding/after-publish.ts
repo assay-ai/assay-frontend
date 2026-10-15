@@ -7,6 +7,7 @@ import type {
   ToolBindingSummary,
 } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
+import { demoEnabled } from "@/libs/demo/demo-api";
 import { revalidateProviderStake } from "@/services/provider-stake.service";
 
 /**
@@ -30,8 +31,11 @@ import { revalidateProviderStake } from "@/services/provider-stake.service";
  */
 export async function applyPublished(
   queryClient: QueryClient,
-  published: PublishedToolBinding,
+  answer: PublishedToolBinding,
+  /** The listing as the wizard last saved it (demo builds only use it, see `demoPublished`). */
+  before?: ToolBindingDetail | null,
 ): Promise<void> {
+  const published = demoEnabled() && before ? demoPublished(answer, before) : answer;
   rememberPublished(published);
   queryClient.setQueryData<ToolBindingDetail>(["provider", "tool-binding", published.id], published);
   queryClient.setQueryData<CursorPage<ToolBindingSummary>>(
@@ -74,6 +78,24 @@ export function isPublishedState(binding: ToolBindingDetail | undefined): boolea
 // ── "Just published" ────────────────────────────────────────────────────────
 
 /**
+ * The demo fixture layer is stateless: its publish answer is the stock draft
+ * flipped to live, so a price set on Go live would read back as "Free". In a
+ * demo build the terms the wizard last saved win and the publish answer only
+ * contributes what publishing changes (status and revision). Never used
+ * against a real API, whose publish answer IS the published listing.
+ */
+export function demoPublished(answer: PublishedToolBinding, before: ToolBindingDetail): PublishedToolBinding {
+  return {
+    ...before,
+    status: answer.status,
+    publishedVersion: answer.publishedVersion ?? before.version,
+    hasUnpublishedChanges: false,
+    version: Math.max(answer.version, before.version),
+    publishedAt: answer.publishedAt,
+  };
+}
+
+/**
  * The publish answer, kept for a few minutes in memory so a re-read that is
  * OLDER than it cannot undo it on screen.
  *
@@ -83,7 +105,10 @@ export function isPublishedState(binding: ToolBindingDetail | undefined): boolea
  * right after a successful publish. The publish response is the server's own
  * word that the listing is live, so it wins over any read that does not yet
  * show that revision as published. Once a read catches up, the read wins and
- * the record is dropped. Nothing is persisted: a reload starts from the server.
+ * the record is dropped. The seed itself (the very object remembered) is not
+ * a read: dropping the record on it is what let the next stale read undo the
+ * publish. Nothing is persisted: a reload starts from the server. A demo build
+ * keeps the record for the session, since its fixtures never catch up.
  */
 export const JUST_PUBLISHED_MS = 5 * 60_000;
 
@@ -93,13 +118,32 @@ export function rememberPublished(binding: ToolBindingDetail, now: number = Date
   justPublished.set(binding.id, { binding, at: now });
 }
 
+/**
+ * A later save of the same listing (Settings) while the record is held: a new
+ * revision ends the record (reads show it as it is); a save that did not move
+ * the revision (only the stateless demo answers like that) updates the
+ * remembered terms so the overlay does not put the old price back.
+ */
+export function noteSaved(saved: ToolBindingDetail): void {
+  const record = justPublished.get(saved.id);
+  if (!record) return;
+  if (saved.version > record.binding.version || !demoEnabled()) {
+    justPublished.delete(saved.id);
+    return;
+  }
+  const { status, publishedVersion, hasUnpublishedChanges, version } = record.binding;
+  record.binding = { ...saved, status, publishedVersion, hasUnpublishedChanges, version };
+}
+
 /** Pure: the listing to show, given a read and the remembered publish answer. */
 export function withJustPublished(
   fetched: ToolBindingDetail,
   record: { binding: ToolBindingDetail; at: number } | undefined,
   now: number,
+  ttl: number = JUST_PUBLISHED_MS,
 ): ToolBindingDetail {
-  if (!record || now - record.at > JUST_PUBLISHED_MS) return fetched;
+  if (!record || now - record.at > ttl) return fetched;
+  if (fetched === record.binding) return fetched;
   const live = record.binding.publishedVersion ?? 0;
   const caughtUp = fetched.publishedVersion !== null && fetched.publishedVersion >= live;
   const newerEdit = fetched.version > record.binding.version;
@@ -107,11 +151,12 @@ export function withJustPublished(
   return { ...fetched, ...record.binding };
 }
 
-/** `withJustPublished` against the in-memory record, dropping it once it is no longer needed. */
+/** `withJustPublished` against the in-memory record, dropping it once a real read caught up. */
 export function overlayJustPublished(fetched: ToolBindingDetail): ToolBindingDetail {
   const record = justPublished.get(fetched.id);
   if (!record) return fetched;
-  const shown = withJustPublished(fetched, record, Date.now());
-  if (shown === fetched) justPublished.delete(fetched.id);
+  const ttl = demoEnabled() ? Number.POSITIVE_INFINITY : JUST_PUBLISHED_MS;
+  const shown = withJustPublished(fetched, record, Date.now(), ttl);
+  if (shown === fetched && fetched !== record.binding && !demoEnabled()) justPublished.delete(fetched.id);
   return shown;
 }

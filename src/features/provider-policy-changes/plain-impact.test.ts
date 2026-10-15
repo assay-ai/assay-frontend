@@ -21,7 +21,7 @@ describe("plainImpact", () => {
 
   it("describes a changed clause limit without raw paths", () => {
     const impact = plainImpact({ path: "$.clauses[0].value", changeType: "changed", before: 2, after: 1 });
-    expect(impact.text).toBe("A rule's limit changes from 2 to 1.");
+    expect(impact.text).toBe("One of the rules that decides when a result fails changes its threshold from 2 to 1; the technical details below name it.");
     expect(impact.text).not.toMatch(/\$\./);
   });
 

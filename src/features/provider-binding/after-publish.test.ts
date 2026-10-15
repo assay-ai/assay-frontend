@@ -18,7 +18,7 @@ vi.mock("@/services/provider-stake.service", () => ({
 
 import { revalidateProviderStake } from "@/services/provider-stake.service";
 
-import { applyPublished, isAlreadyLive, isPublishedState, JUST_PUBLISHED_MS, withJustPublished } from "./after-publish";
+import { applyPublished, demoPublished, isAlreadyLive, isPublishedState, JUST_PUBLISHED_MS, withJustPublished } from "./after-publish";
 
 const ID = "b-1";
 
@@ -131,5 +131,28 @@ describe("withJustPublished", () => {
     const edited = detail({ status: "ACTIVE", version: 3, publishedVersion: 1 });
     expect(withJustPublished(edited, { binding: live, at: 1000 }, 2000)).toBe(edited);
     expect(withJustPublished(draft, { binding: live, at: 0 }, JUST_PUBLISHED_MS + 1)).toBe(draft);
+  });
+});
+
+describe("withJustPublished — the seed is not a read", () => {
+  it("keeps the record when shown the very object it remembered, so a later stale read is still overlaid", () => {
+    const live = detail({ status: "ACTIVE", publishedVersion: 1, hasUnpublishedChanges: false });
+    const record = { binding: live, at: 1000 };
+    expect(withJustPublished(live, record, 2000)).toBe(live);
+    expect(withJustPublished(detail(), record, 2000).status).toBe("ACTIVE");
+  });
+});
+
+describe("demoPublished", () => {
+  it("keeps the terms the wizard saved and takes only the publish state from the answer", () => {
+    const saved = detail({ pricingMode: "PAID", price: { amount: "300000", asset: "x", decimals: 6 } });
+    const answer: PublishedToolBinding = {
+      ...detail({ pricingMode: "FREE", price: { amount: "0", asset: "x", decimals: 6 }, status: "ACTIVE", publishedVersion: 1 }),
+      publishedAt: "2026-10-16T00:00:00.000Z",
+    };
+    const shown = demoPublished(answer, saved);
+    expect(shown.pricingMode).toBe("PAID");
+    expect(shown.price.amount).toBe("300000");
+    expect(isPublishedState(shown)).toBe(true);
   });
 });

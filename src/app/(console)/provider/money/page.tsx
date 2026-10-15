@@ -284,8 +284,13 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
   return (
     <li className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-md px-3 py-3 hover:bg-02">
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="text-body-13 text-01">Paid to your wallet</span>
-        <LocalTime value={payout.createdAt} className="text-body-xs text-03" />
+        {/* A payout carries no tool or call count; the day of the run is what it is for. */}
+        <span className="text-body-13 text-01">
+          Payout for calls settled on <LocalTime value={payout.createdAt} dateOnly />
+        </span>
+        <span className="text-body-xs text-03">
+          Sent to your wallet · <LocalTime value={payout.createdAt} withZone />
+        </span>
       </span>
       <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(payout.amount, { decimals: 2 })}</span>
       {href ? (

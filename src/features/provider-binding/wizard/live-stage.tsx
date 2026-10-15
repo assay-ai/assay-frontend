@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { estimatePenalty, exampleFailureRate } from "@/features/provider-penalties/estimate";
+import { WINDOW_WORDS } from "@/features/provider-sla/window";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import type {
@@ -134,11 +135,14 @@ function PercentStepper({
   error,
   disabled,
   example,
+  free,
 }: {
   value: string;
   onChange: (next: string) => void;
   error?: string;
   disabled?: boolean;
+  /** A free tool has no stake behind it, so going over the promise costs no money. */
+  free?: boolean;
   /** "Example: at 12% failures in a window, …", for a paid tool. */
   example?: string | null;
 }) {
@@ -167,7 +171,9 @@ function PercentStepper({
       </div>
       <p className={cn("text-body-xs", error ? "text-danger-500" : "text-03")}>
         {error ??
-          "Out of every 100 checked calls in a window. Go over it and part of your stake can be taken as a penalty. A higher number is safer for you but looks weaker to buyers."}
+          (free
+            ? `Out of every 100 checked calls in a window (${WINDOW_WORDS}). A free tool has no stake, so going over it costs you no money; buyers see the promise and how you do against it.`
+            : `Out of every 100 checked calls in a window (${WINDOW_WORDS}). Go over it and part of your stake can be taken as a penalty. A higher number is safer for you but looks weaker to buyers.`)}
       </p>
       {!error && example ? <p className="text-body-xs text-02">{example}</p> : null}
     </div>
@@ -388,7 +394,8 @@ export function LiveStage({
             onChange={(next) => set({ failurePercent: next })}
             error={parsed.errors.failurePercent}
             disabled={readOnly}
-            example={penaltyExample}
+            example={mode === "FREE" ? null : penaltyExample}
+            free={mode === "FREE"}
           />
 
           <div className="flex flex-col gap-3">

@@ -118,7 +118,7 @@ export function InboxItem({ item }: { item: NotificationItem }) {
           {formatNotificationTitle(item.title)}
         </p>
         <p className="break-words text-body-13 leading-[1.55] text-02 [overflow-wrap:anywhere]">{formatNotificationBody(item.body)}</p>
-        <LocalTime value={item.createdAt} className="text-body-xs text-03" />
+        <LocalTime value={item.createdAt} withZone className="text-body-xs text-03" />
       </div>
       {target ? (
         <Button size="sm" variant="secondary" asChild className="self-start tablet:self-center">
