@@ -17,8 +17,8 @@ import { disputeUrgency } from "./inbox";
  *     → [alert] 3h left                      danger, under a quarter of the window left
  *
  *   <Deadline kind="dispute" until={row.expiresAt} from={row.disputedAt} />
- *     → [clock] 26 days left                 neutral
- *     → [alert] 7 days left · rule by Oct 23 danger, from day 20 of the 30
+ *     → [clock] 26 days left · rule by Nov 11  neutral
+ *     → [alert] 7 days left · rule by Oct 23   danger, from day 20 of the 30
  *
  * Props:
  *   - `kind`   "approval" (a two-person request, 24 h) or "dispute" (the 30-day on-chain window).
@@ -67,7 +67,8 @@ export function deadlineReading(
     const start = from ? Date.parse(from) : Number.NaN;
     const end = until ? Date.parse(until) : Number.isNaN(start) ? Number.NaN : start + 30 * DAY;
     if (Number.isNaN(end)) return { label: urgency.label, urgent: false, expired: false, end: null };
-    const ruleBy = urgency.urgent && !urgency.expired ? ` · rule by ${formatLocalDate(end, { ...options, now })}` : "";
+    // Every open dispute names its date, so two rows read alike; only the colour changes from day 20.
+    const ruleBy = !urgency.expired ? ` · rule by ${formatLocalDate(end, { ...options, now })}` : "";
     return { label: `${urgency.label}${ruleBy}`, urgent: urgency.urgent, expired: urgency.expired, end };
   }
 
@@ -111,7 +112,7 @@ export function Deadline({ kind, until, from, now: fixedNow, className }: Deadli
 
   const reading = deadlineReading(kind, until, from, fixedNow ?? tick);
   const endIso = reading.end === null ? undefined : new Date(reading.end).toISOString();
-  // A dispute names what is due by then; the date is always one hover away, and in the label once little is left.
+  // A dispute names what is due by then: the date is in the label, the exact instant one hover away.
   const title = endIso ? deadlineTitle(kind === "dispute" ? "Rule by" : "Ends", endIso) : undefined;
   const Icon = reading.urgent ? AlertTriangle : Clock;
   const label = mounted ? reading.label : endIso ? `Ends ${utcTitle(endIso)}` : reading.label;
