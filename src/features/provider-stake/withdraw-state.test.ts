@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ProviderChainStake } from "@/interfaces";
 
-import { availableAfterRequest, periodLabel, toolsPausedAt, withdrawPlan, withdrawStateOf } from "./withdraw-state";
+import { MIN_UNBONDING_MS, availableAfterRequest, periodLabel, toolsPausedAt, waitingDuration, waitingPeriodOf, waitingPeriodPhrase, withdrawPlan, withdrawStateOf } from "./withdraw-state";
 
 const m = (amount: string) => ({ amount, asset: "usdg", decimals: 6 });
 const entry = (patch: Partial<ProviderChainStake>): ProviderChainStake => ({
@@ -71,5 +71,22 @@ describe("withdrawPlan", () => {
     expect(toolsPausedAt(plan, 300_000_000n).map((t) => t.toolId)).toEqual(["market-quote"]);
     expect(toolsPausedAt(plan, 100_000_000n)).toHaveLength(2);
     expect(toolsPausedAt(plan, 450_000_000n)).toHaveLength(0);
+  });
+});
+
+describe("waiting period: one source, one wording", () => {
+  const terms = { commercialTerms: [{ key: "unbonding", label: "Unbonding", value: "14 days" }] };
+
+  it("prefers a running clock, then the published terms, then the contract minimum", () => {
+    expect(waitingPeriodOf(3 * 86_400_000, terms)).toEqual({ ms: 3 * 86_400_000, exact: true });
+    expect(waitingPeriodOf(null, terms)).toEqual({ ms: 14 * 86_400_000, exact: true });
+    expect(waitingPeriodOf(null, null)).toEqual({ ms: MIN_UNBONDING_MS, exact: false });
+  });
+
+  it("says an exact period as a compound and the minimum as 'at least'", () => {
+    expect(waitingPeriodPhrase(waitingPeriodOf(null, terms))).toBe("a 14-day waiting period");
+    expect(waitingDuration(waitingPeriodOf(null, terms))).toBe("14 days");
+    expect(waitingPeriodPhrase(waitingPeriodOf(null, null))).toBe("a waiting period of at least 11 days");
+    expect(waitingDuration(waitingPeriodOf(null, null))).toBe("at least 11 days");
   });
 });

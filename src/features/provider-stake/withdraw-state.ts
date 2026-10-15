@@ -64,6 +64,46 @@ export function periodLabel(periodMs: number | null): string | null {
  */
 export const MIN_UNBONDING_MS = 11 * 86_400_000;
 
+/**
+ * The waiting period, from the best source there is, said one way everywhere
+ * (Setup's end screen, the Withdraw sheet, the Stake page):
+ *
+ *  1. a running withdrawal's own clock (`periodMs`) — exact;
+ *  2. the published provider terms ("Unbonding · 14 days") — exact;
+ *  3. the contract minimum — a lower bound, so it is always "at least".
+ */
+export interface WaitingPeriod {
+  ms: number;
+  /** False when only the contract minimum is known. */
+  exact: boolean;
+}
+
+const DAY_MS = 86_400_000;
+
+export function waitingPeriodOf(
+  periodMs: number | null,
+  terms?: { commercialTerms: { key: string; label: string; value: string }[] } | null,
+): WaitingPeriod {
+  if (periodMs) return { ms: periodMs, exact: true };
+  const term = terms?.commercialTerms.find((entry) => /unbond|waiting/i.test(`${entry.key} ${entry.label}`));
+  const days = term ? /(\d+(?:\.\d+)?)\s*day/i.exec(term.value) : null;
+  if (days && Number(days[1]) > 0) return { ms: Number(days[1]) * DAY_MS, exact: true };
+  return { ms: MIN_UNBONDING_MS, exact: false };
+}
+
+/** "14 days", or "at least 11 days" when only the minimum is known. */
+export function waitingDuration(period: WaitingPeriod): string {
+  const label = periodLabel(period.ms) ?? "";
+  return period.exact ? label : `at least ${label}`;
+}
+
+/** "a 14-day waiting period", or "a waiting period of at least 11 days". */
+export function waitingPeriodPhrase(period: WaitingPeriod): string {
+  if (!period.exact) return `a waiting period of ${waitingDuration(period)}`;
+  const label = periodLabel(period.ms) ?? "";
+  return `a ${label.replace(/ (day|hour)s?$/, "-$1")} waiting period`;
+}
+
 export interface WithdrawPlan {
   /** What can leave without pausing a paid tool or touching penalty reserves. Null when unknown. */
   free: Money | null;

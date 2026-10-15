@@ -188,3 +188,41 @@ export function caseOf(detail: SlashProposalCaseDetail | undefined | null): Pena
     windowId: p?.windowId ?? null,
   };
 }
+
+/**
+ * Open penalties — every one not closed, whether it still needs the provider
+ * or is disputed — and what the stake holds back for them. The Stake page and
+ * the Withdraw sheet both say this, so they count the same rows: a disputed
+ * penalty still holds its amount until the arbiter rules.
+ */
+export interface OpenPenaltyHold {
+  count: number;
+  needsAction: number;
+  disputed: number;
+  /** Sum of the open amounts, in the first row's asset; null when none are open. */
+  total: Money | null;
+}
+
+export function openPenaltyHold(rows: readonly PenaltyRow[]): OpenPenaltyHold {
+  const open = rows.filter((row) => row.tab !== "closed");
+  const first = open[0]?.amount ?? null;
+  const total = first
+    ? { ...first, amount: open.reduce((sum, row) => sum + BigInt(row.amount.amount || "0"), 0n).toString() }
+    : null;
+  return {
+    count: open.length,
+    needsAction: open.filter((row) => row.tab === "needs-action").length,
+    disputed: open.filter((row) => row.tab === "disputed").length,
+    total,
+  };
+}
+
+/** "2 open penalties (1 needs your answer, 1 disputed)" — one wording for every screen that counts them. */
+export function openPenaltyPhrase(hold: OpenPenaltyHold): string {
+  const head = hold.count === 1 ? "1 open penalty" : `${hold.count} open penalties`;
+  const parts = [
+    hold.needsAction ? `${hold.needsAction} ${hold.needsAction === 1 ? "needs" : "need"} your answer` : null,
+    hold.disputed ? `${hold.disputed} disputed` : null,
+  ].filter(Boolean);
+  return parts.length > 1 ? `${head} (${parts.join(", ")})` : head;
+}

@@ -15,6 +15,8 @@ import { Field } from "@/components/ui/field";
 import { Outcome } from "@/features/m41/outcome";
 import { plainTermsLine, termLabel, termValue } from "@/features/m41/terms";
 import { addressFamily, useProviderSetup, type ProviderSetup } from "@/features/m41/use-setup";
+import { WINDOW_WORDS } from "@/features/provider-sla/window";
+import { waitingPeriodOf, waitingPeriodPhrase } from "@/features/provider-stake/withdraw-state";
 import { useChainName } from "@/hooks/useChainName";
 import { useConnectedAddresses } from "@/hooks/useSigner";
 import { ApiError } from "@/libs/ApiClient";
@@ -101,10 +103,12 @@ export default function ProviderSetupPage() {
       { id: "paid", label: "Get paid" },
       { id: "api", label: "Your API" },
     ] as const
-  ).map((step) => ({
-    ...step,
-    state: stage === step.id ? "current" : done[step.id] ? "done" : "upcoming",
-  }));
+  ).map((step, index, all) => {
+    // A step after the one on screen is never shown as done: the stepper says where you are, in order.
+    const current = all.findIndex((entry) => entry.id === stage);
+    const ahead = current !== -1 && index > current;
+    return { ...step, state: stage === step.id ? "current" : done[step.id] && !ahead ? "done" : "upcoming" };
+  });
 
   const price = params.get("price");
   const wizardHref = (() => {
@@ -520,7 +524,6 @@ function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
 function DoneScreen({ href, setup }: { href: string; setup: ProviderSetup }) {
   const term = (pattern: RegExp) => setup.terms.commercialTerms.find((t) => pattern.test(`${t.key} ${t.label}`))?.value ?? null;
   const takeRate = term(/take.?rate/i);
-  const waiting = term(/unbond/i);
   const basics: [string, string][] = [
     [
       "Price",
@@ -528,11 +531,11 @@ function DoneScreen({ href, setup }: { href: string; setup: ProviderSetup }) {
     ],
     [
       "Stake",
-      `Free tools need none. To charge, your stake must cover $50 or 1,000 calls at your price, whichever is more. You get it back when you stop${waiting ? `, after a ${waiting} waiting period` : ""}.`,
+      `Free tools need none. To charge, your stake must cover $50 or 1,000 calls at your price, whichever is more. You get it back when you stop, after ${waitingPeriodPhrase(waitingPeriodOf(null, setup.terms))}.`,
     ],
     [
       "Penalty",
-      "You promise a failure rate. If more calls fail than that in a 7-day window, part of your stake can be taken. You can dispute it before the deadline.",
+      `You promise a failure rate. Calls are measured in windows (${WINDOW_WORDS}); if more fail than you promised in one window, part of your stake can be taken. You can dispute it before the deadline.`,
     ],
   ];
   return (
