@@ -169,11 +169,13 @@ export function rowsOf(exported: ProviderCallsExport | undefined): ProviderCallR
  * figures (see `docs` rule 01: listed and charged, always both).
  */
 export function isCredited(row: ProviderCallRow): boolean {
-  // Settled, but the export says the credit is not written (yet).
+  // Settled, but the export says the credit is not written (yet), or the
+  // provider forfeited the voucher and nothing was collected or credited.
   return (
     row.status === "SETTLED" &&
     row.classification !== "PENDING" &&
-    row.classification !== "PAID_AWAITING_REDEMPTION"
+    row.classification !== "PAID_AWAITING_REDEMPTION" &&
+    row.classification !== "PROVIDER_FORFEITED"
   );
 }
 

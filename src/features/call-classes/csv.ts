@@ -127,10 +127,13 @@ function isCredited(row: CallRow): boolean {
   // A rail-B call the verdict settled is credited only once its voucher is
   // redeemed on chain; until then the export says PAID_AWAITING_REDEMPTION.
   // PENDING on a settled row is the export saying no credit was written for it.
+  // PROVIDER_FORFEITED is SETTLED too, but the provider forfeited the voucher:
+  // nothing was collected, credited or taken, so it is not earned.
   return (
     row.status === "SETTLED" &&
     row.classification !== "PAID_AWAITING_REDEMPTION" &&
-    row.classification !== "PENDING"
+    row.classification !== "PENDING" &&
+    row.classification !== "PROVIDER_FORFEITED"
   );
 }
 
@@ -227,6 +230,10 @@ export function pendingNote(rows: CallRow[]): string {
  * credited once its voucher is redeemed on chain. Listed beside PAID_CREDITED.
  * So is PLATFORM_ABSORBED: credited from platform funds because the voucher
  * could never be redeemed (the `reason` column names why), with no fee taken.
+ * PROVIDER_FORFEITED sits beside it: a rail-B call whose voucher was not
+ * collected because the provider's stake was below the minimum or it was
+ * blocked. Nobody was charged or credited and no fee was taken; the `reason`
+ * column names the cause.
  *
  * PENDING is the mirror image: the wire emits it and **neither design draws it**.
  * It is listed last because the totals have to add up — a screen whose job is
@@ -236,6 +243,7 @@ export const CLASS_ORDER = [
   "PAID_CREDITED",
   "PAID_AWAITING_REDEMPTION",
   "PLATFORM_ABSORBED",
+  "PROVIDER_FORFEITED",
   "PAID_UNCREDITED",
   "FREE",
   "EXPLORATION",

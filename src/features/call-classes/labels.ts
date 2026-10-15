@@ -10,6 +10,7 @@ const CLASS_LABEL: Record<string, string> = {
   PAID_CREDITED: "Paid and credited",
   PAID_AWAITING_REDEMPTION: "Passed, credit on its way",
   PLATFORM_ABSORBED: "Covered by the platform",
+  PROVIDER_FORFEITED: "Forfeited by you",
   PAID_UNCREDITED: "Rejected by our checks",
   FREE: "Free call",
   EXPLORATION: "Trial traffic",
@@ -64,6 +65,23 @@ const REASON_LABEL: Record<string, string> = {
   "mcp: no provider outcome — the call never reached one": "The call never reached your endpoint",
 };
 
+/**
+ * What a PROVIDER_FORFEITED row carries in `reason`: `provider_forfeit:` and
+ * the cause, a program error or a block, as the redemption sweep wrote it.
+ */
+const FORFEIT_PREFIX = "provider_forfeit:";
+
+const FORFEIT_CAUSE_LABEL: Record<string, string> = {
+  ProviderBelowMinimumStake: "Forfeited — your stake was below the minimum",
+  ProviderBlocked: "Forfeited — your provider account was blocked",
+  PayeeBlocked: "Forfeited — your payout address was blocked",
+  PayeeBlockedOnChain: "Forfeited — your payout address was blocked on chain",
+};
+
 export function reasonLabel(reason: string): string {
+  if (reason.startsWith(FORFEIT_PREFIX)) {
+    const cause = reason.slice(FORFEIT_PREFIX.length).trim();
+    return FORFEIT_CAUSE_LABEL[cause] ?? (cause ? `Forfeited — ${cause}` : "Forfeited");
+  }
   return REASON_LABEL[reason] ?? reason;
 }

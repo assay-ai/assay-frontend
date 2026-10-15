@@ -75,6 +75,42 @@ describe("PLATFORM_ABSORBED", () => {
   });
 });
 
+// Review 2026-10-15, M2: a voucher the provider forfeited (stake below the
+// minimum, or a block) is SETTLED but nobody was charged, credited or paid a fee.
+describe("PROVIDER_FORFEITED", () => {
+  const rows = [
+    row({ callId: "a" }),
+    row({
+      callId: "b",
+      classification: "PROVIDER_FORFEITED",
+      reason: "provider_forfeit:ProviderBelowMinimumStake",
+      providerAmount: "0",
+      platformFee: "0",
+    }),
+  ];
+
+  it("gets its own bucket and is not counted as earned", () => {
+    const table = foldClasses(rows);
+    const forfeited = table.buckets.find((b) => b.className === "PROVIDER_FORFEITED");
+    expect(forfeited?.calls).toBe(1);
+    expect(forfeited?.credited?.amount ?? "0").toBe("0");
+    expect(forfeited?.gross?.amount ?? "0").toBe("0");
+    expect(table.totalCredited?.amount).toBe("900000");
+    expect(table.totalGross?.amount).toBe("1000000");
+    expect(table.unexplained).toBe(0);
+  });
+
+  it("is listed among the calls that were not credited", () => {
+    const failed = foldNotCredited(rows);
+    expect(failed.calls).toBe(1);
+    expect(failed.buckets[0]?.className).toBe("PROVIDER_FORFEITED");
+  });
+
+  it("does not read as a 0% take rate", () => {
+    expect(observedTakeRate(rows).summary).toBe("observed 10%");
+  });
+});
+
 describe("foldClasses — settled with no credit recorded (BUG-R2-V3-03)", () => {
   it("credits nothing for a settled row the export marks PENDING", () => {
     const table = foldClasses([

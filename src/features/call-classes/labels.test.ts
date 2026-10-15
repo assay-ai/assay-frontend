@@ -28,6 +28,15 @@ describe("call class labels (BUG-R5-03)", () => {
     expect(reasonLabel("mcp: provider outcome was not a DATA_RESULT")).not.toContain("DATA_RESULT");
   });
 
+  it("names the cause of a forfeited voucher", () => {
+    expect(classLabel("PROVIDER_FORFEITED")).toBe("Forfeited by you");
+    expect(reasonLabel("provider_forfeit:ProviderBelowMinimumStake")).toBe(
+      "Forfeited — your stake was below the minimum"
+    );
+    expect(reasonLabel("provider_forfeit:PayeeBlockedOnChain")).toContain("blocked on chain");
+    expect(reasonLabel("provider_forfeit:SomethingElse")).toBe("Forfeited — SomethingElse");
+  });
+
   it("leaves a reason it does not know untouched", () => {
     expect(reasonLabel("settled, no credit written")).toBe("settled, no credit written");
   });
