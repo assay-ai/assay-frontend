@@ -16,6 +16,7 @@ import { SHORT_NOTE_MIN_LENGTH } from "@/features/operator/reason-codes";
 import { useOperatorDirectory } from "@/features/operator/use-operator-lookups";
 import type { OperatorApproval, OperatorIdentity } from "@/interfaces/operator";
 import { approvalHref, type TwoPersonAnswer } from "@/features/operator/two-person";
+import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
 import { ApiError } from "@/libs/ApiClient";
 import { suspendCase } from "@/services/operator.service";
 
@@ -128,7 +129,7 @@ export function SuspendSheet({
           <Field label="Ticket (optional)" value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="OPS-1187" maxLength={128} />
           {twoPerson ? <ApprovalFooter needs={approvalNeeds("S-1")} approvers={approvers} /> : null}
         </div>
-        <SheetFooter className="sticky bottom-0 bg-01">
+        <SheetFooter className={OPERATOR_SHEET_FOOTER}>
           <div role="alert" className={failure ? "text-body-xs text-danger-600" : "sr-only"}>
             {failure?.sentence ?? ""}
             {failure?.code ? (
@@ -138,7 +139,7 @@ export function SuspendSheet({
               </details>
             ) : null}
           </div>
-          <div className="flex w-full flex-col-reverse gap-2 tablet:flex-row tablet:justify-end">
+          <div className={OPERATOR_SHEET_BUTTONS}>
             <SheetClose asChild>
               <Button variant="secondary" disabled={busy}>
                 Keep the penalty

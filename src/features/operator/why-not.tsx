@@ -6,8 +6,9 @@ import * as React from "react";
 import type { Money } from "@/interfaces/api";
 import type { OperatorIdentity } from "@/interfaces/operator";
 import { cn } from "@/utils";
+import { formatMoney } from "@/utils/money";
 
-import { checkAction, rolesPhrase, whoCan, type ConsoleAction } from "./roles";
+import { checkAction, MONEY_ACTIONS, rolesPhrase, whoCan, type ConsoleAction } from "./roles";
 import { useOperatorDirectory } from "./use-operator-lookups";
 
 /**
@@ -34,11 +35,16 @@ function firstName(name: string): string {
   return name.split(/\s+/)[0] ?? name;
 }
 
-/** "Riley Brooks or Iris Park can." / "Nobody holds that role yet." Pure. */
-export function whoCanSentence(names: readonly string[], rolePhrase: string): string {
-  if (names.length === 0) return `Nobody on the team can right now: it needs ${rolePhrase}. An admin adds or changes someone on Team.`;
+/**
+ * "Riley Brooks or Iris Park can (Lead adjudicator or Adjudicator)." With
+ * `amountText` for an action on money, the names are already filtered by
+ * authority limit (`whoCan`), and the sentence says so. Pure.
+ */
+export function whoCanSentence(names: readonly string[], rolePhrase: string, amountText?: string | null): string {
+  const needs = amountText ? `${rolePhrase}, with an authority limit of at least ${amountText}` : rolePhrase;
+  if (names.length === 0) return `Nobody on the team can right now: it needs ${needs}. An admin adds or changes someone on Team.`;
   const list = names.length <= 3 ? `${names.slice(0, -1).join(", ")}${names.length > 1 ? " or " : ""}${names[names.length - 1]}` : `${names.slice(0, 3).join(", ")} or ${names.length - 3} others`;
-  return `${list} can (${rolePhrase}).`;
+  return `${list} can (${needs}).`;
 }
 
 function absolute(link: string): string {
@@ -106,7 +112,7 @@ export function WhyNot({ action, me, amount, ask, link, why, title, className }:
         {directory.isPending ? null : (
           <p className="text-02">
             <span className="text-03">Who can: </span>
-            {whoCanSentence(names, phrase)}
+            {whoCanSentence(names, phrase, amount && MONEY_ACTIONS.has(action) ? formatMoney(amount) : null)}
           </p>
         )}
       </div>
