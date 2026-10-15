@@ -10,6 +10,7 @@ import {
   approvedResultSentence,
   decisionText,
   describeApproval,
+  EMPTY_APPROVAL_CONTEXT,
   isWithdrawn,
   pendingBadge,
   rejectMode,
@@ -263,11 +264,17 @@ describe("how a row reads", () => {
         target: `slash_proposal:${id}`,
         payload: { body: { note: "n", reasonCode: "R15_TEST" }, proposalId: id },
       });
-      expect(suspend.sentence).toBe("Suspend case a337cb6d…, which cancels its penalty (r15 test).");
-      expect(suspend.target).toEqual({ label: "Case a337cb6d…", href: `/operator/cases/view?id=${id}` });
+      expect(suspend.sentence).toBe("Suspend penalty a337cb6d…, which cancels it (r15 test).");
+      expect(suspend.target).toEqual({ label: "Penalty a337cb6d…", href: `/operator/cases/view?id=${id}` });
+      // Once the penalty is read, it is named by its provider and amount.
+      const named = describeApproval(
+        { action: "slash.suspend", target: `slash_proposal:${id}`, payload: { proposalId: id, body: {} } },
+        { ...EMPTY_APPROVAL_CONTEXT, penalties: new Map([[id, "Northwind Geo's $28.47 penalty"]]) },
+      );
+      expect(named.sentence).toBe("Suspend Northwind Geo's $28.47 penalty, which cancels it.");
 
       const sweep = describeApproval(approval());
-      expect(sweep.sentence).toBe("Sweep every case with defect D-1 over the last 24 h, decided like case p1 (r).");
+      expect(sweep.sentence).toBe("Sweep every penalty with defect D-1 over the last 24 h, decided like penalty p1 (r).");
       expect(sweep.fields.map((f) => f.label)).toEqual(["Defect", "Look back", "Reason", "Note"]);
 
       const comp = describeApproval({
@@ -275,7 +282,7 @@ describe("how a row reads", () => {
         target: "slash_proposal:p1",
         payload: { proposalId: "p1", body: { signature: "5sig", reasonCode: "R", note: "n" } },
       });
-      expect(comp.sentence).toBe("Record compensation for case p1 and close it as compensated (r).");
+      expect(comp.sentence).toBe("Record that penalty p1 was paid back, and close it as compensated (r).");
       expect(comp.fields[0]).toEqual({ label: "Deposit signature", value: "5sig" });
     });
 
@@ -290,9 +297,11 @@ describe("how a row reads", () => {
     expect(approvedResultSentence("slash.sweep", { matchedCount: 14, appliedCount: 0 })).toBe(
       "Fleet sweep opened: 14 matched, 0 applied.",
     );
-    expect(approvedResultSentence("account.unblock", { subject: "eip155:1:0xabc" })).toBe(
-      "Block lifted on eip155:1:0xabc.",
+    // Never the CAIP id off the wire: the shared wallet label, or the card's own name for it.
+    expect(approvedResultSentence("account.unblock", { subjectKind: "WALLET", subject: "eip155:46630:0x9f3c2b7e1d4a8c05b6e9f2a3d7c1b4e8a0d5f36c" })).toMatch(
+      /^Block lifted on Wallet 0x9[fF]3[cC]…[fF]36[cC]\.$/,
     );
+    expect(approvedResultSentence("account.unblock", {}, "Wallet 0x9F3c…F36c")).toBe("Block lifted on Wallet 0x9F3c…F36c.");
   });
 
   it("badges the pending count, with a plus past one page", () => {

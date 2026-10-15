@@ -17,7 +17,7 @@ import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { approvalNeeds } from "@/features/operator/approvals";
+import { approvalNeeds, approvalTargetId } from "@/features/operator/approvals";
 import { arbiterErrorMessage, mayBlockOnChain } from "@/features/operator/arbiter";
 import {
   blockSubjectLabel,
@@ -34,9 +34,10 @@ import { eligibleApprovers } from "@/features/operator/inbox";
 import { BLOCK_REASONS, UNBLOCK_REASONS, reasonLabel } from "@/features/operator/reasons";
 import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
-import { approvalHref } from "@/features/operator/two-person";
+import { approvalHref, sentForApproval } from "@/features/operator/two-person";
 import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-operator-lookups";
-import type { AccountBlock, BlockSubjectKind } from "@/interfaces/operator";
+import { WhyNot } from "@/features/operator/why-not";
+import type { AccountBlock, BlockSubjectKind, OperatorApproval } from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
 import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
@@ -45,6 +46,7 @@ import {
   createArbiterBlockIntent,
   getPlatformHealth,
   listAccountBlocks,
+  listApprovals,
   unblockAccount,
 } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
@@ -56,7 +58,8 @@ import { formatMoney } from "@/utils/money";
  * name, an organization id — the kind is inferred), what the block will stop,
  * a reason chip and a note. For a wallet, "Also block on chain" builds the
  * arbiter's `setBlocked` in the same flow. Lifting is two-person: the sheet
- * says who can approve it.
+ * says who can approve it, a block whose lift is already waiting says so on
+ * its row, and a second identical request is not sent.
  *
  * `?block=<id>&kind=ORGANIZATION|WALLET` opens the form prefilled — the case
  * and arbiter pages link here with it.
@@ -83,6 +86,21 @@ function BlocksScreen() {
   const [lifting, setLifting] = React.useState<AccountBlock | null>(null);
   const [chainBlocking, setChainBlocking] = React.useState<AccountBlock | null>(null);
   const [result, setResult] = React.useState<React.ReactNode>(null);
+
+  // Lifts already waiting for approval, by block id — the same query as the badge.
+  const pendingQuery = useQuery({
+    queryKey: ["operator", "approvals", "pending-count"],
+    queryFn: () => listApprovals({ status: "PENDING", limit: 100 }),
+    refetchInterval: 30_000,
+    retry: 0,
+  });
+  const pendingLift = React.useMemo(() => {
+    const map = new Map<string, OperatorApproval>();
+    for (const approval of pendingQuery.data?.items ?? []) {
+      if (approval.action === "account.unblock" && approval.status === "PENDING") map.set(approvalTargetId(approval), approval);
+    }
+    return map;
+  }, [pendingQuery.data]);
 
   // A link from a case or the arbiter page opens the form prefilled, once.
   React.useEffect(() => {
@@ -137,6 +155,20 @@ function BlocksScreen() {
 
       {result ? <div className="w-full">{result}</div> : null}
 
+      {!canAct ? (
+        <WhyNot
+          action="block"
+          me={me}
+          title="Blocking and lifting blocks"
+          why={
+            me.roles.includes("OPS_ADMIN")
+              ? "Admins manage the team. Blocking an account, or asking to lift a block, needs a Lead adjudicator or On-call (SRE)."
+              : undefined
+          }
+          ask="Can you help with an account block on Assay? My role cannot block or lift accounts."
+        />
+      ) : null}
+
       <div className="flex w-full flex-col gap-2.5 tablet:flex-row tablet:items-center tablet:justify-between">
         <Segmented value={filter} onValueChange={(value) => setFilter(value as Filter)} aria-label="Which blocks" className="self-start">
           <SegmentedItem value="active">Active</SegmentedItem>
@@ -177,6 +209,7 @@ function BlocksScreen() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-label-13 text-01">{label(block)}</span>
                   <StatusChip status={block.active ? "blocked" : "closed"} detail={block.active ? undefined : "lifted"} />
+                  {block.active && pendingLift.has(block.id) ? <StatusChip status="waiting" detail="lift waiting for approval" /> : null}
                   <span className="text-body-xs text-03">{block.subjectKind === "ORGANIZATION" ? "Organization" : "Wallet"}</span>
                 </div>
                 <p className="text-body-13 text-02">
@@ -200,7 +233,11 @@ function BlocksScreen() {
                     Block on chain
                   </Button>
                 ) : null}
-                {block.active && canAct ? (
+                {block.active && pendingLift.has(block.id) ? (
+                  <Button variant="secondary" size="sm" asChild>
+                    <Link href={approvalHref(pendingLift.get(block.id)!.id)}>Open the lift request</Link>
+                  </Button>
+                ) : block.active && canAct ? (
                   <Button variant="secondary" size="sm" onClick={() => setLifting(block)}>
                     Lift block
                   </Button>
@@ -234,6 +271,8 @@ function BlocksScreen() {
         <LiftSheet
           block={lifting}
           label={lifting ? label(lifting) : ""}
+          waiting={lifting ? (pendingLift.get(lifting.id) ?? null) : null}
+          nameOf={directory.nameOf}
           approvers={directory.isPending ? undefined : eligibleApprovers("A-10", directory.operators, me.id)}
           onClose={() => setLifting(null)}
           onDone={setResult}
@@ -378,7 +417,13 @@ function BlockSheet({
 
   return (
     <Sheet open={open} onOpenChange={(next) => (block.isPending ? undefined : onOpenChange(next))}>
-      <SheetContent showCloseButton={!block.isPending}>
+      <SheetContent
+        showCloseButton={!block.isPending}
+        // Arriving with the account already picked: do not focus (and so open) its search over the reason and note.
+        onOpenAutoFocus={(event) => {
+          if (prefill) event.preventDefault();
+        }}
+      >
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Block an account</SheetTitle>
           <SheetDescription>It stops paying and being paid through Assay within seconds. Lifting it later needs two people.</SheetDescription>
@@ -431,16 +476,18 @@ function BlockSheet({
             errors={errors}
           />
           <Field label="Ticket (optional)" value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="INC-123" maxLength={128} />
-          {canChain && picked?.kind === "WALLET" ? (
+          {canChain ? (
             <div className="flex w-full flex-col gap-1">
               <Switch
                 checked={onChain && evm !== null && chainId !== null}
                 disabled={evm === null || chainId === null}
                 onChange={(e) => setOnChain(e.target.checked)}
-                label="Incident: also block on chain"
+                label="Also block on chain"
               />
               <p className="text-body-xs text-03">
-                {evm === null
+                {picked?.kind !== "WALLET"
+                  ? "For a wallet only: pick a wallet (0x…) above to turn this on. An organization is blocked here, not on chain."
+                  : evm === null
                   ? "Only an EVM wallet can be blocked on chain."
                   : chainId === null
                     ? health.isError
@@ -553,12 +600,17 @@ function ChainBlockSheet({ block, label, onClose }: { block: AccountBlock | null
 function LiftSheet({
   block,
   label,
+  waiting,
+  nameOf,
   approvers,
   onClose,
   onDone,
 }: {
   block: AccountBlock | null;
   label: string;
+  /** A request to lift this block that is already waiting, if any. */
+  waiting: OperatorApproval | null;
+  nameOf: (subject: string | null | undefined) => string;
   approvers: string[] | undefined;
   onClose: () => void;
   onDone: (node: React.ReactNode) => void;
@@ -573,15 +625,19 @@ function LiftSheet({
       unblockAccount(input.id, { reasonCode: input.reasonCode, note: input.note }),
     onSuccess: (answer) => {
       void queryClient.invalidateQueries({ queryKey: ["operator"] });
+      const sent = answer.kind === "queued" ? sentForApproval(`Lifting the block on ${label}`, approvers, approvalNeeds("A-10"), answer.approval.expiresAt) : null;
       onDone(
-        answer.kind === "queued" ? (
-          <ResultCard
-            tone="queued"
-            title={`Lifting the block on ${label} is waiting for approval`}
-            next={`Nothing has changed yet. It needs ${approvalNeeds("A-10")}${approvers && approvers.length > 0 ? ` (${approvers.join(", ")})` : ""}; send them the link.`}
-            link={{ label: "Open the request", href: approvalHref(answer.approval.approvalId) }}
-            onDismiss={() => onDone(null)}
-          />
+        answer.kind === "queued" && sent ? (
+          <div className="flex w-full flex-col gap-2">
+            <ResultCard
+              tone="queued"
+              title={sent.title}
+              next={`${sent.next} Until then ${label} stays blocked.`}
+              link={{ label: "Open the request", href: approvalHref(answer.approval.approvalId) }}
+              onDismiss={() => onDone(null)}
+            />
+            <ApprovalFooter needs={approvalNeeds("A-10")} approvers={approvers} link={approvalHref(answer.approval.approvalId)} expiresAt={answer.approval.expiresAt} />
+          </div>
         ) : (
           <ResultCard title={`The block on ${label} is lifted`} next="It applies within seconds." onDismiss={() => onDone(null)} />
         ),
@@ -600,7 +656,7 @@ function LiftSheet({
 
 
   const submit = () => {
-    if (!block) return;
+    if (!block || waiting) return;
     const validated = validateUnblockForm({ reasonCode: reason, note, ticketRef: "" });
     const next = {
       reason: reason ? undefined : "Pick a reason.",
@@ -619,6 +675,18 @@ function LiftSheet({
           <SheetDescription>Nothing changes until a second operator approves it. Then the account can use Assay again.</SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pt-4">
+          {waiting ? (
+            <div role="status" className="flex w-full flex-col gap-1 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5 text-body-13 text-02">
+              <p className="text-label-13 text-01">A request to lift this block is already waiting</p>
+              <p>
+                {nameOf(waiting.requestedBy)} asked <LocalTime value={waiting.createdAt} />. A second request would wait for the same
+                approvers, so it is not sent.{" "}
+                <Link href={approvalHref(waiting.id)} className="text-primary-600 hover:underline">
+                  Open the waiting request
+                </Link>
+              </p>
+            </div>
+          ) : null}
           <ReasonChips
             label="Why"
             options={UNBLOCK_REASONS}
@@ -643,7 +711,7 @@ function LiftSheet({
                 Keep it blocked
               </Button>
             </SheetClose>
-            <Button loading={lift.isPending} onClick={submit}>
+            <Button loading={lift.isPending} disabled={waiting !== null} onClick={submit}>
               Send for approval
             </Button>
           </div>

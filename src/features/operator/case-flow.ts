@@ -4,16 +4,9 @@ import type { Money } from "@/interfaces/api";
 import type { OperatorCaseBrief, OperatorIdentity, SlashProposalStatus } from "@/interfaces/operator";
 import { DISPUTE_TIMEOUT_SECONDS } from "@/libs/chains/evm/stake-slashes/abi";
 
-import { DISPUTE_RED_FROM_DAY } from "./inbox";
-import { capabilitiesFor, rolesPhrase } from "./roles";
-import {
-  asProposalStatus,
-  authorityRefusal,
-  exceedsAuthority,
-  isLegalInStatus,
-  may,
-  suspendIsTwoPerson,
-} from "./state";
+import { DISPUTE_RED_FROM_DAY, disputeDayText } from "./inbox";
+import { capabilitiesFor, checkAction } from "./roles";
+import { asProposalStatus, isLegalInStatus, may, suspendIsTwoPerson } from "./state";
 
 /**
  * The penalty's on-chain process, as the case screen draws it:
@@ -139,8 +132,9 @@ export function caseTimelineSteps(
       label: stage === "upheld" ? "Arbiter upheld it" : "Arbiter rules",
       state: ruled ? "done" : "current",
       date: ruled ? null : facts.disputeExpiresAt,
-      dateLabel: ruled ? undefined : "30-day limit",
-      countdown: !ruled,
+      // The same "Day N of 30 · X days left" as Home, Penalties and Arbiter — not a second countdown.
+      dateLabel: ruled ? undefined : `${disputeDayText({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }, now)} · ends`,
+      countdown: false,
       urgent: !ruled && day !== null && day >= DISPUTE_RED_FROM_DAY,
       description: ruled ? undefined : "Unruled by then, anyone can expire it and the stake is released.",
     });
@@ -196,11 +190,17 @@ export interface CaseNextStep {
   secondary: CaseActionId | null;
   /** The instant the description points at, for a countdown. */
   until: string | null;
+  /** A short mono line under the description, e.g. "Day 24 of 30 · 7 days left". */
+  meta?: string | null;
 }
 
 export interface CaseAuthority {
-  /** May suspend: role, status and authority limit all allow it. */
-  suspend: { allowed: boolean; twoPerson: boolean; reason: string | null };
+  /**
+   * May suspend: role, status and authority limit all allow it. `open` is the
+   * status half alone — the penalty can still be suspended by someone — which
+   * is when a "who can" line is worth drawing.
+   */
+  suspend: { allowed: boolean; open: boolean; twoPerson: boolean; reason: string | null };
   rule: boolean;
   cancel: boolean;
   compensate: boolean;
@@ -215,17 +215,13 @@ export function caseAuthority(
   const caps = capabilitiesFor(identity.roles);
   const penalty: Money = brief.case.proposal.penaltyAmount;
   const status = facts.status;
-  let suspendReason: string | null = null;
-  let suspendAllowed = false;
-  if (!may(identity.roles, "suspend")) suspendReason = `Suspending needs ${rolesPhrase(["ADJ", "ADJL", "SRE"])}.`;
-  else if (!status || !isLegalInStatus("suspend", status) || facts.stage === "executed" || facts.stage === "cancelled") {
-    suspendReason = "This penalty can no longer be suspended.";
-  } else if (identity.authorityLimit && exceedsAuthority(identity.authorityLimit, penalty.amount)) {
-    suspendReason = `Above your authority: ${authorityRefusal(identity.authorityLimit, penalty)}.`;
-  } else suspendAllowed = true;
+  // Role and authority limit: the same check the Home banner reads.
+  const check = checkAction(identity, "suspend", penalty);
+  const legal = Boolean(status && isLegalInStatus("suspend", status)) && facts.stage !== "executed" && facts.stage !== "cancelled";
+  const suspendReason = !legal ? "This penalty can no longer be suspended." : check.why;
 
   return {
-    suspend: { allowed: suspendAllowed, twoPerson: status ? suspendIsTwoPerson(status) : false, reason: suspendReason },
+    suspend: { allowed: legal && check.allowed, open: legal, twoPerson: status ? suspendIsTwoPerson(status) : false, reason: suspendReason },
     rule: caps.rule,
     cancel: may(identity.roles, "cancel") && facts.stage === "cancel-requested",
     compensate: may(identity.roles, "compensate") && status !== null && isLegalInStatus("compensate", status),
@@ -289,6 +285,7 @@ export function caseNextStep(
             action: "rule",
             secondary: null,
             until: facts.disputeExpiresAt,
+            meta: disputeDayText({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }),
           }
         : {
             kind: "waiting",
@@ -297,6 +294,7 @@ export function caseNextStep(
             action: null,
             secondary: null,
             until: facts.disputeExpiresAt,
+            meta: disputeDayText({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }),
           };
     case "window-open":
       return {

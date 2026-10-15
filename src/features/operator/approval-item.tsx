@@ -104,7 +104,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
   };
   const onApprove = async () => {
     const decision = await approveApproval(approval.id);
-    settle({ kind: "approved", text: approvedResultSentence(approval.action, decision.result), next: NEXT[approval.action] });
+    settle({ kind: "approved", text: approvedResultSentence(approval.action, decision.result, target.label), next: NEXT[approval.action] });
   };
   const onReject = async () => {
     await rejectApproval(approval.id);

@@ -33,7 +33,8 @@ import { OPERATOR_ADD_REASONS, OPERATOR_CHANGE_REASONS, OPERATOR_REMOVE_REASONS 
 import { ResultCard } from "@/features/operator/result-card";
 import { ROLE_PRESETS, presetOf, removalWarnings, roleTitle } from "@/features/operator/roles";
 import { useOperatorSession } from "@/features/operator/session-context";
-import { approvalHref, type TwoPersonAnswer } from "@/features/operator/two-person";
+import { approvalHref, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
+import { WhyNot } from "@/features/operator/why-not";
 import type { OperatorDirectoryEntry, OperatorRole } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { checkEvmAddress, toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
@@ -47,9 +48,11 @@ import { formatMoney, parseAmountInput } from "@/utils/money";
  * Everyone reads it (it is how you find who can approve something). Admins
  * add people with a side sheet: name, wallet, a role in plain words
  * (fine-grained roles under "Customize"), a limit in dollars, and why.
- * Adding and raising need a second admin, named in the footer. Removing is
- * immediate and warns when it would leave a two-person action with nobody to
- * approve it [backend: refuse such a removal].
+ * Adding and raising need a second admin, named in the footer; with no other
+ * admin, Send is held back and the sheet says what to do. Removing is
+ * immediate — the backend runs it as a one-person action (A-14), so access
+ * can be cut at once in an incident — and warns when it would leave a
+ * two-person action with nobody to approve it [backend: refuse such a removal].
  */
 
 const LIST_LIMIT = 100;
@@ -89,13 +92,14 @@ export default function TeamPage() {
     void queryClient.invalidateQueries({ queryKey: ["operator", "operators"] });
     void queryClient.invalidateQueries({ queryKey: ["operator", "approvals"] });
   };
-  const queuedOrDone = (answer: TwoPersonAnswer<OperatorDirectoryEntry>, what: string) =>
+  const queuedOrDone = (answer: TwoPersonAnswer<OperatorDirectoryEntry>, what: string, approvers: string[]) => {
+    const sent = answer.kind === "queued" ? sentForApproval(what, approvers, "a second Admin", answer.approval.expiresAt) : null;
     done(
-      answer.kind === "queued" ? (
+      answer.kind === "queued" && sent ? (
         <ResultCard
           tone="queued"
-          title={`${what}: waiting for a second admin`}
-          next="Nothing has changed yet. It applies when another admin approves it, within 24 h. Send them the link."
+          title={sent.title}
+          next={sent.next}
           link={{ label: "Open the request", href: approvalHref(answer.approval.approvalId) }}
           onDismiss={() => setResult(null)}
         />
@@ -103,6 +107,9 @@ export default function TeamPage() {
         <ResultCard title={`${what}: done`} next="It applies from their next request." activityHref="/operator/override-log?kind=operators" onDismiss={() => setResult(null)} />
       ),
     );
+  };
+  const addApprovers = eligibleApprovers("A-12", rows, me.id);
+  const changeApprovers = eligibleApprovers("A-13", rows, me.id);
 
   return (
     <>
@@ -121,6 +128,10 @@ export default function TeamPage() {
       </header>
 
       {result ? <div className="w-full">{result}</div> : null}
+
+      {!canManage ? (
+        <WhyNot action="manageTeam" me={me} title="Changing the team" ask="Can you change an operator's access on Team? It needs an admin." />
+      ) : null}
 
       <Segmented value={status} onValueChange={(value) => setStatus(value as "ACTIVE" | "")} aria-label="Who to show" className="self-start">
         <SegmentedItem value="ACTIVE">Active</SegmentedItem>
@@ -184,16 +195,16 @@ export default function TeamPage() {
             open={sheet?.kind === "add"}
             onClose={() => setSheet(null)}
             decimals={decimals}
-            approvers={eligibleApprovers("A-12", rows, me.id)}
-            onDone={(answer, name) => queuedOrDone(answer, `Adding ${name}`)}
+            approvers={addApprovers}
+            onDone={(answer, name) => queuedOrDone(answer, `Adding ${name}`, addApprovers)}
           />
           <ChangeSheet
             row={sheet?.kind === "change" ? sheet.row : null}
             onClose={() => setSheet(null)}
             decimals={decimals}
             asset={asset}
-            approvers={eligibleApprovers("A-13", rows, me.id)}
-            onDone={(answer, name) => queuedOrDone(answer, `Changing ${name}`)}
+            approvers={changeApprovers}
+            onDone={(answer, name) => queuedOrDone(answer, `Changing ${name}`, changeApprovers.filter((n) => n !== name))}
           />
           <RemoveSheet
             row={sheet?.kind === "remove" ? sheet.row : null}
@@ -296,6 +307,7 @@ function Footer({
   confirmLabel,
   tone = "primary",
   onConfirm,
+  blocked = null,
 }: {
   busy: boolean;
   error: unknown;
@@ -303,11 +315,13 @@ function Footer({
   confirmLabel: string;
   tone?: "primary" | "danger";
   onConfirm: () => void;
+  /** Why the confirm button is held back, when it is. */
+  blocked?: string | null;
 }) {
   return (
     <SheetFooter className="sticky bottom-0 bg-01">
       <div role="alert" className={cn("min-h-[18px] text-body-xs text-danger-600")}>
-        {error ? directoryErrorMessage(error).replace(/\s*\([A-Z_]+\)$/, "") : (summary ?? "")}
+        {error ? directoryErrorMessage(error).replace(/\s*\([A-Z_]+\)$/, "") : (summary ?? blocked ?? "")}
         {error instanceof ApiError ? (
           <details className="mt-1 text-03">
             <summary className="cursor-pointer select-none text-label-xs">Details</summary>
@@ -321,12 +335,21 @@ function Footer({
             Cancel
           </Button>
         </SheetClose>
-        <Button variant={tone} loading={busy} onClick={onConfirm}>
+        <Button variant={tone} loading={busy} disabled={blocked !== null} onClick={onConfirm}>
           {confirmLabel}
         </Button>
       </div>
     </SheetFooter>
   );
+}
+
+/** Clears one field's error once it is edited: a message never outlives the mistake. */
+function useFieldErrors() {
+  const [errors, setErrors] = React.useState<Record<string, string | null | undefined>>({});
+  const clear = React.useCallback((...keys: string[]) => {
+    setErrors((current) => (keys.some((key) => current[key]) ? { ...current, ...Object.fromEntries(keys.map((key) => [key, undefined])) } : current));
+  }, []);
+  return { errors, setErrors, clear };
 }
 
 function summaryOf(errors: Record<string, string | null | undefined>, names: Record<string, string>): string | null {
@@ -359,7 +382,17 @@ function AddSheet({
   const limit = useLimit("0");
   const [reason, setReason] = React.useState("");
   const [note, setNote] = React.useState("");
-  const [errors, setErrors] = React.useState<Record<string, string | null | undefined>>({});
+  const { errors, setErrors, clear } = useFieldErrors();
+  React.useEffect(() => {
+    if (reason) clear("reason");
+  }, [reason, clear]);
+  React.useEffect(() => {
+    if (note.trim().length >= DIRECTORY_NOTE_MIN) clear("note");
+  }, [note, clear]);
+  React.useEffect(() => {
+    if (roles.length > 0) clear("roles");
+  }, [roles, clear]);
+  const soleAdmin = approvers.length === 0;
 
   const subject = handle ?? deriveSubject(name);
   const walletCheck = wallet.trim() ? checkEvmAddress(wallet) : null;
@@ -412,17 +445,33 @@ function AddSheet({
           <SheetDescription>They sign in with the wallet you enter. A second admin approves it first.</SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-3 px-[18px] pt-4">
+          {soleAdmin ? (
+            <div role="alert" className="flex w-full gap-2.5 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5">
+              <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
+              <div className="flex flex-col gap-1 text-body-13 text-02">
+                <p className="text-label-13 text-01">You are the only admin, so nobody can approve this yet</p>
+                <p>
+                  Adding someone always needs a second admin, and the console cannot make the first one. Ask engineering to register a
+                  second admin wallet on the backend (operator-access runbook); then send this again and they approve it.
+                </p>
+              </div>
+            </div>
+          ) : null}
           <Field
             label="Name"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              clear("name", "subject");
+            }}
             placeholder="Noor Hassan"
             maxLength={128}
             error={errors.name ?? errors.subject ?? undefined}
             hint={
               subject ? (
                 <>
-                  Recorded as <span className="font-mono">{subject}</span>{" "}
+                  Their handle: <span className="font-mono">{subject}</span>, the short name Activity and approvals show for
+                  them.{" "}
                   {handle === null ? (
                     <button type="button" className="text-primary-600 hover:underline" onClick={() => setHandle(subject)}>
                       change
@@ -435,12 +484,24 @@ function AddSheet({
             }
           />
           {handle !== null ? (
-            <Field label="Handle" value={handle} onChange={(e) => setHandle(e.target.value)} maxLength={256} hint="The short name Activity uses, e.g. noor@." />
+            <Field
+              label="Handle"
+              value={handle}
+              onChange={(e) => {
+                setHandle(e.target.value);
+                clear("subject");
+              }}
+              maxLength={256}
+              hint="The short name Activity and approvals show for them, e.g. noor@. It is not an email address."
+            />
           ) : null}
           <Field
             label="Their wallet"
             value={wallet}
-            onChange={(e) => setWallet(e.target.value)}
+            onChange={(e) => {
+              setWallet(e.target.value);
+              clear("wallet");
+            }}
             placeholder="0x…"
             autoComplete="off"
             spellCheck={false}
@@ -448,7 +509,14 @@ function AddSheet({
             hint={walletCheck && walletCheck.ok ? `Checks out: ${walletCheck.checksummed.slice(0, 6)}…${walletCheck.checksummed.slice(-4)}` : RESERVED}
           />
           <RoleField roles={roles} onChange={setRoles} error={errors.roles ?? undefined} />
-          <LimitField choice={limit.choice} onChange={limit.setChoice} error={errors.limit} />
+          <LimitField
+            choice={limit.choice}
+            onChange={(value) => {
+              limit.setChoice(value);
+              clear("limit");
+            }}
+            error={errors.limit}
+          />
           <ReasonChips
             label="Why"
             options={OPERATOR_ADD_REASONS}
@@ -469,6 +537,7 @@ function AddSheet({
           summary={summaryOf(errors, { name: "name", wallet: "wallet", roles: "role", limit: "limit", reason: "reason", note: "note", subject: "handle" })}
           confirmLabel="Send for approval"
           onConfirm={submit}
+          blocked={soleAdmin ? "Held back: no second admin can approve it yet." : null}
         />
       </SheetContent>
     </Sheet>
@@ -496,8 +565,15 @@ function ChangeSheet({
   const limit = useLimit("0");
   const [reason, setReason] = React.useState("");
   const [note, setNote] = React.useState("");
-  const [errors, setErrors] = React.useState<Record<string, string | null | undefined>>({});
+  const { errors, setErrors, clear } = useFieldErrors();
   const { setChoice } = limit;
+  React.useEffect(() => {
+    if (reason) clear("reason");
+  }, [reason, clear]);
+  React.useEffect(() => {
+    if (note.trim().length >= DIRECTORY_NOTE_MIN) clear("note");
+  }, [note, clear]);
+  React.useEffect(() => clear("roles", "limit"), [roles, limit.choice, clear]);
 
   React.useEffect(() => {
     if (!row) return;
@@ -506,7 +582,7 @@ function ChangeSheet({
     setReason("");
     setNote("");
     setErrors({});
-  }, [row, setChoice]);
+  }, [row, setChoice, setErrors]);
 
   const change = useMutation({
     mutationFn: (input: { id: string; body: Parameters<typeof changeOperator>[1] }) => changeOperator(input.id, input.body),
@@ -581,6 +657,7 @@ function ChangeSheet({
           summary={summaryOf(errors, { roles: "role", limit: "limit", reason: "reason", note: "note" })}
           confirmLabel={raising ? "Send for approval" : "Apply now"}
           onConfirm={submit}
+          blocked={raising && approvers.filter((name) => name !== operatorLabel(row)).length === 0 ? "Held back: no other admin can approve a raise yet. Lowering still applies at once." : null}
         />
       </SheetContent>
     </Sheet>
@@ -632,7 +709,11 @@ function RemoveSheet({
       <SheetContent showCloseButton={!remove.isPending}>
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Remove {operatorLabel(row)}?</SheetTitle>
-          <SheetDescription>It applies at once: every session they hold ends and their wallet can no longer sign in.</SheetDescription>
+          <SheetDescription>
+            It applies at once, without a second admin: every session they hold ends and their wallet can no longer sign in. Removal
+            is one-person on purpose, so access can be cut in an incident; it is recorded in Activity, and adding them back needs a
+            second admin.
+          </SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-3 px-[18px] pt-4">
           {warnings.length > 0 ? (

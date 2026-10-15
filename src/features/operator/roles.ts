@@ -1,4 +1,6 @@
-import type { OperatorRole } from "@/interfaces/operator";
+import type { Money } from "@/interfaces/api";
+import type { OperatorDirectoryEntry, OperatorRole } from "@/interfaces/operator";
+import { formatMoney } from "@/utils/money";
 
 import { APPROVER_ROLES } from "./approvals";
 import { ARBITER_BLOCK_ROLES, ARBITER_RULING_ROLES } from "./arbiter";
@@ -113,9 +115,106 @@ const APPROVES = Object.entries(APPROVER_ROLES).map(([code, roles]) => ({
 
 const SUSPEND_ROLES: readonly OperatorRole[] = ["ADJ", "ADJL", "SRE"];
 const COMPENSATE_ROLES: readonly OperatorRole[] = ["ADJL", "TRE"];
+const ADMIN_ROLES: readonly OperatorRole[] = ["OPS_ADMIN"];
 
 function holds(roles: readonly OperatorRole[], allowed: readonly OperatorRole[]): boolean {
   return roles.some((role) => allowed.includes(role));
+}
+
+// ── One capability check for every screen ───────────────────────────────────
+
+/**
+ * Everything an operator might start. The Home banner, the buttons on each
+ * screen and the "Why you can't, and who can" lines all read `checkAction`,
+ * so the banner can never promise an action a screen then hides.
+ */
+export type ConsoleAction = "rule" | "suspend" | "block" | "blockOnChain" | "compensate" | "manageTeam";
+
+const ACTION_ROLES: Readonly<Record<ConsoleAction, readonly OperatorRole[]>> = {
+  rule: ARBITER_RULING_ROLES,
+  suspend: SUSPEND_ROLES,
+  block: BLOCK_ROLES,
+  blockOnChain: ARBITER_BLOCK_ROLES,
+  compensate: COMPENSATE_ROLES,
+  manageTeam: ADMIN_ROLES,
+};
+
+/** What the action is, as a verb phrase: "suspend a penalty". */
+export const ACTION_WHAT: Readonly<Record<ConsoleAction, string>> = {
+  rule: "rule on disputed penalties",
+  suspend: "suspend a penalty",
+  block: "block an account",
+  blockOnChain: "block a wallet on chain",
+  compensate: "compensate a provider",
+  manageTeam: "add and change operators",
+};
+
+/** Actions on money: the authority limit applies (the backend refuses above it). */
+const MONEY_ACTIONS: ReadonlySet<ConsoleAction> = new Set(["suspend", "compensate"]);
+
+export interface ActionCheck {
+  allowed: boolean;
+  /** Why not, as one sentence. Null when allowed. */
+  why: string | null;
+  /** The roles that may take it. */
+  roles: readonly OperatorRole[];
+  /** True when the role is right and only the limit is in the way. */
+  limitOnly: boolean;
+}
+
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function aboveLimit(limit: Money | null | undefined, amount: string): boolean {
+  if (!limit) return false;
+  if (!/^\d+$/.test(limit.amount) || !/^\d+$/.test(amount)) return false;
+  return BigInt(amount) > BigInt(limit.amount);
+}
+
+/**
+ * May this operator take `action` — on `amount` when it is about money? The
+ * role comes first, then the authority limit: a $0 limit rules out every
+ * action on money, whatever the role says.
+ */
+export function checkAction(
+  identity: { roles: readonly OperatorRole[]; authorityLimit?: Money | null },
+  action: ConsoleAction,
+  amount?: Money | null,
+): ActionCheck {
+  const roles = ACTION_ROLES[action];
+  if (!holds(identity.roles, roles)) {
+    return { allowed: false, why: `${capitalise(ACTION_WHAT[action])} needs ${rolesPhrase(roles)}.`, roles, limitOnly: false };
+  }
+  if (MONEY_ACTIONS.has(action) && identity.authorityLimit) {
+    const limit = identity.authorityLimit;
+    if (limit.amount === "0") {
+      return { allowed: false, why: `Your authority limit is $0, so you cannot ${ACTION_WHAT[action]}.`, roles, limitOnly: true };
+    }
+    if (amount && aboveLimit(limit, amount.amount)) {
+      return {
+        allowed: false,
+        why: `It is ${formatMoney(amount)}, above your authority limit of ${formatMoney(limit)}.`,
+        roles,
+        limitOnly: true,
+      };
+    }
+  }
+  return { allowed: true, why: null, roles, limitOnly: false };
+}
+
+/**
+ * Who could take `action` instead: active operators who pass the same check,
+ * other than `exceptId`. Names as the console shows them.
+ */
+export function whoCan(
+  action: ConsoleAction,
+  operators: readonly Pick<OperatorDirectoryEntry, "id" | "roles" | "status" | "displayName" | "subject" | "authorityLimit">[],
+  options: { amount?: Money | null; exceptId?: string | null } = {},
+): string[] {
+  return operators
+    .filter((op) => op.status === "ACTIVE" && op.id !== options.exceptId && checkAction(op, action, options.amount).allowed)
+    .map((op) => op.displayName?.trim() || op.subject);
 }
 
 export interface Capabilities {
@@ -123,7 +222,7 @@ export interface Capabilities {
   approveCodes: string[];
   /** "lifting account blocks, suspensions of upheld penalties" */
   approves: string[];
-  /** Other things they may start, in words. */
+  /** Other things they may start, in words — only what `checkAction` allows. */
   can: string[];
   rule: boolean;
   block: boolean;
@@ -131,26 +230,23 @@ export interface Capabilities {
   manageOperators: boolean;
 }
 
-export function capabilitiesFor(roles: readonly OperatorRole[]): Capabilities {
+const BANNER_ACTIONS: readonly ConsoleAction[] = ["rule", "suspend", "block", "compensate", "manageTeam"];
+
+/**
+ * What a set of roles (and, when given, an authority limit) lets someone do.
+ * With a limit, the money actions it rules out are left out of `can`.
+ */
+export function capabilitiesFor(roles: readonly OperatorRole[], authorityLimit?: Money | null): Capabilities {
   const approving = APPROVES.filter((row) => holds(roles, row.roles));
-  const rule = holds(roles, ARBITER_RULING_ROLES);
-  const block = holds(roles, BLOCK_ROLES);
-  const blockOnChain = holds(roles, ARBITER_BLOCK_ROLES);
-  const manageOperators = roles.includes("OPS_ADMIN");
-  const can: string[] = [];
-  if (rule) can.push("rule on disputed penalties");
-  if (holds(roles, SUSPEND_ROLES)) can.push("suspend a penalty");
-  if (block) can.push("block an account");
-  if (holds(roles, COMPENSATE_ROLES)) can.push("compensate a provider");
-  if (manageOperators) can.push("add and change operators");
+  const identity = { roles, authorityLimit };
   return {
     approveCodes: approving.map((row) => row.code),
     approves: [...new Set(approving.map((row) => row.what))],
-    can,
-    rule,
-    block,
-    blockOnChain,
-    manageOperators,
+    can: BANNER_ACTIONS.filter((action) => checkAction(identity, action).allowed).map((action) => ACTION_WHAT[action]),
+    rule: holds(roles, ARBITER_RULING_ROLES),
+    block: holds(roles, BLOCK_ROLES),
+    blockOnChain: holds(roles, ARBITER_BLOCK_ROLES),
+    manageOperators: roles.includes("OPS_ADMIN"),
   };
 }
 

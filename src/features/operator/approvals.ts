@@ -11,6 +11,7 @@ import { toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
 import { shortAddress } from "@/libs/chains/format";
 import { formatMoney } from "@/utils/money";
 
+import { walletLabel } from "./block-targets";
 import { ROLE_OPTIONS } from "./directory";
 import { routes } from "@/libs/routes";
 
@@ -109,13 +110,22 @@ export interface ApprovalContext {
   >;
   /** The platform asset, read off any directory row, to turn minor units into money. */
   readonly asset: Pick<Money, "asset" | "decimals"> | null;
+  /** Penalty id → "Northwind Geo's $28.47 penalty", for the ones already read. */
+  readonly penalties?: ReadonlyMap<string, string>;
 }
 
 export const EMPTY_APPROVAL_CONTEXT: ApprovalContext = {
   blocks: new Map(),
   operators: new Map(),
   asset: null,
+  penalties: new Map(),
 };
+
+/** "Northwind Geo's $28.47 penalty", "Helios Data Labs' $12.40 penalty". */
+export function penaltyPhrase(providerName: string, amount: string): string {
+  const owner = /s$/i.test(providerName) ? `${providerName}'` : `${providerName}'s`;
+  return `${owner} ${amount} penalty`;
+}
 
 export interface ApprovalDescription {
   /** One sentence: what approving runs. */
@@ -235,8 +245,14 @@ function extraFields(body: Record<string, unknown>): { label: string; value: str
   return fields;
 }
 
-function caseTarget(id: string) {
-  return { label: `Case ${shortId(id)}`, href: routes.operatorCase(id) };
+/** A penalty in words: its provider and amount when read, else "penalty 0a6d3b9e…". */
+function penaltyName(id: string, context: ApprovalContext): string {
+  return context.penalties?.get(id) ?? `penalty ${shortId(id)}`;
+}
+
+function caseTarget(id: string, context: ApprovalContext) {
+  const name = penaltyName(id, context);
+  return { label: name.charAt(0).toUpperCase() + name.slice(1), href: routes.operatorCase(id) };
 }
 
 /**
@@ -352,8 +368,8 @@ export function describeApproval(
     case "slash.suspend": {
       const id = text(payload.proposalId) ?? targetId;
       return {
-        sentence: `Suspend case ${shortId(id)}, which cancels its penalty${because}.`,
-        target: caseTarget(id),
+        sentence: `Suspend ${penaltyName(id, context)}, which cancels it${because}.`,
+        target: caseTarget(id, context),
         fields: [...commonFields(body), ...extraFields(body)],
       };
     }
@@ -366,8 +382,8 @@ export function describeApproval(
       if (defect) fields.push({ label: "Defect", value: defect });
       if (hours) fields.push({ label: "Look back", value: `${hours} h` });
       return {
-        sentence: `Sweep every case with defect ${defect ?? "?"} over the last ${hours ?? "?"} h, decided like case ${shortId(id)}${because}.`,
-        target: caseTarget(id),
+        sentence: `Sweep every penalty with defect ${defect ?? "?"} over the last ${hours ?? "?"} h, decided like ${penaltyName(id, context)}${because}.`,
+        target: caseTarget(id, context),
         fields: [...fields, ...commonFields(body), ...extraFields(body)],
       };
     }
@@ -376,8 +392,8 @@ export function describeApproval(
       const id = text(payload.proposalId) ?? targetId;
       const signature = text(body.signature);
       return {
-        sentence: `Record compensation for case ${shortId(id)} and close it as compensated${because}.`,
-        target: caseTarget(id),
+        sentence: `Record that ${penaltyName(id, context)} was paid back, and close it as compensated${because}.`,
+        target: caseTarget(id, context),
         fields: [
           ...(signature ? [{ label: "Deposit signature", value: signature }] : []),
           ...commonFields(body),
@@ -417,18 +433,30 @@ export function decisionText(
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
-/** One sentence for what an approval did, from the action's own result. */
-export function approvedResultSentence(action: string, result: unknown): string {
+/**
+ * One sentence for what an approval did, from the action's own result.
+ * `target` is what the card already calls the record ("Wallet 0x9F3c…F36c");
+ * a raw subject off the wire (a CAIP id) is never printed.
+ */
+export function approvedResultSentence(action: string, result: unknown, target?: string): string {
   const r = (result && typeof result === "object" ? result : {}) as Record<string, unknown>;
   switch (action) {
     case "slash.sweep":
       return `Fleet sweep opened: ${String(r.matchedCount ?? "?")} matched, ${String(r.appliedCount ?? "?")} applied.`;
     case "slash.suspend":
-      return "Proposal suspended. If a record stands on chain, its cancel is requested and still needs its signer.";
+      return `${target ? `${target.charAt(0).toUpperCase()}${target.slice(1)} suspended` : "Penalty suspended"}. If it stands on chain, its cancel is requested and still needs the arbiter's signature.`;
     case "slash.compensated":
       return "Deposit verified on chain. The case is recorded as compensated.";
-    case "account.unblock":
-      return `Block lifted${typeof r.subject === "string" ? ` on ${r.subject}` : ""}.`;
+    case "account.unblock": {
+      const subject =
+        target ??
+        (typeof r.subject === "string"
+          ? r.subjectKind === "ORGANIZATION"
+            ? `organization ${shortId(r.subject)}`
+            : walletLabel(r.subject)
+          : null);
+      return `Block lifted${subject ? ` on ${subject}` : ""}.`;
+    }
     case "operator.add":
       return `Operator added${typeof r.subject === "string" ? `: ${r.subject}` : ""}. They can sign in with their wallet now.`;
     case "operator.change":
