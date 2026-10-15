@@ -29,8 +29,8 @@ import { capsAreSet } from "./caps";
 export const LIMIT_SOURCE = {
   agent: "this agent's spending limit",
   ceiling: "your account ceiling",
-  oldBudget: "an older Assay budget",
-  oldRule: "an older refuse-above rule",
+  oldBudget: "this agent's older budget",
+  oldRule: "an older account-wide rule",
 } as const;
 
 export interface CeilingCaps {
@@ -171,4 +171,19 @@ export function budgetAgentId(
     if (owner) return owner.agentId;
   }
   return agents.length === 1 ? agents[0]!.agentId : null;
+}
+
+/**
+ * Whether the account ceiling's "spent in the last 24 hours" is more than the
+ * agents on screen add up to — spend by keys since revoked or agents since
+ * removed still counts against the ceiling. Then the page says so in one line,
+ * instead of leaving two numbers that seem to disagree.
+ */
+export function ceilingCountsMoreThanAgents(
+  ceilingSpent: Money | null | undefined,
+  agentSpent: readonly (Money | null | undefined)[],
+): boolean {
+  if (!ceilingSpent) return false;
+  const total = agentSpent.reduce((sum, m) => sum + BigInt(m?.amount || "0"), 0n);
+  return BigInt(ceilingSpent.amount || "0") > total;
 }

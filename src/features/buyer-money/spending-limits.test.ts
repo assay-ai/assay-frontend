@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import type { EscrowDelegate, Money } from "@/interfaces";
 
-import { agentLimitRows, budgetAgentId, hasOldBudget, LIMIT_SOURCE, limitLines, limitSentence } from "./spending-limits";
+import {
+  agentLimitRows,
+  budgetAgentId,
+  ceilingCountsMoreThanAgents,
+  hasOldBudget,
+  LIMIT_SOURCE,
+  limitLines,
+  limitSentence,
+} from "./spending-limits";
 
 const usd = (major: string): Money => ({ amount: String(Math.round(Number(major) * 1_000_000)), asset: "eip155:1/erc20:0xa", decimals: 6 });
 const grant = (call: string, day: string, spent = "0", status: EscrowDelegate["status"] = "ACTIVE"): EscrowDelegate => ({
@@ -66,5 +74,13 @@ describe("budgetAgentId: the agent whose Assay limits this session can edit", ()
     expect(budgetAgentId(agents, { agentId: null }, "eip155:1:0xaa")).toBe("a");
     expect(budgetAgentId(agents, null, null)).toBeNull();
     expect(budgetAgentId([agents[0]!], null, null)).toBe("a");
+  });
+});
+
+describe("ceilingCountsMoreThanAgents", () => {
+  it("is true only when the ceiling counted more than the agents on screen", () => {
+    expect(ceilingCountsMoreThanAgents(usd("2.61"), [usd("0"), null])).toBe(true);
+    expect(ceilingCountsMoreThanAgents(usd("15.75"), [usd("15.75")])).toBe(false);
+    expect(ceilingCountsMoreThanAgents(null, [usd("1")])).toBe(false);
   });
 });

@@ -8,7 +8,7 @@ import {
 } from "./fixtures";
 import { ApiError } from "@/libs/ApiClient";
 
-import { freshAtLeast, freshStage } from "./fresh-account";
+import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
 
 /**
  * DEMO ONLY — see `demo-api.ts` for the rules. The buyer surface.
@@ -1420,6 +1420,9 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     match: /^\/agents\/[^/]+\/credentials$/,
     body: (path, _query, body) => {
       const name = (body as { name?: unknown } | undefined)?.name;
+      // A fresh account with no key now has one: the agent cards and Get
+      // started read it back on their next fetch.
+      advanceFreshStage("new", "call");
       return {
         id: "cred_demo_new",
         agentId: segment(path, 1),

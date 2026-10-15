@@ -22,6 +22,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Values that are identifiers or secrets, never body text: ids, chain ids, key prefixes, hashes. */
 const RAW_VALUE = /^(eip155:|solana:|x402_|sk_|pk_|cred_|ses_|aud_|dep_|sp_|hld_)|^0x[0-9a-f]{6,}$/i;
 
+/** An email address: said only as the actor's name, never inside a change. */
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 /** Field names whose values are money in major units. */
 const MONEY_KEY = /(cap|limit|amount|budget|charged|price|balance)$/i;
 
@@ -39,7 +42,7 @@ function shown(value: unknown, key = ""): string | null {
   if (typeof value === "boolean") return value ? "on" : "off";
   if (typeof value === "number") return value.toLocaleString("en-US");
   if (typeof value === "string") {
-    if (UUID.test(value) || RAW_VALUE.test(value)) return null;
+    if (UUID.test(value) || RAW_VALUE.test(value) || EMAIL.test(value)) return null;
     if (MONEY_KEY.test(key) && /^\d+(\.\d+)?$/.test(value)) return `$${value}`;
     return value;
   }
@@ -85,7 +88,9 @@ export function auditChanges(entry: AuditEntryLike): string[] {
 }
 
 function text(value: unknown): string | null {
-  return typeof value === "string" && value.trim() !== "" && !UUID.test(value) && !RAW_VALUE.test(value) ? value : null;
+  return typeof value === "string" && value.trim() !== "" && !UUID.test(value) && !RAW_VALUE.test(value) && !EMAIL.test(value)
+    ? value
+    : null;
 }
 
 function dollars(value: unknown): string | null {

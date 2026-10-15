@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   checkSentences,
+  routingNotes,
   failRateLabel,
   failsOften,
   heldPriceSentence,
@@ -125,5 +126,29 @@ describe("failsOften and priceRange", () => {
     const range = priceRange(usd("100000"), [usd("100000"), usd("250000")]);
     expect(range?.differs).toBe(false);
     expect(heldPriceSentence(range!)).toBeNull();
+  });
+});
+
+describe("routingNotes", () => {
+  const usd = (major: string) => ({ amount: String(Math.round(Number(major) * 1_000_000)), asset: "usd", decimals: 6 });
+  it("names a provider priced above the hold and says why it gets no paid calls", () => {
+    const notes = routingNotes(usd("0.10"), [
+      { name: "Cheap Co", price: usd("0.10"), quality: null },
+      { name: "Dear Co", price: usd("0.25"), quality: null },
+    ]);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toContain("Dear Co ($0.25 a call) is not taking paid calls right now");
+  });
+  it("says the only provider taking calls fails often, and that failures are never charged", () => {
+    const notes = routingNotes(usd("0.10"), [
+      { name: "Flaky", price: usd("0.10"), quality: { measuredCalls: 8, failedCalls: 8 } },
+      { name: "Dear Co", price: usd("0.25"), quality: null },
+    ]);
+    expect(notes[1]).toBe(
+      "Calls go to the provider that is taking calls; this one has failed often recently. Failed results are never charged.",
+    );
+  });
+  it("says nothing when every provider takes calls and none fails often", () => {
+    expect(routingNotes(usd("0.10"), [{ name: "A", price: usd("0.10"), quality: null }])).toEqual([]);
   });
 });

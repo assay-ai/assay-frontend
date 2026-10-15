@@ -132,8 +132,8 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
       ...base,
       status: "needs-authorisation",
       sentence: grant
-        ? "Its permission to pay has expired. Let it pay again to pay for calls."
-        : "Its payment key is ready. Let it pay to pay for calls.",
+        ? "Its permission to pay has expired. Let it pay again so it can pay for calls."
+        : "Its payment key is ready. Let it pay for calls.",
       next: "authorise",
     };
   }

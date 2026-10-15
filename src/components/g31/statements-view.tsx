@@ -204,7 +204,10 @@ function StatementsContent() {
                       <span className="flex flex-wrap gap-x-4 gap-y-0.5 text-body-xs text-03 tablet:text-body-13">
                         <span>{plural(group.calls, "call")}</span>
                         <span>listed {formatMoney(group.listedTotal, { decimals: 2 })}</span>
-                        <span className="text-teal-600">−{formatMoney(group.withheldTotal, { decimals: 2 })} not charged</span>
+                        {/* Nothing withheld says nothing: a "−$0.00" line is noise. */}
+                        {BigInt(group.withheldTotal?.amount || "0") > 0n ? (
+                          <span className="text-teal-600">−{formatMoney(group.withheldTotal, { decimals: 2 })} not charged</span>
+                        ) : null}
                         <span className="font-semibold text-01">paid {formatMoney(group.chargedTotal, { decimals: 2 })}</span>
                       </span>
                     </li>

@@ -13,6 +13,14 @@ const entry = (over: Partial<Parameters<typeof auditSentence>[0]>) => ({
 });
 
 describe("auditSentence", () => {
+  it("never puts an email inside a change; only the actor may be named by one", () => {
+    const line = auditSentence(
+      entry({ actorId: "ops@team.example", before: { dailyCap: "40.00" }, after: { dailyCap: "75.00", changedBy: "ops@team.example" } }),
+      () => null,
+      "me@example.com",
+    ).line;
+    expect(line).toBe("ops@team.example changed daily budget from $40.00 to $75.00");
+  });
   it("says who changed what, from what to what", () => {
     expect(
       auditSentence(entry({ before: { dailyCap: "40.00" }, after: { dailyCap: "75.00" } }), () => null, "me@example.com"),

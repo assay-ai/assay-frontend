@@ -108,7 +108,13 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
           onAlertsClick={openAlerts}
           alerts={<AlertsMenu count={alertCount} variant="mobile" />}
           onSearch={() => router.push(routes.calls())}
-          avatar={<WalletMenu />}
+          avatar={
+            <>
+              {/* The same theme switch as the desktop bar, so the choice is reachable at every width. */}
+              <ThemeToggle />
+              <WalletMenu />
+            </>
+          }
         />
       </div>
 

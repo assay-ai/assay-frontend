@@ -541,9 +541,8 @@ function RevokeSheet({
           <span className="break-all font-mono text-mono-xs text-01">
             {addressOfAccount(delegate)}
           </span>
-          <p className="rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700" data-testid="revoke-debt-note">
-            Calls this agent already made are collected about a minute later. If stopping it prevents one from
-            being collected, you still owe it: paid calls pause until it is settled.
+          <p className="rounded-lg bg-02 px-3 py-2 text-body-13 text-02" data-testid="revoke-debt-note">
+            Calls already made are still settled and paid for.
           </p>
           <LiveReadNote ready={ready} gone={gone} />
           <UnsettledPayments
