@@ -5,7 +5,11 @@ import { Download, EyeOff, Upload } from "lucide-react";
 import * as React from "react";
 import { useMemo, useState } from "react";
 
-import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
+import {
+  DisplayAssetSelect,
+  displayAssetLabel,
+  useDisplayAsset,
+} from "@/components/display-asset-select";
 import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -20,6 +24,7 @@ import {
 import { Table, type TableColumn } from "@/components/ui/table";
 import { formatCount } from "@/features/buyer/period";
 import {
+  assetScopeNote,
   foldClasses,
   observedTakeRate,
   pendingNote,
@@ -32,6 +37,7 @@ import {
   useCallsExport,
 } from "@/features/call-classes/use-calls-export";
 import type { Money } from "@/interfaces";
+import { useChains } from "@/hooks/useChains";
 import { ApiError } from "@/libs/ApiClient";
 import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
 import { cn } from "@/utils";
@@ -194,6 +200,11 @@ export default function ReconciliationPage() {
   const loading = calls.isLoading || assetPending;
 
   const classes = useMemo(() => foldClasses(rows), [rows]);
+  const { chains } = useChains();
+  const scopeNote =
+    loading || !displayAsset || !calls.data
+      ? null
+      : assetScopeNote(calls.rows.length, rows.length, displayAssetLabel(displayAsset, chains));
   /*
     DELIBERATE DEPARTURE from the design's copy, and the same derivation the
     provider view uses so the two screens cannot disagree.
@@ -370,7 +381,7 @@ export default function ReconciliationPage() {
         <Banner
           tone="warning"
           title="This reconciliation is computed over a capped export"
-          description={`The month matched ${formatCount(calls.meta.totalMatching)} calls and the file holds ${formatCount(calls.meta.rowCount)}. The classes below do not cover the whole month.`}
+          description={`The month matched ${formatCount(calls.meta.totalMatching)} calls in every asset and the file holds ${formatCount(calls.meta.rowCount)}. The classes below do not cover the whole month.`}
         />
       ) : null}
       {calls.data && !calls.meta ? (
@@ -379,6 +390,10 @@ export default function ReconciliationPage() {
           title="Whether this export is complete is not visible"
           description="The cap headers were not readable from the browser, so we cannot tell you whether the month matched more calls than the file holds."
         />
+      ) : null}
+
+      {scopeNote ? (
+        <Banner tone="primary" title="One asset at a time" description={scopeNote} />
       ) : null}
 
       {/* Join — bg-01, radius-xl, 1px border-01, gap 40, padding [18, 22]. */}
@@ -391,7 +406,7 @@ export default function ReconciliationPage() {
         <JoinStat
           label="Our ledger"
           value={loading ? DASH : `${formatCount(classes.totalCalls)} calls`}
-          caption={`as of ${stamp(period.to)}`}
+          caption={`${displayAsset ? `in ${displayAssetLabel(displayAsset, chains)} · ` : ""}as of ${stamp(period.to)}`}
         />
         {/*
           Matched and Unexplained are the OUTPUT of a join with the provider's

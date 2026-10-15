@@ -1,6 +1,10 @@
 "use client";
 
-import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
+import {
+  DisplayAssetSelect,
+  displayAssetLabel,
+  useDisplayAsset,
+} from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { CircleCheck, Download, Info } from "lucide-react";
@@ -34,6 +38,7 @@ import {
   foldTraffic,
   observedTakeRate,
   rowsInAsset,
+  assetScopeNote,
   type CallRow,
 } from "@/features/call-classes/csv";
 import { ClassName } from "@/features/call-classes/class-name";
@@ -43,6 +48,7 @@ import {
   useCallsExport,
 } from "@/features/call-classes/use-calls-export";
 import type { Money, ProviderPayout } from "@/interfaces";
+import { useChains } from "@/hooks/useChains";
 import { ApiError } from "@/libs/ApiClient";
 import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
 import { getProviderEarnings, getProviderQuality } from "@/services/provider-reports.service";
@@ -241,6 +247,11 @@ export default function ProviderViewPage() {
     [calls.rows, assetPending, displayAsset]
   );
   const callsLoading = calls.isLoading || assetPending;
+  const { chains } = useChains();
+  const scopeNote =
+    callsLoading || !displayAsset || !calls.data
+      ? null
+      : assetScopeNote(calls.rows.length, rows.length, displayAssetLabel(displayAsset, chains));
   // The payout batches are money too: only the display asset's are listed.
   const payoutItems = useMemo(
     () => (assetPending ? [] : payoutsInAsset(payouts.data?.items ?? [], displayAsset)),
@@ -531,8 +542,11 @@ export default function ProviderViewPage() {
         <Banner
           tone="warning"
           title="This export is capped"
-          description={`The window matched ${formatCount(calls.meta.totalMatching)} calls and the file holds ${formatCount(calls.meta.rowCount)}. Every figure below is computed over the capped file.`}
+          description={`The window matched ${formatCount(calls.meta.totalMatching)} calls in every asset and the file holds ${formatCount(calls.meta.rowCount)}. Every figure below is computed over the capped file.`}
         />
+      ) : null}
+      {scopeNote ? (
+        <Banner tone="primary" title="One asset at a time" description={scopeNote} />
       ) : null}
       {calls.data && !calls.meta ? (
         <Banner
