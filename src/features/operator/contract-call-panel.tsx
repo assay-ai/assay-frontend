@@ -16,9 +16,9 @@ import { assertContractCall, formatCallArg, type ExpectedCall } from "@/libs/cha
 
 /** The pinned contracts, by the name the panel shows. */
 const CONTRACT_LABEL: Record<ExpectedCall["contract"], string> = {
-  escrow: "X402Escrow",
-  stake: "X402Stake",
-  config: "X402Config",
+  escrow: "Escrow contract",
+  stake: "Stake contract",
+  config: "Config contract",
   token: "settlement token",
 };
 
