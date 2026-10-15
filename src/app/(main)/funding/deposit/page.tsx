@@ -29,6 +29,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { evmRpcUrl } from "@/libs/chains/evm/chains";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { shortAddress } from "@/libs/chains/format";
+import { isRailNotOffered, railNotOfferedText } from "@/libs/chains/paid-rails";
 import { isEvmChain } from "@/libs/chains/registry";
 import { toBase64 } from "@/libs/chains/solana/base64";
 import { buildDepositTransaction } from "@/libs/chains/solana/deposit-transaction";
@@ -558,7 +559,10 @@ function DepositPageContent() {
       if (caught instanceof ApiError) {
         setOutcome({
           kind: "failed",
-          message: caught.message,
+          // 409 CHAIN_RAIL_NOT_OFFERED: the chain serves free calls only. Plain words, not its id.
+          message: isRailNotOffered(caught)
+            ? railNotOfferedText(chainId === null ? null : chainDisplayName(chains, chainId))
+            : caught.message,
           code: caught.code,
         });
         return;

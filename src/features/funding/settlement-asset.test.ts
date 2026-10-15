@@ -36,6 +36,15 @@ const EVM: Chain = {
 
 const CHAINS = [SOLANA, EVM];
 
+/** A second paid chain with its own token, so two buyers' tiles can differ. */
+const EVM_USDC: Chain = {
+  ...EVM,
+  chainId: "eip155:8453",
+  displayName: "Base",
+  settlementAsset: "eip155:8453/erc20:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  settlementAssetSymbol: "USDC",
+};
+
 function linked(...chains: Chain[]): DepositableChains {
   return { kind: "linked", chains };
 }
@@ -56,17 +65,26 @@ describe("depositMethodLabel — the deposits table's Method column", () => {
 
 describe("addFundsTile", () => {
   it("names THIS buyer's asset and network, not the first chain's", () => {
-    const solana = addFundsTile(linked(SOLANA));
+    const base = addFundsTile(linked(EVM_USDC));
     const evm = addFundsTile(linked(EVM));
 
-    expect(solana.title).toBe("Send USDC");
-    expect(solana.sub).toContain("Solana devnet");
+    expect(base.title).toBe("Send USDC");
+    expect(base.sub).toContain("Base");
     expect(evm.title).toBe("Send USDG");
     expect(evm.sub).toContain("Robinhood Chain testnet");
 
     // The degenerate this kills: one tile for everybody.
-    expect(evm.title).not.toBe(solana.title);
-    expect(evm.sub).not.toBe(solana.sub);
+    expect(evm.title).not.toBe(base.title);
+    expect(evm.sub).not.toBe(base.sub);
+  });
+
+  // Paid rails A and B are off on Solana, so a deposit there would fund nothing.
+  it("offers no deposit on a chain that serves free calls only", () => {
+    const tile = addFundsTile(linked(SOLANA));
+    expect(tile.title).toBe("Add funds");
+    expect(tile.sub).toBe("Solana devnet currently serves free calls only · no deposits for now");
+    // Beside a paid chain, the free-only one is simply not named.
+    expect(addFundsTile({ kind: "unfiltered", chains: CHAINS }).title).toBe("Send USDG");
   });
 
   it("never carries the deleted claims", () => {
@@ -81,11 +99,15 @@ describe("addFundsTile", () => {
   });
 
   it("names both when both are offered, and de-duplicates equal symbols", () => {
-    expect(addFundsTile({ kind: "unfiltered", chains: CHAINS }).title).toBe("Send USDC or USDG");
+    expect(addFundsTile({ kind: "unfiltered", chains: [EVM_USDC, EVM] }).title).toBe(
+      "Send USDC or USDG",
+    );
 
-    const mainnet: Chain = { ...SOLANA, chainId: "solana:5eyk", displayName: "Solana mainnet" };
+    const mainnet: Chain = { ...EVM_USDC, chainId: "eip155:1", displayName: "Ethereum" };
     // Two chains, one symbol. "Send USDC or USDC" is a screen nobody trusts.
-    expect(addFundsTile({ kind: "unfiltered", chains: [SOLANA, mainnet] }).title).toBe("Send USDC");
+    expect(addFundsTile({ kind: "unfiltered", chains: [EVM_USDC, mainnet] }).title).toBe(
+      "Send USDC",
+    );
   });
 
   it("names no asset and no network while nothing is known", () => {
@@ -111,7 +133,9 @@ describe("addFundsTile", () => {
 describe("fundingAssetNote", () => {
   it("names the buyer's own token", () => {
     expect(fundingAssetNote(linked(EVM))).toContain("You fund the account with USDG");
-    expect(fundingAssetNote(linked(SOLANA))).toContain("You fund the account with USDC");
+    expect(fundingAssetNote(linked(EVM_USDC))).toContain("You fund the account with USDC");
+    // No token is named for a chain that takes no deposits (free calls only).
+    expect(fundingAssetNote(linked(SOLANA))).not.toContain("USDC");
   });
 
   it("keeps the chain-independent half in every state", () => {
@@ -154,6 +178,8 @@ describe("an API that does not serve the symbol yet", () => {
   });
 
   it("still names the symbols it DOES have", () => {
-    expect(addFundsTile({ kind: "unfiltered", chains: [SOLANA, noSymbol] }).title).toBe("Send USDC");
+    expect(addFundsTile({ kind: "unfiltered", chains: [EVM_USDC, noSymbol] }).title).toBe(
+      "Send USDC",
+    );
   });
 });
