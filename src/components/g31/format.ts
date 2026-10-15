@@ -88,6 +88,35 @@ export function formatQuote(
   return pricingMode !== "FREE" && (routableBindings ?? 0) > 1 ? `up to ${shown}` : shown;
 }
 
+/**
+ * Free first, then paid: the lead a FREEMIUM quote carries — "100 free per
+ * day, then" — or `null` for any other mode.
+ *
+ * A FREEMIUM tool is served free while the agent's daily allowance lasts, even
+ * when some of its providers are PAID, and only then at the quote. Worded the
+ * way MCP `tools/list` words it. Without a known allowance it still says the
+ * tool has a free tier rather than inventing a number.
+ */
+export function freeFirstLead(
+  pricingMode: string | null | undefined,
+  freeCallsPerDay: number | null | undefined,
+): string | null {
+  if (pricingMode !== "FREEMIUM") return null;
+  return freeCallsPerDay == null ? "free tier, then" : `${freeCallsPerDay} free per day, then`;
+}
+
+/** {@link formatQuote}, led by {@link freeFirstLead} for a FREEMIUM tool. */
+export function formatOffer(
+  price: Money | null | undefined,
+  routableBindings: number | undefined,
+  pricingMode: string | null | undefined,
+  freeCallsPerDay: number | null | undefined,
+): string {
+  const quote = formatQuote(price, routableBindings, pricingMode);
+  const lead = freeFirstLead(pricingMode, freeCallsPerDay);
+  return lead ? `${lead} ${quote}` : quote;
+}
+
 /** Ratio of `used` to `cap`, 0–100, clamped. Returns null when there is no cap. */
 export function percentOf(used: Money | null | undefined, cap: Money | null | undefined): number | null {
   if (!used || !cap) return null;

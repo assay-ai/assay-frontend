@@ -5,6 +5,7 @@ import { Check, Rocket, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
 import { BindingNav } from "@/features/provider-binding/binding-nav";
+import { freeFirstHint } from "@/features/provider-binding/free-first";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -200,6 +201,7 @@ export default function FreeTierPage() {
                 </option>
               ))}
             </Select>
+            {freeFirstHint(mode) ? <p className="text-body-xs text-03">{freeFirstHint(mode)}</p> : null}
 
             <Field
               id="free-quota-per-agent"
@@ -233,8 +235,8 @@ export default function FreeTierPage() {
                 budget.error
                   ? undefined
                   : savedBudget
-                    ? `saved as ${formatMoney(savedBudget, { decimals: 4 })} per day, across all agents · When it runs out, agents are told the free budget is used up and are offered your paid option with its price.`
-                    : "Per day, across all agents. When it runs out, agents are told the free budget is used up and are offered your paid option with its price."
+                    ? `saved as ${formatMoney(savedBudget, { decimals: 4 })} per day, across all agents · When it runs out, agents are told the free budget is used up and are offered the tool's paid option with its price.`
+                    : "Per day, across all agents. When it runs out, agents are told the free budget is used up and are offered the tool's paid option with its price."
               }
               disabled={!binding}
             />
@@ -253,7 +255,7 @@ export default function FreeTierPage() {
               className="max-w-none"
               icon={null}
               title="Free-tier usage is not available yet"
-              description="Free calls served today and free budget used are not shown yet. The limits you set still apply: when one runs out, agents are told so and are offered your paid option with its price."
+              description="Free calls served today and free budget used are not shown yet. The limits you set still apply: when one runs out, agents are told so and are offered the tool's paid option with its price."
             />
           </PanelBody>
         </Panel>
