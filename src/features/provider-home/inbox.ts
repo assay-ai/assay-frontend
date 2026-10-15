@@ -33,13 +33,39 @@ export function isProviderEvent(event: string | null | undefined): boolean {
  * already counted (its subject is one of that penalty's ids — the on-chain
  * request id or Assay's case id) is not counted twice.
  */
-export function inboxCount(input: {
+export interface InboxBreakdown {
+  /** Penalties that can still be disputed. */
+  penalties: number;
+  /** Unread provider notices not about one of those penalties. */
+  notices: number;
+}
+
+export function inboxBreakdown(input: {
   urgent: readonly (readonly string[])[];
   notifications: readonly { event: string; readAt?: string | null; subjectId?: string | null }[];
-}): number {
+}): InboxBreakdown {
   const urgentIds = new Set(input.urgent.flat().map((id) => id.toLowerCase()));
   const unread = input.notifications.filter(
     (item) => isProviderEvent(item.event) && !item.readAt && !(item.subjectId && urgentIds.has(item.subjectId.toLowerCase())),
   );
-  return input.urgent.length + unread.length;
+  return { penalties: input.urgent.length, notices: unread.length };
+}
+
+export function inboxCount(input: Parameters<typeof inboxBreakdown>[0]): number {
+  const { penalties, notices } = inboxBreakdown(input);
+  return penalties + notices;
+}
+
+/**
+ * The Inbox heading: the badge's number broken into what it counts, so it can
+ * be matched against the page ("2 new: 1 penalty to decide on, 1 unread notice").
+ */
+export function inboxHeadline({ penalties, notices }: InboxBreakdown): string {
+  const total = penalties + notices;
+  if (total === 0) return "Nothing new. Penalties to decide on and notices about your tools land here.";
+  const parts = [
+    penalties ? `${penalties} ${penalties === 1 ? "penalty" : "penalties"} to decide on` : null,
+    notices ? `${notices} unread ${notices === 1 ? "notice" : "notices"} (marked with a dot)` : null,
+  ].filter(Boolean);
+  return `${total} new: ${parts.join(", ")}.`;
 }

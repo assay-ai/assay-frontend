@@ -25,8 +25,12 @@ import { isHttpsUrl } from "./url";
 
 export const TOOL_REQUESTS_LIST_KEY = ["provider", "tool-requests", "list"] as const;
 
-/** The reply promise, said the same way everywhere. */
-export const REPLY_PROMISE = "We reply within 2 working days in your Inbox.";
+/**
+ * The reply promise, said the same way everywhere. Each request carries a
+ * reply due date (`firstResponseDueAt`) and the Tool requests page shows the
+ * reply; no Inbox notice exists for tool requests, so none is promised.
+ */
+export const REPLY_PROMISE = "We aim to reply within 2 working days; the reply shows on your Tool requests page.";
 
 /**
  * "Can't find your tool? Request it" — two required fields (name, what it
