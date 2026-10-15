@@ -828,7 +828,7 @@ function RulingSheet({
             describeError={errorText}
             onSigned={(results) => {
               const hash = results[results.length - 1]?.data;
-              onDone(kind === "UPHOLD" ? `Upheld ${noun}` : `Cancelled ${noun}`, typeof hash === "string" ? hash : null, chainId);
+              onDone(kind === "UPHOLD" ? `Uphold of ${noun} sent` : `Cancel of ${noun} sent`, typeof hash === "string" ? hash : null, chainId);
             }}
             functionName={functionName}
             chainId={chainId}
