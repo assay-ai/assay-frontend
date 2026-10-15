@@ -79,10 +79,15 @@ export function moneyFlowSummary(nodes: readonly MoneyFlowNode[]): string {
 
 export function MoneyFlow({ nodes, ariaLabel, className }: MoneyFlowProps) {
   return (
-    <div role="img" aria-label={ariaLabel ?? moneyFlowSummary(nodes)} className={cn("flex w-full flex-wrap items-center gap-x-1.5 gap-y-2", className)}>
+    <div role="img" aria-label={ariaLabel ?? moneyFlowSummary(nodes)} className={cn(
+        // A column on phones: a wrapped row strands an arrow at a line end.
+        "flex w-full flex-col items-start gap-1 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-x-1.5 tablet:gap-y-2",
+        className,
+      )}
+    >
       {nodes.map((node, index) => (
         <React.Fragment key={index}>
-          {index > 0 ? <ArrowRight aria-hidden="true" className="size-3.5 shrink-0 text-03" /> : null}
+          {index > 0 ? <ArrowRight aria-hidden="true" className="ml-3 size-3.5 shrink-0 rotate-90 text-03 tablet:ml-0 tablet:rotate-0" /> : null}
           <span aria-hidden="true" className="flex flex-col gap-0.5">
             <span
               className={cn(
