@@ -179,8 +179,19 @@ export async function exportProviderCalls(
   return {
     csv: response.data,
     meta: readExportMeta(headers),
-    filename: readFilename(headers),
+    filename: readFilename(headers) ?? callsCsvFilename(query.from, query.to),
   };
+}
+
+/**
+ * The name the API gives a per-call export, for when `Content-Disposition` is
+ * not readable: `assay-calls-<from>_<to>.csv`, with every character outside
+ * `[0-9A-Za-z._-]` (the ISO timestamps' colons) turned into "-" — the same rule
+ * as the backend's `callsExportFilename`.
+ */
+export function callsCsvFilename(from: string, to: string): string {
+  const safe = (value: string) => value.replace(/[^0-9A-Za-z._-]/g, "-");
+  return `assay-calls-${safe(from)}_${safe(to)}.csv`;
 }
 
 function headerValue(headers: Record<string, unknown>, name: string): string | null {
