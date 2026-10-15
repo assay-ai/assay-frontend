@@ -28,3 +28,26 @@ export function ChangeRows({ changes }: { changes: ConfirmChange[] }) {
     </dl>
   );
 }
+
+/**
+ * The same diff on one line, for a list row: "Executed → Paid back to the
+ * provider". With more than one change each part keeps its label
+ * ("Roles: Adjudicator → Lead adjudicator · Limit: $100 → $1,000").
+ */
+export function ChangeInline({ changes, className }: { changes: ConfirmChange[]; className?: string }) {
+  if (changes.length === 0) return null;
+  const labelled = changes.length > 1;
+  return (
+    <span className={className}>
+      {changes.map((change, index) => (
+        <React.Fragment key={index}>
+          {index > 0 ? <span className="text-03"> · </span> : null}
+          {labelled ? <span className="text-03">{change.label}: </span> : null}
+          <span className="text-02">{change.before}</span>
+          <ArrowRight aria-label="becomes" className="mx-1 inline size-3 align-[-1px] text-03" />
+          <span className="text-01">{change.after}</span>
+        </React.Fragment>
+      ))}
+    </span>
+  );
+}
