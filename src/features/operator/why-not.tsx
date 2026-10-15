@@ -20,7 +20,7 @@ import { useOperatorDirectory } from "./use-operator-lookups";
  *
  *   <WhyNot action="suspend" me={identity} amount={penalty}
  *           ask="Can you suspend Northwind Geo's $28.47 penalty?" />
- *     → [lock] Suspending a penalty needs Adjudicator, Lead adjudicator or On-call (SRE) · Ask Riley or Iris
+ *     → [lock] Suspending a penalty needs Adjudicator, Lead adjudicator or Support / on-call · Ask Riley or Iris
  *
  * One line by default (two at most on a phone); the full "who can" sentence is
  * its tooltip. `variant="box"` is the older panel with a title and both
@@ -112,7 +112,7 @@ export interface WhyNotProps {
   className?: string;
 }
 
-/** "Blocking an account needs Lead adjudicator or On-call (SRE)" — the why, without its full stop. Pure. */
+/** "Blocking an account needs Lead adjudicator or Support / on-call" — the why, without its full stop. Pure. */
 export function whyLine(why: string): string {
   return why.trim().replace(/\.$/, "");
 }

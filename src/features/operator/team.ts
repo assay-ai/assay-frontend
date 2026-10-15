@@ -1,3 +1,4 @@
+import type { Money } from "@/interfaces/api";
 import type { OperatorApproval, OperatorDirectoryEntry, OperatorRole } from "@/interfaces/operator";
 import { formatMoney } from "@/utils/money";
 
@@ -10,11 +11,20 @@ import { actsOnMoney } from "./roles";
  * the directory only lists them once they are added).
  */
 
+/**
+ * A limit as Team and its sheets write it: whole dollars without cents
+ * ("$0", "$1,000"), cents only when there are some ("$2.50"). One rule for
+ * the table, the invite rows and the "After: …" line of Change access.
+ */
+export function limitMoney(money: Money): string {
+  return formatMoney(money).replace(/\.00$/, "");
+}
+
 /** "$1,000", "No limit", or "—" for someone who cannot act on money at all. */
 export function limitCell(row: Pick<OperatorDirectoryEntry, "authorityLimit" | "roles">): string {
   if (!actsOnMoney(row.roles)) return "—";
   if (row.authorityLimit === null) return "No limit";
-  return formatMoney(row.authorityLimit).replace(/\.00$/, "");
+  return limitMoney(row.authorityLimit);
 }
 
 /** An invite's limit, as `limitCell` says it for a member. */
@@ -22,7 +32,26 @@ export function inviteLimit(invite: Pick<Invite, "roles" | "limitMinor">, asset:
   if (invite.roles.length > 0 && !actsOnMoney(invite.roles)) return "—";
   if (invite.limitMinor === null) return "No limit";
   if (invite.limitMinor === undefined) return "—";
-  return formatMoney({ amount: invite.limitMinor, asset, decimals }).replace(/\.00$/, "");
+  return limitMoney({ amount: invite.limitMinor, asset, decimals });
+}
+
+/**
+ * Team's tabs. "Active" counts the people who can sign in; "Everyone" adds the
+ * removed and suspended. When nobody is removed or suspended the two lists are
+ * the same, so there is one list and no tabs (`null`). Invites waiting for a
+ * second admin are not in either count: they are listed under their own
+ * heading. A count ends in "+" when more pages exist.
+ */
+export function teamTabs(
+  active: { count: number; more: boolean } | null,
+  everyone: { count: number; more: boolean } | null,
+): { active: string; everyone: string } | null {
+  if (!active || !everyone) return null;
+  if (active.count === everyone.count && active.more === everyone.more) return null;
+  return {
+    active: `${active.count}${active.more ? "+" : ""}`,
+    everyone: `${everyone.count}${everyone.more ? "+" : ""}`,
+  };
 }
 
 /** A pending `operator.add`, drawn as a row until it is approved. */

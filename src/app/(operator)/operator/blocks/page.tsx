@@ -17,7 +17,7 @@ import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { approvalNeeds, approvalTargetId } from "@/features/operator/approvals";
+import { approvalTargetId } from "@/features/operator/approvals";
 import { arbiterErrorMessage, mayBlockOnChain } from "@/features/operator/arbiter";
 import {
   blockSubjectLabel,
@@ -34,7 +34,7 @@ import { eligibleApprovers } from "@/features/operator/inbox";
 import { BLOCK_REASONS, UNBLOCK_REASONS, reasonLabel } from "@/features/operator/reasons";
 import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
-import { approvalHref, sentForApproval } from "@/features/operator/two-person";
+import { approvalHref, approverPhrase, sentForApproval } from "@/features/operator/two-person";
 import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-operator-lookups";
 import { WhatHappens } from "@/features/operator/what-happens";
 import { WhyNot } from "@/features/operator/why-not";
@@ -122,8 +122,12 @@ function BlocksScreen() {
     if ((!subject && !fresh) || !canAct) return;
     setPrefill(subject ? { kind: searchParams.get("kind") === "WALLET" ? "WALLET" : "ORGANIZATION", subject } : null);
     setBlockOpen(true);
-    router.replace(pathname, { scroll: false });
-  }, [searchParams, canAct, router, pathname]);
+  }, [searchParams, canAct]);
+  // The link's params go when the sheet closes, so a reload does not open it again.
+  const onBlockOpenChange = (open: boolean) => {
+    setBlockOpen(open);
+    if (!open && (searchParams.has("new") || searchParams.has("block"))) router.replace(pathname, { scroll: false });
+  };
 
   const list = useInfiniteQuery({
     queryKey: ["operator", "blocks", "list", { active: filter === "active" }],
@@ -282,7 +286,7 @@ function BlocksScreen() {
                     <div className="mt-1 flex w-full min-w-0 flex-wrap items-center gap-2 tablet:mt-0 tablet:w-auto tablet:justify-end">
                       {waiting ? (
                         <Button variant="secondary" size="sm" asChild className="min-w-0 flex-1 tablet:flex-none">
-                          <Link href={approvalHref(waiting.id)}>Open lift request</Link>
+                          <Link href={approvalHref(waiting.id)}>View request</Link>
                         </Button>
                       ) : block.active && canAct ? (
                         <Button variant="secondary" size="sm" onClick={() => setLifting(block)} className="min-w-0 flex-1 tablet:flex-none">
@@ -327,7 +331,7 @@ function BlocksScreen() {
       {canAct ? (
         <BlockSheet
           open={blockOpen}
-          onOpenChange={setBlockOpen}
+          onOpenChange={onBlockOpenChange}
           prefill={prefill}
           canChain={canChain}
           activeBlocks={filter === "active" ? rows : []}
@@ -500,10 +504,9 @@ function BlockSheet({
     <Sheet open={open} onOpenChange={(next) => (block.isPending ? undefined : onOpenChange(next))}>
       <SheetContent
         showCloseButton={!block.isPending}
-        // Arriving with the account already picked: do not focus (and so open) its search over the reason and note.
-        onOpenAutoFocus={(event) => {
-          if (prefill) event.preventDefault();
-        }}
+        // Never focus (and so open) the account search on opening: its list would cover the reason and note,
+        // and on a phone raise the keyboard. The list opens when the person taps or types.
+        onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Block an account</SheetTitle>
@@ -704,6 +707,9 @@ function LiftSheet({
   onDone: (node: React.ReactNode) => void;
 }) {
   const queryClient = useQueryClient();
+  const me = useOperatorSession();
+  // "a Lead adjudicator" for Support, "a second Lead adjudicator" for a Lead.
+  const needs = approverPhrase("A-10", me.roles);
   const [reason, setReason] = React.useState("");
   const [note, setNote] = React.useState("");
   const [errors, setErrors] = React.useState<{ reason?: string; note?: string }>({});
@@ -713,7 +719,7 @@ function LiftSheet({
       unblockAccount(input.id, { reasonCode: input.reasonCode, note: input.note }),
     onSuccess: (answer) => {
       void queryClient.invalidateQueries({ queryKey: ["operator"] });
-      const sent = answer.kind === "queued" ? sentForApproval(`Lifting the block on ${label}`, approvers, approvalNeeds("A-10"), answer.approval.expiresAt) : null;
+      const sent = answer.kind === "queued" ? sentForApproval(`Lifting the block on ${label}`, approvers, needs, answer.approval.expiresAt) : null;
       onDone(
         answer.kind === "queued" && sent ? (
           <div className="flex w-full flex-col gap-2">
@@ -724,7 +730,7 @@ function LiftSheet({
               link={{ label: "Open the request", href: approvalHref(answer.approval.approvalId) }}
               onDismiss={() => onDone(null)}
             />
-            <ApprovalFooter needs={approvalNeeds("A-10")} approvers={approvers} link={approvalHref(answer.approval.approvalId)} expiresAt={answer.approval.expiresAt} />
+            <ApprovalFooter needs={needs} approvers={approvers} link={approvalHref(answer.approval.approvalId)} expiresAt={answer.approval.expiresAt} />
           </div>
         ) : (
           <ResultCard title={`The block on ${label} is lifted`} next="It applies within seconds." onDismiss={() => onDone(null)} />
@@ -792,7 +798,7 @@ function LiftSheet({
             notePlaceholder="What changed, and how you checked it."
             errors={errors}
           />
-          <ApprovalFooter needs={approvalNeeds("A-10")} approvers={approvers} />
+          <ApprovalFooter needs={needs} approvers={approvers} />
         </div>
         <SheetFooter className={OPERATOR_SHEET_FOOTER}>
           <div role="alert" className={lift.error ? "text-body-xs text-danger-600" : "sr-only"}>
