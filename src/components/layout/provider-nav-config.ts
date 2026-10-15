@@ -45,7 +45,7 @@ export const PROVIDER_NAV_ITEMS: ProviderNavItem[] = [
     phoneTab: true,
   },
   { id: "money", label: "Money", href: "/provider/money", match: ["/provider/money"], phoneTab: true },
-  { id: "stake", label: "Stake", href: "/provider/capital", match: ["/provider/capital", "/provider/exit"], phoneTab: true },
+  { id: "stake", label: "Stake", href: "/provider/capital", match: ["/provider/capital", "/provider/stake", "/provider/exit"], phoneTab: true },
   {
     id: "account",
     label: "Account",

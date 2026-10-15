@@ -1023,8 +1023,10 @@ function splitFailures(total: number, shares: readonly number[]): number[] {
 }
 
 /** "$28.41" from a major-unit string, two decimals. */
+/** Cut to cents, never rounded up — the same rule `formatMoney` applies, so a fixture's text matches the screens. */
 function usd(major: string): string {
-  return `$${Number(major).toFixed(2)}`;
+  const [whole, fraction = ""] = major.split(".");
+  return `$${whole}.${fraction.padEnd(2, "0").slice(0, 2)}`;
 }
 
 /**

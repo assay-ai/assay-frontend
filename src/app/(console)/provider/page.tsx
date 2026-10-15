@@ -241,7 +241,8 @@ function EarningsPanel({ earnings, loading }: { earnings: ProviderEarnings | und
     split.notCredited
       ? {
           label: "Not credited",
-          note: `${split.notCreditedCalls} call${split.notCreditedCalls === 1 ? "" : "s"} failed the check`,
+          // Not every uncredited call failed the check (API errors and refusals earn nothing too); Money breaks it down by reason.
+          note: `${split.notCreditedCalls.toLocaleString("en-US")} call${split.notCreditedCalls === 1 ? "" : "s"} earned nothing; see why in Money`,
           value: value(split.notCredited),
           amount: formatMoney(split.notCredited, { decimals: 2 }),
           tone: "danger" as const,
