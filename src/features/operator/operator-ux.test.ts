@@ -312,8 +312,8 @@ describe("the next step for this operator", () => {
     expect(caseNextStep(facts, caseAuthority(b, lead, facts), fmt)).toMatchObject({ kind: "action", action: "rule" });
     expect(caseNextStep(facts, caseAuthority(b, support, facts), fmt)).toMatchObject({
       kind: "waiting",
-      title: "Nothing for you",
-      description: expect.stringMatching(/^Waiting for the arbiter to rule, by /),
+      title: "Waiting for the arbiter",
+      description: expect.stringMatching(/^The ruling is due by /),
     });
   });
 
@@ -373,7 +373,7 @@ describe("the next step for this operator", () => {
     const facts = caseFacts(b, NOW);
     expect(facts.cancel).toEqual({ deadline: iso(NOW + 7 * DAY), ifUnsigned: "expires" });
     const next = caseNextStep(facts, caseAuthority(b, lead, facts), fmt);
-    expect(next).toMatchObject({ kind: "action", action: "cancel", title: "Cancel requested — waiting for the arbiter's signature", until: iso(NOW + 7 * DAY) });
+    expect(next).toMatchObject({ kind: "action", action: "cancel", title: "Get the cancel signed", until: iso(NOW + 7 * DAY) });
     expect(next.description).not.toMatch(/anyone can execute/);
     expect(next.description).not.toMatch(/deadline has passed/);
     const end = caseTimelineSteps(b, facts, { now: NOW }).at(-1);
