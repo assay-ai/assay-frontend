@@ -454,7 +454,7 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
           chainExecutableAt: executableAt,
           chainStatus: c.chainStatus,
           chainDisputedAt: disputedAt,
-          chainDisputedParts: c.chainStatus === "DISPUTED" ? 1 : 0,
+          chainDisputedParts: original.chainStatus === "DISPUTED" ? 1 : 0,
           secondsRemaining: null,
           runningClock: "NONE",
         },
@@ -525,7 +525,7 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
     requiresSecondSignature: false,
     chainStatus: c.chainStatus,
     chainExecutableAt: executableAt,
-    chainDisputedParts: c.chainStatus === "DISPUTED" ? 1 : 0,
+    chainDisputedParts: original.chainStatus === "DISPUTED" ? 1 : 0,
   };
 }
 

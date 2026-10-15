@@ -54,6 +54,12 @@ export interface PresetChipsProps {
   hint?: React.ReactNode;
   disabled?: boolean;
   className?: string;
+  /**
+   * "chips" (default) wraps compact chips on one line. "cards" lays options
+   * with a sentence-long description out as a grid of equal-width cards,
+   * one column on a phone and two from 480px, left-aligned.
+   */
+  layout?: "chips" | "cards";
 }
 
 function normalise(option: string | PresetOption): PresetOption & { label: string } {
@@ -81,7 +87,9 @@ export function PresetChips({
   hint,
   disabled,
   className,
+  layout = "chips",
 }: PresetChipsProps) {
+  const cards = layout === "cards";
   const options = presets.map(normalise);
   const id = React.useId();
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -114,7 +122,11 @@ export function PresetChips({
 
   return (
     <div className={cn("flex w-full flex-col gap-2", className)}>
-      <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
+      <div
+        role="radiogroup"
+        aria-label={label}
+        className={cards ? "grid w-full grid-cols-1 gap-2 min-[480px]:grid-cols-2" : "flex flex-wrap gap-2"}
+      >
         {options.map((option, index) => {
           const selected = isSelected(option);
           // Roving tab stop, as in any radio group: only the selected chip (or
@@ -135,10 +147,18 @@ export function PresetChips({
                 option.onPick?.();
               }}
               onKeyDown={onArrow}
-              className={cn(chip(selected), option.description && "items-start font-sans")}
+              className={cn(
+                chip(selected),
+                option.description && "items-start font-sans",
+                cards && "h-full w-full justify-start gap-0.5 py-2.5 text-left",
+              )}
             >
               {option.label}
-              {option.description ? <span className="font-mono text-mono-xs font-normal text-03">{option.description}</span> : null}
+              {option.description ? (
+                <span className={cards ? "text-body-xs font-normal text-03" : "font-mono text-mono-xs font-normal text-03"}>
+                  {option.description}
+                </span>
+              ) : null}
             </button>
           );
         })}

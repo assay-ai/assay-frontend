@@ -42,6 +42,15 @@ export interface CaseFacts {
   disputeExpiresAt: string | null;
   /** True when the case still carries a status of the retired off-chain objection process. */
   legacyStatus: boolean;
+  /**
+   * While a cancel waits for the arbiter (`cancel-requested`): the instant it
+   * must be signed by, and what happens if nobody signs. A record still
+   * `Disputed` on chain can never be executed — its one deadline is the
+   * dispute's 30-day timeout (the same instant the Arbiter page counts down),
+   * after which anyone can expire it and the stake is released. A `Pending`
+   * record becomes executable by anyone at `executableAt`. `null` otherwise.
+   */
+  cancel: { deadline: string | null; ifUnsigned: "expires" | "executes" } | null;
 }
 
 function plusSeconds(iso: string | null, seconds: number): string | null {
@@ -78,13 +87,24 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
     stage = !Number.isNaN(at) && at <= now ? "executable" : "window-open";
   } else stage = "not-on-chain";
 
+  const disputeExpiresAt = plusSeconds(disputedAt, DISPUTE_TIMEOUT_SECONDS);
+  // The record under the cancel is still disputed when the chain still counts disputed parts.
+  const recordDisputed = disputedAt !== null && (clocks.chainDisputedParts ?? 0) > 0;
+  const cancel =
+    stage !== "cancel-requested"
+      ? null
+      : recordDisputed
+        ? { deadline: disputeExpiresAt, ifUnsigned: "expires" as const }
+        : { deadline: executableAt, ifUnsigned: "executes" as const };
+
   return {
     stage,
     status,
     executableAt,
     disputedAt,
-    disputeExpiresAt: plusSeconds(disputedAt, DISPUTE_TIMEOUT_SECONDS),
+    disputeExpiresAt,
     legacyStatus,
+    cancel,
   };
 }
 
@@ -154,14 +174,21 @@ export function caseTimelineSteps(
   } else if (stage === "cancelled") {
     steps.push({ id: "end", label: "Cancelled", state: "done", date: proposal.resolvedAt });
   } else if (stage === "cancel-requested") {
+    const disputedRecord = facts.cancel?.ifUnsigned === "expires";
     steps.push({
       id: "end",
-      label: "Cancel waiting for the arbiter",
+      label: "Cancel requested — waiting for the arbiter's signature",
       state: "current",
-      date: facts.executableAt,
-      dateLabel: "sign before",
-      countdown: true,
-      urgent: true,
+      date: facts.cancel?.deadline ?? null,
+      // A disputed record reads the same "Day N of 30" as the Arbiter page; it cannot be executed meanwhile.
+      dateLabel: disputedRecord
+        ? `${disputeDayText({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }, now)} · sign before`
+        : "sign before",
+      countdown: !disputedRecord,
+      urgent: !disputedRecord,
+      description: disputedRecord
+        ? "Still disputed on chain, so it cannot be executed. Unsigned by then, anyone can expire it and the stake is released."
+        : undefined,
     });
   } else {
     steps.push({
@@ -244,38 +271,8 @@ export function caseNextStep(
 ): CaseNextStep {
   const suspendSecondary = authority.suspend.allowed ? ("suspend" as const) : null;
   switch (facts.stage) {
-    case "cancel-requested": {
-      const passed = facts.executableAt !== null && Date.parse(facts.executableAt) <= Date.now();
-      if (passed) {
-        return {
-          kind: authority.cancel ? "action" : "waiting",
-          title: authority.cancel ? "Get the cancel signed now" : "Nothing for you",
-          description: authority.cancel
-            ? "The deadline has passed: anyone can execute this penalty now. Have the arbiter sign the cancel as soon as possible."
-            : "The deadline for the cancel has passed and anyone can execute the penalty. A Lead adjudicator or Treasury has to get the cancel signed now.",
-          action: authority.cancel ? "cancel" : null,
-          secondary: null,
-          until: null,
-        };
-      }
-      return authority.cancel
-        ? {
-            kind: "action",
-            title: "Get the cancel signed",
-            description: `The penalty was cancelled here, but its record still stands on chain. Prepare the cancel for the arbiter and have it signed before ${when(facts.executableAt, format)}; after that anyone can execute the penalty.`,
-            action: "cancel",
-            secondary: null,
-            until: facts.executableAt,
-          }
-        : {
-            kind: "waiting",
-            title: "Nothing for you",
-            description: `Waiting for a Lead adjudicator or Treasury to have the arbiter sign the cancel, before ${when(facts.executableAt, format)}.`,
-            action: null,
-            secondary: null,
-            until: facts.executableAt,
-          };
-    }
+    case "cancel-requested":
+      return cancelNextStep(facts, authority, format);
     case "disputed":
       return authority.rule
         ? {
@@ -364,4 +361,69 @@ export function caseNextStep(
         until: null,
       };
   }
+}
+
+const CANCEL_TITLE = "Cancel requested — waiting for the arbiter's signature";
+
+/**
+ * The sentence for what a missing cancel signature leads to, for the cancel
+ * sheet and the next-step card. Never says "anyone can execute" for a record
+ * still disputed on chain: the contract refuses to execute those.
+ */
+export function cancelDeadlineSentence(facts: CaseFacts, format: (iso: string) => string): string {
+  const deadline = facts.cancel?.deadline ?? null;
+  if (facts.cancel?.ifUnsigned === "expires") {
+    return `Have it signed before ${when(deadline, format)}. The provider's dispute keeps the penalty frozen meanwhile: it cannot be executed, and unsigned by then anyone can expire it and the stake is released.`;
+  }
+  return `Have it signed before ${when(deadline, format)}; after that anyone can execute the penalty.`;
+}
+
+function cancelNextStep(facts: CaseFacts, authority: CaseAuthority, format: (iso: string) => string): CaseNextStep {
+  const deadline = facts.cancel?.deadline ?? null;
+  const executes = facts.cancel?.ifUnsigned !== "expires";
+  const passed = deadline !== null && Date.parse(deadline) <= Date.now();
+  const meta = executes ? null : disputeDayText({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt });
+
+  if (passed && executes) {
+    // Truly the on-chain state: a Pending record past its executable time.
+    return {
+      kind: authority.cancel ? "action" : "waiting",
+      title: authority.cancel ? "Get the cancel signed now" : "Nothing for you",
+      description: authority.cancel
+        ? "The deadline has passed: anyone can execute this penalty now. Have the arbiter sign the cancel as soon as possible."
+        : "The deadline for the cancel has passed and anyone can execute the penalty. A Lead adjudicator or Treasury has to get the cancel signed now.",
+      action: authority.cancel ? "cancel" : null,
+      secondary: null,
+      until: null,
+    };
+  }
+  if (passed) {
+    return {
+      kind: "waiting",
+      title: "Dispute timed out",
+      description: "Nobody signed the cancel before the dispute timed out, so anyone can now expire it and the stake is released. Nothing is taken from the provider.",
+      action: null,
+      secondary: null,
+      until: null,
+    };
+  }
+  return authority.cancel
+    ? {
+        kind: "action",
+        title: CANCEL_TITLE,
+        description: `Suspended here; on chain the record stands until the arbiter key signs the cancel. ${cancelDeadlineSentence(facts, format)}`,
+        action: "cancel",
+        secondary: null,
+        until: deadline,
+        meta,
+      }
+    : {
+        kind: "waiting",
+        title: CANCEL_TITLE,
+        description: `Nothing for you: a Lead adjudicator or Treasury gets the arbiter to sign it. ${cancelDeadlineSentence(facts, format)}`,
+        action: null,
+        secondary: null,
+        until: deadline,
+        meta,
+      };
 }

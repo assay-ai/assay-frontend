@@ -10,9 +10,9 @@ import { noTargetText } from "./block-targets";
 import { disputeDayText } from "./inbox";
 import { aboutProvider, operatorRowLabel, plainKey } from "./operator-measurement";
 import { splitSharesText } from "./penalty-money";
-import { filterRecent, RECENT_PENALTIES_MAX, withRecent, type RecentPenalty } from "./recent-penalties";
+import { filterRecent, knownPenalties, penaltyIdFrom, RECENT_PENALTIES_MAX, withRecent, type KnownPenalty, type RecentPenalty } from "./recent-penalties";
 import { roleCanSentence } from "./role-intro";
-import { capabilitiesFor, checkAction, whoCan } from "./roles";
+import { capabilitiesFor, checkAction, ROLE_PRESETS, roleDescription, whoCan } from "./roles";
 import { sentForApproval, toTwoPersonAnswer } from "./two-person";
 import { askLabel, whoCanSentence } from "./why-not";
 
@@ -180,5 +180,55 @@ describe("the demo stage set follows what was done", () => {
   it("uses the provider's declared-rate key the label table knows", () => {
     const brief = fixture("GET", `/operator/cases/${NORTHWIND_CASE}`)() as { case: { arithmetic: { key: string }[] } };
     expect(brief.case.arithmetic.map((row) => row.key)).not.toContain("declared_rate");
+  });
+});
+
+describe("finding a penalty (round 2, top 2)", () => {
+  const names: Record<string, string> = { nw: "Northwind Geo", co: "Cobalt Street Data" };
+  const name = (id: string) => names[id] ?? id;
+  const row = (id: string, providerId: string, source: KnownPenalty["source"]): KnownPenalty => ({ id, providerId, label: `${name(providerId)}'s penalty`, source });
+
+  it("searches every list that exists by provider, one row per penalty, first source wins", () => {
+    const sources = {
+      disputed: [row("a", "nw", "disputed")],
+      activity: [row("a", "nw", "activity"), row("b", "co", "activity")],
+      recent: [row("c", "nw", "recent")],
+    };
+    expect(knownPenalties(sources, name, "north").map((r) => [r.id, r.source])).toEqual([
+      ["a", "disputed"],
+      ["c", "recent"],
+    ]);
+    expect(knownPenalties(sources, name, "").map((r) => r.id)).toEqual(["a", "b", "c"]);
+    expect(knownPenalties(sources, name, "nobody")).toEqual([]);
+  });
+
+  it("reads a penalty id out of a bare id or any link", () => {
+    expect(penaltyIdFrom(" 8B3F2E9A-1c74-4d05-b6e2-7f0a9c3d5e18 ")).toBe("8b3f2e9a-1c74-4d05-b6e2-7f0a9c3d5e18");
+    expect(penaltyIdFrom("https://app.example/operator/cases/view?id=8b3f2e9a-1c74-4d05-b6e2-7f0a9c3d5e18")).toBe("8b3f2e9a-1c74-4d05-b6e2-7f0a9c3d5e18");
+    expect(penaltyIdFrom("Northwind")).toBeNull();
+  });
+});
+
+describe("roles described by what they can do (round 2, top 3)", () => {
+  it("never says Support suspends penalties outright: money actions carry the limit", () => {
+    const support = ROLE_PRESETS.find((p) => p.id === "support")!;
+    expect(support.description).toBe(roleDescription(["SRE", "SUP"]));
+    expect(support.description).toMatch(/suspends penalties within its authority limit/i);
+    expect(support.description).not.toMatch(/suspends penalties[,.]/i);
+    expect(roleDescription(["OPS_ADMIN"])).toMatch(/^Adds, changes and removes operators\. Approves/);
+    expect(support.description).toBe("Blocks accounts. Suspends penalties within its authority limit.");
+  });
+
+  it("lists who can suspend only among those whose limit covers the penalty, and says so", () => {
+    const team = [
+      { id: "a", roles: ["ADJ"] as OperatorRole[], status: "ACTIVE" as const, displayName: "Iris Park", subject: "iris@", authorityLimit: USD("250000000") },
+      { id: "b", roles: ["ADJL"] as OperatorRole[], status: "ACTIVE" as const, displayName: "Jordan Blake", subject: "jordan@", authorityLimit: USD("1000000000") },
+      { id: "c", roles: ["SRE", "SUP"] as OperatorRole[], status: "ACTIVE" as const, displayName: "Sam Reyes", subject: "sam@", authorityLimit: USD("0") },
+    ];
+    expect(whoCan("suspend", team, { amount: USD("28470000") })).toEqual(["Iris Park", "Jordan Blake"]);
+    expect(whoCan("suspend", team, { amount: USD("300000000") })).toEqual(["Jordan Blake"]);
+    expect(whoCanSentence(["Jordan Blake"], "Lead adjudicator", "$300.00")).toBe(
+      "Jordan Blake can (Lead adjudicator, with an authority limit of at least $300.00).",
+    );
   });
 });

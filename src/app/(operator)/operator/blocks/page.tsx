@@ -37,6 +37,7 @@ import { useOperatorSession } from "@/features/operator/session-context";
 import { approvalHref, sentForApproval } from "@/features/operator/two-person";
 import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-operator-lookups";
 import { WhyNot } from "@/features/operator/why-not";
+import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
 import type { AccountBlock, BlockSubjectKind, OperatorApproval } from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
@@ -498,7 +499,7 @@ function BlockSheet({
             </div>
           ) : null}
         </div>
-        <SheetFooter className="sticky bottom-0 bg-01">
+        <SheetFooter className={OPERATOR_SHEET_FOOTER}>
           <div role="alert" className={block.error ? "text-body-xs text-danger-600" : "sr-only"}>
             {block.error ? blockErrorMessage(block.error, "block").replace(/\s*\([A-Z_]+\)$/, "") : ""}
             {block.error instanceof ApiError ? (
@@ -508,7 +509,7 @@ function BlockSheet({
               </details>
             ) : null}
           </div>
-          <div className="flex w-full flex-col-reverse gap-2 tablet:flex-row tablet:justify-end">
+          <div className={OPERATOR_SHEET_BUTTONS}>
             <SheetClose asChild>
               <Button variant="secondary" disabled={block.isPending}>
                 Cancel
@@ -701,11 +702,11 @@ function LiftSheet({
           />
           <ApprovalFooter needs={approvalNeeds("A-10")} approvers={approvers} />
         </div>
-        <SheetFooter className="sticky bottom-0 bg-01">
+        <SheetFooter className={OPERATOR_SHEET_FOOTER}>
           <div role="alert" className={lift.error ? "text-body-xs text-danger-600" : "sr-only"}>
             {lift.error ? blockErrorMessage(lift.error, "unblock").replace(/\s*\([A-Z_]+\)$/, "") : ""}
           </div>
-          <div className="flex w-full flex-col-reverse gap-2 tablet:flex-row tablet:justify-end">
+          <div className={OPERATOR_SHEET_BUTTONS}>
             <SheetClose asChild>
               <Button variant="secondary" disabled={lift.isPending}>
                 Keep it blocked

@@ -35,6 +35,7 @@ import { ROLE_PRESETS, presetOf, removalWarnings, roleTitle } from "@/features/o
 import { useOperatorSession } from "@/features/operator/session-context";
 import { approvalHref, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
 import { WhyNot } from "@/features/operator/why-not";
+import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
 import type { OperatorDirectoryEntry, OperatorRole } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { checkEvmAddress, toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
@@ -247,6 +248,7 @@ function RoleField({ roles, onChange, error }: { roles: OperatorRole[]; onChange
         value={value}
         onChange={(next) => setCustom(next === "custom")}
         allowCustom={false}
+        layout="cards"
       />
       {custom ? (
         <div className="grid w-full grid-cols-1 gap-2 rounded-lg border border-01 bg-02 p-3 min-[480px]:grid-cols-2">
@@ -319,7 +321,7 @@ function Footer({
   blocked?: string | null;
 }) {
   return (
-    <SheetFooter className="sticky bottom-0 bg-01">
+    <SheetFooter className={OPERATOR_SHEET_FOOTER}>
       <div role="alert" className={cn("min-h-[18px] text-body-xs text-danger-600")}>
         {error ? directoryErrorMessage(error).replace(/\s*\([A-Z_]+\)$/, "") : (summary ?? blocked ?? "")}
         {error instanceof ApiError ? (
@@ -329,7 +331,7 @@ function Footer({
           </details>
         ) : null}
       </div>
-      <div className="flex w-full flex-col-reverse gap-2 tablet:flex-row tablet:justify-end">
+      <div className={OPERATOR_SHEET_BUTTONS}>
         <SheetClose asChild>
           <Button variant="secondary" disabled={busy}>
             Cancel

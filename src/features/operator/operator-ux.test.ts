@@ -14,7 +14,7 @@ import { activitySentence, activityText, isOfKind, targetTypeOf } from "./activi
 import { approvalChanges, approvalNeeds, approvalTargetId } from "./approvals";
 import { disputeAmount, durationText } from "./arbiter";
 import { evmAddressOf, noTargetText, pickedTarget, searchBlockTargets, walletLabel } from "./block-targets";
-import { caseAuthority, caseFacts, caseNextStep, caseTimelineSteps } from "./case-flow";
+import { cancelDeadlineSentence, caseAuthority, caseFacts, caseNextStep, caseTimelineSteps } from "./case-flow";
 import { deriveSubject, limitInputFromChoice } from "./directory";
 import { checkedAgo, disputeUrgency, eligibleApprovers, groupApprovals, healthIssues, needsYouCount, sortDisputesByDaysLeft } from "./inbox";
 import { activeOperatorNav, operatorNavFor, operatorTitleFor } from "./nav";
@@ -359,6 +359,34 @@ describe("the next step for this operator", () => {
       action: "cancel",
       description: expect.stringMatching(/deadline has passed/),
     });
+  });
+
+  it("after suspending a disputed penalty, waits for the arbiter on the dispute's own clock (B1)", () => {
+    // Disputed 23 days ago, frozen executable time long past: the record is still Disputed on chain.
+    const b = brief({
+      status: "OVERTURNED",
+      chainStatus: "CANCEL_REQUESTED",
+      disputedAt: iso(NOW - 23 * DAY),
+      executableAt: iso(NOW - 21 * DAY),
+      parts: 1,
+    });
+    const facts = caseFacts(b, NOW);
+    expect(facts.cancel).toEqual({ deadline: iso(NOW + 7 * DAY), ifUnsigned: "expires" });
+    const next = caseNextStep(facts, caseAuthority(b, lead, facts), fmt);
+    expect(next).toMatchObject({ kind: "action", action: "cancel", title: "Cancel requested — waiting for the arbiter's signature", until: iso(NOW + 7 * DAY) });
+    expect(next.description).not.toMatch(/anyone can execute/);
+    expect(next.description).not.toMatch(/deadline has passed/);
+    const end = caseTimelineSteps(b, facts, { now: NOW }).at(-1);
+    expect(end).toMatchObject({ date: iso(NOW + 7 * DAY), urgent: false, countdown: false });
+    expect(end?.dateLabel).toBe("Day 24 of 30 · 7 days left · sign before");
+    expect(cancelDeadlineSentence(facts, fmt)).toMatch(/cannot be executed/);
+  });
+
+  it("keeps the executable-time deadline for a cancel on a pending record", () => {
+    const b = brief({ status: "OVERTURNED", chainStatus: "CANCEL_REQUESTED", executableAt: iso(NOW + DAY) });
+    const facts = caseFacts(b, NOW);
+    expect(facts.cancel).toEqual({ deadline: iso(NOW + DAY), ifUnsigned: "executes" });
+    expect(cancelDeadlineSentence(facts, fmt)).toMatch(/anyone can execute/);
   });
 
   it("splits the money by the chain's current terms", () => {
