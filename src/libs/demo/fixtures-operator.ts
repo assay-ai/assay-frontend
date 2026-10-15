@@ -588,6 +588,7 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
     chainStatus: c.chainStatus,
     chainExecutableAt: executableAt,
     chainDisputedParts: original.chainStatus === "DISPUTED" ? 1 : 0,
+    upheldViolations30d: c.providerId === NORTHWIND ? 2 : 0,
   };
 }
 
