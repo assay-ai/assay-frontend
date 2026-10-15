@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { chainLabel } from "@/utils/chain";
 
-import { stakeLines, type ChainStake } from "./format";
+import { formatQuote, stakeLines, type ChainStake } from "./format";
 
 /**
  * Bonded stake is per chain, and the rules it must obey on screen.
@@ -98,5 +98,26 @@ describe("chainLabel", () => {
   it("returns anything that is not a CAIP-2 id untouched rather than guessing", () => {
     expect(chainLabel("solana")).toBe("solana");
     expect(chainLabel("")).toBe("");
+  });
+});
+
+// BUG-R16-B3-03: the tools page printed the hold as a flat price beside a
+// cheaper floor; tools/list says "up to $X" whenever more than one binding
+// could serve, and the screen now says the same.
+describe("formatQuote", () => {
+  const price = { amount: "250000", asset: "eip155:46630/erc20:0xabc", decimals: 6 };
+
+  it("says 'up to' when more than one binding could serve", () => {
+    expect(formatQuote(price, 2, "PAID")).toBe("up to $0.2500");
+  });
+
+  it("is a plain price when exactly one binding could serve", () => {
+    expect(formatQuote(price, 1, "PAID")).toBe("$0.2500");
+    expect(formatQuote(price, undefined, "PAID")).toBe("$0.2500");
+  });
+
+  it("never says 'up to' for a free tool, and dashes an unroutable one", () => {
+    expect(formatQuote({ ...price, amount: "0" }, 3, "FREE")).not.toMatch(/up to/);
+    expect(formatQuote(null, 2, "PAID")).toBe("—");
   });
 });

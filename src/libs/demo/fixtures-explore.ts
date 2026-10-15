@@ -460,6 +460,7 @@ function toolRow(tool: DemoTool): CatalogueTool {
     price: dearest(prices),
     pricingMode: tool.pricingMode,
     routable: tool.offers.length > 0,
+    routableBindings: tool.offers.length,
     unroutableReason: tool.unroutableReason ?? null,
     settlementChains: [DEMO_CHAIN_ID],
   };
