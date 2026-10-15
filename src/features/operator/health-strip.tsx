@@ -19,9 +19,9 @@ function age(seconds: number | null): string {
 }
 
 /**
- * Platform health as one line — "All normal", or what is red — that opens
- * into the six figures. It starts open only when something is red: the
- * figures are context, not tasks.
+ * Platform health as one line — "All systems normal" in plain text, or what
+ * is red in a danger box — that opens into the six figures. It starts open
+ * only when something is red: the figures are context, not tasks.
  */
 export function HealthStrip({ health, error }: { health: PlatformHealth | undefined; error?: boolean }) {
   const issues = health ? healthIssues(health) : [];
@@ -42,15 +42,15 @@ export function HealthStrip({ health, error }: { health: PlatformHealth | undefi
   if (!health) return null;
 
   return (
-    <section aria-label="Platform health" className="flex w-full flex-col gap-3">
+    <section aria-label="Platform health" className="flex w-full flex-col gap-2.5">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-left text-body-13",
+          "flex items-center gap-2 text-left text-body-13",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
-          red ? "border-danger-20 bg-danger-10 text-danger-700" : "border-01 bg-01 text-02",
+          red ? "w-full rounded-lg border border-danger-20 bg-danger-10 px-3.5 py-2.5 text-danger-700" : "self-start rounded-md text-02 hover:text-01",
         )}
       >
         {red ? (
@@ -59,11 +59,17 @@ export function HealthStrip({ health, error }: { health: PlatformHealth | undefi
           <CheckCircle2 aria-hidden="true" className="size-4 shrink-0 text-success-500" />
         )}
         <span className="min-w-0 flex-1">
-          <span className={red ? "text-label-13" : "text-label-13 text-01"}>Platform health</span>
-          {" · "}
-          {red ? issues.map((issue) => issue.text).join(" · ") : "All normal"}
+          {red ? (
+            <>
+              <span className="text-label-13">Platform health</span>
+              {" · "}
+              {issues.map((issue) => issue.text).join(" · ")}
+            </>
+          ) : (
+            "All systems normal"
+          )}
         </span>
-        <span className="hidden shrink-0 text-label-xs text-03 tablet:inline">{open ? "Hide figures" : "Show figures"}</span>
+        <span className="sr-only">{open ? ", hide figures" : ", show figures"}</span>
         <ChevronDown aria-hidden="true" className={cn("size-4 shrink-0 text-03 transition-transform", open && "rotate-180")} />
       </button>
       {open ? (

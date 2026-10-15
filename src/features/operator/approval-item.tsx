@@ -1,40 +1,51 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import { Ban, Banknote, Check, ChevronDown, History, KeyRound, Link2, MoreHorizontal, PenLine, Undo2, Zap } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { ApprovalFooter } from "@/components/patterns/approval-footer";
-import { ChangeRows } from "@/components/patterns/change-rows";
-import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
+import { approverNames } from "@/components/patterns/approval-footer";
+import { ChangeInline } from "@/components/patterns/change-rows";
+import { ConfirmSheet, type ConfirmOutcome } from "@/components/patterns/confirm-sheet";
 import { LocalTime } from "@/components/patterns/local-time";
-import { StatusChip } from "@/components/patterns/status-chip";
+import { StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { OperatorApproval, OperatorIdentity } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { approveApproval, rejectApproval } from "@/services/operator.service";
 import { cn } from "@/utils";
 
 import {
-  actionLabel,
   approvalActivityHref,
   approvalChanges,
   approvalErrorMessage,
   approvalNeeds,
+  approvalOutcome,
   approvedResultSentence,
   decisionText,
   describeApproval,
   isWithdrawn,
   type ApprovalContext,
+  type ApprovalOutcomeLine,
 } from "./approvals";
+import { Deadline } from "./deadline";
 import { ResultCard } from "./result-card";
 import { approvalHref } from "./two-person";
 
 /**
- * One two-person request, the same on Home and on the Approvals screen:
- * the sentence, before → after, who must approve it (with a link to send
- * them) and how long it stays open. Approve and Reject go through a confirm
- * step; the result replaces the buttons with where to see it.
+ * One two-person request as a row of a list, the same on Home and on the
+ * Approvals screen. The parent draws the bordered container and the dividers.
+ *
+ *   line 1  Pay back Meridian Index's $3.75 penalty     Riley Brooks · 02:08  [clock] 17h left  [Reject] [Approve]
+ *   line 2  Executed → Paid back to the provider · Executed in error
+ *
+ * One filled button per row: Approve (decide), Copy link (your own request,
+ * Withdraw in the ⋯ menu), none for a request waiting on a role you lack.
+ * Approve and Reject go through a confirm that says what happens; the result
+ * replaces the buttons with where to see it. A non-compact row (Approvals)
+ * opens the request's fields from its chevron.
  */
 export type ApprovalItemMode = "decide" | "own" | "other" | "history";
 
@@ -42,12 +53,12 @@ export interface ApprovalItemProps {
   approval: OperatorApproval;
   context: ApprovalContext;
   mode: ApprovalItemMode;
-  /** Names of who could approve (for the footer). */
+  /** Names of who could approve. */
   approvers?: readonly string[];
   /** Turns a subject (`sam@`) into a name. */
   nameOf: (subject: string | null | undefined) => string;
   highlighted?: boolean;
-  /** Smaller: no field list (Home). */
+  /** No details expander (Home). */
   compact?: boolean;
   /**
    * Receives the outcome. A decided request leaves the waiting list on the
@@ -76,14 +87,66 @@ const NEXT: Readonly<Record<string, string>> = {
   "slash.sweep": "Matching cases are decided in the background.",
 };
 
+const OUTCOME_ICON: Readonly<Record<ApprovalOutcomeLine["kind"], ConfirmOutcome["icon"]>> = {
+  money: Banknote,
+  access: KeyRound,
+  chain: PenLine,
+  runs: Zap,
+  record: History,
+};
+
+function historyChip(approval: OperatorApproval): StatusChipKey {
+  if (approval.status === "APPROVED") return "done";
+  if (isWithdrawn(approval)) return "withdrawn";
+  return approval.status === "EXPIRED" ? "expired" : "rejected";
+}
+
+function lowerFirst(value: string): string {
+  return /^[A-Z][a-z]/.test(value) ? value.charAt(0).toLowerCase() + value.slice(1) : value;
+}
+
+function absolute(link: string): string {
+  if (/^https?:\/\//.test(link) || typeof window === "undefined") return link;
+  return `${window.location.origin}${link.startsWith("/") ? "" : "/"}${link}`;
+}
+
+function CopyLinkButton({ link }: { link: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(absolute(link));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard refused: the link is in the title for a manual copy.
+    }
+  };
+  return (
+    <Button
+      type="button"
+      size="sm"
+      data-primary=""
+      title={absolute(link)}
+      icon={copied ? <Check aria-hidden="true" /> : <Link2 aria-hidden="true" />}
+      onClick={() => void copy()}
+    >
+      {copied ? "Link copied" : "Copy link"}
+    </Button>
+  );
+}
+
 export function ApprovalItem({ approval, context, mode, approvers, nameOf, highlighted, compact, onDecided, className }: ApprovalItemProps) {
   const queryClient = useQueryClient();
   const [confirm, setConfirm] = React.useState<"approve" | "reject" | null>(null);
   const [outcome, setOutcome] = React.useState<Outcome | null>(null);
+  const [open, setOpen] = React.useState(false);
+  const detailsId = React.useId();
 
-  const { sentence, target, fields } = describeApproval(approval, context);
+  const { title, reason, target, fields } = describeApproval(approval, context);
   const changes = approvalChanges(approval, context);
   const pending = approval.status === "PENDING";
+  const names = approverNames(approvers);
+  const needs = `Needs ${approvalNeeds(approval.code)}${names ? `: ${names}` : ""}`;
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["operator"] });
@@ -115,110 +178,153 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
     return approvalErrorMessage(error, kind);
   };
 
+  const waitingFor = names ? `waiting for ${names}` : "waiting for an approver";
+  const meta =
+    mode === "history" ? (
+      <>
+        {decisionText({
+          ...approval,
+          approvedBy: approval.approvedBy ? nameOf(approval.approvedBy) : null,
+          rejectedBy: approval.rejectedBy ? nameOf(approval.rejectedBy) : null,
+          requestedBy: approval.rejectedBy && isWithdrawn(approval) ? nameOf(approval.rejectedBy) : approval.requestedBy,
+        })}{" "}
+        · <LocalTime value={approval.decidedAt ?? approval.expiresAt} /> ·{" "}
+        <Link href={approvalActivityHref(approval)} className="text-primary-700 hover:underline">
+          History
+        </Link>
+      </>
+    ) : mode === "own" ? (
+      <>{waitingFor}</>
+    ) : (
+      <>
+        {nameOf(approval.requestedBy)} · <LocalTime value={approval.createdAt} />
+        {mode === "other" ? ` · ${waitingFor}` : null}
+      </>
+    );
+
+  const showActions = pending && !outcome && (mode === "decide" || mode === "own");
+  const expandable = !compact && fields.length > 0;
+
   return (
     <article
       id={`approval-${approval.id}`}
       data-inbox-row=""
       tabIndex={-1}
       className={cn(
-        "flex w-full min-w-0 flex-col gap-3 rounded-xl border border-01 bg-01 p-4 outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
-        highlighted && "ring-2 ring-primary-500",
+        "flex w-full min-w-0 flex-col gap-1 px-4 py-3 outline-none focus-visible:bg-02 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500",
+        highlighted && "bg-primary-10",
         className,
       )}
     >
-      <header className="flex w-full min-w-0 flex-col gap-1">
-        <div className="flex w-full flex-wrap items-center gap-2">
-          <p className="text-label-xs uppercase tracking-[0.04em] text-03">{actionLabel(approval.action)}</p>
-          {mode === "history" ? (
-            <StatusChip
-              status={approval.status === "APPROVED" ? "done" : isWithdrawn(approval) ? "closed" : approval.status === "EXPIRED" ? "closed" : "failed"}
-              detail={approval.status === "APPROVED" ? undefined : isWithdrawn(approval) ? "withdrawn" : approval.status.toLowerCase()}
-            />
-          ) : mode === "decide" ? (
-            <StatusChip status="needs-you" />
+      <div className="flex w-full min-w-0 flex-col gap-2 tablet:flex-row tablet:items-center tablet:gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            {mode === "history" ? <StatusChip status={historyChip(approval)} /> : null}
+            {target.href ? (
+              <Link href={target.href} className="min-w-0 text-label-sm text-01 [overflow-wrap:anywhere] hover:underline">
+                {title}
+              </Link>
+            ) : (
+              <span className="min-w-0 text-label-sm text-01 [overflow-wrap:anywhere]">{title}</span>
+            )}
+          </p>
+          {changes.length > 0 || reason ? (
+            <p className="text-body-13 [overflow-wrap:anywhere]">
+              <ChangeInline changes={changes} />
+              {reason ? (
+                <span className="text-03">
+                  {changes.length > 0 ? " · " : ""}
+                  {reason}
+                </span>
+              ) : null}
+            </p>
           ) : null}
         </div>
-        <p className="text-body-sm text-01 [overflow-wrap:anywhere]">{sentence}</p>
-        <p className="text-body-xs text-03">
-          Asked by {nameOf(approval.requestedBy)}
-          {mode === "own" ? " (you)" : ""} · <LocalTime value={approval.createdAt} />
-          {target.href ? (
+
+        <div className="flex min-w-0 shrink-0 flex-col gap-2 tablet:flex-row tablet:items-center tablet:gap-4">
+          <p className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-body-xs text-03">
+            <span className="min-w-0">{meta}</span>
+            {pending ? <Deadline kind="approval" until={approval.expiresAt} from={approval.createdAt} /> : null}
+          </p>
+          {showActions ? (
+            <div className="grid w-full grid-cols-[1fr_1fr] gap-2 tablet:flex tablet:w-auto">
+              {mode === "decide" ? (
+                <>
+                  <Button type="button" size="sm" variant="secondary" onClick={() => setConfirm("reject")}>
+                    Reject
+                  </Button>
+                  <Button type="button" size="sm" data-primary="" title={needs} onClick={() => setConfirm("approve")}>
+                    Approve
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <CopyLinkButton link={approvalHref(approval.id)} />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" size="sm" variant="secondary" aria-label="More for this request" icon={<MoreHorizontal aria-hidden="true" />}>
+                        <span className="tablet:sr-only">More</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => setConfirm("reject")} className="gap-2">
+                        <Undo2 aria-hidden="true" className="size-4" />
+                        Withdraw request
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              )}
+            </div>
+          ) : null}
+          {expandable ? (
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={detailsId}
+              onClick={() => setOpen((value) => !value)}
+              className="inline-flex items-center gap-1 self-start rounded-md text-label-13 text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:self-center"
+            >
+              <span className="tablet:sr-only">Details</span>
+              <ChevronDown aria-hidden="true" className={cn("size-4 transition-transform", open && "rotate-180")} />
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {expandable && open ? (
+        <dl id={detailsId} className="mt-2 grid w-full grid-cols-1 gap-x-6 gap-y-1.5 border-t border-01 pt-2.5 text-body-13 tablet:grid-cols-[160px_minmax(0,1fr)]">
+          {pending ? (
             <>
-              {" · "}
-              <Link href={target.href} className="text-primary-600 hover:underline">
-                {target.label}
-              </Link>
+              <dt className="text-label-13 text-02">Who can approve</dt>
+              <dd className="text-01">{needs.replace(/^Needs /, "")}</dd>
             </>
           ) : null}
-        </p>
-      </header>
-
-      {changes.length > 0 ? <ChangeRows changes={changes} /> : null}
-
-      {!compact && fields.length > 0 ? (
-        <details className="w-full">
-          <summary className="cursor-pointer select-none text-label-13 text-02 hover:text-01">Details of the request</summary>
-          <dl className="mt-2 grid w-full grid-cols-1 gap-x-6 gap-y-1.5 text-body-13 tablet:grid-cols-[160px_minmax(0,1fr)]">
-            {fields.map((line) => (
-              <React.Fragment key={line.label}>
-                <dt className="text-label-13 text-02">{line.label}</dt>
-                <dd className="text-01 [overflow-wrap:anywhere]">{line.value}</dd>
-              </React.Fragment>
-            ))}
-          </dl>
-        </details>
+          {fields.map((line) => (
+            <React.Fragment key={line.label}>
+              <dt className="text-label-13 text-02">{line.label}</dt>
+              <dd className="text-01 [overflow-wrap:anywhere]">{line.value}</dd>
+            </React.Fragment>
+          ))}
+        </dl>
       ) : null}
 
-      {mode === "history" ? (
-        <p className="text-body-xs text-02">
-          {decisionText({
-            ...approval,
-            approvedBy: approval.approvedBy ? nameOf(approval.approvedBy) : null,
-            rejectedBy: approval.rejectedBy ? nameOf(approval.rejectedBy) : null,
-            requestedBy: approval.rejectedBy && isWithdrawn(approval) ? nameOf(approval.rejectedBy) : approval.requestedBy,
-          })}{" "}
-          · <LocalTime value={approval.decidedAt ?? approval.expiresAt} /> ·{" "}
-          <Link href={approvalActivityHref(approval)} className="text-primary-600 hover:underline">
-            History
-          </Link>
-        </p>
-      ) : outcome ? (
+      {outcome ? (
         <ResultCard
+          className="mt-2"
           tone="done"
           title={outcome.text}
           next={outcome.next}
           activityHref={outcome.kind === "approved" ? approvalActivityHref(approval) : null}
         />
-      ) : pending ? (
-        <>
-          <ApprovalFooter
-            needs={approvalNeeds(approval.code)}
-            approvers={approvers}
-            link={mode === "own" ? approvalHref(approval.id) : undefined}
-            createdAt={approval.createdAt}
-            expiresAt={approval.expiresAt}
-          />
-          {mode === "decide" || mode === "own" ? (
-            <div className="flex w-full flex-col-reverse gap-2 tablet:flex-row tablet:justify-end">
-              <Button type="button" variant="secondary" onClick={() => setConfirm("reject")}>
-                {mode === "own" ? "Withdraw request" : "Reject"}
-              </Button>
-              {mode === "decide" ? (
-                <Button type="button" data-primary="" onClick={() => setConfirm("approve")}>
-                  Approve
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-        </>
       ) : null}
 
       <ConfirmSheet
         open={confirm === "approve"}
-        onOpenChange={(open) => setConfirm(open ? "approve" : null)}
+        onOpenChange={(next) => setConfirm(next ? "approve" : null)}
         tone="primary"
-        title={`Approve: ${sentence.replace(/\.$/, "")}?`}
-        description="It runs at once, re-checked against how things stand now. It is recorded in Activity under your name."
+        title={`Approve: ${lowerFirst(title)}?`}
+        outcome={approvalOutcome(approval, context).map((line) => ({ icon: OUTCOME_ICON[line.kind], text: line.text }))}
         changes={changes}
         confirmLabel="Approve and run"
         onConfirm={onApprove}
@@ -226,18 +332,60 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
       />
       <ConfirmSheet
         open={confirm === "reject"}
-        onOpenChange={(open) => setConfirm(open ? "reject" : null)}
+        onOpenChange={(next) => setConfirm(next ? "reject" : null)}
         tone="danger"
-        title={mode === "own" ? "Withdraw your request?" : "Reject this request?"}
-        description={
+        title={mode === "own" ? "Withdraw your request?" : `Reject: ${lowerFirst(title)}?`}
+        outcome={
           mode === "own"
-            ? "Nothing runs, and nobody can approve it any more. You can ask again later."
-            : `Nothing runs. ${nameOf(approval.requestedBy)} sees it as rejected.`
+            ? [
+                { icon: Ban, text: "Nothing runs, and nobody can approve it any more" },
+                { icon: Undo2, text: "You can ask again later" },
+              ]
+            : [
+                { icon: Ban, text: "Nothing runs" },
+                { icon: History, text: `${nameOf(approval.requestedBy)} sees it as rejected, under your name` },
+              ]
         }
         confirmLabel={mode === "own" ? "Withdraw request" : "Reject request"}
         onConfirm={onReject}
         describeError={describe("reject")}
       />
     </article>
+  );
+}
+
+/**
+ * A section of rows: a small header with a count and an optional link at
+ * the right, then one bordered container with dividers. Home and Approvals.
+ */
+export function RowSection({
+  id,
+  title,
+  count,
+  hint,
+  action,
+  children,
+}: {
+  id: string;
+  title: string;
+  count?: number;
+  /** Shown on hover of the header (the rule behind the order). */
+  hint?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section aria-labelledby={id} className="flex w-full min-w-0 flex-col gap-2">
+      <div className="flex w-full flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 id={id} title={hint} className="text-label-13 text-02">
+          {title}
+          {count !== undefined ? <span className="tabular-nums text-03"> · {count}</span> : null}
+        </h2>
+        {action}
+      </div>
+      <div className="flex w-full min-w-0 flex-col divide-y divide-01 overflow-hidden rounded-xl border border-01 bg-01">
+        {children}
+      </div>
+    </section>
   );
 }
