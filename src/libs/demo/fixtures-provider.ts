@@ -161,6 +161,10 @@ interface DemoBinding {
   upstreamPath: string;
   /** Output fields the response mapping writes, in document order. */
   outputs: { target: string; selector: string }[];
+  /** A new draft's mappings, as the wizard seeds them (field name → same name). */
+  seeded?: { inputs: string[] };
+  /** What a test call against this listing returns, when not the market quote. */
+  sample?: { query: string; rawBody: string; mapped: Record<string, unknown> };
 }
 
 const BINDINGS: DemoBinding[] = [
@@ -260,9 +264,78 @@ const BINDINGS: DemoBinding[] = [
   },
 ];
 
-/** The known binding for an id, or the lead one standing in for an unknown id. */
+/**
+ * A tool a demo visitor can start a NEW listing for: every catalogue tool the
+ * provider does not list yet. Its draft id names the tool, so a later GET of
+ * that id answers as the same tool — the wizard never switches tools under
+ * the visitor, and nothing has to be remembered between calls.
+ */
+const DRAFT_PREFIX = "demo-draft-";
+
+const DRAFT_TOOLS: Record<string, Pick<DemoBinding, "toolName" | "outputs" | "seeded" | "sample">> = {
+  "weather-now": {
+    toolName: "Weather now",
+    outputs: [
+      { target: "temperature", selector: "$.temperature" },
+      { target: "conditions", selector: "$.conditions" },
+      { target: "observedAt", selector: "$.observedAt" },
+    ],
+    seeded: { inputs: ["city", "units"] },
+    sample: {
+      query: "?city=Lisbon&units=metric",
+      rawBody: '{"temperature":21.4,"conditions":"Clear","observedAt":"2026-10-16T08:40:00Z"}',
+      mapped: { temperature: 21.4, conditions: "Clear", observedAt: "2026-10-16T08:40:00Z" },
+    },
+  },
+};
+
+function draftBinding(toolId: string): DemoBinding {
+  const known = DRAFT_TOOLS[toolId];
+  return {
+    id: `${DRAFT_PREFIX}${toolId}`,
+    toolId,
+    toolName: known?.toolName ?? toolId,
+    endpoint: API_HOST,
+    pricingMode: "FREE",
+    priceMajor: "0",
+    status: "DRAFT",
+    version: 1,
+    publishedVersion: null,
+    freeQuotaPerAgent: null,
+    freeDailyBudget: null,
+    slaFailureRate: 0.02,
+    timeoutMs: 10000,
+    maxRps: null,
+    maxDailyCalls: null,
+    upstreamPath: "/",
+    outputs: known?.outputs ?? [],
+    seeded: known?.seeded ?? { inputs: [] },
+    sample: known?.sample,
+  };
+}
+
+/** The known binding for an id, a new draft's own tool, or the lead one standing in for an unknown id. */
 function bindingFor(id: string | null): DemoBinding {
+  if (id?.startsWith(DRAFT_PREFIX)) return draftBinding(id.slice(DRAFT_PREFIX.length));
   return BINDINGS.find((binding) => binding.id === id) ?? BINDINGS[0];
+}
+
+/** A write's answer: the stored listing with what was sent laid over it. Echoed, not kept. */
+function withWrite(binding: DemoBinding, data: Record<string, unknown>): DemoBinding {
+  const next = { ...binding };
+  if (typeof data.endpoint === "string") next.endpoint = data.endpoint;
+  if (data.pricingMode === "FREE" || data.pricingMode === "FREEMIUM" || data.pricingMode === "PAID") next.pricingMode = data.pricingMode;
+  if (typeof data.priceAmount === "string" && /^\d+$/.test(data.priceAmount)) {
+    next.priceMajor = (Number(data.priceAmount) / 1e6).toFixed(6);
+  }
+  if (typeof data.slaFailureRate === "number") next.slaFailureRate = data.slaFailureRate;
+  if (typeof data.timeoutMs === "number") next.timeoutMs = data.timeoutMs;
+  if (data.freeQuotaPerAgent === null || typeof data.freeQuotaPerAgent === "number") next.freeQuotaPerAgent = data.freeQuotaPerAgent;
+  return next;
+}
+
+function isMapping(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function bindingSummary(binding: DemoBinding) {
@@ -284,6 +357,12 @@ function bindingSummary(binding: DemoBinding) {
  * the editor and saving nothing does not bump `mapping_version`.
  */
 function requestMapping(binding: DemoBinding): Record<string, unknown> {
+  if (binding.seeded) {
+    const inputs = binding.seeded.inputs;
+    return inputs.length > 0
+      ? { method: "GET", path: "/", query: Object.fromEntries(inputs.map((name) => [name, { $path: `$.${name}` }])) }
+      : { method: "GET", path: "/" };
+  }
   return {
     method: "GET",
     path: binding.upstreamPath,
@@ -1335,20 +1414,20 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         ],
         request: {
           method: "GET",
-          url: `${binding.endpoint}?q=ETH-USD&limit=25`,
+          url: binding.sample ? `${binding.endpoint}${binding.sample.query}` : `${binding.endpoint}?q=ETH-USD&limit=25`,
           headerNames: ["accept", "x-api-version", "x-x402-call-id"],
           body: null,
         },
         upstream: {
           status: 200,
           latencyMs: 118,
-          rawBody: '{"data":{"symbol":"ETH-USD","last":3184.22,"ts":"2026-09-16T08:41:02Z"}}',
+          rawBody: binding.sample?.rawBody ?? '{"data":{"symbol":"ETH-USD","last":3184.22,"ts":"2026-09-16T08:41:02Z"}}',
           rawBodyTruncated: false,
           contentType: "application/json",
           transportError: null,
         },
         classification: { responseClass: "DATA_RESULT", reason: "OK", retryAfterMs: null },
-        mapped: { symbol: "ETH-USD", price: 3184.22, asOf: "2026-09-16T08:41:02Z" },
+        mapped: binding.sample?.mapped ?? { symbol: "ETH-USD", price: 3184.22, asOf: "2026-09-16T08:41:02Z" },
         verification: {
           policySource: "STORED_POLICY",
           policyId: "pol_market_quote_v3",
@@ -1376,20 +1455,43 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   /*
     Writes from the listing wizard and a listing's Settings. Stand-ins only:
     they echo a plausible answer and remember nothing, so the screens can be
-    walked through without a backend. A new draft answers as the demo's one
-    draft (Vessel positions), so the wizard continues on a listing GET knows.
+    walked through without a backend. A new draft answers as the tool that
+    was picked (its id names the tool, see `draftBinding`), so the wizard keeps
+    that tool on every later GET; a tool already listed answers as that listing.
   */
   {
     method: "POST",
+    match: "/providers/me/tool-bindings/validate-mapping",
+    body: (_path, _query, data = {}) => ({
+      canonical: data.mapping ?? {},
+      selectors: [],
+      transforms: [],
+    }),
+  },
+  {
+    method: "POST",
     match: "/providers/me/tool-bindings",
-    body: () => bindingDetail(BINDINGS[3], BINDINGS[3].id),
+    body: (_path, _query, data = {}) => {
+      const toolId = typeof data.toolId === "string" ? data.toolId : BINDINGS[3].toolId;
+      const listed = BINDINGS.find((binding) => binding.toolId === toolId);
+      const binding = withWrite(listed ?? draftBinding(toolId), data);
+      return {
+        ...bindingDetail(binding, binding.id),
+        ...(isMapping(data.requestMapping) ? { requestMapping: data.requestMapping } : {}),
+        ...(isMapping(data.responseMapping) ? { responseMapping: data.responseMapping } : {}),
+      };
+    },
   },
   {
     method: "PATCH",
     match: /^\/providers\/me\/tool-bindings\/[^/]+$/,
-    body: (path) => {
+    body: (path, _query, data = {}) => {
       const id = idIn(path, 3) ?? BINDINGS[0].id;
-      return bindingDetail(bindingFor(id), id);
+      return {
+        ...bindingDetail(withWrite(bindingFor(id), data), id),
+        ...(isMapping(data.requestMapping) ? { requestMapping: data.requestMapping } : {}),
+        ...(isMapping(data.responseMapping) ? { responseMapping: data.responseMapping } : {}),
+      };
     },
   },
   {

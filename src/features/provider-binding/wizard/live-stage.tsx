@@ -3,11 +3,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Minus, Plus, Rocket } from "lucide-react";
 import Link from "next/link";
+import Decimal from "decimal.js";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { estimatePenalty, exampleFailureRate } from "@/features/provider-penalties/estimate";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import type {
@@ -25,6 +27,7 @@ import { formatMoney, toDecimal } from "@/utils/money";
 
 import { BuyerPreview } from "../buyer-preview";
 import { minorUnitsFromMajorInput, majorInputFromMoney } from "../chrome";
+import { useProviderToolNames } from "../tool-name";
 import {
   choiceOfMode,
   DEFAULT_FAILURE_PERCENT,
@@ -37,6 +40,7 @@ import {
   providerShare,
   stakeNeededFor,
   stakeRuleOf,
+  stakeSummary,
   takeRateOf,
   timeoutFromSeconds,
   totalStakeWith,
@@ -50,6 +54,9 @@ export const REQUIREMENT_SENTENCE: Record<PublishRequirement, string> = {
   PAYOUT_ACCOUNT: "Add a payout wallet so you can be paid.",
   STAKE_AT_MINIMUM_ON_EVERY_CHAIN: "Add stake to cover paid calls.",
 };
+
+/** The window volume the penalty example assumes; nothing is on the wire before a tool is live. */
+const EXAMPLE_WINDOW_CALLS = 1000;
 
 export interface LiveForm {
   choice: PriceChoice;
@@ -126,11 +133,14 @@ function PercentStepper({
   onChange,
   error,
   disabled,
+  example,
 }: {
   value: string;
   onChange: (next: string) => void;
   error?: string;
   disabled?: boolean;
+  /** "Example: at 12% failures in a window, …", for a paid tool. */
+  example?: string | null;
 }) {
   const step = (delta: number) => {
     const current = Number(value.replace("%", ""));
@@ -159,6 +169,7 @@ function PercentStepper({
         {error ??
           "Out of every 100 checked calls in a window. Go over it and part of your stake can be taken as a penalty. A higher number is safer for you but looks weaker to buyers."}
       </p>
+      {!error && example ? <p className="text-body-xs text-02">{example}</p> : null}
     </div>
   );
 }
@@ -198,6 +209,7 @@ export function LiveStage({
   const [stakeOpen, setStakeOpen] = React.useState(false);
 
   const stake = useStakeStatus();
+  const names = useProviderToolNames();
   const check = useQuery({
     queryKey: ["provider", "tool-binding", binding.id, "publish-check"],
     queryFn: () => getPublishCheck(binding.id),
@@ -246,6 +258,36 @@ export function LiveStage({
         })()
       : null;
   const currentTerms = !take.fromServer || !rule.fromServer;
+  const largestOther = (stake.stake?.requirement ?? [])
+    .filter((item) => item.bindingId !== binding.id && item.minimum)
+    .reduce<{ toolId: string; amount: Decimal } | null>((best, item) => {
+      const amount = toDecimal(item.minimum!);
+      return !best || amount.gt(best.amount) ? { toolId: item.toolId, amount } : best;
+    }, null);
+  const summary =
+    needed && parsed.price
+      ? stakeSummary({
+          needed,
+          total: totalNeeded,
+          have,
+          price: parsed.price,
+          rule,
+          largestToolName: largestOther ? (names.tool(largestOther.toolId)?.name ?? null) : null,
+        })
+      : null;
+  const exampleRate = parsed.failureRate !== null ? exampleFailureRate(parsed.failureRate) : null;
+  const penaltyExample =
+    mode !== "FREE" && parsed.price && exampleRate !== null
+      ? (() => {
+          const estimate = estimatePenalty({
+            price: parsed.price,
+            calls: EXAMPLE_WINDOW_CALLS,
+            observedRate: exampleRate,
+            declaredRate: parsed.failureRate!,
+          });
+          return `Example: at ${percentText(exampleRate)}% failures in a window of ${EXAMPLE_WINDOW_CALLS.toLocaleString("en-US")} paid calls, about ${formatMoney(estimate.penalty)} of your stake could be taken${estimate.capped ? " (the most one window can take at this price)" : ""}. Within your promise, nothing is taken.`;
+        })()
+      : null;
 
   const unmet = (check.data?.requirements ?? []).filter((requirement) => !requirement.met);
   const testMissing = unmet.find((r) => r.requirement === "TESTER_RUN" || r.requirement === "TESTER_PASSED");
@@ -346,6 +388,7 @@ export function LiveStage({
             onChange={(next) => set({ failurePercent: next })}
             error={parsed.errors.failurePercent}
             disabled={readOnly}
+            example={penaltyExample}
           />
 
           <div className="flex flex-col gap-3">
@@ -389,24 +432,25 @@ export function LiveStage({
             ) : (
               <p className="text-body-13 text-03">Enter a price to see what you earn.</p>
             )}
-            {mode !== "FREE" && needed ? (
-              <p className="flex flex-wrap items-center gap-1 text-body-13 text-01">
-                Needs {formatMoney(totalNeeded)} stake
-                {stake.isLoading ? null : have ? (
-                  <span className={shortfall ? "text-warning-700" : "text-success-700"}>
-                    {`(you have ${formatMoney(have)}${shortfall ? `, ${formatMoney(shortfall)} short)` : " ✓)"}`}
-                  </span>
-                ) : (
-                  <span className="text-warning-700">(you have none yet)</span>
+            {mode !== "FREE" && summary ? (
+              <>
+                <p className="text-body-13 text-01">{summary.perTool}</p>
+                {stake.isLoading ? null : (
+                  <p
+                    className={cn(
+                      "text-body-13",
+                      summary.tone === "ok" ? "text-success-700" : summary.tone === "short" ? "text-warning-700" : "text-02",
+                    )}
+                  >
+                    {summary.total}
+                  </p>
                 )}
-              </p>
-            ) : null}
-            {mode !== "FREE" ? (
-              <p className="text-body-xs text-03">
-                Stake is your guarantee to buyers: {formatMoney({ amount: rule.floor.mul(10 ** asset.decimals).toFixed(0), asset: asset.assetId, decimals: asset.decimals })} or{" "}
-                {rule.multiplier.toFixed()} × your price, whichever is more. It stays yours unless you break your promise.
-                {currentTerms ? " Figures use the current published terms." : null}
-              </p>
+                <p className="text-body-xs text-03">
+                  {summary.exposure}
+                  {` ${summary.recommended}`}
+                  {currentTerms ? " Figures use the current published terms." : null}
+                </p>
+              </>
             ) : null}
           </div>
 

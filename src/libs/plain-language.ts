@@ -347,6 +347,8 @@ const ERRORS: Record<string, string> = {
   PAYOUT_ADDRESS_UNPROVEN: "Prove you control the payout address first.",
   CHAIN_NOT_ENROLLED: "Set up this chain first.",
   BINDING_NOT_EDITABLE: "This listing cannot be edited right now.",
+  BINDING_TOOL_UNKNOWN: "This tool is not in the catalogue any more. Pick another one.",
+  MAPPING_INVALID: "This mapping is not valid yet. Check the highlighted row.",
   BINDING_CHAIN_STAKE_BELOW_MINIMUM: "There is not enough stake on this chain.",
   PUBLISH_CHECKS_FAILED: "The listing did not pass the checks before going live.",
   BINDING_PRICE_NOT_POSITIVE: "The price must be above zero.",
