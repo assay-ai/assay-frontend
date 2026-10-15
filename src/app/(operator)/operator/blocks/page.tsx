@@ -282,19 +282,19 @@ function BlocksScreen() {
                         </>
                       )}
                     </span>
-                    <div className="mt-1 flex w-full min-w-0 flex-wrap items-center gap-2 tablet:mt-0 tablet:w-auto tablet:justify-end">
+                    <div className="mt-1 flex w-full min-w-0 flex-wrap items-center gap-2 sm:justify-end tablet:mt-0 tablet:w-auto">
                       {waiting ? (
-                        <Button variant="secondary" size="sm" asChild className="touch-target min-w-0 flex-1 tablet:flex-none">
+                        <Button variant="secondary" size="sm" asChild className="touch-target min-w-0 flex-1 sm:flex-none">
                           <Link href={approvalHref(waiting.id)}>View request</Link>
                         </Button>
                       ) : block.active && canAct ? (
-                        <Button variant="secondary" size="sm" onClick={() => setLifting(block)} className="touch-target min-w-0 flex-1 tablet:flex-none">
+                        <Button variant="secondary" size="sm" onClick={() => setLifting(block)} className="touch-target min-w-0 flex-1 sm:flex-none">
                           Lift block
                         </Button>
                       ) : null}
                       <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" aria-label={`More for ${label(block)}`} className="touch-target ml-auto tablet:ml-0">
+                          <Button variant="ghost" size="sm" aria-label={`More for ${label(block)}`} className="touch-target ml-auto sm:ml-0">
                             <MoreHorizontal aria-hidden="true" />
                           </Button>
                         </DropdownMenuTrigger>
