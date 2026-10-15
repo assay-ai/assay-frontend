@@ -94,7 +94,7 @@ const EDITABLE_CHANNELS: {
   { channel: "EMAIL", name: "Email", icon: Mail, placeholder: "name@example.com" },
   { channel: "PUSH", name: "Push", icon: Smartphone, placeholder: "device / registration token" },
   { channel: "SLACK", name: "Slack", icon: MessageSquare, placeholder: "incoming webhook URL" },
-  { channel: "WEBHOOK", name: "Webhook", icon: Webhook, placeholder: "https://your-endpoint…" },
+  { channel: "WEBHOOK", name: "Webhook", icon: Webhook, placeholder: "https://example.com/assay-alerts" },
 ];
 
 /**
@@ -313,8 +313,8 @@ export function AlertsView() {
             <p className="text-body-xs text-03">
               {EDITABLE_CHANNELS.filter(({ channel }) => !available.includes(channel))
                 .map(({ name }) => name)
-                .join(", ")}
-              : not available yet.
+                .join(", ")}{" "}
+              alerts can&apos;t be set up here yet.
             </p>
           ) : null}
         </PanelBody>

@@ -90,7 +90,7 @@ export function listingProgress(input: ListingProgressInput): ListingProgress {
     {
       id: "tool",
       title: "List your first tool",
-      description: "Pick the tool your API answers and point it at your endpoint.",
+      description: "Pick the tool your API answers and give us your API's URL.",
       href: routes.bindingWizard(),
       actionLabel: "List a tool",
     },

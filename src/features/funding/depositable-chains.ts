@@ -120,9 +120,8 @@ export function depositUnavailableOn(
   const name = chainName ?? chainId;
   if (!wallet.rpcConfigured) {
     return (
-      `Deposits on ${name} are not available in this build — it has no network endpoint for ` +
-      `this chain. Money already in your escrow on this chain is unaffected and is shown on the ` +
-      `Escrow screen.`
+      `Deposits on ${name} aren't available right now. Money already in your escrow is safe and ` +
+      `shown above.`
     );
   }
   return null;

@@ -30,6 +30,13 @@ const bindingStatusTone: Record<string, string> = {
   SUSPENDED: "bg-danger-10 text-danger-700",
 };
 
+const bindingStatusWord: Record<string, string> = {
+  ACTIVE: "Live",
+  PAUSED: "Paused",
+  DRAFT: "Draft",
+  SUSPENDED: "Suspended",
+};
+
 function BindingChip({ binding }: { binding: PolicyChangeBinding }) {
   return (
     <span
@@ -38,11 +45,11 @@ function BindingChip({ binding }: { binding: PolicyChangeBinding }) {
     >
       <span
         className={cn(
-          "rounded-full px-1.5 py-px font-mono text-mono-2xs font-semibold tracking-[0.5px]",
+          "rounded-full px-1.5 py-px text-label-xs font-semibold",
           bindingStatusTone[binding.status] ?? "bg-03 text-02"
         )}
       >
-        {binding.status}
+        {bindingStatusWord[binding.status] ?? "Unknown"}
       </span>
       {shortBindingId(binding.bindingId)}
     </span>
