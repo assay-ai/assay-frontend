@@ -33,7 +33,18 @@ import { useOperatorDirectory } from "./use-operator-lookups";
  * The section shows only when there is a block to sign (or the list failed):
  * no heading and empty sentence on a page that has nothing for it.
  */
-export function ApprovedArbiterBlocks({ onSent }: { onSent?: () => void }) {
+export function ApprovedArbiterBlocks({
+  onSent,
+  canRule = true,
+}: {
+  onSent?: () => void;
+  /**
+   * Whether this operator rules as the arbiter (ADJL, TRE). Others allowed to
+   * fetch the call (Support, SRE) prepare the file for the arbiter's wallet,
+   * and the row says so instead of "Sign or download".
+   */
+  canRule?: boolean;
+}) {
   const approvals = useQuery({
     queryKey: ["operator", "approvals", APPROVED_BLOCKS_QUERY.status, APPROVED_BLOCKS_QUERY.action],
     queryFn: () => listApprovals(APPROVED_BLOCKS_QUERY),
@@ -61,10 +72,17 @@ export function ApprovedArbiterBlocks({ onSent }: { onSent?: () => void }) {
         <>
           <p className="text-body-xs text-03">
             Approved by a second Lead adjudicator. Nothing is blocked on chain until the arbiter&rsquo;s wallet signs each one.
+            {canRule ? null : " You can download each file for the arbiter's wallet; only that wallet can sign it."}
           </p>
           <ul className="flex w-full flex-col divide-y divide-01 overflow-hidden rounded-xl border border-01 bg-01">
             {blocks.map((block) => (
-              <ApprovedBlockRow key={block.approvalId} block={block} approvedBy={block.approvedBy ? nameOf(block.approvedBy) : null} onSent={onSent} />
+              <ApprovedBlockRow
+                key={block.approvalId}
+                block={block}
+                approvedBy={block.approvedBy ? nameOf(block.approvedBy) : null}
+                onSent={onSent}
+                openLabel={canRule ? "Sign or download" : "Download for the arbiter"}
+              />
             ))}
           </ul>
         </>
@@ -77,10 +95,12 @@ function ApprovedBlockRow({
   block,
   approvedBy,
   onSent,
+  openLabel,
 }: {
   block: ApprovedArbiterBlock;
   approvedBy: string | null;
   onSent?: () => void;
+  openLabel: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const call = useQuery({
@@ -109,7 +129,7 @@ function ApprovedBlockRow({
         </div>
         {!open ? (
           <Button type="button" variant="secondary" size="sm" className="touch-target shrink-0 self-start" onClick={() => setOpen(true)}>
-            Sign or download
+            {openLabel}
           </Button>
         ) : null}
       </div>

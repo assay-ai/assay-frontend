@@ -46,6 +46,7 @@ import {
   beneficiaryCheck,
   disputeAmount,
   durationText,
+  mayBlockOnChain,
   mayRule,
   possessive,
   pruneArbiterSelection,
@@ -114,6 +115,9 @@ function ArbiterScreen() {
   const queryClient = useQueryClient();
   const canRule = mayRule(me.roles);
   const canBlock = mayBlock(me.roles);
+  // Who may fetch an approved block's call (backend: ADJL, SRE, TRE). Support
+  // (SRE) may download it for the arbiter's wallet; only that wallet signs.
+  const canExportBlocks = mayBlockOnChain(me.roles);
   const blockWhy = checkAction(me, "block").why;
   const providers = useProviderNames();
   const searchParams = useSearchParams();
@@ -275,7 +279,7 @@ function ArbiterScreen() {
       {/* Records of an earlier proposal that landed on chain late (review R2-6), and approved
           on-chain blocks (A-11) still to sign (review N5). Each section shows only when it has rows. */}
       <SupersededRecords canCancel={canRule} providerName={providers.name} onSent={refresh} />
-      {canBlock ? <ApprovedArbiterBlocks onSent={refresh} /> : null}
+      {canExportBlocks ? <ApprovedArbiterBlocks onSent={refresh} canRule={canRule} /> : null}
 
       {/* The selection's actions: a bar fixed to the bottom of the screen (above
           the phone's tab bar), out of the flow, so selecting never moves a row.
