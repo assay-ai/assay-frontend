@@ -6,6 +6,7 @@ import { demoResponse } from "@/libs/demo/demo-api";
 import {
   durationLeft,
   OPEN_STATUSES,
+  defaultTab,
   penaltyChip,
   penaltyNext,
   rowFromCase,
@@ -91,7 +92,7 @@ describe("what a row says", () => {
   });
 
   it("never shows Disputed in the lime 'positive' sense for a cancel, and names an upheld one", () => {
-    expect(penaltyChip(row({ status: "CANCEL_REQUESTED" }), NOW)).toEqual({ status: "waiting-signature", detail: "cancel" });
+    expect(penaltyChip(row({ status: "CANCEL_REQUESTED" }), NOW)).toEqual({ status: "waiting-signature" });
     expect(penaltyChip(row({ status: "PROPOSED", disputedAt: "2026-10-01T00:00:00Z" }), NOW)).toEqual({ status: "upheld" });
     expect(penaltyChip(row({ status: "COMPENSATED" }), NOW)).toEqual({ status: "closed", detail: "paid back" });
   });
@@ -116,8 +117,23 @@ describe("what a row says", () => {
   });
 
   it("names who a waiting request needs", () => {
-    expect(waitingText("slash.suspend", ["Riley Brooks", "Iris Park"])).toBe("Suspend waiting for approval · Riley or Iris");
-    expect(waitingText("slash.compensated", [])).toBe("Pay-back waiting for approval");
+    expect(waitingText(["Riley Brooks", "Iris Park"])).toBe("Waiting for Riley or Iris to approve");
+    expect(waitingText([])).toBe("Waiting for approval");
+  });
+
+  it("tells one story in Status and Next while a request waits", () => {
+    expect(penaltyChip(row({ status: "PROPOSED", disputedAt: "2026-10-01T00:00:00Z" }), NOW, "slash.suspend")).toEqual({
+      status: "upheld",
+      detail: "suspend pending",
+    });
+    expect(penaltyChip(row({ status: "EXECUTED" }), NOW, "slash.compensated")).toEqual({ status: "executed", detail: "pay-back pending" });
+    expect(penaltyChip(row({ status: "EXECUTED" }), NOW, null)).toEqual({ status: "executed" });
+  });
+
+  it("opens on Needs ruling for who can rule, on All for everyone else", () => {
+    expect(defaultTab(true, false)).toBe("needs-ruling");
+    expect(defaultTab(false, false)).toBe("all");
+    expect(defaultTab(false, true)).toBe("needs-ruling");
   });
 
   it("rounds time left up, in whole units", () => {

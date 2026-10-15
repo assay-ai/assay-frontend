@@ -1,6 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
@@ -9,6 +10,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
 import { approvalTargetId } from "@/features/operator/approvals";
+import { mayRule } from "@/features/operator/arbiter";
 import { eligibleApprovers } from "@/features/operator/inbox";
 import {
   FALLBACK_TABS,
@@ -21,14 +23,17 @@ import {
   rowFromQueue,
   rowMatches,
   tabById,
+  defaultTab,
   tabCounts,
   uniqueRows,
   waitingText,
   type PenaltyRow,
+  type PenaltyWaiting,
   type PenaltyTab,
   type PenaltyTabId,
 } from "@/features/operator/penalty-list";
 import { penaltyIdFrom, readRecentPenalties, type RecentPenalty } from "@/features/operator/recent-penalties";
+import { useOperatorSession } from "@/features/operator/session-context";
 import { useOperatorDirectory, usePenaltyBriefs, useProviderNames } from "@/features/operator/use-operator-lookups";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
@@ -64,6 +69,7 @@ const PAGE_SIZE = 50;
 
 export default function PenaltiesPage() {
   const router = useRouter();
+  const me = useOperatorSession();
   const providers = useProviderNames();
   const directory = useOperatorDirectory();
   const tabParam = useSearchParam("tab");
@@ -96,7 +102,8 @@ export default function PenaltiesPage() {
   });
   const listMissing = open.error instanceof ApiError && open.error.status === 404;
   const tabs = listMissing ? FALLBACK_TABS : STATUS_TABS;
-  const tab = tabById(tabs, tabId ?? tabParam);
+  // Who can rule lands on what needs ruling; everyone else on every penalty.
+  const tab = tabById(tabs, tabId ?? (tabParam || defaultTab(mayRule(me.roles), listMissing)));
 
   const list = useInfiniteQuery({
     queryKey: ["operator", "cases", "list", tab.id, providerId ?? null],
@@ -142,12 +149,12 @@ export default function PenaltiesPage() {
     retry: 0,
   });
   const waitingBy = React.useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, PenaltyWaiting>();
     for (const approval of pending.data?.items ?? []) {
       const code = PENALTY_APPROVAL_CODES[approval.action];
       if (!code || approval.status !== "PENDING") continue;
       const names = directory.isPending ? [] : eligibleApprovers(code, directory.operators, approval.requestedById);
-      map.set(approvalTargetId(approval), waitingText(approval.action, names));
+      map.set(approvalTargetId(approval), { action: approval.action, text: waitingText(names) });
     }
     return map;
   }, [pending.data, directory]);
@@ -209,6 +216,9 @@ export default function PenaltiesPage() {
     setQueryError(q && shown.length === 0 ? "No penalty matches. Paste a penalty id or link to open it." : null);
   };
 
+  // A pasted id or link is not a filter: it opens on Enter, and the panel says so instead of "no match".
+  const typedId = penaltyIdFrom(query);
+
   const recentLine = recent.filter((item) => !rows.some((row) => row.id === item.id)).slice(0, 4);
 
   return (
@@ -249,7 +259,7 @@ export default function PenaltiesPage() {
               aria-selected={selected}
               onClick={() => chooseTab(t)}
               className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-label-13 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
+                "touch-target inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-label-13 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
                 selected ? "border-01 bg-inverse text-inverse" : "border-01 bg-01 text-02 hover:bg-02 hover:text-01",
               )}
             >
@@ -266,7 +276,9 @@ export default function PenaltiesPage() {
       </div>
 
       <section role="tabpanel" aria-label={tab.label} className="flex w-full flex-col gap-3">
-        {loading ? (
+        {typedId ? (
+          <OpenTypedPenalty id={typedId} />
+        ) : loading ? (
           <PageState kind="loading" rows={4} label="Loading penalties" />
         ) : failed ? (
           <PageState
@@ -314,6 +326,22 @@ export default function PenaltiesPage() {
         </p>
       ) : null}
     </>
+  );
+}
+
+/** A pasted id or link: the one row to open, and that Enter opens it. */
+function OpenTypedPenalty({ id }: { id: string }) {
+  return (
+    <Link
+      href={routes.operatorCase(id)}
+      className="flex w-full items-center justify-between gap-3 rounded-xl border border-01 bg-01 px-4 py-3 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+    >
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-label-13 text-01">Press Enter to open this penalty</span>
+        <span className="truncate font-mono text-mono-12 text-03">{id}</span>
+      </span>
+      <ArrowRight aria-hidden="true" className="size-4 shrink-0 text-03" />
+    </Link>
   );
 }
 
