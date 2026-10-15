@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
+import { CopyChip } from "@/components/patterns/copy-chip";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -273,6 +274,11 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
           </Button>
         </PanelBody>
       </Panel>
+
+      <div className="flex w-full flex-wrap items-center gap-2 px-1 text-body-xs text-03">
+        <span>For support: listing id</span>
+        <CopyChip value={binding.id} label="listing id" />
+      </div>
 
       <div className="sticky bottom-0 z-10 -mx-4 flex flex-col gap-1 border-t border-01 bg-01 px-4 py-3 tablet:-mx-[26px] tablet:flex-row tablet:items-center tablet:justify-between tablet:px-[26px]">
         <span aria-live="polite" className={error ? "text-body-xs text-danger-600" : "text-body-xs text-03"}>

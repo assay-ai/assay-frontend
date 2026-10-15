@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
+import { CopyChip } from "@/components/patterns/copy-chip";
 import { LocalTime } from "@/components/patterns/local-time";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusTimeline, type StatusTimelineStep } from "@/components/patterns/status-timeline";
@@ -52,8 +53,9 @@ function lifecycle(binding: ToolBindingDetail, testPassed: boolean): StatusTimel
     {
       id: "live",
       label: "Live",
-      state: live ? "current" : published ? "done" : "upcoming",
-      description: live ? "Agents can call it." : undefined,
+      // Live is the goal, so a live tool shows it done (a check), not "in progress".
+      state: live || published ? "done" : "upcoming",
+      description: live ? "Agents can call it." : paused && published ? "Was live before the pause." : undefined,
     },
     // Paused is a state the tool can be in, not a stage it moves towards: only show it when it applies.
     ...(paused
@@ -97,11 +99,13 @@ function FirstRunCard({ binding, toolName, description }: { binding: ToolBinding
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex items-center gap-2">
             <PartyPopper aria-hidden="true" className="size-5 text-success-600" />
-            <h2 className="text-label-md text-01">Your tool is live</h2>
+            <h2 className="text-label-md text-01">{toolName} is live. Agents can call it now.</h2>
           </div>
           <p className="text-body-13 text-02">
-            {toolName} is in the catalogue. Agents that need it can call it now; you are paid for each call that passes
-            the check.
+            It is in the catalogue.{" "}
+            {binding.pricingMode === "FREE"
+              ? "Agents use it for free."
+              : "You are paid for each call that passes our check, and calls that fail it are not charged to the buyer."}
           </p>
           <ol className="flex flex-col gap-2" aria-live="polite">
             <li className="flex items-center gap-2 text-body-13 text-01">
@@ -127,9 +131,35 @@ function FirstRunCard({ binding, toolName, description }: { binding: ToolBinding
               </li>
             ) : null}
           </ol>
-          <p className="text-body-xs text-03">
-            Next: watch quality in the Quality tab. You get an Inbox message if your failure rate gets close to your promise.
-          </p>
+          <div className="flex flex-col gap-2">
+            <span className="text-label-13 text-01">What to do next</span>
+            <ul className="flex flex-col gap-1.5 text-body-13 text-02">
+              <li>
+                <Link href={routes.binding(binding.id, "quality")} className="text-primary-600 underline">
+                  Watch quality
+                </Link>
+                : your failure rate against your promise. We message your Inbox if it gets close.
+              </li>
+              <li>
+                <a href={routes.publicTool(binding.toolId)} target="_blank" rel="noreferrer" className="text-primary-600 underline">
+                  See how buyers see it
+                </a>
+                , or{" "}
+                <CopyChip
+                  value={typeof globalThis.location === "undefined" ? routes.publicTool(binding.toolId) : `${globalThis.location.origin}${routes.publicTool(binding.toolId)}`}
+                  display="copy its link to share"
+                  label="public tool link"
+                  className="align-middle"
+                />
+              </li>
+              <li>
+                <Link href={routes.bindingWizard(binding.id, "connect")} className="text-primary-600 underline">
+                  Run a test call
+                </Link>{" "}
+                any time. Nobody is charged.
+              </li>
+            </ul>
+          </div>
         </div>
         <BuyerPreview
           className="w-full tablet:w-[360px] tablet:shrink-0"

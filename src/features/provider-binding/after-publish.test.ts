@@ -18,7 +18,7 @@ vi.mock("@/services/provider-stake.service", () => ({
 
 import { revalidateProviderStake } from "@/services/provider-stake.service";
 
-import { applyPublished, isAlreadyLive, isPublishedState } from "./after-publish";
+import { applyPublished, isAlreadyLive, isPublishedState, JUST_PUBLISHED_MS, withJustPublished } from "./after-publish";
 
 const ID = "b-1";
 
@@ -113,5 +113,23 @@ describe("isPublishedState", () => {
     expect(isPublishedState(detail())).toBe(false);
     expect(isPublishedState({ ...published, hasUnpublishedChanges: true })).toBe(false);
     expect(isPublishedState(undefined)).toBe(false);
+  });
+});
+
+describe("withJustPublished", () => {
+  const draft = detail({ status: "DRAFT", version: 2, publishedVersion: null, hasUnpublishedChanges: true });
+  const live = detail({ status: "ACTIVE", version: 2, publishedVersion: 2, hasUnpublishedChanges: false });
+
+  it("keeps a just-published listing live over an older read", () => {
+    const shown = withJustPublished(draft, { binding: live, at: 1000 }, 2000);
+    expect(shown.status).toBe("ACTIVE");
+    expect(isPublishedState(shown)).toBe(true);
+  });
+
+  it("lets the read win once it caught up, after a newer edit, or after the record expires", () => {
+    expect(withJustPublished(live, { binding: live, at: 1000 }, 2000)).toBe(live);
+    const edited = detail({ status: "ACTIVE", version: 3, publishedVersion: 1 });
+    expect(withJustPublished(edited, { binding: live, at: 1000 }, 2000)).toBe(edited);
+    expect(withJustPublished(draft, { binding: live, at: 0 }, JUST_PUBLISHED_MS + 1)).toBe(draft);
   });
 });

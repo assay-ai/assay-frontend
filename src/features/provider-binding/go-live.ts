@@ -1,6 +1,7 @@
 import Decimal from "decimal.js";
 
 import type { Money, PricingMode, ProviderStake, ProviderTermsSummary } from "@/interfaces";
+import { formatMoney } from "@/utils/money";
 
 /**
  * The arithmetic behind the wizard's "Go live" summary and the Settings
@@ -140,4 +141,80 @@ export function timeoutFromSeconds(text: string): { value: number | null; error:
   const ms = Math.round(Number(trimmed) * 1000);
   if (ms < 1 || ms > 120_000) return { value: null, error: "Between 0.001 and 120 seconds." };
   return { value: ms, error: null };
+}
+
+/**
+ * The Go live stake explanation, in one place so the numbers can never
+ * disagree with each other:
+ *
+ *   "This tool alone needs $300.00 (1,000 × $0.30)."
+ *   "Your stake has to cover your largest paid tool, Market quote: $450.00;
+ *    you have $600.00 ✓"
+ *
+ * `total` is the account-wide requirement once this tool is live. The rule is
+ * `max` across tools, not a sum (`requirementRule`, see `totalStakeWith`), so
+ * the copy names the largest tool rather than adding them up. `have` is what
+ * is staked.
+ */
+const RECOMMENDED_FACTOR = new Decimal("1.5");
+
+export interface StakeSummary {
+  perTool: string;
+  total: string;
+  tone: "ok" | "short" | "unknown";
+  /** Why "1,000 × your price". */
+  exposure: string;
+  /** The 1.5× cushion. */
+  recommended: string;
+}
+
+export function stakeSummary({
+  needed,
+  total,
+  have,
+  price,
+  rule,
+  largestToolName,
+}: {
+  /** The name of the other tool whose requirement is the total, when it is not this one. */
+  largestToolName?: string | null;
+  needed: Money;
+  total: Money | null;
+  have: Money | null;
+  price: Money;
+  rule: StakeRule;
+}): StakeSummary {
+  const fmt = (value: Money) => formatMoney(value);
+  const multiplier = rule.multiplier.toNumber().toLocaleString("en-US");
+  const floorWins = major(needed).eq(rule.floor) && rule.multiplier.mul(major(price)).lt(rule.floor);
+  const perTool = floorWins
+    ? `This tool alone needs ${fmt(needed)} (the minimum for any paid tool).`
+    : `This tool alone needs ${fmt(needed)} (${multiplier} × ${formatMoney(price, { decimals: 6 })}).`;
+
+  const overall = total && major(total).gt(major(needed)) ? total : needed;
+  const lead =
+    overall === needed
+      ? "That is all the stake you need"
+      : `Your stake has to cover your largest paid tool${largestToolName ? `, ${largestToolName}` : ""}: ${fmt(overall)}`;
+  let tail: string;
+  let tone: StakeSummary["tone"];
+  if (!have) {
+    tail = "we could not read your stake yet";
+    tone = "unknown";
+  } else if (major(have).lte(0)) {
+    tail = "you have none yet";
+    tone = "short";
+  } else if (major(have).gte(major(overall))) {
+    tail = `you have ${fmt(have)} ✓`;
+    tone = "ok";
+  } else {
+    tail = `you have ${fmt(have)}, ${fmt(fromMajor(major(overall).minus(major(have)), overall))} short`;
+    tone = "short";
+  }
+
+  const exposure = `Why ${multiplier} × your price: your stake has to cover about ${multiplier} calls' worth of refunds to buyers if your API stops working, before anything else can happen. It stays yours unless you break your promise.`;
+  // The same 1.5× cushion the Stake page calls "Recommended".
+  const recommended = fromMajor(major(overall).mul(RECOMMENDED_FACTOR), overall);
+  const recommendedLine = `We recommend ${fmt(recommended)} (1.5 × ${fmt(overall)}), so one penalty does not take you below the minimum and pause your paid tools.`;
+  return { perTool, total: `${lead}; ${tail}.`, tone, exposure, recommended: recommendedLine };
 }
