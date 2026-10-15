@@ -86,7 +86,7 @@ export function ApprovalLinkView({ approvalId }: { approvalId: string }) {
         </Button>
       </div>
       <p className="text-body-xs text-03">
-        Approving a payment by hand is not available yet. A call that costs more than your budget allows is refused, so
+        Payments can&apos;t be approved by hand yet. A call that costs more than your budget allows is refused, so
         you are never charged above it.
       </p>
     </section>,

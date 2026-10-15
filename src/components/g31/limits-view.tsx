@@ -1,5 +1,6 @@
 "use client";
 
+import { SkeletonRows } from "@/components/patterns/page-state";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, X } from "lucide-react";
 import Link from "next/link";
@@ -281,7 +282,7 @@ function History() {
       <summary className="cursor-pointer select-none text-label-13 text-01">Change history</summary>
       <div className="mt-2 flex flex-col">
         {history.isPending ? (
-          <p className="py-2 text-body-13 text-03">Loading…</p>
+          <SkeletonRows rows={2} className="py-2" />
         ) : history.isError ? (
           <p className="py-2 text-body-13 text-02">The history could not be loaded.</p>
         ) : items.length === 0 ? (

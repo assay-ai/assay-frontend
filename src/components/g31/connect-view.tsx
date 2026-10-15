@@ -55,7 +55,7 @@ export function ConnectView() {
         </p>
 
         <p className="rounded-lg border border-teal-20 bg-teal-10 px-3.5 py-3 text-body-13 text-teal-600">
-          No money needed to start: many tools give each agent free calls every day (usually 100 per tool). Add funds
+          No money needed to start: many tools include free calls every day; the tool list shows how many. Add funds
           when you want paid calls.
         </p>
 

@@ -12,7 +12,7 @@ import { Stepper, type StepperStep } from "@/components/patterns/stepper";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
-import { Outcome } from "@/features/m41/steps";
+import { Outcome } from "@/features/m41/outcome";
 import { termValue } from "@/features/m41/terms";
 import { addressFamily, useProviderSetup, type ProviderSetup } from "@/features/m41/use-setup";
 import { useChainName } from "@/hooks/useChainName";

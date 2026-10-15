@@ -254,7 +254,7 @@ export function samplingSubline(receipt: Receipt): string | null {
   if (!semantic || stageStatus(semantic) !== "not-sampled") return null;
   const others = receipt.stages.filter((s) => s.stage !== "SEMANTIC");
   if (!others.every((s) => stageStatus(s) === "passed")) return null;
-  return "The relevance judgement is the only stage that did not run, and it is sampled — not skipped.";
+  return "One check (relevance) runs on a sample of calls; this call was not in the sample.";
 }
 
 /**

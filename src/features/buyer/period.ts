@@ -22,6 +22,8 @@ export interface Period {
   to: string;
   /** "August 2026" — the design's own month wording. */
   label: string;
+  /** "Aug 2026" — for a narrow table column. Present on month periods. */
+  shortLabel?: string;
   /** Stable react key, `2026-08`. */
   key: string;
 }
@@ -32,6 +34,8 @@ const MONTH_LABEL = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
+const MONTH_SHORT = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+
 export function monthPeriod(anchor: Date): Period {
   const y = anchor.getUTCFullYear();
   const m = anchor.getUTCMonth();
@@ -41,6 +45,7 @@ export function monthPeriod(anchor: Date): Period {
     from: from.toISOString(),
     to: to.toISOString(),
     label: MONTH_LABEL.format(from),
+    shortLabel: MONTH_SHORT.format(from),
     key: `${y}-${String(m + 1).padStart(2, "0")}`,
   };
 }

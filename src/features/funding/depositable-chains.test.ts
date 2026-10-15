@@ -112,7 +112,7 @@ describe("depositUnavailableOn", () => {
         kind: "embedded",
         rpcConfigured: false,
       }) ?? "";
-    expect(note).toContain("no network endpoint");
+    expect(note).toContain("aren't available right now");
   });
 
   it("does not refuse on a guess while the wallet is still resolving", () => {
@@ -134,6 +134,6 @@ describe("depositUnavailableOn", () => {
         kind: "external",
         rpcConfigured: false,
       }),
-    ).toContain("no network endpoint");
+    ).toContain("aren't available right now");
   });
 });

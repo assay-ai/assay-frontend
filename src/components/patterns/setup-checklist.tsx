@@ -119,7 +119,7 @@ const STATE_WORD: Record<SetupStepState, string> = {
   done: "done",
   current: "next",
   todo: "to do",
-  blocked: "not available yet",
+  blocked: "waiting",
 };
 
 export function SetupChecklist({

@@ -1198,7 +1198,7 @@ export function MappingEditor({
                   patchState((state) => ({ ...state, path: event.target.value || null }))
                 }
                 placeholder="/v1/cities/{$.cityId}/now"
-                hint="appended to the endpoint. {$.selector} segments interpolate, URL-encoded."
+                hint="Added to your API's URL. {$.selector} parts are filled in from the request, URL-encoded."
               />
             </div>
           ) : null}

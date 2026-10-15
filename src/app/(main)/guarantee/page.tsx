@@ -127,7 +127,7 @@ export default function GuaranteePage() {
   const anyMonthHasCalls = monthRows.some((m) => m.calls > 0);
 
   const monthColumns: TableColumn<MonthRow & { id: string }>[] = [
-    { key: "month", header: "Month", cell: (r) => r.period.label },
+    { key: "month", header: "Month", cell: (r) => r.period.shortLabel ?? r.period.label },
     { key: "calls", header: "Calls", width: 90, mono: true, cell: (r) => formatCount(r.calls) },
     { key: "listed", header: "Listed", width: 100, mono: true, cell: (r) => formatMoney(r.listed) },
     { key: "charged", header: "Charged", width: 100, mono: true, cell: (r) => formatMoney(r.charged) },
@@ -325,7 +325,7 @@ export default function GuaranteePage() {
                           <span className="text-body-xs text-03">
                             {formatCount(r.calls)} {r.calls === 1 ? "call" : "calls"}
                             {r.mostlyToolId ? ` · mostly ${names.name("tool", r.mostlyToolId)}` : ""}
-                            {r.mostlyProviderId ? ` from ${names.name("provider", r.mostlyProviderId)}` : ""}
+                            {names.lookup("provider", r.mostlyProviderId) ? ` from ${names.lookup("provider", r.mostlyProviderId)}` : ""}
                           </span>
                         </div>
                         <span className="shrink-0 font-mono text-mono-13 font-semibold text-teal-600">

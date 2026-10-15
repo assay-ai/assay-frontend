@@ -336,7 +336,7 @@ export default function ProviderAccountPage() {
           <h1 className="text-heading-sm text-01 tablet:text-heading-md">Account</h1>
           <p className="text-body-13 text-03">Your contacts, machine tokens and the terms you accepted.</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex shrink-0 flex-col items-end gap-1">
           <Button
             icon={<Plus />}
             type="button"
@@ -348,6 +348,9 @@ export default function ProviderAccountPage() {
           >
             New machine token
           </Button>
+          {agentIds.length === 0 ? (
+            <span className="text-body-xs text-03">A token belongs to an agent; there is none yet.</span>
+          ) : null}
         </div>
       </header>
 

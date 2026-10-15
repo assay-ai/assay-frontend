@@ -1,5 +1,6 @@
 "use client";
 
+import { SkeletonRows } from "@/components/patterns/page-state";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { usePrivy } from "@privy-io/react-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -229,7 +230,7 @@ export function WalletMenu({ className }: { className?: string }) {
             </span>
           </div>
           {balancesQuery.isPending && open ? (
-            <p className="px-2.5 py-1.5 text-body-xs text-03">Loading…</p>
+            <SkeletonRows rows={1} className="px-2.5 py-1.5" />
           ) : balancesQuery.isError ? (
             <p className="px-2.5 py-1.5 text-body-xs text-danger-500">Balance unavailable.</p>
           ) : (

@@ -1,5 +1,6 @@
 "use client";
 
+import { SkeletonRows } from "@/components/patterns/page-state";
 import { useQuery } from "@tanstack/react-query";
 import { ShieldCheck, UserPlus } from "lucide-react";
 
@@ -78,14 +79,14 @@ export function TeamView() {
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>Members</PanelTitle>
-            <PanelDescription>roles and invitations are not available yet</PanelDescription>
+            <PanelDescription>one owner per account for now</PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="p-5">
           <EmptyState
             icon={null}
             title="Nobody else has been invited"
-            description="Inviting team members, roles and ownership transfer are not available yet. Today the account has one owner."
+            description="Today the account has one owner. Inviting team members, roles and ownership transfer can't be done here yet."
           />
         </PanelBody>
       </Panel>
@@ -99,7 +100,7 @@ export function TeamView() {
         </PanelHeader>
         <PanelBody className="px-2.5 pb-2.5 pt-1.5">
           {policy.isPending ? (
-            <p className="p-3 font-mono text-mono-13 text-03">Loading…</p>
+            <SkeletonRows rows={2} className="p-3" />
           ) : policy.isError ? (
             <p className="p-3 text-body-13 text-danger-600">
               The organization ceiling could not be read, so nothing here states what binds.

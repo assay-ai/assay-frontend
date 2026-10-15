@@ -92,7 +92,9 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
   const steps: WalletStep[] = [
     {
       id: "approve",
-      label: `Allow the deposit of ${parsed.value ? formatDecimal(parsed.value) : "this amount"} ${symbol}`,
+      label: parsed.value
+        ? `Allow the escrow to take ${formatDecimal(parsed.value)} ${symbol}`
+        : "Allow the escrow to take the amount",
       cost: "gas",
       skip: !evm,
       run: async ({ report, previousAttempt }) => {
@@ -181,7 +183,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
       open={open}
       onOpenChange={onOpenChange}
       title="Add funds"
-      description="Money goes into your escrow, which only your wallet controls. Minimum $5.00."
+      description="Money goes into your escrow, which only your wallet controls."
       steps={steps}
       label={label}
       resetKey={resetKey}

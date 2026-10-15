@@ -277,9 +277,6 @@ export function ProvidersView() {
             <span className="flex-1 text-label-13 text-01">All providers</span>
             <span className="font-mono text-mono-12 text-03">{providers.length}</span>
           </div>
-          <p className="px-2.5 pb-1 pt-2 text-body-xs text-03">
-            Browsing providers by category is not available yet.
-          </p>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col gap-3.5">

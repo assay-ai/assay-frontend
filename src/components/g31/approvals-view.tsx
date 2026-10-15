@@ -49,7 +49,7 @@ export function ApprovalsView() {
             description="An approval holds a call open until a person decides. Nothing is holding right now, so your agent is spending inside its policy without asking. A call refused by a limit does not appear here — see Limits."
           />
           <p className="text-body-xs text-03">
-            Calls can't be approved by hand yet, so a call above your approval threshold is refused instead of
+            Calls can&apos;t be approved by hand yet, so a call above your approval threshold is refused instead of
             waiting here.
           </p>
         </div>
