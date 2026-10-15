@@ -38,7 +38,7 @@ describe("UnsettledPayments", () => {
   it("says how many payments are still being settled, without a warning when nothing strands", () => {
     const html = render();
     expect(html).toContain('data-testid="unsettled-line"');
-    expect(html).toContain("1 payment (0.100000 USDG) still being settled");
+    expect(html).toContain("1 payment ($0.10) still being settled");
     expect(html).not.toContain("unsettled-strand-warning");
   });
 

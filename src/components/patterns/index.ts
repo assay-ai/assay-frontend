@@ -11,6 +11,8 @@
  * | Lifecycle with dates                   | `StatusTimeline`                              | `ui/timeline` (that is a call's event log) |
  * | Where money went / how it divides      | `MoneyFlow`, `MoneySplit`                     | prose                                      |
  * | A cap or budget                        | `CapMeter`                                    | `ui/meter` (no sentence, no refill)        |
+ * | "What can this agent spend?"           | `EffectiveLimit` (`resolveLimit`)             | three separate limit panels                |
+ * | A tx that must survive a reload        | `usePendingTransactions` (hooks)              | state held only in the signing sheet       |
  * | Loading / empty / error / blocked      | `PageState`, `Skeleton`                       | "Loading…", `ui/empty-state`, `common/Empty` |
  * | A record's state                       | `StatusChip`                                  | raw API status text, `ui/badge` for new UI |
  * | An amount                              | `PresetChips` + `parseAmountInput` (utils/money) | free text + `Number()`                  |

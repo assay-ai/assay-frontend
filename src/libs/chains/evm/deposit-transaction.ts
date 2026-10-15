@@ -195,3 +195,20 @@ export async function waitForSuccess(chainId: string, hash: `0x${string}`): Prom
     throw new Error(`The transaction ${hash} reverted on ${chainId}. Nothing was deposited.`);
   }
 }
+
+/**
+ * One look at a transaction, without waiting: `"pending"` until it is mined
+ * (or while the RPC has not seen it), then `"success"` or `"reverted"`. For
+ * picking a pending transaction back up after a reload.
+ */
+export async function readReceiptStatus(
+  chainId: string,
+  hash: `0x${string}`,
+): Promise<"pending" | "success" | "reverted"> {
+  try {
+    const receipt = await clientFor(chainId).getTransactionReceipt({ hash });
+    return receipt.status === "success" ? "success" : "reverted";
+  } catch {
+    return "pending";
+  }
+}

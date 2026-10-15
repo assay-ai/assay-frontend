@@ -64,11 +64,11 @@ import {
 } from "@/services/delegation.service";
 import { getEscrow } from "@/services/escrow.service";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
-import { formatMoney } from "@/utils/money";
+import { formatLocalDate } from "@/libs/local-time";
 import { toast } from "@/utils/toast";
 
 import { MicroLabel, StatusPill } from "./chrome";
-import { dateOnly, relativeTime } from "./format";
+import { dateOnly, formatLimit, relativeTime } from "./format";
 import { UnsettledPayments, useSettleWait } from "./unsettled-payments";
 
 /** The credential fields this section reads. */
@@ -207,9 +207,10 @@ function EscrowLimitWarning({
 /** Full precision: a cap of 0.005 must not read as 0.01 (review S3-11). */
 function exact(
   money: EscrowDelegate["maxVoucherAmount"],
-  unit: string,
+  _unit?: string,
 ): string {
-  return `${formatMoney(money, { decimals: money.decimals, symbol: "" })} ${unit}`.trim();
+  // Dollars at two decimals (sub-cent amounts keep their digits), never 6-decimal token units.
+  return formatLimit(money);
 }
 
 /** "Who can pay from your escrow" — every on-chain grant of the payer, each revocable. */
@@ -218,25 +219,30 @@ export function PayerDelegationsPanel({
   bindings,
   version,
   onChanged,
+  onlyUnbound = false,
 }: {
   account: string | undefined;
   bindings: readonly DelegateBinding[];
   version: number;
   onChanged: () => void;
+  /** Only keys not bound to a live credential (the per-agent cards show the rest). Hidden when there are none. */
+  onlyUnbound?: boolean;
 }) {
   const ctx = useDelegationContext(account, version);
   const [revoking, setRevoking] = React.useState<EscrowDelegate | null>(null);
   const [editing, setEditing] = React.useState<SheetTarget | null>(null);
   if (!ctx.enabled) return null;
 
-  const rows = delegationRows(ctx.delegatesQuery.data?.delegates, bindings);
+  const all = delegationRows(ctx.delegatesQuery.data?.delegates, bindings);
+  const rows = onlyUnbound ? all.filter((row) => !row.bound) : all;
+  if (onlyUnbound && rows.length === 0 && !ctx.delegatesQuery.isError) return null;
 
   return (
     <div
       className="flex w-full flex-col gap-2.5 rounded-lg border border-01 bg-02 p-3.5 tablet:p-[15px]"
       data-testid="payer-delegations"
     >
-      <MicroLabel>KEYS THAT CAN PAY FROM YOUR ESCROW</MicroLabel>
+      <MicroLabel>{onlyUnbound ? "OTHER KEYS THAT CAN STILL PAY" : "KEYS THAT CAN PAY FROM YOUR ESCROW"}</MicroLabel>
       {ctx.delegatesQuery.isError ? (
         <p className="text-body-xs text-danger-600">
           The authorisations could not be read from the chain:{" "}
@@ -481,10 +487,15 @@ function RevokeSheet({
   }, [open, reset]);
 
   const atRisk = reasons.length > 0;
+  const [revokeNote, setRevokeNote] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!open) setRevokeNote(null);
+  }, [open]);
 
   const revoke = async () => {
     if (!target) return;
     setBusy(true);
+    setRevokeNote(null);
     try {
       const intent = await createRevokeDelegateIntent(addressOfAccount(target.delegate));
       await submitRelayedDelegation(
@@ -493,12 +504,13 @@ function RevokeSheet({
         { domain: domain(escrow), delegate: target.delegate },
         submitRevokeDelegate,
       );
-      toast.success("Revoked. That key can no longer sign payments.");
+      toast.success("Revoked. That key can no longer sign payments from its next one on.");
+      onFinished();
     } catch (error) {
-      toast.error(explain(error, "The authorisation could not be revoked"));
+      // Declining in the wallet is a decision, not a failure: the sheet stays as it was.
+      setRevokeNote(explain(error, "The authorisation could not be revoked"));
     } finally {
       setBusy(false);
-      onFinished();
     }
   };
 
@@ -516,6 +528,10 @@ function RevokeSheet({
           <span className="break-all font-mono text-mono-xs text-01">
             {addressOfAccount(delegate)}
           </span>
+          <p className="rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700" data-testid="revoke-debt-note">
+            Calls this agent already made are collected about a minute later. If revoking stops one from being
+            collected, you still owe it: paid calls pause until it is settled.
+          </p>
           <LiveReadNote ready={ready} gone={gone} />
           <UnsettledPayments
             unsettled={unsettled}
@@ -539,8 +555,13 @@ function RevokeSheet({
             disabled={atRisk || !ready || gone}
             onClick={() => void revoke()}
           >
-            Sign and revoke
+            Sign and revoke (free)
           </Button>
+          {revokeNote ? (
+            <p role="status" className="text-body-13 text-warning-700" data-testid="revoke-note">
+              {revokeNote}
+            </p>
+          ) : null}
         </div>
       </SheetContent>
     </Sheet>
@@ -809,10 +830,10 @@ function AuthorizeSheet({
     if (success) {
       toast.success(
         editing
-          ? editedToast(
+          ? `${editedToast(
               current ? capsOf(grant ?? current) : null,
               preview?.ok ? preview.body : capsOf(grant ?? current!),
-            )
+            )} Payments may pause for about 30 seconds while it applies.`
           : "Authorised. The agent can now pay within these caps.",
       );
     }
@@ -833,10 +854,8 @@ function AuthorizeSheet({
       setHeldNote(`${explain(error, "The signed change was refused")} Sign it again to apply it.`);
       return;
     }
-    toast.error(
-      explain(error, editing ? "The limits could not be updated" : "The agent could not be authorised"),
-    );
-    onFinished();
+    // Declined or failed: keep the sheet and every value; say what happened inside it.
+    setHeldNote(explain(error, editing ? "The limits could not be updated" : "The agent could not be authorised"));
   };
 
   /** The nonce a request built now would be signed at. */
@@ -900,8 +919,7 @@ function AuthorizeSheet({
     asset: escrow?.maxVoucherAmount?.asset ?? "",
     decimals,
   });
-  const isoSeconds = (seconds: number) =>
-    new Date(seconds * 1000).toISOString().replace(".000Z", "Z");
+  const isoSeconds = (seconds: number) => formatLocalDate(seconds * 1000);
 
   return (
     <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
@@ -930,7 +948,7 @@ function AuthorizeSheet({
               <span className="text-body-xs text-03" data-testid="edit-delegate-current">
                 Now: up to {exact(current.maxVoucherAmount, unit)} a payment and{" "}
                 {exact(current.maxPerWindow, unit)} per 24 hours, until{" "}
-                {current.validUntil.replace(".000Z", "Z")}.
+                {formatLocalDate(current.validUntil)}.
               </span>
             ) : null}
           </div>
@@ -962,7 +980,7 @@ function AuthorizeSheet({
                     data-testid="edit-delegate-keep-expiry"
                     checked={form.keepExpiry === true}
                     onChange={(e) => change("keepExpiry", e.target.checked)}
-                    label={`Keep the current expiry (${current.validUntil.replace(".000Z", "Z")})`}
+                    label={`Keep the current expiry (${formatLocalDate(current.validUntil)})`}
                   />
                   {form.keepExpiry && errors.validDays ? (
                     <span className="text-body-xs text-danger-500">{errors.validDays}</span>
@@ -1056,5 +1074,75 @@ function AuthorizeSheet({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * Edit and Revoke for one agent's pay permission, as two buttons with their
+ * sheets — for the per-agent card on Agents & keys.
+ */
+export function GrantActions({
+  account,
+  delegation,
+  boundAt,
+  onChanged,
+}: {
+  account: string | undefined;
+  delegation: EscrowDelegate;
+  boundAt?: string | null;
+  onChanged: () => void;
+}) {
+  const ctx = useDelegationContext(account, 0);
+  const [editing, setEditing] = React.useState<SheetTarget | null>(null);
+  const [revoking, setRevoking] = React.useState<EscrowDelegate | null>(null);
+  if (!ctx.enabled) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        variant="secondary"
+        size="sm"
+        type="button"
+        data-testid="edit-agent-delegate"
+        disabled={!escrowCanDelegate(ctx.escrowQuery.data)}
+        onClick={() => setEditing({ delegateAccount: delegation.delegate, boundAt, current: delegation })}
+      >
+        Change caps
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        type="button"
+        className="text-danger-600"
+        data-testid="revoke-agent-delegate"
+        onClick={() => setRevoking(delegation)}
+      >
+        Stop it paying
+      </Button>
+      <AuthorizeSheet
+        target={editing}
+        escrow={ctx.escrowQuery.data}
+        escrowReceivedAt={ctx.escrowQuery.dataUpdatedAt}
+        unit={ctx.unit}
+        onClose={() => setEditing(null)}
+        onFinished={() => {
+          setEditing(null);
+          onChanged();
+        }}
+        signer={ctx.signer}
+        domain={ctx.domain}
+      />
+      <RevokeSheet
+        target={revoking}
+        escrow={ctx.escrowQuery.data}
+        unit={ctx.unit}
+        onClose={() => setRevoking(null)}
+        onFinished={() => {
+          setRevoking(null);
+          onChanged();
+        }}
+        signer={ctx.signer}
+        domain={ctx.domain}
+      />
+    </div>
   );
 }
