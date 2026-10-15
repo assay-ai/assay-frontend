@@ -286,7 +286,7 @@ function AgentCard({
                 </div>
                 {configFor === key.id ? (
                   <div className="min-w-0">
-                    <McpConfigTabs token={null} />
+                    <McpConfigTabs token={null} keyPrefix={key.prefix} />
                   </div>
                 ) : null}
               </li>

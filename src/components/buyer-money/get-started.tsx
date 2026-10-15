@@ -73,6 +73,9 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
 
   const [sheet, setSheet] = React.useState<"deposit" | "caps" | "pay" | null>(null);
   const [revealing, setRevealing] = React.useState(false);
+  // The key made on this visit, kept in memory only (never stored), so the
+  // config stays ready to paste after "I've pasted it".
+  const [createdToken, setCreatedToken] = React.useState<string | null>(null);
   const [expanded, setExpanded] = React.useState<string | null | undefined>(undefined);
 
   const agent = data.agents[0] ?? null;
@@ -124,18 +127,27 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
       id: "key",
       title: "Create a key and connect your agent",
       description: "Your agent uses the key to call tools through Assay.",
-      state: revealing ? "current" : states.key,
+      // Done as soon as the key exists, so the count says 1 of 4 while the
+      // key is still on screen; the step stays open until "I've pasted it".
+      state: revealing && !facts.hasLiveKey ? "current" : states.key,
       blockedReason: agent ? undefined : "Your account is still being set up. Reload in a moment.",
       content: agent ? (
         facts.hasLiveKey && !revealing ? (
           <div className="flex min-w-0 flex-col gap-2">
-            <p className="text-body-13 text-02">Your key is ready. Paste this into your MCP client, with your key in place of the placeholder:</p>
-            <McpConfigTabs token={null} />
+            <p className="text-body-13 text-02">
+              {createdToken
+                ? "Your key is ready, and the config below already carries it:"
+                : "Your key is ready. Paste this into your MCP client, with your full key in place of the placeholder:"}
+            </p>
+            <McpConfigTabs token={createdToken} keyPrefix={liveKeys[0]?.prefix ?? null} />
           </div>
         ) : (
           <CreateKeyForm
             agentId={agent.agentId}
-            onCreated={() => setRevealing(true)}
+            onCreated={(key) => {
+              setCreatedToken(key.token);
+              setRevealing(true);
+            }}
             onDone={() => {
               setRevealing(false);
               setExpanded("call");
@@ -244,7 +256,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
         description="Four steps to your agent's first paid call. Free calls work after step 2."
         steps={steps}
         loading={loading}
-        expandedId={expanded}
+        expandedId={revealing ? "key" : expanded}
         onExpandedChange={setExpanded}
         doneTitle="All set: your agent can call tools and pay for them"
         doneDescription="Watch its calls under Activity. Change its spending limits under Controls."

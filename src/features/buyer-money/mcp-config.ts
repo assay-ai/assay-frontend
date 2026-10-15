@@ -18,8 +18,18 @@ export const MCP_CLIENTS: readonly { id: McpClient; label: string; file: string 
 /** Placeholder shown when the key itself is not on screen (it is shown once, at creation). */
 export const KEY_PLACEHOLDER = "PASTE_YOUR_KEY_HERE";
 
-export function mcpConfig(client: McpClient, input: { url: string; token: string | null }): string {
-  const token = input.token ?? KEY_PLACEHOLDER;
+/**
+ * What stands in for the key when it is not on screen: the bare placeholder
+ * when no key is known, else the key's own visible prefix, so a person with a
+ * key sees which key goes there (`assay_live_ab12…REST_OF_YOUR_KEY`).
+ */
+export function keyPlaceholder(keyPrefix?: string | null): string {
+  const prefix = keyPrefix?.trim();
+  return prefix ? `${prefix.replace(/[.…]+$/, "")}…REST_OF_YOUR_KEY` : KEY_PLACEHOLDER;
+}
+
+export function mcpConfig(client: McpClient, input: { url: string; token: string | null; keyPrefix?: string | null }): string {
+  const token = input.token ?? keyPlaceholder(input.keyPrefix);
   if (client === "claude-desktop") {
     return JSON.stringify(
       {
