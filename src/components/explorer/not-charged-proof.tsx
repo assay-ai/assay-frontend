@@ -49,6 +49,34 @@ function BucketTag({ bucket }: { bucket: PublicNotChargedCall["bucket"] }) {
   );
 }
 
+/**
+ * One line of the same proof, for the top of the Explorer: the totals only,
+ * with a link down to the full record (`NotChargedProof`, below the tool
+ * list), so the tools are on the first screen and the proof is still the
+ * first thing read. Says nothing while loading, on error, or before any paid
+ * call was checked; the full block below explains each of those.
+ */
+export function NotChargedSummary({ className }: { className?: string }) {
+  const query = usePublicNotCharged();
+  const chainName = useChainName();
+  if (!query.isSuccess) return null;
+  const { callsChecked, callsNotCharged, amountNotCharged } = query.data.totals;
+  if (callsChecked === 0) return null;
+  return (
+    <p className={cn("flex items-start gap-2 text-body-13 text-02", className)}>
+      <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-teal-600" />
+      <span>
+        Last {query.data.windowDays} days: {plural(callsChecked, "paid call")} checked,{" "}
+        <span className="font-semibold text-teal-600">{callsNotCharged.toLocaleString("en-US")} not charged</span> (
+        {amountsText(amountNotCharged, chainName)} kept by buyers).{" "}
+        <a href="#not-charged" className="text-01 underline underline-offset-2 hover:text-primary-700">
+          See what was refused
+        </a>
+      </span>
+    </p>
+  );
+}
+
 export function NotChargedProof({ toolId, limit = 6, className }: { toolId?: string; limit?: number; className?: string }) {
   const query = usePublicNotCharged();
   const chainName = useChainName();
@@ -82,8 +110,9 @@ export function NotChargedProof({ toolId, limit = 6, className }: { toolId?: str
 
   return (
     <section
+      id={toolId ? undefined : "not-charged"}
       aria-labelledby="proof-title"
-      className={cn("flex w-full flex-col gap-4 rounded-xl border border-teal-20 bg-01 p-4 tablet:p-6", className)}
+      className={cn("flex w-full scroll-mt-4 flex-col gap-4 rounded-xl border border-teal-20 bg-01 p-4 tablet:p-6", className)}
     >
       <div className="flex items-start gap-3">
         <ShieldCheck aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-teal-600" />
