@@ -118,7 +118,12 @@ function BlocksScreen() {
   React.useEffect(() => {
     const subject = searchParams.get("block");
     const fresh = searchParams.get("new") === "1";
-    if ((!subject && !fresh) || !canAct) return;
+    if (!subject && !fresh) return;
+    // Without the right no sheet opens to clear them, so the link's params go now.
+    if (!canAct) {
+      dropUrlParams(["new", "block", "kind"]);
+      return;
+    }
     setPrefill(subject ? { kind: searchParams.get("kind") === "WALLET" ? "WALLET" : "ORGANIZATION", subject } : null);
     setBlockOpen(true);
   }, [searchParams, canAct]);
