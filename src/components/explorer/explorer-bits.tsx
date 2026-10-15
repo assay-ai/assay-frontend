@@ -1,6 +1,7 @@
 import { BadgeCheck, Gift, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
+import { Term } from "@/components/patterns/term";
 import { cn } from "@/utils";
 
 /**
@@ -25,21 +26,42 @@ export function FreeTierBadge({ label, className }: { label: string | null; clas
 }
 
 /** Identity checked by the platform — not a quality claim. */
-export function VerifiedMark({ verified, className }: { verified: boolean; className?: string }) {
+/**
+ * "Identity verified", with its glossary definition. Inside a link (a list
+ * row) the definition is the hover title (`interactive` off: a button inside a
+ * link is invalid HTML); on a page of its own it opens on hover, focus or tap.
+ */
+export function VerifiedMark({
+  verified,
+  interactive = false,
+  className,
+}: {
+  verified: boolean;
+  interactive?: boolean;
+  className?: string;
+}) {
   if (!verified) return null;
   return (
-    <span
-      title="Assay checked who this company is. This is not a quality score, and it says nothing about stake."
-      className={cn("inline-flex items-center gap-1 whitespace-nowrap text-label-xs text-primary-600", className)}
-    >
+    <span className={cn("inline-flex items-center gap-1 whitespace-nowrap text-label-xs text-primary-600", className)}>
       <BadgeCheck aria-hidden="true" className="size-3.5" />
-      Identity verified
+      <Term k="identity-verified" inline={!interactive}>
+        Identity verified
+      </Term>
     </span>
   );
 }
 
+/** The "Observed failures" label, with its glossary definition (see `VerifiedMark` for `interactive`). */
+export function ObservedFailuresLabel({ interactive = false }: { interactive?: boolean }) {
+  return (
+    <Term k="observed-failures" inline={!interactive}>
+      Observed failures
+    </Term>
+  );
+}
+
 /** A muted label + value pair, for a row's facts. */
-export function Fact({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+export function Fact({ label, children, className }: { label: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-0.5", className)}>
       <span className="text-body-xs text-03">{label}</span>

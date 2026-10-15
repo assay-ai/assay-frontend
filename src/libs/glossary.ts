@@ -102,6 +102,16 @@ export const GLOSSARY = {
     definition:
       "Money taken from a provider's stake when their tool fails more often than they promised; buyers who paid in that period are compensated from it.",
   },
+  "identity-verified": {
+    term: "Identity verified",
+    definition:
+      "Assay checked who the company behind this provider is; it is not a quality score and says nothing about their stake or failure rate.",
+  },
+  "observed-failures": {
+    term: "Observed failures",
+    definition:
+      "The share of a provider's checked calls whose result failed, measured by Assay on real calls rather than reported by the provider; \"Not measured yet\" until their first paid calls have been checked.",
+  },
   mcp: {
     term: "MCP",
     definition: "Model Context Protocol, the standard way AI agents discover and call tools; Assay is one MCP server.",
