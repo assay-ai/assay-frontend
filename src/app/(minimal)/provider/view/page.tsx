@@ -171,7 +171,7 @@ const CLASS_NOTE: Record<string, string> = {
   PAID_UNCREDITED:
     "our checks rejected the response — not charged to the buyer, not credited to you",
   FREE: "free-tier call — nothing is charged and nothing is paid",
-  EXPLORATION: "trial traffic for a new binding, paid for by us",
+  EXPLORATION: "trial traffic for a new binding; the buyer paid, we paid only for checking it",
   EXCLUDED: "excluded from the SLA window by our team",
   TEST: "our own dry runs against your endpoint",
   SYSTEM_ERROR: "your endpoint timed out or returned 5xx",
