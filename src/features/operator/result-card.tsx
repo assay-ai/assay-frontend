@@ -48,17 +48,17 @@ export function ResultCard({ title, next, tone = "done", activityHref, txUrl, li
         {next ? <p className="text-body-13 text-02">{next}</p> : null}
         <p className="flex flex-wrap gap-x-4 gap-y-1 pt-0.5">
           {link ? (
-            <Link href={link.href} className="text-label-13 text-primary-600 hover:underline">
+            <Link href={link.href} className="hit-area text-label-13 text-primary-600 hover:underline">
               {link.label}
             </Link>
           ) : null}
           {activityHref ? (
-            <Link href={activityHref} className="text-label-13 text-primary-600 hover:underline">
+            <Link href={activityHref} className="hit-area text-label-13 text-primary-600 hover:underline">
               See it in Activity
             </Link>
           ) : null}
           {txUrl ? (
-            <a href={txUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-label-13 text-primary-600 hover:underline">
+            <a href={txUrl} target="_blank" rel="noopener noreferrer" className="hit-area inline-flex items-center gap-1 text-label-13 text-primary-600 hover:underline">
               View transaction
               <ExternalLink aria-hidden="true" className="size-3" />
             </a>

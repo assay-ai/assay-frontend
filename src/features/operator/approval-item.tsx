@@ -121,9 +121,11 @@ function CopyLinkButton({ link }: { link: string }) {
     }
   };
   return (
+    // Secondary: lime means "your action now", and a request that waits on someone else is not.
     <Button
       type="button"
       size="sm"
+      variant="secondary"
       data-primary=""
       className="touch-target"
       title={absolute(link)}
@@ -192,7 +194,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
           requestedBy: approval.rejectedBy && isWithdrawn(approval) ? nameOf(approval.rejectedBy) : approval.requestedBy,
         })}{" "}
         · <LocalTime value={approval.decidedAt ?? approval.expiresAt} /> ·{" "}
-        <Link href={approvalActivityHref(approval)} className="text-primary-700 hover:underline">
+        <Link href={approvalActivityHref(approval)} className="hit-area text-primary-700 hover:underline">
           {/* Not "History": that is the tab this row sits under. */}
           See in Activity
         </Link>
@@ -225,7 +227,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
           <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             {mode === "history" ? <StatusChip status={historyChip(approval)} /> : null}
             {target.href ? (
-              <Link href={target.href} className="min-w-0 text-label-sm text-01 [overflow-wrap:anywhere] hover:underline">
+              <Link href={target.href} className="hit-area min-w-0 text-label-sm text-01 [overflow-wrap:anywhere] hover:underline">
                 {title}
               </Link>
             ) : (
@@ -381,7 +383,7 @@ export function RowSection({
 }: {
   id: string;
   title: string;
-  /** A number, or a phrase such as "2 of 4 waiting". */
+  /** The number of rows, or a short phrase. */
   count?: number | string;
   /** Shown on hover of the header (the rule behind the order). */
   hint?: string;

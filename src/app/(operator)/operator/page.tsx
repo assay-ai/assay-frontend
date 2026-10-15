@@ -13,7 +13,7 @@ import { ApprovalItem, RowSection, type ApprovalResult } from "@/features/operat
 import { approvalErrorMessage } from "@/features/operator/approvals";
 import { DisputeLine } from "@/features/operator/dispute-line";
 import { HealthStrip } from "@/features/operator/health-strip";
-import { checkedAgo, groupApprovals, needsYouBreakdown, needsYouCount, ofWaitingText, sortDisputesByDaysLeft } from "@/features/operator/inbox";
+import { checkedAgo, groupApprovals, needsYouBreakdown, needsYouCount, sortDisputesByDaysLeft, waitingSummary } from "@/features/operator/inbox";
 import { ResultCard } from "@/features/operator/result-card";
 import { RoleIntro, useRoleIntro } from "@/features/operator/role-intro";
 import { capabilitiesFor } from "@/features/operator/roles";
@@ -170,6 +170,8 @@ export default function OperatorHome() {
   const breakdown = needsYouBreakdown(groups.needsYou.length, disputeRows.length, caps.rule);
   const loading = pending.isLoading || (caps.rule && disputes.isLoading);
   const nothing = needsYouTotal === 0 && groups.yours.length === 0;
+  // Every waiting request, accounted for in one line: the same split and numbers as the Approvals tabs.
+  const waiting = waitingSummary({ needsYou: groups.needsYou.length, yours: groups.yours.length, others: groups.others.length });
 
   return (
     <>
@@ -245,9 +247,8 @@ export default function OperatorHome() {
             <RowSection
               id="to-approve"
               title="To approve"
-              count={ofWaitingText(groups.needsYou.length, openApprovals)}
-              hint="Requests your roles can approve (Waiting for you on Approvals), out of every request waiting (All waiting)."
-              action={<ViewAll href="/operator/approvals">All approvals</ViewAll>}
+              count={groups.needsYou.length}
+              hint="Requests your roles can approve (Waiting for you on Approvals), closest to expiring first."
             >
               {groups.needsYou.map((approval) => (
                 <ApprovalItem
@@ -282,8 +283,8 @@ export default function OperatorHome() {
             <RowSection
               id="waiting-on-others"
               title="Waiting on others"
-              count={groups.needsYou.length === 0 ? ofWaitingText(groups.yours.length, openApprovals) : groups.yours.length}
-              action={groups.needsYou.length === 0 ? <ViewAll href="/operator/approvals">All approvals</ViewAll> : undefined}
+              count={groups.yours.length}
+              hint="Your requests, waiting for someone else to approve (Your requests on Approvals)."
             >
               {groups.yours.map((approval) => (
                 <ApprovalItem
@@ -301,6 +302,14 @@ export default function OperatorHome() {
           ) : null}
         </>
       )}
+
+      {!loading && !pending.isError && waiting ? (
+        <p className="flex w-full flex-wrap items-center gap-x-2 text-body-13 tabular-nums text-03">
+          <span>{waiting}</span>
+          <span aria-hidden="true">·</span>
+          <ViewAll href="/operator/approvals">All approvals</ViewAll>
+        </p>
+      ) : null}
 
       {caps.rule && disputes.isError ? (
         <PageState

@@ -65,7 +65,7 @@ export const CopyChip = React.forwardRef<HTMLButtonElement, CopyChipProps>(
         title={value}
         onClick={(event) => void copy(event)}
         className={cn(
-          "inline-flex max-w-full items-center gap-1 rounded-sm border border-01 bg-02 px-1.5 py-px font-mono text-mono-xs text-02 transition-colors",
+          "hit-area inline-flex max-w-full items-center gap-1 rounded-sm border border-01 bg-02 px-1.5 py-px font-mono text-mono-xs text-02 transition-colors",
           "hover:border-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
           className,
         )}

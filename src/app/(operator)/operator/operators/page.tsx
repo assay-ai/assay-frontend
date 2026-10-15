@@ -90,7 +90,12 @@ function TeamScreen() {
 
   // Home's "Add someone" links here with `?new=1`.
   React.useEffect(() => {
-    if (searchParams.get("new") !== "1" || !canManage) return;
+    if (searchParams.get("new") !== "1") return;
+    // Without the right no sheet opens to clear it, so the param goes now.
+    if (!canManage) {
+      dropUrlParams(["new"]);
+      return;
+    }
     setSheet({ kind: "add" });
   }, [searchParams, canManage]);
   // `?new=1` goes when the sheet closes, so a reload does not open it again.
@@ -301,7 +306,7 @@ function TeamScreen() {
                     </span>
                   </span>
                   <span className="absolute right-3 top-2 tablet:hidden">
-                    <Button variant="ghost" size="sm" asChild aria-label={`Open the request to add ${invite.name}`}>
+                    <Button variant="ghost" size="sm" asChild aria-label={`Open the request to add ${invite.name}`} className="touch-target">
                       <Link href={approvalHref(invite.id)}>
                         <ArrowUpRight aria-hidden="true" />
                       </Link>
@@ -677,7 +682,7 @@ function AddSheet({
                   Their handle: <span className="font-mono">{subject}</span>, the short name Activity and approvals show for
                   them.{" "}
                   {handle === null ? (
-                    <button type="button" className="text-primary-600 hover:underline" onClick={() => setHandle(subject)}>
+                    <button type="button" className="hit-area text-primary-600 hover:underline" onClick={() => setHandle(subject)}>
                       change
                     </button>
                   ) : null}
