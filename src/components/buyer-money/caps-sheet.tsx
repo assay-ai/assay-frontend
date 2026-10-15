@@ -141,7 +141,15 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
       }
       doneAction={next ?? { label: "Done", onClick: () => onOpenChange(false) }}
     >
-      <CapsFields unit={money.symbol} value={value} onChange={setValue} parsed={parsed} idPrefix="escrow-caps" label="Account ceiling" />
+      <CapsFields
+        unit={money.symbol}
+        value={value}
+        onChange={setValue}
+        parsed={parsed}
+        idPrefix="escrow-caps"
+        label="Account ceiling"
+        current={current}
+      />
       {current ? (
         <p className="text-body-xs text-03">
           Now: {formatLimit(money.escrow?.maxVoucherAmount)} a call · {formatLimit(money.escrow?.maxPerWindow)} per 24 hours.

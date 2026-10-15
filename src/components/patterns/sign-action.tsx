@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CircleAlert, ExternalLink, Loader2, X } from "lucide-react";
+import { Check, CircleAlert, ExternalLink, Info, Loader2, X } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -269,7 +269,7 @@ export function SignAction({
   const anyDone = state.phase !== "idle" && state.phase !== "success" && state.index > 0;
 
   let message: React.ReactNode = null;
-  let messageTone: "neutral" | "warning" | "danger" = "neutral";
+  let messageTone: "neutral" | "reason" | "warning" | "danger" = "neutral";
   if (state.phase === "running") {
     const what = steps.length > 1 && activeStep ? `“${activeStep.label}”` : "this";
     message =
@@ -287,7 +287,10 @@ export function SignAction({
     message = state.submitted ? SUBMITTED_FAILURE : (describeError?.(state.error) ?? DEFAULT_FAILURE);
     messageTone = "danger";
   } else if (state.phase === "idle" && disabled && disabledReason) {
+    // Why the button cannot be pressed: in body colour with a mark, so a
+    // disabled "Deposit $20.00" never reads as a bug at a glance.
     message = disabledReason;
+    messageTone = "reason";
   }
 
   const rawError = state.phase === "failed" ? errorText(state.error) : null;
@@ -368,9 +371,13 @@ export function SignAction({
             messageTone === "warning" && "text-warning-700",
             messageTone === "danger" && "text-danger-600",
             messageTone === "neutral" && "text-03",
+            messageTone === "reason" && "text-02",
           )}
         >
-          {messageTone !== "neutral" ? <CircleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" /> : null}
+          {messageTone === "reason" ? <Info aria-hidden="true" className="mt-px size-3.5 shrink-0" /> : null}
+          {messageTone === "warning" || messageTone === "danger" ? (
+            <CircleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+          ) : null}
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span>{message}</span>
             {liveUrl ? <ExplorerLink href={liveUrl} label={explorerLabel} className="self-start text-02" /> : null}

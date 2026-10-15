@@ -139,6 +139,14 @@ describe("LimitsView (Spending limits) — two layers, one effective limit per a
     expect(html).not.toContain("older rule");
   });
 
+  it("keeps the space after each bold lead-in (retest 2026-10-16b read \"On chain:your account\")", () => {
+    const html = markup(POLICY);
+    expect(html).toContain("On chain:</span> your account ceiling");
+    expect(html).toContain("Checked by Assay:</span> the monthly limit");
+    expect(html).toContain("Every limit stops calls.</span> A call over");
+    expect(html).not.toMatch(/:<\/span>[A-Za-z]/);
+  });
+
   it("shows the older refuse-above rule only while it is set, with a way to remove it", () => {
     const html = markup({ ...POLICY, requireApprovalAbove: usd("25") });
     expect(html).toContain("Older rules still checked");
