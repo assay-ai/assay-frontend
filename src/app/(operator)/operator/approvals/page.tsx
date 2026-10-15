@@ -9,6 +9,7 @@ import * as React from "react";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { replaceUrlQuery } from "@/features/operator/url-params";
 import { ApprovalItem, RowSection, type ApprovalResult } from "@/features/operator/approval-item";
 import { ResultCard } from "@/features/operator/result-card";
 import { approvalErrorMessage } from "@/features/operator/approvals";
@@ -61,7 +62,7 @@ function ApprovalsInbox() {
     else params.delete("tab");
     params.delete("id");
     const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    replaceUrlQuery(pathname, query);
   };
 
   // Same key as the shell's badge and Home.
