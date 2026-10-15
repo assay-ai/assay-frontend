@@ -108,11 +108,12 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
         credentials: keysQuery.data?.[agent.agentId],
         delegates,
         escrow: escrowQuery.data,
+        escrowUnreadable: escrowQuery.isError,
         paused: policyQuery.data?.paused === true,
       });
     }
     return map;
-  }, [agents, keysQuery.data, delegates, escrowQuery.data, policyQuery.data]);
+  }, [agents, keysQuery.data, delegates, escrowQuery.data, escrowQuery.isError, policyQuery.data]);
 
   return {
     agentsQuery,

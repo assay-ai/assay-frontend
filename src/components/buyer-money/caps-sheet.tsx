@@ -41,7 +41,8 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
   const current = capsToForm(money.escrow);
   const [value, setValue] = React.useState<CapsValue>({ perCall: "", perDay: "" });
   const [seeded, setSeeded] = React.useState(false);
-  if (open && !seeded) {
+  // Seed only once the escrow is read, so the form starts from the real caps.
+  if (open && !seeded && !money.escrowQuery.isPending) {
     setSeeded(true);
     setValue(current ?? { perCall: "1", perDay: "20" });
   }
@@ -141,7 +142,7 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
       }
       doneAction={next ?? { label: "Done", onClick: () => onOpenChange(false) }}
     >
-      <CapsFields value={value} onChange={setValue} parsed={parsed} idPrefix="escrow-caps" label="Safety caps" />
+      <CapsFields unit={money.symbol} value={value} onChange={setValue} parsed={parsed} idPrefix="escrow-caps" label="Safety caps" />
       {current ? (
         <p className="text-body-xs text-03">
           Now: {formatLimit(money.escrow?.maxVoucherAmount)} a call · {formatLimit(money.escrow?.maxPerWindow)} a day.

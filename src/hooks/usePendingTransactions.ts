@@ -76,7 +76,14 @@ export function usePendingTransactions() {
     driving.delete(id);
     write(withoutPending(snapshot(), id));
   }, []);
+  /** Stop driving an entry without forgetting it: the list picks it up (a failed or abandoned run). */
+  const release = React.useCallback((id: string) => {
+    if (!driving.delete(id)) return;
+    snapshot();
+    cache = { raw: cache.raw, list: [...cache.list] }; // a new identity, so subscribers re-render
+    listeners.forEach((listener) => listener());
+  }, []);
   /** Entries nobody on this page is driving: the ones to pick up again. */
-  const orphaned = React.useMemo(() => items.filter((tx) => !driving.has(tx.id)), [items]);
-  return { items, orphaned, track, resolve };
+  const orphaned = items.filter((tx) => !driving.has(tx.id));
+  return { items, orphaned, track, resolve, release };
 }

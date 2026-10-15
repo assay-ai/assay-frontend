@@ -207,7 +207,6 @@ function EscrowLimitWarning({
 /** Full precision: a cap of 0.005 must not read as 0.01 (review S3-11). */
 function exact(
   money: EscrowDelegate["maxVoucherAmount"],
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _unit?: string,
 ): string {
   // Dollars at two decimals (sub-cent amounts keep their digits), never 6-decimal token units.

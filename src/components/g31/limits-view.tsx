@@ -25,6 +25,7 @@ import {
   type BudgetField,
   type BudgetForm,
 } from "@/features/buyer-money/budget-form";
+import { capsAreSet } from "@/features/buyer-money/caps";
 import { nextUtcMidnight, nextUtcMonth } from "@/features/buyer-money/refill";
 import { policyBootstrapAsset } from "@/features/limits/policy-bootstrap";
 import { useChains } from "@/hooks/useChains";
@@ -171,7 +172,7 @@ function EffectiveLimitCard({
   const readiness = data.readiness[agent.agentId];
   const grant = readiness?.grant?.status === "ACTIVE" ? readiness.grant : null;
   const escrow = data.escrowQuery.data;
-  const capsSet = Boolean(escrow?.maxVoucherAmount && BigInt(escrow.maxVoucherAmount.amount) > 0n);
+  const capsSet = capsAreSet(escrow);
 
   const rows: EffectiveLimitRow[] = [
     {

@@ -430,6 +430,13 @@ export function WalletActionSheet({
 }: WalletActionSheetProps) {
   const [busy, setBusy] = React.useState(false);
   const [acknowledged, setAcknowledged] = React.useState(false);
+  // However the sheet closed (its X, or a Done button calling the parent), the
+  // next opening asks again.
+  const [wasOpen, setWasOpen] = React.useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (!open) setAcknowledged(false);
+  }
   const needsAck = Boolean(acknowledge) && !acknowledged;
 
   return (

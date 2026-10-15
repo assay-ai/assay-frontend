@@ -21,6 +21,7 @@ export const STATUS_CHIPS = {
   "needs-authorisation": { label: "Needs authorisation", tone: "warning" },
   "no-key": { label: "No key", tone: "neutral" },
   paused: { label: "Paused", tone: "warning" },
+  "cap-reached": { label: "Cap reached", tone: "warning" },
   revoked: { label: "Revoked", tone: "neutral" },
   "withdrawal-pending": { label: "Withdrawal pending", tone: "primary" },
   claimable: { label: "Ready to claim", tone: "success" },

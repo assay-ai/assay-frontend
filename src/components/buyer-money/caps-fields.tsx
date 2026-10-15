@@ -28,7 +28,9 @@ export function CapsFields({
   parsed,
   idPrefix,
   label = "Caps",
+  unit = "USD",
 }: {
+  unit?: string;
   value: CapsValue;
   onChange: (next: CapsValue) => void;
   parsed: ParsedCaps;
@@ -71,7 +73,7 @@ export function CapsFields({
             id={`${idPrefix}-per-call`}
             label="Most per call"
             inputMode="decimal"
-            suffix="USD"
+            suffix={unit}
             placeholder="1.00"
             value={value.perCall}
             error={value.perCall ? (parsed.perCall.error ?? undefined) : undefined}
@@ -82,7 +84,7 @@ export function CapsFields({
             id={`${idPrefix}-per-day`}
             label="Most per 24 hours"
             inputMode="decimal"
-            suffix="USD"
+            suffix={unit}
             placeholder="20.00"
             value={value.perDay}
             error={value.perDay ? (parsed.perDay.error ?? undefined) : undefined}

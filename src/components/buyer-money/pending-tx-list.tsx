@@ -20,11 +20,15 @@ import { cn } from "@/utils";
  */
 const POLL_MS = 8_000;
 
-type RowState = "checking" | "finishing" | "failed";
+type RowState = "checking" | "finishing" | "failed" | "stuck";
+/** Leave a fresh deposit to the tab that sent it for this long (another tab may be finishing it). */
+const OWNER_GRACE_MS = 60_000;
+const MAX_SETTLE_FAILURES = 5;
 
 function PendingRow({ tx, onDone }: { tx: PendingTx; onDone: () => void }) {
   const queryClient = useQueryClient();
-  const [state, setState] = React.useState<RowState>("checking");
+  const [state, setState] = React.useState<RowState>(isEvmChain(tx.chainId) ? "checking" : "stuck");
+  const failures = React.useRef(0);
   const busy = React.useRef(false);
   const doneRef = React.useRef(onDone);
   React.useEffect(() => {
@@ -46,6 +50,7 @@ function PendingRow({ tx, onDone }: { tx: PendingTx; onDone: () => void }) {
         }
         if (status === "success") {
           if (tx.kind === "deposit" && tx.resume) {
+            if (Date.now() - tx.submittedAt < OWNER_GRACE_MS) return;
             setState("finishing");
             await settleByHash({ chainId: tx.chainId, amountAtomic: tx.resume.amountAtomic }, tx.resume.depositId, tx.hash);
           }
@@ -55,7 +60,13 @@ function PendingRow({ tx, onDone }: { tx: PendingTx; onDone: () => void }) {
           doneRef.current();
         }
       } catch {
-        // Try again on the next tick; the chain or the API was briefly unreachable.
+        // Try again on the next tick (the chain or the API was briefly
+        // unreachable), but not for ever: then say so and offer Dismiss.
+        failures.current += 1;
+        if (failures.current >= MAX_SETTLE_FAILURES) {
+          stopped = true;
+          setState("stuck");
+        }
       } finally {
         busy.current = false;
       }
@@ -70,7 +81,7 @@ function PendingRow({ tx, onDone }: { tx: PendingTx; onDone: () => void }) {
 
   return (
     <li className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2.5">
-      {state === "failed" ? (
+      {state === "failed" || state === "stuck" ? (
         <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-danger-500" />
       ) : (
         <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin text-primary-500 motion-reduce:animate-none" />
@@ -80,6 +91,8 @@ function PendingRow({ tx, onDone }: { tx: PendingTx; onDone: () => void }) {
         <span className={cn("text-body-xs", state === "failed" ? "text-danger-600" : "text-03")}>
           {state === "failed"
             ? "This transaction failed on chain. No money moved, though the network fee may be spent."
+            : state === "stuck"
+              ? "We could not confirm this yet. Check it on the explorer; if the money left your wallet, contact support with that link."
             : state === "finishing"
               ? "Confirmed on chain. Adding it to your balance…"
               : <>Sent <LocalTime value={new Date(tx.submittedAt).toISOString()} />. Waiting for the chain to confirm it.</>}
@@ -96,7 +109,7 @@ function PendingRow({ tx, onDone }: { tx: PendingTx; onDone: () => void }) {
           <ExternalLink aria-hidden="true" className="size-3" />
         </a>
       ) : null}
-      {state === "failed" ? (
+      {state === "failed" || state === "stuck" ? (
         <Button size="sm" variant="secondary" type="button" onClick={onDone}>
           Dismiss
         </Button>
