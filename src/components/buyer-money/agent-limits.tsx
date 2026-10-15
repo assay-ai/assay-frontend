@@ -110,7 +110,7 @@ export function rowsFor(ctx: LimitsContext, agent: AgentRow) {
 export function EffectiveLimitLines({ lines, className }: { lines: LimitLine[]; className?: string }) {
   return (
     <div className={cn("flex flex-col gap-1.5", className)} data-testid="effective-limit">
-      <span className="text-label-13 text-01">Effective limit</span>
+      <span className="text-label-13 text-01">Effective limit: what applies now</span>
       {lines.length === 0 ? (
         <p className="text-body-13 text-02">No limit is set, so only your balance stops spending.</p>
       ) : (
@@ -126,8 +126,8 @@ export function EffectiveLimitLines({ lines, className }: { lines: LimitLine[]; 
         </ul>
       )}
       <p className="text-body-xs text-03">
-        These are the numbers that apply now: the lowest limit wins, and this agent&apos;s spending limits sit under your account
-        ceiling.
+        Each line is already the lowest of this agent&apos;s limits and your account ceiling, so it is the one number that
+        applies to this agent now.
       </p>
     </div>
   );
