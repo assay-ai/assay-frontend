@@ -11,6 +11,8 @@ import type {
 } from "@/interfaces";
 
 import { ApiError } from "@/libs/ApiClient";
+import { demoEnabled } from "@/libs/demo/demo-api";
+import { demoCallsCsv } from "@/libs/demo/fixtures-provider-calls";
 
 import { api } from "./api";
 import { getChains } from "./chains.service";
@@ -166,6 +168,12 @@ async function lookUpEarningAssets(now: Date): Promise<string[]> {
 export async function exportProviderCalls(
   query: ProviderCallsExportQuery
 ): Promise<ProviderCallsExport> {
+  // The demo stage set: this route skips the JSON envelope, so the fixture table never sees it.
+  if (demoEnabled()) {
+    const csv = demoCallsCsv();
+    const rows = csv.split("\n").length - 1;
+    return { csv, meta: { rowCount: rows, totalMatching: rows, truncated: false }, filename: "assay-calls-demo.csv" };
+  }
   const response = await api.raw().request<string>({
     method: "GET",
     url: "/providers/me/calls/export",
