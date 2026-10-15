@@ -11,6 +11,7 @@ import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases"
 import { demoEnabled } from "@/libs/demo/demo-api";
 import {
   DEMO_PENALTY_AMOUNTS,
+  DEMO_PENALTY_ANCHOR_SECONDS,
   DEMO_PENALTY_PROPOSALS,
   DEMO_PENALTY_REQUESTS,
 } from "@/libs/demo/demo-penalties";
@@ -29,7 +30,7 @@ export const PENALTY_DEPLOYMENT = ROBINHOOD_TESTNET_STAKE;
 /** The query key of one Assay case, shared with every surface that reads it. */
 export const caseKey = (proposalId: string) => ["provider", "slash-proposal-case", proposalId] as const;
 
-/** DEMO ONLY: the three records, dated relative to now. */
+/** DEMO ONLY: the three records, dated from the demo's fixed anchor (`nowSeconds` is that anchor). */
 function demoChain(nowSeconds: number): { rows: ChainSlashRow[]; index: AssayCaseIndex } {
   const atomic = (major: string) => BigInt(Math.round(Number(major) * 1_000_000));
   const base = {
@@ -102,9 +103,9 @@ export function usePenalties(options: { withCases?: "open" | "all" | "none" } = 
   const ownAddress: HexString | null = authority ? normaliseEvmAddress(addressOfAccount(authority)) : null;
 
   const { chain, assay } = useChainSlashes(PENALTY_DEPLOYMENT, demo ? null : ownAddress, !demo);
-  // The demo's rows are fixed per minute, so they do not churn every render.
-  const minute = Math.floor(nowSeconds / 60);
-  const demoData = React.useMemo(() => (demo ? demoChain(minute * 60) : null), [demo, minute]);
+  // The demo's rows count from one fixed anchor, the same one the demo cases use,
+  // so a deadline never moves between screens or renders.
+  const demoData = React.useMemo(() => (demo ? demoChain(DEMO_PENALTY_ANCHOR_SECONDS) : null), [demo]);
 
   const asset = demo
     ? { decimals: 6, symbol: "USDG", fromChain: true }
