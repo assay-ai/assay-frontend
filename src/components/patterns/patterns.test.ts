@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { capReading } from "./cap-meter";
 import { shortId } from "./copy-chip";
+import { filterEntityOptions } from "./entity-picker";
 import { moneyFlowSummary, splitPercents } from "./money-flow";
 import { matchesPreset } from "./preset-chips";
 import { checklistProgress, defaultExpandedStep } from "./setup-checklist";
@@ -36,6 +37,10 @@ describe("capReading", () => {
     expect(r.level).toBe("over");
     expect(r.percent).toBe(100);
     expect(r.sentence).toBe("$0.10 over the limit ($2.10 of $2.00). Paid calls are refused until the limit is raised.");
+  });
+
+  it("says when no cap is set", () => {
+    expect(capReading({ used: usd("0"), limit: null }, UTC)).toMatchObject({ level: "unset", percent: 0 });
   });
 
   it("handles a zero limit and sub-cent caps", () => {
@@ -105,5 +110,19 @@ describe("small helpers", () => {
     expect(matchesPreset("20.00", ["5", "20"])).toBe(true);
     expect(matchesPreset("", ["5"])).toBe(false);
     expect(matchesPreset("7", ["5", "20"])).toBe(false);
+  });
+});
+
+describe("filterEntityOptions", () => {
+  const options = [
+    { id: "1", label: "deep_search" },
+    { id: "2", label: "search_web", detail: "3 providers" },
+    { id: "3", label: "scrape_url", detail: "web pages" },
+  ];
+
+  it("matches label and detail, prefix matches first", () => {
+    expect(filterEntityOptions(options, "search").map((o) => o.id)).toEqual(["2", "1"]);
+    expect(filterEntityOptions(options, "PAGES").map((o) => o.id)).toEqual(["3"]);
+    expect(filterEntityOptions(options, "  ")).toHaveLength(3);
   });
 });

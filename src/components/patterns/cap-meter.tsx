@@ -22,14 +22,15 @@ import { toDecimal } from "@/utils/money";
 
 export interface CapSentenceInput {
   used: Money;
-  limit: Money;
+  /** `null` = no cap set (e.g. escrow caps not configured): reads "Caps not set". */
+  limit: Money | null;
   /** ISO instant when the cap is full again (window reset). */
   refillsAt?: string | null;
   /** What happens at the limit. Default "Paid calls are refused". */
   consequence?: string;
 }
 
-export type CapLevel = "ok" | "high" | "full" | "over" | "none";
+export type CapLevel = "ok" | "high" | "full" | "over" | "none" | "unset";
 
 export interface CapReading {
   level: CapLevel;
@@ -40,14 +41,18 @@ export interface CapReading {
 
 /** Pure: the sentence and level, so every screen says the same words. */
 export function capReading(input: CapSentenceInput, options: LocalTimeOptions = {}): CapReading {
+  if (!input.limit) {
+    return { level: "unset", percent: 0, sentence: "Caps not set, so this cannot pay yet. Set a cap to start." };
+  }
+  const cap = input.limit;
   const used = toDecimal(input.used);
-  const limit = toDecimal(input.limit);
+  const limit = toDecimal(cap);
   // "~14:20" for today; "Tomorrow 00:00" / "Oct 20, 14:20" read better without the tilde.
   const at = input.refillsAt ? formatLocalDateTime(input.refillsAt, options) : null;
   const when = at && !at.includes(" ") ? `~${at}` : at?.replace(/^(Yesterday|Tomorrow)/, (word) => word.toLowerCase()) ?? null;
   const consequence = input.consequence ?? "Paid calls are refused";
   const money = (value: Decimal): string =>
-    formatLimit({ amount: value.mul(new Decimal(10).pow(input.limit.decimals)).toFixed(0), asset: input.limit.asset, decimals: input.limit.decimals });
+    formatLimit({ amount: value.mul(new Decimal(10).pow(cap.decimals)).toFixed(0), asset: cap.asset, decimals: cap.decimals });
 
   if (limit.lte(0)) {
     return {
@@ -88,6 +93,7 @@ const FILL: Record<CapLevel, string> = {
   full: "bg-danger-500",
   over: "bg-danger-500",
   none: "bg-danger-500",
+  unset: "bg-chart-6",
 };
 
 export interface CapMeterProps extends CapSentenceInput {
@@ -102,13 +108,20 @@ export function CapMeter({ label, used, limit, refillsAt, consequence, className
   React.useEffect(() => setMounted(true), []);
   const reading = capReading({ used, limit, refillsAt, consequence }, mounted ? {} : { timeZone: "UTC" });
   const alarm = reading.level === "full" || reading.level === "over" || reading.level === "none";
+  const muted = reading.level === "unset";
 
   return (
     <div className={cn("flex w-full flex-col gap-2", className)}>
       <div className="flex w-full items-baseline justify-between gap-3">
         <span className="text-label-13 text-01">{label}</span>
         <span className="font-mono text-mono-13 text-02">
-          {formatLimit(used)} <span className="text-03">of</span> {formatLimit(limit)}
+          {limit ? (
+            <>
+              {formatLimit(used)} <span className="text-03">of</span> {formatLimit(limit)}
+            </>
+          ) : (
+            "Not set"
+          )}
         </span>
       </div>
       <div
@@ -122,7 +135,7 @@ export function CapMeter({ label, used, limit, refillsAt, consequence, className
       >
         <div className={cn("h-full rounded-full transition-[width] duration-500", FILL[reading.level])} style={{ width: `${reading.percent}%` }} />
       </div>
-      <p className={cn("text-body-xs", alarm ? "text-danger-600" : "text-03")} title={refillsAt ? utcTitle(refillsAt) : undefined}>
+      <p className={cn("text-body-xs", alarm ? "text-danger-600" : muted ? "text-warning-700" : "text-03")} title={refillsAt ? utcTitle(refillsAt) : undefined}>
         {reading.sentence}
       </p>
     </div>

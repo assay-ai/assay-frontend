@@ -38,10 +38,14 @@ export interface StatusTimelineStep {
   countdown?: boolean;
   /** One short sentence under the label. */
   description?: React.ReactNode;
+  /** Draw the date as urgent (danger), e.g. a dispute deadline under 10 days away. Decided by the caller. */
+  urgent?: boolean;
 }
 
 export interface StatusTimelineProps {
   steps: StatusTimelineStep[];
+  /** Called once when a counting-down date passes, e.g. to refetch the record. */
+  onElapsed?: (stepId: string) => void;
   /** Accessible name of the list. Default "Status". */
   label?: string;
   /** Force one orientation. Default: vertical on mobile, horizontal from tablet. */
@@ -99,17 +103,39 @@ function Mark({ state, index }: { state: TimelineStepState; index: number }) {
   }
 }
 
-function StepDate({ step, highlighted }: { step: StatusTimelineStep; highlighted: boolean }) {
-  const { msLeft } = useCountdown(step.countdown ? step.date : null);
+function StepDate({
+  step,
+  highlighted,
+  onElapsed,
+}: {
+  step: StatusTimelineStep;
+  highlighted: boolean;
+  onElapsed?: (stepId: string) => void;
+}) {
+  const { msLeft, hasPassed } = useCountdown(step.countdown ? step.date : null);
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
+  const fired = React.useRef(false);
+  React.useEffect(() => {
+    if (step.countdown && hasPassed && !fired.current) {
+      fired.current = true;
+      onElapsed?.(step.id);
+    }
+  }, [hasPassed, onElapsed, step.countdown, step.id]);
   if (!step.date && !step.dateLabel) return null;
 
   return (
     <span
       className={cn(
         "inline-flex flex-wrap items-center gap-x-1.5 font-mono text-mono-12",
-        highlighted ? "self-start rounded-sm bg-primary-10 px-1.5 py-px text-primary-700" : "text-03",
+        highlighted
+          ? cn(
+              "self-start rounded-sm px-1.5 py-px",
+              step.urgent ? "bg-danger-10 text-danger-700" : "bg-primary-10 text-primary-700",
+            )
+          : step.urgent
+            ? "text-danger-600"
+            : "text-03",
       )}
     >
       {step.date ? (
@@ -120,14 +146,15 @@ function StepDate({ step, highlighted }: { step: StatusTimelineStep; highlighted
       {step.dateLabel ? <span>{step.dateLabel}</span> : null}
       {step.countdown && msLeft !== null ? (
         <span className={highlighted ? "font-semibold" : undefined}>
-          · {msLeft > 0 ? `in ${formatRemaining(msLeft)}` : "now"}
+          {/* Never "now": under a minute reads "in under a minute" (useCountdown), so nobody acts before the chain ticks over. */}
+          · {hasPassed ? "time is up" : `in ${formatRemaining(msLeft)}`}
         </span>
       ) : null}
     </span>
   );
 }
 
-export function StatusTimeline({ steps, label = "Status", orientation = "auto", className }: StatusTimelineProps) {
+export function StatusTimeline({ steps, label = "Status", orientation = "auto", onElapsed, className }: StatusTimelineProps) {
   const next = nextDatedStepIndex(steps);
   const horizontal = orientation === "horizontal";
   const vertical = orientation === "vertical";
@@ -181,7 +208,7 @@ export function StatusTimeline({ steps, label = "Status", orientation = "auto", 
                 {step.label}
                 <span className="sr-only">, {STATE_WORD[step.state]}</span>
               </span>
-              <StepDate step={step} highlighted={index === next} />
+              <StepDate step={step} highlighted={index === next} onElapsed={onElapsed} />
               {step.description ? <span className="text-body-xs text-03">{step.description}</span> : null}
             </div>
           </li>

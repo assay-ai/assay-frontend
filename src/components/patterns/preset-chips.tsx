@@ -11,13 +11,29 @@ import { cn } from "@/utils";
  *   <PresetChips label="Amount" presets={["5", "20", "50"]} value={amount} onChange={setAmount} />
  *
  * `value` is a decimal string in major units ("20", "0.50"), `""` for
- * nothing chosen. The caller validates and converts it (`toAtomic`).
- * Choosing Custom keeps whatever was typed before and focuses the field.
+ * nothing chosen. Validate with `parseAmountInput(value, { decimals, min, max })`
+ * from `utils/money.ts` and pass its `error` back as `error`; it also gives
+ * the minor units for the API. Choosing Custom focuses the field.
+ *
+ * A preset can set more than one field (escrow caps: "Light" = $0.50 a call
+ * and $5 a day): give each option a `label`, a `description` and `onPick`,
+ * and keep `value` as the option's key.
+ *
+ *   <PresetChips label="Safety caps" value={preset} onChange={setPreset}
+ *     presets={[
+ *       { value: "light", label: "Light", description: "$0.50 a call · $5 a day", onPick: () => setCaps("0.5", "5") },
+ *       { value: "standard", label: "Standard", description: "$1 a call · $20 a day", onPick: () => setCaps("1", "20") },
+ *     ]}
+ *     allowCustom={false} />
  */
 export interface PresetOption {
   value: string;
   /** Default: "$" + value. */
   label?: string;
+  /** A second line on the chip, e.g. "$1 a call · $20 a day". */
+  description?: string;
+  /** Extra effect when picked (set other fields). */
+  onPick?: () => void;
 }
 
 export interface PresetChipsProps {
@@ -40,10 +56,9 @@ export interface PresetChipsProps {
   className?: string;
 }
 
-function normalise(option: string | PresetOption): Required<PresetOption> {
-  const value = typeof option === "string" ? option : option.value;
-  const label = typeof option === "string" ? `$${option}` : (option.label ?? `$${option.value}`);
-  return { value, label };
+function normalise(option: string | PresetOption): PresetOption & { label: string } {
+  if (typeof option === "string") return { value: option, label: `$${option}` };
+  return { ...option, label: option.label ?? `$${option.value}` };
 }
 
 /** Whether `value` is one of the presets (numerically: "20" = "20.00"). */
@@ -70,13 +85,26 @@ export function PresetChips({
   const options = presets.map(normalise);
   const id = React.useId();
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const isPreset = matchesPreset(value, options.map((o) => o.value));
+  const isPreset = options.some((o) => o.value === value) || matchesPreset(value, options.map((o) => o.value));
+
+  // Arrow keys move between chips, as in any radio group.
+  const onArrow = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    const radios = Array.from(
+      event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)') ?? [],
+    );
+    const at = radios.indexOf(event.currentTarget);
+    const step = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+    event.preventDefault();
+    radios[(at + step + radios.length) % radios.length]?.click();
+    radios[(at + step + radios.length) % radios.length]?.focus();
+  };
   const [customMode, setCustomMode] = React.useState(() => value !== "" && !isPreset);
   const custom = allowCustom && (customMode || (value !== "" && !isPreset));
 
   const chip = (selected: boolean) =>
     cn(
-      "inline-flex min-h-9 items-center justify-center rounded-md border px-3.5 text-label-13 font-mono transition-colors",
+      "inline-flex min-h-9 flex-col items-center justify-center rounded-md border px-3.5 py-1 text-label-13 font-mono transition-colors",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-40",
       selected ? "border-primary-500 bg-primary-10 text-01" : "border-02 bg-01 text-02 hover:bg-02 hover:text-01",
     );
@@ -85,7 +113,7 @@ export function PresetChips({
     <div className={cn("flex w-full flex-col gap-2", className)}>
       <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
         {options.map((option) => {
-          const selected = !custom && isPreset && Number(option.value) === Number(value);
+          const selected = !custom && (option.value === value || (isPreset && Number(option.value) === Number(value)));
           return (
             <button
               key={option.value}
@@ -96,10 +124,13 @@ export function PresetChips({
               onClick={() => {
                 setCustomMode(false);
                 onChange(option.value);
+                option.onPick?.();
               }}
-              className={chip(selected)}
+              onKeyDown={onArrow}
+              className={cn(chip(selected), option.description && "items-start font-sans")}
             >
               {option.label}
+              {option.description ? <span className="font-mono text-mono-xs font-normal text-03">{option.description}</span> : null}
             </button>
           );
         })}
@@ -114,6 +145,7 @@ export function PresetChips({
               if (isPreset) onChange("");
               requestAnimationFrame(() => inputRef.current?.focus());
             }}
+            onKeyDown={onArrow}
             className={cn(chip(custom), "font-sans")}
           >
             {customLabel}
@@ -145,7 +177,12 @@ export function PresetChips({
               disabled={disabled}
               aria-invalid={error ? true : undefined}
               aria-describedby={error || hint ? `${id}-help` : undefined}
-              onChange={(event) => onChange(event.target.value.replace(/[^0-9.]/g, ""))}
+              // Digits and one point only; parseAmountInput says the rest in words.
+              onChange={(event) => {
+                const cleaned = event.target.value.replace(/[^0-9.]/g, "");
+                const [whole, ...fraction] = cleaned.split(".");
+                onChange(fraction.length ? `${whole}.${fraction.join("")}` : (whole ?? ""));
+              }}
               className="w-full min-w-0 bg-transparent font-mono text-mono-sm text-01 outline-none placeholder:text-03"
             />
           </div>

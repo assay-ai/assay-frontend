@@ -51,6 +51,12 @@ export function SectionTabs({ tabs, label = "Section", activeId, linkAs: LinkCom
                 )}
               >
                 {tab.label}
+                {tab.badge ? (
+                  <span className="ml-1.5 rounded-full bg-danger-500 px-1.5 py-px font-mono text-mono-2xs font-semibold text-on-color">
+                    {tab.badge > 99 ? "99+" : tab.badge}
+                    <span className="sr-only"> needing attention</span>
+                  </span>
+                ) : null}
               </LinkComponent>
             </li>
           );

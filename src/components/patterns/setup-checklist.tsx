@@ -5,6 +5,8 @@ import * as React from "react";
 
 import { cn } from "@/utils";
 
+import { Skeleton } from "./page-state";
+
 /**
  * A goal broken into ordered steps that tick themselves from data.
  *
@@ -59,6 +61,11 @@ export interface SetupChecklistProps {
   doneDescription?: React.ReactNode;
   /** Adds a dismiss button. */
   onDismiss?: () => void;
+  /**
+   * True while the data the steps are derived from is still loading: shows a
+   * skeleton instead of a misleading "0 of 4" or "All set".
+   */
+  loading?: boolean;
   className?: string;
 }
 
@@ -124,6 +131,7 @@ export function SetupChecklist({
   doneTitle = "All set",
   doneDescription,
   onDismiss,
+  loading = false,
   className,
 }: SetupChecklistProps) {
   const baseId = React.useId();
@@ -156,6 +164,25 @@ export function SetupChecklist({
       <X aria-hidden="true" className="size-4" />
     </button>
   ) : null;
+
+  if (loading) {
+    return (
+      <section
+        aria-busy="true"
+        aria-label={typeof title === "string" ? title : "Checklist"}
+        className={cn("flex w-full flex-col gap-3 rounded-xl border border-01 bg-01 p-4 shadow-soft tablet:p-5", className)}
+      >
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-1.5 w-[160px] rounded-full" />
+        {steps.map((step) => (
+          <div key={step.id} className="flex items-center gap-3 pt-1">
+            <Skeleton className="size-6 shrink-0 rounded-full" />
+            <Skeleton className="h-4 w-1/2" />
+          </div>
+        ))}
+      </section>
+    );
+  }
 
   if (progress.complete && !showWhenDone) {
     return (
@@ -289,5 +316,47 @@ export function SetupChecklist({
         })}
       </ol>
     </section>
+  );
+}
+
+/**
+ * The checklist's progress as a compact pill for a header or sidebar ("Get
+ * listed · 2 of 5"), linking to where the full checklist lives. Hidden once
+ * every required step is done.
+ *
+ *   <ChecklistPill label="Get listed" steps={steps} href="/provider" />
+ */
+export function ChecklistPill({
+  label,
+  steps,
+  href,
+  linkAs: LinkComponent = "a",
+  className,
+}: {
+  label: string;
+  steps: readonly Pick<SetupStep, "state" | "optional">[];
+  href: string;
+  linkAs?: React.ElementType;
+  className?: string;
+}) {
+  const progress = checklistProgress(steps);
+  if (progress.complete || progress.total === 0) return null;
+  return (
+    <LinkComponent
+      href={href}
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full border border-primary-20 bg-primary-10 py-1 pl-1 pr-2.5 text-label-xs text-primary-700",
+        "transition-colors hover:bg-primary-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
+        className,
+      )}
+    >
+      <span className="rounded-full bg-primary-400 px-1.5 py-px font-mono text-mono-xs font-semibold text-on-primary">
+        {progress.done}/{progress.total}
+      </span>
+      {label}
+      <span className="sr-only">
+        : {progress.done} of {progress.total} steps done
+      </span>
+    </LinkComponent>
   );
 }

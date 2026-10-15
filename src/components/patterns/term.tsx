@@ -11,7 +11,7 @@ import { cn } from "@/utils";
  * or tap.
  *
  *   <Term k="escrow">escrow</Term>
- *   <Term k="binding" />            // renders the glossary's own term
+ *   <Term k="binding" />            // renders the glossary's own term ("Listing")
  *
  * The definition is always in the DOM (visually hidden) and wired to the
  * trigger with `aria-describedby`, so a screen reader reads it whether or not
@@ -19,17 +19,34 @@ import { cn } from "@/utils";
  * hover and keyboard focus like any tooltip, and also on tap, because a touch
  * screen has no hover and the people who most need a definition are on
  * phones as often as not.
+ *
+ * Inside another control (a button row, a link, a checklist step title) use
+ * `inline`: it renders a non-interactive span with the definition as its
+ * title and description, because a button inside a button is invalid HTML.
  */
 export interface TermProps {
   k: GlossaryKey;
+  /** Non-interactive, for use inside buttons and links. */
+  inline?: boolean;
   children?: React.ReactNode;
   className?: string;
 }
 
-export function Term({ k, children, className }: TermProps) {
+export function Term({ k, inline = false, children, className }: TermProps) {
   const entry = GLOSSARY[k];
   const id = React.useId();
   const [open, setOpen] = React.useState(false);
+
+  if (inline) {
+    return (
+      <span
+        title={entry.definition}
+        className={cn("underline decoration-03 decoration-dotted underline-offset-[3px]", className)}
+      >
+        {children ?? entry.term}
+      </span>
+    );
+  }
 
   return (
     <TooltipPrimitive.Provider delayDuration={150}>
@@ -48,7 +65,7 @@ export function Term({ k, children, className }: TermProps) {
               className,
             )}
           >
-            {children ?? entry.term.toLowerCase()}
+            {children ?? entry.term}
           </button>
         </TooltipPrimitive.Trigger>
         <TooltipPrimitive.Portal>
