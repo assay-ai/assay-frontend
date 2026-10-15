@@ -174,7 +174,7 @@ export function RoleCapabilities({ identity, children, align = "end" }: { identi
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
-      <DropdownMenuContent align={align} className="w-[min(480px,calc(100vw-32px))] p-0">
+      <DropdownMenuContent align={align} className="w-[min(480px,calc(100vw-32px))] border border-02 p-0 shadow-lg">
         <RoleCapabilitiesPanel identity={identity} />
       </DropdownMenuContent>
     </DropdownMenu>

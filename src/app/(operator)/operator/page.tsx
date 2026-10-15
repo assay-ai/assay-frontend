@@ -231,6 +231,7 @@ export default function OperatorHome() {
         </div>
       ) : (
         <>
+          {needsYouTotal === 0 ? <p className="text-body-13 text-03">Nothing needs you right now.</p> : null}
           {groups.needsYou.length > 0 ? (
             <RowSection
               id="to-approve"
