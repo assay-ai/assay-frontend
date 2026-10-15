@@ -128,6 +128,25 @@ export function strandWarning(reasons: readonly StrandReason[], count: number): 
   );
 }
 
+/**
+ * The acknowledgement on a signing screen whose change strands payments
+ * still being settled: the count, the amount and the effect in plain words
+ * (the chain refuses them, the provider is not paid for calls it served,
+ * the money stays in the escrow), and the way to avoid it.
+ */
+export function strandAcknowledgement(unsettled: UnsettledVouchers | null | undefined): string | null {
+  const line = unsettledLine(unsettled);
+  if (!line || !unsettled) return null;
+  const one = unsettled.count === 1;
+  const value = toDecimal(unsettled.amount);
+  const amount = formatMoney(unsettled.amount, { decimals: !value.isZero() && value.lt("0.01") ? 4 : 2 });
+  return (
+    `${line.charAt(0).toUpperCase()}${line.slice(1)} would no longer fit. I accept that the chain then refuses ` +
+    `${one ? "it" : "them"}: the provider is not paid for ${one ? "a call" : "calls"} it already served, and the ` +
+    `${amount} stays in my escrow. (Waiting about a minute for ${one ? "it" : "them"} to settle avoids this.)`
+  );
+}
+
 /** True for the backend's refusal of a change that strands payments still being settled. */
 export function isUnsettledRefusal(error: unknown): boolean {
   return error instanceof ApiError && error.code === UNSETTLED_AT_RISK_CODE;

@@ -8,7 +8,7 @@ import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-a
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { capsToForm, parseCaps } from "@/features/buyer-money/caps";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
-import { strandReasons } from "@/features/delegation/unsettled";
+import { strandAcknowledgement, strandReasons } from "@/features/delegation/unsettled";
 import { applyLimitsSubmitted } from "@/features/escrow/after-set-limits";
 import { ESCROW_SUBMITTERS, runEscrowAction } from "@/features/escrow/relayed-submission";
 import type { EscrowLimitsBody } from "@/interfaces";
@@ -75,7 +75,6 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
         )
       : [];
   const atRisk = strands.length > 0;
-  const count = unsettled.data?.unsettled?.count ?? 0;
 
   const walletBlocker = useWalletBlocker(money.signerState, money.ownerShort);
   const disabledReason = readOnly
@@ -133,11 +132,7 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
       disabled={Boolean(disabledReason)}
       disabledReason={disabledReason}
       describeError={describeMoneyError}
-      acknowledge={
-        atRisk
-          ? `${count} ${count === 1 ? "payment is" : "payments are"} still being settled and would no longer fit. I accept that ${count === 1 ? "it" : "they"} will not be paid to the provider${count === 1 ? "" : "s"} and may be owed by me.`
-          : undefined
-      }
+      acknowledge={atRisk ? (strandAcknowledgement(unsettled.data?.unsettled) ?? undefined) : undefined}
       successTitle="Account ceiling set"
       successDescription={
         next
