@@ -273,7 +273,6 @@ export default function PenaltiesPage() {
         row={disputing}
         toolName={disputingTool}
         steps={steps}
-        simulated={simulated}
         onOpenChange={(open) => {
           if (!open) setDisputing(null);
         }}

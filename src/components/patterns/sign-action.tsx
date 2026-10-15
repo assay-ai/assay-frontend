@@ -24,6 +24,7 @@ import {
   isUserRejection,
   lastExplorerUrl,
   runWalletSteps,
+  simulatedSteps,
   stepStatuses,
   trackerHeadline,
   type StepStatus,
@@ -407,9 +408,35 @@ export function SignAction({
  */
 /** Shown at the top of every signing sheet on a demo build. */
 export const DEMO_SIGNING_NOTE =
-  "Demo: nothing is signed and no money moves. You can fill this in and read every step; on a live site the button opens your wallet.";
-/** The sign button's reason on a demo build. */
-export const DEMO_SIGNING_REASON = "This is a demo, so nothing is signed.";
+  "Demo: nothing is signed and no money moves. The button walks through every step without a wallet, so you can see how it ends; on a live site it opens your wallet.";
+
+/**
+ * DEMO ONLY: what a signing sheet runs and when its button is disabled. One
+ * behaviour for every wallet sheet, buyer and provider alike: on a demo build
+ * the steps are `simulatedSteps` (the real `run` is never called, so nothing
+ * is signed or sent) and the button works as on a live site, still waiting
+ * for the caller's own reasons and the acknowledgement. A live build gets the
+ * caller's steps and reasons unchanged.
+ */
+export function sheetSigning({
+  demo,
+  steps,
+  disabled,
+  disabledReason,
+  needsAck,
+}: {
+  demo: boolean;
+  steps: WalletStep[];
+  disabled?: boolean;
+  disabledReason?: React.ReactNode;
+  needsAck: boolean;
+}): { steps: WalletStep[]; disabled: boolean; disabledReason: React.ReactNode | undefined } {
+  return {
+    steps: demo ? simulatedSteps(steps) : steps,
+    disabled: Boolean(disabled) || needsAck,
+    disabledReason: disabled ? disabledReason : needsAck ? "Tick the box above to continue." : undefined,
+  };
+}
 
 export interface WalletActionSheetProps extends SignActionProps {
   open: boolean;
@@ -454,9 +481,10 @@ export function WalletActionSheet({
   }
   const needsAck = Boolean(acknowledge) && !acknowledged;
   // DEMO ONLY: the screens read fixtures, so a signature would move real
-  // test money against figures that are not real. Every step up to the
-  // button works; the button says why it stops.
+  // test money against figures that are not real. The steps are simulated
+  // instead, so the whole flow, success state included, can be walked.
   const demo = demoEnabled();
+  const signing = sheetSigning({ demo, steps: signProps.steps, disabled, disabledReason, needsAck });
 
   return (
     <Sheet
@@ -497,16 +525,9 @@ export function WalletActionSheet({
         <SheetFooter className="sticky bottom-0 bg-01">
           <SignAction
             {...signProps}
-            disabled={demo || disabled || needsAck}
-            disabledReason={
-              demo
-                ? DEMO_SIGNING_REASON
-                : disabled
-                  ? disabledReason
-                  : needsAck
-                    ? "Tick the box above to continue."
-                    : undefined
-            }
+            steps={signing.steps}
+            disabled={signing.disabled}
+            disabledReason={signing.disabledReason}
             onPhaseChange={(phase) => {
               setBusy(phase === "running");
               onPhaseChange?.(phase);
