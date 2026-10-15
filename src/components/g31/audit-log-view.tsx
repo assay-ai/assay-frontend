@@ -66,7 +66,7 @@ export function classOf(action: string): ClassName {
 
 const FILTERS: { value: string; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "Policy", label: "Budgets & alerts" },
+  { value: "Policy", label: "Spending limits & alerts" },
   { value: "Authority", label: "Agents & keys" },
   { value: "Money", label: "Money" },
 ];

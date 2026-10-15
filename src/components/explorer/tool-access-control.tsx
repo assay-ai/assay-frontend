@@ -129,7 +129,7 @@ export function ToolAccessControl({
         onOpenChange={setConfirming}
         tone="danger"
         title={`Block ${toolName} for your agents?`}
-        description="Your agents can use every tool today. Blocking one switches you to a list of allowed tools: tools listed on Assay later are not allowed until you allow them, here or in Budgets."
+        description="Your agents can use every tool today. Blocking one switches you to a list of allowed tools: tools listed on Assay later are not allowed until you allow them, here or in Spending limits."
         changes={[
           { label: toolName, before: "Allowed", after: "Blocked" },
           { label: "New tools", before: "Allowed", after: "Need allowing" },

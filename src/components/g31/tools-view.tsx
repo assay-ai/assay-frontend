@@ -275,7 +275,7 @@ function ToolsList() {
           <p className="text-body-13 text-03">
             {accessSummary(policy.data.allowedTools, tools.length)}{" "}
             <Link href="/limits" className="text-primary-600 hover:underline">
-              Budgets
+              Spending limits
             </Link>
           </p>
         ) : null}
