@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { OperatorApproval, OperatorRole } from "@/interfaces/operator";
 
 import { actsOnMoney, ROLE_PRESETS, capabilitiesFor } from "./roles";
-import { firstNames, inviteLimit, invitesOf, limitCell } from "./team";
+import { roleName } from "./roles";
+import { firstNames, inviteLimit, invitesOf, limitCell, limitMoney, teamTabs } from "./team";
+import { approverPhrase } from "./two-person";
 
 const usd = (amount: string) => ({ amount, asset: "eip155:46630", decimals: 6 });
 const op = (id: string, name: string, roles: OperatorRole[]) => ({ id, displayName: name, subject: `${id}@`, roles, status: "ACTIVE" as const });
@@ -61,7 +63,36 @@ describe("role picker lines", () => {
       if (/blocks accounts/i.test(preset.short)) expect(caps.block).toBe(true);
       if (/team/i.test(preset.short)) expect(caps.manageOperators).toBe(true);
     }
-    expect(ROLE_PRESETS.find((p) => p.id === "support")!.short).toBe("Blocks accounts in an incident");
+    expect(ROLE_PRESETS.find((p) => p.id === "support")!.short).toBe("Blocks accounts; suspends penalties within a limit");
     expect(ROLE_PRESETS.map((p) => p.description).join(" ")).not.toMatch(/fleet sweep/);
+  });
+});
+
+describe("round 4: Team counts, limits and names", () => {
+  it("shows tabs only when Everyone differs from Active, with counts that match the rows", () => {
+    expect(teamTabs({ count: 6, more: false }, { count: 6, more: false })).toBeNull();
+    expect(teamTabs({ count: 6, more: false }, { count: 7, more: false })).toEqual({ active: "6", everyone: "7" });
+    expect(teamTabs({ count: 100, more: true }, { count: 100, more: true })).toBeNull();
+    expect(teamTabs(null, { count: 7, more: false })).toBeNull();
+  });
+
+  it("writes every limit as whole dollars, cents only when there are some", () => {
+    expect(limitMoney(usd("0"))).toBe("$0");
+    expect(limitMoney(usd("1000000000"))).toBe("$1,000");
+    expect(limitMoney(usd("2500000"))).toBe("$2.50");
+  });
+
+  it("names Support / on-call the same way in the role list and in 'needs' sentences", () => {
+    expect(roleName("SRE")).toBe("Support / on-call");
+    expect(ROLE_PRESETS.find((p) => p.id === "support")!.label).toBe("Support / on-call");
+  });
+
+  it("asks for 'a second' approver only when the requester holds that role", () => {
+    expect(approverPhrase("A-10", ["SRE", "SUP"])).toBe("a Lead adjudicator");
+    expect(approverPhrase("A-10", ["ADJL"])).toBe("a second Lead adjudicator");
+    expect(approverPhrase("A-12", ["OPS_ADMIN"])).toBe("a second Admin");
+    expect(approverPhrase("A-12", ["ADJL"])).toBe("an Admin");
+    expect(approverPhrase("S-1", ["ADJ"])).toBe("a second Adjudicator or Lead adjudicator");
+    expect(approverPhrase("X-99", ["ADJ"])).toBe("a second operator");
   });
 });
