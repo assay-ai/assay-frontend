@@ -96,7 +96,7 @@ export function OperatorPatternsGallery() {
             functionName="cancelSlashBatch"
             chainId="eip155:46630"
             transactions={[{ to: "0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c", value: "0", data: CALLDATA }]}
-            afterExport="Import it in the Safe that holds the arbiter key."
+            afterExport="Import it in the arbiter's multi-signer wallet."
           />
           <SignOrExport
             canSign={false}
@@ -106,7 +106,7 @@ export function OperatorPatternsGallery() {
             functionName="cancelSlashBatch"
             chainId="eip155:46630"
             transactions={[{ to: "0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c", value: "0", data: CALLDATA }]}
-            afterExport="Import the file in the Safe that holds the arbiter key and sign it there."
+            afterExport="Import the file in the arbiter's multi-signer wallet and sign it there."
           />
         </div>
       </Spec>

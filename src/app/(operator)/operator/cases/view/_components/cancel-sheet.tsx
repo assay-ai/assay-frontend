@@ -19,7 +19,8 @@ import { WhatHappens } from "./what-happens";
 /**
  * Get a requested cancel signed. Opening the sheet builds the cancel (it
  * changes nothing: unsigned bytes), then it is one "Sign and send" when this
- * browser holds the arbiter's wallet, otherwise a Safe batch to download.
+ * browser holds the arbiter's wallet, otherwise a file to download and sign
+ * in the arbiter's multi-signer wallet.
  * The case moves to cancelled on its own once the chain watcher sees it.
  */
 function evmCancelCall(intent: CancelIntent, penaltyAsset: string): SlashContractCall {
@@ -95,7 +96,7 @@ export function CancelSheet({
               signLabel="Sign and send the cancel"
               successTitle="Cancel sent"
               successDescription="The penalty shows as cancelled once the chain watcher reads it back, usually within a minute."
-              afterExport="Open the file in the wallet that holds the arbiter key and sign it there. The penalty shows as cancelled once it lands."
+              afterExport="Open the file in the arbiter's multi-signer wallet and sign it there. The penalty shows as cancelled once it lands."
               onSigned={onSigned}
               onBusyChange={setSigning}
             />
