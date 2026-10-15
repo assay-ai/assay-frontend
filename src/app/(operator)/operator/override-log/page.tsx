@@ -297,7 +297,7 @@ function ActivityScreen() {
                           {sentence.pending ? <span className="block text-body-xs text-03">Built as a {sentence.pending}.</span> : null}
                         </p>
                         {row.ticketRef ? (
-                          <span className="hidden shrink-0 rounded bg-03 px-1.5 py-px font-mono text-mono-12 text-02 min-[480px]:inline">{row.ticketRef}</span>
+                          <span className="hidden max-w-[10rem] shrink-0 truncate rounded bg-03 px-1.5 py-px font-mono text-mono-12 text-02 min-[480px]:inline" title={row.ticketRef}>{row.ticketRef}</span>
                         ) : null}
                         <time dateTime={row.createdAt} title={utcTitle(row.createdAt)} className="w-11 shrink-0 text-right text-body-13 tabular-nums text-03">
                           {formatClock(row.createdAt)}
@@ -317,7 +317,7 @@ function ActivityScreen() {
                         )}
                       </div>
                       {row.ticketRef ? (
-                        <span className="ml-7 mt-1 self-start rounded bg-03 px-1.5 py-px font-mono text-mono-12 text-02 min-[480px]:hidden">{row.ticketRef}</span>
+                        <span className="ml-7 mt-1 max-w-[calc(100%-1.75rem)] self-start rounded bg-03 px-1.5 py-px font-mono text-mono-12 text-02 [overflow-wrap:anywhere] min-[480px]:hidden">{row.ticketRef}</span>
                       ) : null}
                       {open ? <p className="ml-7 mt-1.5 text-body-13 text-02 [overflow-wrap:anywhere]">{row.reason}</p> : null}
                     </li>

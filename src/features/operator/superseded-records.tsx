@@ -5,6 +5,7 @@ import { Lock, PenLine, Undo2 } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { shortId } from "@/components/patterns/copy-chip";
 import { PageState } from "@/components/patterns/page-state";
 import { ReasonChips } from "@/components/patterns/reason-chips";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,7 @@ import type { ArbiterSupersededRecord } from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
-import { createSupersededCancelIntent, listSupersededRecords } from "@/services/operator.service";
+import { createSupersededCancelIntent, getArbiterTerms, listSupersededRecords } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
 
 import {
@@ -167,6 +168,14 @@ function SupersededCancelSheet({
   const [call, setCall] = React.useState<SlashContractCall | null>(null);
   const [busy, setBusy] = React.useState(false);
   const prepare = useMutation({ mutationFn: createSupersededCancelIntent, onSuccess: setCall });
+  // The arbiter of the record's own chain, so the sheet names the key that signs (as rulings do).
+  const terms = useQuery({
+    queryKey: ["operator", "arbiter", "terms", record?.chainId ?? ""],
+    queryFn: () => getArbiterTerms(record!.chainId),
+    enabled: record !== null,
+    retry: 0,
+  });
+  const arbiter = terms.data?.arbiter ?? null;
 
   const id = record?.requestId ?? "";
   React.useEffect(() => {
@@ -201,7 +210,10 @@ function SupersededCancelSheet({
                   text: `${amount ? formatMoney(amount) : "Its amount"} is never taken for these calls a second time: the earlier record is cancelled on ${chainDisplayName(record.chainId)}`,
                 },
                 { icon: Lock, text: "The case's current penalty is not touched. A cancel can't be undone" },
-                { icon: PenLine, text: "Signed by the arbiter key, here or as a file for its multi-signer wallet" },
+                {
+                  icon: PenLine,
+                  text: `Signed by the arbiter key${arbiter ? ` ${shortId(arbiter)}` : ""}, here or as a file for its multi-signer wallet`,
+                },
               ]}
             />
             <p className="text-body-13 text-02">
