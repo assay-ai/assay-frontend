@@ -140,6 +140,16 @@ describe("how a row reads", () => {
       expect(JSON.stringify(d)).not.toContain(BLOCK_ID);
     });
 
+    it("names who blocked by display name, not by a truncated handle", () => {
+      const blocked = new Map(context.blocks);
+      blocked.set(BLOCK_ID, { ...context.blocks.get(BLOCK_ID)!, blockedBy: "test-op-b@" });
+      const d = describeApproval(
+        { action: "account.unblock", target: `account_block:${BLOCK_ID}`, payload: { blockId: BLOCK_ID } },
+        { ...context, blocks: blocked },
+      );
+      expect(d.fields.find((f) => f.label === "Blocked for")?.value).toBe("R15 test · by Test Op B");
+    });
+
     it("falls back to a short block id when the block is not loaded", () => {
       const d = describeApproval({
         action: "account.unblock",
