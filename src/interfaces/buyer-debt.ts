@@ -7,9 +7,11 @@ import type { Money } from "./api";
  * for a reason that is not the provider's (a revoked agent key, an expired
  * voucher, a lowered limit). The price is still held in the buyer's escrow,
  * nobody is paid yet, and the payer's PAID calls are refused
- * (`PAYMENT_DEBT_OUTSTANDING`, 402) until it is settled. Free calls still work.
- * Settling is signing a replacement voucher for the same call; a debt left
- * unsettled until `writeOffAt` is written off and the provider is not paid.
+ * (`PAYMENT_DEBT_OUTSTANDING`, 402) until it is collected. Free calls still
+ * work. Settling is signing a replacement voucher for the same call; a debt
+ * left unsettled until `writeOffAt` is written off (the hold is released and
+ * the provider is not paid), but it still refuses paid calls until it is
+ * signed, and signing it then pays the provider.
  */
 export interface BuyerDebt {
   /** The payment intent of the served call — the debt id. */
@@ -22,19 +24,45 @@ export interface BuyerDebt {
   toolId: string;
   /** Why the voucher lapsed — the chain refusal (`VoucherExpired`, `DelegateIsRevoked`, …). */
   cause: string | null;
-  /** When the call became debt (ISO 8601). */
+  /** See {@link BuyerDebtState}. */
+  state: BuyerDebtState;
+  /** When the call FIRST became debt (ISO 8601). A failed replacement does not reset it. */
   lapsedAt: string;
-  /** When it is written off if still unsettled (ISO 8601). */
+  /** When it is (or was — it may be past) written off if still unsettled (ISO 8601). */
   writeOffAt: string;
+  /** `REPLACING` only: when the replacement voucher was accepted (ISO 8601). */
+  replacedAt: string | null;
   /** When the call was made (ISO 8601). */
   createdAt: string;
 }
+
+/**
+ * Where one debt stands. Every state refuses the payer's paid calls.
+ * - `OPEN`: sign the replacement voucher.
+ * - `REPLACING`: signed, being collected from the escrow — nothing to do; paid
+ *   calls resume once it lands. If the collection fails it is `OPEN` again.
+ * - `WRITTEN_OFF`: not settled within 30 days — the hold was released and the
+ *   provider was not paid, but paid calls stay refused until it is signed;
+ *   signing it then pays the provider.
+ */
+export type BuyerDebtState = "OPEN" | "REPLACING" | "WRITTEN_OFF";
+
+/**
+ * A call's buyer-debt flag on a receipt or a tool-call row.
+ * - `OUTSTANDING`: not collected yet (also while a signed replacement is being
+ *   collected); the price stays held and paid calls are refused.
+ * - `WRITTEN_OFF`: never settled; not charged, provider not paid, and paid
+ *   calls stay refused until it is signed.
+ * - `VOIDED`: the call failed verification after it had become debt; not
+ *   charged, provider not paid.
+ */
+export type CallDebt = "OUTSTANDING" | "WRITTEN_OFF" | "VOIDED";
 
 /** `GET /escrow/debts`. */
 export interface BuyerDebts {
   /** The session's payer account. Only its own debts can be settled from this session. */
   account: string;
-  /** Open debts, oldest first — the payer account's and the organization's. */
+  /** Debts that refuse paid calls, in every state, oldest lapse first — the payer account's and the organization's. */
   debts: BuyerDebt[];
 }
 
@@ -84,10 +112,13 @@ export interface SettleDebtBody {
 /** `POST /escrow/debts/:intentId/voucher`. */
 export interface SettleDebtResult {
   intentId: string;
-  /** The replacement was accepted; the redemption job collects it within about a minute. */
-  status: "REPLACED";
+  /**
+   * The replacement was accepted; the redemption job collects it within about
+   * a minute. Paid calls resume once it is collected and no other debt is left.
+   */
+  status: "REPLACING";
   seq: string;
-  /** Open debts left for this payer. Paid calls work again at zero. */
+  /** Debts of this payer still to sign (`OPEN` or `WRITTEN_OFF`). */
   remainingDebts: number;
 }
 
@@ -96,9 +127,10 @@ export interface DebtOutstandingContext {
   count: number;
   /** The total, formatted by the backend (`"2.50 USDG"`), or null across assets. */
   owed: string | null;
-  debts: Omit<BuyerDebt, "createdAt">[];
+  debts: Omit<BuyerDebt, "createdAt" | "replacedAt">[];
   settleWith: string;
 }
 
 export const PAYMENT_DEBT_OUTSTANDING = "PAYMENT_DEBT_OUTSTANDING";
 export const PAYMENT_DEBT_NOT_FOUND = "PAYMENT_DEBT_NOT_FOUND";
+export const PAYMENT_DEBT_REPLACEMENT_PENDING = "PAYMENT_DEBT_REPLACEMENT_PENDING";

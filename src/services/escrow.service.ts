@@ -176,9 +176,10 @@ export function submitEscrowWithdrawRequest(
 }
 
 /**
- * `GET /escrow/debts` — the payer's open BUYER DEBTS: served paid calls whose
- * payment could not be collected. Paid calls are refused
- * (`PAYMENT_DEBT_OUTSTANDING`) until each is settled; free calls work. Lists
+ * `GET /escrow/debts` — the payer's BUYER DEBTS: served paid calls whose
+ * payment could not be collected, in every state (`OPEN`, `REPLACING`,
+ * `WRITTEN_OFF`). Paid calls are refused (`PAYMENT_DEBT_OUTSTANDING`) until
+ * each is collected; free calls work. Lists
  * the session account's debts and the organization's, so a console sees every
  * debt that blocks its agents — but only the session account's own can be
  * settled from here (`account` on the answer).
@@ -191,13 +192,21 @@ export function getBuyerDebts(): Promise<BuyerDebts> {
  * `POST /escrow/debts/:intentId/voucher-intent` — the replacement voucher that
  * settles one debt, with a fresh `seq`, plus its EIP-712 request on eip155.
  * Sign it unchanged before `voucher.expiresAt`. 404 `PAYMENT_DEBT_NOT_FOUND`
- * when it is settled already, written off, or another wallet's.
+ * when it is settled already, another wallet's, or (for an agent's delegate)
+ * another agent's call; 409 `PAYMENT_DEBT_REPLACEMENT_PENDING` while a signed
+ * replacement is being collected; 429 `PAYMENT_NEXT_SEQ_RATE_LIMITED`. The
+ * optional `{ resource }` body (for an old debt whose tool is gone) is not
+ * sent: the console does not know the resource the call signed.
  */
 export function createDebtVoucherIntent(intentId: string): Promise<DebtVoucherIntent> {
   return api.post<DebtVoucherIntent>(`/escrow/debts/${encodeURIComponent(intentId)}/voucher-intent`, {});
 }
 
-/** `POST /escrow/debts/:intentId/voucher` — settle one debt with the signed voucher. */
+/**
+ * `POST /escrow/debts/:intentId/voucher` — settle one debt with the signed
+ * voucher. Answers `REPLACING`: the debt is collected within about a minute.
+ * See `settleDebtErrorSentence` for the refusals.
+ */
 export function submitDebtVoucher(intentId: string, body: SettleDebtBody): Promise<SettleDebtResult> {
   return api.post<SettleDebtResult>(`/escrow/debts/${encodeURIComponent(intentId)}/voucher`, body);
 }
