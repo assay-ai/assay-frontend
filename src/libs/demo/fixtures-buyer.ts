@@ -499,6 +499,8 @@ function collect(
   toMs: number,
   groupBy: string,
 ): { groups: Map<string, Bucket>; totals: Bucket } {
+  // A fresh demo account (?fresh=) has spent nothing and been refunded nothing.
+  if (freshStage()) return { groups: new Map(), totals: emptyBucket() };
   const todayMs = utcDayStart(Date.now());
   const first = utcDayStart(fromMs);
   // Bounded so a malformed window cannot walk for ever; no screen asks for more.
@@ -971,7 +973,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/holds",
     body: () => ({
-      items: CALLS.filter(inFlight).map((call) => ({
+      items: (freshStage() ? [] : CALLS.filter(inFlight)).map((call) => ({
         id: `hld_${call.intentId.slice(0, 8)}`,
         intentId: call.intentId,
         amount: money(listedPrice(call)),
@@ -991,7 +993,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     body: (_path, query) => {
       const { from, to } = windowOf(query);
       return {
-        items: CALLS.filter((call) => withinWindow(call, from, to)).map(toolCallRow),
+        // A fresh demo account has no calls in its history yet.
+        items: freshStage() ? [] : CALLS.filter((call) => withinWindow(call, from, to)).map(toolCallRow),
         pageInfo: { nextCursor: null, hasMore: false },
       };
     },
@@ -1445,7 +1448,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/audit-log",
-    body: () => ({
+    body: () => (freshStage() ? { items: [], pageInfo: { nextCursor: null, hasMore: false } } : {
       items: [
         {
           id: "aud_77a4",
@@ -1544,12 +1547,13 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/notifications/unread-count",
-    body: () => ({ count: 2 }),
+    body: () => ({ count: freshStage() ? 0 : 2 }),
   },
   {
     method: "GET",
     match: "/notifications",
-    body: () => ({
+    // A fresh demo account has had no alerts.
+    body: () => (freshStage() ? { items: [], pageInfo: { nextCursor: null, hasMore: false } } : {
       items: [
         {
           id: "ntf_4c17",
