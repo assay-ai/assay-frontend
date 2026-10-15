@@ -33,6 +33,7 @@ export const STATUS_CHIPS = {
   paused: { label: "Paused", tone: "warning" },
   "cap-reached": { label: "Limit reached", tone: "warning" },
   revoked: { label: "Revoked", tone: "neutral" },
+  "expires-soon": { label: "Permission ends soon", tone: "warning", icon: Clock },
   "withdrawal-pending": { label: "Withdrawal pending", tone: "primary" },
   claimable: { label: "Ready to claim", tone: "success" },
   // Calls

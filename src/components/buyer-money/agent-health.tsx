@@ -7,6 +7,7 @@ import { relativeTime } from "@/components/g31/format";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
 import type { AgentReadiness } from "@/features/buyer-money/agent-readiness";
+import { permissionExpiry } from "@/features/buyer-money/permission-expiry";
 import { cn } from "@/utils";
 
 import { useAgentsAndKeys } from "./use-agents";
@@ -27,6 +28,7 @@ export function AgentHealthLine({ readiness, className }: { readiness: AgentRead
 /** Overview: one row per agent, linking to its card on Agents & keys. */
 export function AgentHealthList({ className }: { className?: string }) {
   const data = useAgentsAndKeys({ pollMs: 30_000 });
+  const [now] = React.useState(() => Date.now());
   if (data.agentsQuery.isError) {
     return <PageState kind="error" title="Your agents' status could not be loaded" onRetry={() => void data.agentsQuery.refetch()} className={className} />;
   }
@@ -43,13 +45,32 @@ export function AgentHealthList({ className }: { className?: string }) {
         {data.agents.map((agent) => {
           const readiness = data.readiness[agent.agentId];
           if (!readiness) return null;
+          // Its permission to pay ends within a week: say so here, with the way to renew it.
+          const expiry = permissionExpiry(readiness.grant, now);
           return (
             <li key={agent.agentId} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 tablet:px-5">
               <span className="min-w-0 flex-1">
                 <span className="block text-label-13 text-01">{agent.label ?? "Agent"}</span>
                 <AgentHealthLine readiness={readiness} className="text-body-xs" />
+                {expiry ? (
+                  <span className="block text-body-xs text-warning-700" data-testid="overview-permission-expiry">
+                    Its permission to pay ends {expiry.label}; then paid calls are refused.
+                  </span>
+                ) : null}
               </span>
-              <StatusChip status={readiness.status} />
+              {expiry ? (
+                <>
+                  <StatusChip status="expires-soon" detail={expiry.label} />
+                  <Link
+                    href="/agents"
+                    className="text-label-13 font-semibold text-primary-600 hover:underline"
+                  >
+                    Renew
+                  </Link>
+                </>
+              ) : (
+                <StatusChip status={readiness.status} />
+              )}
             </li>
           );
         })}
