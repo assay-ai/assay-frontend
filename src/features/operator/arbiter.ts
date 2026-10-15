@@ -292,6 +292,7 @@ const MESSAGES: Readonly<Record<string, string | ((action: ArbiterAction, e: Api
         ? "No arbiter is appointed on this chain, so the cancellation cannot be built: Assay builds cancelSlash for the arbiter only. The admin appoints one with setArbiter; build it again then."
         : "No arbiter is appointed on this chain, so nobody can rule on a dispute. The admin appoints one with setArbiter.",
   CHAIN_ADDRESS_ALREADY_BLOCKED: "This address is already blocked on chain. Nothing to do.",
+  OPERATOR_APPROVAL_NOT_APPROVED: "This is not an approved on-chain block, so there is no call to sign.",
   CHAIN_PROGRAM_PAUSED: (_a, e) => `Contracts paused — try after unpause. ${e.message}.`,
   CHAIN_ADDRESS_BLOCKED: (_a, e) => `Blocked on chain. ${e.message}.`,
   SLASH_CHAIN_BATCH_REFUSED: (_a, e) =>
@@ -326,4 +327,44 @@ export function arbiterErrorMessage(error: unknown, action: ArbiterAction): stri
   if (entry === undefined) return describeChainRefusal(error);
   const sentence = typeof entry === "function" ? entry(action, error) : entry;
   return `${sentence} (${error.code})`;
+}
+
+/** An approved `A-11` whose unsigned block the arbiter may still have to sign (frontend review N5). */
+export interface ApprovedArbiterBlock {
+  readonly approvalId: string;
+  readonly chainId: string;
+  readonly account: string;
+  readonly approvedBy: string | null;
+  readonly decidedAt: string | null;
+}
+
+/**
+ * The APPROVED `arbiter.block` approvals, newest first as listed, with the
+ * address and chain read off the approved payload: the arbiter page offers
+ * each one's call again, after the approver's tab is gone.
+ */
+export function approvedArbiterBlocks(
+  approvals: readonly {
+    id: string;
+    action: string;
+    status: string;
+    payload: Record<string, unknown>;
+    approvedBy: string | null;
+    decidedAt: string | null;
+  }[],
+): ApprovedArbiterBlock[] {
+  return approvals.flatMap((approval) => {
+    const { chainId, account } = approval.payload;
+    if (approval.action !== "arbiter.block" || approval.status !== "APPROVED") return [];
+    if (typeof chainId !== "string" || typeof account !== "string") return [];
+    return [
+      {
+        approvalId: approval.id,
+        chainId,
+        account,
+        approvedBy: approval.approvedBy,
+        decidedAt: approval.decidedAt,
+      },
+    ];
+  });
 }

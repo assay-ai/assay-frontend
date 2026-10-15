@@ -217,15 +217,29 @@ export function disputeDeadlineOf(clocks: SlashProposalClocks): string | null {
 }
 
 /**
- * Whether the provider can still dispute on chain: the case is `PROPOSED`, its
- * record stands `PENDING` and was never disputed, and its door has not opened.
+ * Whether a record of the case can still be disputed on chain at `nowMs`.
+ * Per record (review N-4): the backend's `disputeBy` is the earliest door of a
+ * record still Pending and never disputed, so a sibling's dispute or a case
+ * that moved on does not close it. An older backend that sends no `disputeBy`
+ * keeps the case-level rule: `PROPOSED`, record `PENDING`, never disputed.
  */
-export function mayDisputeOnChain(proposal: SlashProposalSummary, stage: CaseStage, nowMs: number): boolean {
-  if (!disputesOnChain(proposal.clocks) || stage.kind !== "open" || proposal.status !== "PROPOSED") return false;
-  if (proposal.clocks.chainStatus !== "PENDING" || proposal.clocks.chainDisputedAt) return false;
-  const by = disputeDeadlineOf(proposal.clocks);
+export function disputeWindowOpen(proposal: SlashProposalSummary, nowMs: number): boolean {
+  const { clocks } = proposal;
+  if (!disputesOnChain(clocks)) return false;
+  if (clocks.disputeBy !== undefined) {
+    const byMs = clocks.disputeBy ? new Date(clocks.disputeBy).getTime() : Number.NaN;
+    return Number.isFinite(byMs) && byMs > nowMs;
+  }
+  if (proposal.status !== "PROPOSED") return false;
+  if (clocks.chainStatus !== "PENDING" || clocks.chainDisputedAt) return false;
+  const by = disputeDeadlineOf(clocks);
   const byMs = by ? new Date(by).getTime() : Number.NaN;
   return Number.isFinite(byMs) && byMs > nowMs;
+}
+
+/** Whether to offer the on-chain dispute: the case is still open on chain and a record can be disputed. */
+export function mayDisputeOnChain(proposal: SlashProposalSummary, stage: CaseStage, nowMs: number): boolean {
+  return stage.kind === "open" && disputeWindowOpen(proposal, nowMs);
 }
 
 /** The penalties-on-chain page, with this case's records selected for the dispute. */

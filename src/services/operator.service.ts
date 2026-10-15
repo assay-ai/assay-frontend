@@ -291,6 +291,18 @@ export async function createArbiterBlockIntent(
   );
 }
 
+/**
+ * `GET /operator/arbiter/blocks/:approvalId/call` — the unsigned
+ * `setBlocked(account, true)` of an APPROVED `A-11`, rebuilt from the approved
+ * payload for the arbiter's wallet (frontend review N5). 409 once the address
+ * is blocked on chain, or for any other approval.
+ */
+export function getApprovedArbiterBlockCall(approvalId: string): Promise<SlashContractCall> {
+  return operatorApi.get<SlashContractCall>(
+    `/operator/arbiter/blocks/${encodeURIComponent(approvalId)}/call`,
+  );
+}
+
 // ── The operator directory (`OPS_ADMIN` writes) ─────────────────────────────
 
 /** `GET /operator/operators[?status=]` — newest first. Any operator may read. */
