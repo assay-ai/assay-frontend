@@ -72,6 +72,12 @@ export interface CaseChainMirror {
   readonly chainStatus?: string | null;
   readonly chainDisputedAt?: string | null;
   readonly chainDisputedParts?: number | null;
+  /**
+   * The backend's state derived per record (review N-4), when it sends one:
+   * it outranks the case-level `chainDisputedAt`, which stays set after the
+   * arbiter cancels one part while the others stand undisputed.
+   */
+  readonly chainState?: string | null;
 }
 
 /**
@@ -89,6 +95,11 @@ export type CaseChainDisputePhase = "disputed" | "partly-disputed" | "upheld" | 
 export function caseChainDisputePhase(mirror: CaseChainMirror): CaseChainDisputePhase {
   const parts = mirror.chainDisputedParts ?? 0;
   if (mirror.chainStatus === "DISPUTED") return "disputed";
+  if (mirror.chainState) {
+    if (mirror.chainStatus !== "PENDING") return "none";
+    if (mirror.chainState === "DISPUTED") return "partly-disputed";
+    return mirror.chainState === "UPHELD" ? "upheld" : "none";
+  }
   if (mirror.chainStatus === "PENDING" && parts > 0) return "partly-disputed";
   if (mirror.chainStatus === "PENDING" && mirror.chainDisputedAt) return "upheld";
   return "none";
@@ -105,7 +116,7 @@ export function caseChainStatusLabel(mirror: CaseChainMirror, chain?: string | n
 
 /** Why a record was cancelled, as the backend names it (`WITHDRAWN`, …). */
 const CANCEL_REASON_LABELS: Readonly<Record<string, string>> = {
-  WITHDRAWN: "Withdrawn by Assay",
+  WITHDRAWN: "Cancelled by Assay's arbiter",
   EXPIRED: "Expired: nobody executed it in time",
   VERIFIER_UNAVAILABLE: "Verifier key no longer valid",
   DISPUTE_UNRESOLVED: DISPUTE_UNRESOLVED_LABEL,

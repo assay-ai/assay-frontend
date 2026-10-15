@@ -57,6 +57,15 @@ describe("caseChainStageOf", () => {
     });
   });
 
+  it("N-4: is not upheld when the backend's per-record state says a record stands undisputed", () => {
+    // The arbiter cancelled the disputed part; another part stands undisputed.
+    expect(
+      caseChainStageOf(
+        clocksOf({ chainStatus: "PENDING", chainDisputedAt: R13.chainDisputedAt, chainDisputedParts: 0, chainState: "PENDING" }),
+      ).kind,
+    ).toBe("open");
+  });
+
   it("is upheld when the record is Pending again with a disputedAt and no disputed part", () => {
     expect(caseChainStageOf(clocksOf(UPHELD_CLOCKS))).toEqual({
       kind: "upheld",
@@ -154,6 +163,21 @@ describe("the on-chain dispute, the only dispute on EVM", () => {
     ]) {
       expect(mayDisputeOnChain(data.proposal, caseStageOf(data.proposal), before)).toBe(false);
     }
+  });
+
+  it("N-4: follows the backend's per-record disputeBy, whatever the case status or a sibling's dispute", () => {
+    const partly = caseOf("UPHELD", {
+      chainStatus: "PENDING",
+      chainDisputedAt: R13.chainDisputedAt,
+      chainDisputedParts: 1,
+      chainState: "DISPUTED",
+      disputeBy: R13.chainExecutableAt,
+    });
+    expect(mayDisputeOnChain(partly.proposal, caseStageOf(partly.proposal), before)).toBe(true);
+    expect(mayDisputeOnChain(partly.proposal, caseStageOf(partly.proposal), after)).toBe(false);
+
+    const none = caseOf("PROPOSED", { disputeBy: null, chainState: "UPHELD" });
+    expect(mayDisputeOnChain(none.proposal, caseStageOf(none.proposal), before)).toBe(false);
   });
 
   it("links to the penalties on chain page with the case selected", () => {

@@ -159,7 +159,14 @@ export function waitingFigure(data: SlashProposalCaseDetail, stage: CaseStage): 
   if (disputesOnChain(clocks)) {
     // The one deadline on EVM: the record's executableAt. No in-app clock.
     const by = disputeDeadlineOf(clocks);
-    if (proposal.status !== "PROPOSED") {
+    // Per record (review N-4): the backend's `disputeBy` stays set while any
+    // record is still Pending and undisputed, whatever a sibling's dispute or
+    // the case status say. An older backend without it: `PROPOSED` only.
+    const disputable =
+      clocks.disputeBy !== undefined
+        ? clocks.disputeBy !== null || (proposal.status === "PROPOSED" && !clocks.chainExecutableAt)
+        : proposal.status === "PROPOSED";
+    if (!disputable) {
       return {
         label: "Dispute on chain by",
         value: by ? `${stampUtc(by)} UTC` : DASH,

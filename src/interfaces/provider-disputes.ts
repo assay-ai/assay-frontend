@@ -147,7 +147,15 @@ export interface FileSlashDisputeBody {
 export type SlashProposalRunningClock = "PROVIDER" | "PLATFORM" | "NONE";
 
 /** `OnChainDisputeState` (assay-backend `slash/domain/on-chain-dispute.ts`). */
-export type OnChainDisputeState = "PENDING" | "DISPUTED" | "UPHELD" | "CANCELLED" | "EXECUTED" | "EXPIRED";
+export type OnChainDisputeState =
+  | "PENDING"
+  | "DISPUTED"
+  | "UPHELD"
+  | "CANCELLED"
+  | "EXECUTED"
+  | "EXPIRED"
+  /** Never disputed nor executed, then expired: nobody ruled for the provider, nothing taken. */
+  | "LAPSED";
 
 /**
  * Both sides' clocks, together — `SlashProposalClocksDto`. the case timeline's subtitle
@@ -206,11 +214,12 @@ export interface SlashProposalClocks {
    * backends, read as on chain (the console's stake is on EVM).
    */
   disputeOnChain?: boolean;
-  /** The record's state from the watcher's mirror. Null off EVM or before a record stands. */
+  /** The state of the case's records, derived per record. Null off EVM or before a record stands. */
   chainState?: OnChainDisputeState | null;
   /**
-   * The deadline to dispute on chain — the record's `executableAt` — while
-   * the case can still be disputed. Null otherwise.
+   * The deadline to dispute on chain: the earliest `executableAt` of a record
+   * still Pending and never disputed, whatever its siblings or the case status
+   * say. Null when no record can be disputed.
    */
   disputeBy?: string | null;
   secondsRemaining: number | null;
