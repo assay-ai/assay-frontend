@@ -269,7 +269,9 @@ export default function EconomicsCalculatorPage() {
               label="Expected calls / month"
               inputMode="numeric"
               value={group(callsDigits)}
-              onChange={(event) => setCallsDigits(event.target.value.replace(/[^0-9]/g, ""))}
+              // 12 digits (under a trillion calls a month): beyond that the money
+              // columns stop being exact in the formatter, and no real volume needs it.
+              onChange={(event) => setCallsDigits(event.target.value.replace(/[^0-9]/g, "").slice(0, 12))}
             />
             <Select
               id="calculator-mode"

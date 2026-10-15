@@ -60,7 +60,7 @@ const PROOF_POINTS = [
   {
     icon: Split,
     title: "Money moves, or it does not",
-    detail: "Passed: the hold is charged. Failed: you keep the money.",
+    detail: "Passed: you pay the serving provider's price, never more than the hold. Failed: you keep the money.",
   },
 ];
 
