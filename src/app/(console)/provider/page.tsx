@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { ExternalLink, Plus } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -151,12 +151,22 @@ export default function ProviderHomePage() {
           {subtitle ? <p className="text-body-13 text-03 tablet:truncate">{subtitle}</p> : null}
         </div>
         {record ? (
-          <Button asChild>
-            <Link href={routes.bindingWizard()}>
-              <Plus aria-hidden="true" />
-              List a tool
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {live.length > 0 ? (
+              <Button asChild variant="secondary">
+                <a href={routes.publicProvider(record.id)} target="_blank" rel="noreferrer">
+                  How buyers see you
+                  <ExternalLink aria-hidden="true" />
+                </a>
+              </Button>
+            ) : null}
+            <Button asChild>
+              <Link href={routes.bindingWizard()}>
+                <Plus aria-hidden="true" />
+                List a tool
+              </Link>
+            </Button>
+          </div>
         ) : null}
       </header>
 
