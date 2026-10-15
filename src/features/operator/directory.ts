@@ -20,7 +20,7 @@ import { checkEvmAddress } from "@/libs/chains/evm/operator-wallet";
 export const ROLE_OPTIONS: readonly { role: OperatorRole; label: string }[] = Object.freeze([
   { role: "ADJ", label: "Adjudicator" },
   { role: "ADJL", label: "Lead adjudicator" },
-  { role: "SRE", label: "On-call (SRE)" },
+  { role: "SRE", label: "Support / on-call" },
   { role: "TRE", label: "Treasury" },
   { role: "TREA", label: "Treasury approver" },
   { role: "POL", label: "Policy author" },
