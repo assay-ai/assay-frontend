@@ -22,7 +22,7 @@ import { toDecimal } from "@/utils/money";
 
 export interface CapSentenceInput {
   used: Money;
-  /** `null` = no cap set (e.g. escrow caps not configured): reads "Caps not set". */
+  /** `null` = no cap set (e.g. escrow caps not configured): reads "No limit set yet". */
   limit: Money | null;
   /** ISO instant when the cap is full again (window reset). */
   refillsAt?: string | null;
@@ -60,7 +60,7 @@ export interface CapReading {
 /** Pure: the sentence and level, so every screen says the same words. */
 export function capReading(input: CapSentenceInput, options: LocalTimeOptions = {}): CapReading {
   if (!input.limit) {
-    return { level: "unset", percent: 0, sentence: "Caps not set, so this cannot pay yet. Set a cap to start." };
+    return { level: "unset", percent: 0, sentence: "No limit set yet, so this cannot pay. Set one to start." };
   }
   const cap = input.limit;
   const used = toDecimal(shownUsed(input.used, cap));

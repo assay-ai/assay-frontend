@@ -120,11 +120,15 @@ export function EffectiveLimitLines({ lines, className }: { lines: LimitLine[]; 
               <span className="font-mono font-semibold text-01">{line.amount}</span>
               {line.setBy ? <> — {line.setBy}</> : null}
               {line.left ? <span className="text-03"> · {line.left}</span> : null}
+              {line.stop ? <span className="text-03"> · {line.stop}</span> : null}
             </li>
           ))}
         </ul>
       )}
-      <p className="text-body-xs text-03">The lowest limit wins: this agent&apos;s spending limits sit under your account ceiling.</p>
+      <p className="text-body-xs text-03">
+        These are the numbers that apply now: the lowest limit wins, and this agent&apos;s spending limits sit under your account
+        ceiling.
+      </p>
     </div>
   );
 }
@@ -430,6 +434,10 @@ export function OldRuleLine({ policy }: { policy: SpendPolicy | null }) {
   return (
     <div className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-01 px-4 py-3" data-testid="old-rule-line">
       <p className="text-label-13 text-01">Older rules still checked</p>
+      <p className="text-body-xs text-03">
+        Left over from before spending limits. Each agent&apos;s effective limit above already counts them, so the numbers there
+        are the ones that apply now.
+      </p>
       {policy?.requireApprovalAbove ? (
         <div className="flex flex-wrap items-center gap-3">
           <p className="min-w-0 flex-1 text-body-13 text-02">

@@ -20,7 +20,7 @@ describe("budgetPatch", () => {
   it("sends only what changed, with a default reason", () => {
     const form = { ...budgetFormFrom(policy), perDay: "50" };
     const result = budgetPatch(form, policy, 6, false);
-    expect(result).toEqual({ ok: true, changed: true, body: { dailyCap: "50000000", changeReason: "Budget changed" } });
+    expect(result).toEqual({ ok: true, changed: true, body: { dailyCap: "50000000", changeReason: "Spending limits changed" } });
   });
 
   it("clears a limit when the field is emptied, and knows when nothing changed", () => {
