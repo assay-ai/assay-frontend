@@ -93,7 +93,7 @@ export function PenaltyTable({
                 </span>
                 <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                   <Chip row={row} now={now} />
-                  <Next row={row} waiting={waitingBy.get(row.id) ?? null} now={now} />
+                  <Next row={row} waiting={waitingBy.get(row.id) ?? null} now={now} hideNone />
                 </span>
               </span>
               <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
@@ -110,11 +110,11 @@ function Chip({ row, now }: { row: PenaltyRow; now: number }) {
   return <StatusChip status={chip.status} detail={chip.detail} />;
 }
 
-function Next({ row, waiting, now }: { row: PenaltyRow; waiting: string | null; now: number }) {
+function Next({ row, waiting, now, hideNone = false }: { row: PenaltyRow; waiting: string | null; now: number; hideNone?: boolean }) {
   if (waiting) return <span className="text-body-xs text-02">{waiting}</span>;
   const next = penaltyNext(row, now);
   if (next.kind === "dispute") return <Deadline kind="dispute" until={next.until} from={next.from} />;
-  if (next.kind === "none") return <span className="text-body-xs text-03">—</span>;
+  if (next.kind === "none") return hideNone ? null : <span className="text-body-xs text-03">—</span>;
   return (
     <span
       title={next.until ? new Date(next.until).toISOString().slice(0, 16).replace("T", " ") + " UTC" : undefined}

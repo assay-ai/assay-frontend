@@ -70,6 +70,9 @@ export function moneyHeading(stage: CaseStage, penaltyText: string): { title: st
         meta: `Cancel requested: the reserved ${penaltyText} goes back to the provider once the arbiter signs.`,
         split: false,
       };
+    case "upheld":
+    case "executable":
+      return { title: "When it executes", meta: "Reserved in the provider's stake. Nothing has moved yet.", split: true };
     default:
       return { title: "If upheld", meta: "Reserved in the provider's stake. Nothing has moved yet.", split: true };
   }

@@ -297,7 +297,7 @@ describe("where a penalty stands", () => {
     const ruling = caseTimelineSteps(b, caseFacts(b, NOW), { now: NOW }).find((s) => s.id === "ruling");
     // The same "Day N of 30 · X days left" as Home and Arbiter, not a second countdown.
     expect(ruling).toMatchObject({ state: "current", urgent: true, countdown: false });
-    expect(ruling?.dateLabel).toBe("Day 22 of 30 · 9 days left · ends");
+    expect(ruling?.dateLabel).toBe("9 days left · rule by");
   });
 });
 
@@ -378,7 +378,7 @@ describe("the next step for this operator", () => {
     expect(next.description).not.toMatch(/deadline has passed/);
     const end = caseTimelineSteps(b, facts, { now: NOW }).at(-1);
     expect(end).toMatchObject({ date: iso(NOW + 7 * DAY), urgent: false, countdown: false });
-    expect(end?.dateLabel).toBe("Day 24 of 30 · 7 days left · sign before");
+    expect(end?.dateLabel).toBe("7 days left · sign before");
     expect(cancelDeadlineSentence(facts, fmt)).toMatch(/cannot be executed/);
   });
 
