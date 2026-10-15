@@ -1,6 +1,8 @@
 import type { OverrideLogEntry } from "@/interfaces/operator";
 import { routes } from "@/libs/routes";
 
+import { RULING_REASONS } from "./arbiter";
+import { walletLabel } from "./block-targets";
 import { reasonLabel } from "./reasons";
 
 /**
@@ -51,9 +53,79 @@ const VERBS: Readonly<Record<string, string>> = {
   "A-14": "removed",
   "S-1": "suspended",
   "S-5": "recorded a compensation for",
-  "S-11": "opened a fleet sweep from",
+  "S-11": "opened a bulk decision from",
   "S-13": "ruled on",
 };
+
+/**
+ * An arbiter ruling's outcome: the entry's own `after.ruling` (what the
+ * backend logs with `S-13`), else the function it built, else the reason —
+ * each ruling reason belongs to one side only. Null when none of them says.
+ */
+export function rulingOf(entry: Pick<OverrideLogEntry, "code" | "after" | "reasonCode">): "UPHOLD" | "CANCEL" | null {
+  if (entry.code !== "S-13") return null;
+  const after = entry.after ?? {};
+  const ruling = typeof after.ruling === "string" ? after.ruling.toUpperCase() : null;
+  if (ruling === "UPHOLD" || ruling === "CANCEL") return ruling;
+  if (after.functionName === "upholdSlashBatch") return "UPHOLD";
+  if (after.functionName === "cancelSlashBatch") return "CANCEL";
+  const code = entry.reasonCode;
+  if (!code || code === "OTHER") return null;
+  if (RULING_REASONS.UPHOLD.some((r) => r.value === code)) return "UPHOLD";
+  if (RULING_REASONS.CANCEL.some((r) => r.value === code)) return "CANCEL";
+  return null;
+}
+
+/** What kind of action an entry is, for its icon. */
+export type ActivityIcon = "block" | "unblock" | "chain" | "suspend" | "ruling" | "money" | "team" | "other";
+
+export function activityIcon(entry: Pick<OverrideLogEntry, "code">): ActivityIcon {
+  switch (entry.code) {
+    case "A-9":
+      return "block";
+    case "A-10":
+      return "unblock";
+    case "A-11":
+      return "chain";
+    case "S-1":
+    case "S-11":
+      return "suspend";
+    case "S-13":
+      return "ruling";
+    case "S-5":
+      return "money";
+    case "A-12":
+    case "A-13":
+    case "A-14":
+      return "team";
+    default:
+      return "other";
+  }
+}
+
+/**
+ * Entries grouped by the reader's local day, newest first as given. `dayOf`
+ * turns a timestamp into the group's key and label (the page passes the
+ * browser's zone; tests pass a fixed one). Pure.
+ */
+export function groupByDay<T extends Pick<OverrideLogEntry, "createdAt">>(
+  rows: readonly T[],
+  dayOf: (iso: string) => { key: string; label: string },
+): { key: string; label: string; rows: T[] }[] {
+  const groups: { key: string; label: string; rows: T[] }[] = [];
+  for (const row of rows) {
+    const day = dayOf(row.createdAt);
+    const last = groups[groups.length - 1];
+    if (last && last.key === day.key) last.rows.push(row);
+    else groups.push({ ...day, rows: [row] });
+  }
+  return groups;
+}
+
+/** Only the entries this operator took (as the actor, not as the approver). */
+export function byActor<T extends Pick<OverrideLogEntry, "actorSubject">>(rows: readonly T[], subject: string): T[] {
+  return rows.filter((row) => row.actorSubject === subject);
+}
 
 export interface ActivityNames {
   /** `jordan@` → "Jordan Blake". */
@@ -71,8 +143,16 @@ export interface ActivitySentence {
   href: string | null;
 }
 
-function fallbackTarget(entry: Pick<OverrideLogEntry, "targetType" | "targetId">): string {
+function fallbackTarget(entry: Pick<OverrideLogEntry, "targetType" | "targetId"> & { after?: Record<string, unknown> }): string {
   switch (entry.targetType) {
+    case "slash_record_batch": {
+      // An arbiter ruling: the batch is not a record of its own, the penalties in it are.
+      const ids = entry.after?.requestIds;
+      const count = Array.isArray(ids) ? ids.length : 0;
+      return count > 1 ? `${count} disputed penalties` : "a disputed penalty";
+    }
+    case "chain_blocklist":
+      return typeof entry.after?.account === "string" ? walletLabel(entry.after.account) : "a wallet";
     case "slash_proposal":
       return `penalty ${entry.targetId.length > 12 ? `${entry.targetId.slice(0, 8)}…` : entry.targetId}`;
     case "account_block":
@@ -97,10 +177,17 @@ export function activityHref(entry: Pick<OverrideLogEntry, "targetType" | "targe
   }
 }
 
+function verbOf(entry: OverrideLogEntry): string {
+  const ruling = rulingOf(entry);
+  if (ruling === "UPHOLD") return "upheld";
+  if (ruling === "CANCEL") return "cancelled";
+  return VERBS[entry.code] ?? entry.label.toLowerCase();
+}
+
 export function activitySentence(entry: OverrideLogEntry, names: ActivityNames): ActivitySentence {
   return {
     actor: names.operator(entry.actorSubject),
-    verb: VERBS[entry.code] ?? entry.label.toLowerCase(),
+    verb: verbOf(entry),
     target: names.target(entry) ?? fallbackTarget(entry),
     reason: entry.reasonCode ? reasonLabel(entry.reasonCode) : null,
     approver: entry.approverSubject ? names.operator(entry.approverSubject) : null,
