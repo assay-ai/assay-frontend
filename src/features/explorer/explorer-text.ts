@@ -201,10 +201,26 @@ export interface RoutingProvider {
  *  - a provider marked "Fails often" that still takes the calls gets one line
  *    saying so, and that failed results are never charged.
  */
-export function routingNotes(held: Money | null | undefined, providers: readonly RoutingProvider[]): string[] {
+export function routingNotes(
+  held: Money | null | undefined,
+  providers: readonly RoutingProvider[],
+  /** Names a chain from its CAIP-2 id; when given, a provider paid on another chain is said as such. */
+  chainName?: (chainId: string) => string,
+): string[] {
   const notes: string[] = [];
-  const idle = providers.filter((p) => notTakingPaidCalls(held, p.price));
-  const taking = providers.filter((p) => !notTakingPaidCalls(held, p.price));
+  // A listing in another asset is priced on another chain: compare it to nothing, name its chain.
+  const elsewhere = held && chainName ? providers.filter((p) => p.price && p.price.asset !== held.asset) : [];
+  if (held && chainName && elsewhere.length > 0) {
+    const chainOf = (asset: string) => chainName(asset.split("/")[0]);
+    notes.push(
+      `The price above is for ${chainOf(held.asset)}. ${elsewhere
+        .map((p) => `${p.name} charges ${formatCallPrice(p.price)} a call on ${chainOf(p.price!.asset)}`)
+        .join("; ")}.`,
+    );
+  }
+  const sameChain = providers.filter((p) => !elsewhere.includes(p));
+  const idle = sameChain.filter((p) => notTakingPaidCalls(held, p.price));
+  const taking = sameChain.filter((p) => !notTakingPaidCalls(held, p.price));
   if (idle.length > 0 && taking.length > 0) {
     const named = idle.map((p) => `${p.name} (${formatCallPrice(p.price)} a call)`).join(", ");
     notes.push(
@@ -216,7 +232,7 @@ export function routingNotes(held: Money | null | undefined, providers: readonly
     notes.push(
       taking.length === 1
         ? "Calls go to the provider that is taking calls; this one has failed often recently. Failed results are never charged."
-        : `${failing.map((p) => p.name).join(", ")} ${failing.length === 1 ? "has" : "have"} failed often recently and still take calls. Failed results are never charged.`,
+        : `${failing.map((p) => p.name).join(", ")} ${failing.length === 1 ? "has failed often recently and still takes" : "have failed often recently and still take"} calls. Failed results are never charged.`,
     );
   }
   return notes;

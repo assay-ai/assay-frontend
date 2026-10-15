@@ -200,6 +200,7 @@ function ToolPage() {
           ? routingNotes(
               tool.price,
               serving.map((p) => ({ name: p.name, price: listingOf(p.providerId)?.price, quality: p.quality })),
+              chainName,
             ).map((note) => (
               <p key={note} className="text-body-13 text-02" data-testid="routing-note">
                 {note}
