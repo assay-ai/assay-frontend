@@ -26,6 +26,26 @@ describe("roleCapabilityLists", () => {
     expect(others).toContain("add and change operators (Admin)");
   });
 
+  it("says blocking in one line for Support / on-call, not 'Block an account' and 'Block a wallet on chain'", () => {
+    const { can, others } = roleCapabilityLists({ roles: ["SRE", "SUP"], authorityLimit: usd(0) });
+    expect([...can, ...others].filter((item) => item.includes("block"))).toEqual(["block an account (a wallet also on chain)"]);
+  });
+
+  it("says what the other half needs when a role can block only one way", () => {
+    const { can } = roleCapabilityLists({ roles: ["TRE"], authorityLimit: usd(1000) });
+    expect(can).toContain("block a wallet on chain (in Assay too needs Lead adjudicator or Support / on-call)");
+    const admin = roleCapabilityLists({ roles: ["OPS_ADMIN"], authorityLimit: usd(0) });
+    expect(admin.others.filter((item) => item.includes("block"))).toEqual([
+      "block an account (Lead adjudicator or Support / on-call; on chain: Lead adjudicator, Support / on-call or Treasury)",
+    ]);
+  });
+
+  it("says blocking in one line for a Lead, who can do both", () => {
+    const { can, others } = roleCapabilityLists({ roles: ["ADJL"], authorityLimit: usd(1000) });
+    expect(can).toContain("block an account (a wallet also on chain)");
+    expect([...can, ...others].filter((item) => item.includes("block a"))).toHaveLength(1);
+  });
+
   it("says a $0 limit is why, not the role", () => {
     const { others } = roleCapabilityLists({ roles: ["SRE", "SUP"], authorityLimit: usd(0) });
     expect(others).toContain("suspend a penalty (your limit is $0)");
