@@ -148,12 +148,18 @@ export function depositSteps(input: {
       report({ stage: "preparing" });
       const deposit = await intent();
       const tx = deposit.transaction;
-      if (!tx || tx.namespace !== "eip155" || tx.kind !== "transaction" || !deposit.amount) return;
+      // No transaction: the deposit step says why (`blockedBy`); nothing to approve.
+      if (!tx || tx.namespace !== "eip155" || tx.kind !== "transaction") return;
       // The deposit must be exactly depositStake(amount) on the pinned stake
       // contract, or the approval below would name an unchecked spender.
       assertStakeIntent(deposit, { kind: "DEPOSIT", amount: amountAtomic });
+      // As main's `approveStakeDeposit`: an EVM deposit with no amount or a
+      // non-ERC-20 asset is refused by name, not skipped into a revert later.
+      if (!deposit.amount) throw new Error("This deposit intent carries no amount. Nothing was sent.");
       const token = deposit.amount.asset.split("/erc20:")[1];
-      if (!token) return;
+      if (!token) {
+        throw new Error(`The stake asset ${deposit.amount.asset} is not an ERC-20 on this chain. Nothing was sent.`);
+      }
       // The approval is the one call the API names nothing of: only the pinned
       // settlement token, approving the pinned stake contract (`tx.to`, checked above).
       if (token.toLowerCase() !== pinnedDeployment(tx.chainId).settlementToken.toLowerCase()) {
