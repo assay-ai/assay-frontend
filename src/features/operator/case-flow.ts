@@ -174,7 +174,8 @@ export function caseTimelineSteps(
       id: "end",
       label: "Executed or cancelled",
       state: stage === "executable" ? "current" : "upcoming",
-      date: facts.executableAt,
+      // While disputed, the old executable time no longer applies: it moves with the ruling.
+      date: stage === "disputed" ? null : facts.executableAt,
       dateLabel: stage === "disputed" ? "after the ruling" : "executable from",
     });
   }

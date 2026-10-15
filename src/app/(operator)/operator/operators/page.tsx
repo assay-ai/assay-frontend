@@ -220,7 +220,9 @@ export default function TeamPage() {
 
 function RoleField({ roles, onChange, error }: { roles: OperatorRole[]; onChange: (roles: OperatorRole[]) => void; error?: string }) {
   const preset = presetOf(roles);
-  const [custom, setCustom] = React.useState(() => roles.length > 0 && preset === null);
+  const [customOpen, setCustom] = React.useState(false);
+  // A mix that matches no preset is always shown as Customize, so nothing is hidden.
+  const custom = customOpen || (roles.length > 0 && preset === null);
   const value = custom ? "custom" : (preset?.id ?? "");
   return (
     <div className="flex w-full flex-col gap-2">

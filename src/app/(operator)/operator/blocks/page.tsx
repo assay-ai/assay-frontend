@@ -18,7 +18,7 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { approvalNeeds } from "@/features/operator/approvals";
-import { mayBlockOnChain } from "@/features/operator/arbiter";
+import { arbiterErrorMessage, mayBlockOnChain } from "@/features/operator/arbiter";
 import {
   blockSubjectLabel,
   evmAddressOf,
@@ -26,6 +26,7 @@ import {
   pickedTarget,
   searchBlockTargets,
   targetId,
+  walletLabel,
 } from "@/features/operator/block-targets";
 import { BLOCK_NOTE_MAX, BLOCK_NOTE_MIN, blockErrorMessage, mayBlock, validateBlockForm, validateUnblockForm } from "@/features/operator/blocks";
 import { ContractCallAction } from "@/features/operator/contract-call-action";
@@ -80,6 +81,7 @@ function BlocksScreen() {
   const [blockOpen, setBlockOpen] = React.useState(false);
   const [prefill, setPrefill] = React.useState<{ kind: BlockSubjectKind; subject: string } | null>(null);
   const [lifting, setLifting] = React.useState<AccountBlock | null>(null);
+  const [chainBlocking, setChainBlocking] = React.useState<AccountBlock | null>(null);
   const [result, setResult] = React.useState<React.ReactNode>(null);
 
   // A link from a case or the arbiter page opens the form prefilled, once.
@@ -193,6 +195,11 @@ function BlocksScreen() {
                 <Button variant="ghost" size="sm" asChild>
                   <Link href={`/operator/override-log?targetId=${encodeURIComponent(block.id)}`}>History</Link>
                 </Button>
+                {block.active && canChain && block.subjectKind === "WALLET" && evmAddressOf(block.subject) ? (
+                  <Button variant="ghost" size="sm" onClick={() => setChainBlocking(block)}>
+                    Block on chain
+                  </Button>
+                ) : null}
                 {block.active && canAct ? (
                   <Button variant="secondary" size="sm" onClick={() => setLifting(block)}>
                     Lift block
@@ -219,6 +226,9 @@ function BlocksScreen() {
           activeBlocks={filter === "active" ? rows : []}
           onDone={setResult}
         />
+      ) : null}
+      {canChain ? (
+        <ChainBlockSheet block={chainBlocking} label={chainBlocking ? label(chainBlocking) : ""} onClose={() => setChainBlocking(null)} />
       ) : null}
       {canAct ? (
         <LiftSheet
@@ -273,6 +283,12 @@ function BlockSheet({
   }, [open, prefill]);
 
   const picked = pickedTarget(target);
+  const catalogue = providers.providers;
+  // Stable, or the picker would search again on every render.
+  const searchTargets = React.useCallback(async (q: string) => searchBlockTargets(q, catalogue), [catalogue]);
+  const shownLabel =
+    targetLabel ??
+    (picked ? (picked.kind === "ORGANIZATION" ? (providers.lookup(picked.subject) ?? undefined) : walletLabel(picked.subject)) : undefined);
   const provider = picked?.kind === "ORGANIZATION" ? providers.providers.find((p) => p.providerId === picked.subject) : undefined;
   const evm = picked?.kind === "WALLET" ? evmAddressOf(picked.subject) : null;
   const alreadyBlocked = picked
@@ -313,7 +329,7 @@ function BlockSheet({
               call
                 ? "It applies within seconds. Now have the arbiter sign the on-chain block below."
                 : chainError
-                  ? `It applies within seconds. The on-chain block could not be prepared: ${blockErrorMessage(chainError, "block")} Try it from the Arbiter page.`
+                  ? `It applies within seconds. The on-chain block could not be prepared: ${arbiterErrorMessage(chainError, "block").replace(/\s*\([A-Z_]+\)$/, "")} Use "Block on chain" on its row to try again.`
                   : "It applies within seconds on every instance. Lifting it needs two people."
             }
             activityHref={`/operator/override-log?targetId=${encodeURIComponent(created.id)}`}
@@ -364,13 +380,13 @@ function BlockSheet({
           <EntityPicker
             label="Who"
             value={target}
-            selectedLabel={targetLabel}
+            selectedLabel={shownLabel}
             onChange={(id, option) => {
               setTarget(id);
               setTargetLabel(option?.label);
               setErrors((e) => ({ ...e, target: undefined }));
             }}
-            search={async (q) => searchBlockTargets(q, providers.providers)}
+            search={searchTargets}
             placeholder="Wallet 0x…, provider name or organization id"
             emptyText={noTargetText}
             error={errors.target}
@@ -445,6 +461,65 @@ function BlockSheet({
             </Button>
           </div>
         </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ── On-chain block of an existing wallet block (A-11) ──────────────────────
+
+function ChainBlockSheet({ block, label, onClose }: { block: AccountBlock | null; label: string; onClose: () => void }) {
+  const health = useQuery({ queryKey: ["operator", "health"], queryFn: getPlatformHealth, enabled: block !== null, retry: 0 });
+  const chainId = health.data?.chainState?.[0]?.chainId ?? ROBINHOOD_TESTNET_STAKE.chainId;
+  const build = useMutation({
+    mutationFn: (input: AccountBlock) =>
+      createArbiterBlockIntent({
+        chainId,
+        account: evmAddressOf(input.subject)!,
+        reasonCode: input.reasonCode,
+        // The block's own reason and note (at least 20 characters, as every block has) go on the record.
+        note: input.note,
+        ...(input.ticketRef ? { ticketRef: input.ticketRef } : {}),
+      }),
+  });
+  const { mutate, reset } = build;
+  React.useEffect(() => {
+    if (block && !health.isLoading) mutate(block);
+    if (!block) reset();
+  }, [block, health.isLoading, mutate, reset]);
+
+  return (
+    <Sheet open={block !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <SheetContent showCloseButton>
+        <SheetHeader className="tablet:pt-5">
+          <SheetTitle className="pr-8">Also block {label} on chain?</SheetTitle>
+          <SheetDescription>
+            The contracts then refuse it as a party to payments, deposits, withdrawals and execution. The arbiter signs it; only the
+            admin can lift it.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
+          {build.isPending || build.isIdle ? (
+            <PageState kind="loading" rows={2} label="Preparing the on-chain block" bare />
+          ) : build.isError ? (
+            <PageState
+              kind="error"
+              title="The on-chain block could not be prepared"
+              description={arbiterErrorMessage(build.error, "block").replace(/\s*\([A-Z_]+\)$/, "")}
+              onRetry={() => block && mutate(block)}
+              code={build.error instanceof ApiError ? build.error.code : null}
+              bare
+            />
+          ) : build.data ? (
+            <ContractCallAction
+              call={build.data}
+              signLabel="Sign and send the on-chain block"
+              successTitle="Blocked on chain"
+              successDescription="The contracts refuse the wallet once this lands."
+              afterExport="Import the file in the Safe that holds the arbiter key and sign it there."
+            />
+          ) : null}
+        </div>
       </SheetContent>
     </Sheet>
   );
