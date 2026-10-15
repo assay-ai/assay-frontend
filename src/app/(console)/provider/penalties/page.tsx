@@ -20,7 +20,15 @@ import {
 } from "@/features/provider-penalties/model";
 import { DisputeSheet, PenaltyDrawer, PenaltyRowCard } from "@/features/provider-penalties/penalty-ui";
 import { PENALTY_DEPLOYMENT, caseKey, usePenalties } from "@/features/provider-penalties/use-penalties";
+import { trackSubmissions } from "@/features/provider-stake/pending-chain-tx";
+import { ProviderPendingTxList, useProviderPendingTransactions } from "@/features/provider-stake/pending-chain-tx-list";
 import { txLink } from "@/features/provider-stake/stake-steps";
+import {
+  WALLET_READING,
+  WALLET_READ_STALLED,
+  simulatedSteps,
+  useStalled,
+} from "@/features/provider-stake/wallet-readiness";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useConnectedAddresses, useSigner } from "@/hooks/useSigner";
 import { cn } from "@/utils";
@@ -87,24 +95,30 @@ export default function PenaltiesPage() {
     chainId: PENALTY_DEPLOYMENT.chainId,
     address: penalties.ownAddress ? connectedSpelling(connected, penalties.ownAddress) : undefined,
   });
-  const disputeBlocked = !penalties.ownAddress
+  const reading = signerState.status === "hydrating" || signerState.status === "chain-unknown";
+  const stalled = useStalled(reading);
+  // DEMO ONLY (build-time flag): the dispute is walked through without a wallet.
+  const simulated = penalties.demo;
+  const disputeBlocked = simulated
+    ? null
+    : !penalties.ownAddress
     ? "Disputes are recorded on chain against your stake, so they are sent from the wallet that holds it. Confirm that wallet on the Stake page first."
     : signerState.status === "ready"
       ? null
-      : signerState.status === "hydrating" || signerState.status === "chain-unknown"
-        ? "Reading the wallets connected in this browser…"
+      : reading
+        ? stalled
+          ? WALLET_READ_STALLED
+          : WALLET_READING
         : `Disputes are recorded on chain against your stake, so only the wallet that holds it can file one. Connect that wallet (${penalties.ownAddress.slice(0, 6)}…${penalties.ownAddress.slice(-4)}) in this browser.`;
 
   const { connectWallet } = useConnectWallet();
   const needsConnect =
-    Boolean(penalties.ownAddress) &&
-    signerState.status !== "ready" &&
-    signerState.status !== "hydrating" &&
-    signerState.status !== "chain-unknown";
+    !simulated && Boolean(penalties.ownAddress) && signerState.status !== "ready" && (!reading || stalled);
   const onConnect = needsConnect ? () => connectWallet({ walletChainType: "ethereum-and-solana" }) : undefined;
 
   const [disputing, setDisputing] = React.useState<PenaltyRow | null>(null);
-  const steps = disputing
+  const pending = useProviderPendingTransactions();
+  const realSteps = disputing
     ? [
         disputeStep({
           requestId: disputing.requestId,
@@ -115,6 +129,19 @@ export default function PenaltiesPage() {
         }),
       ]
     : [];
+  const disputingTool = disputing ? (penalties.caseFor(disputing)?.proposal.toolName ?? null) : null;
+  const steps = simulated
+    ? simulatedSteps(realSteps)
+    : trackSubmissions(
+        realSteps,
+        {
+          kind: "dispute",
+          chainId: PENALTY_DEPLOYMENT.chainId,
+          idPrefix: `dispute:${disputing?.requestId ?? ""}`,
+          label: () => (disputingTool ? `Dispute the ${disputingTool} penalty` : "Dispute a penalty"),
+        },
+        pending,
+      );
 
   const onDisputed = () => {
     void penalties.refetch();
@@ -142,6 +169,8 @@ export default function PenaltiesPage() {
           </Button>
         ) : null}
       </header>
+
+      <ProviderPendingTxList kinds={["dispute"]} />
 
       <div role="tablist" aria-label="Penalties" className="flex w-full gap-1 overflow-x-auto border-b border-01">
         {PENALTY_TABS.map((item) => (
@@ -242,8 +271,9 @@ export default function PenaltiesPage() {
 
       <DisputeSheet
         row={disputing}
-        toolName={disputing ? (penalties.caseFor(disputing)?.proposal.toolName ?? null) : null}
+        toolName={disputingTool}
         steps={steps}
+        simulated={simulated}
         onOpenChange={(open) => {
           if (!open) setDisputing(null);
         }}
