@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   checkSentences,
+  explorerHref,
+  hasFreeCalls,
+  readExplorerState,
   routingNotes,
   failRateLabel,
   failsOften,
@@ -167,5 +170,22 @@ describe("routingNotes across chains", () => {
       (id) => names[id] ?? id,
     );
     expect(notes).toEqual(["The price above is for Robinhood Chain testnet. Open-Meteo charges $0.25 a call on Solana devnet."]);
+  });
+});
+
+describe("Explorer list state in the URL", () => {
+  it("round-trips view, search and the free filter, leaving defaults out", () => {
+    expect(explorerHref({ view: "tools", q: "", free: false })).toBe("/catalogue");
+    const href = explorerHref({ view: "tools", q: "weather now", free: true });
+    expect(href).toBe("/catalogue?q=weather+now&free=1");
+    expect(readExplorerState(new URLSearchParams(href.split("?")[1]))).toEqual({ view: "tools", q: "weather now", free: true });
+    expect(explorerHref({ view: "providers", q: "", free: true })).toBe("/catalogue?view=providers");
+    expect(readExplorerState(new URLSearchParams(""))).toEqual({ view: "tools", q: "", free: false });
+  });
+
+  it("counts free and free-tier tools as having free calls", () => {
+    expect(hasFreeCalls("FREE")).toBe(true);
+    expect(hasFreeCalls("FREEMIUM")).toBe(true);
+    expect(hasFreeCalls("PAID")).toBe(false);
   });
 });
