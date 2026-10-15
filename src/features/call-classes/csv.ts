@@ -207,21 +207,32 @@ export function assetScopeNote(
 }
 
 /**
- * The note for the PENDING class, from why its rows are pending.
+ * The note for the PENDING class ("Still being checked"), from why its rows
+ * are pending.
  *
  * The export marks two different things PENDING: a call still being judged,
- * and a SETTLED call with no credit written for it (reason "settled, no credit
- * recorded"). Only the first is in flight.
+ * and a SETTLED call with no credit written for it yet (reason "settled, no
+ * credit recorded"). Both are still being checked — the second one's payment,
+ * not its response — so neither note may read as closed (BUG-R17 notes: the
+ * old "settled, no credit recorded · not paid to you" read as final).
  */
 export function pendingNote(rows: CallRow[]): string {
   const pending = rows.filter((row) => row.classification === "PENDING");
   const settled = pending.filter((row) => row.status === "SETTLED").length;
   const inFlight = pending.length - settled;
-  if (settled === 0) return "still in flight — no money has moved";
-  if (inFlight === 0) return "settled, no credit recorded · not paid to you";
+  if (settled === 0) return "the response is still being checked · no money has moved";
+  if (inFlight === 0) return PENDING_PAYMENT_NOTE;
   const count = (n: number) => n.toLocaleString("en-US");
-  return `${count(settled)} settled, no credit recorded · ${count(inFlight)} still in flight`;
+  return `${count(settled)} with the payment still being checked (no credit recorded yet) · ${count(inFlight)} with the response still being checked · not paid to you yet`;
 }
+
+/** PENDING rows that settled but have no credit recorded yet. */
+export const PENDING_PAYMENT_NOTE =
+  "the payment is still being checked: settled, no credit recorded for you yet · not paid to you yet";
+
+/** PENDING, when the rows are not at hand to say which kind it is. */
+export const PENDING_NOTE =
+  "not resolved yet: the response or its payment is still being checked · not paid to you yet";
 
 // ── Call classes ───────────────────────────────────────────────────────────
 

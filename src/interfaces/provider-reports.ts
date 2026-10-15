@@ -235,3 +235,44 @@ export interface ProviderCallsExport {
   /** Parsed out of `Content-Disposition`, when that header is readable. */
   filename: string | null;
 }
+
+// ── Reconciliation ─────────────────────────────────────────────────────────
+
+export interface ProviderReconciliationQuery extends ProviderReportWindow {
+  /** CAIP-19 asset id. Required by the API when the window spans two assets. */
+  asset?: string;
+}
+
+/** One class of `GET /providers/me/reconciliation`. Every class is sent, `calls: 0` included. */
+export interface ProviderReconciliationClassRow {
+  class: string;
+  calls: number;
+  /** 0..1 of every call in the window, from the whole ledger (never capped). */
+  share: number;
+  /** Σ provider_amount over the class's credited rows: net of the platform's take. */
+  credited: Money | null;
+  note: string;
+}
+
+/**
+ * `GET /providers/me/reconciliation` — the month's class breakdown and
+ * settlement, aggregated over the whole ledger (the per-call CSV is capped).
+ *
+ * `gross` is Σ price over the credited rows, `platformTake` Σ platform_fee over
+ * the same rows and `net` Σ provider_amount, so `gross − platformTake = net`
+ * and `net` is the sum of the classes' `credited`. `platformTakeRatePercent`
+ * is the configured rate from the provider terms, NOT derived from the figures.
+ */
+export interface ProviderReconciliation {
+  from: string;
+  to: string;
+  asset: string | null;
+  callCount: number;
+  classBreakdown: ProviderReconciliationClassRow[];
+  unexplained: { calls: number; reference: string | null };
+  gross: Money | null;
+  platformTakeRatePercent: number;
+  platformTake: Money | null;
+  net: Money | null;
+  batches: { count: number; paid: Money | null; reconciles: boolean };
+}

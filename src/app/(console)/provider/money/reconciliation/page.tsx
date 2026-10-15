@@ -27,9 +27,11 @@ import {
   assetScopeNote,
   foldClasses,
   observedTakeRate,
+  PENDING_NOTE,
   pendingNote,
   rowsInAsset,
 } from "@/features/call-classes/csv";
+import { fromExport, fromLedger, takeCopy } from "@/features/call-classes/reconciliation";
 import { ClassName } from "@/features/call-classes/class-name";
 import {
   downloadCallsCsv,
@@ -40,6 +42,7 @@ import type { Money } from "@/interfaces";
 import { useChains } from "@/hooks/useChains";
 import { ApiError } from "@/libs/ApiClient";
 import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
+import { getProviderReconciliation } from "@/services/provider-reports.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
@@ -48,15 +51,20 @@ import { toast } from "@/utils/toast";
  * Reconciliation — route
  * `/provider/money/reconciliation`. Console shell.
  *
- * ## There is no reconciliation endpoint
+ * ## Sources
  *
- * `reconciliation_runs` holds hundreds of rows and **no controller reads them**
- * — `GET /providers/me/reconciliation` and `/reconciliation-runs` both answer
- * 404, measured. Nothing receives a provider's uploaded access log either. So
- * the run concept the frame draws has no feed, and this screen is assembled
- * from the same two sources the provider view uses: the per-call CSV export and the payout
- * ledger. Where the frame states a figure that only a completed run could
- * produce, the unknown treatment is rendered rather than a derived stand-in.
+ * The class table and the Settlement block come from
+ * `GET /providers/me/reconciliation`, aggregated over every call in the month
+ * (BUG-R17 notes: shares folded from the per-call CSV covered only its first
+ * 50,000 rows). The CSV is still fetched: it is the download, and the PENDING
+ * note's split when the file is complete. Only when the endpoint cannot be
+ * read are the classes folded from the CSV, and the cap banner then says the
+ * shares cover the file only — see `fromExport`.
+ *
+ * Nothing receives a provider's uploaded access log, and no route serves a
+ * reconciliation run, so where the frame states a figure that only a completed
+ * run could produce, the unknown treatment is rendered rather than a derived
+ * stand-in.
  *
  * That is three of the four figures in the Join strip and the Settlement
  * "Reconciles" cell. Each is annotated at its call site.
@@ -115,7 +123,8 @@ const MONTH_SHORT = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: 
  *     count has no endpoint, and TEST has no producer at all today, so the
  *     count is dropped rather than invented.
  *   - PENDING is emitted by the wire and drawn by neither frame. Its note is
- *     OURS and depends on why the rows are pending: see `pendingNote`.
+ *     OURS and depends on why the rows are pending: see `pendingNote`. It
+ *     must agree with the class name, "Still being checked".
  */
 const CLASS_NOTE: Record<string, string> = {
   PAID_CREDITED: "settled to you",
@@ -199,29 +208,37 @@ export default function ReconciliationPage() {
     () => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)),
     [calls.rows, assetPending, displayAsset]
   );
-  const loading = calls.isLoading || assetPending;
+
+  const ledger = useQuery({
+    queryKey: ["provider", "reconciliation", period.from, period.to, displayAsset ?? null],
+    queryFn: () =>
+      getProviderReconciliation(displayAsset ? { ...period, asset: displayAsset } : period),
+    enabled: !assetPending,
+  });
+  /* The CSV fold only stands in when the endpoint cannot be read. */
+  const fallback = ledger.isError;
+  const loading = assetPending || (fallback ? calls.isLoading : ledger.isPending);
 
   const classes = useMemo(() => foldClasses(rows), [rows]);
   const { chains } = useChains();
   const scopeNote =
-    loading || !displayAsset || !calls.data
+    !fallback || loading || !displayAsset || !calls.data
       ? null
       : assetScopeNote(calls.rows.length, rows.length, displayAssetLabel(displayAsset, chains));
   /*
-    DELIBERATE DEPARTURE from the design's copy, and the same derivation the
-    provider view uses so the two screens cannot disagree.
-
-    The design hardcodes "Platform take (10%, verified)". The rate is
-    configurable and can differ by verification tier, so a fixed 10% can sit
-    directly above figures taken at a different rate on the one screen whose
-    whole subject is a provider checking our arithmetic against theirs.
-
-    "Platform take" and ", verified" are the frame's and stay. Only the rate is
-    derived — measured from `platform_fee / price_amount` on the settled rows in
-    this window — and it is labelled "observed" so it reads as measured rather
-    than declared.
+    DELIBERATE DEPARTURE from the design's copy. The design hardcodes
+    "Platform take (10%, verified)". The rate is configurable, and the fees on
+    the calls can come to a different rate than the terms state, so "verified"
+    is printed only when they agree — see `takeCopy`.
   */
   const observedTake = useMemo(() => observedTakeRate(rows), [rows]);
+  const summary = useMemo(
+    () =>
+      ledger.data ? fromLedger(ledger.data) : fallback ? fromExport(classes, observedTake) : null,
+    [ledger.data, fallback, classes, observedTake]
+  );
+  /* The CSV's own split is only true of the month when the file is whole. */
+  const exportComplete = calls.meta !== null && !calls.meta.truncated;
 
   const batchCount = new Set(
     (assetPending ? [] : payoutsInAsset(payouts.data?.items ?? [], displayAsset)).map(
@@ -229,18 +246,23 @@ export default function ReconciliationPage() {
     )
   ).size;
 
-  const gross = classes.totalGross;
-  const fee = classes.totalFee;
-  const net = classes.totalCredited;
+  const gross = summary?.gross ?? null;
+  const fee = summary?.take ?? null;
+  const net = summary?.net ?? null;
+  const totalCalls = summary?.totalCalls ?? 0;
 
-  const classRows: ClassRow[] = classes.buckets.map((bucket) => ({
+  const classRows: ClassRow[] = (summary?.rows ?? []).map((bucket) => ({
     id: bucket.className,
     className: bucket.className,
     calls: formatCount(bucket.calls),
     share: `${(bucket.share * 100).toFixed(1)}%`,
     credited: money(bucket.credited),
     note:
-      bucket.className === "PENDING" ? pendingNote(rows) : (CLASS_NOTE[bucket.className] ?? ""),
+      bucket.className === "PENDING"
+        ? fallback || exportComplete
+          ? pendingNote(rows)
+          : PENDING_NOTE
+        : (CLASS_NOTE[bucket.className] ?? ""),
   }));
 
   const classColumns: TableColumn<ClassRow>[] = [
@@ -255,7 +277,8 @@ export default function ReconciliationPage() {
     { key: "share", header: "Share", width: 110, align: "end", mono: true, cell: (r) => r.share },
     {
       key: "credited",
-      header: "Credited",
+      // Net of the platform's take: the column sums to Net below, not Gross.
+      header: "Credited (net)",
       width: 140,
       align: "end",
       mono: true,
@@ -272,23 +295,33 @@ export default function ReconciliationPage() {
     },
   ];
 
+  const take = summary
+    ? takeCopy(summary)
+    : { label: "Platform take", note: "fees taken on the credited calls" };
+
   const settlementRows: SettlementRow[] = [
-    { id: "gross", label: "Gross", amount: money(gross), note: "sum of credited classes" },
+    /*
+      Gross is the price of the credited calls, before the platform's take —
+      NOT the sum of the Credited column, which is net (BUG-R17-R-03). The
+      three rows add up: Gross − Platform take = Net = the Credited total.
+    */
+    {
+      id: "gross",
+      label: "Gross",
+      amount: money(gross),
+      note: "price of the credited calls, before the platform's take",
+    },
     {
       id: "take",
-      // See `observedTake` above. With nothing observable the parenthesis keeps
-      // only the frame's own word rather than printing a rate nobody paid.
-      label: observedTake.summary
-        ? `Platform take (${observedTake.summary}, verified)`
-        : "Platform take (verified)",
+      label: take.label,
       amount: fee ? `−${money(fee)}` : DASH,
-      note: "take rate, no per-call fee floor",
+      note: take.note,
     },
     {
       id: "net",
       label: "Net",
       amount: money(net),
-      note: `paid in ${formatCount(batchCount)} batch${batchCount === 1 ? "" : "es"}`,
+      note: `gross − take · the Credited column's total · paid in ${formatCount(batchCount)} batch${batchCount === 1 ? "" : "es"}`,
     },
   ];
 
@@ -319,7 +352,10 @@ export default function ReconciliationPage() {
     },
   ];
 
-  const error = [calls.error, payouts.error].find((e): e is ApiError => e instanceof ApiError);
+  // A failed reconciliation read is only an error when the CSV cannot stand in.
+  const error = [fallback ? calls.error : null, payouts.error].find(
+    (e): e is ApiError => e instanceof ApiError
+  );
 
   async function onExport() {
     setExporting(true);
@@ -380,18 +416,29 @@ export default function ReconciliationPage() {
         computed over a silently capped file is worse than no reconciliation.
         Both strings are OURS; the frame draws no slot for either.
       */}
-      {calls.data && calls.meta?.truncated ? (
+      {fallback && calls.data && calls.meta?.truncated ? (
         <Banner
           tone="warning"
           title="This reconciliation is computed over a capped export"
-          description={`The month matched ${formatCount(calls.meta.totalMatching)} calls in every asset and the file holds ${formatCount(calls.meta.rowCount)}. The classes below do not cover the whole month.`}
+          description={`The month's totals could not be read, so the classes are counted from the per-call file. The month matched ${formatCount(calls.meta.totalMatching)} calls in every asset and the file holds ${formatCount(calls.meta.rowCount)}: the calls, shares and amounts below cover only those ${formatCount(calls.meta.rowCount)}, not the whole month.`}
+        />
+      ) : null}
+      {!fallback && calls.data && calls.meta?.truncated ? (
+        <Banner
+          tone="primary"
+          title="The per-call CSV is capped"
+          description={`The month matched ${formatCount(calls.meta.totalMatching)} calls in every asset and the download holds the first ${formatCount(calls.meta.rowCount)}. The classes, shares and settlement below count every call.`}
         />
       ) : null}
       {calls.data && !calls.meta ? (
         <Banner
           tone="warning"
           title="Whether this export is complete is not visible"
-          description="The cap headers were not readable from the browser, so we cannot tell you whether the month matched more calls than the file holds."
+          description={
+            fallback
+              ? "The month's totals could not be read, so the classes are counted from the per-call file, and its cap headers were not readable: we cannot tell you whether the month matched more calls than the file holds."
+              : "The cap headers were not readable from the browser, so we cannot tell you whether the download holds every call. The figures below count every call."
+          }
         />
       ) : null}
 
@@ -408,7 +455,7 @@ export default function ReconciliationPage() {
         <JoinStat label="Your log" value={DASH} caption="no access log has been uploaded" />
         <JoinStat
           label="Our ledger"
-          value={loading ? DASH : `${formatCount(classes.totalCalls)} calls`}
+          value={loading ? DASH : `${formatCount(totalCalls)} calls`}
           caption={`${displayAsset ? `in ${displayAssetLabel(displayAsset, chains)} · ` : ""}as of ${stamp(period.to)}`}
         />
         {/*
@@ -435,16 +482,18 @@ export default function ReconciliationPage() {
         </PanelHeader>
         {/* The tables scroll inside their panels, as on the earnings screen. */}
         <PanelBody className="overflow-x-auto px-2.5 pb-2.5 pt-1.5">
-          {classes.totalCalls > 0 ? (
+          {loading ? (
+            <p className="px-3 py-6 font-mono text-mono-13 text-03">Loading…</p>
+          ) : totalCalls > 0 ? (
             <Table
               columns={classColumns}
               rows={classRows}
               total={{
                 label: "Total",
                 values: {
-                  calls: formatCount(classes.totalCalls),
+                  calls: formatCount(totalCalls),
                   share: "100%",
-                  credited: money(classes.totalCredited),
+                  credited: money(net),
                   /*
                     DELIBERATE DEPARTURE from the design's copy, and the twin
                     of the provider view's. **Do not "restore" it.**
