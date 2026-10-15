@@ -57,13 +57,27 @@ export function roleIntroSentence(roles: OperatorIdentity["roles"], waiting: num
   return `You are ${title}: you can approve ${listPhrase(caps.approves)}; ${waiting === 0 ? "nothing" : waiting} waiting.`;
 }
 
+/**
+ * The "you can …" line, from the same check every button reads
+ * (`capabilitiesFor` → `checkAction`, limit included): an action the role
+ * names but the $0 limit rules out is not listed.
+ */
+export function roleCanSentence(identity: Pick<OperatorIdentity, "roles" | "authorityLimit">): string {
+  const caps = capabilitiesFor(identity.roles, identity.authorityLimit);
+  if (caps.can.length === 0) {
+    return caps.approves.length > 0
+      ? "Apart from approving, you can read every screen; starting an action needs another role."
+      : "You can read every screen here; acting needs another role.";
+  }
+  return `${caps.approves.length > 0 ? "You can also" : "You can"} ${listPhrase(caps.can)}.`;
+}
+
 export function RoleIntro({ identity, waiting, onDismiss }: { identity: OperatorIdentity; waiting: number; onDismiss: () => void }) {
-  const caps = capabilitiesFor(identity.roles);
   const limit =
     identity.authorityLimit === null
       ? "no limit on the amounts you act on"
       : identity.authorityLimit.amount === "0"
-        ? "an authority limit of $0, so you cannot act on money"
+        ? "an authority limit of $0, so you cannot suspend or compensate a penalty"
         : `an authority limit of ${formatMoney(identity.authorityLimit)} per action`;
   return (
     <section aria-label="Your role" className="relative flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 p-4 pr-12 tablet:p-5 tablet:pr-14">
@@ -77,7 +91,7 @@ export function RoleIntro({ identity, waiting, onDismiss }: { identity: Operator
       </button>
       <p className="text-label-md text-01">{roleIntroSentence(identity.roles, waiting)}</p>
       <ul className="flex flex-col gap-1 text-body-13 text-02">
-        {caps.can.length > 0 ? <li>You can also {listPhrase(caps.can)}.</li> : <li>You can read every screen here; acting needs another role.</li>}
+        <li>{roleCanSentence(identity)}</li>
         <li>You have {limit}.</li>
         <li>Anything that needs two people waits on Home for someone who holds the right role, for 24 hours.</li>
       </ul>

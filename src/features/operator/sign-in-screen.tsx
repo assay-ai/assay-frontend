@@ -246,6 +246,8 @@ export function OperatorSignInScreen({
         </div>
       )}
 
+      <NoAccessYet addresses={wallets.map((wallet) => toChecksumAddress(wallet.address))} />
+
       <details className="w-full rounded-lg border border-01 bg-01 px-3.5 py-2.5">
         <summary className="cursor-pointer select-none text-label-13 text-02">What happens when I sign?</summary>
         <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-body-13 text-02">
@@ -287,8 +289,8 @@ export function OperatorSignInScreen({
   );
 }
 
-/** A wallet that signed but is not an operator: its address and a request to copy. */
-function NotAnOperator({ address }: { address: string }) {
+/** "Copy access request" for one address. */
+function CopyAccessRequest({ address }: { address: string }) {
   const [copied, setCopied] = React.useState(false);
   const copy = async () => {
     try {
@@ -300,13 +302,51 @@ function NotAnOperator({ address }: { address: string }) {
     }
   };
   return (
+    <Button type="button" size="sm" variant="secondary" className="self-start" icon={copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />} onClick={() => void copy()}>
+      {copied ? "Copied" : "Copy access request"}
+    </Button>
+  );
+}
+
+/**
+ * For someone whose wallet is not registered yet: who adds it, and a request
+ * they can send for any wallet already connected here — before trying to sign.
+ */
+function NoAccessYet({ addresses }: { addresses: readonly string[] }) {
+  const unique = [...new Set(addresses)];
+  return (
+    <details className="w-full rounded-lg border border-01 bg-01 px-3.5 py-2.5">
+      <summary className="cursor-pointer select-none text-label-13 text-02">No access yet? Ask your admin</summary>
+      <div className="mt-2 flex flex-col gap-2 text-body-13 text-02">
+        <p>
+          An admin adds your wallet on the console&rsquo;s Team page and a second admin approves it. Send them your wallet address; you
+          can sign in as soon as it is approved.
+        </p>
+        {unique.length === 0 ? (
+          <p className="text-03">Connect your wallet above (signing is not needed) to copy a ready-made request here.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {unique.map((address) => (
+              <li key={address} className="flex flex-wrap items-center gap-2">
+                <CopyChip value={address} label="wallet address" />
+                <CopyAccessRequest address={address} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </details>
+  );
+}
+
+/** A wallet that signed but is not an operator: its address and a request to copy. */
+function NotAnOperator({ address }: { address: string }) {
+  return (
     <div role="alert" className="flex w-full flex-col gap-2 rounded-lg border border-danger-20 bg-danger-10 p-3.5">
       <p className="text-label-13 text-01">This wallet is not an Assay operator</p>
       <p className="text-body-13 text-02">It signed correctly but is not on the team. Send this to an admin, then sign in again once they have added you.</p>
       <CopyChip value={address} label="wallet address" className="self-start" />
-      <Button type="button" size="sm" variant="secondary" className="self-start" icon={copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />} onClick={() => void copy()}>
-        {copied ? "Copied" : "Copy access request"}
-      </Button>
+      <CopyAccessRequest address={address} />
     </div>
   );
 }
