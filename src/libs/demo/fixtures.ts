@@ -1,4 +1,5 @@
 import { BUYER_FIXTURES } from "./fixtures-buyer";
+import { freshAtLeast, freshStage } from "./fresh-account";
 import { EXPLORE_FIXTURES } from "./fixtures-explore";
 import { OPERATOR_FIXTURES } from "./fixtures-operator";
 import { PROVIDER_FIXTURES, providerNotifications } from "./fixtures-provider";
@@ -93,22 +94,28 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/balances",
     override: "always",
-    body: () => ({
-      balances: [
-        {
-          chainId: DEMO_CHAIN_ID,
-          accountId: DEMO_BUYER_ACCOUNT,
-          asset: DEMO_ASSET,
-          decimals: 6,
-          available: money("482.15"),
-          held: money("17.85"),
-          total: money("500.00"),
-          chainBalance: money("500.00"),
-          spendable: money("482.15"),
-          withdrawable: money("482.15"),
-          chainReadable: true,
-        },
-      ],
-    }),
+    body: () => {
+      // A fresh demo account (?fresh=) has nothing until its first deposit
+      // (stage "bind" opens a $20 escrow), matching the escrow fixture.
+      const stage = freshStage();
+      const fresh = stage ? (freshAtLeast(stage, "bind") ? "20.00" : "0") : null;
+      return {
+        balances: [
+          {
+            chainId: DEMO_CHAIN_ID,
+            accountId: DEMO_BUYER_ACCOUNT,
+            asset: DEMO_ASSET,
+            decimals: 6,
+            available: money(fresh ?? "482.15"),
+            held: money(fresh ? "0" : "17.85"),
+            total: money(fresh ?? "500.00"),
+            chainBalance: money(fresh ?? "500.00"),
+            spendable: money(fresh ?? "482.15"),
+            withdrawable: money(fresh ?? "482.15"),
+            chainReadable: true,
+          },
+        ],
+      };
+    },
   },
 ];

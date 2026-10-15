@@ -36,6 +36,7 @@ import {
   type AlertPreset,
   type ExternalChannel,
 } from "@/features/buyer/alert-presets";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { plainError } from "@/libs/plain-language";
 import { ApiError } from "@/libs/ApiClient";
 import { listNotifications } from "@/services/account.service";
@@ -142,6 +143,13 @@ export function AlertsView() {
   const queryClient = useQueryClient();
   const available = React.useMemo(() => availableChannels(), []);
   const [logOpen, setLogOpen] = React.useState(false);
+  // `/alerts?view=recent` (the bell's "See all alerts") opens the list at once.
+  const view = useSearchParam("view");
+  const [seenView, setSeenView] = React.useState("");
+  if (view !== seenView) {
+    setSeenView(view);
+    if (view === "recent") setLogOpen(true);
+  }
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [configuringChannel, setConfiguringChannel] = React.useState<ExternalChannel | null>(null);
   const [draftDestination, setDraftDestination] = React.useState("");

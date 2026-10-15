@@ -119,7 +119,7 @@ function ProviderStake({ stake }: { stake: ChainStake[] }) {
  * which a test over the presenter alone would have missed the shape of — it
  * has to be the component, and the assertion has to be the DOM.
  */
-export function ProviderCard({ provider }: { provider: ProviderRow }) {
+export function ProviderCard({ provider, callsWindow }: { provider: ProviderRow; callsWindow?: string }) {
   return (
     <Link
       href={routes.exploreProvider(provider.providerId)}
@@ -147,7 +147,7 @@ export function ProviderCard({ provider }: { provider: ProviderRow }) {
       <p className="text-body-13 text-02">
         {provider.toolIds.length} {provider.toolIds.length === 1 ? "tool" : "tools"} served
         {provider.yourCalls > 0
-          ? ` · you have called them ${provider.yourCalls} ${provider.yourCalls === 1 ? "time" : "times"}`
+          ? ` · you have called them ${provider.yourCalls} ${provider.yourCalls === 1 ? "time" : "times"}${callsWindow ? ` ${callsWindow}` : ""}`
           : ""}
         .
       </p>
@@ -179,7 +179,7 @@ export function ProviderCard({ provider }: { provider: ProviderRow }) {
 }
 
 export function ProvidersView() {
-  const { providers, tools, isPending, isError, error } = useCatalogue();
+  const { providers, tools, isPending, isError, error, callsWindow } = useCatalogue();
   const [query, setQuery] = React.useState("");
   const [verifiedOnly, setVerifiedOnly] = React.useState(false);
   const [sort, setSort] = React.useState<SortKey>("quality");
@@ -308,7 +308,7 @@ export function ProvidersView() {
           ) : (
             <div className="grid w-full grid-cols-1 gap-3 tablet:grid-cols-2 desktop:grid-cols-3">
               {visible.map((provider) => (
-                <ProviderCard key={provider.providerId} provider={provider} />
+                <ProviderCard key={provider.providerId} provider={provider} callsWindow={callsWindow} />
               ))}
             </div>
           )}

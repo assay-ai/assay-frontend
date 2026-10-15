@@ -101,6 +101,9 @@ export function PresetChips({
   };
   const [customMode, setCustomMode] = React.useState(() => value !== "" && !isPreset);
   const custom = allowCustom && (customMode || (value !== "" && !isPreset));
+  const isSelected = (option: PresetOption) =>
+    !custom && (option.value === value || (isPreset && Number(option.value) === Number(value)));
+  const anySelected = custom || options.some(isSelected);
 
   const chip = (selected: boolean) =>
     cn(
@@ -112,14 +115,19 @@ export function PresetChips({
   return (
     <div className={cn("flex w-full flex-col gap-2", className)}>
       <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
-        {options.map((option) => {
-          const selected = !custom && (option.value === value || (isPreset && Number(option.value) === Number(value)));
+        {options.map((option, index) => {
+          const selected = isSelected(option);
+          // Roving tab stop, as in any radio group: only the selected chip (or
+          // the first, when none is) takes focus, so a drawer's auto-focus never
+          // rings a chip that is not the chosen one.
+          const tabStop = anySelected ? selected : index === 0;
           return (
             <button
               key={option.value}
               type="button"
               role="radio"
               aria-checked={selected}
+              tabIndex={tabStop ? 0 : -1}
               disabled={disabled}
               onClick={() => {
                 setCustomMode(false);
@@ -139,6 +147,7 @@ export function PresetChips({
             type="button"
             role="radio"
             aria-checked={custom}
+            tabIndex={custom ? 0 : -1}
             disabled={disabled}
             onClick={() => {
               setCustomMode(true);

@@ -14,7 +14,9 @@ import {
   failRateLabel,
   failsOften,
   heldPriceSentence,
+  notTakingPaidCalls,
   priceRange,
+  routingNotes,
   formatCallPrice,
   freeTierLabel,
   priceSentence,
@@ -164,9 +166,7 @@ function ToolPage() {
               const listing = listingOf(provider.providerId);
               // Priced above the hold: the router's quote is the dearest provider
               // that can take a call now, so this one is not being routed to.
-              const notRouted = Boolean(
-                listing && tool.price && listing.price.asset === tool.price.asset && BigInt(listing.price.amount) > BigInt(tool.price.amount),
-              );
+              const notRouted = notTakingPaidCalls(tool.price, listing?.price);
               return (
                 <li key={provider.providerId}>
                   <Link
@@ -196,6 +196,16 @@ function ToolPage() {
             })}
           </ul>
         )}
+        {serving.length > 0
+          ? routingNotes(
+              tool.price,
+              serving.map((p) => ({ name: p.name, price: listingOf(p.providerId)?.price, quality: p.quality })),
+            ).map((note) => (
+              <p key={note} className="text-body-13 text-02" data-testid="routing-note">
+                {note}
+              </p>
+            ))
+          : null}
         <p className="text-body-xs text-03">
           A provider who fails more often than they promised loses part of their <Term k="stake">stake</Term>, and part
           of it goes to the buyers they served badly.
