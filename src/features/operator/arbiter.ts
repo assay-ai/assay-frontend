@@ -18,6 +18,8 @@ import type {
   ArbiterDispute,
   ArbiterRuling,
   ArbiterRulingBody,
+  ArbiterSupersededCancelBody,
+  ArbiterSupersededRecord,
   OperatorRole,
 } from "@/interfaces/operator";
 import { refusedFunctionOf } from "@/features/chain-calls/refusals";
@@ -243,6 +245,49 @@ export function validateRulingForm(
   };
 }
 
+/** The superseded-record cancel form: the ruling form without a ruling or a selection. */
+export interface SupersededCancelFormInput {
+  reasonCode: string;
+  note: string;
+  ticketRef: string;
+}
+
+/** The reason code the superseded-record cancel suggests. */
+export const SUPERSEDED_REASON_SUGGESTIONS: readonly string[] = Object.freeze([
+  "SUPERSEDED_EPOCH",
+  "DOUBLE_CHARGE_RISK",
+]);
+
+/**
+ * Review R2-6: the guarded cancel of ONE superseded record. The body names
+ * exactly the row's id and chain; the backend refuses (409) any id that is
+ * not a superseded record standing on that chain.
+ */
+export function validateSupersededCancelForm(
+  input: SupersededCancelFormInput,
+  record: Pick<ArbiterSupersededRecord, "requestId" | "chainId">,
+): ArbiterValidated<ArbiterSupersededCancelBody, keyof SupersededCancelFormInput> {
+  const reasonCode = input.reasonCode.trim();
+  const note = input.note.trim();
+  const ticketRef = input.ticketRef.trim();
+  const errors = compact<keyof SupersededCancelFormInput>({
+    reasonCode: reasonCodeError(reasonCode),
+    note: noteError(note),
+    ticketRef: ticketError(ticketRef),
+  });
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  return {
+    ok: true,
+    body: {
+      chainId: record.chainId,
+      requestId: record.requestId.toLowerCase(),
+      reasonCode,
+      note,
+      ...(ticketRef ? { ticketRef } : {}),
+    },
+  };
+}
+
 export function validateChainBlockForm(
   input: ChainBlockFormInput,
   chainId: string,
@@ -292,6 +337,7 @@ const MESSAGES: Readonly<Record<string, string | ((action: ArbiterAction, e: Api
         ? "No arbiter is appointed on this chain, so the cancellation cannot be built: Assay builds cancelSlash for the arbiter only. The admin appoints one with setArbiter; build it again then."
         : "No arbiter is appointed on this chain, so nobody can rule on a dispute. The admin appoints one with setArbiter.",
   CHAIN_ADDRESS_ALREADY_BLOCKED: "This address is already blocked on chain. Nothing to do.",
+  OPERATOR_APPROVAL_NOT_APPROVED: "This is not an approved on-chain block, so there is no call to sign.",
   CHAIN_PROGRAM_PAUSED: (_a, e) => `Contracts paused — try after unpause. ${e.message}.`,
   CHAIN_ADDRESS_BLOCKED: (_a, e) => `Blocked on chain. ${e.message}.`,
   SLASH_CHAIN_BATCH_REFUSED: (_a, e) =>
@@ -326,4 +372,56 @@ export function arbiterErrorMessage(error: unknown, action: ArbiterAction): stri
   if (entry === undefined) return describeChainRefusal(error);
   const sentence = typeof entry === "function" ? entry(action, error) : entry;
   return `${sentence} (${error.code})`;
+}
+
+/** An approved `A-11` whose unsigned block the arbiter may still have to sign (frontend review N5). */
+/**
+ * Review R2-7: the approvals query behind the approved-blocks panel. The
+ * backend filters by action, so a block is never hidden behind fifty newer
+ * approvals of other actions; the backend also refuses (409) a block approved
+ * longer ago than the approvals' expiry, or one already carried out and lifted.
+ */
+export const APPROVED_BLOCKS_QUERY = {
+  status: "APPROVED",
+  action: "arbiter.block",
+  limit: 50,
+} as const;
+
+export interface ApprovedArbiterBlock {
+  readonly approvalId: string;
+  readonly chainId: string;
+  readonly account: string;
+  readonly approvedBy: string | null;
+  readonly decidedAt: string | null;
+}
+
+/**
+ * The APPROVED `arbiter.block` approvals, newest first as listed, with the
+ * address and chain read off the approved payload: the arbiter page offers
+ * each one's call again, after the approver's tab is gone.
+ */
+export function approvedArbiterBlocks(
+  approvals: readonly {
+    id: string;
+    action: string;
+    status: string;
+    payload: Record<string, unknown>;
+    approvedBy: string | null;
+    decidedAt: string | null;
+  }[],
+): ApprovedArbiterBlock[] {
+  return approvals.flatMap((approval) => {
+    const { chainId, account } = approval.payload;
+    if (approval.action !== "arbiter.block" || approval.status !== "APPROVED") return [];
+    if (typeof chainId !== "string" || typeof account !== "string") return [];
+    return [
+      {
+        approvalId: approval.id,
+        chainId,
+        account,
+        approvedBy: approval.approvedBy,
+        decidedAt: approval.decidedAt,
+      },
+    ];
+  });
 }

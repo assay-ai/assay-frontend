@@ -7,7 +7,7 @@ import type { Money } from "@/interfaces";
  * built around.
  *
  * `GET /providers/me/calls/export` is the only provider endpoint that emits a
- * row per call, and `X-X402-Call-Id` is its first column — which is the whole
+ * row per call, and `X-Assay-Call-Id` is its first column — which is the whole
  * reason both screens exist. A provider counts N requests in their access log,
  * we count M, and the join key that explains the difference is in this file.
  *
@@ -170,6 +170,25 @@ function sum(
  */
 export function rowsInAsset(rows: CallRow[], asset: string | undefined): CallRow[] {
   return asset ? rows.filter((row) => row.asset === asset) : rows;
+}
+
+/**
+ * Why the class table counts fewer calls than the file holds, or null.
+ *
+ * The screens count one asset at a time (the asset selector), while the
+ * export — and its cap headers — cover every asset. With traffic in two
+ * assets the table read "4 calls" beside a 50,000-row file whose classes,
+ * PENDING included, were nearly all in the other asset (BUG-R16-V3-03).
+ */
+export function assetScopeNote(
+  fileRows: number,
+  shownRows: number,
+  assetLabel: string,
+): string | null {
+  if (shownRows === fileRows) return null;
+  const count = (n: number) => n.toLocaleString("en-US");
+  const rest = fileRows - shownRows;
+  return `The classes below count the ${count(shownRows)} ${shownRows === 1 ? "call" : "calls"} in ${assetLabel}. The file holds ${count(fileRows)} calls in every asset; the other ${count(rest)} ${rest === 1 ? "is" : "are"} in another asset — pick it above to see ${rest === 1 ? "it" : "them"}.`;
 }
 
 /**

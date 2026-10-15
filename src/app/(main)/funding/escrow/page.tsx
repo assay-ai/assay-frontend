@@ -385,7 +385,14 @@ function EscrowPageContent() {
     setRefusal(null);
     setBroadcasting(true);
     try {
-      const result = await runEscrowAction(intent, signerState.signer);
+      // Signed only if the payload is the action and amount this form built.
+      const result = await runEscrowAction(
+        intent,
+        signerState.signer,
+        purpose === "CLAIM"
+          ? { kind: "WITHDRAW" }
+          : { kind: "REQUEST_WITHDRAW", amount: build.variables?.atomic ?? "0" },
+      );
       if (result.kind === "relayed") {
         setRelayed(result.relayed);
       } else {

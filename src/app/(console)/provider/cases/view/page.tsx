@@ -24,7 +24,16 @@ import {
   WhatHappensNext,
   WhatIsNotHappening,
 } from "@/features/provider-slash-case/assurances";
-import { caseStageOf, mayAcknowledge } from "@/features/provider-slash-case/chain-stage";
+import { useNowSeconds } from "@/features/chain-slashes/use-chain-slashes";
+import {
+  caseStageOf,
+  disputeDeadlineOf,
+  disputesOnChain,
+  mayAcknowledge,
+  mayDisputeOnChain,
+  onChainDisputeHref,
+  onChainDisputeSentence,
+} from "@/features/provider-slash-case/chain-stage";
 import { CaseContext } from "@/features/provider-slash-case/context";
 import { eventLabel, eventSummary } from "@/features/provider-slash-case/labels";
 import { Measurement } from "@/features/provider-slash-case/measurement";
@@ -68,10 +77,13 @@ import { routes } from "@/libs/routes";
  * - `POST …/acknowledge` — records that the provider has seen the case. It
  *   moves **no clock**, and the button says so, because a control that looks
  *   like it might buy time and does not is worse than no control.
- * - `POST …/dispute` — through `DisputeFilingForm`, which another agent owns
- *   at `@/features/provider-disputes/dispute-filing-form` and whose own
- *   docstring says it is exported separately so this screen can mount it
- *   inline. It is not rebuilt here.
+ * - **Dispute** — on EVM (every case the console stakes today) the dispute is
+ *   the on-chain `disputeSlash`, sent from the provider's own stake wallet:
+ *   the button opens the penalties on chain page with this case's records
+ *   selected, and that page builds, checks and sends the transaction. There
+ *   is no in-app objection, extension or platform deadline for such a case;
+ *   Assay's arbiter rules on chain. A Solana case (`disputeOnChain: false`)
+ *   keeps `POST …/dispute` through `DisputeFilingForm`, mounted inline.
  *
  * Both writes answer with the whole case, which is seeded straight into the
  * cache with `setQueryData`. A refetch would be wrong rather than merely
@@ -116,6 +128,7 @@ export default function SlashProposalCasePage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [filing, setFiling] = React.useState(false);
+  const nowSeconds = useNowSeconds();
 
   const caseQuery = useQuery({
     queryKey: CASE_KEY(proposalId),
@@ -174,9 +187,11 @@ export default function SlashProposalCasePage() {
     waived) has no deadline, no execution ahead and no action left.
   */
   const stage = caseStageOf(proposal);
+  const onChain = disputesOnChain(proposal.clocks);
   /* Disputed on chain or upheld after it: a record is disputed at most once. */
-  const canDispute =
-    DISPUTABLE.includes(proposal.status) && proposal.disputeId === null && stage.kind === "open";
+  const canDispute = onChain
+    ? mayDisputeOnChain(proposal, stage, nowSeconds * 1000)
+    : DISPUTABLE.includes(proposal.status) && proposal.disputeId === null && stage.kind === "open";
 
   return (
     <>
@@ -229,6 +244,12 @@ export default function SlashProposalCasePage() {
             : null}
         </p>
       )}
+
+      {canDispute && onChain ? (
+        <p className="text-body-13 font-semibold leading-[1.55] text-01">
+          {onChainDisputeSentence(disputeDeadlineOf(proposal.clocks), stampUtc)}
+        </p>
+      ) : null}
 
       {/* The independent check: the same penalty, read from the chain and not from us. */}
       <p className="text-body-13 text-02">
@@ -288,7 +309,14 @@ export default function SlashProposalCasePage() {
           </Button>
         ) : null}
 
-        {canDispute ? (
+        {canDispute && onChain ? (
+          <Button asChild>
+            <Link href={onChainDisputeHref(proposal.id)}>
+              <Scale aria-hidden="true" />
+              Dispute on chain
+            </Link>
+          </Button>
+        ) : canDispute ? (
           <Button
             variant={filing ? "secondary" : "primary"}
             icon={filing ? <X aria-hidden="true" /> : <Scale aria-hidden="true" />}
@@ -315,7 +343,7 @@ export default function SlashProposalCasePage() {
       ) : null}
 
       {/* ── Dispute filing, mounted inline ───────────────────────────── */}
-      {filing ? (
+      {filing && !onChain ? (
         <DisputeFilingForm
           proposalId={proposalId}
           onCancel={() => setFiling(false)}
@@ -358,7 +386,7 @@ export default function SlashProposalCasePage() {
                   </span>
                   {/* The event in words; the API's own code stays under it, small. */}
                   <span className="flex w-[190px] shrink-0 flex-col">
-                    <span className="text-label-13 text-01">{eventLabel(event.kind)}</span>
+                    <span className="text-label-13 text-01">{eventLabel(event.kind, event.detail)}</span>
                     <span className="font-mono text-mono-2xs text-03">{event.kind}</span>
                   </span>
                   {/* The stored sentence, with its amounts as money and its ids as names. */}

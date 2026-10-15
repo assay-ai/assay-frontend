@@ -31,6 +31,21 @@ describe("samplingExplainerCopy", () => {
     expect(copy.body).toMatch(/Instead we sample/);
     expect(copy.tail).toBe("");
   });
+
+  // BUG-R16-B1-02: "does not apply to this tool" sat right above "runs on every call".
+  it("says one thing when the tool declares no relevance judgement", () => {
+    const copy = samplingExplainerCopy(
+      {
+        ...receipt({ rate: 1, display: "every call" }),
+        stages: [{ stage: "SEMANTIC", status: "NOT_APPLICABLE" }],
+      } as unknown as Receipt,
+      "$0.2500",
+    );
+    expect(copy.body).toMatch(/does not declare a relevance judgement/);
+    expect(copy.body).not.toMatch(/runs on every call|Instead we sample/);
+    expect(copy.rate).toBe("");
+    expect(copy.tail).toBe("");
+  });
 });
 
 describe("deriveReceiptState — expired intents", () => {

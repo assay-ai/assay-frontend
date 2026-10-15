@@ -5,6 +5,7 @@ import { sameEvmAddress, waitForContractCall } from "@/libs/chains/evm/contract-
 import { contractErrorNameOf } from "@/libs/chains/evm/contract-error-selectors";
 import { contractErrorText } from "@/libs/chains/evm/contract-errors";
 import { fillTransaction } from "@/libs/chains/evm/deposit-transaction";
+import { assertContractCall, type ExpectedCall } from "@/libs/chains/evm/signing-guard";
 
 /**
  * Sending one of the dispute upgrade's unsigned calls from the one wallet the
@@ -18,8 +19,11 @@ import { fillTransaction } from "@/libs/chains/evm/deposit-transaction";
  * wallet from the page, an injected one through its own RPC.
  *
  * It refuses, before the wallet is asked anything, a call from another
- * account than `signer`, a call carrying value, and (inside `signAndSend`) a
- * call for another chain than the one the signer is bound to. A gas estimate
+ * account than `signer`, a call carrying value, a call that does not decode to
+ * exactly `expected` on the pinned contract (frontend review 2026-10-15, F1:
+ * `functionName` and `requestIds` are the server's labels, `data` is what is
+ * signed), and (inside `signAndSend`) a call for another chain than the one
+ * the signer is bound to. A gas estimate
  * that reverts with a contract error this app knows (`contract-errors.ts`) is
  * refused in plain words, with the error's name.
  */
@@ -69,6 +73,7 @@ const DEFAULT_DEPS: SendContractCallDeps = { fill: fillTransaction, wait: waitFo
 export async function sendSlashContractCall(
   call: SlashContractCall,
   signer: Signer,
+  expected: ExpectedCall,
   deps: SendContractCallDeps = DEFAULT_DEPS,
 ): Promise<`0x${string}`> {
   if (!signerMatches(signer.address, call)) {
@@ -82,6 +87,7 @@ export async function sendSlashContractCall(
   if (!/^0x[0-9a-fA-F]*$/.test(call.data)) {
     throw new Error(`The ${call.functionName} calldata is not hex. Nothing was sent.`);
   }
+  assertContractCall(call, expected);
   let tx: Eip155UnsignedTransaction;
   try {
     tx = await deps.fill({

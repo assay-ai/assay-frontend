@@ -18,7 +18,7 @@ import { formatMoney, differs, notCharged } from "@/utils/money";
 
 import { MicroLabel, PageHeader } from "./chrome";
 import { ExploreNav } from "./explore-nav";
-import { formatPrice } from "./format";
+import { formatPrice, formatQuote } from "./format";
 import { settlementReach } from "./settlement-reach";
 import { useCatalogue, type ToolRow } from "./use-catalogue";
 import { shortToolId } from "./use-tool-names";
@@ -157,7 +157,7 @@ export function ToolsView() {
 
       <PageHeader
         title="Tools"
-        subtitle={`${tools.length} tools · every tool on the platform, priced by the router · the allowlist is written on Limits`}
+        subtitle={`${tools.length} tools · every tool a provider serves right now, priced by the router · the allowlist is written on Limits`}
         actions={
           <Search
             wrapperClassName="w-full tablet:w-[260px]"
@@ -172,10 +172,12 @@ export function ToolsView() {
       <div className="flex w-full items-start gap-2.5 rounded-lg border border-01 bg-01 px-4 py-3">
         <Building2 aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-03" />
         <p className="text-body-13 text-02">
-          Every tool is served by providers who have staked against it. <b>From</b> is the market
-          floor; <b>Quote</b> is what a call is actually held for, because the router reserves
-          against the dearest provider it might fail over to. The last two columns are your own
-          spend, and are empty until you call the tool.
+          Every tool here is served by providers who have staked against it. <b>From</b> is the
+          cheapest listed provider. <b>Quote</b> is what a call is held for: the dearest provider
+          the router can use right now, so it reads &ldquo;up to&rdquo; when more than one could
+          serve. You are charged the price of the provider that serves the call and the rest of
+          the hold comes back. A listed provider the router cannot use right now is not in the
+          quote. The last two columns are your own spend, and are empty until you call the tool.
         </p>
       </div>
 
@@ -246,7 +248,7 @@ export function ToolsView() {
                       {formatPrice(tool.fromPrice)}
                     </div>
                     <div className="w-[100px] text-right font-mono text-mono-12 text-01">
-                      {formatPrice(tool.price)}
+                      {formatQuote(tool.price, tool.routableBindings, tool.pricingMode)}
                     </div>
                     <div className="w-[110px] text-right font-mono text-mono-12 text-01">
                       {formatMoney(tool.charged, { decimals: 4 })}
@@ -303,7 +305,8 @@ export function ToolsView() {
                 </div>
                 <div className="flex w-full items-center justify-between gap-2.5 border-t border-01 pt-2.5">
                   <span className="font-mono text-mono-xs text-03">
-                    from {formatPrice(tool.fromPrice)} · quoted {formatPrice(tool.price)}
+                    from {formatPrice(tool.fromPrice)} · quote{" "}
+                    {formatQuote(tool.price, tool.routableBindings, tool.pricingMode)}
                     {tool.listed && tool.charged && differs(tool.listed, tool.charged)
                       ? " · some calls were not charged"
                       : ""}
@@ -321,8 +324,9 @@ export function ToolsView() {
         <p className="flex-1 text-body-13 text-primary-700">
           The allowlist is enforced by the gateway, on the way into a paid call — a tool outside it is refused before any money moves. It is our software doing the
           refusing, not a signer, so treat it as a control and not as a guarantee. The list itself
-          lives on the spend policy and is edited on Limits; this screen shows every tool the
-          platform can serve, whether or not you have called it.
+          lives on the spend policy and is edited on Limits; this screen shows every tool a
+          provider serves right now, whether or not you have called it. A tool no provider serves
+          yet is not listed.
         </p>
         <Button variant="secondary" size="sm" asChild>
           <Link href="/limits">Open Limits</Link>

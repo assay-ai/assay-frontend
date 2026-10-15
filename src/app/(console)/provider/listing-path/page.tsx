@@ -148,7 +148,8 @@ export default function ListingPathChooserPage() {
 
           <p className="w-full text-body-13 text-02">
             Serve real traffic for free, build a published quality record, and stake only
-            when you decide to charge.
+            when you decide to charge. A FREE binding only receives free calls; paid calls go
+            to providers with a staked paid binding.
           </p>
 
           <ul className="flex w-full flex-col gap-2">

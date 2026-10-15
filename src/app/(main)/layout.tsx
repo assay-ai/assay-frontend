@@ -126,14 +126,18 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
         />
       </div>
 
-      {/* pb-24 keeps the last row clear of the fixed tab bar at mobile widths. */}
-      <main className="flex w-full flex-1 flex-col pb-24 md:pb-0">
+      {/*
+        The padding keeps the last row clear of the fixed tab bar at mobile widths:
+        the bar's own height plus the home-indicator inset it pads itself by.
+      */}
+      <main className="flex w-full flex-1 flex-col pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0">
         {/* Shell level, above every buyer screen: see `features/account-block`. */}
         <AccountBlockBanner wrapperClassName="w-full px-4 pt-4 md:px-6" />
         {children}
       </main>
 
-      <div className="md:hidden">
+      {/* Pinned to the viewport, so the five tabs stay in reach while the page scrolls. */}
+      <div className="fixed inset-x-0 bottom-0 z-40 bg-01 pb-[env(safe-area-inset-bottom)] md:hidden">
         <BottomTabBar
           linkAs={Link}
           active={tabFor(pathname)}

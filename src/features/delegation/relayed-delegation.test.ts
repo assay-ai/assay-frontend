@@ -23,7 +23,7 @@ function authorizeIntent(
       chainId: "eip155:46630",
       kind: "typed-data",
       domain: {
-        name: "x402 Settlement",
+        name: "Assay Settlement",
         version: "2",
         chainId: "46630",
         verifyingContract: "0x1D2625efD87c2fc10b8563f3F0890072845Fcf41",
@@ -127,7 +127,7 @@ describe("submitRelayedDelegation", () => {
     [
       "another escrow",
       {
-        name: "x402 Settlement",
+        name: "Assay Settlement",
         version: "2",
         chainId: "46630",
         verifyingContract: "0x9999999999999999999999999999999999999999",
@@ -136,7 +136,7 @@ describe("submitRelayedDelegation", () => {
     [
       "another chain",
       {
-        name: "x402 Settlement",
+        name: "Assay Settlement",
         version: "2",
         chainId: "4663",
         verifyingContract: ESCROW,
@@ -145,7 +145,7 @@ describe("submitRelayedDelegation", () => {
     [
       "another domain name",
       {
-        name: "x402 Settlement2",
+        name: "Assay Settlement2",
         version: "2",
         chainId: "46630",
         verifyingContract: ESCROW,
@@ -154,7 +154,7 @@ describe("submitRelayedDelegation", () => {
     [
       "another version",
       {
-        name: "x402 Settlement",
+        name: "Assay Settlement",
         version: "3",
         chainId: "46630",
         verifyingContract: ESCROW,
@@ -171,7 +171,7 @@ describe("submitRelayedDelegation", () => {
       const signer = signerSpy();
       await expect(
         submitRelayedDelegation(tampered, signer, EXPECTED, vi.fn()),
-      ).rejects.toThrow(/not for this escrow/);
+      ).rejects.toThrow(/not for this (escrow|app.s escrow contract)/);
       expect(signer.signTypedData).not.toHaveBeenCalled();
     },
   );

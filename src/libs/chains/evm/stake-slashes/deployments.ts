@@ -21,6 +21,13 @@
  * CREATE2 landed in block `0x7e49e9f` = 132,423,327). The RPC and explorer are
  * the ones `providers/index.tsx` already writes out for the same chain.
  *
+ * ## Also the trust anchor for every signature and call
+ *
+ * The same record pins the escrow, config and settlement token, so every
+ * EIP-712 request and contract call the app signs is checked against these
+ * values and never against anything the API served (`libs/chains/evm/signing-guard.ts`).
+ * A chain with no entry here is a chain the app refuses to sign for.
+ *
  * The stake asset's scale is NOT pinned: it is read from the contract
  * (`ASSET()` then the token's `decimals()`). `fallbackAssetDecimals` is used
  * only if that read fails, and the deployment record says 6 (USDG).
@@ -36,6 +43,12 @@ export interface StakeDeployment {
   readonly explorerBaseUrl: string | null;
   /** The X402Stake proxy. */
   readonly stakeContract: `0x${string}`;
+  /** The X402Escrow proxy: the EIP-712 verifying contract for buyer requests and payout proofs. */
+  readonly escrowContract: `0x${string}`;
+  /** The X402Config proxy (the arbiter's `setBlocked`). */
+  readonly configContract: `0x${string}`;
+  /** The settlement token (USDG) that deposits approve and stake. */
+  readonly settlementToken: `0x${string}`;
   /** The proxy's deployment block — no slash can be older than this. */
   readonly deployBlock: bigint;
   /** Only if `ASSET().decimals()` cannot be read. */
@@ -50,6 +63,9 @@ export const ROBINHOOD_TESTNET_STAKE: StakeDeployment = {
   rpcUrl: "https://rpc.testnet.chain.robinhood.com",
   explorerBaseUrl: "https://explorer.testnet.chain.robinhood.com",
   stakeContract: "0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c",
+  escrowContract: "0x1D2625efD87c2fc10b8563f3F0890072845Fcf41",
+  configContract: "0xCf6592A3a053d9714D16d176A86fA039Fe7B6a43",
+  settlementToken: "0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3",
   deployBlock: BigInt(132_423_327),
   fallbackAssetDecimals: 6,
   fallbackAssetSymbol: "USDG",

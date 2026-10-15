@@ -17,6 +17,7 @@ const SOLANA_ROW: FullBalance = {
   decimals: 6,
   available: { amount: "12500000", asset: `${SOLANA}/token:4zMM`, decimals: 6 },
   held: { amount: "300000", asset: `${SOLANA}/token:4zMM`, decimals: 6 },
+  withdrawable: { amount: "12500000", asset: `${SOLANA}/token:4zMM`, decimals: 6 },
   /* A readable chain. Stated, never defaulted — see `FullBalance.chainReadable`. */
   chainReadable: true,
 };
@@ -28,6 +29,7 @@ const EVM_ROW: FullBalance = {
   decimals: 6,
   available: { amount: "4000000", asset: `${EVM}/erc20:0xa0b8`, decimals: 6 },
   held: { amount: "0", asset: `${EVM}/erc20:0xa0b8`, decimals: 6 },
+  withdrawable: { amount: "4000000", asset: `${EVM}/erc20:0xa0b8`, decimals: 6 },
   /* A readable chain. Stated, never defaulted — see `FullBalance.chainReadable`. */
   chainReadable: true,
 };
@@ -85,5 +87,14 @@ describe("CloseAccountView — blockers are per chain and never summarised", () 
     const one = markup([SOLANA_ROW]);
     expect(one.match(/Withdrawable balance/g)).toHaveLength(1);
     expect(one).not.toContain("Withdrawable balance ·");
+  });
+
+  it("says Unknown for an unreadable chain, never the ledger's available", () => {
+    // R16b-B4-01: Funding said "Unknown" while this screen printed available ($499).
+    const html = markup([{ ...EVM_ROW, withdrawable: null, chainReadable: false }]);
+    expect(html).toContain("Unknown");
+    expect(html).toContain("could not read this chain");
+    expect(html).not.toContain("$4.00");
+    expect(html).not.toContain("must be withdrawn first");
   });
 });

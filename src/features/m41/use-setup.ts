@@ -438,7 +438,7 @@ export function useProviderSetup() {
       const proof = await provePayoutAddress({
         challengeId: challenge.challengeId,
         // Typed data on eip155, the message on Solana — see the helper.
-        signature: await signProofChallenge(signer, challenge),
+        signature: await signProofChallenge(signer, challenge, "PAYOUT_ADDRESS"),
       });
       setProvedNow(proof.payoutAccountId);
       setWallet("proved");

@@ -591,7 +591,7 @@ export default function MappingTesterPage() {
           layer={layerOf(report, "REQUEST_MAPPING")}
           meta={
             report?.request
-              ? `${report.request.method} ${pathOf(report.request.url)} · x-x402-call-id: ${report.callId}`
+              ? `${report.request.method} ${pathOf(report.request.url)} · x-assay-call-id: ${report.callId}`
               : `${String(binding.requestMapping.method ?? "")} ${String(binding.requestMapping.path ?? "")}`.trim() ||
                 "no request built yet"
           }

@@ -215,8 +215,10 @@ export default function OperatorsPage() {
 
   const remove = useMutation({
     mutationFn: (args: { id: string; body: RemoveOperatorInput }) => removeOperator(args.id, args.body),
-    onSuccess: (result) => {
-      toast.success(`Removed ${result.subject}. Every session they held has ended.`);
+    onSuccess: (answer) => {
+      // Removing an OPS_ADMIN is two-person: queued (202) until approved.
+      if (answer.kind === "queued") onQueued(answer.approval);
+      else toast.success(`Removed ${answer.result.subject}. Every session they held has ended.`);
       closeEditing();
       invalidate();
     },

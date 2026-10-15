@@ -478,7 +478,9 @@ export function EndpointFields({ setup }: { setup: ProviderSetup }) {
         <Button
           className="w-full justify-center px-3.5 py-3"
           loading={declaring}
-          disabled={!canWriteEndpoint}
+          // Not while a re-check runs: saving re-runs the check server-side,
+          // and one provider gets one connectivity check at a time.
+          disabled={!canWriteEndpoint || checking}
           onClick={declare}
         >
           Save this endpoint

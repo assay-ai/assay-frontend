@@ -83,7 +83,7 @@ describe("buildChainSlashRows", () => {
       parse(proposedLog(1), cancelledLog(1, { reason: 0 })),
       new Map([[requestId(1), record({ status: 3 })]]),
     );
-    expect(rows[0].cancelReason).toMatch(/withdrawn/i);
+    expect(rows[0].cancelReason).toMatch(/arbiter/i);
     expect(rows[0].proposeTx).not.toBeNull();
     expect(rows[0].closeTx).not.toBeNull();
     expect(rows[0].closeTx).not.toBe(rows[0].proposeTx);

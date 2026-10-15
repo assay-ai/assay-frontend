@@ -12,6 +12,7 @@ import { getToolBinding } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
 import { presentVerdict } from "@/utils/verdict";
 import { labelForEndpoint } from "@/utils/provider-label";
+import { BindingNav } from "@/features/provider-binding/binding-nav";
 
 /**
  * Corpus backtest.
@@ -265,6 +266,8 @@ export function BacktestView({ bindingId }: { bindingId: string }) {
           </Button>
         </div>
       </div>
+
+      <BindingNav bindingId={bindingId} />
 
       {/* Ours, not the design's: the design has no state for "the feature has
           no backend". Saying it once at the top is what stops every "—" below

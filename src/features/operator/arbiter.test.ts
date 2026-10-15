@@ -5,6 +5,8 @@ import { ApiError } from "@/libs/ApiClient";
 
 import {
   agentShareText,
+  APPROVED_BLOCKS_QUERY,
+  approvedArbiterBlocks,
   arbiterErrorMessage,
   beneficiaryCheck,
   mayBlockOnChain,
@@ -14,6 +16,7 @@ import {
   toggleArbiterSelection,
   validateChainBlockForm,
   validateRulingForm,
+  validateSupersededCancelForm,
 } from "./arbiter";
 
 const NOTE = "The evidence holds on every sampled call.";
@@ -196,5 +199,81 @@ describe("beneficiaryCheck", () => {
     const check = beneficiaryCheck(dispute(1, { beneficiaryEvidence: { ...evidence, ok: false, reason } }));
     expect(check.status).toBe("failed");
     expect(check.reason).toBe(reason);
+  });
+});
+
+/* Review R2-7: the backend filters by action; the newest 50 of every action no longer hide a block. */
+describe("APPROVED_BLOCKS_QUERY", () => {
+  it("asks the server for approved arbiter.block approvals only", () => {
+    expect(APPROVED_BLOCKS_QUERY).toEqual({ status: "APPROVED", action: "arbiter.block", limit: 50 });
+  });
+});
+
+/* Frontend review N5: an approved A-11 stays reachable for the arbiter's wallet. */
+describe("approvedArbiterBlocks", () => {
+  const row = (patch: Record<string, unknown>) => ({
+    id: "appr-1",
+    action: "arbiter.block",
+    status: "APPROVED",
+    payload: { chainId: "eip155:46630", account: "0xA271A3407D3302f4b4Fbe469b9188487cedd7d45" },
+    approvedBy: "lead@",
+    decidedAt: "2026-10-15T10:00:00Z",
+    ...patch,
+  });
+
+  it("keeps the approved blocks, with the address and chain off the approved payload", () => {
+    expect(
+      approvedArbiterBlocks([
+        row({}),
+        row({ id: "appr-2", status: "PENDING" }),
+        row({ id: "appr-3", action: "slash.suspend" }),
+        row({ id: "appr-4", payload: { chainId: "eip155:46630" } }),
+      ]),
+    ).toEqual([
+      {
+        approvalId: "appr-1",
+        chainId: "eip155:46630",
+        account: "0xA271A3407D3302f4b4Fbe469b9188487cedd7d45",
+        approvedBy: "lead@",
+        decidedAt: "2026-10-15T10:00:00Z",
+      },
+    ]);
+  });
+});
+
+/* Review R2-6: the guarded cancel of one superseded earlier-epoch record. */
+describe("validateSupersededCancelForm", () => {
+  const record = {
+    requestId: `0x${"A".repeat(64)}`,
+    proposalId: "p-1",
+    providerId: "prov",
+    chainId: "eip155:46630",
+    chainStatus: "PENDING",
+    recordEpoch: 0,
+    caseEpoch: 1,
+    penaltyAmount: "500",
+    reservedAmount: "500",
+    executableAt: "2026-10-20T00:00:00.000Z",
+  };
+
+  it("builds the body for exactly that record, lower-cased", () => {
+    expect(
+      validateSupersededCancelForm({ reasonCode: " SUPERSEDED_EPOCH ", note: NOTE, ticketRef: "" }, record),
+    ).toEqual({
+      ok: true,
+      body: {
+        chainId: "eip155:46630",
+        requestId: `0x${"a".repeat(64)}`,
+        reasonCode: "SUPERSEDED_EPOCH",
+        note: NOTE,
+      },
+    });
+  });
+
+  it("asks for a reason and a note", () => {
+    const result = validateSupersededCancelForm({ reasonCode: "", note: "short", ticketRef: "" }, record);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(Object.keys(result.errors).sort()).toEqual(["note", "reasonCode"]);
   });
 });

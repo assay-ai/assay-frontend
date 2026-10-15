@@ -8,9 +8,11 @@ import { caseChainStatusLabel } from "@/libs/chains/status-labels";
 import { formatMoney } from "@/utils/money";
 
 import {
-  CLOSED_HEADLINE,
+  closedHeadlineOf,
   TERMINAL_CASE_STATUSES,
   caseStageOf,
+  disputeDeadlineOf,
+  disputesOnChain,
   respondByApplies,
   type CaseStage,
 } from "./chain-stage";
@@ -132,7 +134,7 @@ export function waitingFigure(data: SlashProposalCaseDetail, stage: CaseStage): 
     return {
       label: "Case",
       value: "Closed",
-      caption: `${CLOSED_HEADLINE[stage.outcome].toLowerCase()}; no deadline runs and there is nothing for you to do`,
+      caption: `${closedHeadlineOf(stage).toLowerCase()}; no deadline runs and there is nothing for you to do`,
     };
   }
   if (stage.kind === "disputed") {
@@ -153,6 +155,37 @@ export function waitingFigure(data: SlashProposalCaseDetail, stage: CaseStage): 
         : "Assay's arbiter upheld your on-chain dispute; a penalty can be disputed on chain only once",
       tone: "danger",
     };
+  }
+  if (disputesOnChain(clocks)) {
+    // The one deadline on EVM: the record's executableAt. No in-app clock.
+    const by = disputeDeadlineOf(clocks);
+    // Per record (review N-4): the backend's `disputeBy` stays set while any
+    // record is still Pending and undisputed, whatever a sibling's dispute or
+    // the case status say. An older backend without it: `PROPOSED` only.
+    const disputable =
+      clocks.disputeBy !== undefined
+        ? clocks.disputeBy !== null || (proposal.status === "PROPOSED" && !clocks.chainExecutableAt)
+        : proposal.status === "PROPOSED";
+    if (!disputable) {
+      return {
+        label: "Dispute on chain by",
+        value: by ? `${stampUtc(by)} UTC` : DASH,
+        caption: "the case is past the point of a dispute",
+      };
+    }
+    const left = clocks.runningClock === "PROVIDER" ? remaining(clocks.secondsRemaining) : null;
+    return by
+      ? {
+          label: "Dispute on chain by",
+          value: `${stampUtc(by)} UTC`,
+          caption: `${left ? `${left} · ` : ""}disputing freezes the penalty on chain until the arbiter decides`,
+          tone: "danger",
+        }
+      : {
+          label: "Dispute on chain by",
+          value: DASH,
+          caption: "you can dispute once the penalty's record is on chain",
+        };
   }
   const respondBy = clocks.respondByAt;
   if (!respondBy) {
@@ -191,7 +224,9 @@ export function executesFigure(stage: CaseStage): FigureCopy {
         caption:
           stage.outcome === "compensated"
             ? "taken from stake, then deposited back by Assay"
-            : "taken from stake; nothing more will be",
+            : stage.partly
+              ? "taken from stake in part; the cancelled records took nothing, and nothing more will be"
+              : "taken from stake; nothing more will be",
       };
     }
     return { label: "Execution", value: "None", caption: "nothing will be taken from your stake" };

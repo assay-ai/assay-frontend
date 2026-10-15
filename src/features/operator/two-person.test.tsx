@@ -8,8 +8,10 @@ import { operatorApi } from "@/services/operator-api";
 import {
   addOperator,
   changeOperator,
+  createArbiterBlockIntent,
   openFleetSweep,
   recordCompensation,
+  removeOperator,
   suspendCase,
   unblockAccount,
 } from "@/services/operator.service";
@@ -65,6 +67,17 @@ describe("every two-person form's service call", () => {
         }),
     ],
     ["raise roles", () => changeOperator("o1", { roles: ["ADJ", "ADJL"], ...body })],
+    ["demote an OPS_ADMIN", () => changeOperator("o1", { roles: ["ADJ"], ...body })],
+    ["remove an OPS_ADMIN", () => removeOperator("o1", body)],
+    [
+      "arbiter block",
+      () =>
+        createArbiterBlockIntent({
+          chainId: "eip155:46630",
+          account: "0x52908400098527886E0F7030069857D2E4169EE7",
+          ...body,
+        }),
+    ],
   ];
 
   it.each(calls)("%s: a 202 comes back as queued with its approval id", async (_name, call) => {

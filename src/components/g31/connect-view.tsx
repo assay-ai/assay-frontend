@@ -91,7 +91,7 @@ export function ConnectView() {
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
   }, [credentialsQuery.data]);
 
-  const config = `"x402": {
+  const config = `"assay": {
   "url": "${mcpEndpointUrl()}",
   "headers": { "Authorization": "Bearer ${live ? `${live.prefix}…` : "<credential>"}" }
 }
