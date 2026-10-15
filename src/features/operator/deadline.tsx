@@ -80,6 +80,15 @@ export function deadlineReading(
   return { label: timeLeftLabel(msLeft), urgent: msLeft / total < 0.25, expired: false, end };
 }
 
+/**
+ * The tooltip for a deadline: "Rule by Nov 11, 10:06 GMT+9 · 2026-11-11 03:06 UTC" —
+ * the local end with its zone, then the exact UTC instant. Shared with the
+ * Penalties list's Next column, so a row and its page name the same instant.
+ */
+export function deadlineTitle(lead: string, endIso: string): string {
+  return `${lead} ${formatLocalDateTime(endIso, { alwaysDay: true, midSentence: true })} ${zoneLabel(endIso)} · ${utcTitle(endIso) ?? ""}`.trim();
+}
+
 export interface DeadlineProps {
   kind: DeadlineKind;
   until: string | null | undefined;
@@ -102,7 +111,8 @@ export function Deadline({ kind, until, from, now: fixedNow, className }: Deadli
 
   const reading = deadlineReading(kind, until, from, fixedNow ?? tick);
   const endIso = reading.end === null ? undefined : new Date(reading.end).toISOString();
-  const title = endIso ? `Ends ${formatLocalDateTime(endIso)} ${zoneLabel(endIso)} · ${utcTitle(endIso)}`.trim() : undefined;
+  // A dispute names what is due by then; the date is always one hover away, and in the label once little is left.
+  const title = endIso ? deadlineTitle(kind === "dispute" ? "Rule by" : "Ends", endIso) : undefined;
   const Icon = reading.urgent ? AlertTriangle : Clock;
   const label = mounted ? reading.label : endIso ? `Ends ${utcTitle(endIso)}` : reading.label;
 
