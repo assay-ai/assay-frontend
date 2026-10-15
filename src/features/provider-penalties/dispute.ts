@@ -20,6 +20,9 @@ import { disputeCallMismatch } from "@/libs/chains/evm/stake-slashes/dispute-cal
 import type { StakeDeployment } from "@/libs/chains/evm/stake-slashes/deployments";
 import { createSlashDisputeIntent } from "@/services/provider-slash-cases.service";
 
+/** An unruled dispute expires in the provider's favour after this long (X402Stake `DISPUTE_TIMEOUT_SECONDS`). */
+export const DISPUTE_TIMEOUT_DAYS = 30;
+
 const NOT_CONNECTED = "Connect your stake wallet in this browser: it is the only account the contract accepts a dispute from.";
 
 export class DisputeRefused extends Error {}

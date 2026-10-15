@@ -4,7 +4,7 @@ import type { AssayCaseIndex } from "@/features/chain-slashes/assay-match";
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
 import { slashRecordStatusOf } from "@/libs/chains/evm/stake-slashes/status";
 
-import { countByTab, openPenaltyHold, openPenaltyPhrase, penaltyRowOf, penaltyTimeline, sortPenalties } from "./model";
+import { countByTab, lossOf, openPenaltyHold, openPenaltyPhrase, penaltyRowOf, penaltyTimeline, sortPenalties } from "./model";
 import { failureSentence } from "./sentences";
 
 const NOW = 1_800_000_000;
@@ -43,6 +43,8 @@ describe("penaltyRowOf", () => {
     expect(row.canDispute).toBe(true);
     expect(row.proposalId).toBe("p1");
     expect(row.amount).toEqual({ amount: "28470000", asset: "USDG", decimals: 6 });
+    // What the provider would actually lose: 90% of what the chain reserved.
+    expect(lossOf(row)?.amount).toBe("25623000");
   });
 
   it("never offers Dispute after the deadline, on an executed or on an upheld record", () => {
@@ -118,5 +120,13 @@ describe("openPenaltyHold", () => {
   it("says nothing extra for one kind", () => {
     expect(openPenaltyPhrase({ count: 1, needsAction: 1, disputed: 0, total: null })).toBe("1 open penalty");
     expect(openPenaltyHold([]).total).toBeNull();
+  });
+});
+
+describe("lossOf", () => {
+  it("counts from what the chain reserved, and is nothing for a cancelled record", () => {
+    const capped = penaltyRowOf(chainRow(1, { reserved: BigInt(10_000_000) }), ASSET, index, NOW);
+    expect(lossOf(capped)?.amount).toBe("9000000");
+    expect(lossOf({ ...capped, closedAs: "cancelled" })).toBeNull();
   });
 });

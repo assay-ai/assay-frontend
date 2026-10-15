@@ -10,10 +10,12 @@ import { MoneySplit } from "@/components/patterns/money-flow";
 import { WalletActionSheet } from "@/components/patterns/sign-action";
 import { StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
 import { StatusTimeline } from "@/components/patterns/status-timeline";
+import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Measurement } from "@/features/provider-slash-case/measurement";
 import { SLASH_AGENT_BPS, SLASH_PLATFORM_BPS, splitPenalty } from "@/features/provider-slash-case/distribution";
+import { DEMO_SIGNING_NOTE } from "@/features/provider-stake/wallet-readiness";
 import { formatRemaining, useCountdown } from "@/hooks/useCountdown";
 import type { Money } from "@/interfaces";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
@@ -21,8 +23,8 @@ import { getSlaWindow } from "@/services/provider-sla-windows.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
-import { describeDisputeError } from "./dispute";
-import { penaltyTimeline, type PenaltyRow } from "./model";
+import { DISPUTE_TIMEOUT_DAYS, describeDisputeError } from "./dispute";
+import { lossBasis, lossOf, penaltyTimeline, type PenaltyRow } from "./model";
 import { failureSentence } from "./sentences";
 
 /* ── small pieces ─────────────────────────────────────────────────────── */
@@ -92,6 +94,25 @@ export function DeadlineChip({ row }: { row: PenaltyRow }) {
   return null;
 }
 
+/**
+ * The number a provider reads first is what leaves their stake, not the gross
+ * penalty: 90% of it is taken, the rest is never touched.
+ */
+export function HeadlineAmount({ row }: { row: PenaltyRow }) {
+  const loss = lossOf(row);
+  if (!loss) {
+    return <span className="font-mono text-mono-13 text-03 line-through">{formatMoney(row.amount)}</span>;
+  }
+  const executed = row.closedAs === "executed";
+  return (
+    <span className="flex flex-wrap items-baseline gap-x-1.5">
+      <span className="text-body-13 text-02">{executed ? "You lost" : "You would lose"}</span>
+      <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(loss)}</span>
+      <span className="text-body-xs text-03">of a {formatMoney(lossBasis(row))} penalty</span>
+    </span>
+  );
+}
+
 /* ── the row ──────────────────────────────────────────────────────────── */
 
 export function PenaltyRowCard({
@@ -122,7 +143,7 @@ export function PenaltyRowCard({
           <StatusChip status={statusKeyOf(row, nowSeconds)} />
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-13 text-02">
-          <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(row.applied ?? row.amount)}</span>
+          <HeadlineAmount row={row} />
           {detail?.proposal.windowId ? <WindowRange windowId={detail.proposal.windowId} /> : null}
           {row.tab === "closed" ? (
             <span className="text-03">
@@ -168,7 +189,7 @@ export function LossSentence({ row }: { row: PenaltyRow }) {
   if (row.closedAs === "cancelled" || row.closedAs === "expired") {
     return <p className="text-body-13 text-02">Nothing was taken from your stake.</p>;
   }
-  const basis: Money = row.applied ?? row.amount;
+  const basis: Money = lossBasis(row);
   const split = splitPenalty(basis);
   const executed = row.closedAs === "executed";
   return (
@@ -231,7 +252,7 @@ export function PenaltyDrawer({
             <SheetHeader className="tablet:pt-5">
               <SheetTitle className="pr-8">{toolName ? `Why ${toolName} got a penalty` : "Why this penalty"}</SheetTitle>
               <SheetDescription>
-                {formatMoney(row.applied ?? row.amount)} ·{" "}
+                {lossOf(row) ? `${row.closedAs === "executed" ? "You lost" : "You would lose"} ${formatMoney(lossOf(row))} · ` : null}
                 {detail?.proposal.windowId ? <WindowRange windowId={detail.proposal.windowId} /> : "proposed "}
                 {detail?.proposal.windowId ? null : <LocalTime value={row.proposedAt} />}
               </SheetDescription>
@@ -246,8 +267,8 @@ export function PenaltyDrawer({
 
               {row.tab === "disputed" ? (
                 <p className="text-body-13 text-02">
-                  You disputed this on chain, so it cannot be executed while Assay&apos;s arbiter reviews it. The arbiter
-                  aims to rule within 7 days
+                  You disputed this on chain, so it cannot be executed while Assay&apos;s <Term k="arbiter">arbiter</Term>{" "}
+                  reviews it. The arbiter aims to rule within 7 days
                   {row.arbiterTargetAt ? (
                     <>
                       {" "}(by <LocalTime value={row.arbiterTargetAt} dateOnly />)
@@ -263,8 +284,8 @@ export function PenaltyDrawer({
               ) : row.canDispute ? (
                 <p className="text-body-13 text-02">
                   Nothing is taken before <LocalTime value={row.executableAt} withZone className="font-semibold text-01" />. If you
-                  think it is wrong, dispute it before then: one signature from your stake wallet, and a person at Assay
-                  rules on it.
+                  think it is wrong, dispute it before then: one signature from your stake wallet, and Assay&apos;s{" "}
+                  <Term k="arbiter">arbiter</Term>, a person, rules on it on chain.
                 </p>
               ) : row.tab === "needs-action" ? (
                 <p className="text-body-13 text-02">
@@ -287,7 +308,7 @@ export function PenaltyDrawer({
                     ))}
                     {topAgent && totalFailures > 0 && topAgent.count / totalFailures > 0.5 ? (
                       <li>
-                        {topAgent.count} of the {totalFailures} failures came from one agent — worth saying in a dispute.
+                        {topAgent.count} of the {totalFailures} failures came from one agent.
                       </li>
                     ) : null}
                   </ul>
@@ -336,19 +357,29 @@ export function PenaltyDrawer({
 
 /* ── the dispute sheet ────────────────────────────────────────────────── */
 
+/**
+ * The review step before the one signature. A dispute is final: one per
+ * record (the contract refuses a second, `SlashAlreadyDisputed`), and it
+ * carries no message, so everything the provider needs to decide is said here.
+ */
 export function DisputeSheet({
   row,
   toolName,
   steps,
   onOpenChange,
   onDisputed,
+  simulated = false,
 }: {
   row: PenaltyRow | null;
   toolName: string | null;
   steps: React.ComponentProps<typeof WalletActionSheet>["steps"];
   onOpenChange: (open: boolean) => void;
   onDisputed: () => void;
+  /** DEMO ONLY: say that nothing is signed. */
+  simulated?: boolean;
 }) {
+  const loss = row ? lossOf(row) : null;
+  const split = row ? splitPenalty(lossBasis(row)) : null;
   return (
     <WalletActionSheet
       open={row !== null}
@@ -357,19 +388,49 @@ export function DisputeSheet({
       description={
         row ? (
           <>
-            {formatMoney(row.amount)} cannot be taken from your stake while the dispute stands. A person at Assay rules on
-            it, aiming for 7 days.
+            You can dispute this penalty once. The dispute carries no message: it asks Assay&apos;s{" "}
+            <Term k="arbiter">arbiter</Term>, a person, to look at the record and rule on it on chain.
           </>
         ) : undefined
       }
+      acknowledge="I understand I can dispute this penalty only once and cannot add anything later."
       steps={steps}
       label="Dispute on chain"
       resetKey={row?.id}
       describeError={describeDisputeError}
       successTitle="Disputed on chain"
-      successDescription="The penalty is frozen. The arbiter aims to rule within 7 days; you will see the ruling here and in your Inbox."
+      successDescription="The penalty is frozen. The arbiter aims to rule within 7 days; the ruling shows on this page."
       onSuccess={onDisputed}
       doneAction={{ label: "Done", onClick: () => onOpenChange(false) }}
-    />
+    >
+      {row ? (
+        <>
+          <dl className="flex flex-col gap-2.5 rounded-lg border border-01 bg-02 px-3.5 py-3 text-body-13">
+            <div className="flex flex-col gap-0.5">
+              <dt className="text-label-13 text-01">While the dispute stands</dt>
+              <dd className="text-02">Nothing can be taken from your stake.</dd>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <dt className="text-label-13 text-01">If the arbiter upholds it</dt>
+              <dd className="text-02">
+                You lose <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(loss)}</span> of your
+                stake ({formatMoney(split?.agent)} to the buyers whose calls failed, {formatMoney(split?.platform)} to
+                Assay). It can be taken from <LocalTime value={row.executableAt} withZone />, or as soon as it is upheld if
+                that is later.
+              </dd>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <dt className="text-label-13 text-01">If the arbiter cancels it, or nobody rules within {DISPUTE_TIMEOUT_DAYS} days</dt>
+              <dd className="text-02">Nothing is taken.</dd>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <dt className="text-label-13 text-01">Cost</dt>
+              <dd className="text-02">One network fee, paid in ETH by your stake wallet. The dispute itself is free.</dd>
+            </div>
+          </dl>
+          {simulated ? <p className="text-body-xs text-03">{DEMO_SIGNING_NOTE}</p> : null}
+        </>
+      ) : null}
+    </WalletActionSheet>
   );
 }
