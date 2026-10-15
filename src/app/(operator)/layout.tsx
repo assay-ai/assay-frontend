@@ -1,22 +1,20 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 import { Toaster } from "sonner";
 
 import { AlertFill, CheckCircle } from "@/components/icons";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { Button } from "@/components/ui/button";
-import { Tag } from "@/components/ui/tag";
-import { pendingBadge } from "@/features/operator/approvals";
+import { PageState } from "@/components/patterns/page-state";
+import { groupApprovals, needsYouCount } from "@/features/operator/inbox";
+import { capabilitiesFor } from "@/features/operator/roles";
+import { OperatorBottomTabs, OperatorMobileTopBar, OperatorTopBar } from "@/features/operator/operator-shell";
 import { OperatorRefusal, SuspendedBanner } from "@/features/operator/operator-refusal";
 import { OperatorSessionContext } from "@/features/operator/session-context";
 import { msUntilExpiry, signOutOperator } from "@/features/operator/sign-in";
 import { OperatorSignInScreen } from "@/features/operator/sign-in-screen";
 import { ApiError } from "@/libs/ApiClient";
-import { toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
 import {
   clearOperatorSession,
   readOperatorSession,
@@ -24,7 +22,7 @@ import {
   type OperatorSessionEnd,
   type OperatorSessionRecord,
 } from "@/libs/operator-session";
-import { getOperatorIdentity, listApprovals, logoutOperator } from "@/services/operator.service";
+import { getOperatorIdentity, listApprovals, listArbiterDisputes, logoutOperator } from "@/services/operator.service";
 import { useTheme } from "@/providers/ThemeProvider";
 
 /**
@@ -53,16 +51,6 @@ import { useTheme } from "@/providers/ThemeProvider";
  * operator action reports its result by toast, so the mount below is
  * load-bearing.
  */
-
-/** The console's screens. Case pages are reached from the queue. */
-const CONSOLE_NAV: readonly { href: string; label: string }[] = [
-  { href: "/operator", label: "Queue" },
-  { href: "/operator/approvals", label: "Approvals" },
-  { href: "/operator/blocks", label: "Blocks" },
-  { href: "/operator/arbiter", label: "Arbiter" },
-  { href: "/operator/operators", label: "Operators" },
-  { href: "/operator/override-log", label: "Override log" },
-];
 
 const PENDING_PAGE = 100;
 
@@ -109,9 +97,22 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
     refetchInterval: 30_000,
     retry: 0,
   });
-  const badge = pendingQuery.data
-    ? pendingBadge(pendingQuery.data.items.length, pendingQuery.data.pageInfo.hasMore)
-    : null;
+  const canRule = data ? capabilitiesFor(data.roles).rule : false;
+  const disputesQuery = useQuery({
+    queryKey: ["operator", "arbiter", "disputes"],
+    queryFn: listArbiterDisputes,
+    enabled: Boolean(session && data && canRule),
+    refetchInterval: 60_000,
+    retry: 0,
+  });
+  // The badge counts what this operator can act on — the same rule as the Home heading.
+  const needsYou = data
+    ? needsYouCount(
+        pendingQuery.data ? groupApprovals(pendingQuery.data.items, data).needsYou.length : 0,
+        disputesQuery.data?.length ?? 0,
+        canRule,
+      )
+    : 0;
 
   // Ends the operator session only; the Privy login stays signed in.
   const signOut = React.useCallback(
@@ -120,25 +121,26 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
   );
 
   let body: React.ReactNode;
+  const loading = <PageState kind="loading" rows={4} label="Loading the operator console" />;
 
   if (session === undefined) {
-    body = <p className="text-body-13 text-03">Loading…</p>;
+    body = loading;
   } else if (session === null) {
     body = <OperatorSignInScreen lastEnd={lastEnd} onSignedIn={() => setLastEnd(null)} />;
   } else if (isLoading) {
-    body = <p className="text-body-13 text-03">Loading…</p>;
+    body = loading;
   } else if (isError) {
     // A 401 has already ended the session and drawn the sign-in screen. What
     // reaches here is another refusal: a 403 for an operator removed or
     // suspended since signing in, among them.
     body =
       error instanceof ApiError && error.status === 401 ? (
-        <p className="text-body-13 text-03">Loading…</p>
+        loading
       ) : (
         <OperatorRefusal error={error} onSignOut={() => void signOut()} />
       );
   } else if (!data) {
-    body = <p className="text-body-13 text-03">Loading…</p>;
+    body = loading;
   } else if (data.status !== "ACTIVE") {
     body = (
       <SuspendedBanner
@@ -146,73 +148,44 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
         onSignOut={() => void signOut()}
       />
     );
-  } else {
-    body = (
-      <OperatorSessionContext.Provider value={data}>
-        <header className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 border-b border-01 pb-3.5">
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <p className="truncate text-heading-md text-01">{data.displayName}</p>
-            <p className="truncate font-mono text-mono-13 text-03">
-              {data.subject}
-              {data.walletAddress ? ` · ${toChecksumAddress(data.walletAddress)}` : ""}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5" aria-label="Your roles">
-            {data.roles.map((role) => (
-              <Tag key={role} variant="secondary" size="sm">
-                {role}
-              </Tag>
-            ))}
-          </div>
-
-          <nav aria-label="Operator console" className="ml-auto flex flex-wrap items-center gap-3">
-            {CONSOLE_NAV.map((item) => {
-              const active =
-                item.href === "/operator" ? pathname === "/operator" : pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={
-                    active
-                      ? "inline-flex items-center gap-1 text-label-13 text-01 underline underline-offset-4"
-                      : "inline-flex items-center gap-1 text-label-13 text-02 hover:text-01 hover:underline"
-                  }
-                >
-                  {item.label}
-                  {item.href === "/operator/approvals" && badge ? (
-                    <span
-                      className="rounded-full bg-primary-400 px-1.5 font-mono text-mono-12 text-on-primary"
-                      aria-label={`${badge} pending`}
-                    >
-                      {badge}
-                    </span>
-                  ) : null}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <ThemeToggle />
-          <Button type="button" variant="secondary" size="sm" onClick={() => void signOut()}>
-            Sign out
-          </Button>
-        </header>
-
-        {children}
-      </OperatorSessionContext.Provider>
-    );
   }
+
+  const signedIn = Boolean(session && data && data.status === "ACTIVE" && !isError);
+  const shell = signedIn && data && session
+    ? { identity: data, pathname, needsYou, expiresAt: session.expiresAt, onSignOut: () => void signOut() }
+    : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-02">
-      {/* Same Main as the provider console: gap 16, padding
-          [22, 26] from tablet, gap 14 / padding 16 below it. */}
-      <main className="flex min-w-0 flex-1 flex-col gap-3.5 p-4 tablet:gap-4 tablet:px-[26px] tablet:py-[22px]">
-        {body}
+      {shell ? (
+        <>
+          <div className="hidden md:block">
+            <OperatorTopBar {...shell} />
+          </div>
+          <div className="md:hidden">
+            <OperatorMobileTopBar {...shell} />
+          </div>
+        </>
+      ) : null}
+
+      {/* Same Main as the provider console: gap 16, padding [22, 26] from
+          tablet, gap 14 / padding 16 below it. pb-28 keeps the last row clear
+          of the bottom tab bar on phones. */}
+      <main
+        className={
+          shell
+            ? "mx-auto flex w-full min-w-0 max-w-[1200px] flex-1 flex-col gap-3.5 p-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] md:pb-4 tablet:gap-4 tablet:px-[26px] tablet:py-[22px]"
+            : "mx-auto flex w-full min-w-0 max-w-[1200px] flex-1 flex-col gap-3.5 p-4 tablet:gap-4 tablet:px-[26px] tablet:py-[22px]"
+        }
+      >
+        {shell && data ? <OperatorSessionContext.Provider value={data}>{children}</OperatorSessionContext.Provider> : body}
       </main>
+
+      {shell ? (
+        <div className="md:hidden">
+          <OperatorBottomTabs identity={shell.identity} pathname={pathname} needsYou={needsYou} />
+        </div>
+      ) : null}
 
       <Toaster
         theme={themeType}

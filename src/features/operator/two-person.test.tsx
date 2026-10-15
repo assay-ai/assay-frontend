@@ -15,7 +15,7 @@ import {
 } from "@/services/operator.service";
 
 import { envelope, memoryStorage, scriptedAdapter } from "./operator-test-kit";
-import { QueuedNotice } from "./queued-notice";
+import { ResultCard } from "./result-card";
 import { approvalHref, queuedMessage, toTwoPersonAnswer } from "./two-person";
 
 const QUEUED: ApprovalQueued = {
@@ -85,9 +85,16 @@ describe("every two-person form's service call", () => {
 describe("what a 202 shows", () => {
   it("says it was sent for approval, with the id and a link to the inbox", () => {
     expect(queuedMessage(QUEUED)).toMatch(/^Sent for approval \(id 7d1c2b9e-1111-4222-8333-944455556666\)/);
-    const html = renderToStaticMarkup(<QueuedNotice approval={QUEUED} />);
-    expect(html).toContain("Sent for approval");
-    expect(html).toContain(QUEUED.approvalId);
+    // The screens show a queued result card that links to the request, never "done".
+    const html = renderToStaticMarkup(
+      <ResultCard
+        tone="queued"
+        title="Fleet sweep sent for approval"
+        next="Nothing has happened yet."
+        link={{ label: "Open the request", href: approvalHref(QUEUED.approvalId) }}
+      />,
+    );
+    expect(html).toContain("sent for approval");
     expect(html).toContain(`href="${approvalHref(QUEUED.approvalId)}"`);
     expect(approvalHref(QUEUED.approvalId)).toBe(`/operator/approvals?id=${QUEUED.approvalId}`);
     expect(html).toContain("Nothing has happened yet");

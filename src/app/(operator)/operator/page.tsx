@@ -1,368 +1,297 @@
 "use client";
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { Badge } from "@/components/ui/badge";
+import { LocalTime } from "@/components/patterns/local-time";
+import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { EmptyState } from "@/components/ui/empty-state";
-import { MetricTile } from "@/components/ui/metric-tile";
-import {
-  Panel,
-  PanelBody,
-  PanelDescription,
-  PanelHeader,
-  PanelTitle,
-  PanelTitles,
-} from "@/components/ui/panel";
-import { Table, type TableColumn, type TableRowData } from "@/components/ui/table";
-import { DASH, count, percent } from "@/features/g34a/stats";
-import { SlashHoldsPanel } from "@/features/operator/slash-holds-panel";
-import { caseBadgeVariant } from "@/features/operator/state";
-import { remaining } from "@/features/provider-slash-case/status-header";
-import type { AdjudicationQueueRow } from "@/interfaces/operator";
+import { ApprovalItem, type ApprovalResult } from "@/features/operator/approval-item";
+import { ResultCard } from "@/features/operator/result-card";
+import { approvalErrorMessage } from "@/features/operator/approvals";
+import { DisputeLine } from "@/features/operator/dispute-line";
+import { HealthStrip } from "@/features/operator/health-strip";
+import { checkedAgo, groupApprovals, needsYouCount, sortDisputesByDaysLeft } from "@/features/operator/inbox";
+import { RoleIntro, useRoleIntro } from "@/features/operator/role-intro";
+import { capabilitiesFor } from "@/features/operator/roles";
+import { useOperatorSession } from "@/features/operator/session-context";
+import { sortHoldsOldestFirst } from "@/features/operator/slash-holds-panel";
+import { useApprovalContext } from "@/features/operator/use-approval-context";
+import { useProviderNames } from "@/features/operator/use-operator-lookups";
+import { holdChainName } from "@/features/slash-hold/model";
 import { ApiError } from "@/libs/ApiClient";
-import { formatMoney } from "@/utils/money";
-import { getPlatformHealth, listAdjudicationQueue } from "@/services/operator.service";
-import { routes } from "@/libs/routes";
+import { operatorHoldReasonText } from "@/libs/slash-hold";
+import { getPlatformHealth, listAccountBlocks, listApprovals, listArbiterDisputes } from "@/services/operator.service";
 
 /**
- * The adjudication queue, route `/operator`.
+ * Home, route `/operator`: the "Needs you" inbox.
  *
- * The landing screen of the operator console: six platform-health tiles over
- * the queue of slash proposals a provider has objected to.
+ * Everything this operator can act on, on one page, in the order it can be
+ * lost: approvals their roles can decide (closest to expiring first), and —
+ * for whoever can rule — on-chain disputes by days left, red from day 20.
+ * Then what is worth watching but needs nobody: slash holds and active
+ * blocks. Platform health is one line that opens only when something is red.
  *
- * ## The queue's order is the product
+ * Not here, on purpose:
+ *  - Penalties waiting for a cancel signature (CANCEL_REQUESTED). The backend
+ *    has no endpoint that lists them; each one shows on its penalty page with
+ *    its deadline. [backend] a list endpoint, then a group here.
+ *  - The retired off-chain objection queue (claim / decide / second).
  *
- * `GET /operator/queue` orders by time-to-deadline then penalty size, fixed
- * server-side — a caller cannot ask for insertion order. So this screen offers
- * no sort control: the one thing an adjudicator must not be able to do is work
- * the queue oldest-first while a case with two hours left sits below the fold.
- *
- * ## Why there are two empty states
- *
- * The backend applies `mine` / `unassigned` / `overdue` **after** keyset
- * pagination, so a filtered page can come back with zero rows while
- * `hasMore` is true. "Nothing to adjudicate" would then be a false statement
- * about the queue rather than about the page, which is why the filtered case
- * says only what it can honestly say — see `listAdjudicationQueue`'s own note.
+ * j / k move between rows and Enter takes a row's main action.
  */
 
-const LIST_LIMIT = 25;
+const PENDING_PAGE = 100;
 
-interface QueueRow extends TableRowData, AdjudicationQueueRow {}
-
-/**
- * `elapsed()` in `@/features/g34a/stats` takes an ISO stamp and a clock;
- * `PlatformHealth`'s two age fields are already a number of seconds. Reading
- * them in the same `2h 5m` shape here keeps the two tiles identical to each
- * other without reconstructing a timestamp only to subtract it again.
- */
-function ageFromSeconds(seconds: number | null): string {
-  if (seconds === null) return DASH;
-  const minutes = Math.max(0, Math.floor(seconds / 60));
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+function useNow(intervalMs: number): number {
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(timer);
+  }, [intervalMs]);
+  return now;
 }
 
-/** `PLATFORM_MAPPING_CHANGE` → `platform mapping change`. */
-function claimLabel(claimType: string | null): string {
-  return claimType === null ? DASH : claimType.toLowerCase().replace(/_/g, " ");
+/** j/k/Enter over `[data-inbox-row]`, ignored while typing or with a dialog open. */
+function useKeyboardTriage(): void {
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.closest("input, textarea, select, [contenteditable=true]") || target.closest("[role=dialog]"))) return;
+      if (event.key !== "j" && event.key !== "k" && event.key !== "Enter") return;
+      const rows = Array.from(document.querySelectorAll<HTMLElement>("[data-inbox-row]"));
+      if (rows.length === 0) return;
+      const at = rows.findIndex((row) => row === document.activeElement);
+      if (event.key === "Enter") {
+        if (at === -1) return;
+        event.preventDefault();
+        rows[at]!.querySelector<HTMLElement>("[data-primary]")?.click();
+        return;
+      }
+      event.preventDefault();
+      const next = event.key === "j" ? Math.min(rows.length - 1, at + 1) : Math.max(0, at === -1 ? 0 : at - 1);
+      rows[next]!.focus();
+      rows[next]!.scrollIntoView({ block: "nearest" });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 }
 
-export default function AdjudicationQueuePage() {
-  const [mine, setMine] = React.useState(false);
-  const [unassigned, setUnassigned] = React.useState(false);
-  const [overdue, setOverdue] = React.useState(false);
+export default function OperatorHome() {
+  const me = useOperatorSession();
+  const caps = capabilitiesFor(me.roles);
+  const queryClient = useQueryClient();
+  const now = useNow(10_000);
+  const intro = useRoleIntro(me.id);
+  const providers = useProviderNames();
+  useKeyboardTriage();
 
-  /*
-    Only the filters that are ON are sent. `mine=false` is not the same request
-    as no `mine` at all — it would ask the server to narrow to cases that are
-    explicitly not mine, which is not what an unticked box means.
-  */
-  const filters = {
-    mine: mine || undefined,
-    unassigned: unassigned || undefined,
-    overdue: overdue || undefined,
-  };
-  const anyFilter = mine || unassigned || overdue;
-
-  const healthQuery = useQuery({
+  // Same key as the shell's badge, so the two never disagree.
+  const pending = useQuery({
+    queryKey: ["operator", "approvals", "pending-count"],
+    queryFn: () => listApprovals({ status: "PENDING", limit: PENDING_PAGE }),
+    refetchInterval: 30_000,
+    retry: 0,
+  });
+  const disputes = useQuery({
+    queryKey: ["operator", "arbiter", "disputes"],
+    queryFn: listArbiterDisputes,
+    enabled: caps.rule,
+    refetchInterval: 60_000,
+    retry: 0,
+  });
+  const health = useQuery({
     queryKey: ["operator", "health"],
     queryFn: getPlatformHealth,
+    refetchInterval: 60_000,
+    retry: 0,
+  });
+  const activeBlocks = useQuery({
+    queryKey: ["operator", "blocks", "active-count"],
+    queryFn: () => listAccountBlocks({ active: true, limit: 100 }),
     retry: 0,
   });
 
-  const queueQuery = useInfiniteQuery({
-    // `filters` is part of the key, so ticking a box restarts from a fresh
-    // cursor rather than appending a differently-filtered page to the old one.
-    queryKey: ["operator", "queue", "list", filters],
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      listAdjudicationQueue({ limit: LIST_LIMIT, cursor: pageParam, ...filters }),
-    getNextPageParam: (last) => last.pageInfo.nextCursor ?? undefined,
-    retry: 0,
-  });
+  const groups = React.useMemo(() => groupApprovals(pending.data?.items ?? [], me, now), [pending.data, me, now]);
+  const { context, approversFor, nameOf } = useApprovalContext([...groups.needsYou, ...groups.yours], me);
+  const disputeRows = React.useMemo(() => sortDisputesByDaysLeft(disputes.data ?? []), [disputes.data]);
+  const holds = sortHoldsOldestFirst(health.data?.slashHolds ?? []);
+  const blockCount = activeBlocks.data?.items.length ?? null;
 
-  const health = healthQuery.data;
+  const lastChecked = Math.max(pending.dataUpdatedAt, disputes.dataUpdatedAt, health.dataUpdatedAt);
+  const refreshing = pending.isFetching || disputes.isFetching || health.isFetching;
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ["operator", "approvals"] });
+    void queryClient.invalidateQueries({ queryKey: ["operator", "arbiter", "disputes"] });
+    void queryClient.invalidateQueries({ queryKey: ["operator", "health"] });
+    void queryClient.invalidateQueries({ queryKey: ["operator", "blocks"] });
+  };
 
-  const rows: QueueRow[] = React.useMemo(
-    () =>
-      (queueQuery.data?.pages ?? []).flatMap((page) =>
-        page.items.map((row) => ({ ...row, id: row.proposalId })),
-      ),
-    [queueQuery.data],
-  );
+  const [results, setResults] = React.useState<ApprovalResult[]>([]);
+  const onDecided = React.useCallback((result: ApprovalResult) => setResults((list) => [result, ...list.filter((r) => r.id !== result.id)]), []);
 
-  const columns: TableColumn<QueueRow>[] = [
-    {
-      key: "case",
-      header: "Case",
-      noTruncate: true,
-      cell: (row) => (
-        <Link href={routes.operatorCase(row.proposalId)} className="hover:underline">
-          {row.caseLabel}
-        </Link>
-      ),
-    },
-    {
-      key: "provider",
-      header: "Provider",
-      cell: (row) => row.providerName,
-    },
-    {
-      key: "status",
-      header: "Status",
-      cell: (row) => <Badge variant={caseBadgeVariant(row.status)} />,
-    },
-    {
-      key: "claim",
-      header: "Claim",
-      cell: (row) => claimLabel(row.claimType),
-    },
-    {
-      key: "penalty",
-      header: "Penalty",
-      width: 110,
-      mono: true,
-      cell: (row) => formatMoney(row.penaltyAmount),
-    },
-    {
-      key: "remaining",
-      header: "Remaining",
-      width: 130,
-      mono: true,
-      // Red is the whole point of the column once the deadline has passed: the
-      // sweeper overturns an overdue case against us, so this is a loss the
-      // adjudicator still has a chance to stop, not a status.
-      cell: (row) => (
-        <span className={row.overdue ? "text-danger-600" : undefined}>
-          {remaining(row.secondsToDeadline) ?? DASH}
-        </span>
-      ),
-    },
-    {
-      key: "owner",
-      header: "Owner",
-      // A running clock with nobody's name on it is the exact failure this
-      // queue exists to prevent, so the red here is specified, not decorative.
-      cell: (row) =>
-        row.ownerSubject ?? <span className="text-danger-600">unassigned</span>,
-    },
-    {
-      key: "coFailures",
-      header: "Co-failures",
-      width: 90,
-      mono: true,
-      cell: (row) => count(row.coFailureCount),
-    },
-    {
-      key: "rootCause",
-      header: "Root cause",
-      cell: (row) =>
-        row.rootCauseGroupSize > 1
-          ? `${row.rootCauseKey} · ${row.rootCauseGroupSize} cases`
-          : DASH,
-    },
-  ];
+  const needsYouTotal = needsYouCount(groups.needsYou.length, disputeRows.length, caps.rule);
+  const loading = pending.isLoading || (caps.rule && disputes.isLoading);
 
   return (
     <>
-      <header className="flex w-full flex-col items-start gap-0.5">
-        <h1 className="text-heading-md text-01">Adjudication queue</h1>
-        <p className="text-body-sm text-03">
-          ordered by time remaining, then penalty size — never by age
-        </p>
+      <header className="flex w-full flex-wrap items-end justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h1 className="text-heading-md text-01">Needs you{needsYouTotal > 0 ? ` · ${needsYouTotal}` : ""}</h1>
+          <p className="text-body-13 text-03" aria-live="polite">
+            {lastChecked > 0 ? checkedAgo(lastChecked, now) : "checking…"}
+            <span className="hidden tablet:inline"> · keys: j / k to move, Enter to act</span>
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/operator/approvals">
+              All approvals{groups.yours.length + groups.others.length > 0 ? ` · ${groups.needsYou.length + groups.yours.length + groups.others.length} open` : ""}
+            </Link>
+          </Button>
+          {!intro.open ? (
+            <Button type="button" variant="ghost" size="sm" onClick={intro.show}>
+              What can I do?
+            </Button>
+          ) : null}
+          <Button type="button" variant="secondary" size="sm" loading={refreshing} icon={<RefreshCw aria-hidden="true" />} onClick={refresh}>
+            Refresh
+          </Button>
+        </div>
       </header>
 
-      <Panel className="w-full">
-        <PanelHeader>
-          <PanelTitles>
-            <PanelTitle>Platform health</PanelTitle>
-            <PanelDescription>read live, not cached</PanelDescription>
-          </PanelTitles>
-        </PanelHeader>
-        <PanelBody className="p-4 tablet:p-5">
-          {healthQuery.isLoading ? (
-            <p className="text-body-13 text-03">Loading…</p>
-          ) : healthQuery.isError ? (
-            <p className="text-body-13 text-danger-600">
-              Platform health could not be loaded.{" "}
-              {healthQuery.error instanceof ApiError ? healthQuery.error.message : ""}
-            </p>
-          ) : health ? (
-            <div className="grid w-full grid-cols-1 gap-3.5 tablet:grid-cols-2 desktop:grid-cols-3">
-              <MetricTile
-                label="Intents / minute"
-                value={count(health.intentsPerMinute)}
-                sub="per minute"
-                meta={
-                  health.intentsPerMinuteDeltaVsHour === null
-                    ? DASH
-                    : `${percent(health.intentsPerMinuteDeltaVsHour)} vs an hour ago`
-                }
-              />
-              <MetricTile
-                label="Verification backlog"
-                value={count(health.verificationBacklog)}
-                sub="pending"
-                meta={
-                  health.verificationBacklogP95AgeSeconds === null
-                    ? DASH
-                    : `p95 age ${ageFromSeconds(health.verificationBacklogP95AgeSeconds)}`
-                }
-              />
-              {/*
-                A rate at or above the gate is a breach, not a caution — but
-                `MetricTile` has exactly two meta tones, "default" and
-                "warning", and adding a danger tone to a shared primitive is
-                out of scope here (shared primitives are not redesigned
-                for one screen). So "warning" carries the breach, and the
-                meta line names the gate the rate is being read against so the
-                comparison is legible without the colour.
-              */}
-              <MetricTile
-                label="False-positive rate"
-                value={percent(health.falsePositiveRate)}
-                sub="of resolved proposals"
-                meta={`gate ${percent(health.falsePositiveGate)}`}
-                metaTone={
-                  health.falsePositiveRate >= health.falsePositiveGate ? "warning" : "default"
-                }
-              />
-              <MetricTile
-                label="Policies in shadow"
-                value={`${health.policiesInShadow} / ${health.policiesTotal}`}
-                sub="in shadow mode"
-              />
-              <MetricTile
-                label="Stake locked"
-                value={formatMoney(health.stakeLocked)}
-                sub={`${count(health.providersWithStake)} ${
-                  health.providersWithStake === 1 ? "provider" : "providers"
-                }`}
-              />
-              <MetricTile
-                label="Open disputes"
-                value={count(health.openDisputes)}
-                sub="open"
-                meta={
-                  health.oldestOpenDisputeAgeSeconds === null
-                    ? DASH
-                    : `oldest ${ageFromSeconds(health.oldestOpenDisputeAgeSeconds)}`
-                }
-              />
-            </div>
-          ) : null}
-        </PanelBody>
-      </Panel>
+      {intro.open ? <RoleIntro identity={me} waiting={groups.needsYou.length} onDismiss={intro.dismiss} /> : null}
 
-      {healthQuery.isError ? null : (
-        <SlashHoldsPanel holds={health?.slashHolds} loading={healthQuery.isLoading} />
+      <HealthStrip health={health.data} error={health.isError} />
+
+      {results.map((result) => (
+        <ResultCard
+          key={result.id}
+          title={result.title}
+          next={result.next}
+          activityHref={result.activityHref}
+          onDismiss={() => setResults((list) => list.filter((r) => r.id !== result.id))}
+        />
+      ))}
+
+      {loading ? (
+        <PageState kind="loading" rows={3} label="Loading what needs you" />
+      ) : pending.isError ? (
+        <PageState
+          kind="error"
+          description={approvalErrorMessage(pending.error, "list")}
+          onRetry={() => void pending.refetch()}
+          code={pending.error instanceof ApiError ? pending.error.code : null}
+          details={pending.error instanceof Error ? pending.error.message : null}
+        />
+      ) : needsYouTotal === 0 ? (
+        <PageState
+          kind="empty"
+          title="Nothing needs you"
+          description={`${checkedAgo(lastChecked || now, now).replace(/^c/, "C")}. New requests and disputes appear here on their own.`}
+        />
+      ) : (
+        <>
+          {groups.needsYou.length > 0 ? (
+            <section aria-labelledby="needs-approval" className="flex w-full flex-col gap-2.5">
+              <h2 id="needs-approval" className="text-label-md text-01">
+                Waiting for your approval · {groups.needsYou.length}
+              </h2>
+              {groups.needsYou.map((approval) => (
+                <ApprovalItem
+                  key={approval.id}
+                  approval={approval}
+                  context={context}
+                  mode="decide"
+                  onDecided={onDecided}
+                  approvers={approversFor(approval)}
+                  nameOf={nameOf}
+                  compact
+                />
+              ))}
+            </section>
+          ) : null}
+
+          {caps.rule && disputeRows.length > 0 ? (
+            <section aria-labelledby="needs-ruling" className="flex w-full flex-col gap-2.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 id="needs-ruling" className="text-label-md text-01">
+                  Disputes to rule · {disputeRows.length}
+                </h2>
+                <p className="text-body-xs text-03">fewest days left first · unruled after 30 days, the stake is released</p>
+              </div>
+              {disputeRows.map((row) => (
+                <DisputeLine key={row.requestId} row={row} providerName={providers.name(row.providerId)} now={now} canRule />
+              ))}
+            </section>
+          ) : null}
+        </>
       )}
 
-      <Panel className="w-full">
-        <PanelHeader>
-          <PanelTitles>
-            <PanelTitle>Cases</PanelTitle>
-            <PanelDescription>
-              disputed, under review or awaiting a second signature
-            </PanelDescription>
-          </PanelTitles>
-        </PanelHeader>
-        <PanelBody className="p-4 tablet:p-5">
-          {/*
-            Three independent booleans, so three checkboxes rather than
-            `Segmented` — that control is a single-select group over one
-            `value: string` and cannot hold two filters on at once.
-          */}
-          <div
-            className="mb-4 flex w-full flex-wrap items-center gap-x-5 gap-y-2.5"
-            role="group"
-            aria-label="Queue filters"
-          >
-            <Checkbox
-              label="Mine"
-              checked={mine}
-              onChange={(event) => setMine(event.target.checked)}
-            />
-            <Checkbox
-              label="Unassigned"
-              checked={unassigned}
-              onChange={(event) => setUnassigned(event.target.checked)}
-            />
-            <Checkbox
-              label="Overdue"
-              checked={overdue}
-              onChange={(event) => setOverdue(event.target.checked)}
-            />
-          </div>
-
-          {queueQuery.isLoading ? (
-            <p className="text-body-13 text-03">Loading…</p>
-          ) : queueQuery.isError ? (
-            <p className="text-body-13 text-danger-600">
-              The queue could not be loaded.{" "}
-              {queueQuery.error instanceof ApiError ? queueQuery.error.message : ""}
-            </p>
-          ) : rows.length === 0 ? (
-            anyFilter ? (
-              <EmptyState
-                title="No matches on this page"
-                description="Filters are applied after pagination, so a later page may still match. Load more, or clear the filters."
-              />
-            ) : (
-              <EmptyState
-                title="Nothing to adjudicate"
-                description="The queue holds cases a provider has objected to — DISPUTED, UNDER_REVIEW or AWAITING_SECOND. A proposal nobody has objected to yet is not in it, and will resolve on its own if the provider's window closes."
-              />
-            )
-          ) : (
-            <div className="w-full overflow-x-auto">
-              <Table
-                columns={columns}
-                rows={rows}
-                caption="Adjudication queue"
-                className="min-w-[1080px]"
-              />
-            </div>
-          )}
-        </PanelBody>
-      </Panel>
-
-      {queueQuery.hasNextPage ? (
-        <Button
-          variant="secondary"
-          className="self-start"
-          loading={queueQuery.isFetchingNextPage}
-          onClick={() => queueQuery.fetchNextPage()}
-        >
-          Load more
-        </Button>
+      {caps.rule && disputes.isError ? (
+        <PageState
+          kind="error"
+          title="Disputes could not be loaded"
+          description="The on-chain disputes could not be read. Approvals above are still current."
+          onRetry={() => void disputes.refetch()}
+          code={disputes.error instanceof ApiError ? disputes.error.code : null}
+        />
       ) : null}
+
+      {groups.yours.length > 0 ? (
+        <p className="w-full rounded-lg border border-01 bg-01 px-3.5 py-2.5 text-body-13 text-02">
+          {groups.yours.length === 1 ? "1 of your requests is" : `${groups.yours.length} of your requests are`} waiting for
+          someone else.{" "}
+          <Link href="/operator/approvals" className="text-primary-600 hover:underline">
+            See who can approve
+          </Link>
+        </p>
+      ) : null}
+
+      <section aria-labelledby="watching" className="flex w-full flex-col gap-2.5">
+        <h2 id="watching" className="text-label-md text-01">
+          On watch
+        </h2>
+        <div className="grid w-full grid-cols-1 gap-2.5 tablet:grid-cols-2">
+          <Link
+            href="/operator/blocks"
+            className="flex flex-col gap-0.5 rounded-xl border border-01 bg-01 p-4 hover:border-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          >
+            <span className="text-label-13 text-01">Active blocks</span>
+            <span className="font-mono text-mono-sm text-01">{blockCount === null ? "—" : blockCount}</span>
+            <span className="text-body-xs text-03">accounts that cannot use Assay right now</span>
+          </Link>
+          <details className="group flex flex-col rounded-xl border border-01 bg-01 p-4">
+            <summary className="flex cursor-pointer list-none flex-col gap-0.5">
+              <span className="text-label-13 text-01">Slash holds</span>
+              <span className="font-mono text-mono-sm text-01">{health.data?.slashHolds === undefined ? "—" : holds.length}</span>
+              <span className="text-body-xs text-03">
+                providers not routed while a penalty cannot be collected · lifts by itself
+                {holds.length > 0 ? <span className="text-primary-600 group-open:hidden"> · show</span> : null}
+              </span>
+            </summary>
+            {holds.length > 0 ? (
+              <ul className="mt-3 flex flex-col gap-2 border-t border-01 pt-3">
+                {holds.map((hold) => (
+                  <li key={`${hold.providerId}:${hold.chainId}`} className="flex flex-col gap-0.5 text-body-13">
+                    <span className="text-01">
+                      {providers.name(hold.providerId)} · {holdChainName(hold.chainId)}
+                    </span>
+                    <span className="text-body-xs text-03">
+                      {hold.reasons.map((reason) => operatorHoldReasonText(reason).replace(/\s*\([A-Z_]+\)$/, "")).join("; ")} · since{" "}
+                      <LocalTime value={hold.heldSince} />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </details>
+        </div>
+      </section>
     </>
   );
 }

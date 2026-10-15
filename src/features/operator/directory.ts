@@ -19,8 +19,8 @@ import { checkEvmAddress } from "@/libs/chains/evm/operator-wallet";
 /** Every role, in the order the console lists them, with what each one is for. */
 export const ROLE_OPTIONS: readonly { role: OperatorRole; label: string }[] = Object.freeze([
   { role: "ADJ", label: "Adjudicator" },
-  { role: "ADJL", label: "Adjudication lead" },
-  { role: "SRE", label: "On-call / SRE" },
+  { role: "ADJL", label: "Lead adjudicator" },
+  { role: "SRE", label: "On-call (SRE)" },
   { role: "TRE", label: "Treasury" },
   { role: "TREA", label: "Treasury approver" },
   { role: "POL", label: "Policy author" },
@@ -28,8 +28,8 @@ export const ROLE_OPTIONS: readonly { role: OperatorRole; label: string }[] = Ob
   { role: "BD", label: "Provider success" },
   { role: "SUP", label: "Support" },
   { role: "CMP", label: "Compliance" },
-  { role: "SEC", label: "Security / keys" },
-  { role: "OPS_ADMIN", label: "Operator administrator" },
+  { role: "SEC", label: "Security" },
+  { role: "OPS_ADMIN", label: "Admin" },
 ]);
 
 export const DIRECTORY_NOTE_MIN = 10;
@@ -239,4 +239,28 @@ export function directoryErrorMessage(error: unknown): string {
     default:
       return `${error.message}${tail}`;
   }
+}
+
+// ── Plain-language form helpers ─────────────────────────────────────────────
+
+/** "Noor Hassan" → "noor@", the short handle the register names people by. */
+export function deriveSubject(name: string): string {
+  const first = name.trim().split(/\s+/)[0] ?? "";
+  const handle = first
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\u0111/g, "d")
+    .replace(/[^a-z0-9._-]/g, "");
+  return handle ? `${handle}@` : "";
+}
+
+/**
+ * The limit chosen in dollars ("0", "100", "1000", "unlimited" or a typed
+ * amount already converted to minor units) as the form's `LimitInput`.
+ */
+export function limitInputFromChoice(choice: string, atomic: string | null): LimitInput {
+  if (choice === "unlimited") return { mode: "unbounded", amount: "" };
+  if (choice === "0" || atomic === "0") return { mode: "zero", amount: "" };
+  return { mode: "amount", amount: atomic ?? "" };
 }

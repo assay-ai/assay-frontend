@@ -21,6 +21,8 @@ import type {
   OperatorRole,
 } from "@/interfaces/operator";
 import { refusedFunctionOf } from "@/features/chain-calls/refusals";
+import type { Money } from "@/interfaces/api";
+import { stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { ApiError } from "@/libs/ApiClient";
 import { MAX_SLASH_BATCH } from "@/libs/chains/evm/stake-slashes/abi";
 import { normaliseEvmAddress } from "@/libs/chains/evm/stake-slashes/address";
@@ -327,3 +329,42 @@ export function arbiterErrorMessage(error: unknown, action: ArbiterAction): stri
   const sentence = typeof entry === "function" ? entry(action, error) : entry;
   return `${sentence} (${error.code})`;
 }
+
+// ── Display ─────────────────────────────────────────────────────────────────
+
+/**
+ * A dispute's atomic amount as money ("$28.47"), at the scale this build pins
+ * for the chain's stake asset. Null when the scale is not known here — the
+ * screen then says "amount on chain" rather than printing atomic units.
+ */
+export function disputeAmount(chainId: string, atomic: string | null): Money | null {
+  if (atomic === null || !/^\d+$/.test(atomic)) return null;
+  const deployment = stakeDeploymentFor(chainId);
+  if (!deployment) return null;
+  return { amount: atomic, asset: chainId, decimals: deployment.fallbackAssetDecimals };
+}
+
+/** "72 h", "3 days", "45 min" — for a duration read off the chain. */
+export function durationText(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) return "not reported";
+  if (seconds % 3600 === 0 && seconds <= 7 * 86_400) return `${seconds / 3600} h`;
+  if (seconds % 86_400 === 0) return `${seconds / 86_400} days`;
+  if (seconds >= 3600) return `${Math.round(seconds / 360) / 10} h`;
+  return `${Math.max(1, Math.round(seconds / 60))} min`;
+}
+
+/** A ruling's reasons, as chips. The codes are what the override register records. */
+export const RULING_REASONS: Readonly<Record<ArbiterRuling, readonly { value: string; label: string; hint: string }[]>> = Object.freeze({
+  UPHOLD: [
+    { value: "EVIDENCE_HOLDS", label: "Evidence holds", hint: "The failed calls are real and the provider's." },
+    { value: "PROVIDER_CONFIRMED", label: "Provider confirmed", hint: "The provider acknowledged the failures." },
+    { value: "RATE_GENUINELY_EXCEEDED", label: "Rate exceeded", hint: "The failure rate was above the declared one." },
+    { value: "OTHER", label: "Other", hint: "Say why in the note." },
+  ],
+  CANCEL: [
+    { value: "PLATFORM_DEFECT", label: "Our defect", hint: "Our mapping, checks or routing caused the failures." },
+    { value: "INSUFFICIENT_EVIDENCE", label: "Not enough evidence", hint: "The sample cannot support the penalty." },
+    { value: "OVERTURNED", label: "Provider is right", hint: "The dispute is upheld for the provider." },
+    { value: "OTHER", label: "Other", hint: "Say why in the note." },
+  ],
+});

@@ -55,8 +55,8 @@ describe("who sees Approve", () => {
   });
 
   it("is held back, with the roles named, when yours do not cover the code", () => {
-    expect(approveBlockedBecause(approval({ code: "A-10" }), me)).toBe("Approving A-10 needs ADJL.");
-    expect(approveBlockedBecause(approval({ code: "A-12" }), { roles: ["ADJL"] })).toMatch(/OPS_ADMIN/);
+    expect(approveBlockedBecause(approval({ code: "A-10" }), me)).toBe("Only a Lead adjudicator can approve this.");
+    expect(approveBlockedBecause(approval({ code: "A-12" }), { roles: ["ADJL"] })).toMatch(/an Admin/);
     expect(approveBlockedBecause(approval({ code: "S-5" }), { roles: ["TRE"] })).toBeNull();
     expect(approveBlockedBecause(approval({ code: "S-11" }), me)).toBeNull();
   });
@@ -133,9 +133,9 @@ describe("how a row reads", () => {
         },
         context,
       );
-      expect(d.sentence).toBe("Lift the block on wallet 0x0000…0aBc (reason R15_DONE).");
+      expect(d.sentence).toBe("Lift the block on wallet 0x0000…0aBc (r15 done).");
       expect(d.target).toEqual({ label: "Wallet 0x0000…0aBc", href: "/operator/blocks" });
-      expect(d.fields.map((f) => f.label)).toEqual(["Blocked", "Reason code", "Note"]);
+      expect(d.fields.map((f) => f.label)).toEqual(["Blocked for", "Reason", "Note"]);
       expect(JSON.stringify(d)).not.toContain(BLOCK_ID);
     });
 
@@ -145,7 +145,7 @@ describe("how a row reads", () => {
         target: `account_block:${BLOCK_ID}`,
         payload: { body: { reasonCode: "R" }, blockId: BLOCK_ID },
       });
-      expect(d.sentence).toBe("Lift the block on block 7b2acf05… (reason R).");
+      expect(d.sentence).toBe("Lift the block on block 7b2acf05… (r).");
     });
 
     it("spells out an operator add with labels, a checksummed wallet and money", () => {
@@ -168,15 +168,15 @@ describe("how a row reads", () => {
         context,
       );
       expect(d.sentence).toBe(
-        "Add operator r15-throwaway@example.test with wallet 0x07cd…D711, roles POL, limit $0.00 (reason E2E_TEST).",
+        "Add operator r15-throwaway@example.test with wallet 0x07cd…D711, roles Policy author, limit $0.00 (e2e test).",
       );
       expect(d.target.label).toBe("Wallet 0x07cd29d00E0F6f86B9e061F5d15c65D5edf4D711");
       expect(d.fields).toEqual([
         { label: "Operator", value: "R15 Throwaway (r15-throwaway@example.test)" },
         { label: "Wallet", value: "0x07cd29d00E0F6f86B9e061F5d15c65D5edf4D711" },
-        { label: "Roles", value: "POL (Policy author)" },
+        { label: "Roles", value: "Policy author" },
         { label: "Authority limit", value: "$0.00" },
-        { label: "Reason code", value: "E2E_TEST" },
+        { label: "Reason", value: "E2e test" },
         { label: "Note", value: "R15 e2e throwaway operator, removed afterwards" },
       ]);
       expect(JSON.stringify(d.fields)).not.toMatch(/authorityLimitMinor|walletAddress|displayName|reasonCode/);
@@ -191,12 +191,12 @@ describe("how a row reads", () => {
         },
         context,
       );
-      expect(d.sentence).toBe("Raise the roles of Test Op B (test-op-b@) to POL, TRE, ADJL (reason R14_ADJL).");
+      expect(d.sentence).toBe("Raise the roles of Test Op B (test-op-b@) to Policy author, Treasury, Lead adjudicator (r14 adjl).");
       expect(d.target.label).toBe("Operator test-op-b@");
       expect(d.fields.slice(0, 3)).toEqual([
         { label: "Wallet", value: "0x07cd29d00E0F6f86B9e061F5d15c65D5edf4D711" },
-        { label: "Roles now", value: "POL, TRE" },
-        { label: "New roles", value: "POL (Policy author), TRE (Treasury), ADJL (Adjudication lead)" },
+        { label: "Roles now", value: "Policy author, Treasury" },
+        { label: "New roles", value: "Policy author, Treasury, Lead adjudicator" },
       ]);
     });
 
@@ -215,7 +215,7 @@ describe("how a row reads", () => {
       expect(labels).not.toContain("Limit now");
       expect(d.fields).toContainEqual({
         label: "Roles requested (at request time)",
-        value: "POL (Policy author), TRE (Treasury), ADJL (Adjudication lead)",
+        value: "Policy author, Treasury, Lead adjudicator",
       });
       expect(d.fields).toContainEqual({ label: "Limit requested (at request time)", value: "$5.00" });
       expect(labels).not.toContain("Roles before (at request time)");
@@ -235,7 +235,7 @@ describe("how a row reads", () => {
         },
         context,
       );
-      expect(d.fields).toContainEqual({ label: "Roles before (at request time)", value: "POL" });
+      expect(d.fields).toContainEqual({ label: "Roles before (at request time)", value: "Policy author" });
       expect(d.fields).toContainEqual({ label: "Limit before (at request time)", value: "$0.00" });
     });
 
@@ -253,7 +253,7 @@ describe("how a row reads", () => {
         target: `operator:${OP_ID}`,
         payload: { body: { authorityLimitMinor: null, reasonCode: "R" }, operatorId: OP_ID },
       });
-      expect(d.sentence).toBe("Raise the authority limit of operator c39c364e… to unbounded (reason R).");
+      expect(d.sentence).toBe("Raise the authority limit of operator c39c364e… to unbounded (r).");
     });
 
     it("links a case and words suspend, sweep and compensation", () => {
@@ -263,19 +263,19 @@ describe("how a row reads", () => {
         target: `slash_proposal:${id}`,
         payload: { body: { note: "n", reasonCode: "R15_TEST" }, proposalId: id },
       });
-      expect(suspend.sentence).toBe("Suspend case a337cb6d…, which cancels its penalty (reason R15_TEST).");
+      expect(suspend.sentence).toBe("Suspend case a337cb6d…, which cancels its penalty (r15 test).");
       expect(suspend.target).toEqual({ label: "Case a337cb6d…", href: `/operator/cases/view?id=${id}` });
 
       const sweep = describeApproval(approval());
-      expect(sweep.sentence).toBe("Sweep every case with defect D-1 over the last 24 h, decided like case p1 (reason R).");
-      expect(sweep.fields.map((f) => f.label)).toEqual(["Defect", "Look back", "Reason code", "Note"]);
+      expect(sweep.sentence).toBe("Sweep every case with defect D-1 over the last 24 h, decided like case p1 (r).");
+      expect(sweep.fields.map((f) => f.label)).toEqual(["Defect", "Look back", "Reason", "Note"]);
 
       const comp = describeApproval({
         action: "slash.compensated",
         target: "slash_proposal:p1",
         payload: { proposalId: "p1", body: { signature: "5sig", reasonCode: "R", note: "n" } },
       });
-      expect(comp.sentence).toBe("Record compensation for case p1 and close it as compensated (reason R).");
+      expect(comp.sentence).toBe("Record compensation for case p1 and close it as compensated (r).");
       expect(comp.fields[0]).toEqual({ label: "Deposit signature", value: "5sig" });
     });
 
@@ -311,10 +311,10 @@ describe("the approve and reject refusals", () => {
     ["OPERATOR_APPROVER_AUTHORITY_EXCEEDED", 403, /above your authority limit/],
     ["OPERATOR_APPROVAL_NOT_PENDING", 409, /already approved, rejected or has expired/],
     ["OPERATOR_NOT_AUTHORIZED", 403, /no longer active/],
-  ] as const)("maps %s and keeps the code", (code, status, pattern) => {
+  ] as const)("maps %s to a sentence; the code goes under Details", (code, status, pattern) => {
     const message = approvalErrorMessage(err(code, status), "approve");
     expect(message).toMatch(pattern);
-    expect(message).toContain(`(${code})`);
+    expect(message).not.toContain(code);
   });
 
   it("explains a re-validation failure and that the request is still pending", () => {
@@ -322,7 +322,7 @@ describe("the approve and reject refusals", () => {
       err("SLASH_PROPOSAL_INVALID_TRANSITION", 409, "The proposal is CANCELLED"),
       "approve",
     );
-    expect(message).toMatch(/re-checked against the current state and refused: The proposal is CANCELLED/);
+    expect(message).toMatch(/re-checked against how things stand now and refused/);
     expect(message).toMatch(/still pending/);
   });
 
