@@ -7,7 +7,7 @@ import { cn } from "@/utils";
  * Design: "Search", from the design's "Field Bench".
  *
  * Only one static instance is drawn: a search icon, placeholder copy
- * ("Receipt, ULID, tool or tx…"), and a "⌘K" kbd hint — verbatim from the
+ * (the buyer bar says "Find a call by id or tool"), and a "⌘K" kbd hint — verbatim from the
  * bench. Note the ground is `$bg-02`/`$border-01` here, not the `$bg-01`/
  * `$border-02` that Field and Select's boxes use; that is a real, deliberate
  * difference in the design, not a mismatch.

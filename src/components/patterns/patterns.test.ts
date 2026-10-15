@@ -45,7 +45,7 @@ describe("capReading", () => {
 
   it("handles a zero limit and sub-cent caps", () => {
     expect(capReading({ used: usd("0"), limit: usd("0") }, UTC).level).toBe("none");
-    expect(capReading({ used: usd("0"), limit: usd("1000") }, UTC).sentence).toBe("$0.0010 left of $0.0010");
+    expect(capReading({ used: usd("0"), limit: usd("1000") }, UTC).sentence).toBe("$0.001 left of $0.001");
   });
 });
 

@@ -2,7 +2,6 @@
 
 import * as React from "react";
 
-import { BalanceCards } from "@/components/funding/balance-cards";
 import { AlertBadge } from "@/components/ui/alert-badge";
 import { ApprovalCard } from "@/components/ui/approval-card";
 import { Arithmetic, type ArithmeticRow } from "@/components/ui/arithmetic";
@@ -512,9 +511,9 @@ export default function KitchenSinkPage() {
           </Spec>
 
           <Spec name="search · with shortcut / without / disabled">
-            <Search placeholder="Receipt, ULID, tool or tx…" />
-            <Search placeholder="Receipt, ULID, tool or tx…" shortcut={null} />
-            <Search placeholder="Receipt, ULID, tool or tx…" disabled />
+            <Search placeholder="Find a call by id or tool" />
+            <Search placeholder="Find a call by id or tool" shortcut={null} />
+            <Search placeholder="Find a call by id or tool" disabled />
           </Spec>
 
           <Spec name="segmented">
@@ -854,7 +853,7 @@ export default function KitchenSinkPage() {
               activeNavId="controls"
               alertCount={0}
               avatarName="QA Runner"
-              search={<Search placeholder="Receipt, ULID, tool or tx…" wrapperClassName="hidden w-[240px] desktop:flex" />}
+              search={<Search placeholder="Find a call by id or tool" wrapperClassName="hidden w-[240px] desktop:flex" />}
             />
           </Spec>
 
@@ -900,96 +899,6 @@ export default function KitchenSinkPage() {
               badges={{ controls: true }}
               className="w-full max-w-[390px]"
             />
-          </Spec>
-        </Group>
-
-        {/* ================================================================
-         * 7. Balances, per chain
-         * ============================================================== */}
-        <Group index="07" title="Balances, per chain">
-          {/*
-            A two-chain BalanceCards, with DIFFERENT amounts on purpose.
-
-            This is the only place a browser can read computed style off these
-            cards without an API or a session: /kitchen-sink is static,
-            unauthenticated and prerendered. `cn()` silently drops custom design
-            tokens — invisible to tsc, to the CSS and to review — so a card whose
-            colours are wrong looks perfect in every other gate.
-
-            12.50 and 4.00 are deliberately unequal and deliberately not round:
-            first-row, last-row and sum are three distinguishable answers, and
-            $16.50 must appear nowhere on this page.
-          */}
-          <Spec name="balance-cards · two chains, no total">
-            <section id="balance-cards" className="flex w-full flex-col gap-3">
-              <BalanceCards
-                emptyNote={{ kind: "none", text: "unused — this spec has two rows" }}
-                chains={[
-                  {
-                    chainId: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
-                    namespace: "solana",
-                    displayName: "Solana devnet",
-                    explorerBaseUrl: "https://explorer.solana.com/?cluster=devnet",
-                    settlementAsset: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1/token:4zMM",
-                    settlementAssetSymbol: "USDC",
-                    decimals: 6,
-                  },
-                  {
-                    chainId: "eip155:46630",
-                    namespace: "eip155",
-                    displayName: "Robinhood Chain testnet",
-                    explorerBaseUrl: "https://testnet-explorer.example/",
-                    settlementAsset: "eip155:46630/erc20:0xa0b8",
-                    settlementAssetSymbol: "USDG",
-                    decimals: 6,
-                  },
-                ]}
-                balances={[
-                  {
-                    chainId: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
-                    accountId:
-                      "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1:AgentAccount1111111111111111111111111111111",
-                    asset: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1/token:4zMM",
-                    decimals: 6,
-                    available: { amount: "12500000", asset: "solana:.../token:4zMM", decimals: 6 },
-                    held: { amount: "300000", asset: "solana:.../token:4zMM", decimals: 6 },
-                    /* Read: the chain answered, and this is what it said. */
-                    withdrawable: { amount: "12200000", asset: "solana:.../token:4zMM", decimals: 6 },
-                    chainReadable: true,
-                  },
-                  {
-                    chainId: "eip155:46630",
-                    accountId: "eip155:46630:0x83ab1234567890abcdef1234567890abcdef2913",
-                    asset: "eip155:46630/erc20:0xa0b8",
-                    decimals: 6,
-                    available: { amount: "4000000", asset: "eip155:46630/erc20:0xa0b8", decimals: 6 },
-                    held: { amount: "0", asset: "eip155:46630/erc20:0xa0b8", decimals: 6 },
-                    /*
-                      Unreadable, deliberately — the gallery is where the two
-                      states are compared side by side. This card must never
-                      look like the one above it with a smaller number.
-                    */
-                    withdrawable: null,
-                    chainReadable: false,
-                  },
-                ]}
-              />
-            </section>
-          </Spec>
-
-          <Spec name="balance-cards · empty, the ABSENT state">
-            {/* An array is always truthy; this is the branch that proves the
-                component branches on `.length`. It must NOT read $0.00. */}
-            <section id="balance-cards-empty" className="flex w-full flex-col gap-3">
-              <BalanceCards
-                chains={[]}
-                balances={[]}
-                emptyNote={{
-                  kind: "none",
-                  text: "No balance to read for this account. Add funds to open one.",
-                }}
-              />
-            </section>
           </Spec>
         </Group>
 

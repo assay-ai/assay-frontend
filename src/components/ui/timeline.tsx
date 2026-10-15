@@ -26,10 +26,12 @@ export type TimelineEventTone = NonNullable<VariantProps<typeof dotVariants>["to
 
 export interface TimelineEvent {
   id?: string;
-  /** Monospace timestamp, e.g. "10:00:00.004". */
+  /** Timestamp as shown, e.g. "10:00:04" in the reader's own time zone. */
   time: string;
+  /** Tooltip for the timestamp — the exact UTC instant. */
+  timeTitle?: string;
   label: string;
-  /** Monospace detail, e.g. "$0.0100" or "prv_searchly · TRUSTED · 408ms". Omit for events with nothing to report. */
+  /** Monospace detail, e.g. "$0.01" or "408ms". Omit for events with nothing to report. */
   meta?: string;
   tone?: TimelineEventTone;
 }
@@ -51,7 +53,7 @@ export const Timeline = React.forwardRef<HTMLOListElement, TimelineProps>(
             {event.time} — {event.label}
             {event.meta ? `: ${event.meta}` : ""}
           </span>
-          <span aria-hidden="true" className="shrink-0 text-mono-12 font-mono text-03">
+          <span aria-hidden="true" title={event.timeTitle} className="shrink-0 text-mono-12 font-mono tabular-nums text-03">
             {event.time}
           </span>
           <span aria-hidden="true" className={dotVariants({ tone: event.tone })} />

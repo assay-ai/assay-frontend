@@ -165,7 +165,10 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
                         <LocalTime value={call.createdAt} />
                       </span>
                     </div>
-                    <span className="shrink-0 font-mono text-mono-13 text-01">{formatMoney(call.charged, { decimals: 4 })}</span>
+                    <span className="shrink-0 font-mono text-mono-13 text-01">{callOutcome(call) === "checking"
+                        ? `${formatMoney(call.price, { decimals: 4 })} held`
+                        : formatMoney(call.charged, { decimals: 4 })}
+                    </span>
                     <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
                   </Link>
                 </li>

@@ -78,7 +78,7 @@ export function SettlesElsewhere({
         </span>
       </p>
       <Button size="sm" variant="secondary" asChild>
-        <Link href="/funding/deposit">Add funds on {names[0]}</Link>
+        <Link href="/funding?action=deposit">Add funds on {names[0]}</Link>
       </Button>
     </div>
   );

@@ -61,7 +61,7 @@ describe("SettlesElsewhere — marked, never hidden", () => {
     const html = markup([EVM], [SOLANA]);
     expect(html).toContain("Settles on Robinhood Chain testnet");
     expect(html).toContain("you have no funds there");
-    expect(html).toContain('href="/funding/deposit"');
+    expect(html).toContain('href="/funding?action=deposit"');
     /* The display name, never the raw CAIP-2 id. */
     expect(html).not.toContain(EVM);
   });

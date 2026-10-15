@@ -84,6 +84,6 @@ describe("chainFigure — the three states never collapse", () => {
   });
 
   it("honours `decimals` for a read figure", () => {
-    expect(chainFigure(true, money("1000"), { decimals: 4 }).text).toBe("$0.0010");
+    expect(chainFigure(true, money("1000"), { decimals: 4 }).text).toBe("$0.001");
   });
 });

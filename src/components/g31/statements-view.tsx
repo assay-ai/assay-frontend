@@ -70,7 +70,7 @@ function StatementsContent() {
       assetLabel,
     });
     const t = summary.data.totals;
-    const plainAmount = (m: typeof t.listedTotal) => formatMoney(m, { grouped: false, symbol: "", decimals: m.decimals });
+    const plainAmount = (m: typeof t.listedTotal) => formatMoney(m, { grouped: false, exact: true, symbol: "", decimals: m.decimals });
     const total = ["Total", "", assetLabel, String(t.calls), plainAmount(t.listedTotal), plainAmount(t.chargedTotal), plainAmount(t.withheldTotal), String(t.refundedCalls)].join(",");
     const csv = `${body}\n${total}`;
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));

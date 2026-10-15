@@ -9,12 +9,16 @@ import type { SummaryGroup } from "./wire";
  * Spend (`/spend`), pure: the headline, the ranked bars and the CSV.
  */
 
-/** "▲ 12% vs previous 7 days", or null when there is nothing to compare. */
+/**
+ * "▲ 12%" (the screen adds "vs previous 7 days"), or null when there is nothing
+ * to compare — including a previous period with no spend, where "new" would
+ * only repeat the headline.
+ */
 export function changePercent(current: Money | null | undefined, previous: Money | null | undefined): string | null {
   if (!current || !previous) return null;
   const now = toDecimal(current);
   const before = toDecimal(previous);
-  if (before.isZero()) return now.isZero() ? null : "new this period";
+  if (before.isZero()) return null;
   const pct = now.minus(before).div(before).mul(100);
   if (pct.abs().lt(0.5)) return "about the same";
   const rounded = pct.abs().lt(10) ? pct.abs().toFixed(1) : pct.abs().toFixed(0);
@@ -56,7 +60,10 @@ export function rankRows(groups: readonly SummaryGroup[], labelOf: (key: string)
       const charged = toDecimal(g.chargedTotal);
       const withheld = toDecimal(g.withheldTotal);
       const pct = (v: Decimal) => (max.isZero() ? 0 : v.div(max).mul(100).toNumber());
-      const deltaAmount = g.comparison ? new Decimal(g.comparison.deltaChargedTotal.amount || "0") : null;
+      // A row only compares with a previous period that had spend on it: "+$52.50
+      // vs before" on a group that is entirely new is the row's own total again.
+      const hadBefore = g.comparison ? !toDecimal(g.comparison.chargedTotal).isZero() : false;
+      const deltaAmount = g.comparison && hadBefore ? new Decimal(g.comparison.deltaChargedTotal.amount || "0") : null;
       return {
         key: g.key,
         label: labelOf(g.key),
@@ -89,9 +96,9 @@ export function spendCsv(
     g.key,
     options.assetLabel,
     String(g.calls),
-    formatMoney(g.listedTotal, { grouped: false, symbol: "", decimals: g.listedTotal.decimals }),
-    formatMoney(g.chargedTotal, { grouped: false, symbol: "", decimals: g.chargedTotal.decimals }),
-    formatMoney(g.withheldTotal, { grouped: false, symbol: "", decimals: g.withheldTotal.decimals }),
+    formatMoney(g.listedTotal, { grouped: false, exact: true, symbol: "", decimals: g.listedTotal.decimals }),
+    formatMoney(g.chargedTotal, { grouped: false, exact: true, symbol: "", decimals: g.chargedTotal.decimals }),
+    formatMoney(g.withheldTotal, { grouped: false, exact: true, symbol: "", decimals: g.withheldTotal.decimals }),
     String(g.refundedCalls),
   ]);
   return [header, ...rows].map((r) => r.map(escape).join(",")).join("\n");

@@ -14,7 +14,7 @@ import type { ToolBindingSummary } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
-import { formatMoneyNonZero } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 import { labelForEndpoint } from "@/utils/provider-label";
 
 /**
@@ -27,7 +27,7 @@ const LIST_LIMIT = 25;
 
 function priceLine(binding: ToolBindingSummary): string {
   if (binding.pricingMode === "FREE") return "Free";
-  const price = `${formatMoneyNonZero(binding.price)} a call`;
+  const price = `${formatMoney(binding.price, { decimals: 6 })} a call`;
   return binding.pricingMode === "FREEMIUM" ? `Free calls, then ${price}` : price;
 }
 

@@ -3,7 +3,7 @@ import Decimal from "decimal.js";
 import { DASH, stampUtc } from "@/features/g34a/stats";
 import { claimTypeLabel } from "@/features/provider-disputes/claim-types";
 import type { SlashArithmeticRow } from "@/interfaces/provider-slash-cases";
-import { formatMoneyNonZero } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 
 /**
  * Words for what the slash case's API sends as field names, minor units and
@@ -25,7 +25,7 @@ export interface CaseMoney {
 }
 
 const minor = (amount: string, money: CaseMoney): string =>
-  formatMoneyNonZero({ amount, asset: money.asset, decimals: money.decimals });
+  formatMoney({ amount, asset: money.asset, decimals: money.decimals });
 
 /* ------------------------------------------------------------ measurement */
 

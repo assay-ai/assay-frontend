@@ -39,7 +39,7 @@
  * (`SlashProposalClocks` below) — real for slash-proposal-originated
  * disputes, via `subjectId` (the proposal id). For every other dispute this
  * app renders only the provider's own `deadlineAt`, and says so rather than
- * inventing a platform deadline. See `src/features/provider-disputes/timeline.ts`.
+ * inventing a platform deadline.
  */
 
 import type { ListQuery, Money } from "./api";

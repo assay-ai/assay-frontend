@@ -16,54 +16,65 @@ export function toDecimal(money: Money): Decimal {
 
 export interface FormatMoneyOptions {
   /**
-   * Fraction digits. The design shows money at two very different precisions —
-   * $12.40 for a balance, $0.0010 for a per-call price — so this is explicit at
-   * every call site rather than guessed from the value.
+   * The MOST fraction digits to show. Display always follows one rule (see
+   * `formatDecimal`): two decimals, more only when the value has them. A
+   * per-call price passes 4 or 6 so `$0.0016` survives; a balance leaves it at 2.
    */
   decimals?: number;
   /** Prefix. Defaults to "$". */
   symbol?: string;
   /** Thousands separators. On by default, as the design's "14,760" shows. */
   grouped?: boolean;
+  /**
+   * Exactly `decimals` places, no trimming and no widening — for CSV exports
+   * and raw details, where the figure must be the ledger's own.
+   */
+  exact?: boolean;
 }
 
+/** Past this, a computed Decimal (a division) is noise, not precision. */
+const MAX_SUBUNIT_PLACES = 8;
+
 /**
- * **The one rounding convention on this platform: truncate, never round.**
+ * **The one display rule for money on this platform.**
  *
- * `Decimal.ROUND_DOWN`, spelled once, here. $9.965 is `$9.96` and $34.965 is
- * `$34.96` — on every screen, in every direction, including the screens that
- * add two of those together.
+ * 1. Two decimals by default: `$12.40`, `$2.50`.
+ * 2. More decimals only when the value has them, up to `decimals`, with the
+ *    trailing zeros past the second dropped: `$0.0120` is `$0.012`,
+ *    `$2.5000` is `$2.50`, `$0.0016` stays `$0.0016`.
+ * 3. A value that is not zero never reads as zero: below the requested
+ *    precision it is written out to its own precision (`$0.000001`, `$0.005`).
+ *    Zero is `$0.00`.
  *
- * ## Why truncation and not half-up
+ * Exact values (CSV exports, raw details) do not come through here.
  *
- * Either is defensible in isolation; disagreeing is not. Between the two, a
- * displayed figure that is never larger than the figure behind it is the one
- * that cannot promise money that is not there — a balance shown as `$9.97`
- * when the ledger holds 9.965 is a withdrawal request the chain refuses, and a
- * price shown rounded up is a charge nobody made. Down is the direction whose
- * error is always in the buyer's favour to discover.
- *
- * ## Why this function exists at all
- *
- * It was already the convention, implemented **three times**: here, and by two
- * hand-copied `money()` helpers in `funding/deposit/page.tsx` and
- * `funding/auto-top-up/page.tsx`. Three copies agree by coincidence, and
- * `/spend` had already broken step — `perCall` wrote
- * `toFixed(4, Decimal.ROUND_DOWN)` while the narrative sentence two hundred
- * lines below wrote `toFixed(4)`, which is decimal.js's default and is
- * ROUND_HALF_UP. Same screen, same quantity, two conventions, and no test
- * could see it because neither line had one. So there is one implementation
- * now, and a caller that wants a different convention has to say so where a
- * reviewer reads it.
+ * **Truncate, never round** (`Decimal.ROUND_DOWN`, spelled once, here).
+ * $9.965 is `$9.96` and $34.965 is `$34.96` — on every screen, in every
+ * direction. A displayed figure that is never larger than the figure behind it
+ * cannot promise money that is not there: a balance shown as `$9.97` when the
+ * ledger holds 9.965 is a withdrawal request the chain refuses, and a price
+ * shown rounded up is a charge nobody made.
  *
  * Takes a `Decimal` rather than a `Money` so the arithmetic screens — "balance
  * after this deposit" — reach the same code as the reading screens. `formatMoney`
  * is the `Money` front door and delegates here.
  */
 export function formatDecimal(value: Decimal, options: FormatMoneyOptions = {}): string {
-  const { decimals = 2, symbol = "$", grouped = true } = options;
+  const { decimals = 2, symbol = "$", grouped = true, exact = false } = options;
+  const minPlaces = exact ? decimals : Math.min(2, decimals);
 
-  const fixed = value.toFixed(decimals, Decimal.ROUND_DOWN);
+  let places = decimals;
+  if (!exact && !value.isZero() && value.toDecimalPlaces(decimals, Decimal.ROUND_DOWN).isZero()) {
+    places = Math.max(decimals, Math.min(value.decimalPlaces(), MAX_SUBUNIT_PLACES));
+  }
+
+  let fixed = value.toFixed(places, Decimal.ROUND_DOWN);
+  if (places > minPlaces) {
+    const [whole, fraction = ""] = fixed.split(".");
+    let kept = fraction.replace(/0+$/, "");
+    if (kept.length < minPlaces) kept = kept.padEnd(minPlaces, "0");
+    fixed = kept ? `${whole}.${kept}` : whole;
+  }
   if (!grouped) return `${symbol}${fixed}`;
 
   const [whole, fraction] = fixed.split(".");
@@ -71,28 +82,12 @@ export function formatDecimal(value: Decimal, options: FormatMoneyOptions = {}):
   return `${symbol}${withSeparators}${fraction ? "." + fraction : ""}`;
 }
 
+/** `Money` (minor units) through the one display rule above. Nothing is `$0.00`. */
 export function formatMoney(money: Money | null | undefined, options: FormatMoneyOptions = {}): string {
   const { decimals = 2, symbol = "$" } = options;
-  if (!money) return `${symbol}0.${"0".repeat(decimals)}`;
+  if (!money) return `${symbol}0.${"0".repeat(Math.min(2, decimals))}`;
 
   return formatDecimal(toDecimal(money), options);
-}
-
-/**
- * Money at normal currency precision (two decimals) — except an amount that is
- * not zero and below one cent, which is written out to the asset's own scale
- * with trailing zeros dropped (`$0.000001`, `$0.005`). For the places where
- * the point is that a gap exists at all: a one-unit difference must never
- * read as `$0.00`.
- */
-export function formatMoneyNonZero(
-  money: Money | null | undefined,
-  options: Omit<FormatMoneyOptions, "decimals"> = {},
-): string {
-  if (!money) return formatMoney(money, options);
-  const value = toDecimal(money);
-  if (value.isZero() || value.abs().gte("0.01")) return formatDecimal(value, options);
-  return formatDecimal(value, { ...options, decimals: money.decimals }).replace(/0+$/, "");
 }
 
 /** True when the two sides differ — the counterfactual actually has a gap. */

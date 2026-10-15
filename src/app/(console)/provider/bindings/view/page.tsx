@@ -24,7 +24,7 @@ import { getPublishCheck, pauseToolBinding, resumeToolBinding } from "@/services
 import { getProviderEarnings } from "@/services/provider-reports.service";
 import { listSlaWindows } from "@/services/provider-sla-windows.service";
 import { cn } from "@/utils";
-import { formatMoney, formatMoneyNonZero } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 
 /**
  * A listing's Overview: where it stands (one timeline), the one thing to do
@@ -312,7 +312,7 @@ function OverviewContent() {
                   <dd className="text-body-13 text-01">
                     {binding.pricingMode === "FREE"
                       ? "Free"
-                      : `${formatMoneyNonZero(binding.price)} a call${
+                      : `${formatMoney(binding.price, { decimals: 6 })} a call${
                           binding.pricingMode === "FREEMIUM" && binding.freeQuotaPerAgent
                             ? ` after ${binding.freeQuotaPerAgent.toLocaleString("en-US")} free calls per agent a day`
                             : ""
