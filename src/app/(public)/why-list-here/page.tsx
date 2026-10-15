@@ -11,6 +11,7 @@ import { Field } from "@/components/ui/field";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import {
+  DAILY_CAP_PERCENT,
   economics,
   FEE_RATE,
   parseCalls,
@@ -18,6 +19,7 @@ import {
   setupHref,
   type ListingMode,
 } from "@/features/explorer/provider-economics";
+import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
 
 /**
  * For providers — route `/why-list-here`, with the earnings calculator
@@ -27,7 +29,8 @@ import {
  *
  * Terms follow the owner decisions: paid calls go only to staked listings; a
  * free listing needs no stake and cannot be penalised; disputes are on chain
- * and decided by an independent arbiter.
+ * and decided by Assay's arbiter (a person, on chain). The only limits on a
+ * penalty shown as guarantees are the ones the chain enforces.
  */
 
 const MODES: { value: ListingMode; label: string }[] = [
@@ -146,15 +149,18 @@ function Calculator({
             ) : null}
 
             {result ? (
-              <div className="grid grid-cols-1 gap-3 tablet:grid-cols-2 desktop:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 tablet:grid-cols-3">
                 <Figure label="You earn per month" value={result.netPerMonth} sub={`after the ${feePercent} fee`} strong />
                 <Figure
                   label={<Term k="stake">Stake to post</Term>}
                   value={result.stake}
                   sub={result.daysToCoverStake ? `≈ ${result.daysToCoverStake} days of earnings` : "returned when you leave"}
                 />
-                <Figure label="Most a penalty takes per window" value={result.worstPerWindow ?? "—"} sub="only if you fail more than you promised" />
-                <Figure label="Most per 24 hours" value={result.worstPer24h ?? "—"} sub="10% of your stake" />
+                <Figure
+                  label="Most penalties can take in 24 hours"
+                  value={result.worstPer24h ?? "—"}
+                  sub={`${DAILY_CAP_PERCENT}% of your stake, enforced on chain; only if you fail more than you promised`}
+                />
               </div>
             ) : (
               <p className="text-body-13 text-03">Fix the numbers above to see your earnings.</p>
@@ -265,7 +271,7 @@ const FACTS: ReadonlyArray<{ value: string; key: string; sub: string }> = [
   { value: "Per call", key: "paid on chain", sub: "to your own wallet" },
   { value: "0%", key: "reserve held", sub: "we hold nothing back" },
   { value: "Never", key: "clawed back", sub: "a payout stays paid" },
-  { value: "Capped", key: "worst case", sub: "per window, and again per 24 h" },
+  { value: `${DAILY_CAP_PERCENT}%`, key: "most taken per 24 h", sub: "of your stake, enforced on chain" },
 ];
 
 /** The things that can cost you money come first, then the protections. */
@@ -285,8 +291,9 @@ const TERMS: ReadonlyArray<{ tone: "alert" | "check"; title: string; detail: Rea
     title: "You can get a penalty",
     detail: (
       <>
-        Only after enough checked calls to be fair, only when you fail more often than you promised, and capped per{" "}
-        <Term k="window">window</Term> and per 24 hours.
+        Only after at least {MIN_CHECKED_CALLS} checked calls in a <Term k="window">window</Term>, and only when you
+        fail more often than you promised. The chain never lets penalties take more than {DAILY_CAP_PERCENT}% of your
+        stake in any 24 hours, and each penalty is limited to a maximum set on chain.
       </>
     ),
   },
@@ -306,7 +313,8 @@ const TERMS: ReadonlyArray<{ tone: "alert" | "check"; title: string; detail: Rea
     detail: (
       <>
         A penalty waits 72 hours before it can be taken. During that time you can{" "}
-        <Term k="dispute">dispute</Term> it on chain and an independent <Term k="arbiter">arbiter</Term> decides.
+        <Term k="dispute">dispute</Term> it on chain: Assay&apos;s <Term k="arbiter">arbiter</Term>, a person, rules on
+        it on chain, and if nobody rules in time it expires and nothing is taken.
       </>
     ),
   },

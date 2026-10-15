@@ -1,12 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { ExternalLink } from "lucide-react";
 import * as React from "react";
 
 import { SectionTabs } from "@/components/layout/section-tabs";
 import { StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
 import { Skeleton } from "@/components/patterns/page-state";
 import type { BindingStatus, ToolBindingDetail } from "@/interfaces";
+import { routes } from "@/libs/routes";
 import { getToolBinding } from "@/services/provider-tool-bindings.service";
 import { labelForEndpoint } from "@/utils/provider-label";
 
@@ -83,6 +85,17 @@ export function BindingHeader({
           {binding ? (
             <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-03">
               <span className="min-w-0 break-all font-mono">{labelForEndpoint(binding.endpoint)}</span>
+              {binding.status === "ACTIVE" ? (
+                <a
+                  href={routes.publicTool(binding.toolId)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-primary-600 underline underline-offset-2"
+                >
+                  How buyers see it
+                  <ExternalLink aria-hidden="true" className="size-3" />
+                </a>
+              ) : null}
             </p>
           ) : null}
         </div>

@@ -17,9 +17,11 @@ import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { noteSaved } from "@/features/provider-binding/after-publish";
 import { BindingHeader, bindingQueryKey, useBinding } from "@/features/provider-binding/binding-header";
 import { integerFromInput, majorInputFromMoney, minorUnitsFromMajorInput } from "@/features/provider-binding/chrome";
-import { modeOfChoice, PRICE_CHOICES, type PriceChoice } from "@/features/provider-binding/go-live";
+import { modeOfChoice, percentText, PRICE_CHOICES, stakeEffectOf, type PriceChoice } from "@/features/provider-binding/go-live";
 import { useProviderCatalogue } from "@/features/provider-binding/tool-name";
 import { liveFormOf, parseLiveForm, type LiveForm } from "@/features/provider-binding/wizard/live-stage";
+import { StakeSheet } from "@/features/provider-stake/stake-sheet";
+import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import type { ToolBindingDetail, UpdateToolBindingBody } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
@@ -36,8 +38,10 @@ import { toast } from "@/utils/toast";
  * wizard's "Connect & test" step, because a change there needs a new test
  * before it can go live — that is where the test runs.
  *
- * Changing the price or how agents pay on a live tool asks first, because
- * buyers see it at once. `freeDailyBudget` reads as a number and writes as a
+ * Changing the price or how agents pay on a live tool, or making the promise
+ * stricter, asks first: buyers see the price at once, a higher price can need
+ * more stake (the confirm shows needed before → after and offers to add the
+ * missing stake), and a stricter promise raises the penalty risk. `freeDailyBudget` reads as a number and writes as a
  * digits string (minor units): it is sent only when the box changed.
  */
 
@@ -71,6 +75,8 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [stakeOpen, setStakeOpen] = React.useState(false);
+  const stake = useStakeStatus();
 
   React.useEffect(() => {
     const section = params.get("section");
@@ -105,6 +111,11 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
   const changed = Object.keys(body).length > 0;
   const pricingChanged = body.pricingMode !== undefined || body.priceAmount !== undefined || body.freeQuotaPerAgent !== undefined;
   const live = binding.status === "ACTIVE";
+  const promiseStricter = body.slaFailureRate !== undefined && body.slaFailureRate < binding.slaFailureRate;
+  const effect = stakeEffectOf({ binding, price: parsed.price, mode, stake: stake.stake, staked: stake.staked });
+  const stakeRises =
+    pricingChanged && effect.after !== null && (effect.before === null || BigInt(effect.after.amount) > BigInt(effect.before.amount));
+  const shortAfterSave = pricingChanged ? effect.shortfall : null;
 
   const save = async () => {
     setSaving(true);
@@ -128,7 +139,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
   };
 
   const onSave = () => {
-    if (live && pricingChanged) setConfirmOpen(true);
+    if (live && (pricingChanged || promiseStricter)) setConfirmOpen(true);
     else void save().catch(() => undefined);
   };
 
@@ -170,7 +181,11 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
               disabled={readOnly}
               onChange={(event) => set({ price: event.target.value })}
               error={parsed.errors.price}
-              hint="A higher price needs more stake. The Stake page shows how much."
+              hint={
+                effect.after
+                  ? `At this price your paid tools need ${formatMoney(effect.after)} of stake; you have ${formatMoney(stake.staked)}.`
+                  : "A higher price needs more stake."
+              }
             />
           ) : null}
           {mode === "FREEMIUM" ? (
@@ -302,18 +317,83 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         tone="primary"
-        title="Change what buyers pay?"
-        description="Buyers see the new terms once you publish them. Calls already made keep the old price."
+        title={pricingChanged ? "Change what buyers pay?" : "Make your promise stricter?"}
+        description={
+          <>
+            {pricingChanged ? "Buyers see the new terms once you publish them. Calls already made keep the old price. " : ""}
+            {promiseStricter
+              ? "A stricter promise raises your penalty risk: from the next window, fewer failed calls are enough to go over it."
+              : null}
+          </>
+        }
         changes={[
-          {
-            label: "Price",
-            before:
-              binding.pricingMode === "FREE" ? "Free" : `${formatMoney(binding.price, { decimals: 6 })} a call`,
-            after: mode === "FREE" || !parsed.price ? "Free" : `${formatMoney(parsed.price, { decimals: 6 })} a call`,
-          },
+          ...(pricingChanged
+            ? [
+                {
+                  label: "Price",
+                  before:
+                    binding.pricingMode === "FREE" ? "Free" : `${formatMoney(binding.price, { decimals: 6 })} a call`,
+                  after: mode === "FREE" || !parsed.price ? "Free" : `${formatMoney(parsed.price, { decimals: 6 })} a call`,
+                },
+              ]
+            : []),
+          ...(pricingChanged && (effect.before || effect.after)
+            ? [
+                {
+                  label: `Stake needed (you have ${formatMoney(stake.staked)})`,
+                  before: effect.before ? formatMoney(effect.before) : "None",
+                  after: effect.after ? formatMoney(effect.after) : "None",
+                },
+              ]
+            : []),
+          ...(body.slaFailureRate !== undefined
+            ? [
+                {
+                  label: "Failures you promise to stay under",
+                  before: `${percentText(binding.slaFailureRate)}%`,
+                  after: `${percentText(body.slaFailureRate)}%`,
+                },
+              ]
+            : []),
         ]}
-        confirmLabel="Save new price"
-        onConfirm={save}
+        confirmLabel={
+          shortAfterSave ? `Add ${formatMoney(shortAfterSave)} stake, then save` : pricingChanged ? "Save new price" : "Save new promise"
+        }
+        onConfirm={shortAfterSave ? () => setStakeOpen(true) : save}
+      >
+        {shortAfterSave ? (
+          <div className="flex flex-col gap-2 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5 text-body-13 text-warning-700">
+            <p>
+              Your stake is {formatMoney(shortAfterSave)} short of what the new price needs. Until it covers{" "}
+              {formatMoney(effect.after)}, paid tools above your stake stop taking paid calls.
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="self-start"
+              onClick={() => {
+                setConfirmOpen(false);
+                void save().catch(() => undefined);
+              }}
+            >
+              Save without adding stake
+            </Button>
+          </div>
+        ) : stakeRises ? (
+          <p className="text-body-13 text-02">Your stake already covers the new price.</p>
+        ) : null}
+      </ConfirmSheet>
+
+      <StakeSheet
+        open={stakeOpen}
+        onOpenChange={setStakeOpen}
+        amount={shortAfterSave}
+        reason={`The new price needs ${formatMoney(effect.after)} of stake. Your price is saved once the stake lands.`}
+        onStaked={() => {
+          setStakeOpen(false);
+          void stake.refetch();
+          void save().catch(() => undefined);
+        }}
       />
     </>
   );

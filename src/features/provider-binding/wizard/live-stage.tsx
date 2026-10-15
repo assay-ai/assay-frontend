@@ -9,7 +9,9 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { DAILY_CAP_PERCENT } from "@/features/explorer/provider-economics";
 import { estimatePenalty, exampleFailureRate } from "@/features/provider-penalties/estimate";
+import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
 import { WINDOW_WORDS } from "@/features/provider-sla/window";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
@@ -291,7 +293,7 @@ export function LiveStage({
             observedRate: exampleRate,
             declaredRate: parsed.failureRate!,
           });
-          return `Example: at ${percentText(exampleRate)}% failures in a window of ${EXAMPLE_WINDOW_CALLS.toLocaleString("en-US")} paid calls, about ${formatMoney(estimate.penalty)} of your stake could be taken${estimate.capped ? " (the most one window can take at this price)" : ""}. Within your promise, nothing is taken.`;
+          return `Example: at ${percentText(exampleRate)}% failures in a window of ${EXAMPLE_WINDOW_CALLS.toLocaleString("en-US")} paid calls, up to about ${formatMoney(estimate.penalty)} of your stake could be taken. The chain never lets penalties take more than ${DAILY_CAP_PERCENT}% of your stake in any 24 hours. Within your promise, or below ${MIN_CHECKED_CALLS} checked calls in a window, nothing is taken.`;
         })()
       : null;
 
@@ -299,9 +301,13 @@ export function LiveStage({
   const testMissing = unmet.find((r) => r.requirement === "TESTER_RUN" || r.requirement === "TESTER_PASSED");
   const payoutMissing = unmet.find((r) => r.requirement === "PAYOUT_ACCOUNT");
   const hasErrors = Object.keys(parsed.errors).length > 0;
+  // An empty price is not marked red before anything was typed; the button says what is missing instead.
+  const priceEmpty = form.price.trim() === "";
+  const onlyPriceMissing = priceEmpty && Object.keys(parsed.errors).every((key) => key === "price");
 
   let blockReason: React.ReactNode = null;
   if (readOnly) blockReason = "Your account is blocked, so publishing is paused.";
+  else if (hasErrors && onlyPriceMissing) blockReason = "Enter a price per call, like 0.10.";
   else if (hasErrors) blockReason = "Fix the fields marked above.";
   else if (testMissing)
     blockReason = (
@@ -372,7 +378,7 @@ export function LiveStage({
               value={form.price}
               disabled={readOnly}
               onChange={(event) => set({ price: event.target.value })}
-              error={parsed.errors.price}
+              error={priceEmpty ? undefined : parsed.errors.price}
               placeholder="0.10"
             />
           ) : null}

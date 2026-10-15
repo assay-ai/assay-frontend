@@ -67,7 +67,8 @@ export const GLOSSARY = {
   },
   arbiter: {
     term: "Arbiter",
-    definition: "The person appointed on chain to decide disputed penalties, independently of the provider and Assay's checks.",
+    definition:
+      "A person at Assay, not its servers or automated checks, who rules on a disputed penalty on chain: upheld, or cancelled with nothing taken.",
   },
   dispute: {
     term: "Dispute",

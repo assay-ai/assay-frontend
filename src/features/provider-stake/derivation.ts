@@ -1,6 +1,8 @@
+import type { Money } from "@/interfaces";
 import type { Chain } from "@/interfaces/chain";
 import type { BindingStatus } from "@/interfaces/provider-bindings";
 import { assetName, chainDisplayName } from "@/services/chains.service";
+import { formatMoney } from "@/utils/money";
 
 const MISMATCH = /^priced in (\S+), stake floor in (\S+) .*STAKE_ASSET_MISMATCH/;
 
@@ -79,4 +81,13 @@ export function missingRequirementNote(status: BindingStatus): string {
     default:
       return "draft — not live yet, needs stake when you publish it";
   }
+}
+
+/**
+ * A tool's stake figure on the Stake page. A missing or zero `minimum` is "not
+ * computed" (e.g. an asset mismatch, whose reason shows beside it), never
+ * "$0.00", which would read as "needs no stake" (merge audit L3, the class of 80a0c15).
+ */
+export function requiredText(minimum: Money | null | undefined): string {
+  return minimum && BigInt(minimum.amount || "0") > 0n ? formatMoney(minimum) : "—";
 }

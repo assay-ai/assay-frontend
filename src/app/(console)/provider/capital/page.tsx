@@ -16,15 +16,17 @@ import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { openPenaltyHold, openPenaltyPhrase } from "@/features/provider-penalties/model";
 import { usePenalties } from "@/features/provider-penalties/use-penalties";
 import { stakeActionChain, unreadableChains } from "@/features/provider-stake/chain-stake";
-import { missingRequirementNote, stakeReason } from "@/features/provider-stake/derivation";
+import { missingRequirementNote, requiredText, stakeReason } from "@/features/provider-stake/derivation";
+import { ProviderPendingTxList } from "@/features/provider-stake/pending-chain-tx-list";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import { WithdrawSheet } from "@/features/provider-stake/withdraw-sheet";
-import { withdrawStateOf } from "@/features/provider-stake/withdraw-state";
+import { waitingDuration, waitingPeriodOf, withdrawStateOf } from "@/features/provider-stake/withdraw-state";
 import { useChains } from "@/hooks/useChains";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import type { ProviderStakeRequirementItem, ToolBindingSummary } from "@/interfaces";
 import { routes } from "@/libs/routes";
+import { getProviderRegistration } from "@/services/provider-registration.service";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { formatMoney } from "@/utils/money";
 
@@ -61,7 +63,7 @@ function rowsFor(
       return {
         id: binding.id,
         name,
-        required: item.minimum ? formatMoney(item.minimum) : "—",
+        required: requiredText(item.minimum),
         reason: reasonOf(item),
         grace: item.grace && !item.grace.expired ? item.grace.expiresAt : null,
       };
@@ -86,7 +88,7 @@ function rowsFor(
     rows.push({
       id: item.bindingId,
       name: label({ toolId: item.toolId }),
-      required: item.minimum ? formatMoney(item.minimum) : "—",
+      required: requiredText(item.minimum),
       reason: reasonOf(item),
       grace: item.grace && !item.grace.expired ? item.grace.expiresAt : null,
     });
@@ -102,6 +104,7 @@ export default function ProviderStakePage() {
   // The same rows and wording as the Withdraw sheet: every open penalty, disputed ones included.
   const hold = openPenaltyHold(usePenalties({ withCases: "none" }).rows);
   const { chains } = useChains();
+  const registration = useQuery({ queryKey: ["provider", "registration"], queryFn: getProviderRegistration, retry: 0 });
   const bindings = useQuery({
     queryKey: ["provider", "tool-bindings", "sidebar"],
     queryFn: () => listToolBindings({ limit: 50 }),
@@ -140,6 +143,7 @@ export default function ProviderStakePage() {
   );
   const grace = status.stake?.graceSummary ?? null;
   const hasStake = Boolean(status.staked && status.staked.amount !== "0");
+  const waiting = waitingPeriodOf(withdraw.periodMs, registration.data?.terms);
 
   let headline: React.ReactNode;
   if (unreadable && !status.staked) {
@@ -190,6 +194,8 @@ export default function ProviderStakePage() {
           </div>
         </div>
       </header>
+
+      <ProviderPendingTxList kinds={["stake", "unstake", "withdraw"]} />
 
       <Panel className="w-full">
         <PanelBody className="flex flex-col gap-4 p-4 tablet:p-5">
@@ -295,6 +301,50 @@ export default function ProviderStakePage() {
               ))}
             </ul>
           )}
+        </PanelBody>
+      </Panel>
+
+      <Panel id="leaving" className="w-full scroll-mt-20">
+        <PanelHeader>
+          <PanelTitles>
+            <PanelTitle>Getting your stake back</PanelTitle>
+            <PanelDescription className="whitespace-normal">What pausing a tool and withdrawing do, before you do either.</PanelDescription>
+          </PanelTitles>
+        </PanelHeader>
+        <PanelBody className="p-4 tablet:p-5">
+          <ul className="flex list-disc flex-col gap-1.5 pl-5 text-body-13 text-02">
+            <li>
+              <span className="text-label-13 text-01">Pausing a tool</span> stops agents being sent to it. Calls already
+              made stay counted and paid, your stake stays where it is, and there is no penalty for pausing.
+            </li>
+            <li>
+              <span className="text-label-13 text-01">Withdrawing</span> takes two signatures, one on each side of a waiting
+              period of {waitingDuration(waiting)}. During it the money stays staked and can still cover penalties for calls
+              you already served; after it you withdraw to your wallet.
+              {withdraw.completesAt ? (
+                <>
+                  {" "}Your current withdrawal unlocks{" "}
+                  <LocalTime value={withdraw.completesAt} className="font-semibold text-01" />.
+                </>
+              ) : null}
+            </li>
+            <li>
+              A new withdrawal request restarts the waiting period for everything already waiting. Paid tools that need
+              more stake than what remains are paused.
+            </li>
+            <li>Open penalties hold their amount until they are settled; that part cannot be withdrawn.</li>
+          </ul>
+          {hasStake || withdraw.phase !== "none" ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mt-3"
+              icon={<ArrowUpFromLine aria-hidden="true" />}
+              onClick={() => setSheet("withdraw")}
+            >
+              {withdraw.phase === "ready" ? `Withdraw ${formatMoney(withdraw.unbonding)}` : "Start a withdrawal"}
+            </Button>
+          ) : null}
         </PanelBody>
       </Panel>
 

@@ -6,8 +6,24 @@
  * demo flag on, `usePenalties` uses these rows instead — one that needs
  * action, one disputed, one closed — and each is matched to an Assay case the
  * provider fixtures answer (`/providers/me/slash-proposals/:id`). No state:
- * every read returns the same three rows, dated relative to now.
+ * every read returns the same three rows, dated from one fixed anchor.
  */
+
+/**
+ * The one clock every demo penalty date counts from: the start of the current
+ * UTC hour, read once when this module loads.
+ *
+ * The chain rows and the Assay cases both count from it, so a deadline is the
+ * same instant on Home, the Penalties list, the Why drawer and after a reload
+ * (within the hour). Counting from "now" at each render made the same deadline
+ * drift a minute at a time between screens (provider review 2026-10-16b).
+ */
+export const DEMO_PENALTY_ANCHOR_SECONDS = Math.floor(Date.now() / 3_600_000) * 3600;
+
+/** ISO time `minutes` after the anchor (negative: before it). */
+export function demoPenaltyTime(minutes: number): string {
+  return new Date((DEMO_PENALTY_ANCHOR_SECONDS + minutes * 60) * 1000).toISOString();
+}
 
 /** Assay case ids, in the order: needs action, disputed, closed. */
 export const DEMO_PENALTY_PROPOSALS = [

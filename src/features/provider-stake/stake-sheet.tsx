@@ -13,9 +13,16 @@ import type { Money, ProviderStake } from "@/interfaces";
 import { formatDecimal, formatMoney, parseAmountInput, toDecimal } from "@/utils/money";
 
 import { withProvedStakeAuthority } from "./chain-stake";
+import { trackSubmissions } from "./pending-chain-tx";
+import { useProviderPendingTransactions } from "./pending-chain-tx-list";
+import { stakePreflight, useStakeBalances } from "./stake-preflight";
 import { depositSteps, describeStakeError, proveWalletStep } from "./stake-steps";
 import { PROVIDER_STAKE_KEY, useStakeStatus } from "./use-stake-status";
 import { short, useStakeWallet, walletBlocker } from "./use-stake-wallet";
+import { DEMO_SIGNING_NOTE, simulatedSteps } from "./wallet-readiness";
+
+/** The gas token of every pinned stake deployment (Robinhood Chain testnet; see `providers/index.tsx`). */
+const NATIVE_SYMBOL = "ETH";
 
 /**
  * THE Stake sheet: one `WalletActionSheet` that every surface opens (Stake
@@ -88,7 +95,21 @@ export function StakeSheet({ open, onOpenChange, amount, reason, onStaked }: Sta
       : []),
   ].filter((p, i, all) => all.findIndex((q) => q.value === p.value) === i);
 
-  const steps = [
+  const pending = useProviderPendingTransactions();
+  const balances = useStakeBalances({
+    chainId: wallet.chainId,
+    address: wallet.address,
+    enabled: open && wallet.isEvm && !wallet.simulated,
+  });
+  const preflight = stakePreflight({
+    balances: balances.data ?? null,
+    amountAtomic: parsed.atomic,
+    decimals,
+    tokenSymbol: wallet.tokenSymbol,
+    nativeSymbol: NATIVE_SYMBOL,
+  });
+
+  const realSteps = [
     proveWalletStep({
       chainId: wallet.chainId,
       address: wallet.address,
@@ -107,8 +128,20 @@ export function StakeSheet({ open, onOpenChange, amount, reason, onStaked }: Sta
       chain: wallet.chain,
     }),
   ];
+  const steps = wallet.simulated
+    ? simulatedSteps(realSteps)
+    : trackSubmissions(
+        realSteps,
+        {
+          kind: "stake",
+          chainId: wallet.chainId,
+          idPrefix: "stake",
+          label: (step) => (step.id === "approve" ? `Approve ${amountLabel} for your stake` : `Stake ${amountLabel}`),
+        },
+        pending,
+      );
 
-  const blocker = walletBlocker(wallet);
+  const blocker = walletBlocker(wallet) ?? preflight.blocker;
   const after = parsed.value && status.staked ? toDecimal(status.staked).plus(parsed.value) : parsed.value;
 
   return (
@@ -177,7 +210,8 @@ export function StakeSheet({ open, onOpenChange, amount, reason, onStaked }: Sta
             only ever touch this wallet&apos;s stake.
           </span>
         ) : null}
-        {wallet.signerState.status === "no-wallet" || wallet.signerState.status === "address-not-connected" ? (
+        {wallet.simulated ? <span className="text-body-xs text-03">{DEMO_SIGNING_NOTE}</span> : null}
+        {wallet.canConnect ? (
           <Button
             variant="secondary"
             size="sm"
@@ -201,6 +235,21 @@ export function StakeSheet({ open, onOpenChange, amount, reason, onStaked }: Sta
             : "You can stake before you list a paid tool."
         }
       />
+      {preflight.rows.length > 0 ? (
+        <dl className="flex flex-col gap-1 rounded-lg border border-01 px-3.5 py-2.5 text-body-13">
+          <span className="text-label-13 text-01">Before you sign</span>
+          {preflight.rows.map((row) => (
+            <div key={row.label} className="flex items-center justify-between gap-3">
+              <dt className="text-02">{row.label}</dt>
+              <dd className={row.bad ? "font-mono text-mono-13 text-danger-600" : "font-mono text-mono-13 text-01"}>{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : balances.isError ? (
+        <p className="text-body-xs text-03">
+          We could not read this wallet&apos;s balance. Your wallet will say if it does not hold enough.
+        </p>
+      ) : null}
       {wallet.isEvm ? (
         <p className="text-body-xs text-03">
           Two signatures in your wallet. Step 1: approve, which lets the stake contract move this amount. Step 2: deposit,

@@ -84,6 +84,34 @@ export function totalStakeWith(needed: Money | null, stake: ProviderStake | null
   return all.reduce((best, next) => (major(next).gt(major(best)) ? next : best));
 }
 
+/**
+ * What a price change on a live tool does to the stake: the total needed
+ * before and after (the rule is "max" across tools), and how much is missing
+ * once the new price applies. Shown in the Settings confirm, so raising a
+ * price never quietly stops paid calls.
+ */
+export interface StakeEffect {
+  before: Money | null;
+  after: Money | null;
+  shortfall: Money | null;
+}
+
+export function stakeEffectOf(input: {
+  binding: { id: string; price: Money; pricingMode: PricingMode };
+  price: Money | null;
+  mode: PricingMode;
+  stake: ProviderStake | null | undefined;
+  staked: Money | null | undefined;
+}): StakeEffect {
+  const rule = stakeRuleOf(input.stake);
+  const { binding } = input;
+  const before = totalStakeWith(stakeNeededFor(binding.price, binding.pricingMode, rule), input.stake, binding.id);
+  const after = totalStakeWith(stakeNeededFor(input.price, input.mode, rule), input.stake, binding.id);
+  const gap = after ? major(after).minus(input.staked ? major(input.staked) : 0) : null;
+  const shortfall = after && gap && gap.gt(0) ? fromMajor(gap, after) : null;
+  return { before, after, shortfall };
+}
+
 export interface TakeRate {
   /** e.g. 0.1 for 10%. */
   rate: Decimal;
