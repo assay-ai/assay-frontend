@@ -330,6 +330,18 @@ export function arbiterErrorMessage(error: unknown, action: ArbiterAction): stri
 }
 
 /** An approved `A-11` whose unsigned block the arbiter may still have to sign (frontend review N5). */
+/**
+ * Review R2-7: the approvals query behind the approved-blocks panel. The
+ * backend filters by action, so a block is never hidden behind fifty newer
+ * approvals of other actions; the backend also refuses (409) a block approved
+ * longer ago than the approvals' expiry, or one already carried out and lifted.
+ */
+export const APPROVED_BLOCKS_QUERY = {
+  status: "APPROVED",
+  action: "arbiter.block",
+  limit: 50,
+} as const;
+
 export interface ApprovedArbiterBlock {
   readonly approvalId: string;
   readonly chainId: string;
