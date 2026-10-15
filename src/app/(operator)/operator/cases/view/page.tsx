@@ -21,19 +21,24 @@ import {
   type CaseActionId,
   type CaseStage,
 } from "@/features/operator/case-flow";
+import { approvalNeeds, approvalTargetId, penaltyPhrase } from "@/features/operator/approvals";
+import { eligibleApprovers } from "@/features/operator/inbox";
+import { OperatorMeasurement } from "@/features/operator/operator-measurement";
 import { PenaltyMoney } from "@/features/operator/penalty-money";
+import { reasonLabel } from "@/features/operator/reasons";
+import { rememberRecentPenalty } from "@/features/operator/recent-penalties";
 import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { suspendedNotice } from "@/features/operator/state";
-import { approvalHref, type TwoPersonAnswer } from "@/features/operator/two-person";
+import { approvalHref, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
 import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-operator-lookups";
+import { WhyNot } from "@/features/operator/why-not";
 import { CaseContext } from "@/features/provider-slash-case/context";
-import { Measurement } from "@/features/provider-slash-case/measurement";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
 import { explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { formatLocalDateTime } from "@/libs/local-time";
-import { getArbiterTerms, getOperatorCase } from "@/services/operator.service";
+import { getArbiterTerms, getOperatorCase, listApprovals } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
 
 import { CancelSheet } from "./_components/cancel-sheet";
@@ -79,7 +84,7 @@ function BackToPenalties() {
   );
 }
 
-type Result = { title: string; next: string; approvalId?: string; txHash?: string | null };
+type Result = { title: string; next: string; approvalId?: string; txHash?: string | null; approvers?: string[]; expiresAt?: string };
 
 export default function OperatorCasePage() {
   const proposalId = useSearchParam("id");
@@ -112,9 +117,31 @@ export default function OperatorCasePage() {
     retry: 0,
   });
 
+  // A suspension of this penalty already waiting for approval — the same query as the badge.
+  const pending = useQuery({
+    queryKey: ["operator", "approvals", "pending-count"],
+    queryFn: () => listApprovals({ status: "PENDING", limit: 100 }),
+    refetchInterval: 30_000,
+    retry: 0,
+  });
+  const waitingSuspend =
+    pending.data?.items.find((a) => a.action === "slash.suspend" && a.status === "PENDING" && approvalTargetId(a) === proposalId) ?? null;
+
+  // After an action, everything on the page is read again: status, next step, history.
   const refetch = React.useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["operator", "case", proposalId] });
+    void queryClient.invalidateQueries({ queryKey: ["operator", "approvals"] });
+    void queryClient.invalidateQueries({ queryKey: ["operator", "override-log"] });
+    void queryClient.invalidateQueries({ queryKey: ["operator", "arbiter", "disputes"] });
   }, [queryClient, proposalId]);
+
+  // Remembered in this browser, so a penalty nobody disputed can be found again from Penalties.
+  const loaded = caseQuery.data?.case.proposal;
+  const loadedName = loaded && !providers.isPending ? penaltyPhrase(providers.name(loaded.providerId), formatMoney(loaded.penaltyAmount)) : null;
+  React.useEffect(() => {
+    if (!loaded || !loadedName) return;
+    rememberRecentPenalty({ id: loaded.id, providerId: loaded.providerId, label: loadedName, at: new Date().toISOString() });
+  }, [loaded, loadedName]);
 
   if (!proposalId) {
     return (
@@ -162,6 +189,8 @@ export default function OperatorCasePage() {
   const next = caseNextStep(facts, authority, (iso) => formatLocalDateTime(iso));
   const providerName = providers.name(proposal.providerId);
   const penaltyText = formatMoney(proposal.penaltyAmount);
+  const penaltyName = penaltyPhrase(providerName, penaltyText);
+  const suspendApprovers = directory.isPending ? undefined : eligibleApprovers("S-1", directory.operators, identity.id);
   const chip = STAGE_CHIP[facts.stage];
 
   const actionFor = (id: CaseActionId | null, primary: boolean): NextStepAction | undefined => {
@@ -177,15 +206,20 @@ export default function OperatorCasePage() {
     }
   };
 
-  const onSuspended = (answer: TwoPersonAnswer<unknown>) => {
+  const onSuspended = (answer: TwoPersonAnswer<unknown>, reasonCode: string) => {
     if (answer.kind === "queued") {
+      const sent = sentForApproval(`Suspending ${penaltyName}`, suspendApprovers, approvalNeeds("S-1"), answer.approval.expiresAt);
       setResult({
-        title: "Suspension sent for approval",
-        next: "Nothing has happened yet. It runs when a second adjudicator approves it, within 24 h.",
+        ...sent,
         approvalId: answer.approval.approvalId,
+        approvers: suspendApprovers,
+        expiresAt: answer.approval.expiresAt,
       });
     } else {
-      setResult({ title: "Penalty suspended", next: suspendedNotice(brief.chainStatus, proposal.penaltyAmount.asset) });
+      setResult({
+        title: `${penaltyName.charAt(0).toUpperCase()}${penaltyName.slice(1)} is suspended (${reasonLabel(reasonCode)})`,
+        next: suspendedNotice(brief.chainStatus, proposal.penaltyAmount.asset),
+      });
     }
     refetch();
   };
@@ -238,13 +272,33 @@ export default function OperatorCasePage() {
         />
       ) : null}
 
+      {waitingSuspend && !result?.approvalId ? (
+        <p role="status" className="w-full rounded-lg border border-primary-20 bg-primary-10 px-3.5 py-2.5 text-body-13 text-01">
+          A suspension of this penalty is waiting for approval: {directory.nameOf(waitingSuspend.requestedBy)} asked{" "}
+          <LocalTime value={waitingSuspend.createdAt} />.{" "}
+          <Link href={approvalHref(waitingSuspend.id)} className="text-primary-600 hover:underline">
+            Open the request
+          </Link>
+        </p>
+      ) : null}
+
       <NextStepCard
         kind={next.kind}
         title={next.title}
         description={next.description}
+        meta={next.meta ?? undefined}
         action={next.kind === "action" ? actionFor(next.action, true) : undefined}
         secondary={next.secondary ? actionFor(next.secondary, false) : undefined}
       />
+
+      {facts.stage === "disputed" && !authority.rule ? (
+        <WhyNot
+          action="rule"
+          me={identity}
+          title="Ruling on this dispute"
+          ask={`Can you rule on ${penaltyName}? The provider disputed it on chain.`}
+        />
+      ) : null}
 
       <PenaltyMoney
         penalty={proposal.appliedAmount ?? proposal.penaltyAmount}
@@ -263,7 +317,7 @@ export default function OperatorCasePage() {
           </TabsList>
         </div>
         <TabsContent value="measurement">
-          <Measurement data={brief.case} />
+          <OperatorMeasurement data={brief.case} />
         </TabsContent>
         <TabsContent value="context">
           <CaseContext data={brief.case} />
@@ -317,6 +371,17 @@ export default function OperatorCasePage() {
         identity={identity}
         authority={authority}
         onSuspend={authority.suspend.allowed && next.secondary !== "suspend" ? () => setSheet("suspend") : null}
+        suspendBlocked={
+          authority.suspend.open && !authority.suspend.allowed ? (
+            <WhyNot
+              action="suspend"
+              me={identity}
+              amount={proposal.penaltyAmount}
+              title="Suspend this penalty"
+              ask={`Can you suspend ${penaltyName}? It looks wrong to me.`}
+            />
+          ) : null
+        }
       />
 
       {authority.suspend.allowed ? (
@@ -327,6 +392,7 @@ export default function OperatorCasePage() {
           penaltyText={penaltyText}
           twoPerson={authority.suspend.twoPerson}
           me={identity}
+          waiting={waitingSuspend}
           onDone={onSuspended}
         />
       ) : null}

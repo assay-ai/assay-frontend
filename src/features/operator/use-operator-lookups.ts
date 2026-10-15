@@ -1,13 +1,15 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
 import { shortId } from "@/components/patterns/copy-chip";
 import type { OperatorDirectoryEntry } from "@/interfaces/operator";
 import { listCatalogueProviders, type CatalogueProvider } from "@/services/catalogue.service";
-import { listOperators } from "@/services/operator.service";
+import { getOperatorCase, listOperators } from "@/services/operator.service";
+import { formatMoney } from "@/utils/money";
 
+import { penaltyPhrase } from "./approvals";
 import { operatorLabel } from "./inbox";
 
 /**
@@ -76,4 +78,35 @@ export function useOperatorDirectory(): {
       isError: query.isError,
     };
   }, [query.data, query.isPending, query.isError]);
+}
+
+/** At most this many penalties are read to name them; the rest keep a short id. */
+const CASE_LOOKUP_MAX = 30;
+
+/**
+ * "Northwind Geo's $28.47 penalty" for each penalty id given, read from the
+ * penalty itself (the same query the penalty page uses, so it is cached
+ * both ways). An id still loading, or not found, has no entry; callers fall
+ * back to a short id.
+ */
+export function usePenaltyNames(ids: readonly string[]): ReadonlyMap<string, string> {
+  const providers = useProviderNames();
+  const unique = React.useMemo(() => [...new Set(ids.filter(Boolean))].slice(0, CASE_LOOKUP_MAX), [ids]);
+  const results = useQueries({
+    queries: unique.map((id) => ({
+      queryKey: ["operator", "case", id],
+      queryFn: () => getOperatorCase(id),
+      staleTime: 60_000,
+      retry: 0,
+    })),
+  });
+  // Cheap to rebuild: a handful of entries.
+  const map = new Map<string, string>();
+  unique.forEach((id, index) => {
+    const brief = results[index]?.data;
+    if (!brief) return;
+    const proposal = brief.case.proposal;
+    map.set(id, penaltyPhrase(providers.name(proposal.providerId), formatMoney(proposal.penaltyAmount)));
+  });
+  return map;
 }

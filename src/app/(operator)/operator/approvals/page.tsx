@@ -13,6 +13,7 @@ import { ApprovalItem, type ApprovalResult } from "@/features/operator/approval-
 import { ResultCard } from "@/features/operator/result-card";
 import { approvalErrorMessage } from "@/features/operator/approvals";
 import { groupApprovals } from "@/features/operator/inbox";
+import { capabilitiesFor } from "@/features/operator/roles";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { useApprovalContext } from "@/features/operator/use-approval-context";
 import type { OperatorApprovalStatus } from "@/interfaces/operator";
@@ -24,8 +25,10 @@ import { cn } from "@/utils";
  * Approvals, route `/operator/approvals` (reached from Home).
  *
  * Three groups, so nobody has to work out which requests are theirs:
- *  - **Needs you**: someone else asked, and your roles can decide it. The
- *    shell's badge counts these and only these.
+ *  - **Waiting for your approval**: someone else asked, and your roles can
+ *    decide it. Home's "Needs you" adds the disputes to rule; this page is
+ *    approvals only, so it is labelled differently rather than counted
+ *    differently under the same name.
  *  - **Your requests**: who can approve each one, and a link to send them.
  *  - **Others**: waiting for a role you do not hold; collapsed.
  *
@@ -41,6 +44,7 @@ const HISTORY_PAGE = 50;
 
 function ApprovalsInbox() {
   const me = useOperatorSession();
+  const canRule = capabilitiesFor(me.roles).rule;
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -176,7 +180,11 @@ function ApprovalsInbox() {
             ) : null}
 
             {groups.needsYou.length > 0 ? (
-              <Group id="needs-you" title={`Needs you · ${groups.needsYou.length}`}>
+              <Group
+                id="needs-you"
+                title={`Waiting for your approval · ${groups.needsYou.length}`}
+                note={canRule ? "Disputes to rule are on Home and Arbiter, not here." : undefined}
+              >
                 {groups.needsYou.map((row) => (
                   <ApprovalItem
                     key={row.id}

@@ -20,8 +20,17 @@ import type { DemoFixture } from "./fixtures";
  * demo console as …", which stores a session whose token names a role preset
  * (`demo-operator:lead`). `/operator/me` reads that token, so the same data
  * can be reviewed as a Lead adjudicator, as on-call support or as an admin —
- * which is the point of a role-aware console. Nothing here has state: an
- * approve answers success and the list still shows the request.
+ * which is the point of a role-aware console.
+ *
+ * Each preset has its own requests (Lead asked for a suspension, Support for a
+ * lift, the admin for a new operator), so "your requests" differs by role.
+ *
+ * A write is remembered for this page load only (`memory` below): a request
+ * sent for approval shows up in the inbox, an approve takes it off the list,
+ * a suspension changes the penalty and lands in Activity with the reason that
+ * was picked. Without that the demo would contradict its own result cards.
+ * A reload starts the stage set over. It is still not a mock backend: nothing
+ * is validated, nothing persists.
  *
  * Provider ids are the explorer fixtures' own, so `/catalogue/providers`
  * names them.
@@ -41,11 +50,21 @@ const DEMO_ASSET = `${DEMO_CHAIN_ID}/erc20:0x915Ef7c9F9f80a69e3BE47A38EE0Bb47607
 const HOUR = 60;
 const DAY = 24 * HOUR;
 
+/*
+  One "now" for the whole stage set, taken once and rounded to the minute: the
+  same event then reads the same time on Home, Arbiter and the penalty page,
+  however far apart they were opened.
+*/
+const NOW = Math.floor(Date.now() / 60_000) * 60_000;
+
 function minutesAgo(minutes: number): string {
-  return new Date(Date.now() - minutes * 60_000).toISOString();
+  return new Date(NOW - minutes * 60_000).toISOString();
 }
 function inMinutes(minutes: number): string {
-  return new Date(Date.now() + minutes * 60_000).toISOString();
+  return new Date(NOW + minutes * 60_000).toISOString();
+}
+function nowIso(): string {
+  return new Date().toISOString();
 }
 function usd(major: string) {
   const [whole, fraction = ""] = major.split(".");
@@ -136,6 +155,18 @@ const OPERATORS: OperatorDirectoryEntry[] = [
     lastSeenAt: minutesAgo(5 * HOUR),
     createdAt: minutesAgo(200 * DAY),
   },
+  {
+    id: "op-ava",
+    subject: "ava@",
+    displayName: "Ava Chen",
+    walletAddress: "0x2e7b4c9a1d6f30e85c2a7b4d9e1f6a3c8b5d0e47",
+    roles: ["OPS_ADMIN"],
+    authorityLimit: usd("0"),
+    status: "ACTIVE",
+    email: "ava@assay.example",
+    lastSeenAt: minutesAgo(2 * HOUR),
+    createdAt: minutesAgo(150 * DAY),
+  },
 ];
 
 const ME_BY_PRESET: Record<DemoOperatorPreset, string> = { lead: "op-jordan", support: "op-sam", admin: "op-dan" };
@@ -150,6 +181,132 @@ function me(): OperatorIdentity {
   const row = OPERATORS.find((op) => op.id === ME_BY_PRESET[demoPreset()])!;
   const { email: _email, lastSeenAt: _seen, createdAt: _created, ...identity } = row;
   return identity;
+}
+
+// ── What this page load did (demo only; see the file comment) ───────────────
+
+interface Suspension {
+  reasonCode: string;
+  note: string;
+  by: string;
+  at: string;
+}
+
+const memory = {
+  /** Approvals decided here, by id: the row as it now reads. */
+  decided: new Map<string, OperatorApproval>(),
+  /** Requests sent for approval here, newest first. */
+  added: [] as OperatorApproval[],
+  suspended: new Map<string, Suspension>(),
+  /** Blocks lifted by an approval here: block id → who and when. */
+  lifted: new Map<string, { by: string; approvedBy: string; at: string; note: string }>(),
+  /** Blocks created here, newest first. */
+  blocks: [] as AccountBlock[],
+  removed: new Set<string>(),
+  log: [] as OverrideLogEntry[],
+  seq: 0,
+};
+
+function nextId(prefix: string): string {
+  memory.seq += 1;
+  return `${prefix}-demo-${memory.seq}`;
+}
+
+function caseNow(c: DemoCase): DemoCase {
+  if (!memory.suspended.has(c.id)) return c;
+  // Suspending closes the case; a record standing on chain gets its cancel requested.
+  const standing = c.chainStatus === "PENDING" || c.chainStatus === "DISPUTED";
+  return { ...c, status: "OVERTURNED", chainStatus: standing ? "CANCEL_REQUESTED" : c.chainStatus, outcome: "OVERTURNED_PLATFORM_DEFECT" };
+}
+
+function approvalsNow(): OperatorApproval[] {
+  return [...memory.added, ...APPROVALS].map((a) => memory.decided.get(a.id) ?? a);
+}
+
+function blocksNow(): AccountBlock[] {
+  return [...memory.blocks, ...BLOCKS].map((b) => {
+    const lift = memory.lifted.get(b.id);
+    return lift
+      ? { ...b, active: false, unblockedBy: lift.by, unblockApprovedBy: lift.approvedBy, unblockedAt: lift.at, unblockNote: lift.note }
+      : b;
+  });
+}
+
+function bodyText(data: Record<string, unknown> | undefined, key: string): string {
+  const value = data?.[key];
+  return typeof value === "string" ? value : "";
+}
+
+/** A request sent for approval: remembered, and answered the way the API answers a 202. */
+function queue(action: string, code: string, target: string, payload: Record<string, unknown>) {
+  const self = me();
+  const approval: OperatorApproval = {
+    id: nextId("apr"),
+    action,
+    code,
+    target,
+    payload,
+    status: "PENDING",
+    requestedBy: self.subject,
+    requestedById: self.id,
+    approvedBy: null,
+    rejectedBy: null,
+    createdAt: nowIso(),
+    decidedAt: null,
+    expiresAt: new Date(Date.now() + 24 * 3_600_000).toISOString(),
+  };
+  memory.added.unshift(approval);
+  return { approvalId: approval.id, status: "PENDING" as const, action, expiresAt: approval.expiresAt };
+}
+
+function remember(entry: Omit<OverrideLogEntry, "createdAt" | "family" | "organizationId" | "before" | "after" | "breakGlass" | "approvalMode"> & { approvalMode?: string }) {
+  memory.log.unshift({
+    createdAt: nowIso(),
+    family: entry.code.startsWith("S") ? "SLASH" : "ACCESS",
+    organizationId: null,
+    before: {},
+    after: {},
+    breakGlass: false,
+    approvalMode: entry.approvalMode ?? (entry.approverSubject ? "TWO_PERSON" : "SINGLE"),
+    ...entry,
+  });
+}
+
+function suspend(caseId: string, reasonCode: string, note: string, by: string, approver: string | null): void {
+  memory.suspended.set(caseId, { reasonCode, note, by, at: nowIso() });
+  remember({
+    id: nextId("log"),
+    code: "S-1",
+    label: "Suspend slash proposal",
+    action: "slash.suspend",
+    actorSubject: by,
+    approverSubject: approver,
+    targetType: "slash_proposal",
+    targetId: caseId,
+    reasonCode,
+    reason: note,
+    ticketRef: null,
+  });
+}
+
+function approve(id: string) {
+  const approval = approvalsNow().find((a) => a.id === id) ?? APPROVALS[0];
+  const self = me();
+  const decided: OperatorApproval = { ...approval, status: "APPROVED", approvedBy: self.subject, decidedAt: nowIso() };
+  memory.decided.set(approval.id, decided);
+  const body = (approval.payload.body ?? {}) as Record<string, unknown>;
+  const reasonCode = bodyText(body, "reasonCode");
+  const note = bodyText(body, "note");
+  let result: unknown = {};
+  if (approval.action === "account.unblock") {
+    const blockId = String(approval.payload.blockId ?? approval.target.split(":")[1] ?? "");
+    memory.lifted.set(blockId, { by: approval.requestedBy, approvedBy: self.subject, at: nowIso(), note });
+    result = blocksNow().find((b) => b.id === blockId) ?? {};
+    remember({ id: nextId("log"), code: "A-10", label: "Lift account block", action: "account.unblock", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "account_block", targetId: blockId, reasonCode, reason: note, ticketRef: null });
+  } else if (approval.action === "slash.suspend") {
+    suspend(String(approval.payload.proposalId ?? ""), reasonCode, note, approval.requestedBy, self.subject);
+  }
+  return { approval: decided, result };
 }
 
 // ── Penalties ───────────────────────────────────────────────────────────────
@@ -265,7 +422,9 @@ const CASES: DemoCase[] = [
 
 const CASE_BY_ID = new Map(CASES.map((c) => [c.id, c]));
 
-function caseBrief(c: DemoCase): OperatorCaseBrief {
+function caseBrief(original: DemoCase): OperatorCaseBrief {
+  const c = caseNow(original);
+  const suspended = memory.suspended.get(c.id);
   const proposedAt = minutesAgo(c.proposedMinutesAgo);
   const executableAt = inMinutes(c.executableIn);
   const disputedAt = c.disputedMinutesAgo === null ? null : minutesAgo(c.disputedMinutesAgo);
@@ -302,7 +461,7 @@ function caseBrief(c: DemoCase): OperatorCaseBrief {
         disputeId: null,
         outcome: c.outcome ?? null,
         resolutionKind: null,
-        resolvedAt: executed ? minutesAgo(c.executedMinutesAgo ?? 0) : c.status === "OVERTURNED" ? minutesAgo(5 * HOUR) : null,
+        resolvedAt: executed ? minutesAgo(c.executedMinutesAgo ?? 0) : suspended ? suspended.at : c.status === "OVERTURNED" ? minutesAgo(5 * HOUR) : null,
         executedAt: executed ? minutesAgo(c.executedMinutesAgo ?? 0) : null,
       },
       changeOverlay: null,
@@ -330,7 +489,7 @@ function caseBrief(c: DemoCase): OperatorCaseBrief {
       arithmetic: [
         { key: "verified_calls", expression: "214 verified of 604 posted", value: "214", note: "above the 200-call sample gate", tone: "NEUTRAL" },
         { key: "observed_rate", expression: "27 failed / 214 verified", value: "12.62%", note: "observed 12.62% > 6.81% → breach", tone: "BAD" },
-        { key: "declared_rate", expression: null, value: "5.00%", note: "frozen when the window opened", tone: "NEUTRAL" },
+        { key: "declared_sla", expression: null, value: "5.00%", note: "frozen when the window opened", tone: "NEUTRAL" },
         { key: "effective_threshold", expression: "5.00% + 2.58 × sqrt(p(1−p)/214)", value: "6.81%", note: null, tone: "NEUTRAL" },
         { key: "penalty", expression: "failed spend × multiplier, capped", value: `$${c.penalty}`, note: null, tone: "BAD" },
       ],
@@ -349,8 +508,11 @@ function caseBrief(c: DemoCase): OperatorCaseBrief {
       ...(c.status === "UPHELD"
         ? [{ id: `${c.id}-3`, occurredAt: minutesAgo(2 * DAY), kind: "CHAIN_UPHELD", actorType: "operator" as const, actorId: "riley@", summary: "Upheld by the arbiter", detail: {} }]
         : []),
-      ...(c.status === "OVERTURNED"
+      ...(c.status === "OVERTURNED" && !suspended
         ? [{ id: `${c.id}-3`, occurredAt: minutesAgo(5 * HOUR), kind: "SUSPENDED", actorType: "operator" as const, actorId: "jordan@", summary: "Suspended: proposed during a mapping regression", detail: {} }]
+        : []),
+      ...(suspended
+        ? [{ id: `${c.id}-s`, occurredAt: suspended.at, kind: "SUSPENDED", actorType: "operator" as const, actorId: suspended.by, summary: `Suspended: ${suspended.note}`, detail: {} }]
         : []),
       ...(executed
         ? [{ id: `${c.id}-4`, occurredAt: minutesAgo(c.executedMinutesAgo ?? 0), kind: "EXECUTED", actorType: "system" as const, actorId: null, summary: "Executed on chain", detail: {} }]
@@ -367,7 +529,8 @@ function caseBrief(c: DemoCase): OperatorCaseBrief {
   };
 }
 
-function arbiterDispute(c: DemoCase): ArbiterDispute {
+function arbiterDispute(original: DemoCase): ArbiterDispute {
+  const c = caseNow(original);
   const disputedAt = minutesAgo(c.disputedMinutesAgo ?? 0);
   return {
     requestId: c.requestId,
@@ -476,6 +639,24 @@ const APPROVALS: OperatorApproval[] = [
     createdAt: minutesAgo(50),
     decidedAt: null,
     expiresAt: inMinutes(23 * HOUR + 10),
+  },
+  {
+    id: "apr-change-1",
+    action: "operator.change",
+    code: "A-13",
+    target: "operator:op-iris",
+    payload: {
+      operatorId: "op-iris",
+      body: { authorityLimitMinor: "1000000000", reasonCode: "ROLE_CHANGE", note: "Iris now covers the weekend adjudication rota." },
+    },
+    status: "PENDING",
+    requestedBy: "ava@",
+    requestedById: "op-ava",
+    approvedBy: null,
+    rejectedBy: null,
+    createdAt: minutesAgo(3 * HOUR),
+    decidedAt: null,
+    expiresAt: inMinutes(21 * HOUR),
   },
   {
     id: "apr-old-1",
@@ -662,7 +843,18 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
   {
     method: "POST",
     match: /^\/operator\/cases\/[^/]+\/suspend$/,
-    body: (path) => ({ id: lastSegment(path, 1), status: "CANCELLED" }),
+    body: (path, _query, data) => {
+      const id = lastSegment(path, 1);
+      const found = CASE_BY_ID.get(id);
+      const reasonCode = bodyText(data, "reasonCode");
+      const note = bodyText(data, "note");
+      // From UPHELD a suspension is two-person (S-1): the API answers 202 { approvalId }.
+      if (found && caseNow(found).status === "UPHELD") {
+        return queue("slash.suspend", "S-1", `slash_proposal:${id}`, { proposalId: id, body: { reasonCode, note } });
+      }
+      suspend(id, reasonCode, note, me().subject, null);
+      return { id, status: "CANCELLED" };
+    },
   },
   {
     method: "POST",
@@ -684,26 +876,23 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
     match: "/operator/approvals",
     body: (_path, query) => {
       const status = typeof query.status === "string" ? query.status : null;
-      return page(status ? APPROVALS.filter((a) => a.status === status) : APPROVALS);
+      const rows = approvalsNow();
+      return page(status ? rows.filter((a) => a.status === status) : rows);
     },
   },
   {
     method: "POST",
     match: /^\/operator\/approvals\/[^/]+\/approve$/,
-    body: (path) => {
-      const approval = APPROVALS.find((a) => a.id === lastSegment(path, 1)) ?? APPROVALS[0];
-      return {
-        approval: { ...approval, status: "APPROVED", approvedBy: `${me().subject}`, decidedAt: new Date().toISOString() },
-        result: approval.action === "account.unblock" ? { ...BLOCKS[1], active: false } : {},
-      };
-    },
+    body: (path) => approve(lastSegment(path, 1)),
   },
   {
     method: "POST",
     match: /^\/operator\/approvals\/[^/]+\/reject$/,
     body: (path) => {
-      const approval = APPROVALS.find((a) => a.id === lastSegment(path, 1)) ?? APPROVALS[0];
-      return { approval: { ...approval, status: "REJECTED", rejectedBy: me().subject, decidedAt: new Date().toISOString() } };
+      const approval = approvalsNow().find((a) => a.id === lastSegment(path, 1)) ?? APPROVALS[0];
+      const decided: OperatorApproval = { ...approval, status: "REJECTED", rejectedBy: me().subject, decidedAt: nowIso() };
+      memory.decided.set(approval.id, decided);
+      return { approval: decided };
     },
   },
   {
@@ -711,18 +900,40 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
     match: "/operator/blocks",
     body: (_path, query) => {
       const active = query.active === undefined ? null : String(query.active) === "true";
-      return page(active === null ? BLOCKS : BLOCKS.filter((b) => b.active === active));
+      const rows = blocksNow();
+      return page(active === null ? rows : rows.filter((b) => b.active === active));
     },
   },
   {
     method: "POST",
     match: "/operator/blocks",
-    body: () => ({ ...BLOCKS[1], id: "blk-new", blockedBy: me().subject, blockedAt: new Date().toISOString() }),
+    body: (_path, _query, data) => {
+      const subjectKind = bodyText(data, "subjectKind") === "ORGANIZATION" ? "ORGANIZATION" : "WALLET";
+      const subject = bodyText(data, "subject") || BLOCKS[1].subject;
+      const block: AccountBlock = {
+        ...BLOCKS[1],
+        id: nextId("blk"),
+        subjectKind,
+        subject,
+        subjectKey: subjectKind === "WALLET" ? `eip155:${subject.split(":").pop()}` : subject,
+        reasonCode: bodyText(data, "reasonCode") || "OTHER",
+        note: bodyText(data, "note"),
+        ticketRef: bodyText(data, "ticketRef") || null,
+        blockedBy: me().subject,
+        blockedAt: nowIso(),
+      };
+      memory.blocks.unshift(block);
+      remember({ id: nextId("log"), code: "A-9", label: "Block account", action: "account.block", actorSubject: me().subject, approverSubject: null, targetType: "account_block", targetId: block.id, reasonCode: block.reasonCode, reason: block.note, ticketRef: block.ticketRef });
+      return block;
+    },
   },
   {
     method: "POST",
     match: /^\/operator\/blocks\/[^/]+\/unblock$/,
-    body: () => ({ approvalId: "apr-demo-new", status: "PENDING", action: "account.unblock", expiresAt: inMinutes(24 * HOUR) }),
+    body: (path, _query, data) => {
+      const blockId = lastSegment(path, 1);
+      return queue("account.unblock", "A-10", `account_block:${blockId}`, { blockId, body: { reasonCode: bodyText(data, "reasonCode"), note: bodyText(data, "note") } });
+    },
   },
   {
     method: "GET",
@@ -730,7 +941,7 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
     body: (_path, query) => {
       const targetId = typeof query.targetId === "string" ? query.targetId : null;
       const targetType = typeof query.targetType === "string" ? query.targetType : null;
-      return page(LOG.filter((row) => (!targetId || row.targetId === targetId) && (!targetType || row.targetType === targetType)));
+      return page([...memory.log, ...LOG].filter((row) => (!targetId || row.targetId === targetId) && (!targetType || row.targetType === targetType)));
     },
   },
   {
@@ -748,24 +959,36 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
   {
     method: "POST",
     match: "/operator/operators",
-    body: () => ({ approvalId: "apr-demo-add", status: "PENDING", action: "operator.add", expiresAt: inMinutes(24 * HOUR) }),
+    body: (_path, _query, data) => {
+      const wallet = bodyText(data, "walletAddress").toLowerCase();
+      return queue("operator.add", "A-12", `operator_wallet:${wallet}`, { body: { ...data } });
+    },
   },
   {
     method: "PATCH",
     match: /^\/operator\/operators\/[^/]+$/,
-    body: () => ({ approvalId: "apr-demo-change", status: "PENDING", action: "operator.change", expiresAt: inMinutes(24 * HOUR) }),
+    body: (path, _query, data) => {
+      const operatorId = lastSegment(path);
+      return queue("operator.change", "A-13", `operator:${operatorId}`, { operatorId, body: { ...data } });
+    },
   },
   {
     method: "POST",
     match: /^\/operator\/operators\/[^/]+\/remove$/,
-    body: (path) => ({ ...OPERATORS.find((op) => op.id === lastSegment(path, 1)), status: "REMOVED" }),
+    body: (path, _query, data) => {
+      const id = lastSegment(path, 1);
+      memory.removed.add(id);
+      remember({ id: nextId("log"), code: "A-14", label: "Remove operator", action: "operator.remove", actorSubject: me().subject, approverSubject: null, targetType: "operator", targetId: id, reasonCode: bodyText(data, "reasonCode"), reason: bodyText(data, "note"), ticketRef: null });
+      return { ...OPERATORS.find((op) => op.id === id), status: "REMOVED" };
+    },
   },
   {
     method: "GET",
     match: "/operator/operators",
     body: (_path, query) => {
       const status = typeof query.status === "string" ? query.status : null;
-      return page(status ? OPERATORS.filter((op) => op.status === status) : OPERATORS);
+      const rows = OPERATORS.map((op) => (memory.removed.has(op.id) ? { ...op, status: "REMOVED" as const } : op));
+      return page(status ? rows.filter((op) => op.status === status) : rows);
     },
   },
 ];

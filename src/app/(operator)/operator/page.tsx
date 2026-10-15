@@ -10,13 +10,15 @@ import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { ApprovalItem, type ApprovalResult } from "@/features/operator/approval-item";
 import { ResultCard } from "@/features/operator/result-card";
-import { approvalErrorMessage } from "@/features/operator/approvals";
+import { approvalErrorMessage, describeApproval } from "@/features/operator/approvals";
 import { DisputeLine } from "@/features/operator/dispute-line";
 import { HealthStrip } from "@/features/operator/health-strip";
 import { checkedAgo, groupApprovals, needsYouCount, sortDisputesByDaysLeft } from "@/features/operator/inbox";
+import { approverNames, expiryReading } from "@/components/patterns/approval-footer";
 import { RoleIntro, useRoleIntro } from "@/features/operator/role-intro";
 import { capabilitiesFor } from "@/features/operator/roles";
 import { useOperatorSession } from "@/features/operator/session-context";
+import { approvalHref } from "@/features/operator/two-person";
 import { sortHoldsOldestFirst } from "@/features/operator/slash-holds-panel";
 import { useApprovalContext } from "@/features/operator/use-approval-context";
 import { useProviderNames } from "@/features/operator/use-operator-lookups";
@@ -143,6 +145,9 @@ export default function OperatorHome() {
         <div className="flex min-w-0 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">Needs you{needsYouTotal > 0 ? ` · ${needsYouTotal}` : ""}</h1>
           <p className="text-body-13 text-03" aria-live="polite">
+            {caps.rule && needsYouTotal > 0
+              ? `${groups.needsYou.length} approval${groups.needsYou.length === 1 ? "" : "s"} · ${disputeRows.length} dispute${disputeRows.length === 1 ? "" : "s"} · `
+              : ""}
             {lastChecked > 0 ? checkedAgo(lastChecked, now) : "checking…"}
             <span className="hidden tablet:inline"> · keys: j / k to move, Enter to act</span>
           </p>
@@ -243,13 +248,33 @@ export default function OperatorHome() {
       ) : null}
 
       {groups.yours.length > 0 ? (
-        <p className="w-full rounded-lg border border-01 bg-01 px-3.5 py-2.5 text-body-13 text-02">
-          {groups.yours.length === 1 ? "1 of your requests is" : `${groups.yours.length} of your requests are`} waiting for
-          someone else.{" "}
-          <Link href="/operator/approvals" className="text-primary-600 hover:underline">
-            See who can approve
-          </Link>
-        </p>
+        <section aria-labelledby="your-requests" className="flex w-full flex-col gap-1.5 rounded-lg border border-01 bg-01 px-3.5 py-3">
+          <h2 id="your-requests" className="text-label-13 text-01">
+            Your request{groups.yours.length === 1 ? "" : "s"} waiting for someone else · {groups.yours.length}
+          </h2>
+          <ul className="flex flex-col gap-1">
+            {groups.yours.slice(0, 3).map((approval) => {
+              const names = approverNames(approversFor(approval));
+              const expiry = expiryReading(approval.createdAt, approval.expiresAt, now);
+              return (
+                <li key={approval.id} className="text-body-13 text-02 [overflow-wrap:anywhere]">
+                  <Link href={approvalHref(approval.id)} className="text-01 hover:underline">
+                    {describeApproval(approval, context).sentence}
+                  </Link>{" "}
+                  <span className="text-03">
+                    · {names ? `waiting for ${names}` : "waiting for an approver"}
+                    {expiry ? ` · ${expiry.label.toLowerCase()}` : ""}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          {groups.yours.length > 3 ? (
+            <Link href="/operator/approvals" className="text-label-13 text-primary-600 hover:underline">
+              See all {groups.yours.length}
+            </Link>
+          ) : null}
+        </section>
       ) : null}
 
       <section aria-labelledby="watching" className="flex w-full flex-col gap-2.5">
