@@ -8,6 +8,7 @@ import * as React from "react";
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { PageState } from "@/components/patterns/page-state";
 import { Panel, PanelBody, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
+import { demoEnabled } from "@/libs/demo/demo-api";
 
 import { KeyValueRow, PageHeader } from "./chrome";
 
@@ -49,12 +50,14 @@ export function SettingsView() {
   const email = user?.email?.address ?? null;
   const methods = [...new Set(accounts.map((a) => LOGIN_METHOD[a.type]).filter(Boolean))];
   const wallets = accounts.filter((a) => a.type === "wallet" && a.address);
+  // DEMO ONLY: there is no sign-in session to read, so say so instead of "not available".
+  const demo = demoEnabled();
 
   return (
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
       <PageHeader title="Settings" />
 
-      {!ready ? (
+      {!ready && !demo ? (
         <PageState kind="loading" rows={3} label="Loading your account" />
       ) : (
         <Panel>
@@ -76,7 +79,11 @@ export function SettingsView() {
               />
             ))}
             {!email && methods.length === 0 && wallets.length === 0 ? (
-              <p className="py-3 text-body-13 text-02">Your sign-in details are not available right now.</p>
+              <p className="py-3 text-body-13 text-02">
+                {demo
+                  ? "Demo: nobody is signed in here. On a live site this shows your email, how you sign in and your wallets."
+                  : "Your sign-in details are not available right now."}
+              </p>
             ) : null}
           </PanelBody>
         </Panel>

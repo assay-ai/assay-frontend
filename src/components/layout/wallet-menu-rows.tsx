@@ -8,6 +8,7 @@ import { useSigner } from "@/hooks/useSigner";
 import type { Chain } from "@/interfaces/chain";
 import { explorerAddressUrl } from "@/libs/chains/explorer";
 import { shortAddress } from "@/libs/chains/format";
+import { demoEnabled } from "@/libs/demo/demo-api";
 import { assetName } from "@/services/chains.service";
 import { formatMoney } from "@/utils/money";
 
@@ -114,7 +115,9 @@ export function ChainWalletRow({ chain }: { chain: Chain }) {
         </div>
       ) : (
         <p className="mt-0.5 text-body-xs text-02">
-          {state.status === "hydrating"
+          {demoEnabled()
+            ? "Demo: no wallet is connected. On a live site your wallet shows here."
+            : state.status === "hydrating"
             ? "Connecting…"
             : state.status === "chain-unknown"
               ? "Preparing…"

@@ -17,6 +17,7 @@ import type { FullBalance } from "@/features/g30/balance";
 import { useChains } from "@/hooks/useChains";
 import { useConnectedAddresses } from "@/hooks/useSigner";
 import { clearSessionToken } from "@/libs/ApiClient";
+import { demoEnabled } from "@/libs/demo/demo-api";
 import { getBalances } from "@/services";
 import { cn } from "@/utils";
 
@@ -107,7 +108,8 @@ export function WalletMenu({ className }: { className?: string }) {
   const balancesQuery = useQuery<{ balances: FullBalance[] }>({
     queryKey: ["balances"],
     queryFn: () => getBalances() as Promise<{ balances: FullBalance[] }>,
-    enabled: open && ready && authenticated,
+    // DEMO ONLY: no Privy session exists, and the demo answers /balances itself.
+    enabled: open && (demoEnabled() || (ready && authenticated)),
     retry: 0,
     networkMode: "always" as const,
   });
