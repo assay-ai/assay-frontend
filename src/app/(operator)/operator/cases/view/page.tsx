@@ -14,6 +14,7 @@ import { StatusTimeline } from "@/components/patterns/status-timeline";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  cancelDeadlineSentence,
   caseAuthority,
   caseFacts,
   caseNextStep,
@@ -402,7 +403,7 @@ export default function OperatorCasePage() {
           onOpenChange={(open) => setSheet(open ? "cancel" : null)}
           proposalId={proposalId}
           penaltyAsset={proposal.penaltyAmount.asset}
-          deadlineText={facts.executableAt ? `before ${formatLocalDateTime(facts.executableAt)}` : "as soon as possible"}
+          deadlineSentence={cancelDeadlineSentence(facts, (iso) => formatLocalDateTime(iso))}
           onSigned={(hash) => {
             setResult({ title: "Cancel sent", next: "The penalty shows as cancelled once the chain watcher reads it back.", txHash: hash });
             refetch();
