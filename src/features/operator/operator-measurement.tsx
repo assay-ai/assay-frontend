@@ -8,6 +8,7 @@ import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitle
 import { arithmeticLabel, presentArithmeticRow } from "@/features/provider-slash-case/labels";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
 import { formatLocalDateTime } from "@/libs/local-time";
+import { cn } from "@/utils";
 
 /**
  * The penalty's measurement, for an operator: the frozen derivation the
@@ -20,6 +21,13 @@ import { formatLocalDateTime } from "@/libs/local-time";
  * `./labels` table, with "you/your" turned to "the provider", and a key the
  * table does not know is put into words rather than printed raw.
  */
+
+const VALUE_TONE: Record<NonNullable<ArithmeticRow["valueTone"]>, string> = {
+  default: "text-01",
+  success: "text-success-600",
+  danger: "text-danger-600",
+  muted: "text-02",
+};
 
 const toneMap: Record<"NEUTRAL" | "GOOD" | "BAD", ArithmeticRow["valueTone"]> = {
   NEUTRAL: "default",
@@ -86,11 +94,24 @@ export function OperatorMeasurement({ data }: { data: SlashProposalCaseDetail })
             />
           </div>
         ) : (
-          <div className="w-full overflow-x-auto">
-            <div className="min-w-[720px] py-2">
-              <Arithmetic rows={rows} />
+          <>
+            {/* Phone and narrow tablet: label over value, nothing clipped or scrolled sideways. */}
+            <dl className="flex w-full flex-col py-1 tablet:hidden">
+              {rows.map((row, index) => (
+                <div key={row.id ?? `${row.label}-${index}`} className={cn("flex w-full flex-col gap-0.5 px-4 py-2.5", index % 2 === 1 && "bg-02")}>
+                  <dt className="text-body-xs text-03">{row.label}</dt>
+                  <dd className={cn("break-words font-mono text-mono-13 font-semibold", VALUE_TONE[row.valueTone ?? "default"])}>{row.value}</dd>
+                  {row.expression ? <dd className="break-all font-mono text-mono-12 text-03">{row.expression}</dd> : null}
+                  {row.note ? <dd className="text-body-xs text-03">{row.note}</dd> : null}
+                </div>
+              ))}
+            </dl>
+            <div className="hidden w-full overflow-x-auto tablet:block">
+              <div className="min-w-[720px] py-2">
+                <Arithmetic rows={rows} />
+              </div>
             </div>
-          </div>
+          </>
         )}
         <p className="border-t border-01 bg-02 px-5 py-3 text-body-xs text-02">
           Where the penalty goes is shown once, under &ldquo;Where the money goes&rdquo; above.

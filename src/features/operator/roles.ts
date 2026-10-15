@@ -42,40 +42,6 @@ export interface RolePreset {
   roles: readonly OperatorRole[];
 }
 
-/** What an admin picks when adding someone. Fine-grained roles sit under "Customize". */
-export const ROLE_PRESETS: readonly RolePreset[] = Object.freeze([
-  {
-    id: "lead",
-    label: "Lead adjudicator",
-    description: "Rules on disputes, blocks accounts, approves lifts and suspensions.",
-    roles: ["ADJL"],
-  },
-  {
-    id: "adjudicator",
-    label: "Adjudicator",
-    description: "Reviews penalties, suspends them, approves suspensions.",
-    roles: ["ADJ"],
-  },
-  {
-    id: "support",
-    label: "Support / on-call",
-    description: "Blocks accounts in an incident, suspends penalties.",
-    roles: ["SRE", "SUP"],
-  },
-  {
-    id: "treasury",
-    label: "Treasury",
-    description: "Rules on disputes, compensates providers, approves compensations.",
-    roles: ["TRE"],
-  },
-  {
-    id: "admin",
-    label: "Admin",
-    description: "Adds, changes and removes operators.",
-    roles: ["OPS_ADMIN"],
-  },
-]);
-
 function sameSet(a: readonly string[], b: readonly string[]): boolean {
   const left = new Set(a);
   const right = new Set(b);
@@ -150,7 +116,7 @@ export const ACTION_WHAT: Readonly<Record<ConsoleAction, string>> = {
 };
 
 /** Actions on money: the authority limit applies (the backend refuses above it). */
-const MONEY_ACTIONS: ReadonlySet<ConsoleAction> = new Set(["suspend", "compensate"]);
+export const MONEY_ACTIONS: ReadonlySet<ConsoleAction> = new Set(["suspend", "compensate"]);
 
 export interface ActionCheck {
   allowed: boolean;
@@ -285,3 +251,65 @@ export function removalWarnings(
       : `Only one other ${who} would be left: their own requests for ${listPhrase(whats)} could not be approved.`,
   );
 }
+
+/** Each action in the third person, for a role card. */
+const ACTION_DOES: Readonly<Record<ConsoleAction, string>> = {
+  rule: "rules on disputes",
+  suspend: "suspends penalties",
+  block: "blocks accounts",
+  blockOnChain: "blocks wallets on chain",
+  compensate: "compensates providers",
+  manageTeam: "adds, changes and removes operators",
+};
+
+/** The approvals, short, for a role card. */
+const APPROVAL_SHORT: Readonly<Record<string, string>> = {
+  "S-1": "suspensions",
+  "S-11": "fleet sweeps",
+  "S-5": "compensations",
+  "A-10": "block lifts",
+  "A-12": "new operators",
+  "A-13": "raised roles and limits",
+};
+
+function sentence(text: string): string {
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
+}
+
+/**
+ * A role set in a few short sentences — "Blocks accounts. Suspends penalties
+ * within its authority limit." — from the same role tables `checkAction` reads
+ * and the approver table. The limit is picked separately, so actions on money
+ * say "within its authority limit" (at $0 that is none, as the Home banner
+ * then says). Pure.
+ */
+export function roleDescription(roles: readonly OperatorRole[]): string {
+  const allowed = BANNER_ACTIONS.filter((action) => holds(roles, ACTION_ROLES[action]));
+  const plain = allowed.filter((action) => !MONEY_ACTIONS.has(action)).map((action) => ACTION_DOES[action]);
+  const money = allowed.filter((action) => MONEY_ACTIONS.has(action)).map((action) => ACTION_DOES[action]);
+  const approves = [...new Set(APPROVES.filter((row) => holds(roles, row.roles)).map((row) => APPROVAL_SHORT[row.code] ?? row.what))];
+  const parts = [
+    ...(plain.length > 0 ? [sentence(listPhrase(plain))] : []),
+    ...(money.length > 0 ? [sentence(`${listPhrase(money)} within its authority limit`)] : []),
+    ...(approves.length > 0 ? [sentence(`approves ${listPhrase(approves)}`)] : []),
+  ];
+  return parts.length > 0 ? parts.join(" ") : "Reads every screen.";
+}
+
+/**
+ * What an admin picks when adding someone. Fine-grained roles sit under
+ * "Customize". Each description is `roleDescription(roles)` — the same check
+ * the Home banner and every button read — so a card can never promise what
+ * the console then refuses.
+ */
+export const ROLE_PRESETS: readonly RolePreset[] = Object.freeze(
+  (
+    [
+      { id: "lead", label: "Lead adjudicator", roles: ["ADJL"] },
+      { id: "adjudicator", label: "Adjudicator", roles: ["ADJ"] },
+      { id: "support", label: "Support / on-call", roles: ["SRE", "SUP"] },
+      { id: "treasury", label: "Treasury", roles: ["TRE"] },
+      { id: "admin", label: "Admin", roles: ["OPS_ADMIN"] },
+    ] as const
+  ).map((preset) => ({ ...preset, roles: [...preset.roles] as OperatorRole[], description: roleDescription([...preset.roles]) })),
+);
