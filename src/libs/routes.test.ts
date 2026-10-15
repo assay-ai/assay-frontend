@@ -18,6 +18,14 @@ describe("routes", () => {
     );
   });
 
+  it("builds explorer and calls links", () => {
+    expect(routes.publicTool("search_web")).toBe("/catalogue/view?tool=search_web");
+    expect(routes.publicProvider("p1")).toBe("/catalogue/provider?id=p1");
+    expect(routes.exploreTool("t1")).toBe("/explore?tool=t1");
+    expect(routes.calls()).toBe("/spend/calls");
+    expect(routes.calls({ status: "not-charged", tool: "" })).toBe("/spend/calls?status=not-charged");
+  });
+
   it("gives the path a link points at, without its query", () => {
     expect(pathOf(routes.binding("b1", "test"))).toBe("/provider/bindings/view/test");
   });

@@ -1,9 +1,11 @@
 "use client";
 
-import { Code2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Code2, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { PageState } from "@/components/patterns/page-state";
+import { useChainName } from "@/hooks/useChainName";
 import { Banner } from "@/components/ui/banner";
 import { MetricTile } from "@/components/ui/metric-tile";
 import {
@@ -62,9 +64,11 @@ import { formatMoney } from "@/utils/money";
  */
 
 const CUSTODIAL_NOTE =
-  "Balances counted here are held in a pooled vault that the platform controls. This page is " +
-  "how you check that the vault holds at least what the ledger owes. Per-account balance caps " +
-  "may apply.";
+  "Buyers' balances counted here sit together in one vault that Assay controls. This page lets " +
+  "anyone check that the vault holds at least what Assay owes. Per-account balance limits may apply.";
+
+/** The raw JSON behind this page, on the API host (this site is static). */
+const RESERVES_API_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL ?? ""}/public/reserves`;
 
 /** Absent, drawn as absent. The frame has no empty-value example; `—` is the console's. */
 const ABSENT = "—";
@@ -130,6 +134,7 @@ export default function ReservesPage() {
   const [data, setData] = React.useState<PublicReserves | null>(null);
   const [configured, setConfigured] = React.useState<boolean | null>(null);
   const [failed, setFailed] = React.useState(false);
+  const chainName = useChainName();
 
   React.useEffect(() => {
     let cancelled = false;
@@ -150,10 +155,11 @@ export default function ReservesPage() {
   if (failed) {
     return (
       <Shell>
-        <Banner
-          tone="danger"
+        <PageState
+          kind="error"
           title="Could not load proof of reserves"
-          description="The figures are not available right now. This page shows nothing rather than showing numbers it cannot stand behind."
+          description="The figures are not available right now. We show nothing rather than numbers we cannot stand behind."
+          onRetry={() => window.location.reload()}
         />
       </Shell>
     );
@@ -162,7 +168,7 @@ export default function ReservesPage() {
   if (configured === null) {
     return (
       <Shell>
-        <p className="text-body-13 text-02">Loading…</p>
+        <PageState kind="loading" rows={4} label="Loading proof of reserves" />
       </Shell>
     );
   }
@@ -174,8 +180,8 @@ export default function ReservesPage() {
       <Shell>
         <Banner
           tone="primary"
-          title="Proof of reserves is not available yet"
-          description="We are not publishing reserve figures here yet, so there is nothing to show. That is not a shortfall."
+          title="Reserve figures are not published on this site"
+          description="There is nothing to show here, and that is not a shortfall."
         />
         <p className="text-body-13 text-02">
           You can still read{" "}
@@ -202,20 +208,19 @@ export default function ReservesPage() {
     {
       label: "Asset",
       value: assetLabel(data.asset, data.assetSymbol),
-      sub: data.asset ? `CAIP-19 ${data.asset}` : undefined,
     },
     // No signer count is printed — see the file docstring.
     {
       label: "Control",
-      value: "Squads multisig",
-      sub: "signer threshold is on the multisig account",
+      value: "Shared multi-signature wallet",
+      sub: "several people must sign to move money",
     },
     {
       label: "Withdrawals",
-      value: "wallet signature required",
-      sub: "a session token can never move value",
+      value: "Need the owner's wallet signature",
+      sub: "being signed in is never enough to move money",
     },
-    { label: "Reconciler", value: "every 5 minutes", sub: "vault balance vs ledger liabilities" },
+    { label: "Checked", value: "Every 5 minutes", sub: "vault balance compared with what Assay owes" },
     {
       label: "Stake locked",
       value: data.stake
@@ -230,7 +235,7 @@ export default function ReservesPage() {
         : ABSENT,
       // Its OWN clock. Not `reconciledAt`.
       sub: data.stake
-        ? `${data.stake.providerCount} providers · read at ${utc(data.stake.readAt)}`
+        ? `providers' stake · ${data.stake.providerCount} providers · read at ${utc(data.stake.readAt)}`
         : "no stake reading yet",
     },
   ];
@@ -239,12 +244,12 @@ export default function ReservesPage() {
     <Shell>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex flex-col gap-[6px]">
-          <h1 className="text-display-sm text-01">Proof of reserves</h1>
-          <p className="text-body-15 text-02">
-            Compares the USDC held in the reserve vault on-chain with the ledger&apos;s
-            liabilities, verifiable without an account. Reconciled every five minutes.
+          <h1 className="text-heading-lg text-01">Proof of reserves</h1>
+          <p className="max-w-[720px] text-body-md text-02">
+            Is the money really there? This compares what the vault holds on chain with what Assay
+            owes its users. Anyone can check it, no account needed. Checked every five minutes.
           </p>
-          {network && <p className="font-mono text-mono-2xs tracking-[1.1px] text-03">{network}</p>}
+          {network && <p className="text-body-xs text-03">On {chainName(network)}</p>}
         </div>
         <div className="flex items-center gap-2">
           {address && (
@@ -258,29 +263,33 @@ export default function ReservesPage() {
               View vault on Solscan
             </a>
           )}
-          <a
-            href="/api/v1/public/reserves"
-            className="flex items-center gap-2 rounded-lg border border-02 px-3 py-2 text-label-13 text-01"
-          >
-            <Code2 className="h-4 w-4" />
-            API
-          </a>
+          {process.env.NEXT_PUBLIC_API_BASE_URL ? (
+            <a
+              href={RESERVES_API_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 rounded-lg border border-02 px-3 py-2 text-label-13 text-01"
+            >
+              <Code2 className="h-4 w-4" />
+              Raw data (JSON)
+            </a>
+          ) : null}
         </div>
       </div>
 
       {never && (
         <Banner
           tone="primary"
-          title="No reserve check has run yet"
-          description="The figures below are absent rather than zero. Nothing has been checked, so nothing is being claimed."
+          title="No check has run yet"
+          description="The figures below are blank, not zero: nothing has been checked, so nothing is claimed."
         />
       )}
 
       {blind && (
         <Banner
           tone="danger"
-          title="The last reconciliation failed"
-          description="The most recent check could not read the chain, so there are no current figures to publish. Earlier readings are in the history below with the time they were taken."
+          title="The last check failed"
+          description="It could not read the chain, so there are no current figures. Earlier readings are in the history below, with the time each was taken."
         />
       )}
 
@@ -290,14 +299,14 @@ export default function ReservesPage() {
           value={money(data.vaultBalance, data.decimals, data.asset)}
           sub={
             data.vaultSlot
-              ? `observed on-chain · slot ${slot(data.vaultSlot)}`
-              : "observed on-chain · slot not recorded"
+              ? `read on chain · slot ${slot(data.vaultSlot)}`
+              : "read on chain"
           }
         />
         <MetricTile
-          label="Ledger liabilities"
+          label="What Assay owes"
           value={money(data.totalLiabilities, data.decimals, data.asset)}
-          sub="sum of all user balances and holds"
+          sub="every user balance and hold"
         />
         <MetricTile
           // Teal is the frame's treatment for a difference of exactly zero. A
@@ -307,13 +316,13 @@ export default function ReservesPage() {
           label="Difference"
           value={money(data.difference, data.decimals, data.asset)}
           sub={
-            data.reconciledAt ? `reconciled ${utc(data.reconciledAt)}` : "not yet reconciled"
+            data.reconciledAt ? `checked ${utc(data.reconciledAt)}` : "not checked yet"
           }
         />
         <MetricTile
           label="Accounts"
           value={data.accounts === null ? ABSENT : data.accounts.toLocaleString("en-US")}
-          sub="with a non-zero balance"
+          sub="holding money"
         />
       </div>
 
@@ -321,7 +330,7 @@ export default function ReservesPage() {
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>The vault</PanelTitle>
-            <PanelDescription>one address, no commingling with operating funds</PanelDescription>
+            <PanelDescription>One address, kept apart from Assay&apos;s own money</PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody>
@@ -347,15 +356,15 @@ export default function ReservesPage() {
       <Panel>
         <PanelHeader>
           <PanelTitles>
-            <PanelTitle>Reconciliation history</PanelTitle>
+            <PanelTitle>History of checks</PanelTitle>
             <PanelDescription>
-              a non-zero difference is a public incident, not a private one
+              Any difference shows here, in public
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody>
           {data.history.length === 0 ? (
-            <p className="text-body-13 text-02">No reconciliation has been recorded yet.</p>
+            <p className="px-5 py-4 text-body-13 text-02">No check has been recorded yet.</p>
           ) : (
             <Table
               caption="Reconciliation history"
@@ -381,7 +390,7 @@ export default function ReservesPage() {
                 },
                 {
                   key: "liabilities",
-                  header: "Liabilities",
+                  header: "Owed",
                   width: 130,
                   align: "end",
                   mono: true,
@@ -417,6 +426,12 @@ export default function ReservesPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex w-full flex-col gap-4 px-7 pb-7 pt-6">{children}</div>
+    <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 pb-7 pt-6 tablet:px-7">
+      <Link href="/how-it-works" className="inline-flex items-center gap-1.5 self-start text-label-13 text-02 hover:text-01">
+        <ArrowLeft aria-hidden="true" className="size-3.5" />
+        How it works
+      </Link>
+      {children}
+    </div>
   );
 }
