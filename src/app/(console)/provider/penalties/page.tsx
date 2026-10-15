@@ -88,12 +88,12 @@ export default function PenaltiesPage() {
     address: penalties.ownAddress ? connectedSpelling(connected, penalties.ownAddress) : undefined,
   });
   const disputeBlocked = !penalties.ownAddress
-    ? "Confirm your stake wallet on the Stake page first: disputes are sent from it."
+    ? "Disputes are recorded on chain against your stake, so they are sent from the wallet that holds it. Confirm that wallet on the Stake page first."
     : signerState.status === "ready"
       ? null
       : signerState.status === "hydrating" || signerState.status === "chain-unknown"
         ? "Reading the wallets connected in this browser…"
-        : `Only the wallet that holds your stake (${penalties.ownAddress.slice(0, 6)}…${penalties.ownAddress.slice(-4)}) can dispute on chain. Connect it in this browser.`;
+        : `Disputes are recorded on chain against your stake, so only the wallet that holds it can file one. Connect that wallet (${penalties.ownAddress.slice(0, 6)}…${penalties.ownAddress.slice(-4)}) in this browser.`;
 
   const { connectWallet } = useConnectWallet();
   const needsConnect =
