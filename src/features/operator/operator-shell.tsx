@@ -22,6 +22,7 @@ import { formatClock } from "@/libs/local-time";
 import { useTheme } from "@/providers/ThemeProvider";
 import { cn } from "@/utils";
 
+import { needsYouBadgeText } from "./inbox";
 import { activeOperatorNav, operatorNavFor, type OperatorNavId } from "./nav";
 import { RoleCapabilities, RoleCapabilitiesPanel, roleLimitText, rolePillText } from "./role-intro";
 import { roleTitle } from "./roles";
@@ -68,9 +69,12 @@ const DEMO_ROLES: readonly { id: DemoOperatorPreset; label: string }[] = [
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="ml-1.5 rounded-full bg-danger-500 px-1.5 py-px text-[11px] font-semibold leading-4 tabular-nums text-on-color">
-      {count > 99 ? "99+" : count}
-      <span className="sr-only"> waiting for you</span>
+    <span
+      title={`${needsYouBadgeText(count)}: approvals and disputes, as on Home`}
+      className="ml-1.5 rounded-full bg-danger-500 px-1.5 py-px text-[11px] font-semibold leading-4 tabular-nums text-on-color"
+    >
+      <span aria-hidden="true">{count > 99 ? "99+" : count}</span>
+      <span className="sr-only">, {needsYouBadgeText(count)}</span>
     </span>
   );
 }
@@ -131,16 +135,16 @@ function AccountMenu({ identity, expiresAt, onSignOut, demo, onShortcuts }: Pick
           <SessionChip expiresAt={expiresAt} className="mt-1 self-start" />
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => setCapsOpen(true)} className="gap-2">
+        <DropdownMenuItem onSelect={() => setCapsOpen(true)} className="touch-target gap-2">
           <CircleHelp aria-hidden="true" className="size-4" />
           What can I do?
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setTheme(themeType === "light" ? "dark" : "light")} className="gap-2">
+        <DropdownMenuItem onSelect={() => setTheme(themeType === "light" ? "dark" : "light")} className="touch-target gap-2">
           {themeType === "light" ? <Moon aria-hidden="true" className="size-4" /> : <Sun aria-hidden="true" className="size-4" />}
           {themeType === "light" ? "Dark theme" : "Light theme"}
         </DropdownMenuItem>
         {onShortcuts ? (
-          <DropdownMenuItem onSelect={onShortcuts} className="gap-2">
+          <DropdownMenuItem onSelect={onShortcuts} className="touch-target gap-2">
             <Keyboard aria-hidden="true" className="size-4" />
             Keyboard shortcuts
             <span className="ml-auto text-body-xs text-03">?</span>
@@ -151,7 +155,7 @@ function AccountMenu({ identity, expiresAt, onSignOut, demo, onShortcuts }: Pick
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-label-xs text-03">Switch demo role</DropdownMenuLabel>
             {DEMO_ROLES.map((role) => (
-              <DropdownMenuItem key={role.id} onSelect={() => demo.onSwitch(role.id)} className="gap-2">
+              <DropdownMenuItem key={role.id} onSelect={() => demo.onSwitch(role.id)} className="touch-target gap-2">
                 <Check aria-hidden="true" className={cn("size-4", demo.current === role.id ? "text-primary-600" : "invisible")} />
                 {role.label}
               </DropdownMenuItem>
@@ -159,7 +163,7 @@ function AccountMenu({ identity, expiresAt, onSignOut, demo, onShortcuts }: Pick
           </>
         ) : null}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onSignOut} className="gap-2">
+        <DropdownMenuItem onSelect={onSignOut} className="touch-target gap-2">
           <LogOut aria-hidden="true" className="size-4" />
           Sign out of the console
         </DropdownMenuItem>
@@ -272,7 +276,7 @@ export function OperatorBottomTabs({ identity, pathname, needsYou }: Pick<Operat
             </span>
             <span className={cn("max-w-full truncate text-label-xs", isActive ? "text-primary-500" : "text-03")}>
               {item.label}
-              {item.id === "home" && needsYou > 0 ? <span className="sr-only">, {needsYou} waiting for you</span> : null}
+              {item.id === "home" && needsYou > 0 ? <span className="sr-only">, {needsYouBadgeText(needsYou)}</span> : null}
             </span>
           </Link>
         );

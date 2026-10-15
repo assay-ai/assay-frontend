@@ -48,7 +48,7 @@ export function HealthStrip({ health, error }: { health: PlatformHealth | undefi
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex items-center gap-2 text-left text-body-13",
+          "touch-target flex items-center gap-2 text-left text-body-13",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
           red ? "w-full rounded-lg border border-danger-20 bg-danger-10 px-3.5 py-2.5 text-danger-700" : "self-start rounded-md text-02 hover:text-01",
         )}
