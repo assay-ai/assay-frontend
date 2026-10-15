@@ -22,8 +22,8 @@ import { cn } from "@/utils";
  *
  * `value` is the code that is sent (the backend's reason code); the person
  * only ever sees the label. The note counter reads "12 / 20 minimum" until the
- * minimum is met. Error lines have reserved space, so an error appearing never
- * moves the controls under the pointer.
+ * minimum is met. The line under the chips (the picked reason's hint, or the
+ * error) takes no space until it has something to say.
  *
  * An error clears itself as soon as its field is valid: the reason error once
  * a chip is picked, the note error once the note is between `noteMin` and
@@ -143,8 +143,8 @@ export function ReasonChips({
             );
           })}
         </div>
-        {/* Reserved line: the hint for the picked reason, or the error. */}
-        <p className={cn("min-h-[18px] text-body-xs", live.reason ? "text-danger-600" : "text-03")} aria-live="polite">
+        {/* The hint for the picked reason, or the error — no space is held for it until there is one. */}
+        <p className={cn("text-body-xs empty:hidden", live.reason ? "text-danger-600" : "text-03")} aria-live="polite">
           {live.reason ?? picked?.hint ?? ""}
         </p>
       </div>
@@ -175,7 +175,7 @@ export function ReasonChips({
           )}
         >
           <span>{live.note ?? ""}</span>
-          <span className="shrink-0 font-mono text-mono-12">{counter.text}</span>
+          <span className="shrink-0 tabular-nums">{counter.text}</span>
         </p>
       </div>
     </div>

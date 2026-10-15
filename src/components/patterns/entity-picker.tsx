@@ -53,6 +53,12 @@ export interface EntityPickerProps {
   emptyText?: (query: string) => string;
   error?: React.ReactNode;
   disabled?: boolean;
+  /**
+   * Draw the suggestions in the flow, pushing what follows down, instead of
+   * over it. For a picker with controls right under it (the Block sheet's
+   * "Why" chips), so an open list never covers them.
+   */
+  inline?: boolean;
   className?: string;
 }
 
@@ -75,6 +81,7 @@ export function EntityPicker({
   emptyText = (query) => (query ? `Nothing matches “${query}”.` : "Nothing to pick yet."),
   error,
   disabled,
+  inline = false,
   className,
 }: EntityPickerProps) {
   const id = React.useId();
@@ -189,7 +196,10 @@ export function EntityPicker({
           id={`${id}-list`}
           role="listbox"
           aria-label={label}
-          className="absolute inset-x-0 top-full z-50 mt-1 max-h-[280px] overflow-y-auto rounded-lg border border-01 bg-01 p-1 shadow-soft"
+          className={cn(
+            "max-h-[280px] overflow-y-auto rounded-lg border border-01 bg-01 p-1",
+            inline ? "w-full" : "absolute inset-x-0 top-full z-50 mt-1 shadow-soft",
+          )}
         >
           {search && (remote.loading || stale) ? (
             <li className="flex flex-col gap-2 px-2.5 py-2">

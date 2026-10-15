@@ -2,6 +2,7 @@
 
 import { Check, Download, Link2 } from "lucide-react";
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/utils";
@@ -52,6 +53,8 @@ export interface SignOrExportProps {
   transactions?: readonly SafeBatchTransaction[];
   /** Or: build them when Download is pressed. */
   prepare?: () => Promise<readonly SafeBatchTransaction[]>;
+  /** The Download button's tone: "danger" when signing it takes money (an uphold). Default primary. */
+  exportVariant?: "primary" | "danger";
   /** Disable both paths (e.g. the form is not complete), with the reason. */
   disabled?: boolean;
   disabledReason?: React.ReactNode;
@@ -68,6 +71,14 @@ export interface SignOrExportProps {
    * the message to send with it. Drawn as "Copy link for the signer".
    */
   handoff?: { link: string; message: string };
+  /**
+   * Where the buttons go, when not here: a sheet's sticky footer, so they stay
+   * on screen while the form above them grows. The explanation and the
+   * technical details stay in place.
+   */
+  actionsContainer?: HTMLElement | null;
+  /** Leave out the "Who signs" sentence, when the sheet already says it ("What happens"). */
+  hideSigner?: boolean;
   className?: string;
 }
 
@@ -91,11 +102,14 @@ export function SignOrExport({
   prepare,
   disabled,
   disabledReason,
+  exportVariant = "primary",
   afterExport,
   details = [],
   resetKey,
   onPhaseChange,
   handoff,
+  actionsContainer,
+  hideSigner = false,
   className,
 }: SignOrExportProps) {
   const [linkCopied, setLinkCopied] = React.useState(false);
@@ -145,56 +159,76 @@ export function SignOrExport({
     setDownloaded(true);
   };
 
-  return (
-    <div className={cn("flex w-full flex-col gap-3", className)}>
-      {canSign ? (
-        <SignAction
-          steps={steps}
-          label={signLabel}
-          disabled={disabled}
-          disabledReason={disabledReason}
-          resetKey={resetKey}
-          onPhaseChange={onPhaseChange}
-          onSuccess={onSigned}
-          successTitle={successTitle}
-          successDescription={successDescription}
-          describeError={describeError}
-        />
+  const downloadButton = (
+    <Button
+      type="button"
+      icon={<Download aria-hidden="true" />}
+      onClick={() => void download()}
+      loading={preparing}
+      disabled={disabled}
+      variant={exportVariant}
+      className={cn(!actionsContainer && "w-full tablet:w-auto", actionsContainer && !handoff && "col-span-2")}
+    >
+      Download the file to sign
+    </Button>
+  );
+  const handoffButton = handoff ? (
+    <Button
+      type="button"
+      variant="secondary"
+      icon={linkCopied ? <Check aria-hidden="true" /> : <Link2 aria-hidden="true" />}
+      onClick={() => void copyHandoff()}
+      className={actionsContainer ? undefined : "w-full tablet:w-auto"}
+    >
+      {linkCopied ? "Link copied" : "Copy link for the signer"}
+    </Button>
+  ) : null;
+  const exportStatus = prepareError ?? (downloaded ? afterExport : disabled ? (disabledReason ?? "") : "");
+  const actions = canSign ? (
+    <SignAction
+      steps={steps}
+      label={signLabel}
+      disabled={disabled}
+      disabledReason={disabledReason}
+      resetKey={resetKey}
+      onPhaseChange={onPhaseChange}
+      onSuccess={onSigned}
+      successTitle={successTitle}
+      successDescription={successDescription}
+      describeError={describeError}
+    />
+  ) : (
+    <div className="flex w-full flex-col gap-2">
+      {actionsContainer ? (
+        // A sheet footer: the action on the right, the hand-off on its left; side by side on a phone too.
+        <div className="grid w-full grid-cols-2 gap-2 [&>*]:min-w-0 [&>*]:!whitespace-normal [&>*]:text-center tablet:flex tablet:justify-end">
+          {handoffButton}
+          {downloadButton}
+        </div>
       ) : (
-        <div className="flex w-full flex-col gap-2">
-          <p className="text-body-13 text-02">
-            <span className="text-label-13 text-01">Who signs: </span>
-            {signerLabel}. That is not the wallet connected here, so download the transaction file and have it signed in the
-            Safe that holds that key. Nothing changes until it is signed.
-          </p>
-          <div className="flex w-full flex-col gap-2 tablet:flex-row tablet:items-center">
-            <Button
-              type="button"
-              icon={<Download aria-hidden="true" />}
-              onClick={() => void download()}
-              loading={preparing}
-              disabled={disabled}
-              className="w-full tablet:w-auto"
-            >
-              Download the file to sign
-            </Button>
-            {handoff ? (
-              <Button
-                type="button"
-                variant="secondary"
-                icon={linkCopied ? <Check aria-hidden="true" /> : <Link2 aria-hidden="true" />}
-                onClick={() => void copyHandoff()}
-                className="w-full tablet:w-auto"
-              >
-                {linkCopied ? "Link copied" : "Copy link for the signer"}
-              </Button>
-            ) : null}
-          </div>
-          <p className={cn("min-h-[18px] text-body-xs", prepareError ? "text-danger-600" : "text-02")} role="status">
-            {prepareError ?? (downloaded ? afterExport : disabled ? (disabledReason ?? "") : "")}
-          </p>
+        <div className="flex w-full flex-col gap-2 tablet:flex-row tablet:items-center">
+          {downloadButton}
+          {handoffButton}
         </div>
       )}
+      {exportStatus ? (
+        <p className={cn("text-body-xs", prepareError ? "text-danger-600" : "text-02")} role="status">
+          {exportStatus}
+        </p>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <div className={cn("flex w-full flex-col gap-3", className)}>
+      {!canSign && !hideSigner ? (
+        <p className="text-body-13 text-02">
+          <span className="text-label-13 text-01">Who signs: </span>
+          {signerLabel}. That is not the wallet connected here, so download the transaction file and have it signed in the
+          Safe that holds that key. Nothing changes until it is signed.
+        </p>
+      ) : null}
+      {actionsContainer ? createPortal(actions, actionsContainer) : actions}
 
       {transactions.length > 0 || details.length > 0 || canSign ? (
       <details className="group w-full rounded-md border border-01 bg-02 px-3 py-2">
@@ -230,9 +264,11 @@ export function SignOrExport({
               >
                 Download the file to sign in a Safe instead
               </Button>
-              <p className={cn("min-h-[18px] pt-1 text-body-xs", prepareError ? "text-danger-600" : "text-02")} role="status">
-                {prepareError ?? (downloaded ? afterExport : "")}
-              </p>
+              {prepareError || downloaded ? (
+                <p className={cn("pt-1 text-body-xs", prepareError ? "text-danger-600" : "text-02")} role="status">
+                  {prepareError ?? afterExport}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </dl>
