@@ -19,11 +19,29 @@ export function useScrollFade<T extends HTMLElement>(): React.RefCallback<T> {
     };
     update();
     node.addEventListener("scroll", update, { passive: true });
+    // The row's own size rarely changes when its content does (chips gain a
+    // count once data loads), so its children are watched too: otherwise the
+    // row first measured empty never got its right-hand fade (operator
+    // retest 2026-10-16b, Penalties chips at 390px).
     const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
-    resize?.observe(node);
+    const watchChildren = () => {
+      resize?.disconnect();
+      resize?.observe(node);
+      for (const child of Array.from(node.children)) resize?.observe(child);
+    };
+    watchChildren();
+    const mutation =
+      typeof MutationObserver === "undefined"
+        ? null
+        : new MutationObserver(() => {
+            watchChildren();
+            update();
+          });
+    mutation?.observe(node, { childList: true, subtree: true, characterData: true });
     cleanup.current = () => {
       node.removeEventListener("scroll", update);
       resize?.disconnect();
+      mutation?.disconnect();
     };
   }, []);
 }
