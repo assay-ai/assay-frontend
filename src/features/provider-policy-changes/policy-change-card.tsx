@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { LocalTime } from "@/components/patterns/local-time";
+
 import {
   Panel,
   PanelBody,
@@ -22,6 +24,7 @@ import { cn } from "@/utils";
 import { shortBindingId } from "@/utils/provider-label";
 
 import { formatDiffValue } from "./format-diff-value";
+import { overallImpact, plainImpact } from "./plain-impact";
 
 const bindingStatusTone: Record<string, string> = {
   ACTIVE: "bg-success-10 text-success-700",
@@ -134,58 +137,71 @@ export function PolicyChangeCard({ change, toolLabel }: PolicyChangeCardProps) {
     id: `${entry.path}-${index}`,
     ...entry,
   }));
+  const impacts = change.diff.map((entry) => plainImpact(entry).text);
+  const uniqueImpacts = impacts.filter((text, index) => impacts.indexOf(text) === index);
+  const live = change.bindings.filter((binding) => binding.status === "ACTIVE").length;
 
   return (
     <Panel className="w-full">
       <PanelHeader>
         <PanelTitles>
-          <PanelTitle>{`Version ${change.pendingVersion} pending on ${toolLabel}`}</PanelTitle>
-          <PanelDescription>
-            {change.inForceVersion === null
-              ? "no version currently in force for this tool"
-              : `in force: V${change.inForceVersion}`}
+          <PanelTitle>{`The checks on ${toolLabel} are changing`}</PanelTitle>
+          <PanelDescription className="whitespace-normal">
+            {change.effectiveDate ? (
+              <>
+                Takes effect <LocalTime value={change.effectiveDate} />
+              </>
+            ) : (
+              "No date set yet. It runs in test mode now and changes nothing until Assay switches it on."
+            )}
           </PanelDescription>
         </PanelTitles>
       </PanelHeader>
 
       <PanelBody className="gap-4 p-4 tablet:p-5">
-        <p className="font-mono text-mono-12 text-03">
-          {`effective date ${DASH} — promotion is an immediate operator action, not a scheduled one`}
-        </p>
+        <p className="text-body-13 text-01">{overallImpact(change.diff)}</p>
 
-        <div className="flex w-full flex-col gap-2">
-          <p className="text-body-13 text-02">
-            {`Affects ${change.bindings.length} of your binding${
-              change.bindings.length === 1 ? "" : "s"
-            } on this tool.`}
-          </p>
-          <div className="flex w-full flex-wrap items-center gap-2">
-            {change.bindings.map((binding) => (
-              <BindingChip key={binding.bindingId} binding={binding} />
+        {uniqueImpacts.length > 0 ? (
+          <ul className="flex list-disc flex-col gap-1.5 pl-5 text-body-13 text-02">
+            {uniqueImpacts.map((text) => (
+              <li key={text}>{text}</li>
             ))}
-          </div>
-        </div>
-
-        {change.inForceVersion === null ? (
-          <p className="text-body-13 text-03">
-            No version is currently active for this tool — every field below would be newly
-            introduced, since nothing is currently enforcing.
-          </p>
+          </ul>
         ) : null}
 
-        {rows.length > 0 ? (
-          <div className="w-full overflow-x-auto">
-            <Table
-              columns={diffColumns(inForceLabel)}
-              rows={rows}
-              caption={`Structural diff, in force to pending, ${toolLabel}`}
-            />
+        <p className="text-body-13 text-02">
+          {live > 0
+            ? `It applies to your live listing${live === 1 ? "" : "s"} of this tool once it takes effect.`
+            : "None of your listings of this tool is live, so nothing changes for you yet."}{" "}
+          Your price and promise do not change. Watch the Quality tab of the tool after it takes effect.
+        </p>
+
+        <details className="group w-full rounded-lg border border-01 bg-02">
+          <summary className="cursor-pointer select-none px-3.5 py-2.5 text-label-13 text-02">Technical details</summary>
+          <div className="flex w-full flex-col gap-3 border-t border-01 px-3.5 py-3">
+            <p className="font-mono text-mono-12 text-03">
+              {`Version ${change.pendingVersion} (${change.pendingLifecycle.toLowerCase()}) replaces ${
+                change.inForceVersion === null ? "no version in force" : `version ${change.inForceVersion}`
+              } · effective date ${change.effectiveDate ?? DASH}`}
+            </p>
+            <div className="flex w-full flex-wrap items-center gap-2">
+              {change.bindings.map((binding) => (
+                <BindingChip key={binding.bindingId} binding={binding} />
+              ))}
+            </div>
+            {rows.length > 0 ? (
+              <div className="w-full overflow-x-auto">
+                <Table
+                  columns={diffColumns(inForceLabel)}
+                  rows={rows}
+                  caption={`Structural diff, in force to pending, ${toolLabel}`}
+                />
+              </div>
+            ) : (
+              <p className="text-body-13 text-03">No structural difference between the in-force and pending decision documents.</p>
+            )}
           </div>
-        ) : (
-          <p className="text-body-13 text-03">
-            No structural difference between the in-force and pending decision documents.
-          </p>
-        )}
+        </details>
       </PanelBody>
     </Panel>
   );

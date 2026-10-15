@@ -9,7 +9,8 @@ import { LocalTime } from "@/components/patterns/local-time";
 import { PresetChips } from "@/components/patterns/preset-chips";
 import { WalletActionSheet } from "@/components/patterns/sign-action";
 import { StatusTimeline } from "@/components/patterns/status-timeline";
-import { usePenaltySummary } from "@/features/provider-penalties/use-penalty-summary";
+import { useProviderToolNames } from "@/features/provider-binding/tool-name";
+import { usePenalties } from "@/features/provider-penalties/use-penalties";
 import { routes } from "@/libs/routes";
 import { formatDecimal, formatMoney, parseAmountInput, toDecimal } from "@/utils/money";
 
@@ -17,7 +18,7 @@ import { stakeActionChain } from "./chain-stake";
 import { describeStakeError, unstakeStep, withdrawStep } from "./stake-steps";
 import { PROVIDER_STAKE_KEY, useStakeStatus } from "./use-stake-status";
 import { useStakeWallet, walletBlocker } from "./use-stake-wallet";
-import { availableAfterRequest, periodLabel, withdrawStateOf } from "./withdraw-state";
+import { availableAfterRequest, MIN_UNBONDING_MS, periodLabel, toolsPausedAt, withdrawPlan, withdrawStateOf } from "./withdraw-state";
 
 /**
  * "Withdraw stake": one sheet for both halves of getting stake back.
@@ -27,33 +28,53 @@ import { availableAfterRequest, periodLabel, withdrawStateOf } from "./withdraw-
  *    the WHOLE unbonding balance — said before the signature, not after.
  * 2. When the clock has ended, "Withdraw $X to your wallet".
  *
- * Never shows a nonce, gas figure or chain id; open penalties and paid tools
- * that would pause are named as chips with links.
+ * The amount starts at what is free: staked − what paid tools need − what
+ * open penalties hold back, so the default never pauses anything. Going
+ * above it names each tool that would pause and at which stake. Before the
+ * signature a timeline shows the waiting period and the unlock date.
+ *
+ * Never shows a nonce, gas figure or chain id.
  */
 export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const status = useStakeStatus();
   const wallet = useStakeWallet(status);
-  const penalties = usePenaltySummary();
+  const penalties = usePenalties({ withCases: "none" });
+  const names = useProviderToolNames();
   const queryClient = useQueryClient();
   const entry = stakeActionChain(status.stake ?? undefined);
   const state = withdrawStateOf(entry);
   const decimals = state.staked?.decimals ?? status.required?.decimals ?? 6;
 
+  const openPenalties = penalties.rows.filter((row) => row.tab !== "closed");
+  const plan = withdrawPlan({
+    staked: state.staked,
+    required: status.required,
+    reserved: openPenalties.map((row) => row.amount),
+    requirement: status.stake?.requirement ?? [],
+  });
+  const freeValue = plan.free && toDecimal(plan.free).gt(0) ? toDecimal(plan.free).toFixed() : "";
+
   const [value, setValue] = React.useState("");
+  const wasOpen = React.useRef(false);
   React.useEffect(() => {
-    if (open) setValue("");
-  }, [open]);
+    // Start at the amount that pauses nothing, once per opening.
+    if (open && !wasOpen.current) setValue(freeValue);
+    wasOpen.current = open;
+  }, [open, freeValue]);
 
   const max = state.staked ? toDecimal(state.staked).toFixed() : undefined;
   const parsed = parseAmountInput(value, { decimals, max });
   const amountLabel = parsed.value ? formatDecimal(parsed.value) : "";
   const remaining = parsed.value && state.staked ? toDecimal(state.staked).minus(parsed.value) : null;
-  const pausesTools =
-    remaining !== null && status.required ? remaining.lt(toDecimal(status.required)) : false;
-  const pausingCount = pausesTools
-    ? (status.stake?.requirement ?? []).filter((item) => item.minimum && remaining!.lt(toDecimal(item.minimum))).length
-    : 0;
-  const maturesAt = availableAfterRequest(state);
+  const pausing =
+    remaining !== null && parsed.atomic !== null && state.staked
+      ? toolsPausedAt(plan, BigInt(state.staked.amount) - BigInt(parsed.atomic ?? "0"))
+      : [];
+  const pausesTools = pausing.length > 0;
+  const periodKnown = state.periodMs !== null;
+  const waitMs = state.periodMs ?? MIN_UNBONDING_MS;
+  const maturesAt = availableAfterRequest(state) ?? new Date(Date.now() + MIN_UNBONDING_MS).toISOString();
+  const waitLabel = periodLabel(waitMs)!;
   const blocker = walletBlocker(wallet);
 
   const ready = state.phase === "ready" && state.unbonding;
@@ -91,21 +112,38 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
     />
   );
 
-  const chips: React.ReactNode[] = [];
-  if (penalties.count > 0) {
-    chips.push(
-      <Link key="penalties" href={routes.penalties("needs-action")} className="underline-offset-2 hover:underline">
-        {penalties.count === 1 ? "1 open penalty" : `${penalties.count} open penalties`} reserve part of your stake
-      </Link>,
-    );
-  }
-  if (pausingCount > 0) {
-    chips.push(
-      <Link key="tools" href="/provider/bindings" className="underline-offset-2 hover:underline">
-        {pausingCount === 1 ? "1 paid tool" : `${pausingCount} paid tools`} would pause below the stake left
-      </Link>,
-    );
-  }
+  const plannedTimeline = (
+    <StatusTimeline
+      label="What happens next"
+      orientation="vertical"
+      steps={[
+        { id: "start", label: "Start withdrawing", state: "current", dateLabel: "Today, one signature" },
+        {
+          id: "wait",
+          label: `Waiting period: ${periodKnown ? waitLabel : `at least ${waitLabel}`}`,
+          state: "upcoming",
+          description: "Covers penalties for calls you already served. The money stays staked and cannot be taken for new calls.",
+        },
+        {
+          id: "unlock",
+          label: periodKnown ? "Unlocks" : "Unlocks on or after",
+          state: "upcoming",
+          date: maturesAt,
+        },
+        { id: "withdraw", label: "Withdraw to your wallet", state: "upcoming", dateLabel: "Come back here, one signature" },
+      ]}
+    />
+  );
+
+  const freeHint = state.staked
+    ? [
+        `Staked ${formatMoney(state.staked)}`,
+        status.required ? `paid tools need ${formatMoney(status.required)}` : null,
+        plan.reserved ? `open penalties hold ${formatMoney(plan.reserved)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : undefined;
 
   return (
     <WalletActionSheet
@@ -117,9 +155,8 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
           <>{formatMoney(state.unbonding)} has finished unbonding and can go back to your wallet now.</>
         ) : (
           <>
-            Stake comes back in two steps: it unbonds for a waiting period
-            {periodLabel(state.periodMs) ? ` (${periodLabel(state.periodMs)})` : ""}, then you withdraw it to your
-            wallet. The wait covers penalties for calls you already served.
+            Stake comes back in two steps: it waits for {periodKnown ? waitLabel : `at least ${waitLabel}`}, then you
+            withdraw it to your wallet.
           </>
         )
       }
@@ -150,29 +187,52 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
     >
       {state.phase !== "none" ? timeline : null}
 
+      {!ready && state.staked ? (
+        <div className="flex flex-col gap-1 rounded-lg border border-01 bg-02 px-3.5 py-3 text-body-13 text-02">
+          <p>
+            <span className="font-semibold text-01">{formatMoney(plan.free)}</span> is free to withdraw without pausing any tool.
+          </p>
+          {freeHint ? <p className="text-body-xs text-03">{freeHint}</p> : null}
+          {plan.reserved ? (
+            <Link href={routes.penalties("needs-action")} className="text-body-xs text-03 underline underline-offset-2">
+              {openPenalties.length === 1 ? "1 open penalty" : `${openPenalties.length} open penalties`} hold{" "}
+              {formatMoney(plan.reserved)} until they are settled
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+
       {!ready ? (
         <>
           <PresetChips
             label="Amount to withdraw"
-            presets={max ? [{ value: max, label: `Max ${formatMoney(state.staked)}` }] : []}
+            presets={[
+              ...(freeValue ? [{ value: freeValue, label: `Max without pausing ${formatMoney(plan.free)}` }] : []),
+              ...(max && max !== freeValue ? [{ value: max, label: `Everything ${formatMoney(state.staked)}` }] : []),
+            ]}
             value={value}
             onChange={setValue}
             error={value ? parsed.error : undefined}
-            hint={state.staked ? `Staked now: ${formatMoney(state.staked)}` : undefined}
           />
+          {pausesTools ? (
+            <ul className="flex flex-col gap-1 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5 text-body-13 text-warning-700">
+              {pausing.map((item) => (
+                <li key={item.bindingId}>
+                  <Link href={routes.binding(item.bindingId)} className="font-semibold underline-offset-2 hover:underline">
+                    {names.toolName(item.toolId) ?? "A paid tool"}
+                  </Link>{" "}
+                  pauses: it needs {formatMoney(item.minimum)} of stake and {formatDecimal(remaining!)} would be left.
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {parsed.value ? (
             <p className="text-body-13 text-02">
-              Withdraw {amountLabel} →{" "}
-              {maturesAt ? (
-                <>
-                  available on <LocalTime value={maturesAt} className="font-semibold text-01" />
-                </>
-              ) : (
-                "available when the waiting period ends (the date shows here once you confirm)"
-              )}
-              .
+              Withdraw {amountLabel}: unlocks {periodKnown ? "on" : "on or after"}{" "}
+              <LocalTime value={maturesAt} dateOnly className="font-semibold text-01" />.
             </p>
           ) : null}
+          {state.phase === "none" ? plannedTimeline : null}
           <p className="flex items-start gap-1.5 text-body-xs text-warning-700">
             <CircleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
             <span>
@@ -183,15 +243,6 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
         </>
       ) : null}
 
-      {chips.length > 0 ? (
-        <ul className="flex flex-wrap gap-2">
-          {chips.map((chip, index) => (
-            <li key={index} className="rounded-full bg-warning-10 px-2.5 py-1 text-label-xs text-warning-700">
-              {chip}
-            </li>
-          ))}
-        </ul>
-      ) : null}
     </WalletActionSheet>
   );
 }

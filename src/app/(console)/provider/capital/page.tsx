@@ -190,6 +190,26 @@ export default function ProviderStakePage() {
         <PanelBody className="flex flex-col gap-4 p-4 tablet:p-5">
           <StakeGauge staked={status.staked} needed={status.required} recommended={status.recommended} />
           <p className={status.enough === false ? "text-body-13 text-danger-600" : "text-body-13 text-02"}>{headline}</p>
+          {status.required ? (
+            <dl className="grid grid-cols-1 gap-2 rounded-lg border border-01 bg-02 px-3.5 py-3 text-body-xs text-02 tablet:grid-cols-2 tablet:gap-4">
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-label-xs text-01">Needed: {formatMoney(status.required)}</dt>
+                <dd>
+                  The most any one paid tool needs, not the sum. Each paid tool needs its price × 1,000 calls (at least
+                  $50.00): enough to cover about 1,000 calls that fail their check.
+                </dd>
+              </div>
+              {status.recommended ? (
+                <div className="flex flex-col gap-0.5">
+                  <dt className="text-label-xs text-01">Recommended: {formatMoney(status.recommended)}</dt>
+                  <dd>
+                    1.5× what is needed. If a penalty takes part of your stake, you stay above what is needed and no tool
+                    pauses.
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
           {withdraw.phase !== "none" ? (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-01 bg-02 px-3.5 py-2.5 text-body-13 text-02">
               <StatusChip status={withdraw.phase === "ready" ? "withdrawable" : "unbonding"} />

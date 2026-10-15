@@ -197,10 +197,16 @@ export function StakeSheet({ open, onOpenChange, amount, reason, onStaked }: Sta
         error={value ? parsed.error : undefined}
         hint={
           status.required
-            ? `Your tools need ${formatMoney(status.required)} in total; you have ${status.staked ? formatMoney(status.staked) : "$0.00"}.`
+            ? `Your paid tools need ${formatMoney(status.required)} (the most any one of them needs); you have ${status.staked ? formatMoney(status.staked) : "$0.00"}.`
             : "You can stake before you list a paid tool."
         }
       />
+      {wallet.isEvm ? (
+        <p className="text-body-xs text-03">
+          Two signatures in your wallet. Step 1: approve, which lets the stake contract move this amount. Step 2: deposit,
+          which moves it into your stake. Each costs a small network fee.
+        </p>
+      ) : null}
     </WalletActionSheet>
   );
 }
