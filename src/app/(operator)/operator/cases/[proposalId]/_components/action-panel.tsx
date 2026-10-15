@@ -216,7 +216,7 @@ interface Gate {
 
 /** The panel's own label for each action, used in the "nothing is available" list. */
 /** The off-chain decision path, which an on-chain (EVM) case does not have. */
-const OFF_CHAIN_DECISIONS: readonly OperatorAction[] = ["claim", "decide", "second", "extendDeadline"];
+const OFF_CHAIN_DECISIONS: readonly OperatorAction[] = ["claim", "decide", "second", "extendDeadline", "suspend"];
 
 const ACTION_LABEL: Partial<Record<OperatorAction, string>> = {
   claim: "Claim",
@@ -702,7 +702,9 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
     EVM: the case is disputed and ruled on chain only. The provider disputes
     with `disputeSlash` from its own wallet and Assay's arbiter rules on the
     arbiter page; the backend refuses an off-chain claim, decision, second
-    signature or extension (`SLASH_ARBITER_RULES_ON_CHAIN`), so none is drawn.
+    signature, extension or S-1 suspension (`SLASH_ARBITER_RULES_ON_CHAIN`,
+    review N-2: only the arbiter's cancelSlash stops an EVM penalty), so none
+    is drawn.
   */
   const ruledOnChain = disputesOnChain(brief.case.proposal.clocks);
   const offChainDecision = (base: Gate): Gate => (ruledOnChain ? { ...base, offered: false } : base);
@@ -710,7 +712,7 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
   const claimGate = offChainDecision(gate("claim"));
   const decideGate = offChainDecision(gate("decide"));
   const secondGate = offChainDecision(withinAuthority(gate("second")));
-  const suspendGate = withinAuthority(gate("suspend"));
+  const suspendGate = offChainDecision(withinAuthority(gate("suspend")));
 
   /*
     `extendDeadline` is the one action with a THIRD gate, and it is not a role
