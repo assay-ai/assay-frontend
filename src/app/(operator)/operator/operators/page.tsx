@@ -1,7 +1,9 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Plus } from "lucide-react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, ArrowUpRight, Clock, MoreHorizontal, Plus, ShieldCheck, Users, Wallet } from "lucide-react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { ApprovalFooter } from "@/components/patterns/approval-footer";
@@ -12,10 +14,11 @@ import { PresetChips } from "@/components/patterns/preset-chips";
 import { ReasonChips, type ReasonOption } from "@/components/patterns/reason-chips";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { approvalNeeds } from "@/features/operator/approvals";
+import { approvalNeeds, approvalTargetId } from "@/features/operator/approvals";
 import {
   DIRECTORY_NOTE_MIN,
   ROLE_OPTIONS,
@@ -32,14 +35,16 @@ import { eligibleApprovers, operatorLabel } from "@/features/operator/inbox";
 import { OPERATOR_ADD_REASONS, OPERATOR_CHANGE_REASONS, OPERATOR_REMOVE_REASONS } from "@/features/operator/reasons";
 import { ResultCard } from "@/features/operator/result-card";
 import { ROLE_PRESETS, presetOf, removalWarnings, roleTitle } from "@/features/operator/roles";
+import { firstNames, inviteLimit, invitesOf, limitCell } from "@/features/operator/team";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { approvalHref, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
+import { WhatHappens } from "@/features/operator/what-happens";
 import { WhyNot } from "@/features/operator/why-not";
 import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
-import type { OperatorDirectoryEntry, OperatorRole } from "@/interfaces/operator";
+import type { OperatorApproval, OperatorDirectoryEntry, OperatorRole } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { checkEvmAddress, toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
-import { addOperator, changeOperator, listOperators, removeOperator } from "@/services/operator.service";
+import { addOperator, changeOperator, listApprovals, listOperators, removeOperator } from "@/services/operator.service";
 import { cn } from "@/utils";
 import { formatMoney, parseAmountInput } from "@/utils/money";
 
@@ -54,27 +59,42 @@ import { formatMoney, parseAmountInput } from "@/utils/money";
  * immediate — the backend runs it as a one-person action (A-14), so access
  * can be cut at once in an incident — and warns when it would leave a
  * two-person action with nobody to approve it [backend: refuse such a removal].
+ *
+ * The team is one table (name, role, limit, wallet, last seen; Change and
+ * Remove in the row menu). Someone whose addition still waits for a second
+ * admin is listed too, from the pending approvals: "Invited · waiting for Ava
+ * Chen". `?new=1` opens "Add someone" (Home's quick action for admins).
  */
 
 const LIST_LIMIT = 100;
-/** Reserves the hint line of a field so an error appearing does not move anything. */
-const RESERVED = " ";
 
-function limitLabel(row: Pick<OperatorDirectoryEntry, "authorityLimit">): string {
-  if (row.authorityLimit === null) return "no limit";
-  if (row.authorityLimit.amount === "0") return "$0 limit";
-  return `${formatMoney(row.authorityLimit)} limit`;
+function limitLabel(row: Pick<OperatorDirectoryEntry, "authorityLimit" | "roles">): string {
+  const cell = limitCell(row);
+  return cell === "—" ? "no actions on money" : cell === "No limit" ? "no limit" : `${cell} limit`;
 }
+
+/** The desktop columns: name, role, limit, wallet, last seen, menu. */
+const TEAM_GRID = "tablet:grid tablet:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_80px_minmax(0,1fr)_minmax(0,0.9fr)_36px] tablet:items-center tablet:gap-4";
 
 type SheetState = { kind: "add" } | { kind: "change"; row: OperatorDirectoryEntry } | { kind: "remove"; row: OperatorDirectoryEntry } | null;
 
-export default function TeamPage() {
+function TeamScreen() {
   const me = useOperatorSession();
   const queryClient = useQueryClient();
   const canManage = mayManageOperators(me.roles);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const [status, setStatus] = React.useState<"ACTIVE" | "">("ACTIVE");
   const [sheet, setSheet] = React.useState<SheetState>(null);
   const [result, setResult] = React.useState<React.ReactNode>(null);
+
+  // Home's "Add someone" links here with `?new=1`.
+  React.useEffect(() => {
+    if (searchParams.get("new") !== "1" || !canManage) return;
+    setSheet({ kind: "add" });
+    router.replace(pathname, { scroll: false });
+  }, [searchParams, canManage, router, pathname]);
 
   const list = useInfiniteQuery({
     queryKey: ["operator", "operators", "list", status],
@@ -83,9 +103,33 @@ export default function TeamPage() {
     getNextPageParam: (last) => last.pageInfo.nextCursor ?? undefined,
     retry: 0,
   });
+  const other = useQuery({
+    queryKey: ["operator", "operators", "list", status === "ACTIVE" ? "" : "ACTIVE", "count"],
+    queryFn: () => listOperators({ status: status === "ACTIVE" ? undefined : "ACTIVE", limit: LIST_LIMIT }),
+    retry: 0,
+  });
+  // Additions and raises waiting for a second admin — the same query as the badge.
+  const pending = useQuery({
+    queryKey: ["operator", "approvals", "pending-count"],
+    queryFn: () => listApprovals({ status: "PENDING", limit: 100 }),
+    refetchInterval: 30_000,
+    retry: 0,
+  });
   const rows = React.useMemo(() => (list.data?.pages ?? []).flatMap((page) => page.items), [list.data]);
+  const invites = React.useMemo(() => invitesOf(pending.data?.items ?? [], rows), [pending.data, rows]);
+  const changes = React.useMemo(() => {
+    const map = new Map<string, OperatorApproval>();
+    for (const approval of pending.data?.items ?? []) {
+      if (approval.action === "operator.change" && approval.status === "PENDING") map.set(approvalTargetId(approval), approval);
+    }
+    return map;
+  }, [pending.data]);
   const decimals = me.authorityLimit?.decimals ?? rows.find((row) => row.authorityLimit)?.authorityLimit?.decimals ?? 6;
   const asset = me.authorityLimit?.asset ?? rows.find((row) => row.authorityLimit)?.authorityLimit?.asset ?? "";
+  const countOf = (tab: "ACTIVE" | ""): string | null => {
+    if (tab === status) return list.data ? `${rows.length}${list.hasNextPage ? "+" : ""}` : null;
+    return other.data ? `${other.data.items.length}${other.data.pageInfo.nextCursor ? "+" : ""}` : null;
+  };
 
   const done = (node: React.ReactNode) => {
     setResult(node);
@@ -115,11 +159,13 @@ export default function TeamPage() {
   return (
     <>
       <header className="flex w-full flex-wrap items-end justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-0.5">
+        <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-heading-md text-01">Team</h1>
-          <p className="text-body-13 text-03">
-            Who can sign in to this console and what each person can do.{canManage ? "" : " Changing the team needs an admin."}
-          </p>
+          {canManage ? (
+            <p className="text-body-13 text-03">Who can sign in to this console and what each person can do.</p>
+          ) : (
+            <WhyNot action="manageTeam" me={me} ask="Can you change an operator's access on Team? It needs an admin." />
+          )}
         </div>
         {canManage ? (
           <Button icon={<Plus aria-hidden="true" />} onClick={() => setSheet({ kind: "add" })} className="w-full tablet:w-auto">
@@ -130,13 +176,16 @@ export default function TeamPage() {
 
       {result ? <div className="w-full">{result}</div> : null}
 
-      {!canManage ? (
-        <WhyNot action="manageTeam" me={me} title="Changing the team" ask="Can you change an operator's access on Team? It needs an admin." />
-      ) : null}
-
       <Segmented value={status} onValueChange={(value) => setStatus(value as "ACTIVE" | "")} aria-label="Who to show" className="self-start">
-        <SegmentedItem value="ACTIVE">Active</SegmentedItem>
-        <SegmentedItem value="">Everyone</SegmentedItem>
+        {(["ACTIVE", ""] as const).map((tab) => {
+          const count = countOf(tab);
+          return (
+            <SegmentedItem key={tab || "all"} value={tab}>
+              {tab === "ACTIVE" ? "Active" : "Everyone"}
+              {count !== null ? <span className="ml-1.5 tabular-nums text-03">{count}</span> : null}
+            </SegmentedItem>
+          );
+        })}
       </Segmented>
 
       {list.isLoading ? (
@@ -148,46 +197,105 @@ export default function TeamPage() {
           onRetry={() => void list.refetch()}
           code={list.error instanceof ApiError ? list.error.code : null}
         />
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && invites.length === 0 ? (
         <PageState kind="empty" title="Nobody here" />
       ) : (
-        <ul className="flex w-full flex-col gap-2">
-          {rows.map((row) => (
-            <li key={row.id} className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:gap-5">
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <p className="flex flex-wrap items-center gap-x-2 text-label-13 text-01">
-                  {operatorLabel(row)}
-                  {row.id === me.id ? <span className="text-body-xs text-03">(you)</span> : null}
-                  {row.status !== "ACTIVE" ? <span className="text-body-xs text-danger-600">{row.status.toLowerCase()}</span> : null}
-                </p>
-                <p className="text-body-13 text-02">
-                  {roleTitle(row.roles)} · {limitLabel(row)}
-                </p>
-                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-03">
-                  {row.subject}
-                  {row.walletAddress ? <CopyChip value={toChecksumAddress(row.walletAddress)} label="wallet address" /> : null}
-                  {row.lastSeenAt ? (
-                    <span>
-                      seen <LocalTime value={row.lastSeenAt} />
+        <div className="w-full overflow-hidden rounded-xl border border-01 bg-01">
+          <div aria-hidden="true" className={cn(TEAM_GRID, "hidden border-b border-01 px-4 py-2 text-label-13 text-03")}>
+            <span>Name</span>
+            <span>Role</span>
+            <span className="text-right">Limit</span>
+            <span>Wallet</span>
+            <span>Last seen</span>
+            <span />
+          </div>
+          <ul className="flex w-full flex-col divide-y divide-01">
+            {rows.map((row) => {
+              const change = changes.get(row.id);
+              return (
+                <li key={row.id} className={cn(TEAM_GRID, "relative flex min-w-0 flex-col gap-1 px-4 py-2.5 pr-14 tablet:pr-4")}>
+                  <div className="flex min-w-0 flex-col">
+                    <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-label-13 text-01">
+                      <span className="truncate">{operatorLabel(row)}</span>
+                      {row.id === me.id ? <span className="text-body-xs text-03">(you)</span> : null}
+                      {row.status !== "ACTIVE" ? <span className="text-body-xs text-danger-600">{row.status === "REMOVED" ? "removed" : "suspended"}</span> : null}
                     </span>
-                  ) : (
-                    <span>never signed in</span>
-                  )}
-                </p>
-              </div>
-              {mayEditRow(me, row) ? (
-                <div className="flex shrink-0 gap-2">
-                  <Button variant="secondary" size="sm" onClick={() => setSheet({ kind: "change", row })}>
-                    Change access
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setSheet({ kind: "remove", row })}>
-                    Remove
-                  </Button>
-                </div>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+                    {change ? (
+                      <span className="inline-flex items-center gap-1 text-body-xs text-02">
+                        <Clock aria-hidden="true" className="size-3.5 shrink-0 text-03" />
+                        Change waiting for {firstNames(eligibleApprovers("A-13", rows, change.requestedById).filter((name) => name !== operatorLabel(row)))}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="min-w-0 text-body-13 text-02">
+                    {roleTitle(row.roles)}
+                    <span className="tablet:hidden"> · {limitCell(row) === "—" ? "no money actions" : `${limitCell(row)} limit`}</span>
+                  </span>
+                  <span className="hidden text-right text-body-13 tabular-nums text-02 tablet:block">{limitCell(row)}</span>
+                  <span className="flex min-w-0 items-center gap-2 text-body-xs text-03">
+                    {row.walletAddress ? <CopyChip value={toChecksumAddress(row.walletAddress)} label="wallet address" /> : <span>No wallet</span>}
+                    <span className="tablet:hidden">· {row.lastSeenAt ? <LocalTime value={row.lastSeenAt} /> : "never signed in"}</span>
+                  </span>
+                  <span className="hidden text-body-13 text-02 tablet:block">
+                    {row.lastSeenAt ? <LocalTime value={row.lastSeenAt} /> : <span className="text-03">Never</span>}
+                  </span>
+                  <span className="absolute right-3 top-2 tablet:static tablet:flex tablet:justify-end">
+                    {mayEditRow(me, row) ? (
+                      <DropdownMenu modal={false}>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" aria-label={`More for ${operatorLabel(row)}`}>
+                            <MoreHorizontal aria-hidden="true" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-[180px] border border-01">
+                          <DropdownMenuItem onSelect={() => setSheet({ kind: "change", row })}>Change access</DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/operator/override-log?targetId=${encodeURIComponent(row.id)}`}>History in Activity</Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setSheet({ kind: "remove", row })} className="text-danger-600 focus:text-danger-700">
+                            Remove
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : null}
+                  </span>
+                </li>
+              );
+            })}
+            {invites.map((invite) => {
+              const limit = inviteLimit(invite, asset, decimals);
+              return (
+                <li key={invite.id} className={cn(TEAM_GRID, "relative flex min-w-0 flex-col gap-1 bg-02 px-4 py-2.5 pr-14 tablet:pr-4")}>
+                  <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-label-13 text-01">
+                    <span className="truncate">{invite.name}</span>
+                    {invite.subject && invite.subject !== invite.name ? <span className="font-mono text-mono-12 text-03">{invite.subject}</span> : null}
+                  </span>
+                  <span className="min-w-0 text-body-13 text-02">
+                    {invite.roles.length > 0 ? roleTitle(invite.roles) : "—"}
+                    <span className="tablet:hidden"> · {limit === "—" ? "no money actions" : `${limit} limit`}</span>
+                  </span>
+                  <span className="hidden text-right text-body-13 tabular-nums text-02 tablet:block">{limit}</span>
+                  <span className="flex min-w-0 items-center text-body-xs text-03">
+                    {invite.wallet ? <CopyChip value={toChecksumAddress(invite.wallet)} label="wallet address" /> : null}
+                  </span>
+                  <span className="inline-flex min-w-0 items-center gap-1 text-body-xs text-02 tablet:col-span-2">
+                    <Clock aria-hidden="true" className="size-3.5 shrink-0 text-03" />
+                    <span>
+                      Invited · waiting for {firstNames(invite.waitingFor)}
+                    </span>
+                  </span>
+                  <span className="absolute right-3 top-2 tablet:hidden">
+                    <Button variant="ghost" size="sm" asChild aria-label={`Open the request to add ${invite.name}`}>
+                      <Link href={approvalHref(invite.id)}>
+                        <ArrowUpRight aria-hidden="true" />
+                      </Link>
+                    </Button>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
 
       {canManage ? (
@@ -228,6 +336,14 @@ export default function TeamPage() {
   );
 }
 
+export default function TeamPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <TeamScreen />
+    </React.Suspense>
+  );
+}
+
 // ── Shared fields ───────────────────────────────────────────────────────────
 
 function RoleField({ roles, onChange, error }: { roles: OperatorRole[]; onChange: (roles: OperatorRole[]) => void; error?: string }) {
@@ -236,20 +352,41 @@ function RoleField({ roles, onChange, error }: { roles: OperatorRole[]; onChange
   // A mix that matches no preset is always shown as Customize, so nothing is hidden.
   const custom = customOpen || (roles.length > 0 && preset === null);
   const value = custom ? "custom" : (preset?.id ?? "");
+  const name = React.useId();
+  const options = [
+    ...ROLE_PRESETS.map((p) => ({ id: p.id, label: p.label, short: p.short, pick: () => onChange([...p.roles]) })),
+    { id: "custom", label: "Customize", short: "Pick the roles one by one", pick: () => undefined },
+  ];
   return (
-    <div className="flex w-full flex-col gap-2">
-      <span className="text-label-13 text-01">What they do</span>
-      <PresetChips
-        label="Role"
-        presets={[
-          ...ROLE_PRESETS.map((p) => ({ value: p.id, label: p.label, description: p.description, onPick: () => onChange([...p.roles]) })),
-          { value: "custom", label: "Customize", description: "Pick the roles one by one", onPick: () => undefined },
-        ]}
-        value={value}
-        onChange={(next) => setCustom(next === "custom")}
-        allowCustom={false}
-        layout="cards"
-      />
+    <fieldset className="flex w-full flex-col gap-2">
+      <legend className="mb-2 text-label-13 text-01">What they do</legend>
+      <div className="flex w-full flex-col overflow-hidden rounded-lg border border-02">
+        {options.map((option) => (
+          <label
+            key={option.id}
+            className={cn(
+              "flex cursor-pointer items-start gap-3 border-b border-01 px-3 py-2 last:border-b-0 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-primary-500",
+              value === option.id ? "bg-primary-10" : "hover:bg-02",
+            )}
+          >
+            <input
+              type="radio"
+              name={name}
+              value={option.id}
+              checked={value === option.id}
+              onChange={() => {
+                setCustom(option.id === "custom");
+                option.pick();
+              }}
+              className="mt-1 size-4 shrink-0 accent-primary-600"
+            />
+            <span className="flex min-w-0 flex-col">
+              <span className="text-label-13 text-01">{option.label}</span>
+              <span className="text-body-xs text-03">{option.short}</span>
+            </span>
+          </label>
+        ))}
+      </div>
       {custom ? (
         <div className="grid w-full grid-cols-1 gap-2 rounded-lg border border-01 bg-02 p-3 min-[480px]:grid-cols-2">
           {ROLE_OPTIONS.map((option) => (
@@ -262,8 +399,19 @@ function RoleField({ roles, onChange, error }: { roles: OperatorRole[]; onChange
           ))}
         </div>
       ) : null}
-      <p className={cn("min-h-[18px] text-body-xs", error ? "text-danger-600" : "text-03")}>{error ?? RESERVED}</p>
-    </div>
+      <details className="group text-body-13">
+        <summary className="cursor-pointer select-none text-label-13 text-02 hover:text-01">What exactly?</summary>
+        <dl className="mt-2 flex flex-col gap-2">
+          {ROLE_PRESETS.map((p) => (
+            <div key={p.id} className="flex flex-col">
+              <dt className="text-label-13 text-01">{p.label}</dt>
+              <dd className="text-02">{p.description}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
+      {error ? <p className="text-body-xs text-danger-600">{error}</p> : null}
+    </fieldset>
   );
 }
 
@@ -322,7 +470,7 @@ function Footer({
 }) {
   return (
     <SheetFooter className={OPERATOR_SHEET_FOOTER}>
-      <div role="alert" className={cn("min-h-[18px] text-body-xs text-danger-600")}>
+      <div role="alert" className={error || summary || blocked ? "text-body-xs text-danger-600" : "sr-only"}>
         {error ? directoryErrorMessage(error).replace(/\s*\([A-Z_]+\)$/, "") : (summary ?? blocked ?? "")}
         {error instanceof ApiError ? (
           <details className="mt-1 text-03">
@@ -444,9 +592,15 @@ function AddSheet({
       <SheetContent showCloseButton={!add.isPending}>
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Add someone to the team</SheetTitle>
-          <SheetDescription>They sign in with the wallet you enter. A second admin approves it first.</SheetDescription>
         </SheetHeader>
-        <div className="flex w-full flex-col gap-3 px-[18px] pt-4">
+        <div className="flex w-full flex-col gap-3 px-[18px] pt-3">
+          <WhatHappens
+            lines={[
+              { icon: Users, text: soleAdmin ? "A second admin must approve it, and there is none yet" : `Nothing changes until ${firstNames(approvers)} approves`, tone: soleAdmin ? "warning" : "neutral" },
+              { icon: Wallet, text: "Then they sign in with the wallet you enter" },
+              { icon: ShieldCheck, text: "Recorded in Activity under your name" },
+            ]}
+          />
           {soleAdmin ? (
             <div role="alert" className="flex w-full gap-2.5 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5">
               <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
@@ -468,6 +622,7 @@ function AddSheet({
             }}
             placeholder="Noor Hassan"
             maxLength={128}
+            className="font-sans text-body-sm"
             error={errors.name ?? errors.subject ?? undefined}
             hint={
               subject ? (
@@ -480,9 +635,7 @@ function AddSheet({
                     </button>
                   ) : null}
                 </>
-              ) : (
-                RESERVED
-              )
+              ) : undefined
             }
           />
           {handle !== null ? (
@@ -508,7 +661,7 @@ function AddSheet({
             autoComplete="off"
             spellCheck={false}
             error={errors.wallet ?? undefined}
-            hint={walletCheck && walletCheck.ok ? `Checks out: ${walletCheck.checksummed.slice(0, 6)}…${walletCheck.checksummed.slice(-4)}` : RESERVED}
+            hint={walletCheck && walletCheck.ok ? `Checks out: ${walletCheck.checksummed.slice(0, 6)}…${walletCheck.checksummed.slice(-4)}` : undefined}
           />
           <RoleField roles={roles} onChange={setRoles} error={errors.roles ?? undefined} />
           <LimitField
