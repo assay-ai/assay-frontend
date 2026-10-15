@@ -1,3 +1,4 @@
+import { Ban, Check, CircleAlert, Clock, PenLine, Scale, TimerOff, Undo2, X, type LucideIcon } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/utils";
@@ -12,6 +13,10 @@ import { cn } from "@/utils";
  * passed through as the label. Map the API value to one of these keys in the
  * screen (or add a key here, with its tone, if a new state appears). Sentence
  * case with a dot; colour is never the only signal because the word is always there.
+ *
+ * A key may carry an `icon`, drawn at 12px in place of the dot — for the
+ * states an operator scans for (needs you, waiting, blocked, done, disputed).
+ * Do not show a chip that repeats the tab or filter it sits under.
  */
 export const STATUS_CHIPS = {
   // Buyer: agents, escrow and money
@@ -38,19 +43,22 @@ export const STATUS_CHIPS = {
   withdrawable: { label: "Withdrawable", tone: "success" },
   // Penalties, disputes, approvals
   "needs-action": { label: "Needs action", tone: "danger" },
-  "needs-you": { label: "Needs you", tone: "danger" },
-  waiting: { label: "Waiting", tone: "primary" },
-  disputed: { label: "Disputed", tone: "primary" },
+  "needs-you": { label: "Needs you", tone: "danger", icon: CircleAlert },
+  waiting: { label: "Waiting", tone: "neutral", icon: Clock },
+  "waiting-signature": { label: "Waiting for signature", tone: "warning", icon: PenLine },
+  disputed: { label: "Disputed", tone: "warning", icon: Scale },
   upheld: { label: "Penalty upheld", tone: "danger" },
   cancelled: { label: "Cancelled", tone: "neutral" },
-  expired: { label: "Expired", tone: "neutral" },
+  expired: { label: "Expired", tone: "neutral", icon: TimerOff },
   executed: { label: "Executed", tone: "danger" },
   closed: { label: "Closed", tone: "neutral" },
-  blocked: { label: "Blocked", tone: "danger" },
+  blocked: { label: "Blocked", tone: "danger", icon: Ban },
+  rejected: { label: "Rejected", tone: "neutral", icon: X },
+  withdrawn: { label: "Withdrawn", tone: "neutral", icon: Undo2 },
   // Generic
   failed: { label: "Failed", tone: "danger" },
-  done: { label: "Done", tone: "success" },
-} as const satisfies Record<string, { label: string; tone: StatusTone }>;
+  done: { label: "Done", tone: "success", icon: Check },
+} as const satisfies Record<string, { label: string; tone: StatusTone; icon?: LucideIcon }>;
 
 export type StatusTone = "neutral" | "primary" | "success" | "warning" | "danger" | "teal";
 export type StatusChipKey = keyof typeof STATUS_CHIPS;
@@ -71,8 +79,9 @@ export interface StatusChipProps extends Omit<React.HTMLAttributes<HTMLSpanEleme
 }
 
 export function StatusChip({ status, detail, className, ...props }: StatusChipProps) {
-  const chip = STATUS_CHIPS[status];
+  const chip: { label: string; tone: StatusTone; icon?: LucideIcon } = STATUS_CHIPS[status];
   const tone = TONES[chip.tone];
+  const Icon = chip.icon;
   return (
     <span
       className={cn(
@@ -83,7 +92,11 @@ export function StatusChip({ status, detail, className, ...props }: StatusChipPr
       )}
       {...props}
     >
-      <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", tone.dot)} />
+      {Icon ? (
+        <Icon aria-hidden="true" className="size-3 shrink-0" />
+      ) : (
+        <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", tone.dot)} />
+      )}
       {chip.label}
       {detail ? <span className="font-normal opacity-80">· {detail}</span> : null}
     </span>
