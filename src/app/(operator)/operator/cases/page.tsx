@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
 import { approvalTargetId } from "@/features/operator/approvals";
 import { mayRule } from "@/features/operator/arbiter";
-import { eligibleApprovers } from "@/features/operator/inbox";
+import { eligibleApprovers, isLiveApproval } from "@/features/operator/inbox";
 import {
   FALLBACK_TABS,
   OPEN_STATUSES,
@@ -152,7 +152,8 @@ export default function PenaltiesPage() {
     const map = new Map<string, PenaltyWaiting>();
     for (const approval of pending.data?.items ?? []) {
       const code = PENALTY_APPROVAL_CODES[approval.action];
-      if (!code || approval.status !== "PENDING") continue;
+      // Waiting as Approvals counts it: pending and not past its deadline.
+      if (!code || !isLiveApproval(approval, now)) continue;
       const myName = directory.nameOf(me.id);
       // "Waiting for you or Iris to approve" when the signed-in operator is one of them.
       const names = directory.isPending
@@ -161,7 +162,7 @@ export default function PenaltiesPage() {
       map.set(approvalTargetId(approval), { action: approval.action, text: waitingText(names) });
     }
     return map;
-  }, [pending.data, directory, me.id]);
+  }, [pending.data, directory, me.id, now]);
 
   let rows: PenaltyRow[];
   let loading: boolean;
