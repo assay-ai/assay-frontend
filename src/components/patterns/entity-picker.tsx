@@ -81,10 +81,11 @@ export function EntityPicker({
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [active, setActive] = React.useState(0);
-  const [remote, setRemote] = React.useState<{ query: string; options: EntityOption[]; loading: boolean }>({
+  const [remote, setRemote] = React.useState<{ query: string; options: EntityOption[]; loading: boolean; ready: boolean }>({
     query: "",
     options: [],
     loading: false,
+    ready: false,
   });
 
   React.useEffect(() => {
@@ -93,8 +94,8 @@ export function EntityPicker({
     const timer = setTimeout(() => {
       setRemote((r) => ({ ...r, loading: true }));
       search(query)
-        .then((found) => !cancelled && setRemote({ query, options: found, loading: false }))
-        .catch(() => !cancelled && setRemote({ query, options: [], loading: false }));
+        .then((found) => !cancelled && setRemote({ query, options: found, loading: false, ready: true }))
+        .catch(() => !cancelled && setRemote({ query, options: [], loading: false, ready: true }));
     }, 250);
     return () => {
       cancelled = true;
@@ -102,7 +103,11 @@ export function EntityPicker({
     };
   }, [search, query, open]);
 
-  const list = search ? remote.options : filterEntityOptions(options, query);
+  // A server search's answer belongs to the text it was asked for: until the
+  // answer for what is typed now arrives, show it as loading rather than the
+  // previous (e.g. unfiltered) list.
+  const stale = Boolean(search) && (!remote.ready || remote.query !== query);
+  const list = search ? (stale ? [] : remote.options) : filterEntityOptions(options, query);
   const selected = options.find((o) => o.id === value) ?? remote.options.find((o) => o.id === value);
   const shownLabel = selected?.label ?? selectedLabel ?? (value ? shortId(value) : "");
 
@@ -186,7 +191,7 @@ export function EntityPicker({
           aria-label={label}
           className="absolute inset-x-0 top-full z-50 mt-1 max-h-[280px] overflow-y-auto rounded-lg border border-01 bg-01 p-1 shadow-soft"
         >
-          {search && remote.loading ? (
+          {search && (remote.loading || stale) ? (
             <li className="flex flex-col gap-2 px-2.5 py-2">
               <Skeleton className="h-3.5 w-1/2" />
               <Skeleton className="h-3.5 w-1/3" />

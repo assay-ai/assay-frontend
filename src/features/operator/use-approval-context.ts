@@ -6,9 +6,9 @@ import * as React from "react";
 import type { OperatorApproval, OperatorIdentity } from "@/interfaces/operator";
 import { listAccountBlocks } from "@/services/operator.service";
 
-import type { ApprovalContext } from "./approvals";
+import { approvalTargetId, type ApprovalContext } from "./approvals";
 import { eligibleApprovers } from "./inbox";
-import { useOperatorDirectory } from "./use-operator-lookups";
+import { useOperatorDirectory, usePenaltyNames } from "./use-operator-lookups";
 
 /** The API's page ceiling. Enough to name what a pending request is about. */
 const LOOKUP_LIMIT = 100;
@@ -36,6 +36,13 @@ export function useApprovalContext(
     retry: 0,
   });
 
+  const penaltyIds = React.useMemo(
+    () => rows.filter((row) => row.action.startsWith("slash.")).map((row) => approvalTargetId(row)),
+    [rows],
+  );
+  const penalties = usePenaltyNames(penaltyIds);
+  const penaltiesKey = [...penalties.entries()].map(([id, name]) => `${id}=${name}`).join("|");
+
   const context = React.useMemo<ApprovalContext>(() => {
     const operators = directory.operators;
     const withLimit = operators.find((op) => op.authorityLimit !== null)?.authorityLimit ?? me.authorityLimit;
@@ -43,8 +50,11 @@ export function useApprovalContext(
       blocks: new Map((blocksQuery.data?.items ?? []).map((block) => [block.id, block])),
       operators: new Map(operators.map((op) => [op.id, op])),
       asset: withLimit ? { asset: withLimit.asset, decimals: withLimit.decimals } : null,
+      penalties,
     };
-  }, [blocksQuery.data, directory.operators, me.authorityLimit]);
+    // `penalties` is rebuilt every render; its content is `penaltiesKey`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocksQuery.data, directory.operators, me.authorityLimit, penaltiesKey]);
 
   const approversFor = React.useCallback(
     (approval: OperatorApproval) =>

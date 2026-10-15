@@ -24,6 +24,11 @@ import { cn } from "@/utils";
  * only ever sees the label. The note counter reads "12 / 20 minimum" until the
  * minimum is met. Error lines have reserved space, so an error appearing never
  * moves the controls under the pointer.
+ *
+ * An error clears itself as soon as its field is valid: the reason error once
+ * a chip is picked, the note error once the note is between `noteMin` and
+ * `noteMax` — the caller does not have to reset its error state on every
+ * keystroke (see `shownErrors`).
  */
 export interface ReasonOption {
   /** The code sent to the API, e.g. `LEAKED_KEY`. */
@@ -59,6 +64,22 @@ export function noteCounter(length: number, min: number, max?: number): { text: 
   return { text: `${length.toLocaleString("en-US")} characters`, short: false, long: false };
 }
 
+/** The errors still worth showing for the current value and note. Pure. */
+export function shownErrors(
+  errors: ReasonChipsProps["errors"],
+  value: string,
+  note: string,
+  noteMin: number,
+  noteMax?: number,
+): { reason: string | null; note: string | null } {
+  const length = note.trim().length;
+  const noteValid = length >= noteMin && (noteMax === undefined || length <= noteMax);
+  return {
+    reason: errors?.reason && !value ? errors.reason : null,
+    note: errors?.note && !noteValid ? errors.note : null,
+  };
+}
+
 export function ReasonChips({
   label,
   options,
@@ -76,6 +97,7 @@ export function ReasonChips({
 }: ReasonChipsProps) {
   const id = React.useId();
   const counter = noteCounter(note.trim().length, noteMin, noteMax);
+  const live = shownErrors(errors, value, note, noteMin, noteMax);
   const picked = options.find((option) => option.value === value);
 
   const onArrow = (event: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -122,8 +144,8 @@ export function ReasonChips({
           })}
         </div>
         {/* Reserved line: the hint for the picked reason, or the error. */}
-        <p className={cn("min-h-[18px] text-body-xs", errors?.reason ? "text-danger-600" : "text-03")} aria-live="polite">
-          {errors?.reason ?? picked?.hint ?? ""}
+        <p className={cn("min-h-[18px] text-body-xs", live.reason ? "text-danger-600" : "text-03")} aria-live="polite">
+          {live.reason ?? picked?.hint ?? ""}
         </p>
       </div>
 
@@ -138,21 +160,21 @@ export function ReasonChips({
           rows={3}
           disabled={disabled}
           placeholder={notePlaceholder}
-          aria-invalid={errors?.note ? true : undefined}
+          aria-invalid={live.note ? true : undefined}
           aria-describedby={`${id}-count`}
           className={cn(
             "w-full rounded-md border bg-01 px-3 py-2.5 text-body-sm text-01 outline-none placeholder:text-03",
-            errors?.note ? "border-[1.5px] border-danger-500" : "border-02 focus:border-[1.5px] focus:border-primary-500",
+            live.note ? "border-[1.5px] border-danger-500" : "border-02 focus:border-[1.5px] focus:border-primary-500",
           )}
         />
         <p
           id={`${id}-count`}
           className={cn(
             "flex min-h-[18px] w-full justify-between gap-3 text-body-xs",
-            errors?.note || counter.long ? "text-danger-600" : "text-03",
+            live.note || counter.long ? "text-danger-600" : "text-03",
           )}
         >
-          <span>{errors?.note ?? ""}</span>
+          <span>{live.note ?? ""}</span>
           <span className="shrink-0 font-mono text-mono-12">{counter.text}</span>
         </p>
       </div>

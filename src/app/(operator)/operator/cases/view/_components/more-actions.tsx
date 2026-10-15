@@ -10,7 +10,7 @@ import { CopyChip } from "@/components/patterns/copy-chip";
 import { ReasonChips, type ReasonOption } from "@/components/patterns/reason-chips";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
-import { approvalHref, type TwoPersonAnswer } from "@/features/operator/two-person";
+import { approvalHref, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
 import { approvalNeeds, reasonText } from "@/features/operator/approvals";
 import type { CaseAuthority } from "@/features/operator/case-flow";
 import { eligibleApprovers } from "@/features/operator/inbox";
@@ -48,6 +48,7 @@ export function MoreActions({
   identity,
   authority,
   onSuspend,
+  suspendBlocked = null,
 }: {
   brief: OperatorCaseBrief;
   proposalId: string;
@@ -55,6 +56,8 @@ export function MoreActions({
   authority: CaseAuthority;
   /** Shown here when Suspend is not already on the next-step card. */
   onSuspend: (() => void) | null;
+  /** "Why you can't, and who can", when the penalty can be suspended but not by this operator. */
+  suspendBlocked?: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState<Open>(null);
   const outcome = brief.case.proposal.outcome;
@@ -69,6 +72,13 @@ export function MoreActions({
           Suspend
         </Button>
       </Row>,
+    );
+  }
+  if (suspendBlocked) {
+    items.push(
+      <div key="suspend-blocked" className="border-t border-01 py-3 first:border-t-0">
+        {suspendBlocked}
+      </div>,
     );
   }
   if (authority.block) {
@@ -186,16 +196,11 @@ function Failure({ error }: { error: unknown }) {
   );
 }
 
-function Queued({ answer, title }: { answer: TwoPersonAnswer<unknown>; title: string }) {
-  return answer.kind === "queued" ? (
-    <ResultCard
-      tone="queued"
-      title={`${title} sent for approval`}
-      next="Nothing has happened yet. It runs when a second operator approves it from their Home, within 24 h."
-      link={{ label: "Open the request", href: approvalHref(answer.approval.approvalId) }}
-    />
-  ) : (
-    <ResultCard title={`${title} done`} />
+function Queued({ answer, what, needs, approvers }: { answer: TwoPersonAnswer<unknown>; what: string; needs: string; approvers: string[] | undefined }) {
+  if (answer.kind !== "queued") return <ResultCard title={`${what}: done`} />;
+  const sent = sentForApproval(what, approvers, needs, answer.approval.expiresAt);
+  return (
+    <ResultCard tone="queued" title={sent.title} next={sent.next} link={{ label: "Open the request", href: approvalHref(answer.approval.approvalId) }} />
   );
 }
 
@@ -229,7 +234,8 @@ function SweepForm({ proposalId, outcome, me }: { proposalId: string; outcome: A
     sweep.mutate();
   };
 
-  if (sweep.data) return <Queued answer={sweep.data} title="Fleet sweep" />;
+  const approvers = directory.isPending ? undefined : eligibleApprovers("S-11", directory.operators, me.id);
+  if (sweep.data) return <Queued answer={sweep.data} what="The fleet sweep" needs={approvalNeeds("S-11")} approvers={approvers} />;
   return (
     <>
       <Field label="Defect" value={defectKey} onChange={(e) => setDefectKey(e.target.value)} placeholder="MAPPING_REGRESSION_2026_10" maxLength={128} error={errors.defect} />
@@ -279,7 +285,16 @@ function CompensateForm({ brief, proposalId, me }: { brief: OperatorCaseBrief; p
 
   const penalty = brief.case.proposal.appliedAmount ?? brief.case.proposal.penaltyAmount;
 
-  if (record.data) return <Queued answer={record.data} title="Compensation record" />;
+  if (record.data) {
+    return (
+      <Queued
+        answer={record.data}
+        what="Recording the compensation"
+        needs={approvalNeeds("S-5")}
+        approvers={directory.isPending ? undefined : eligibleApprovers("S-5", directory.operators, me.id)}
+      />
+    );
+  }
   if (!intent) {
     return (
       <>
