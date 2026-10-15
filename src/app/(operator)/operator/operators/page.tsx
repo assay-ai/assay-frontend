@@ -771,6 +771,17 @@ function AddSheet({
 
 // ── Change (A-13: raising is two-person; A-14: so is taking the Admin role away; other lowering applies at once) ──
 
+/**
+ * Why a request about an Admin cannot be approved when the only Admins are
+ * the requester and the person it is about: neither may approve it. Said
+ * instead of "nobody else holds that role", which reads as false while the
+ * person concerned is an Admin (operator retest 2026-10-16b).
+ */
+function onlyYouAndThem(name: string): string {
+  return `the only Admins are you and ${name}. You asked for this and it is about ${name}, so neither of you can approve it. Add a third Admin first.`;
+}
+
+
 function ChangeSheet({
   row,
   onClose,
@@ -842,6 +853,8 @@ function ChangeSheet({
       ? "Taking the Admin role away needs a second admin."
       : "Adding a role or raising the limit needs a second admin.";
   const changeApprovers = approvers.filter((name) => name !== operatorLabel(row));
+  // The only other approver is the person this change is about.
+  const subjectIsOnlyApprover = changeApprovers.length === 0 && approvers.length > 0;
 
   const submit = () => {
     const validated = validateChangeOperator(row, {
@@ -890,7 +903,13 @@ function ChangeSheet({
             noteMax={2048}
             errors={{ reason: errors.reason, note: errors.note }}
           />
-          {needsSecond ? <ApprovalFooter needs={approverPhrase(removesAdmin ? "A-14" : "A-13", me.roles)} approvers={changeApprovers} /> : null}
+          {needsSecond ? (
+            <ApprovalFooter
+              needs={approverPhrase(removesAdmin ? "A-14" : "A-13", me.roles)}
+              approvers={changeApprovers}
+              nobodyReason={subjectIsOnlyApprover ? onlyYouAndThem(operatorLabel(row)) : undefined}
+            />
+          ) : null}
         </div>
         <Footer
           busy={change.isPending}
@@ -900,7 +919,7 @@ function ChangeSheet({
           onConfirm={submit}
           blocked={
             needsSecond && changeApprovers.length === 0
-              ? `Held back: no other admin can approve this yet.${removesAdmin ? "" : " Lowering still applies at once."}`
+              ? `${subjectIsOnlyApprover ? "Held back until a third Admin is added." : "Held back: no other admin can approve this yet."}${removesAdmin ? "" : " Lowering still applies at once."}`
               : null
           }
           idle={changed ? null : "Change the role or the limit first."}
@@ -995,7 +1014,15 @@ function RemoveSheet({
             noteMax={2048}
             errors={errors}
           />
-          {isAdmin ? <ApprovalFooter needs={approverPhrase("A-14", me.roles)} approvers={approvers} /> : null}
+          {isAdmin ? (
+            <ApprovalFooter
+              needs={approverPhrase("A-14", me.roles)}
+              approvers={approvers}
+              // `approvers` already leaves out the Admin being removed: empty here means
+              // the only Admins are the requester and them.
+              nobodyReason={approvers.length === 0 ? onlyYouAndThem(operatorLabel(row)) : undefined}
+            />
+          ) : null}
         </div>
         <Footer
           busy={remove.isPending}
@@ -1004,7 +1031,7 @@ function RemoveSheet({
           confirmLabel={isAdmin ? "Send for approval" : `Remove ${operatorLabel(row)}`}
           tone="danger"
           onConfirm={submit}
-          blocked={isAdmin && approvers.length === 0 ? "Held back: no other admin can approve removing an Admin yet." : null}
+          blocked={isAdmin && approvers.length === 0 ? "Held back until a third Admin is added." : null}
         />
       </SheetContent>
     </Sheet>

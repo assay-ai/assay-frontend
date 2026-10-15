@@ -374,7 +374,7 @@ describe("how a row reads", () => {
     );
     expect(approvedResultSentence("account.unblock", {}, "Wallet 0x9F3c…F36c")).toBe("Block lifted on Wallet 0x9F3c…F36c.");
     // "Below" only when the call came back, as the screen then draws it there.
-    expect(approvedResultSentence("arbiter.block", { to: "0xcf65", data: "0x" })).toMatch(/ready below\. Nothing is blocked on chain until the arbiter's wallet signs/);
+    expect(approvedResultSentence("arbiter.block", { to: "0xcf65", data: "0x" })).toMatch(/ready below, and on Arbiter\. Nothing is blocked on chain until the arbiter's wallet signs/);
     expect(approvedResultSentence("arbiter.block", {})).toMatch(/^Approved\. Nothing is blocked on chain yet: .* from Arbiter/);
     expect(approvedResultSentence("arbiter.block", {})).not.toMatch(/below/);
   });

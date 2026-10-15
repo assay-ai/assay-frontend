@@ -719,7 +719,7 @@ export function approvedResultSentence(action: string, result: unknown, target?:
     case "arbiter.block":
       // "Below" only when the answer carried the call, which the screen then draws under this line.
       return typeof r.to === "string" && typeof r.data === "string"
-        ? "Approved. The arbiter's unsigned block is ready below. Nothing is blocked on chain until the arbiter's wallet signs and sends it."
+        ? "Approved. The arbiter's unsigned block is ready below, and on Arbiter. Nothing is blocked on chain until the arbiter's wallet signs and sends it."
         : "Approved. Nothing is blocked on chain yet: the arbiter's wallet signs it from Arbiter, under On-chain blocks to sign.";
     default:
       return "Approved. The action ran.";

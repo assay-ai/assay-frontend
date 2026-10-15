@@ -39,6 +39,12 @@ export interface ApprovalFooterProps {
   link?: string;
   createdAt?: string | null;
   expiresAt?: string | null;
+  /**
+   * Why nobody can approve, when `approvers` is `[]` and the plain "nobody
+   * else holds that role" would be false (e.g. the only other holder is the
+   * person the request is about).
+   */
+  nobodyReason?: React.ReactNode;
   /** Shown when there is no `expiresAt` yet (a form). Default: requests expire after 24 h. */
   expiryNote?: React.ReactNode;
   className?: string;
@@ -94,6 +100,7 @@ export function ApprovalFooter({
   createdAt,
   expiresAt,
   expiryNote = "If nobody approves it within 24 h, it expires and nothing runs.",
+  nobodyReason,
   className,
 }: ApprovalFooterProps) {
   const [now, setNow] = React.useState(() => Date.now());
@@ -126,7 +133,7 @@ export function ApprovalFooter({
         <p className={cn("min-w-0 flex-1 text-body-13", nobody ? "text-danger-600" : "text-01")}>
           Needs {needs}
           {names ? <span className="text-02">: {names}</span> : null}
-          {nobody ? <span>: nobody else holds that role, so it cannot be approved yet.</span> : null}
+          {nobody ? <span>: {nobodyReason ?? "nobody else holds that role, so it cannot be approved yet."}</span> : null}
         </p>
         {link ? (
           <button
