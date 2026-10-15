@@ -5,7 +5,7 @@ import type { EscrowDelegate, Money } from "@/interfaces";
 import { agentReadiness, type ReadinessCredential } from "./agent-readiness";
 import { capsAreSet, capsSentence, capsToForm, keyGroups, parseCaps, presetDescription, presetFor } from "./caps";
 import { getStartedStates, payStage, type GetStartedFacts } from "./get-started";
-import { KEY_PLACEHOLDER, mcpConfig } from "./mcp-config";
+import { KEY_PLACEHOLDER, keyPlaceholder, mcpConfig } from "./mcp-config";
 import { PENDING_TX_MAX_AGE_MS, parsePending, withPending, withoutPending, type PendingTx } from "./pending-tx";
 import { nextUtcMidnight, nextUtcMonth, windowRefillAt } from "./refill";
 import { isLowBalance, runwayDays, runwayLine } from "./runway";
@@ -93,6 +93,11 @@ describe("mcp config", () => {
       headers: { Authorization: "Bearer k" },
     });
     expect(mcpConfig("other", { url, token: null })).toContain(KEY_PLACEHOLDER);
+    // A known key is named by its prefix, never a bare placeholder.
+    const named = mcpConfig("cursor", { url, token: null, keyPrefix: "assay_live_ab12…" });
+    expect(named).toContain("assay_live_ab12…REST_OF_YOUR_KEY");
+    expect(named).not.toContain(KEY_PLACEHOLDER);
+    expect(keyPlaceholder(null)).toBe(KEY_PLACEHOLDER);
   });
 });
 
