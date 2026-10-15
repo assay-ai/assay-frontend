@@ -34,9 +34,10 @@ export type CaseStage =
   | "upheld"
   | "cancel-requested"
   | "executed"
+  | "compensated"
   | "cancelled";
 
-const CLOSED_CANCELLED: readonly SlashProposalStatus[] = ["OVERTURNED", "WAIVED", "CANCELLED", "REVERSED"];
+const CLOSED_CANCELLED: readonly SlashProposalStatus[] = ["OVERTURNED", "WAIVED", "CANCELLED"];
 
 export interface CaseFacts {
   stage: CaseStage;
@@ -72,7 +73,9 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
   const legacyStatus = status === "DISPUTED" || status === "UNDER_REVIEW" || status === "AWAITING_SECOND";
 
   let stage: CaseStage;
-  if (chain === "EXECUTED" || status === "EXECUTED" || status === "EXECUTING") stage = "executed";
+  // Executed on chain, then paid back by the treasury: the chain still reads EXECUTED.
+  if (status === "REVERSED") stage = "compensated";
+  else if (chain === "EXECUTED" || status === "EXECUTED" || status === "EXECUTING") stage = "executed";
   else if (chain === "CANCEL_REQUESTED") stage = "cancel-requested";
   else if (chain === "CANCELLED" || (status !== null && CLOSED_CANCELLED.includes(status))) stage = "cancelled";
   else if (chainStage.kind === "disputed" || (chainStage.kind === "open" && chainStage.disputedParts > 0)) stage = "disputed";
@@ -110,7 +113,7 @@ export function caseTimelineSteps(
   const windowLabel = hours ? `${hours} h dispute window` : "Dispute window";
   const { stage } = facts;
   const wasDisputed = facts.disputedAt !== null || stage === "disputed";
-  const closed = stage === "executed" || stage === "cancelled";
+  const closed = stage === "executed" || stage === "cancelled" || stage === "compensated";
 
   const steps: StatusTimelineStep[] = [
     { id: "proposed", label: "Proposed", state: "done", date: proposal.clocks.proposedAt },
@@ -152,13 +155,10 @@ export function caseTimelineSteps(
 
   if (stage === "executed") {
     steps.push({ id: "end", label: "Executed", state: "done", date: proposal.executedAt ?? proposal.resolvedAt });
+  } else if (stage === "compensated") {
+    steps.push({ id: "end", label: "Executed, then compensated", state: "done", date: proposal.resolvedAt });
   } else if (stage === "cancelled") {
-    steps.push({
-      id: "end",
-      label: proposal.status === "REVERSED" ? "Compensated" : "Cancelled",
-      state: "done",
-      date: proposal.resolvedAt,
-    });
+    steps.push({ id: "end", label: "Cancelled", state: "done", date: proposal.resolvedAt });
   } else if (stage === "cancel-requested") {
     steps.push({
       id: "end",
@@ -248,7 +248,20 @@ export function caseNextStep(
 ): CaseNextStep {
   const suspendSecondary = authority.suspend.allowed ? ("suspend" as const) : null;
   switch (facts.stage) {
-    case "cancel-requested":
+    case "cancel-requested": {
+      const passed = facts.executableAt !== null && Date.parse(facts.executableAt) <= Date.now();
+      if (passed) {
+        return {
+          kind: authority.cancel ? "action" : "waiting",
+          title: authority.cancel ? "Get the cancel signed now" : "Nothing for you",
+          description: authority.cancel
+            ? "The deadline has passed: anyone can execute this penalty now. Have the arbiter sign the cancel as soon as possible."
+            : "The deadline for the cancel has passed and anyone can execute the penalty. A Lead adjudicator or Treasury has to get the cancel signed now.",
+          action: authority.cancel ? "cancel" : null,
+          secondary: null,
+          until: null,
+        };
+      }
       return authority.cancel
         ? {
             kind: "action",
@@ -266,6 +279,7 @@ export function caseNextStep(
             secondary: null,
             until: facts.executableAt,
           };
+    }
     case "disputed":
       return authority.rule
         ? {
@@ -333,8 +347,7 @@ export function caseNextStep(
         secondary: null,
         until: null,
       };
-    case "cancelled":
-      if (facts.status === "REVERSED") {
+    case "compensated":
         return {
           kind: "done",
           title: "Provider compensated",
@@ -343,7 +356,7 @@ export function caseNextStep(
           secondary: null,
           until: null,
         };
-      }
+    case "cancelled":
       return {
         kind: "done",
         title: "Penalty cancelled",

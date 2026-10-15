@@ -262,6 +262,7 @@ function BlockSheet({
 }) {
   const queryClient = useQueryClient();
   const providers = useProviderNames();
+  const directory = useOperatorDirectory();
   const health = useQuery({ queryKey: ["operator", "health"], queryFn: getPlatformHealth, enabled: open && canChain, retry: 0 });
   const [target, setTarget] = React.useState<string | null>(null);
   const [targetLabel, setTargetLabel] = React.useState<string | undefined>(undefined);
@@ -294,7 +295,7 @@ function BlockSheet({
   const alreadyBlocked = picked
     ? activeBlocks.find((b) => b.subjectKind === picked.kind && (b.subject === picked.subject.toLowerCase() || b.subjectKey.endsWith(picked.subject.toLowerCase())))
     : undefined;
-  const chainId = health.data?.chainState?.[0]?.chainId ?? ROBINHOOD_TESTNET_STAKE.chainId;
+  const chainId = health.data ? (health.data.chainState?.[0]?.chainId ?? ROBINHOOD_TESTNET_STAKE.chainId) : null;
 
   const block = useMutation({
     mutationFn: async () => {
@@ -309,7 +310,7 @@ function BlockSheet({
       const created = await createAccountBlock(validated.body);
       let call: SlashContractCall | null = null;
       let chainError: unknown = null;
-      if (onChain && evm) {
+      if (onChain && evm && chainId) {
         try {
           call = await createArbiterBlockIntent({ chainId, account: evm, reasonCode: reason, note: note.trim(), ...(ticket.trim() ? { ticketRef: ticket.trim() } : {}) });
         } catch (error) {
@@ -357,6 +358,12 @@ function BlockSheet({
       onOpenChange(false);
     },
   });
+
+  // A refusal from the last attempt is not about this opening. (A typed draft is kept.)
+  const { reset: resetBlock } = block;
+  React.useEffect(() => {
+    if (open) resetBlock();
+  }, [open, resetBlock]);
 
   const submit = () => {
     const next = {
@@ -407,7 +414,7 @@ function BlockSheet({
               ) : (
                 <p>This wallet can no longer pay or be paid through Assay, on any EVM chain.</p>
               )}
-              {alreadyBlocked ? <p className="text-danger-600">It is already blocked, by {alreadyBlocked.blockedBy}.</p> : null}
+              {alreadyBlocked ? <p className="text-danger-600">It is already blocked, by {directory.nameOf(alreadyBlocked.blockedBy)}.</p> : null}
             </div>
           ) : null}
           <ReasonChips
@@ -427,14 +434,18 @@ function BlockSheet({
           {canChain && picked?.kind === "WALLET" ? (
             <div className="flex w-full flex-col gap-1">
               <Switch
-                checked={onChain && evm !== null}
-                disabled={evm === null}
+                checked={onChain && evm !== null && chainId !== null}
+                disabled={evm === null || chainId === null}
                 onChange={(e) => setOnChain(e.target.checked)}
                 label="Incident: also block on chain"
               />
               <p className="text-body-xs text-03">
                 {evm === null
                   ? "Only an EVM wallet can be blocked on chain."
+                  : chainId === null
+                    ? health.isError
+                      ? "The chain could not be read just now, so this cannot be built. Block it on chain from its row later."
+                      : "Reading the chain…"
                   : "The contracts then refuse the wallet too. The arbiter signs it next; only the admin can lift it."}
               </p>
             </div>
@@ -457,7 +468,7 @@ function BlockSheet({
               </Button>
             </SheetClose>
             <Button variant="danger" loading={block.isPending} onClick={submit}>
-              {onChain && evm ? "Block, then sign on chain" : "Block account"}
+              {onChain && evm && chainId ? "Block, then sign on chain" : "Block account"}
             </Button>
           </div>
         </SheetFooter>
@@ -483,14 +494,17 @@ function ChainBlockSheet({ block, label, onClose }: { block: AccountBlock | null
       }),
   });
   const { mutate, reset } = build;
+  const [signing, setSigning] = React.useState(false);
+  const chainKnown = health.data !== undefined;
   React.useEffect(() => {
-    if (block && !health.isLoading) mutate(block);
+    // Built only once the chain is known: a fallback chain would build the block for the wrong one.
+    if (block && chainKnown) mutate(block);
     if (!block) reset();
-  }, [block, health.isLoading, mutate, reset]);
+  }, [block, chainKnown, mutate, reset]);
 
   return (
-    <Sheet open={block !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <SheetContent showCloseButton>
+    <Sheet open={block !== null} onOpenChange={(open) => (!open && !signing ? onClose() : undefined)}>
+      <SheetContent showCloseButton={!signing}>
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Also block {label} on chain?</SheetTitle>
           <SheetDescription>
@@ -499,7 +513,15 @@ function ChainBlockSheet({ block, label, onClose }: { block: AccountBlock | null
           </SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
-          {build.isPending || build.isIdle ? (
+          {health.isError ? (
+            <PageState
+              kind="error"
+              title="The chain could not be read"
+              description="Assay could not tell which chain to block on. Try again in a moment."
+              onRetry={() => void health.refetch()}
+              bare
+            />
+          ) : build.isPending || build.isIdle ? (
             <PageState kind="loading" rows={2} label="Preparing the on-chain block" bare />
           ) : build.isError ? (
             <PageState
@@ -517,6 +539,7 @@ function ChainBlockSheet({ block, label, onClose }: { block: AccountBlock | null
               successTitle="Blocked on chain"
               successDescription="The contracts refuse the wallet once this lands."
               afterExport="Import the file in the Safe that holds the arbiter key and sign it there."
+              onBusyChange={setSigning}
             />
           ) : null}
         </div>
@@ -567,7 +590,14 @@ function LiftSheet({
       setNote("");
       onClose();
     },
-  });
+  });  const { reset: resetLift } = lift;
+  React.useEffect(() => {
+    setReason("");
+    setNote("");
+    setErrors({});
+    resetLift();
+  }, [block?.id, resetLift]);
+
 
   const submit = () => {
     if (!block) return;

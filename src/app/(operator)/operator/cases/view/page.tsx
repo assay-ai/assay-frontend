@@ -26,7 +26,7 @@ import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { suspendedNotice } from "@/features/operator/state";
 import { approvalHref, type TwoPersonAnswer } from "@/features/operator/two-person";
-import { useProviderNames } from "@/features/operator/use-operator-lookups";
+import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-operator-lookups";
 import { CaseContext } from "@/features/provider-slash-case/context";
 import { Measurement } from "@/features/provider-slash-case/measurement";
 import { useSearchParam } from "@/hooks/useSearchParam";
@@ -64,6 +64,7 @@ const STAGE_CHIP: Record<CaseStage, { status: StatusChipKey; detail?: string }> 
   upheld: { status: "upheld" },
   "cancel-requested": { status: "needs-action", detail: "cancel to sign" },
   executed: { status: "executed" },
+  compensated: { status: "closed", detail: "compensated" },
   cancelled: { status: "cancelled" },
 };
 
@@ -85,6 +86,7 @@ export default function OperatorCasePage() {
   const identity = useOperatorSession();
   const queryClient = useQueryClient();
   const providers = useProviderNames();
+  const directory = useOperatorDirectory();
   const [sheet, setSheet] = React.useState<"suspend" | "cancel" | null>(null);
   const [result, setResult] = React.useState<Result | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
@@ -278,7 +280,7 @@ export default function OperatorCasePage() {
                     <LocalTime value={event.occurredAt} className="w-[150px] shrink-0 font-mono text-mono-12 text-03" />
                     <span className="min-w-0 flex-1 text-body-13 text-01">{event.summary}</span>
                     <span className="shrink-0 text-body-xs text-03">
-                      {event.actorType === "system" ? "Assay" : event.actorType === "provider" ? "Provider" : (event.actorId ?? "Operator")}
+                      {event.actorType === "system" ? "Assay" : event.actorType === "provider" ? "Provider" : directory.nameOf(event.actorId)}
                     </span>
                   </li>
                 ))}

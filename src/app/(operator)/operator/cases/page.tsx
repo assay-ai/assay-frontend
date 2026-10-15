@@ -34,7 +34,11 @@ export default function PenaltiesPage() {
   const caps = capabilitiesFor(me.roles);
   const router = useRouter();
   const providers = useProviderNames();
-  const [now] = React.useState(() => Date.now());
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
   const [lookup, setLookup] = React.useState("");
   const [lookupError, setLookupError] = React.useState<string | undefined>(undefined);
 

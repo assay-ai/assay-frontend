@@ -9,6 +9,7 @@ import { cn } from "@/utils";
 import { CopyChip } from "./copy-chip";
 import { downloadJson, safeBatchFile, safeBatchFileName, type SafeBatchTransaction } from "./safe-batch";
 import { SignAction, type WalletStep, type WalletStepResult } from "./sign-action";
+import type { WalletRunState } from "./wallet-steps";
 
 /**
  * A transaction this app built for someone else's key — sign it here when the
@@ -58,6 +59,10 @@ export interface SignOrExportProps {
   afterExport: React.ReactNode;
   /** Extra rows under Technical details (signer address, request ids…). */
   details?: readonly { label: string; value: string }[];
+  /** Change it when the inputs change: a retry then starts over, and a prepared batch is rebuilt. */
+  resetKey?: string | number;
+  /** The signing phase, so a sheet can refuse to close mid-signature. */
+  onPhaseChange?: (phase: WalletRunState["phase"]) => void;
   className?: string;
 }
 
@@ -78,22 +83,31 @@ export function SignOrExport({
   disabledReason,
   afterExport,
   details = [],
+  resetKey,
+  onPhaseChange,
   className,
 }: SignOrExportProps) {
   const [downloaded, setDownloaded] = React.useState(false);
-  const [prepared, setPrepared] = React.useState<readonly SafeBatchTransaction[] | null>(null);
+  // Kept per `resetKey`, so downloading twice does not build (and log) the same call twice.
+  const [prepared, setPrepared] = React.useState<{ key: string | number | undefined; txs: readonly SafeBatchTransaction[] } | null>(null);
   const [preparing, setPreparing] = React.useState(false);
   const [prepareError, setPrepareError] = React.useState<string | null>(null);
-  const transactions = given ?? prepared ?? [];
+  const current = prepared && prepared.key === resetKey ? prepared.txs : null;
+  const transactions = given ?? current ?? [];
+  React.useEffect(() => {
+    setDownloaded(false);
+    setPrepareError(null);
+  }, [resetKey]);
 
   const download = async () => {
+    if (disabled) return;
     setPrepareError(null);
-    let txs = given ?? null;
+    let txs = given ?? current ?? null;
     if (!txs && prepare) {
       setPreparing(true);
       try {
         txs = await prepare();
-        setPrepared(txs);
+        setPrepared({ key: resetKey, txs });
       } catch (error) {
         setPrepareError(describeError?.(error) ?? "The transaction could not be prepared. Nothing was downloaded.");
         return;
@@ -117,6 +131,8 @@ export function SignOrExport({
           label={signLabel}
           disabled={disabled}
           disabledReason={disabledReason}
+          resetKey={resetKey}
+          onPhaseChange={onPhaseChange}
           onSuccess={onSigned}
           successTitle={successTitle}
           successDescription={successDescription}
@@ -167,9 +183,20 @@ export function SignOrExport({
           ))}
           {canSign ? (
             <div className="pt-1">
-              <Button type="button" size="sm" variant="secondary" icon={<Download aria-hidden="true" />} onClick={() => void download()}>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                icon={<Download aria-hidden="true" />}
+                loading={preparing}
+                disabled={disabled}
+                onClick={() => void download()}
+              >
                 Download Safe batch instead
               </Button>
+              <p className={cn("min-h-[18px] pt-1 text-body-xs", prepareError ? "text-danger-600" : "text-02")} role="status">
+                {prepareError ?? (downloaded ? afterExport : "")}
+              </p>
             </div>
           ) : null}
         </dl>

@@ -38,6 +38,7 @@ export function PenaltyMoney({
 }) {
   const split = agentBps === null ? null : penaltySplit(penalty, agentBps);
   const taken = stage === "executed";
+  const repaid = stage === "compensated";
   const released = stage === "cancelled";
   return (
     <section aria-label="Where the money goes" className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 p-4 tablet:p-5">
@@ -46,6 +47,8 @@ export function PenaltyMoney({
         <p className="text-body-13 text-02">
           {taken
             ? "Taken from the provider's stake."
+            : repaid
+              ? "Taken from the provider's stake, then paid back by the treasury."
             : released
               ? "Nothing was taken: the reserved stake went back to the provider."
               : "Reserved in the provider's stake. Nothing has moved yet."}
@@ -55,17 +58,17 @@ export function PenaltyMoney({
         nodes={[
           { label: "Provider's stake", tone: "neutral" },
           {
-            label: taken ? "Taken" : released ? "Released" : "Reserved",
+            label: taken || repaid ? "Taken" : released ? "Released" : "Reserved",
             amount: formatMoney(penalty),
-            tone: released ? "teal" : taken ? "danger" : "warning",
-            note: !taken && !released && executableAt ? (
+            tone: released ? "teal" : taken || repaid ? "danger" : "warning",
+            note: !taken && !repaid && !released && executableAt && stage !== "disputed" && stage !== "cancel-requested" ? (
               <>
                 executable from <LocalTime value={executableAt} />
               </>
             ) : undefined,
           },
-          ...(released
-            ? [{ label: "Back to the provider", amount: formatMoney(penalty), tone: "teal" as const }]
+          ...(released || repaid
+            ? [{ label: repaid ? "Paid back by the treasury" : "Back to the provider", amount: formatMoney(penalty), tone: "teal" as const }]
             : split
               ? [
                   { label: "Agents who paid", amount: formatMoney(split.agents), tone: "primary" as const },
@@ -74,7 +77,7 @@ export function PenaltyMoney({
               : []),
         ]}
       />
-      {split && !released ? (
+      {split && !released && !repaid ? (
         <div className="flex flex-col gap-2">
           <MoneySplit
             segments={[

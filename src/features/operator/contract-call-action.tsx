@@ -33,6 +33,7 @@ export function ContractCallAction({
   successTitle,
   successDescription,
   onSigned,
+  onBusyChange,
 }: {
   call: SlashContractCall;
   signLabel: string;
@@ -41,6 +42,8 @@ export function ContractCallAction({
   successTitle?: React.ReactNode;
   successDescription?: React.ReactNode;
   onSigned?: (hash: string | null) => void;
+  /** True while the wallet is signing, so the sheet around it can refuse to close. */
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const connected = useConnectedAddresses();
   const signerState = useSigner({ chainId: call.chainId, address: connectedSpelling(connected, call.signer) });
@@ -85,6 +88,7 @@ export function ContractCallAction({
         onSigned?.(typeof last?.data === "string" ? last.data : null);
       }}
       describeError={(error) => (error instanceof Error ? error.message.split("\n")[0]! : "The wallet did not complete this.")}
+      onPhaseChange={(phase) => onBusyChange?.(phase === "running")}
       functionName={call.functionName}
       chainId={call.chainId}
       transactions={[{ to: call.to, value: call.value, data: call.data }]}

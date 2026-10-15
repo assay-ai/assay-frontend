@@ -110,11 +110,16 @@ function ArbiterScreen() {
   const [result, setResult] = React.useState<{ title: string; hash: string | null; chainId: string } | null>(null);
 
   // Land on the dispute a link named.
+  // Once per link, not on every refresh.
+  const scrolledTo = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!disputes.data) return;
+    const key = focus ?? focusCase;
+    if (!key || scrolledTo.current === key) return;
     const row = rows.find((r) => r.requestId.toLowerCase() === focus || (focusCase && r.proposalId === focusCase));
-    if (row) document.getElementById(`dispute-${row.requestId}`)?.scrollIntoView({ block: "center" });
-  }, [disputes.data, rows, focus, focusCase]);
+    if (!row) return;
+    scrolledTo.current = key;
+    document.getElementById(`dispute-${row.requestId}`)?.scrollIntoView({ block: "center" });
+  }, [rows, focus, focusCase]);
 
   const toggle = (row: ArbiterDispute) => {
     const next = toggleArbiterSelection(selected, row, rows);
@@ -150,7 +155,7 @@ function ArbiterScreen() {
           <Select label="Chain" value={chainId} onChange={(e) => setChosenChain(e.target.value)}>
             {chainIds.map((id) => (
               <option key={id} value={id}>
-                {stakeDeploymentFor(id)?.displayName ?? id}
+                {stakeDeploymentFor(id)?.displayName ?? `Chain ${id.split(":")[1] ?? id}`}
               </option>
             ))}
           </Select>
@@ -236,11 +241,23 @@ function ArbiterScreen() {
 
       {mayBlockOnChain(me.roles) ? (
         <p className="text-body-xs text-03">
-          To block a wallet on chain, block it on{" "}
-          <Link href="/operator/blocks" className="text-primary-600 hover:underline">
-            Blocks
-          </Link>{" "}
-          and turn on &ldquo;also block on chain&rdquo;.
+          {canBlock ? (
+            <>
+              To block a wallet on chain, block it on{" "}
+              <Link href="/operator/blocks" className="text-primary-600 hover:underline">
+                Blocks
+              </Link>{" "}
+              and turn on &ldquo;also block on chain&rdquo;.
+            </>
+          ) : (
+            <>
+              To block a wallet on chain, open it on{" "}
+              <Link href="/operator/blocks" className="text-primary-600 hover:underline">
+                Blocks
+              </Link>{" "}
+              and use &ldquo;Block on chain&rdquo; on its row.
+            </>
+          )}
         </p>
       ) : null}
 
@@ -249,7 +266,6 @@ function ArbiterScreen() {
           ruling={ruling}
           rows={ruling ? ruling.ids.map((id) => rowsById.get(id)).filter((r): r is ArbiterDispute => Boolean(r)) : []}
           providerName={providers.name}
-          arbiter={arbiter}
           chainForSelection={ruling ? selectionChain(new Set(ruling.ids), rows) : null}
           onClose={() => setRuling(null)}
           onRefused={setRowRefusals}
@@ -337,7 +353,7 @@ function ArbiterStatus({
         <Fact label="Admin">
           <CopyChip value={terms.admin} label="admin address" />
         </Fact>
-        <Fact label="Chain">{stakeDeploymentFor(terms.chainId)?.displayName ?? terms.chainId}</Fact>
+        <Fact label="Chain">{stakeDeploymentFor(terms.chainId)?.displayName ?? `Chain ${terms.chainId.split(":")[1] ?? terms.chainId}`}</Fact>
         {chainState ? (
           <>
             <Fact label="Blocked on chain">{String(chainState.blockedCount)}</Fact>
@@ -491,7 +507,6 @@ function RulingSheet({
   ruling,
   rows,
   providerName,
-  arbiter,
   chainForSelection,
   onClose,
   onRefused,
@@ -500,7 +515,6 @@ function RulingSheet({
   ruling: { kind: ArbiterRuling; ids: string[] } | null;
   rows: ArbiterDispute[];
   providerName: (id: string) => string;
-  arbiter: string | null;
   chainForSelection: string | null;
   onClose: () => void;
   onRefused: (refusals: ReadonlyMap<string, readonly string[]>) => void;
@@ -511,6 +525,15 @@ function RulingSheet({
   const [ticket, setTicket] = React.useState("");
   const kind = ruling?.kind ?? "CANCEL";
   const chainId = chainForSelection ?? FALLBACK_CHAIN;
+  // The arbiter of the chain these penalties are on, not of the chain picked in the header.
+  const terms = useQuery({
+    queryKey: ["operator", "arbiter", "terms", chainId],
+    queryFn: () => getArbiterTerms(chainId),
+    enabled: ruling !== null,
+    retry: 0,
+  });
+  const arbiter = terms.data?.arbiter ?? null;
+  const [signing, setSigning] = React.useState(false);
 
   const rulingKey = ruling ? `${ruling.kind}:${ruling.ids.join(",")}` : "";
   React.useEffect(() => {
@@ -571,8 +594,8 @@ function RulingSheet({
   const errorText = (error: unknown) => arbiterErrorMessage(error, "ruling").replace(/\s*\([A-Z_]+\)$/, "");
 
   return (
-    <Sheet open={ruling !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <SheetContent showCloseButton>
+    <Sheet open={ruling !== null} onOpenChange={(open) => (!open && !signing ? onClose() : undefined)}>
+      <SheetContent showCloseButton={!signing}>
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">{title}</SheetTitle>
           <SheetDescription>
@@ -612,6 +635,8 @@ function RulingSheet({
             steps={steps}
             disabled={notReady !== null}
             disabledReason={notReady}
+            resetKey={`${rulingKey}|${reason}|${note}|${ticket}`}
+            onPhaseChange={(phase) => setSigning(phase === "running")}
             describeError={errorText}
             onSigned={(results) => {
               const hash = results[results.length - 1]?.data;

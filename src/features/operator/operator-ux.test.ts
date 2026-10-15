@@ -16,7 +16,7 @@ import { disputeAmount, durationText } from "./arbiter";
 import { evmAddressOf, noTargetText, pickedTarget, searchBlockTargets, walletLabel } from "./block-targets";
 import { caseAuthority, caseFacts, caseNextStep, caseTimelineSteps } from "./case-flow";
 import { deriveSubject, limitInputFromChoice } from "./directory";
-import { checkedAgo, disputeUrgency, eligibleApprovers, groupApprovals, healthIssues, sortDisputesByDaysLeft } from "./inbox";
+import { checkedAgo, disputeUrgency, eligibleApprovers, groupApprovals, healthIssues, needsYouCount, sortDisputesByDaysLeft } from "./inbox";
 import { activeOperatorNav, operatorNavFor, operatorTitleFor } from "./nav";
 import { penaltySplit } from "./penalty-money";
 import { capabilitiesFor, presetOf, removalWarnings, roleTitle, rolesPhrase } from "./roles";
@@ -78,6 +78,11 @@ describe("the Needs-you groups", () => {
     expect(groups.others.map((r) => r.id)).toEqual(["other"]);
   });
 
+  it("counts disputes into Needs you only for whoever can rule (the badge uses the same rule)", () => {
+    expect(needsYouCount(1, 3, true)).toBe(4);
+    expect(needsYouCount(1, 3, false)).toBe(1);
+  });
+
   it("names who could approve, never the requester", () => {
     const team = [operator("jordan", ["ADJL"]), operator("riley", ["ADJL", "TRE"]), operator("sam", ["SRE"]), operator("old", ["ADJL"], "REMOVED")];
     expect(eligibleApprovers("A-10", team, "jordan")).toEqual(["Riley"]);
@@ -88,6 +93,7 @@ describe("the Needs-you groups", () => {
   it("says who must approve and what changes", () => {
     expect(approvalNeeds("A-10")).toBe("a second Lead adjudicator");
     expect(approvalNeeds("A-12")).toBe("a second Admin");
+    expect(approvalNeeds("S-1")).toBe("a second Adjudicator or Lead adjudicator");
     expect(approvalChanges(approval())).toEqual([{ label: "Account", before: "Blocked", after: "Can use Assay again" }]);
     expect(approvalChanges(approval({ action: "slash.suspend", code: "S-1" }))).toEqual([{ label: "Penalty", before: "Stands", after: "Cancelled" }]);
     expect(approvalTargetId(approval())).toBe("blk-1");
@@ -336,8 +342,21 @@ describe("the next step for this operator", () => {
     const facts = caseFacts(b, NOW);
     expect(caseNextStep(facts, caseAuthority(b, lead, facts), fmt)).toMatchObject({ kind: "done", title: "Penalty executed" });
     const c = brief({ status: "REVERSED", chainStatus: "EXECUTED" });
-    // Executed on chain, compensated in Assay: still read from the chain record.
-    expect(caseFacts(c, NOW).stage).toBe("executed");
+    // Executed on chain, then paid back: its own closed stage, not "executed".
+    const cf = caseFacts(c, NOW);
+    expect(cf.stage).toBe("compensated");
+    expect(caseNextStep(cf, caseAuthority(c, lead, cf), fmt)).toMatchObject({ kind: "done", title: "Provider compensated" });
+    expect(caseTimelineSteps(c, cf, { now: NOW }).at(-1)).toMatchObject({ label: "Executed, then compensated", state: "done" });
+  });
+
+  it("says so when the cancel deadline has passed", () => {
+    const b = brief({ status: "OVERTURNED", chainStatus: "CANCEL_REQUESTED", executableAt: iso(Date.now() - 60_000) });
+    const facts = caseFacts(b, Date.now());
+    expect(caseNextStep(facts, caseAuthority(b, lead, facts), fmt)).toMatchObject({
+      kind: "action",
+      action: "cancel",
+      description: expect.stringMatching(/deadline has passed/),
+    });
   });
 
   it("splits the money by the chain's current terms", () => {

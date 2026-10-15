@@ -169,7 +169,7 @@ export function OperatorBottomTabs({ identity, pathname, needsYou }: Pick<Operat
   return (
     <nav
       aria-label="Operator console"
-      className="fixed inset-x-0 bottom-0 z-40 flex w-full items-stretch border-t border-01 bg-01 px-1 pb-5 pt-2"
+      className="fixed inset-x-0 bottom-0 z-40 flex w-full items-stretch border-t border-01 bg-01 px-1 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2"
     >
       {items.map((item) => {
         const Icon = ICONS[item.id];
