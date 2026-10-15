@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { publicFooterLinks } from "./public-footer";
 import { DEFAULT_PUBLIC_NAV_ITEMS, flattenPublicNav, publicNavItems } from "./public-top-bar";
 
 const APP_DIR = join(__dirname, "../../app");
@@ -60,5 +61,23 @@ describe("public top bar links", () => {
   it("hides Demo while the demo is not configured", () => {
     expect(publicNavItems({ demo: false }).map((i) => i.id)).not.toContain("demo");
     expect(publicNavItems({ demo: true }).map((i) => i.id)).toContain("demo");
+  });
+});
+
+describe("public footer links", () => {
+  const routes = collectRoutes(APP_DIR);
+
+  it.each(publicFooterLinks({ signedIn: false }).filter((l) => !l.external).map((l) => l.href))(
+    "%s resolves to an existing app route",
+    (href) => {
+      expect(routes.some((route) => matches(route, href))).toBe(true);
+    },
+  );
+
+  it("links Proof of reserves, and Sign in only when signed out", () => {
+    expect(publicFooterLinks({ signedIn: false }).map((l) => l.label)).toEqual(
+      expect.arrayContaining(["How it works", "Explorer", "Why list here", "Proof of reserves", "Sign in"]),
+    );
+    expect(publicFooterLinks({ signedIn: true }).map((l) => l.label)).not.toContain("Sign in");
   });
 });
