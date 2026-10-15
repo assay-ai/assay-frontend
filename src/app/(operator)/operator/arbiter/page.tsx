@@ -74,7 +74,7 @@ import { createArbiterRulingIntent, getArbiterTerms, getPlatformHealth, listArbi
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
-import { Deadline } from "./_components/deadline";
+import { Deadline } from "@/features/operator/deadline";
 
 /**
  * Arbiter, route `/operator/arbiter` (assay-evm D-19).
