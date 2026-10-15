@@ -55,11 +55,10 @@ function lifecycle(binding: ToolBindingDetail, testPassed: boolean): StatusTimel
       state: live ? "current" : published ? "done" : "upcoming",
       description: live ? "Agents can call it." : undefined,
     },
-    {
-      id: "paused",
-      label: binding.status === "SUSPENDED" ? "Paused by Assay" : "Paused",
-      state: paused ? "current" : "skipped",
-    },
+    // Paused is a state the tool can be in, not a stage it moves towards: only show it when it applies.
+    ...(paused
+      ? [{ id: "paused", label: binding.status === "SUSPENDED" ? "Paused by Assay" : "Paused", state: "current" as const }]
+      : []),
   ];
 }
 

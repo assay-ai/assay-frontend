@@ -38,6 +38,7 @@ const base = {
   bindings: [{ id: "b1", toolId: "t1", status: "ACTIVE" as const, endpoint: "https://api.example" }],
   stake: { enough: true, shortfall: null },
   label: () => "Market quote",
+  now: Date.parse("2026-10-16T11:00:00Z"),
 };
 
 describe("needsActionItems", () => {
@@ -47,9 +48,20 @@ describe("needsActionItems", () => {
 
   it("warns early, in plain percentages, before the promise is broken", () => {
     const [item] = needsActionItems({ ...base, openWindows: [window({})] });
-    expect(item.title).toBe("Market quote: 1.6% of your 2% this window");
+    expect(item.title).toBe("Market quote: 1.6% of calls failed, near your 2% promise");
     expect(item.tone).toBe("warning");
     expect(item.deadline).toBe("2026-10-16T12:00:00Z");
+  });
+
+  it("shows one row per tool, for the window still open", () => {
+    const items = needsActionItems({
+      ...base,
+      openWindows: [
+        window({ windowId: "old", deadlineAt: "2026-10-16T09:00:00Z", observedFailureRate: 0.13 }),
+        window({ windowId: "open" }),
+      ],
+    });
+    expect(items.map((i) => i.id)).toEqual(["sla:open"]);
   });
 
   it("stays quiet under half of the promised rate", () => {

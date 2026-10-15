@@ -138,7 +138,8 @@ export function penaltyTimeline(row: PenaltyRow): PenaltyTimelineStep[] {
   ];
   steps.push({
     id: "disputed",
-    label: "Disputed",
+    // Until the provider disputes, this step is the window to do so, not a dispute.
+    label: disputed ? "Disputed" : row.canDispute ? "Dispute window" : "Not disputed",
     state: disputed ? "done" : closed || !row.canDispute ? "skipped" : "current",
     date: disputed ? row.disputedAt : row.canDispute ? row.executableAt : null,
     dateLabel: disputed ? undefined : row.canDispute ? "Dispute by" : undefined,
@@ -149,7 +150,8 @@ export function penaltyTimeline(row: PenaltyRow): PenaltyTimelineStep[] {
     label: row.upheld ? "Arbiter upheld it" : "Arbiter rules",
     state: !disputed ? "skipped" : row.chainKey === "disputed" ? "current" : "done",
     date: row.chainKey === "disputed" ? row.arbiterTargetAt : null,
-    dateLabel: row.chainKey === "disputed" ? "Target" : undefined,
+    dateLabel: row.chainKey === "disputed" ? "Aims to rule by" : undefined,
+    description: disputed ? undefined : "Only if you dispute",
   });
   const finalLabel =
     row.closedAs === "executed" ? "Executed" : row.closedAs === "expired" ? "Expired" : row.closedAs === "cancelled" ? "Cancelled" : "Executed or cancelled";

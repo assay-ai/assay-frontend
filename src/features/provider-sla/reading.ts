@@ -4,7 +4,7 @@ import type { SlaWindow, SlaWindowOutcome } from "@/interfaces";
 /**
  * A window's numbers as sentences a provider can act on:
  *
- *   "1.6% of your 2% this window"                     the early warning
+ *   "1.6% of calls failed this window (you promised at most 2%)"
  *   "Not enough calls yet (6 of 400)"                 below the sample gate
  *   "Oct 13, 15:00 – 17:00"                           a window by its dates, never "w_48"
  */
@@ -17,7 +17,7 @@ function pct(rate: number): string {
 }
 
 export interface SlaReading {
-  /** "1.6% of your 2% this window", or null before any checked call. */
+  /** "1.6% of calls failed this window (you promised at most 2%)", or null before any checked call. */
   headline: string | null;
   tone: SlaTone;
   /** "Not enough calls yet (6 of 400)" while a penalty cannot happen at all. */
@@ -50,7 +50,7 @@ export function slaReading(window: Pick<SlaWindow, "status" | "verifiedCalls" | 
   }
   const used = rate / promise;
   const scope = window.status === "OPEN" ? "this window" : "last window";
-  const headline = `${pct(rate)} of your ${pct(promise)} ${scope}`;
+  const headline = `${pct(rate)} of calls failed ${scope} (you promised at most ${pct(promise)})`;
   let tone: SlaTone = used > 1 ? "danger" : used >= 0.75 ? "warning" : "ok";
   let advice: string;
   if (sampleShort) {

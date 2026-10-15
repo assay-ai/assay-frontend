@@ -7,7 +7,7 @@ const base = { status: "OPEN" as const, verifiedCalls: 500, failedCalls: 8, minV
 describe("slaReading", () => {
   it("warns early in plain words", () => {
     const reading = slaReading(base, 0.02);
-    expect(reading.headline).toBe("1.6% of your 2% this window");
+    expect(reading.headline).toBe("1.6% of calls failed this window (you promised at most 2%)");
     expect(reading.tone).toBe("warning");
     expect(reading.sample).toBeNull();
   });

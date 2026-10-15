@@ -127,7 +127,7 @@ function StepDate({
   return (
     <span
       className={cn(
-        "inline-flex flex-wrap items-center gap-x-1.5 font-mono text-mono-12",
+        "inline-flex flex-wrap items-center gap-x-1 text-body-xs tabular-nums",
         highlighted
           ? cn(
               "self-start rounded-sm px-1.5 py-px",
@@ -138,12 +138,13 @@ function StepDate({
             : "text-03",
       )}
     >
+      {/* The label leads ("Dispute by Oct 18, 04:44"): a date on its own does not say what happens then. */}
+      {step.dateLabel ? <span>{step.dateLabel}</span> : null}
       {step.date ? (
         <time dateTime={step.date} title={utcTitle(step.date)}>
           {mounted ? formatLocalDateTime(step.date) : utcTitle(step.date)}
         </time>
       ) : null}
-      {step.dateLabel ? <span>{step.dateLabel}</span> : null}
       {step.countdown && msLeft !== null ? (
         <span className={highlighted ? "font-semibold" : undefined}>
           {/* Never "now": under a minute reads "in under a minute" (useCountdown), so nobody acts before the chain ticks over. */}
@@ -201,7 +202,6 @@ export function StatusTimeline({ steps, label = "Status", orientation = "auto", 
                 className={cn(
                   "text-label-13",
                   step.state === "upcoming" || step.state === "skipped" ? "text-02" : "text-01",
-                  step.state === "skipped" && "line-through decoration-03",
                   step.state === "failed" && "text-danger-600",
                 )}
               >
