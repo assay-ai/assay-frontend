@@ -12,7 +12,7 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { ApprovalItem, RowSection, type ApprovalResult } from "@/features/operator/approval-item";
 import { ResultCard } from "@/features/operator/result-card";
 import { approvalErrorMessage } from "@/features/operator/approvals";
-import { groupApprovals } from "@/features/operator/inbox";
+import { allWaitingLabel, groupApprovals } from "@/features/operator/inbox";
 import { capabilitiesFor } from "@/features/operator/roles";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { useApprovalContext } from "@/features/operator/use-approval-context";
@@ -114,7 +114,7 @@ function ApprovalsInbox() {
 
   return (
     <>
-      <Button variant="ghost" size="sm" asChild className="self-start">
+      <Button variant="ghost" size="sm" asChild className="touch-target self-start">
         <Link href="/operator">
           <ArrowLeft aria-hidden="true" />
           Home
@@ -128,7 +128,7 @@ function ApprovalsInbox() {
       <div role="group" aria-label="Approvals" className="flex w-full gap-4 border-b border-01">
         {(
           [
-            ["waiting", `Waiting${waitingCount > 0 ? ` · ${waitingCount}` : ""}`],
+            ["waiting", allWaitingLabel(waitingCount, "tab")],
             ["history", "History"],
           ] as const
         ).map(([value, label]) => (
@@ -138,7 +138,7 @@ function ApprovalsInbox() {
             aria-pressed={tab === value}
             onClick={() => setTab(value)}
             className={cn(
-              "-mb-px border-b-2 pb-2 text-label-13",
+              "touch-target -mb-px inline-flex items-end border-b-2 pb-2 text-label-13",
               tab === value ? "border-primary-500 text-01" : "border-transparent text-02 hover:text-01",
             )}
           >
@@ -172,7 +172,7 @@ function ApprovalsInbox() {
             {highlightGone && !results.some((r) => r.id === highlight) ? (
               <p role="status" className="w-full rounded-lg border border-01 bg-01 px-3.5 py-2.5 text-body-13 text-02">
                 The request you opened is no longer waiting: it was decided, withdrawn or has expired.{" "}
-                <button type="button" onClick={() => setTab("history")} className="text-primary-600 hover:underline">
+                <button type="button" onClick={() => setTab("history")} className="hit-area text-primary-600 hover:underline">
                   See History
                 </button>
               </p>
@@ -227,7 +227,7 @@ function ApprovalsInbox() {
                   id="others"
                   aria-expanded={othersOpen}
                   onClick={() => setOthersOpen((open) => !open)}
-                  className="inline-flex items-center gap-1 self-start rounded-md text-label-13 text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                  className="touch-target inline-flex items-center gap-1 self-start rounded-md text-label-13 text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                 >
                   <ChevronRight aria-hidden="true" className={cn("size-4 transition-transform", othersOpen && "rotate-90")} />
                   Others<span className="tabular-nums text-03"> · {groups.others.length}</span>

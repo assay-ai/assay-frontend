@@ -25,6 +25,23 @@ export function needsYouCount(needsYouApprovals: number, openDisputes: number, c
 
 // ── Approvals ───────────────────────────────────────────────────────────────
 
+/**
+ * The one name for every open request, yours or not, so it never reads as a
+ * rival to the "Needs you" / "Waiting for you" counts:
+ *   link (Home)      "All waiting approvals · 5"
+ *   tab (Approvals)  "All waiting · 5"
+ * No count when nothing waits.
+ */
+export function allWaitingLabel(count: number, where: "link" | "tab" = "link"): string {
+  const name = where === "tab" ? "All waiting" : "All waiting approvals";
+  return count > 0 ? `${name} · ${count}` : name;
+}
+
+/** The nav badge's tooltip and screen-reader text: "4 need you". */
+export function needsYouBadgeText(count: number): string {
+  return `${count} need${count === 1 ? "s" : ""} you`;
+}
+
 export interface ApprovalGroups {
   /** Pending, someone else's, and your roles cover it. */
   needsYou: OperatorApproval[];

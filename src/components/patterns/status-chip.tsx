@@ -1,4 +1,4 @@
-import { Ban, Check, CircleAlert, Clock, PenLine, Scale, TimerOff, Undo2, X, type LucideIcon } from "lucide-react";
+import { Ban, Check, CircleAlert, CircleCheckBig, Clock, PenLine, Scale, TimerOff, Undo2, X, type LucideIcon } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/utils";
@@ -17,6 +17,11 @@ import { cn } from "@/utils";
  * A key may carry an `icon`, drawn at 12px in place of the dot — for the
  * states an operator scans for (needs you, waiting, blocked, done, disputed).
  * Do not show a chip that repeats the tab or filter it sits under.
+ *
+ * Tones for the penalty states mean one thing each: danger = it needs you, or
+ * money will be taken (needs you, penalty upheld); warning = disputed;
+ * info = waiting on a signer; neutral = waiting, or nothing more happens;
+ * ink = done and final (executed), so a finished state never reads as an error.
  */
 export const STATUS_CHIPS = {
   // Buyer: agents, escrow and money
@@ -45,12 +50,12 @@ export const STATUS_CHIPS = {
   "needs-action": { label: "Needs action", tone: "danger" },
   "needs-you": { label: "Needs you", tone: "danger", icon: CircleAlert },
   waiting: { label: "Waiting", tone: "neutral", icon: Clock },
-  "waiting-signature": { label: "Waiting for signature", tone: "warning", icon: PenLine },
+  "waiting-signature": { label: "Waiting for signature", tone: "info", icon: PenLine },
   disputed: { label: "Disputed", tone: "warning", icon: Scale },
   upheld: { label: "Penalty upheld", tone: "danger" },
   cancelled: { label: "Cancelled", tone: "neutral" },
   expired: { label: "Expired", tone: "neutral", icon: TimerOff },
-  executed: { label: "Executed", tone: "danger" },
+  executed: { label: "Executed", tone: "ink", icon: CircleCheckBig },
   closed: { label: "Closed", tone: "neutral" },
   blocked: { label: "Blocked", tone: "danger", icon: Ban },
   rejected: { label: "Rejected", tone: "neutral", icon: X },
@@ -60,15 +65,17 @@ export const STATUS_CHIPS = {
   done: { label: "Done", tone: "success", icon: Check },
 } as const satisfies Record<string, { label: string; tone: StatusTone; icon?: LucideIcon }>;
 
-export type StatusTone = "neutral" | "primary" | "success" | "warning" | "danger" | "teal";
+export type StatusTone = "neutral" | "ink" | "primary" | "success" | "warning" | "danger" | "info" | "teal";
 export type StatusChipKey = keyof typeof STATUS_CHIPS;
 
 const TONES: Record<StatusTone, { bg: string; text: string; dot: string }> = {
   neutral: { bg: "bg-03", text: "text-02", dot: "bg-text-03" },
+  ink: { bg: "bg-03", text: "text-01", dot: "bg-text-01" },
   primary: { bg: "bg-primary-10", text: "text-primary-700", dot: "bg-primary-500" },
   success: { bg: "bg-success-10", text: "text-success-700", dot: "bg-success-500" },
   warning: { bg: "bg-warning-10", text: "text-warning-700", dot: "bg-warning-500" },
   danger: { bg: "bg-danger-10", text: "text-danger-700", dot: "bg-danger-500" },
+  info: { bg: "bg-info-10", text: "text-info-600", dot: "bg-info-500" },
   teal: { bg: "bg-teal-10", text: "text-teal-600", dot: "bg-teal-500" },
 };
 
@@ -85,7 +92,9 @@ export function StatusChip({ status, detail, className, ...props }: StatusChipPr
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-label-xs",
+        // w-max + shrink-0: the pill always wraps its whole text, the detail too,
+        // even in a fixed-width table cell or a flex row that would squeeze it.
+        "inline-flex w-max max-w-none shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-label-xs",
         tone.bg,
         tone.text,
         className,
@@ -98,7 +107,7 @@ export function StatusChip({ status, detail, className, ...props }: StatusChipPr
         <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", tone.dot)} />
       )}
       {chip.label}
-      {detail ? <span className="font-normal opacity-80">· {detail}</span> : null}
+      {detail ? <span className="shrink-0 font-normal opacity-80">· {detail}</span> : null}
     </span>
   );
 }

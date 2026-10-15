@@ -22,6 +22,7 @@ import { formatClock } from "@/libs/local-time";
 import { useTheme } from "@/providers/ThemeProvider";
 import { cn } from "@/utils";
 
+import { needsYouBadgeText } from "./inbox";
 import { activeOperatorNav, operatorNavFor, type OperatorNavId } from "./nav";
 import { RoleCapabilities, RoleCapabilitiesPanel, roleLimitText, rolePillText } from "./role-intro";
 import { roleTitle } from "./roles";
@@ -68,9 +69,12 @@ const DEMO_ROLES: readonly { id: DemoOperatorPreset; label: string }[] = [
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="ml-1.5 rounded-full bg-danger-500 px-1.5 py-px text-[11px] font-semibold leading-4 tabular-nums text-on-color">
-      {count > 99 ? "99+" : count}
-      <span className="sr-only"> waiting for you</span>
+    <span
+      title={`${needsYouBadgeText(count)}: approvals and disputes, as on Home`}
+      className="ml-1.5 rounded-full bg-danger-500 px-1.5 py-px text-[11px] font-semibold leading-4 tabular-nums text-on-color"
+    >
+      <span aria-hidden="true">{count > 99 ? "99+" : count}</span>
+      <span className="sr-only">, {needsYouBadgeText(count)}</span>
     </span>
   );
 }
@@ -116,7 +120,7 @@ function AccountMenu({ identity, expiresAt, onSignOut, demo, onShortcuts }: Pick
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`Account: ${identity.displayName}`}
-        className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        className="-m-1.5 inline-flex size-10 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
         <Avatar name={identity.displayName} size="md" />
       </DropdownMenuTrigger>
@@ -131,16 +135,16 @@ function AccountMenu({ identity, expiresAt, onSignOut, demo, onShortcuts }: Pick
           <SessionChip expiresAt={expiresAt} className="mt-1 self-start" />
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => setCapsOpen(true)} className="gap-2">
+        <DropdownMenuItem onSelect={() => setCapsOpen(true)} className="touch-target gap-2">
           <CircleHelp aria-hidden="true" className="size-4" />
           What can I do?
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setTheme(themeType === "light" ? "dark" : "light")} className="gap-2">
+        <DropdownMenuItem onSelect={() => setTheme(themeType === "light" ? "dark" : "light")} className="touch-target gap-2">
           {themeType === "light" ? <Moon aria-hidden="true" className="size-4" /> : <Sun aria-hidden="true" className="size-4" />}
           {themeType === "light" ? "Dark theme" : "Light theme"}
         </DropdownMenuItem>
         {onShortcuts ? (
-          <DropdownMenuItem onSelect={onShortcuts} className="gap-2">
+          <DropdownMenuItem onSelect={onShortcuts} className="touch-target gap-2">
             <Keyboard aria-hidden="true" className="size-4" />
             Keyboard shortcuts
             <span className="ml-auto text-body-xs text-03">?</span>
@@ -151,7 +155,7 @@ function AccountMenu({ identity, expiresAt, onSignOut, demo, onShortcuts }: Pick
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-label-xs text-03">Switch demo role</DropdownMenuLabel>
             {DEMO_ROLES.map((role) => (
-              <DropdownMenuItem key={role.id} onSelect={() => demo.onSwitch(role.id)} className="gap-2">
+              <DropdownMenuItem key={role.id} onSelect={() => demo.onSwitch(role.id)} className="touch-target gap-2">
                 <Check aria-hidden="true" className={cn("size-4", demo.current === role.id ? "text-primary-600" : "invisible")} />
                 {role.label}
               </DropdownMenuItem>
@@ -159,7 +163,7 @@ function AccountMenu({ identity, expiresAt, onSignOut, demo, onShortcuts }: Pick
           </>
         ) : null}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onSignOut} className="gap-2">
+        <DropdownMenuItem onSelect={onSignOut} className="touch-target gap-2">
           <LogOut aria-hidden="true" className="size-4" />
           Sign out of the console
         </DropdownMenuItem>
@@ -194,9 +198,9 @@ export function OperatorTopBar({ identity, pathname, needsYou, expiresAt, onSign
   const items = operatorNavFor(identity.roles);
   const active = activeOperatorNav(pathname);
   return (
-    <header className="flex h-14 w-full items-center gap-6 border-b border-01 bg-01 px-5">
+    <header className="flex h-14 w-full items-center gap-4 border-b border-01 bg-01 px-5 lg:gap-6">
       <Brand />
-      <nav aria-label="Operator console" className="flex min-w-0 flex-1 items-center gap-1">
+      <nav aria-label="Operator console" className="flex min-w-0 flex-1 items-center gap-0.5 lg:gap-1">
         {items.map((item) => (
           <Link
             key={item.id}
@@ -215,10 +219,13 @@ export function OperatorTopBar({ identity, pathname, needsYou, expiresAt, onSign
       </nav>
       <div className="flex shrink-0 items-center gap-2.5">
         <SessionChip expiresAt={expiresAt} within={30} />
+        {/* The pill needs ~240px more than the nav leaves at tablet width
+            (768-1023px), where it would sit on top of the last nav items; the
+            account menu carries the role and "What can I do?" there. */}
         <RoleCapabilities identity={identity}>
           <button
             type="button"
-            className="max-w-[260px] truncate rounded-full border border-01 px-2.5 py-1 text-label-xs text-02 hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            className="hidden max-w-[260px] truncate rounded-full lg:inline-block border border-01 px-2.5 py-1 text-label-xs text-02 hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             {rolePillText(identity)}
           </button>
@@ -262,14 +269,14 @@ export function OperatorBottomTabs({ identity, pathname, needsYou }: Pick<Operat
             <span className="relative flex size-5 items-center justify-center">
               <Icon aria-hidden="true" className={cn("size-5", isActive ? "text-primary-500" : "text-03")} />
               {item.id === "home" && needsYou > 0 ? (
-                <span className="absolute -right-2 -top-1.5 rounded-full bg-danger-500 px-1 text-[10px] font-semibold leading-[14px] tabular-nums text-on-color">
+                <span aria-hidden="true" className="absolute -right-2 -top-1.5 rounded-full bg-danger-500 px-1 text-[10px] font-semibold leading-[14px] tabular-nums text-on-color">
                   {needsYou > 9 ? "9+" : needsYou}
                 </span>
               ) : null}
             </span>
             <span className={cn("max-w-full truncate text-label-xs", isActive ? "text-primary-500" : "text-03")}>
               {item.label}
-              {item.id === "home" && needsYou > 0 ? <span className="sr-only">, {needsYou} waiting for you</span> : null}
+              {item.id === "home" && needsYou > 0 ? <span className="sr-only">, {needsYouBadgeText(needsYou)}</span> : null}
             </span>
           </Link>
         );

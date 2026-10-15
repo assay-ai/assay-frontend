@@ -64,7 +64,7 @@ export function ResultCard({ title, next, tone = "done", activityHref, txUrl, li
             </a>
           ) : null}
           {onDismiss ? (
-            <button type="button" onClick={onDismiss} className="text-label-13 text-03 hover:text-01">
+            <button type="button" onClick={onDismiss} className="hit-area text-label-13 text-03 hover:text-01">
               Dismiss
             </button>
           ) : null}

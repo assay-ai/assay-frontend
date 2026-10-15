@@ -16,7 +16,7 @@ import { disputeAmount, durationText } from "./arbiter";
 import { evmAddressOf, noTargetText, pickedTarget, searchBlockTargets, walletLabel } from "./block-targets";
 import { cancelDeadlineSentence, caseAuthority, caseFacts, caseNextStep, caseTimelineSteps } from "./case-flow";
 import { deriveSubject, limitInputFromChoice } from "./directory";
-import { checkedAgo, disputeUrgency, eligibleApprovers, groupApprovals, healthIssues, needsYouCount, sortDisputesByDaysLeft } from "./inbox";
+import { allWaitingLabel, checkedAgo, disputeUrgency, eligibleApprovers, groupApprovals, healthIssues, needsYouBadgeText, needsYouCount, sortDisputesByDaysLeft } from "./inbox";
 import { activeOperatorNav, operatorNavFor, operatorTitleFor } from "./nav";
 import { penaltySplit } from "./penalty-money";
 import { capabilitiesFor, presetOf, removalWarnings, roleTitle, rolesPhrase } from "./roles";
@@ -81,6 +81,14 @@ describe("the Needs-you groups", () => {
   it("counts disputes into Needs you only for whoever can rule (the badge uses the same rule)", () => {
     expect(needsYouCount(1, 3, true)).toBe(4);
     expect(needsYouCount(1, 3, false)).toBe(1);
+  });
+
+  it("names every open request 'All waiting', apart from the Needs you count", () => {
+    expect(allWaitingLabel(5)).toBe("All waiting approvals · 5");
+    expect(allWaitingLabel(5, "tab")).toBe("All waiting · 5");
+    expect(allWaitingLabel(0, "tab")).toBe("All waiting");
+    expect(needsYouBadgeText(1)).toBe("1 needs you");
+    expect(needsYouBadgeText(4)).toBe("4 need you");
   });
 
   it("names who could approve, never the requester", () => {
