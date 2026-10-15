@@ -13,7 +13,7 @@ import { parseCallsCsv, type CallRow } from "./csv";
  * The per-call CSV, fetched once per window and shared by the call-classes screen and the provider earnings screen.
  *
  * Both screens read the same file: it is the only provider endpoint that emits
- * a row per call, and `X-X402-Call-Id` — its first column — is the join key the
+ * a row per call, and `X-Assay-Call-Id` — its first column — is the join key the
  * two screens exist to explain. Fetching it through one query key means the two
  * cannot disagree about the same window, and the download button re-uses the
  * bytes already in the cache rather than asking for them twice.

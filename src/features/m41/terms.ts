@@ -81,3 +81,21 @@ export function resolveTerms(terms: ProviderTermsSummary | undefined): {
 } {
   return terms ? { terms, fromDesign: false } : { terms: DESIGN_TERMS, fromDesign: true };
 }
+
+/**
+ * One word for one thing: the console calls it a "penalty" everywhere, so the
+ * policy is named the Penalty Policy on screen. Only the name is rewritten;
+ * the document and its version are the ones the server published.
+ */
+export function plainTermsLine(line: string): string {
+  return line
+    .replace(/\b(the )?slash policy\b/gi, (_match, the: string | undefined) => `${the ?? ""}Penalty Policy`)
+    .replace(/\((\d{4})-(\d{2})-(\d{2})\)/g, (_match, y: string, m: string, d: string) => `(${MONTHS[Number(m) - 1] ?? m} ${Number(d)}, ${y} version)`);
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** A term's label, in the console's words ("Penalty when", not "Slashed when"). */
+export function termLabel(term: { label: string }): string {
+  return term.label.replace(/^Slashed when$/i, "Penalty when");
+}

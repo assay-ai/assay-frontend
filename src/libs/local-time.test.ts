@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatClock, formatLocalDate, formatLocalDateTime, utcTitle } from "./local-time";
+import { formatClock, formatLocalDate, formatLocalDateTime, utcTitle, zoneLabel } from "./local-time";
 
 const NOW = Date.parse("2026-10-15T12:00:00Z");
 const UTC = { timeZone: "UTC", now: NOW };
@@ -32,5 +32,12 @@ describe("local time", () => {
   it("never throws on junk", () => {
     expect(formatLocalDateTime("not a date", UTC)).toBe("—");
     expect(formatLocalDateTime(undefined, UTC)).toBe("—");
+  });
+});
+
+describe("zoneLabel", () => {
+  it("names the zone a time is shown in", () => {
+    expect(zoneLabel("2026-10-16T12:00:00Z", { timeZone: "UTC" })).toBe("UTC");
+    expect(zoneLabel("2026-07-01T12:00:00Z", { timeZone: "Europe/London" })).toBe("GMT+1");
   });
 });

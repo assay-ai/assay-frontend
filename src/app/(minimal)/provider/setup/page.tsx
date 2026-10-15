@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Outcome } from "@/features/m41/outcome";
-import { termValue } from "@/features/m41/terms";
+import { plainTermsLine, termLabel, termValue } from "@/features/m41/terms";
 import { addressFamily, useProviderSetup, type ProviderSetup } from "@/features/m41/use-setup";
 import { useChainName } from "@/hooks/useChainName";
 import { useConnectedAddresses } from "@/hooks/useSigner";
@@ -46,7 +46,9 @@ const HIDDEN_TERMS = /penalty.?ceiling/i;
 
 function stageDone(setup: ProviderSetup, stage: Exclude<Stage, "done">): boolean {
   const status = (key: string) => setup.steps.find((step) => step.key === key)?.status;
-  if (stage === "you") return setup.registered && status("account") === "DONE" && setup.accepted;
+  // Terms read from the server count at once: `accepted` is only copied from them after the first render.
+  const accepted = setup.accepted || Boolean(setup.state?.registration.acceptedTerms);
+  if (stage === "you") return setup.registered && status("account") === "DONE" && accepted;
   if (stage === "paid") return status("payoutWallet") === "DONE";
   return status("endpoint") === "DONE";
 }
@@ -117,7 +119,7 @@ export default function ProviderSetupPage() {
   return (
     <SetupFrame>
       {stage === "done" ? (
-        <DoneScreen href={wizardHref} />
+        <DoneScreen href={wizardHref} setup={setup} />
       ) : (
         <>
           <header className="flex flex-col gap-1">
@@ -238,7 +240,7 @@ function YouStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
           label="Time zone"
           className={sans}
           placeholder="Europe/London"
-          hint="Deadlines we give you are counted in this zone."
+          hint="Emails about deadlines use this zone. The console shows times in this device's zone, labelled."
           value={account.timezone}
           error={accountErrors.timezone}
           onChange={(e) => setAccountField("timezone", e.target.value)}
@@ -246,7 +248,8 @@ function YouStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
         />
       ) : (
         <p className="text-body-13 text-02">
-          Deadlines are counted in <span className="font-semibold text-01">{account.timezone}</span>.{" "}
+          Emails about deadlines use <span className="font-semibold text-01">{account.timezone}</span>; the console
+          shows times in this device&apos;s zone, labelled.{" "}
           <button type="button" className="text-primary-600 underline-offset-2 hover:underline" onClick={() => setEditZone(true)}>
             Change
           </button>
@@ -265,7 +268,7 @@ function YouStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
         <dl className="mt-2 flex w-full flex-col">
           {shownTerms.map((term) => (
             <div key={term.key} className="flex w-full flex-col gap-0.5 border-t border-01 py-2 tablet:flex-row tablet:gap-3">
-              <dt className="text-02 tablet:w-44 tablet:shrink-0">{term.label}</dt>
+              <dt className="text-02 tablet:w-44 tablet:shrink-0">{termLabel(term)}</dt>
               <dd className="flex flex-col gap-0.5">
                 <span className="font-semibold text-01">{termValue(term)}</span>
                 <span className="text-body-xs text-03">{term.caption}</span>
@@ -279,7 +282,7 @@ function YouStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
         checked={accepted}
         disabled={registered}
         onChange={(e) => setAccepted(e.target.checked)}
-        label={terms.acceptanceLine}
+        label={plainTermsLine(terms.acceptanceLine)}
         className="items-start [&>span:first-of-type]:mt-px"
       />
 
@@ -514,7 +517,24 @@ function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
 
 /* ------------------------------------------------------------------ The end */
 
-function DoneScreen({ href }: { href: string }) {
+function DoneScreen({ href, setup }: { href: string; setup: ProviderSetup }) {
+  const term = (pattern: RegExp) => setup.terms.commercialTerms.find((t) => pattern.test(`${t.key} ${t.label}`))?.value ?? null;
+  const takeRate = term(/take.?rate/i);
+  const waiting = term(/unbond/i);
+  const basics: [string, string][] = [
+    [
+      "Price",
+      `You set a price per call${takeRate ? ` and keep the rest after Assay's ${takeRate} fee` : ""}. Buyers pay only for calls that pass our checks.`,
+    ],
+    [
+      "Stake",
+      `Free tools need none. To charge, your stake must cover $50 or 1,000 calls at your price, whichever is more. You get it back when you stop${waiting ? `, after a ${waiting} waiting period` : ""}.`,
+    ],
+    [
+      "Penalty",
+      "You promise a failure rate. If more calls fail than that in a 7-day window, part of your stake can be taken. You can dispute it before the deadline.",
+    ],
+  ];
   return (
     <section className="flex w-full flex-col gap-5 rounded-xl border border-success-20 bg-01 p-5 tablet:p-8">
       <div className="flex items-start gap-3">
@@ -524,6 +544,14 @@ function DoneScreen({ href }: { href: string }) {
           <p className="text-body-13 text-02">Your account, payout wallet and API are ready. Next, list your first tool.</p>
         </div>
       </div>
+      <dl className="flex w-full flex-col rounded-lg border border-01 bg-02 px-3.5 py-1">
+        {basics.map(([label, body]) => (
+          <div key={label} className="flex flex-col gap-0.5 border-t border-01 py-2.5 first:border-t-0 tablet:flex-row tablet:gap-3">
+            <dt className="text-label-13 text-01 tablet:w-20 tablet:shrink-0">{label}</dt>
+            <dd className="text-body-13 text-02">{body}</dd>
+          </div>
+        ))}
+      </dl>
       <ol className="flex flex-col gap-3">
         {[
           ["Pick the tool your API answers", "and point it at your API. We fill in what we can."],
