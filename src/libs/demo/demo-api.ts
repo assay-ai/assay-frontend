@@ -80,6 +80,7 @@ export function demoResponse(
   method: string | undefined,
   url: string | undefined,
   params?: Record<string, unknown>,
+  data?: unknown,
 ): unknown {
   if (!demoEnabled()) return undefined;
   const fixture = matchFixture(method ?? "GET", normalise(url));
@@ -91,7 +92,7 @@ export function demoResponse(
     same three totals under three different headings, which is the kind of
     detail a viewer notices.
   */
-  return fixture.body(normalise(url), params ?? queryOf(url));
+  return fixture.body(normalise(url), params ?? queryOf(url), parseBody(data));
 }
 
 /** The query string as a plain object, for a caller that sent one in the URL. */
@@ -99,4 +100,14 @@ function queryOf(url: string | undefined): Record<string, string> {
   const query = (url ?? "").split("?")[1];
   if (query === undefined) return {};
   return Object.fromEntries(new URLSearchParams(query).entries());
+}
+
+/** The request body as an object: axios hands over a JSON string once it has serialised it. */
+function parseBody(data: unknown): unknown {
+  if (typeof data !== "string") return data;
+  try {
+    return JSON.parse(data);
+  } catch {
+    return undefined;
+  }
 }

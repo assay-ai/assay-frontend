@@ -7,7 +7,7 @@ import type { SetupStepState } from "@/components/patterns/setup-checklist";
  *   1. key   — a live key exists for an agent (and its MCP config was shown);
  *   2. call  — the agent made a call with it (`lastUsedAt` set; polled);
  *   3. funds — money is in the escrow (a deposit opens it);
- *   4. pay   — safety caps set + the agent's payment key bound + authorised.
+ *   4. pay   — account ceiling set + the agent's payment key bound + authorised.
  *
  * Free calls need only steps 1–2, so 3 and 4 never block them; 4 is blocked
  * until 3 because caps are set on an escrow, which the first deposit opens.

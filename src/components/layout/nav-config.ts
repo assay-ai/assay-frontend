@@ -6,7 +6,7 @@
  *   Overview   /                       (Get started lives here for new accounts)
  *   Activity   /spend                  Spend · Calls · Not charged
  *   Money      /funding                Funding · Statements
- *   Controls   /agents                 Agents & keys · Connect · Budgets
+ *   Controls   /agents                 Agents & keys · Connect · Spending limits
  *   Explore    /explore
  *
  * Rare pages (Alerts settings, Activity log, Settings, Help) sit in the
@@ -71,7 +71,7 @@ export const BUYER_SECTION_TABS: Partial<Record<BuyerSectionId, SectionTab[]>> =
   controls: [
     { id: "agents", label: "Agents & keys", href: "/agents" },
     { id: "connect", label: "Connect", href: "/connect" },
-    { id: "budgets", label: "Budgets", href: "/limits" },
+    { id: "budgets", label: "Spending limits", href: "/limits" },
   ],
 };
 
