@@ -7,6 +7,7 @@ import {
   budgetAgentId,
   ceilingCountsMoreThanAgents,
   hasOldBudget,
+  HARD_STOP,
   LIMIT_SOURCE,
   limitLines,
   limitSentence,
@@ -39,11 +40,13 @@ describe("spending limits: one effective line per limit, naming what binds", () 
       "$900.00 a month — set by this agent's spending limit",
     ]);
     expect(lines[1]!.left).toBe("$24.25 left now");
+    expect(lines.map((l) => l.stop)).toEqual([HARD_STOP.chain, HARD_STOP.chain, HARD_STOP.assay]);
   });
 
   it("names the account ceiling when it is the lower one", () => {
     const [call] = limitLines(agentLimitRows({ delegation: true, grant: grant("20", "40"), policy: null, ceiling }));
     expect(limitSentence(call!)).toBe(`$10.00 a call — set by ${LIMIT_SOURCE.ceiling}`);
+    expect(call!.stop).toBe(HARD_STOP.chain);
   });
 
   it("names the older rule and older budget only while they are set and lower", () => {
@@ -61,6 +64,7 @@ describe("spending limits: one effective line per limit, naming what binds", () 
   it("an agent without an on-chain permission is limited by Assay per call and per calendar day", () => {
     const lines = limitLines(agentLimitRows({ delegation: false, grant: null, policy: policy({ perCallMax: usd("1"), dailyCap: usd("5") }), ceiling: null }));
     expect(lines.map((l) => l.amount)).toEqual(["$1.00 a call", "$5.00 a day (UTC)"]);
+    expect(lines.every((l) => l.stop === HARD_STOP.assay)).toBe(true);
   });
 });
 

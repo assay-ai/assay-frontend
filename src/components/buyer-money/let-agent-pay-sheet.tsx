@@ -41,6 +41,11 @@ export interface LetAgentPaySheetProps {
   agentName: string;
   /** CAIP-10 of the agent's payment key (bound with `agent-cli bind`). */
   delegateAccount: string | null;
+  /**
+   * Renewing a permission that ends soon: the drawer opens on its current
+   * limits (major units) and grants them again for the full period.
+   */
+  renew?: { perCall: string; perDay: string } | null;
 }
 
 export function KeyMatch({ account }: { account: string }) {
@@ -86,7 +91,7 @@ export function agentDefault(ceiling: { perCall: string; perDay: string } | null
   return { perCall: lower(ceiling.perCall, standard.perCall), perDay: lower(ceiling.perDay, standard.perDay) };
 }
 
-export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccount }: LetAgentPaySheetProps) {
+export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccount, renew = null }: LetAgentPaySheetProps) {
   const queryClient = useQueryClient();
   const readOnly = useAccountReadOnly();
   const money = useBuyerMoney();
@@ -98,7 +103,7 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
   const [openingCaps, setOpeningCaps] = React.useState<{ perCall: string; perWindow: string } | null>(null);
   if (open && !seeded && !money.escrowQuery.isPending) {
     setSeeded(true);
-    setValue(agentDefault(capsToForm(escrow)));
+    setValue(renew ?? agentDefault(capsToForm(escrow)));
     setOpeningCaps(
       escrow?.maxVoucherAmount && escrow.maxPerWindow
         ? { perCall: escrow.maxVoucherAmount.amount || "0", perWindow: escrow.maxPerWindow.amount || "0" }
@@ -202,8 +207,13 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
     <WalletActionSheet
       open={open}
       onOpenChange={onOpenChange}
-      title={`Let ${agentName} pay`}
-      description="Your agent pays for calls from your escrow, within these spending limits. It cannot withdraw, change your limits or let anyone else pay. Free, no gas."
+      chain={money.chain}
+      title={renew ? `Renew ${agentName}'s permission to pay` : `Let ${agentName} pay`}
+      description={
+        renew
+          ? `The same spending limits, valid for another ${DEFAULT_DELEGATION_DAYS} days from now. It still cannot withdraw, change your limits or let anyone else pay. Free, no gas.`
+          : "Your agent pays for calls from your escrow, within these spending limits. It cannot withdraw, change your limits or let anyone else pay. Free, no gas."
+      }
       steps={steps}
       label={capsCover ? "Sign to allow (free)" : "Sign to apply (free)"}
       resetKey={`${value.perCall}|${value.perDay}|${delegateAccount ?? ""}`}

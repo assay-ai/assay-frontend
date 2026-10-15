@@ -42,7 +42,7 @@ export function ConnectView() {
           </p>
         </header>
 
-        <McpConfigTabs token={null} />
+        <McpConfigTabs token={null} keyPrefix={live[0]?.prefix ?? null} />
 
         <p className="text-body-13 text-02">
           {live.length === 0 ? "You need a key to paste in. " : "Your key was shown once when you created it. "}

@@ -5,7 +5,7 @@ import { humanize, plainAuditAction } from "@/libs/plain-language";
  * entries grouped by day.
  *
  *   { actorType: "user", action: "spend_policy.updated", before: { dailyCap: "40.00" }, after: { dailyCap: "75.00" } }
- *   → title "Budget changed", line "You changed daily cap from 40.00 to 75.00"
+ *   → title "Spending limits changed", line "You changed daily spending limit from $40.00 to $75.00"
  */
 
 export interface AuditEntryLike {
@@ -20,7 +20,7 @@ export interface AuditEntryLike {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Values that are identifiers or secrets, never body text: ids, chain ids, key prefixes, hashes. */
-const RAW_VALUE = /^(eip155:|solana:|x402_|sk_|pk_|cred_|ses_|aud_|dep_|sp_|hld_)|^0x[0-9a-f]{6,}$/i;
+const RAW_VALUE = /^(eip155:|solana:|assay_|x402_|sk_|pk_|cred_|ses_|aud_|dep_|sp_|hld_)|^0x[0-9a-f]{6,}$/i;
 
 /** An email address: said only as the actor's name, never inside a change. */
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -30,8 +30,8 @@ const MONEY_KEY = /(cap|limit|amount|budget|charged|price|balance)$/i;
 
 /** Field names said in the product's words rather than humanized. */
 const KEY_WORDS: Record<string, string> = {
-  dailyCap: "daily budget",
-  monthlyCap: "monthly budget",
+  dailyCap: "daily spending limit",
+  monthlyCap: "monthly spending limit",
   perCallCap: "per-call limit",
   maxCallsPerMinute: "calls per minute limit",
   revokedAt: "revoked",
@@ -99,7 +99,7 @@ function dollars(value: unknown): string | null {
 
 /**
  * Entries whose generic "changed X from A to B" reading would be system talk
- * ("Assay changed charged from 6.00 to 0.00", "set credential to x402_live_…").
+ * ("Assay changed charged from 6.00 to 0.00", "set credential to assay_live_…").
  * Each gets the sentence a person would say.
  */
 function specific(

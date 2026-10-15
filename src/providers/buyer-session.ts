@@ -1,5 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 
+import { loginHref } from "@/libs/login-redirect";
+
 import { settleCacheForIdentity } from "./identity-cache";
 
 /**
@@ -85,4 +87,38 @@ export function applyIdentityChange(
       cancelled = true;
     },
   };
+}
+
+/**
+ * Where a buyer-API 401 sends this page.
+ *
+ * "Your session expired" is only true when this page load actually had a
+ * signed-in identity (`previous` is a string). A visitor who never signed in
+ * is not told their session expired: on `/` they get the product's front page
+ * (How it works), anywhere else plain sign-in that returns them here.
+ */
+export function unauthorizedTarget(input: {
+  pathname: string;
+  search: string;
+  /** The identity this page load last resolved: string = signed in, null = signed out, undefined = not resolved yet. */
+  previous: string | null | undefined;
+}): string {
+  const hadSession = typeof input.previous === "string";
+  if (!hadSession && input.pathname === "/") return "/how-it-works";
+  return loginHref({ next: `${input.pathname}${input.search}`, reason: hadSession ? "expired" : undefined });
+}
+
+/**
+ * A signed-out visitor at the bare domain sees the product, not an empty
+ * console: `/` goes to How it works once Privy has settled. Never on a demo
+ * build, whose `/` is the demo console, and never while Privy is resolving.
+ */
+export function signedOutLanding(input: {
+  ready: boolean;
+  authenticated: boolean;
+  pathname: string;
+  demo: boolean;
+}): string | null {
+  if (input.demo || !input.ready || input.authenticated) return null;
+  return input.pathname === "/" ? "/how-it-works" : null;
 }

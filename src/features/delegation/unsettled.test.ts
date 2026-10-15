@@ -19,6 +19,7 @@ import {
   strandWarning,
   UNSETTLED_WAIT_MAX_MS,
   unsettledLine,
+  strandAcknowledgement,
 } from "./unsettled";
 
 const ASSET = "eip155:46630/erc20:0xDbbC";
@@ -298,5 +299,20 @@ describe("editedToast", () => {
     expect(editedToast(null, current)).toBe(
       "Updated. The new caps apply from the agent’s next payment.",
     );
+  });
+});
+
+describe("strandAcknowledgement", () => {
+  it("names the count, the amount and the effect", () => {
+    const text = strandAcknowledgement({ ...RETEST, count: 3, amount: usdg("600000") });
+    expect(text).toMatch(/^3 payments \(\$0\.60\) still being settled would no longer fit\./);
+    expect(text).toContain("the provider is not paid for calls it already served");
+    expect(text).toContain("the $0.60 stays in my escrow");
+    expect(text).not.toMatch(/owed/);
+  });
+
+  it("is null when nothing is being settled", () => {
+    expect(strandAcknowledgement({ ...RETEST, count: 0 })).toBeNull();
+    expect(strandAcknowledgement(null)).toBeNull();
   });
 });

@@ -35,6 +35,8 @@ export interface LimitSource {
   used?: Money | null;
   /** E.g. "24 h window", "calendar day (UTC)". */
   note?: string;
+  /** Enforced by a contract (true) rather than checked by Assay's software. */
+  onChain?: boolean;
 }
 
 export interface EffectiveLimitRow {
@@ -48,6 +50,8 @@ export interface ResolvedLimit {
   value: Money | null;
   /** Which source it comes from. */
   source: string | null;
+  /** Whether that source is enforced on chain. */
+  onChain: boolean;
   /** Smallest amount left across sources that report `used`; `null` when none do. */
   left: Money | null;
   leftSource: string | null;
@@ -72,6 +76,7 @@ export function resolveLimit(sources: readonly LimitSource[]): ResolvedLimit {
   return {
     value: best?.value ?? null,
     source: best?.source ?? null,
+    onChain: best?.onChain === true,
     left: left?.money ?? null,
     leftSource: left?.source ?? null,
   };

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseFreshStage } from "@/libs/demo/fresh-account";
 
-import { gasHelp } from "./gas-help";
+import { gasHelp, testTokenHelp } from "./gas-help";
 
 describe("gasHelp", () => {
   it("helps only on EVM test networks, linking a faucet only when the chain names one", () => {
@@ -13,6 +13,16 @@ describe("gasHelp", () => {
     );
     expect(gasHelp({ chainId: "eip155:1", displayName: "Ethereum" })).toBeNull();
     expect(gasHelp({ chainId: "solana:EtWT", displayName: "Solana devnet" })).toBeNull();
+  });
+});
+
+describe("testTokenHelp", () => {
+  it("names the token and the chain's faucet on a test network only", () => {
+    expect(testTokenHelp({ chainId: "eip155:46630", displayName: "Robinhood Chain testnet", settlementAssetSymbol: "USDG" })).toBe(
+      "No USDG? On this test network it has no real value: get some from the Robinhood Chain testnet faucet.",
+    );
+    expect(testTokenHelp({ chainId: "eip155:1", displayName: "Ethereum", settlementAssetSymbol: "USDC" })).toBeNull();
+    expect(testTokenHelp(null)).toBeNull();
   });
 });
 

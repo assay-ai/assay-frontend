@@ -127,7 +127,7 @@ export function budgetPatch(form: BudgetForm, policy: PolicyFields | null, decim
   if (form.clearRefuseAbove && base.requireApprovalAbove) body.requireApprovalAbove = null;
 
   const changed = Object.keys(body).length > 0;
-  body.changeReason = form.reason.trim() || (creating ? "Budget created" : "Budget changed");
+  body.changeReason = form.reason.trim() || (creating ? "Spending limits set" : "Spending limits changed");
   return { ok: true, body, changed };
 }
 

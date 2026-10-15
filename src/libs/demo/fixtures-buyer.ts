@@ -499,6 +499,8 @@ function collect(
   toMs: number,
   groupBy: string,
 ): { groups: Map<string, Bucket>; totals: Bucket } {
+  // A fresh demo account (?fresh=) has spent nothing and been refunded nothing.
+  if (freshStage()) return { groups: new Map(), totals: emptyBucket() };
   const todayMs = utcDayStart(Date.now());
   const first = utcDayStart(fromMs);
   // Bounded so a malformed window cannot walk for ever; no screen asks for more.
@@ -943,7 +945,7 @@ function freshCredentials(agentId: string) {
         id: "cred_fresh",
         agentId,
         name: "My agent",
-        prefix: "x402_live_f00d",
+        prefix: "assay_live_f00d",
         scopes: ["tools:call"],
         lastUsedAt: stage === "call" ? null : minutesAgo(3),
         expiresAt: null,
@@ -971,7 +973,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/holds",
     body: () => ({
-      items: CALLS.filter(inFlight).map((call) => ({
+      items: (freshStage() ? [] : CALLS.filter(inFlight)).map((call) => ({
         id: `hld_${call.intentId.slice(0, 8)}`,
         intentId: call.intentId,
         amount: money(listedPrice(call)),
@@ -991,7 +993,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     body: (_path, query) => {
       const { from, to } = windowOf(query);
       return {
-        items: CALLS.filter((call) => withinWindow(call, from, to)).map(toolCallRow),
+        // A fresh demo account has no calls in its history yet.
+        items: freshStage() ? [] : CALLS.filter((call) => withinWindow(call, from, to)).map(toolCallRow),
         pageInfo: { nextCursor: null, hasMore: false },
       };
     },
@@ -1407,7 +1410,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           maxVoucherAmount: money("2.00"),
           maxPerWindow: money("40.00"),
           spentInWindow: money("15.75"),
-          validUntil: new Date(Date.now() + 26 * 86_400_000).toISOString(),
+          // Five days left, so the demo shows the "permission ends soon" chip and Renew.
+          validUntil: new Date(Date.now() + 5 * 86_400_000 + 3_600_000).toISOString(),
           status: "ACTIVE",
         },
       ],
@@ -1427,8 +1431,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
         id: "cred_demo_new",
         agentId: segment(path, 1),
         name: typeof name === "string" && name.trim() ? name.trim() : "My agent",
-        prefix: "x402_live_d3m0",
-        token: "x402_live_d3m0_demo-key-shown-once-not-a-real-secret",
+        prefix: "assay_live_d3m0",
+        token: "assay_live_d3m0_demo-key-shown-once-not-a-real-secret",
         scopes: ["tools:call"],
         createdAt: new Date().toISOString(),
       };
@@ -1445,7 +1449,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/audit-log",
-    body: () => ({
+    body: () => (freshStage() ? { items: [], pageInfo: { nextCursor: null, hasMore: false } } : {
       items: [
         {
           id: "aud_77a4",
@@ -1544,12 +1548,13 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/notifications/unread-count",
-    body: () => ({ count: 2 }),
+    body: () => ({ count: freshStage() ? 0 : 2 }),
   },
   {
     method: "GET",
     match: "/notifications",
-    body: () => ({
+    // A fresh demo account has had no alerts.
+    body: () => (freshStage() ? { items: [], pageInfo: { nextCursor: null, hasMore: false } } : {
       items: [
         {
           id: "ntf_4c17",
@@ -1566,7 +1571,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           id: "ntf_2fa9",
           event: "spend.threshold_crossed",
           severity: "INFO",
-          title: "This month's spend passed 10% of the monthly cap",
+          title: "This month's spend passed 10% of the monthly spending limit",
           body: "$127.15 charged of a $900.00 cap. This is a notice, not a refusal — a limit is what refuses.",
           subjectType: "spend_policy",
           subjectId: "sp_northwind",

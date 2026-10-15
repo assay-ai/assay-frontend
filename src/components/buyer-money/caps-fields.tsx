@@ -27,7 +27,7 @@ export function CapsFields({
   onChange,
   parsed,
   idPrefix,
-  label = "Caps",
+  label = "Account ceiling",
   unit = "USD",
   who,
 }: {

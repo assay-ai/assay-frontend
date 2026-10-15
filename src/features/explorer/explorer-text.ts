@@ -129,7 +129,9 @@ export function stakeSummary(
   stake: readonly (Money & { chainId: string })[],
   chainName: (chainId: string) => string,
 ): string {
-  if (stake.length === 0) return "Stake not known";
+  // An empty list is "the chain could not be read just now", never "no stake"
+  // and never a doubt about who the provider is (Verified is about identity).
+  if (stake.length === 0) return "Could not be read just now";
   return stake
     .map((entry) => `${formatDecimal(toDecimal(entry), { decimals: 2 })} on ${chainName(entry.chainId)}`)
     .join(" · ");
@@ -236,4 +238,35 @@ export function routingNotes(
     );
   }
   return notes;
+}
+
+/** The Explorer's list state, as it rides in the URL so Back from a tool restores it. */
+export interface ExplorerListState {
+  view: "tools" | "providers";
+  q: string;
+  /** Tools with free calls only. */
+  free: boolean;
+}
+
+export function readExplorerState(params: { get(name: string): string | null }): ExplorerListState {
+  return {
+    view: params.get("view") === "providers" ? "providers" : "tools",
+    q: params.get("q") ?? "",
+    free: params.get("free") === "1",
+  };
+}
+
+/** `/catalogue` with only the non-default parts of the state in its query. */
+export function explorerHref(state: ExplorerListState): string {
+  const params = new URLSearchParams();
+  if (state.view === "providers") params.set("view", "providers");
+  if (state.q.trim()) params.set("q", state.q);
+  if (state.free && state.view === "tools") params.set("free", "1");
+  const query = params.toString();
+  return query ? `/catalogue?${query}` : "/catalogue";
+}
+
+/** Whether a tool has free calls: free outright, or a free tier on some listing. */
+export function hasFreeCalls(mode: string | null | undefined): boolean {
+  return freeTierLabel(mode) !== null;
 }

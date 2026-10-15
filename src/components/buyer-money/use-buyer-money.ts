@@ -120,10 +120,22 @@ export function useWalletBlockerText(state: UseSignerResult, owner?: string | nu
     const timer = window.setTimeout(() => setSlow(true), 10_000);
     return () => window.clearTimeout(timer);
   }, [hydrating]);
+  return walletBlockerText(state, owner, { slow });
+}
+
+/**
+ * The sentence itself, pure. Every branch says what is wrong and what to do
+ * next; "slow" is the wallet still not connected after ten seconds.
+ */
+export function walletBlockerText(
+  state: Pick<UseSignerResult, "status">,
+  owner: string | null | undefined,
+  { slow }: { slow: boolean },
+): string | null {
   if (state.status === "ready") return null;
-  if (hydrating) {
+  if (state.status === "hydrating" || state.status === "chain-unknown") {
     return slow
-      ? "Your wallet is taking a long time to connect. Reload the page if this does not change."
+      ? "Your wallet has not connected yet. Reload the page; if it still does not connect, sign out and sign in again."
       : "Connecting your wallet…";
   }
   if (state.status === "address-not-connected") {
