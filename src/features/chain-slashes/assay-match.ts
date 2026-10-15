@@ -100,3 +100,17 @@ export function assayMatchFor(row: ChainSlashRow, index: AssayCaseIndex | null):
   if (hit) return { kind: "known", proposalId: hit.proposalId };
   return row.status.needsAttention ? { kind: "not-known" } : { kind: "unchecked" };
 }
+
+/**
+ * The rows that are records of Assay case `proposalId` — what the case page's
+ * "Dispute on chain" opens this page with selected (`?case=`). Empty when the
+ * lookup did not answer: a row is never selected on a guess.
+ */
+export function rowsOfCase(
+  rows: readonly ChainSlashRow[],
+  index: AssayCaseIndex | null,
+  proposalId: string,
+): ChainSlashRow[] {
+  if (!index || index.status !== "checked") return [];
+  return rows.filter((row) => index.known.get(row.requestId.toLowerCase())?.proposalId === proposalId);
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { evmChainsFrom, evmRpcUrl, setEvmRpcUrls } from "./chains";
-import { encodeApprove, encodeDepositFor } from "./deposit-transaction";
+import { assertSaneFees, encodeApprove, encodeDepositFor } from "./deposit-transaction";
 
 /*
   Selectors pinned as literals, computed independently of viem
@@ -75,5 +75,20 @@ describe("the chain registry the API fills", () => {
     expect(chain.rpcUrls.default.http).toEqual([
       "https://rpc.testnet.chain.robinhood.com",
     ]);
+  });
+});
+
+/* Frontend review 2026-10-15, F4: the RPC is served by the backend, so its fee answer is bounded. */
+describe("assertSaneFees", () => {
+  const ok = { gasLimit: "120000", maxFeePerGas: "20000000", maxPriorityFeePerGas: "0" };
+
+  it("accepts the fees the pinned chain charges", () => {
+    expect(() => assertSaneFees(ok)).not.toThrow();
+  });
+
+  it("refuses a fee, a gas limit or a tip no transaction here needs", () => {
+    expect(() => assertSaneFees({ ...ok, maxFeePerGas: String(10n ** 15n) })).toThrow(/Nothing was sent/);
+    expect(() => assertSaneFees({ ...ok, gasLimit: "30000000" })).toThrow(/Nothing was sent/);
+    expect(() => assertSaneFees({ ...ok, maxPriorityFeePerGas: "30000000" })).toThrow(/Nothing was sent/);
   });
 });

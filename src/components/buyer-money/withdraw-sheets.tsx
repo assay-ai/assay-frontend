@@ -97,9 +97,11 @@ export function WithdrawSheet({
       run: async ({ report }) => {
         const signer = requireSigner(money.signerState, money.ownerShort);
         report({ stage: "preparing" });
-        const intent = await createEscrowWithdrawIntent({ amount: cancelling ? "0" : parsed.atomic! });
+        const requestedAmount = cancelling ? "0" : parsed.atomic!;
+        const intent = await createEscrowWithdrawIntent({ amount: requestedAmount });
         report({ stage: "wallet" });
-        const result = await runEscrowAction(intent, signer);
+        // Signed only if the payload is this request for this amount.
+        const result = await runEscrowAction(intent, signer, { kind: "REQUEST_WITHDRAW", amount: requestedAmount });
         const hash = result.kind === "relayed" ? result.relayed.transactionHash : result.signature;
         if (result.kind === "relayed") queryClient.setQueryData(["escrow", null], result.relayed.escrow);
         void queryClient.invalidateQueries({ queryKey: ["escrow"] });
@@ -218,7 +220,8 @@ export function ClaimSheet({ open, onOpenChange }: { open: boolean; onOpenChange
           const note = withdrawGasGrantNote(intent.gasGrant);
           setGrantText(note?.text ?? null);
           report({ stage: "wallet" });
-          const result = await runEscrowAction(intent, signer);
+          // Signed only if it is the claim (`withdraw()`) on the pinned escrow.
+          const result = await runEscrowAction(intent, signer, { kind: "WITHDRAW" });
           hash = result.kind === "relayed" ? result.relayed.transactionHash : result.signature;
           const explorerUrl = money.chain ? explorerTxUrl(money.chain, hash) : undefined;
           report({ stage: "submitted", data: hash, explorerUrl });

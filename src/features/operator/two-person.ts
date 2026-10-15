@@ -8,7 +8,8 @@ import { approvalNeeds } from "./approvals";
  *
  * Called by one operator, a two-person route (suspend from `UPHELD` or
  * `AWAITING_SECOND`, sweep, compensated, unblock, add operator, raise an
- * operator's roles or limit) runs nothing: it answers `202 { approvalId }` and
+ * operator's roles or limit, remove or demote an `OPS_ADMIN`, the arbiter's
+ * on-chain block) runs nothing: it answers `202 { approvalId }` and
  * the action waits in the approvals inbox for a different operator. Only a
  * `200` carries the action's result. A screen that read a 202 body as the
  * result would report a suspension, a sweep or a lifted block that has not
@@ -98,5 +99,5 @@ export function sentForApproval(
 
 /** The one sentence every two-person form shows on a 202. */
 export function queuedMessage(approval: Pick<ApprovalQueued, "approvalId">): string {
-  return `Sent for approval (id ${approval.approvalId}). Nothing has happened yet: a second operator approves it in the approvals inbox.`;
+  return `Sent for approval (id ${approval.approvalId}), waiting for a second operator's approval. Nothing has happened yet: a second operator approves it in the approvals inbox.`;
 }

@@ -13,6 +13,7 @@ import { StatusChip, type StatusChipKey } from "@/components/patterns/status-chi
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { OperatorApproval, OperatorIdentity } from "@/interfaces/operator";
+import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
 import { approveApproval, rejectApproval } from "@/services/operator.service";
 import { cn } from "@/utils";
@@ -30,6 +31,7 @@ import {
   type ApprovalContext,
   type ApprovalOutcomeLine,
 } from "./approvals";
+import { ContractCallAction } from "./contract-call-action";
 import { Deadline } from "./deadline";
 import { ResultCard } from "./result-card";
 import { approvalHref } from "./two-person";
@@ -74,9 +76,43 @@ export interface ApprovalResult {
   title: string;
   next?: string;
   activityHref?: string | null;
+  /** An approved on-chain block (A-11): its unsigned call, which the arbiter's wallet still signs. */
+  chainBlock?: ApprovedChainBlock | null;
 }
 
-type Outcome = { kind: "approved" | "rejected" | "withdrawn"; text: string; next?: string };
+/** The approved arbiter block's unsigned call and the address the approver approved. */
+export interface ApprovedChainBlock {
+  call: SlashContractCall;
+  account: string;
+}
+
+type Outcome = { kind: "approved" | "rejected" | "withdrawn"; text: string; next?: string; chainBlock?: ApprovedChainBlock | null };
+
+/** The unsigned `setBlocked` an approved `arbiter.block` answers with, or null for any other result. */
+export function approvedChainBlockOf(approval: Pick<OperatorApproval, "action" | "payload">, result: unknown): ApprovedChainBlock | null {
+  if (approval.action !== "arbiter.block") return null;
+  const account = approval.payload.account;
+  const call = result as Partial<SlashContractCall> | undefined;
+  if (typeof account !== "string" || !call || typeof call.to !== "string" || typeof call.data !== "string") return null;
+  return { call: call as SlashContractCall, account };
+}
+
+/**
+ * Signs the approved block (A-11) where the approval ran: the calldata must be
+ * `setBlocked(<the approved address>, true)` on the pinned config contract.
+ */
+export function ApprovedChainBlockAction({ block }: { block: ApprovedChainBlock }) {
+  return (
+    <ContractCallAction
+      call={block.call}
+      expected={{ contract: "config", functionName: "setBlocked", args: [block.account, true] }}
+      signLabel="Sign and send the on-chain block"
+      successTitle="Blocked on chain"
+      successDescription="The contracts refuse the wallet once this lands. Only the admin can lift it."
+      afterExport="Open the file in the arbiter's multi-signer wallet and sign it there. It is also listed on Arbiter until it lands."
+    />
+  );
+}
 
 const NEXT: Readonly<Record<string, string>> = {
   "account.unblock": "The account can use Assay again within seconds.",
@@ -84,6 +120,7 @@ const NEXT: Readonly<Record<string, string>> = {
   "operator.change": "Their new access applies from their next request.",
   "slash.suspend": "If the record stands on chain, its cancel still needs the arbiter's signature: see the penalty.",
   "slash.sweep": "Matching cases are decided in the background.",
+  "arbiter.block": "Nothing is blocked on chain until the arbiter's wallet signs it: here, or on Arbiter.",
 };
 
 const OUTCOME_ICON: Readonly<Record<ApprovalOutcomeLine["kind"], ConfirmOutcome["icon"]>> = {
@@ -164,6 +201,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
         title: next.text,
         next: next.next,
         activityHref: next.kind === "approved" ? approvalActivityHref(approval) : null,
+        chainBlock: next.chainBlock ?? null,
       });
     } else {
       setOutcome(next);
@@ -172,7 +210,12 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
   };
   const onApprove = async () => {
     const decision = await approveApproval(approval.id);
-    settle({ kind: "approved", text: approvedResultSentence(approval.action, decision.result, target.label), next: NEXT[approval.action] });
+    settle({
+      kind: "approved",
+      text: approvedResultSentence(approval.action, decision.result, target.label),
+      next: NEXT[approval.action],
+      chainBlock: approvedChainBlockOf(approval, decision.result),
+    });
   };
   const onReject = async () => {
     await rejectApproval(approval.id);
@@ -332,6 +375,11 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
           next={outcome.next}
           activityHref={outcome.kind === "approved" ? approvalActivityHref(approval) : null}
         />
+      ) : null}
+      {outcome?.chainBlock ? (
+        <div className="mt-2">
+          <ApprovedChainBlockAction block={outcome.chainBlock} />
+        </div>
       ) : null}
 
       <ConfirmSheet

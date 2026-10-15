@@ -47,6 +47,7 @@ import type {
 } from "@/interfaces/chain-transaction";
 import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import type { Signer } from "@/hooks/useSigner";
+import { assertContractCall, assertTypedData, type ExpectedCall } from "@/libs/chains/evm/signing-guard";
 import { submitEscrowLimits, submitEscrowWithdrawRequest } from "@/services/escrow.service";
 import type { SignableIntent } from "./run-escrow-intent";
 import { runEscrowIntent } from "./run-escrow-intent";
@@ -84,6 +85,58 @@ export interface RelayedSubmitters {
 
 /** Refusals this module raises before anything reaches a wallet or the network. */
 export const RELAYED_SUBMISSION_REFUSED = "RELAYED_SUBMISSION_REFUSED";
+
+/**
+ * What the person chose on the screen, in atomic units. The payload is
+ * signed only when it says exactly this (frontend review 2026-10-15, F1): the
+ * API builds it, and a compromised API could otherwise put a delegate grant or
+ * another amount behind the "request withdrawal" button.
+ */
+export type EscrowExpectation =
+  | { readonly kind: "SET_LIMITS"; readonly maxVoucherAmount: string; readonly maxPerWindow: string }
+  | { readonly kind: "REQUEST_WITHDRAW"; readonly amount: string }
+  | { readonly kind: "WITHDRAW" };
+
+const PRIMARY_TYPE: Record<RelayedIntentKind, string> = {
+  SET_LIMITS: "SetLimits",
+  REQUEST_WITHDRAW: "RequestWithdraw",
+};
+
+function chosenFields(expected: EscrowExpectation): Record<string, string> {
+  switch (expected.kind) {
+    case "SET_LIMITS":
+      return { maxVoucherAmount: expected.maxVoucherAmount, maxPerWindow: expected.maxPerWindow };
+    case "REQUEST_WITHDRAW":
+      return { amount: expected.amount };
+    case "WITHDRAW":
+      return {};
+  }
+}
+
+/** The one escrow call each kind may send, with the chosen arguments. */
+function expectedEscrowCall(expected: EscrowExpectation): ExpectedCall {
+  switch (expected.kind) {
+    case "SET_LIMITS":
+      return {
+        contract: "escrow",
+        functionName: "setLimits",
+        args: [expected.maxVoucherAmount, expected.maxPerWindow],
+      };
+    case "REQUEST_WITHDRAW":
+      return { contract: "escrow", functionName: "requestWithdraw", args: [expected.amount] };
+    case "WITHDRAW":
+      return { contract: "escrow", functionName: "withdraw", args: [] };
+  }
+}
+
+function assertKind(intent: { kind: string }, expected: EscrowExpectation): void {
+  if (intent.kind !== expected.kind) {
+    throw new Error(
+      `${RELAYED_SUBMISSION_REFUSED}: this screen asked for ${expected.kind} and the payload is ${intent.kind}. ` +
+        `Nothing was signed.`,
+    );
+  }
+}
 
 /**
  * Whether two addresses name the same account on this chain.
@@ -150,6 +203,7 @@ export function relayedSubmitBody(
 export async function submitRelayedEscrowIntent(
   intent: { kind: string; transaction: UnsignedChainTransaction },
   signer: Signer,
+  expected: EscrowExpectation,
   submitters: RelayedSubmitters,
 ): Promise<RelayedEscrowIntent> {
   const transaction = intent.transaction;
@@ -201,6 +255,17 @@ export async function submitRelayedEscrowIntent(
     );
   }
 
+  assertKind(intent, expected);
+  assertTypedData(
+    transaction,
+    {
+      chainId: signer.chainId,
+      primaryTypes: [PRIMARY_TYPE[intent.kind as RelayedIntentKind]],
+      message: { buyer: signer.address, ...chosenFields(expected) },
+    },
+    RELAYED_SUBMISSION_REFUSED,
+  );
+
   const signature = await signer.signTypedData(transaction);
   return submit(relayedSubmitBody(transaction, signature));
 }
@@ -221,13 +286,19 @@ export async function submitRelayedEscrowIntent(
 export async function runEscrowAction(
   intent: SignableIntent & { kind: string },
   signer: Signer,
+  expected: EscrowExpectation,
   submitters: RelayedSubmitters = ESCROW_SUBMITTERS,
 ): Promise<EscrowActionResult> {
   if (isTypedDataRequest(intent.transaction)) {
     return {
       kind: "relayed",
-      relayed: await submitRelayedEscrowIntent(intent, signer, submitters),
+      relayed: await submitRelayedEscrowIntent(intent, signer, expected, submitters),
     };
+  }
+  assertKind(intent, expected);
+  if (intent.transaction.namespace === "eip155") {
+    // The escrow call the person chose, to the pinned escrow, and nothing else.
+    assertContractCall(intent.transaction, expectedEscrowCall(expected), RELAYED_SUBMISSION_REFUSED);
   }
   return { kind: "broadcast", signature: (await runEscrowIntent(intent, signer)).signature };
 }

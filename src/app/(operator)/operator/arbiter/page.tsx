@@ -54,11 +54,13 @@ import {
   toggleArbiterSelection,
   validateRulingForm,
 } from "@/features/operator/arbiter";
+import { ApprovedArbiterBlocks } from "@/features/operator/approved-arbiter-blocks";
 import { BLOCK_NOTE_MAX, mayBlock } from "@/features/operator/blocks";
 import { disputeUrgency, sortDisputesByDaysLeft } from "@/features/operator/inbox";
 import { splitSharesText } from "@/features/operator/penalty-money";
 import { ResultCard } from "@/features/operator/result-card";
 import { useRulingFromLink } from "@/features/operator/ruling-link";
+import { SupersededRecords } from "@/features/operator/superseded-records";
 import { checkAction } from "@/features/operator/roles";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
@@ -71,6 +73,7 @@ import type { Money } from "@/interfaces/api";
 import type { ArbiterDispute, ArbiterRuling, ArbiterTerms, ChainStateHealth } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { sameEvmAddress } from "@/libs/chains/evm/contract-call";
+import { assertContractCall, type ExpectedCall } from "@/libs/chains/evm/signing-guard";
 import { ROBINHOOD_TESTNET_STAKE, explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { routes } from "@/libs/routes";
 import { createArbiterRulingIntent, getArbiterTerms, getPlatformHealth, listArbiterDisputes } from "@/services/operator.service";
@@ -267,6 +270,31 @@ function ArbiterScreen() {
         </ul>
       )}
 
+      {/* Records of an earlier proposal that landed on chain late (review R2-6): executing one would charge the same calls twice. */}
+      <section aria-labelledby="superseded-records" className="flex w-full flex-col gap-2">
+        <h2 id="superseded-records" className="text-label-13 text-02">
+          Superseded records
+        </h2>
+        <p className="text-body-xs text-03">
+          An earlier proposal of a case that landed on chain late. It covers the same calls as the case&rsquo;s current
+          penalty, so the arbiter cancels it before anyone can execute it.
+        </p>
+        <SupersededRecords canCancel={canRule} onSent={refresh} />
+      </section>
+
+      {/* Approved on-chain blocks (A-11) the arbiter's wallet may still have to sign (frontend review N5). */}
+      {canBlock ? (
+        <section aria-labelledby="approved-blocks" className="flex w-full flex-col gap-2">
+          <h2 id="approved-blocks" className="text-label-13 text-02">
+            Approved on-chain blocks
+          </h2>
+          <p className="text-body-xs text-03">
+            Approved in the inbox by a second operator. The arbiter&rsquo;s wallet signs each one here.
+          </p>
+          <ApprovedArbiterBlocks onSent={refresh} />
+        </section>
+      ) : null}
+
       {/* The selection's actions: a bar fixed to the bottom of the screen (above
           the phone's tab bar), out of the flow, so selecting never moves a row.
           The spacer keeps the last row scrollable above it. */}
@@ -321,6 +349,7 @@ function ArbiterScreen() {
           }}
         />
       ) : null}
+
     </>
   );
 }
@@ -659,15 +688,28 @@ function RulingSheet({
     otherError: validated.ok ? null : (Object.values(validated.errors)[0] ?? "Check the form."),
   });
 
+  // The ruling the arbiter chose here, on exactly the selected records: the
+  // calldata is checked against it before it is signed or downloaded (F1).
+  const expected: ExpectedCall | null = validated.ok
+    ? {
+        contract: "stake",
+        functionName: kind === "UPHOLD" ? "upholdSlashBatch" : "cancelSlashBatch",
+        args: [validated.body.requestIds],
+      }
+    : null;
+
   const prepare = async () => {
-    if (!validated.ok) throw new Error(notReady ?? "Check the form.");
+    if (!validated.ok || !expected) throw new Error(notReady ?? "Check the form.");
+    let call;
     try {
-      return await createArbiterRulingIntent(validated.body);
+      call = await createArbiterRulingIntent(validated.body);
     } catch (error) {
       const refused = refusalsOf(error);
       if (refused && refused.length > 0) onRefused(refusalsById(refused, "arbiter"));
       throw error;
     }
+    assertContractCall(call, expected);
+    return { call, expected };
   };
 
   const totalMoney = sumMoney(rows);
@@ -693,9 +735,9 @@ function RulingSheet({
       run: async ({ report }) => {
         if (signerState.status !== "ready") throw new Error("Connect the arbiter's wallet to sign here.");
         report({ stage: "preparing" });
-        const call = await prepare();
+        const { call, expected: chosen } = await prepare();
         report({ stage: "wallet" });
-        const hash = await sendSlashContractCall(call, signerState.signer);
+        const hash = await sendSlashContractCall(call, signerState.signer, chosen);
         const deployment = stakeDeploymentFor(call.chainId);
         const explorerUrl = deployment ? (explorerTxLink(deployment, hash) ?? undefined) : undefined;
         report({ stage: "submitted", data: hash, explorerUrl });
@@ -787,7 +829,7 @@ function RulingSheet({
             functionName={kind === "UPHOLD" ? "upholdSlashBatch" : "cancelSlashBatch"}
             chainId={chainId}
             prepare={async () => {
-              const call = await prepare();
+              const { call } = await prepare();
               return [{ to: call.to, value: call.value, data: call.data }];
             }}
             afterExport={`Downloaded. In the arbiter's multi-signer wallet (Safe), open Transaction Builder, drop the file in and sign. ${count === 1 ? "The penalty moves" : "The penalties move"} once it lands.`}

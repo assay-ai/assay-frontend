@@ -10,7 +10,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { replaceUrlQuery } from "@/features/operator/url-params";
-import { ApprovalItem, RowSection, type ApprovalResult } from "@/features/operator/approval-item";
+import { ApprovalItem, ApprovedChainBlockAction, RowSection, type ApprovalResult } from "@/features/operator/approval-item";
 import { ResultCard } from "@/features/operator/result-card";
 import { approvalErrorMessage } from "@/features/operator/approvals";
 import { allWaitingLabel, groupApprovals } from "@/features/operator/inbox";
@@ -161,13 +161,16 @@ function ApprovalsInbox() {
         ) : (
           <>
             {results.map((result) => (
-              <ResultCard
-                key={result.id}
-                title={result.title}
-                next={result.next}
-                activityHref={result.activityHref}
-                onDismiss={() => setResults((list) => list.filter((r) => r.id !== result.id))}
-              />
+              <React.Fragment key={result.id}>
+                <ResultCard
+                  title={result.title}
+                  next={result.next}
+                  activityHref={result.activityHref}
+                  onDismiss={() => setResults((list) => list.filter((r) => r.id !== result.id))}
+                />
+                {/* A-11: the approval's result is the arbiter's unsigned setBlocked; its wallet signs here. */}
+                {result.chainBlock ? <ApprovedChainBlockAction block={result.chainBlock} /> : null}
+              </React.Fragment>
             ))}
 
             {highlightGone && !results.some((r) => r.id === highlight) ? (

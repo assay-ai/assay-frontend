@@ -7,7 +7,7 @@ import * as React from "react";
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { PageState } from "@/components/patterns/page-state";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ContractCallAction } from "@/features/operator/contract-call-action";
+import { ConfirmedCancelCall } from "@/features/operator/confirmed-cancel-call";
 import { operatorErrorSentence } from "@/features/operator/operator-errors";
 import type { CancelIntent } from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
@@ -91,7 +91,12 @@ export function CancelSheet({
               bare
             />
           ) : intent && intent.to ? (
-            <ContractCallAction
+            /*
+              The case brief carries no on-chain request id to compare the call
+              with (frontend review N3), so the id decoded from the calldata is
+              shown and the operator ticks it; only that id is then signed.
+            */
+            <ConfirmedCancelCall
               call={evmCancelCall(intent, penaltyAsset)}
               signLabel="Sign and send the cancel"
               successTitle="Cancel sent"

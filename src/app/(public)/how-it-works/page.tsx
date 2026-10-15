@@ -67,7 +67,7 @@ const FLOW: FlowStep[] = [
     n: "1",
     icon: Terminal,
     title: "Your agent calls a tool",
-    detail: "Through MCP or REST. It sees the price before it calls.",
+    detail: "Through MCP or REST. It sees the most a call can cost before it calls.",
     note: "$0.0100 listed",
   },
   {
@@ -94,8 +94,8 @@ const FLOW: FlowStep[] = [
     title: "Money moves, or it does not",
     detail: (
       <>
-        Passed: the hold is charged. Failed: the hold is released and the amount is{" "}
-        <Term k="not-charged">not charged</Term>.
+        Passed: you pay the price of the provider that served, never more than the hold, and the rest is
+        released. Failed: the hold is released and the amount is <Term k="not-charged">not charged</Term>.
       </>
     ),
     note: "charged $0.0100  ·  or  ·  $0.0000",

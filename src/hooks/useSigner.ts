@@ -607,6 +607,19 @@ export function useSigner(options: { chainId: string | null; address?: string })
 
             signTypedData: async (request) => {
               assertChainMatches(boundChainId, request);
+              /*
+                The wrapper's `chainId` is not what is signed; the domain's is.
+                An embedded wallet never switches chain, so without this it
+                would sign a domain for any chain the payload names (frontend
+                review 2026-10-15, F1).
+              */
+              const boundReference = boundChainId.slice(boundChainId.indexOf(":") + 1);
+              if (String(request.domain.chainId) !== boundReference) {
+                throw new Error(
+                  `useSigner: this signer is bound to ${JSON.stringify(boundChainId)}, but the EIP-712 ` +
+                    `domain names chain ${JSON.stringify(String(request.domain.chainId))}. Nothing was signed.`,
+                );
+              }
               if (!isEmbeddedWallet(wallet)) {
                 /*
                   MetaMask refuses `eth_signTypedData_v4` when the domain's

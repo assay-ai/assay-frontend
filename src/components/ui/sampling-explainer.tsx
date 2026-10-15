@@ -43,7 +43,7 @@ export const SamplingExplainer = React.forwardRef<HTMLDivElement, SamplingExplai
     >
       <p className="w-full text-body-13 text-02">{body}</p>
       {tail ? <p className="w-full text-body-13 text-03">{tail}</p> : null}
-      <p className="w-full text-body-13 text-03">{rate}</p>
+      {rate ? <p className="w-full text-body-13 text-03">{rate}</p> : null}
     </div>
   )
 );

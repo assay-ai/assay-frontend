@@ -16,7 +16,7 @@ import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { openPenaltyHold, openPenaltyPhrase } from "@/features/provider-penalties/model";
 import { usePenalties } from "@/features/provider-penalties/use-penalties";
 import { stakeActionChain, unreadableChains } from "@/features/provider-stake/chain-stake";
-import { stakeReason } from "@/features/provider-stake/derivation";
+import { missingRequirementNote, stakeReason } from "@/features/provider-stake/derivation";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import { WithdrawSheet } from "@/features/provider-stake/withdraw-sheet";
@@ -69,11 +69,14 @@ function rowsFor(
     if (binding.pricingMode === "FREE") {
       return { id: binding.id, name, required: "$0.00", reason: "free tools need no stake", grace: null };
     }
+    // A paid tool missing from `requirement[]`: no figure is computed for it, and
+    // "$0.00" would read as "needs no stake". An ACTIVE one means the read is
+    // older than the binding's state (BUG-R16-V3-01), never "paused".
     return {
       id: binding.id,
       name,
-      required: "$0.00",
-      reason: binding.status === "DRAFT" ? "not live yet — needs stake when you publish it" : "paused — needs stake again when it resumes",
+      required: "—",
+      reason: missingRequirementNote(binding.status),
       grace: null,
     };
   });

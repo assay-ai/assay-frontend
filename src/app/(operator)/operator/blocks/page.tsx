@@ -40,7 +40,7 @@ import { WhatHappens } from "@/features/operator/what-happens";
 import { WhyNot } from "@/features/operator/why-not";
 import { dropUrlParams } from "@/features/operator/url-params";
 import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
-import type { AccountBlock, BlockSubjectKind, OperatorApproval } from "@/interfaces/operator";
+import type { AccountBlock, ApprovalQueued, BlockSubjectKind, OperatorApproval } from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
 import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
@@ -389,8 +389,12 @@ function BlockSheet({
   onDone: (node: React.ReactNode) => void;
 }) {
   const queryClient = useQueryClient();
+  const me = useOperatorSession();
   const providers = useProviderNames();
   const directory = useOperatorDirectory();
+  // The on-chain block (A-11) is two-person: a first request is queued for an approver.
+  const chainNeeds = approverPhrase("A-11", me.roles);
+  const chainApprovers = directory.isPending ? undefined : eligibleApprovers("A-11", directory.operators, me.id);
   const health = useQuery({ queryKey: ["operator", "health"], queryFn: getPlatformHealth, enabled: open && canChain, retry: 0 });
   const [target, setTarget] = React.useState<string | null>(null);
   const [targetLabel, setTargetLabel] = React.useState<string | undefined>(undefined);
@@ -438,18 +442,21 @@ function BlockSheet({
       });
       if (!validated.ok) throw new Error(validated.errors.subject ?? "Check the form.");
       const created = await createAccountBlock(validated.body);
-      let call: SlashContractCall | null = null;
+      let call: { call: SlashContractCall; account: string } | null = null;
+      let queued: ApprovalQueued | null = null;
       let chainError: unknown = null;
       if (onChain && evm && chainId) {
         try {
-          call = await createArbiterBlockIntent({ chainId, account: evm, reasonCode: reason, note: note.trim(), ...(ticket.trim() ? { ticketRef: ticket.trim() } : {}) });
+          const answer = await createArbiterBlockIntent({ chainId, account: evm, reasonCode: reason, note: note.trim(), ...(ticket.trim() ? { ticketRef: ticket.trim() } : {}) });
+          if (answer.kind === "queued") queued = answer.approval;
+          else call = { call: answer.result, account: evm };
         } catch (error) {
           chainError = error;
         }
       }
-      return { created, call, chainError };
+      return { created, call, queued, chainError };
     },
-    onSuccess: ({ created, call, chainError }) => {
+    onSuccess: ({ created, call, queued, chainError }) => {
       void queryClient.invalidateQueries({ queryKey: ["operator", "blocks"] });
       const name = blockSubjectLabel(created, providers.lookup);
       onDone(
@@ -459,18 +466,25 @@ function BlockSheet({
             next={
               call
                 ? "It applies within seconds. Now have the arbiter sign the on-chain block below."
-                : chainError
+                : queued
+                  ? "It applies within seconds. The on-chain block went to a second operator for approval, below."
+                  : chainError
                   ? `It applies within seconds. The on-chain block could not be prepared: ${arbiterErrorMessage(chainError, "block").replace(/\s*\([A-Z_]+\)$/, "")} Use "Block on chain" on its row to try again.`
                   : "It applies within seconds on every instance. Lifting it needs two people."
             }
             activityHref={`/operator/override-log?targetId=${encodeURIComponent(created.id)}`}
             onDismiss={() => onDone(null)}
           />
+          {queued ? (
+            <QueuedChainBlock approval={queued} needs={chainNeeds} approvers={chainApprovers} onDismiss={() => onDone(null)} />
+          ) : null}
           {call ? (
             <section className="flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 p-4">
               <p className="text-label-13 text-01">Also block on chain</p>
               <ContractCallAction
-                call={call}
+                call={call.call}
+                // The wallet picked on this screen, never the server's label.
+                expected={{ contract: "config", functionName: "setBlocked", args: [call.account, true] }}
                 signLabel="Sign and send the on-chain block"
                 successTitle="Blocked on chain"
                 successDescription="The contracts refuse the wallet once this lands. Only the admin can lift it."
@@ -632,7 +646,38 @@ function BlockSheet({
 
 // ── On-chain block of an existing wallet block (A-11) ──────────────────────
 
+/** An on-chain block request (A-11) queued for a second operator: who approves it, and that nothing is blocked on chain yet. */
+function QueuedChainBlock({
+  approval,
+  needs,
+  approvers,
+  onDismiss,
+}: {
+  approval: ApprovalQueued;
+  needs: string;
+  approvers: string[] | undefined;
+  onDismiss?: () => void;
+}) {
+  const sent = sentForApproval("The on-chain block", approvers, needs, approval.expiresAt);
+  return (
+    <div className="flex w-full flex-col gap-2">
+      <ResultCard
+        tone="queued"
+        title={sent.title}
+        next={`${sent.next} Once approved, the approver gets the unsigned call for the arbiter's wallet to sign; it is also listed on Arbiter.`}
+        link={{ label: "Open the request", href: approvalHref(approval.approvalId) }}
+        onDismiss={onDismiss}
+      />
+      <ApprovalFooter needs={needs} approvers={approvers} link={approvalHref(approval.approvalId)} expiresAt={approval.expiresAt} />
+    </div>
+  );
+}
+
 function ChainBlockSheet({ block, label, onClose }: { block: AccountBlock | null; label: string; onClose: () => void }) {
+  const me = useOperatorSession();
+  const directory = useOperatorDirectory();
+  const needs = approverPhrase("A-11", me.roles);
+  const approvers = directory.isPending ? undefined : eligibleApprovers("A-11", directory.operators, me.id);
   const health = useQuery({ queryKey: ["operator", "health"], queryFn: getPlatformHealth, enabled: block !== null, retry: 0 });
   const chainId = health.data?.chainState?.[0]?.chainId ?? ROBINHOOD_TESTNET_STAKE.chainId;
   const build = useMutation({
@@ -685,9 +730,13 @@ function ChainBlockSheet({ block, label, onClose }: { block: AccountBlock | null
               code={build.error instanceof ApiError ? build.error.code : null}
               bare
             />
-          ) : build.data ? (
+          ) : build.data?.kind === "queued" ? (
+            <QueuedChainBlock approval={build.data.approval} needs={needs} approvers={approvers} />
+          ) : build.data && block ? (
             <ContractCallAction
-              call={build.data}
+              call={build.data.result}
+              // The blocked wallet itself, never the server's label.
+              expected={{ contract: "config", functionName: "setBlocked", args: [evmAddressOf(block.subject)!, true] }}
               signLabel="Sign and send the on-chain block"
               successTitle="Blocked on chain"
               successDescription="The contracts refuse the wallet once this lands."

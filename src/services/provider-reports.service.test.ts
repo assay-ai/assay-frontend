@@ -104,3 +104,13 @@ describe("providerEarningAssets — whether to offer the asset selector", () => 
     expect(await providerEarningAssets()).toEqual([]);
   });
 });
+
+// BUG-R16-V1-02: the fallback name disagreed with the API's and kept the colons.
+describe("callsCsvFilename", () => {
+  it("matches the API's assay-calls-<from>_<to>.csv, colons replaced", async () => {
+    const { callsCsvFilename } = await load();
+    expect(callsCsvFilename("2026-10-01T00:00:00.000Z", "2026-10-16T00:00:00.000Z")).toBe(
+      "assay-calls-2026-10-01T00-00-00.000Z_2026-10-16T00-00-00.000Z.csv",
+    );
+  });
+});

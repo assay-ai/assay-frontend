@@ -293,7 +293,18 @@ export function samplingSubline(receipt: Receipt): string | null {
 export function samplingExplainerCopy(
   receipt: Receipt,
   listed: string,
-): { body?: string; tail?: string } {
+): { body?: string; tail?: string; rate?: string } {
+  // The tool declares no relevance judgement at all: the stage reads "does not
+  // apply", and a sampling rate beside it (the backend still derives one from
+  // the price) would describe a check that never runs (BUG-R16-B1-02).
+  const semantic = receipt.stages?.find((s) => s.stage === "SEMANTIC");
+  if (semantic?.status === "NOT_APPLICABLE") {
+    return {
+      body: "This tool does not declare a relevance judgement, so no call to it is judged for relevance and nothing on this receipt is sampled. The other checks above are what decided this call.",
+      tail: "",
+      rate: "",
+    };
+  }
   const rate = receipt.sampling.rate;
   if (typeof rate === "number" && rate >= 1) {
     return {

@@ -102,6 +102,8 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
         const result = await runEscrowAction(
           intent,
           signer,
+          // Signed only if the payload carries exactly the ceiling chosen here.
+          { kind: "SET_LIMITS", maxVoucherAmount: signed.maxVoucherAmount, maxPerWindow: signed.maxPerWindow },
           atRisk
             ? {
                 ...ESCROW_SUBMITTERS,

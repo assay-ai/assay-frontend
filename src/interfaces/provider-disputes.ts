@@ -146,6 +146,21 @@ export interface FileSlashDisputeBody {
 
 export type SlashProposalRunningClock = "PROVIDER" | "PLATFORM" | "NONE";
 
+/** `OnChainDisputeState` (assay-backend `slash/domain/on-chain-dispute.ts`). */
+export type OnChainDisputeState =
+  | "PENDING"
+  | "DISPUTED"
+  | "UPHELD"
+  | "CANCELLED"
+  | "EXECUTED"
+  | "EXPIRED"
+  /** Never executed, then expired: nobody ruled for the provider in the end, nothing taken. */
+  | "LAPSED"
+  /** Review R2-3: some records executed, the others were cancelled or expired (nothing taken for them). */
+  | "PARTIALLY_EXECUTED"
+  /** Review R2-8: cancelled or expired for a reason never recorded; nothing taken. */
+  | "RELEASED";
+
 /**
  * Both sides' clocks, together — `SlashProposalClocksDto`. the case timeline's subtitle
  * is a promise about exactly this shape: "both clocks are visible, including
@@ -156,9 +171,9 @@ export interface SlashProposalClocks {
   /** Null until a notification channel confirms delivery. */
   notifiedAt: string | null;
   acknowledgedAt: string | null;
-  /** The provider's deadline to object. Null until delivery is confirmed. */
+  /** The provider's deadline to object in the app (Solana only). Null on EVM. */
   respondByAt: string | null;
-  /** OUR deadline to decide, set once a dispute is filed. Null before that. */
+  /** OUR deadline to decide an in-app objection (Solana only). Null on EVM. */
   platformDecisionDueAt: string | null;
   /** Nothing executes before this, even on total inaction. */
   earliestExecutionAt: string;
@@ -196,6 +211,25 @@ export interface SlashProposalClocks {
   chainDisputedAt?: string | null;
   /** How many of the case's current parts are `Disputed` on chain. `undefined` on older backends. */
   chainDisputedParts?: number;
+  /**
+   * True on EVM: the provider's dispute is `disputeSlash` from its own stake
+   * wallet, the arbiter rules on chain, and the in-app objection is refused.
+   * False on Solana, which keeps the in-app objection. `undefined` on older
+   * backends, read as on chain (the console's stake is on EVM).
+   */
+  disputeOnChain?: boolean;
+  /** The state of the case's records, derived per record. Null off EVM or before a record stands. */
+  chainState?: OnChainDisputeState | null;
+  /**
+   * The deadline to dispute on chain: the earliest `executableAt` of a record
+   * still Pending and never disputed, whatever its siblings or the case status
+   * say. Null when no record can be disputed.
+   */
+  disputeBy?: string | null;
+  /** Review R2-3: how many on-chain records (current parts) the case has. `undefined` on older backends. */
+  chainRecords?: number;
+  /** Of those, how many were cancelled or expired on chain with nothing taken. */
+  cancelledRecords?: number;
   secondsRemaining: number | null;
   runningClock: SlashProposalRunningClock;
 }

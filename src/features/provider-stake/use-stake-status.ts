@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 
 import type { Money, ProviderStake } from "@/interfaces";
-import { getProviderStake } from "@/services/provider-stake.service";
+import { revalidateProviderStake } from "@/services/provider-stake.service";
 import { toDecimal } from "@/utils/money";
 
 import { requirementChain, stakeActionChain } from "./chain-stake";
@@ -91,6 +91,8 @@ export function stakeStatusOf(stake: ProviderStake | undefined): StakeStatus {
 export const PROVIDER_STAKE_KEY = ["provider", "stake"] as const;
 
 export function useStakeStatus() {
-  const query = useQuery({ queryKey: PROVIDER_STAKE_KEY, queryFn: getProviderStake, retry: 0 });
+  // Revalidated past the browser's HTTP cache: a body from before a binding was
+  // resumed left an ACTIVE binding out of the requirement table (BUG-R16-V3-01).
+  const query = useQuery({ queryKey: PROVIDER_STAKE_KEY, queryFn: revalidateProviderStake, retry: 0 });
   return { ...stakeStatusOf(query.data), isLoading: query.isLoading, isError: query.isError, stake: query.data ?? null, refetch: query.refetch };
 }

@@ -22,7 +22,13 @@ export interface WithdrawableLine {
 export function withdrawableByAsset(rows: readonly FullBalance[]): WithdrawableLine[] {
   const lines = new Map<string, WithdrawableLine>();
   for (const row of rows) {
-    const value = row.withdrawable ?? (row.chainReadable === false ? null : row.available);
+    /*
+      The same three states as Funding's Withdrawable row (`chainFigure`): an
+      unreadable chain (`chainReadable !== true`) is unknown, never the
+      ledger's `available` printed as if the chain had confirmed it; a read
+      chain with no escrow yet is zero.
+    */
+    const value = row.chainReadable === true ? (row.withdrawable ?? { amount: "0", asset: row.asset, decimals: row.decimals }) : null;
     const prev = lines.get(row.asset);
     const amount = BigInt(value?.amount ?? "0");
     if (prev) {

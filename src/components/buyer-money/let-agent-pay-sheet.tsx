@@ -158,7 +158,8 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
         };
         const intent = await createEscrowLimitsIntent(escrowCaps);
         report({ stage: "wallet" });
-        const result = await runEscrowAction(intent, signer);
+        // Signed only if the payload carries exactly these caps.
+        const result = await runEscrowAction(intent, signer, { kind: "SET_LIMITS", ...escrowCaps });
         await applyLimitsSubmitted(queryClient, null, escrowCaps, result.kind === "relayed" ? result.relayed.escrow : null);
         const hash = result.kind === "relayed" ? result.relayed.transactionHash : result.signature;
         return { explorerUrl: money.chain ? explorerTxUrl(money.chain, hash) : undefined };

@@ -5,14 +5,14 @@ import { Download, ExternalLink, HelpCircle } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
+import { DisplayAssetSelect, displayAssetLabel, useDisplayAsset } from "@/components/display-asset-select";
 import { LocalTime } from "@/components/patterns/local-time";
 import { MoneySplit, type MoneySplitSegment } from "@/components/patterns/money-flow";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { foldNotCredited, rowsInAsset } from "@/features/call-classes/csv";
+import { assetScopeNote, foldNotCredited, rowsInAsset } from "@/features/call-classes/csv";
 import { downloadCallsCsv, useCallsExport } from "@/features/call-classes/use-calls-export";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { earningsSplit, type EarningsSplit } from "@/features/provider-earnings/earned-tile";
@@ -74,6 +74,11 @@ export default function ProviderMoneyPage() {
 
   const rows = React.useMemo(() => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)), [calls.rows, assetPending, displayAsset]);
   const notCredited = React.useMemo(() => foldNotCredited(rows), [rows]);
+  /* The reasons count one asset of the export; say so when the file holds calls in another. */
+  const scopeNote =
+    calls.isLoading || assetPending || !displayAsset || !calls.data
+      ? null
+      : assetScopeNote(calls.rows.length, rows.length, displayAssetLabel(displayAsset, chains));
   /* Each reason card's amount, adjusted by whole cents so the cards add up to their total on screen. */
   const reasonAmounts = React.useMemo(() => {
     const parts = notCredited.buckets.map((bucket) => bucket.notCredited);
@@ -266,6 +271,7 @@ export default function ProviderMoneyPage() {
         calls={earnings.data?.totals.calls ?? null}
         split={split}
         loading={earnings.isPending}
+        scopeNote={scopeNote}
         reasons={notCredited.buckets.map((bucket, index) => ({
           key: bucket.className,
           title: notCreditedReason(bucket.className).title,
@@ -317,6 +323,7 @@ function ExplainSheet({
   split,
   reasons,
   loading,
+  scopeNote,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -325,6 +332,7 @@ function ExplainSheet({
   split: EarningsSplit;
   reasons: { key: string; title: string; calls: number; amount: Money | null }[];
   loading: boolean;
+  scopeNote: string | null;
 }) {
   const lines: { label: string; detail?: string; amount: string }[] = [
     { label: "Paid to your wallet", amount: formatMoney(split.inWallet, { decimals: 2 }) },
@@ -371,6 +379,7 @@ function ExplainSheet({
             {reasons.length > 0 ? (
               <>
                 <p className="pt-1 text-label-xs text-02">Not credited, by reason</p>
+                {scopeNote ? <p className="text-body-xs text-03">{scopeNote}</p> : null}
                 <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01">
                   {reasons.map((reason) => (
                     <li key={reason.key} className="flex items-center justify-between gap-3 px-3 py-2.5">

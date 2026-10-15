@@ -147,8 +147,8 @@ async function lookUpEarningAssets(now: Date): Promise<string[]> {
  *
  * ## The three cap headers
  *
- * The export caps itself, and says so in `X-X402-Export-Row-Count`,
- * `X-X402-Export-Total-Matching` and `X-X402-Export-Truncated`, set before the
+ * The export caps itself, and says so in `X-Assay-Export-Row-Count`,
+ * `X-Assay-Export-Total-Matching` and `X-Assay-Export-Truncated`, set before the
  * first byte. They are returned alongside the text rather than dropped,
  * because a caller holding only the body cannot tell a complete export from a
  * truncated one.
@@ -187,8 +187,19 @@ export async function exportProviderCalls(
   return {
     csv: response.data,
     meta: readExportMeta(headers),
-    filename: readFilename(headers),
+    filename: readFilename(headers) ?? callsCsvFilename(query.from, query.to),
   };
+}
+
+/**
+ * The name the API gives a per-call export, for when `Content-Disposition` is
+ * not readable: `assay-calls-<from>_<to>.csv`, with every character outside
+ * `[0-9A-Za-z._-]` (the ISO timestamps' colons) turned into "-" — the same rule
+ * as the backend's `callsExportFilename`.
+ */
+export function callsCsvFilename(from: string, to: string): string {
+  const safe = (value: string) => value.replace(/[^0-9A-Za-z._-]/g, "-");
+  return `assay-calls-${safe(from)}_${safe(to)}.csv`;
 }
 
 function headerValue(headers: Record<string, unknown>, name: string): string | null {
@@ -203,9 +214,9 @@ function headerValue(headers: Record<string, unknown>, name: string): string | n
  * believes their export is the whole answer.
  */
 function readExportMeta(headers: Record<string, unknown>): ProviderCallsExportMeta | null {
-  const rowCount = headerValue(headers, "x-x402-export-row-count");
-  const totalMatching = headerValue(headers, "x-x402-export-total-matching");
-  const truncated = headerValue(headers, "x-x402-export-truncated");
+  const rowCount = headerValue(headers, "x-assay-export-row-count");
+  const totalMatching = headerValue(headers, "x-assay-export-total-matching");
+  const truncated = headerValue(headers, "x-assay-export-truncated");
   if (rowCount === null || totalMatching === null || truncated === null) return null;
 
   return {
