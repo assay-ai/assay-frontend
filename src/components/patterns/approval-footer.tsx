@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Link2, Users } from "lucide-react";
+import { AlertTriangle, Check, Clock, Link2, Users } from "lucide-react";
 import * as React from "react";
 
 import { formatRemaining } from "@/hooks/useCountdown";
@@ -27,6 +27,9 @@ import { LocalTime } from "./local-time";
  * `approvers` is the list of names who can approve; `[]` says nobody can
  * (which the reader must know before sending), `undefined` leaves the names
  * out (still loading, or not knowable).
+ *
+ * Time left is a clock and words, never a bar: lists use `Deadline`
+ * (features/operator/deadline.tsx), and this footer says the same thing.
  */
 export interface ApprovalFooterProps {
   /** Who, in words: "a second Lead adjudicator", "another admin". */
@@ -138,22 +141,13 @@ export function ApprovalFooter({
         ) : null}
       </div>
       {expiry ? (
-        <div className="flex w-full items-center gap-3">
-          <div
-            role="meter"
-            aria-label="Time left to approve"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(expiry.left * 100)}
-            aria-valuetext={expiry.label}
-            className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-03"
-          >
-            <span
-              className={cn("block h-full rounded-full", expiry.urgent ? "bg-danger-500" : "bg-primary-500")}
-              style={{ width: `${Math.max(expiry.expired ? 0 : 3, expiry.left * 100)}%` }}
-            />
-          </div>
-          <span className={cn("shrink-0 font-mono text-mono-12", expiry.urgent ? "text-danger-600" : "text-03")}>
+        <p className={cn("flex items-center gap-1.5 text-body-xs tabular-nums", expiry.urgent ? "text-danger-600" : "text-02")}>
+          {expiry.urgent ? (
+            <AlertTriangle aria-hidden="true" className="size-3.5 shrink-0" />
+          ) : (
+            <Clock aria-hidden="true" className="size-3.5 shrink-0" />
+          )}
+          <span>
             {expiry.label}
             {expiresAt && !expiry.expired ? (
               <>
@@ -162,7 +156,7 @@ export function ApprovalFooter({
               </>
             ) : null}
           </span>
-        </div>
+        </p>
       ) : (
         <p className="text-body-xs text-03">{expiryNote}</p>
       )}
