@@ -351,9 +351,9 @@ export async function removeOperator(
 
 // ── Two-person approvals ────────────────────────────────────────────────────
 
-/** `GET /operator/approvals[?status=]` — newest first. Any operator. */
+/** `GET /operator/approvals[?status=&action=]` — newest first. Any operator. */
 export function listApprovals(
-  query: { status?: OperatorApprovalStatus; cursor?: string; limit?: number } = {},
+  query: { status?: OperatorApprovalStatus; action?: string; cursor?: string; limit?: number } = {},
 ): Promise<CursorPage<OperatorApproval>> {
   return operatorApi.get<CursorPage<OperatorApproval>>("/operator/approvals", query);
 }

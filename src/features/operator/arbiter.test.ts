@@ -5,6 +5,7 @@ import { ApiError } from "@/libs/ApiClient";
 
 import {
   agentShareText,
+  APPROVED_BLOCKS_QUERY,
   approvedArbiterBlocks,
   arbiterErrorMessage,
   beneficiaryCheck,
@@ -197,6 +198,13 @@ describe("beneficiaryCheck", () => {
     const check = beneficiaryCheck(dispute(1, { beneficiaryEvidence: { ...evidence, ok: false, reason } }));
     expect(check.status).toBe("failed");
     expect(check.reason).toBe(reason);
+  });
+});
+
+/* Review R2-7: the backend filters by action; the newest 50 of every action no longer hide a block. */
+describe("APPROVED_BLOCKS_QUERY", () => {
+  it("asks the server for approved arbiter.block approvals only", () => {
+    expect(APPROVED_BLOCKS_QUERY).toEqual({ status: "APPROVED", action: "arbiter.block", limit: 50 });
   });
 });
 

@@ -7,7 +7,12 @@ import { Button } from "@/components/ui/button";
 import { stampUtc } from "@/features/g34a/stats";
 import { getApprovedArbiterBlockCall, listApprovals } from "@/services/operator.service";
 
-import { approvedArbiterBlocks, arbiterErrorMessage, type ApprovedArbiterBlock } from "./arbiter";
+import {
+  APPROVED_BLOCKS_QUERY,
+  approvedArbiterBlocks,
+  arbiterErrorMessage,
+  type ApprovedArbiterBlock,
+} from "./arbiter";
 import { ContractCallPanel } from "./contract-call-panel";
 
 /**
@@ -16,12 +21,14 @@ import { ContractCallPanel } from "./contract-call-panel";
  * in the approver's tab; here each approved block's call is fetched again,
  * rebuilt by the backend from the approved payload, and signed or copied
  * through the same guarded panel. The backend refuses it (409) once the
- * address is blocked on chain.
+ * address is blocked on chain, once the approval is older than the
+ * approvals' expiry, and once the block was carried out and later lifted
+ * (review R2-7). The list is filtered by action on the server.
  */
 export function ApprovedArbiterBlocks({ onSent }: { onSent?: () => void }) {
   const approvals = useQuery({
-    queryKey: ["operator", "approvals", "APPROVED"],
-    queryFn: () => listApprovals({ status: "APPROVED", limit: 50 }),
+    queryKey: ["operator", "approvals", APPROVED_BLOCKS_QUERY.status, APPROVED_BLOCKS_QUERY.action],
+    queryFn: () => listApprovals(APPROVED_BLOCKS_QUERY),
     retry: 0,
   });
   const blocks = approvedArbiterBlocks(approvals.data?.items ?? []);
