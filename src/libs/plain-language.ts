@@ -346,6 +346,8 @@ const ERRORS: Record<string, string> = {
   BINDING_FREE_LIMIT_TOO_LARGE: "The free allowance is too large.",
   CONNECTIVITY_CHECK_FAILED: "We could not reach your endpoint.",
   TERMS_VERSION_MISMATCH: "Accept the latest terms to continue.",
+  CONTACTS_NOT_DISTINCT: "Use a different email for the second person: it must be someone else's inbox.",
+  PAYOUT_CHALLENGE_ALREADY_USED: "That signing request was already used. Sign again.",
   PROVIDER_SUSPENDED: "This provider account is suspended.",
   STAKE_CHALLENGE_EXPIRED: "The signing request expired. Start again.",
   PAYOUT_CHALLENGE_EXPIRED: "The signing request expired. Start again.",

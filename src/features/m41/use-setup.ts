@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
+import { useChains } from "@/hooks/useChains";
 import { isUserRejection, useSigner } from "@/hooks/useSigner";
 import { signProofChallenge } from "@/features/provider-proof/sign-proof-challenge";
 import type {
@@ -77,6 +78,35 @@ function looksLikeEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+$/.test(value.trim());
 }
 
+/** The browser's IANA zone ("Europe/London"), or "" when it cannot tell. */
+export function detectTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** The chain family an address belongs to: "eip155" for 0x…, "solana" for base58. */
+export function addressFamily(address: string): "eip155" | "solana" | null {
+  const value = address.trim();
+  if (/^0x[0-9a-fA-F]{40}$/.test(value)) return "eip155";
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value)) return "solana";
+  return null;
+}
+
+/** The chain to prove `address` on: the agent's chain when it is that family, else the first served one. */
+export function payoutChainFor(
+  address: string,
+  served: readonly { chainId: string; namespace: string }[],
+  agentChainId: string | null,
+): string | null {
+  const family = addressFamily(address);
+  if (!family) return null;
+  if (agentChainId && agentChainId.startsWith(`${family}:`)) return agentChainId;
+  return served.find((chain) => chain.namespace === family || chain.chainId.startsWith(`${family}:`))?.chainId ?? null;
+}
+
 export interface StepView {
   key: ProviderOnboardingStepKey;
   status: OnboardingStepStatus;
@@ -105,11 +135,13 @@ export function useProviderSetup() {
   const loadError = registrationQuery.error && !notFound ? registrationQuery.error : null;
 
   /*
-    The CAIP-2 chain id the payout address is validated against. No route
-    publishes it — there is no chain registry on this API — but the session's
-    own agent row carries one, and `GET /agents` answers for an organisation
-    with no provider row. That is the only wire source, so it is the one used;
-    nothing here hardcodes a network. See the report.
+    The chain the payout address is proved on. It follows the wallet: an EVM
+    address (0x…) is proved on the served EVM chain, a base58 one on the
+    served Solana chain — so nobody types or picks a CAIP id. When the
+    session's agent row names a chain of that family it wins (it is the chain
+    this organisation already pays on); otherwise the first served chain of
+    that family. `GET /chains` is the registry; the agent row is the fallback
+    for a backend that predates it.
   */
   const agentsQuery = useQuery({
     queryKey: ["agents", "chain-id"],
@@ -117,8 +149,9 @@ export function useProviderSetup() {
     retry: 0,
     networkMode: "always" as const,
   });
+  const chains = useChains();
   const first = agentsQuery.data?.items?.[0];
-  const chainId = typeof first?.chainId === "string" ? first.chainId : null;
+  const agentChainId = typeof first?.chainId === "string" ? first.chainId : null;
 
   const { terms, fromDesign: termsFromDesign } = resolveTerms(state?.terms);
 
@@ -126,6 +159,13 @@ export function useProviderSetup() {
 
   const [account, setAccount] = React.useState<AccountForm>(EMPTY_ACCOUNT);
   const [seeded, setSeeded] = React.useState(false);
+
+  // A new account starts with the browser's own zone; nobody should have to type an IANA name.
+  React.useEffect(() => {
+    if (seeded || state) return;
+    const detected = detectTimezone();
+    if (detected) setAccount((previous) => (previous.timezone ? previous : { ...previous, timezone: detected }));
+  }, [seeded, state]);
 
   React.useEffect(() => {
     if (seeded || !state) return;
@@ -265,6 +305,7 @@ export function useProviderSetup() {
   // ── step 2 · payout wallet ────────────────────────────────────────────
 
   const [address, setAddressValue] = React.useState("");
+  const chainId = payoutChainFor(address, chains.chains, agentChainId) ?? (address.trim() === "" ? agentChainId : null);
 
   /*
     The address being PROVED, not "my wallet". The backend verifies the
@@ -365,13 +406,15 @@ export function useProviderSetup() {
   */
   const walletStructuralBlock: string | null = !registered
     ? "Finish step 1 first — a payout address is claimed against a provider record, and there is not one yet."
-    : !chainId
-      ? "We could not read which chain to validate an address against, so nothing can be sent."
-      : null;
+    : null;
 
   const walletBlockedBy: string | null =
     walletStructuralBlock ??
-    (address.trim() === "" ? "Enter the address you want paid before signing for it." : null);
+    (address.trim() === ""
+      ? "Connect the wallet you want to be paid in first."
+      : !chainId
+        ? "Assay does not pay out on this wallet's network. Connect an EVM or Solana wallet."
+        : null);
 
   const [signing, setSigning] = React.useState(false);
 
@@ -470,6 +513,35 @@ export function useProviderSetup() {
       }
     } finally {
       setSigning(false);
+    }
+  }
+
+  /**
+   * The same proof as `signAndProve`, for `SignAction`: resolves once the
+   * platform accepted the signature, throws otherwise (a wallet refusal is
+   * rethrown as is, so the tracker says "declined" and nothing else).
+   */
+  async function prove(): Promise<void> {
+    if (walletBlockedBy || !chainId) throw new Error(walletBlockedBy ?? "Connect the wallet you want to be paid in first.");
+    if (signerState.status === "hydrating" || signerState.status === "chain-unknown") {
+      throw new Error("Your wallet is still loading. Try again in a moment.");
+    }
+    if (signerState.status !== "ready") {
+      throw new Error("That wallet is not connected in this browser. Connect it, then sign again.");
+    }
+    setWallet("prompting");
+    try {
+      const challenge = await createPayoutAddressChallenge({ chainId, address: address.trim() });
+      const proof = await provePayoutAddress({
+        challengeId: challenge.challengeId,
+        signature: await signProofChallenge(signerState.signer, challenge),
+      });
+      setProvedNow(proof.payoutAccountId);
+      setWallet("proved");
+      await queryClient.invalidateQueries({ queryKey: ["provider", "registration"] });
+    } catch (error) {
+      setWallet(isUserRejection(error) ? "declined" : "rejected");
+      throw error;
     }
   }
 
@@ -624,6 +696,7 @@ export function useProviderSetup() {
     walletAttempted,
     signing,
     signAndProve,
+    prove,
     payoutAccounts,
     pendingProvedAccountId,
     pendingProvedIsNewChain,
@@ -635,6 +708,11 @@ export function useProviderSetup() {
     probe,
     check,
     declare,
+    /** Saves the endpoint (the server re-checks it first) and resolves with the result. */
+    declareAsync: (value: string) => {
+      checkMutation.reset();
+      return declareMutation.mutateAsync(value);
+    },
     checking: checkMutation.isPending,
     declaring: declareMutation.isPending,
     checkError: (checkMutation.error ?? declareMutation.error) as ApiError | null,
