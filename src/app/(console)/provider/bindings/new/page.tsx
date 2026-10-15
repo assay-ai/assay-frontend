@@ -22,6 +22,7 @@ import type {
   UpdateToolBindingBody,
 } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
+import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { getProviderRegistration } from "@/services/provider-registration.service";
 import {
@@ -212,7 +213,7 @@ function WizardContent() {
       await applyPublished(queryClient, published);
       toast.success(`${tool?.name ?? "Your tool"} is live`);
     } catch (error) {
-      if (!isAlreadyLive(error)) throw error instanceof ApiError ? new Error(error.message) : error;
+      if (!isAlreadyLive(error)) throw error instanceof ApiError ? new Error(plainError(error.code)) : error;
       void queryClient.invalidateQueries({ queryKey: bindingQueryKey(binding.id) });
     }
     router.push(`${routes.binding(binding.id)}&welcome=1`);
