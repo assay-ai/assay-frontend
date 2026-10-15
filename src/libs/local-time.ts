@@ -110,3 +110,19 @@ export function zoneLabel(value: string | number | Date | null | undefined, opti
     .find((p) => p.type === "timeZoneName");
   return part?.value ?? "";
 }
+
+/**
+ * A recent moment, said the way a person would: "just now", "4 min ago",
+ * "Today 14:20", else whatever `formatLocalDateTime` says. For lists of live
+ * things (a call still being checked), where a bare "01:35" reads as a timer.
+ */
+export function formatRelative(value: string | number | Date | null | undefined, options: LocalTimeOptions = {}): string {
+  const date = toDate(value);
+  if (!date) return "—";
+  const now = options.now ?? Date.now();
+  const minutes = Math.floor((now - date.getTime()) / 60_000);
+  if (minutes >= 0 && minutes < 1) return "just now";
+  if (minutes >= 1 && minutes < 60) return `${minutes} min ago`;
+  const text = formatLocalDateTime(date, options);
+  return dayKey(date, options.timeZone) === dayKey(new Date(now), options.timeZone) ? `Today ${text}` : text;
+}

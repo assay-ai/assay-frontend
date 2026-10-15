@@ -15,6 +15,7 @@ import { ThemeToggle } from "./theme-toggle";
  * from the buyer console's `Top Bar` (56px).
  *
  *   How it works · Explore · Demo · For providers · Docs      Sign in  [+ List a tool]
+ *   (signed in: "Open app" in place of "Sign in")
  *
  * "For providers" is one page (the offer with the earnings calculator
  * embedded); "Demo" shows only where it is configured. "Docs" appears
@@ -71,6 +72,9 @@ export interface PublicTopBarProps extends React.HTMLAttributes<HTMLElement> {
   onSignInClick?: () => void;
   listToolHref?: string;
   onListToolClick?: () => void;
+  /** A signed-in visitor sees "Open app" (to `appHref`) where "Sign in" would be. */
+  signedIn?: boolean;
+  appHref?: string;
 }
 
 const LINK_CLASS =
@@ -112,6 +116,8 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
       onSignInClick,
       listToolHref = "/provider/setup",
       onListToolClick,
+      signedIn = false,
+      appHref = "/",
       ...props
     },
     ref
@@ -183,11 +189,11 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <ThemeToggle />
             <a
-              href={signInHref}
-              onClick={onSignInClick}
+              href={signedIn ? appHref : signInHref}
+              onClick={signedIn ? undefined : onSignInClick}
               className="hidden rounded-md px-[14px] py-[9px] text-label-sm font-sans text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:inline-flex"
             >
-              Sign in
+              {signedIn ? "Open app" : "Sign in"}
             </a>
             <a
               href={listToolHref}
@@ -242,14 +248,14 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
             )}
             <div className="my-2 h-px bg-03" role="separator" />
             <a
-              href={signInHref}
+              href={signedIn ? appHref : signInHref}
               onClick={() => {
-                onSignInClick?.();
+                if (!signedIn) onSignInClick?.();
                 close();
               }}
               className="flex items-center justify-center rounded-md border border-02 px-3 py-2.5 text-label-sm text-01 hover:bg-02"
             >
-              Sign in
+              {signedIn ? "Open app" : "Sign in"}
             </a>
           </nav>
         ) : null}

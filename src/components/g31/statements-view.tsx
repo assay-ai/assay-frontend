@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Calendar, Download } from "lucide-react";
+import { Calendar, ChevronDown, Download } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
@@ -13,12 +13,15 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { recentMonths } from "@/features/buyer/period";
+import { MATCHES_SENTENCE, ReconcileNote, reconcileState } from "@/features/buyer/reconcile-note";
+import { readWithheld } from "@/features/buyer/wire";
 import { spendCsv } from "@/features/g30/spend-view";
 import type { ReceiptsSummary } from "@/features/g30/wire";
 import { useChains } from "@/hooks/useChains";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
+import { getWithheld } from "@/services/balances.service";
 import { getReceiptsSummary } from "@/services/receipts.service";
 import { formatMoney } from "@/utils/money";
 
@@ -58,6 +61,19 @@ function StatementsContent() {
       getReceiptsSummary({ from: period.from, to: period.to, groupBy: "tool" }) as Promise<ReceiptsSummary>,
   });
 
+  // The same `GET /withheld` the Not charged page reads, so both pages say the
+  // same thing about whether this month matches the balance history.
+  const withheldQuery = useQuery({
+    queryKey: ["withheld", "statement", period.key, assetPick],
+    retry: 0,
+    queryFn: () => getWithheld({ from: period.from, to: period.to }),
+  });
+  const withheld = withheldQuery.data ? readWithheld(withheldQuery.data, summary.data?.asset) : null;
+  const matches = reconcileState(withheld) === "matches";
+  const notChargedCalls = withheld?.withheld.calls ?? null;
+  const failedChecks = withheld?.withheld.buckets.find((b) => b.bucket === "FAILED_VERIFICATION")?.calls ?? null;
+  const noResult = withheld?.withheld.buckets.find((b) => b.bucket === "PROVIDER_OR_PLATFORM_ERROR")?.calls ?? null;
+
   const totals = summary.data?.totals;
   const groups = summary.data?.groups ?? [];
 
@@ -89,7 +105,8 @@ function StatementsContent() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="secondary" icon={<Calendar />} aria-label={`Month: ${period.label}. Change month`}>
-                {period.label}
+                <span className="text-03">Month:</span> {period.label}
+                <ChevronDown aria-hidden="true" className="size-3.5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="border border-01">
@@ -125,7 +142,9 @@ function StatementsContent() {
             <PanelHeader className="flex-col items-start gap-3 tablet:flex-row tablet:items-center">
               <PanelTitles>
                 <PanelTitle>{period.label}</PanelTitle>
-                <PanelDescription className="whitespace-normal">Matches your balance history exactly.</PanelDescription>
+                {matches ? (
+                  <PanelDescription className="whitespace-normal">{MATCHES_SENTENCE}</PanelDescription>
+                ) : null}
               </PanelTitles>
               <Button icon={<Download />} onClick={download} disabled={!totals || totals.calls === 0}>
                 Download CSV
@@ -143,7 +162,15 @@ function StatementsContent() {
                   />
                   <KeyValueRow
                     label={<Term k="not-charged">Not charged</Term>}
-                    sub={`${plural(totals.refundedCalls, "call")} that failed our checks`}
+                    sub={
+                      notChargedCalls !== null
+                        ? `${plural(notChargedCalls, "call")}${
+                            failedChecks !== null && noResult !== null
+                              ? `: ${formatCount(failedChecks)} failed our checks, ${formatCount(noResult)} had no usable result`
+                              : ""
+                          }`
+                        : "Calls that failed our checks or had no usable result"
+                    }
                     value={`−${formatMoney(totals.withheldTotal, { decimals: 2 })}`}
                     valueClassName="text-teal-600"
                   />
@@ -156,6 +183,8 @@ function StatementsContent() {
               )}
             </PanelBody>
           </Panel>
+
+          <ReconcileNote withheld={withheld} />
 
           {groups.length > 0 ? (
             <Panel>

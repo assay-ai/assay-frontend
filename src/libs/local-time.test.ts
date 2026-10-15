@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatClock, formatLocalDate, formatLocalDateTime, utcTitle, zoneLabel } from "./local-time";
+import { formatClock, formatLocalDate, formatLocalDateTime, formatRelative, utcTitle, zoneLabel } from "./local-time";
 
 const NOW = Date.parse("2026-10-15T12:00:00Z");
 const UTC = { timeZone: "UTC", now: NOW };
@@ -39,5 +39,17 @@ describe("zoneLabel", () => {
   it("names the zone a time is shown in", () => {
     expect(zoneLabel("2026-10-16T12:00:00Z", { timeZone: "UTC" })).toBe("UTC");
     expect(zoneLabel("2026-07-01T12:00:00Z", { timeZone: "Europe/London" })).toBe("GMT+1");
+  });
+});
+
+describe("formatRelative", () => {
+  const now = Date.parse("2026-10-16T12:00:00Z");
+  it("says minutes ago within the hour", () => {
+    expect(formatRelative("2026-10-16T11:58:00Z", { now, timeZone: "UTC" })).toBe("2 min ago");
+    expect(formatRelative("2026-10-16T11:59:40Z", { now, timeZone: "UTC" })).toBe("just now");
+  });
+  it("names today and falls back to the dated form", () => {
+    expect(formatRelative("2026-10-16T08:05:00Z", { now, timeZone: "UTC" })).toBe("Today 08:05");
+    expect(formatRelative("2026-10-14T08:05:00Z", { now, timeZone: "UTC" })).toBe("Oct 14, 08:05");
   });
 });

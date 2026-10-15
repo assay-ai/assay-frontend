@@ -1,4 +1,4 @@
-import { BadgeCheck, Gift } from "lucide-react";
+import { BadgeCheck, Gift, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/utils";
@@ -53,6 +53,25 @@ export function UnavailableTag() {
   return (
     <span className="inline-flex items-center whitespace-nowrap rounded-full bg-03 px-2 py-0.5 text-label-xs text-02">
       No provider yet
+    </span>
+  );
+}
+
+/**
+ * A provider whose observed failure rate is high (see `failsOften`). A warning,
+ * not a filter: the provider stays listed and the buyer decides.
+ */
+export function FailsOftenChip({ className }: { className?: string }) {
+  return (
+    <span
+      title="At least 1 in 5 of this provider's checked calls failed. Failed calls are not charged, but they cost your agent time."
+      className={cn(
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700",
+        className,
+      )}
+    >
+      <TriangleAlert aria-hidden="true" className="size-3" />
+      Fails often
     </span>
   );
 }

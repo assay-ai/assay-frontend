@@ -31,13 +31,14 @@ import {
 } from "@/features/g30/receipt-parts";
 import {
   isFinalNotCharged,
+  isFinalNotChargedReceipt,
+  notChargedStory,
   receiptFlow,
   relevanceReached,
   STATE_CARDS,
   STATE_CARD_ORDER,
   chargedHeadline,
   deriveReceiptState,
-  notChargedHeadline,
   samplingExplainerCopy,
   samplingSubline,
   toStageChecks,
@@ -211,8 +212,13 @@ function ReceiptPageContent() {
   const paid = formatMoney(receipt.chargedPrice, { decimals: 4 });
   const withheld = formatMoney(receipt.withheld, { decimals: 4 });
 
-  const stateCard = state === "CHARGED" || state === "NOT_CHARGED" ? null : STATE_CARDS[state];
   const finalNotCharged = isFinalNotCharged(state, receipt);
+  // Every finished call that was not charged tells ONE story — the banner, the
+  // money strip, the check rows and the details all read from it — so a voided
+  // call can never say "No result recorded" beside "Check failed".
+  const story = state !== "CHECKING" && isFinalNotChargedReceipt(receipt) ? notChargedStory(receipt) : null;
+  const stateCard =
+    state === "CHARGED" || state === "NOT_CHARGED" || story ? null : STATE_CARDS[state as keyof typeof STATE_CARDS];
 
   /* ------------------------------------------------------------- timeline */
 
@@ -245,7 +251,10 @@ function ReceiptPageContent() {
       label: "Provider identity",
       value: providerQuery.data ? (providerQuery.data.verification.verified ? "Verified" : "Not verified") : "—",
     },
-    { label: "Result type", value: receipt.classification ? responseClassLabel(receipt.classification) : "—" },
+    {
+      label: "Result type",
+      value: story ? story.resultType : receipt.classification ? responseClassLabel(receipt.classification) : "—",
+    },
     ...(relevanceReached(receipt) && receipt.sampling.display
       ? [{ label: "Relevance checked on", value: receipt.sampling.display }]
       : []),
@@ -277,10 +286,11 @@ function ReceiptPageContent() {
         />
       ) : null}
 
-      {state === "NOT_CHARGED" ? (
+      {story ? (
         <NotChargedHeadline
-          headline={notChargedHeadline(receipt)}
-          failedChecks={receipt.verdict?.status === "FAIL"}
+          headline={story.headline}
+          explain={story.explain}
+          failedChecks={story.reason === "FAILED_CHECKS"}
           listed={listed}
           paid={paid}
           notCharged={withheld}
@@ -315,7 +325,7 @@ function ReceiptPageContent() {
           <PanelHeader>
             <PanelTitles>
               <PanelTitle>Checks run on this call</PanelTitle>
-              <PanelDescription>Checks stop at the first failure</PanelDescription>
+              <PanelDescription>{story ? story.checksSummary : "Checks stop at the first failure"}</PanelDescription>
             </PanelTitles>
           </PanelHeader>
           <PanelBody className="gap-3.5 px-5 pb-5 pt-2">

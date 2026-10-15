@@ -10,9 +10,9 @@ import { cn } from "@/utils";
  * from the design, never paraphrased.
  */
 const DEFAULT_BODY =
-  "Relevance judgement is the only sampled stage. At $0.0010 a call, judging every one would cost more than the call itself. Instead we sample, and the provider’s stake covers the rest: if their measured quality falls below what they published, they are slashed and you are compensated for what you spent in that window.";
+  "The relevance check is the only sampled check. At $0.0010 a call, judging every one would cost more than the call itself. Instead we sample, and the provider’s stake covers the rest: if their measured quality falls below what they published, they pay a penalty from it and you are compensated for what you spent in that window.";
 const DEFAULT_TAIL =
-  "Tools priced $0.05 and above on the guaranteed tier are judged on every call.";
+  "Tools priced $0.05 and above on the guaranteed tier get the relevance check on every call.";
 
 export interface SamplingExplainerProps extends React.HTMLAttributes<HTMLDivElement> {
   /**

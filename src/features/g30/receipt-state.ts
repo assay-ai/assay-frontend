@@ -21,7 +21,15 @@ const STAGE_NAME: Record<WireStageName, string> = {
   SCHEMA: "Response shape",
   DETERMINISTIC_RULES: "Result quality rules",
   CROSS_CHECK: "Independent cross-check",
-  SEMANTIC: "Relevance judgement",
+  SEMANTIC: "Relevance check",
+};
+
+/** The glossary entry that explains each stage, for a `Term` around its name. */
+export const STAGE_TERM: Partial<Record<WireStageName, "cross-check" | "relevance-check" | "response-shape" | "quality-rules">> = {
+  SCHEMA: "response-shape",
+  DETERMINISTIC_RULES: "quality-rules",
+  CROSS_CHECK: "cross-check",
+  SEMANTIC: "relevance-check",
 };
 
 /**
@@ -58,20 +66,52 @@ const STAGE_FALLBACK_NOTE: Partial<Record<WireStageName, string>> = {
   DETERMINISTIC_RULES: "runs on every call",
 };
 
+/** The API's own note on a stage that did not run — true, but it said nothing about THIS call. */
+const GENERIC_NOT_REACHED = "checks stop at the first failure";
+
+/**
+ * The receipt's stage rows, told as one story with the rest of the receipt.
+ *
+ * Two corrections over the wire rows:
+ *  - a call refunded for a result in the wrong format (`REFUNDED`, no verdict
+ *    record) was rejected by the response-shape check before the pipeline
+ *    started, so that stage is shown as the one that failed;
+ *  - a stage that did not run says WHY for this call ("an earlier check
+ *    failed", or "there was no result to check") once, instead of the API's
+ *    generic note printed twice per row.
+ */
 export function toStageChecks(receipt: Receipt): StageCheck[] {
-  return receipt.stages.map((stage) => {
-    const status = stageStatus(stage);
+  const story = isFinalNotChargedReceipt(receipt) ? notChargedStory(receipt) : null;
+  const rows = receipt.stages.map((stage) => {
+    let status = stageStatus(stage);
+    let detail = stage.detail ?? undefined;
+    if (story?.reason === "WRONG_FORMAT" && stage.stage === "SCHEMA" && status === "not-reached") {
+      status = "failed";
+      detail = "The result did not match the format this tool promises.";
+    }
+    return { stage, status, detail };
+  });
+  const anyFailed = rows.some((row) => row.status === "failed");
+
+  return rows.map(({ stage, status, detail }) => {
     const sampledNote =
       stage.stage === "SEMANTIC" && status === "not-sampled"
         ? receipt.sampling.display ?? undefined
         : undefined;
+    let note = sampledNote ?? stage.note ?? STAGE_FALLBACK_NOTE[stage.stage];
+    if (status === "not-reached") {
+      note = anyFailed ? "not run: an earlier check failed" : story ? story.notRunNote : note;
+      if (detail === GENERIC_NOT_REACHED) detail = undefined;
+    }
+    if (detail && note && detail.toLowerCase() === note.toLowerCase()) detail = undefined;
 
     return {
       id: stage.stage,
       name: STAGE_NAME[stage.stage] ?? stage.stage,
+      term: STAGE_TERM[stage.stage],
       status,
-      note: sampledNote ?? stage.note ?? STAGE_FALLBACK_NOTE[stage.stage],
-      detail: stage.detail ?? undefined,
+      note,
+      detail,
       detailVariant: status === "failed" ? ("error" as const) : ("info" as const),
     };
   });
@@ -121,7 +161,9 @@ export function deriveReceiptState(receipt: Receipt): ReceiptState {
   if (verdict === "MISAPPLIED") return "MISAPPLIED";
   if (verdict === "EMPTY_CONFIRMED") return "EMPTY_CONFIRMED";
 
-  return receipt.chargedPrice.amount !== "0" ? "CHARGED" : "NOT_CHARGED";
+  // A settled call is charged, even at $0 (a free-tier call): "not charged"
+  // is reserved for calls that ended without a charge.
+  return receipt.status === "SETTLED" || receipt.chargedPrice.amount !== "0" ? "CHARGED" : "NOT_CHARGED";
 }
 
 export type StateTone = "primary" | "neutral" | "warning" | "danger";
@@ -225,25 +267,6 @@ export function chargedHeadline(receipt: Receipt): string {
 }
 
 /**
- * The not-charged receipt headline.
- *
- * The design writes one sentence — "Not charged. This call failed our checks,
- * so you paid nothing for it." — which is the FAIL wording. A call can also be
- * uncharged because it expired, or because it was never judged, and saying "it
- * failed our checks" about those would be false. So FAIL keeps the design's
- * sentence exactly and everything else takes "Not charged." followed by
- * `presentVerdict()`'s sentence, which is the only thing allowed to describe a
- * verdict at all.
- */
-export function notChargedHeadline(receipt: Receipt): string {
-  if (receipt.verdict?.status === "FAIL") {
-    return "Not charged. This call failed our checks, so you paid nothing for it.";
-  }
-  const shown = presentVerdict(receipt.verdict?.status ?? null).shownAs;
-  return `Not charged. ${shown.endsWith(".") ? shown : `${shown}.`}`;
-}
-
-/**
  * The charged receipt sub-line, shown only when it is true: the design's example has the
  * relevance judgement as the one stage that did not run, and shows this to say
  * that "sampled" is not "skipped". Rendering it on a receipt where two stages
@@ -274,7 +297,7 @@ export function samplingExplainerCopy(
   const rate = receipt.sampling.rate;
   if (typeof rate === "number" && rate >= 1) {
     return {
-      body: `Relevance judgement runs on every call at ${listed}, so nothing on this receipt is sampled.`,
+      body: `The relevance check runs on every call at ${listed}, so nothing on this receipt is sampled.`,
       tail: "",
     };
   }
@@ -284,7 +307,7 @@ export function samplingExplainerCopy(
   const tail = toDecimal(receipt.listedPrice).gte("0.05") ? { tail: "" } : {};
   return {
     ...tail,
-    body: `Relevance judgement is the only sampled stage. At ${listed} a call, judging every one would cost more than the call itself. Instead we sample, and the provider’s stake covers the rest: if their measured quality falls below what they published, they are slashed and you are compensated for what you spent in that window.`,
+    body: `The relevance check is the only sampled check. At ${listed} a call, judging every one would cost more than the call itself. Instead we sample, and the provider’s stake covers the rest: if their measured quality falls below what they published, they pay a penalty from it and you are compensated for what you spent in that window.`,
   };
 }
 
@@ -316,7 +339,9 @@ export function receiptFlow(receipt: Receipt, state: ReceiptState): ReceiptFlowN
   const step =
     state === "CHARGED"
       ? { label: "Check passed", tone: "success" as const }
-      : OUTCOME_STEP[state];
+      : !chargedSomething && isFinalNotChargedReceipt(receipt)
+        ? notChargedStory(receipt).flowStep
+        : OUTCOME_STEP[state];
   if (chargedSomething) {
     return [held, step, { label: "Charged", amount: charged(receipt), tone: "neutral" }];
   }
@@ -337,4 +362,175 @@ export function relevanceReached(receipt: Receipt): boolean {
 /** A not-charged outcome that is final (not still checking, not charged). */
 export function isFinalNotCharged(state: ReceiptState, receipt: Receipt): boolean {
   return state !== "CHECKING" && receipt.chargedPrice.amount === "0";
+}
+
+/* ------------------------------------------------- the not-charged story */
+
+/**
+ * Why a call ended without a charge — worked out from the receipt's own fields,
+ * so the banner, the money strip, the check rows and the details all tell the
+ * same story. The classes, and how the API shows each:
+ *
+ *   FAILED_CHECKS     REFUNDED, verdict FAIL — a check ran and rejected the result
+ *   WRONG_FORMAT      REFUNDED, no verdict record — the response did not match the
+ *                     tool's output format, rejected before the pipeline ran
+ *   MISAPPLIED        verdict MISAPPLIED — our check did not fit the request
+ *   PROVIDER_ERROR    VOIDED, classification SYSTEM_ERROR
+ *   REQUEST_REJECTED  VOIDED, classification REQUEST_ERROR
+ *   NO_ANSWER         VOIDED, no classification — no provider produced an outcome
+ *   EXPIRED           EXPIRED — the hold ran out before the call was resolved
+ */
+export type NotChargedReason =
+  | "FAILED_CHECKS"
+  | "WRONG_FORMAT"
+  | "MISAPPLIED"
+  | "PROVIDER_ERROR"
+  | "REQUEST_REJECTED"
+  | "NO_ANSWER"
+  | "EXPIRED"
+  | "UNKNOWN";
+
+export interface NotChargedStory {
+  reason: NotChargedReason;
+  /** The banner sentence, starting "Not charged." */
+  headline: string;
+  /** One sentence on what happened to the money. */
+  explain: string;
+  /** The middle step of the money strip. */
+  flowStep: { label: string; tone: ReceiptFlowNode["tone"] };
+  /** "Result type" in the details row. */
+  resultType: string;
+  /** The checks panel's subtitle. */
+  checksSummary: string;
+  /** The note on a check that did not run, when none failed. */
+  notRunNote: string;
+}
+
+const RELEASED = "The money was held for the call and then released, so your balance is back where it was.";
+
+export function notChargedReason(receipt: Pick<Receipt, "status" | "classification" | "verdict">): NotChargedReason {
+  const verdict = receipt.verdict?.status ?? null;
+  if (verdict === "FAIL") return "FAILED_CHECKS";
+  if (verdict === "MISAPPLIED") return "MISAPPLIED";
+  if (receipt.status === "EXPIRED") return "EXPIRED";
+  if (receipt.status === "REFUNDED") return "WRONG_FORMAT";
+  if (receipt.status === "VOIDED") {
+    if (receipt.classification === "SYSTEM_ERROR") return "PROVIDER_ERROR";
+    if (receipt.classification === "REQUEST_ERROR") return "REQUEST_REJECTED";
+    return "NO_ANSWER";
+  }
+  return "UNKNOWN";
+}
+
+export function notChargedStory(receipt: Receipt): NotChargedStory {
+  const reason = notChargedReason(receipt);
+  const failed = receipt.stages.find((stage) => stageStatus(stage) === "failed");
+  const failedName = failed ? (STAGE_NAME[failed.stage] ?? "one check").toLowerCase() : null;
+  switch (reason) {
+    case "FAILED_CHECKS":
+      return {
+        reason,
+        headline: "Not charged. This call failed our checks, so you paid nothing for it.",
+        explain: failedName
+          ? `The result failed the ${failedName}. ${RELEASED}`
+          : `The result failed our checks. ${RELEASED}`,
+        flowStep: { label: "Check failed", tone: "danger" },
+        resultType: "Data returned, failed our checks",
+        checksSummary: "Checks stop at the first failure",
+        notRunNote: "not run: an earlier check failed",
+      };
+    case "WRONG_FORMAT":
+      return {
+        reason,
+        headline: "Not charged. The result did not match the format this tool promises.",
+        explain: `The provider sent data, but not in the shape the tool declares, so it failed the first check. ${RELEASED}`,
+        flowStep: { label: "Wrong result format", tone: "danger" },
+        resultType: "Data in the wrong format",
+        checksSummary: "Checks stop at the first failure",
+        notRunNote: "not run: an earlier check failed",
+      };
+    case "MISAPPLIED":
+      return {
+        reason,
+        headline: "Not charged. This request was outside what the tool covers.",
+        explain: `Our check did not fit this request, so nobody is blamed and nothing is charged. ${RELEASED}`,
+        flowStep: { label: "Outside the tool's scope", tone: "warning" },
+        resultType: receipt.classification ? responseClassWords(receipt.classification) : "Data returned",
+        checksSummary: "Our check did not fit this request",
+        notRunNote: "not run",
+      };
+    case "PROVIDER_ERROR":
+      return {
+        reason,
+        headline: "Not charged. The provider returned an error instead of a result.",
+        explain: `Errors are never charged. ${RELEASED}`,
+        flowStep: { label: "Provider error", tone: "danger" },
+        resultType: "Provider error, no result",
+        checksSummary: "No checks ran: there was no result to check",
+        notRunNote: "not run: no result",
+      };
+    case "REQUEST_REJECTED":
+      return {
+        reason,
+        headline: "Not charged. The provider rejected the request as invalid.",
+        explain: `A rejected request is never charged. Check the input your agent sent. ${RELEASED}`,
+        flowStep: { label: "Request rejected", tone: "danger" },
+        resultType: "Request rejected, no result",
+        checksSummary: "No checks ran: there was no result to check",
+        notRunNote: "not run: no result",
+      };
+    case "NO_ANSWER":
+      return {
+        reason,
+        headline: "Not charged. No provider returned a usable result for this call.",
+        explain: `The call never got a result, so there was nothing to charge for. ${RELEASED}`,
+        flowStep: { label: "No result", tone: "warning" },
+        resultType: "No result",
+        checksSummary: "No checks ran: there was no result to check",
+        notRunNote: "not run: no result",
+      };
+    case "EXPIRED":
+      return receipt.classification === "DATA_RESULT"
+        ? {
+            reason,
+            headline: "Not charged. The provider answered, but the check did not finish in time.",
+            explain: `A call we cannot finish checking is never charged. ${RELEASED}`,
+            flowStep: { label: "Did not finish in time", tone: "warning" },
+            resultType: "Data returned, not checked in time",
+            checksSummary: "No checks finished before the time limit",
+            notRunNote: "not run: out of time",
+          }
+        : {
+            reason,
+            headline: "Not charged. The call did not finish in time.",
+            explain: `No result arrived before the time limit. ${RELEASED}`,
+            flowStep: { label: "Did not finish in time", tone: "warning" },
+            resultType: "No result",
+            checksSummary: "No checks ran: there was no result to check",
+            notRunNote: "not run: no result",
+          };
+    default:
+      return {
+        reason,
+        headline: "Not charged. No result was recorded for this call.",
+        explain: RELEASED,
+        flowStep: { label: "No result", tone: "warning" },
+        resultType: "No result",
+        checksSummary: "No checks ran on this call",
+        notRunNote: "not run",
+      };
+  }
+}
+
+function responseClassWords(classification: string): string {
+  if (classification === "EMPTY_RESULT") return "Empty result";
+  return "Data returned";
+}
+
+/** The terminal statuses that end a call without a charge. */
+const NOT_CHARGED_STATUSES = new Set(["REFUNDED", "VOIDED", "EXPIRED"]);
+
+/** True for a finished call that was not charged, from the receipt alone. */
+export function isFinalNotChargedReceipt(receipt: Receipt): boolean {
+  return NOT_CHARGED_STATUSES.has(receipt.status) && receipt.chargedPrice.amount === "0";
 }

@@ -19,11 +19,30 @@ export interface AuditEntryLike {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function shown(value: unknown): string | null {
+/** Values that are identifiers or secrets, never body text: ids, chain ids, key prefixes, hashes. */
+const RAW_VALUE = /^(eip155:|solana:|x402_|sk_|pk_|cred_|ses_|aud_|dep_|sp_|hld_)|^0x[0-9a-f]{6,}$/i;
+
+/** Field names whose values are money in major units. */
+const MONEY_KEY = /(cap|limit|amount|budget|charged|price|balance)$/i;
+
+/** Field names said in the product's words rather than humanized. */
+const KEY_WORDS: Record<string, string> = {
+  dailyCap: "daily budget",
+  monthlyCap: "monthly budget",
+  perCallCap: "per-call limit",
+  maxCallsPerMinute: "calls per minute limit",
+  revokedAt: "revoked",
+};
+
+function shown(value: unknown, key = ""): string | null {
   if (value === null || value === undefined || value === "") return "none";
   if (typeof value === "boolean") return value ? "on" : "off";
   if (typeof value === "number") return value.toLocaleString("en-US");
-  if (typeof value === "string") return UUID.test(value) || /^eip155:|^solana:/.test(value) ? null : value;
+  if (typeof value === "string") {
+    if (UUID.test(value) || RAW_VALUE.test(value)) return null;
+    if (MONEY_KEY.test(key) && /^\d+(\.\d+)?$/.test(value)) return `$${value}`;
+    return value;
+  }
   if (Array.isArray(value)) return value.length === 0 ? "none" : `${value.length} ${value.length === 1 ? "item" : "items"}`;
   return null;
 }
@@ -51,11 +70,12 @@ export function auditChanges(entry: AuditEntryLike): string[] {
   const before = entry.before ?? {};
   const phrases: string[] = [];
   for (const [key, next] of Object.entries(after).slice(0, 3)) {
-    const label = humanize(key).toLowerCase();
-    const to = shown(next);
+    if (/Id$|_id$/.test(key)) continue;
+    const label = KEY_WORDS[key] ?? humanize(key).toLowerCase();
+    const to = shown(next, key);
     if (to === null) continue;
     if (key in before && before[key] !== next) {
-      const from = shown(before[key]);
+      const from = shown(before[key], key);
       phrases.push(from === null ? `changed ${label} to ${to}` : `changed ${label} from ${from} to ${to}`);
     } else if (!(key in before)) {
       phrases.push(`set ${label} to ${to}`);
@@ -64,12 +84,81 @@ export function auditChanges(entry: AuditEntryLike): string[] {
   return phrases;
 }
 
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" && !UUID.test(value) && !RAW_VALUE.test(value) ? value : null;
+}
+
+function dollars(value: unknown): string | null {
+  return typeof value === "string" && /^\d+(\.\d+)?$/.test(value) ? `$${value}` : null;
+}
+
+/**
+ * Entries whose generic "changed X from A to B" reading would be system talk
+ * ("Assay changed charged from 6.00 to 0.00", "set credential to x402_live_…").
+ * Each gets the sentence a person would say.
+ */
+function specific(
+  entry: AuditEntryLike,
+  actor: string,
+): { title: string; line: string } | null {
+  const before = entry.before ?? {};
+  const after = entry.after ?? {};
+  const subject = actor === "You" ? "You" : actor;
+  switch (entry.action) {
+    case "session.created":
+      return entry.actorType === "agent"
+        ? { title: "Agent connected", line: `${subject} connected to Assay with its agent key` }
+        : { title: "Signed in", line: actor === "You" ? "You signed in" : `${subject} signed in` };
+    case "payment_intent.refunded":
+    case "payment_intent.voided":
+    case "payment_intent.expired": {
+      const amount = dollars(before.charged) ?? dollars(before.amount) ?? dollars(after.amount);
+      const why =
+        entry.action === "payment_intent.refunded"
+          ? "A call failed our checks"
+          : entry.action === "payment_intent.voided"
+            ? "A call got no usable result"
+            : "A call did not finish in time";
+      return {
+        title: amount ? `Refund: ${amount} not charged` : "Refund: call not charged",
+        line: `${why}, so ${amount ? `the ${amount}` : "the amount"} held for it went back to your balance`,
+      };
+    }
+    case "deposit.credited": {
+      const amount = dollars(after.amount);
+      return {
+        title: amount ? `Deposit: ${amount} added` : "Deposit added",
+        line: "Your deposit reached your balance and can pay for calls",
+      };
+    }
+    case "credential.created": {
+      const name = text(after.name) ?? text(after.label);
+      return { title: "Agent key created", line: `${subject} created ${name ? `the agent key “${name}”` : "an agent key"}` };
+    }
+    case "credential.revoked": {
+      const name = text(after.name) ?? text(before.name);
+      return {
+        title: "Agent key revoked",
+        line: `${subject} revoked ${name ? `the agent key “${name}”` : "an agent key"}; it stopped working immediately`,
+      };
+    }
+    case "agent.created": {
+      const name = text(after.label) ?? text(after.name);
+      return { title: "Agent added", line: `${subject} added ${name ? `the agent “${name}”` : "an agent"}` };
+    }
+    default:
+      return null;
+  }
+}
+
 export function auditSentence(
   entry: AuditEntryLike,
   agentName: (id: string) => string | null,
   me?: string | null,
 ): { title: string; line: string } {
   const actor = auditActor(entry, agentName, me);
+  const special = specific(entry, actor);
+  if (special) return special;
   const changes = auditChanges(entry);
   return {
     title: plainAuditAction(entry.action),

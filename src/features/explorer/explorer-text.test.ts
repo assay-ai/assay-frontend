@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   checkSentences,
   failRateLabel,
+  failsOften,
+  heldPriceSentence,
+  priceRange,
   formatCallPrice,
   freeTierLabel,
   moneyByAsset,
@@ -100,5 +103,27 @@ describe("misc", () => {
   });
   it("formats a UTC day", () => {
     expect(shortDay("2026-10-14")).toBe("14 Oct");
+  });
+});
+
+describe("failsOften and priceRange", () => {
+  const usd = (amount: string) => ({ amount, asset: "a", decimals: 6 });
+  it("flags at least 20% failures over at least 5 calls only", () => {
+    expect(failsOften({ measuredCalls: 8, failedCalls: 8 })).toBe(true);
+    expect(failsOften({ measuredCalls: 10, failedCalls: 2 })).toBe(true);
+    expect(failsOften({ measuredCalls: 10, failedCalls: 1 })).toBe(false);
+    expect(failsOften({ measuredCalls: 4, failedCalls: 4 })).toBe(false);
+    expect(failsOften(null)).toBe(false);
+  });
+  it("says from the cheapest eligible price, held at the quote", () => {
+    const range = priceRange(usd("12000"), [usd("8000"), usd("11000"), usd("12000")]);
+    expect(range?.from.amount).toBe("8000");
+    expect(range?.differs).toBe(true);
+    expect(heldPriceSentence(range!)).toMatch(/held at most \$0\.012; you pay the price of the provider that served/);
+  });
+  it("ignores listings priced above the hold (not routed) and reports one price", () => {
+    const range = priceRange(usd("100000"), [usd("100000"), usd("250000")]);
+    expect(range?.differs).toBe(false);
+    expect(heldPriceSentence(range!)).toBeNull();
   });
 });

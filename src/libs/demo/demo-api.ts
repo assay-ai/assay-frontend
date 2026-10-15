@@ -119,3 +119,4 @@ function queryOf(url: string | undefined): Record<string, string> {
   if (query === undefined) return {};
   return Object.fromEntries(new URLSearchParams(query).entries());
 }
+
