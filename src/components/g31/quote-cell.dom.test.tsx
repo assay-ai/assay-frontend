@@ -13,7 +13,7 @@ function tool(overrides: Partial<ToolRow>): ToolRow {
     providerCount: 2,
     fromPrice: null,
     price: { amount: "20000", asset: "eip155:46630/erc20:0xabc", decimals: 6 },
-    routableBindings: 2,
+    paidBindings: 2,
     pricingMode: "PAID",
     routable: true,
     unroutableReason: null,
@@ -33,6 +33,15 @@ describe("QuoteCell", () => {
     );
     expect(html).toContain("100 free per day, then");
     expect(html).toContain("up to $0.0200");
+  });
+
+  it("shows a single price when a free binding sits beside one paid binding", () => {
+    const html = renderToStaticMarkup(
+      <QuoteCell tool={tool({ pricingMode: "FREEMIUM", freeCallsPerDay: 150, paidBindings: 1 })} />,
+    );
+    expect(html).toContain("150 free per day, then");
+    expect(html).toContain("$0.0200");
+    expect(html).not.toContain("up to");
   });
 
   it("is the bare quote for a PAID tool", () => {

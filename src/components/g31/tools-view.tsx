@@ -64,7 +64,7 @@ export function QuoteCell({ tool }: { tool: ToolRow }) {
   return (
     <>
       {lead ? <span className="block font-sans text-body-xs text-03">{lead}</span> : null}
-      {formatQuote(tool.price, tool.routableBindings, tool.pricingMode)}
+      {formatQuote(tool.price, tool.paidBindings, tool.pricingMode)}
     </>
   );
 }
@@ -326,7 +326,7 @@ export function ToolsView() {
                 <div className="flex w-full items-center justify-between gap-2.5 border-t border-01 pt-2.5">
                   <span className="font-mono text-mono-xs text-03">
                     from {formatPrice(tool.fromPrice)} · quote{" "}
-                    {formatOffer(tool.price, tool.routableBindings, tool.pricingMode, tool.freeCallsPerDay)}
+                    {formatOffer(tool.price, tool.paidBindings, tool.pricingMode, tool.freeCallsPerDay)}
                     {tool.listed && tool.charged && differs(tool.listed, tool.charged)
                       ? " · some calls were not charged"
                       : ""}
