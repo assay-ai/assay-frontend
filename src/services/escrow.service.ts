@@ -41,7 +41,11 @@
  */
 
 import type {
+  BuyerDebts,
   BuyerEscrow,
+  DebtVoucherIntent,
+  SettleDebtBody,
+  SettleDebtResult,
   EscrowClaimBody,
   EscrowIntent,
   EscrowLimitsBody,
@@ -169,4 +173,31 @@ export function submitEscrowWithdrawRequest(
   body: SubmitRequestWithdrawBody,
 ): Promise<RelayedEscrowIntent> {
   return api.post<RelayedEscrowIntent>("/escrow/withdrawals/request", body);
+}
+
+/**
+ * `GET /escrow/debts` — the payer's open BUYER DEBTS: served paid calls whose
+ * payment could not be collected. Paid calls are refused
+ * (`PAYMENT_DEBT_OUTSTANDING`) until each is settled; free calls work. Lists
+ * the session account's debts and the organization's, so a console sees every
+ * debt that blocks its agents — but only the session account's own can be
+ * settled from here (`account` on the answer).
+ */
+export function getBuyerDebts(): Promise<BuyerDebts> {
+  return api.get<BuyerDebts>("/escrow/debts");
+}
+
+/**
+ * `POST /escrow/debts/:intentId/voucher-intent` — the replacement voucher that
+ * settles one debt, with a fresh `seq`, plus its EIP-712 request on eip155.
+ * Sign it unchanged before `voucher.expiresAt`. 404 `PAYMENT_DEBT_NOT_FOUND`
+ * when it is settled already, written off, or another wallet's.
+ */
+export function createDebtVoucherIntent(intentId: string): Promise<DebtVoucherIntent> {
+  return api.post<DebtVoucherIntent>(`/escrow/debts/${encodeURIComponent(intentId)}/voucher-intent`, {});
+}
+
+/** `POST /escrow/debts/:intentId/voucher` — settle one debt with the signed voucher. */
+export function submitDebtVoucher(intentId: string, body: SettleDebtBody): Promise<SettleDebtResult> {
+  return api.post<SettleDebtResult>(`/escrow/debts/${encodeURIComponent(intentId)}/voucher`, body);
 }

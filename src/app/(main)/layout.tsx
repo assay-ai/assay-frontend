@@ -12,6 +12,7 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { DEFAULT_NAV_ITEMS, TopBar } from "@/components/layout/top-bar";
 import { WalletMenu } from "@/components/layout/wallet-menu";
 import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
+import { BuyerDebtBanner } from "@/features/buyer-debt/debt-banner";
 import { getUnreadCount } from "@/services";
 import { useTheme } from "@/providers/ThemeProvider";
 
@@ -133,6 +134,8 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
       <main className="flex w-full flex-1 flex-col pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0">
         {/* Shell level, above every buyer screen: see `features/account-block`. */}
         <AccountBlockBanner wrapperClassName="w-full px-4 pt-4 md:px-6" />
+        {/* Buyer debt: paid calls are paused until it is settled (`features/buyer-debt`). */}
+        <BuyerDebtBanner wrapperClassName="w-full px-4 pt-4 md:px-6" />
         {children}
       </main>
 

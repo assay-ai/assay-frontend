@@ -88,6 +88,14 @@ interface DemoCall {
   /** Set only on a call that was not charged; `/guarantee` folds by this. */
   readonly reasonCode: string | null;
   readonly score: number | null;
+  /**
+   * Buyer debt: a served, passed call whose payment could not be collected.
+   * `OUTSTANDING` keeps its charge (it is charged once the buyer settles) and
+   * is the one debt `GET /escrow/debts` lists — see {@link DEMO_DEBT}.
+   */
+  readonly debt?: "OUTSTANDING" | "WRITTEN_OFF";
+  /** The lapse cause recorded with a debt. */
+  readonly debtCause?: string;
 }
 
 /**
@@ -173,6 +181,10 @@ const CALLS: readonly DemoCall[] = [
     classification: "DATA_RESULT",
     reasonCode: null,
     score: 0.96,
+    // The agent's delegate key was revoked before the voucher was collected:
+    // buyer debt, so the buyer screens show the "Sign to settle" banner.
+    debt: "OUTSTANDING",
+    debtCause: "DelegateIsRevoked",
   },
   {
     intentId: "8c47b0d2-9e36-4a15-b7f8-03d1e5c86a29",
@@ -660,10 +672,38 @@ function toolCallRow(call: DemoCall) {
     status: call.status,
     price: money(listedPrice(call)),
     charged: money(call.charged),
+    forfeited: false,
+    debt: call.debt ?? null,
     verdict: call.verdict,
     createdAt: minutesAgo(call.minutesAgo),
   };
 }
+
+/* ----------------------------------------------------------- buyer debt */
+
+const WRITE_OFF_DAYS = 30;
+
+/** The one open debt, as `GET /escrow/debts` lists it. */
+function debtView(call: DemoCall) {
+  const lapsedMinutes = Math.max(call.minutesAgo - 10, 0);
+  return {
+    intentId: call.intentId,
+    payer: DEMO_BUYER_ACCOUNT,
+    amount: {
+      amount: money(listedPrice(call)).amount,
+      asset: DEMO_ASSET,
+      decimals: 6,
+    },
+    providerId: providerOf(call),
+    toolId: call.toolId,
+    cause: call.debtCause ?? null,
+    lapsedAt: minutesAgo(lapsedMinutes),
+    writeOffAt: minutesAgo(lapsedMinutes - WRITE_OFF_DAYS * 1440),
+    createdAt: minutesAgo(call.minutesAgo),
+  };
+}
+
+export const DEMO_DEBT = debtView(CALLS.find((call) => call.debt === "OUTSTANDING")!);
 
 /* ----------------------------------------------------------------- receipt */
 
@@ -774,7 +814,10 @@ function receiptBody(call: DemoCall) {
     status: call.status,
     listedPrice: money(listedPrice(call)),
     chargedPrice: money(call.charged),
-    withheld: money(notChargedMajor(call)),
+    withheld: money(call.debt ? "0" : notChargedMajor(call)),
+    forfeited: false,
+    debt: call.debt ?? null,
+    chargeNote: call.debt ? (call.debtCause ?? null) : null,
     verdict: {
       status: call.verdict,
       reasonCode: call.reasonCode,
@@ -1051,6 +1094,13 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       ],
       pageInfo: { nextCursor: null, hasMore: false },
     }),
+  },
+
+  /* ----------------------------------------------------------- buyer debt */
+  {
+    method: "GET",
+    match: "/escrow/debts",
+    body: () => ({ account: DEMO_BUYER_ACCOUNT, debts: [DEMO_DEBT] }),
   },
 
   /* --------------------------------------------------------------- escrow */
