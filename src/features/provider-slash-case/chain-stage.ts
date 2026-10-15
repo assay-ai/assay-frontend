@@ -32,23 +32,26 @@ export type CaseChainStage =
       readonly disputedParts: number;
     };
 
+/** The chain's own `executableAt` when it is known and readable, else `null`. */
+export function chainExecutableOf(clocks: SlashProposalClocks): string | null {
+  const at = clocks.chainExecutableAt;
+  return at && Number.isFinite(new Date(at).getTime()) ? at : null;
+}
+
 /**
- * The one execution date to plan against: the LATER of Assay's
- * `earliestExecutionAt` and the chain's own `chainExecutableAt`. Nothing is
- * taken before both have passed, so this can only overstate the wait.
+ * The one execution date to plan against, the same rule the operator case
+ * screen (`case-flow.ts`) and the backend's listing use:
+ * `chainExecutableAt ?? earliestExecutionAt`.
  *
- * An absent or unparseable chain date loses the comparison. The winner is
- * returned as the original string, so an unparseable value still reaches
- * `stampUtc` and renders as a dash instead of throwing.
+ * Once the record is on chain, `X402Stake.executeSlash` is open to ANY caller
+ * from the record's `executableAt`; Assay's own later floor
+ * (`earliestExecutionAt`) only binds Assay's executor, not anyone else. So the
+ * chain date wins even when it is earlier, and a provider is never told they
+ * have more time than the chain gives. Assay's floor applies only while the
+ * record is not on chain (no chain date, or an unreadable one).
  */
 export function executionFloorOf(clocks: SlashProposalClocks): string {
-  const offChain = new Date(clocks.earliestExecutionAt).getTime();
-  const onChain = clocks.chainExecutableAt
-    ? new Date(clocks.chainExecutableAt).getTime()
-    : Number.NEGATIVE_INFINITY;
-  return onChain > offChain && clocks.chainExecutableAt
-    ? clocks.chainExecutableAt
-    : clocks.earliestExecutionAt;
+  return chainExecutableOf(clocks) ?? clocks.earliestExecutionAt;
 }
 
 function plusSeconds(iso: string, seconds: number): string | null {
