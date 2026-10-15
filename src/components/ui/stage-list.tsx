@@ -2,6 +2,8 @@ import { cva } from "class-variance-authority";
 import { Check, Minus, X } from "lucide-react";
 import * as React from "react";
 
+import { Term } from "@/components/patterns/term";
+import type { GlossaryKey } from "@/libs/glossary";
 import { cn } from "@/utils";
 
 /**
@@ -17,6 +19,8 @@ export interface StageCheck {
   id?: string;
   /** Check name, e.g. "Response shape". */
   name: string;
+  /** A glossary entry that explains the check; the name becomes a `Term`. */
+  term?: GlossaryKey;
   status: StageCheckStatus;
   /** Short muted context shown at the end of the row, e.g. "runs on every call". */
   note?: string;
@@ -120,7 +124,9 @@ export const StageList = React.forwardRef<HTMLUListElement, StageListProps>(
               icon={STATUS_ICON[check.status]}
               className={markVariants({ status: check.status })}
             />
-            <span className="w-[260px] shrink-0 text-label-sm text-01">{check.name}</span>
+            <span className="w-[260px] shrink-0 text-label-sm text-01">
+              {check.term ? <Term k={check.term}>{check.name}</Term> : check.name}
+            </span>
             <span className={statusTextVariants({ status: check.status })}>
               {STATUS_LABEL[check.status]}
             </span>

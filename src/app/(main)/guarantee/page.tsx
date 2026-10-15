@@ -28,10 +28,11 @@ import {
 import { CardRow } from "@/components/ui/card-row";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { formatCount, isZeroMoney, sharePercent } from "@/features/buyer/period";
+import { MATCHES_SENTENCE, ReconcileNote } from "@/features/buyer/reconcile-note";
 import { useGuarantee, type MonthRow } from "@/features/buyer/use-guarantee";
 import { usePublicFeatures } from "@/features/explorer/use-public-explorer";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { plain, plainError } from "@/libs/plain-language";
+import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { SUPPORT_URL } from "@/libs/support";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
@@ -252,7 +253,7 @@ export default function GuaranteePage() {
             <DecompositionRow
               total
               label="Total not charged"
-              sub={`${formatCount(withheldCalls)} ${withheldCalls === 1 ? "call" : "calls"}${reconciles ? " · matches your balance history exactly" : ""}`}
+              sub={`${formatCount(withheldCalls)} ${withheldCalls === 1 ? "call" : "calls"}${reconciles ? ` · ${MATCHES_SENTENCE.replace(/\.$/, "").toLowerCase()}` : ""}`}
               value={formatMoney(withheldTotal)}
             />
             <Link
@@ -266,30 +267,7 @@ export default function GuaranteePage() {
         </section>
       ) : null}
 
-      {data?.withheld && !data.withheld.ok && !withheldUnavailable ? (
-        <section role="alert" className="flex w-full flex-col gap-3 rounded-xl border border-warning-20 bg-warning-10 p-4 tablet:flex-row tablet:items-center tablet:justify-between">
-          <div className="flex flex-col gap-1">
-            <p className="text-label-sm text-warning-700">This month&apos;s figures do not add up yet</p>
-            <p className="text-body-13 text-02">
-              The released holds differ from the not-charged total by{" "}
-              {formatMoney({ ...data.withheld.holdReleaseTotal, amount: data.withheld.difference.replace(/^-/, "") })}.
-              Your money is not affected; keep this month&apos;s statement for reference.
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <Button variant="secondary" size="sm" asChild>
-              <Link href={`/statements?month=${period.key}`}>Download statement</Link>
-            </Button>
-            {SUPPORT_URL ? (
-              <Button variant="secondary" size="sm" asChild>
-                <a href={SUPPORT_URL} target="_blank" rel="noreferrer">
-                  Contact support
-                </a>
-              </Button>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
+      {!loading && !error && !withheldUnavailable ? <ReconcileNote withheld={data?.withheld} /> : null}
 
       {data?.freeTier ? (
         <p className="flex items-start gap-2 text-body-13 text-02">
@@ -321,7 +299,7 @@ export default function GuaranteePage() {
                         className="flex w-full items-center gap-3 px-4 py-3 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 tablet:px-5"
                       >
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className="text-body-sm text-01">{plain(r.reason)}</span>
+                          <span className="text-body-sm text-01">{r.label}</span>
                           <span className="text-body-xs text-03">
                             {formatCount(r.calls)} {r.calls === 1 ? "call" : "calls"}
                             {r.mostlyToolId ? ` · mostly ${names.name("tool", r.mostlyToolId)}` : ""}
@@ -337,7 +315,7 @@ export default function GuaranteePage() {
                   ))}
                 </ul>
                 {!data?.reasonsComplete ? (
-                  <p className="px-5 py-2.5 text-body-xs text-03">Showing the first 1,000 failed calls of this month.</p>
+                  <p className="px-5 py-2.5 text-body-xs text-03">Built from the first 1,000 calls of this month.</p>
                 ) : null}
               </PanelBody>
             </Panel>
