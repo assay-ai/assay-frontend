@@ -16,11 +16,13 @@ import {
   formatCallPrice,
   freeTierLabel,
   plural,
+  smallestFreeAllowance,
   stakeSummary,
 } from "@/features/explorer/explorer-text";
 import {
   publicErrorText,
   usePublicFeatures,
+  usePublicProviderDetails,
   usePublicProviders,
   usePublicTools,
 } from "@/features/explorer/use-public-explorer";
@@ -47,8 +49,8 @@ function matches(needle: string, ...fields: (string | null | undefined)[]): bool
   return fields.some((field) => (field ?? "").toLowerCase().includes(needle));
 }
 
-function ToolRow({ tool }: { tool: PublicTool }) {
-  const free = freeTierLabel(tool.pricingMode);
+function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: number | null }) {
+  const free = freeTierLabel(tool.pricingMode, freeAllowance);
   return (
     <li>
       <Link
@@ -128,6 +130,13 @@ export default function CataloguePage() {
     const rows = [...(providers.data?.providers ?? [])].sort((a, b) => b.toolIds.length - a.toolIds.length);
     return needle ? rows.filter((p) => matches(needle, p.name, p.providerId)) : rows;
   }, [providers.data, needle]);
+
+  // Each listing's free allowance lives on the provider detail; there are few providers and they are cached.
+  const details = usePublicProviderDetails((providers.data?.providers ?? []).map((p) => p.providerId));
+  const freeAllowanceOf = (toolId: string) =>
+    smallestFreeAllowance(
+      details.map((d) => d.data?.tools.find((t) => t.toolId === toolId)?.freeCallsPerAgentPerDay),
+    );
 
   const active = view === "tools" ? tools : providers;
   const total = view === "tools" ? (tools.data?.tools.length ?? 0) : (providers.data?.providers.length ?? 0);
@@ -220,7 +229,7 @@ export default function CataloguePage() {
         ) : (
           <ul className="flex flex-col divide-y divide-01 overflow-hidden rounded-xl border border-01 bg-01">
             {view === "tools"
-              ? toolRows.map((tool) => <ToolRow key={tool.id} tool={tool} />)
+              ? toolRows.map((tool) => <ToolRow key={tool.id} tool={tool} freeAllowance={freeAllowanceOf(tool.id)} />)
               : providerRows.map((provider) => (
                   <ProviderRow key={provider.providerId} provider={provider} chainName={chainName} />
                 ))}
