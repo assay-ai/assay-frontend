@@ -1,14 +1,16 @@
 "use client";
 
-import { DisplayAssetSelect } from "@/components/display-asset-select";
-import { ChartNoAxesColumn, Gauge, Info, Plus, TriangleAlert } from "lucide-react";
+import { DisplayAssetSelect, useDisplayAssetPick } from "@/components/display-asset-select";
+import { ChartNoAxesColumn, ChevronRight, Gauge, Info, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, type ReactNode } from "react";
 
 import { WalletSetupBanner } from "@/components/auth/wallet-setup-banner";
-import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
-import { CardRow } from "@/components/ui/card-row";
+import { EntityName } from "@/components/patterns/entity-name";
+import { LocalTime } from "@/components/patterns/local-time";
+import { PageState } from "@/components/patterns/page-state";
+import { StatusChip } from "@/components/patterns/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Panel,
@@ -24,21 +26,23 @@ import {
   axisLabel,
   formatAge,
   formatCount,
-  formatUtcStamp,
-  formatUtcTime,
   isZeroMoney,
   monthPeriod,
   sharePercent,
-  shortId,
   trendIsUp,
   trendLabel,
 } from "@/features/buyer/period";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
+import { attentionAction } from "@/features/buyer/attention-action";
+import { callOutcome } from "@/features/buyer/call-outcome";
 import { overviewBalance, singleBalanceSub } from "@/features/buyer/overview-balance";
 import { useOverview, type NotificationRow } from "@/features/buyer/use-overview";
 import type { FullBalance } from "@/features/g30/balance";
-import { formatMoney, notCharged } from "@/utils/money";
-import { presentVerdict } from "@/utils/verdict";
+import { useChainName } from "@/hooks/useChainName";
+import { useEntityNames } from "@/hooks/useEntityNames";
+import { plainError } from "@/libs/plain-language";
+import { routes } from "@/libs/routes";
+import { formatMoney, notCharged, toDecimal } from "@/utils/money";
 
 /**
  * Overview (desktop design, with tablet 834 and mobile 390 variants).
@@ -72,7 +76,10 @@ function HoldFigure({ label, value }: { label: string; value: string }) {
 
 export default function OverviewPage() {
   const anchor = useMemo(() => new Date(), []);
-  const { data, loading, error, reload } = useOverview(anchor);
+  const assetPick = useDisplayAssetPick();
+  const { data, loading, error, reload } = useOverview(anchor, assetPick);
+  const names = useEntityNames({ kinds: ["tool"] });
+  const chainName = useChainName();
   // The month is a fact about the calendar, not about the response, so the
   // tile labels stay correct even when every request failed.
   const monthLabel = useMemo(() => monthPeriod(anchor).label, [anchor]);
@@ -117,7 +124,7 @@ export default function OverviewPage() {
     const tools = data?.chartTools ?? [];
     const rawSeries: ChartSeries[] = tools.map((id, i) => ({
       key: id,
-      label: shortId(id),
+      label: names.name("tool", id),
       tone: ((i % 6) + 1) as ChartSeries["tone"],
     }));
     const rawBars = (data?.chart ?? []).map((d) => ({ label: axisLabel(d.key), values: d.byTool }));
@@ -127,7 +134,7 @@ export default function OverviewPage() {
       ...capped.bars.map((b) => Object.values(b.values).reduce((a, v) => a + v, 0)),
     );
     return { ...capped, scaleMax: max };
-  }, [data?.chart, data?.chartTools]);
+  }, [data?.chart, data?.chartTools, names]);
 
   const decimals = balance?.decimals ?? 6;
   const asset = balance?.asset ?? "";
@@ -146,9 +153,7 @@ export default function OverviewPage() {
       <header className="flex w-full flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">Overview</h1>
-          <p className="font-mono text-mono-12 text-03">
-            agent prod · {formatUtcStamp(anchor)} · figures update every 30s
-          </p>
+          <p className="text-body-13 text-03">Your money, today&apos;s spend and anything that needs you. Updates every 30 seconds.</p>
         </div>
         <div className="flex shrink-0 items-center gap-2.5">
           <Button variant="secondary" asChild>
@@ -158,7 +163,7 @@ export default function OverviewPage() {
             </Link>
           </Button>
           <Button asChild>
-            <Link href="/funding">
+            <Link href="/funding/deposit">
               <Plus className="size-[15px]" />
               Add funds
             </Link>
@@ -166,7 +171,7 @@ export default function OverviewPage() {
         </div>
       </header>
 
-      <DisplayAssetSelect />
+      <DisplayAssetSelect live />
 
       {/* A brand-new account's first requests fail for one specific, temporary
           reason — Privy records the wallet after issuing the token — and that
@@ -174,23 +179,24 @@ export default function OverviewPage() {
       {isWalletNotLinked(error) ? <WalletSetupBanner onLinked={reload} /> : null}
 
       {error && !isWalletNotLinked(error) ? (
-        <Banner
-          tone="danger"
+        <PageState
+          kind="error"
           title="The overview could not be loaded"
-          description={`${error.code} · ${error.message}`}
+          description={plainError(error.code)}
+          onRetry={reload}
+          code={error.code}
+          details={error.message}
         />
       ) : null}
 
       {loading && !data ? (
-        <p role="status" aria-live="polite" className="text-body-md text-02">
-          Loading your account…
-        </p>
+        <PageState kind="loading" rows={4} label="Loading your account" />
       ) : null}
 
       {/* Foundations > Breakpoints, row "Metric tiles": 1 column at 390 with the
           two HEADLINE figures — balance and not charged — full width and the
           secondary pair 2-across; 2 columns at 834; 4 at 1440. */}
-      <section className="grid w-full grid-cols-2 gap-3 tablet:grid-cols-2 tablet:gap-3.5 desktop:grid-cols-4 desktop:gap-4">
+      <section className="grid w-full grid-cols-2 gap-3 tablet:grid-cols-2 tablet:gap-3.5 desktop:grid-cols-3 desktop:gap-4">
         <MetricTile
           className="order-1 col-span-2 tablet:col-span-1"
           label="Balance"
@@ -207,12 +213,14 @@ export default function OverviewPage() {
             balanceState.kind === "single"
               ? singleBalanceSub(balanceState.balance)
               : balanceState.kind === "multiple"
-                ? "balances are per chain — open Funding"
+                ? ((data?.balances ?? []) as readonly FullBalance[])
+                    .map((b) => `${formatMoney(b.available)} on ${chainName(b.chainId)}`)
+                    .join(" · ")
                 : "not available"
           }
           meta={
             balance
-              ? `${formatMoney(balance.held)} held · ${formatCount(openHolds.length)} calls in flight`
+              ? `${formatMoney(balance.held)} held · ${formatCount(openHolds.length)} ${openHolds.length === 1 ? "call" : "calls"} in flight`
               : undefined
           }
         />
@@ -229,12 +237,12 @@ export default function OverviewPage() {
               ? "not available"
               : nothingWithheld
                 ? "nothing withheld yet"
-                : `${formatCount(withheldCalls)} calls`
+                : `${formatCount(withheldCalls)} ${withheldCalls === 1 ? "call" : "calls"}`
           }
           meta={
             nothingWithheld
               ? "Refunds are a released hold, so your balance never moves. This is where you see them."
-              : `${withheldShare ?? "—"} of ${formatMoney(data?.monthListed ?? null)} listed · reconciles to the ledger`
+              : `${withheldShare ?? "—"} of ${formatMoney(data?.monthListed ?? null)} listed this month`
           }
         />
 
@@ -242,21 +250,13 @@ export default function OverviewPage() {
           className="order-3 desktop:order-2"
           label="Today"
           value={data ? formatMoney(data.todayCharged) : "—"}
-          sub={data ? `${formatCount(data.todayCalls)} calls` : "not available"}
+          sub={data ? `${formatCount(data.todayCalls)} ${data.todayCalls === 1 ? "call" : "calls"}` : "not available"}
           meta={trend ?? undefined}
           metaTone={trendUp ? "warning" : "default"}
         />
 
-        <MetricTile
-          className="order-4"
-          tone="teal"
-          label="Compensation received"
-          // No endpoint reports SLASH_DISTRIBUTION to a buyer, so this is an
-          // em-dash rather than an invented zero.
-          value="—"
-          sub={`not reported yet · ${monthLabel}`}
-          meta="60% of each penalty taken from the provider who served you the bad result"
-        />
+        {/* "Compensation received" is not drawn: no endpoint reports a buyer's
+            share of a penalty yet, and a tile that can only say "—" is noise. */}
       </section>
 
       <section className="flex w-full flex-col gap-3.5 desktop:flex-row desktop:gap-4">
@@ -291,7 +291,9 @@ export default function OverviewPage() {
             <PanelTitles>
               <PanelTitle>Needs attention</PanelTitle>
               <PanelDescription>
-                Actionable only — {formatCount(data?.notifications.length ?? 0)} items
+                {(data?.notifications.length ?? 0) === 1
+                  ? "1 item"
+                  : `${formatCount(data?.notifications.length ?? 0)} items`}
               </PanelDescription>
             </PanelTitles>
           </PanelHeader>
@@ -299,22 +301,32 @@ export default function OverviewPage() {
             {(data?.notifications.length ?? 0) === 0 ? (
               <p className="px-5 py-4 text-body-sm text-02">Nothing needs your attention.</p>
             ) : (
-              data?.notifications.map((note, i) => (
-                <div
-                  key={note.id}
-                  className={
-                    i === 0
-                      ? "flex w-full items-center gap-3 px-5 py-3.5"
-                      : "flex w-full items-center gap-3 border-t border-01 px-5 py-3.5"
-                  }
-                >
-                  <span className="shrink-0">{SEVERITY_ICON[note.severity] ?? SEVERITY_ICON.INFO}</span>
-                  <p className="min-w-0 flex-1 text-body-sm text-01">{note.title}</p>
-                  <p className="shrink-0 font-mono text-mono-13 text-03">
-                    {note.createdAt.slice(0, 10)}
-                  </p>
-                </div>
-              ))
+              data?.notifications.map((note, i) => {
+                const action = attentionAction(note);
+                return (
+                  <div
+                    key={note.id}
+                    className={
+                      i === 0
+                        ? "flex w-full items-center gap-3 px-4 py-3 tablet:px-5"
+                        : "flex w-full items-center gap-3 border-t border-01 px-4 py-3 tablet:px-5"
+                    }
+                  >
+                    <span className="shrink-0">{SEVERITY_ICON[note.severity] ?? SEVERITY_ICON.INFO}</span>
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <p className="text-body-sm text-01">{note.title}</p>
+                      <p className="text-body-xs text-03">
+                        <LocalTime value={note.createdAt} />
+                      </p>
+                    </div>
+                    {action ? (
+                      <Button variant="secondary" size="sm" className="shrink-0" asChild>
+                        <Link href={action.href}>{action.label}</Link>
+                      </Button>
+                    ) : null}
+                  </div>
+                );
+              })
             )}
           </PanelBody>
         </Panel>
@@ -350,35 +362,59 @@ export default function OverviewPage() {
           <PanelHeader>
             <PanelTitles>
               <PanelTitle>Recent calls</PanelTitle>
-              <PanelDescription>
-                Listed and charged on every row, even when they are equal
-              </PanelDescription>
+              <PanelDescription>Open a call to see why it was or was not charged</PanelDescription>
             </PanelTitles>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={routes.calls()}>See all</Link>
+            </Button>
           </PanelHeader>
-          <PanelBody className="gap-2.5 p-4 tablet:p-[18px] desktop:p-5">
+          <PanelBody>
             {(data?.recentCalls.length ?? 0) === 0 ? (
-              <EmptyState className="max-w-none border-0 bg-transparent p-0" />
+              <EmptyState
+                className="max-w-none border-0 bg-transparent px-5 py-4"
+                title="No calls yet"
+                description="When your agent calls a tool, each call shows here with what it cost."
+              />
             ) : (
-              data?.recentCalls.map((call) => {
-                const uncharged = notCharged(call.price, call.charged);
-                return (
-                  <CardRow
-                    key={call.intentId}
-                    name={shortId(call.toolId)}
-                    callsLabel={formatUtcTime(call.createdAt)}
-                    figures={[
-                      { label: "Listed", value: formatMoney(call.price, { decimals: 4 }) },
-                      { label: "Charged", value: formatMoney(call.charged, { decimals: 4 }) },
-                      {
-                        label: "Not charged",
-                        value: formatMoney(uncharged, { decimals: 4 }),
-                        tone: "teal",
-                      },
-                    ]}
-                    meta={presentVerdict(call.verdict).shownAs}
-                  />
-                );
-              })
+              <ul className="flex flex-col">
+                {data?.recentCalls.map((call) => {
+                  const outcome = callOutcome(call);
+                  const uncharged = notCharged(call.price, call.charged);
+                  return (
+                    <li key={call.intentId} className="border-b border-01 last:border-b-0">
+                      <Link
+                        href={routes.receipt(call.intentId)}
+                        className="flex w-full items-center gap-3 px-4 py-3 transition-colors hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 tablet:px-5"
+                      >
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
+                          <span className="truncate font-mono text-mono-13 font-semibold text-01">
+                            <EntityName kind="tool" id={call.toolId} copyable={false} />
+                          </span>
+                          <span className="flex flex-wrap items-center gap-2 text-body-xs text-03">
+                            <StatusChip status={outcome} />
+                            <LocalTime value={call.createdAt} />
+                          </span>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-0.5">
+                          <span className="font-mono text-mono-13 font-semibold text-01">
+                            {outcome === "free" ? "Free" : formatMoney(call.charged, { decimals: 4 })}
+                          </span>
+                          {toDecimal(uncharged).gt(0) && outcome !== "checking" ? (
+                            <span className="font-mono text-mono-xs text-teal-600">
+                              {formatMoney(uncharged, { decimals: 4 })} not charged
+                            </span>
+                          ) : outcome === "checking" ? (
+                            <span className="font-mono text-mono-xs text-03">
+                              {formatMoney(call.price, { decimals: 4 })} held
+                            </span>
+                          ) : null}
+                        </div>
+                        <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </PanelBody>
         </Panel>

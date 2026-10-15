@@ -22,19 +22,32 @@ export function pickDisplayAsset(
 
 export function storedDisplayAsset(): string | null {
   try {
-    return window.localStorage.getItem(STORAGE_KEY);
+    return window.localStorage.getItem(STORAGE_KEY) ?? memoryPick;
   } catch {
-    return null;
+    return memoryPick;
   }
+}
+
+let memoryPick: string | null = null;
+const listeners = new Set<() => void>();
+
+/** Called whenever the pick changes, so a screen can refetch without a page reload. */
+export function subscribeDisplayAsset(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 export function storeDisplayAsset(asset: string): void {
   cached = null;
+  memoryPick = asset;
   try {
     window.localStorage.setItem(STORAGE_KEY, asset);
   } catch {
     // Private mode: the pick simply does not survive a reload.
   }
+  for (const listener of listeners) listener();
 }
 
 /** The assets this buyer holds, in the API's order, without duplicates. */
