@@ -1,0 +1,67 @@
+import { describe, expect, it } from "vitest";
+
+import type { OperatorApproval, OperatorRole } from "@/interfaces/operator";
+
+import { actsOnMoney, ROLE_PRESETS, capabilitiesFor } from "./roles";
+import { firstNames, inviteLimit, invitesOf, limitCell } from "./team";
+
+const usd = (amount: string) => ({ amount, asset: "eip155:46630", decimals: 6 });
+const op = (id: string, name: string, roles: OperatorRole[]) => ({ id, displayName: name, subject: `${id}@`, roles, status: "ACTIVE" as const });
+
+describe("Team limit column", () => {
+  it("shows a dash for roles that cannot act on money, and no .00 on whole dollars", () => {
+    expect(limitCell({ roles: ["OPS_ADMIN"], authorityLimit: usd("0") })).toBe("—");
+    expect(limitCell({ roles: ["ADJL"], authorityLimit: usd("1000000000") })).toBe("$1,000");
+    expect(limitCell({ roles: ["ADJ"], authorityLimit: usd("2500000") })).toBe("$2.50");
+    expect(limitCell({ roles: ["TRE"], authorityLimit: null })).toBe("No limit");
+    expect(actsOnMoney(["SRE", "SUP"])).toBe(true);
+    expect(actsOnMoney(["SUP"])).toBe(false);
+  });
+});
+
+describe("Team invites", () => {
+  const approval = (overrides: Partial<OperatorApproval>): OperatorApproval => ({
+    id: "apr-add-1",
+    action: "operator.add",
+    code: "A-12",
+    target: "operator_wallet:0x4d2e",
+    payload: { body: { subject: "noor@", displayName: "Noor Hassan", roles: ["ADJ"], authorityLimitMinor: "100000000", walletAddress: "0x4d2e8a1c6b9f3e07d5a2c8b1e4f7a0d3c6b9e258" } },
+    status: "PENDING",
+    requestedBy: "dan@",
+    requestedById: "dan",
+    approvedBy: null,
+    rejectedBy: null,
+    createdAt: "2026-10-16T07:00:00.000Z",
+    decidedAt: null,
+    expiresAt: "2026-10-17T07:00:00.000Z",
+    ...overrides,
+  });
+  const team = [op("dan", "Dan Ortiz", ["OPS_ADMIN"]), op("ava", "Ava Chen", ["OPS_ADMIN"]), op("jordan", "Jordan Blake", ["ADJL"])];
+
+  it("lists a pending addition with who it waits for (not the requester)", () => {
+    const [invite] = invitesOf([approval({}), approval({ id: "x", action: "operator.change" }), approval({ id: "y", status: "APPROVED" })], team);
+    expect(invite).toMatchObject({ name: "Noor Hassan", subject: "noor@", roles: ["ADJ"], waitingFor: ["Ava Chen"] });
+    expect(`Invited · waiting for ${firstNames(invite!.waitingFor)}`).toBe("Invited · waiting for Ava Chen");
+    expect(inviteLimit(invite!, "eip155:46630", 6)).toBe("$100");
+  });
+
+  it("says who in short names", () => {
+    expect(firstNames([])).toBe("a second admin");
+    expect(firstNames(["Riley Brooks", "Jordan Blake"])).toBe("Riley or Jordan");
+    expect(firstNames(["Riley Brooks", "Jordan Blake", "Iris Park"])).toBe("Riley or 2 others");
+  });
+});
+
+describe("role picker lines", () => {
+  it("are at most 8 words and promise only what the role can do", () => {
+    for (const preset of ROLE_PRESETS) {
+      expect(preset.short.split(/\s+/).length).toBeLessThanOrEqual(8);
+      const caps = capabilitiesFor(preset.roles);
+      if (/rules disputes/i.test(preset.short)) expect(caps.rule).toBe(true);
+      if (/blocks accounts/i.test(preset.short)) expect(caps.block).toBe(true);
+      if (/team/i.test(preset.short)) expect(caps.manageOperators).toBe(true);
+    }
+    expect(ROLE_PRESETS.find((p) => p.id === "support")!.short).toBe("Blocks accounts in an incident");
+    expect(ROLE_PRESETS.map((p) => p.description).join(" ")).not.toMatch(/fleet sweep/);
+  });
+});
