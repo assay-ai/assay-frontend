@@ -186,7 +186,7 @@ export function penaltyChip(row: Pick<PenaltyRow, "status" | "disputedAt" | "nex
     case "DISPUTED":
       return { status: "waiting", detail: "old process" };
     case "CANCEL_REQUESTED":
-      return { status: "waiting", detail: "cancel to sign" };
+      return { status: "waiting-signature", detail: "cancel" };
     case "PROPOSED": {
       if (row.disputedAt) return { status: "upheld" };
       const at = row.nextDeadline ? Date.parse(row.nextDeadline) : Number.NaN;
