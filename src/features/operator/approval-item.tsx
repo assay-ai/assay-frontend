@@ -192,7 +192,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
           requestedBy: approval.rejectedBy && isWithdrawn(approval) ? nameOf(approval.rejectedBy) : approval.requestedBy,
         })}{" "}
         · <LocalTime value={approval.decidedAt ?? approval.expiresAt} /> ·{" "}
-        <Link href={approvalActivityHref(approval)} className="text-primary-700 hover:underline">
+        <Link href={approvalActivityHref(approval)} className="hit-area text-primary-700 hover:underline">
           {/* Not "History": that is the tab this row sits under. */}
           See in Activity
         </Link>
@@ -225,7 +225,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
           <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             {mode === "history" ? <StatusChip status={historyChip(approval)} /> : null}
             {target.href ? (
-              <Link href={target.href} className="min-w-0 text-label-sm text-01 [overflow-wrap:anywhere] hover:underline">
+              <Link href={target.href} className="hit-area min-w-0 text-label-sm text-01 [overflow-wrap:anywhere] hover:underline">
                 {title}
               </Link>
             ) : (

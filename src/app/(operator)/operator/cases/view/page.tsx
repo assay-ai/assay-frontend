@@ -340,7 +340,7 @@ export default function OperatorCasePage() {
         <p role="status" className="w-full rounded-lg border border-01 bg-02 px-3.5 py-2.5 text-body-13 text-01">
           {WAITING_WHAT[waitingAny.action] ?? "A request on this penalty"} is waiting for approval: {directory.nameOf(waitingAny.requestedBy)} asked{" "}
           <LocalTime value={waitingAny.createdAt} midSentence />.{" "}
-          <Link href={approvalHref(waitingAny.id)} className="text-primary-700 underline-offset-2 hover:underline">
+          <Link href={approvalHref(waitingAny.id)} className="hit-area text-primary-700 underline-offset-2 hover:underline">
             Open the request
           </Link>
         </p>
@@ -387,7 +387,7 @@ export default function OperatorCasePage() {
             <Fact label="Provider">
               <Link
                 href={`/operator/cases?tab=all&q=${encodeURIComponent(providerName)}`}
-                className="inline-flex items-center gap-1 text-01 underline-offset-2 hover:underline"
+                className="hit-area inline-flex items-center gap-1 text-01 underline-offset-2 hover:underline"
               >
                 {providerName}
                 <ArrowRight aria-hidden="true" className="size-3.5 text-03" />
@@ -451,7 +451,7 @@ export default function OperatorCasePage() {
               </ol>
             )}
             <p className="pt-3 text-body-13">
-              <Link href={`/operator/override-log?targetId=${encodeURIComponent(proposalId)}`} className="text-primary-700 underline-offset-2 hover:underline">
+              <Link href={`/operator/override-log?targetId=${encodeURIComponent(proposalId)}`} className="hit-area text-primary-700 underline-offset-2 hover:underline">
                 Operator actions on this penalty, in Activity
               </Link>
             </p>

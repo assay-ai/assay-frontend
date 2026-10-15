@@ -301,7 +301,7 @@ function TeamScreen() {
                     </span>
                   </span>
                   <span className="absolute right-3 top-2 tablet:hidden">
-                    <Button variant="ghost" size="sm" asChild aria-label={`Open the request to add ${invite.name}`}>
+                    <Button variant="ghost" size="sm" asChild aria-label={`Open the request to add ${invite.name}`} className="touch-target">
                       <Link href={approvalHref(invite.id)}>
                         <ArrowUpRight aria-hidden="true" />
                       </Link>
@@ -677,7 +677,7 @@ function AddSheet({
                   Their handle: <span className="font-mono">{subject}</span>, the short name Activity and approvals show for
                   them.{" "}
                   {handle === null ? (
-                    <button type="button" className="text-primary-600 hover:underline" onClick={() => setHandle(subject)}>
+                    <button type="button" className="hit-area text-primary-600 hover:underline" onClick={() => setHandle(subject)}>
                       change
                     </button>
                   ) : null}

@@ -790,7 +790,7 @@ function LiftSheet({
               <p>
                 {nameOf(waiting.requestedBy)} asked <LocalTime value={waiting.createdAt} />. A second request would wait for the same
                 approvers, so it is not sent.{" "}
-                <Link href={approvalHref(waiting.id)} className="text-primary-600 hover:underline">
+                <Link href={approvalHref(waiting.id)} className="hit-area text-primary-600 hover:underline">
                   Open the waiting request
                 </Link>
               </p>
