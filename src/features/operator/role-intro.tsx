@@ -192,7 +192,7 @@ export function RoleIntro({ identity, onDismiss }: { identity: OperatorIdentity;
         You&apos;re signed in as <span className="text-label-13 text-01">{roleTitle(identity.roles)}</span>
         {limit ? ` · ${limit} per action` : ""}.{" "}
         <RoleCapabilities identity={identity} align="start">
-          <button type="button" className="text-label-13 text-primary-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+          <button type="button" className="hit-area text-label-13 text-primary-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
             What can I do?
           </button>
         </RoleCapabilities>
@@ -201,7 +201,7 @@ export function RoleIntro({ identity, onDismiss }: { identity: OperatorIdentity;
         type="button"
         onClick={onDismiss}
         aria-label="Hide this"
-        className="flex size-7 shrink-0 items-center justify-center rounded-full text-03 hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        className="hit-area flex size-7 shrink-0 items-center justify-center rounded-full text-03 hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
         <X aria-hidden="true" className="size-4" />
       </button>

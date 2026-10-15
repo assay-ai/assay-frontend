@@ -126,6 +126,7 @@ function CopyLinkButton({ link }: { link: string }) {
       type="button"
       size="sm"
       data-primary=""
+      className="touch-target"
       title={absolute(link)}
       icon={copied ? <Check aria-hidden="true" /> : <Link2 aria-hidden="true" />}
       onClick={() => void copy()}
@@ -192,14 +193,15 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
         })}{" "}
         · <LocalTime value={approval.decidedAt ?? approval.expiresAt} /> ·{" "}
         <Link href={approvalActivityHref(approval)} className="text-primary-700 hover:underline">
-          History
+          {/* Not "History": that is the tab this row sits under. */}
+          See in Activity
         </Link>
       </>
     ) : mode === "own" ? (
       <>{waitingFor}</>
     ) : (
       <>
-        {nameOf(approval.requestedBy)} · <LocalTime value={approval.createdAt} />
+        {nameOf(approval.requestedBy)} · asked <LocalTime value={approval.createdAt} />
         {mode === "other" ? ` · ${waitingFor}` : null}
       </>
     );
@@ -248,14 +250,16 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
             <span className="min-w-0">{meta}</span>
             {pending ? <Deadline kind="approval" until={approval.expiresAt} from={approval.createdAt} /> : null}
           </p>
+          {/* Phone: two equal buttons across the row. From 640px they keep
+              their own width, at the right, instead of stretching. */}
           {showActions ? (
-            <div className="grid w-full grid-cols-[1fr_1fr] gap-2 tablet:flex tablet:w-auto">
+            <div className="grid w-full grid-cols-[1fr_1fr] gap-2 sm:flex sm:w-auto sm:self-end tablet:self-auto">
               {mode === "decide" ? (
                 <>
-                  <Button type="button" size="sm" variant="secondary" onClick={() => setConfirm("reject")}>
+                  <Button type="button" size="sm" variant="secondary" className="touch-target" onClick={() => setConfirm("reject")}>
                     Reject
                   </Button>
-                  <Button type="button" size="sm" data-primary="" title={needs} onClick={() => setConfirm("approve")}>
+                  <Button type="button" size="sm" data-primary="" className="touch-target" title={needs} onClick={() => setConfirm("approve")}>
                     Approve
                   </Button>
                 </>
@@ -264,12 +268,19 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
                   <CopyLinkButton link={approvalHref(approval.id)} />
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button type="button" size="sm" variant="secondary" aria-label="More for this request" icon={<MoreHorizontal aria-hidden="true" />}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="touch-target"
+                        aria-label="More for this request"
+                        icon={<MoreHorizontal aria-hidden="true" />}
+                      >
                         <span className="tablet:sr-only">More</span>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => setConfirm("reject")} className="gap-2">
+                      <DropdownMenuItem onSelect={() => setConfirm("reject")} className="touch-target gap-2">
                         <Undo2 aria-hidden="true" className="size-4" />
                         Withdraw request
                       </DropdownMenuItem>
@@ -285,7 +296,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
               aria-expanded={open}
               aria-controls={detailsId}
               onClick={() => setOpen((value) => !value)}
-              className="inline-flex items-center gap-1 self-start rounded-md text-label-13 text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:self-center"
+              className="touch-target inline-flex items-center gap-1 self-start rounded-md text-label-13 text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:self-center"
             >
               <span className="tablet:sr-only">Details</span>
               <ChevronDown aria-hidden="true" className={cn("size-4 transition-transform", open && "rotate-180")} />

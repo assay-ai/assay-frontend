@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ChevronRight, RefreshCw, Search, ShieldBan, UserPlus } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, RefreshCw, Search, ShieldBan, UserPlus } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -13,7 +13,7 @@ import { ApprovalItem, RowSection, type ApprovalResult } from "@/features/operat
 import { approvalErrorMessage } from "@/features/operator/approvals";
 import { DisputeLine } from "@/features/operator/dispute-line";
 import { HealthStrip } from "@/features/operator/health-strip";
-import { checkedAgo, groupApprovals, needsYouCount, sortDisputesByDaysLeft } from "@/features/operator/inbox";
+import { allWaitingLabel, checkedAgo, groupApprovals, needsYouCount, sortDisputesByDaysLeft } from "@/features/operator/inbox";
 import { ResultCard } from "@/features/operator/result-card";
 import { RoleIntro, useRoleIntro } from "@/features/operator/role-intro";
 import { capabilitiesFor } from "@/features/operator/roles";
@@ -58,10 +58,10 @@ function useNow(intervalMs: number): number {
   return now;
 }
 
-/** "View all approvals (5) →": a text link that reads as one. */
+/** "All waiting approvals · 5 →": a text link that reads as one. */
 function ViewAll({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <Link href={href} className="inline-flex items-center gap-1 text-label-13 text-primary-700 underline-offset-2 hover:underline">
+    <Link href={href} className="touch-target inline-flex items-center gap-1 text-label-13 text-primary-700 underline-offset-2 hover:underline">
       {children}
       <ArrowRight aria-hidden="true" className="size-3.5" />
     </Link>
@@ -72,20 +72,20 @@ function ViewAll({ href, children }: { href: string; children: React.ReactNode }
 function QuickAction({ caps }: { caps: ReturnType<typeof capabilitiesFor> }) {
   if (caps.manageOperators) {
     return (
-      <Button asChild size="sm" variant="secondary" icon={<UserPlus aria-hidden="true" />}>
+      <Button asChild size="sm" variant="secondary" className="touch-target" icon={<UserPlus aria-hidden="true" />}>
         <Link href="/operator/operators?new=1">Add someone</Link>
       </Button>
     );
   }
   if (caps.block && !caps.rule) {
     return (
-      <Button asChild size="sm" variant="secondary" icon={<ShieldBan aria-hidden="true" />}>
+      <Button asChild size="sm" variant="secondary" className="touch-target" icon={<ShieldBan aria-hidden="true" />}>
         <Link href="/operator/blocks?new=1">Block an account</Link>
       </Button>
     );
   }
   return (
-    <Button asChild size="sm" variant="secondary" icon={<Search aria-hidden="true" />}>
+    <Button asChild size="sm" variant="secondary" className="touch-target" icon={<Search aria-hidden="true" />}>
       <Link href="/operator/cases">Find a penalty</Link>
     </Button>
   );
@@ -94,14 +94,19 @@ function QuickAction({ caps }: { caps: ReturnType<typeof capabilitiesFor> }) {
 const TILE =
   "flex min-w-0 items-center gap-3 rounded-xl border border-01 bg-01 px-4 py-3 text-left hover:border-02 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500";
 
-function Tile({ label, value }: { label: string; value: number | null }) {
+/**
+ * One count. `opens` says what a click does, honestly: a tile that goes to a
+ * page ends in a right chevron; one that opens a list in place, a down one.
+ */
+function Tile({ label, value, opens = "page" }: { label: string; value: number | null; opens?: "page" | "menu" }) {
+  const Icon = opens === "menu" ? ChevronDown : ChevronRight;
   return (
     <>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-body-xs text-03">{label}</span>
         <span className="text-heading-sm tabular-nums text-01">{value === null ? "—" : value}</span>
       </span>
-      <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
+      <Icon aria-hidden="true" className="size-4 shrink-0 text-03" />
     </>
   );
 }
@@ -183,6 +188,7 @@ export default function OperatorHome() {
             type="button"
             variant="ghost"
             size="sm"
+            className="touch-target"
             loading={refreshing}
             icon={<RefreshCw aria-hidden="true" />}
             onClick={refresh}
@@ -237,7 +243,8 @@ export default function OperatorHome() {
               id="to-approve"
               title="To approve"
               count={groups.needsYou.length}
-              action={<ViewAll href="/operator/approvals">View all approvals ({openApprovals})</ViewAll>}
+              hint="Requests your roles can approve: Waiting for you on Approvals."
+              action={<ViewAll href="/operator/approvals">{allWaitingLabel(openApprovals)}</ViewAll>}
             >
               {groups.needsYou.map((approval) => (
                 <ApprovalItem
@@ -273,7 +280,7 @@ export default function OperatorHome() {
               id="waiting-on-others"
               title="Waiting on others"
               count={groups.yours.length}
-              action={groups.needsYou.length === 0 ? <ViewAll href="/operator/approvals">View all approvals ({openApprovals})</ViewAll> : undefined}
+              action={groups.needsYou.length === 0 ? <ViewAll href="/operator/approvals">{allWaitingLabel(openApprovals)}</ViewAll> : undefined}
             >
               {groups.yours.map((approval) => (
                 <ApprovalItem
@@ -312,7 +319,7 @@ export default function OperatorHome() {
           </Link>
           <DropdownMenu>
             <DropdownMenuTrigger className={cn(TILE, "w-full")} disabled={health.data?.slashHolds === undefined}>
-              <Tile label="Slash holds" value={health.data?.slashHolds === undefined ? null : holds.length} />
+              <Tile label="Slash holds" opens="menu" value={health.data?.slashHolds === undefined ? null : holds.length} />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[min(360px,calc(100vw-32px))]">
               <DropdownMenuLabel className="flex flex-col gap-0.5 py-2">
@@ -344,7 +351,7 @@ export default function OperatorHome() {
             <Tile label="Disputes open" value={openDisputes} />
           </Link>
           <Link href="/operator/approvals" className={TILE}>
-            <Tile label="Approvals open" value={pending.data ? openApprovals : null} />
+            <Tile label="Approvals waiting" value={pending.data ? openApprovals : null} />
           </Link>
         </div>
       </section>
