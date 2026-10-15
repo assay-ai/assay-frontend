@@ -5,6 +5,7 @@ import * as React from "react";
 import { SetupChecklist, type SetupStep } from "@/components/patterns/setup-checklist";
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
+import { capsAreSet } from "@/features/buyer-money/caps";
 import { getStartedStates, payStage, type GetStartedFacts } from "@/features/buyer-money/get-started";
 import { supportsDelegation } from "@/features/delegation/delegation-form";
 
@@ -71,11 +72,11 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   const facts: GetStartedFacts = {
     hasLiveKey: liveKeys.length > 0,
     firstCallSeen: liveKeys.some((k) => k.lastUsedAt),
-    hasFunds: Boolean(escrow?.exists && escrow.balance && BigInt(escrow.balance.amount) > 0n),
+    // "Has ever deposited": the first deposit opens the escrow. A balance
+    // spent down to zero later must not bring the checklist back.
+    hasFunds: escrow?.exists === true,
     escrowExists: escrow?.exists === true,
-    capsSet: Boolean(
-      escrow?.maxVoucherAmount && escrow.maxPerWindow && BigInt(escrow.maxVoucherAmount.amount) > 0n && BigInt(escrow.maxPerWindow.amount) > 0n,
-    ),
+    capsSet: capsAreSet(escrow),
     keyBound: Boolean(bound?.delegateAccount),
     grantActive: readiness?.grant?.status === "ACTIVE",
     needsDelegation: supportsDelegation(agent?.agentAccount),
@@ -93,7 +94,9 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   React.useEffect(() => setExpanded(undefined), [currentId]);
 
   const loading = data.agentsQuery.isPending || (data.agents.length > 0 && data.keysQuery.isPending) || data.escrowQuery.isPending;
-  if (placement === "overview" && !loading && (complete || dismissed)) return null;
+  // On Overview, render nothing until the data says it is needed: a set-up
+  // account should not see a checklist skeleton flash on every visit.
+  if (placement === "overview" && (loading || complete || dismissed)) return null;
 
   const agentName = agent?.label ?? "your agent";
 

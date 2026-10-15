@@ -8,7 +8,7 @@ import { DepositChainChoice } from "@/components/funding/deposit-chain-choice";
 import { PresetChips } from "@/components/patterns/preset-chips";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
-import { runApproveStep, runDepositStep, type DepositRun } from "@/features/buyer-money/deposit-flow";
+import { runApproveStep, runDepositStep, type DepositAttempt, type DepositRun } from "@/features/buyer-money/deposit-flow";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { depositChoice } from "@/features/funding/deposit-chain";
 import { depositUnavailableOn, depositableChains, offeredChains } from "@/features/funding/depositable-chains";
@@ -80,6 +80,12 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
 
   // One run per attempt: created in the first step, read by the second.
   const runRef = React.useRef<DepositRun | null>(null);
+  // Every way of closing (Done, Next, the X) starts the next opening empty.
+  React.useEffect(() => {
+    if (open) return;
+    setAmount("");
+    runRef.current = null;
+  }, [open]);
   const resetKey = `${amount}|${chainId ?? ""}`;
   const evm = chainId !== null && isEvmChain(chainId);
 
@@ -114,32 +120,37 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
         }
         const run = runRef.current;
         report({ stage: "preparing" });
-        let trackedId: string | null = null;
-        const settled = await runDepositStep(run, signer, {
-          onWallet: () => report({ stage: "wallet" }),
-          previousHash: previousAttempt?.data as `0x${string}` | undefined,
-          onSubmitted: (hash, depositId) => {
-            const explorerUrl = chain ? explorerTxUrl(chain, hash) : undefined;
-            report({ stage: "submitted", data: hash, explorerUrl });
-            trackedId = `deposit:${depositId}`;
-            pending.track({
-              id: trackedId,
-              kind: "deposit",
-              label,
-              chainId: run.chainId,
-              hash,
-              explorerUrl,
-              submittedAt: Date.now(),
-              resume: { depositId, amountAtomic: run.amountAtomic },
-            });
-          },
-        });
-        if (trackedId) pending.resolve(trackedId);
-        runRef.current = null;
-        return {
-          data: settled,
-          explorerUrl: settled.chainTxRef && chain ? explorerTxUrl(chain, settled.chainTxRef) : undefined,
-        };
+        const previous = previousAttempt?.data as DepositAttempt | undefined;
+        let trackedId: string | null = previous?.kind === "hash" ? `deposit:${previous.depositId}` : null;
+        try {
+          const settled = await runDepositStep(run, signer, {
+            onWallet: () => report({ stage: "wallet" }),
+            previous,
+            onSigned: (attempt) => report({ stage: "submitted", data: attempt }),
+            onSubmitted: (hash, depositId) => {
+              const explorerUrl = chain ? explorerTxUrl(chain, hash) : undefined;
+              report({ stage: "submitted", data: { kind: "hash", hash, depositId } satisfies DepositAttempt, explorerUrl });
+              trackedId = `deposit:${depositId}`;
+              pending.track({
+                id: trackedId,
+                kind: "deposit",
+                label,
+                chainId: run.chainId,
+                hash,
+                explorerUrl,
+                submittedAt: Date.now(),
+                resume: { depositId, amountAtomic: run.amountAtomic },
+              });
+            },
+          });
+          if (trackedId) pending.resolve(trackedId);
+          runRef.current = null;
+          const ref = settled === "already-credited" ? null : settled.chainTxRef;
+          return { data: settled, explorerUrl: ref && chain ? explorerTxUrl(chain, ref) : undefined };
+        } finally {
+          // Still pending after a failure: hand it to the list, which keeps checking it.
+          if (trackedId) pending.release(trackedId);
+        }
       },
     },
   ];
@@ -168,13 +179,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
   return (
     <WalletActionSheet
       open={open}
-      onOpenChange={(next) => {
-        if (!next) {
-          setAmount("");
-          runRef.current = null;
-        }
-        onOpenChange(next);
-      }}
+      onOpenChange={onOpenChange}
       title="Add funds"
       description="Money goes into your escrow, which only your wallet controls. Minimum $5.00."
       steps={steps}

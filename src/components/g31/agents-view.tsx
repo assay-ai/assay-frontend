@@ -53,6 +53,9 @@ export function AgentsView() {
 
   const [newKeyFor, setNewKeyFor] = React.useState<AgentRow | null>(null);
   const [revoking, setRevoking] = React.useState<{ agent: AgentRow; key: KeyRow } | null>(null);
+  // The last target, so the sheet's title does not go blank while it animates out.
+  const [lastRevoke, setLastRevoke] = React.useState<{ agent: AgentRow; key: KeyRow } | null>(null);
+  if (revoking && revoking !== lastRevoke) setLastRevoke(revoking);
   const [payFor, setPayFor] = React.useState<{ agent: AgentRow; delegate: string } | null>(null);
 
   const revoke = useMutation({
@@ -141,11 +144,11 @@ export function AgentsView() {
         open={revoking !== null}
         onOpenChange={(open) => !open && setRevoking(null)}
         tone="danger"
-        title={`Revoke the key “${revoking?.key.name ?? ""}”?`}
-        description={`${revoking?.agent.label ?? "The agent"} stops being able to call tools with it at once. This cannot be undone; you can create a new key.`}
+        title={`Revoke the key “${lastRevoke?.key.name ?? ""}”?`}
+        description={`${lastRevoke?.agent.label ?? "The agent"} stops being able to call tools with it at once. This cannot be undone; you can create a new key.`}
         changes={[{ label: "Key", before: "Live", after: "Revoked" }]}
         confirmLabel="Revoke key"
-        onConfirm={() => revoke.mutateAsync({ agentId: revoking!.agent.agentId, id: revoking!.key.id })}
+        onConfirm={() => revoke.mutateAsync({ agentId: lastRevoke!.agent.agentId, id: lastRevoke!.key.id })}
         describeError={(error) => (error instanceof ApiError ? plainError(error.code) : "The key could not be revoked. Try again.")}
       />
 
@@ -240,7 +243,7 @@ function AgentCard({
                     </span>
                   </span>
                   <Button size="sm" variant="secondary" type="button" onClick={() => setConfigFor(configFor === key.id ? null : key.id)} aria-expanded={configFor === key.id}>
-                    {configFor === key.id ? "Hide mcp.json" : "Show mcp.json"}
+                    {configFor === key.id ? "Hide config" : "MCP config"}
                   </Button>
                   <Button size="sm" variant="secondary" type="button" className="text-danger-600" data-testid="revoke-credential" onClick={() => onRevokeKey(key)}>
                     Revoke

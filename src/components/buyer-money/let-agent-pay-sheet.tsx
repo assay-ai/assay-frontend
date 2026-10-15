@@ -80,12 +80,12 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
   // The escrow caps as they were when the drawer opened. Frozen so the step
   // list cannot change under a running flow (a retry resumes by index).
   const [openingCaps, setOpeningCaps] = React.useState<{ perCall: string; perWindow: string } | null>(null);
-  if (open && !seeded) {
+  if (open && !seeded && !money.escrowQuery.isPending) {
     setSeeded(true);
     setValue(capsToForm(escrow) ?? { perCall: "1", perDay: "20" });
     setOpeningCaps(
       escrow?.maxVoucherAmount && escrow.maxPerWindow
-        ? { perCall: escrow.maxVoucherAmount.amount, perWindow: escrow.maxPerWindow.amount }
+        ? { perCall: escrow.maxVoucherAmount.amount || "0", perWindow: escrow.maxPerWindow.amount || "0" }
         : null,
     );
   }
@@ -134,10 +134,16 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
       run: async ({ report }) => {
         const signer = requireSigner(money.signerState, money.ownerShort);
         report({ stage: "preparing" });
-        const intent = await createEscrowLimitsIntent(chosen!);
+        // Raise the escrow caps to cover the agent; never lower one the buyer set higher.
+        const max = (a: string, b: string | undefined) => (b && BigInt(b) > BigInt(a) ? b : a);
+        const escrowCaps = {
+          maxVoucherAmount: max(chosen!.maxVoucherAmount, openingCaps?.perCall),
+          maxPerWindow: max(chosen!.maxPerWindow, openingCaps?.perWindow),
+        };
+        const intent = await createEscrowLimitsIntent(escrowCaps);
         report({ stage: "wallet" });
         const result = await runEscrowAction(intent, signer);
-        await applyLimitsSubmitted(queryClient, null, chosen!, result.kind === "relayed" ? result.relayed.escrow : null);
+        await applyLimitsSubmitted(queryClient, null, escrowCaps, result.kind === "relayed" ? result.relayed.escrow : null);
         const hash = result.kind === "relayed" ? result.relayed.transactionHash : result.signature;
         return { explorerUrl: money.chain ? explorerTxUrl(money.chain, hash) : undefined };
       },
@@ -198,7 +204,7 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
       doneAction={{ label: "Done", onClick: () => onOpenChange(false) }}
     >
       {delegateAccount ? <KeyMatch account={delegateAccount} /> : null}
-      <CapsFields value={value} onChange={setValue} parsed={parsed} idPrefix="agent-pay" label="Caps for this agent" />
+      <CapsFields unit={money.symbol} value={value} onChange={setValue} parsed={parsed} idPrefix="agent-pay" label="Caps for this agent" />
       <p className="text-body-xs text-03">
         Valid for {DEFAULT_DELEGATION_DAYS} days, until <LocalTime value={until} dateOnly />.{" "}
         {capsCover ? "One signature." : "Two signatures: your escrow's safety caps, then the agent's permission."}

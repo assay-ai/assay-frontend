@@ -302,7 +302,7 @@ function EscrowCard({
           </p>
           <StatusTimeline
             label="Withdrawal"
-            orientation="horizontal"
+            orientation="auto"
             steps={[
               { id: "request", label: "Requested", state: "done" },
               {

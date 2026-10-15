@@ -12,6 +12,7 @@ import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
 import { withdrawGasGrantNote } from "@/features/escrow/withdraw-gas-grant-note";
+import { useCountdown } from "@/hooks/useCountdown";
 import { usePendingTransactions } from "@/hooks/usePendingTransactions";
 import { waitForSuccess } from "@/libs/chains/evm/deposit-transaction";
 import { explorerTxUrl } from "@/libs/chains/explorer";
@@ -135,7 +136,7 @@ export function WithdrawSheet({
         <>
           <StatusTimeline
             label="Withdrawal steps"
-            orientation="horizontal"
+            orientation="auto"
             steps={[
               { id: "request", label: "Request (free)", state: "current" },
               { id: "wait", label: "Wait ~1 hour", state: "upcoming" },
@@ -181,6 +182,12 @@ export function ClaimSheet({ open, onOpenChange }: { open: boolean; onOpenChange
   const evm = money.chainId !== null && isEvmChain(money.chainId);
   const walletBlocker = useWalletBlocker(money.signerState, money.ownerShort);
   const label = payout ? `Claim ${formatLimit(payout)}` : "Claim";
+  const { hasPassed: matured } = useCountdown(escrow?.withdrawAvailableAt);
+  const notYet = !requested || BigInt(requested.amount || "0") === 0n
+    ? "There is no withdrawal to claim. Request one first."
+    : !matured
+      ? "Not ready yet: the hour after your request has not passed."
+      : null;
 
   const steps: WalletStep[] = [
     {
@@ -210,7 +217,12 @@ export function ClaimSheet({ open, onOpenChange }: { open: boolean; onOpenChange
             submittedAt: Date.now(),
           });
         }
-        if (evm && money.chainId) await waitForSuccess(money.chainId, hash as `0x${string}`);
+        try {
+          if (evm && money.chainId) await waitForSuccess(money.chainId, hash as `0x${string}`);
+        } catch (error) {
+          pending.release(`claim:${hash}`);
+          throw error;
+        }
         pending.resolve(`claim:${hash}`);
         void queryClient.invalidateQueries({ queryKey: ["escrow"] });
         void queryClient.invalidateQueries({ queryKey: ["balances"] });
@@ -227,8 +239,8 @@ export function ClaimSheet({ open, onOpenChange }: { open: boolean; onOpenChange
       description={`${payout ? formatLimit(payout) : "The amount"} goes to your wallet${money.ownerShort ? ` ${money.ownerShort}` : ""}.`}
       steps={steps}
       label={label}
-      disabled={readOnly || Boolean(walletBlocker)}
-      disabledReason={readOnly ? "Your account is blocked, so withdrawals are paused." : walletBlocker}
+      disabled={readOnly || Boolean(notYet) || Boolean(walletBlocker)}
+      disabledReason={readOnly ? "Your account is blocked, so withdrawals are paused." : (notYet ?? walletBlocker)}
       describeError={describeMoneyError}
       successTitle="Withdrawn to your wallet"
       successDescription="Your agents can pay for calls again with what is left in your escrow."

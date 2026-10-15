@@ -71,15 +71,35 @@ export async function runApproveStep(
 }
 
 /** Credits a deposit the wallet itself broadcast; an expired intent is replaced, one hash credits once. */
-export async function settleByHash(run: Pick<DepositRun, "chainId" | "amountAtomic">, depositId: string, hash: string): Promise<SettledDeposit> {
+export async function settleByHash(
+  run: Pick<DepositRun, "chainId" | "amountAtomic">,
+  depositId: string,
+  hash: string,
+): Promise<SettledDeposit | "already-credited"> {
   try {
     return await settleDepositByBroadcast(depositId, hash);
   } catch (caught) {
+    if (isAlreadyClaimed(caught)) return "already-credited";
     if (!(caught instanceof ApiError) || caught.code !== "PAYMENT_DEPOSIT_EXPIRED") throw caught;
     const fresh = await createDeposit(run.amountAtomic, run.chainId);
-    return settleDepositByBroadcast(fresh.depositId, hash);
+    try {
+      return await settleDepositByBroadcast(fresh.depositId, hash);
+    } catch (again) {
+      if (isAlreadyClaimed(again)) return "already-credited";
+      throw again;
+    }
   }
 }
+
+/** The hash was credited already (by this page, another tab, or a retry): the job is done. */
+export function isAlreadyClaimed(error: unknown): boolean {
+  return error instanceof ApiError && /ALREADY_(CLAIMED|SETTLED|CREDITED)/.test(error.code);
+}
+
+/** What a submitted deposit step hands back to a retry, so it never signs twice. */
+export type DepositAttempt =
+  | { kind: "hash"; hash: `0x${string}`; depositId: string }
+  | { kind: "signed"; raw: `0x${string}`; depositId: string };
 
 /** Step 2 (EVM), or the only step (Solana). */
 export async function runDepositStep(
@@ -87,13 +107,25 @@ export async function runDepositStep(
   signer: Signer,
   hooks: {
     onWallet: () => void;
+    /** A transaction the wallet broadcast itself (injected wallet). */
     onSubmitted: (hash: `0x${string}`, depositId: string) => void;
-    previousHash?: `0x${string}`;
+    /** Signed bytes about to be handed to the settle route (embedded wallet). */
+    onSigned?: (attempt: DepositAttempt) => void;
+    previous?: DepositAttempt;
   },
-): Promise<SettledDeposit> {
-  if (hooks.previousHash && run.created) {
-    await waitForSuccess(run.chainId, hooks.previousHash);
-    return settleByHash(run, run.created.depositId, hooks.previousHash);
+): Promise<SettledDeposit | "already-credited"> {
+  // A retry after submission re-checks what was sent instead of signing again.
+  if (hooks.previous?.kind === "hash") {
+    await waitForSuccess(run.chainId, hooks.previous.hash);
+    return settleByHash(run, hooks.previous.depositId, hooks.previous.hash);
+  }
+  if (hooks.previous?.kind === "signed") {
+    try {
+      return await settleDeposit(hooks.previous.depositId, run.chainId, hooks.previous.raw);
+    } catch (error) {
+      if (isAlreadyClaimed(error)) return "already-credited";
+      throw error;
+    }
   }
   const created = await freshIntent(run);
   const requirements = created.requirements;
@@ -107,6 +139,7 @@ export async function runDepositStep(
       onSubmitted: (hash) => hooks.onSubmitted(hash, created.depositId),
     });
     if (submission.kind === "signed") {
+      hooks.onSigned?.({ kind: "signed", raw: submission.rawTransaction, depositId: created.depositId });
       return settleDeposit(created.depositId, run.chainId, submission.rawTransaction);
     }
     return settleByHash(run, created.depositId, submission.transactionHash);

@@ -25,13 +25,16 @@ export interface ReadinessEscrow {
   maxPerWindow: Money | null;
   withdrawRequested: Money | null;
   spentInWindow?: Money | null;
+  balance?: Money | null;
 }
 
 export interface ReadinessInput {
   agentAccount?: string | null;
   credentials: readonly ReadinessCredential[] | undefined;
   delegates: readonly EscrowDelegate[] | undefined;
+  /** `undefined` = not read yet (or the read failed: say so with `escrowUnreadable`). */
   escrow: ReadinessEscrow | null | undefined;
+  escrowUnreadable?: boolean;
   paused: boolean;
 }
 
@@ -90,6 +93,16 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
   if (!supportsDelegation(input.agentAccount)) {
     return { ...base, status: recent(lastCallAt, nowMs) ? "paying" : "ready", sentence: readySentence(lastCallAt, nowMs), next: null };
   }
+  if (input.escrow === undefined) {
+    return {
+      ...base,
+      status: "checking",
+      sentence: input.escrowUnreadable
+        ? "We could not read your escrow just now, so we cannot tell whether it can pay. Free calls are unaffected."
+        : "Checking whether it can pay…",
+      next: null,
+    };
+  }
   if (!input.escrow?.exists) {
     return {
       ...base,
@@ -124,12 +137,20 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
       next: "authorise",
     };
   }
-  if (positive(grant.maxPerWindow) && BigInt(grant.spentInWindow.amount) >= BigInt(grant.maxPerWindow.amount)) {
+  if (positive(grant.maxPerWindow) && BigInt(grant.spentInWindow.amount || "0") >= BigInt(grant.maxPerWindow.amount)) {
     return {
       ...base,
-      status: "paused",
+      status: "cap-reached",
       sentence: "Its daily allowance is used up, so paid calls are refused until it refills.",
       next: null,
+    };
+  }
+  if (input.escrow.balance && !positive(input.escrow.balance)) {
+    return {
+      ...base,
+      status: "ready",
+      sentence: "Allowed to pay, but your escrow is empty, so paid calls are refused. Add funds; free calls still work.",
+      next: "funds",
     };
   }
   return { ...base, status: recent(lastCallAt, nowMs) ? "paying" : "ready", sentence: readySentence(lastCallAt, nowMs), next: null };

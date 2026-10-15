@@ -157,8 +157,27 @@ describe("agent readiness", () => {
       { agentAccount: evm, credentials: [bound], delegates: [grant({ spentInWindow: usd("10") })], escrow, paused: false },
       now,
     );
-    expect(spent.status).toBe("paused");
+    expect(spent.status).toBe("cap-reached");
     expect(spent.sentence).toMatch(/used up/);
+  });
+});
+
+describe("agent readiness when the escrow is unknown or empty", () => {
+  it("never claims 'add funds' for an escrow it could not read", () => {
+    const r = agentReadiness({ agentAccount: "eip155:1:0xa", credentials: [{ id: "c", name: "k", revokedAt: null, lastUsedAt: null }], delegates: [], escrow: undefined, escrowUnreadable: true, paused: false });
+    expect(r.status).toBe("checking");
+    expect(r.sentence).toMatch(/could not read/);
+  });
+  it("says an empty escrow cannot pay", () => {
+    const r = agentReadiness({
+      agentAccount: "eip155:1:0xa",
+      credentials: [{ id: "c", name: "k", revokedAt: null, lastUsedAt: null, delegateAccount: "eip155:1:0xd" }],
+      delegates: [{ delegate: "eip155:1:0xd", maxVoucherAmount: usd("1"), maxPerWindow: usd("10"), spentInWindow: usd("0"), validUntil: "2099-01-01T00:00:00Z", status: "ACTIVE" }],
+      escrow: { exists: true, maxVoucherAmount: usd("1"), maxPerWindow: usd("20"), withdrawRequested: usd("0"), balance: usd("0") },
+      paused: false,
+    });
+    expect(r.next).toBe("funds");
+    expect(r.sentence).toMatch(/empty/);
   });
 });
 
