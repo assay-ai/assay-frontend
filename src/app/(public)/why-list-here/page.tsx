@@ -189,6 +189,17 @@ export default function WhyListHerePage() {
   const [price, setPrice] = React.useState("0.001");
   const [calls, setCalls] = React.useState("100000");
 
+  // A direct load of `/why-list-here#calculator` (or the `/calculator`
+  // redirect) lands on the calculator. The browser's own jump runs before
+  // this client page has laid out, so it is repeated once it has.
+  React.useEffect(() => {
+    if (window.location.hash !== "#calculator") return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById("calculator")?.scrollIntoView({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
   return (
     <>
       <section className="flex w-full flex-col items-center gap-3.5 px-4 pb-[30px] pt-11 tablet:px-7">
