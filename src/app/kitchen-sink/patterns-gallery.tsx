@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { GLOSSARY_KEYS } from "@/libs/glossary";
 import { plain, plainError, plainRule } from "@/libs/plain-language";
 import { cn } from "@/utils";
-import { parseAmountInput } from "@/utils/money";
+import { formatDecimal, parseAmountInput } from "@/utils/money";
 
 /**
  * Kitchen-sink group 08: the shared UX patterns (components/patterns), every
@@ -192,7 +192,7 @@ export function PatternsGallery() {
           open={sheetOpen}
           onOpenChange={setSheetOpen}
           title="Set safety caps"
-          description={`Your agents can spend at most $${cap || "0"} a day from escrow.`}
+          description={capCheck.value ? `Your agents can spend at most ${formatDecimal(capCheck.value)} a day from escrow.` : "Choose how much your agents can spend a day from escrow."}
           label="Sign and save"
           resetKey={cap}
           disabled={Boolean(capCheck.error)}
