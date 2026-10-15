@@ -14,11 +14,11 @@ import { cn } from "@/utils";
  * escape-to-close and scroll locking for free — none of that is hand-rolled
  * here.
  *
- * The design draws no close ("X") affordance on the sheet itself — dismissal
- * is the grabber/swipe, the backdrop, Escape, or a Cancel action inside the
- * body — so `SheetContent` renders none by default. `showCloseButton` is an
- * opt-in escape hatch for a future screen that needs one on the centered
- * (tablet+) form, where there is no swipe gesture.
+ * Every sheet shows a visible Close ("X") button by default: Escape, the
+ * backdrop and the grabber were the only ways out before, and testers could not
+ * find them (the centered tablet+ form has no swipe gesture at all). Pass
+ * `showCloseButton={false}` only while closing must be refused (e.g. a wallet
+ * prompt is open). `SheetTitle` keeps clear of the button with right padding.
  */
 
 const Sheet = SheetPrimitive.Root;
@@ -43,14 +43,14 @@ SheetOverlay.displayName = SheetPrimitive.Overlay.displayName;
 
 export interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content> {
-  /** Not drawn by the design; opt in only if a specific screen needs it. */
+  /** Default true. Turn off only while the sheet must not close (a signature in flight). */
   showCloseButton?: boolean;
 }
 
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ className, children, showCloseButton = false, ...props }, ref) => (
+>(({ className, children, showCloseButton = true, ...props }, ref) => (
   <SheetPortal>
     <SheetOverlay />
     <SheetPrimitive.Content
@@ -66,7 +66,7 @@ const SheetContent = React.forwardRef<
       </div>
       {children}
       {showCloseButton && (
-        <SheetPrimitive.Close className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-03 transition-colors hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500">
+        <SheetPrimitive.Close className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full text-03 transition-colors hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500">
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>
@@ -87,7 +87,7 @@ const SheetTitle = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Title>,
   React.ComponentPropsWithoutRef<typeof SheetPrimitive.Title>
 >(({ className, ...props }, ref) => (
-  <SheetPrimitive.Title ref={ref} className={cn("text-label-md text-01", className)} {...props} />
+  <SheetPrimitive.Title ref={ref} className={cn("pr-8 text-label-md text-01", className)} {...props} />
 ));
 SheetTitle.displayName = SheetPrimitive.Title.displayName;
 

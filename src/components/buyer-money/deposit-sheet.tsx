@@ -22,6 +22,7 @@ import { isEvmChain } from "@/libs/chains/registry";
 import { chainDisplayName, findChain, settlementSymbol } from "@/services/chains.service";
 import { formatDecimal, parseAmountInput, toDecimal } from "@/utils/money";
 
+import { GasHelpNote } from "./gas-help-note";
 import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-money";
 
 /**
@@ -32,7 +33,7 @@ import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-mone
  * - The $5 minimum is said before anyone types.
  * - One source line instead of a chain radio and a one-option select.
  * - Approve → Deposit as a tracked two-signature flow; "Confirmed" at the end.
- * - After a first deposit the next step is offered in place: set safety caps.
+ * - After a first deposit the next step is offered in place: set the account ceiling.
  */
 const MINIMUM = "5";
 const DECIMALS = 6;
@@ -41,7 +42,7 @@ const PRESETS = ["5", "20", "50"];
 export interface DepositSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Offered after success when the escrow has no safety caps yet. */
+  /** Offered after success when the escrow has no account ceiling yet. */
   onSetCaps?: () => void;
 }
 
@@ -62,9 +63,13 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
   const chain = chainId ? findChain(money.chains, chainId) : null;
   const chainName = chainId ? chainDisplayName(money.chains, chainId) : null;
   const symbol = (chainId && settlementSymbol(money.chains, chainId)) || "USD";
-  const signerState = useSigner({ chainId });
-  const walletBlocker = useWalletBlocker(signerState);
-  const wallet = signerState.status === "ready" ? signerState.signer.address : null;
+  // `depositFor` credits the wallet that sends it, and the API refuses a sender
+  // that is not the escrow's owner: ask for that wallet by address, so the
+  // "From" line and the escrow's owner can never disagree.
+  const ownerAddress = chainId !== null && chainId === money.chainId && money.owner ? money.owner : undefined;
+  const signerState = useSigner({ chainId, address: ownerAddress });
+  const walletBlocker = useWalletBlocker(signerState, ownerAddress ? money.ownerShort : null);
+  const wallet = signerState.status === "ready" ? signerState.signer.address : (ownerAddress ?? null);
 
   const parsed = parseAmountInput(amount, { decimals: DECIMALS, min: MINIMUM });
   const showError = amount.trim() !== "" ? parsed.error : null;
@@ -98,7 +103,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
       cost: "gas",
       skip: !evm,
       run: async ({ report, previousAttempt }) => {
-        const signer = requireSigner(signerState);
+        const signer = requireSigner(signerState, ownerAddress ? money.ownerShort : null);
         if (!runRef.current || runRef.current.amountAtomic !== parsed.atomic) {
           runRef.current = { chainId: chainId!, amountAtomic: parsed.atomic!, created: null, createdAt: 0 };
         }
@@ -116,7 +121,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
       label: `Deposit ${parsed.value ? formatDecimal(parsed.value) : ""} ${symbol}`.replace(/\s+/g, " "),
       cost: evm ? "gas" : "free",
       run: async ({ report, previousAttempt }) => {
-        const signer = requireSigner(signerState);
+        const signer = requireSigner(signerState, ownerAddress ? money.ownerShort : null);
         if (!runRef.current || runRef.current.amountAtomic !== parsed.atomic) {
           runRef.current = { chainId: chainId!, amountAtomic: parsed.atomic!, created: null, createdAt: 0 };
         }
@@ -194,8 +199,8 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
       successTitle="Deposit confirmed on chain"
       successDescription={
         needsCaps
-          ? "It shows in your balance within about a minute. Next: set safety caps, so your agents can pay."
-          : "It shows in your balance within about a minute. Your agents can spend it within their caps."
+          ? "It shows in your balance within about a minute. Next: set your account ceiling, so your agents can pay."
+          : "It shows in your balance within about a minute. Your agents can spend it within their spending limits."
       }
       onSuccess={() => {
         void queryClient.invalidateQueries({ queryKey: ["balances"] });
@@ -204,7 +209,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
       }}
       doneAction={
         needsCaps && onSetCaps
-          ? { label: "Next: set safety caps", onClick: onSetCaps }
+          ? { label: "Next: set your account ceiling", onClick: onSetCaps }
           : { label: "Done", onClick: close }
       }
     >
@@ -234,6 +239,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
           {evm ? "you pay a small network fee in ETH" : "network fee paid by Assay"}
         </p>
       ) : null}
+      {evm ? <GasHelpNote chain={chain} /> : null}
 
       <details className="group rounded-lg border border-01 bg-02 px-3 py-2 text-body-xs text-02">
         <summary className="flex cursor-pointer select-none items-center gap-1.5 text-label-xs text-02">

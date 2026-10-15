@@ -115,7 +115,7 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
     return {
       ...base,
       status: "caps-not-set",
-      sentence: "Paid calls are refused until you set safety caps. Free calls still work.",
+      sentence: "Paid calls are refused until you set your account ceiling. Free calls still work.",
       next: "caps",
     };
   }
@@ -132,8 +132,8 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
       ...base,
       status: "needs-authorisation",
       sentence: grant
-        ? "Its permission to pay has expired. Authorise it again to pay for calls."
-        : "Its payment key is ready. Authorise it to pay for calls.",
+        ? "Its permission to pay has expired. Let it pay again to pay for calls."
+        : "Its payment key is ready. Let it pay to pay for calls.",
       next: "authorise",
     };
   }
@@ -141,7 +141,7 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
     return {
       ...base,
       status: "cap-reached",
-      sentence: "Its daily allowance is used up, so paid calls are refused until it refills.",
+      sentence: "Its 24-hour spending limit is used up, so paid calls are refused until it refills.",
       next: null,
     };
   }
@@ -162,7 +162,7 @@ function recent(lastCallAt: string | null, nowMs: number): boolean {
 }
 
 function readySentence(lastCallAt: string | null, nowMs: number): string {
-  if (recent(lastCallAt, nowMs)) return "Working: it is calling tools and can pay within its caps.";
+  if (recent(lastCallAt, nowMs)) return "Working: it is calling tools and can pay within its spending limits.";
   return lastCallAt
     ? "Ready to pay. No calls in the last 24 hours."
     : "Ready to pay. Waiting for its first call.";

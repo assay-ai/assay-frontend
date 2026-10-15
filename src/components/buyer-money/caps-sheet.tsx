@@ -20,8 +20,9 @@ import { CapsFields, type CapsValue } from "./caps-fields";
 import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-money";
 
 /**
- * Safety caps (enforced on chain): the two limits on the escrow that nobody,
- * the platform included, can exceed. Presets so nobody has to invent numbers,
+ * The account ceiling (enforced on chain): the two limits on the whole escrow
+ * that nobody, the platform included, can exceed — whichever agent pays.
+ * Each agent's own spending limits sit under it. Presets so nobody has to invent numbers,
  * one button that builds the request and opens the wallet, free (relayed).
  *
  * Lowering caps below payments still being settled would strand them; the
@@ -78,19 +79,19 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
 
   const walletBlocker = useWalletBlocker(money.signerState, money.ownerShort);
   const disabledReason = readOnly
-    ? "Your account is blocked, so caps cannot change now."
+    ? "Your account is blocked, so the ceiling cannot change now."
     : !money.escrow?.exists
       ? "Add funds first: your first deposit opens your escrow."
       : !body
-        ? (parsed.perCall.error ?? parsed.perDay.error ?? "Choose caps.")
+        ? (parsed.perCall.error ?? parsed.perDay.error ?? "Choose a ceiling.")
         : unchanged
-          ? "These are your caps already. Pick other numbers to change them."
+          ? "This is your ceiling already. Pick other numbers to change it."
           : walletBlocker;
 
   const steps: WalletStep[] = [
     {
       id: "caps",
-      label: "Sign the new safety caps",
+      label: "Sign the new account ceiling",
       cost: "free",
       run: async ({ report }) => {
         const signer = requireSigner(money.signerState, money.ownerShort);
@@ -121,8 +122,8 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
     <WalletActionSheet
       open={open}
       onOpenChange={onOpenChange}
-      title="Safety caps (enforced on chain)"
-      description="The most any one call can cost, and the most your agents can spend in 24 hours. Nobody can go past them, Assay included."
+      title="Account ceiling (on chain)"
+      description="Protects your whole escrow: the most any one call can cost, and the most all your agents together can spend in 24 hours. Nobody can go past it, Assay included. Each agent's own spending limits sit under it."
       steps={steps}
       label="Sign to apply (free, no gas)"
       resetKey={`${value.perCall}|${value.perDay}`}
@@ -134,18 +135,18 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
           ? `${count} ${count === 1 ? "payment is" : "payments are"} still being settled and would no longer fit. I accept that ${count === 1 ? "it" : "they"} will not be paid to the provider${count === 1 ? "" : "s"} and may be owed by me.`
           : undefined
       }
-      successTitle="Safety caps set"
+      successTitle="Account ceiling set"
       successDescription={
         next
-          ? "They apply from the next payment. Next: let your agent pay within them."
-          : "They apply from the next payment. Payments may pause for about 30 seconds while the change settles."
+          ? "It applies from the next payment. Next: let your agent pay under it."
+          : "It applies from the next payment. Payments may pause for about 30 seconds while the change settles."
       }
       doneAction={next ?? { label: "Done", onClick: () => onOpenChange(false) }}
     >
-      <CapsFields unit={money.symbol} value={value} onChange={setValue} parsed={parsed} idPrefix="escrow-caps" label="Safety caps" />
+      <CapsFields unit={money.symbol} value={value} onChange={setValue} parsed={parsed} idPrefix="escrow-caps" label="Account ceiling" />
       {current ? (
         <p className="text-body-xs text-03">
-          Now: {formatLimit(money.escrow?.maxVoucherAmount)} a call · {formatLimit(money.escrow?.maxPerWindow)} a day.
+          Now: {formatLimit(money.escrow?.maxVoucherAmount)} a call · {formatLimit(money.escrow?.maxPerWindow)} per 24 hours.
         </p>
       ) : null}
     </WalletActionSheet>

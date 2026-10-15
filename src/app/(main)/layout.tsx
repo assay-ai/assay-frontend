@@ -40,7 +40,7 @@ const TITLES: Record<string, string> = {
   "/spend/calls": "Calls",
   "/guarantee": "Not charged",
   "/funding": "Funding",
-  "/limits": "Budgets",
+  "/limits": "Spending limits",
   "/alerts": "Alerts",
   "/approvals": "Approvals",
   "/explore": "Explore",

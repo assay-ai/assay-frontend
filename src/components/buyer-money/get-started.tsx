@@ -1,6 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import * as React from "react";
+
+import { formatLimit, relativeTime } from "@/components/g31/format";
+import { useChains } from "@/hooks/useChains";
+import { isEvmChain } from "@/libs/chains/registry";
+import { findChain } from "@/services/chains.service";
+import { chainIdOfAccount } from "@/utils/chain";
 
 import { SetupChecklist, type SetupStep } from "@/components/patterns/setup-checklist";
 import { Button } from "@/components/ui/button";
@@ -14,6 +21,7 @@ import { CreateKeyForm } from "./create-key";
 import { DepositSheet } from "./deposit-sheet";
 import { LetAgentPaySheet } from "./let-agent-pay-sheet";
 import { McpConfigTabs } from "./mcp-config-tabs";
+import { GasHelpNote } from "./gas-help-note";
 import { useAgentsAndKeys } from "./use-agents";
 
 /**
@@ -22,8 +30,12 @@ import { useAgentsAndKeys } from "./use-agents";
  *   1. Create a key and paste the MCP config (tabs per client).
  *   2. First call — a live listener ticks it within seconds, no reload.
  *   3. Add funds — only for paid calls; free calls work already.
- *   4. Let the agent pay — safety caps and the agent's permission in one
- *      drawer; the agent's payment key is detected, never typed.
+ *   4. Let the agent pay — its spending limits (and the account ceiling,
+ *      raised to fit if needed) in one drawer; the payment key is detected,
+ *      never typed.
+ *
+ * A done step shows only its summary (what was achieved, where to change it),
+ * never the active-state buttons or "waiting" lines.
  *
  * Every tick comes from data (keys, `lastUsedAt`, the escrow, the chain),
  * never from a click. Overview shows it until everything is done (or it is
@@ -82,6 +94,13 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
     needsDelegation: supportsDelegation(agent?.agentAccount),
   };
   const states = getStartedStates(facts);
+  const firstCallAt = liveKeys.map((k) => k.lastUsedAt).filter((v): v is string => Boolean(v)).sort()[0] ?? null;
+  const { chains } = useChains();
+  const chainId = chainIdOfAccount(escrow?.account ?? agent?.agentAccount);
+  const chain = chainId ? findChain(chains, chainId) : null;
+  const evm = chainId !== null && isEvmChain(chainId);
+  const grant = readiness?.grant?.status === "ACTIVE" ? readiness.grant : null;
+  const payLine = grant ? `up to ${formatLimit(grant.maxVoucherAmount)} a call and ${formatLimit(grant.maxPerWindow)} per 24 hours` : null;
   const stage = payStage(facts);
   const complete = Object.values(states).every((s) => s === "done");
 
@@ -132,55 +151,83 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
       description: "Ask your agent to use a tool. Many tools have free calls each day, so no money is needed yet.",
       state: revealing ? "todo" : states.call,
       blockedReason: "Needs a key first.",
-      content: (
-        <div className="flex flex-col gap-2">
-          <p className="text-body-13 text-02">
-            For example, ask it to “search the web for x402 payments”. This step ticks itself when the call arrives.
+      content:
+        states.call === "done" ? (
+          <p className="text-body-13 text-02" data-testid="step-call-done">
+            Its first call arrived{firstCallAt ? ` ${relativeTime(firstCallAt)}` : ""}. Free calls work from here on.
           </p>
-          <Listening>Waiting for your agent&apos;s first call…</Listening>
-        </div>
-      ),
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="text-body-13 text-02">
+              For example, ask it to “search the web for x402 payments”. This step ticks itself when the call arrives.
+            </p>
+            <Listening>Waiting for your agent&apos;s first call…</Listening>
+          </div>
+        ),
     },
     {
       id: "funds",
       title: "Add funds",
       description: "Only for paid calls. Free calls already work. Minimum $5.00.",
       state: states.funds,
-      content: (
-        <Button type="button" onClick={() => setSheet("deposit")}>
-          Add funds
-        </Button>
-      ),
+      content:
+        states.funds === "done" ? (
+          <p className="text-body-13 text-02" data-testid="step-funds-done">
+            Your escrow is open{escrow?.spendable ? ` with ${formatLimit(escrow.spendable)} available` : ""}. Add more any time
+            on{" "}
+            <Link href="/funding" className="font-semibold text-primary-600 hover:underline">
+              Money
+            </Link>
+            .
+          </p>
+        ) : (
+          <div className="flex flex-col items-start gap-2">
+            <Button type="button" onClick={() => setSheet("deposit")}>
+              Add funds
+            </Button>
+            {evm ? (
+              <p className="text-body-xs text-03">Two wallet prompts, each paid in a little ETH for gas.</p>
+            ) : null}
+            <GasHelpNote chain={chain} />
+          </div>
+        ),
     },
     {
       id: "pay",
       title: "Let your agent pay",
-      description: "Set safety caps and allow your agent to pay within them. Free signatures, no gas.",
+      description: "Allow your agent to pay, within spending limits you choose. Free signatures, no gas.",
       state: states.pay,
       blockedReason: "Add funds first: your first deposit opens your escrow.",
       content:
-        stage === "bind" ? (
+        states.pay === "done" ? (
+          <div className="flex flex-col gap-1.5" data-testid="step-pay-done">
+            <p className="text-body-13 text-02">{agentName} can pay for calls{payLine ? `: ${payLine}` : "."}</p>
+            <Link href="/limits" className="self-start text-label-13 text-primary-600 hover:underline">
+              Change its spending limits
+            </Link>
+          </div>
+        ) : stage === "bind" ? (
           <div className="flex min-w-0 flex-col gap-2.5">
             <p className="text-body-13 text-02">To pay, {agentName} makes its own payment key. Run this on its machine:</p>
             <CodeBlock title="Terminal" code={BIND_COMMAND} />
             <Listening>Waiting for the key. This updates by itself.</Listening>
             {!facts.capsSet ? (
               <Button type="button" variant="secondary" className="self-start" onClick={() => setSheet("caps")}>
-                Set safety caps now
+                Set your account ceiling now
               </Button>
             ) : null}
           </div>
         ) : stage === "caps" && !facts.keyBound && facts.needsDelegation ? (
           <div className="flex min-w-0 flex-col gap-2.5">
             <Button type="button" className="self-start" onClick={() => setSheet("caps")}>
-              Set safety caps
+              Set your account ceiling
             </Button>
             <p className="text-body-13 text-02">Then run this on {agentName}&apos;s machine so it gets its payment key:</p>
             <CodeBlock title="Terminal" code={BIND_COMMAND} />
           </div>
         ) : stage === "caps" && !facts.needsDelegation ? (
           <Button type="button" onClick={() => setSheet("caps")}>
-            Set safety caps
+            Set your account ceiling
           </Button>
         ) : (
           <Button type="button" onClick={() => setSheet("pay")}>
@@ -200,7 +247,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
         expandedId={expanded}
         onExpandedChange={setExpanded}
         doneTitle="All set: your agent can call tools and pay for them"
-        doneDescription="Watch its calls under Activity. Change its caps under Controls."
+        doneDescription="Watch its calls under Activity. Change its spending limits under Controls."
         onDismiss={
           placement === "overview"
             ? () => {

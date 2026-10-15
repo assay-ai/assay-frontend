@@ -20,12 +20,12 @@ describe("caps", () => {
     expect(presetFor("1.00", "20")).toBe("standard");
     expect(presetFor("0.5", "5.0")).toBe("light");
     expect(presetFor("2", "20")).toBe("custom");
-    expect(presetDescription({ perCall: "0.50", perDay: "5" })).toBe("$0.50 a call · $5 a day");
+    expect(presetDescription({ perCall: "0.50", perDay: "5" })).toBe("$0.50 a call · $5 per 24 h");
   });
 
   it("says what the caps mean in one sentence", () => {
     expect(capsSentence("1", "20")).toBe(
-      "Any one call can cost at most $1.00, and your agents can spend at most $20.00 in any 24 hours.",
+      "Any one call can cost at most $1.00, and your agents together can spend at most $20.00 in any 24 hours.",
     );
     expect(capsSentence("", "20")).toBeNull();
   });

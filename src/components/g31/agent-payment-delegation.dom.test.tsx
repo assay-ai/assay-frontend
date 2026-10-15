@@ -80,12 +80,12 @@ const credential = {
 describe("PayerDelegationsPanel", () => {
   // BUG-D1-04: an authorised key showed only "Revoke"; changing its caps took a
   // revoke and a new grant (two signatures, no authority in between).
-  it("offers Edit limits beside Revoke on a standing grant", () => {
+  it("offers Change spending limits beside Stop it paying on a standing grant", () => {
     const html = render(
       <PayerDelegationsPanel account={PAYER} bindings={[]} version={0} onChanged={() => {}} />,
     );
     expect(html).toContain('data-testid="edit-delegate"');
-    expect(html).toContain("Edit limits");
+    expect(html).toContain("Change spending limits");
     expect(html).toContain('data-testid="revoke-delegate"');
   });
 
@@ -117,7 +117,7 @@ describe("PayerDelegationsPanel — payments still being settled (BUG-D1-07)", (
 });
 
 describe("AgentPaymentDelegation", () => {
-  it("offers Edit limits on an authorised key", () => {
+  it("offers Change spending limits on a key that can pay", () => {
     const html = render(
       <AgentPaymentDelegation
         agentAccount={PAYER}
@@ -126,7 +126,7 @@ describe("AgentPaymentDelegation", () => {
         onChanged={() => {}}
       />,
     );
-    expect(html).toContain("AUTHORISED");
+    expect(html).toContain("CAN PAY");
     expect(html).toContain('data-testid="edit-agent-delegate"');
   });
 });

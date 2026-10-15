@@ -28,6 +28,24 @@ export interface CapSentenceInput {
   refillsAt?: string | null;
   /** What happens at the limit. Default "Paid calls are refused". */
   consequence?: string;
+  /**
+   * What the refill time means, appended after it: "your time; 24 h after the
+   * window's first payment". A rolling window and a calendar day read the same
+   * otherwise.
+   */
+  refillHint?: string;
+}
+
+/**
+ * The amount used as the meter prints it: rounded UP to the cent (when the
+ * limit is at least a cent), so "used" and "left" always add up to the limit.
+ * Both used to round down, so $2.605 used of $10 read "$2.60" next to
+ * "$7.39 left".
+ */
+export function shownUsed(used: Money, limit: Money | null): Money {
+  if (!limit || toDecimal(limit).lt("0.01")) return used;
+  const up = toDecimal(used).toDecimalPlaces(2, Decimal.ROUND_UP);
+  return { ...used, amount: up.mul(new Decimal(10).pow(used.decimals)).toFixed(0) };
 }
 
 export type CapLevel = "ok" | "high" | "full" | "over" | "none" | "unset";
@@ -45,7 +63,7 @@ export function capReading(input: CapSentenceInput, options: LocalTimeOptions = 
     return { level: "unset", percent: 0, sentence: "Caps not set, so this cannot pay yet. Set a cap to start." };
   }
   const cap = input.limit;
-  const used = toDecimal(input.used);
+  const used = toDecimal(shownUsed(input.used, cap));
   const limit = toDecimal(cap);
   // "~14:20" for today; "Tomorrow 00:00" / "Oct 20, 14:20" read better without the tilde.
   const at = input.refillsAt ? formatLocalDateTime(input.refillsAt, options) : null;
@@ -63,7 +81,8 @@ export function capReading(input: CapSentenceInput, options: LocalTimeOptions = 
   }
 
   const percent = Math.min(100, Math.max(0, used.div(limit).mul(100).toNumber()));
-  const until = when ? `until it refills ${when}` : "until the limit is raised";
+  const hint = when && input.refillHint ? ` (${input.refillHint})` : "";
+  const until = when ? `until it refills ${when}${hint}` : "until the limit is raised";
 
   if (used.gt(limit)) {
     return {
@@ -83,7 +102,7 @@ export function capReading(input: CapSentenceInput, options: LocalTimeOptions = 
   return {
     level: percent >= 80 ? "high" : "ok",
     percent,
-    sentence: when ? `${left} · full again ${when}` : left,
+    sentence: when ? `${left} · full again ${when}${hint}` : left,
   };
 }
 
@@ -102,11 +121,11 @@ export interface CapMeterProps extends CapSentenceInput {
   className?: string;
 }
 
-export function CapMeter({ label, used, limit, refillsAt, consequence, className }: CapMeterProps) {
+export function CapMeter({ label, used, limit, refillsAt, consequence, refillHint, className }: CapMeterProps) {
   // Local time only after mount: the static export has no time zone.
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
-  const reading = capReading({ used, limit, refillsAt, consequence }, mounted ? {} : { timeZone: "UTC" });
+  const reading = capReading({ used, limit, refillsAt, consequence, refillHint }, mounted ? {} : { timeZone: "UTC" });
   const alarm = reading.level === "full" || reading.level === "over" || reading.level === "none";
   const muted = reading.level === "unset";
 
@@ -117,7 +136,7 @@ export function CapMeter({ label, used, limit, refillsAt, consequence, className
         <span className="font-mono text-mono-13 text-02">
           {limit ? (
             <>
-              {formatLimit(used)} <span className="text-03">of</span> {formatLimit(limit)}
+              {formatLimit(shownUsed(used, limit))} <span className="text-03">of</span> {formatLimit(limit)}
             </>
           ) : (
             "Not set"
