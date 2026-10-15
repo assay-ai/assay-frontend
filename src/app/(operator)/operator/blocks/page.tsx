@@ -469,7 +469,7 @@ function BlockSheet({
                 signLabel="Sign and send the on-chain block"
                 successTitle="Blocked on chain"
                 successDescription="The contracts refuse the wallet once this lands. Only the admin can lift it."
-                afterExport="Import the file in the Safe that holds the arbiter key and sign it there. The contracts refuse the wallet once it lands."
+                afterExport="Open the file in the arbiter's multi-signer wallet and sign it there. The contracts refuse the wallet once it lands."
               />
             </section>
           ) : null}
@@ -686,7 +686,7 @@ function ChainBlockSheet({ block, label, onClose }: { block: AccountBlock | null
               signLabel="Sign and send the on-chain block"
               successTitle="Blocked on chain"
               successDescription="The contracts refuse the wallet once this lands."
-              afterExport="Import the file in the Safe that holds the arbiter key and sign it there."
+              afterExport="Open the file in the arbiter's multi-signer wallet and sign it there."
               onBusyChange={setSigning}
             />
           ) : null}

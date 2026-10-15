@@ -228,7 +228,7 @@ export function SignOrExport({
         <p className="text-body-13 text-02">
           <span className="text-label-13 text-01">Who signs: </span>
           {signerLabel}. That is not the wallet connected here, so download the transaction file and have it signed in the
-          Safe that holds that key. Nothing changes until it is signed.
+          multi-signer wallet that holds that key. Nothing changes until it is signed.
         </p>
       ) : null}
       {actionsContainer ? createPortal(actions, actionsContainer) : actions}
