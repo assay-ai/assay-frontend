@@ -33,6 +33,8 @@ export interface NeedsActionInput {
   bindings: readonly { id: string; toolId: string; status: BindingStatus; endpoint: string }[];
   stake: { enough: boolean | null; shortfall: Money | null };
   label: (binding: { toolId: string; endpoint?: string | null }) => string;
+  /** Clock for "is this window still open"; injectable for tests. */
+  now?: number;
 }
 
 /** "1.6%" — one decimal under 10%, none above. */
@@ -72,7 +74,16 @@ export function needsActionItems(input: NeedsActionInput): NeedsActionItem[] {
     });
   }
 
+  // One row per tool: the window still open now. A window past its deadline is
+  // closed; whatever it decided shows up as a penalty, not as a warning.
+  const now = input.now ?? Date.now();
+  const latestOpen = new Map<string, SlaWindow>();
   for (const window of input.openWindows) {
+    if (window.deadlineAt && Date.parse(window.deadlineAt) <= now) continue;
+    const seen = latestOpen.get(window.bindingId);
+    if (!seen || (window.deadlineAt ?? "") > (seen.deadlineAt ?? "")) latestOpen.set(window.bindingId, window);
+  }
+  for (const window of latestOpen.values()) {
     if (window.observedFailureRate === null || window.declaredFailureRate <= 0) continue;
     const share = window.observedFailureRate / window.declaredFailureRate;
     if (share < SLA_WARNING_SHARE && !window.warningLevel) continue;
@@ -83,10 +94,12 @@ export function needsActionItems(input: NeedsActionInput): NeedsActionItem[] {
       id: `sla:${window.windowId}`,
       kind: "sla",
       tone: over || window.warningLevel === "CRITICAL" ? "danger" : "warning",
-      title: `${name}: ${percent(window.observedFailureRate)} of your ${percent(window.declaredFailureRate)} this window`,
+      title: over
+        ? `${name}: ${percent(window.observedFailureRate)} of calls failed, over your ${percent(window.declaredFailureRate)} promise`
+        : `${name}: ${percent(window.observedFailureRate)} of calls failed, near your ${percent(window.declaredFailureRate)} promise`,
       detail: over
-        ? "More calls failed than you promised. If it stays there when the window closes, a penalty is proposed."
-        : "Failures are building up. Check your API before the window closes.",
+        ? "If it is still over when this window closes, a penalty is proposed. Fix your API now to bring it back down."
+        : "Failures are building up in this window. Check your API before it closes.",
       deadline: window.deadlineAt,
       action: { label: "See quality", href: routes.binding(window.bindingId, "quality") },
     });

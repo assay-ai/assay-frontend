@@ -26,7 +26,7 @@ function Deadline({ at }: { at: string }) {
       )}
     >
       <Clock aria-hidden="true" className="size-3" />
-      {hasPassed ? "Deadline passed" : `${formatRemaining(msLeft)} left`}
+      {hasPassed ? "Time is up" : `${formatRemaining(msLeft)} left`}
     </span>
   );
 }
