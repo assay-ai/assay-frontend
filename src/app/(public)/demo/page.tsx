@@ -151,8 +151,8 @@ export default function DemoPage() {
       <Shell>
         <Banner
           tone="primary"
-          title="The live demo is not available yet"
-          description="There is nothing to run here yet. Nothing is broken."
+          title="The live demo is not running on this site"
+          description="You can see the same thing with real data: the Explorer lists what our checks refused to charge."
         />
         <p className="text-body-13 text-02">
           You can still read{" "}
@@ -253,7 +253,7 @@ export default function DemoPage() {
         href="/login"
         className="fixed inset-x-4 bottom-4 z-10 block rounded-lg bg-primary-400 px-4 py-3 text-center text-label-sm text-on-primary shadow-lg lg:hidden"
       >
-        Start with 1,000 free calls a day
+        Start free — tools with a free tier need no deposit
       </a>
     </Shell>
   );

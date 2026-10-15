@@ -178,7 +178,8 @@ async function loadMonth(period: Period): Promise<MonthRow> {
   };
 }
 
-export function useGuarantee(anchor: Date, monthsBack = 3): GuaranteeState {
+/** `assetKey`: the display-asset pick; a change refetches without a reload. */
+export function useGuarantee(anchor: Date, monthsBack = 3, assetKey: string | null = null): GuaranteeState {
   const [selectedKey, setSelected] = useState<string | null>(null);
   const [data, setData] = useState<GuaranteeData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -259,7 +260,7 @@ export function useGuarantee(anchor: Date, monthsBack = 3): GuaranteeState {
     return () => {
       cancelled = true;
     };
-  }, [period, months, nonce]);
+  }, [period, months, nonce, assetKey]);
 
   const reload = useCallback(() => setNonce((n) => n + 1), []);
   const onSelectMonth = useCallback((key: string) => setSelected(key), []);

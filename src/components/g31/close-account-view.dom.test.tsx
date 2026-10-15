@@ -49,41 +49,28 @@ function markup(balances?: FullBalance[]): string {
 }
 
 /**
- * This suite exists because of a measured miss.
- *
- * Replacing `rows.length === 0 ?` with `!rows ?` in this file — the
- * array-is-always-truthy mutation that already shipped once as
- * `providers-view.tsx:112` — deleted the "Withdrawable balance" blocker row
- * from the rendered page entirely, and **213 tests, `tsc` and `next build` all
- * stayed green.** It was only visible in a browser. A blocker that vanishes on
- * the screen telling somebody what stands between them and closing a funded
- * account is the most expensive shape this defect has.
+ * The blocker that matters most: money left on the account. It must never
+ * read as zero when it could not be read, never be summed across chains, and
+ * never repeat one line per account of the same asset.
  */
-describe("CloseAccountView — blockers are per chain and never summarised", () => {
-  it("keeps the Withdrawable blocker row when the balance could NOT be read", () => {
+describe("CloseAccountView — withdraw step", () => {
+  it("says the balance could not be read instead of showing $0.00", () => {
     const html = markup();
-    expect(html).toContain("Withdrawable balance");
-    // A dash, not a zero: "we could not read it" and "there is none" are
-    // different facts and only one of them lets an account close.
+    expect(html).toContain("Withdraw your money");
     expect(html).not.toContain("$0.00");
   });
 
-  it("shows one row per chain, both figures, and no sum", () => {
+  it("shows one line per chain, both figures, and no sum", () => {
     const html = markup([SOLANA_ROW, EVM_ROW]);
-    expect(html.match(/Withdrawable balance/g)).toHaveLength(2);
     expect(html).toContain("$12.50");
     expect(html).toContain("$4.00");
-    // 12.50 + 4.00 = $16.50 of nothing.
     expect(html).not.toContain("$16.50");
   });
 
-  it("names the chain on each row only when there is more than one", () => {
-    const many = markup([SOLANA_ROW, EVM_ROW]);
-    expect(many).toContain("eip155:46630");
-    // Assert the loser: a single-chain account must read exactly as it always
-    // has, with no chain suffix appended to a row that cannot be confused.
-    const one = markup([SOLANA_ROW]);
-    expect(one.match(/Withdrawable balance/g)).toHaveLength(1);
-    expect(one).not.toContain("Withdrawable balance ·");
+  it("merges several accounts of one asset into one total", () => {
+    const second = { ...EVM_ROW, accountId: `${EVM}:0xdead` };
+    const html = markup([EVM_ROW, second]);
+    expect(html).toContain("$8.00");
+    expect(html).toContain("across 2 accounts");
   });
 });

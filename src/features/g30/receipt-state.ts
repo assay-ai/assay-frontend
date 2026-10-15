@@ -287,3 +287,54 @@ export function samplingExplainerCopy(
     body: `Relevance judgement is the only sampled stage. At ${listed} a call, judging every one would cost more than the call itself. Instead we sample, and the provider’s stake covers the rest: if their measured quality falls below what they published, they are slashed and you are compensated for what you spent in that window.`,
   };
 }
+
+/* ------------------------------------------------------------ money flow */
+
+export interface ReceiptFlowNode {
+  label: string;
+  amount?: string;
+  tone?: "neutral" | "primary" | "success" | "danger" | "warning" | "teal";
+}
+
+const OUTCOME_STEP: Record<Exclude<ReceiptState, "CHECKING" | "CHARGED">, { label: string; tone: ReceiptFlowNode["tone"] }> = {
+  NOT_CHARGED: { label: "Check failed", tone: "danger" },
+  EMPTY_CONFIRMED: { label: "No results, confirmed", tone: "neutral" },
+  MISAPPLIED: { label: "Outside the tool's scope", tone: "warning" },
+  SYSTEM_ERROR: { label: "Provider error", tone: "danger" },
+  REQUEST_ERROR: { label: "Request rejected", tone: "danger" },
+  EXPIRED: { label: "Did not finish in time", tone: "warning" },
+};
+
+/**
+ * Where this call's money went, as the receipt's strip draws it:
+ * Held $0.10 → Check failed → Released $0.10, or Held → Check passed → Charged.
+ */
+export function receiptFlow(receipt: Receipt, state: ReceiptState): ReceiptFlowNode[] {
+  const held: ReceiptFlowNode = { label: "Held", amount: price(receipt), tone: "primary" };
+  if (state === "CHECKING") return [held, { label: "Checking now", tone: "neutral" }];
+  const chargedSomething = receipt.chargedPrice.amount !== "0";
+  const step =
+    state === "CHARGED"
+      ? { label: "Check passed", tone: "success" as const }
+      : OUTCOME_STEP[state];
+  if (chargedSomething) {
+    return [held, step, { label: "Charged", amount: charged(receipt), tone: "neutral" }];
+  }
+  return [held, step, { label: "Released to you", amount: formatMoney(receipt.withheld, { decimals: 4 }), tone: "teal" }];
+}
+
+/**
+ * Whether the relevance stage was reached on this call — it ran, or it was
+ * considered and not sampled. Only then does the sampling explanation belong
+ * on the receipt; an expired, voided or errored call never got that far.
+ */
+export function relevanceReached(receipt: Receipt): boolean {
+  const semantic = receipt.stages.find((s) => s.stage === "SEMANTIC");
+  if (!semantic) return false;
+  return stageStatus(semantic) !== "not-reached";
+}
+
+/** A not-charged outcome that is final (not still checking, not charged). */
+export function isFinalNotCharged(state: ReceiptState, receipt: Receipt): boolean {
+  return state !== "CHECKING" && receipt.chargedPrice.amount === "0";
+}

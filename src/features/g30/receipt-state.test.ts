@@ -4,6 +4,8 @@ import {
   STATE_CARDS,
   canContestRejection,
   deriveReceiptState,
+  receiptFlow,
+  relevanceReached,
   samplingExplainerCopy,
 } from "./receipt-state";
 import type { Receipt } from "./wire";
@@ -71,5 +73,34 @@ describe("canContestRejection — the 'This result was actually fine' block", ()
     expect(canContestRejection(stages("PASSED", "SKIPPED"))).toBe(false);
     expect(canContestRejection(stages("MISAPPLIED", "UNAVAILABLE"))).toBe(false);
     expect(canContestRejection(stages())).toBe(false);
+  });
+});
+
+describe("receiptFlow and relevanceReached", () => {
+  const money = (amount: string) => ({ amount, asset: "x", decimals: 6 });
+  const r = (charged: string, stages: { stage: string; status: string }[] = []) =>
+    ({
+      listedPrice: money("100000"),
+      chargedPrice: money(charged),
+      withheld: money(charged === "0" ? "100000" : "0"),
+      stages,
+    }) as unknown as Receipt;
+
+  it("draws held → check failed → released for a refused call", () => {
+    expect(receiptFlow(r("0"), "NOT_CHARGED").map((n) => [n.label, n.amount ?? null])).toEqual([
+      ["Held", "$0.1000"],
+      ["Check failed", null],
+      ["Released to you", "$0.1000"],
+    ]);
+  });
+
+  it("draws held → check passed → charged for a charged call", () => {
+    expect(receiptFlow(r("100000"), "CHARGED").map((n) => n.label)).toEqual(["Held", "Check passed", "Charged"]);
+  });
+
+  it("says the relevance stage was reached only when it ran or was sampled out", () => {
+    expect(relevanceReached(r("0", [{ stage: "SEMANTIC", status: "NOT_REACHED" }]))).toBe(false);
+    expect(relevanceReached(r("0", [{ stage: "SEMANTIC", status: "SKIPPED" }]))).toBe(true);
+    expect(relevanceReached(r("0", []))).toBe(false);
   });
 });

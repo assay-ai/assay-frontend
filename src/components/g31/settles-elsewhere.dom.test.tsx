@@ -36,6 +36,8 @@ function tool(settlementChains: string[] | undefined): ToolRow {
     toolId: "b0a2f1c4-0000-4000-8000-000000000001",
     name: "search.web",
     description: "web search",
+    tier: "VERIFIED",
+    pricingMode: "PAID",
     providerCount: 2,
     fromPrice: null,
     price: null,
