@@ -9,6 +9,7 @@ import { PresetChips } from "@/components/patterns/preset-chips";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { runApproveStep, runDepositStep, type DepositAttempt, type DepositRun } from "@/features/buyer-money/deposit-flow";
+import { testTokenHelp } from "@/features/buyer-money/gas-help";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { DEPOSIT_MINIMUM_USD } from "@/features/explorer/buyer-costs";
 import { depositChoice } from "@/features/funding/deposit-chain";
@@ -187,6 +188,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
               : null;
 
   const needsCaps = !money.capsSet;
+  const tokenHelp = testTokenHelp(chain);
   const close = () => onOpenChange(false);
 
   return (
@@ -247,6 +249,17 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
         </p>
       ) : null}
       {evm ? <GasHelpNote chain={chain} /> : null}
+      {tokenHelp ? (
+        <p className="text-body-xs text-03" data-testid="test-token-help">
+          {tokenHelp}
+        </p>
+      ) : null}
+
+      {/* Money truths stay visible: a deposit is final, and getting it back takes about an hour. */}
+      <ul className="flex list-disc flex-col gap-1 rounded-lg border border-01 bg-02 py-2 pl-7 pr-3 text-body-xs text-02" data-testid="deposit-truths">
+        <li>Deposits settle on chain and are final: there is no card and no chargeback.</li>
+        <li>You can withdraw what you have not spent at any time; it takes about an hour.</li>
+      </ul>
 
       <details className="group rounded-lg border border-01 bg-02 px-3 py-2 text-body-xs text-02">
         <summary className="flex cursor-pointer select-none items-center gap-1.5 text-label-xs text-02">
@@ -257,8 +270,6 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
           <li>
             You deposit {symbol}, a dollar token on {chainName ?? "this chain"}. It is spent on this chain only.
           </li>
-          <li>Deposits settle on chain and are final: there is no card and no chargeback.</li>
-          <li>You can withdraw what you have not spent at any time; it takes about an hour.</li>
           {evm ? <li>Two wallet prompts: one allows the transfer, one makes it. Both cost a little ETH.</li> : null}
         </ul>
       </details>
