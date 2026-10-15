@@ -248,8 +248,9 @@ export function deriveSubject(name: string): string {
   const first = name.trim().split(/\s+/)[0] ?? "";
   const handle = first
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    // Letters with a stroke (U+0111) do not decompose, so map them by hand.
     .replace(/\u0111/g, "d")
     .replace(/[^a-z0-9._-]/g, "");
   return handle ? `${handle}@` : "";
