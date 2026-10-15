@@ -1,260 +1,201 @@
 "use client";
 
-import { DisplayAssetSelect } from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
-import { Download, Info, List } from "lucide-react";
+import { Calendar, Download } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { DisplayAssetSelect, displayAssetLabel, useDisplayAssetPick } from "@/components/display-asset-select";
+import { EntityName } from "@/components/patterns/entity-name";
+import { PageState } from "@/components/patterns/page-state";
+import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
-import type { Money } from "@/interfaces";
+import { recentMonths } from "@/features/buyer/period";
+import { spendCsv } from "@/features/g30/spend-view";
+import type { ReceiptsSummary } from "@/features/g30/wire";
+import { useChains } from "@/hooks/useChains";
+import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
+import { plainError } from "@/libs/plain-language";
 import { getReceiptsSummary } from "@/services/receipts.service";
 import { formatMoney } from "@/utils/money";
 
-import { KeyValueRow, MicroLabel, PageHeader } from "./chrome";
-import { formatCount, monthBounds } from "./format";
+import { KeyValueRow, PageHeader } from "./chrome";
+import { formatCount } from "./format";
 
 /**
- * Statements and export.
+ * Money › Statements — "get my monthly statement for accounting".
  *
- * The design's own footnote says this document is Phase 2 and that CSV export
- * ships at MVP on the Spend explorer — so this screen is honest about being a
- * partial statement rather than pretending to be a finance-grade one.
- *
- * What reconciles for real: gross tool spend, amount withheld and net charged
- * all come from one call to `GET /receipts/summary` over UTC month bounds,
- * and the per-tool table from the same endpoint with `groupBy=tool`. The
- * design's line about that is the point — the same endpoint serves the
- * dashboard, the export and the statement, so the three cannot disagree in
- * front of a finance approver.
- *
- * What cannot: opening balance, closing balance, deposits and withdrawals.
- * `GET /balances` is a point-in-time reading with no `asOf` parameter, and
- * there is no historical-balance endpoint, so a month's opening and closing
- * figures cannot be derived without guessing. They are named and left
- * unanswered rather than filled with today's balance, which would be wrong by
- * exactly the month's activity.
- *
- * `groupBy=provider` currently 500s on the API ("column intent.providerid does
- * not exist"), so only the by-tool grouping is offered.
+ * One statement card per UTC month (picked here, or `?month=2026-10` from Not
+ * charged) with one primary action, Download CSV, built in the browser from
+ * the same `GET /receipts/summary` rows the dashboard reads — so the two can
+ * never disagree. Opening and closing balances, deposits and withdrawals have
+ * no historical endpoint and are not drawn at all rather than shown as "—".
  */
 
-interface SummaryFigures {
-  calls: number;
-  refundedCalls: number;
-  listedTotal: Money;
-  chargedTotal: Money;
-  withheldTotal: Money;
-  failRate: number;
+const MONTHS_BACK = 6;
+
+function plural(n: number, one: string): string {
+  return `${formatCount(n)} ${n === 1 ? one : `${one}s`}`;
 }
 
-interface SummaryGroup extends SummaryFigures {
-  key: string;
-}
+function StatementsContent() {
+  const anchor = React.useMemo(() => new Date(), []);
+  const months = React.useMemo(() => recentMonths(anchor, MONTHS_BACK), [anchor]);
+  const requested = useSearchParams().get("month");
+  const [selected, setSelected] = React.useState<string | null>(requested);
+  const period = months.find((m) => m.key === selected) ?? months[0]!;
+  const assetPick = useDisplayAssetPick();
+  const names = useEntityNames({ kinds: ["tool"] });
+  const { chains } = useChains();
 
-interface Summary {
-  groups: SummaryGroup[];
-  totals: SummaryFigures;
-  asset: string;
-}
-
-function monthLabel(from: string): string {
-  return new Date(from).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-}
-
-export function StatementsView() {
-  const month = React.useMemo(() => monthBounds(), []);
-
-  const summary = useQuery({
-    queryKey: ["receipts-summary", "statement", month.from],
-    retry: false,
+  const summary = useQuery<ReceiptsSummary, ApiError>({
+    queryKey: ["receipts-summary", "statement", period.key, assetPick],
+    retry: 0,
     queryFn: () =>
-      getReceiptsSummary({ from: month.from, to: month.to, groupBy: "tool" }) as Promise<Summary>,
+      getReceiptsSummary({ from: period.from, to: period.to, groupBy: "tool" }) as Promise<ReceiptsSummary>,
   });
 
   const totals = summary.data?.totals;
+  const groups = summary.data?.groups ?? [];
+
+  const download = React.useCallback(() => {
+    if (!summary.data) return;
+    const assetLabel = summary.data.asset ? displayAssetLabel(summary.data.asset, chains) : "";
+    const body = spendCsv(summary.data.groups, {
+      dimensionHeader: "Tool",
+      labelOf: (key) => names.name("tool", key),
+      assetLabel,
+    });
+    const t = summary.data.totals;
+    const plainAmount = (m: typeof t.listedTotal) => formatMoney(m, { grouped: false, symbol: "", decimals: m.decimals });
+    const total = ["Total", "", assetLabel, String(t.calls), plainAmount(t.listedTotal), plainAmount(t.chargedTotal), plainAmount(t.withheldTotal), String(t.refundedCalls)].join(",");
+    const csv = `${body}\n${total}`;
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `assay-statement_${period.key}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [summary.data, chains, names, period.key]);
 
   return (
-    <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
+    <>
       <PageHeader
         title="Statements"
-        subtitle="generated on a UTC month boundary · reconciles to the ledger to the atomic unit"
         actions={
-          <>
-            <Button variant="secondary" icon={<List />} type="button" disabled>
-              Usage view
-            </Button>
-            <Button icon={<Download />} type="button" disabled>
-              Export CSV
-            </Button>
-          </>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="secondary" icon={<Calendar />} aria-label={`Month: ${period.label}. Change month`}>
+                {period.label}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="border border-01">
+              {months.map((m) => (
+                <DropdownMenuItem key={m.key} className="text-body-13" onSelect={() => setSelected(m.key)}>
+                  {m.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         }
       />
+      <p className="-mt-2 text-body-13 text-03">
+        One statement per calendar month (UTC), for your records or your accountant.
+      </p>
 
-      <DisplayAssetSelect />
+      <DisplayAssetSelect live />
 
-      <Panel>
-        <PanelHeader>
-          <PanelTitles>
-            <PanelTitle>{monthLabel(month.from)}</PanelTitle>
-            <PanelDescription className="whitespace-normal">
-              opening balance → deposits → gross tool spend → amount withheld → net charged →
-              withdrawals → closing balance
-            </PanelDescription>
-          </PanelTitles>
-        </PanelHeader>
-        <PanelBody className="px-5 pb-[18px] pt-2">
-          {summary.isPending ? (
-            <p className="font-mono text-mono-13 text-03">Loading…</p>
-          ) : summary.isError ? (
-            <p className="py-2 text-body-13 text-danger-600">
-              This period could not be read:{" "}
-              {summary.error instanceof ApiError ? summary.error.message : "the request failed"}. No
-              figures are shown until it can be read.
-            </p>
-          ) : (
-            <>
-              <KeyValueRow
-                label="Opening balance"
-                sub="not available yet"
-                value="—"
-                valueClassName="text-03"
-              />
-              <KeyValueRow
-                label="Deposits"
-                sub="not included in this statement yet — see Funding"
-                value="—"
-                valueClassName="text-03"
-              />
-              <KeyValueRow
-                label="Gross tool spend"
-                sub={`${formatCount(totals?.calls ?? 0)} calls at listed price`}
-                value={totals ? `−${formatMoney(totals.listedTotal, { decimals: 2 })}` : "—"}
-              />
-              <KeyValueRow
-                label="Amount withheld"
-                sub={`${formatCount(totals?.refundedCalls ?? 0)} calls · the guarantee`}
-                value={totals ? `+${formatMoney(totals.withheldTotal, { decimals: 2 })}` : "—"}
-                valueClassName="text-teal-600"
-              />
-              <KeyValueRow
-                label="Net charged"
-                value={
-                  <span className="text-heading-sm">
-                    {totals ? `−${formatMoney(totals.chargedTotal, { decimals: 2 })}` : "—"}
-                  </span>
-                }
-              />
-              <KeyValueRow
-                label="Withdrawals"
-                sub="not included in this statement yet — see Funding"
-                value="—"
-                valueClassName="text-03"
-              />
-              <KeyValueRow
-                label="Closing balance"
-                sub="not available yet"
-                value="—"
-                valueClassName="text-03"
-                divider={false}
-              />
-            </>
-          )}
-        </PanelBody>
-      </Panel>
+      {summary.isPending ? (
+        <PageState kind="loading" rows={4} label={`Loading the ${period.label} statement`} />
+      ) : summary.isError ? (
+        <PageState
+          kind="error"
+          title={`The ${period.label} statement could not be loaded`}
+          description={plainError(summary.error.code)}
+          onRetry={() => void summary.refetch()}
+          code={summary.error.code}
+          details={summary.error.message}
+        />
+      ) : (
+        <>
+          <Panel>
+            <PanelHeader className="flex-col items-start gap-3 tablet:flex-row tablet:items-center">
+              <PanelTitles>
+                <PanelTitle>{period.label}</PanelTitle>
+                <PanelDescription className="whitespace-normal">Matches your balance history exactly.</PanelDescription>
+              </PanelTitles>
+              <Button icon={<Download />} onClick={download} disabled={!totals || totals.calls === 0}>
+                Download CSV
+              </Button>
+            </PanelHeader>
+            <PanelBody className="px-5 pb-[18px] pt-2">
+              {!totals || totals.calls === 0 ? (
+                <p className="py-3 text-body-13 text-02">No paid calls in {period.label}, so there is nothing to itemise.</p>
+              ) : (
+                <>
+                  <KeyValueRow
+                    label="Calls at listed price"
+                    sub={plural(totals.calls, "call")}
+                    value={formatMoney(totals.listedTotal, { decimals: 2 })}
+                  />
+                  <KeyValueRow
+                    label={<Term k="not-charged">Not charged</Term>}
+                    sub={`${plural(totals.refundedCalls, "call")} that failed our checks`}
+                    value={`−${formatMoney(totals.withheldTotal, { decimals: 2 })}`}
+                    valueClassName="text-teal-600"
+                  />
+                  <KeyValueRow
+                    label="You paid"
+                    value={<span className="text-heading-sm">{formatMoney(totals.chargedTotal, { decimals: 2 })}</span>}
+                    divider={false}
+                  />
+                </>
+              )}
+            </PanelBody>
+          </Panel>
 
-      <Panel>
-        <PanelHeader>
-          <PanelTitles>
-            <PanelTitle>By tool</PanelTitle>
-            <PanelDescription className="whitespace-normal">
-              the same figures as the dashboard and the CSV export
-            </PanelDescription>
-          </PanelTitles>
-        </PanelHeader>
-        <PanelBody className="px-2.5 pb-2.5 pt-1.5">
-          {summary.isPending ? (
-            <p className="p-3 font-mono text-mono-13 text-03">Loading…</p>
-          ) : summary.isError ? (
-            <p className="p-3 text-body-13 text-danger-600">
-              The per-tool breakdown could not be read.
-            </p>
-          ) : (summary.data?.groups.length ?? 0) === 0 ? (
-            <p className="p-3 text-body-13 text-02">
-              No call settled in this period, so there is nothing to itemise.
-            </p>
-          ) : (
-            <div className="w-full overflow-x-auto">
-              <div className="min-w-[720px]">
-                <div className="flex items-center gap-3 border-b border-02 px-3 pb-2.5">
-                  <div className="min-w-0 flex-1">
-                    <MicroLabel>Tool</MicroLabel>
-                  </div>
-                  <div className="w-[120px] text-right">
-                    <MicroLabel>Calls</MicroLabel>
-                  </div>
-                  <div className="w-[120px] text-right">
-                    <MicroLabel>Listed</MicroLabel>
-                  </div>
-                  <div className="w-[130px] text-right">
-                    <MicroLabel>Withheld</MicroLabel>
-                  </div>
-                  <div className="w-[130px] text-right">
-                    <MicroLabel>Charged</MicroLabel>
-                  </div>
-                </div>
-                {summary.data?.groups.map((group) => (
-                  <div
-                    key={group.key}
-                    className="flex items-center gap-3 border-b border-01 px-3 py-2.5"
-                  >
-                    <div className="min-w-0 flex-1 truncate font-mono text-mono-12 font-semibold text-01">
-                      {group.key}
-                    </div>
-                    <div className="w-[120px] text-right font-mono text-mono-12 text-02">
-                      {formatCount(group.calls)}
-                    </div>
-                    <div className="w-[120px] text-right font-mono text-mono-12 text-02">
-                      {formatMoney(group.listedTotal, { decimals: 2 })}
-                    </div>
-                    <div className="w-[130px] text-right font-mono text-mono-12 text-teal-600">
-                      {formatMoney(group.withheldTotal, { decimals: 2 })}
-                    </div>
-                    <div className="w-[130px] text-right font-mono text-mono-12 text-02">
-                      {formatMoney(group.chargedTotal, { decimals: 2 })}
-                    </div>
-                  </div>
-                ))}
-                {totals ? (
-                  <div className="flex items-center gap-3 border-t border-02 px-3 py-3">
-                    <div className="min-w-0 flex-1 text-label-sm text-01">Total</div>
-                    <div className="w-[120px] text-right font-mono text-mono-13 font-semibold text-01">
-                      {formatCount(totals.calls)}
-                    </div>
-                    <div className="w-[120px] text-right font-mono text-mono-13 font-semibold text-01">
-                      {formatMoney(totals.listedTotal, { decimals: 2 })}
-                    </div>
-                    <div className="w-[130px] text-right font-mono text-mono-13 font-semibold text-teal-600">
-                      {formatMoney(totals.withheldTotal, { decimals: 2 })}
-                    </div>
-                    <div className="w-[130px] text-right font-mono text-mono-13 font-semibold text-01">
-                      {formatMoney(totals.chargedTotal, { decimals: 2 })}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          )}
-        </PanelBody>
-      </Panel>
+          {groups.length > 0 ? (
+            <Panel>
+              <PanelHeader>
+                <PanelTitles>
+                  <PanelTitle>By tool</PanelTitle>
+                  <PanelDescription className="whitespace-normal">The same rows as the CSV</PanelDescription>
+                </PanelTitles>
+              </PanelHeader>
+              <PanelBody>
+                <ul className="flex flex-col">
+                  {groups.map((group) => (
+                    <li key={group.key} className="flex flex-col gap-1 border-b border-01 px-5 py-3 last:border-b-0 tablet:flex-row tablet:items-center tablet:gap-4">
+                      <span className="min-w-0 flex-1 truncate font-mono text-mono-13 font-semibold text-01">
+                        <EntityName kind="tool" id={group.key} copyable={false} />
+                      </span>
+                      <span className="flex flex-wrap gap-x-4 gap-y-0.5 text-body-xs text-03 tablet:text-body-13">
+                        <span>{plural(group.calls, "call")}</span>
+                        <span>listed {formatMoney(group.listedTotal, { decimals: 2 })}</span>
+                        <span className="text-teal-600">−{formatMoney(group.withheldTotal, { decimals: 2 })} not charged</span>
+                        <span className="font-semibold text-01">paid {formatMoney(group.chargedTotal, { decimals: 2 })}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </PanelBody>
+            </Panel>
+          ) : null}
+        </>
+      )}
+    </>
+  );
+}
 
-      <div className="flex w-full items-start gap-2.5 rounded-lg border border-01 bg-02 p-3.5 tablet:p-[15px]">
-        <Info aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-03" />
-        <p className="text-body-13 text-02">
-          A downloadable statement is not available yet. You can export your calls as CSV from Spend.
-        </p>
-      </div>
+export function StatementsView() {
+  return (
+    <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
+      <React.Suspense fallback={<PageState kind="loading" rows={4} label="Loading statements" />}>
+        <StatementsContent />
+      </React.Suspense>
     </div>
   );
 }
