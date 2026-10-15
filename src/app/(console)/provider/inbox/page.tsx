@@ -5,6 +5,7 @@ import * as React from "react";
 import { PageState } from "@/components/patterns/page-state";
 import { NeedsActionStrip } from "@/features/provider-home/needs-action-strip";
 import { useProviderNeedsAction } from "@/features/provider-home/use-needs-action";
+import { inboxHeadline } from "@/features/provider-home/inbox";
 import { useProviderInbox } from "@/features/provider-home/use-provider-inbox";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
@@ -26,7 +27,7 @@ import { InboxItem } from "./_components/inbox-item";
  * here. "Mark all read" is not offered: the console has no call for it yet.
  */
 export default function ProviderInboxPage() {
-  const { notifications, items, penalties, count } = useProviderInbox();
+  const { notifications, items, penalties, breakdown } = useProviderInbox();
 
   // The same "Needs action" list as Home: penalties, windows near the promise,
   // a short stake, a suspended tool.
@@ -40,11 +41,7 @@ export default function ProviderInboxPage() {
       <header className="flex w-full flex-col gap-0.5">
         <h1 className="text-heading-sm text-01 tablet:text-heading-md">Inbox</h1>
         <p className="text-body-13 text-03" aria-live="polite">
-          {loading
-            ? "Penalties to decide on, and notices about your tools."
-            : count === 0
-              ? "Nothing new. Penalties to decide on and notices about your tools land here."
-              : `${count} new: ${count === 1 ? "it needs" : "they need"} a look. Penalties to decide on come first.`}
+          {loading ? "Penalties to decide on, and notices about your tools." : inboxHeadline(breakdown)}
         </p>
       </header>
 
