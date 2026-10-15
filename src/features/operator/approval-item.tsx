@@ -247,7 +247,8 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
     ) : (
       <>
         {nameOf(approval.requestedBy)} · asked <LocalTime value={approval.createdAt} midSentence />
-        {mode === "other" ? ` · ${waitingFor}` : null}
+        {/* Who must approve, visible without a hover (operator review 2026-10-16b, P1-8). */}
+        {mode === "other" ? ` · ${waitingFor}` : pending ? ` · ${needs.charAt(0).toLowerCase()}${needs.slice(1)}` : null}
       </>
     );
 

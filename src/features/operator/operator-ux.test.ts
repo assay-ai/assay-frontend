@@ -81,6 +81,9 @@ describe("the Needs-you groups", () => {
   it("counts disputes into Needs you only for whoever can rule (the badge uses the same rule)", () => {
     expect(needsYouCount(1, 3, true)).toBe(4);
     expect(needsYouCount(1, 3, false)).toBe(1);
+    // Approved on-chain blocks and superseded records to cancel count for whoever rules.
+    expect(needsYouCount(1, 3, true, 2)).toBe(6);
+    expect(needsYouCount(1, 3, false, 2)).toBe(1);
   });
 
   it("names every open request 'All waiting', apart from the Needs you count", () => {
@@ -98,6 +101,8 @@ describe("the Needs-you groups", () => {
     expect(needsYouBreakdown(2, 0, true)).toBeNull();
     expect(needsYouBreakdown(0, 3, true)).toBeNull();
     expect(needsYouBreakdown(2, 2, false)).toBeNull();
+    expect(needsYouBreakdown(0, 2, true, 1)).toBe("2 to rule · 1 to sign");
+    expect(needsYouBreakdown(1, 0, true, 1)).toBe("1 to approve · 1 to sign");
     expect(needsYouBadgeText(1)).toBe("1 needs you");
     expect(needsYouBadgeText(4)).toBe("4 need you");
   });
