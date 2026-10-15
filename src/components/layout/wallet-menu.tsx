@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 
+import { PauseAllConfirm, usePauseAll } from "@/components/buyer-money/pause-all";
 import { ACCOUNT_MENU_LINKS } from "@/components/layout/nav-config";
 import { BalanceRows, WalletChainRows } from "@/components/layout/wallet-menu-rows";
 import { Avatar } from "@/components/ui/avatar";
@@ -65,6 +66,8 @@ const ITEM_CLASS = cn(
 
 export function WalletMenu({ className }: { className?: string }) {
   const [open, setOpen] = React.useState(false);
+  const pause = usePauseAll();
+  const [confirmPause, setConfirmPause] = React.useState(false);
   /*
     The avatar's initials and colour are derived from the wallet address, which
     exists only in the browser — so the server renders "?" on an indigo circle
@@ -128,6 +131,13 @@ export function WalletMenu({ className }: { className?: string }) {
   }, [logout, queryClient, router]);
 
   return (
+    <>
+    <PauseAllConfirm
+      open={confirmPause}
+      onOpenChange={setConfirmPause}
+      pausing={!pause.paused}
+      onConfirm={() => pause.mutation.mutateAsync(!pause.paused)}
+    />
     <DropdownMenuPrimitive.Root open={open} onOpenChange={setOpen}>
       <DropdownMenuPrimitive.Trigger asChild>
         <button
@@ -229,10 +239,18 @@ export function WalletMenu({ className }: { className?: string }) {
           <div className="-mx-1 my-1 h-px bg-03" role="separator" />
 
           <DropdownMenuPrimitive.Item asChild className={ITEM_CLASS}>
-            <Link href="/funding/deposit">
+            <Link href="/funding?action=deposit">
               <span className="flex-1">Add funds</span>
             </Link>
           </DropdownMenuPrimitive.Item>
+          {pause.available ? (
+            <DropdownMenuPrimitive.Item
+              onSelect={() => setConfirmPause(true)}
+              className={cn(ITEM_CLASS, pause.paused ? "text-01" : "text-danger-500")}
+            >
+              <span className="flex-1">{pause.paused ? "Resume paid calls" : "Pause all paid calls"}</span>
+            </DropdownMenuPrimitive.Item>
+          ) : null}
 
           <div className="-mx-1 my-1 h-px bg-03" role="separator" />
 
@@ -267,5 +285,6 @@ export function WalletMenu({ className }: { className?: string }) {
         </DropdownMenuPrimitive.Content>
       </DropdownMenuPrimitive.Portal>
     </DropdownMenuPrimitive.Root>
+    </>
   );
 }

@@ -5,6 +5,7 @@ import * as React from "react";
 
 import { SectionTabs } from "@/components/layout/section-tabs";
 import { CapMeter } from "@/components/patterns/cap-meter";
+import { EffectiveLimit } from "@/components/patterns/effective-limit";
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { EntityPicker } from "@/components/patterns/entity-picker";
@@ -347,6 +348,42 @@ export function PatternsGallery() {
         ))}
         <div className="w-full max-w-[320px] rounded-xl border border-01 bg-01 p-4">
           <CapMeter label="Per day" used={usd("0")} limit={null} />
+        </div>
+      </Spec>
+
+      <Spec name="effective-limit · lowest of budget, agent permission, safety caps">
+        <div className="w-full max-w-[420px]">
+          <EffectiveLimit
+            title="What prod can spend"
+            rows={[
+              {
+                id: "call",
+                label: "Per call",
+                sources: [
+                  { source: "Budget", value: usd("10") },
+                  { source: "Agent permission", value: usd("0.5") },
+                  { source: "Safety caps", value: usd("1") },
+                ],
+              },
+              {
+                id: "day",
+                label: "Per day",
+                sources: [
+                  { source: "Budget", value: usd("10"), used: usd("8.25") },
+                  { source: "Agent permission", value: usd("40"), used: usd("15.75") },
+                  { source: "Safety caps", value: usd("20"), used: usd("3.4") },
+                ],
+              },
+            ]}
+            footer="The lowest limit wins."
+          />
+        </div>
+        <div className="w-full max-w-[420px]">
+          <EffectiveLimit
+            title="What staging can spend"
+            rows={[{ id: "call", label: "Per call", sources: [{ source: "Budget", value: null }] }]}
+            stopped="All paid calls are paused, so this agent can spend nothing until you resume."
+          />
         </div>
       </Spec>
 

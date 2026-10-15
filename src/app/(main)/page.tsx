@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useEffect, useMemo, type ReactNode } from "react";
 
 import { WalletSetupBanner } from "@/components/auth/wallet-setup-banner";
+import { AgentHealthList } from "@/components/buyer-money/agent-health";
+import { GetStarted } from "@/components/buyer-money/get-started";
 import { Button } from "@/components/ui/button";
 import { EntityName } from "@/components/patterns/entity-name";
 import { LocalTime } from "@/components/patterns/local-time";
@@ -172,6 +174,10 @@ export default function OverviewPage() {
       </header>
 
       <DisplayAssetSelect live />
+
+      {/* Get started (until the first paid call is possible) and each agent's health: owned by buyer-money. */}
+      <GetStarted placement="overview" />
+      <AgentHealthList />
 
       {/* A brand-new account's first requests fail for one specific, temporary
           reason — Privy records the wallet after issuing the token — and that

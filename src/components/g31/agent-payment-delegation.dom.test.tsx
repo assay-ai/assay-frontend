@@ -97,7 +97,7 @@ describe("PayerDelegationsPanel", () => {
       "50000",
     );
     expect(lowered).toContain('data-testid="delegate-above-escrow-limits"');
-    expect(lowered).toContain("0.050000 USDG a payment");
+    expect(lowered).toContain("$0.05 a payment");
 
     const fine = render(
       <PayerDelegationsPanel account={PAYER} bindings={[]} version={0} onChanged={() => {}} />,
@@ -112,7 +112,7 @@ describe("PayerDelegationsPanel — payments still being settled (BUG-D1-07)", (
       <PayerDelegationsPanel account={PAYER} bindings={[]} version={0} onChanged={() => {}} />,
     );
     expect(html).toContain('data-testid="delegate-unsettled"');
-    expect(html).toContain("1 payment (0.100000 USDG) still being settled");
+    expect(html).toContain("1 payment ($0.10) still being settled");
   });
 });
 

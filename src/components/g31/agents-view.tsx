@@ -1,468 +1,355 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { KeyRound, Plus } from "lucide-react";
 import * as React from "react";
 
-import { CodeBlock } from "@/components/ui/code-block";
+import { AgentHealthLine } from "@/components/buyer-money/agent-health";
+import { CreateKeySheet } from "@/components/buyer-money/create-key";
+import { LetAgentPaySheet } from "@/components/buyer-money/let-agent-pay-sheet";
+import { McpConfigTabs } from "@/components/buyer-money/mcp-config-tabs";
+import { useAgentsAndKeys, type AgentRow, type KeyRow } from "@/components/buyer-money/use-agents";
+import { CapMeter } from "@/components/patterns/cap-meter";
+import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
+import { CopyChip } from "@/components/patterns/copy-chip";
+import { LocalTime } from "@/components/patterns/local-time";
+import { PageState } from "@/components/patterns/page-state";
+import { StatusChip } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Field } from "@/components/ui/field";
-import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { CodeBlock } from "@/components/ui/code-block";
+import type { AgentReadiness } from "@/features/buyer-money/agent-readiness";
+import { type DelegateBinding, supportsDelegation } from "@/features/delegation/delegation-form";
 import { ApiError } from "@/libs/ApiClient";
-import {
-  createCredential,
-  listAgents,
-  listCredentials,
-  revokeCredential,
-} from "@/services/account.service";
+import { plainError } from "@/libs/plain-language";
+import { shortAddress } from "@/libs/chains/format";
+import { revokeCredential } from "@/services/account.service";
+import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { toast } from "@/utils/toast";
 
-import type { DelegateBinding } from "@/features/delegation/delegation-form";
-import { supportsDelegation } from "@/features/delegation/delegation-form";
-
-import { AgentPaymentDelegation, PayerDelegationsPanel } from "./agent-payment-delegation";
-import { MicroLabel, PageHeader, StatusPill } from "./chrome";
-import { dateOnly, relativeTime } from "./format";
+import { GrantActions, PayerDelegationsPanel } from "./agent-payment-delegation";
+import { formatLimit, relativeTime } from "./format";
 
 /**
- * Agents and credentials, and the "Credential created" reveal.
+ * Controls › Agents & keys: one card per agent, answering "is it working?"
+ * and "how do I stop it?" without leaving the card.
  *
- * "Credential created" is not a route. It is the one-shot reveal that follows a successful
- * `POST /agents/{agentId}/credentials`, and the API's own words are that the
- * secret is "returned exactly once". So it is a dialog on this screen, opened
- * by the response and closed by the person confirming they have stored it —
- * a route would imply the key could be navigated back to.
+ *   1. Keys — the agent's live keys (revoked ones folded away), the MCP
+ *      config to paste, and Revoke behind a confirmation that names the key.
+ *   2. Payment key — bound by `agent-cli bind`, detected automatically.
+ *   3. Pay permission — the agent's caps on chain, what it spent in the last
+ *      24 hours, and Change caps / Stop it paying.
  *
- * The design's own note is the product rule here: revocation is immediate,
- * with no grace period and no cached-token window. `DELETE .../credentials/{id}`
- * sets `revoked_at` and never deletes the row, so a revoked credential stays
- * visible with its history rather than vanishing.
- *
- * Two sections of the design have no endpoint and are not drawn: the session
- * signer (no signer resource) and browser sessions (no session resource). What
- * stands in for a session signer is agent payment delegation: the agent's own
- * key, bound to its credential, authorised by the person's wallet on chain —
- * see `agent-payment-delegation.tsx`.
- * Both would have had to be invented wholesale on a screen whose subject is
- * "what currently has authority over your money" — the worst place in the
- * product to show a made-up grant.
+ * Revocation of a key is immediate; there is no grace period.
  */
-
-interface Credential {
-  id: string;
-  agentId: string;
-  name: string;
-  prefix: string;
-  scopes: string[];
-  lastUsedAt: string | null;
-  expiresAt: string | null;
-  revokedAt: string | null;
-  rotatedFromId: string | null;
-  /** CAIP-10 of the delegate key this credential proved it holds (agent payment delegation). */
-  delegateAccount?: string | null;
-  delegateBoundAt?: string | null;
-  createdAt: string;
-}
-
-interface CreatedCredential {
-  id: string;
-  agentId: string;
-  name: string;
-  prefix: string;
-  /** Shown exactly once. Never re-fetchable. */
-  token: string;
-  scopes: string[];
-  expiresAt: string | null;
-  createdAt: string;
-}
-
-interface Agent {
-  agentId: string;
-  label?: string;
-  agentAccount?: string;
-  credentialCount?: number;
-}
-
-const DEFAULT_SCOPES = ["tools:call"];
-
-function CredentialRow({
-  credential,
-  onRevoke,
-  revoking,
-}: {
-  credential: Credential;
-  onRevoke: () => void;
-  revoking: boolean;
-}) {
-  const revoked = Boolean(credential.revokedAt);
-  return (
-    <div
-      data-testid="credential-row"
-      data-credential-id={credential.id}
-      className="flex w-full items-center gap-3.5 rounded-lg border border-01 bg-02 p-3.5"
-    >
-      <KeyRound aria-hidden="true" className="size-4 shrink-0 text-02" />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate font-mono text-mono-13 font-semibold text-01">
-          {credential.prefix}…
-        </span>
-        <span className={revoked ? "text-body-xs text-danger-600" : "text-body-xs text-03"}>
-          {credential.name} · created {dateOnly(credential.createdAt)} ·{" "}
-          {revoked
-            ? `revoked ${relativeTime(credential.revokedAt)}`
-            : credential.lastUsedAt
-              ? `last used ${relativeTime(credential.lastUsedAt)}`
-              : "never used"}
-        </span>
-      </div>
-      {revoked ? (
-        <StatusPill label="REVOKED" tone="danger" />
-      ) : (
-        <Button
-          variant="secondary"
-          size="sm"
-          type="button"
-          data-testid="revoke-credential"
-          className="text-danger-600"
-          loading={revoking}
-          onClick={onRevoke}
-        >
-          Revoke
-        </Button>
-      )}
-    </div>
-  );
-}
+const BIND_COMMAND = "agent-cli keygen && agent-cli bind";
+const POLL_MS = 5_000;
 
 export function AgentsView() {
   const queryClient = useQueryClient();
-  const [creatingFor, setCreatingFor] = React.useState<string | null>(null);
-  const [name, setName] = React.useState("");
-  const [created, setCreated] = React.useState<CreatedCredential | null>(null);
-  const [revokingId, setRevokingId] = React.useState<string | null>(null);
-  /**
-   * Bumped after every write, and threaded into the REQUEST URL — not just the
-   * React Query key.
-   *
-   * The API answers every GET with
-   * `Cache-Control: private, max-age=10, stale-while-revalidate=3600`, so the
-   * BROWSER serves a credential list it already has and the request never
-   * reaches the server. Measured: after creating a credential the API returned
-   * six rows to curl while the page still showed five, through
-   * `invalidateQueries`, through `refetchQueries`, and through a fresh React
-   * Query key — because none of those change the URL.
-   *
-   * On this screen that is not a refresh annoyance. The design's own promise
-   * is "revocation is immediate, no grace period and no cached-token window",
-   * and a revoked credential that keeps rendering as live says the opposite.
-   *
-   * `from` is the cache-buster because it is on the endpoint's parameter
-   * whitelist (an unknown parameter is a 400) and because a `from` in 1970
-   * excludes nothing. The real fix belongs in the backend's cache headers.
-   */
-  const [writeCount, setWriteCount] = React.useState(0);
-  const cacheBuster = React.useMemo(() => new Date(writeCount).toISOString(), [writeCount]);
+  const [needsPoll, setNeedsPoll] = React.useState(false);
+  const data = useAgentsAndKeys({ pollMs: needsPoll ? POLL_MS : false });
+  const anyWaiting = Object.values(data.readiness).some((r) => r.next === "bind");
+  React.useEffect(() => setNeedsPoll(anyWaiting), [anyWaiting]);
 
-  const agentsQuery = useQuery({
-    queryKey: ["agents"],
-    retry: false,
-    queryFn: () => listAgents({ limit: 50 }) as unknown as Promise<{ items: Agent[] }>,
-  });
+  const [newKeyFor, setNewKeyFor] = React.useState<AgentRow | null>(null);
+  const [revoking, setRevoking] = React.useState<{ agent: AgentRow; key: KeyRow } | null>(null);
+  // The last target, so the sheet's title does not go blank while it animates out.
+  const [lastRevoke, setLastRevoke] = React.useState<{ agent: AgentRow; key: KeyRow } | null>(null);
+  if (revoking && revoking !== lastRevoke) setLastRevoke(revoking);
+  const [payFor, setPayFor] = React.useState<{ agent: AgentRow; delegate: string } | null>(null);
 
-  const agents = React.useMemo(() => agentsQuery.data?.items ?? [], [agentsQuery.data]);
-  /** Bumped after every delegation write, success or failure, so the chain is read again. */
-  const [delegationVersion, setDelegationVersion] = React.useState(0);
-  const bumpDelegations = React.useCallback(() => setDelegationVersion((n) => n + 1), []);
-
-  const agentIds = React.useMemo(() => agents.map((agent) => agent.agentId), [agents]);
-
-  /** One query across every agent, keyed by `writeCount` — see the note above. */
-  const credentialsQuery = useQuery({
-    queryKey: ["credentials", agentIds, writeCount],
-    /*
-      This used to carry an `eslint-disable-next-line
-      @tanstack/query/exhaustive-deps`, which was dead:
-      `@tanstack/eslint-plugin-query` has never been a dependency of this repo,
-      so the rule never ran and the directive suppressed nothing. It was removed
-      when the frontend gained its first ESLint config, because ESLint reports a
-      disable comment naming an unknown rule as an error of its own. If that
-      plugin is ever added, this call is where its finding will land.
-    */
-    enabled: agentIds.length > 0,
-    queryFn: async () => {
-      const lists = await Promise.all(
-        agentIds.map(
-          (id) =>
-            listCredentials(id, { limit: 50, from: cacheBuster } as never) as Promise<{
-              items: Credential[];
-            }>
-        )
-      );
-      return Object.fromEntries(agentIds.map((id, i) => [id, lists[i].items])) as Record<
-        string,
-        Credential[]
-      >;
+  const revoke = useMutation({
+    mutationFn: (input: { agentId: string; id: string }) => revokeCredential(input.agentId, input.id),
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: ["agent-keys"] });
+      void queryClient.invalidateQueries({ queryKey: ["credentials"] });
+      toast.success("Key revoked. It stopped working immediately.");
     },
   });
 
-  /**
-   * The payer whose on-chain grants the page lists: an agent's spending account on
-   * eip155 (every agent of a person spends from the same wallet).
-   */
-  const payerAccount = agents.find((agent) => supportsDelegation(agent.agentAccount))?.agentAccount;
-  /** Every credential that ever bound a key — revoked ones included, so their grants stay visible. */
-  const delegateBindings = React.useMemo<DelegateBinding[]>(
-    () =>
-      agents.flatMap((agent) =>
-        (credentialsQuery.data?.[agent.agentId] ?? [])
-          .filter((credential) => credential.delegateAccount)
-          .map((credential) => ({
-            agentId: agent.agentId,
-            agentLabel: agent.label ?? agent.agentId,
-            credentialId: credential.id,
-            credentialName: credential.name,
-            delegateAccount: credential.delegateAccount as string,
-            delegateBoundAt: credential.delegateBoundAt ?? null,
-            revokedAt: credential.revokedAt,
-          }))
-      ),
-    [agents, credentialsQuery.data]
+  const refresh = () => {
+    data.refetchKeys();
+    data.refetchDelegates();
+    void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+  };
+
+  const payerAccount = data.agents.find((a) => supportsDelegation(a.agentAccount))?.agentAccount;
+  const bindings: DelegateBinding[] = data.agents.flatMap((agent) =>
+    (data.keys[agent.agentId] ?? [])
+      .filter((k) => k.delegateAccount)
+      .map((k) => ({
+        agentId: agent.agentId,
+        agentLabel: agent.label ?? "Agent",
+        credentialId: k.id,
+        credentialName: k.name,
+        delegateAccount: k.delegateAccount as string,
+        delegateBoundAt: k.delegateBoundAt ?? null,
+        revokedAt: k.revokedAt,
+      })),
   );
 
-  const createMutation = useMutation({
-    mutationFn: (input: { agentId: string; name: string }) =>
-      createCredential(input.agentId, {
-        name: input.name,
-        scopes: DEFAULT_SCOPES,
-      }) as Promise<CreatedCredential>,
-    onSuccess: async (credential) => {
-      setCreated(credential);
-      setCreatingFor(null);
-      setName("");
-      setWriteCount((n) => n + 1);
-      await queryClient.refetchQueries({ queryKey: ["agents"] });
-    },
-    onError: (error) => {
-      toast.error(error instanceof ApiError ? error.message : "The credential could not be created");
-    },
-  });
-
-  const revokeMutation = useMutation({
-    mutationFn: (input: { agentId: string; id: string }) =>
-      revokeCredential(input.agentId, input.id),
-    onSuccess: async () => {
-      setRevokingId(null);
-      setWriteCount((n) => n + 1);
-      await queryClient.refetchQueries({ queryKey: ["agents"] });
-      toast.success("Revoked. There is no grace period — it stopped working immediately.");
-    },
-    onError: (error) => {
-      setRevokingId(null);
-      toast.error(error instanceof ApiError ? error.message : "The credential could not be revoked");
-    },
-  });
-
   return (
-    <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
-      <PageHeader
-        title="Agents and credentials"
-        subtitle="what currently has authority over your money, and when each thing stops working"
-        actions={
-          agents.length > 0 ? (
-            <Button
-              icon={<Plus />}
-              type="button"
-              data-testid="new-credential"
-              onClick={() => setCreatingFor(agents[0].agentId)}
-            >
-              New credential
-            </Button>
-          ) : null
-        }
-      />
+    <div className="flex w-full flex-col gap-4 bg-02 px-4 py-5 tablet:gap-5 tablet:px-7 tablet:py-[22px]">
+      <header className="flex flex-col gap-0.5">
+        <h1 className="text-heading-md text-01">Agents & keys</h1>
+        <p className="text-body-13 text-02">Each agent&apos;s keys, whether it can pay, and how to stop it.</p>
+      </header>
 
-      <div className="flex w-full items-start gap-2.5 rounded-lg border border-primary-20 bg-primary-10 p-3.5 tablet:p-[15px]">
-        <ShieldCheck aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-primary-600" />
-        <p className="text-body-13 text-primary-700">
-          Revocation is immediate. There is no grace period and no cached-token window.
-        </p>
-      </div>
-
-      {payerAccount ? (
-        <PayerDelegationsPanel
-          account={payerAccount}
-          bindings={delegateBindings}
-          version={delegationVersion}
-          onChanged={bumpDelegations}
+      {data.agentsQuery.isPending ? (
+        <PageState kind="loading" rows={3} label="Loading your agents" />
+      ) : data.agentsQuery.isError ? (
+        <PageState
+          kind="error"
+          title="Your agents could not be loaded"
+          description={data.agentsQuery.error instanceof ApiError ? plainError(data.agentsQuery.error.code) : undefined}
+          code={data.agentsQuery.error instanceof ApiError ? data.agentsQuery.error.code : null}
+          onRetry={() => void data.agentsQuery.refetch()}
         />
-      ) : null}
-
-      {agentsQuery.isPending ? (
-        <p className="font-mono text-mono-13 text-03">Loading agents…</p>
-      ) : agentsQuery.isError ? (
-        <EmptyState
-          icon={<KeyRound width={22} height={22} />}
-          title="Agents could not be read"
-          description={`${
-            agentsQuery.error instanceof ApiError
-              ? agentsQuery.error.message
-              : "The request could not be completed"
-          }. This is not a statement that nothing holds authority over your money — it is a statement that we cannot currently see what does.`}
-        />
-      ) : agents.length === 0 ? (
-        <EmptyState
-          icon={<KeyRound width={22} height={22} />}
-          title="No agent has been created yet"
-          description="An agent is the thing that holds a credential and spends against your policy. Until one exists, nothing has authority over your money."
+      ) : data.agents.length === 0 ? (
+        <PageState
+          kind="empty"
+          icon={<KeyRound />}
+          title="No agent yet"
+          description="Your first agent is set up when you sign in for the first time. Reload in a moment."
         />
       ) : (
-        agents.map((agent) => {
-          const credentials = credentialsQuery.data?.[agent.agentId] ?? [];
-          const pending = credentialsQuery.isPending;
-          return (
-            <Panel key={agent.agentId}>
-              <PanelHeader>
-                <PanelTitles>
-                  <PanelTitle>{agent.label ?? agent.agentId}</PanelTitle>
-                  <PanelDescription>
-                    {credentials.filter((c) => !c.revokedAt).length} live ·{" "}
-                    {credentials.filter((c) => c.revokedAt).length} revoked · {agent.agentId}
-                  </PanelDescription>
-                </PanelTitles>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  type="button"
-                  icon={<Plus />}
-                  onClick={() => setCreatingFor(agent.agentId)}
-                >
-                  New credential
-                </Button>
-              </PanelHeader>
-              <PanelBody className="gap-3 p-5">
-                <MicroLabel>CREDENTIALS</MicroLabel>
-                {pending ? (
-                  <p className="font-mono text-mono-13 text-03">Loading…</p>
-                ) : credentials.length === 0 ? (
-                  <p className="text-body-13 text-02">
-                    This agent has no credential. It cannot call anything until one is created.
-                  </p>
-                ) : (
-                  credentials.map((credential) => (
-                    <CredentialRow
-                      key={credential.id}
-                      credential={credential}
-                      revoking={revokingId === credential.id}
-                      onRevoke={() => {
-                        setRevokingId(credential.id);
-                        revokeMutation.mutate({ agentId: agent.agentId, id: credential.id });
-                      }}
-                    />
-                  ))
-                )}
-                {agent.agentAccount ? (
-                  <p className="break-all pt-1 font-mono text-mono-xs text-03">
-                    spends from {agent.agentAccount}
-                  </p>
-                ) : null}
-                <AgentPaymentDelegation
-                  agentAccount={agent.agentAccount}
-                  credentials={credentials}
-                  version={delegationVersion}
-                  onChanged={bumpDelegations}
-                />
-              </PanelBody>
-            </Panel>
-          );
-        })
+        data.agents.map((agent) => (
+          <AgentCard
+            key={agent.agentId}
+            agent={agent}
+            keys={data.keys[agent.agentId]}
+            keysPending={data.keysQuery.isPending}
+            readiness={data.readiness[agent.agentId]!}
+            escrowReady={Boolean(data.escrowQuery.data?.exists)}
+            onNewKey={() => setNewKeyFor(agent)}
+            onRevokeKey={(key) => setRevoking({ agent, key })}
+            onLetPay={(delegate) => setPayFor({ agent, delegate })}
+            onChanged={refresh}
+          />
+        ))
       )}
 
-      <p className="text-body-xs text-03">
-        An agent’s authority to pay is listed above, read from the chain.
-      </p>
+      {payerAccount ? (
+        <PayerDelegationsPanel account={payerAccount} bindings={bindings} version={0} onChanged={refresh} onlyUnbound />
+      ) : null}
 
-      {/* Create */}
-      <Sheet open={creatingFor !== null} onOpenChange={(open) => !open && setCreatingFor(null)}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>New credential</SheetTitle>
-            <SheetDescription>
-              The secret is returned exactly once. Give it a name you will recognise in this list
-              when you come to revoke it.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
-            <Field
-              label="Name"
-              id="credential-name"
-              data-testid="credential-name"
-              placeholder="CI deploy"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              hint={`Scopes: ${DEFAULT_SCOPES.join(", ")}`}
-            />
-            <Button
-              type="button"
-              data-testid="create-credential"
-              loading={createMutation.isPending}
-              disabled={!name.trim()}
-              onClick={() =>
-                creatingFor && createMutation.mutate({ agentId: creatingFor, name: name.trim() })
-              }
-            >
-              Create credential
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <CreateKeySheet
+        agentId={newKeyFor?.agentId ?? null}
+        agentName={newKeyFor?.label}
+        open={newKeyFor !== null}
+        onOpenChange={(open) => !open && setNewKeyFor(null)}
+      />
 
-      {/* Credential created */}
-      <Sheet open={created !== null} onOpenChange={(open) => !open && setCreated(null)}>
-        <SheetContent className="tablet:max-w-[760px]" data-testid="credential-created">
-          <SheetHeader>
-            <SheetTitle className="text-heading-md">Your new credential</SheetTitle>
-            <SheetDescription className="text-body-md">
-              Scoped to {created?.name}. It does not expire — revoke or rotate it at any time under
-              Agents.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex w-full flex-col gap-5 px-[18px] pb-8 pt-5">
-            {created ? (
-              <CodeBlock title={`${created.prefix}…`} code={created.token} />
-            ) : null}
+      <ConfirmSheet
+        open={revoking !== null}
+        onOpenChange={(open) => !open && setRevoking(null)}
+        tone="danger"
+        title={`Revoke the key “${lastRevoke?.key.name ?? ""}”?`}
+        description={`${lastRevoke?.agent.label ?? "The agent"} stops being able to call tools with it at once. This cannot be undone; you can create a new key.`}
+        changes={[{ label: "Key", before: "Live", after: "Revoked" }]}
+        confirmLabel="Revoke key"
+        onConfirm={() => revoke.mutateAsync({ agentId: lastRevoke!.agent.agentId, id: lastRevoke!.key.id })}
+        describeError={(error) => (error instanceof ApiError ? plainError(error.code) : "The key could not be revoked. Try again.")}
+      />
 
-            <div className="flex w-full items-start gap-2.5 rounded-lg border border-warning-20 bg-warning-10 p-3.5">
-              <TriangleAlert aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-warning-600" />
-              <p className="text-body-13 text-warning-700">
-                This key is shown once. We cannot show it again — create a new one if you lose it.
-              </p>
-            </div>
-
-            <div className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-02 p-4">
-              <p className="text-label-sm text-01">Rotating safely</p>
-              <p className="text-body-13 text-02">
-                Both keys are live right now. Deploy this one, confirm “last used” updates on the
-                Agents screen, then revoke the old key. Revocation is immediate and has no
-                cached-token window.
-              </p>
-            </div>
-
-            <div className="flex w-full justify-end gap-2.5">
-              <Button type="button" onClick={() => setCreated(null)}>
-                I have stored it
-              </Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <LetAgentPaySheet
+        open={payFor !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPayFor(null);
+            refresh();
+          }
+        }}
+        agentName={payFor?.agent.label ?? "your agent"}
+        delegateAccount={payFor?.delegate ?? null}
+      />
     </div>
+  );
+}
+
+function SubRow({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex w-full gap-3 border-t border-01 pt-3.5">
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-03 font-mono text-mono-xs text-02">{n}</span>
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <span className="text-label-13 text-01">{title}</span>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function AgentCard({
+  agent,
+  keys,
+  keysPending,
+  readiness,
+  escrowReady,
+  onNewKey,
+  onRevokeKey,
+  onLetPay,
+  onChanged,
+}: {
+  agent: AgentRow;
+  keys: KeyRow[] | undefined;
+  keysPending: boolean;
+  readiness: AgentReadiness;
+  escrowReady: boolean;
+  onNewKey: () => void;
+  onRevokeKey: (key: KeyRow) => void;
+  onLetPay: (delegate: string) => void;
+  onChanged: () => void;
+}) {
+  const [showRevoked, setShowRevoked] = React.useState(false);
+  const [configFor, setConfigFor] = React.useState<string | null>(null);
+  const name = agent.label ?? "Agent";
+  const revoked = (keys ?? []).filter((k) => k.revokedAt);
+  const live = readiness.liveCredentials as KeyRow[];
+  const bound = readiness.boundCredential as KeyRow | null;
+  const grant = readiness.grant;
+  const delegation = supportsDelegation(agent.agentAccount);
+  const chainId = chainIdOfAccount(bound?.delegateAccount);
+
+  return (
+    <section
+      aria-label={name}
+      data-testid="agent-card"
+      className="flex w-full flex-col gap-3.5 rounded-xl border border-01 bg-01 p-4 shadow-hair tablet:p-5"
+    >
+      <header className="flex w-full flex-wrap items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h2 className="text-label-md text-01">{name}</h2>
+          <AgentHealthLine readiness={readiness} />
+        </div>
+        <StatusChip status={readiness.status} />
+      </header>
+
+      <SubRow n={1} title="Keys">
+        {keysPending ? (
+          <p className="text-body-13 text-03">Loading keys…</p>
+        ) : live.length === 0 ? (
+          <p className="text-body-13 text-02">No live key. Create one to connect this agent.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {live.map((key) => (
+              <li key={key.id} data-testid="credential-row" className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-02 p-3">
+                <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
+                  <KeyRound aria-hidden="true" className="size-4 shrink-0 text-02" />
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-label-13 text-01">{key.name}</span>
+                    <span className="text-body-xs text-03">
+                      <span className="font-mono">{key.prefix}…</span> ·{" "}
+                      {key.lastUsedAt ? `last used ${relativeTime(key.lastUsedAt)}` : "never used"}
+                    </span>
+                  </span>
+                  <Button size="sm" variant="secondary" type="button" onClick={() => setConfigFor(configFor === key.id ? null : key.id)} aria-expanded={configFor === key.id}>
+                    {configFor === key.id ? "Hide config" : "MCP config"}
+                  </Button>
+                  <Button size="sm" variant="secondary" type="button" className="text-danger-600" data-testid="revoke-credential" onClick={() => onRevokeKey(key)}>
+                    Revoke
+                  </Button>
+                </div>
+                {configFor === key.id ? (
+                  <div className="min-w-0">
+                    <McpConfigTabs token={null} />
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button size="sm" variant={live.length === 0 ? "primary" : "secondary"} icon={<Plus />} type="button" data-testid="new-credential" onClick={onNewKey}>
+            New key
+          </Button>
+          {revoked.length > 0 ? (
+            <button type="button" className="text-label-13 text-02 hover:underline" onClick={() => setShowRevoked((v) => !v)} aria-expanded={showRevoked}>
+              {showRevoked ? "Hide" : "Show"} {revoked.length} revoked
+            </button>
+          ) : null}
+        </div>
+        {showRevoked ? (
+          <ul className="flex flex-col gap-1">
+            {revoked.map((key) => (
+              <li key={key.id} className="text-body-xs text-03">
+                {key.name} · <span className="font-mono">{key.prefix}…</span> · revoked {relativeTime(key.revokedAt)}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </SubRow>
+
+      {delegation ? (
+        <SubRow n={2} title="Payment key">
+          {bound?.delegateAccount && chainId ? (
+            <p className="text-body-13 text-02">
+              <span className="font-mono text-01">{shortAddress(chainId, addressOfAccount(bound.delegateAccount))}</span>
+              {bound.delegateBoundAt ? <> · set up {relativeTime(bound.delegateBoundAt)}</> : null} · on key “{bound.name}”
+            </p>
+          ) : live.length === 0 ? (
+            <p className="text-body-13 text-03">Create a key first.</p>
+          ) : (
+            <>
+              <p className="text-body-13 text-02">
+                To pay, the agent makes its own payment key. Run this on the agent&apos;s machine:
+              </p>
+              <CodeBlock title="Terminal" code={BIND_COMMAND} />
+              <p className="flex items-center gap-1.5 text-body-xs text-03" aria-live="polite">
+                <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-primary-500 motion-reduce:animate-none" />
+                Waiting for the key. This updates by itself.
+              </p>
+            </>
+          )}
+        </SubRow>
+      ) : null}
+
+      {delegation ? (
+        <SubRow n={3} title="Permission to pay">
+          {grant && grant.status === "ACTIVE" ? (
+            <>
+              <p className="text-body-xs text-03">
+                Up to {formatLimit(grant.maxVoucherAmount)} a call · until <LocalTime value={grant.validUntil} dateOnly />
+              </p>
+              <CapMeter label="Spent in the last 24 hours" used={grant.spentInWindow} limit={grant.maxPerWindow} />
+              <GrantActions account={agent.agentAccount} delegation={grant} boundAt={bound?.delegateBoundAt} onChanged={onChanged} />
+            </>
+          ) : (
+            <>
+              <p className="text-body-13 text-02">
+                {grant?.status === "EXPIRED"
+                  ? "Its permission expired, so paid calls are refused."
+                  : "Not allowed to pay yet. Free calls still work."}
+              </p>
+              <Button
+                size="sm"
+                type="button"
+                className="self-start"
+                disabled={!bound?.delegateAccount || !escrowReady}
+                onClick={() => bound?.delegateAccount && onLetPay(bound.delegateAccount)}
+              >
+                {grant?.status === "EXPIRED" ? "Allow it again" : "Let it pay"}
+              </Button>
+              {!bound?.delegateAccount ? (
+                <p className="text-body-xs text-03">Needs the payment key above first.</p>
+              ) : !escrowReady ? (
+                <p className="text-body-xs text-03">Add funds first: your first deposit opens your escrow.</p>
+              ) : null}
+            </>
+          )}
+        </SubRow>
+      ) : null}
+
+      <details className="text-body-xs text-03">
+        <summary className="cursor-pointer select-none text-label-xs">Details</summary>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          Agent id <CopyChip value={agent.agentId} />
+          {agent.agentAccount ? (
+            <>
+              · pays from <CopyChip value={addressOfAccount(agent.agentAccount)} />
+            </>
+          ) : null}
+        </div>
+      </details>
+    </section>
   );
 }

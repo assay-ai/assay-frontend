@@ -44,7 +44,7 @@ vi.mock("@privy-io/react-auth", () => ({
   useSignTransaction: () => ({ signTransaction: async () => ({ signature: "0x" }) }),
 }));
 
-import { BalanceRows, WalletChainRows } from "./wallet-menu-rows";
+import { BalanceRows, WalletChainRows, balanceRowLabel } from "./wallet-menu-rows";
 
 const SOLANA = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
 const EVM = "eip155:46630";
@@ -199,5 +199,15 @@ describe("BalanceRows — one pair per chain, and never a total", () => {
     expect(html).toContain("Solana devnet");
     expect(html).toContain(EVM);
     expect(html).toContain("$4.00");
+  });
+});
+
+describe("balanceRowLabel", () => {
+  it("adds the asset and the account only when they tell rows on one chain apart", () => {
+    const second: FullBalance = { ...EVM_ROW, accountId: `${EVM}:0x1810000000000000000000000000000000007296` };
+    expect(balanceRowLabel(EVM_ROW, [SOLANA_ROW, EVM_ROW], CHAINS)).toBe("Robinhood Chain testnet");
+    const label = balanceRowLabel(second, [EVM_ROW, second], CHAINS);
+    expect(label).toMatch(/^Robinhood Chain testnet · USDG · 0x18/);
+    expect(label).not.toBe(balanceRowLabel(EVM_ROW, [EVM_ROW, second], CHAINS));
   });
 });

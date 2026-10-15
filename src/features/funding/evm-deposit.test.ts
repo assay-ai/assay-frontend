@@ -17,6 +17,7 @@ vi.mock("@/libs/chains/evm/deposit-transaction", () => ({
   })),
   maxGasCostWei: vi.fn(() => 1n),
   broadcastAndWait: vi.fn(),
+  broadcast: vi.fn(async () => `0x${"bb".repeat(32)}`),
   waitForSuccess: vi.fn(async () => undefined),
   encodeApprove: vi.fn(() => "0xapprove"),
   encodeDepositFor: vi.fn(() => "0xdepositFor"),
@@ -24,7 +25,7 @@ vi.mock("@/libs/chains/evm/deposit-transaction", () => ({
 
 import * as tx from "@/libs/chains/evm/deposit-transaction";
 
-import { signEvmDeposit } from "./evm-deposit";
+import { approveEvmDeposit, checkEvmDeposit, sendEvmDepositFor, signEvmDeposit } from "./evm-deposit";
 
 const BUYER = "0x4924000000000000000000000000000000000d89";
 const REQUIREMENTS = {
@@ -123,6 +124,51 @@ describe("signEvmDeposit with the embedded wallet — unchanged", () => {
     });
 
     expect(result).toEqual({ kind: "signed", rawTransaction: "0xsigned" });
+    expect(raw.signAndSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("the two deposit steps, as the Add funds drawer runs them", () => {
+  it("reports each broadcast hash before waiting for it", async () => {
+    const { signer: s } = signer("external");
+    const submitted: string[] = [];
+    const check = await checkEvmDeposit({ signer: s, requirements: REQUIREMENTS, amountAtomic: 5_000_000n });
+    expect(check.needsApprove).toBe(true);
+    await approveEvmDeposit({
+      signer: s,
+      requirements: REQUIREMENTS,
+      amountAtomic: 5_000_000n,
+      nativeWei: check.nativeWei,
+      onSubmitted: (hash) => submitted.push(hash),
+    });
+    const result = await sendEvmDepositFor({
+      signer: s,
+      requirements: REQUIREMENTS,
+      amountAtomic: 5_000_000n,
+      onSubmitted: (hash) => submitted.push(hash),
+    });
+    expect(submitted).toEqual([`0x${"aa".repeat(32)}`, `0x${"dd".repeat(32)}`]);
+    expect(result).toEqual({ kind: "broadcast", transactionHash: `0x${"dd".repeat(32)}` });
+  });
+
+  it("broadcasts an embedded wallet's approve itself and reports its hash", async () => {
+    const { signer: s } = signer("embedded");
+    const submitted: string[] = [];
+    await approveEvmDeposit({
+      signer: s,
+      requirements: REQUIREMENTS,
+      amountAtomic: 5_000_000n,
+      nativeWei: 10n ** 15n,
+      onSubmitted: (hash) => submitted.push(hash),
+    });
+    expect(submitted).toEqual([`0x${"bb".repeat(32)}`]);
+  });
+
+  it("refuses a wallet that is not the buyer before any prompt", async () => {
+    const { signer: s, raw } = signer("external");
+    await expect(
+      checkEvmDeposit({ signer: { ...s, address: "0x1111111111111111111111111111111111111111" } as Signer, requirements: REQUIREMENTS, amountAtomic: 5_000_000n }),
+    ).rejects.toThrow(/connected wallet/);
     expect(raw.signAndSend).not.toHaveBeenCalled();
   });
 });
