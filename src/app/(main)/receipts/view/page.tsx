@@ -469,8 +469,11 @@ function ReceiptPageContent() {
               <MoneyPair
                 className="border-transparent bg-transparent p-0 shadow-none"
                 listedValue={listed}
+                paidLabel={state === "DEBT_OUTSTANDING" ? "Owed" : "You paid"}
                 paidValue={paid}
-                notChargedValue={withheld}
+                // Same rule as the headline: a debt or a forfeit withholds
+                // nothing, so "Not charged" would be a misleading zero there.
+                notChargedValue={COLLECTION_STATES.has(state) ? undefined : withheld}
               />
             </PanelBody>
           </Panel>

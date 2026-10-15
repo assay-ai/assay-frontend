@@ -44,7 +44,7 @@ export function debtBannerTitle(debts: readonly Pick<BuyerDebt, "amount" | "stat
   if (toSign.length === 1) {
     return `Settle ${formatMoney(toSign[0].amount, { decimals: 4 })} your agent owes for a call`;
   }
-  return `Settle ${toSign.length} calls your agents owe for`;
+  return `Settle ${toSign.length} payments your agents owe`;
 }
 
 /** The sentence for one debt, in plain words, by its state. */

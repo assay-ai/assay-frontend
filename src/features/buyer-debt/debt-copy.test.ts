@@ -80,7 +80,7 @@ describe("the debt banner", () => {
     expect(text).not.toContain("1 Oct 2026");
     expect(
       debtBannerTitle([debt(), debt({ state: "REPLACING" }), debt({ state: "WRITTEN_OFF" })]),
-    ).toBe("Settle 2 calls your agents owe for");
+    ).toBe("Settle 2 payments your agents owe");
   });
 
   it("marks a row's state, and nothing for an open one", () => {
@@ -113,7 +113,7 @@ describe("the debt banner", () => {
     expect(text).toMatch(/^2 calls your agents made/);
     expect(text).toContain("Paid calls are paused until every one is settled.");
     expect(text).toContain("1 Nov 2026 (the earliest)");
-    expect(debtBannerTitle([debt(), debt()])).toBe("Settle 2 calls your agents owe for");
+    expect(debtBannerTitle([debt(), debt()])).toBe("Settle 2 payments your agents owe");
   });
 
   it("titles one debt with its amount", () => {
