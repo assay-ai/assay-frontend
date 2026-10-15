@@ -23,8 +23,8 @@ async function headersFor(nodeEnv: string): Promise<Record<string, string>> {
 describe("security headers", () => {
   it("refuses framing and sniffing, trims the referrer and drops device permissions", async () => {
     const headers = await headersFor("development");
-    expect(headers["Content-Security-Policy"]).toBe("frame-ancestors 'none'");
-    expect(headers["X-Frame-Options"]).toBe("DENY");
+    expect(headers["Content-Security-Policy"]).toBe("frame-ancestors 'self'");
+    expect(headers["X-Frame-Options"]).toBe("SAMEORIGIN");
     expect(headers["X-Content-Type-Options"]).toBe("nosniff");
     expect(headers["Referrer-Policy"]).toBe("strict-origin-when-cross-origin");
     expect(headers["Permissions-Policy"]).toContain("camera=()");

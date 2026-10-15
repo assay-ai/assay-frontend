@@ -1,11 +1,11 @@
 # Cloudflare Pages response headers (copied to out/_headers by the build).
 
 /*
-  Content-Security-Policy: frame-ancestors 'none'
+  Content-Security-Policy: frame-ancestors 'self'
   Strict-Transport-Security: max-age=63072000; includeSubDomains
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  X-Frame-Options: DENY
+  X-Frame-Options: SAMEORIGIN
   Permissions-Policy: camera=(), microphone=(), geolocation=()
 
 # Content-hashed build assets never change under the same name.
