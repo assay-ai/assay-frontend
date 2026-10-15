@@ -1,3 +1,4 @@
+import { demoMinutesAgo } from "./demo-clock";
 import { BUYER_FIXTURES } from "./fixtures-buyer";
 import { freshAtLeast, freshStage } from "./fresh-account";
 import { EXPLORE_FIXTURES } from "./fixtures-explore";
@@ -46,9 +47,19 @@ export function money(major: string): { amount: string; decimals: number; curren
   return { amount: String(BigInt(minor)), decimals: 6, currency: "USD" };
 }
 
-/** `now - minutes`, as the ISO string every list sorts on. */
+/**
+ * `now - minutes`, as the ISO string every list sorts on. "Now" is the demo
+ * clock, fixed for the session (`demo-clock.ts`), so a fixture's date is the
+ * same on every screen and after a reload. Something that happens on a click
+ * (a mutation's `createdAt`) uses `justNow()` instead.
+ */
 export function minutesAgo(minutes: number): string {
-  return new Date(Date.now() - minutes * 60_000).toISOString();
+  return demoMinutesAgo(minutes);
+}
+
+/** The real current time, for what a demo action does on a click. */
+export function justNow(): string {
+  return new Date().toISOString();
 }
 
 /**

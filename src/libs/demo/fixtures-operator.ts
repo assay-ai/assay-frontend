@@ -16,6 +16,7 @@ import { encodeCall } from "@/libs/chains/evm/calldata-fixtures";
 import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
 import { readOperatorSession } from "@/libs/operator-session";
 
+import { DEMO_NOW_MS } from "./demo-clock";
 import type { DemoFixture } from "./fixtures";
 
 /**
@@ -59,11 +60,10 @@ const HOUR = 60;
 const DAY = 24 * HOUR;
 
 /*
-  One "now" for the whole stage set, rounded to the minute and kept for the
-  browser tab's session (sessionStorage): the same event then reads the same
-  time on Home, Arbiter and the penalty page, and after a reload — not 03:39
-  on one page and 03:43 on the next. A session older than six hours starts
-  over, so the deadlines stay plausible.
+  One "now" for the whole stage set: the shared demo clock (`demo-clock.ts`),
+  fixed for the browser tab's session, so the same event reads the same time
+  on Home, Arbiter, the penalty page and the provider's screens, and after a
+  reload. A session older than six hours starts over.
 
   Every time below is relative to this one base, and every deadline still
   running (a request waiting for approval, a cancel waiting for its
@@ -71,27 +71,13 @@ const DAY = 24 * HOUR;
   countdowns tick with the real clock, but nothing lapses or expires while a
   session lasts. `operator-fixes.test.ts` holds the fixtures to that.
 */
-const NOW_KEY = "demo-operator-now";
-const NOW_MAX_AGE_MS = 6 * 3_600_000;
 /** The earliest a running deadline may end, in minutes after the session base: the session's six hours plus slack. */
 export const SESSION_SAFE_MINUTES = 7 * 60;
-const NOW = demoNow(Date.now());
+const NOW = DEMO_NOW_MS;
 
 /** The session base, for tests that check the fixtures against it. */
 export function demoSessionBase(): number {
   return NOW;
-}
-
-function demoNow(real: number): number {
-  const rounded = Math.floor(real / 60_000) * 60_000;
-  try {
-    const stored = Number(window.sessionStorage.getItem(NOW_KEY));
-    if (Number.isFinite(stored) && stored > 0 && real >= stored && real - stored < NOW_MAX_AGE_MS) return stored;
-    window.sessionStorage.setItem(NOW_KEY, String(rounded));
-  } catch {
-    /* no window or no storage (build, tests, private mode): this load's own minute */
-  }
-  return rounded;
 }
 
 function minutesAgo(minutes: number): string {

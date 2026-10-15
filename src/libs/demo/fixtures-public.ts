@@ -7,6 +7,7 @@ import type {
   PublicTool,
 } from "@/services/public-explorer.service";
 
+import { DEMO_NOW_MS } from "./demo-clock";
 import { EXPLORE_FIXTURES } from "./fixtures-explore";
 import type { DemoFixture } from "./fixtures";
 
@@ -55,7 +56,7 @@ function publicTool(row: CatalogueTool): PublicTool {
 }
 
 function utcDay(daysAgo: number): string {
-  const d = new Date(Date.now() - daysAgo * 86_400_000);
+  const d = new Date(DEMO_NOW_MS - daysAgo * 86_400_000);
   return d.toISOString().slice(0, 10);
 }
 

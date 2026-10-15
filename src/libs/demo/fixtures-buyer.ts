@@ -2,12 +2,14 @@ import {
   DEMO_ASSET,
   DEMO_BUYER_ACCOUNT,
   DEMO_CHAIN_ID,
+  justNow,
   minutesAgo,
   money,
   type DemoFixture,
 } from "./fixtures";
 import { ApiError } from "@/libs/ApiClient";
 
+import { DEMO_NOW_MS } from "./demo-clock";
 import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
 
 /**
@@ -324,7 +326,7 @@ function findCallByVerdict(verdictId: string): DemoCall {
  * does not reach, which is the truth: these fourteen rows are the recent ones.
  */
 function withinWindow(call: DemoCall, fromMs: number, toMs: number): boolean {
-  const at = Date.now() - call.minutesAgo * 60_000;
+  const at = DEMO_NOW_MS - call.minutesAgo * 60_000;
   return at >= fromMs && at < toMs;
 }
 
@@ -924,7 +926,7 @@ function freshEscrow() {
     spendable: opened ? money("20.00") : null,
     withdrawRequested: opened ? money("0") : null,
     withdrawAvailableAt: null,
-    serverTime: minutesAgo(0),
+    serverTime: justNow(),
     maxVoucherAmount: opened ? money("1.00") : null,
     maxPerWindow: opened ? money("20.00") : null,
     spentInWindow: opened ? money("0") : null,
@@ -1151,7 +1153,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       spendable: money("482.15"),
       withdrawRequested: money("0"),
       withdrawAvailableAt: null,
-      serverTime: minutesAgo(0),
+      serverTime: justNow(),
       maxVoucherAmount: money("10.00"),
       maxPerWindow: money("120.00"),
       spentInWindow: money("15.75"),
@@ -1411,7 +1413,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           maxPerWindow: money("40.00"),
           spentInWindow: money("15.75"),
           // Five days left, so the demo shows the "permission ends soon" chip and Renew.
-          validUntil: new Date(Date.now() + 5 * 86_400_000 + 3_600_000).toISOString(),
+          validUntil: new Date(DEMO_NOW_MS + 5 * 86_400_000 + 3_600_000).toISOString(),
           status: "ACTIVE",
         },
       ],
