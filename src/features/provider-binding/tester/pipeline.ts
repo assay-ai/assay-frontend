@@ -229,3 +229,20 @@ export function testPipeline(report: BindingTestReport): TestPipeline {
     failed: steps.find((step) => step.status === "fail") ?? null,
   };
 }
+
+/**
+ * Whether a run lets the provider continue to Go live. A run whose result was
+ * empty "passes" on the wire (every check was skipped) but proves nothing, so
+ * it counts only once the provider says, in so many words, that they know
+ * (provider review 2026-10-16b). A stale run never counts.
+ */
+export function testGate(
+  pipeline: Pick<TestPipeline, "passed" | "emptyResult">,
+  options: { stale: boolean; emptyAcknowledged: boolean },
+): { passed: boolean; needsEmptyAck: boolean } {
+  const needsEmptyAck = pipeline.passed && pipeline.emptyResult && !options.stale;
+  return {
+    passed: pipeline.passed && !options.stale && (!pipeline.emptyResult || options.emptyAcknowledged),
+    needsEmptyAck,
+  };
+}
