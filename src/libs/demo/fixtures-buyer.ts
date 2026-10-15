@@ -1410,7 +1410,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           maxVoucherAmount: money("2.00"),
           maxPerWindow: money("40.00"),
           spentInWindow: money("15.75"),
-          validUntil: new Date(Date.now() + 26 * 86_400_000).toISOString(),
+          // Five days left, so the demo shows the "permission ends soon" chip and Renew.
+          validUntil: new Date(Date.now() + 5 * 86_400_000 + 3_600_000).toISOString(),
           status: "ACTIVE",
         },
       ],
