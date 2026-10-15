@@ -119,7 +119,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
       </div>
 
       {/* pb-24 keeps the last row clear of the fixed tab bar at mobile widths. */}
-      <main className="flex w-full flex-1 flex-col pb-24 md:pb-0">
+      <main className="flex w-full flex-1 flex-col bg-02 pb-24 md:pb-0">
         {/* The kill switch's state, on every screen while paid calls are paused. */}
         <PausedBanner />
         {/* The section's own tabs (Activity, Money, Controls), from nav-config. */}

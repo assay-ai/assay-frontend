@@ -159,7 +159,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
         ) : (
           <div className="flex flex-col gap-2">
             <p className="text-body-13 text-02">
-              For example, ask it to “search the web for x402 payments”. This step ticks itself when the call arrives.
+              For example, ask it to “search the web for today’s weather in Paris”. This step ticks itself when the call arrives.
             </p>
             <Listening>Waiting for your agent&apos;s first call…</Listening>
           </div>
