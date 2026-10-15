@@ -1,38 +1,28 @@
 "use client";
 
+import { usePrivy } from "@privy-io/react-auth";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Download } from "lucide-react";
+import { Bot, Building2, ShieldCheck, User } from "lucide-react";
 import * as React from "react";
 
+import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
-import { Search } from "@/components/ui/search";
-import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { auditSentence, groupByDay } from "@/features/buyer/audit-sentence";
+import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
+import { formatClock } from "@/libs/local-time";
 import { listAuditLog } from "@/services/account.service";
+import { cn } from "@/utils";
 
-import { MicroLabel, PageHeader } from "./chrome";
-import { timestamp } from "./format";
+import { PageHeader } from "./chrome";
 
 /**
- * Activity and audit log.
+ * Account › Activity log (`/audit-log`): who changed what, as plain sentences
+ * in day-grouped cards ("You changed daily cap from 40.00 to 75.00 · 14:02").
+ * Calls are receipts, not audit events, and stay under Activity › Calls.
  *
- * The design's most important line is in the panel subtitle, and it is a
- * product rule rather than a caption: individual tool calls are deliberately
- * NOT here, because mixing fifteen thousand of them into an audit log
- * destroys the log. A tool call is a receipt; an audit event is somebody
- * changing what is allowed. This screen renders `GET /audit-log` and nothing
- * else, so that separation holds by construction.
- *
- * The design's filter strip carries six segments — "tool, provider, hour,
- * status, verdict, agent" — which are the Spend explorer's, copied in with the
- * design. The classes the design's own rows actually use are Policy, Approval,
- * Authority and Money, and those are what the filter offers.
- *
- * `AuditLogEntryDto.action` is dotted and past-tense (`credential.revoked`),
- * so class is derived from its prefix rather than fetched — there is no class
- * field on the wire.
+ * No search box: `GET /audit-log` ignores `search` today (BUG-R2-B4-02).
+ * Export is not offered until there is something to export to.
  */
 
 interface AuditEntry {
@@ -68,200 +58,125 @@ const CLASS_BY_PREFIX: Record<string, ClassName> = {
   notification_preference: "Policy",
 };
 
-/**
- * What the backend records today (BUG-R2-B4-01), and what it does not. Shown
- * with the log whether or not it has entries, so an absent event is never read
- * as "it did not happen".
- */
-export const RECORDED_EVENTS_NOTE =
-  "Recorded here: limit changes including pause and resume, agent credentials created or revoked, alert channel and alert preference changes, and escrow limit changes and agent payment authorisations or revocations that Assay relayed for you.";
-export const UNRECORDED_EVENTS_NOTE =
-  "Not recorded here yet: deposits, withdrawals and refunds, approvals, an agent binding its signing key, credentials that expired on their own, and any change made before recording began.";
-
 export function classOf(action: string): ClassName {
   const prefix = action.split(".")[0];
   return CLASS_BY_PREFIX[prefix] ?? "Other";
 }
 
 const FILTERS: { value: string; label: string }[] = [
-  { value: "all", label: "all" },
-  { value: "Policy", label: "policy" },
-  { value: "Approval", label: "approval" },
-  { value: "Authority", label: "authority" },
-  { value: "Money", label: "money" },
+  { value: "all", label: "All" },
+  { value: "Policy", label: "Budgets & alerts" },
+  { value: "Authority", label: "Agents & keys" },
+  { value: "Money", label: "Money" },
 ];
 
-/** A short human line from `before`/`after`, without dumping raw JSON at people. */
-function detailOf(entry: AuditEntry): string {
-  if (entry.after && Object.keys(entry.after).length > 0) {
-    const pairs = Object.entries(entry.after).slice(0, 3);
-    return pairs
-      .map(([key, value]) => {
-        const from = entry.before?.[key];
-        if (from !== undefined && from !== value) return `${key} ${String(from)} → ${String(value)}`;
-        return `${key} ${String(value)}`;
-      })
-      .join(" · ");
-  }
-  if (entry.resourceType) return `${entry.resourceType} ${entry.resourceId ?? ""}`.trim();
-  return "—";
-}
+const ACTOR_ICON = { user: User, agent: Bot, system: ShieldCheck, provider: Building2 } as const;
 
 export function AuditLogView() {
   const [filter, setFilter] = React.useState("all");
-  const [query, setQuery] = React.useState("");
+  const { user } = usePrivy();
+  const me = user?.email?.address ?? null;
+  const names = useEntityNames({ kinds: ["agent"] });
 
   const log = useInfiniteQuery({
-    queryKey: ["audit-log", query],
+    queryKey: ["audit-log"],
     retry: false,
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
-      // `search` is a documented query parameter on GET /audit-log but is
-      // absent from the shared `ListQuery` type, which only covers the four
-      // parameters every list endpoint takes.
-      listAuditLog({ limit: 50, cursor: pageParam, search: query || undefined } as never) as Promise<{
+      listAuditLog({ limit: 50, cursor: pageParam }) as Promise<{
         items: AuditEntry[];
         pageInfo: { nextCursor: string | null; hasMore: boolean };
       }>,
     getNextPageParam: (last) => last.pageInfo.nextCursor ?? undefined,
   });
 
-  const entries = React.useMemo(
-    () => (log.data?.pages ?? []).flatMap((page) => page.items),
-    [log.data]
-  );
-
+  const entries = React.useMemo(() => (log.data?.pages ?? []).flatMap((page) => page.items), [log.data]);
   const visible = React.useMemo(
     () => (filter === "all" ? entries : entries.filter((e) => classOf(e.action) === filter)),
-    [entries, filter]
+    [entries, filter],
   );
+  const days = React.useMemo(() => groupByDay(visible), [visible]);
+  const agentName = React.useCallback((id: string) => names.lookup("agent", id), [names]);
 
   return (
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
-      <PageHeader
-        title="Activity and audit log"
-        subtitle="typed events, filterable by actor, type and window · individual tool calls are receipts, not audit events"
-        actions={
-          <Button variant="secondary" icon={<Download />} type="button" disabled>
-            Export
-          </Button>
-        }
-      />
+      <PageHeader title="Activity log" />
+      <p className="-mt-2 text-body-13 text-03">
+        Who changed what on your account: budgets, agent keys and alerts. Individual calls are under Activity › Calls.
+      </p>
 
-      <div className="flex w-full flex-col gap-2.5 tablet:flex-row tablet:items-center">
-        <Segmented value={filter} onValueChange={setFilter} aria-label="Filter by class">
-          {FILTERS.map((option) => (
-            <SegmentedItem key={option.value} value={option.value}>
-              {option.label}
-            </SegmentedItem>
-          ))}
-        </Segmented>
-        <Search
-          wrapperClassName="w-full tablet:w-[280px]"
-          placeholder="Actor, object or id…"
-          aria-label="Search the audit log"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
+      <div role="radiogroup" aria-label="Show" className="flex flex-wrap gap-2">
+        {FILTERS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={filter === option.value}
+            onClick={() => setFilter(option.value)}
+            className={cn(
+              "rounded-full border px-3 py-1.5 text-label-13 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
+              filter === option.value ? "border-primary-500 bg-primary-10 text-primary-700" : "border-02 bg-01 text-02 hover:text-01",
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {log.isError ? (
+        <PageState
+          kind="error"
+          title="The activity log could not be loaded"
+          description="This is not an empty log. Try again in a moment."
+          onRetry={() => void log.refetch()}
+          code={log.error instanceof ApiError ? log.error.code : null}
+          details={log.error.message}
         />
-      </div>
-
-      <Panel>
-        <PanelHeader>
-          <PanelTitles>
-            <PanelTitle>Events</PanelTitle>
-            <PanelDescription className="whitespace-normal">
-              individual tool calls are not listed here — see Spend for those
-            </PanelDescription>
-          </PanelTitles>
-        </PanelHeader>
-        <PanelBody className="px-2.5 pb-2.5 pt-1.5">
-          {log.isError ? (
-            <p className="p-3 text-body-13 text-danger-600">
-              The audit log could not be read:{" "}
-              {log.error instanceof ApiError ? log.error.message : "the request failed"}. This is not an empty log.
-            </p>
-          ) : log.isPending ? (
-            <p className="p-3 font-mono text-mono-13 text-03">Loading…</p>
-          ) : visible.length === 0 ? (
-            <div className="p-3">
-              {/* Three different empties: the account's, the search's and the class filter's. */}
-              {entries.length > 0 ? (
-                <EmptyState
-                  icon={null}
-                  title={`No ${filter} events in the entries loaded so far`}
-                  description={
-                    log.hasNextPage
-                      ? "Other classes have entries. Choose All to see them, or load more below."
-                      : "Other classes have entries. Choose All to see them."
-                  }
-                />
-              ) : query ? (
-                <EmptyState
-                  icon={null}
-                  title="No audit event matches this search"
-                  description="The search looks at the actor, the action and the object's type and id."
-                />
-              ) : (
-                /* An empty log is only "nothing changed" for the events listed below the panel. */
-                <EmptyState
-                  icon={null}
-                  title="No audit events yet"
-                  description="None of the recorded changes has been made on this account. Change a limit, create or revoke a credential, or edit an alert channel and it appears here."
-                />
-              )}
-            </div>
-          ) : (
-            <div className="w-full overflow-x-auto">
-              <div className="min-w-[900px]">
-                <div className="flex items-center gap-3 border-b border-02 px-3 pb-2.5">
-                  <div className="w-[180px]">
-                    <MicroLabel>When</MicroLabel>
-                  </div>
-                  <div className="w-[120px] text-right">
-                    <MicroLabel>Class</MicroLabel>
-                  </div>
-                  <div className="min-w-0 flex-1 text-right">
-                    <MicroLabel>Event</MicroLabel>
-                  </div>
-                  <div className="w-[210px] text-right">
-                    <MicroLabel>Actor</MicroLabel>
-                  </div>
-                  <div className="w-[340px] text-right">
-                    <MicroLabel>Detail</MicroLabel>
-                  </div>
-                </div>
-                {visible.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center gap-3 border-b border-01 px-3 py-2.5 last:border-b-0"
-                  >
-                    <div className="w-[180px] font-mono text-mono-12 font-semibold text-01">
-                      {timestamp(entry.createdAt)}
-                    </div>
-                    <div className="w-[120px] text-right font-mono text-mono-12 text-02">
-                      {classOf(entry.action)}
-                    </div>
-                    <div className="min-w-0 flex-1 truncate text-right font-mono text-mono-12 text-02">
-                      {entry.action}
-                    </div>
-                    <div className="w-[210px] truncate text-right font-mono text-mono-12 text-02">
-                      {entry.actorId ?? entry.actorType}
-                    </div>
-                    <div className="w-[340px] truncate text-right font-mono text-mono-12 text-02">
-                      {detailOf(entry)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </PanelBody>
-      </Panel>
-
-      <div className="flex flex-col gap-1 px-1">
-        <p className="text-body-xs text-03">{RECORDED_EVENTS_NOTE}</p>
-        <p className="text-body-xs text-03">{UNRECORDED_EVENTS_NOTE}</p>
-      </div>
+      ) : log.isPending ? (
+        <PageState kind="loading" rows={6} label="Loading the activity log" />
+      ) : visible.length === 0 ? (
+        entries.length > 0 ? (
+          <PageState
+            kind="empty"
+            title="Nothing of this kind yet"
+            description={log.hasNextPage ? "Show everything, or load older entries below." : "Other kinds of changes are listed under All."}
+            action={{ label: "Show everything", onClick: () => setFilter("all") }}
+          />
+        ) : (
+          <PageState
+            kind="empty"
+            title="No changes yet"
+            description="When you change a budget, create or revoke an agent key, or change alerts, it shows here."
+            action={{ label: "Set a budget", href: "/limits" }}
+          />
+        )
+      ) : (
+        <div className="flex flex-col gap-4">
+          {days.map((group) => (
+            <section key={group.day} className="flex flex-col gap-2">
+              <h2 className="text-label-13 text-03">{group.day}</h2>
+              <ul className="flex flex-col overflow-hidden rounded-xl border border-01 bg-01">
+                {group.entries.map((entry) => {
+                  const sentence = auditSentence(entry, agentName, me);
+                  const Icon = ACTOR_ICON[entry.actorType as keyof typeof ACTOR_ICON] ?? User;
+                  return (
+                    <li key={entry.id} className="flex items-start gap-3 border-b border-01 px-4 py-3 last:border-b-0 tablet:px-5">
+                      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-02 text-02">
+                        <Icon aria-hidden="true" className="size-3.5" />
+                      </span>
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="text-label-sm text-01">{sentence.title}</span>
+                        <span className="break-words text-body-13 text-02">{sentence.line}</span>
+                      </div>
+                      <span className="shrink-0 text-body-xs text-03">{formatClock(entry.createdAt)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
 
       {log.hasNextPage ? (
         <Button
@@ -271,7 +186,7 @@ export function AuditLogView() {
           loading={log.isFetchingNextPage}
           onClick={() => log.fetchNextPage()}
         >
-          Load more
+          Show older
         </Button>
       ) : null}
     </div>

@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  RECORDED_EVENTS_NOTE,
-  UNRECORDED_EVENTS_NOTE,
-  classOf,
-} from "./audit-log-view";
+import { classOf } from "./audit-log-view";
 
 /**
  * The actions the backend's `AuditLogWriter` call sites record (BUG-R2-B4-01).
@@ -34,17 +30,5 @@ describe("classOf", () => {
 
   it("classes an unknown action as Other rather than guessing", () => {
     expect(classOf("something.happened")).toBe("Other");
-  });
-});
-
-describe("the recorded / not recorded notes", () => {
-  it("names what is recorded and keeps the note for what is not", () => {
-    expect(RECORDED_EVENTS_NOTE).toMatch(
-      /limit changes including pause and resume/,
-    );
-    expect(RECORDED_EVENTS_NOTE).toMatch(/credentials created or revoked/);
-    expect(RECORDED_EVENTS_NOTE).toMatch(/alert channel/);
-    expect(UNRECORDED_EVENTS_NOTE).toMatch(/^Not recorded here yet:/);
-    expect(UNRECORDED_EVENTS_NOTE).toMatch(/approvals/);
   });
 });
