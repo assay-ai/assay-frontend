@@ -155,11 +155,14 @@ export function BudgetFields({ draft, unit = draft.unit }: { draft: BudgetDraft;
       />
       {old ? (
         <p className="rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700" data-testid="old-budget-note">
-          Assay also still checks an older budget of{" "}
+          Assay also still checks this agent&apos;s older budget of{" "}
           {[policy?.perCallMax ? `${formatLimit(policy.perCallMax)} a call` : null, policy?.dailyCap ? `${formatLimit(policy.dailyCap)} a day` : null]
             .filter(Boolean)
             .join(" and ")}
           . Saving removes it, so only the numbers above apply.
+          {policy?.requireApprovalAbove
+            ? ` (The older account-wide rule, which refuses any call above ${formatLimit(policy.requireApprovalAbove)}, is separate; remove it on the Spending limits page.)`
+            : ""}
         </p>
       ) : null}
 

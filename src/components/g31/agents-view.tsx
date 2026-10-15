@@ -61,7 +61,7 @@ export function revokeKeyText(agent: AgentRow, key: KeyRow, readiness: AgentRead
   const name = agent.label ?? "The agent";
   const base = `${name} can no longer call any tool with this key, free or paid, from now on. This cannot be undone; you can create a new key.`;
   if (paysThrough(key, readiness)) {
-    return `${base} Paying stops too, because its payment key was set up on this key. The on-chain permission itself stays until you choose Stop it paying; after this it is listed under “Other keys that can still pay”.`;
+    return `${base} Paying stops too, because its payment key was set up on this key. The on-chain permission itself stays until you choose Stop it paying; after this it is listed lower on this page, under “Other keys that can still pay”.`;
   }
   if (key.delegateAccount) {
     return `${base} Its payment key was set up on this key, so it cannot be used to pay any more either.`;

@@ -174,3 +174,50 @@ export function shortDay(day: string): string {
   if (Number.isNaN(date.getTime())) return day;
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 }
+
+/**
+ * Whether a provider's listing is priced above what a call is held for. The
+ * hold is the dearest provider that can take a paid call now, so a listing
+ * above it is not being sent paid calls (paid calls go only to providers whose
+ * stake covers them).
+ */
+export function notTakingPaidCalls(held: Money | null | undefined, listing: Money | null | undefined): boolean {
+  if (!held || !listing || listing.asset !== held.asset) return false;
+  return BigInt(listing.amount) > BigInt(held.amount);
+}
+
+export interface RoutingProvider {
+  name: string;
+  price: Money | null | undefined;
+  quality: { measuredCalls: number; failedCalls: number } | null | undefined;
+}
+
+/**
+ * The lines under "Who serves it" that keep the price and the provider list
+ * coherent:
+ *
+ *  - a provider priced above the hold is said by name, with why it gets no
+ *    paid calls — so a "$0.10" headline next to a "$0.25" provider reads right;
+ *  - a provider marked "Fails often" that still takes the calls gets one line
+ *    saying so, and that failed results are never charged.
+ */
+export function routingNotes(held: Money | null | undefined, providers: readonly RoutingProvider[]): string[] {
+  const notes: string[] = [];
+  const idle = providers.filter((p) => notTakingPaidCalls(held, p.price));
+  const taking = providers.filter((p) => !notTakingPaidCalls(held, p.price));
+  if (idle.length > 0 && taking.length > 0) {
+    const named = idle.map((p) => `${p.name} (${formatCallPrice(p.price)} a call)`).join(", ");
+    notes.push(
+      `${named} ${idle.length === 1 ? "is" : "are"} not taking paid calls right now: paid calls go only to providers whose stake covers them. The price above counts only the providers taking calls.`,
+    );
+  }
+  const failing = taking.filter((p) => failsOften(p.quality));
+  if (failing.length > 0) {
+    notes.push(
+      taking.length === 1
+        ? "Calls go to the provider that is taking calls; this one has failed often recently. Failed results are never charged."
+        : `${failing.map((p) => p.name).join(", ")} ${failing.length === 1 ? "has" : "have"} failed often recently and still take calls. Failed results are never charged.`,
+    );
+  }
+  return notes;
+}
