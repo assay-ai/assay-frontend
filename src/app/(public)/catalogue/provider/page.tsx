@@ -10,6 +10,7 @@ import { Term } from "@/components/patterns/term";
 import { failRateLabel, failsOften, formatCallPrice, freeTierLabel, plural, stakeSummary } from "@/features/explorer/explorer-text";
 import { publicErrorText, usePublicProvider } from "@/features/explorer/use-public-explorer";
 import { useChainName } from "@/hooks/useChainName";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
@@ -23,6 +24,8 @@ function ProviderPage() {
   const id = useSearchParam("id");
   const query = usePublicProvider(id);
   const chainName = useChainName();
+  // A static export cannot set per-provider metadata; name the provider in the tab.
+  useDocumentTitle(query.data ? `${query.data.name} — Assay` : null);
 
   if (!id || (query.isError && query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 400))) {
     return (

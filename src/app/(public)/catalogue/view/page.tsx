@@ -31,6 +31,7 @@ import {
   usePublicTools,
 } from "@/features/explorer/use-public-explorer";
 import { useChainName } from "@/hooks/useChainName";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
@@ -64,9 +65,7 @@ function ToolPage() {
       .find((d) => d?.providerId === providerId)
       ?.tools.find((t) => t.toolId === tool?.id);
   // A static export cannot set per-tool metadata; name the tool in the tab.
-  React.useEffect(() => {
-    if (tool) document.title = `${tool.name}: price and record — Assay`;
-  }, [tool]);
+  useDocumentTitle(tool ? `${tool.name}: price and record — Assay` : null);
   const freeAllowance = smallestFreeAllowance(serving.map((p) => listingOf(p.providerId)?.freeCallsPerAgentPerDay));
 
   if (tools.isPending) {
