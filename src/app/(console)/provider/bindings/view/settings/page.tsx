@@ -14,6 +14,7 @@ import { Field } from "@/components/ui/field";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
+import { noteSaved } from "@/features/provider-binding/after-publish";
 import { BindingHeader, bindingQueryKey, useBinding } from "@/features/provider-binding/binding-header";
 import { integerFromInput, majorInputFromMoney, minorUnitsFromMajorInput } from "@/features/provider-binding/chrome";
 import { modeOfChoice, PRICE_CHOICES, type PriceChoice } from "@/features/provider-binding/go-live";
@@ -110,6 +111,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
     setError(null);
     try {
       const saved = await updateToolBinding(binding.id, body);
+      noteSaved(saved);
       // Seeded from the answer: a refetch right after a write is served the old body from the HTTP cache.
       queryClient.setQueryData(bindingQueryKey(binding.id), saved);
       void queryClient.invalidateQueries({ queryKey: ["provider", "tool-bindings"] });
