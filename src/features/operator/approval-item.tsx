@@ -383,7 +383,7 @@ export function RowSection({
 }: {
   id: string;
   title: string;
-  /** A number, or a phrase such as "2 of 4 waiting". */
+  /** The number of rows, or a short phrase. */
   count?: number | string;
   /** Shown on hover of the header (the rule behind the order). */
   hint?: string;

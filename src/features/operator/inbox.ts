@@ -27,19 +27,34 @@ export function needsYouCount(needsYouApprovals: number, openDisputes: number, c
 
 /**
  * The one name for every open request, yours or not, on the Approvals tab:
- * "All waiting · 4" (no count when nothing waits). Home says the same thing
- * from the other side: "To approve · 2 of 4 waiting" (`ofWaitingText`).
+ * "All waiting · 4" (no count when nothing waits). Home accounts for the same
+ * requests in one line under its sections (`waitingSummary`).
  */
 export function allWaitingLabel(count: number): string {
   return count > 0 ? `All waiting · ${count}` : "All waiting";
 }
 
 /**
- * A Home section's count against every waiting request, so the two numbers
- * read as one: "2 of 4 waiting", or just "2" when they are all of them. Pure.
+ * Home's one line for every waiting request, split the way the Approvals tabs
+ * are (Waiting for you · Your requests · Others), so each one is accounted for:
+ *   "5 requests waiting: 2 for you, 1 from you, 2 for others"
+ *   "2 requests waiting, both for others" · "1 request waiting, from you"
+ * Null when nothing waits. Pure.
  */
-export function ofWaitingText(part: number, total: number): string {
-  return total > part ? `${part} of ${total} waiting` : `${part}`;
+export function waitingSummary(counts: { needsYou: number; yours: number; others: number }): string | null {
+  const total = counts.needsYou + counts.yours + counts.others;
+  if (total === 0) return null;
+  const parts = (
+    [
+      [counts.needsYou, "for you"],
+      [counts.yours, "from you"],
+      [counts.others, "for others"],
+    ] as const
+  ).filter(([n]) => n > 0);
+  const head = `${total} ${total === 1 ? "request" : "requests"} waiting`;
+  if (parts.length > 1) return `${head}: ${parts.map(([n, who]) => `${n} ${who}`).join(", ")}`;
+  const who = parts[0][1];
+  return total === 1 ? `${head}, ${who}` : `${head}, ${total === 2 ? "both" : "all"} ${who}`;
 }
 
 /**
