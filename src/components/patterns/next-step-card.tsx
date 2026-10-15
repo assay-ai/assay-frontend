@@ -114,7 +114,8 @@ export function NextStepCard({ kind, title, description, meta, action, secondary
         >
           <Icon className="size-4" />
         </span>
-        <div className="flex min-w-0 flex-col gap-1">
+        {/* flex-1: a footer of buttons spans the card, so it right-aligns like the action row below. */}
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           {eyebrow ? <p className="text-label-xs text-03">{eyebrow}</p> : null}
           <p className="text-label-md text-01">{title}</p>
           {description ? <p className="text-body-13 text-02">{description}</p> : null}
