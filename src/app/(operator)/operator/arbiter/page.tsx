@@ -44,6 +44,7 @@ import {
   type ChainBlockFormInput,
   type RulingFormInput,
 } from "@/features/operator/arbiter";
+import { ApprovedArbiterBlocks } from "@/features/operator/approved-arbiter-blocks";
 import { BLOCK_NOTE_MAX } from "@/features/operator/blocks";
 import { ContractCallPanel } from "@/features/operator/contract-call-panel";
 import { QueuedNotice } from "@/features/operator/queued-notice";
@@ -561,6 +562,23 @@ export default function ArbiterPage() {
                 />
               </div>
             ) : null}
+          </PanelBody>
+        </Panel>
+      ) : null}
+
+      {/* ── Approved blocks the arbiter still has to sign (frontend review N5) ── */}
+      {canBlock ? (
+        <Panel className="w-full">
+          <PanelHeader>
+            <PanelTitles>
+              <PanelTitle>Approved on-chain blocks</PanelTitle>
+              <PanelDescription>
+                A-11 approved in the inbox · the arbiter&apos;s wallet signs the unsigned setBlocked here
+              </PanelDescription>
+            </PanelTitles>
+          </PanelHeader>
+          <PanelBody className="p-4 tablet:p-5">
+            <ApprovedArbiterBlocks onSent={refreshAll} />
           </PanelBody>
         </Panel>
       ) : null}

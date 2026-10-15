@@ -33,7 +33,8 @@ describe("slashStatusOf", () => {
 
 describe("cancelReasonLabel", () => {
   it("names the four CancelReason values", () => {
-    expect(cancelReasonLabel(0)).toMatch(/withdrawn/i);
+    // cancelSlash is the arbiter's on EVM (review N-4): a ruling, not Assay withdrawing it.
+    expect(cancelReasonLabel(0)).toMatch(/cancelled by assay's arbiter/i);
     expect(cancelReasonLabel(1)).toMatch(/expired/i);
     expect(cancelReasonLabel(2)).toMatch(/verifier/i);
     expect(cancelReasonLabel(3)).toBe("Dispute unresolved (30 days)");

@@ -45,6 +45,28 @@ describe("a fresh case, record pending on chain", () => {
   });
 });
 
+describe("a partly disputed case (review N-4)", () => {
+  it("still offers the dispute of the parts nobody disputed, whatever the case status", () => {
+    const data = caseOf("UPHELD", {
+      chainStatus: "PENDING",
+      chainDisputedAt: "2026-10-15T08:58:08.000Z",
+      chainDisputedParts: 1,
+      chainState: "DISPUTED",
+      disputeBy: "2026-10-15T09:37:00.000Z",
+      runningClock: "PROVIDER",
+      secondsRemaining: 3600,
+    });
+    const header = render(<StatusHeader data={data} />);
+    expect(header).toContain("Dispute on chain by 2026-10-15 09:37 UTC");
+    expect(header).not.toContain("past the point of a dispute");
+  });
+
+  it("says the dispute is over once no record can be disputed", () => {
+    const data = caseOf("UPHELD", { chainState: "PENDING", disputeBy: null, runningClock: "NONE" });
+    expect(render(<StatusHeader data={data} />)).toContain("past the point of a dispute");
+  });
+});
+
 describe("a case disputed on chain (R13 id3)", () => {
   const data = caseOf("DISPUTED", DISPUTED_CLOCKS, { disputeId: "d1" });
   const stage = caseChainStageOf(data.proposal.clocks);

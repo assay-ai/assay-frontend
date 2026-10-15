@@ -5,6 +5,7 @@ import { ApiError } from "@/libs/ApiClient";
 
 import {
   agentShareText,
+  approvedArbiterBlocks,
   arbiterErrorMessage,
   beneficiaryCheck,
   mayBlockOnChain,
@@ -196,5 +197,37 @@ describe("beneficiaryCheck", () => {
     const check = beneficiaryCheck(dispute(1, { beneficiaryEvidence: { ...evidence, ok: false, reason } }));
     expect(check.status).toBe("failed");
     expect(check.reason).toBe(reason);
+  });
+});
+
+/* Frontend review N5: an approved A-11 stays reachable for the arbiter's wallet. */
+describe("approvedArbiterBlocks", () => {
+  const row = (patch: Record<string, unknown>) => ({
+    id: "appr-1",
+    action: "arbiter.block",
+    status: "APPROVED",
+    payload: { chainId: "eip155:46630", account: "0xA271A3407D3302f4b4Fbe469b9188487cedd7d45" },
+    approvedBy: "lead@",
+    decidedAt: "2026-10-15T10:00:00Z",
+    ...patch,
+  });
+
+  it("keeps the approved blocks, with the address and chain off the approved payload", () => {
+    expect(
+      approvedArbiterBlocks([
+        row({}),
+        row({ id: "appr-2", status: "PENDING" }),
+        row({ id: "appr-3", action: "slash.suspend" }),
+        row({ id: "appr-4", payload: { chainId: "eip155:46630" } }),
+      ]),
+    ).toEqual([
+      {
+        approvalId: "appr-1",
+        chainId: "eip155:46630",
+        account: "0xA271A3407D3302f4b4Fbe469b9188487cedd7d45",
+        approvedBy: "lead@",
+        decidedAt: "2026-10-15T10:00:00Z",
+      },
+    ]);
   });
 });

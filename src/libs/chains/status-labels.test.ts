@@ -54,7 +54,7 @@ describe("cancel reasons", () => {
   });
 
   it("names the older three and says when it does not know one", () => {
-    expect(chainCancelReasonLabel("WITHDRAWN")).toMatch(/withdrawn/i);
+    expect(chainCancelReasonLabel("WITHDRAWN")).toMatch(/arbiter/i);
     expect(chainCancelReasonCodeLabel(1)).toMatch(/expired/i);
     expect(chainCancelReasonCodeLabel(2)).toMatch(/verifier/i);
     expect(chainCancelReasonCodeLabel(8)).toBe("Unknown reason (8)");

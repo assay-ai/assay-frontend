@@ -40,7 +40,7 @@ describe("ContractCallPanel", () => {
     const html = markup(call("cancelSlashBatch"));
     expect(html).toContain("Function (decoded from the calldata)");
     expect(html).toContain(`[${ID}]`);
-    expect(html).toContain("X402Stake");
+    expect(html).toContain("Stake contract");
     expect(html).toContain("Sign and send with the connected wallet");
   });
 
