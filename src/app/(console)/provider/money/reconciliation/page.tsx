@@ -121,6 +121,7 @@ const CLASS_NOTE: Record<string, string> = {
   PAID_CREDITED: "settled to you",
   PAID_AWAITING_REDEMPTION: "passed · credited once the voucher is redeemed on chain",
   PLATFORM_ABSORBED: "voucher could not be redeemed · owed to you by the platform, no fee",
+  PROVIDER_FORFEITED: "voucher not collected: your stake was below the minimum or you were blocked · not credited, buyer not charged",
   PAID_UNCREDITED: "our checks rejected the response · see verdicts",
   FREE: "free-tier call · nothing charged, nothing paid",
   EXPLORATION: "trial traffic for a new binding, paid for by us",
