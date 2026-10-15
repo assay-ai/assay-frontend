@@ -18,9 +18,9 @@ import {
   setSessionToken,
 } from "@/libs/ApiClient";
 
-import { loginHref } from "@/libs/login-redirect";
+import { demoEnabled } from "@/libs/demo/demo-api";
 
-import { applyIdentityChange, isOperatorConsolePath } from "./buyer-session";
+import { applyIdentityChange, isOperatorConsolePath, signedOutLanding, unauthorizedTarget } from "./buyer-session";
 
 /**
  * Bridges Privy's client-side auth state onto the axios session used by
@@ -110,11 +110,20 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
       // Privy session too. Best-effort: the redirect must not wait on it or
       // get blocked by it failing.
       void logout().catch(() => {});
-      // Back to the same page after signing in again, with the reason shown.
+      // Back to the same page after signing in. "Your session expired" only
+      // when this page load had one; a first-time visitor at `/` gets How it works.
       const search = typeof window === "undefined" ? "" : window.location.search;
-      router.replace(loginHref({ next: `${pathnameRef.current}${search}`, reason: "expired" }));
+      router.replace(unauthorizedTarget({ pathname: pathnameRef.current, search, previous: lastIdentityRef.current }));
     });
   }, [queryClient, router, logout]);
+
+  // Signed out at the bare domain: show the product, not an empty console.
+  useEffect(() => {
+    // A 401 redirect in flight (an expired session signing out) wins.
+    if (redirectingRef.current) return;
+    const target = signedOutLanding({ ready, authenticated, pathname, demo: demoEnabled() });
+    if (target) router.replace(target);
+  }, [ready, authenticated, pathname, router]);
 
   // The operator console has its own session: on its pages the buyer login
   // path (token write, wallet link, cache reset) does not run at all.
