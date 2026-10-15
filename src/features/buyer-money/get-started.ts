@@ -56,3 +56,10 @@ export function payStage(facts: Pick<GetStartedFacts, "capsSet" | "keyBound" | "
   if (!facts.grantActive) return "authorise";
   return "done";
 }
+
+/**
+ * Where `agent-cli` comes from. It has no public install path yet (an open
+ * owner question), so the screens say so plainly next to every command that
+ * needs it, rather than leaving a buyer to search for a tool they cannot find.
+ */
+export const AGENT_CLI_SOURCE = "agent-cli is not published yet: get it from your Assay contact.";
