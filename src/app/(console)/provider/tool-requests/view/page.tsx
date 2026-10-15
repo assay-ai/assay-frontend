@@ -14,8 +14,12 @@ import {
   PanelTitle,
   PanelTitles,
 } from "@/components/ui/panel";
-import { DASH, count, stampUtc } from "@/features/g34a/stats";
-import { isToolRequestTerminal, toolRequestOwnerLabel, toolRequestStateLine } from "@/features/provider-tool-requests/state";
+import { LocalTime } from "@/components/patterns/local-time";
+import { PageState } from "@/components/patterns/page-state";
+import { DASH, count } from "@/features/g34a/stats";
+import { replyBadge, TOOL_REQUEST_STATUS_LABEL } from "@/features/provider-tool-requests/due";
+import { REPLY_PROMISE } from "@/features/provider-tool-requests/request-sheet";
+import { isToolRequestTerminal } from "@/features/provider-tool-requests/state";
 import { isLinkableUrl } from "@/features/provider-tool-requests/url";
 import { getToolRequest } from "@/services/provider-tool-requests.service";
 import { useSearchParam } from "@/hooks/useSearchParam";
@@ -46,6 +50,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function ToolRequestDetailPage() {
   const id = useSearchParam("id");
+  const [now] = React.useState(() => Date.now());
 
   const requestQuery = useQuery({
     queryKey: ["provider", "tool-requests", "detail", id],
@@ -55,10 +60,12 @@ export default function ToolRequestDetailPage() {
 
   if (requestQuery.isError) {
     return (
-      <p className="text-body-13 text-03">
-        This request could not be loaded. It may belong to another organisation, or the id may not
-        exist.
-      </p>
+      <PageState
+        kind="error"
+        title="This request could not be opened"
+        description="It may have been removed, or it belongs to another account."
+        onRetry={() => void requestQuery.refetch()}
+      />
     );
   }
 
@@ -71,9 +78,20 @@ export default function ToolRequestDetailPage() {
         <Button variant="ghost" size="sm" icon={<ArrowLeft aria-hidden="true" />} asChild>
           <Link href="/provider/tool-requests">Back to requests</Link>
         </Button>
-        <h1 className="truncate text-heading-md text-01">{request ? request.title : "Loading…"}</h1>
-        {request ? <p className="text-body-sm text-02">{toolRequestStateLine(request)}</p> : null}
+        <h1 className="truncate text-heading-md text-01">{request ? request.title : "Tool request"}</h1>
+        {request ? (
+          <p className="text-body-sm text-02">
+            {TOOL_REQUEST_STATUS_LABEL[request.status]}
+            {(() => {
+              const badge = replyBadge(request, now);
+              return badge ? ` · ${badge.label}` : "";
+            })()}
+            {request.status === "OPEN" ? `. ${REPLY_PROMISE}` : ""}
+          </p>
+        ) : null}
       </header>
+
+      {!request ? <PageState kind="loading" rows={4} label="Loading this request" /> : null}
 
       {request ? (
         <section className="flex w-full flex-col items-start gap-4 tablet:flex-row">
@@ -122,23 +140,23 @@ export default function ToolRequestDetailPage() {
               </PanelTitles>
             </PanelHeader>
             <PanelBody className="p-4 tablet:p-5">
-              <Row label="Owner" value={toolRequestOwnerLabel(request)} />
+              <Row label="Handled by" value={request.ownerOperatorId ? "The Assay team" : "Not assigned yet"} />
               <Row
                 label="First response due"
-                value={`${stampUtc(request.firstResponseDueAt)} UTC`}
+                value={<LocalTime value={request.firstResponseDueAt} />}
               />
               <Row
                 label="First responded"
-                value={request.firstRespondedAt ? `${stampUtc(request.firstRespondedAt)} UTC` : DASH}
+                value={request.firstRespondedAt ? <LocalTime value={request.firstRespondedAt} /> : DASH}
               />
               <Row
                 label="Expected monthly calls"
                 value={count(request.expectedMonthlyCalls)}
               />
-              <Row label="Filed" value={`${stampUtc(request.createdAt)} UTC`} />
+              <Row label="Filed" value={<LocalTime value={request.createdAt} />} />
               <Row
                 label="Closed"
-                value={request.closedAt ? `${stampUtc(request.closedAt)} UTC` : DASH}
+                value={request.closedAt ? <LocalTime value={request.closedAt} /> : DASH}
               />
             </PanelBody>
           </Panel>
