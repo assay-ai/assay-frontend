@@ -409,3 +409,27 @@ export function rulingOutcome(input: {
 export function possessive(name: string): string {
   return /s$/i.test(name.trim()) ? `${name}'` : `${name}'s`;
 }
+
+/**
+ * Why the ruling sheet cannot sign yet, everything at once, or null when it
+ * can. Pure.
+ *   "Still needed: confirm the payee warning, pick a reason and write at least 20 characters in the note."
+ * `otherError` is what the form check says beyond these (a bad ticket, the
+ * selection), shown on its own when nothing else is missing.
+ */
+export function rulingMissingText(input: {
+  warnings: number;
+  acknowledged: boolean;
+  reason: string;
+  note: string;
+  otherError?: string | null;
+}): string | null {
+  const missing = [
+    ...(input.warnings > 0 && !input.acknowledged ? [`confirm the payee warning${input.warnings === 1 ? "" : "s"}`] : []),
+    ...(input.reason.trim() === "" ? ["pick a reason"] : []),
+    ...(input.note.trim().length < ARBITER_NOTE_MIN ? [`write at least ${ARBITER_NOTE_MIN} characters in the note`] : []),
+  ];
+  if (missing.length === 0) return input.otherError ?? null;
+  const list = missing.length === 1 ? missing[0]! : `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}`;
+  return `Still needed: ${list}.`;
+}
