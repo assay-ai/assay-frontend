@@ -180,3 +180,44 @@ export function toAtomic(value: Decimal, decimals: number): string {
   const digits = (negative ? fixed.slice(1) : fixed).replace(".", "").replace(/^0+(?=\d)/, "");
   return negative && digits !== "0" ? `-${digits}` : digits;
 }
+
+export interface ParsedAmount {
+  /** The amount, when valid. */
+  value: Decimal | null;
+  /** Minor units for the API (`toAtomic`), when valid. */
+  atomic: string | null;
+  /** One sentence for the field, when not valid (or empty and required). */
+  error: string | null;
+}
+
+/**
+ * What a person typed in an amount field → a validated amount, or one
+ * sentence saying what is wrong. Use it for every amount input (PresetChips'
+ * Custom field included), so every form refuses the same things in the same words.
+ *
+ *   parseAmountInput("20", { decimals: 6, min: "5" })   → { value: 20, atomic: "20000000", error: null }
+ *   parseAmountInput("1.2.3", { decimals: 6 })          → { error: "Enter an amount like 20 or 20.50." }
+ */
+export function parseAmountInput(
+  raw: string,
+  options: { decimals: number; min?: string; max?: string; required?: boolean; symbol?: string },
+): ParsedAmount {
+  const { decimals, min, max, required = true, symbol = "$" } = options;
+  const text = raw.trim().replace(/,/g, "");
+  if (text === "") return { value: null, atomic: null, error: required ? "Enter an amount." : null };
+  if (!/^\d*\.?\d*$/.test(text) || text === ".") {
+    return { value: null, atomic: null, error: "Enter an amount like 20 or 20.50." };
+  }
+  const value = new Decimal(text);
+  if (exceedsScale(value, decimals)) {
+    return { value: null, atomic: null, error: `Use at most ${decimals} decimal places.` };
+  }
+  if (value.lte(0)) return { value: null, atomic: null, error: "Enter an amount above zero." };
+  if (min !== undefined && value.lt(min)) {
+    return { value: null, atomic: null, error: `The minimum is ${formatDecimal(new Decimal(min), { symbol })}.` };
+  }
+  if (max !== undefined && value.gt(max)) {
+    return { value: null, atomic: null, error: `The most you can use here is ${formatDecimal(new Decimal(max), { symbol })}.` };
+  }
+  return { value, atomic: toAtomic(value, decimals), error: null };
+}

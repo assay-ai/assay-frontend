@@ -219,7 +219,7 @@ const RESPONSE_CLASSES: Record<string, string> = {
   DATA_RESULT: "The provider returned data",
   DATA_FAIL: "The provider returned data that failed our checks",
   SYSTEM_ERROR: "The provider's system failed — no charge",
-  REQUEST_ERROR: "The provider refused the request — no charge",
+  REQUEST_ERROR: "The request was not valid for this tool — no charge",
 };
 
 const CLASSIFICATION_REASONS: Record<string, string> = {
@@ -285,7 +285,7 @@ const INELIGIBILITY: Record<string, string> = {
   MAX_VOUCHER_AMOUNT: "Over the per-call payment limit",
   MAX_PER_WINDOW: "Over the payment limit for this period",
   VALID_UNTIL: "The payment permission expired",
-  REVOKED: "The payment permission was revoked",
+  REVOKED: "Revoked",
   SLASH_WINDOW_FULL: "Too many penalties are open at once",
   STAKE_FULLY_RESERVED: "All stake is reserved for open penalties",
   BONDED_BELOW_MINIMUM: "Stake is below the minimum",
@@ -303,11 +303,11 @@ const INELIGIBILITY: Record<string, string> = {
 const ERRORS: Record<string, string> = {
   AUTH_WALLET_NOT_LINKED: "Your wallet is still being linked to your account. Try again in a minute.",
   AUTH_AGENT_SUSPENDED: "This agent is suspended.",
-  AUTH_ORGANIZATION_SUSPENDED: "Your organisation is suspended.",
+  AUTH_ORGANIZATION_SUSPENDED: "Your organization is suspended.",
   AUTH_HUMAN_SESSION_REQUIRED: "Sign in as yourself to do this; an agent key cannot.",
   ACCOUNT_BLOCKED: "This account is blocked. Contact support.",
   SPEND_LIMIT_EXCEEDED: "This call would go over your spend limit.",
-  VELOCITY_LIMIT_EXCEEDED: "Spending too fast — calls are slowed down for a moment.",
+  VELOCITY_LIMIT_EXCEEDED: "Spending too fast: this call was refused. Calls are allowed again in a moment.",
   POLICY_AGENT_PAUSED: "This agent is paused by its budget.",
   APPROVAL_REQUIRED: "This call needs a person's approval.",
   TOOL_NOT_ALLOWED: "Your budget does not allow this tool.",
@@ -378,7 +378,7 @@ const ERRORS: Record<string, string> = {
   VERIFICATION_EVIDENCE_PACK_TAMPERED: "The evidence failed its integrity check.",
   CHAIN_PROGRAM_PAUSED: "The contracts are paused. Try again after they resume.",
   CHAIN_ADDRESS_BLOCKED: "This address is blocked on chain.",
-  CHAIN_TRANSACTION_FAILED: "The transaction failed on chain. Nothing was charged.",
+  CHAIN_TRANSACTION_FAILED: "The transaction failed on chain. Your balance did not change, though the network fee may have been spent.",
   CHAIN_RAIL_NOT_OFFERED: "This way of paying is not offered on this chain.",
   VALIDATION_FAILED: "Some of the details are not valid.",
   UNAUTHORIZED: "Your session expired. Sign in again.",

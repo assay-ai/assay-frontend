@@ -53,6 +53,8 @@ export interface SectionTab {
   href: string;
   /** Extra paths that count as this tab (sub-pages). Defaults to `[href]`. */
   match?: string[];
+  /** A count to show next to the label ("Needs you 3"). Hidden at 0. Set at render time. */
+  badge?: number;
 }
 
 /** The tabs at the top of each multi-page section. */

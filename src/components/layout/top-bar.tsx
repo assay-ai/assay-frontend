@@ -35,6 +35,8 @@ export interface TopBarNavItem {
   id: string;
   label: string;
   href: string;
+  /** A count next to the label (e.g. penalties needing action). Hidden at 0. */
+  badge?: number;
 }
 
 const DEFAULT_NAV_ITEMS: TopBarNavItem[] = BUYER_NAV_ITEMS;
@@ -117,6 +119,12 @@ const TopBar = React.forwardRef<HTMLElement, TopBarProps>(
                 )}
               >
                 {item.label}
+                {item.badge ? (
+                  <span className="ml-1.5 rounded-full bg-danger-500 px-1.5 py-px font-mono text-mono-2xs font-semibold text-on-color">
+                    {item.badge > 99 ? "99+" : item.badge}
+                    <span className="sr-only"> needing attention</span>
+                  </span>
+                ) : null}
               </LinkComponent>
             );
           })}

@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 import { describe, expect, it } from "vitest";
 
 import {
+  parseAmountInput,
   exceedsScale,
   formatDecimal,
   formatMoney,
@@ -212,5 +213,22 @@ describe("formatMoneyNonZero — two decimals, more only below one cent", () => 
   it("keeps zero and nothing as plain zero", () => {
     expect(formatMoneyNonZero(usd("0"))).toBe("$0.00");
     expect(formatMoneyNonZero(null)).toBe("$0.00");
+  });
+});
+
+describe("parseAmountInput", () => {
+  it("accepts a plain amount and converts it", () => {
+    expect(parseAmountInput("20.5", { decimals: 6 })).toMatchObject({ atomic: "20500000", error: null });
+    expect(parseAmountInput("1,000", { decimals: 6 }).atomic).toBe("1000000000");
+  });
+
+  it("refuses in one sentence", () => {
+    expect(parseAmountInput("", { decimals: 6 }).error).toBe("Enter an amount.");
+    expect(parseAmountInput("", { decimals: 6, required: false }).error).toBeNull();
+    expect(parseAmountInput("1.2.3", { decimals: 6 }).error).toBe("Enter an amount like 20 or 20.50.");
+    expect(parseAmountInput("0", { decimals: 6 }).error).toBe("Enter an amount above zero.");
+    expect(parseAmountInput("0.0000001", { decimals: 6 }).error).toBe("Use at most 6 decimal places.");
+    expect(parseAmountInput("4", { decimals: 6, min: "5" }).error).toBe("The minimum is $5.00.");
+    expect(parseAmountInput("60", { decimals: 6, max: "50" }).error).toBe("The most you can use here is $50.00.");
   });
 });

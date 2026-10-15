@@ -7,11 +7,13 @@ import { SectionTabs } from "@/components/layout/section-tabs";
 import { CapMeter } from "@/components/patterns/cap-meter";
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { CopyChip } from "@/components/patterns/copy-chip";
+import { EntityPicker } from "@/components/patterns/entity-picker";
+import { STATUS_CHIPS, StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
 import { LocalTime } from "@/components/patterns/local-time";
 import { MoneyFlow, MoneySplit } from "@/components/patterns/money-flow";
 import { PageState, Skeleton } from "@/components/patterns/page-state";
 import { PresetChips } from "@/components/patterns/preset-chips";
-import { SetupChecklist, type SetupStep } from "@/components/patterns/setup-checklist";
+import { ChecklistPill, SetupChecklist, type SetupStep } from "@/components/patterns/setup-checklist";
 import { CostBadge, SignAction, WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { StatusTimeline } from "@/components/patterns/status-timeline";
 import { Term } from "@/components/patterns/term";
@@ -19,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { GLOSSARY_KEYS } from "@/libs/glossary";
 import { plain, plainError, plainRule } from "@/libs/plain-language";
 import { cn } from "@/utils";
+import { parseAmountInput } from "@/utils/money";
 
 /**
  * Kitchen-sink group 08: the shared UX patterns (components/patterns), every
@@ -105,6 +108,7 @@ function ChecklistDemo() {
   ];
   return (
     <div className="flex w-full max-w-[560px] flex-col gap-2">
+      <ChecklistPill label="Get started" steps={steps} href="#" className="self-start" />
       <SetupChecklist title="Get started" description="Four steps to your agent's first verified call." steps={steps} onDismiss={() => setDone(1)} />
       <button type="button" className="self-start text-label-xs text-03 underline" onClick={() => setDone(done >= 4 ? 1 : done + 1)}>
         Advance the data (simulated)
@@ -116,8 +120,11 @@ function ChecklistDemo() {
 export function PatternsGallery() {
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [withdrawOpen, setWithdrawOpen] = React.useState(false);
+  const [toolId, setToolId] = React.useState<string | null>(null);
   const [amount, setAmount] = React.useState("");
   const [cap, setCap] = React.useState("20");
+  const capCheck = parseAmountInput(cap, { decimals: 6, min: "1" });
   const [stepsKey, setStepsKey] = React.useState(0);
   const [now] = React.useState(() => Date.now());
   const iso = (offsetHours: number) => new Date(now + offsetHours * 3_600_000).toISOString();
@@ -126,6 +133,19 @@ export function PatternsGallery() {
     <>
       <Spec name="setup-checklist · live steps, inline actions, collapses to all set">
         <ChecklistDemo />
+      </Spec>
+
+      <Spec name="setup-checklist · loading (never a false 0 of 4)">
+        <SetupChecklist
+          className="max-w-[560px]"
+          loading
+          title="Get started"
+          steps={[
+            { id: "a", title: "A", state: "todo" },
+            { id: "b", title: "B", state: "todo" },
+            { id: "c", title: "C", state: "todo" },
+          ]}
+        />
       </Spec>
 
       <Spec name="sign-action · two signatures; the 2nd declines once, then try again resumes">
@@ -159,7 +179,8 @@ export function PatternsGallery() {
             steps={[{ id: "w", label: "Withdraw", cost: "gas", run: () => wait(500) }]}
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full max-w-[420px] items-center gap-2 rounded-xl border border-01 bg-01 p-4">
+          <span className="text-body-13 text-02">Cost badges:</span>
           <CostBadge cost="free" />
           <CostBadge cost="gas" />
         </div>
@@ -173,12 +194,40 @@ export function PatternsGallery() {
           title="Set safety caps"
           description={`Your agents can spend at most $${cap || "0"} a day from escrow.`}
           label="Sign and save"
+          resetKey={cap}
+          disabled={Boolean(capCheck.error)}
+          disabledReason={capCheck.error}
           steps={[{ id: "caps", label: "Save caps on chain", cost: "gas", run: () => wait(1200) }]}
           successTitle="Caps saved"
           doneAction={{ label: "Close", onClick: () => setSheetOpen(false) }}
         >
-          <PresetChips label="Daily cap" presets={["5", "20", "50"]} value={cap} onChange={setCap} hint="You can change this at any time." />
+          <PresetChips
+            label="Daily cap"
+            presets={["5", "20", "50"]}
+            value={cap}
+            onChange={setCap}
+            error={cap ? capCheck.error : null}
+            hint="You can change this at any time."
+          />
         </WalletActionSheet>
+        <Button variant="secondary" onClick={() => setWithdrawOpen(true)}>
+          Request a withdrawal
+        </Button>
+        <WalletActionSheet
+          open={withdrawOpen}
+          onOpenChange={setWithdrawOpen}
+          title="Request a withdrawal of $20.00?"
+          description="The money leaves escrow after about an hour. Paid calls pause until then."
+          changes={[
+            { label: "Escrow", before: "$20.00", after: "$0.00" },
+            { label: "Paid calls", before: "Allowed", after: "Paused" },
+          ]}
+          acknowledge="I understand my agents cannot pay until the withdrawal completes"
+          label="Request withdrawal"
+          steps={[{ id: "req", label: "Request withdrawal", cost: "free", run: () => wait(900) }]}
+          successTitle="Withdrawal requested"
+          doneAction={{ label: "Close", onClick: () => setWithdrawOpen(false) }}
+        />
       </Spec>
 
       <Spec name="status-timeline · penalty lifecycle, next date highlighted (horizontal ≥ tablet, stacked below)">
@@ -262,7 +311,30 @@ export function PatternsGallery() {
         </div>
       </Spec>
 
-      <Spec name="cap-meter · ok / high / full / over">
+      <Spec name="status-chip · the shared state vocabulary">
+        {(Object.keys(STATUS_CHIPS) as StatusChipKey[]).map((key) => (
+          <StatusChip key={key} status={key} />
+        ))}
+        <StatusChip status="needs-you" detail="3" />
+      </Spec>
+
+      <Spec name="entity-picker · search by name, never by id">
+        <div className="w-full max-w-[360px]">
+          <EntityPicker
+            label="Tool"
+            value={toolId}
+            onChange={(id) => setToolId(id)}
+            options={[
+              { id: "06399979-f8b8-4c9e-a9b1-bd2a5924d442", label: "search_web", detail: "3 providers" },
+              { id: "1a2b3c4d-0000-4000-8000-000000000001", label: "get_token_price", detail: "1 provider" },
+              { id: "1a2b3c4d-0000-4000-8000-000000000002", label: "scrape_url", detail: "2 providers" },
+              { id: "1a2b3c4d-0000-4000-8000-000000000003", label: "deep_research", detail: "no provider live", disabled: true },
+            ]}
+          />
+        </div>
+      </Spec>
+
+      <Spec name="cap-meter · ok / high / full / over / not set">
         {[
           ["1.54", "2.00"],
           ["1.80", "2.00"],
@@ -273,6 +345,9 @@ export function PatternsGallery() {
             <CapMeter label="Today" used={usd(used!)} limit={usd(limit!)} refillsAt={iso(2.3)} />
           </div>
         ))}
+        <div className="w-full max-w-[320px] rounded-xl border border-01 bg-01 p-4">
+          <CapMeter label="Per day" used={usd("0")} limit={null} />
+        </div>
       </Spec>
 
       <Spec name="page-state · loading / empty / error / blocked">
@@ -301,7 +376,8 @@ export function PatternsGallery() {
           description="A withdrawal is in progress. Calls resume when it completes, or cancel it."
           action={{ label: "View withdrawal", href: "#" }}
         />
-        <div className="flex w-[200px] flex-col gap-2">
+        <div className="flex w-full max-w-[420px] flex-col gap-2 rounded-xl border border-01 bg-01 p-4">
+          <span className="text-body-13 text-02">Skeleton, for a custom loading shape:</span>
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-4 w-1/2" />
         </div>
