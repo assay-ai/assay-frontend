@@ -5,7 +5,7 @@ import type { OperatorCaseBrief, OperatorIdentity, SlashProposalStatus } from "@
 import { formatMoney } from "@/utils/money";
 import { DISPUTE_TIMEOUT_SECONDS } from "@/libs/chains/evm/stake-slashes/abi";
 
-import { DISPUTE_RED_FROM_DAY, disputeDayText } from "./inbox";
+import { DISPUTE_RED_FROM_DAY, disputeUrgency } from "./inbox";
 import { capabilitiesFor, checkAction, rolesPhrase, type ConsoleAction } from "./roles";
 import { asProposalStatus, isLegalInStatus, may, suspendIsTwoPerson } from "./state";
 import { askLabel } from "./why-not";
@@ -154,8 +154,8 @@ export function caseTimelineSteps(
       label: stage === "upheld" ? "Arbiter upheld it" : "Arbiter rules",
       state: ruled ? "done" : "current",
       date: ruled ? null : facts.disputeExpiresAt,
-      // The same "Day N of 30 · X days left" as Home, Penalties and Arbiter — not a second countdown.
-      dateLabel: ruled ? undefined : `${disputeDayText({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }, now)} · ends`,
+      // "7 days left · rule by Oct 23": the same days-left as the Deadline elsewhere, not a second countdown.
+      dateLabel: ruled ? undefined : `${disputeUrgency({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }, now).label} · rule by`,
       countdown: false,
       urgent: !ruled && day !== null && day >= DISPUTE_RED_FROM_DAY,
       description: ruled ? undefined : "If nobody rules by then, the penalty lapses.",
@@ -179,12 +179,12 @@ export function caseTimelineSteps(
     const disputedRecord = facts.cancel?.ifUnsigned === "expires";
     steps.push({
       id: "end",
-      label: "Cancel requested — waiting for the arbiter's signature",
+      label: "Cancel waits for the arbiter's signature",
       state: "current",
       date: facts.cancel?.deadline ?? null,
       // A disputed record reads the same "Day N of 30" as the Arbiter page; it cannot be executed meanwhile.
       dateLabel: disputedRecord
-        ? `${disputeDayText({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }, now)} · sign before`
+        ? `${disputeUrgency({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }, now).label} · sign before`
         : "sign before",
       countdown: !disputedRecord,
       urgent: !disputedRecord,

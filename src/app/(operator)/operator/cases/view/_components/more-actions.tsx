@@ -171,8 +171,8 @@ function MenuItem({
       <span className="flex min-w-0 flex-col">
         <span className={cn("text-body-13", disabled ? "text-03" : "text-01")}>{label}</span>
         {why ? (
-          <span className="flex items-center gap-1 text-body-xs text-03">
-            <Lock aria-hidden="true" className="size-3 shrink-0" />
+          <span className="flex items-start gap-1 text-body-xs text-03">
+            <Lock aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
             {why}
           </span>
         ) : null}

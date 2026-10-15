@@ -91,7 +91,7 @@ describe("what a row says", () => {
   });
 
   it("never shows Disputed in the lime 'positive' sense for a cancel, and names an upheld one", () => {
-    expect(penaltyChip(row({ status: "CANCEL_REQUESTED" }), NOW)).toEqual({ status: "waiting", detail: "signature" });
+    expect(penaltyChip(row({ status: "CANCEL_REQUESTED" }), NOW)).toEqual({ status: "waiting", detail: "cancel to sign" });
     expect(penaltyChip(row({ status: "PROPOSED", disputedAt: "2026-10-01T00:00:00Z" }), NOW)).toEqual({ status: "upheld" });
     expect(penaltyChip(row({ status: "COMPENSATED" }), NOW)).toEqual({ status: "closed", detail: "paid back" });
   });

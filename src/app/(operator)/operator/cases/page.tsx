@@ -237,7 +237,7 @@ export default function PenaltiesPage() {
         </form>
       </header>
 
-      <div role="tablist" aria-label="Penalties by status" className="-mx-4 flex w-[calc(100%+2rem)] gap-1.5 overflow-x-auto px-4 tablet:mx-0 tablet:w-full tablet:flex-wrap tablet:px-0">
+      <div role="tablist" aria-label="Penalties by status" className="-mx-4 flex w-[calc(100%+2rem)] gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] tablet:mx-0 tablet:w-full tablet:flex-wrap tablet:px-0 [&::-webkit-scrollbar]:hidden">
         {visibleTabs.map((t) => {
           const selected = t.id === tab.id;
           const count = counts[t.id];

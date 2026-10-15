@@ -25,6 +25,7 @@ import {
 import { approvalNeeds, approvalTargetId, penaltyPhrase } from "@/features/operator/approvals";
 import { eligibleApprovers } from "@/features/operator/inbox";
 import { OperatorMeasurement } from "@/features/operator/operator-measurement";
+import { PENALTY_APPROVAL_CODES } from "@/features/operator/penalty-list";
 import { PenaltyMoney, stakeReduction } from "@/features/operator/penalty-money";
 import { reasonLabel } from "@/features/operator/reasons";
 import { rememberRecentPenalty } from "@/features/operator/recent-penalties";
@@ -79,6 +80,15 @@ const STAGE_CHIP: Record<CaseStage, { status: StatusChipKey; detail?: string }> 
   cancelled: { status: "cancelled" },
 };
 
+const WAITING_WHAT: Record<string, string> = {
+  "slash.suspend": "A suspension of this penalty",
+  "slash.compensated": "A pay-back of this penalty",
+  "slash.sweep": "A fleet sweep from this penalty",
+};
+
+/** Stages where the stake will not go down: nothing to say about by how much. */
+const MOVES_NOTHING: readonly CaseStage[] = ["cancelled", "cancel-requested", "compensated"];
+
 function BackToPenalties() {
   return (
     <Button variant="ghost" size="sm" asChild className="self-start">
@@ -132,6 +142,11 @@ export default function OperatorCasePage() {
   });
   const waitingSuspend =
     pending.data?.items.find((a) => a.action === "slash.suspend" && a.status === "PENDING" && approvalTargetId(a) === proposalId) ?? null;
+  // Any two-person request on this penalty (suspend, pay back, sweep) is said once, above the columns.
+  const waitingAny =
+    waitingSuspend ??
+    pending.data?.items.find((a) => a.action in PENALTY_APPROVAL_CODES && a.status === "PENDING" && approvalTargetId(a) === proposalId) ??
+    null;
 
   // After an action, everything on the page is read again: status, next step, history.
   const refetch = React.useCallback(() => {
@@ -283,11 +298,11 @@ export default function OperatorCasePage() {
         />
       ) : null}
 
-      {waitingSuspend && !result?.approvalId ? (
+      {waitingAny && !result?.approvalId ? (
         <p role="status" className="w-full rounded-lg border border-01 bg-02 px-3.5 py-2.5 text-body-13 text-01">
-          A suspension of this penalty is waiting for approval: {directory.nameOf(waitingSuspend.requestedBy)} asked{" "}
-          <LocalTime value={waitingSuspend.createdAt} />.{" "}
-          <Link href={approvalHref(waitingSuspend.id)} className="text-primary-700 underline-offset-2 hover:underline">
+          {WAITING_WHAT[waitingAny.action] ?? "A request on this penalty"} is waiting for approval: {directory.nameOf(waitingAny.requestedBy)} asked{" "}
+          <LocalTime value={waitingAny.createdAt} />.{" "}
+          <Link href={approvalHref(waitingAny.id)} className="text-primary-700 underline-offset-2 hover:underline">
             Open the request
           </Link>
         </p>
@@ -327,7 +342,9 @@ export default function OperatorCasePage() {
               </Link>
             </Fact>
             <Fact label="Tool">{proposal.bindingLabel || proposal.toolName}</Fact>
-            {reduction ? <Fact label="Stake goes down by">{formatMoney(reduction)}</Fact> : null}
+            {reduction && (facts.stage === "executed" || !MOVES_NOTHING.includes(facts.stage)) ? (
+              <Fact label={facts.stage === "executed" ? "Stake went down by" : "Stake goes down by"}>{formatMoney(reduction)}</Fact>
+            ) : null}
             <Fact label="Proposed">
               <LocalTime value={proposal.clocks.proposedAt} />
             </Fact>
