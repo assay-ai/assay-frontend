@@ -79,6 +79,23 @@
     }
   }
 
+  /*
+   * A row that scrolls sideways (chips on a phone) fades at the edge that has
+   * more to show, so a cut-off chip reads as "scroll", not as clipped.
+   * `useScrollFade` sets the two data attributes from the scroll position.
+   */
+  .scroll-fade-x[data-more-right] {
+    mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+  }
+
+  .scroll-fade-x[data-more-left] {
+    mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent);
+  }
+
+  .scroll-fade-x[data-more-left][data-more-right] {
+    mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+  }
+
   /* Custom scrollbar styles */
   ::-webkit-scrollbar {
     width: 8px;

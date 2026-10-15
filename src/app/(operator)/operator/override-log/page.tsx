@@ -22,6 +22,7 @@ import {
 import { blockSubjectLabel } from "@/features/operator/block-targets";
 import { operatorLabel } from "@/features/operator/inbox";
 import { useOperatorSession } from "@/features/operator/session-context";
+import { useScrollFade } from "@/features/operator/scroll-fade";
 import { useOperatorDirectory, usePenaltyNames, useProviderNames } from "@/features/operator/use-operator-lookups";
 import type { OverrideLogEntry } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
@@ -73,6 +74,7 @@ const KINDS = new Set(ACTIVITY_KINDS.map((kind) => kind.id));
 function ActivityScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const chipRow = useScrollFade<HTMLDivElement>();
   const kindParam = searchParams.get("kind") as ActivityKind | null;
   const kind: ActivityKind = kindParam && KINDS.has(kindParam) ? kindParam : "all";
   const q = searchParams.get("q") ?? "";
@@ -171,7 +173,7 @@ function ActivityScreen() {
       <div className="flex w-full flex-col gap-2.5 tablet:flex-row tablet:items-center tablet:justify-between">
         {/* One row that scrolls sideways on a phone, never three. "All" means no filter at all, so it is lit only
             when neither a kind nor "By me" is on, and pressing it clears both. */}
-        <div className="-mx-4 flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto px-4 [scrollbar-width:none] tablet:mx-0 tablet:px-0 [&::-webkit-scrollbar]:hidden">
+        <div ref={chipRow} className="scroll-fade-x -mx-4 flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto px-4 [scrollbar-width:none] tablet:mx-0 tablet:px-0 [&::-webkit-scrollbar]:hidden">
           <div role="radiogroup" aria-label="Kind" className="flex flex-nowrap gap-2">
             {ACTIVITY_KINDS.map((option) => {
               const on = option.id === "all" ? kind === "all" && !mine : kind === option.id;
