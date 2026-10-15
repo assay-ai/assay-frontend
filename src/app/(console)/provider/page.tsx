@@ -14,21 +14,19 @@ import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitle
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { FirstRunCard } from "@/features/provider-home/first-run-card";
 import { callPrice } from "@/features/provider-home/format";
-import { needsActionItems } from "@/features/provider-home/needs-action";
 import { NeedsActionStrip } from "@/features/provider-home/needs-action-strip";
+import { useProviderNeedsAction } from "@/features/provider-home/use-needs-action";
 import {
   useListingProgress,
   useProviderBindings,
   useProviderRegistration,
 } from "@/features/provider-home/use-listing-progress";
-import { usePenaltySummary } from "@/features/provider-penalties/use-penalty-summary";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import { earningsSplit } from "@/features/provider-earnings/earned-tile";
 import type { BindingStatus, Money, ProviderEarnings, ToolBindingSummary } from "@/interfaces";
 import { routes } from "@/libs/routes";
 import { getProviderEarnings } from "@/services/provider-reports.service";
-import { listSlaWindows } from "@/services/provider-sla-windows.service";
 import { getToolBinding } from "@/services/provider-tool-bindings.service";
 import { formatMoney, toDecimal } from "@/utils/money";
 
@@ -78,18 +76,10 @@ export default function ProviderHomePage() {
   const bindings = useProviderBindings();
   const progress = useListingProgress();
   const stake = useStakeStatus();
-  const penalties = usePenaltySummary();
   const names = useProviderToolNames();
 
   const items = React.useMemo(() => bindings.data?.items ?? [], [bindings.data]);
   const live = items.filter((binding) => binding.status === "ACTIVE");
-
-  const openWindows = useQuery({
-    queryKey: ["provider", "sla-windows", "open"],
-    queryFn: () => listSlaWindows({ status: "OPEN", limit: 50 }),
-    enabled: live.length > 0,
-    retry: false,
-  });
 
   const earningsMonth = useQuery({
     queryKey: ["provider", "earnings", "tool", month.from, month.to],
@@ -123,13 +113,7 @@ export default function ProviderHomePage() {
   const record = registration.data?.registration;
   const title = record?.legalName ?? "Welcome";
 
-  const attention = needsActionItems({
-    penalties: penalties.needsAction,
-    openWindows: openWindows.data?.items ?? [],
-    bindings: items,
-    stake: { enough: items.some((b) => b.pricingMode !== "FREE") ? stake.enough : true, shortfall: stake.shortfall },
-    label: names.bindingLabel,
-  });
+  const { attention, loading: attentionLoading } = useProviderNeedsAction();
 
   const steps: SetupStep[] = progress.steps.map((step) => ({
     id: step.id,
@@ -195,7 +179,7 @@ export default function ProviderHomePage() {
           />
         )
       ) : (
-        <NeedsActionStrip items={attention} onOpenStake={() => setStakeOpen(true)} loading={penalties.isLoading} />
+        <NeedsActionStrip items={attention} onOpenStake={() => setStakeOpen(true)} loading={attentionLoading} />
       )}
 
       {showFirstRun && firstLive ? (

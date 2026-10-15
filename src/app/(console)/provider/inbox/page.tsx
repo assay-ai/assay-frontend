@@ -1,9 +1,14 @@
 "use client";
 
+import * as React from "react";
+
 import { PageState } from "@/components/patterns/page-state";
-import { needsActionItems } from "@/features/provider-home/needs-action";
 import { NeedsActionStrip } from "@/features/provider-home/needs-action-strip";
+import { useProviderNeedsAction } from "@/features/provider-home/use-needs-action";
 import { useProviderInbox } from "@/features/provider-home/use-provider-inbox";
+import { StakeSheet } from "@/features/provider-stake/stake-sheet";
+import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
+import { formatMoney } from "@/utils/money";
 
 import { InboxItem } from "./_components/inbox-item";
 
@@ -23,13 +28,11 @@ import { InboxItem } from "./_components/inbox-item";
 export default function ProviderInboxPage() {
   const { notifications, items, penalties, count } = useProviderInbox();
 
-  const urgent = needsActionItems({
-    penalties: penalties.needsAction,
-    openWindows: [],
-    bindings: [],
-    stake: { enough: null, shortfall: null },
-    label: () => "",
-  });
+  // The same "Needs action" list as Home: penalties, windows near the promise,
+  // a short stake, a suspended tool.
+  const { attention: urgent } = useProviderNeedsAction();
+  const [stakeOpen, setStakeOpen] = React.useState(false);
+  const stake = useStakeStatus();
   const loading = notifications.isPending || penalties.isLoading;
 
   return (
@@ -45,7 +48,7 @@ export default function ProviderInboxPage() {
         </p>
       </header>
 
-      {urgent.length > 0 ? <NeedsActionStrip items={urgent} onOpenStake={() => undefined} /> : null}
+      {urgent.length > 0 ? <NeedsActionStrip items={urgent} onOpenStake={() => setStakeOpen(true)} /> : null}
 
       <section className="flex w-full flex-col gap-3" aria-labelledby="inbox-notices">
         {items.length > 0 ? (
@@ -71,6 +74,18 @@ export default function ProviderInboxPage() {
           />
         ) : null}
       </section>
+
+      <StakeSheet
+        open={stakeOpen}
+        onOpenChange={setStakeOpen}
+        amount={stake.shortfall}
+        reason={
+          stake.required
+            ? `Your paid tools need ${formatMoney(stake.required, { decimals: 2 })} of stake in total.`
+            : "Stake backs the failure rate you promise on paid tools."
+        }
+        onStaked={() => void stake.refetch()}
+      />
     </>
   );
 }
