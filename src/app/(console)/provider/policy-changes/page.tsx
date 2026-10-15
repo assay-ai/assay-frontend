@@ -4,13 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import { FileCog } from "lucide-react";
 import * as React from "react";
 
-import { EmptyState } from "@/components/ui/empty-state";
+import { PageState } from "@/components/patterns/page-state";
+import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { PolicyChangeCard } from "@/features/provider-policy-changes/policy-change-card";
 import type { ToolBindingSummary } from "@/interfaces";
 import type { PolicyChange } from "@/interfaces/provider-policy-changes";
 import { listToolBindings } from "@/services";
 import { listPolicyChanges } from "@/services/provider-policy-changes.service";
-import { labelForEndpoint, shortBindingId } from "@/utils/provider-label";
+import { labelForEndpoint } from "@/utils/provider-label";
 
 /**
  * Policy change centre — route
@@ -50,12 +51,18 @@ import { labelForEndpoint, shortBindingId } from "@/utils/provider-label";
  * only fires if the two reads race or disagree.
  */
 
-function toolLabelFor(change: PolicyChange, endpointByBindingId: Map<string, string>): string {
+function toolLabelFor(
+  change: PolicyChange,
+  endpointByBindingId: Map<string, string>,
+  toolName: (toolId: string) => string | null,
+): string {
+  const named = toolName(change.toolId);
+  if (named) return named;
   for (const binding of change.bindings) {
     const endpoint = endpointByBindingId.get(binding.bindingId);
     if (endpoint) return labelForEndpoint(endpoint);
   }
-  return `tool ${shortBindingId(change.toolId)}`;
+  return "One of your tools";
 }
 
 export default function PolicyChangesPage() {
@@ -73,6 +80,7 @@ export default function PolicyChangesPage() {
     queryFn: () => listToolBindings({ limit: 50 }),
   });
 
+  const names = useProviderToolNames();
   const changes: PolicyChange[] = changesQuery.data ?? [];
   const bindings: ToolBindingSummary[] = bindingsQuery.data?.items ?? [];
   const endpointByBindingId = React.useMemo(() => {
@@ -83,28 +91,26 @@ export default function PolicyChangesPage() {
 
   const subtitle =
     changes.length === 0
-      ? "No pending version affects your bindings right now"
-      : `${changes.length} pending version${changes.length === 1 ? "" : "s"} affecting your bindings`;
+      ? "Nothing pending affects your tools right now"
+      : `${changes.length} pending change${changes.length === 1 ? "" : "s"} to the checks on your tools`;
 
   return (
     <>
       <header className="flex w-full flex-col gap-0.5">
-        <h1 className="text-heading-md text-01">Policy changes</h1>
-        <p className="font-mono text-mono-12 text-03">{subtitle}</p>
+        <h1 className="text-heading-sm text-01 tablet:text-heading-md">Policy changes</h1>
+        <p className="text-body-13 text-03">{subtitle}</p>
       </header>
 
       {changesQuery.isPending ? (
-        <p className="text-body-13 text-03">Loading policy changes…</p>
+        <PageState kind="loading" rows={3} label="Loading policy changes" />
       ) : changesQuery.isError ? (
-        <p className="text-body-13 text-03">
-          Policy changes could not be loaded. Reload the page to try again.
-        </p>
+        <PageState kind="error" description="Policy changes could not be loaded." onRetry={() => void changesQuery.refetch()} />
       ) : changes.length === 0 ? (
-        <EmptyState
+        <PageState
+          kind="empty"
           icon={<FileCog width={22} height={22} aria-hidden="true" />}
-          title="No pending policy changes"
-          description="None of your bindings have a new verification policy version pending right now. When an engineer proposes a new version for a tool you're bound to, it appears here with the structural diff against the version currently in force and every one of your bindings it would touch — you will see it before it takes effect, not after."
-          className="max-w-[560px]"
+          title="No pending changes"
+          description="When Assay changes the checks on a tool you list, the change shows here, with what differs and the tools it touches, before it takes effect."
         />
       ) : (
         <div className="flex w-full flex-col gap-4">
@@ -112,7 +118,7 @@ export default function PolicyChangesPage() {
             <PolicyChangeCard
               key={change.toolId}
               change={change}
-              toolLabel={toolLabelFor(change, endpointByBindingId)}
+              toolLabel={toolLabelFor(change, endpointByBindingId, names.toolName)}
             />
           ))}
         </div>

@@ -2,11 +2,13 @@
 
 import { DisplayAssetSelect } from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
-import { Copy, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import { useMemo } from "react";
 
 import { Banner } from "@/components/ui/banner";
-import { Button } from "@/components/ui/button";
+import { PageState } from "@/components/patterns/page-state";
+import { useProviderToolNames } from "@/features/provider-binding/tool-name";
+import { plainError } from "@/libs/plain-language";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Panel,
@@ -30,7 +32,6 @@ import { requirementChain } from "@/features/provider-stake/chain-stake";
 import { getProviderStake } from "@/services/provider-stake.service";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { formatMoney } from "@/utils/money";
-import { labelForEndpoint } from "@/utils/provider-label";
 
 /**
  * Binding portfolio.
@@ -92,11 +93,9 @@ const DASH = "—";
 
 interface PortfolioRow {
   id: string;
-  binding: string;
   tool: string;
   mode: string;
   price: string;
-  quality: string;
   share: string;
   stake: string;
   net: string;
@@ -143,6 +142,7 @@ function netCell(
 }
 
 export default function ProviderPortfolioPage() {
+  const names = useProviderToolNames();
   const window30d = useMemo(() => last30Days(new Date()), []);
 
   /*
@@ -187,12 +187,9 @@ export default function ProviderPortfolioPage() {
     const group = groupsByTool.get(binding.toolId);
     return {
       id: binding.id,
-      binding: shortId(binding.id),
-      tool: labelForEndpoint(binding.endpoint),
-      mode: binding.pricingMode,
+      tool: names.bindingLabel(binding),
+      mode: binding.pricingMode === "FREE" ? "Free" : binding.pricingMode === "FREEMIUM" ? "Free + paid" : "Paid",
       price: priceCell(binding),
-      // See the file docstring: no per-binding quality exists to read.
-      quality: DASH,
       share: shareCell(group, totalCalls),
       stake: stakeCell(binding, stake.data?.requirement, chainKnown),
       net: netCell(group, earnings.data?.asset),
@@ -200,25 +197,9 @@ export default function ProviderPortfolioPage() {
   });
 
   const columns: TableColumn<PortfolioRow>[] = [
-    {
-      key: "binding",
-      header: "Binding",
-      mono: true,
-      // The frame sets the identity cell at weight 600 while every other cell
-      // is normal; Table has no per-column weight, so it rides on the value.
-      cell: (row) => <span className="font-semibold">{row.binding}</span>,
-    },
-    { key: "tool", header: "Tool", width: 180, align: "end", mono: true, cell: (r) => r.tool },
-    { key: "mode", header: "Mode", width: 110, align: "end", mono: true, cell: (r) => r.mode },
+    { key: "tool", header: "Tool", cell: (r) => <span className="font-semibold">{r.tool}</span> },
+    { key: "mode", header: "How agents pay", width: 130, align: "end", cell: (r) => r.mode },
     { key: "price", header: "Price", width: 110, align: "end", mono: true, cell: (r) => r.price },
-    {
-      key: "quality",
-      header: "Quality 30d",
-      width: 130,
-      align: "end",
-      mono: true,
-      cell: (r) => r.quality,
-    },
     { key: "share", header: "Share", width: 100, align: "end", mono: true, cell: (r) => r.share },
     { key: "stake", header: "Stake", width: 110, align: "end", mono: true, cell: (r) => r.stake },
     { key: "net", header: "Net 30d", width: 130, align: "end", mono: true, cell: (r) => r.net },
@@ -227,12 +208,11 @@ export default function ProviderPortfolioPage() {
   const total = {
     label: "Total",
     values: {
-      tool: `${formatCount(items.length)} binding${items.length === 1 ? "" : "s"}`,
+      tool: `${formatCount(items.length)} tool${items.length === 1 ? "" : "s"}`,
       // The frame writes an em-dash in every total that does not add up — a
       // pricing mode, a price, an average rate and a share are four of them.
       mode: DASH,
       price: DASH,
-      quality: DASH,
       share: DASH,
       // `requirementTotal` is the `max` over the per-binding minima, not their
       // sum. Printing a sum here would overstate the floor on every provider
@@ -263,33 +243,9 @@ export default function ProviderPortfolioPage() {
       <header className="flex w-full items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">Portfolio</h1>
-          {/*
-            DELIBERATE, RULED EXCEPTION to the verbatim-copy rule — the first
-            one in this project. The design writes this subtitle
-            as "Phase 2 · clone a working binding rather than authoring the
-            next one from scratch"; the `Phase 2 · ` prefix is dropped here on
-            purpose. It is a roadmap note addressed to whoever plans the
-            product, not a sentence addressed to a provider, and shipping it
-            would put internal scheduling on a screen a customer reads. The
-            rest of the string is the design's, word for word.
-
-            This is a decision, not a transcription slip. Do not restore the
-            prefix to "match the design".
-          */}
-          <p className="font-mono text-mono-12 text-03">
-            clone a working binding rather than authoring the next one from scratch
+          <p className="text-body-13 text-03">
+            Every tool you list, with its price, share of your calls, stake and earnings over 30 days.
           </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2.5">
-          {/*
-            Drawn enabled on the frame, rendered disabled here. Cloning needs a
-            target tool, and there is no tool-catalogue endpoint to pick one
-            from — nor any clone route. A control that silently does nothing is
-            worse than one that says it cannot.
-          */}
-          <Button disabled icon={<Copy />}>
-            Clone binding
-          </Button>
         </div>
       </header>
 
@@ -299,23 +255,21 @@ export default function ProviderPortfolioPage() {
         <Banner
           tone="danger"
           title="The portfolio could not be loaded"
-          description={`${error.code} · ${error.message}`}
+          description={plainError(error.code)}
         />
       ) : null}
 
       {loading ? (
-        <p role="status" aria-live="polite" className="text-body-md text-02">
-          Loading your bindings…
-        </p>
+        <PageState kind="loading" rows={4} label="Loading your tools" />
       ) : null}
 
       {!loading && !bindings.error ? (
         <Panel>
           <PanelHeader>
             <PanelTitles>
-              <PanelTitle>All bindings</PanelTitle>
+              <PanelTitle>All tools</PanelTitle>
               <PanelDescription>
-                exposure is per provider, not per binding — adding one changes the whole picture
+                your stake covers all your tools together
               </PanelDescription>
             </PanelTitles>
           </PanelHeader>
@@ -332,8 +286,8 @@ export default function ProviderPortfolioPage() {
               <EmptyState
                 className="m-2.5"
                 icon={null}
-                title="No bindings yet"
-                description="Publish a binding and it appears here with its price, share and net."
+                title="No tools yet"
+                description="Publish a tool and it appears here with its price, share and earnings."
               />
             )}
           </PanelBody>
@@ -344,8 +298,8 @@ export default function ProviderPortfolioPage() {
       <div className="flex w-full items-start gap-2.5 rounded-lg border border-01 bg-02 p-[15px]">
         <Info width={15} height={15} strokeWidth={1.5} aria-hidden="true" className="mt-0.5 shrink-0 text-03" />
         <p className="min-w-0 flex-1 text-body-13 text-02">
-          Each binding has its own quality record. A new binding starts on the exploration floor and
-          is sampled at 100% until it has a record of its own.
+          Each tool builds its own quality record. A new tool gets a fair share of calls and every call is
+          checked until it has a record of its own.
         </p>
       </div>
     </>

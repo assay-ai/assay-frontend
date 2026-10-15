@@ -42,6 +42,7 @@ export const STATUS_CHIPS = {
   disputed: { label: "Disputed", tone: "primary" },
   upheld: { label: "Penalty upheld", tone: "danger" },
   cancelled: { label: "Cancelled", tone: "neutral" },
+  expired: { label: "Expired", tone: "neutral" },
   executed: { label: "Executed", tone: "danger" },
   closed: { label: "Closed", tone: "neutral" },
   blocked: { label: "Blocked", tone: "danger" },

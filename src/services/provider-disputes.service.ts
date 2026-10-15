@@ -2,7 +2,6 @@ import type { CursorPage } from "@/interfaces/api";
 import type {
   CreateDisputeBody,
   Dispute,
-  FileSlashDisputeBody,
   ListDisputesQuery,
   SlashProposalCase,
   SlashProposalTimeline,
@@ -51,17 +50,3 @@ export function getSlashProposalTimeline(proposalId: string): Promise<SlashPropo
   );
 }
 
-/**
- * `POST /providers/me/slash-proposals/:id/dispute` — the dispute form's submit.
- * Returns the case again, with `proposal.disputeId` now set; navigate to
- * `/provider/disputes/{disputeId}` from that, not from a separate response.
- */
-export function fileSlashDispute(
-  proposalId: string,
-  body: FileSlashDisputeBody
-): Promise<SlashProposalCase> {
-  return api.post<SlashProposalCase>(
-    `/providers/me/slash-proposals/${encodeURIComponent(proposalId)}/dispute`,
-    body
-  );
-}
