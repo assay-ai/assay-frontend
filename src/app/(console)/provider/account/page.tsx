@@ -132,8 +132,19 @@ interface SeatRow {
 
 interface TokenRow {
   id: string;
+  name: string;
   token: string;
   lastUsed: string;
+}
+
+/** "••••8f3a": enough to tell two keys apart, never the key's raw prefix. */
+function maskedKey(prefix: string): string {
+  return `••••${prefix.slice(-4)}`;
+}
+
+/** Terms versions are dated ("2026-06-15"); say them as a local date like every other date here. */
+function versionLabel(version: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(version) ? `The ${dateOnly(`${version}T12:00:00Z`)} version` : `Version ${version}`;
 }
 
 interface TermRow {
@@ -175,10 +186,14 @@ const SEAT_COLUMNS: TableColumn<SeatRow>[] = [
 const TOKEN_COLUMNS: TableColumn<TokenRow>[] = [
   {
     key: "token",
-    header: "Token",
-    mono: true,
+    header: "Key",
     noTruncate: true,
-    cell: (row) => <span className="whitespace-nowrap font-semibold">{row.token}</span>,
+    cell: (row) => (
+      <span className="flex flex-col">
+        <span className="whitespace-nowrap font-semibold">{row.name}</span>
+        <span className="font-mono text-mono-xs text-03">{row.token}</span>
+      </span>
+    ),
   },
   {
     key: "lastUsed",
@@ -289,7 +304,8 @@ export default function ProviderAccountPage() {
 
   const tokenRows: TokenRow[] = (credentials.data ?? []).map((credential) => ({
     id: credential.id,
-    token: `${credential.prefix}…`,
+    name: credential.name,
+    token: maskedKey(credential.prefix),
     // A revoked credential is kept, not deleted, so its row stays readable —
     // and the cell says which it is rather than showing a stale "last used".
     lastUsed: credential.revokedAt
@@ -303,7 +319,7 @@ export default function ProviderAccountPage() {
     id,
     document,
     accepted: dateOnly(record!.acceptedTerms.acceptedAt),
-    inForce: accepted === inForce ? "Up to date" : `Version ${inForce} is now in force`,
+    inForce: accepted === inForce ? "Up to date" : `${versionLabel(inForce)} is now in force`,
   });
   const termRows: TermRow[] =
     record && published
@@ -334,7 +350,7 @@ export default function ProviderAccountPage() {
       <header className="flex w-full items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-sm text-01 tablet:text-heading-md">Account</h1>
-          <p className="text-body-13 text-03">Your contacts, machine tokens and the terms you accepted.</p>
+          <p className="text-body-13 text-03">Your contacts, API keys for scripts and the terms you accepted.</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <Button
@@ -346,10 +362,10 @@ export default function ProviderAccountPage() {
             disabled={agentIds.length === 0}
             onClick={() => setCreating(true)}
           >
-            New machine token
+            New API key
           </Button>
           {agentIds.length === 0 ? (
-            <span className="text-body-xs text-03">A token belongs to an agent; there is none yet.</span>
+            <span className="text-body-xs text-03">A key belongs to an agent; there is none yet.</span>
           ) : null}
         </div>
       </header>
@@ -373,7 +389,7 @@ export default function ProviderAccountPage() {
       {createMutation.error instanceof ApiError ? (
         <Banner
           tone="danger"
-          title="The machine token could not be created"
+          title="The API key could not be created"
           description={plainError(createMutation.error.code)}
         />
       ) : null}
@@ -417,24 +433,24 @@ export default function ProviderAccountPage() {
         <Panel className="w-full shrink-0 tablet:w-[520px]">
           <PanelHeader>
             <PanelTitles>
-              <PanelTitle>Machine tokens</PanelTitle>
-              <PanelDescription>config-as-code needs a token that is not a person</PanelDescription>
+              <PanelTitle>API keys for scripts</PanelTitle>
+              <PanelDescription className="whitespace-normal">let a deploy pipeline or script manage your tools without a person signing in</PanelDescription>
             </PanelTitles>
           </PanelHeader>
           {/* Body — padding [6, 10, 10, 10]. */}
           <PanelBody className="px-2.5 pb-2.5 pt-1.5">
             {credentials.isPending && agentIds.length > 0 ? (
-              <PageState kind="loading" rows={2} bare label="Loading tokens" />
+              <PageState kind="loading" rows={2} bare label="Loading API keys" />
             ) : tokenRows.length > 0 ? (
-              <Table columns={TOKEN_COLUMNS} rows={tokenRows} caption="Machine tokens" />
+              <Table columns={TOKEN_COLUMNS} rows={tokenRows} caption="API keys for scripts" />
             ) : (
               /* OUR copy — the frame draws two rows and no empty state. This is
                  the state the seeded provider org is actually in. */
               <EmptyState
                 className="m-2.5"
                 icon={<KeyRound width={22} height={22} />}
-                title="No machine token yet"
-                description="Nothing but a signed-in person can change this account. Create a token when a deploy pipeline needs to."
+                title="No API key yet"
+                description="Nothing but a signed-in person can change this account. Create a key when a deploy pipeline or script needs to."
               />
             )}
           </PanelBody>
@@ -482,15 +498,15 @@ export default function ProviderAccountPage() {
       <Sheet open={creating} onOpenChange={setCreating}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>New machine token</SheetTitle>
+            <SheetTitle>New API key</SheetTitle>
             <SheetDescription>
-              The secret is returned exactly once. Give it a name you will recognise later.
+              The key is shown exactly once. Give it a name you will recognise later.
             </SheetDescription>
           </SheetHeader>
           <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
             <Field
               label="Name"
-              id="machine-token-name"
+              id="api-key-name"
               placeholder="CI deploy"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -502,7 +518,7 @@ export default function ProviderAccountPage() {
               disabled={!name.trim()}
               onClick={() => createMutation.mutate(name.trim())}
             >
-              Create token
+              Create key
             </Button>
           </div>
         </SheetContent>
@@ -512,20 +528,20 @@ export default function ProviderAccountPage() {
       <Sheet open={created !== null} onOpenChange={(open) => !open && setCreated(null)}>
         <SheetContent className="tablet:max-w-[760px]">
           <SheetHeader>
-            <SheetTitle>Your new machine token</SheetTitle>
+            <SheetTitle>Your new API key</SheetTitle>
             <SheetDescription>
-              {created ? `${created.name} · ${created.prefix}…` : null}
+              {created ? `${created.name} · ${maskedKey(created.prefix)}` : null}
             </SheetDescription>
           </SheetHeader>
           <div className="flex w-full flex-col gap-5 px-[18px] pb-8 pt-5">
-            {created ? <CodeBlock title={`${created.prefix}…`} code={created.token} /> : null}
+            {created ? <CodeBlock title={created.name} code={created.token} /> : null}
             <div className="flex w-full items-start gap-2.5 rounded-lg border border-warning-20 bg-warning-10 p-3.5">
               <TriangleAlert
                 aria-hidden="true"
                 className="mt-0.5 size-[15px] shrink-0 text-warning-600"
               />
               <p className="text-body-13 text-warning-700">
-                This token is shown once. We cannot show it again — create a new one if you lose it.
+                This key is shown once. We cannot show it again; create a new one if you lose it.
               </p>
             </div>
             <div className="flex w-full justify-end">
