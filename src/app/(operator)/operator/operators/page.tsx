@@ -250,7 +250,7 @@ function TeamScreen() {
                     {mayEditRow(me, row) ? (
                       <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" aria-label={`More for ${operatorLabel(row)}`}>
+                          <Button variant="ghost" size="sm" aria-label={`More for ${operatorLabel(row)}`} className="touch-target">
                             <MoreHorizontal aria-hidden="true" />
                           </Button>
                         </DropdownMenuTrigger>
