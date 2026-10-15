@@ -216,3 +216,35 @@ export function parseAmountInput(
   }
   return { value, atomic: toAtomic(value, decimals), error: null };
 }
+
+/**
+ * Parts of one total, each cut to `places` decimals for display, so that the
+ * parts shown add up to the total shown — largest remainder: every part is
+ * truncated (as `formatMoney` does), and the cents the truncation lost from
+ * the total go one each to the parts that lost the most.
+ *
+ *   $28.47 at 60 / 30 / 10 → 17.082, 8.541, 2.847 → $17.08 + $8.54 + $2.85 = $28.47
+ *
+ * The parts share one asset and scale; amounts must be whole minor units.
+ * Returned in the input order. Display only: what moves on chain is the
+ * exact figure, never this one.
+ */
+export function splitForDisplay(parts: readonly Money[], places: number = 2): Money[] {
+  if (parts.length === 0) return [];
+  const decimals = parts[0]!.decimals;
+  if (parts.some((part) => part.decimals !== decimals || !/^\d+$/.test(part.amount)) || places >= decimals) return [...parts];
+  const unit = BigInt(10) ** BigInt(decimals - places);
+  const amounts = parts.map((part) => BigInt(part.amount));
+  const total = amounts.reduce((sum, value) => sum + value, BigInt(0)) / unit;
+  const floors = amounts.map((value) => value / unit);
+  let left = total - floors.reduce((sum, value) => sum + value, BigInt(0));
+  const order = amounts
+    .map((value, index) => ({ index, remainder: value % unit }))
+    .sort((a, b) => (a.remainder === b.remainder ? a.index - b.index : a.remainder > b.remainder ? -1 : 1));
+  for (const { index } of order) {
+    if (left <= BigInt(0)) break;
+    floors[index] = floors[index]! + BigInt(1);
+    left -= BigInt(1);
+  }
+  return parts.map((part, index) => ({ ...part, amount: (floors[index]! * unit).toString() }));
+}
