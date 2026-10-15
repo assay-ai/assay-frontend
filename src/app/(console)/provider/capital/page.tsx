@@ -41,7 +41,10 @@ import {
 import { runStakeIntent, type StakeExpectation } from "@/features/provider-stake/run-stake-intent";
 import { useChains } from "@/hooks/useChains";
 import type { Chain } from "@/interfaces/chain";
-import { readableDerivation } from "@/features/provider-stake/derivation";
+import {
+  missingRequirementNote,
+  readableDerivation,
+} from "@/features/provider-stake/derivation";
 import { isUserRejection, useSigner, type UseSignerResult } from "@/hooks/useSigner";
 import type {
   ProviderStake,
@@ -56,7 +59,7 @@ import { listSlaWindows } from "@/services/provider-sla-windows.service";
 import {
   createOpenStakeIntent,
   createStakeDepositIntent,
-  getProviderStake,
+  revalidateProviderStake,
 } from "@/services/provider-stake.service";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { isSolanaTransaction } from "@/interfaces/chain-transaction";
@@ -251,8 +254,8 @@ function requirementRows(
       };
     }
 
-    // A PAID/FREEMIUM binding missing from `requirement[]` is not active. No
-    // requirement is computed for it, so there is no figure — and $0.00 here
+    // A PAID/FREEMIUM binding missing from `requirement[]` is not live (or the
+    // read predates it going live). No requirement is computed for it, so there is no figure — and $0.00 here
     // would read as "you need no stake", which is the opposite of the truth
     // the moment it is resumed.
     return {
@@ -260,7 +263,7 @@ function requirementRows(
       binding: label,
       mode: binding.pricingMode,
       price: money(binding.price, 4),
-      derivation: "not active — no requirement is computed",
+      derivation: missingRequirementNote(binding.status),
       required: DASH,
     };
   });
@@ -297,7 +300,10 @@ function authorityAddress(stakeAuthority: string | null | undefined): string {
 export default function ProviderCapitalPage() {
   const stake = useQuery({
     queryKey: ["provider", "stake"],
-    queryFn: getProviderStake,
+    // Revalidated past the browser's HTTP cache: provider GETs carry an hour
+    // of stale-while-revalidate, and a body from before a binding was resumed
+    // left an ACTIVE binding out of the requirement table (BUG-R16-V3-01).
+    queryFn: revalidateProviderStake,
   });
 
   /* Shared with the `(console)` layout's rail — same key, so no second trip. */
