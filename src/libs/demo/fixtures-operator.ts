@@ -2,6 +2,7 @@ import type { CursorPage } from "@/interfaces/api";
 import type {
   AccountBlock,
   ArbiterDispute,
+  ArbiterSupersededRecord,
   OperatorApproval,
   OperatorCaseBrief,
   OperatorCaseListRow,
@@ -11,6 +12,8 @@ import type {
   OverrideLogEntry,
   PlatformHealth,
 } from "@/interfaces/operator";
+import { encodeCall } from "@/libs/chains/evm/calldata-fixtures";
+import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
 import { readOperatorSession } from "@/libs/operator-session";
 
 import type { DemoFixture } from "./fixtures";
@@ -124,7 +127,9 @@ const VERDANT = "c9f35a82-6014-4d7b-8e93-2a1c7f06b5d8";
 const LATTICE = "48e1b60c-d573-4a92-bf08-6c3d95e12a7b";
 
 const ARBITER = "0x5B38Da6a701c568545dCfcB03FcB875f56beddC4";
-const STAKE_CONTRACT = "0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c";
+/* The pinned contracts: the signing guard refuses a call to anything else, demo or not. */
+const STAKE_CONTRACT = ROBINHOOD_TESTNET_STAKE.stakeContract;
+const CONFIG_CONTRACT = ROBINHOOD_TESTNET_STAKE.configContract;
 
 // ── The team ────────────────────────────────────────────────────────────────
 
@@ -424,6 +429,10 @@ function approve(id: string) {
     remember({ id: nextId("log"), code: "A-10", label: "Lift account block", action: "account.unblock", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "account_block", targetId: blockId, reasonCode, reason: note, ticketRef: null });
   } else if (approval.action === "slash.suspend") {
     suspend(String(approval.payload.proposalId ?? ""), reasonCode, note, approval.requestedBy, self.subject);
+  } else if (approval.action === "arbiter.block") {
+    // The API answers an approved A-11 with the arbiter's unsigned setBlocked; nothing is blocked yet.
+    result = setBlockedCall(String(approval.payload.account ?? ""));
+    remember({ id: nextId("log"), code: "A-11", label: "Arbiter on-chain block", action: "arbiter.block", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "chain_blocklist", targetId: String(approval.payload.account ?? ""), reasonCode: bodyText(approval.payload, "reasonCode"), reason: bodyText(approval.payload, "note"), ticketRef: null });
   } else if (approval.action === "slash.compensated") {
     const caseId = String(approval.payload.proposalId ?? "");
     memory.compensated.set(caseId, { by: approval.requestedBy, at: nowIso() });
@@ -902,6 +911,10 @@ function caseList(query: Record<string, unknown>): CursorPage<OperatorCaseListRo
 
 // ── Approvals ───────────────────────────────────────────────────────────────
 
+/** The wallets of the two demo on-chain block requests. */
+const CHAIN_BLOCK_PENDING = "0x8d4f2b6a1c9e3f70b5a2d8c4e1f6a3b9c7d0e5f2";
+const CHAIN_BLOCK_APPROVED = "0x3e7a9c1d5b2f84a06c3d9e1f7b4a2c8e5d0b6f19";
+
 const APPROVALS: OperatorApproval[] = [
   {
     id: "apr-unblock-1",
@@ -994,6 +1007,38 @@ const APPROVALS: OperatorApproval[] = [
     createdAt: minutesAgo(3 * HOUR),
     decidedAt: null,
     expiresAt: inMinutes(21 * HOUR),
+  },
+  {
+    // A-11 asked by the other Lead: the Lead preset approves it, and the approval answers with the unsigned call.
+    id: "apr-chainblock-1",
+    action: "arbiter.block",
+    code: "A-11",
+    target: `chain_blocklist:${DEMO_CHAIN_ID}:${CHAIN_BLOCK_PENDING}`,
+    payload: { chainId: DEMO_CHAIN_ID, account: CHAIN_BLOCK_PENDING, reasonCode: "FRAUD", note: "Same wallet drained three buyer escrows through a cloned tool listing." },
+    status: "PENDING",
+    requestedBy: "riley@",
+    requestedById: "op-riley",
+    approvedBy: null,
+    rejectedBy: null,
+    createdAt: minutesAgo(40),
+    decidedAt: null,
+    expiresAt: inMinutes(23 * HOUR + 20),
+  },
+  {
+    // Approved earlier, not signed yet: Arbiter (and Home's "To sign") offers its call.
+    id: "apr-chainblock-0",
+    action: "arbiter.block",
+    code: "A-11",
+    target: `chain_blocklist:${DEMO_CHAIN_ID}:${CHAIN_BLOCK_APPROVED}`,
+    payload: { chainId: DEMO_CHAIN_ID, account: CHAIN_BLOCK_APPROVED, reasonCode: "SANCTIONS", note: "Listed address; blocked off-chain this morning." },
+    status: "APPROVED",
+    requestedBy: "riley@",
+    requestedById: "op-riley",
+    approvedBy: "jordan@",
+    rejectedBy: null,
+    createdAt: minutesAgo(5 * HOUR),
+    decidedAt: minutesAgo(3 * HOUR),
+    expiresAt: inMinutes(19 * HOUR),
   },
   {
     id: "apr-old-1",
@@ -1148,17 +1193,73 @@ function health(): PlatformHealth {
   };
 }
 
-function contractCall(functionName: string, requestIds: string[]) {
+/*
+  Real calldata for the pinned contracts, so the signing guard (which decodes
+  every call and refuses anything else) passes in the demo too. The guard is
+  never loosened for the demo: the fixture is made right instead.
+*/
+function contractCall(functionName: "upholdSlashBatch" | "cancelSlashBatch", requestIds: string[]) {
+  const ids = requestIds.map((id) => id.toLowerCase() as `0x${string}`);
   return {
     chainId: DEMO_CHAIN_ID,
     to: STAKE_CONTRACT,
-    data: `0x${"5f2a9c1e".repeat(9)}${requestIds.map((id) => id.slice(2)).join("")}`,
+    data: encodeCall(`${functionName}(bytes32[])`, [ids]),
     value: "0",
     signer: ARBITER,
     signerRole: "ARBITER" as const,
     functionName,
-    requestIds,
+    requestIds: ids,
   };
+}
+
+/** `cancelSlash(requestId)`, the calldata of a penalty's cancel. */
+function cancelSlashData(requestId: string): string {
+  return encodeCall("cancelSlash(bytes32)", [requestId.toLowerCase()]);
+}
+
+/** The arbiter's unsigned `setBlocked(account, true)` on the config contract. */
+function setBlockedCall(account: string) {
+  return {
+    chainId: DEMO_CHAIN_ID,
+    to: CONFIG_CONTRACT,
+    data: encodeCall("setBlocked(address,bool)", [account.toLowerCase(), true]),
+    value: "0",
+    signer: ARBITER,
+    signerRole: "ARBITER" as const,
+    functionName: "setBlocked",
+    requestIds: [] as string[],
+  };
+}
+
+/** The ids a write asked for, as `0x` + 64 hex. */
+function bodyIds(data: Record<string, unknown> | undefined, key: string): string[] {
+  const value = data?.[key];
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string" && /^0x[0-9a-fA-F]{64}$/.test(id)) : [];
+}
+
+// ── Superseded records (review R2-6) ────────────────────────────────────────
+
+/**
+ * One record of an earlier proposal of Helios' case that landed on chain
+ * late: the same calls as the case's current penalty, executable by anyone
+ * from `executableAt`, so the arbiter cancels it first.
+ */
+function supersededRecords(): ArbiterSupersededRecord[] {
+  const helios = CASES[0];
+  return [
+    {
+      requestId: `0x${"e5".repeat(32)}`,
+      proposalId: helios.id,
+      providerId: helios.providerId,
+      chainId: DEMO_CHAIN_ID,
+      chainStatus: "PENDING",
+      recordEpoch: 1,
+      caseEpoch: 2,
+      penaltyAmount: usd(helios.penalty).amount,
+      reservedAmount: usd(helios.penalty).amount,
+      executableAt: inMinutes(SESSION_SAFE_MINUTES + 14 * HOUR),
+    },
+  ];
 }
 
 // ── The table ───────────────────────────────────────────────────────────────
@@ -1195,12 +1296,30 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
     },
   },
   {
+    // Two-person (S-11): queued, as the API answers it.
+    method: "POST",
+    match: /^\/operator\/cases\/[^/]+\/sweep$/,
+    body: (path, _query, data) => {
+      const id = lastSegment(path, 1);
+      return queue("slash.sweep", "S-11", `slash_proposal:${id}`, { proposalId: id, body: { ...data } });
+    },
+  },
+  {
+    // Two-person (S-5): queued, as the API answers it.
+    method: "POST",
+    match: /^\/operator\/cases\/[^/]+\/compensated$/,
+    body: (path, _query, data) => {
+      const id = lastSegment(path, 1);
+      return queue("slash.compensated", "S-5", `slash_proposal:${id}`, { proposalId: id, body: { ...data } });
+    },
+  },
+  {
     method: "POST",
     match: /^\/operator\/cases\/[^/]+\/cancel-intent$/,
     body: (path) => {
       const found = CASE_BY_ID.get(lastSegment(path, 1)) ?? CASES[3];
       return {
-        transaction: contractCall("cancelSlash", [found.requestId]).data,
+        transaction: cancelSlashData(found.requestId),
         admin: ARBITER,
         signerRole: "ARBITER",
         to: STAKE_CONTRACT,
@@ -1222,7 +1341,8 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
         if (x === null || y === null) return (x === null ? 0 : 1) - (y === null ? 0 : 1);
         return y - x;
       });
-      return page(status ? rows.filter((a) => a.status === status) : rows);
+      const action = typeof query.action === "string" ? query.action : null;
+      return page(rows.filter((a) => (!status || a.status === status) && (!action || a.action === action)));
     },
   },
   {
@@ -1299,9 +1419,47 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
   {
     method: "POST",
     match: "/operator/arbiter/ruling-intent",
-    body: () => contractCall("cancelSlashBatch", DISPUTED.map((c) => c.requestId)),
+    // Built from what was chosen, as the API builds it: the guard checks the calldata against the selection.
+    body: (_path, _query, data) => {
+      const ids = bodyIds(data, "requestIds");
+      return contractCall(bodyText(data, "ruling") === "UPHOLD" ? "upholdSlashBatch" : "cancelSlashBatch", ids.length > 0 ? ids : DISPUTED.map((c) => c.requestId));
+    },
   },
-  { method: "POST", match: "/operator/arbiter/block-intent", body: () => contractCall("setBlocked", []) },
+  { method: "GET", match: "/operator/arbiter/superseded", body: () => ({ items: supersededRecords() }) },
+  {
+    method: "POST",
+    match: "/operator/arbiter/superseded/cancel-intent",
+    body: (_path, _query, data) => {
+      const id = bodyText(data, "requestId") || supersededRecords()[0]?.requestId || `0x${"e5".repeat(32)}`;
+      remember({ id: nextId("log"), code: "S-13", label: "Arbiter ruling", action: "arbiter.superseded.cancel", actorSubject: me().subject, approverSubject: null, targetType: "slash_request", targetId: id, reasonCode: bodyText(data, "reasonCode"), reason: bodyText(data, "note"), ticketRef: bodyText(data, "ticketRef") || null });
+      return contractCall("cancelSlashBatch", [id]);
+    },
+  },
+  {
+    method: "POST",
+    match: "/operator/arbiter/block-intent",
+    // Two-person (A-11): queued for a second Lead adjudicator, as the API answers it (202).
+    body: (_path, _query, data) => {
+      const chainId = bodyText(data, "chainId") || DEMO_CHAIN_ID;
+      const account = bodyText(data, "account");
+      return queue("arbiter.block", "A-11", `chain_blocklist:${chainId}:${account.toLowerCase()}`, {
+        chainId,
+        account,
+        reasonCode: bodyText(data, "reasonCode"),
+        note: bodyText(data, "note"),
+        ...(bodyText(data, "ticketRef") ? { ticketRef: bodyText(data, "ticketRef") } : {}),
+      });
+    },
+  },
+  {
+    method: "GET",
+    match: /^\/operator\/arbiter\/blocks\/[^/]+\/call$/,
+    body: (path) => {
+      const approval = approvalsNow().find((a) => a.id === lastSegment(path, 1));
+      const account = approval?.action === "arbiter.block" ? approval.payload.account : null;
+      return typeof account === "string" ? setBlockedCall(account) : undefined;
+    },
+  },
   {
     method: "POST",
     match: "/operator/operators",

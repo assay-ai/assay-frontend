@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { shortId } from "@/components/patterns/copy-chip";
 import { SignOrExport } from "@/components/patterns/sign-or-export";
+import { Button } from "@/components/ui/button";
 import type { WalletStep, WalletStepResult } from "@/components/patterns/sign-action";
 import {
   connectedSpelling,
@@ -16,12 +17,15 @@ import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { assertContractCall, formatCallArg, type ExpectedCall } from "@/libs/chains/evm/signing-guard";
 import { explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 
+import { callSummary } from "./call-summary";
+
 /**
  * One unsigned contract call the console built for the arbiter's key (a
  * ruling, an on-chain block, a cancel), as `SignOrExport`: one "Sign and
  * send" when the wallet connected here IS the signer, otherwise a file to
- * sign in the arbiter's multi-signer wallet. The calldata and signer sit
- * under Technical details.
+ * sign in the arbiter's multi-signer wallet. What it does (action, target,
+ * contract, chain, signer), decoded from the calldata, is shown next to the
+ * button; only the raw calldata sits under Technical details.
  *
  * Signing goes through the same `useSigner` → `sendSlashContractCall` path as
  * every other transaction in the app, which refuses a call from another
@@ -60,6 +64,8 @@ export function ContractCallAction({
   onSigned,
   onBusyChange,
   handoff,
+  trackIds,
+  onRetry,
 }: {
   call: SlashContractCall;
   /** The call the operator chose here; anything else is refused. */
@@ -74,6 +80,10 @@ export function ContractCallAction({
   onBusyChange?: (busy: boolean) => void;
   /** The link and message for the signer. Default: this page, and what is to be signed. */
   handoff?: { link: string; message: string };
+  /** The records it acts on, so a download or a send is remembered for them (see `SignOrExport`). */
+  trackIds?: readonly string[];
+  /** Build the call again, offered when this one was refused. */
+  onRetry?: () => void;
 }) {
   const connected = useConnectedAddresses();
   const signerState = useSigner({ chainId: call.chainId, address: connectedSpelling(connected, call.signer) });
@@ -117,9 +127,21 @@ export function ContractCallAction({
 
   if (decoded === null) {
     return (
-      <p role="alert" className="text-body-13 text-danger-600">
-        This is not the transaction you asked for, so it is not offered for signing or as a file. {checked.refusal}
-      </p>
+      <div role="alert" className="flex w-full flex-col gap-2 rounded-lg border border-danger-20 bg-danger-10 px-3.5 py-2.5">
+        <p className="text-body-13 text-danger-700">
+          The transaction the server built is not the one you asked for, so it is not offered for signing or as a file.
+          Nothing was signed and nothing changed on chain.
+        </p>
+        <details className="text-body-xs text-02">
+          <summary className="cursor-pointer select-none text-label-13 hover:text-01">Technical details</summary>
+          <p className="mt-1 break-all font-mono text-mono-xs">{checked.refusal}</p>
+        </details>
+        {onRetry ? (
+          <Button type="button" size="sm" variant="secondary" className="self-start" onClick={onRetry}>
+            Build it again
+          </Button>
+        ) : null}
+      </div>
     );
   }
 
@@ -141,6 +163,17 @@ export function ContractCallAction({
       chainId={call.chainId}
       transactions={[{ to: call.to, value: call.value, data: call.data }]}
       afterExport={afterExport}
+      summary={callSummary({
+        functionName: decoded.functionName,
+        args: decoded.args,
+        contract: decoded.contract,
+        to: decoded.to,
+        chainId: call.chainId,
+        signer: call.signer,
+        signerRole: signerRoleLabel(call.signerRole).toLowerCase(),
+      })}
+      summaryNote="Read from the transaction itself, and checked against what you chose here."
+      trackIds={trackIds}
       signerWallet={call.signerRole === "ARBITER" ? "the arbiter's multi-signer wallet" : undefined}
       handoff={handoff ?? { link: here, message: `Please sign ${what} with the ${signerRoleLabel(call.signerRole).toLowerCase()} key. The file is attached; the record is here:` }}
       details={[

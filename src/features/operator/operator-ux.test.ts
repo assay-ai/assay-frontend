@@ -81,6 +81,9 @@ describe("the Needs-you groups", () => {
   it("counts disputes into Needs you only for whoever can rule (the badge uses the same rule)", () => {
     expect(needsYouCount(1, 3, true)).toBe(4);
     expect(needsYouCount(1, 3, false)).toBe(1);
+    // Approved on-chain blocks and superseded records to cancel count for whoever rules.
+    expect(needsYouCount(1, 3, true, 2)).toBe(6);
+    expect(needsYouCount(1, 3, false, 2)).toBe(1);
   });
 
   it("names every open request 'All waiting', apart from the Needs you count", () => {
@@ -98,6 +101,8 @@ describe("the Needs-you groups", () => {
     expect(needsYouBreakdown(2, 0, true)).toBeNull();
     expect(needsYouBreakdown(0, 3, true)).toBeNull();
     expect(needsYouBreakdown(2, 2, false)).toBeNull();
+    expect(needsYouBreakdown(0, 2, true, 1)).toBe("2 to rule · 1 to sign");
+    expect(needsYouBreakdown(1, 0, true, 1)).toBe("1 to approve · 1 to sign");
     expect(needsYouBadgeText(1)).toBe("1 needs you");
     expect(needsYouBadgeText(4)).toBe("4 need you");
   });
@@ -196,11 +201,14 @@ describe("roles in plain words", () => {
   it("warns when a removal leaves a two-person action without approvers", () => {
     const team = [operator("jordan", ["ADJL"]), operator("riley", ["ADJL"]), operator("dan", ["OPS_ADMIN"])];
     expect(removalWarnings(team, "jordan")).toEqual([
-      "Only one other Adjudicator or Lead adjudicator would be left: their own requests for suspensions of upheld penalties and bulk decisions could not be approved.",
-      "Only one other Lead adjudicator or Treasury would be left: their own requests for provider compensations could not be approved.",
-      "Only one other Lead adjudicator would be left: their own requests for lifting account blocks and on-chain blocks could not be approved.",
+      "Only one other Adjudicator or Lead adjudicator would be left, so their own requests for suspensions of upheld penalties and bulk decisions could not be approved.",
+      "Only one other Lead adjudicator or Treasury would be left, so their own requests for provider compensations could not be approved.",
+      "Only one other Lead adjudicator would be left, so their own requests for lifting account blocks and on-chain blocks could not be approved.",
     ]);
-    expect(removalWarnings(team, "dan")[0]).toBe("Nobody else is Admin: new operators, raised roles and limits and admin removals could no longer be approved.");
+    // A serial comma, so "raised roles and limits" reads as one item (merge audit 2026-10-16, finding 5).
+    expect(removalWarnings(team, "dan")[0]).toBe(
+      "Nobody else holds the Admin role, so nobody could approve new operators, raised roles and limits, or admin removals.",
+    );
     expect(removalWarnings([...team, operator("iris", ["ADJL", "OPS_ADMIN"])], "jordan")).toEqual([]);
   });
 });

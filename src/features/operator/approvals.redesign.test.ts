@@ -63,10 +63,42 @@ describe("approvalTitle", () => {
   });
 });
 
+/* Operator review 2026-10-16b, P1-6: the two most dangerous requests name who they are about. */
+describe("high-risk requests name their target", () => {
+  const block = approval({
+    action: "arbiter.block",
+    code: "A-11",
+    target: "chain_blocklist:eip155:46630:0x9f3c0000000000000000000000000000000ff36c",
+    payload: { chainId: "eip155:46630", account: "0x9f3c0000000000000000000000000000000ff36c", reasonCode: "FRAUD" },
+  });
+  const removal = approval({ action: "operator.remove", code: "A-14", target: "operator:op-ava", payload: { operatorId: "op-ava", body: { reasonCode: "LEFT" } } });
+  const team: ApprovalContext = {
+    ...context,
+    operators: new Map([["op-ava", { subject: "ava@", displayName: "Ava Chen", walletAddress: "0x2e7b", roles: ["OPS_ADMIN"], authorityLimit: null }]]),
+  };
+
+  it("titles an on-chain block with the wallet and the chain by name", () => {
+    expect(approvalTitle(block, context)).toMatch(/^Block wallet 0x9[fF]3[cC]…[fF]36[cC] on chain \(Robinhood Chain testnet\)$/);
+  });
+
+  it("titles an admin removal with the person and their role", () => {
+    expect(approvalTitle(removal, team)).toBe("Remove Ava Chen (Admin)");
+  });
+
+  it("says what approving does, and that a removal can't be undone", () => {
+    expect(approvalOutcome(block, context).map((l) => l.text).join(" | ")).toMatch(/Nothing is blocked on chain until the arbiter's wallet signs it/);
+    const lines = approvalOutcome(removal, team).map((l) => l.text);
+    expect(lines[0]).toBe("Ava Chen is removed, and every session they hold ends now");
+    expect(lines).toContain("It can't be undone: adding them back is a new request");
+  });
+});
+
 describe("approvalOutcome", () => {
   it("leads with the money and ends with where it is recorded", () => {
     const lines = approvalOutcome(compensated, context);
-    expect(lines[0]).toEqual({ kind: "money", text: "Treasury pays $3.75 to Meridian Index" });
+    // The deposit already happened: approving records it, in the same words as the result and Activity.
+    expect(lines[0]).toEqual({ kind: "money", text: "Records that the treasury paid $3.75 back into Meridian Index's stake" });
+    expect(lines).toContainEqual({ kind: "record", text: "The penalty closes as paid back. It can't be undone" });
     expect(lines[lines.length - 1]).toEqual({ kind: "record", text: "Recorded in Activity under your name" });
   });
 
@@ -75,6 +107,6 @@ describe("approvalOutcome", () => {
   });
 
   it("falls back to words without the penalty read", () => {
-    expect(approvalOutcome(compensated, EMPTY_APPROVAL_CONTEXT)[0]!.text).toBe("Treasury pays the provider back the penalty");
+    expect(approvalOutcome(compensated, EMPTY_APPROVAL_CONTEXT)[0]!.text).toBe("Records that the treasury paid the penalty back into the provider's stake");
   });
 });

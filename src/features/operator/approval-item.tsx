@@ -108,7 +108,7 @@ export function ApprovedChainBlockAction({ block }: { block: ApprovedChainBlock 
       expected={{ contract: "config", functionName: "setBlocked", args: [block.account, true] }}
       signLabel="Sign and send the on-chain block"
       successTitle="Blocked on chain"
-      successDescription="The contracts refuse the wallet once this lands. Only the admin can lift it."
+      successDescription="The contracts refuse the wallet once this lands. Only the contracts' admin key can lift it on chain."
       afterExport="Open the file in the arbiter's multi-signer wallet and sign it there. It is also listed on Arbiter until it lands."
     />
   );
@@ -247,7 +247,8 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
     ) : (
       <>
         {nameOf(approval.requestedBy)} · asked <LocalTime value={approval.createdAt} midSentence />
-        {mode === "other" ? ` · ${waitingFor}` : null}
+        {/* Who must approve, visible without a hover (operator review 2026-10-16b, P1-8). */}
+        {mode === "other" ? ` · ${waitingFor}` : pending ? ` · ${needs.charAt(0).toLowerCase()}${needs.slice(1)}` : null}
       </>
     );
 

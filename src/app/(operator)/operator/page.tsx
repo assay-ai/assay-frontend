@@ -5,12 +5,16 @@ import { ArrowRight, ChevronDown, ChevronRight, RefreshCw, Search, ShieldBan, Us
 import Link from "next/link";
 import * as React from "react";
 
+import { shortId } from "@/components/patterns/copy-chip";
 import { LocalTime } from "@/components/patterns/local-time";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ApprovalItem, RowSection, type ApprovalResult } from "@/features/operator/approval-item";
+import { ApprovalItem, ApprovedChainBlockAction, RowSection, type ApprovalResult } from "@/features/operator/approval-item";
 import { approvalErrorMessage } from "@/features/operator/approvals";
+import { disputeAmount, possessive } from "@/features/operator/arbiter";
+import { chainDisplayName } from "@/features/operator/call-summary";
+import { Deadline } from "@/features/operator/deadline";
 import { DisputeLine } from "@/features/operator/dispute-line";
 import { HealthStrip } from "@/features/operator/health-strip";
 import { checkedAgo, groupApprovals, needsYouBreakdown, needsYouCount, sortDisputesByDaysLeft, waitingSummary } from "@/features/operator/inbox";
@@ -21,19 +25,23 @@ import { useOperatorSession } from "@/features/operator/session-context";
 import { useKeyboardTriage } from "@/features/operator/shortcuts";
 import { sortHoldsOldestFirst } from "@/features/operator/slash-holds-panel";
 import { useApprovalContext } from "@/features/operator/use-approval-context";
-import { useProviderNames } from "@/features/operator/use-operator-lookups";
+import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-operator-lookups";
+import { useToSign } from "@/features/operator/use-to-sign";
 import { holdChainName } from "@/features/slash-hold/model";
 import { ApiError } from "@/libs/ApiClient";
 import { operatorHoldReasonText } from "@/libs/slash-hold";
 import { getPlatformHealth, listAccountBlocks, listApprovals, listArbiterDisputes } from "@/services/operator.service";
 import { cn } from "@/utils";
+import { formatMoney } from "@/utils/money";
 
 /**
  * Home, route `/operator`: the "Needs you" inbox.
  *
  * Flat lists, in the order things can be lost: requests this operator can
  * approve (closest to expiring first), then — for whoever can rule — on-chain
- * disputes by days left, then their own requests waiting on someone else.
+ * disputes by days left and what the arbiter's wallet still has to sign
+ * (approved on-chain blocks, earlier penalties to cancel before anyone can
+ * execute them), then their own requests waiting on someone else.
  * Under them "At a glance": four counts, each a link. Platform health is one
  * line that opens only when something is red. Each role gets its one way in
  * to its own work (Block an account, Add someone, Find a penalty).
@@ -149,6 +157,8 @@ export default function OperatorHome() {
   const groups = React.useMemo(() => groupApprovals(pending.data?.items ?? [], me, now), [pending.data, me, now]);
   const { context, approversFor, nameOf } = useApprovalContext([...groups.needsYou, ...groups.yours], me);
   const disputeRows = React.useMemo(() => sortDisputesByDaysLeft(disputes.data ?? []), [disputes.data]);
+  const toSign = useToSign(caps.rule);
+  const directory = useOperatorDirectory();
   const holds = sortHoldsOldestFirst(health.data?.slashHolds ?? []);
   const blockCount = activeBlocks.data?.items.length ?? null;
   const openApprovals = groups.needsYou.length + groups.yours.length + groups.others.length;
@@ -166,9 +176,9 @@ export default function OperatorHome() {
   const [results, setResults] = React.useState<ApprovalResult[]>([]);
   const onDecided = React.useCallback((result: ApprovalResult) => setResults((list) => [result, ...list.filter((r) => r.id !== result.id)]), []);
 
-  const needsYouTotal = needsYouCount(groups.needsYou.length, disputeRows.length, caps.rule);
-  const breakdown = needsYouBreakdown(groups.needsYou.length, disputeRows.length, caps.rule);
-  const loading = pending.isLoading || (caps.rule && disputes.isLoading);
+  const needsYouTotal = needsYouCount(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count);
+  const breakdown = needsYouBreakdown(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count);
+  const loading = pending.isLoading || (caps.rule && (disputes.isLoading || toSign.isLoading));
   const nothing = needsYouTotal === 0 && groups.yours.length === 0;
   // Every waiting request, accounted for in one line: the same split and numbers as the Approvals tabs.
   const waiting = waitingSummary({ needsYou: groups.needsYou.length, yours: groups.yours.length, others: groups.others.length });
@@ -211,13 +221,16 @@ export default function OperatorHome() {
       <HealthStrip health={health.data} error={health.isError} />
 
       {results.map((result) => (
-        <ResultCard
-          key={result.id}
-          title={result.title}
-          next={result.next}
-          activityHref={result.activityHref}
-          onDismiss={() => setResults((list) => list.filter((r) => r.id !== result.id))}
-        />
+        <React.Fragment key={result.id}>
+          <ResultCard
+            title={result.title}
+            next={result.next}
+            activityHref={result.activityHref}
+            onDismiss={() => setResults((list) => list.filter((r) => r.id !== result.id))}
+          />
+          {/* A-11: the approval's result is the arbiter's unsigned setBlocked; its wallet signs here, as on Approvals. */}
+          {result.chainBlock ? <ApprovedChainBlockAction block={result.chainBlock} /> : null}
+        </React.Fragment>
       ))}
 
       {loading ? (
@@ -275,6 +288,42 @@ export default function OperatorHome() {
             >
               {disputeRows.map((row) => (
                 <DisputeLine key={row.requestId} row={row} providerName={providers.name(row.providerId)} now={now} canRule />
+              ))}
+            </RowSection>
+          ) : null}
+
+          {caps.rule && toSign.count > 0 ? (
+            <RowSection
+              id="to-sign"
+              title="To sign"
+              count={toSign.count}
+              hint="Calls only the arbiter's wallet can sign: approved on-chain blocks, and earlier penalties to cancel before anyone can execute them."
+              action={<ViewAll href="/operator/arbiter">Open Arbiter</ViewAll>}
+            >
+              {toSign.superseded.map((record) => {
+                const amount = disputeAmount(record.chainId, record.penaltyAmount);
+                return (
+                  <Link key={record.requestId} href="/operator/arbiter#superseded-records" className="flex w-full min-w-0 flex-col gap-1 px-4 py-3 hover:bg-02 tablet:flex-row tablet:items-center tablet:gap-4">
+                    <span className="min-w-0 flex-1 text-label-sm text-01">
+                      Cancel {possessive(providers.name(record.providerId))} earlier {amount ? `${formatMoney(amount)} ` : ""}penalty
+                      <span className="block text-body-xs font-normal text-03">
+                        {chainDisplayName(record.chainId)} · it covers calls already in a later penalty, so executing it would charge them twice
+                      </span>
+                    </span>
+                    <Deadline kind="execute" until={record.executableAt} now={now} />
+                  </Link>
+                );
+              })}
+              {toSign.blocks.map((block) => (
+                <Link key={block.approvalId} href="/operator/arbiter#approved-blocks" className="flex w-full min-w-0 flex-col gap-1 px-4 py-3 hover:bg-02 tablet:flex-row tablet:items-center tablet:gap-4">
+                  <span className="min-w-0 flex-1 text-label-sm text-01">
+                    Block wallet {shortId(block.account)} on chain
+                    <span className="block text-body-xs font-normal text-03">
+                      {chainDisplayName(block.chainId)}
+                      {block.approvedBy ? ` · approved by ${directory.nameOf(block.approvedBy)}` : ""} · nothing is blocked on chain until the arbiter signs
+                    </span>
+                  </span>
+                </Link>
               ))}
             </RowSection>
           ) : null}

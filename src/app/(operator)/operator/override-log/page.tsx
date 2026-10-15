@@ -294,6 +294,7 @@ function ActivityScreen() {
                           {sentence.reason ? <span className="text-02"> · {sentence.reason}</span> : null}
                           {sentence.approver ? <span className="text-02">, approved by {sentence.approver}</span> : null}
                           {row.breakGlass ? <span className="text-danger-600"> · emergency override</span> : null}
+                          {sentence.pending ? <span className="block text-body-xs text-03">Built as a {sentence.pending}.</span> : null}
                         </p>
                         {row.ticketRef ? (
                           <span className="hidden shrink-0 rounded bg-03 px-1.5 py-px font-mono text-mono-12 text-02 min-[480px]:inline">{row.ticketRef}</span>

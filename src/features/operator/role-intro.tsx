@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import * as React from "react";
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { OperatorIdentity } from "@/interfaces/operator";
 import { formatMoney } from "@/utils/money";
 
@@ -208,6 +209,8 @@ export function RoleCapabilities({ identity, children, align = "end" }: { identi
 
 export function RoleIntro({ identity, onDismiss }: { identity: OperatorIdentity; onDismiss: () => void }) {
   const limit = roleLimitText(identity);
+  // A sheet, as from the account menu: a small popover anchored mid-sentence was easy to miss or lose.
+  const [open, setOpen] = React.useState(false);
   return (
     <section
       aria-label="Your role"
@@ -216,12 +219,25 @@ export function RoleIntro({ identity, onDismiss }: { identity: OperatorIdentity;
       <p className="min-w-0 flex-1">
         You&apos;re signed in as <span className="text-label-13 text-01">{roleTitle(identity.roles)}</span>
         {limit ? ` · ${limit} per action` : ""}.{" "}
-        <RoleCapabilities identity={identity} align="start">
-          <button type="button" className="hit-area text-label-13 text-primary-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
-            What can I do?
-          </button>
-        </RoleCapabilities>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
+          className="hit-area text-label-13 text-primary-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        >
+          What can I do?
+        </button>
       </p>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent aria-describedby={undefined}>
+          <SheetHeader className="tablet:pt-5">
+            <SheetTitle>What can I do?</SheetTitle>
+          </SheetHeader>
+          <div className="px-1.5 pb-4">
+            <RoleCapabilitiesPanel identity={identity} />
+          </div>
+        </SheetContent>
+      </Sheet>
       <button
         type="button"
         onClick={onDismiss}
