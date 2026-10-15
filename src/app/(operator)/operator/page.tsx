@@ -178,7 +178,6 @@ export default function OperatorHome() {
           {needsYouTotal > 0 ? (
             <span className="rounded-full bg-danger-10 px-2 py-0.5 text-label-13 tabular-nums text-danger-700">
               {needsYouTotal}
-              <span className="sr-only"> waiting for you</span>
             </span>
           ) : null}
         </h1>
