@@ -221,8 +221,8 @@ export function caseTimelineSteps(
       date: facts.cancel?.deadline ?? null,
       // A disputed record reads the same "Day N of 30" as the Arbiter page; it cannot be executed meanwhile.
       dateLabel: disputedRecord
-        ? `${disputeUrgency({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }, now).label} · sign before`
-        : "sign before",
+        ? `${disputeUrgency({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }, now).label} · sign by`
+        : "sign by",
       countdown: !disputedRecord,
       urgent: !disputedRecord,
       description: disputedRecord
