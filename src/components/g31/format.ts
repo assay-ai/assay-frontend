@@ -73,6 +73,21 @@ export function formatPrice(money: Money | null | undefined): string {
   return formatMoney(money, { decimals: 4 });
 }
 
+/**
+ * The quote — what a call is held for — worded the way MCP `tools/list` words
+ * it: "up to $X" when more than one binding could serve, because the call pays
+ * the serving binding and that may be cheaper than the hold (BUG-R16-B3-03).
+ */
+export function formatQuote(
+  price: Money | null | undefined,
+  routableBindings: number | undefined,
+  pricingMode?: string | null,
+): string {
+  if (!price) return "—";
+  const shown = formatPrice(price);
+  return pricingMode !== "FREE" && (routableBindings ?? 0) > 1 ? `up to ${shown}` : shown;
+}
+
 /** Ratio of `used` to `cap`, 0–100, clamped. Returns null when there is no cap. */
 export function percentOf(used: Money | null | undefined, cap: Money | null | undefined): number | null {
   if (!used || !cap) return null;

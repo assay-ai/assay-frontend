@@ -126,6 +126,13 @@ export interface CatalogueTool {
   price: CatalogueMoney | null;
   pricingMode: string | null;
   routable: boolean;
+  /**
+   * Bindings the router could serve this tool from right now — the set `price`
+   * is the dearest of. Not `providerCount`: a listed provider the router cannot
+   * use (stake on another asset, a ceiling hit) counts there and not here.
+   * Optional for a backend that predates the field.
+   */
+  routableBindings?: number;
   unroutableReason: string | null;
   /**
    * CAIP-2, the chains any ACTIVE binding for this tool settles on.

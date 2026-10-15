@@ -1,18 +1,16 @@
 import { api } from "./api";
 
 /**
- * Explore: the Tools, Providers and Provider detail screens.
+ * Explore: a provider's identity, for the Provider detail screen.
  *
- * **There is no provider LIST endpoint.** `POST /providers` registers the
- * caller as one, `GET /providers/me*` reads your own, and
- * `GET /providers/{providerId}/verification` reads one you already know the id
- * of. Nothing enumerates the catalogue. So the explorer discovers providers
- * from the only place their ids appear to a buyer — the buyer's own
- * `/tool-calls` feed — and then asks each id for its identity. That is a
- * stand-in for a catalogue endpoint, and it means a provider this
- * organization has never called is invisible here.
+ * The lists themselves (providers, tools, a provider's entry) come from the
+ * platform catalogue, `GET /catalogue/*` in `catalogue.service.ts` — every
+ * provider with an ACTIVE binding and every tool one of them serves, the same
+ * for every caller. Your own `/tool-calls` only decorates those rows with your
+ * spend. A tool contract no provider serves yet is not in the catalogue (it is
+ * in `GET /tools`, the contract list, which is why that one is longer).
  *
- * The verification response is also NOT the flat `ProviderVerificationDto`
+ * The verification response is NOT the flat `ProviderVerificationDto`
  * the OpenAPI document declares. What the running API actually returns is
  * `{ providerId, legalName, verification: { verified, … } }` — verified
  * against http://localhost:3000/api/v1. `legalName` is the only source of a

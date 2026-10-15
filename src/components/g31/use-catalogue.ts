@@ -93,6 +93,9 @@ export interface ToolRow {
   fromPrice: Money | null;
   /** What a call would be held for — the dearest eligible binding, not the floor. */
   price: Money | null;
+  /** Bindings the quote was taken over; above one, the quote reads "up to". */
+  routableBindings: number | undefined;
+  pricingMode: string | null;
   routable: boolean;
   unroutableReason: string | null;
   /**
@@ -195,6 +198,8 @@ export function useCatalogue() {
         providerCount: row.providerCount,
         fromPrice: row.fromPrice,
         price: row.price,
+        routableBindings: row.routableBindings,
+        pricingMode: row.pricingMode,
         routable: row.routable,
         unroutableReason: row.unroutableReason,
         settlementChains: row.settlementChains,
