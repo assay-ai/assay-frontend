@@ -120,7 +120,8 @@ const MONTH_SHORT = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: 
 const CLASS_NOTE: Record<string, string> = {
   PAID_CREDITED: "settled to you",
   PAID_AWAITING_REDEMPTION: "passed · credited once the voucher is redeemed on chain",
-  PLATFORM_ABSORBED: "voucher could not be redeemed · owed to you by the platform, no fee",
+  PAID_BUYER_DEBT: "passed · the buyer's payment could not be collected yet · paid from their escrow once they settle, not by the platform",
+  PAID_UNCOLLECTED: "passed · the buyer never settled it · written off, not paid, no fee, nobody owes it",
   PROVIDER_FORFEITED: "voucher not collected: your stake was below the minimum or you were blocked · not credited, buyer not charged",
   PAID_UNCREDITED: "our checks rejected the response · see verdicts",
   FREE: "free-tier call · nothing charged, nothing paid",

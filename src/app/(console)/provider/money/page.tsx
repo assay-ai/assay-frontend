@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/panel";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { formatCount } from "@/features/buyer/period";
-import { earnedTileSub } from "@/features/provider-earnings/earned-tile";
+import { earnedTileSub, unpaidLines } from "@/features/provider-earnings/earned-tile";
 import type { Money, ProviderEarningsGroup, ProviderPayout } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
@@ -220,6 +220,7 @@ export default function ProviderMoneyPage() {
   }, [bindings.data]);
 
   const totals = earningsByTool.data?.totals;
+  const unpaid = unpaidLines(totals, (value) => money(value, 4));
 
   const withheldRows: WithheldRow[] = (earningsByTool.data?.groups ?? [])
     .filter((group: ProviderEarningsGroup) => group.withheldCalls > 0)
@@ -428,6 +429,31 @@ export default function ProviderMoneyPage() {
           className="[&>p:nth-child(2)]:text-danger-600"
         />
       </section>
+
+      {/* Passed but not paid (yet): buyer debt, written off, forfeited. Never paid by us. */}
+      {unpaid.length > 0 ? (
+        <Panel data-testid="provider-unpaid">
+          <PanelHeader>
+            <PanelTitles>
+              <PanelTitle>Passed, but not paid</PanelTitle>
+              <PanelDescription>
+                not in earned · you are only ever paid from the buyer&apos;s escrow, never by the
+                platform
+              </PanelDescription>
+            </PanelTitles>
+          </PanelHeader>
+          <PanelBody className="flex flex-col gap-3 px-5 pb-5 pt-2">
+            {unpaid.map((line) => (
+              <div key={line.key} className="flex flex-col gap-1">
+                <p className="text-body-13 font-semibold text-01">
+                  {line.label} · <span className="font-mono">{money(line.amount, 4)}</span>
+                </p>
+                <p className="text-body-13 text-02">{line.explanation}</p>
+              </div>
+            ))}
+          </PanelBody>
+        </Panel>
+      ) : null}
 
       {/* Withheld, itemised. */}
       <Panel>

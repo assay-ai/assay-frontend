@@ -128,21 +128,30 @@ function isCredited(row: CallRow): boolean {
   // redeemed on chain; until then the export says PAID_AWAITING_REDEMPTION.
   // PENDING on a settled row is the export saying no credit was written for it.
   // PROVIDER_FORFEITED is SETTLED too, but the provider forfeited the voucher:
-  // nothing was collected, credited or taken, so it is not earned.
+  // nothing was collected, credited or taken, so it is not earned. Nor is
+  // PAID_BUYER_DEBT (the buyer has not paid it yet) or PAID_UNCOLLECTED (the
+  // buyer never did): the platform never pays a provider in their place.
   return (
     row.status === "SETTLED" &&
     row.classification !== "PAID_AWAITING_REDEMPTION" &&
     row.classification !== "PENDING" &&
-    row.classification !== "PROVIDER_FORFEITED"
+    row.classification !== "PROVIDER_FORFEITED" &&
+    row.classification !== "PAID_BUYER_DEBT" &&
+    row.classification !== "PAID_UNCOLLECTED"
   );
 }
 
-/** A call still in flight has neither earned nor withheld anything yet. */
+/**
+ * A call still in flight has neither earned nor withheld anything yet. An open
+ * buyer debt is the same: its price is still held in the buyer's escrow and is
+ * paid to the provider once the buyer settles it, so it is not withheld.
+ */
 function isPending(row: CallRow): boolean {
   return (
     row.status === "VERIFYING" ||
     row.classification === "PENDING" ||
-    row.classification === "PAID_AWAITING_REDEMPTION"
+    row.classification === "PAID_AWAITING_REDEMPTION" ||
+    row.classification === "PAID_BUYER_DEBT"
   );
 }
 
@@ -228,9 +237,12 @@ export function pendingNote(rows: CallRow[]): string {
  *
  * PAID_AWAITING_REDEMPTION is ours too: a rail-B call that passed and is
  * credited once its voucher is redeemed on chain. Listed beside PAID_CREDITED.
- * So is PLATFORM_ABSORBED: credited from platform funds because the voucher
- * could never be redeemed (the `reason` column names why), with no fee taken.
- * PROVIDER_FORFEITED sits beside it: a rail-B call whose voucher was not
+ * PAID_BUYER_DEBT is a call that passed but whose payment could not be
+ * collected from the buyer yet (the `reason` column names why): the price is
+ * still held in the buyer's escrow, and it is paid once the buyer signs again.
+ * PAID_UNCOLLECTED is one the buyer never settled, written off after 30 days:
+ * not paid, no fee, and nobody owes it — the platform never pays providers.
+ * PROVIDER_FORFEITED sits beside them: a rail-B call whose voucher was not
  * collected because the provider's stake was below the minimum or it was
  * blocked. Nobody was charged or credited and no fee was taken; the `reason`
  * column names the cause.
@@ -242,7 +254,8 @@ export function pendingNote(rows: CallRow[]): string {
 export const CLASS_ORDER = [
   "PAID_CREDITED",
   "PAID_AWAITING_REDEMPTION",
-  "PLATFORM_ABSORBED",
+  "PAID_BUYER_DEBT",
+  "PAID_UNCOLLECTED",
   "PROVIDER_FORFEITED",
   "PAID_UNCREDITED",
   "FREE",
@@ -366,8 +379,7 @@ export interface ObservedTake {
 export function observedTakeRate(rows: CallRow[]): ObservedTake {
   const exact = new Map<string, Decimal>();
   for (const row of rows) {
-    // An absorbed call is credited but took no fee: it carries no rate.
-    if (!isCredited(row) || row.classification === "PLATFORM_ABSORBED") continue;
+    if (!isCredited(row)) continue;
     const price = new Decimal(row.priceAmount || "0");
     if (price.isZero()) continue;
     const rate = new Decimal(row.platformFee || "0").div(price).mul(100);

@@ -146,12 +146,25 @@ export interface ProviderEarningsFigures {
   withheld: Money | null;
   withheldCalls: number;
   /**
-   * The part of `earned` the platform credited from its own funds because the
-   * voucher could never be redeemed. Owed by the platform, not in the wallet.
-   * Optional: older backends do not send it.
+   * The three ways a call that PASSED still paid the provider nothing (yet).
+   * None of them is in `earned`, and none is ever paid by the platform: a
+   * provider is only ever paid out of the buyer's escrow. Optional: older
+   * backends do not send them.
+   *
+   * - `forfeited` — the provider caused the payment to fail (stake below the
+   *   minimum, or blocked); the buyer was not charged.
+   * - `debtOutstanding` — buyer debt: the payment could not be collected yet,
+   *   the price is still held in the buyer's escrow, and it is paid once the
+   *   buyer signs a replacement voucher (or never, if written off).
+   * - `uncollected` — a buyer debt written off after 30 days (or an older call
+   *   absorbed before buyer debt existed). Nobody owes it.
    */
-  absorbed?: Money | null;
-  absorbedCalls?: number;
+  forfeited?: Money | null;
+  forfeitedCalls?: number;
+  debtOutstanding?: Money | null;
+  debtOutstandingCalls?: number;
+  uncollected?: Money | null;
+  uncollectedCalls?: number;
 }
 
 export interface ProviderEarningsGroup extends ProviderEarningsFigures {

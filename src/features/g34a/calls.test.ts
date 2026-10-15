@@ -37,4 +37,9 @@ describe("isCredited", () => {
       false,
     );
   });
+
+  it("does not count buyer debt or an uncollected call as earned", () => {
+    expect(isCredited(row({ classification: "PAID_BUYER_DEBT" }))).toBe(false);
+    expect(isCredited(row({ classification: "PAID_UNCOLLECTED", providerAmount: money("0") }))).toBe(false);
+  });
 });

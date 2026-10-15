@@ -48,25 +48,51 @@ describe("foldClasses — rail B awaiting redemption", () => {
   });
 });
 
-describe("PLATFORM_ABSORBED", () => {
+// No platform debt: a call whose payment could not be collected is the
+// BUYER's debt. Open, it is not earned and not withheld; written off, it is
+// closed with nothing paid. The platform never credits it.
+describe("PAID_BUYER_DEBT", () => {
+  const rows = [
+    row({ callId: "a" }),
+    row({ callId: "b", classification: "PAID_BUYER_DEBT", reason: "buyer_debt:DelegateIsRevoked" }),
+  ];
+
+  it("gets its own bucket and is neither earned nor withheld", () => {
+    const table = foldClasses(rows);
+    const debt = table.buckets.find((b) => b.className === "PAID_BUYER_DEBT");
+    expect(debt?.calls).toBe(1);
+    expect(debt?.credited?.amount ?? "0").toBe("0");
+    expect(debt?.withheld?.amount ?? "0").toBe("0");
+    expect(table.totalCredited?.amount).toBe("900000");
+    expect(table.totalWithheld?.amount ?? "0").toBe("0");
+    expect(table.unexplained).toBe(0);
+    expect(foldNotCredited(rows).calls).toBe(0);
+  });
+
+  it("does not read as a 0% take rate", () => {
+    expect(observedTakeRate(rows).summary).toBe("observed 10%");
+  });
+});
+
+describe("PAID_UNCOLLECTED", () => {
   const rows = [
     row({ callId: "a" }),
     row({
       callId: "b",
-      classification: "PLATFORM_ABSORBED",
-      reason: "DelegateIsRevoked",
+      classification: "PAID_UNCOLLECTED",
+      reason: "uncollected:DelegateIsRevoked",
+      providerAmount: "0",
       platformFee: "0",
     }),
   ];
 
-  it("gets its own bucket: credited, no fee, not unexplained", () => {
+  it("gets its own bucket and is not earned", () => {
     const table = foldClasses(rows);
-    const absorbed = table.buckets.find((b) => b.className === "PLATFORM_ABSORBED");
-    expect(absorbed?.calls).toBe(1);
-    expect(absorbed?.credited?.amount).toBe("900000");
-    expect(absorbed?.fee?.amount).toBe("0");
-    expect(table.totalCredited?.amount).toBe("1800000");
-    expect(table.totalFee?.amount).toBe("100000");
+    const uncollected = table.buckets.find((b) => b.className === "PAID_UNCOLLECTED");
+    expect(uncollected?.calls).toBe(1);
+    expect(uncollected?.credited?.amount ?? "0").toBe("0");
+    expect(table.totalCredited?.amount).toBe("900000");
+    expect(table.totalGross?.amount).toBe("1000000");
     expect(table.unexplained).toBe(0);
   });
 
