@@ -149,7 +149,8 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
   const rowChanges = mode === "history" ? [] : changes;
   const pending = approval.status === "PENDING";
   const names = approverNames(approvers);
-  const needs = `Needs ${approvalNeeds(approval.code)}${names ? `: ${names}` : ""}`;
+  const requesterRoles = approval.requestedById ? context.operators.get(approval.requestedById)?.roles : undefined;
+  const needs = `Needs ${approvalNeeds(approval.code, requesterRoles)}${names ? `: ${names}` : ""}`;
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["operator"] });

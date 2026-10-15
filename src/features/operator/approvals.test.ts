@@ -6,6 +6,7 @@ import { ApiError } from "@/libs/ApiClient";
 import {
   actionLabel,
   approvalErrorMessage,
+  approvalNeeds,
   approveBlockedBecause,
   approvedResultSentence,
   decisionText,
@@ -366,5 +367,17 @@ describe("the approve and reject refusals", () => {
       expect(decisionText(approval({ status: "EXPIRED" }))).toBe("Expired");
       expect(statusWord(approval({ status: "EXPIRED" }))).toBe("expired");
     });
+  });
+});
+
+describe("approvalNeeds", () => {
+  it("says 'a second' only when the requester holds the approving role", () => {
+    expect(approvalNeeds("A-10", ["ADJL"])).toBe("a second Lead adjudicator");
+    expect(approvalNeeds("A-10", ["SRE", "SUP"])).toBe("a Lead adjudicator");
+    expect(approvalNeeds("A-12", ["SRE"])).toMatch(/^an Admin/);
+  });
+
+  it("keeps 'a second' when the requester is unknown", () => {
+    expect(approvalNeeds("A-10")).toBe("a second Lead adjudicator");
   });
 });
