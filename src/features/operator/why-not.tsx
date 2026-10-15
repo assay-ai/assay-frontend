@@ -14,12 +14,17 @@ import { useOperatorDirectory } from "./use-operator-lookups";
 /**
  * "Why you can't, and who can" — drawn wherever an action exists but this
  * operator may not take it, instead of hiding the button and leaving them to
- * guess. One sentence for why, the names who can (or the role when nobody
- * holds it), and an "Ask …" button that copies a message with a link to this
- * page, ready to paste into chat.
+ * guess. Why, the names who can (or the role when nobody holds it), and an
+ * "Ask …" link that copies a message with a link to this page, ready to paste
+ * into chat.
  *
  *   <WhyNot action="suspend" me={identity} amount={penalty}
  *           ask="Can you suspend Northwind Geo's $28.47 penalty?" />
+ *     → [lock] Suspend a penalty needs Adjudicator, Lead adjudicator or On-call (SRE) · Ask Riley or Iris
+ *
+ * One line by default (two at most on a phone); the full "who can" sentence is
+ * its tooltip. `variant="box"` is the older panel with a title and both
+ * sentences, kept for a page that is read-only for you as a whole.
  */
 
 /** "Ask Riley Brooks", "Ask Riley or Iris", "Ask a Lead adjudicator". Pure. */
@@ -52,8 +57,8 @@ function absolute(link: string): string {
   return `${window.location.origin}${link.startsWith("/") ? "" : "/"}${link}`;
 }
 
-/** The "Ask …" button: copies `message` and a link to `link` (default: this page). */
-export function AskButton({ label, message, link }: { label: string; message: string; link?: string }) {
+/** The "Ask …" button: copies `message` and a link to `link` (default: this page). `link` style: a text link, for the one-line why-not. */
+export function AskButton({ label, message, link, look = "button" }: { label: string; message: string; link?: string; look?: "button" | "link" }) {
   const [copied, setCopied] = React.useState(false);
   const copy = async () => {
     const href = link ? absolute(link) : typeof window === "undefined" ? "" : window.location.href;
@@ -65,6 +70,18 @@ export function AskButton({ label, message, link }: { label: string; message: st
       /* clipboard refused: the page link is still in the address bar */
     }
   };
+  if (look === "link") {
+    return (
+      <button
+        type="button"
+        onClick={() => void copy()}
+        className="inline-flex items-center gap-1 rounded-sm text-label-13 text-primary-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+      >
+        {copied ? <Check aria-hidden="true" className="size-3.5 text-success-500" /> : <Link2 aria-hidden="true" className="size-3.5" />}
+        {copied ? "Message and link copied" : label}
+      </button>
+    );
+  }
   return (
     <button
       type="button"
@@ -88,18 +105,43 @@ export interface WhyNotProps {
   link?: string;
   /** Overrides the "why" sentence. */
   why?: string;
-  /** Lead-in, e.g. "Suspend this penalty". */
+  /** Lead-in, e.g. "Suspend this penalty" (the box only). */
   title?: string;
+  /** "inline" (default): one line. "box": a panel, for a page that is read-only for you. */
+  variant?: "inline" | "box";
   className?: string;
 }
 
+/** "Blocking an account needs Lead adjudicator or On-call (SRE)" — the why, without its full stop. Pure. */
+export function whyLine(why: string): string {
+  return why.trim().replace(/\.$/, "");
+}
+
 /** Nothing when the action is allowed. */
-export function WhyNot({ action, me, amount, ask, link, why, title, className }: WhyNotProps) {
+export function WhyNot({ action, me, amount, ask, link, why, title, variant = "inline", className }: WhyNotProps) {
   const directory = useOperatorDirectory();
   const check = checkAction(me, action, amount);
   if (check.allowed) return null;
   const names = directory.isPending ? [] : whoCan(action, directory.operators, { amount, exceptId: me.id });
   const phrase = rolesPhrase(check.roles);
+  const who = whoCanSentence(names, phrase, amount && MONEY_ACTIONS.has(action) ? formatMoney(amount) : null);
+  if (variant === "inline") {
+    return (
+      <p className={cn("flex w-full flex-wrap items-center gap-x-2 gap-y-0.5 text-body-13 text-02", className)} title={directory.isPending ? undefined : who}>
+        <Lock aria-hidden="true" className="size-3.5 shrink-0 text-03" />
+        <span className="min-w-0">{whyLine(why ?? check.why ?? "")}</span>
+        {directory.isPending ? null : (
+          <>
+            <span aria-hidden="true" className="text-03">
+              ·
+            </span>
+            <span className="sr-only">Who can: {who}</span>
+            <AskButton look="link" label={askLabel(names, phrase)} message={ask} link={link} />
+          </>
+        )}
+      </p>
+    );
+  }
   return (
     <div className={cn("flex w-full flex-col gap-2 rounded-lg border border-01 bg-02 px-3.5 py-3 tablet:flex-row tablet:items-center tablet:gap-4", className)}>
       <Lock aria-hidden="true" className="hidden size-4 shrink-0 text-03 tablet:block" />
@@ -112,7 +154,7 @@ export function WhyNot({ action, me, amount, ask, link, why, title, className }:
         {directory.isPending ? null : (
           <p className="text-02">
             <span className="text-03">Who can: </span>
-            {whoCanSentence(names, phrase, amount && MONEY_ACTIONS.has(action) ? formatMoney(amount) : null)}
+            {who}
           </p>
         )}
       </div>

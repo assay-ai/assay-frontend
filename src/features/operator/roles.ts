@@ -38,6 +38,9 @@ export function rolesPhrase(roles: readonly string[], join: "or" | "and" = "or")
 export interface RolePreset {
   id: string;
   label: string;
+  /** At most 8 words, for the role picker: "Blocks accounts in an incident". */
+  short: string;
+  /** The full list, from `roleDescription`: under "What exactly?". */
   description: string;
   roles: readonly OperatorRole[];
 }
@@ -66,7 +69,7 @@ export function roleTitle(roles: readonly OperatorRole[]): string {
 /** What approving each register code means, in words. The roles come from `APPROVER_ROLES`. */
 export const APPROVAL_WHAT: Readonly<Record<string, string>> = Object.freeze({
   "S-1": "suspensions of upheld penalties",
-  "S-11": "fleet sweeps",
+  "S-11": "bulk decisions",
   "S-5": "provider compensations",
   "A-10": "lifting account blocks",
   "A-12": "new operators",
@@ -85,6 +88,15 @@ const ADMIN_ROLES: readonly OperatorRole[] = ["OPS_ADMIN"];
 
 function holds(roles: readonly OperatorRole[], allowed: readonly OperatorRole[]): boolean {
   return roles.some((role) => allowed.includes(role));
+}
+
+/**
+ * Whether these roles can take any action on money (suspend, compensate) —
+ * the only ones an authority limit applies to. Team shows "—" as the limit
+ * of everyone else: an admin's "$0 limit" says nothing.
+ */
+export function actsOnMoney(roles: readonly OperatorRole[]): boolean {
+  return holds(roles, SUSPEND_ROLES) || holds(roles, COMPENSATE_ROLES);
 }
 
 // ── One capability check for every screen ───────────────────────────────────
@@ -265,7 +277,7 @@ const ACTION_DOES: Readonly<Record<ConsoleAction, string>> = {
 /** The approvals, short, for a role card. */
 const APPROVAL_SHORT: Readonly<Record<string, string>> = {
   "S-1": "suspensions",
-  "S-11": "fleet sweeps",
+  "S-11": "bulk decisions",
   "S-5": "compensations",
   "A-10": "block lifts",
   "A-12": "new operators",
@@ -298,18 +310,19 @@ export function roleDescription(roles: readonly OperatorRole[]): string {
 
 /**
  * What an admin picks when adding someone. Fine-grained roles sit under
- * "Customize". Each description is `roleDescription(roles)` — the same check
- * the Home banner and every button read — so a card can never promise what
- * the console then refuses.
+ * "Customize". `short` is the line in the picker; `description` is
+ * `roleDescription(roles)` — the same check the Home banner and every button
+ * read — so the full list can never promise what the console then refuses.
+ * A test holds each `short` to that list.
  */
 export const ROLE_PRESETS: readonly RolePreset[] = Object.freeze(
   (
     [
-      { id: "lead", label: "Lead adjudicator", roles: ["ADJL"] },
-      { id: "adjudicator", label: "Adjudicator", roles: ["ADJ"] },
-      { id: "support", label: "Support / on-call", roles: ["SRE", "SUP"] },
-      { id: "treasury", label: "Treasury", roles: ["TRE"] },
-      { id: "admin", label: "Admin", roles: ["OPS_ADMIN"] },
+      { id: "lead", label: "Lead adjudicator", short: "Rules disputes, blocks accounts, approves lifts", roles: ["ADJL"] },
+      { id: "adjudicator", label: "Adjudicator", short: "Suspends penalties, approves suspensions", roles: ["ADJ"] },
+      { id: "support", label: "Support / on-call", short: "Blocks accounts in an incident", roles: ["SRE", "SUP"] },
+      { id: "treasury", label: "Treasury", short: "Rules disputes, compensates providers", roles: ["TRE"] },
+      { id: "admin", label: "Admin", short: "Adds and changes who is on the team", roles: ["OPS_ADMIN"] },
     ] as const
   ).map((preset) => ({ ...preset, roles: [...preset.roles] as OperatorRole[], description: roleDescription([...preset.roles]) })),
 );
