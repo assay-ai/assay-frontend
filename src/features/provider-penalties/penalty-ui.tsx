@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Clock, HelpCircle, Scale } from "lucide-react";
+import { Clock, HelpCircle, Scale, Wallet } from "lucide-react";
 import * as React from "react";
 
 import { CopyChip } from "@/components/patterns/copy-chip";
@@ -96,6 +96,7 @@ export function PenaltyRowCard({
   onWhy,
   onDispute,
   disputeBlocked,
+  onConnect,
 }: {
   row: PenaltyRow;
   detail: SlashProposalCaseDetail | null;
@@ -104,6 +105,8 @@ export function PenaltyRowCard({
   onDispute: () => void;
   /** Why Dispute cannot be pressed, shown next to it. */
   disputeBlocked: string | null;
+  /** Set when the only thing missing is the stake wallet: offer to connect it instead of a dead button. */
+  onConnect?: () => void;
 }) {
   const toolName = detail?.proposal.toolName ?? null;
   return (
@@ -135,9 +138,15 @@ export function PenaltyRowCard({
             Why?
           </Button>
           {row.canDispute ? (
-            <Button size="sm" icon={<Scale aria-hidden="true" />} onClick={onDispute} disabled={Boolean(disputeBlocked)}>
-              Dispute
-            </Button>
+            disputeBlocked && onConnect ? (
+              <Button size="sm" icon={<Wallet aria-hidden="true" />} onClick={onConnect}>
+                Connect stake wallet
+              </Button>
+            ) : (
+              <Button size="sm" icon={<Scale aria-hidden="true" />} onClick={onDispute} disabled={Boolean(disputeBlocked)}>
+                Dispute
+              </Button>
+            )
           ) : null}
         </div>
         {row.canDispute && disputeBlocked ? (
@@ -192,6 +201,7 @@ export function PenaltyDrawer({
   onOpenChange,
   onDispute,
   disputeBlocked,
+  onConnect,
 }: {
   row: PenaltyRow | null;
   detail: SlashProposalCaseDetail | null;
@@ -199,6 +209,7 @@ export function PenaltyDrawer({
   onOpenChange: (open: boolean) => void;
   onDispute: () => void;
   disputeBlocked: string | null;
+  onConnect?: () => void;
 }) {
   const open = row !== null;
   const toolName = detail?.proposal.toolName ?? null;
@@ -296,9 +307,15 @@ export function PenaltyDrawer({
 
               {row.canDispute ? (
                 <div className="flex flex-col gap-1">
-                  <Button icon={<Scale aria-hidden="true" />} onClick={onDispute} disabled={Boolean(disputeBlocked)}>
-                    Dispute on chain
-                  </Button>
+                  {disputeBlocked && onConnect ? (
+                    <Button icon={<Wallet aria-hidden="true" />} onClick={onConnect}>
+                      Connect stake wallet
+                    </Button>
+                  ) : (
+                    <Button icon={<Scale aria-hidden="true" />} onClick={onDispute} disabled={Boolean(disputeBlocked)}>
+                      Dispute on chain
+                    </Button>
+                  )}
                   {disputeBlocked ? <span className="text-body-xs text-03">{disputeBlocked}</span> : null}
                 </div>
               ) : null}
