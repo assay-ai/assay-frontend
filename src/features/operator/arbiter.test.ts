@@ -16,6 +16,7 @@ import {
   toggleArbiterSelection,
   validateChainBlockForm,
   validateRulingForm,
+  validateSupersededCancelForm,
 } from "./arbiter";
 
 const NOTE = "The evidence holds on every sampled call.";
@@ -237,5 +238,42 @@ describe("approvedArbiterBlocks", () => {
         decidedAt: "2026-10-15T10:00:00Z",
       },
     ]);
+  });
+});
+
+/* Review R2-6: the guarded cancel of one superseded earlier-epoch record. */
+describe("validateSupersededCancelForm", () => {
+  const record = {
+    requestId: `0x${"A".repeat(64)}`,
+    proposalId: "p-1",
+    providerId: "prov",
+    chainId: "eip155:46630",
+    chainStatus: "PENDING",
+    recordEpoch: 0,
+    caseEpoch: 1,
+    penaltyAmount: "500",
+    reservedAmount: "500",
+    executableAt: "2026-10-20T00:00:00.000Z",
+  };
+
+  it("builds the body for exactly that record, lower-cased", () => {
+    expect(
+      validateSupersededCancelForm({ reasonCode: " SUPERSEDED_EPOCH ", note: NOTE, ticketRef: "" }, record),
+    ).toEqual({
+      ok: true,
+      body: {
+        chainId: "eip155:46630",
+        requestId: `0x${"a".repeat(64)}`,
+        reasonCode: "SUPERSEDED_EPOCH",
+        note: NOTE,
+      },
+    });
+  });
+
+  it("asks for a reason and a note", () => {
+    const result = validateSupersededCancelForm({ reasonCode: "", note: "short", ticketRef: "" }, record);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(Object.keys(result.errors).sort()).toEqual(["note", "reasonCode"]);
   });
 });

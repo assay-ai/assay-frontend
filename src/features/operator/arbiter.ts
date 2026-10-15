@@ -18,6 +18,8 @@ import type {
   ArbiterDispute,
   ArbiterRuling,
   ArbiterRulingBody,
+  ArbiterSupersededCancelBody,
+  ArbiterSupersededRecord,
   OperatorRole,
 } from "@/interfaces/operator";
 import { refusedFunctionOf } from "@/features/chain-calls/refusals";
@@ -236,6 +238,49 @@ export function validateRulingForm(
       chainId,
       ruling: input.ruling,
       requestIds: ids,
+      reasonCode,
+      note,
+      ...(ticketRef ? { ticketRef } : {}),
+    },
+  };
+}
+
+/** The superseded-record cancel form: the ruling form without a ruling or a selection. */
+export interface SupersededCancelFormInput {
+  reasonCode: string;
+  note: string;
+  ticketRef: string;
+}
+
+/** The reason code the superseded-record cancel suggests. */
+export const SUPERSEDED_REASON_SUGGESTIONS: readonly string[] = Object.freeze([
+  "SUPERSEDED_EPOCH",
+  "DOUBLE_CHARGE_RISK",
+]);
+
+/**
+ * Review R2-6: the guarded cancel of ONE superseded record. The body names
+ * exactly the row's id and chain; the backend refuses (409) any id that is
+ * not a superseded record standing on that chain.
+ */
+export function validateSupersededCancelForm(
+  input: SupersededCancelFormInput,
+  record: Pick<ArbiterSupersededRecord, "requestId" | "chainId">,
+): ArbiterValidated<ArbiterSupersededCancelBody, keyof SupersededCancelFormInput> {
+  const reasonCode = input.reasonCode.trim();
+  const note = input.note.trim();
+  const ticketRef = input.ticketRef.trim();
+  const errors = compact<keyof SupersededCancelFormInput>({
+    reasonCode: reasonCodeError(reasonCode),
+    note: noteError(note),
+    ticketRef: ticketError(ticketRef),
+  });
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  return {
+    ok: true,
+    body: {
+      chainId: record.chainId,
+      requestId: record.requestId.toLowerCase(),
       reasonCode,
       note,
       ...(ticketRef ? { ticketRef } : {}),

@@ -3,7 +3,8 @@ import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { toTwoPersonAnswer, type TwoPersonAnswer } from "@/features/operator/two-person";
 import type {
   AccountBlock, AddOperatorBody, AdjudicationQueueRow, ApprovalDecision, ApprovalQueued,
-  ArbiterBlockBody, ArbiterDispute, ArbiterRulingBody, ArbiterTerms, CancelIntent,
+  ArbiterBlockBody, ArbiterDispute, ArbiterRulingBody, ArbiterSupersededCancelBody,
+  ArbiterSupersededRecord, ArbiterTerms, CancelIntent,
   ChangeOperatorBody, CreateAccountBlockBody, ListAccountBlocksQuery, ListOverrideLogQuery,
   OperatorApproval, OperatorApprovalStatus, OperatorChallenge, OperatorDirectoryEntry,
   OperatorSignIn, OperatorStatus, OverrideLogEntry, RemoveOperatorBody, UnblockAccountBody,
@@ -276,6 +277,24 @@ export async function listArbiterDisputes(): Promise<ArbiterDispute[]> {
  */
 export function createArbiterRulingIntent(body: ArbiterRulingBody): Promise<SlashContractCall> {
   return operatorApi.post<SlashContractCall>("/operator/arbiter/ruling-intent", body);
+}
+
+/**
+ * `GET /operator/arbiter/superseded` — review R2-6: records of an earlier
+ * proposal of their case that landed late and still stand, soonest door first.
+ */
+export async function listSupersededRecords(): Promise<ArbiterSupersededRecord[]> {
+  const page = await operatorApi.get<{ items: ArbiterSupersededRecord[] }>("/operator/arbiter/superseded");
+  return page.items;
+}
+
+/**
+ * `POST /operator/arbiter/superseded/cancel-intent` — `S-13`, `ADJL` or `TRE`.
+ * The arbiter's unsigned `cancelSlashBatch` of ONE superseded record; 409 when
+ * the id is not one. Builds and logs; nothing is sent.
+ */
+export function createSupersededCancelIntent(body: ArbiterSupersededCancelBody): Promise<SlashContractCall> {
+  return operatorApi.post<SlashContractCall>("/operator/arbiter/superseded/cancel-intent", body);
 }
 
 /**
