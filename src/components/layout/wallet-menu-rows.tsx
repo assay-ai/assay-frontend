@@ -188,12 +188,8 @@ export function BalanceRows({
           */}
           {rows.length > 1 ? (
             <div className="px-2.5 pt-1.5">
-              <span className="font-mono text-mono-xs text-03">
-                {chains.find((chain) => chain.chainId === row.chainId)?.displayName ?? row.chainId}
-                {/* One account, two assets: say which one this row is. */}
-                {rows.some((other) => other !== row && other.accountId === row.accountId)
-                  ? ` · ${assetName(chains, row.asset)}`
-                  : null}
+              <span className="font-mono text-mono-xs text-03" data-testid="balance-row-label">
+                {balanceRowLabel(row, rows, chains)}
               </span>
             </div>
           ) : null}
@@ -203,4 +199,27 @@ export function BalanceRows({
       ))}
     </>
   );
+}
+
+/**
+ * "Robinhood Chain testnet · USDG · 0x18…7296": the chain, then the asset,
+ * then the account — each part only when it is needed to tell this row from
+ * another (eight rows all reading "Robinhood Chain testnet" told nobody which
+ * was which).
+ */
+export function balanceRowLabel(
+  row: FullBalance,
+  rows: readonly FullBalance[],
+  chains: readonly Chain[],
+): string {
+  const others = rows.filter((other) => other !== row);
+  const parts = [chains.find((chain) => chain.chainId === row.chainId)?.displayName ?? row.chainId];
+  const sameChain = others.filter((other) => other.chainId === row.chainId);
+  if (sameChain.length > 0 || others.some((other) => other.accountId === row.accountId)) {
+    parts.push(assetName(chains, row.asset));
+  }
+  if (sameChain.some((other) => other.accountId !== row.accountId)) {
+    parts.push(shortAddress(row.chainId, row.accountId.split(":").slice(2).join(":")));
+  }
+  return parts.join(" · ");
 }
