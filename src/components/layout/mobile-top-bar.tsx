@@ -34,6 +34,8 @@ export interface MobileTopBarProps
   onAlertsClick?: () => void;
   /** Unread alert count shown in the badge. */
   alertCount?: number;
+  /** Replaces the alerts button with an interactive one (the buyer shell's recent-alerts popover). */
+  alerts?: React.ReactNode;
   /** Trailing slot after the alerts action; the buyer shell puts the account menu here. */
   avatar?: React.ReactNode;
 }
@@ -51,6 +53,7 @@ export const MobileTopBar = React.forwardRef<HTMLElement, MobileTopBarProps>(
       onAlertsClick,
       alertCount = 2,
       avatar,
+      alerts,
       ...props
     },
     ref
@@ -89,7 +92,8 @@ export const MobileTopBar = React.forwardRef<HTMLElement, MobileTopBarProps>(
             </button>
           ) : null}
 
-          {showAlerts ? (
+          {showAlerts && alerts ? alerts : null}
+          {showAlerts && !alerts ? (
             <button
               type="button"
               onClick={onAlertsClick}

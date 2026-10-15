@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import { Fact, FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, Fact, FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { ToolAccessControl, useSpendPolicy } from "@/components/explorer/tool-access-control";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
@@ -15,9 +15,12 @@ import { Search } from "@/components/ui/search";
 import {
   checkSentences,
   failRateLabel,
+  failsOften,
   formatCallPrice,
   freeTierLabel,
+  heldPriceSentence,
   plural,
+  priceRange,
   priceSentence,
   smallestFreeAllowance,
   stakeSummary,
@@ -103,6 +106,11 @@ function ToolDetail({
 }) {
   const chainName = useChainName();
   const uncharged = tool.listed && tool.charged ? notCharged(tool.listed, tool.charged) : null;
+  const range = priceRange(tool.price, [
+    tool.fromPrice,
+    ...providers.map((p) => details.get(p.providerId)?.tools.find((t) => t.toolId === tool.toolId)?.price),
+  ]);
+  const rangeLine = range ? heldPriceSentence(range) : null;
 
   return (
     <div className="flex flex-col gap-4 border-t border-01 bg-02 px-4 py-4 tablet:px-5">
@@ -114,7 +122,7 @@ function ToolDetail({
         <div className="flex flex-col gap-1.5">
           <h3 className="text-label-13 text-01">What a call costs</h3>
           <p className="text-body-13 text-02">
-            {priceSentence({ mode: tool.pricingMode, price: tool.price, freeCallsPerDay: freeAllowance })}
+            {rangeLine ?? priceSentence({ mode: tool.pricingMode, price: tool.price, freeCallsPerDay: freeAllowance })}
           </p>
         </div>
         <div className="flex flex-col gap-1.5">
@@ -149,6 +157,7 @@ function ToolDetail({
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="text-label-sm text-01">{provider.name}</span>
                           <VerifiedMark verified={provider.verified} />
+                          {failsOften(provider) ? <FailsOftenChip /> : null}
                         </span>
                         {listing ? (
                           <span className="text-body-xs text-03">{formatCallPrice(listing.price)} per call</span>
@@ -302,6 +311,7 @@ function ToolsList() {
             const blocked = policy.data ? toolAccess(policy.data.allowedTools, tool.toolId) === "blocked" : false;
             const serving = providers.filter((p) => p.toolIds.includes(tool.toolId));
             const freeAllowance = freeAllowanceOf(tool.toolId);
+            const range = priceRange(tool.price, [tool.fromPrice]);
             return (
               <li key={tool.toolId} ref={open ? openRef : undefined} className="border-b border-01 last:border-b-0">
                 <button
@@ -325,8 +335,17 @@ function ToolsList() {
                     </span>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
-                    <span className="font-mono text-mono-13 font-semibold text-01">{tool.price ? formatCallPrice(tool.price) : "—"}</span>
-                    <span className="hidden text-body-xs text-03 tablet:block">{tool.price ? "per call, only if it passes" : ""}</span>
+                    <span className="font-mono text-mono-13 font-semibold text-01">
+                      {range?.differs ? <span className="font-sans text-body-xs font-normal text-03">from </span> : null}
+                      {range ? formatCallPrice(range.from) : "—"}
+                    </span>
+                    <span className="hidden text-body-xs text-03 tablet:block">
+                      {range?.differs
+                        ? `held at most ${formatCallPrice(range.held)}, paid only if it passes`
+                        : tool.price
+                          ? "per call, only if it passes"
+                          : ""}
+                    </span>
                   </div>
                   {open ? (
                     <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-03" />

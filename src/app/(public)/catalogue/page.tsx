@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowRight, ChevronRight, Store } from "lucide-react";
+import { ChevronRight, Store } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
+import { StartFreeCta } from "@/components/explorer/start-free";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,9 @@ import { Search } from "@/components/ui/search";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import {
   failRateLabel,
+  failsOften,
   formatCallPrice,
+  priceRange,
   freeTierLabel,
   plural,
   smallestFreeAllowance,
@@ -28,7 +31,6 @@ import {
 } from "@/features/explorer/use-public-explorer";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
-import { loginHref } from "@/libs/login-redirect";
 import { routes } from "@/libs/routes";
 import type { PublicProvider, PublicTool } from "@/services/public-explorer.service";
 
@@ -51,6 +53,7 @@ function matches(needle: string, ...fields: (string | null | undefined)[]): bool
 
 function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: number | null }) {
   const free = freeTierLabel(tool.pricingMode, freeAllowance);
+  const range = priceRange(tool.price, [tool.fromPrice]);
   return (
     <li>
       <Link
@@ -70,9 +73,16 @@ function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: num
         </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
           <span className="font-mono text-mono-13 font-semibold text-01">
-            {tool.price ? formatCallPrice(tool.price) : "—"}
+            {range?.differs ? <span className="font-sans text-body-xs font-normal text-03">from </span> : null}
+            {range ? formatCallPrice(range.from) : "—"}
           </span>
-          <span className="hidden text-body-xs text-03 tablet:block">{tool.price ? "per call, only if it passes" : ""}</span>
+          <span className="hidden text-body-xs text-03 tablet:block">
+            {range?.differs
+              ? `held at most ${formatCallPrice(range.held)}, paid only if it passes`
+              : tool.price
+                ? "per call, only if it passes"
+                : ""}
+          </span>
         </div>
         <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03 group-hover:text-02" />
       </Link>
@@ -91,6 +101,7 @@ function ProviderRow({ provider, chainName }: { provider: PublicProvider; chainN
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-label-sm text-01">{provider.name}</span>
             <VerifiedMark verified={provider.verified} />
+            {failsOften(provider.quality) ? <FailsOftenChip /> : null}
           </div>
           <p className="text-body-xs text-03">
             {plural(provider.toolIds.length, "tool")} · {failRateLabel(provider.quality)}
@@ -150,13 +161,8 @@ export default function CataloguePage() {
           Every tool here is served by providers who put up a <Term k="stake">stake</Term>. Each result is checked
           before money moves; if it fails, nobody is charged.
         </p>
-        <div className="flex flex-wrap gap-2.5 pt-1">
-          <Button asChild>
-            <Link href={loginHref({ next: "/" })}>
-              Start free
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </Button>
+        <div className="flex flex-wrap items-start gap-2.5 pt-1">
+          <StartFreeCta next="/" />
           {features.demo ? (
             <Button asChild variant="secondary">
               <Link href="/demo">Watch it refuse to charge</Link>

@@ -4,6 +4,7 @@ import { ArrowLeft, Code2, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { UnavailablePage } from "@/components/explorer/unavailable-page";
 import { PageState } from "@/components/patterns/page-state";
 import { useChainName } from "@/hooks/useChainName";
 import { Banner } from "@/components/ui/banner";
@@ -178,22 +179,23 @@ export default function ReservesPage() {
   if (configured === false || data === null) {
     return (
       <Shell>
-        <Banner
-          tone="primary"
+        <UnavailablePage
+          eyebrow="Reserves"
           title="Reserve figures are not published on this site"
-          description="There is nothing to show here, and that is not a shortfall."
+          wouldShow="This page would show the account that holds buyers' money and how it compares with what buyers are owed. This site does not publish it; that is not a shortfall. What you can check here:"
+          destinations={[
+            {
+              href: "/how-it-works",
+              title: "Where your money sits while a call is checked",
+              description: "Money is held per call and released back to you if the result fails.",
+            },
+            {
+              href: "/catalogue",
+              title: "Providers' stake, per provider",
+              description: "What each provider has put up as a promise of quality, and their failure record.",
+            },
+          ]}
         />
-        <p className="text-body-13 text-02">
-          You can still read{" "}
-          <Link href="/how-it-works" className="text-primary-500 underline">
-            how a call is checked before it is charged
-          </Link>{" "}
-          or browse{" "}
-          <Link href="/catalogue" className="text-primary-500 underline">
-            the tools and prices
-          </Link>
-          .
-        </p>
       </Shell>
     );
   }

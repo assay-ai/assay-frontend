@@ -16,7 +16,7 @@ describe("auditSentence", () => {
   it("says who changed what, from what to what", () => {
     expect(
       auditSentence(entry({ before: { dailyCap: "40.00" }, after: { dailyCap: "75.00" } }), () => null, "me@example.com"),
-    ).toEqual({ title: "Budget changed", line: "You changed daily cap from 40.00 to 75.00" });
+    ).toEqual({ title: "Budget changed", line: "You changed daily budget from $40.00 to $75.00" });
   });
   it("names agents and Assay, and never prints raw ids", () => {
     expect(
@@ -24,10 +24,31 @@ describe("auditSentence", () => {
         entry({ actorType: "agent", actorId: "a1", action: "credential.created", after: { agentId: "5b8e1c02-7a34-4d96-8f10-c6e3b92d7f45" } }),
         (id) => (id === "a1" ? "research-agent" : null),
       ).line,
-    ).toBe("By research-agent");
+    ).toBe("research-agent created an agent key");
     expect(auditSentence(entry({ actorType: "system", actorId: null, after: { maxCallsPerMinute: 30 } }), () => null).line).toBe(
-      "Assay set max calls per minute to 30",
+      "Assay set calls per minute limit to 30",
     );
+  });
+  it("says refunds, sign-ins and revocations as sentences, with no raw keys", () => {
+    const refund = auditSentence(
+      entry({ actorType: "system", actorId: null, action: "payment_intent.refunded", before: { charged: "6.00" }, after: { charged: "0.00" } }),
+      () => null,
+    );
+    expect(refund.title).toBe("Refund: $6.00 not charged");
+    expect(refund.line).toMatch(/failed our checks/);
+    const session = auditSentence(
+      entry({ actorType: "agent", actorId: "a1", action: "session.created", after: { credential: "x402_live_31ac" } }),
+      () => "prod",
+    );
+    expect(session.title).toBe("Agent connected");
+    expect(session.line).not.toMatch(/x402_/);
+    expect(auditSentence(entry({ action: "session.created" }), () => null, "me@example.com").title).toBe("Signed in");
+    const revoked = auditSentence(
+      entry({ action: "credential.revoked", before: { name: "CI deploy", revokedAt: null }, after: { name: "CI deploy", revokedAt: "immediately" } }),
+      () => null,
+      "me@example.com",
+    );
+    expect(revoked).toEqual({ title: "Agent key revoked", line: "You revoked the agent key “CI deploy”; it stopped working immediately" });
   });
 });
 

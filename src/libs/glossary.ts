@@ -77,6 +77,30 @@ export const GLOSSARY = {
     term: "Agent key",
     definition: "The secret your agent uses to call tools through Assay; it identifies the agent and what it may spend.",
   },
+  "response-shape": {
+    term: "Response shape",
+    definition: "Checks that the result has the fields and format the tool promises; it runs on every call.",
+  },
+  "quality-rules": {
+    term: "Result quality rules",
+    definition:
+      "Simple rules the tool publishes for a good result, such as no empty answers, no dead links and no stale data; they run on every call.",
+  },
+  "cross-check": {
+    term: "Independent cross-check",
+    definition:
+      "For some tools we ask a second, independent source the same question and compare the answers; a result that disagrees fails.",
+  },
+  "relevance-check": {
+    term: "Relevance check",
+    definition:
+      "An automated reviewer reads the request and the result and judges whether the result actually answers it; it runs on a sample of calls, set by the price.",
+  },
+  penalty: {
+    term: "Penalty",
+    definition:
+      "Money taken from a provider's stake when their tool fails more often than they promised; buyers who paid in that period are compensated from it.",
+  },
   mcp: {
     term: "MCP",
     definition: "Model Context Protocol, the standard way AI agents discover and call tools; Assay is one MCP server.",

@@ -35,7 +35,8 @@ import { formatMoney, notCharged, toDecimal } from "@/utils/money";
  * (`?status=not-charged&tool=<id>`), so Not charged and Overview can link
  * straight to a filtered list. A row opens the receipt.
  *
- * No agent filter: `GET /tool-calls` neither returns nor filters by agent.
+ * No agent column or filter: `GET /tool-calls` neither returns nor filters by
+ * agent. The provider that served the call is shown when it is known.
  */
 
 const PAGE = 50;
@@ -45,7 +46,7 @@ function CallsList() {
   const router = useRouter();
   const filter = parseCallsFilter(params.get("status"));
   const toolId = params.get("tool") || null;
-  const names = useEntityNames({ kinds: ["tool"] });
+  const names = useEntityNames({ kinds: ["tool", "provider"] });
 
   const setParams = React.useCallback(
     (next: { status?: CallsFilter; tool?: string | null }) => {
@@ -175,9 +176,18 @@ function CallsList() {
                       <span className="truncate font-mono text-mono-13 font-semibold text-01">
                         <EntityName kind="tool" id={call.toolId} copyable={false} />
                       </span>
-                      <span className="flex flex-wrap items-center gap-2 text-body-xs text-03">
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-03">
                         <StatusChip status={outcome} />
-                        <LocalTime value={call.createdAt} />
+                        <span>
+                          {outcome === "checking" ? "started " : null}
+                          <LocalTime value={call.createdAt} relative />
+                        </span>
+                        {names.lookup("provider", call.providerId) ? (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className="truncate">{names.lookup("provider", call.providerId)}</span>
+                          </>
+                        ) : null}
                       </span>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-0.5">

@@ -63,12 +63,20 @@ import {
  * so `useEntityNames` resolves them to legal names as it would in production.
  */
 const TOOLS = {
-  deep_search: { provider: "9c1d4f60-3a77-4c18-9b02-6e5a1f2d8b41", price: "6.00" },
-  ocr_extract: { provider: "e41b7d93-2a58-4f60-b7c9-3d80f5a1e6c4", price: "4.50" },
-  kyc_lookup: { provider: "c9f35a82-6014-4d7b-8e93-2a1c7f06b5d8", price: "3.60" },
-  price_quote: { provider: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", price: "2.50" },
-  geocode: { provider: "b7e04c25-9d13-4a6f-bc80-1e5f3a7d9c62", price: "1.25" },
+  // The keys are this file's short names; `id` is the catalogue's tool id
+  // (fixtures-explore), which is what goes on the wire, so every call, filter,
+  // search result and link resolves to the same named tool on Explore.
+  deep_search: { id: "84c1e70b-5a29-4f36-9e8d-2b40c6f7a915", provider: "9c1d4f60-3a77-4c18-9b02-6e5a1f2d8b41", price: "6.00" }, // deep_research
+  ocr_extract: { id: "abae704e-0a56-5674-9074-6c7bfc25fad1", provider: "e41b7d93-2a58-4f60-b7c9-3d80f5a1e6c4", price: "4.50" }, // extract_page_text
+  kyc_lookup: { id: "2b7f9c41-0e63-4d8a-9f52-7a1c4e6b03d9", provider: "c9f35a82-6014-4d7b-8e93-2a1c7f06b5d8", price: "3.60" }, // search_web
+  price_quote: { id: "a4b9882a-9bc1-4d64-807a-27c0b93daf0a", provider: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", price: "2.50" }, // get_usd_eur_rate
+  geocode: { id: "ad39dccc-aff2-54c1-b383-62e0ff392570", provider: "b7e04c25-9d13-4a6f-bc80-1e5f3a7d9c62", price: "1.25" }, // geocode_place
 } as const;
+
+/** The catalogue tool id a short name stands for. */
+function wireToolId(key: ToolId): string {
+  return TOOLS[key].id;
+}
 
 type ToolId = keyof typeof TOOLS;
 
@@ -254,19 +262,19 @@ const CALLS: readonly DemoCall[] = [
   },
   {
     /*
-      Classified SYSTEM_ERROR, so the receipt screen draws the "The tool did not
-      respond" card — and it still carries a verdict row with a reason, which is
-      what puts its 3.60 in the guarantee's "Why calls failed" table instead of
-      leaving that table short of the headline figure.
+      The provider returned an error, so — as on the real API — the call is
+      VOIDED with no verdict: no check ran because there was no result. The
+      receipt says "The provider returned an error instead of a result" and
+      Not charged lists it under "No usable result".
     */
     intentId: "e48a3b19-7c65-4d02-8f1b-5a97c2e04d63",
     toolId: "kyc_lookup",
     minutesAgo: 2400,
     charged: "0",
-    status: "REFUNDED",
-    verdict: "FAIL",
+    status: "VOIDED",
+    verdict: null,
     classification: "SYSTEM_ERROR",
-    reasonCode: "upstream_unavailable",
+    reasonCode: null,
     score: null,
   },
 ];
@@ -464,7 +472,7 @@ function groupKeyOf(groupBy: string, toolId: ToolId, dayMs: number, refunded: bo
     case "verdict":
       return refunded ? "FAIL" : "PASS";
     default:
-      return toolId;
+      return wireToolId(toolId);
   }
 }
 
@@ -656,7 +664,7 @@ function withheldBody(query: Record<string, unknown>) {
 function toolCallRow(call: DemoCall) {
   return {
     intentId: call.intentId,
-    toolId: call.toolId,
+    toolId: wireToolId(call.toolId),
     providerId: providerOf(call),
     status: call.status,
     price: money(listedPrice(call)),
@@ -705,19 +713,9 @@ function stagesFor(call: DemoCall): WireStage[] {
     return ["SCHEMA", "DETERMINISTIC_RULES", "CROSS_CHECK", "SEMANTIC"].map(notReached);
   }
 
-  if (call.classification === "SYSTEM_ERROR") {
-    return [
-      {
-        stage: "SCHEMA",
-        status: "UNAVAILABLE",
-        label: "could not run",
-        passed: false,
-        detail: "The upstream returned 504 twice and then closed the connection.",
-      },
-      notReached("DETERMINISTIC_RULES"),
-      notReached("CROSS_CHECK"),
-      notReached("SEMANTIC"),
-    ];
+  if (call.classification === "SYSTEM_ERROR" || call.classification === "REQUEST_ERROR") {
+    // No result, so no check ran — the real API has no verification record here.
+    return ["SCHEMA", "DETERMINISTIC_RULES", "CROSS_CHECK", "SEMANTIC"].map(notReached);
   }
 
   if (call.verdict === "FAIL") {
@@ -769,7 +767,7 @@ function receiptBody(call: DemoCall) {
 
   return {
     intentId: call.intentId,
-    toolId: call.toolId,
+    toolId: wireToolId(call.toolId),
     providerId: providerOf(call),
     classification: call.classification,
     status: call.status,
@@ -798,7 +796,7 @@ function receiptBody(call: DemoCall) {
     createdAt: created,
     expiresAt: minutesAgo(call.minutesAgo - 1440),
     updatedAt: settled ?? created,
-    evaluatedAt: settled,
+    evaluatedAt: call.verdict ? settled : null,
     settledAt: charged ? settled : null,
     holdReleasedAt: charged ? null : settled,
   };
@@ -807,13 +805,13 @@ function receiptBody(call: DemoCall) {
 /* ---------------------------------------------------------------- verdicts */
 
 /** Only the finished calls have a verdict; an in-flight one has nothing to record yet. */
-const JUDGED = CALLS.filter((call) => !inFlight(call));
+const JUDGED = CALLS.filter((call) => !inFlight(call) && call.verdict !== null);
 
 function verdictRow(call: DemoCall) {
   return {
     id: verdictIdOf(call),
     intentId: call.intentId,
-    toolId: call.toolId,
+    toolId: wireToolId(call.toolId),
     providerId: providerOf(call),
     verdictStatus: call.verdict,
     reasonCode: call.reasonCode,
@@ -862,7 +860,7 @@ function evidenceBody(call: DemoCall) {
   return {
     id: verdictIdOf(call),
     intentId: call.intentId,
-    toolId: call.toolId,
+    toolId: wireToolId(call.toolId),
     providerId: providerOf(call),
     state: "SEALED",
     request: bodies.request,
@@ -1179,6 +1177,21 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     }),
   },
   {
+    // Allow / Block on Explore and the Budgets screen. The demo keeps no state:
+    // this answers the saved policy as the change would leave it, which the
+    // screens put in their cache, so the success state can be seen; a reload
+    // shows the stage set's own policy again.
+    method: "PATCH",
+    match: "/spend-policy",
+    body: (path, query, data) => {
+      const current = (BUYER_FIXTURES.find((f) => f.method === "GET" && f.match === "/spend-policy")?.body(path, query) ??
+        {}) as Record<string, unknown>;
+      const change = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+      const { changeReason: _reason, ...fields } = change;
+      return { ...current, ...fields, version: Number(current.version ?? 1) + 1, updatedAt: new Date().toISOString() };
+    },
+  },
+  {
     method: "GET",
     match: "/spend-policy",
     body: () => {
@@ -1365,7 +1378,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           id: "aud_5b2c",
           actorType: "system",
           actorId: null,
-          action: "payment_intent.refunded",
+          action: "payment_intent.voided",
           resourceType: "payment_intent",
           resourceId: "e48a3b19-7c65-4d02-8f1b-5a97c2e04d63",
           before: { charged: "3.60" },
@@ -1447,10 +1460,10 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           id: "ntf_4c17",
           event: "velocity.anomaly",
           severity: "WARNING",
-          title: "geocode ran at eight times its usual rate for 20 minutes",
+          title: "geocode_place ran at eight times its usual rate for 20 minutes",
           body: "34 calls between 09:10 and 09:30 UTC against a 7-day median of 4 in that window. Nothing was refused — the per-minute ceiling is 30 and the burst stayed under it.",
           subjectType: "tool",
-          subjectId: "geocode",
+          subjectId: TOOLS.geocode.id,
           readAt: null,
           createdAt: minutesAgo(96),
         },
@@ -1469,7 +1482,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           id: "ntf_8b30",
           event: "payment_intent.refunded",
           severity: "INFO",
-          title: "A deep_search call failed our checks — $6.00 was not charged",
+          title: "A deep_research call failed our checks — $6.00 was not charged",
           body: "The result set was empty where the rules require at least two rows. The hold was released; your balance never moved.",
           subjectType: "payment_intent",
           subjectId: "b90f2c48-3a71-4e69-85d0-2f4a6c19e7b5",
