@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { FailsOftenChip, FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
-import { NotChargedProof } from "@/components/explorer/not-charged-proof";
+import { NotChargedProof, NotChargedSummary } from "@/components/explorer/not-charged-proof";
 import { StartFreeCta } from "@/components/explorer/start-free";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
@@ -41,10 +41,12 @@ import type { PublicProvider, PublicTool } from "@/services/public-explorer.serv
 /**
  * The public Explorer — route `/catalogue`, no sign-in.
  *
- * What a newcomer needs, in order: the promise and its live proof (what our
- * checks refused to charge, across every buyer), then every tool with its
- * price, free tier and who serves it; each row opens the tool's page. Data is
- * the platform's aggregate only (`GET /public/*`).
+ * What a newcomer needs, in order: the promise with a one-line summary of
+ * its live proof, then every tool with its price, free tier and who serves it
+ * (each row opens the tool's page), then the full proof (what our checks
+ * refused to charge, across every buyer). The tools come before the long
+ * proof so a phone visitor sees them without scrolling past it. Data is the
+ * platform's aggregate only (`GET /public/*`).
  */
 
 function errorCode(error: unknown): string | null {
@@ -186,9 +188,8 @@ export default function CataloguePage() {
             </Button>
           ) : null}
         </div>
+        <NotChargedSummary />
       </header>
-
-      <NotChargedProof />
 
       <section aria-labelledby="list-title" className="flex flex-col gap-3">
         <div className="flex flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
@@ -283,6 +284,8 @@ export default function CataloguePage() {
           </ul>
         )}
       </section>
+
+      <NotChargedProof />
 
       <section className="flex flex-col gap-3 rounded-xl border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:justify-between tablet:p-6">
         <div className="flex flex-col gap-1">
