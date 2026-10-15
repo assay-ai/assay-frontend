@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleAlert } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
@@ -10,15 +10,25 @@ import { PresetChips } from "@/components/patterns/preset-chips";
 import { WalletActionSheet } from "@/components/patterns/sign-action";
 import { StatusTimeline } from "@/components/patterns/status-timeline";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
+import { openPenaltyHold, openPenaltyPhrase } from "@/features/provider-penalties/model";
 import { usePenalties } from "@/features/provider-penalties/use-penalties";
 import { routes } from "@/libs/routes";
+import { getProviderRegistration } from "@/services/provider-registration.service";
 import { formatDecimal, formatMoney, parseAmountInput, toDecimal } from "@/utils/money";
 
 import { stakeActionChain } from "./chain-stake";
 import { describeStakeError, unstakeStep, withdrawStep } from "./stake-steps";
 import { PROVIDER_STAKE_KEY, useStakeStatus } from "./use-stake-status";
 import { useStakeWallet, walletBlocker } from "./use-stake-wallet";
-import { availableAfterRequest, MIN_UNBONDING_MS, periodLabel, toolsPausedAt, withdrawPlan, withdrawStateOf } from "./withdraw-state";
+import {
+  availableAfterRequest,
+  toolsPausedAt,
+  waitingDuration,
+  waitingPeriodOf,
+  waitingPeriodPhrase,
+  withdrawPlan,
+  withdrawStateOf,
+} from "./withdraw-state";
 
 /**
  * "Withdraw stake": one sheet for both halves of getting stake back.
@@ -37,6 +47,7 @@ import { availableAfterRequest, MIN_UNBONDING_MS, periodLabel, toolsPausedAt, wi
  */
 export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const status = useStakeStatus();
+  const registration = useQuery({ queryKey: ["provider", "registration"], queryFn: getProviderRegistration, retry: 0 });
   const wallet = useStakeWallet(status);
   const penalties = usePenalties({ withCases: "none" });
   const names = useProviderToolNames();
@@ -71,10 +82,9 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
       ? toolsPausedAt(plan, BigInt(state.staked.amount) - BigInt(parsed.atomic ?? "0"))
       : [];
   const pausesTools = pausing.length > 0;
-  const periodKnown = state.periodMs !== null;
-  const waitMs = state.periodMs ?? MIN_UNBONDING_MS;
-  const maturesAt = availableAfterRequest(state) ?? new Date(Date.now() + MIN_UNBONDING_MS).toISOString();
-  const waitLabel = periodLabel(waitMs)!;
+  const waiting = waitingPeriodOf(state.periodMs, registration.data?.terms);
+  const periodKnown = waiting.exact;
+  const maturesAt = availableAfterRequest(state) ?? new Date(Date.now() + waiting.ms).toISOString();
   const blocker = walletBlocker(wallet);
 
   const ready = state.phase === "ready" && state.unbonding;
@@ -120,7 +130,7 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
         { id: "start", label: "Start withdrawing", state: "current", dateLabel: "Today, one signature" },
         {
           id: "wait",
-          label: `Waiting period: ${periodKnown ? waitLabel : `at least ${waitLabel}`}`,
+          label: `Waiting period: ${waitingDuration(waiting)}`,
           state: "upcoming",
           description: "Covers penalties for calls you already served. The money stays staked and cannot be taken for new calls.",
         },
@@ -134,6 +144,15 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
       ]}
     />
   );
+
+  // Said on the chip itself, before anyone picks it: which paid tools taking everything out would pause.
+  const pausedByAll = toolsPausedAt(plan, 0n).map((item) => names.toolName(item.toolId) ?? "a paid tool");
+  const everythingNote =
+    pausedByAll.length === 0
+      ? undefined
+      : pausedByAll.length <= 2
+        ? `Pauses ${pausedByAll.join(" and ")}`
+        : `Pauses all ${pausedByAll.length} paid tools`;
 
   const freeHint = state.staked
     ? [
@@ -155,8 +174,7 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
           <>{formatMoney(state.unbonding)} has finished unbonding and can go back to your wallet now.</>
         ) : (
           <>
-            Stake comes back in two steps: it waits for {periodKnown ? waitLabel : `at least ${waitLabel}`}, then you
-            withdraw it to your wallet.
+            Stake comes back in two steps: {waitingPeriodPhrase(waiting)}, then you withdraw it to your wallet.
           </>
         )
       }
@@ -195,8 +213,8 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
           {freeHint ? <p className="text-body-xs text-03">{freeHint}</p> : null}
           {plan.reserved ? (
             <Link href={routes.penalties("needs-action")} className="text-body-xs text-03 underline underline-offset-2">
-              {openPenalties.length === 1 ? "1 open penalty" : `${openPenalties.length} open penalties`} hold{" "}
-              {formatMoney(plan.reserved)} until they are settled
+              {openPenaltyPhrase(openPenaltyHold(penalties.rows))} hold {formatMoney(plan.reserved)} until they are
+              settled
             </Link>
           ) : null}
         </div>
@@ -208,7 +226,9 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
             label="Amount to withdraw"
             presets={[
               ...(freeValue ? [{ value: freeValue, label: `Max without pausing ${formatMoney(plan.free)}` }] : []),
-              ...(max && max !== freeValue ? [{ value: max, label: `Everything ${formatMoney(state.staked)}` }] : []),
+              ...(max && max !== freeValue
+                ? [{ value: max, label: `Everything ${formatMoney(state.staked)}`, description: everythingNote }]
+                : []),
             ]}
             value={value}
             onChange={setValue}

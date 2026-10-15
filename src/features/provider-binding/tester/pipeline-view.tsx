@@ -36,7 +36,16 @@ const WORD: Record<PipelineStatus, string> = {
  * knows what to change. Raw request, response and mapped output stay one
  * click away under "Show the raw exchange".
  */
-export function TestPipelineView({ report, stale }: { report: BindingTestReport; stale?: boolean }) {
+export function TestPipelineView({
+  report,
+  stale,
+  paid,
+}: {
+  report: BindingTestReport;
+  stale?: boolean;
+  /** The listing charges per call. A free or not-yet-priced draft must not read "would be paid". */
+  paid?: boolean;
+}) {
   const pipeline = testPipeline(report);
 
   return (
@@ -44,7 +53,11 @@ export function TestPipelineView({ report, stale }: { report: BindingTestReport;
       {pipeline.passed && !pipeline.emptyResult ? (
         <div role="status" className="flex items-start gap-2.5 rounded-lg bg-success-10 px-3.5 py-3 text-success-700">
           <Check aria-hidden="true" strokeWidth={3} className="mt-0.5 size-4 shrink-0" />
-          <p className="text-label-13">Test passed. A real call like this one would be paid.</p>
+          <p className="text-label-13">
+            {paid
+              ? "Test passed. A real call like this one would pass our check and be paid."
+              : "Test passed. A real call like this one would pass our check."}
+          </p>
         </div>
       ) : pipeline.emptyResult ? (
         <div role="status" className="flex items-start gap-2.5 rounded-lg bg-warning-10 px-3.5 py-3 text-warning-700">

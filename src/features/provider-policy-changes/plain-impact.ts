@@ -69,7 +69,7 @@ export function plainImpact(entry: PolicyDiffEntry): PlainImpact {
     if (entry.changeType === "added") return { text: "A new rule is added that each result must meet.", direction: "stricter" };
     if (entry.changeType === "removed") return { text: "A rule each result had to meet is removed.", direction: "looser" };
     if (before !== null && after !== null) {
-      return { text: `A rule's limit changes from ${before} to ${after}.`, direction: "neutral" };
+      return { text: `One of the rules that decides when a result fails changes its threshold from ${before} to ${after}; the technical details below name it.`, direction: "neutral" };
     }
     return { text: "A rule each result must meet changes.", direction: "neutral" };
   }

@@ -186,7 +186,13 @@ function QualityContent() {
             </span>
             {reading.sample ? <span className="text-label-13">{reading.sample}</span> : null}
             <span className="text-body-13">{reading.advice}</span>
-            {current ? <span className="text-body-xs opacity-80">{windowRange(current)}</span> : null}
+            {current && current.status !== "OPEN" ? (
+              <span className="text-body-xs opacity-80">{windowRange(current)}</span>
+            ) : current ? (
+              <span className="text-body-xs opacity-80">
+                This window closes by <LocalTime value={current.deadlineAt} withZone />, or sooner once enough calls are checked.
+              </span>
+            ) : null}
           </section>
 
           <section className="flex w-full flex-col items-start gap-4 tablet:flex-row">
