@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowUpRight, Clock, MoreHorizontal, Plus, ShieldCheck, Users, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Clock, LogOut, MoreHorizontal, Plus, ShieldCheck, UserPlus, Users, Wallet, Zap } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -18,7 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { approvalNeeds, approvalTargetId } from "@/features/operator/approvals";
+import { approvalTargetId } from "@/features/operator/approvals";
 import {
   DIRECTORY_NOTE_MIN,
   ROLE_OPTIONS,
@@ -34,10 +34,10 @@ import {
 import { eligibleApprovers, operatorLabel } from "@/features/operator/inbox";
 import { OPERATOR_ADD_REASONS, OPERATOR_CHANGE_REASONS, OPERATOR_REMOVE_REASONS } from "@/features/operator/reasons";
 import { ResultCard } from "@/features/operator/result-card";
-import { ROLE_PRESETS, presetOf, removalWarnings, roleTitle } from "@/features/operator/roles";
-import { firstNames, inviteLimit, invitesOf, limitCell } from "@/features/operator/team";
+import { ROLE_PRESETS, actsOnMoney, presetOf, removalWarnings, roleTitle } from "@/features/operator/roles";
+import { firstNames, inviteLimit, invitesOf, limitCell, limitMoney, teamTabs } from "@/features/operator/team";
 import { useOperatorSession } from "@/features/operator/session-context";
-import { approvalHref, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
+import { approvalHref, approverPhrase, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
 import { WhatHappens } from "@/features/operator/what-happens";
 import { WhyNot } from "@/features/operator/why-not";
 import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
@@ -93,8 +93,12 @@ function TeamScreen() {
   React.useEffect(() => {
     if (searchParams.get("new") !== "1" || !canManage) return;
     setSheet({ kind: "add" });
-    router.replace(pathname, { scroll: false });
-  }, [searchParams, canManage, router, pathname]);
+  }, [searchParams, canManage]);
+  // `?new=1` goes when the sheet closes, so a reload does not open it again.
+  const closeSheet = () => {
+    setSheet(null);
+    if (searchParams.has("new")) router.replace(pathname, { scroll: false });
+  };
 
   const list = useInfiniteQuery({
     queryKey: ["operator", "operators", "list", status],
@@ -126,19 +130,21 @@ function TeamScreen() {
   }, [pending.data]);
   const decimals = me.authorityLimit?.decimals ?? rows.find((row) => row.authorityLimit)?.authorityLimit?.decimals ?? 6;
   const asset = me.authorityLimit?.asset ?? rows.find((row) => row.authorityLimit)?.authorityLimit?.asset ?? "";
-  const countOf = (tab: "ACTIVE" | ""): string | null => {
-    if (tab === status) return list.data ? `${rows.length}${list.hasNextPage ? "+" : ""}` : null;
-    return other.data ? `${other.data.items.length}${other.data.pageInfo.nextCursor ? "+" : ""}` : null;
+  const countOf = (tab: "ACTIVE" | ""): { count: number; more: boolean } | null => {
+    if (tab === status) return list.data ? { count: rows.length, more: Boolean(list.hasNextPage) } : null;
+    return other.data ? { count: other.data.items.length, more: Boolean(other.data.pageInfo.nextCursor) } : null;
   };
+  // One list when nobody is removed or suspended: the two tabs would be the same.
+  const tabs = teamTabs(countOf("ACTIVE"), countOf(""));
 
   const done = (node: React.ReactNode) => {
     setResult(node);
-    setSheet(null);
+    closeSheet();
     void queryClient.invalidateQueries({ queryKey: ["operator", "operators"] });
     void queryClient.invalidateQueries({ queryKey: ["operator", "approvals"] });
   };
   const queuedOrDone = (answer: TwoPersonAnswer<OperatorDirectoryEntry>, what: string, approvers: string[]) => {
-    const sent = answer.kind === "queued" ? sentForApproval(what, approvers, "a second Admin", answer.approval.expiresAt) : null;
+    const sent = answer.kind === "queued" ? sentForApproval(what, approvers, approverPhrase("A-12", me.roles), answer.approval.expiresAt) : null;
     done(
       answer.kind === "queued" && sent ? (
         <ResultCard
@@ -176,17 +182,16 @@ function TeamScreen() {
 
       {result ? <div className="w-full">{result}</div> : null}
 
-      <Segmented value={status} onValueChange={(value) => setStatus(value as "ACTIVE" | "")} aria-label="Who to show" className="self-start">
-        {(["ACTIVE", ""] as const).map((tab) => {
-          const count = countOf(tab);
-          return (
+      {tabs || status !== "ACTIVE" ? (
+        <Segmented value={status} onValueChange={(value) => setStatus(value as "ACTIVE" | "")} aria-label="Who to show" className="self-start">
+          {(["ACTIVE", ""] as const).map((tab) => (
             <SegmentedItem key={tab || "all"} value={tab}>
               {tab === "ACTIVE" ? "Active" : "Everyone"}
-              {count !== null ? <span className="ml-1.5 tabular-nums text-03">{count}</span> : null}
+              {tabs ? <span className="ml-1.5 tabular-nums text-03">{tab === "ACTIVE" ? tabs.active : tabs.everyone}</span> : null}
             </SegmentedItem>
-          );
-        })}
-      </Segmented>
+          ))}
+        </Segmented>
+      ) : null}
 
       {list.isLoading ? (
         <PageState kind="loading" rows={4} label="Loading the team" />
@@ -200,6 +205,8 @@ function TeamScreen() {
       ) : rows.length === 0 && invites.length === 0 ? (
         <PageState kind="empty" title="Nobody here" />
       ) : (
+        <>
+        {rows.length > 0 ? (
         <div className="w-full overflow-hidden rounded-xl border border-01 bg-01">
           <div aria-hidden="true" className={cn(TEAM_GRID, "hidden border-b border-01 px-4 py-2 text-label-13 text-03")}>
             <span>Name</span>
@@ -262,13 +269,21 @@ function TeamScreen() {
                 </li>
               );
             })}
+          </ul>
+        </div>
+        ) : null}
+        {invites.length > 0 ? (
+          <section aria-labelledby="team-invited" className="flex w-full flex-col gap-1.5">
+            <h2 id="team-invited" className="text-label-13 text-02">
+              Invited, not on the team yet <span className="ml-1 tabular-nums text-03">{invites.length}</span>
+            </h2>
+            <ul className="flex w-full flex-col divide-y divide-01 overflow-hidden rounded-xl border border-01 bg-01">
             {invites.map((invite) => {
               const limit = inviteLimit(invite, asset, decimals);
               return (
-                <li key={invite.id} className={cn(TEAM_GRID, "relative flex min-w-0 flex-col gap-1 bg-02 px-4 py-2.5 pr-14 tablet:pr-4")}>
+                <li key={invite.id} className={cn(TEAM_GRID, "relative flex min-w-0 flex-col gap-1 px-4 py-2.5 pr-14 tablet:pr-4")}>
                   <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-label-13 text-01">
                     <span className="truncate">{invite.name}</span>
-                    {invite.subject && invite.subject !== invite.name ? <span className="font-mono text-mono-12 text-03">{invite.subject}</span> : null}
                   </span>
                   <span className="min-w-0 text-body-13 text-02">
                     {invite.roles.length > 0 ? roleTitle(invite.roles) : "—"}
@@ -294,22 +309,24 @@ function TeamScreen() {
                 </li>
               );
             })}
-          </ul>
-        </div>
+            </ul>
+          </section>
+        ) : null}
+        </>
       )}
 
       {canManage ? (
         <>
           <AddSheet
             open={sheet?.kind === "add"}
-            onClose={() => setSheet(null)}
+            onClose={closeSheet}
             decimals={decimals}
             approvers={addApprovers}
             onDone={(answer, name) => queuedOrDone(answer, `Adding ${name}`, addApprovers)}
           />
           <ChangeSheet
             row={sheet?.kind === "change" ? sheet.row : null}
-            onClose={() => setSheet(null)}
+            onClose={closeSheet}
             decimals={decimals}
             asset={asset}
             approvers={changeApprovers}
@@ -318,7 +335,7 @@ function TeamScreen() {
           <RemoveSheet
             row={sheet?.kind === "remove" ? sheet.row : null}
             warnings={sheet?.kind === "remove" ? removalWarnings(rows, sheet.row.id) : []}
-            onClose={() => setSheet(null)}
+            onClose={closeSheet}
             onDone={(row) =>
               done(
                 <ResultCard
@@ -429,7 +446,21 @@ function parseLimit(choice: string, decimals: number): { atomic: string | null; 
   return { atomic: parsed.atomic, error: parsed.error };
 }
 
-function LimitField({ choice, onChange, error }: { choice: string; onChange: (value: string) => void; error?: string | null }) {
+function LimitField({
+  roles,
+  choice,
+  onChange,
+  error,
+}: {
+  roles: readonly OperatorRole[];
+  choice: string;
+  onChange: (value: string) => void;
+  error?: string | null;
+}) {
+  // A limit only matters to someone who can act on money: an admin's "$0" says nothing.
+  if (roles.length > 0 && !actsOnMoney(roles)) {
+    return <p className="w-full text-body-13 text-03">No money limit: {roleTitle(roles)} cannot act on money.</p>;
+  }
   return (
     <div className="flex w-full flex-col gap-2">
       <span className="text-label-13 text-01">The most they can act on, per action</span>
@@ -445,6 +476,15 @@ function LimitField({ choice, onChange, error }: { choice: string; onChange: (va
   );
 }
 
+/** The limit sent: "0" for roles that cannot act on money, whatever the hidden picker holds. */
+function effectiveChoice(roles: readonly OperatorRole[], choice: string): string {
+  return roles.length > 0 && !actsOnMoney(roles) ? "0" : choice;
+}
+
+function sameRoles(a: readonly OperatorRole[], b: readonly OperatorRole[]): boolean {
+  return a.length === b.length && a.every((role) => b.includes(role));
+}
+
 function initialLimit(row: Pick<OperatorDirectoryEntry, "authorityLimit">): string {
   if (row.authorityLimit === null) return "unlimited";
   return formatMoney(row.authorityLimit, { symbol: "", grouped: false }).replace(/\.00$/, "");
@@ -458,6 +498,7 @@ function Footer({
   tone = "primary",
   onConfirm,
   blocked = null,
+  idle = null,
 }: {
   busy: boolean;
   error: unknown;
@@ -467,11 +508,14 @@ function Footer({
   onConfirm: () => void;
   /** Why the confirm button is held back, when it is. */
   blocked?: string | null;
+  /** Nothing to send yet (e.g. nothing changed): the button waits, with this quiet hint. */
+  idle?: string | null;
 }) {
+  const quiet = !error && !summary && !blocked && idle;
   return (
     <SheetFooter className={OPERATOR_SHEET_FOOTER}>
-      <div role="alert" className={error || summary || blocked ? "text-body-xs text-danger-600" : "sr-only"}>
-        {error ? directoryErrorMessage(error).replace(/\s*\([A-Z_]+\)$/, "") : (summary ?? blocked ?? "")}
+      <div role={quiet ? "status" : "alert"} className={quiet ? "text-body-xs text-03" : error || summary || blocked ? "text-body-xs text-danger-600" : "sr-only"}>
+        {error ? directoryErrorMessage(error).replace(/\s*\([A-Z_]+\)$/, "") : (summary ?? blocked ?? idle ?? "")}
         {error instanceof ApiError ? (
           <details className="mt-1 text-03">
             <summary className="cursor-pointer select-none text-label-xs">Details</summary>
@@ -485,7 +529,7 @@ function Footer({
             Cancel
           </Button>
         </SheetClose>
-        <Button variant={tone} loading={busy} disabled={blocked !== null} onClick={onConfirm}>
+        <Button variant={tone} loading={busy} disabled={blocked !== null || idle !== null} onClick={onConfirm}>
           {confirmLabel}
         </Button>
       </div>
@@ -525,6 +569,7 @@ function AddSheet({
   approvers: string[];
   onDone: (answer: TwoPersonAnswer<OperatorDirectoryEntry>, name: string) => void;
 }) {
+  const me = useOperatorSession();
   const [name, setName] = React.useState("");
   const [handle, setHandle] = React.useState<string | null>(null);
   const [wallet, setWallet] = React.useState("");
@@ -563,13 +608,14 @@ function AddSheet({
   });
 
   const submit = () => {
-    const parsedLimit = parseLimit(limit.choice, decimals);
+    const choice = effectiveChoice(roles, limit.choice);
+    const parsedLimit = parseLimit(choice, decimals);
     const validated = validateAddOperator({
       walletAddress: wallet,
       subject,
       displayName: name,
       roles,
-      limit: limitInputFromChoice(limit.choice, parsedLimit.atomic),
+      limit: limitInputFromChoice(choice, parsedLimit.atomic),
       reasonCode: reason || "",
       note,
     });
@@ -620,7 +666,7 @@ function AddSheet({
               setName(e.target.value);
               clear("name", "subject");
             }}
-            placeholder="Noor Hassan"
+            placeholder="Full name"
             maxLength={128}
             className="font-sans text-body-sm"
             error={errors.name ?? errors.subject ?? undefined}
@@ -647,7 +693,7 @@ function AddSheet({
                 clear("subject");
               }}
               maxLength={256}
-              hint="The short name Activity and approvals show for them, e.g. noor@. It is not an email address."
+              hint="The short name Activity and approvals show for them, e.g. alex@. It is not an email address."
             />
           ) : null}
           <Field
@@ -665,6 +711,7 @@ function AddSheet({
           />
           <RoleField roles={roles} onChange={setRoles} error={errors.roles ?? undefined} />
           <LimitField
+            roles={roles}
             choice={limit.choice}
             onChange={(value) => {
               limit.setChoice(value);
@@ -684,7 +731,7 @@ function AddSheet({
             notePlaceholder="What they will work on."
             errors={{ reason: errors.reason, note: errors.note }}
           />
-          <ApprovalFooter needs={approvalNeeds("A-12")} approvers={approvers} />
+          <ApprovalFooter needs={approverPhrase("A-12", me.roles)} approvers={approvers} />
         </div>
         <Footer
           busy={add.isPending}
@@ -716,6 +763,7 @@ function ChangeSheet({
   approvers: string[];
   onDone: (answer: TwoPersonAnswer<OperatorDirectoryEntry>, name: string) => void;
 }) {
+  const me = useOperatorSession();
   const [roles, setRoles] = React.useState<OperatorRole[]>([]);
   const limit = useLimit("0");
   const [reason, setReason] = React.useState("");
@@ -748,8 +796,14 @@ function ChangeSheet({
 
   if (!row) return <Sheet open={false} />;
 
-  const parsedLimit = parseLimit(limit.choice, decimals);
+  const choice = effectiveChoice(roles, limit.choice);
+  const parsedLimit = parseLimit(choice, decimals);
   const addsRole = roles.some((role) => !row.roles.includes(role));
+  // Nothing to apply until the role or the limit differs from what they have now.
+  const sameLimit =
+    parsedLimit.error === null &&
+    (row.authorityLimit === null ? parsedLimit.atomic === null && choice === "unlimited" : parsedLimit.atomic !== null && BigInt(parsedLimit.atomic) === BigInt(row.authorityLimit.amount));
+  const changed = !sameRoles(roles, row.roles) || !sameLimit;
   const raisesLimit =
     parsedLimit.error === null &&
     (row.authorityLimit === null
@@ -760,7 +814,7 @@ function ChangeSheet({
   const submit = () => {
     const validated = validateChangeOperator(row, {
       roles,
-      limit: limitInputFromChoice(limit.choice, parsedLimit.atomic),
+      limit: limitInputFromChoice(choice, parsedLimit.atomic),
       reasonCode: reason,
       note,
     });
@@ -776,7 +830,7 @@ function ChangeSheet({
   };
 
   const newLimit =
-    limit.choice === "unlimited" ? "no limit" : parsedLimit.atomic !== null ? formatMoney({ amount: parsedLimit.atomic, asset, decimals }) : "—";
+    choice === "unlimited" ? "no limit" : parsedLimit.atomic !== null ? limitMoney({ amount: parsedLimit.atomic, asset, decimals }) : "—";
 
   return (
     <Sheet open onOpenChange={(next) => (!next && !change.isPending ? onClose() : undefined)}>
@@ -789,9 +843,9 @@ function ChangeSheet({
         </SheetHeader>
         <div className="flex w-full flex-col gap-3 px-[18px] pt-4">
           <RoleField roles={roles} onChange={setRoles} error={errors.roles ?? undefined} />
-          <LimitField choice={limit.choice} onChange={limit.setChoice} error={errors.limit} />
+          <LimitField roles={roles} choice={limit.choice} onChange={limit.setChoice} error={errors.limit} />
           <p className="text-body-13 text-02">
-            After: {roleTitle(roles)}, {newLimit === "no limit" ? "no limit" : `${newLimit} limit`}.
+            After: {roleTitle(roles)}, {!actsOnMoney(roles) ? "no actions on money" : newLimit === "no limit" ? "no limit" : `${newLimit} limit`}.
           </p>
           <ReasonChips
             label="Why"
@@ -804,7 +858,7 @@ function ChangeSheet({
             noteMax={2048}
             errors={{ reason: errors.reason, note: errors.note }}
           />
-          {raising ? <ApprovalFooter needs={approvalNeeds("A-13")} approvers={approvers.filter((name) => name !== operatorLabel(row))} /> : null}
+          {raising ? <ApprovalFooter needs={approverPhrase("A-13", me.roles)} approvers={approvers.filter((name) => name !== operatorLabel(row))} /> : null}
         </div>
         <Footer
           busy={change.isPending}
@@ -813,6 +867,7 @@ function ChangeSheet({
           confirmLabel={raising ? "Send for approval" : "Apply now"}
           onConfirm={submit}
           blocked={raising && approvers.filter((name) => name !== operatorLabel(row)).length === 0 ? "Held back: no other admin can approve a raise yet. Lowering still applies at once." : null}
+          idle={changed ? null : "Change the role or the limit first."}
         />
       </SheetContent>
     </Sheet>
@@ -864,13 +919,16 @@ function RemoveSheet({
       <SheetContent showCloseButton={!remove.isPending}>
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Remove {operatorLabel(row)}?</SheetTitle>
-          <SheetDescription>
-            It applies at once, without a second admin: every session they hold ends and their wallet can no longer sign in. Removal
-            is one-person on purpose, so access can be cut in an incident; it is recorded in Activity, and adding them back needs a
-            second admin.
-          </SheetDescription>
         </SheetHeader>
-        <div className="flex w-full flex-col gap-3 px-[18px] pt-4">
+        <div className="flex w-full flex-col gap-3 px-[18px] pt-3">
+          <WhatHappens
+            lines={[
+              { icon: LogOut, text: "Every session they hold ends now, and their wallet can no longer sign in" },
+              { icon: Zap, text: "No second admin needed, so access can be cut at once in an incident" },
+              { icon: UserPlus, text: "Adding them back later needs a second admin" },
+              { icon: ShieldCheck, text: "Recorded in Activity under your name" },
+            ]}
+          />
           {warnings.length > 0 ? (
             <div role="alert" className="flex w-full gap-2.5 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5">
               <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />

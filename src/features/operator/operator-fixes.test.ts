@@ -73,7 +73,7 @@ describe("capability is explicit (top fix 2)", () => {
   });
 
   it("says which role an action needs", () => {
-    expect(checkAction(admin, "block").why).toBe("Block an account needs Lead adjudicator or On-call (SRE).");
+    expect(checkAction(admin, "block").why).toBe("Block an account needs Lead adjudicator or Support / on-call.");
     expect(checkAction(lead, "rule").allowed).toBe(true);
     expect(roleCanSentence(admin)).toBe("You can also add and change operators.");
   });
@@ -213,10 +213,10 @@ describe("roles described by what they can do (round 2, top 3)", () => {
   it("never says Support suspends penalties outright: money actions carry the limit", () => {
     const support = ROLE_PRESETS.find((p) => p.id === "support")!;
     expect(support.description).toBe(roleDescription(["SRE", "SUP"]));
-    expect(support.description).toMatch(/suspends penalties within its authority limit/i);
+    expect(support.description).toMatch(/suspends penalties up to its limit \(none at \$0\)/i);
     expect(support.description).not.toMatch(/suspends penalties[,.]/i);
     expect(roleDescription(["OPS_ADMIN"])).toMatch(/^Adds, changes and removes operators\. Approves/);
-    expect(support.description).toBe("Blocks accounts. Suspends penalties within its authority limit.");
+    expect(support.description).toBe("Blocks accounts. Suspends penalties up to its limit (none at $0).");
   });
 
   it("lists who can suspend only among those whose limit covers the penalty, and says so", () => {

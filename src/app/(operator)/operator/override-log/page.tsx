@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Ban, ChevronRight, CircleDot, CirclePause, Coins, Link2, LockOpen, Scale, Search, UserCog, X, type LucideIcon } from "lucide-react";
+import { Ban, Check, ChevronRight, CircleDot, CirclePause, Coins, Link2, LockOpen, Scale, Search, UserCog, X, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -65,7 +65,7 @@ function localDay(iso: string, now: number): { key: string; label: string } {
 
 const LIST_LIMIT = 25;
 const CHIP =
-  "inline-flex min-h-8 items-center rounded-full border px-3 text-label-13 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500";
+  "inline-flex min-h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 text-label-13 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:min-h-8";
 const CHIP_ON = "border-primary-500 bg-primary-10 text-01";
 const CHIP_OFF = "border-02 bg-01 text-02 hover:text-01";
 const KINDS = new Set(ACTIVITY_KINDS.map((kind) => kind.id));
@@ -169,23 +169,29 @@ function ActivityScreen() {
       </header>
 
       <div className="flex w-full flex-col gap-2.5 tablet:flex-row tablet:items-center tablet:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <div role="radiogroup" aria-label="Kind" className="flex flex-wrap gap-2">
-            {ACTIVITY_KINDS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                role="radio"
-                aria-checked={kind === option.id}
-                onClick={() => setParams({ kind: option.id })}
-                className={cn(CHIP, kind === option.id ? CHIP_ON : CHIP_OFF)}
-              >
-                {option.label}
-              </button>
-            ))}
+        {/* One row that scrolls sideways on a phone, never three. "All" means no filter at all, so it is lit only
+            when neither a kind nor "By me" is on, and pressing it clears both. */}
+        <div className="-mx-4 flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto px-4 [scrollbar-width:none] tablet:mx-0 tablet:px-0 [&::-webkit-scrollbar]:hidden">
+          <div role="radiogroup" aria-label="Kind" className="flex flex-nowrap gap-2">
+            {ACTIVITY_KINDS.map((option) => {
+              const on = option.id === "all" ? kind === "all" && !mine : kind === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => setParams(option.id === "all" ? { kind: "all", mine: false } : { kind: option.id })}
+                  className={cn(CHIP, on ? CHIP_ON : CHIP_OFF)}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
           </div>
-          <span aria-hidden="true" className="mx-0.5 hidden h-5 w-px bg-03 min-[480px]:block" />
+          <span aria-hidden="true" className="mx-0.5 h-5 w-px shrink-0 bg-03" />
           <button type="button" aria-pressed={mine} onClick={() => setParams({ mine: !mine })} className={cn(CHIP, mine ? CHIP_ON : CHIP_OFF)}>
+            {mine ? <Check aria-hidden="true" className="size-3.5" /> : null}
             By me
           </button>
         </div>
@@ -298,7 +304,7 @@ function ActivityScreen() {
                             aria-label={open ? "Hide the note" : "Show the note"}
                             aria-expanded={open}
                             onClick={toggle}
-                            className="-m-1 shrink-0 rounded p-1 text-03 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                            className="-m-3 shrink-0 rounded p-3 text-03 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                           >
                             <ChevronRight aria-hidden="true" className={cn("size-4 transition-transform", open && "rotate-90")} />
                           </button>
