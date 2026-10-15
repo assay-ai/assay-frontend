@@ -8,7 +8,9 @@ import { AgentHealthLine } from "@/components/buyer-money/agent-health";
 import { CreateKeySheet } from "@/components/buyer-money/create-key";
 import { LetAgentPaySheet } from "@/components/buyer-money/let-agent-pay-sheet";
 import { McpConfigTabs } from "@/components/buyer-money/mcp-config-tabs";
-import { useAgentsAndKeys, type AgentRow, type KeyRow } from "@/components/buyer-money/use-agents";
+import { EffectiveLimitLines, type LimitsContext, rowsFor, SpendingLimitsActions, useLimitsContext } from "@/components/buyer-money/agent-limits";
+import { type AgentRow, type KeyRow } from "@/components/buyer-money/use-agents";
+import { limitLines } from "@/features/buyer-money/spending-limits";
 import { CapMeter } from "@/components/patterns/cap-meter";
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { CopyChip } from "@/components/patterns/copy-chip";
@@ -26,28 +28,51 @@ import { revokeCredential } from "@/services/account.service";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { toast } from "@/utils/toast";
 
-import { GrantActions, PayerDelegationsPanel } from "./agent-payment-delegation";
-import { formatLimit, relativeTime } from "./format";
+import { PayerDelegationsPanel } from "./agent-payment-delegation";
+import { relativeTime } from "./format";
 
 /**
  * Controls › Agents & keys: one card per agent, answering "is it working?"
  * and "how do I stop it?" without leaving the card.
  *
- *   1. Keys — the agent's live keys (revoked ones folded away), the MCP
- *      config to paste, and Revoke behind a confirmation that names the key.
+ *   1. Keys — the agent's live API keys (revoked ones folded away), the MCP
+ *      config to paste, and Revoke key behind a confirmation that names the
+ *      key and says whether paying stops too.
  *   2. Payment key — bound by `agent-cli bind`, detected automatically.
- *   3. Pay permission — the agent's caps on chain, what it spent in the last
- *      24 hours, and Change caps / Stop it paying.
+ *   3. Spending limits — the effective limit and what binds it, what it spent
+ *      in the last 24 hours, and Change spending limits / Stop it paying.
  *
- * Revocation of a key is immediate; there is no grace period.
+ * Two different stops, never both called "revoke": **Stop it paying** removes
+ * the on-chain permission (the API key still works for free calls); **Revoke
+ * key** ends the API key for every call, free and paid. Both are immediate.
  */
 const BIND_COMMAND = "agent-cli keygen && agent-cli bind";
 const POLL_MS = 5_000;
 
+/** Whether the agent pays through this key: its payment key was bound on it and is allowed to pay. */
+function paysThrough(key: KeyRow, readiness: AgentReadiness | undefined): boolean {
+  return Boolean(
+    key.delegateAccount && readiness?.boundCredential?.id === key.id && readiness.grant?.status === "ACTIVE",
+  );
+}
+
+/** What revoking an API key does — to calls, and whether paying stops too. */
+export function revokeKeyText(agent: AgentRow, key: KeyRow, readiness: AgentReadiness | undefined): string {
+  const name = agent.label ?? "The agent";
+  const base = `${name} can no longer call any tool with this key, free or paid, from now on. This cannot be undone; you can create a new key.`;
+  if (paysThrough(key, readiness)) {
+    return `${base} Paying stops too, because its payment key was set up on this key. The on-chain permission itself stays until you choose Stop it paying; after this it is listed under “Other keys that can still pay”.`;
+  }
+  if (key.delegateAccount) {
+    return `${base} Its payment key was set up on this key, so it cannot be used to pay any more either.`;
+  }
+  return `${base} Nothing about paying changes: this key has no payment key.`;
+}
+
 export function AgentsView() {
   const queryClient = useQueryClient();
   const [needsPoll, setNeedsPoll] = React.useState(false);
-  const data = useAgentsAndKeys({ pollMs: needsPoll ? POLL_MS : false });
+  const data = useLimitsContext({ pollMs: needsPoll ? POLL_MS : false });
   const anyWaiting = Object.values(data.readiness).some((r) => r.next === "bind");
   React.useEffect(() => setNeedsPoll(anyWaiting), [anyWaiting]);
 
@@ -63,7 +88,7 @@ export function AgentsView() {
     onSuccess: async () => {
       await queryClient.refetchQueries({ queryKey: ["agent-keys"] });
       void queryClient.invalidateQueries({ queryKey: ["credentials"] });
-      toast.success("Key revoked. It stopped working immediately.");
+      toast.success("Key revoked. It stopped working for every call immediately.");
     },
   });
 
@@ -116,6 +141,7 @@ export function AgentsView() {
         data.agents.map((agent) => (
           <AgentCard
             key={agent.agentId}
+            ctx={data}
             agent={agent}
             keys={data.keys[agent.agentId]}
             keysPending={data.keysQuery.isPending}
@@ -144,9 +170,16 @@ export function AgentsView() {
         open={revoking !== null}
         onOpenChange={(open) => !open && setRevoking(null)}
         tone="danger"
-        title={`Revoke the key “${lastRevoke?.key.name ?? ""}”?`}
-        description={`${lastRevoke?.agent.label ?? "The agent"} stops being able to call tools with it at once. This cannot be undone; you can create a new key.`}
-        changes={[{ label: "Key", before: "Live", after: "Revoked" }]}
+        title={`Revoke the API key “${lastRevoke?.key.name ?? ""}”?`}
+        description={lastRevoke ? revokeKeyText(lastRevoke.agent, lastRevoke.key, data.readiness[lastRevoke.agent.agentId]) : ""}
+        changes={
+          lastRevoke && paysThrough(lastRevoke.key, data.readiness[lastRevoke.agent.agentId])
+            ? [
+                { label: "API key", before: "Works", after: "Revoked" },
+                { label: "Paid calls", before: "Allowed", after: "Stopped" },
+              ]
+            : [{ label: "API key", before: "Works", after: "Revoked" }]
+        }
         confirmLabel="Revoke key"
         onConfirm={() => revoke.mutateAsync({ agentId: lastRevoke!.agent.agentId, id: lastRevoke!.key.id })}
         describeError={(error) => (error instanceof ApiError ? plainError(error.code) : "The key could not be revoked. Try again.")}
@@ -180,6 +213,7 @@ function SubRow({ n, title, children }: { n: number; title: string; children: Re
 }
 
 function AgentCard({
+  ctx,
   agent,
   keys,
   keysPending,
@@ -190,6 +224,7 @@ function AgentCard({
   onLetPay,
   onChanged,
 }: {
+  ctx: LimitsContext;
   agent: AgentRow;
   keys: KeyRow[] | undefined;
   keysPending: boolean;
@@ -246,7 +281,7 @@ function AgentCard({
                     {configFor === key.id ? "Hide config" : "MCP config"}
                   </Button>
                   <Button size="sm" variant="secondary" type="button" className="text-danger-600" data-testid="revoke-credential" onClick={() => onRevokeKey(key)}>
-                    Revoke
+                    Revoke key
                   </Button>
                 </div>
                 {configFor === key.id ? (
@@ -304,20 +339,22 @@ function AgentCard({
       ) : null}
 
       {delegation ? (
-        <SubRow n={3} title="Permission to pay">
+        <SubRow n={3} title="Spending limits">
           {grant && grant.status === "ACTIVE" ? (
             <>
+              <EffectiveLimitLines lines={limitLines(rowsFor(ctx, agent))} />
+              <CapMeter label="Spent by this agent in the last 24 hours" used={grant.spentInWindow} limit={grant.maxPerWindow} />
               <p className="text-body-xs text-03">
-                Up to {formatLimit(grant.maxVoucherAmount)} a call · until <LocalTime value={grant.validUntil} dateOnly />
+                Allowed to pay until <LocalTime value={grant.validUntil} dateOnly />. Stop it paying removes that permission; its API key
+                keeps working for free calls.
               </p>
-              <CapMeter label="Spent in the last 24 hours" used={grant.spentInWindow} limit={grant.maxPerWindow} />
-              <GrantActions account={agent.agentAccount} delegation={grant} boundAt={bound?.delegateBoundAt} onChanged={onChanged} />
+              <SpendingLimitsActions ctx={ctx} agent={agent} readiness={readiness} onChanged={onChanged} />
             </>
           ) : (
             <>
               <p className="text-body-13 text-02">
                 {grant?.status === "EXPIRED"
-                  ? "Its permission expired, so paid calls are refused."
+                  ? "Its permission to pay expired, so paid calls are refused. Free calls still work."
                   : "Not allowed to pay yet. Free calls still work."}
               </p>
               <Button
@@ -327,7 +364,7 @@ function AgentCard({
                 disabled={!bound?.delegateAccount || !escrowReady}
                 onClick={() => bound?.delegateAccount && onLetPay(bound.delegateAccount)}
               >
-                {grant?.status === "EXPIRED" ? "Allow it again" : "Let it pay"}
+                {grant?.status === "EXPIRED" ? "Let it pay again" : "Let it pay"}
               </Button>
               {!bound?.delegateAccount ? (
                 <p className="text-body-xs text-03">Needs the payment key above first.</p>
