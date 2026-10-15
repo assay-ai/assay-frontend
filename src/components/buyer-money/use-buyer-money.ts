@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
+import { ConnectWalletNote } from "@/components/buyer-money/connect-wallet";
 import { capsAreSet } from "@/features/buyer-money/caps";
 import { WalletNotReady } from "@/features/buyer-money/money-errors";
 import type { FullBalance } from "@/features/g30/balance";
@@ -96,9 +97,19 @@ export function requireSigner(state: UseSignerResult, owner?: string | null): Si
 
 /**
  * Why the sign button cannot be pressed yet, or `null` when it can. Waits a
- * while before blaming the wallet connection, then says what to do.
+ * while before blaming the wallet connection, then says what to do — and when
+ * connecting a wallet is the fix, offers it as a button beside the sentence
+ * (a disabled sign button with only a footnote was a dead end).
  */
-export function useWalletBlocker(state: UseSignerResult, owner?: string | null): string | null {
+export function useWalletBlocker(state: UseSignerResult, owner?: string | null): React.ReactNode | null {
+  const text = useWalletBlockerText(state, owner);
+  if (text === null) return null;
+  const connectable = state.status === "address-not-connected" || state.status === "no-wallet";
+  return connectable ? React.createElement(ConnectWalletNote, { text }) : text;
+}
+
+/** The same reason as a plain sentence (for places that cannot hold a button). */
+export function useWalletBlockerText(state: UseSignerResult, owner?: string | null): string | null {
   const [slow, setSlow] = React.useState(false);
   const hydrating = state.status === "hydrating" || state.status === "chain-unknown";
   React.useEffect(() => {

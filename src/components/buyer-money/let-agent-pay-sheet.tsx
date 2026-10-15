@@ -6,7 +6,7 @@ import * as React from "react";
 import { LocalTime } from "@/components/patterns/local-time";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
-import { capsToForm, keyGroups, parseCaps } from "@/features/buyer-money/caps";
+import { CAP_PRESETS, capsToForm, keyGroups, parseCaps } from "@/features/buyer-money/caps";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { DEFAULT_DELEGATION_DAYS, parseDelegationForm, serverNowSeconds } from "@/features/delegation/delegation-form";
 import { submitRelayedDelegation } from "@/features/delegation/relayed-delegation";
@@ -22,11 +22,13 @@ import { CapsFields, type CapsValue } from "./caps-fields";
 import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-money";
 
 /**
- * "Let your agent pay": the escrow's safety caps and the agent's own pay
- * permission in one drawer and (at most) two free signatures. One set of
- * numbers applies to both, so nobody has to understand two limit systems to
- * get a first paid call through. The caps step is skipped when the escrow
- * already allows at least as much.
+ * "Let your agent pay": the agent's own spending limit (its on-chain
+ * permission) in one drawer, raising the account ceiling first when it is
+ * lower — at most two free signatures. One set of numbers applies to both, so
+ * nobody has to understand two limit systems to get a first paid call through.
+ * The ceiling step is skipped when the escrow already allows at least as much.
+ * It opens on the Standard preset (or the ceiling, when that is lower), never
+ * on the ceiling itself: an agent's limit is meant to sit under it.
  *
  * The key check is by eye: the key is shown in 4-character groups next to
  * what `agent-cli` printed, and a tick confirms they match. It keeps the
@@ -64,10 +66,24 @@ export function KeyMatch({ account }: { account: string }) {
         ))}
       </div>
       <span className="text-body-xs text-03">
-        Compare it with what <span className="font-mono">agent-cli address</span> prints on the agent&apos;s machine.
+        Compare it with what{" "}
+        <code className="rounded bg-03 px-1 font-mono text-mono-xs text-02">agent-cli address</code>{" "}
+        prints on the agent&apos;s machine.
+      </span>
+      <span className="text-body-xs text-03" data-testid="key-mismatch-help">
+        They don&apos;t match? Don&apos;t sign. Someone else may hold this agent&apos;s API key: revoke that key under
+        Controls, create a new one, and run <code className="font-mono">agent-cli bind</code> again.
       </span>
     </div>
   );
+}
+
+/** Standard, unless the account ceiling is lower: then the ceiling. */
+export function agentDefault(ceiling: { perCall: string; perDay: string } | null): { perCall: string; perDay: string } {
+  const standard = CAP_PRESETS.find((p) => p.id === "standard")!;
+  if (!ceiling) return { perCall: standard.perCall, perDay: standard.perDay };
+  const lower = (a: string, b: string) => (Number(a) < Number(b) ? a : b);
+  return { perCall: lower(ceiling.perCall, standard.perCall), perDay: lower(ceiling.perDay, standard.perDay) };
 }
 
 export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccount }: LetAgentPaySheetProps) {
@@ -82,7 +98,7 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
   const [openingCaps, setOpeningCaps] = React.useState<{ perCall: string; perWindow: string } | null>(null);
   if (open && !seeded && !money.escrowQuery.isPending) {
     setSeeded(true);
-    setValue(capsToForm(escrow) ?? { perCall: "1", perDay: "20" });
+    setValue(agentDefault(capsToForm(escrow)));
     setOpeningCaps(
       escrow?.maxVoucherAmount && escrow.maxPerWindow
         ? { perCall: escrow.maxVoucherAmount.amount || "0", perWindow: escrow.maxPerWindow.amount || "0" }
@@ -108,13 +124,13 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
 
   const walletBlocker = useWalletBlocker(money.signerState, money.ownerShort);
   const disabledReason = readOnly
-    ? "Your account is blocked, so payments cannot be authorised now."
+    ? "Your account is blocked, so no agent can be allowed to pay now."
     : !delegateAccount
       ? "The agent has no payment key yet. Run agent-cli bind on its machine first."
       : !escrow?.exists
         ? "Add funds first: your first deposit opens your escrow."
         : !chosen
-          ? (parsed.perCall.error ?? parsed.perDay.error ?? "Choose caps.")
+          ? (parsed.perCall.error ?? parsed.perDay.error ?? "Choose its limits.")
           : walletBlocker;
 
   const domain = () => {
@@ -128,7 +144,7 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
   const steps: WalletStep[] = [
     {
       id: "caps",
-      label: "Set your escrow's safety caps",
+      label: "Raise your account ceiling to fit",
       cost: "free",
       skip: capsCover,
       run: async ({ report }) => {
@@ -165,7 +181,7 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
           addressOfAccount(delegateAccount!),
           nowSeconds,
         );
-        if (!form.ok) throw new Error(Object.values(form.errors)[0] ?? "These caps cannot be used.");
+        if (!form.ok) throw new Error(Object.values(form.errors)[0] ?? "These limits cannot be used.");
         const intent = await createDelegateIntent(form.body);
         report({ stage: "wallet" });
         const relayed = await submitRelayedDelegation(
@@ -186,7 +202,7 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
       open={open}
       onOpenChange={onOpenChange}
       title={`Let ${agentName} pay`}
-      description="Your agent pays for calls from your escrow, within these caps. It cannot withdraw, change your caps or authorise anyone else. Free, no gas."
+      description="Your agent pays for calls from your escrow, within these spending limits. It cannot withdraw, change your limits or let anyone else pay. Free, no gas."
       steps={steps}
       label={capsCover ? "Sign to allow (free)" : "Sign to apply (free)"}
       resetKey={`${value.perCall}|${value.perDay}|${delegateAccount ?? ""}`}
@@ -197,17 +213,27 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
       successTitle={`${agentName} can pay now`}
       successDescription={
         <>
-          Within these caps until <LocalTime value={until} dateOnly />. Next: its next paid call goes through; you can
+          Within these limits until <LocalTime value={until} dateOnly />. Next: its next paid call goes through; you can
           watch it under Activity.
         </>
       }
       doneAction={{ label: "Done", onClick: () => onOpenChange(false) }}
     >
       {delegateAccount ? <KeyMatch account={delegateAccount} /> : null}
-      <CapsFields unit={money.symbol} value={value} onChange={setValue} parsed={parsed} idPrefix="agent-pay" label="Caps for this agent" />
+      <CapsFields
+        unit={money.symbol}
+        value={value}
+        onChange={setValue}
+        parsed={parsed}
+        idPrefix="agent-pay"
+        label={`Spending limits for ${agentName}`}
+        who="this agent"
+      />
       <p className="text-body-xs text-03">
         Valid for {DEFAULT_DELEGATION_DAYS} days, until <LocalTime value={until} dateOnly />.{" "}
-        {capsCover ? "One signature." : "Two signatures: your escrow's safety caps, then the agent's permission."}
+        {capsCover
+          ? "One signature."
+          : "Two signatures: your account ceiling is raised to fit, then the agent's spending limits."}
       </p>
     </WalletActionSheet>
   );

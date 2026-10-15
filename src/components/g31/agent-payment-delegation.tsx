@@ -65,6 +65,8 @@ import {
 import { getEscrow } from "@/services/escrow.service";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { formatLocalDate } from "@/libs/local-time";
+import { type BudgetBootstrap, BudgetFields, useBudgetDraft } from "@/components/buyer-money/budget-fields";
+import type { SpendPolicy } from "@/services/limits.service";
 import { toast } from "@/utils/toast";
 
 import { MicroLabel, StatusPill } from "./chrome";
@@ -197,9 +199,9 @@ function EscrowLimitWarning({
       data-testid="delegate-above-escrow-limits"
     >
       <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-      Your escrow now allows only {parts.join(" and ")}. Its limits keep applying, so this
-      agent’s payments above them are refused. Edit the agent’s limits, or raise the
-      escrow’s.
+      Your account ceiling now allows only {parts.join(" and ")}. It keeps applying, so this
+      agent’s payments above it are refused. Lower this agent’s spending limits, or raise
+      your account ceiling.
     </span>
   );
 }
@@ -255,7 +257,7 @@ export function PayerDelegationsPanel({
         <p className="font-mono text-mono-13 text-03">Reading the chain…</p>
       ) : rows.length === 0 ? (
         <p className="text-body-13 text-02">
-          No agent key is authorised to pay from your escrow.
+          No agent key is allowed to pay from your escrow.
         </p>
       ) : (
         rows.map(({ delegation, bindings: matched, bound }) => (
@@ -283,7 +285,7 @@ export function PayerDelegationsPanel({
                       {b.delegateBoundAt
                         ? ` · bound ${relativeTime(b.delegateBoundAt)}`
                         : ""}
-                      {b.revokedAt ? " · credential revoked" : ""}
+                      {b.revokedAt ? " · API key revoked" : ""}
                     </span>
                   ))
                 : null}
@@ -303,15 +305,15 @@ export function PayerDelegationsPanel({
                   data-testid="unbound-delegate"
                 >
                   <TriangleAlert aria-hidden="true" className="size-3.5" />
-                  Not bound to any live credential — it can still pay until you
-                  revoke it.
+                  Its API key is gone, but this payment key can still pay until you
+                  stop it paying.
                 </span>
               ) : null}
             </div>
             <div className="flex items-center gap-2">
               <StatusPill
                 label={
-                  delegation.status === "EXPIRED" ? "EXPIRED" : "AUTHORISED"
+                  delegation.status === "EXPIRED" ? "EXPIRED" : "CAN PAY"
                 }
                 tone={delegation.status === "EXPIRED" ? "danger" : "teal"}
               />
@@ -329,7 +331,7 @@ export function PayerDelegationsPanel({
                   })
                 }
               >
-                Edit limits
+                Change spending limits
               </Button>
               <Button
                 variant="secondary"
@@ -339,7 +341,7 @@ export function PayerDelegationsPanel({
                 data-testid="revoke-delegate"
                 onClick={() => setRevoking(delegation)}
               >
-                Revoke
+                Stop it paying
               </Button>
             </div>
           </div>
@@ -448,13 +450,17 @@ function LiveReadNote({ ready, gone }: { ready: boolean; gone: boolean }) {
 }
 
 /**
- * "Revoke": one signature, and the key signs nothing from then on. Payments it
+ * "Stop it paying": one signature removes the payment key's on-chain
+ * permission, and it signs no payment from then on. The agent's API key is
+ * untouched, so free calls keep working ("Revoke key" is the other action: it
+ * ends the API key for every call). Payments it
  * signed that are still being settled become unredeemable the moment the
  * revocation lands — an accepted risk of the brake (risk register §14), so it
  * is never refused, but the sheet says so first and offers to wait (BUG-D1-07).
  */
 function RevokeSheet({
   target,
+  agentName,
   escrow,
   unit,
   onClose,
@@ -463,6 +469,8 @@ function RevokeSheet({
   domain,
 }: {
   target: EscrowDelegate | null;
+  /** Whose permission this is, for the title; unbound keys have none. */
+  agentName?: string;
   escrow: BuyerEscrow | undefined;
   unit: string;
   onClose: () => void;
@@ -504,24 +512,29 @@ function RevokeSheet({
         { domain: domain(escrow), delegate: target.delegate },
         submitRevokeDelegate,
       );
-      toast.success("Revoked. That key can no longer sign payments from its next one on.");
+      toast.success(
+        `${agentName ?? "That key"} can no longer pay. ${agentName ? "Its API key still works for free calls." : ""}`.trim(),
+      );
       onFinished();
     } catch (error) {
       // Declining in the wallet is a decision, not a failure: the sheet stays as it was.
-      setRevokeNote(explain(error, "The authorisation could not be revoked"));
+      setRevokeNote(explain(error, "Paying could not be stopped"));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent data-testid="revoke-delegate-sheet">
+    <Sheet open={open} onOpenChange={(next) => !next && !busy && onClose()}>
+      <SheetContent data-testid="revoke-delegate-sheet" showCloseButton={!busy}>
         <SheetHeader>
-          <SheetTitle>Revoke this key</SheetTitle>
+          <SheetTitle>{agentName ? `Stop ${agentName} paying?` : "Stop this key paying?"}</SheetTitle>
           <SheetDescription>
-            One signature from your wallet stops this key from signing payments from your
-            escrow, from its next payment on. No gas is needed.
+            One free signature from your wallet removes {agentName ? "this agent’s" : "this key’s"} permission
+            to pay from your escrow, from its next payment on.{" "}
+            {agentName
+              ? "Its API key keeps working, so free calls still go through. You can let it pay again later."
+              : "No gas is needed."}
           </SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
@@ -529,8 +542,8 @@ function RevokeSheet({
             {addressOfAccount(delegate)}
           </span>
           <p className="rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700" data-testid="revoke-debt-note">
-            Calls this agent already made are collected about a minute later. If revoking stops one from being
-            collected, you still owe it: paid calls pause until it is settled.
+            Calls this agent already made are collected about a minute later. If stopping it prevents one from
+            being collected, you still owe it: paid calls pause until it is settled.
           </p>
           <LiveReadNote ready={ready} gone={gone} />
           <UnsettledPayments
@@ -543,7 +556,7 @@ function RevokeSheet({
             stalled={settle.stalled}
             onWait={settle.wait}
             onProceed={() => void revoke()}
-            proceedLabel="Revoke now anyway"
+            proceedLabel="Stop it paying now anyway"
             busy={busy || !ready}
           />
           <Button
@@ -555,7 +568,7 @@ function RevokeSheet({
             disabled={atRisk || !ready || gone}
             onClick={() => void revoke()}
           >
-            Sign and revoke (free)
+            Sign to stop paying (free)
           </Button>
           {revokeNote ? (
             <p role="status" className="text-body-13 text-warning-700" data-testid="revoke-note">
@@ -652,7 +665,7 @@ export function AgentPaymentDelegation({
                 </Button>
               ) : (
                 <div className="flex items-center gap-2">
-                  <StatusPill label="AUTHORISED" tone="teal" />
+                  <StatusPill label="CAN PAY" tone="teal" />
                   <Button
                     variant="secondary"
                     size="sm"
@@ -667,7 +680,7 @@ export function AgentPaymentDelegation({
                       })
                     }
                   >
-                    Edit limits
+                    Change spending limits
                   </Button>
                 </div>
               )}
@@ -679,7 +692,7 @@ export function AgentPaymentDelegation({
       ctx.escrowQuery.data &&
       !escrowCanDelegate(ctx.escrowQuery.data) ? (
         <p className="text-body-xs text-03">
-          Set your escrow limits first — an agent’s caps can only narrow them.
+          Set your account ceiling first — an agent’s spending limits sit under it.
         </p>
       ) : null}
 
@@ -700,8 +713,25 @@ export function AgentPaymentDelegation({
   );
 }
 
+/**
+ * The Assay-checked half of an agent's spending limits (monthly, rate limits,
+ * tools), carried by the same sheet so the person edits one set of numbers per
+ * agent. Saved after the on-chain change, or on its own (no signature) when
+ * only it changed.
+ */
+export interface SheetExtra {
+  node: React.ReactNode;
+  /** Something in it differs from what is saved. */
+  dirty: boolean;
+  /** Shows its errors; false stops the save before anything is signed. */
+  validate: () => boolean;
+  save: () => Promise<void>;
+}
+
 function AuthorizeSheet({
   target,
+  agentName,
+  extra,
   escrow,
   escrowReceivedAt,
   unit,
@@ -711,6 +741,8 @@ function AuthorizeSheet({
   domain,
 }: {
   target: SheetTarget | null;
+  agentName?: string;
+  extra?: SheetExtra;
   escrow: BuyerEscrow | undefined;
   /** When `escrow` (and its `serverTime`) arrived, in epoch ms. */
   escrowReceivedAt: number;
@@ -826,7 +858,16 @@ function AuthorizeSheet({
     setHeldNote(null);
   };
 
-  const finish = (success: boolean) => {
+  const finish = async (success: boolean) => {
+    if (success && extra?.dirty) {
+      try {
+        await extra.save();
+      } catch (error) {
+        toast.error(
+          `${explain(error, "The monthly and Advanced limits could not be saved")}. Your on-chain limits did change; open Change spending limits to save the rest again.`,
+        );
+      }
+    }
     if (success) {
       toast.success(
         editing
@@ -834,7 +875,7 @@ function AuthorizeSheet({
               current ? capsOf(grant ?? current) : null,
               preview?.ok ? preview.body : capsOf(grant ?? current!),
             )} Payments may pause for about 30 seconds while it applies.`
-          : "Authorised. The agent can now pay within these caps.",
+          : "Done. The agent can now pay within these limits.",
       );
     }
     onFinished();
@@ -869,6 +910,7 @@ function AuthorizeSheet({
       return;
     }
     if (!keyConfirmed) return;
+    if (extra && !extra.validate()) return;
     // Exactly what the sheet shows this second, computed on the server's clock.
     const body = preview.body;
     const acknowledged = acknowledgeUnsettled ? { acknowledgeUnsettled: true } : {};
@@ -905,13 +947,29 @@ function AuthorizeSheet({
       } else {
         await sign(await createDelegateIntent({ ...body, ...acknowledged }));
       }
-      finish(true);
+      await finish(true);
     } catch (error) {
       failed(error, resubmitted);
     } finally {
       setBusy(false);
     }
   };
+
+  /** Only the Assay-checked limits changed: saved without a signature. */
+  const saveOnly = async () => {
+    if (!extra || !extra.validate()) return;
+    setBusy(true);
+    try {
+      await extra.save();
+      toast.success("Saved. The new limits apply from the next call.");
+      onFinished();
+    } catch (error) {
+      setHeldNote(explain(error, "The limits could not be saved"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const extraOnly = Boolean(editing && unchanged && extra?.dirty);
 
   const decimals = escrow?.maxVoucherAmount?.decimals ?? 6;
   const asMoney = (atomic: string) => ({
@@ -922,19 +980,25 @@ function AuthorizeSheet({
   const isoSeconds = (seconds: number) => formatLocalDate(seconds * 1000);
 
   return (
-    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent data-testid="authorize-delegate-sheet">
+    <Sheet open={open} onOpenChange={(next) => !next && !busy && onClose()}>
+      <SheetContent data-testid="authorize-delegate-sheet" showCloseButton={!busy}>
         <SheetHeader>
-          <SheetTitle>{editing ? "Edit agent limits" : "Authorize agent to pay"}</SheetTitle>
+          <SheetTitle>
+            {editing
+              ? `Spending limits${agentName ? ` for ${agentName}` : ""}`
+              : `Let ${agentName ?? "this agent"} pay`}
+          </SheetTitle>
           <SheetDescription>
             {editing
-              ? "One signature from your wallet replaces this key’s caps and expiry. What it has already spent this window still counts. No gas is needed."
-              : "One signature from your wallet lets this agent’s key sign payments from your escrow, within these caps, until the expiry. It cannot withdraw, change your limits or authorise anyone. Your escrow limits keep applying. No gas is needed."}
+              ? extra
+                ? "One set of numbers for this agent. Per call and per 24 hours are enforced on chain: changing them takes one free signature from your wallet. The monthly limit and Advanced are checked by Assay and save without one. Your account ceiling keeps applying."
+                : "One free signature from your wallet replaces this key’s limits and expiry. What it already spent in the last 24 hours still counts. Your account ceiling keeps applying."
+              : "One free signature from your wallet lets this agent’s key pay from your escrow, within these limits, until the expiry. It cannot withdraw, change your limits or let anyone else pay. Your account ceiling keeps applying."}
           </SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
           <div className="flex flex-col gap-1">
-            <span className="text-label-sm text-02">Agent key</span>
+            <span className="text-label-sm text-02">Payment key</span>
             <span
               className="break-all font-mono text-mono-xs text-01"
               data-testid="authorize-delegate-address"
@@ -946,7 +1010,7 @@ function AuthorizeSheet({
             ) : null}
             {current ? (
               <span className="text-body-xs text-03" data-testid="edit-delegate-current">
-                Now: up to {exact(current.maxVoucherAmount, unit)} a payment and{" "}
+                Now: up to {exact(current.maxVoucherAmount, unit)} a call and{" "}
                 {exact(current.maxPerWindow, unit)} per 24 hours, until{" "}
                 {formatLocalDate(current.validUntil)}.
               </span>
@@ -955,7 +1019,7 @@ function AuthorizeSheet({
           {form ? (
             <>
               <Field
-                label="Most per payment"
+                label="Most per call"
                 id="delegate-max-voucher"
                 suffix={unit}
                 value={form.maxVoucherAmount}
@@ -969,6 +1033,7 @@ function AuthorizeSheet({
                 suffix={unit}
                 value={form.maxPerWindow}
                 error={errors.maxPerWindow}
+                hint="Counts the last 24 hours, not the calendar day."
                 inputMode="decimal"
                 onChange={(e) => change("maxPerWindow", e.target.value)}
               />
@@ -1036,39 +1101,51 @@ function AuthorizeSheet({
               {heldUsable && held ? (
                 <p className="text-body-13 text-02" data-testid="authorize-delegate-summary">
                   Signed, waiting to be submitted: up to{" "}
-                  {exact(asMoney(String(held.maxVoucherAmount)), unit)} a payment and{" "}
+                  {exact(asMoney(String(held.maxVoucherAmount)), unit)} a call and{" "}
                   {exact(asMoney(String(held.maxPerWindow)), unit)} per 24 hours, until{" "}
                   {isoSeconds(Number(held.validUntil))}.
                 </p>
-              ) : preview?.ok ? (
+              ) : preview?.ok && !unchanged ? (
                 <p className="text-body-13 text-02" data-testid="authorize-delegate-summary">
                   You will sign: up to {exact(asMoney(preview.body.maxVoucherAmount), unit)} a
-                  payment and {exact(asMoney(preview.body.maxPerWindow), unit)} per 24 hours, until{" "}
+                  call and {exact(asMoney(preview.body.maxPerWindow), unit)} per 24 hours, until{" "}
                   {isoSeconds(Number(preview.body.validUntil))}.
                 </p>
               ) : null}
-              {unchanged ? (
+              {extra ? extra.node : null}
+              {unchanged && !extra?.dirty ? (
                 <p className="text-body-xs text-03" data-testid="edit-delegate-unchanged">
-                  Change a limit or the expiry to sign.
+                  Change a limit or the expiry to save.
                 </p>
               ) : null}
-              <Button
-                type="button"
-                data-testid="sign-authorize-delegate"
-                loading={busy}
-                disabled={!keyConfirmed || unchanged || atRisk || !readyToSign}
-                onClick={() => void authorize()}
-              >
-                {heldUsable
-                  ? "Submit the signed change"
-                  : editing
-                    ? "Sign and update"
-                    : "Sign and authorise"}
-              </Button>
+              <div className="flex w-full flex-col-reverse gap-2 tablet:flex-row tablet:justify-end">
+                <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>
+                  Cancel
+                </Button>
+                {extraOnly ? (
+                  <Button type="button" data-testid="save-spending-limits" loading={busy} onClick={() => void saveOnly()}>
+                    Save
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    data-testid="sign-authorize-delegate"
+                    loading={busy}
+                    disabled={!keyConfirmed || unchanged || atRisk || !readyToSign}
+                    onClick={() => void authorize()}
+                  >
+                    {heldUsable
+                      ? "Submit the signed change"
+                      : editing
+                        ? "Sign and save (free)"
+                        : "Sign to allow (free)"}
+                  </Button>
+                )}
+              </div>
             </>
           ) : (
             <p className="text-body-13 text-02">
-              Set your escrow limits first — an agent’s caps can only narrow them.
+              Set your account ceiling first — an agent’s spending limits sit under it.
             </p>
           )}
         </div>
@@ -1078,24 +1155,48 @@ function AuthorizeSheet({
 }
 
 /**
- * Edit and Revoke for one agent's pay permission, as two buttons with their
- * sheets — for the per-agent card on Agents & keys.
+ * "Change spending limits" and "Stop it paying" for one agent's on-chain
+ * permission, as two buttons with their sheets — for the per-agent cards on
+ * Agents & keys and Spending limits. With `budget`, the limits sheet also
+ * carries the agent's Assay-checked limits (monthly, Advanced), so the person
+ * edits one set of numbers per agent.
  */
 export function GrantActions({
   account,
   delegation,
   boundAt,
   onChanged,
+  agentName,
+  budget,
+  budgetNote,
+  showStop = true,
 }: {
   account: string | undefined;
   delegation: EscrowDelegate;
   boundAt?: string | null;
   onChanged: () => void;
+  agentName?: string;
+  /** The Assay-checked half; leave out when it cannot be edited for this agent. */
+  budget?: { policy: SpendPolicy | null; bootstrap: BudgetBootstrap | null };
+  /** Shown in the limits sheet when `budget` is left out: why the monthly part is not here. */
+  budgetNote?: React.ReactNode;
+  showStop?: boolean;
 }) {
   const ctx = useDelegationContext(account, 0);
   const [editing, setEditing] = React.useState<SheetTarget | null>(null);
   const [revoking, setRevoking] = React.useState<EscrowDelegate | null>(null);
+  const draft = useBudgetDraft({
+    policy: budget?.policy ?? null,
+    bootstrap: budget?.bootstrap ?? null,
+    open: editing !== null,
+    mode: "chain",
+  });
   if (!ctx.enabled) return null;
+  const extra: SheetExtra | undefined = budget
+    ? { node: <BudgetFields draft={draft} unit={ctx.unit || draft.unit} />, dirty: draft.dirty, validate: draft.validate, save: draft.save }
+    : budgetNote
+      ? { node: budgetNote, dirty: false, validate: () => true, save: async () => undefined }
+      : undefined;
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button
@@ -1106,20 +1207,24 @@ export function GrantActions({
         disabled={!escrowCanDelegate(ctx.escrowQuery.data)}
         onClick={() => setEditing({ delegateAccount: delegation.delegate, boundAt, current: delegation })}
       >
-        Change caps
+        Change spending limits
       </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        type="button"
-        className="text-danger-600"
-        data-testid="revoke-agent-delegate"
-        onClick={() => setRevoking(delegation)}
-      >
-        Stop it paying
-      </Button>
+      {showStop ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          type="button"
+          className="text-danger-600"
+          data-testid="revoke-agent-delegate"
+          onClick={() => setRevoking(delegation)}
+        >
+          Stop it paying
+        </Button>
+      ) : null}
       <AuthorizeSheet
         target={editing}
+        agentName={agentName}
+        extra={extra}
         escrow={ctx.escrowQuery.data}
         escrowReceivedAt={ctx.escrowQuery.dataUpdatedAt}
         unit={ctx.unit}
@@ -1133,6 +1238,7 @@ export function GrantActions({
       />
       <RevokeSheet
         target={revoking}
+        agentName={agentName}
         escrow={ctx.escrowQuery.data}
         unit={ctx.unit}
         onClose={() => setRevoking(null)}
