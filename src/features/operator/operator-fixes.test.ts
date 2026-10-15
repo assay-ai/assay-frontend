@@ -89,8 +89,10 @@ describe("capability is explicit (top fix 2)", () => {
     expect(askLabel(["Jordan Blake", "Riley Brooks"], "x")).toBe("Ask Jordan or Riley");
     expect(askLabel([], "Lead adjudicator or Treasury")).toBe("Ask a Lead adjudicator");
     expect(askLabel([], "Admin")).toBe("Ask an Admin");
-    expect(whoCanSentence(["Jordan Blake", "Riley Brooks"], "Lead adjudicator")).toBe("Jordan Blake or Riley Brooks can (Lead adjudicator).");
-    expect(whoCanSentence([], "Admin")).toMatch(/^Nobody on the team can right now/);
+    expect(whoCanSentence(["Jordan Blake", "Riley Brooks"], "Lead adjudicator")).toBe("Jordan Blake or Riley Brooks (Lead adjudicator).");
+    expect(whoCanSentence([], "Admin")).toMatch(/^Nobody on the team right now/);
+    // Read after "Who can:", so the answer never says "can" again.
+    expect(whoCanSentence(["Dan Ortiz", "Ava Chen"], "Admin")).not.toMatch(/\bcan\b/);
   });
 });
 
@@ -228,7 +230,7 @@ describe("roles described by what they can do (round 2, top 3)", () => {
     expect(whoCan("suspend", team, { amount: USD("28470000") })).toEqual(["Iris Park", "Jordan Blake"]);
     expect(whoCan("suspend", team, { amount: USD("300000000") })).toEqual(["Jordan Blake"]);
     expect(whoCanSentence(["Jordan Blake"], "Lead adjudicator", "$300.00")).toBe(
-      "Jordan Blake can (Lead adjudicator, with an authority limit of at least $300.00).",
+      "Jordan Blake (Lead adjudicator, with an authority limit of at least $300.00).",
     );
   });
 });

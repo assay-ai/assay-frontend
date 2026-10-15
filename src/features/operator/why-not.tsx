@@ -41,15 +41,16 @@ function firstName(name: string): string {
 }
 
 /**
- * "Riley Brooks or Iris Park can (Lead adjudicator or Adjudicator)." With
- * `amountText` for an action on money, the names are already filtered by
- * authority limit (`whoCan`), and the sentence says so. Pure.
+ * The answer to "Who can:", without a second "can": "Riley Brooks or Iris
+ * Park (Lead adjudicator or Adjudicator)." With `amountText` for an action on
+ * money, the names are already filtered by authority limit (`whoCan`), and
+ * the answer says so. Pure.
  */
 export function whoCanSentence(names: readonly string[], rolePhrase: string, amountText?: string | null): string {
   const needs = amountText ? `${rolePhrase}, with an authority limit of at least ${amountText}` : rolePhrase;
-  if (names.length === 0) return `Nobody on the team can right now: it needs ${needs}. An admin adds or changes someone on Team.`;
+  if (names.length === 0) return `Nobody on the team right now: it needs ${needs}. An admin adds or changes someone on Team.`;
   const list = names.length <= 3 ? `${names.slice(0, -1).join(", ")}${names.length > 1 ? " or " : ""}${names[names.length - 1]}` : `${names.slice(0, 3).join(", ")} or ${names.length - 3} others`;
-  return `${list} can (${needs}).`;
+  return `${list} (${needs}).`;
 }
 
 function absolute(link: string): string {
@@ -127,7 +128,7 @@ export function WhyNot({ action, me, amount, ask, link, why, title, variant = "i
   const who = whoCanSentence(names, phrase, amount && MONEY_ACTIONS.has(action) ? formatMoney(amount) : null);
   if (variant === "inline") {
     return (
-      <p className={cn("flex w-full flex-wrap items-center gap-x-2 gap-y-0.5 text-body-13 text-02", className)} title={directory.isPending ? undefined : who}>
+      <p className={cn("flex w-full flex-wrap items-center gap-x-2 gap-y-0.5 text-body-13 text-02", className)} title={directory.isPending ? undefined : `Who can: ${who}`}>
         <Lock aria-hidden="true" className="size-3.5 shrink-0 text-03" />
         <span className="min-w-0">{whyLine(why ?? (check.limitOnly ? (check.why ?? "") : `${ACTION_DOING[action]} needs ${phrase}`))}</span>
         {directory.isPending ? null : (
