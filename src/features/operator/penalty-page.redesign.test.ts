@@ -215,3 +215,15 @@ describe("round 4: ruling from the penalty page", () => {
     expect(rulingFromLink(null)).toBeNull();
   });
 });
+
+describe("round 5: the Context tab reads time like the rest of the console", () => {
+  it("is local with its zone for operators, UTC for the provider page", async () => {
+    const { contextStamp } = await import("@/features/provider-slash-case/context");
+    const { zoneLabel } = await import("@/libs/local-time");
+    const iso = "2026-09-20T03:06:00Z";
+    expect(contextStamp("provider")(iso)).toBe("2026-09-20 03:06 UTC");
+    const local = contextStamp("operator")(iso);
+    expect(local).not.toMatch(/2026-09-20/);
+    expect(local.endsWith(zoneLabel(iso))).toBe(true);
+  });
+});
