@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { slaReading, windowRange } from "./reading";
+import { recentWindows, slaReading, windowRange, windowRate } from "./reading";
 
 const base = { status: "OPEN" as const, verifiedCalls: 500, failedCalls: 8, minVerifiedCalls: 400, observedFailureRate: 0.016, declaredFailureRate: 0.02 };
 
@@ -35,5 +35,27 @@ describe("windowRange", () => {
     expect(windowRange({ status: "OPEN", openedAt: "2026-10-13T15:00:00Z", closedAt: null, deadlineAt: "" }, options)).toBe(
       "Since Oct 13, 15:00",
     );
+  });
+});
+
+describe("recentWindows", () => {
+  const w = (windowId: string, bindingId: string, status: "OPEN" | "CLOSED", openedAt: string) => ({ windowId, bindingId, status, openedAt });
+  it("keeps one tool's windows, newest first, with at most one open", () => {
+    const out = recentWindows(
+      [
+        w("a", "b1", "CLOSED", "2026-10-07T00:00:00Z"),
+        w("x", "b2", "OPEN", "2026-10-15T00:00:00Z"),
+        w("c", "b1", "OPEN", "2026-10-14T00:00:00Z"),
+        w("d", "b1", "OPEN", "2026-10-01T00:00:00Z"),
+        w("e", "b1", "CLOSED", "2026-09-30T00:00:00Z"),
+      ],
+      "b1",
+    );
+    expect(out.map((x) => x.windowId)).toEqual(["c", "a", "e"]);
+  });
+
+  it("states a window's rate", () => {
+    expect(windowRate({ observedFailureRate: 0.0139, verifiedCalls: 431 })).toBe("1.4%");
+    expect(windowRate({ observedFailureRate: null, verifiedCalls: 0 })).toBeNull();
   });
 });

@@ -537,8 +537,17 @@ interface DemoWindow {
 }
 
 /**
- * Newest first, and the lead row is deliberately the OPEN one: the dashboard
- * asks for `limit: 1` and renders `items[0]` in "Needs attention".
+ * Per tool, back-to-back 7-day windows with exactly one OPEN (the newest) —
+ * the Quality tab, the Penalties drawer and Home all read these, so a penalty
+ * always points at a window that went over the promise. The list fixture
+ * sorts newest first and filters by `bindingId`; the array order only fixes
+ * the indices `demo-penalties.ts` refers to.
+ *
+ * Penalties (see `demo-penalties.ts`), by the real formula
+ * min(Σ price × (observed − declared) × 2, max($5, 100 × price)):
+ *   w_117 market-quote  21/512 = 4.10% vs 2% → $675.90 × 2.10% × 2 = $28.41
+ *   w_46  fx-rates      27/214 = 12.62% vs 5% → $72.48 × 7.62% × 2 = $11.04
+ *   w_45  fx-rates      21/203 = 10.34% vs 5% → $70.56 × 5.34% × 2 = $7.54
  */
 const WINDOWS: DemoWindow[] = [
   {
@@ -563,14 +572,14 @@ const WINDOWS: DemoWindow[] = [
     sequence: 117,
     bindingIndex: 0,
     status: "CLOSED",
-    outcome: "WITHIN_SLA",
-    openedMinutesAgo: 12960,
-    closedMinutesAgo: 4320,
+    outcome: "BREACH_PROPOSED",
+    openedMinutesAgo: 12840,
+    closedMinutesAgo: 2760,
     totalCalls: 1502,
     verifiedCalls: 512,
-    failedCalls: 7,
+    failedCalls: 21,
     minVerifiedCalls: 200,
-    warningLevel: null,
+    warningLevel: "CRITICAL",
     samplingEscalationRequested: false,
   },
   {
@@ -580,7 +589,7 @@ const WINDOWS: DemoWindow[] = [
     bindingIndex: 1,
     status: "CLOSED",
     outcome: "BREACH_PROPOSED",
-    openedMinutesAgo: 14400,
+    openedMinutesAgo: 15840,
     closedMinutesAgo: 5760,
     totalCalls: 604,
     verifiedCalls: 214,
@@ -595,14 +604,14 @@ const WINDOWS: DemoWindow[] = [
     sequence: 45,
     bindingIndex: 1,
     status: "CLOSED",
-    outcome: "WITHIN_SLA",
-    openedMinutesAgo: 24480,
+    outcome: "BREACH_PROPOSED",
+    openedMinutesAgo: 25920,
     closedMinutesAgo: 15840,
     totalCalls: 588,
     verifiedCalls: 203,
-    failedCalls: 5,
+    failedCalls: 21,
     minVerifiedCalls: 200,
-    warningLevel: null,
+    warningLevel: "CRITICAL",
     samplingEscalationRequested: false,
   },
   {
@@ -621,10 +630,39 @@ const WINDOWS: DemoWindow[] = [
     warningLevel: null,
     samplingEscalationRequested: true,
   },
+  {
+    windowId: "1b7e4d92-6a05-4c38-9f21-5e8c0a3d7b64",
+    label: "w_116",
+    sequence: 116,
+    bindingIndex: 0,
+    status: "CLOSED",
+    outcome: "WITHIN_SLA",
+    openedMinutesAgo: 22920,
+    closedMinutesAgo: 12840,
+    totalCalls: 1476,
+    verifiedCalls: 498,
+    failedCalls: 7,
+    minVerifiedCalls: 200,
+    warningLevel: null,
+    samplingEscalationRequested: false,
+  },
+  {
+    windowId: "8c2f5a17-3e90-4d6b-a148-0f7b9e2c5d31",
+    label: "w_47",
+    sequence: 47,
+    bindingIndex: 1,
+    status: "OPEN",
+    outcome: null,
+    openedMinutesAgo: 5760,
+    closedMinutesAgo: null,
+    totalCalls: 392,
+    verifiedCalls: 141,
+    failedCalls: 4,
+    minVerifiedCalls: 200,
+    warningLevel: null,
+    samplingEscalationRequested: false,
+  },
 ];
-
-/** The contested window: `w_46`, on the FX binding. */
-const SUBJECT_WINDOW_INDEX = 2;
 
 function slaWindow(entry: DemoWindow, windowId = entry.windowId) {
   const binding = BINDINGS[entry.bindingIndex];
@@ -882,18 +920,7 @@ function evidenceRules(failed: boolean) {
 const PROPOSAL_ID = "a91c35e7-0b62-4d84-9f3a-6c81e740d2b5";
 const DISPUTE_ID = "f2a84c61-3d75-4e08-b19c-7a0e5d2f8c36";
 
-/** Failures concentrated on one caller — which is what the claim rests on. */
-const FAILURES_BY_AGENT = [
-  { key: AGENT_CALLS[1].agentId, count: 19, share: 19 / 27 },
-  { key: AGENT_CALLS[4].agentId, count: 5, share: 5 / 27 },
-  { key: AGENT_CALLS[2].agentId, count: 3, share: 3 / 27 },
-];
 
-const FAILURES_BY_RULE = [
-  { key: "FRESHNESS_STALE", count: 21, share: 21 / 27 },
-  { key: "VALUE_RANGE_OUT_OF_BOUNDS", count: 4, share: 4 / 27 },
-  { key: "REQUIRED_FIELDS_MISSING", count: 2, share: 2 / 27 },
-];
 
 const DISPUTE_REASON =
   "19 of the 27 failures in this window came from one caller, which re-sent the same stale-window query every 40 seconds for two hours. Excluding that caller the observed rate is 3.74%, inside the declared 5.00%.";
@@ -948,21 +975,21 @@ function slashProposalSummary(proposalId: string) {
       status: "EXECUTED",
       appliedAmount: penalty,
       clocks: {
-        proposedAt: minutesAgo(28800),
-        notifiedAt: minutesAgo(28790),
+        proposedAt: minutesAgo(15000),
+        notifiedAt: minutesAgo(14990),
         acknowledgedAt: null,
-        respondByAt: minutesAgo(24480),
+        respondByAt: minutesAgo(10680),
         platformDecisionDueAt: null,
-        earliestExecutionAt: minutesAgo(24480),
-        chainExecutableAt: minutesAgo(24480),
+        earliestExecutionAt: minutesAgo(10680),
+        chainExecutableAt: minutesAgo(10680),
         chainStatus: "EXECUTED",
         secondsRemaining: null,
         runningClock: "NONE",
       },
       disputeId: null,
       outcome: "EXECUTED",
-      resolvedAt: minutesAgo(24000),
-      executedAt: minutesAgo(24000),
+      resolvedAt: minutesAgo(10500),
+      executedAt: minutesAgo(10500),
     };
   }
   return {
@@ -985,6 +1012,49 @@ function slashProposalSummary(proposalId: string) {
     },
     disputeId: DISPUTE_ID,
     executedAt: null,
+  };
+}
+
+/** `total` failures split by `shares`, the first bucket taking the remainder so the parts sum to `total`. */
+function splitFailures(total: number, shares: readonly number[]): number[] {
+  const counts = shares.map((share) => Math.floor(total * share));
+  counts[0] += total - counts.reduce((sum, count) => sum + count, 0);
+  return counts;
+}
+
+/** "$28.41" from a major-unit string, two decimals. */
+function usd(major: string): string {
+  return `$${Number(major).toFixed(2)}`;
+}
+
+/**
+ * The figures one demo penalty case rests on, read from its subject window so
+ * the timeline, the derivation and the Quality tab say the same thing.
+ */
+function caseFacts(proposalId: string | null) {
+  const known = DEMO_PENALTY_PROPOSALS.indexOf(proposalId as (typeof DEMO_PENALTY_PROPOSALS)[number]);
+  const which = known === -1 ? 1 : known;
+  const subject = WINDOWS[DEMO_PENALTY_SUBJECTS[which].windowIndex];
+  const binding = BINDINGS[DEMO_PENALTY_SUBJECTS[which].bindingIndex];
+  const declared = binding.slaFailureRate;
+  const observed = subject.failedCalls / subject.verifiedCalls;
+  const threshold = declared + 2.58 * Math.sqrt((declared * (1 - declared)) / subject.verifiedCalls);
+  const split = (shares: readonly number[]) => splitFailures(subject.failedCalls, shares);
+  const agentCounts = which === 1 ? [19, 5, 3] : split([0.62, 0.24, 0.14]);
+  const ruleCounts = which === 1 ? [21, 4, 2] : split([0.72, 0.19, 0.09]);
+  const agents = [AGENT_CALLS[1].agentId, AGENT_CALLS[4].agentId, AGENT_CALLS[2].agentId];
+  const rules = ["FRESHNESS_STALE", "VALUE_RANGE_OUT_OF_BOUNDS", "REQUIRED_FIELDS_MISSING"];
+  return {
+    which,
+    subject,
+    binding,
+    declared,
+    observed,
+    threshold,
+    amount: DEMO_PENALTY_AMOUNTS[which],
+    proposedMinutesAgo: [1200, 5700, 15000][which],
+    byAgent: agents.map((key, index) => ({ key, count: agentCounts[index], share: agentCounts[index] / subject.failedCalls })),
+    byRule: rules.map((key, index) => ({ key, count: ruleCounts[index], share: ruleCounts[index] / subject.failedCalls })),
   };
 }
 
@@ -1669,12 +1739,16 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
       return {
         ...slaWindow(entry, id),
         calls,
-        failuresByReasonCode: [
-          { key: "FRESHNESS_STALE", count: Math.max(1, entry.failedCalls - 6) },
-          { key: "VALUE_RANGE_OUT_OF_BOUNDS", count: 4 },
-          { key: "REQUIRED_FIELDS_MISSING", count: 2 },
-        ],
-        failuresByAgentId: FAILURES_BY_AGENT.map((row) => ({ key: row.key, count: row.count })),
+        /* Both breakdowns sum to the window's own failure count. */
+        failuresByReasonCode: splitFailures(entry.failedCalls, [0.72, 0.19, 0.09])
+          .map((count, index) => ({
+            key: ["FRESHNESS_STALE", "VALUE_RANGE_OUT_OF_BOUNDS", "REQUIRED_FIELDS_MISSING"][index],
+            count,
+          }))
+          .filter((row) => row.count > 0),
+        failuresByAgentId: splitFailures(entry.failedCalls, [0.62, 0.24, 0.14])
+          .map((count, index) => ({ key: [AGENT_CALLS[1], AGENT_CALLS[4], AGENT_CALLS[2]][index].agentId, count }))
+          .filter((row) => row.count > 0),
       };
     },
   },
@@ -1721,7 +1795,19 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/providers/me/sla-windows",
     override: "always",
-    body: () => page(WINDOWS.map((entry) => slaWindow(entry))),
+    body: (_path, query) => {
+      const bindingId = typeof query.bindingId === "string" ? query.bindingId : null;
+      const status = typeof query.status === "string" ? query.status : null;
+      const limit = Number(query.limit) || WINDOWS.length;
+      return page(
+        [...WINDOWS]
+          .filter((entry) => !bindingId || BINDINGS[entry.bindingIndex].id === bindingId)
+          .filter((entry) => !status || entry.status === status)
+          .sort((a, b) => a.openedMinutesAgo - b.openedMinutesAgo)
+          .slice(0, limit)
+          .map((entry) => slaWindow(entry)),
+      );
+    },
   },
   {
     method: "GET",
@@ -1958,37 +2044,41 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: /^\/providers\/me\/slash-proposals\/[^/]+\/timeline$/,
-    body: () => {
-      const subject = WINDOWS[SUBJECT_WINDOW_INDEX];
-      return {
-        events: [
-          {
-            id: "ev_1",
-            occurredAt: minutesAgo(5760),
-            kind: "WINDOW_CLOSED",
-            actorType: "system",
-            actorId: null,
-            summary: `${subject.label} closed · 27 failed of 214 verified · 12.62% against your declared 5.00%`,
-            detail: {},
-          },
-          {
-            id: "ev_2",
-            occurredAt: minutesAgo(5700),
-            kind: "PROPOSED",
-            actorType: "system",
-            actorId: null,
-            summary: "penalty proposed · $5.00 · the per-window ceiling",
-            detail: {},
-          },
-          {
-            id: "ev_3",
-            occurredAt: minutesAgo(5688),
-            kind: "NOTIFIED",
-            actorType: "system",
-            actorId: null,
-            summary: "delivery confirmed by email · your response clock started here",
-            detail: {},
-          },
+    body: (path) => {
+      const facts = caseFacts(idIn(path, 3));
+      const { subject } = facts;
+      const pct = (value: number) => `${(value * 100).toFixed(2)}%`;
+      const events: { id: string; occurredAt: string; kind: string; actorType: string; actorId: string | null; summary: string; detail: object }[] = [
+        {
+          id: "ev_1",
+          occurredAt: minutesAgo(subject.closedMinutesAgo ?? 0),
+          kind: "WINDOW_CLOSED",
+          actorType: "system",
+          actorId: null,
+          summary: `${subject.label} closed · ${subject.failedCalls} failed of ${subject.verifiedCalls} verified · ${pct(facts.observed)} against your declared ${pct(facts.declared)}`,
+          detail: {},
+        },
+        {
+          id: "ev_2",
+          occurredAt: minutesAgo(facts.proposedMinutesAgo),
+          kind: "PROPOSED",
+          actorType: "system",
+          actorId: null,
+          summary: `penalty proposed · ${usd(facts.amount)}`,
+          detail: {},
+        },
+        {
+          id: "ev_3",
+          occurredAt: minutesAgo(facts.proposedMinutesAgo - 12),
+          kind: "NOTIFIED",
+          actorType: "system",
+          actorId: null,
+          summary: "delivery confirmed by email · your response clock started here",
+          detail: {},
+        },
+      ];
+      if (facts.which === 1) {
+        events.push(
           {
             id: "ev_4",
             occurredAt: minutesAgo(4380),
@@ -2016,12 +2106,26 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
             summary: "reviewer assigned · we respond by the platform deadline on this case",
             detail: {},
           },
-        ],
+        );
+      }
+      if (facts.which === 2) {
+        events.push({
+          id: "ev_4",
+          occurredAt: minutesAgo(10500),
+          kind: "EXECUTED",
+          actorType: "system",
+          actorId: null,
+          summary: `penalty taken from stake · ${usd(facts.amount)}`,
+          detail: {},
+        });
+      }
+      return {
+        events,
         restoration: [
-          { label: "Penalty", value: "$5.00", status: "ON_DECISION" },
-          { label: "Stake", value: "$600.00 untouched", status: "NOT_APPLICABLE" },
+          { label: "Penalty", value: usd(facts.amount), status: facts.which === 2 ? "NOT_APPLICABLE" : "ON_DECISION" },
+          { label: "Stake", value: facts.which === 2 ? `${usd(facts.amount)} taken` : "$600.00 untouched", status: "NOT_APPLICABLE" },
           { label: "Routing", value: "unaffected throughout", status: "NOT_APPLICABLE" },
-          { label: "Window record", value: `${subject.label} annotated`, status: "ON_DECISION" },
+          { label: "Window record", value: `${subject.label} annotated`, status: facts.which === 2 ? "NOT_APPLICABLE" : "ON_DECISION" },
         ],
       };
     },
@@ -2031,18 +2135,29 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     match: /^\/providers\/me\/slash-proposals\/[^/]+$/,
     body: (path) => {
       const proposalId = idIn(path, 3) ?? PROPOSAL_ID;
-      const subject = WINDOWS[SUBJECT_WINDOW_INDEX];
+      const facts = caseFacts(proposalId);
+      const { subject, binding } = facts;
+      const pct = (value: number) => `${(value * 100).toFixed(2)}%`;
+      const gross = Number(binding.priceMajor) * subject.totalCalls;
+      const ceiling = Math.max(5, 100 * Number(binding.priceMajor));
+      const prior = WINDOWS.filter(
+        (entry) =>
+          entry.bindingIndex === subject.bindingIndex &&
+          entry.status === "CLOSED" &&
+          (entry.closedMinutesAgo ?? 0) >= (subject.closedMinutesAgo ?? 0),
+      ).sort((x, y) => (y.closedMinutesAgo ?? 0) - (x.closedMinutesAgo ?? 0));
       return {
         proposal: slashProposalSummary(proposalId),
         changeOverlay: null,
-        failuresByAgent: FAILURES_BY_AGENT,
-        failuresByRule: FAILURES_BY_RULE,
-        evidenceVerdictCount: 214,
-        suggestedClaim: "AGENT_GRIEFING",
+        failuresByAgent: facts.byAgent,
+        failuresByRule: facts.byRule,
+        evidenceVerdictCount: subject.verifiedCalls,
+        suggestedClaim: facts.which === 1 ? "AGENT_GRIEFING" : null,
         inaction: {
-          executesAt: inMinutes(2520),
+          executesAt: inMinutes(facts.which === 0 ? 3120 : 2520),
           stakeBefore: money("600.00"),
-          stakeAfter: money("595.00"),
+          /* 90% of a penalty leaves the stake (60% buyers, 30% Assay); 10% is never taken. */
+          stakeAfter: money((600 - Number(facts.amount) * 0.9).toFixed(6)),
           minimumRequired: money("450.00"),
           fallsBelowMinimum: false,
           graceHours: null,
@@ -2053,84 +2168,47 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         arithmetic: [
           {
             key: "verified_calls",
-            expression: "214 verified of 604 posted",
-            value: "214",
-            note: "above the 200-call sample gate",
+            expression: `${subject.verifiedCalls} verified of ${subject.totalCalls} posted`,
+            value: String(subject.verifiedCalls),
+            note: `above the ${subject.minVerifiedCalls}-call sample gate`,
             tone: "NEUTRAL",
           },
           {
             key: "observed_rate",
-            expression: "27 failed / 214 verified",
-            value: "12.62%",
-            note: "observed 12.62% > 6.81% → breach",
+            expression: `${subject.failedCalls} failed / ${subject.verifiedCalls} verified`,
+            value: pct(facts.observed),
+            note: `observed ${pct(facts.observed)} > ${pct(facts.threshold)} → breach`,
             tone: "BAD",
           },
           {
             key: "declared_rate",
             expression: null,
-            value: "5.00%",
+            value: pct(facts.declared),
             note: "frozen when the window opened",
             tone: "NEUTRAL",
           },
           {
             key: "effective_threshold",
-            expression: "5.00% + 2.58 × sqrt(p(1−p)/214)",
-            value: "6.81%",
+            expression: `${pct(facts.declared)} + 2.58 × sqrt(p(1−p)/${subject.verifiedCalls})`,
+            value: pct(facts.threshold),
             note: null,
             tone: "NEUTRAL",
           },
           {
             key: "penalty",
-            expression: "min($5.00 ceiling, 100 × $0.12)",
-            value: "$5.00",
-            note: "the per-window ceiling applied",
+            expression: `${usd(gross.toFixed(2))} of calls × (${pct(facts.observed)} − ${pct(facts.declared)}) × 2, at most ${usd(ceiling.toFixed(2))}`,
+            value: usd(facts.amount),
+            note: "under the per-window ceiling",
             tone: "BAD",
           },
         ],
-        priorWindows: [
-          {
-            windowId: "pw_41",
-            label: "w_41",
-            observedRate: 0.0189,
-            closedAt: minutesAgo(64800),
-            isSubject: false,
-          },
-          {
-            windowId: "pw_42",
-            label: "w_42",
-            observedRate: 0.0231,
-            closedAt: minutesAgo(54720),
-            isSubject: false,
-          },
-          {
-            windowId: "pw_43",
-            label: "w_43",
-            observedRate: 0.0174,
-            closedAt: minutesAgo(44640),
-            isSubject: false,
-          },
-          {
-            windowId: "pw_44",
-            label: "w_44",
-            observedRate: 0.0296,
-            closedAt: minutesAgo(34560),
-            isSubject: false,
-          },
-          {
-            windowId: WINDOWS[3].windowId,
-            label: WINDOWS[3].label,
-            observedRate: 5 / 203,
-            closedAt: minutesAgo(15840),
-            isSubject: false,
-          },
-          {
-            windowId: subject.windowId,
-            label: subject.label,
-            observedRate: 27 / 214,
-            closedAt: minutesAgo(5760),
-            isSubject: true,
-          },
-        ],
+        priorWindows: prior.map((entry) => ({
+          windowId: entry.windowId,
+          label: entry.label,
+          observedRate: entry.verifiedCalls === 0 ? 0 : entry.failedCalls / entry.verifiedCalls,
+          closedAt: minutesAgo(entry.closedMinutesAgo ?? 0),
+          isSubject: entry.windowId === subject.windowId,
+        })),
       };
     },
   },
@@ -2239,46 +2317,9 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
       ]),
   },
 
-  // ── Shared account surface the provider console reads ────────────────────
-  // Not provider-scoped routes, but `/provider/inbox` and `/provider/account`
-  // are the screens in this task that read them. If the buyer fixtures ever
-  // claim the same paths, theirs are spread first and win.
-  {
-    method: "GET",
-    match: "/notifications/unread-count",
-    body: () => ({ count: 2 }),
-  },
-  {
-    method: "GET",
-    match: "/notifications",
-    body: () => {
-      const subject = WINDOWS[SUBJECT_WINDOW_INDEX];
-      return page([
-        {
-          id: "ntf_9a41c0",
-          event: "slash_proposal.opened",
-          severity: "CRITICAL",
-          title: `A penalty is proposed on ${subject.label}`,
-          body: "27 of 214 verified calls failed, against your declared 5.00%. You have filed an objection and a reviewer is assigned.",
-          subjectType: "SLASH_PROPOSAL",
-          subjectId: PROPOSAL_ID,
-          readAt: null,
-          createdAt: minutesAgo(5688),
-        },
-        {
-          id: "ntf_2f80b7",
-          event: "verification_policy.shadow_published",
-          severity: "WARNING",
-          title: "A policy change is pending on fx-rates",
-          body: "Version 4 is in shadow. Its decision threshold moves from 0.65 to 0.70 and one cross-check verifier is added.",
-          subjectType: "TOOL",
-          subjectId: BINDINGS[1].toolId,
-          readAt: null,
-          createdAt: minutesAgo(2880),
-        },
-      ]);
-    },
-  },
+  // `/notifications` is shared with the buyer console and the buyer fixtures
+  // answer it first; `fixtures.ts` routes the provider Inbox's read (it asks
+  // for `provider.*` events) to `providerNotifications()` below instead.
   {
     method: "GET",
     match: /^\/agents\/[^/]+\/credentials$/,
@@ -2325,3 +2366,53 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
       ]),
   },
 ];
+
+/**
+ * The provider Inbox's notices — provider events only, about the same cases
+ * and windows the other screens show: the penalty that needs action (also
+ * counted by the Needs action strip, so the badge counts it once), a warning
+ * on FX rates' open window, and the executed penalty, already read.
+ */
+export function providerNotifications() {
+  const pending = WINDOWS[DEMO_PENALTY_SUBJECTS[0].windowIndex];
+  const pendingBinding = BINDINGS[DEMO_PENALTY_SUBJECTS[0].bindingIndex];
+  const fx = BINDINGS[1];
+  const fxOpen = WINDOWS.find((entry) => entry.status === "OPEN" && entry.bindingIndex === 1)!;
+  const executed = BINDINGS[DEMO_PENALTY_SUBJECTS[2].bindingIndex];
+  const pct = (value: number) => `${(value * 100).toFixed(1).replace(/\.0$/, "")}%`;
+  return page([
+    {
+      id: "ntf_9a41c0",
+      event: "provider.slash_proposed",
+      severity: "CRITICAL",
+      title: `A penalty of ${usd(DEMO_PENALTY_AMOUNTS[0])} is proposed on ${pendingBinding.toolName}`,
+      body: `${pending.failedCalls} of ${pending.verifiedCalls} checked calls failed (${pct(pending.failedCalls / pending.verifiedCalls)}) against your promised ${pct(pendingBinding.slaFailureRate)}. Dispute it before the deadline if you think it is wrong.`,
+      subjectType: "slash_proposal",
+      subjectId: DEMO_PENALTY_PROPOSALS[0],
+      readAt: null,
+      createdAt: minutesAgo(1190),
+    },
+    {
+      id: "ntf_2f80b7",
+      event: "provider.sla_window_warning",
+      severity: "WARNING",
+      title: `${fx.toolName} is past half of its promised failure rate`,
+      body: `${fxOpen.failedCalls} of ${fxOpen.verifiedCalls} checked calls failed this window (${pct(fxOpen.failedCalls / fxOpen.verifiedCalls)}) against your promised ${pct(fx.slaFailureRate)}. Nothing is taken unless the window closes over the promise.`,
+      subjectType: "binding",
+      subjectId: fx.id,
+      readAt: null,
+      createdAt: minutesAgo(300),
+    },
+    {
+      id: "ntf_7c13e5",
+      event: "provider.slash_executed",
+      severity: "INFO",
+      title: `A penalty of ${usd(DEMO_PENALTY_AMOUNTS[2])} on ${executed.toolName} was taken from your stake`,
+      body: "The dispute window closed with no dispute. Buyers whose calls failed were paid from it.",
+      subjectType: "slash_execution",
+      subjectId: DEMO_PENALTY_PROPOSALS[2],
+      readAt: minutesAgo(10200),
+      createdAt: minutesAgo(10500),
+    },
+  ]);
+}
