@@ -310,9 +310,9 @@ const codeSampleB = `{
 }`;
 
 const sidebarBindings: SidebarBindingItem[] = [
-  { id: "search_web", label: "search_web", status: "live", href: "#" },
-  { id: "get_token_price", label: "get_token_price", status: "live", href: "#" },
-  { id: "scrape_url", label: "scrape_url", status: "paused", href: "#" },
+  { id: "search_web", label: "Web search", status: "live", href: "#" },
+  { id: "get_token_price", label: "Token price", status: "live", href: "#" },
+  { id: "scrape_url", label: "Page scraper", status: "paused", href: "#" },
 ];
 
 const AVATAR_COLOR_LIST: AvatarColor[] = [
@@ -861,16 +861,8 @@ export default function KitchenSinkPage() {
           <Spec name="sidebar · desktop rail (visible ≥ 834px)">
             <Sidebar
               activeItemId="search_web"
-              onNavigate={() => {}}
-              homeHref="#"
-              inboxHref="#"
-              inboxCount={4}
+              counts={{ inbox: 4, penalties: 2 }}
               bindings={sidebarBindings}
-              capitalHref="#"
-              moneyHref="#"
-              policyChangesHref="#"
-              policyChangesCount={2}
-              accountHref="#"
               className="h-[420px]"
             />
           </Spec>
