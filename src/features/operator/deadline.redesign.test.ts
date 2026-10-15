@@ -40,9 +40,9 @@ describe("deadlineReading: approval", () => {
 });
 
 describe("deadlineReading: dispute", () => {
-  it("is neutral early in the 30 days, with no date", () => {
-    const reading = deadlineReading("dispute", iso(NOW + 26 * DAY), iso(NOW - 4 * DAY), NOW);
-    expect(reading).toMatchObject({ label: "26 days left", urgent: false });
+  it("is neutral early in the 30 days, and still names the date to rule by", () => {
+    const reading = deadlineReading("dispute", iso(NOW + 26 * DAY), iso(NOW - 4 * DAY), NOW, { timeZone: "UTC" });
+    expect(reading).toMatchObject({ label: "26 days left · rule by Nov 11", urgent: false });
   });
 
   it("from day 20 is urgent and names the date to rule by", () => {
@@ -51,8 +51,8 @@ describe("deadlineReading: dispute", () => {
   });
 
   it("ends 30 days after the dispute when the expiry is missing", () => {
-    const reading = deadlineReading("dispute", null, iso(NOW - 2 * DAY), NOW);
-    expect(reading.label).toBe("28 days left");
+    const reading = deadlineReading("dispute", null, iso(NOW - 2 * DAY), NOW, { timeZone: "UTC" });
+    expect(reading.label).toBe("28 days left · rule by Nov 13");
     expect(reading.end).toBe(NOW + 28 * DAY);
   });
 
