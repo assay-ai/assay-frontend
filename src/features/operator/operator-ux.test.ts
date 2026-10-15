@@ -201,11 +201,14 @@ describe("roles in plain words", () => {
   it("warns when a removal leaves a two-person action without approvers", () => {
     const team = [operator("jordan", ["ADJL"]), operator("riley", ["ADJL"]), operator("dan", ["OPS_ADMIN"])];
     expect(removalWarnings(team, "jordan")).toEqual([
-      "Only one other Adjudicator or Lead adjudicator would be left: their own requests for suspensions of upheld penalties and bulk decisions could not be approved.",
-      "Only one other Lead adjudicator or Treasury would be left: their own requests for provider compensations could not be approved.",
-      "Only one other Lead adjudicator would be left: their own requests for lifting account blocks and on-chain blocks could not be approved.",
+      "Only one other Adjudicator or Lead adjudicator would be left, so their own requests for suspensions of upheld penalties and bulk decisions could not be approved.",
+      "Only one other Lead adjudicator or Treasury would be left, so their own requests for provider compensations could not be approved.",
+      "Only one other Lead adjudicator would be left, so their own requests for lifting account blocks and on-chain blocks could not be approved.",
     ]);
-    expect(removalWarnings(team, "dan")[0]).toBe("Nobody else is Admin: new operators, raised roles and limits and admin removals could no longer be approved.");
+    // A serial comma, so "raised roles and limits" reads as one item (merge audit 2026-10-16, finding 5).
+    expect(removalWarnings(team, "dan")[0]).toBe(
+      "Nobody else holds the Admin role, so nobody could approve new operators, raised roles and limits, or admin removals.",
+    );
     expect(removalWarnings([...team, operator("iris", ["ADJL", "OPS_ADMIN"])], "jordan")).toEqual([]);
   });
 });

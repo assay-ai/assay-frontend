@@ -544,7 +544,7 @@ function describeLong(
       const demotes =
         roles !== null && operator !== undefined && operator.roles.includes("OPS_ADMIN") && !roles.includes("OPS_ADMIN");
       const sentence = demotes
-        ? `Take OPS_ADMIN away from ${who}: roles become ${rolesText(roles ?? [])}`
+        ? `Take the Admin role away from ${who}: roles become ${rolesText(roles ?? [])}`
         : roles && limit
           ? `Raise the roles of ${who} to ${rolesText(roles)} and the authority limit to ${limit}`
           : roles

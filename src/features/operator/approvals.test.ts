@@ -230,7 +230,7 @@ describe("how a row reads", () => {
           { action: "operator.change", target: `operator:${OP_ID}`, payload: { body: { roles: ["ADJ"], reasonCode: "R" }, operatorId: OP_ID } },
           admin,
         ).sentence,
-      ).toBe("Take OPS_ADMIN away from Test Op B (test-op-b@): roles become Adjudicator (r).");
+      ).toBe("Take the Admin role away from Test Op B (test-op-b@): roles become Adjudicator (r).");
       expect(
         describeApproval(
           { action: "operator.remove", target: `operator:${OP_ID}`, payload: { body: { reasonCode: "R" }, operatorId: OP_ID } },
