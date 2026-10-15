@@ -32,6 +32,9 @@ export function useChainSlashes(
     enabled: provider !== null,
     retry: 0,
     refetchOnWindowFocus: false,
+    // The nav badge, Home and the Penalties page share this read; a full log
+    // scan once a minute is plenty (Refresh forces one).
+    staleTime: 60_000,
   });
 
   const requestIds = React.useMemo(
@@ -44,6 +47,7 @@ export function useChainSlashes(
     queryFn: () => lookupAssayCases(requestIds),
     enabled: matchAgainstAssay && requestIds.length > 0,
     retry: 0,
+    staleTime: 60_000,
   });
 
   return { chain, assay };
