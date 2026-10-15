@@ -9,6 +9,7 @@ import type {
   OperatorSignIn, OperatorStatus, OverrideLogEntry, RemoveOperatorBody, UnblockAccountBody,
   CompensationIntent, DecideCaseBody, ExtendDeadlineBody, FleetSweep, ListQueueQuery,
   OpenFleetSweepBody, OperatorCaseBrief, OperatorIdentity, PlatformHealth,
+  ListOperatorCasesQuery, OperatorCaseListRow,
   RecordCompensationBody, SecondSignatureBody, SuspendProposalBody,
 } from "@/interfaces/operator";
 
@@ -68,6 +69,23 @@ export function listAdjudicationQueue(
     "/operator/queue",
     query as Record<string, unknown>,
   );
+}
+
+/**
+ * `GET /operator/cases` — every penalty, next deadline first. Any operator.
+ *
+ * Newer than some deployed backends: an older one has no such route and
+ * answers 404, which the Penalties page reads as "no list here" and falls
+ * back to the lists that do exist.
+ */
+export function listOperatorCases(
+  query: ListOperatorCasesQuery = {},
+): Promise<CursorPage<OperatorCaseListRow>> {
+  const { status, ...rest } = query;
+  return operatorApi.get<CursorPage<OperatorCaseListRow>>("/operator/cases", {
+    ...rest,
+    ...(status && status.length > 0 ? { status: status.join(",") } : {}),
+  } as Record<string, unknown>);
 }
 
 /** `GET /operator/cases/:proposalId`. A cross-tenant id and an unknown one both 404. */

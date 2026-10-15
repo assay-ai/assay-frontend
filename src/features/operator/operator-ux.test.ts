@@ -297,7 +297,7 @@ describe("where a penalty stands", () => {
     const ruling = caseTimelineSteps(b, caseFacts(b, NOW), { now: NOW }).find((s) => s.id === "ruling");
     // The same "Day N of 30 · X days left" as Home and Arbiter, not a second countdown.
     expect(ruling).toMatchObject({ state: "current", urgent: true, countdown: false });
-    expect(ruling?.dateLabel).toBe("Day 22 of 30 · 9 days left · ends");
+    expect(ruling?.dateLabel).toBe("9 days left · rule by");
   });
 });
 
@@ -312,8 +312,8 @@ describe("the next step for this operator", () => {
     expect(caseNextStep(facts, caseAuthority(b, lead, facts), fmt)).toMatchObject({ kind: "action", action: "rule" });
     expect(caseNextStep(facts, caseAuthority(b, support, facts), fmt)).toMatchObject({
       kind: "waiting",
-      title: "Nothing for you",
-      description: expect.stringMatching(/^Waiting for the arbiter to rule, by /),
+      title: "Waiting for the arbiter",
+      description: expect.stringMatching(/^The ruling is due by /),
     });
   });
 
@@ -373,12 +373,12 @@ describe("the next step for this operator", () => {
     const facts = caseFacts(b, NOW);
     expect(facts.cancel).toEqual({ deadline: iso(NOW + 7 * DAY), ifUnsigned: "expires" });
     const next = caseNextStep(facts, caseAuthority(b, lead, facts), fmt);
-    expect(next).toMatchObject({ kind: "action", action: "cancel", title: "Cancel requested — waiting for the arbiter's signature", until: iso(NOW + 7 * DAY) });
+    expect(next).toMatchObject({ kind: "action", action: "cancel", title: "Get the cancel signed", until: iso(NOW + 7 * DAY) });
     expect(next.description).not.toMatch(/anyone can execute/);
     expect(next.description).not.toMatch(/deadline has passed/);
     const end = caseTimelineSteps(b, facts, { now: NOW }).at(-1);
     expect(end).toMatchObject({ date: iso(NOW + 7 * DAY), urgent: false, countdown: false });
-    expect(end?.dateLabel).toBe("Day 24 of 30 · 7 days left · sign before");
+    expect(end?.dateLabel).toBe("7 days left · sign before");
     expect(cancelDeadlineSentence(facts, fmt)).toMatch(/cannot be executed/);
   });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
+import { Clock, PenLine, ShieldCheck } from "lucide-react";
 import * as React from "react";
 
 import { CopyChip } from "@/components/patterns/copy-chip";
@@ -12,6 +13,8 @@ import type { CancelIntent } from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
 import { createCancelIntent } from "@/services/operator.service";
+
+import { WhatHappens } from "./what-happens";
 
 /**
  * Get a requested cancel signed. Opening the sheet builds the cancel (it
@@ -65,12 +68,16 @@ export function CancelSheet({
       <SheetContent showCloseButton={!signing}>
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Get the cancel signed</SheetTitle>
-          <SheetDescription>
-            The penalty is suspended in Assay, but its record still holds the provider&rsquo;s stake on chain. Only the
-            arbiter&rsquo;s key can retire it. {deadlineSentence}
-          </SheetDescription>
+          <SheetDescription className="sr-only">Only the arbiter&rsquo;s key can retire the record on chain.</SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
+          <WhatHappens
+            lines={[
+              { icon: <ShieldCheck />, text: "The reserved stake goes back to the provider once it lands." },
+              { icon: <PenLine />, text: "Signed by the arbiter key: sign here if this browser holds it, or download the file to sign." },
+              { icon: <Clock />, text: deadlineSentence },
+            ]}
+          />
           {build.isPending || build.isIdle ? (
             <PageState kind="loading" rows={2} label="Preparing the cancel" bare />
           ) : build.isError ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import { History, PenLine, ShieldCheck, Undo2, Users } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -19,6 +20,8 @@ import { approvalHref, type TwoPersonAnswer } from "@/features/operator/two-pers
 import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
 import { ApiError } from "@/libs/ApiClient";
 import { suspendCase } from "@/services/operator.service";
+
+import { WhatHappens } from "./what-happens";
 
 /**
  * Suspend a penalty: a reason chip, a note, and — when the penalty was
@@ -100,12 +103,19 @@ export function SuspendSheet({
       <SheetContent showCloseButton={!busy}>
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Suspend this {penaltyText} penalty?</SheetTitle>
-          <SheetDescription>
-            The penalty is cancelled and nothing is taken from the provider. If it already stands on chain, its cancel
-            is requested and the arbiter signs it next.
-          </SheetDescription>
+          <SheetDescription className="sr-only">Suspending cancels the penalty; nothing is taken from the provider.</SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pt-4">
+          <WhatHappens
+            lines={[
+              { icon: <ShieldCheck />, text: `Nothing is taken: the ${penaltyText} stays with the provider.` },
+              { icon: <PenLine />, text: "If it already stands on chain, the arbiter key signs its cancel next." },
+              twoPerson
+                ? { icon: <Users />, text: `Needs a second approver${approvers && approvers.length > 0 ? `: ${approvers.slice(0, 2).join(" or ")}` : ""}.` }
+                : { icon: <History />, text: "Recorded in Activity under your name." },
+              { icon: <Undo2 />, text: "It can't be undone." },
+            ]}
+          />
           {waiting ? (
             <p role="status" className="w-full rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5 text-body-13 text-02">
               A suspension of this penalty is already waiting for approval, so a second one is not sent.{" "}
@@ -126,7 +136,7 @@ export function SuspendSheet({
             notePlaceholder="What was wrong with this penalty, and how you know."
             errors={errors}
           />
-          <Field label="Ticket (optional)" value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="OPS-1187" maxLength={128} />
+          <Field label="Ticket (optional)" value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="OPS-1187" maxLength={128} className="font-sans text-body-sm" />
           {twoPerson ? <ApprovalFooter needs={approvalNeeds("S-1")} approvers={approvers} /> : null}
         </div>
         <SheetFooter className={OPERATOR_SHEET_FOOTER}>
