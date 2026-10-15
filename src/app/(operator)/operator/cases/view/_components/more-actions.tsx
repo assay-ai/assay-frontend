@@ -325,7 +325,7 @@ function SweepForm({ proposalId, outcome, me }: { proposalId: string; outcome: A
   };
 
   const approvers = directory.isPending ? undefined : eligibleApprovers("S-11", directory.operators, me.id);
-  if (sweep.data) return <Queued answer={sweep.data} what="The fleet sweep" needs={approvalNeeds("S-11")} approvers={approvers} />;
+  if (sweep.data) return <Queued answer={sweep.data} what="The fleet sweep" needs={approvalNeeds("S-11", me.roles)} approvers={approvers} />;
   return (
     <>
       <Field label="Defect" value={defectKey} onChange={(e) => setDefectKey(e.target.value)} placeholder="MAPPING_REGRESSION_2026_10" maxLength={128} error={errors.defect} />
@@ -341,7 +341,7 @@ function SweepForm({ proposalId, outcome, me }: { proposalId: string; outcome: A
         notePlaceholder="What the defect is, how it was found, and why every matched case shares it."
         errors={errors}
       />
-      <ApprovalFooter needs={approvalNeeds("S-11")} approvers={directory.isPending ? undefined : eligibleApprovers("S-11", directory.operators, me.id)} />
+      <ApprovalFooter needs={approvalNeeds("S-11", me.roles)} approvers={directory.isPending ? undefined : eligibleApprovers("S-11", directory.operators, me.id)} />
       <Failure error={sweep.error} />
       <Button variant="danger" className="self-start" loading={sweep.isPending} onClick={submit}>
         Send the sweep for approval
@@ -380,7 +380,7 @@ function CompensateForm({ brief, proposalId, me }: { brief: OperatorCaseBrief; p
       <Queued
         answer={record.data}
         what="Recording the compensation"
-        needs={approvalNeeds("S-5")}
+        needs={approvalNeeds("S-5", me.roles)}
         approvers={directory.isPending ? undefined : eligibleApprovers("S-5", directory.operators, me.id)}
       />
     );
@@ -456,7 +456,7 @@ function CompensateForm({ brief, proposalId, me }: { brief: OperatorCaseBrief; p
         notePlaceholder="Why the executed penalty is paid back, and what shows it."
         errors={errors}
       />
-      <ApprovalFooter needs={approvalNeeds("S-5")} approvers={directory.isPending ? undefined : eligibleApprovers("S-5", directory.operators, me.id)} />
+      <ApprovalFooter needs={approvalNeeds("S-5", me.roles)} approvers={directory.isPending ? undefined : eligibleApprovers("S-5", directory.operators, me.id)} />
       <Failure error={record.error} />
       <Button className="self-start" loading={record.isPending} onClick={submit}>
         Send the record for approval
