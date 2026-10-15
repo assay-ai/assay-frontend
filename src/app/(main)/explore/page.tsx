@@ -1,6 +1,6 @@
-import { redirect } from "next/navigation";
+import { ToolsView } from "@/components/g31/tools-view";
 
-/** Explore has two tabs; Providers is the one the design shows selected. */
+/** Explore: one searchable list of every tool, each row opening in place. */
 export default function ExplorePage() {
-  redirect("/explore/providers");
+  return <ToolsView />;
 }

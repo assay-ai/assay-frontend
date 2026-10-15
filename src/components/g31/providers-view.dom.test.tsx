@@ -24,6 +24,7 @@ function row(stake: ChainStake[]): ProviderRow {
     stake,
     quality: 0.95,
     measuredCalls: 16000,
+    failedCalls: 800,
     yourCalls: 0,
   };
 }
