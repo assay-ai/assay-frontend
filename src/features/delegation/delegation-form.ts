@@ -5,6 +5,7 @@ import type {
   EscrowDelegate,
   Money,
 } from "@/interfaces";
+import { ApiError } from "@/libs/ApiClient";
 import { exceedsScale, toAtomic, toDecimal } from "@/utils/money";
 
 /**
@@ -39,6 +40,18 @@ export interface DelegationFormInput {
  * that window (D1-P05). A kept expiry closer than this could cover no payment.
  */
 export const REDEEM_GRACE_SECONDS = 1_800;
+
+/**
+ * The nearest expiry the backend builds a grant for (assay-evm D-21): at least
+ * `TIGHTEN_DELAY_SECONDS` (3600) after the signed request's `deadline`, which is
+ * the chain's clock plus 300 s — so 3900 s out — plus a margin for the time the
+ * person takes to sign and for clock drift. Closer, it is refused
+ * `SETTLEMENT_DELEGATION_INVALID`.
+ */
+export const MIN_VALID_UNTIL_LEAD_SECONDS = 3_900 + 120;
+
+/** The backend's refusal of a grant the escrow would refuse (bad caps or expiry). */
+export const DELEGATION_INVALID_CODE = "SETTLEMENT_DELEGATION_INVALID";
 
 export interface DelegationFormErrors {
   maxVoucherAmount?: string;
@@ -143,9 +156,9 @@ export function parseDelegationForm(
   const days = input.validDays.trim();
   const keep = input.keepExpiry === true && currentValidUntil !== undefined;
   if (keep) {
-    if (currentValidUntil <= Math.floor(nowSeconds) + REDEEM_GRACE_SECONDS) {
+    if (currentValidUntil < Math.floor(nowSeconds) + MIN_VALID_UNTIL_LEAD_SECONDS) {
       errors.validDays =
-        "The current expiry is less than 30 minutes away — choose a number of days instead.";
+        "The current expiry is less than about 1 hour 5 minutes away — choose a number of days instead.";
     }
   } else if (
     !/^\d+$/.test(days) ||
@@ -297,8 +310,8 @@ export function errorsAfterEdit(
  * own expiry KEPT exactly (BUG-J-POST-01) — a cap edit no longer moves
  * `validUntil` to "N whole days from now". `validDays` is pre-filled with the
  * days it has left (at least 1) for a person who chooses a new expiry. A grant
- * already past, or within the redeem grace of, its expiry starts on days, since
- * keeping that expiry could cover no payment. Every rule of
+ * whose expiry is closer than {@link MIN_VALID_UNTIL_LEAD_SECONDS} starts on
+ * days, since the backend no longer builds a grant ending that soon (D-21). Every rule of
  * {@link parseDelegationForm} applies — the escrow's CURRENT limits included.
  */
 export function editDelegationForm(
@@ -311,7 +324,8 @@ export function editDelegationForm(
     maxVoucherAmount: toDecimal(delegation.maxVoucherAmount).toString(),
     maxPerWindow: toDecimal(delegation.maxPerWindow).toString(),
     validDays: String(Math.min(MAX_DELEGATION_DAYS, Math.max(1, Number.isFinite(left) ? left : 1))),
-    keepExpiry: Number.isFinite(validUntil) && validUntil > nowSeconds + REDEEM_GRACE_SECONDS,
+    keepExpiry:
+      Number.isFinite(validUntil) && validUntil >= nowSeconds + MIN_VALID_UNTIL_LEAD_SECONDS,
   };
 }
 
@@ -344,4 +358,24 @@ export function capsAboveEscrow(
     above.maxPerWindow = escrow.maxPerWindow;
   }
   return above;
+}
+
+/**
+ * `SETTLEMENT_DELEGATION_INVALID` in plain words, or null for any other error.
+ * The backend names the contract's reason (`DelegateValidUntilInvalid`, …) in
+ * its message; the person needs what to change instead.
+ */
+export function delegationInvalidText(error: unknown): string | null {
+  if (!(error instanceof ApiError) || error.code !== DELEGATION_INVALID_CODE) return null;
+  const reason = `${String(error.context?.reason ?? "")} ${error.message}`;
+  if (/ValidUntil/i.test(reason)) {
+    return (
+      "The expiry is too soon. An agent’s authorisation must last at least about " +
+      "1 hour 5 minutes from now (and at most 365 days). Choose a later expiry and sign again."
+    );
+  }
+  return (
+    "Your escrow would refuse these caps. Both must be above zero and within your escrow’s " +
+    "own limits, and the per-payment cap no higher than the 24-hour cap."
+  );
 }
