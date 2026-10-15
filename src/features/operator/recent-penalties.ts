@@ -50,3 +50,52 @@ export function rememberRecentPenalty(entry: RecentPenalty): void {
     /* storage refused: the list just stays as it was */
   }
 }
+
+// ── Finding a penalty ───────────────────────────────────────────────────────
+
+/** Where the console learned of a penalty: the only lists the backend has. */
+export type KnownPenaltySource = "disputed" | "activity" | "recent";
+
+export interface KnownPenalty {
+  id: string;
+  providerId: string;
+  /** "Northwind Geo's $28.47 penalty". */
+  label: string;
+  source: KnownPenaltySource;
+}
+
+export const KNOWN_SOURCE_TEXT: Record<KnownPenaltySource, string> = {
+  disputed: "disputed on chain",
+  activity: "acted on, in Activity",
+  recent: "opened in this browser",
+};
+
+/**
+ * Every penalty the console can name, from the lists that exist —
+ * disputed on chain, acted on by an operator (Activity), opened in this
+ * browser — one row per penalty (the first source wins), narrowed to the
+ * providers whose name matches `query`. Pure.
+ */
+export function knownPenalties(
+  sources: { disputed: readonly KnownPenalty[]; activity: readonly KnownPenalty[]; recent: readonly KnownPenalty[] },
+  providerName: (providerId: string) => string,
+  query: string,
+): KnownPenalty[] {
+  const q = query.trim().toLowerCase();
+  const seen = new Set<string>();
+  const out: KnownPenalty[] = [];
+  for (const row of [...sources.disputed, ...sources.activity, ...sources.recent]) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    if (q && !providerName(row.providerId).toLowerCase().includes(q) && !row.label.toLowerCase().includes(q)) continue;
+    out.push(row);
+  }
+  return out;
+}
+
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/** The penalty id in a pasted id or any link that carries one, lower-cased; `null` when none. Pure. */
+export function penaltyIdFrom(text: string): string | null {
+  return UUID_RE.exec(text.trim())?.[0]?.toLowerCase() ?? null;
+}
