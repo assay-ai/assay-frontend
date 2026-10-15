@@ -46,9 +46,19 @@ describe("ContractCallAction", () => {
     expect(html).toContain("Sign and send the ruling");
   });
 
+  it("says what is signed in plain words next to the button: action, contract, chain by name, signer", () => {
+    const html = markup(call("cancelSlashBatch"));
+    expect(html).toContain("What you sign");
+    expect(html).toContain("Cancel 1 penalty on chain: 0x1111…1111");
+    expect(html).toContain("Stake contract 0x0aF4…c73c");
+    expect(html).toContain("Robinhood Chain testnet");
+    expect(html).toContain("Arbiter key 0x2222…2222");
+  });
+
   it("offers neither signing nor the file when the calldata is an uphold labelled as a cancel", () => {
     const html = markup(call("upholdSlashBatch"));
-    expect(html).toContain("This is not the transaction you asked for");
+    expect(html).toContain("is not the one you asked for");
+    expect(html).toContain("Nothing was signed");
     expect(html).toContain("upholdSlashBatch, not cancelSlashBatch");
     expect(html).not.toContain("Sign and send");
     expect(html).not.toContain("Download");
