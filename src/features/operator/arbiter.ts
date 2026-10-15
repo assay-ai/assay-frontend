@@ -144,21 +144,21 @@ export function beneficiaryCheck(row: ArbiterDispute): {
     return {
       status: "unchecked",
       headline:
-        "Not checked: the backend could not match this record to its window's payments, or could not read the chain's agent share. Check the beneficiary by hand.",
+        "Not checked: Assay could not match this penalty to the payments of its window, or could not read the chain's agent share. Check who gets paid by hand.",
       reason: null,
     };
   }
   if (evidence.ok) {
     return {
       status: "ok",
-      headline: `The beneficiary paid for ${evidence.failedCalls} failed call${evidence.failedCalls === 1 ? "" : "s"}, and this penalty is within its share of the formula penalty.`,
+      headline: `The payee (who gets paid) paid for ${evidence.failedCalls} failed call${evidence.failedCalls === 1 ? "" : "s"}, and this penalty is within their share.`,
       reason: null,
     };
   }
   return {
     status: "failed",
     headline:
-      "The beneficiary check fails: upholding would pay an account that did not pay for these failed calls, or more than its share of the penalty.",
+      "The payee check fails: upholding would pay an account that did not pay for these failed calls, or more than its share of the penalty.",
     reason: evidence.reason,
   };
 }

@@ -221,27 +221,6 @@ function ArbiterScreen() {
         />
       ) : null}
 
-      {canRule && selected.size > 0 ? (
-        <div className="sticky top-2 z-10 flex w-full flex-wrap items-center gap-2 rounded-xl border border-02 bg-01 px-3.5 py-2.5 shadow-soft">
-          <span className="mr-auto text-label-13 tabular-nums text-01" aria-live="polite">
-            {selected.size} selected
-          </span>
-          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-            Clear
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => openRuling("CANCEL", [...selected])}>
-            Cancel {selected.size}
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => openRuling("UPHOLD", [...selected])}>
-            Uphold {selected.size}
-          </Button>
-        </div>
-      ) : null}
-      {notice ? (
-        <p className="text-body-xs text-warning-700" role="status">
-          {notice}
-        </p>
-      ) : null}
 
       {disputes.isLoading ? (
         <PageState kind="loading" rows={3} label="Loading disputes" />
@@ -274,6 +253,33 @@ function ArbiterScreen() {
           ))}
         </ul>
       )}
+
+      {/* The selection's actions stick to the bottom of the screen, under the list, so selecting never moves a row. */}
+      {canRule && (selected.size > 0 || notice) ? (
+        <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+84px)] z-30 flex w-full flex-col gap-1.5 rounded-xl border border-02 bg-01 px-3.5 py-2.5 shadow-soft md:bottom-4">
+          {selected.size > 0 ? (
+            <div className="flex w-full flex-wrap items-center gap-2">
+              <span className="mr-auto text-label-13 tabular-nums text-01" aria-live="polite">
+                {selected.size} selected
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} className="min-h-10 tablet:min-h-8">
+                Clear
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => openRuling("CANCEL", [...selected])} className="min-h-10 tablet:min-h-8">
+                Cancel {selected.size}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => openRuling("UPHOLD", [...selected])} className="min-h-10 tablet:min-h-8">
+                Uphold {selected.size}
+              </Button>
+            </div>
+          ) : null}
+          {notice ? (
+            <p className="text-body-xs text-warning-700" role="status">
+              {notice}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {canRule ? (
         <RulingSheet
@@ -417,7 +423,7 @@ function PayeeChip({ row }: { row: ArbiterDispute }) {
         <p className="text-02">{check.headline}</p>
         {check.reason ? <p className="text-danger-700">{check.reason}</p> : null}
         <p className="flex flex-wrap items-center gap-2 text-body-xs text-03">
-          Payee <CopyChip value={row.beneficiary} label="beneficiary" />
+          Paid to <CopyChip value={row.beneficiary} label="payee address" />
         </p>
         <p className="flex flex-wrap items-center gap-2 text-body-xs text-03">
           Request <CopyChip value={row.requestId} label="request id" />
@@ -470,14 +476,20 @@ function DisputeRow({
       <div className="flex w-full min-w-0 flex-col gap-2 tablet:flex-row tablet:items-start tablet:gap-4">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           {canRule ? (
-            <input
-              id={checkboxId}
-              type="checkbox"
-              className="mt-[3px] size-4 shrink-0 accent-primary-600"
-              checked={selected}
-              onChange={onToggle}
-              aria-label={`Select ${possessive(providerName)} penalty for a combined ruling`}
-            />
+            // A 40px hit area around the 16px box, without moving it.
+            <label
+              htmlFor={checkboxId}
+              className="-mx-3 -my-2.5 flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-02"
+            >
+              <input
+                id={checkboxId}
+                type="checkbox"
+                className="size-4 cursor-pointer accent-primary-600"
+                checked={selected}
+                onChange={onToggle}
+                aria-label={`Select ${possessive(providerName)} penalty for a combined ruling`}
+              />
+            </label>
           ) : null}
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-sm text-01">
@@ -646,8 +658,8 @@ function RulingSheet({
   const signer = canSign
     ? "Signed here, with the arbiter wallet connected in this browser"
     : arbiter
-      ? `Signed by the arbiter key ${shortId(arbiter)}: download the file, sign it in the Safe`
-      : "Signed by the arbiter: download the file for their Safe";
+      ? `Signed by the arbiter key ${shortId(arbiter)}: download the file and sign it in the arbiter's multi-signer wallet`
+      : "Signed by the arbiter: download the file for the arbiter's multi-signer wallet";
   const outcome = rulingOutcome({ kind, total: totalMoney, agentBps: terms.data?.slashAgentBps ?? null, count, signer });
 
   const steps: WalletStep[] = [
@@ -697,10 +709,10 @@ function RulingSheet({
               <p className="flex items-start gap-2 text-body-13 text-02">
                 <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
                 <span>
-                  Upholding pays the beneficiary of {single ? "the penalty" : "each penalty"}.{" "}
+                  Upholding pays the payee (who gets paid) of {single ? "the penalty" : "each penalty"}.{" "}
                   {single
-                    ? `Assay could not confirm the beneficiary paid for the failed calls${beneficiaryCheck(single).reason ? ` (${beneficiaryCheck(single).reason})` : ""}. Check it on the penalty before upholding.`
-                    : `For ${unchecked.length} of them (${unchecked.map((row) => providerName(row.providerId)).join(", ")}) Assay could not confirm the beneficiary paid for the failed calls. Check them on their penalties, or leave them out of this batch.`}
+                    ? `Assay could not confirm the payee paid for the failed calls${beneficiaryCheck(single).reason ? ` (${beneficiaryCheck(single).reason})` : ""}. Check it on the penalty before upholding.`
+                    : `For ${unchecked.length} of them (${unchecked.map((row) => providerName(row.providerId)).join(", ")}) Assay could not confirm the payee paid for the failed calls. Check them on their penalties, or leave them out of this batch.`}
                 </span>
               </p>
               <Checkbox
@@ -755,7 +767,7 @@ function RulingSheet({
               const call = await prepare();
               return [{ to: call.to, value: call.value, data: call.data }];
             }}
-            afterExport={`Downloaded. In the Safe that holds the arbiter key, open Transaction Builder, drop the file in and sign. ${count === 1 ? "The penalty moves" : "The penalties move"} once it lands.`}
+            afterExport={`Downloaded. In the arbiter's multi-signer wallet (Safe), open Transaction Builder, drop the file in and sign. ${count === 1 ? "The penalty moves" : "The penalties move"} once it lands.`}
             details={rows.map((row) => ({ label: `${providerName(row.providerId)} request id`, value: row.requestId }))}
           />
         </div>
