@@ -448,6 +448,8 @@ interface DemoCase {
   /** Minutes from now; negative = past. */
   executableIn: number;
   disputedMinutesAgo: number | null;
+  /** When the arbiter upheld it, for an upheld case. */
+  upheldMinutesAgo?: number;
   requestId: string;
   executedMinutesAgo?: number;
   /** When a closed case was closed, for its timeline. */
@@ -530,9 +532,16 @@ const CASES: DemoCase[] = [
     penalty: "41.20",
     status: "UPHELD",
     chainStatus: "PENDING",
-    proposedMinutesAgo: 9 * DAY,
+    /*
+      As the stake contract has it: an uphold makes the record executable from
+      max(the executableAt frozen at proposal, the uphold), never sooner. Proposed
+      42 h ago with the 72 h timelock, it is executable in 30 h although it was
+      upheld 20 h ago — a wait the timeline explains.
+    */
+    proposedMinutesAgo: 42 * HOUR,
     executableIn: 30 * HOUR,
-    disputedMinutesAgo: 8 * DAY,
+    disputedMinutesAgo: 40 * HOUR,
+    upheldMinutesAgo: 20 * HOUR,
     requestId: `0x${"e5".repeat(32)}`,
     outcome: "UPHELD",
     m: { posted: 1210, verified: 402, failed: 58, sla: 0.05 },
@@ -697,7 +706,7 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
         ? [{ id: `${c.id}-2`, occurredAt: disputedAt, kind: "CHAIN_DISPUTED", actorType: "provider" as const, actorId: null, summary: "Disputed on chain by the provider", detail: {} }]
         : []),
       ...(c.status === "UPHELD"
-        ? [{ id: `${c.id}-3`, occurredAt: minutesAgo(2 * DAY), kind: "CHAIN_UPHELD", actorType: "operator" as const, actorId: "riley@", summary: "Upheld by the arbiter", detail: {} }]
+        ? [{ id: `${c.id}-3`, occurredAt: minutesAgo(c.upheldMinutesAgo ?? 2 * DAY), kind: "CHAIN_UPHELD", actorType: "operator" as const, actorId: "riley@", summary: "Upheld by the arbiter", detail: {} }]
         : []),
       ...(c.status === "OVERTURNED" && !suspended
         ? [{ id: `${c.id}-3`, occurredAt: minutesAgo(5 * HOUR), kind: "SUSPENDED", actorType: "operator" as const, actorId: "jordan@", summary: "Suspended: proposed during a mapping regression", detail: {} }]
@@ -1090,8 +1099,8 @@ function logRow(partial: Partial<OverrideLogEntry> & Pick<OverrideLogEntry, "id"
 
 const LOG: OverrideLogEntry[] = [
   logRow({ id: "log-1", code: "S-1", label: "Suspend slash proposal", action: "slash.suspend", actorSubject: "jordan@", targetType: "slash_proposal", targetId: CASES[3].id, reasonCode: "PLATFORM_DEFECT", reason: "Proposed during a mapping regression." }, 5 * HOUR),
+  logRow({ id: "log-3", code: "S-13", label: "Arbiter ruling", action: "arbiter.ruling", actorSubject: "riley@", targetType: "slash_proposal", targetId: CASES[4].id, reasonCode: "EVIDENCE_HOLDS", reason: "Failures reproduce on the provider's side." }, CASES[4].upheldMinutesAgo ?? 2 * DAY),
   logRow({ id: "log-2", code: "A-9", label: "Block account", action: "account.block", actorSubject: "jordan@", targetType: "account_block", targetId: "blk-2", reasonCode: "LEAKED_KEY", reason: "Key posted in a public repository; customer notified.", ticketRef: "SUP-2231" }, 26 * HOUR),
-  logRow({ id: "log-3", code: "S-13", label: "Arbiter ruling", action: "arbiter.ruling", actorSubject: "riley@", targetType: "slash_proposal", targetId: CASES[4].id, reasonCode: "EVIDENCE_HOLDS", reason: "Failures reproduce on the provider's side." }, 2 * DAY),
   logRow({ id: "log-4", code: "A-9", label: "Block account", action: "account.block", actorSubject: "sam@", targetType: "account_block", targetId: "blk-1", reasonCode: "FRAUD", reason: "Self-dealing: agents owned by the provider farmed refunds.", ticketRef: "INC-412" }, 3 * DAY),
   logRow({ id: "log-5", code: "A-10", label: "Lift account block", action: "account.unblock", actorSubject: "sam@", approverSubject: "jordan@", approvalMode: "TWO_PERSON", targetType: "account_block", targetId: "blk-3", reasonCode: "BLOCKED_IN_ERROR", reason: "Wrong wallet blocked during the incident." }, 4 * DAY - 40),
   logRow({ id: "log-6", code: "A-12", label: "Add operator", action: "operator.add", actorSubject: "dan@", approverSubject: "jordan@", approvalMode: "TWO_PERSON", targetType: "operator", targetId: "op-iris", reasonCode: "NEW_HIRE", reason: "Adjudication rota." }, 40 * DAY),

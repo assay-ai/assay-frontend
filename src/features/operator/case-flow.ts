@@ -237,6 +237,11 @@ export function caseTimelineSteps(
       // While disputed, the old executable time no longer applies: it moves with the ruling.
       date: stage === "disputed" ? null : facts.executableAt,
       dateLabel: stage === "disputed" ? "after the ruling" : "executable from",
+      // Upheld but not yet executable: say what the wait is (the contract runs it from max(frozen executableAt, uphold)).
+      description:
+        stage === "upheld" && !Number.isNaN(executableMs) && executableMs > now
+          ? `The ${hours ? `${hours} h ` : ""}on-chain timelock from the proposal still runs; an uphold never shortens it.`
+          : undefined,
     });
   }
   return steps;
