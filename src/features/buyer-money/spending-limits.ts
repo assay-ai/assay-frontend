@@ -116,13 +116,15 @@ export function agentLimitRows(input: AgentLimitsInput): EffectiveLimitRow[] {
 }
 
 /**
- * Every limit on this page is a hard stop: the call is refused, not just
- * flagged. Only who enforces it differs. The alerts at 50/80/100% are the
- * only part that never refuses anything.
+ * Every limit on this page stops the call: it is refused, not just flagged.
+ * Only who enforces it differs, and the page says once (in "How a limit stops
+ * a call") that Assay's software is a control, not a guarantee; the per-line
+ * label does not repeat a "hard stop" claim next to that caveat. The alerts at
+ * 50/80/100% are the only part that never refuses anything.
  */
 export const HARD_STOP = {
-  chain: "hard stop, enforced on chain",
-  assay: "hard stop, checked by Assay's software",
+  chain: "stops calls on chain",
+  assay: "stops calls (Assay's software)",
 } as const;
 
 const UNIT: Record<string, string> = {

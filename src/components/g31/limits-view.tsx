@@ -117,7 +117,8 @@ function HowLimitsStop() {
       </h2>
       <ul className="flex list-disc flex-col gap-1.5 pl-4 text-body-13 text-02">
         <li>
-          <span className="text-01">Hard stops.</span> Every limit above refuses the call; nothing is charged for it.
+          <span className="text-01">Every limit stops calls.</span> A call over any limit above is refused; nothing is charged
+          for it.
         </li>
         <li>
           <span className="text-01">On chain:</span> your account ceiling and each agent&apos;s per call and per 24 hours
@@ -125,7 +126,8 @@ function HowLimitsStop() {
         </li>
         <li>
           <span className="text-01">Checked by Assay:</span> the monthly limit, rate limits, allowed tools and Pause all.
-          They are enforced by our software, not by your wallet, so treat them as a control and not as a guarantee.
+          They are enforced by Assay&apos;s software, not by your wallet or the contract, so treat them as a control and not as
+          a guarantee.
         </li>
         <li>
           Separately, a call repeated with the same tool and the same arguments is refused as a duplicate from the fifth
