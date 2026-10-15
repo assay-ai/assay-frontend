@@ -89,8 +89,10 @@ describe("who sees Reject", () => {
 describe("how a row reads", () => {
   it("names the action in plain words", () => {
     expect(actionLabel("account.unblock")).toBe("Lift an account block");
-    expect(actionLabel("slash.suspend")).toMatch(/Suspend a slash proposal/);
-    expect(actionLabel("operator.change")).toMatch(/Raise an operator/);
+    expect(actionLabel("slash.suspend")).toBe("Suspend a penalty (cancels it)");
+    expect(actionLabel("operator.change")).toMatch(/^Raise someone's roles/);
+    // No role codes in the words people read.
+    expect(Object.values({ a: actionLabel("operator.change"), b: actionLabel("operator.remove") }).join(" ")).not.toMatch(/OPS_ADMIN/);
     expect(actionLabel("something.new")).toBe("something.new");
   });
 
@@ -243,10 +245,13 @@ describe("how a row reads", () => {
         target: "chain_blocklist:eip155:46630:0xabc",
         payload: { chainId: "eip155:46630", account: "0xAbC", reasonCode: "R", note: "n" },
       });
-      expect(d.sentence).toMatch(/^Prepare the arbiter's on-chain block of 0xAbC \(r\)\./);
+      expect(d.sentence).toMatch(/^Block wallet 0xAbC on chain \(Robinhood Chain testnet\) \(r\)\./);
       expect(d.sentence).toContain("the arbiter's wallet still has to sign it");
-      expect(d.fields[0]).toEqual({ label: "Chain", value: "eip155:46630" });
-      expect(actionLabel("arbiter.block")).toMatch(/on-chain block/);
+      expect(d.fields.slice(0, 2)).toEqual([
+        { label: "Wallet", value: "0xAbC" },
+        { label: "Chain", value: "Robinhood Chain testnet" },
+      ]);
+      expect(actionLabel("arbiter.block")).toMatch(/on chain/);
     });
 
     it("names the operator a change raises, with roles before and after", () => {
@@ -368,7 +373,10 @@ describe("how a row reads", () => {
       /^Block lifted on Wallet 0x9[fF]3[cC]…[fF]36[cC]\.$/,
     );
     expect(approvedResultSentence("account.unblock", {}, "Wallet 0x9F3c…F36c")).toBe("Block lifted on Wallet 0x9F3c…F36c.");
-    expect(approvedResultSentence("arbiter.block", {})).toMatch(/Nothing is blocked until the arbiter's wallet signs/);
+    // "Below" only when the call came back, as the screen then draws it there.
+    expect(approvedResultSentence("arbiter.block", { to: "0xcf65", data: "0x" })).toMatch(/ready below\. Nothing is blocked on chain until the arbiter's wallet signs/);
+    expect(approvedResultSentence("arbiter.block", {})).toMatch(/^Approved\. Nothing is blocked on chain yet: .* from Arbiter/);
+    expect(approvedResultSentence("arbiter.block", {})).not.toMatch(/below/);
   });
 
   it("badges the pending count, with a plus past one page", () => {

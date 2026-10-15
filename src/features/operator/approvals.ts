@@ -12,6 +12,7 @@ import { shortAddress } from "@/libs/chains/format";
 import { formatMoney } from "@/utils/money";
 
 import { walletLabel } from "./block-targets";
+import { chainDisplayName } from "./call-summary";
 import { ROLE_OPTIONS } from "./directory";
 import { routes } from "@/libs/routes";
 
@@ -24,14 +25,14 @@ import { routes } from "@/libs/routes";
 
 /** What each queued action does, in plain words. */
 const ACTION_LABEL: Readonly<Record<string, string>> = {
-  "slash.suspend": "Suspend a slash proposal (cancels the penalty)",
-  "slash.sweep": "Open a fleet sweep across every case with the same defect",
-  "slash.compensated": "Record a treasury compensation and close the case as compensated",
+  "slash.suspend": "Suspend a penalty (cancels it)",
+  "slash.sweep": "Decide every penalty with the same defect",
+  "slash.compensated": "Record a pay-back and close the penalty",
   "account.unblock": "Lift an account block",
   "operator.add": "Add an operator",
-  "operator.change": "Raise an operator's roles or authority limit, or take OPS_ADMIN away",
-  "operator.remove": "Remove an operator who holds OPS_ADMIN",
-  "arbiter.block": "Prepare the arbiter's on-chain block of an address",
+  "operator.change": "Raise someone's roles or limit, or take their Admin role away",
+  "operator.remove": "Remove an operator who is an Admin",
+  "arbiter.block": "Block a wallet on chain (the arbiter signs it)",
 };
 
 export function actionLabel(action: string): string {
@@ -372,6 +373,18 @@ export function approvalTitle(
     }
     case "slash.compensated":
       return `Pay back ${penaltyName(text(payload.proposalId) ?? targetId, context)}`;
+    case "arbiter.block": {
+      // The two most dangerous requests name who they are about (operator review 2026-10-16b, P1-6).
+      const account = text(payload.account) ?? targetId.split(":").pop() ?? "";
+      const chainId = text(payload.chainId);
+      return `Block wallet ${account ? shortEvm(account) : "?"} on chain${chainId ? ` (${chainDisplayName(chainId)})` : ""}`;
+    }
+    case "operator.remove": {
+      const operatorId = text(payload.operatorId) ?? targetId;
+      const operator = context.operators.get(operatorId);
+      const who = personName(operator, operatorId);
+      return operator ? `Remove ${who} (${rolesText(operator.roles)})` : `Remove ${who}`;
+    }
     default:
       return actionLabel(approval.action);
   }
@@ -401,19 +414,39 @@ export function approvalOutcome(
   const parts = context.penaltyParts?.get(penaltyId);
   switch (approval.action) {
     case "slash.compensated":
+      // The treasury's deposit already happened (its signature is in the request): approving records it.
       lines.push({
         kind: "money",
-        text: parts ? `Treasury pays ${parts.amount} to ${parts.provider}` : "Treasury pays the provider back the penalty",
+        text: parts
+          ? `Records that the treasury paid ${parts.amount} back into ${possessive(parts.provider)} stake`
+          : "Records that the treasury paid the penalty back into the provider's stake",
       });
-      lines.push({ kind: "record", text: "The penalty closes as paid back" });
+      lines.push({ kind: "record", text: "The penalty closes as paid back. It can't be undone" });
       break;
     case "slash.suspend":
       lines.push({
         kind: "money",
         text: parts ? `The penalty is cancelled: ${parts.provider} keeps its ${parts.amount}` : "The penalty is cancelled: the provider keeps the amount",
       });
-      lines.push({ kind: "chain", text: "If it stands on chain, the arbiter must still sign the cancel" });
+      lines.push({ kind: "chain", text: "If it stands on chain, the arbiter must still sign the cancel. It can't be undone" });
       break;
+    case "arbiter.block": {
+      const account = text(payload.account);
+      const chainId = text(payload.chainId);
+      lines.push({
+        kind: "chain",
+        text: `Builds the arbiter's unsigned block of ${account ? `wallet ${shortEvm(account)}` : "the wallet"}${chainId ? ` on ${chainDisplayName(chainId)}` : ""}. Nothing is blocked on chain until the arbiter's wallet signs it`,
+      });
+      lines.push({ kind: "access", text: "Once it lands, only the contracts' admin key can lift it on chain" });
+      break;
+    }
+    case "operator.remove": {
+      const operatorId = text(payload.operatorId) ?? targetId;
+      const who = personName(context.operators.get(operatorId), operatorId);
+      lines.push({ kind: "access", text: `${who} is removed, and every session they hold ends now` });
+      lines.push({ kind: "record", text: "It can't be undone: adding them back is a new request" });
+      break;
+    }
     case "slash.sweep":
       lines.push({ kind: "record", text: "Every matching penalty is decided like this one, in the background" });
       break;
@@ -574,9 +607,14 @@ function describeLong(
       const account = text(payload.account) ?? targetId;
       const chainId = text(payload.chainId);
       return {
-        sentence: `Prepare the arbiter's on-chain block of ${account}${because}. Approving builds the unsigned setBlocked call; the arbiter's wallet still has to sign it.`,
-        target: { label: `Address ${account}`, href: "/operator/arbiter" },
-        fields: [...(chainId ? [{ label: "Chain", value: chainId }] : []), ...commonFields(body), ...extraFields(body)],
+        sentence: `Block wallet ${account} on chain${chainId ? ` (${chainDisplayName(chainId)})` : ""}${because}. Approving builds the unsigned call; the arbiter's wallet still has to sign it.`,
+        target: { label: `Wallet ${shortEvm(account)}`, href: "/operator/arbiter" },
+        fields: [
+          { label: "Wallet", value: account },
+          ...(chainId ? [{ label: "Chain", value: chainDisplayName(chainId) }] : []),
+          ...commonFields(body),
+          ...extraFields(body),
+        ],
       };
     }
 
@@ -661,7 +699,7 @@ export function approvedResultSentence(action: string, result: unknown, target?:
     case "slash.suspend":
       return `${target ? `${target.charAt(0).toUpperCase()}${target.slice(1)} suspended` : "Penalty suspended"}. If it stands on chain, its cancel is requested and still needs the arbiter's signature.`;
     case "slash.compensated":
-      return `${target ? `${target.charAt(0).toUpperCase()}${target.slice(1)} paid back` : "Paid back"} into the provider's stake. Penalty closed.`;
+      return `${target ? `${target.charAt(0).toUpperCase()}${target.slice(1)} recorded as paid back` : "Recorded as paid back"} into the provider's stake. Penalty closed.`;
     case "account.unblock": {
       const subject =
         target ??
@@ -679,7 +717,10 @@ export function approvedResultSentence(action: string, result: unknown, target?:
     case "operator.remove":
       return `Operator removed${typeof r.subject === "string" ? `: ${r.subject}` : ""}. Every session they held has ended.`;
     case "arbiter.block":
-      return "The arbiter's unsigned block is built. Nothing is blocked until the arbiter's wallet signs and sends it below.";
+      // "Below" only when the answer carried the call, which the screen then draws under this line.
+      return typeof r.to === "string" && typeof r.data === "string"
+        ? "Approved. The arbiter's unsigned block is ready below. Nothing is blocked on chain until the arbiter's wallet signs and sends it."
+        : "Approved. Nothing is blocked on chain yet: the arbiter's wallet signs it from Arbiter, under On-chain blocks to sign.";
     default:
       return "Approved. The action ran.";
   }
