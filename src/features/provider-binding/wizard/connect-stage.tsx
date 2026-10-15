@@ -290,7 +290,7 @@ export function ConnectStage({
         ) : null}
 
         {report ? (
-          <TestPipelineView report={report} stale={Boolean(stale)} />
+          <TestPipelineView report={report} stale={Boolean(stale)} paid={binding ? binding.pricingMode !== "FREE" : false} />
         ) : testPassedBefore && !dirty ? (
           <p className="text-body-13 text-success-700">Your last test passed. Run it again any time.</p>
         ) : null}

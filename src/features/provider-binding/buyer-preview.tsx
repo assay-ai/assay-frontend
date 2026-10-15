@@ -31,8 +31,9 @@ export function BuyerPreview({
   failureRate: number | null;
   className?: string;
 }) {
+  // A paid mode with no price typed yet is not "Free": say the price is still to come.
   const priceText =
-    mode === "FREE" || !price ? "Free" : `${formatMoney(price, { decimals: 4 })} a call`;
+    mode === "FREE" ? "Free" : price ? `${formatMoney(price, { decimals: 4 })} a call` : "Price not set yet";
   return (
     <section aria-label="How buyers see your tool" className={className}>
       <p className="mb-2 flex items-center gap-1.5 text-label-13 text-02">
