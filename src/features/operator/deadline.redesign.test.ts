@@ -19,13 +19,13 @@ describe("timeLeftLabel", () => {
 
 describe("deadlineReading: approval", () => {
   it("is neutral while most of the 24 h is left", () => {
-    const reading = deadlineReading("approval", iso(NOW + 17 * HOUR), iso(NOW - 7 * HOUR), NOW);
-    expect(reading).toMatchObject({ label: "17h left", urgent: false, expired: false });
+    const reading = deadlineReading("approval", iso(NOW + 17 * HOUR), iso(NOW - 7 * HOUR), NOW, { timeZone: "UTC" });
+    expect(reading).toMatchObject({ label: "17h left · until tomorrow 05:00", urgent: false, expired: false });
   });
 
   it("is urgent under a quarter of the window", () => {
-    const reading = deadlineReading("approval", iso(NOW + 3 * HOUR), iso(NOW - 21 * HOUR), NOW);
-    expect(reading).toMatchObject({ label: "3h left", urgent: true });
+    const reading = deadlineReading("approval", iso(NOW + 3 * HOUR), iso(NOW - 21 * HOUR), NOW, { timeZone: "UTC" });
+    expect(reading).toMatchObject({ label: "3h left · until 15:00", urgent: true });
   });
 
   it("assumes a 24 h window when the start is unknown", () => {
@@ -36,6 +36,23 @@ describe("deadlineReading: approval", () => {
   it("says Expired once past, and No expiry when unreadable", () => {
     expect(deadlineReading("approval", iso(NOW - 1), null, NOW)).toMatchObject({ label: "Expired", expired: true, urgent: true });
     expect(deadlineReading("approval", "nope", null, NOW)).toMatchObject({ label: "No expiry", end: null });
+  });
+});
+
+describe("deadlineReading: execute (a superseded record)", () => {
+  it("names the time to cancel before, and turns urgent under a day", () => {
+    expect(deadlineReading("execute", iso(NOW + 30 * HOUR), null, NOW, { timeZone: "UTC" })).toMatchObject({
+      label: "30h left · cancel before tomorrow 18:00",
+      urgent: false,
+    });
+    expect(deadlineReading("execute", iso(NOW + 5 * HOUR), null, NOW, { timeZone: "UTC" })).toMatchObject({
+      label: "5h left · cancel before 17:00",
+      urgent: true,
+    });
+  });
+
+  it("says anyone can execute it once past", () => {
+    expect(deadlineReading("execute", iso(NOW - HOUR), null, NOW)).toMatchObject({ label: "Anyone can execute it now", expired: true });
   });
 });
 

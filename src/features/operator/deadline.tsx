@@ -13,15 +13,21 @@ import { disputeUrgency } from "./inbox";
  * label, and colour — never colour alone, never a progress bar in a list.
  *
  *   <Deadline kind="approval" until={approval.expiresAt} from={approval.createdAt} />
- *     → [clock] 17h left                     neutral
- *     → [alert] 3h left                      danger, under a quarter of the window left
+ *     → [clock] 17h left · until tomorrow 05:00   neutral
+ *     → [alert] 3h left · until 15:00             danger, under a quarter of the window left
  *
  *   <Deadline kind="dispute" until={row.expiresAt} from={row.disputedAt} />
  *     → [clock] 26 days left · rule by Nov 11  neutral
  *     → [alert] 7 days left · rule by Oct 23   danger, from day 20 of the 30
  *
+ *   <Deadline kind="execute" until={record.executableAt} />
+ *     → [clock] 30h left · cancel before Oct 18, 02:00   neutral
+ *     → [alert] 5h left · cancel before 17:00           danger, under a day left
+ *     → [alert] Anyone can execute it now                past
+ *
  * Props:
- *   - `kind`   "approval" (a two-person request, 24 h) or "dispute" (the 30-day on-chain window).
+ *   - `kind`   "approval" (a two-person request, 24 h), "dispute" (the 30-day on-chain window) or
+ *              "execute" (a record anyone may execute from then: the arbiter cancels before it).
  *   - `until`  ISO instant it ends. A dispute with no `until` ends 30 days after `from`.
  *   - `from`   ISO instant it started; sets the window for the "little left" rule.
  *   - `now`    optional, for tests and for lists that share one clock. Else it ticks each minute.
@@ -31,7 +37,7 @@ import { disputeUrgency } from "./inbox";
  * the element (sorting, a table's sort key, a confirm sheet sentence).
  */
 
-export type DeadlineKind = "approval" | "dispute";
+export type DeadlineKind = "approval" | "dispute" | "execute";
 
 export interface DeadlineReading {
   /** "17h left", "7 days left · rule by Oct 23", "Expired". */
@@ -73,12 +79,20 @@ export function deadlineReading(
   }
 
   const end = until ? Date.parse(until) : Number.NaN;
+  // The end itself, not only the time left: visible without a hover (operator review 2026-10-16b, P1-8).
+  const at = Number.isNaN(end) ? "" : formatLocalDateTime(end, { ...options, now, midSentence: true });
+  if (kind === "execute") {
+    if (Number.isNaN(end)) return { label: "No date set", urgent: false, expired: false, end: null };
+    const msLeft = end - now;
+    if (msLeft <= 0) return { label: "Anyone can execute it now", urgent: true, expired: true, end };
+    return { label: `${timeLeftLabel(msLeft)} · cancel before ${at}`, urgent: msLeft < DAY, expired: false, end };
+  }
   if (Number.isNaN(end)) return { label: "No expiry", urgent: false, expired: false, end: null };
   const msLeft = end - now;
   if (msLeft <= 0) return { label: "Expired", urgent: true, expired: true, end };
   const start = from ? Date.parse(from) : Number.NaN;
   const total = Number.isNaN(start) ? DAY : Math.max(1, end - start);
-  return { label: timeLeftLabel(msLeft), urgent: msLeft / total < 0.25, expired: false, end };
+  return { label: `${timeLeftLabel(msLeft)} · until ${at}`, urgent: msLeft / total < 0.25, expired: false, end };
 }
 
 /**
@@ -113,7 +127,7 @@ export function Deadline({ kind, until, from, now: fixedNow, className }: Deadli
   const reading = deadlineReading(kind, until, from, fixedNow ?? tick);
   const endIso = reading.end === null ? undefined : new Date(reading.end).toISOString();
   // A dispute names what is due by then: the date is in the label, the exact instant one hover away.
-  const title = endIso ? deadlineTitle(kind === "dispute" ? "Rule by" : "Ends", endIso) : undefined;
+  const title = endIso ? deadlineTitle(kind === "dispute" ? "Rule by" : kind === "execute" ? "Cancel before" : "Ends", endIso) : undefined;
   const Icon = reading.urgent ? AlertTriangle : Clock;
   const label = mounted ? reading.label : endIso ? `Ends ${utcTitle(endIso)}` : reading.label;
 
