@@ -134,7 +134,7 @@ const CLASS_NOTE: Record<string, string> = {
   PROVIDER_FORFEITED: "voucher not collected: your stake was below the minimum or you were blocked · not credited, buyer not charged",
   PAID_UNCREDITED: "our checks rejected the response · see verdicts",
   FREE: "free-tier call · nothing charged, nothing paid",
-  EXPLORATION: "trial traffic for a new binding, paid for by us",
+  EXPLORATION: "trial traffic for a new binding; the buyer paid, we paid only for checking it",
   EXCLUDED: "excluded from the SLA window by our team",
   TEST: "your own dry runs",
   SYSTEM_ERROR: "your endpoint timed out or returned 5xx",
