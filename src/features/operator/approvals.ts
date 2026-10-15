@@ -756,11 +756,22 @@ export function approvalActivityHref(approval: Pick<OperatorApproval, "target" |
   return `/operator/override-log?targetId=${encodeURIComponent(approvalTargetId(approval))}`;
 }
 
-/** "a second Lead adjudicator" — who must approve a register code, for `ApprovalFooter`. */
-export function approvalNeeds(code: string): string {
+/**
+ * Who must approve a register code, for `ApprovalFooter` and the request row.
+ * Said from the requester's side when their roles are known: "a second Lead
+ * adjudicator" only when the requester holds that role too, otherwise "a Lead
+ * adjudicator" / "an Admin" (Support asking to lift a block needs a Lead
+ * adjudicator, not a second one). Without them, "a second …" as before.
+ *
+ *   approvalNeeds("A-10")                  → "a second Lead adjudicator"
+ *   approvalNeeds("A-10", ["SRE", "SUP"])  → "a Lead adjudicator"
+ *   approvalNeeds("A-10", ["ADJL"])        → "a second Lead adjudicator"
+ */
+export function approvalNeeds(code: string, requesterRoles?: readonly OperatorRole[]): string {
   const roles = approverRolesFor(code);
   if (!roles || roles.length === 0) return "a second operator";
   const names = roles.map((role) => ROLE_LABEL[role] ?? role);
   const joined = names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
-  return `a second ${joined}`;
+  if (!requesterRoles || requesterRoles.some((role) => roles.includes(role))) return `a second ${joined}`;
+  return `${/^[AEIOU]/i.test(joined) ? "an" : "a"} ${joined}`;
 }
