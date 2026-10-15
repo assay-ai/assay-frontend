@@ -202,6 +202,7 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
     <WalletActionSheet
       open={open}
       onOpenChange={onOpenChange}
+      chain={money.chain}
       title={`Let ${agentName} pay`}
       description="Your agent pays for calls from your escrow, within these spending limits. It cannot withdraw, change your limits or let anyone else pay. Free, no gas."
       steps={steps}
