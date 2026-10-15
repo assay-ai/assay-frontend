@@ -5,301 +5,337 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { penaltyPhrase } from "@/features/operator/approvals";
-import { disputeAmount } from "@/features/operator/arbiter";
-import { DisputeLine } from "@/features/operator/dispute-line";
-import { sortDisputesByDaysLeft } from "@/features/operator/inbox";
+import { Search } from "@/components/ui/search";
+import { penaltyPhrase, approvalTargetId } from "@/features/operator/approvals";
+import { eligibleApprovers } from "@/features/operator/inbox";
 import {
-  KNOWN_SOURCE_TEXT,
-  knownPenalties,
-  penaltyIdFrom,
-  readRecentPenalties,
-  type KnownPenalty,
-  type RecentPenalty,
-} from "@/features/operator/recent-penalties";
-import { capabilitiesFor } from "@/features/operator/roles";
-import { useOperatorSession } from "@/features/operator/session-context";
-import { usePenaltyBriefs, useProviderNames } from "@/features/operator/use-operator-lookups";
+  FALLBACK_TABS,
+  OPEN_STATUSES,
+  PENALTY_APPROVAL_CODES,
+  STATUS_TABS,
+  rowFromBrief,
+  rowFromCase,
+  rowFromDispute,
+  rowFromQueue,
+  rowMatches,
+  tabById,
+  tabCounts,
+  uniqueRows,
+  waitingText,
+  type PenaltyRow,
+  type PenaltyTab,
+  type PenaltyTabId,
+} from "@/features/operator/penalty-list";
+import { penaltyIdFrom, readRecentPenalties, type RecentPenalty } from "@/features/operator/recent-penalties";
+import { useOperatorDirectory, usePenaltyBriefs, useProviderNames } from "@/features/operator/use-operator-lookups";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
-import { listAdjudicationQueue, listArbiterDisputes, listOverrideLog } from "@/services/operator.service";
-import { formatMoney } from "@/utils/money";
+import {
+  listAdjudicationQueue,
+  listApprovals,
+  listArbiterDisputes,
+  listOperatorCases,
+  listOverrideLog,
+} from "@/services/operator.service";
+import { cn } from "@/utils";
+
+import { PenaltyTable } from "./_components/penalty-table";
 
 /**
  * Penalties, route `/operator/cases`.
  *
- * Finding a penalty comes first (support and on-call arrive with a provider
- * name or a link, not a list position). No endpoint lists every penalty
- * [backend: open penalties by provider], so "Search by provider" searches
- * every list that does exist — disputed on chain, acted on by an operator
- * (Activity's penalty entries) and opened in this browser — and says plainly
- * that an untouched, undisputed penalty is reached by its link.
+ * A table of every penalty by where it stands, read from `GET
+ * /operator/cases`. One search box: a pasted id or link opens that penalty,
+ * typed text filters by provider (and asks the server for that provider when
+ * the name is unambiguous). Row click opens the penalty; nothing is done from
+ * the list — ruling lives on the penalty page and the Arbiter.
+ *
+ * A backend older than the list answers 404, and the page then builds its
+ * tabs from the lists that do exist (disputed on chain, acted on in Activity,
+ * opened here), showing only those.
  */
 
 /** Activity entries read for penalties acted on; their penalties are read whole to name them. */
 const ACTIVITY_LOOKBACK = 50;
-/** One shown in the paste box's hint, so the shape of an id is obvious. */
-const EXAMPLE_ID = "8b3f2e9a-1c74-4d05-b6e2-7f0a9c3d5e18";
+const PAGE_SIZE = 50;
 
 export default function PenaltiesPage() {
-  const me = useOperatorSession();
-  const caps = capabilitiesFor(me.roles);
   const router = useRouter();
   const providers = useProviderNames();
+  const directory = useOperatorDirectory();
+  const tabParam = useSearchParam("tab");
+  const [tabId, setTabId] = React.useState<PenaltyTabId | null>(null);
+  const [query, setQuery] = React.useState("");
+  const [queryError, setQueryError] = React.useState<string | null>(null);
+  const [recent, setRecent] = React.useState<RecentPenalty[]>([]);
   const [now, setNow] = React.useState(() => Date.now());
   React.useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
-  const [lookup, setLookup] = React.useState("");
-  const [lookupError, setLookupError] = React.useState<string | undefined>(undefined);
-  const [providerFilter, setProviderFilter] = React.useState("");
-  const [recent, setRecent] = React.useState<RecentPenalty[]>([]);
   React.useEffect(() => setRecent(readRecentPenalties()), []);
 
-  const disputes = useQuery({
-    queryKey: ["operator", "arbiter", "disputes"],
-    queryFn: listArbiterDisputes,
+  // A name that matches exactly one provider becomes a server-side filter, so it reaches every page.
+  const q = query.trim();
+  const named = q && !penaltyIdFrom(q) ? providers.providers.filter((p) => p.legalName.toLowerCase().includes(q.toLowerCase())) : [];
+  const providerId = named.length === 1 ? named[0]!.providerId : undefined;
+
+  const open = useQuery({
+    queryKey: ["operator", "cases", "open", providerId ?? null],
+    queryFn: () => listOperatorCases({ status: [...OPEN_STATUSES], providerId, limit: 100 }),
     refetchInterval: 60_000,
     retry: 0,
   });
-  const legacy = useInfiniteQuery({
-    queryKey: ["operator", "queue", "list"],
+  const listMissing = open.error instanceof ApiError && open.error.status === 404;
+  const tabs = listMissing ? FALLBACK_TABS : STATUS_TABS;
+  const tab = tabById(tabs, tabId ?? tabParam);
+
+  const list = useInfiniteQuery({
+    queryKey: ["operator", "cases", "list", tab.id, providerId ?? null],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => listAdjudicationQueue({ limit: 25, cursor: pageParam }),
+    queryFn: ({ pageParam }) =>
+      listOperatorCases({ status: tab.statuses ?? undefined, providerId, cursor: pageParam, limit: PAGE_SIZE }),
     getNextPageParam: (last) => last.pageInfo.nextCursor ?? undefined,
+    enabled: !listMissing && open.isSuccess,
     retry: 0,
   });
 
+  // ── The fallback: only when the list is missing ──
+  const disputes = useQuery({
+    queryKey: ["operator", "arbiter", "disputes"],
+    queryFn: listArbiterDisputes,
+    enabled: listMissing,
+    refetchInterval: 60_000,
+    retry: 0,
+  });
+  const legacy = useQuery({
+    queryKey: ["operator", "queue", "list"],
+    queryFn: () => listAdjudicationQueue({ limit: 100 }),
+    enabled: listMissing,
+    retry: 0,
+  });
   const activity = useQuery({
     queryKey: ["operator", "override-log", "penalties-acted-on"],
     queryFn: () => listOverrideLog({ targetType: "slash_proposal", limit: ACTIVITY_LOOKBACK }),
+    enabled: listMissing,
     staleTime: 60_000,
     retry: 0,
   });
   const actedIds = React.useMemo(() => [...new Set((activity.data?.items ?? []).map((row) => row.targetId))], [activity.data]);
-  const actedBriefs = usePenaltyBriefs(actedIds);
+  const recentIds = React.useMemo(() => recent.map((item) => item.id), [recent]);
+  const briefIds = React.useMemo(() => (listMissing ? [...actedIds, ...recentIds] : []), [listMissing, actedIds, recentIds]);
+  const briefs = usePenaltyBriefs(briefIds);
 
-  const allRows = React.useMemo(() => sortDisputesByDaysLeft(disputes.data ?? []), [disputes.data]);
-  const q = providerFilter.trim();
-  const disputedIds = new Set(allRows.map((row) => row.proposalId));
-  const legacyRows = (legacy.data?.pages ?? []).flatMap((page) => page.items);
-
-  const disputedKnown: KnownPenalty[] = allRows.map((row) => {
-    const money = disputeAmount(row.chainId, row.penaltyAmount);
-    const name = providers.name(row.providerId);
-    return { id: row.proposalId, providerId: row.providerId, label: money ? penaltyPhrase(name, formatMoney(money)) : `${name}'s penalty`, source: "disputed" };
+  // A two-person request waiting on a penalty is what happens next to it.
+  const pending = useQuery({
+    queryKey: ["operator", "approvals", "pending-count"],
+    queryFn: () => listApprovals({ status: "PENDING", limit: 100 }),
+    refetchInterval: 30_000,
+    retry: 0,
   });
-  const actedKnown: KnownPenalty[] = actedIds.flatMap((id) => {
-    const brief = actedBriefs.get(id);
-    if (!brief) return [];
-    const proposal = brief.case.proposal;
-    return [{ id, providerId: proposal.providerId, label: penaltyPhrase(providers.name(proposal.providerId), formatMoney(proposal.penaltyAmount)), source: "activity" as const }];
-  });
-  const recentKnown: KnownPenalty[] = recent.map((item) => ({ ...item, source: "recent" as const }));
-  const sources = { disputed: disputedKnown, activity: actedKnown, recent: recentKnown };
-  const found = q ? knownPenalties(sources, providers.name, q) : [];
-  const actedShown = knownPenalties({ disputed: [], activity: actedKnown, recent: [] }, providers.name, "").filter((item) => !disputedIds.has(item.id));
-  const actedSet = new Set(actedShown.map((item) => item.id));
-  const recentShown = recent.filter((item) => !disputedIds.has(item.id) && !actedSet.has(item.id));
-  const searching = activity.isLoading || disputes.isLoading;
+  const waitingBy = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const approval of pending.data?.items ?? []) {
+      const code = PENALTY_APPROVAL_CODES[approval.action];
+      if (!code || approval.status !== "PENDING") continue;
+      const names = directory.isPending ? [] : eligibleApprovers(code, directory.operators, approval.requestedById);
+      map.set(approvalTargetId(approval), waitingText(approval.action, names));
+    }
+    return map;
+  }, [pending.data, directory]);
 
-  const open = (event: React.FormEvent) => {
+  let rows: PenaltyRow[];
+  let loading: boolean;
+  let failed: unknown = null;
+  if (!listMissing) {
+    rows = (list.data?.pages ?? []).flatMap((page) => page.items.map(rowFromCase));
+    loading = open.isLoading || list.isLoading;
+    failed = open.isError ? open.error : list.isError ? list.error : null;
+  } else if (tab.id === "needs-ruling") {
+    rows = uniqueRows([
+      ...(disputes.data ?? []).map((d) => rowFromDispute(d, providers.name(d.providerId))),
+      ...(legacy.data?.items ?? []).map(rowFromQueue),
+    ]);
+    loading = disputes.isLoading;
+    failed = disputes.isError ? disputes.error : null;
+  } else {
+    const ids = tab.id === "acted" ? actedIds : recentIds;
+    rows = ids.flatMap((id) => {
+      const brief = briefs.get(id);
+      return brief ? [rowFromBrief(brief, providers.name(brief.case.proposal.providerId), now)] : [];
+    });
+    loading = tab.id === "acted" ? activity.isLoading : false;
+    failed = tab.id === "acted" && activity.isError ? activity.error : null;
+  }
+  const shown = providerId ? rows : rows.filter((row) => rowMatches(row, q));
+
+  const counts: Partial<Record<PenaltyTabId, number>> = listMissing
+    ? {
+        "needs-ruling": uniqueRows([
+          ...(disputes.data ?? []).map((d) => rowFromDispute(d, "")),
+          ...(legacy.data?.items ?? []).map(rowFromQueue),
+        ]).length,
+        acted: actedIds.length,
+        recent: recentIds.length,
+      }
+    : tabCounts((open.data?.items ?? []).map(rowFromCase));
+  const openMore = Boolean(open.data?.pageInfo.nextCursor);
+  // Without the list, a source with nothing in it is not drawn at all.
+  const visibleTabs = listMissing ? tabs.filter((t) => t.id === "needs-ruling" || (counts[t.id] ?? 0) > 0) : tabs;
+
+  const chooseTab = (next: PenaltyTab) => {
+    setTabId(next.id);
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", next.id);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+
+  const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    const id = penaltyIdFrom(lookup);
-    if (!id) {
-      setLookupError("That has no penalty id in it. Paste the id, or the whole link.");
+    const id = penaltyIdFrom(query);
+    if (id) {
+      router.push(routes.operatorCase(id));
       return;
     }
-    setLookupError(undefined);
-    router.push(routes.operatorCase(id));
+    // Plain text filters as it is typed; Enter on text that is not an id says what Enter is for.
+    setQueryError(q && shown.length === 0 ? "No penalty matches. Paste a penalty id or link to open it." : null);
   };
+
+  const recentLine = recent.filter((item) => !rows.some((row) => row.id === item.id)).slice(0, 4);
 
   return (
     <>
-      <header className="flex w-full flex-col gap-0.5">
+      <header className="flex w-full flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
         <h1 className="text-heading-md text-01">Penalties</h1>
-        <p className="text-body-13 text-03">Find any penalty by its link or its provider, and see the ones disputed on chain.</p>
-      </header>
-
-      <section aria-labelledby="find" className="flex w-full flex-col gap-3 rounded-xl border border-01 bg-01 p-4">
-        <h2 id="find" className="text-label-md text-01">
-          Find a penalty
-        </h2>
-        <form onSubmit={open} className="flex w-full flex-col gap-2 tablet:flex-row tablet:items-start" noValidate>
-          <Field
-            label="Its id or link"
-            value={lookup}
-            onChange={(e) => setLookup(e.target.value)}
-            placeholder="Paste an id or a link"
+        <form onSubmit={submit} role="search" className="flex w-full flex-col gap-1 tablet:w-[360px]" noValidate>
+          <Search
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setQueryError(null);
+            }}
+            placeholder="Provider, penalty id or link"
+            aria-label="Find a penalty: provider, penalty id or link"
+            shortcut={null}
             autoComplete="off"
             spellCheck={false}
-            error={lookupError}
-            hint={
-              <>
-                From the provider&rsquo;s alert or ticket, or a penalty in Activity. For example{" "}
-                <span className="break-all font-mono">{EXAMPLE_ID}</span>
-              </>
-            }
-            wrapperClassName="tablet:max-w-[480px]"
+            enterKeyHint="go"
           />
-          <Button type="submit" className="tablet:mt-[26px]">
-            Open
-          </Button>
-        </form>
-        <Field
-          label="Search by provider"
-          value={providerFilter}
-          onChange={(e) => setProviderFilter(e.target.value)}
-          placeholder="e.g. Northwind"
-          autoComplete="off"
-          wrapperClassName="tablet:max-w-[480px]"
-        />
-        {q ? (
-          <div className="flex w-full flex-col gap-2" aria-live="polite">
-            {found.length > 0 ? (
-              <ul className="flex w-full flex-col rounded-lg border border-01">
-                {found.map((item) => (
-                  <li key={item.id} className="border-b border-01 last:border-b-0">
-                    <Link
-                      href={routes.operatorCase(item.id)}
-                      className="flex w-full flex-col gap-0.5 px-3.5 py-2.5 hover:bg-02 tablet:flex-row tablet:items-center tablet:gap-4"
-                    >
-                      <span className="min-w-0 flex-1 text-body-13 text-01">{item.label}</span>
-                      <span className="text-body-xs text-03">{KNOWN_SOURCE_TEXT[item.source]}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : searching ? (
-              <PageState kind="loading" rows={2} label="Searching penalties" bare />
-            ) : (
-              <p className="rounded-lg border border-dashed border-02 px-3.5 py-2.5 text-body-13 text-03">
-                No penalty of a provider matching &ldquo;{q}&rdquo; was disputed, acted on or opened here.
-              </p>
-            )}
-            <p className="text-body-xs text-03">
-              Searched: disputed on chain, acted on in{" "}
-              <Link href="/operator/override-log?kind=penalties" className="text-primary-600 hover:underline">
-                Activity
-              </Link>
-              , and opened in this browser. Assay has no list of every penalty yet, so one nobody disputed or acted on opens from its link above.
+          {queryError ? (
+            <p role="alert" className="text-body-xs text-danger-600">
+              {queryError}
             </p>
-          </div>
+          ) : null}
+        </form>
+      </header>
+
+      <div role="tablist" aria-label="Penalties by status" className="-mx-4 flex w-[calc(100%+2rem)] gap-1.5 overflow-x-auto px-4 tablet:mx-0 tablet:w-full tablet:flex-wrap tablet:px-0">
+        {visibleTabs.map((t) => {
+          const selected = t.id === tab.id;
+          const count = counts[t.id];
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => chooseTab(t)}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-label-13 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
+                selected ? "border-01 bg-inverse text-inverse" : "border-01 bg-01 text-02 hover:bg-02 hover:text-01",
+              )}
+            >
+              {t.label}
+              {count !== undefined ? (
+                <span className={cn("tabular-nums", selected ? "opacity-80" : "text-03")}>
+                  {count}
+                  {openMore ? "+" : ""}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      <section role="tabpanel" aria-label={tab.label} className="flex w-full flex-col gap-3">
+        {loading ? (
+          <PageState kind="loading" rows={4} label="Loading penalties" />
+        ) : failed ? (
+          <PageState
+            kind="error"
+            description="The penalties could not be loaded."
+            onRetry={() => {
+              void open.refetch();
+              void list.refetch();
+            }}
+            code={failed instanceof ApiError ? failed.code : null}
+          />
+        ) : shown.length === 0 ? (
+          <PageState
+            kind="empty"
+            bare
+            title={q ? `No penalty matches “${q}” here` : EMPTY_TITLE[tab.id]}
+            description={q ? (tab.id === "all" ? "Paste a penalty id or link to open it." : "Try the All tab, or paste a penalty id or link.") : EMPTY_TEXT[tab.id]}
+          />
+        ) : (
+          <PenaltyTable rows={shown} waitingBy={waitingBy} now={now} />
+        )}
+        {!listMissing && list.hasNextPage ? (
+          <Button variant="secondary" className="self-start" loading={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
+            Load more
+          </Button>
+        ) : null}
+        {listMissing ? (
+          <p className="text-body-xs text-03">
+            This server does not list every penalty yet. One nobody disputed or acted on opens from its link, pasted above.
+          </p>
         ) : null}
       </section>
 
-      <section aria-labelledby="disputed" className="flex w-full flex-col gap-2.5">
-        <h2 id="disputed" className="text-label-md text-01">
-          Disputed on chain{allRows.length > 0 ? ` · ${allRows.length}` : ""}
-        </h2>
-        {disputes.isLoading ? (
-          <PageState kind="loading" rows={3} label="Loading disputed penalties" />
-        ) : disputes.isError ? (
-          <PageState
-            kind="error"
-            description="The disputed penalties could not be loaded."
-            onRetry={() => void disputes.refetch()}
-            code={disputes.error instanceof ApiError ? disputes.error.code : null}
-          />
-        ) : allRows.length === 0 ? (
-          <PageState
-            kind="empty"
-            title="No penalty is disputed"
-            description="When a provider disputes a penalty on chain, it appears here with its 30-day limit."
-          />
-        ) : (
-          allRows.map((row) => <DisputeLine key={row.requestId} row={row} providerName={providers.name(row.providerId)} now={now} canRule={caps.rule} />)
-        )}
-      </section>
-
-      {legacyRows.length > 0 ? (
-        <section aria-labelledby="legacy" className="flex w-full flex-col gap-2.5">
-          <div className="flex flex-col gap-0.5">
-            <h2 id="legacy" className="text-label-md text-01">
-              From the retired objection process · {legacyRows.length}
-            </h2>
-            <p className="text-body-xs text-03">Objections filed before disputes moved on chain. Open one to see where its record stands.</p>
-          </div>
-          <ul className="flex w-full flex-col rounded-xl border border-01 bg-01">
-            {legacyRows.map((row) => (
-              <li key={row.proposalId} className="border-b border-01 last:border-b-0">
-                <Link
-                  href={routes.operatorCase(row.proposalId)}
-                  className="flex w-full flex-col gap-0.5 px-4 py-3 hover:bg-02 tablet:flex-row tablet:items-center tablet:gap-4"
-                >
-                  <span className="min-w-0 flex-1 text-body-13 text-01">{row.providerName}</span>
-                  <span className="font-mono text-mono-13 text-01">{formatMoney(row.penaltyAmount)}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-          {legacy.hasNextPage ? (
-            <Button variant="secondary" className="self-start" loading={legacy.isFetchingNextPage} onClick={() => void legacy.fetchNextPage()}>
-              Load more
-            </Button>
-          ) : null}
-        </section>
+      {!listMissing && recentLine.length > 0 ? (
+        <p className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 text-body-13 text-03">
+          <span>Recently opened here:</span>
+          {recentLine.map((item, index) => (
+            <React.Fragment key={item.id}>
+              {index > 0 ? <span aria-hidden="true">·</span> : null}
+              <Link href={routes.operatorCase(item.id)} className="text-02 hover:text-01 hover:underline">
+                {labelOf(item, providers.lookup(item.providerId))}
+              </Link>
+            </React.Fragment>
+          ))}
+        </p>
       ) : null}
-
-      {actedShown.length > 0 ? (
-        <section aria-labelledby="acted" className="flex w-full flex-col gap-2.5">
-          <div className="flex flex-col gap-0.5">
-            <h2 id="acted" className="text-label-md text-01">
-              Acted on lately · {actedShown.length}
-            </h2>
-            <p className="text-body-xs text-03">Penalties an operator suspended, ruled on or compensated, from Activity.</p>
-          </div>
-          <ul className="flex w-full flex-col rounded-xl border border-01 bg-01">
-            {actedShown.map((item) => (
-              <li key={item.id} className="border-b border-01 last:border-b-0">
-                <Link
-                  href={routes.operatorCase(item.id)}
-                  className="flex w-full flex-col gap-0.5 px-4 py-3 hover:bg-02 tablet:flex-row tablet:items-center tablet:gap-4"
-                >
-                  <span className="min-w-0 flex-1 text-body-13 text-01">{item.label}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      <section aria-labelledby="recent" className="flex w-full flex-col gap-2.5">
-        <div className="flex flex-col gap-0.5">
-          <h2 id="recent" className="text-label-md text-01">
-            Opened recently in this browser{recentShown.length > 0 ? ` · ${recentShown.length}` : ""}
-          </h2>
-          <p className="text-body-xs text-03">A penalty you open from its link stays here, so you can come back to it.</p>
-        </div>
-        {recentShown.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-02 px-3.5 py-2.5 text-body-13 text-03">
-            No penalty opened in this browser yet.
-          </p>
-        ) : (
-          <ul className="flex w-full flex-col rounded-xl border border-01 bg-01">
-            {recentShown.map((item) => (
-              <li key={item.id} className="border-b border-01 last:border-b-0">
-                <Link
-                  href={routes.operatorCase(item.id)}
-                  className="flex w-full flex-col gap-0.5 px-4 py-3 hover:bg-02 tablet:flex-row tablet:items-center tablet:gap-4"
-                >
-                  <span className="min-w-0 flex-1 text-body-13 text-01">{item.label}</span>
-                  <span className="text-body-xs text-03">
-                    opened <LocalTime value={item.at} />
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <p className="text-body-xs text-03">Penalties waiting for a cancel signature show on their own page with the deadline.</p>
     </>
   );
 }
+
+/** The remembered label, renamed when the provider's name is known now. */
+function labelOf(item: RecentPenalty, name: string | null): string {
+  const amount = /\$[\d,.]+/.exec(item.label)?.[0];
+  return name && amount ? penaltyPhrase(name, amount).replace(/ penalty$/, "") : item.label.replace(/ penalty$/, "");
+}
+
+const EMPTY_TITLE: Record<PenaltyTabId, string> = {
+  "needs-ruling": "Nothing to rule on",
+  signature: "No cancel waiting for a signature",
+  window: "No penalty in its dispute window",
+  executed: "No executed penalty",
+  cancelled: "No cancelled penalty",
+  all: "No penalties yet",
+  acted: "Nothing acted on lately",
+  recent: "Nothing opened here yet",
+};
+
+const EMPTY_TEXT: Record<PenaltyTabId, string> = {
+  "needs-ruling": "When a provider disputes a penalty on chain, it shows here with its 30 days to rule.",
+  signature: "A penalty suspended after it went on chain waits here until the arbiter key signs its cancel.",
+  window: "New penalties wait here while the provider can still dispute them.",
+  executed: "Penalties whose stake was taken show here.",
+  cancelled: "Cancelled, suspended and expired penalties show here.",
+  all: "Penalties show here once Assay proposes one.",
+  acted: "Penalties an operator suspended, ruled on or paid back show here, from Activity.",
+  recent: "A penalty you open from its link shows here, so you can come back to it.",
+};
