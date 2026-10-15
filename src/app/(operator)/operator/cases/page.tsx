@@ -9,6 +9,8 @@ import * as React from "react";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
+import { useScrollFade } from "@/features/operator/scroll-fade";
+import { replaceUrlQuery } from "@/features/operator/url-params";
 import { approvalTargetId } from "@/features/operator/approvals";
 import { mayRule } from "@/features/operator/arbiter";
 import { eligibleApprovers, isLiveApproval } from "@/features/operator/inbox";
@@ -203,11 +205,13 @@ export default function PenaltiesPage() {
   // Without the list, a source with nothing in it is not drawn at all.
   const visibleTabs = listMissing ? tabs.filter((t) => t.id === "needs-ruling" || (counts[t.id] ?? 0) > 0) : tabs;
 
+  const tabRow = useScrollFade<HTMLDivElement>();
+
   const chooseTab = (next: PenaltyTab) => {
     setTabId(next.id);
     const params = new URLSearchParams(window.location.search);
     params.set("tab", next.id);
-    router.replace(`?${params.toString()}`, { scroll: false });
+    replaceUrlQuery(window.location.pathname, params.toString());
   };
 
   const submit = (event: React.FormEvent) => {
@@ -252,7 +256,7 @@ export default function PenaltiesPage() {
         </form>
       </header>
 
-      <div role="tablist" aria-label="Penalties by status" className="-mx-4 flex w-[calc(100%+2rem)] gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] tablet:mx-0 tablet:w-full tablet:flex-wrap tablet:px-0 [&::-webkit-scrollbar]:hidden">
+      <div ref={tabRow} role="tablist" aria-label="Penalties by status" className="scroll-fade-x -mx-4 flex w-[calc(100%+2rem)] gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] tablet:mx-0 tablet:w-full tablet:flex-wrap tablet:px-0 [&::-webkit-scrollbar]:hidden">
         {visibleTabs.map((t) => {
           const selected = t.id === tab.id;
           const count = counts[t.id];

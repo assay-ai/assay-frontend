@@ -23,3 +23,15 @@ export function dropUrlParams(keys: readonly string[]): void {
   if (!keys.some((key) => current.searchParams.has(key))) return;
   window.history.replaceState(window.history.state, "", withoutParams(window.location.href, keys));
 }
+
+/**
+ * Sets the address bar to `pathname` + `query` in place, for filters and tabs
+ * kept in the URL. Same reason as `dropUrlParams`: `router.replace` to the
+ * same page with a shorter (or empty) query can leave the old URL standing.
+ */
+export function replaceUrlQuery(pathname: string, query: string): void {
+  if (typeof window === "undefined") return;
+  const next = `${pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+  if (next === `${window.location.pathname}${window.location.search}${window.location.hash}`) return;
+  window.history.replaceState(window.history.state, "", next);
+}

@@ -145,13 +145,13 @@ function StepDate({
       {/* The label leads ("Dispute by Oct 18, 04:44"): a date on its own does not say what happens then. */}
       {step.dateLabel ? <span>{step.dateLabel}</span> : null}
       {step.date ? (
-        <time dateTime={step.date} title={utcTitle(step.date)}>
+        <time dateTime={step.date} title={utcTitle(step.date)} className="whitespace-nowrap">
           {/* After a lead-in ("sign before today 19:06") the day word is mid-sentence; alone it starts the line ("Today 10:06"). */}
           {mounted ? formatLocalDateTime(step.date, { alwaysDay, midSentence: Boolean(step.dateLabel) }) : utcTitle(step.date)}
         </time>
       ) : null}
       {step.countdown && msLeft !== null ? (
-        <span className={highlighted ? "font-semibold" : undefined}>
+        <span className={cn("whitespace-nowrap", highlighted && "font-semibold")}>
           {/* Never "now": under a minute reads "in under a minute" (useCountdown), so nobody acts before the chain ticks over. */}
           · {hasPassed ? "time is up" : `in ${formatRemaining(msLeft)}`}
         </span>

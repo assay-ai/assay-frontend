@@ -201,7 +201,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
       <>{waitingFor}</>
     ) : (
       <>
-        {nameOf(approval.requestedBy)} · asked <LocalTime value={approval.createdAt} />
+        {nameOf(approval.requestedBy)} · asked <LocalTime value={approval.createdAt} midSentence />
         {mode === "other" ? ` · ${waitingFor}` : null}
       </>
     );

@@ -19,6 +19,7 @@ import {
   type ActivityIcon,
   type ActivityKind,
 } from "@/features/operator/activity";
+import { replaceUrlQuery } from "@/features/operator/url-params";
 import { blockSubjectLabel } from "@/features/operator/block-targets";
 import { operatorLabel } from "@/features/operator/inbox";
 import { useOperatorSession } from "@/features/operator/session-context";
@@ -109,7 +110,7 @@ function ActivityScreen() {
       else params.delete("mine");
     }
     const query = params.toString();
-    router.replace(query ? `/operator/override-log?${query}` : "/operator/override-log", { scroll: false });
+    replaceUrlQuery("/operator/override-log", query);
   };
 
   const log = useInfiniteQuery({

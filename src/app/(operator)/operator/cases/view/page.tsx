@@ -108,7 +108,7 @@ const MOVES_NOTHING: readonly CaseStage[] = ["cancelled", "cancel-requested", "c
 
 function BackToPenalties() {
   return (
-    <Button variant="ghost" size="sm" asChild className="self-start">
+    <Button variant="ghost" size="sm" asChild className="touch-target self-start">
       <Link href="/operator/cases">
         <ArrowLeft aria-hidden="true" />
         Penalties
@@ -420,10 +420,10 @@ export default function OperatorCasePage() {
         <Tabs defaultValue="measurement" className="flex w-full min-w-0 flex-col gap-4 xl:col-start-1 xl:row-start-3">
           <div className="w-full overflow-x-auto">
             <TabsList className="min-w-max">
-              <TabsTrigger value="measurement">Measurement</TabsTrigger>
-              <TabsTrigger value="context">Context</TabsTrigger>
-              <TabsTrigger value="history">History</TabsTrigger>
-              {restoration ? <TabsTrigger value="restoration">If cancelled</TabsTrigger> : null}
+              <TabsTrigger value="measurement" className="touch-target">Measurement</TabsTrigger>
+              <TabsTrigger value="context" className="touch-target">Context</TabsTrigger>
+              <TabsTrigger value="history" className="touch-target">History</TabsTrigger>
+              {restoration ? <TabsTrigger value="restoration" className="touch-target">If cancelled</TabsTrigger> : null}
             </TabsList>
           </div>
           <TabsContent value="measurement">
