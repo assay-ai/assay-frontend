@@ -392,7 +392,7 @@ export function approvalOutcome(
         kind: "money",
         text: parts ? `Treasury pays ${parts.amount} to ${parts.provider}` : "Treasury pays the provider back the penalty",
       });
-      lines.push({ kind: "record", text: "The penalty is closed as compensated" });
+      lines.push({ kind: "record", text: "The penalty closes as paid back" });
       break;
     case "slash.suspend":
       lines.push({
@@ -618,7 +618,7 @@ export function approvedResultSentence(action: string, result: unknown, target?:
     case "slash.suspend":
       return `${target ? `${target.charAt(0).toUpperCase()}${target.slice(1)} suspended` : "Penalty suspended"}. If it stands on chain, its cancel is requested and still needs the arbiter's signature.`;
     case "slash.compensated":
-      return "Deposit verified on chain. The case is recorded as compensated.";
+      return `${target ? `${target.charAt(0).toUpperCase()}${target.slice(1)} paid back` : "Paid back"} into the provider's stake. Penalty closed.`;
     case "account.unblock": {
       const subject =
         target ??

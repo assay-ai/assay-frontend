@@ -5,7 +5,7 @@ import * as React from "react";
 import { MoneySplit } from "@/components/patterns/money-flow";
 import { SLASH_PLATFORM_BPS } from "@/features/provider-slash-case/distribution";
 import type { Money } from "@/interfaces/api";
-import { formatMoney, toDecimal } from "@/utils/money";
+import { formatMoney, splitForDisplay, toDecimal } from "@/utils/money";
 
 import type { CaseStage } from "./case-flow";
 
@@ -49,10 +49,28 @@ export function splitSharesText(agentBps: number, platformBps: number = SLASH_PL
   return `${pct(agentBps)} to the agents who paid · ${pct(platformBps)} to the platform · ${pct(kept)} stays with the provider`;
 }
 
-/** How much the provider's stake goes down if it executes: agents plus platform. Null while the split is unknown. */
-export function stakeReduction(penalty: Money, agentBps: number | null): Money | null {
-  const split = agentBps === null ? null : penaltySplit(penalty, agentBps);
+/** "10%": the share of a penalty that stays with the provider, never taken from its stake. */
+export function keptShareText(agentBps: number, platformBps: number = SLASH_PLATFORM_BPS): string {
+  return pct(Math.max(0, 10_000 - agentBps - platformBps));
+}
+
+/**
+ * How much the provider's stake goes down if it executes: agents plus
+ * platform. With `display`, the two parts as the money card draws them (to the
+ * cent, adding up to the total), so the fact and the card agree. Null while the
+ * split is unknown.
+ */
+export function stakeReduction(penalty: Money, agentBps: number | null, display = false): Money | null {
+  const split = agentBps === null ? null : display ? displaySplit(penalty, agentBps) : penaltySplit(penalty, agentBps);
   return split ? { ...penalty, amount: (BigInt(split.agents.amount) + BigInt(split.platform.amount)).toString() } : null;
+}
+
+/** The split as drawn: each part to the cent, the three adding up to the total shown. Null while unknown. */
+export function displaySplit(penalty: Money, agentBps: number): PenaltySplit | null {
+  const split = penaltySplit(penalty, agentBps);
+  if (!split) return null;
+  const [agents, platform, neverTaken] = splitForDisplay([split.agents, split.platform, split.neverTaken]);
+  return { agents: agents!, platform: platform!, neverTaken: neverTaken! };
 }
 
 /** The card's title and its one meta line, by stage. Pure. */
@@ -88,7 +106,7 @@ export function PenaltyMoney({
   /** From the chain's terms; null while unknown (the split is then not drawn). */
   agentBps: number | null;
 }) {
-  const split = agentBps === null ? null : penaltySplit(penalty, agentBps);
+  const split = agentBps === null ? null : displaySplit(penalty, agentBps);
   const total = formatMoney(penalty);
   const heading = moneyHeading(stage, total);
   return (

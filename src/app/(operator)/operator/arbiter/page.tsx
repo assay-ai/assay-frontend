@@ -57,6 +57,7 @@ import { BLOCK_NOTE_MAX, mayBlock } from "@/features/operator/blocks";
 import { disputeUrgency, sortDisputesByDaysLeft } from "@/features/operator/inbox";
 import { splitSharesText } from "@/features/operator/penalty-money";
 import { ResultCard } from "@/features/operator/result-card";
+import { useRulingFromLink } from "@/features/operator/ruling-link";
 import { checkAction } from "@/features/operator/roles";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
@@ -91,7 +92,8 @@ import { Deadline } from "@/features/operator/deadline";
  * disputes can be ruled in one transaction; upholding one whose payee check
  * did not pass needs an explicit acknowledgement.
  *
- * `?focus=<requestId>` or `?case=<proposalId>` scrolls to one dispute.
+ * `?focus=<requestId>` or `?case=<proposalId>` scrolls to one dispute;
+ * `&rule=cancel|uphold` also opens its ruling sheet.
  *
  * [backend] A "Routine cancels" list (CANCEL_REQUESTED records) needs a list
  * endpoint; each one is reachable from its penalty page meanwhile.
@@ -174,6 +176,8 @@ function ArbiterScreen() {
     setRowRefusals(new Map());
     setRuling({ kind, ids });
   };
+  // "Cancel" / "Uphold" on a penalty page lands here with that dispute's sheet open.
+  useRulingFromLink({ rows, proposalId: focusCase, rule: searchParams.get("rule"), canRule, open: openRuling });
   const soonest = rows[0] ? disputeUrgency(rows[0], now) : null;
 
   return (

@@ -53,11 +53,27 @@ const HOUR = 60;
 const DAY = 24 * HOUR;
 
 /*
-  One "now" for the whole stage set, taken once and rounded to the minute: the
-  same event then reads the same time on Home, Arbiter and the penalty page,
-  however far apart they were opened.
+  One "now" for the whole stage set, rounded to the minute and kept for the
+  browser tab's session (sessionStorage): the same event then reads the same
+  time on Home, Arbiter and the penalty page, and after a reload — not 03:39
+  on one page and 03:43 on the next. A session older than six hours starts
+  over, so the deadlines stay plausible.
 */
-const NOW = Math.floor(Date.now() / 60_000) * 60_000;
+const NOW_KEY = "demo-operator-now";
+const NOW_MAX_AGE_MS = 6 * 3_600_000;
+const NOW = demoNow(Date.now());
+
+function demoNow(real: number): number {
+  const rounded = Math.floor(real / 60_000) * 60_000;
+  try {
+    const stored = Number(window.sessionStorage.getItem(NOW_KEY));
+    if (Number.isFinite(stored) && stored > 0 && real >= stored && real - stored < NOW_MAX_AGE_MS) return stored;
+    window.sessionStorage.setItem(NOW_KEY, String(rounded));
+  } catch {
+    /* no window or no storage (build, tests, private mode): this load's own minute */
+  }
+  return rounded;
+}
 
 function minutesAgo(minutes: number): string {
   return new Date(NOW - minutes * 60_000).toISOString();
@@ -333,6 +349,8 @@ interface DemoCase {
   /** Disputed on chain and left unruled for 30 days. */
   expired?: boolean;
   outcome?: string | null;
+  /** The window's measurement: calls posted and verified, failed, and the declared failure rate. */
+  m: { posted: number; verified: number; failed: number; sla: number };
 }
 
 const CASES: DemoCase[] = [
@@ -349,6 +367,7 @@ const CASES: DemoCase[] = [
     executableIn: 41 * HOUR,
     disputedMinutesAgo: null,
     requestId: `0x${"a1".repeat(32)}`,
+    m: { posted: 588, verified: 231, failed: 31, sla: 0.05 },
   },
   {
     id: "8b3f2e9a-1c74-4d05-b6e2-7f0a9c3d5e18",
@@ -363,6 +382,7 @@ const CASES: DemoCase[] = [
     executableIn: -21 * DAY,
     disputedMinutesAgo: 23 * DAY,
     requestId: `0x${"b2".repeat(32)}`,
+    m: { posted: 604, verified: 214, failed: 27, sla: 0.05 },
   },
   {
     id: "2d9e4c7b-6a13-4f80-8e5d-0b1c3a7f9e62",
@@ -377,6 +397,7 @@ const CASES: DemoCase[] = [
     executableIn: -3 * DAY,
     disputedMinutesAgo: 4 * DAY + 2 * HOUR,
     requestId: `0x${"c3".repeat(32)}`,
+    m: { posted: 412, verified: 203, failed: 12, sla: 0.02 },
   },
   {
     id: "c7a0e5f3-9d21-4b68-a4c9-3e8f1b6d2a07",
@@ -392,6 +413,7 @@ const CASES: DemoCase[] = [
     disputedMinutesAgo: null,
     requestId: `0x${"d4".repeat(32)}`,
     outcome: "OVERTURNED_PLATFORM_DEFECT",
+    m: { posted: 530, verified: 240, failed: 22, sla: 0.03 },
   },
   {
     id: "f1b8d6a2-3e57-4c09-9b14-6a2e0d8c7f35",
@@ -407,6 +429,7 @@ const CASES: DemoCase[] = [
     disputedMinutesAgo: 8 * DAY,
     requestId: `0x${"e5".repeat(32)}`,
     outcome: "UPHELD",
+    m: { posted: 1210, verified: 402, failed: 58, sla: 0.05 },
   },
   {
     id: "0a6d3b9e-7c42-4e1f-8d05-9b3a6c1e4f78",
@@ -423,6 +446,7 @@ const CASES: DemoCase[] = [
     requestId: `0x${"f6".repeat(32)}`,
     executedMinutesAgo: 9 * DAY - 2 * HOUR,
     outcome: "UPHELD",
+    m: { posted: 350, verified: 206, failed: 11, sla: 0.01 },
   },
   {
     id: "6f2a8c41-0b93-4d7e-a5c2-1e9b7d3f0a64",
@@ -438,6 +462,7 @@ const CASES: DemoCase[] = [
     disputedMinutesAgo: null,
     requestId: `0x${"a7".repeat(32)}`,
     resolvedMinutesAgo: 14 * DAY,
+    m: { posted: 480, verified: 219, failed: 19, sla: 0.04 },
   },
   {
     id: "93d0e7b5-4c18-4a2f-8e61-7b5c0a9d2e13",
@@ -454,6 +479,7 @@ const CASES: DemoCase[] = [
     requestId: `0x${"b8".repeat(32)}`,
     resolvedMinutesAgo: 8 * DAY,
     expired: true,
+    m: { posted: 760, verified: 305, failed: 41, sla: 0.05 },
   },
   {
     id: "d48b1f6e-2a07-4c93-b5e8-0f6a3c9d7e21",
@@ -471,6 +497,7 @@ const CASES: DemoCase[] = [
     executedMinutesAgo: 27 * DAY,
     resolvedMinutesAgo: 20 * DAY,
     outcome: "UPHELD",
+    m: { posted: 300, verified: 208, failed: 14, sla: 0.02 },
   },
 ];
 
@@ -484,6 +511,7 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
   const disputedAt = c.disputedMinutesAgo === null ? null : minutesAgo(c.disputedMinutesAgo);
   const penalty = usd(c.penalty);
   const executed = c.status === "EXECUTED";
+  const measured = measurement(c);
   return {
     case: {
       proposal: {
@@ -527,16 +555,9 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
         executedAt: c.executedMinutesAgo !== undefined ? minutesAgo(c.executedMinutesAgo) : null,
       },
       changeOverlay: null,
-      failuresByAgent: [
-        { key: "agent:research-bot", count: 14, share: 0.52 },
-        { key: "agent:pricing-sync", count: 8, share: 0.3 },
-        { key: "agent:other", count: 5, share: 0.18 },
-      ],
-      failuresByRule: [
-        { key: "schema.required_fields", count: 17, share: 0.63 },
-        { key: "latency.p95", count: 10, share: 0.37 },
-      ],
-      evidenceVerdictCount: 214,
+      failuresByAgent: measured.byAgent,
+      failuresByRule: measured.byRule,
+      evidenceVerdictCount: c.m.verified,
       suggestedClaim: null,
       inaction: {
         executesAt: executableAt,
@@ -548,17 +569,16 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
         projectedRestoreHours: null,
         routingContinues: true,
       },
-      arithmetic: [
-        { key: "verified_calls", expression: "214 verified of 604 posted", value: "214", note: "above the 200-call sample gate", tone: "NEUTRAL" },
-        { key: "observed_rate", expression: "27 failed / 214 verified", value: "12.62%", note: "observed 12.62% > 6.81% → breach", tone: "BAD" },
-        { key: "declared_sla", expression: null, value: "5.00%", note: "frozen when the window opened", tone: "NEUTRAL" },
-        { key: "effective_threshold", expression: "5.00% + 2.58 × sqrt(p(1−p)/214)", value: "6.81%", note: null, tone: "NEUTRAL" },
-        { key: "penalty", expression: "failed spend × multiplier, capped", value: `$${c.penalty}`, note: null, tone: "BAD" },
-      ],
+      arithmetic: measured.arithmetic,
       priorWindows: [
-        { windowId: "pw_1", label: "w_1", observedRate: 0.019, closedAt: minutesAgo(40 * DAY), isSubject: false },
-        { windowId: "pw_2", label: "w_2", observedRate: 0.023, closedAt: minutesAgo(30 * DAY), isSubject: false },
-        { windowId: `win_${c.window}`, label: c.window, observedRate: 27 / 214, closedAt: proposedAt, isSubject: true },
+        ...measured.prior.map((rate, index) => ({
+          windowId: `pw_${c.window}_${index + 1}`,
+          label: `w_${Number(c.window.slice(2)) - measured.prior.length + index}`,
+          observedRate: rate,
+          closedAt: minutesAgo(c.proposedMinutesAgo + (measured.prior.length - index) * 7 * DAY),
+          isSubject: false,
+        })),
+        { windowId: `win_${c.window}`, label: c.window, observedRate: c.m.failed / c.m.verified, closedAt: proposedAt, isSubject: true },
       ],
     },
     dispute: null,
@@ -589,6 +609,68 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
     chainExecutableAt: executableAt,
     chainDisputedParts: original.chainStatus === "DISPUTED" ? 1 : 0,
     upheldViolations30d: c.providerId === NORTHWIND ? 2 : 0,
+  };
+}
+
+/** "12.62%". */
+function percentText(rate: number): string {
+  return `${(rate * 100).toFixed(2)}%`;
+}
+
+/** Whole counts in the given shares, adding up to `total` exactly. */
+function splitCount(total: number, shares: readonly number[]): number[] {
+  const counts = shares.map((share) => Math.floor(total * share));
+  let left = total - counts.reduce((sum, n) => sum + n, 0);
+  const order = shares.map((share, index) => ({ index, rest: total * share - counts[index]! })).sort((a, b) => b.rest - a.rest);
+  for (const { index } of order) {
+    if (left <= 0) break;
+    counts[index]! += 1;
+    left -= 1;
+  }
+  return counts;
+}
+
+/**
+ * Each penalty's own measurement, from its window's counts: the observed rate,
+ * the threshold (declared rate plus the 99% one-sided margin for that many
+ * calls), the earlier windows and where the failures came from — so no two
+ * penalties read the same numbers, and each breach is real arithmetic.
+ */
+function measurement(c: DemoCase) {
+  const { posted, verified, failed, sla } = c.m;
+  const observed = failed / verified;
+  const threshold = sla + 2.58 * Math.sqrt((sla * (1 - sla)) / verified);
+  // A small per-case variation, stable for a given window, for the shares and the earlier windows.
+  const seed = [...c.window].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % 5;
+  const ruleShares = [0.55 + seed * 0.05, 0.45 - seed * 0.05];
+  const agentShares = [0.4 + seed * 0.04, 0.35 - seed * 0.02, 0.25 - seed * 0.02];
+  const rules = splitCount(failed, ruleShares);
+  const agents = splitCount(failed, agentShares);
+  const rows = (keys: string[], counts: number[]) =>
+    keys.map((key, index) => ({ key, count: counts[index]!, share: counts[index]! / failed })).filter((row) => row.count > 0);
+  return {
+    byRule: rows(["schema.required_fields", c.tool === "fx_rates" || c.tool === "index_quote" ? "stale_timestamp" : "latency.p95"], rules),
+    byAgent: rows(["agent:research-bot", "agent:pricing-sync", "agent:other"], agents),
+    prior: [sla * (0.3 + seed * 0.08), sla * (0.45 + seed * 0.06)],
+    arithmetic: [
+      { key: "verified_calls", expression: `${verified} verified of ${posted} posted`, value: String(verified), note: "above the 200-call sample gate", tone: "NEUTRAL" as const },
+      {
+        key: "observed_rate",
+        expression: `${failed} failed / ${verified} verified`,
+        value: percentText(observed),
+        note: `observed ${percentText(observed)} > ${percentText(threshold)} → breach`,
+        tone: "BAD" as const,
+      },
+      { key: "declared_sla", expression: null, value: percentText(sla), note: "frozen when the window opened", tone: "NEUTRAL" as const },
+      {
+        key: "effective_threshold",
+        expression: `${percentText(sla)} + 2.58 × sqrt(p(1−p)/${verified})`,
+        value: percentText(threshold),
+        note: null,
+        tone: "NEUTRAL" as const,
+      },
+      { key: "penalty", expression: "failed spend × multiplier, capped", value: `$${c.penalty}`, note: null, tone: "BAD" as const },
+    ],
   };
 }
 

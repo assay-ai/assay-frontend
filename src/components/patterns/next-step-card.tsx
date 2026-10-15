@@ -59,13 +59,14 @@ export interface NextStepCardProps {
   eyebrow?: React.ReactNode;
   /** One line under the body, e.g. a one-line "why you can't · ask" for a read-only role. */
   footer?: React.ReactNode;
-  /** "stack" keeps text over buttons at every width, for a narrow side column. */
+  /** "stack" keeps text over buttons at every width, for a narrow side column; from 640px the buttons are auto width, right-aligned. */
   layout?: "row" | "stack";
   className?: string;
 }
 
 function ActionButton({ action, variant, full }: { action: NextStepAction; variant: "primary" | "danger" | "secondary"; full: boolean }) {
-  const width = full ? "w-full" : "w-full tablet:w-auto";
+  // "touch-target": 40px tall on touch widths. Stacked, the buttons are full width on a phone, auto width from 640px.
+  const width = full ? "touch-target w-full sm:w-auto" : "touch-target w-full tablet:w-auto";
   if (action.href && !action.disabled) {
     return (
       <Button variant={variant} asChild className={width}>
@@ -122,7 +123,12 @@ export function NextStepCard({ kind, title, description, meta, action, secondary
         </div>
       </div>
       {action || secondary ? (
-        <div className={cn("flex w-full shrink-0 flex-col gap-2", !stack && "tablet:w-auto tablet:flex-row tablet:items-center")}>
+        <div
+          className={cn(
+            "flex w-full shrink-0 flex-col gap-2",
+            stack ? "sm:flex-row sm:flex-wrap sm:justify-end" : "tablet:w-auto tablet:flex-row tablet:items-center",
+          )}
+        >
           {secondary ? <ActionButton action={secondary} variant="secondary" full={stack} /> : null}
           {action ? <ActionButton action={action} variant={action.tone === "danger" ? "danger" : "primary"} full={stack} /> : null}
         </div>
