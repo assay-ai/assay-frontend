@@ -135,3 +135,30 @@ export async function signOutOperator(deps: {
   }
   deps.clear();
 }
+
+// ── Remembering how this person signs in ───────────────────────────────────
+
+export type SignInMethod = "privy" | "wallet";
+const METHOD_KEY = "operator-sign-in-method";
+
+/** The method used last time in this browser; Privy (email or wallet in one modal) by default. */
+export function readSignInMethod(storage: Pick<Storage, "getItem"> | null): SignInMethod {
+  try {
+    return storage?.getItem(METHOD_KEY) === "wallet" ? "wallet" : "privy";
+  } catch {
+    return "privy";
+  }
+}
+
+export function writeSignInMethod(storage: Pick<Storage, "setItem"> | null, method: SignInMethod): void {
+  try {
+    storage?.setItem(METHOD_KEY, method);
+  } catch {
+    /* storage refused: the default is used next time */
+  }
+}
+
+/** What a non-operator copies to ask for access. */
+export function accessRequestText(address: string): string {
+  return `Please add ${address} as an Assay operator. (Sent from the operator console sign-in.)`;
+}

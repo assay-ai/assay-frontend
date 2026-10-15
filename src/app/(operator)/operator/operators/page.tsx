@@ -1,719 +1,659 @@
 "use client";
 
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Plus } from "lucide-react";
 import * as React from "react";
-import { toast } from "sonner";
 
-import { Banner } from "@/components/ui/banner";
+import { ApprovalFooter } from "@/components/patterns/approval-footer";
+import { CopyChip } from "@/components/patterns/copy-chip";
+import { LocalTime } from "@/components/patterns/local-time";
+import { PageState } from "@/components/patterns/page-state";
+import { PresetChips } from "@/components/patterns/preset-chips";
+import { ReasonChips, type ReasonOption } from "@/components/patterns/reason-chips";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
-import {
-  Panel,
-  PanelBody,
-  PanelDescription,
-  PanelHeader,
-  PanelTitle,
-  PanelTitles,
-} from "@/components/ui/panel";
-import { Select } from "@/components/ui/select";
-import { Table, type TableColumn, type TableRowData } from "@/components/ui/table";
-import { Tag } from "@/components/ui/tag";
-import { DASH } from "@/features/g34a/stats";
+import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { approvalNeeds } from "@/features/operator/approvals";
 import {
   DIRECTORY_NOTE_MIN,
   ROLE_OPTIONS,
+  deriveSubject,
   directoryErrorMessage,
-  limitInputOf,
+  limitInputFromChoice,
   mayEditRow,
   mayManageOperators,
   validateAddOperator,
   validateChangeOperator,
   validateRemoveOperator,
-  type AddOperatorInput,
-  type ChangeOperatorInput,
-  type FormErrors,
-  type LimitInput,
-  type LimitMode,
-  type RemoveOperatorInput,
 } from "@/features/operator/directory";
-import { QueuedNotice } from "@/features/operator/queued-notice";
+import { eligibleApprovers, operatorLabel } from "@/features/operator/inbox";
+import { OPERATOR_ADD_REASONS, OPERATOR_CHANGE_REASONS, OPERATOR_REMOVE_REASONS } from "@/features/operator/reasons";
+import { ResultCard } from "@/features/operator/result-card";
+import { ROLE_PRESETS, presetOf, removalWarnings, roleTitle } from "@/features/operator/roles";
 import { useOperatorSession } from "@/features/operator/session-context";
-import { queuedMessage } from "@/features/operator/two-person";
-import type {
-  ApprovalQueued,
-  OperatorDirectoryEntry,
-  OperatorRole,
-  OperatorStatus,
-} from "@/interfaces/operator";
+import { approvalHref, type TwoPersonAnswer } from "@/features/operator/two-person";
+import type { OperatorDirectoryEntry, OperatorRole } from "@/interfaces/operator";
+import { ApiError } from "@/libs/ApiClient";
 import { checkEvmAddress, toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
-import {
-  addOperator,
-  changeOperator,
-  listOperators,
-  removeOperator,
-} from "@/services/operator.service";
-import { formatMoney } from "@/utils/money";
+import { addOperator, changeOperator, listOperators, removeOperator } from "@/services/operator.service";
+import { cn } from "@/utils";
+import { formatMoney, parseAmountInput } from "@/utils/money";
 
 /**
- * The operator directory, route `/operator/operators`.
+ * Team, route `/operator/operators`.
  *
- * Any operator reads it. `OPS_ADMIN` alone writes: add (`A-12`, always
- * two-person), change roles or limit (`A-13`: lowering applies at once,
- * adding a role or raising the limit is two-person) and remove (`A-14`, at
- * once, ending every session the operator holds). Nobody edits or removes
- * their own row, so those buttons are not drawn on it.
+ * Everyone reads it (it is how you find who can approve something). Admins
+ * add people with a side sheet: name, wallet, a role in plain words
+ * (fine-grained roles under "Customize"), a limit in dollars, and why.
+ * Adding and raising need a second admin, named in the footer. Removing is
+ * immediate and warns when it would leave a two-person action with nobody to
+ * approve it [backend: refuse such a removal].
  */
 
-const LIST_LIMIT = 50;
+const LIST_LIMIT = 100;
+/** Reserves the hint line of a field so an error appearing does not move anything. */
+const RESERVED = " ";
 
-interface OperatorRow extends TableRowData, OperatorDirectoryEntry {}
-
-function when(iso: string | null): string {
-  if (!iso) return DASH;
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
+function limitLabel(row: Pick<OperatorDirectoryEntry, "authorityLimit">): string {
+  if (row.authorityLimit === null) return "no limit";
+  if (row.authorityLimit.amount === "0") return "$0 limit";
+  return `${formatMoney(row.authorityLimit)} limit`;
 }
 
-function limitText(row: Pick<OperatorDirectoryEntry, "authorityLimit">): string {
-  if (row.authorityLimit === null) return "unbounded";
-  return formatMoney(row.authorityLimit);
-}
+type SheetState = { kind: "add" } | { kind: "change"; row: OperatorDirectoryEntry } | { kind: "remove"; row: OperatorDirectoryEntry } | null;
 
-const EMPTY_ADD: AddOperatorInput = {
-  walletAddress: "",
-  subject: "",
-  displayName: "",
-  roles: [],
-  limit: { mode: "zero", amount: "" },
-  reasonCode: "",
-  note: "",
-};
-
-type Editing =
-  | { kind: "change"; row: OperatorDirectoryEntry }
-  | { kind: "remove"; row: OperatorDirectoryEntry }
-  | null;
-
-export default function OperatorsPage() {
+export default function TeamPage() {
   const me = useOperatorSession();
   const queryClient = useQueryClient();
   const canManage = mayManageOperators(me.roles);
-
-  const [status, setStatus] = React.useState<"" | OperatorStatus>("ACTIVE");
-  const [queued, setQueued] = React.useState<ApprovalQueued | null>(null);
+  const [status, setStatus] = React.useState<"ACTIVE" | "">("ACTIVE");
+  const [sheet, setSheet] = React.useState<SheetState>(null);
+  const [result, setResult] = React.useState<React.ReactNode>(null);
 
   const list = useInfiniteQuery({
     queryKey: ["operator", "operators", "list", status],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      listOperators({ status: status || undefined, cursor: pageParam, limit: LIST_LIMIT }),
+    queryFn: ({ pageParam }) => listOperators({ status: status || undefined, cursor: pageParam, limit: LIST_LIMIT }),
     getNextPageParam: (last) => last.pageInfo.nextCursor ?? undefined,
     retry: 0,
   });
+  const rows = React.useMemo(() => (list.data?.pages ?? []).flatMap((page) => page.items), [list.data]);
+  const decimals = me.authorityLimit?.decimals ?? rows.find((row) => row.authorityLimit)?.authorityLimit?.decimals ?? 6;
+  const asset = me.authorityLimit?.asset ?? rows.find((row) => row.authorityLimit)?.authorityLimit?.asset ?? "";
 
-  const rows: OperatorRow[] = React.useMemo(
-    () => (list.data?.pages ?? []).flatMap((page) => page.items),
-    [list.data],
-  );
-
-  const invalidate = React.useCallback(() => {
+  const done = (node: React.ReactNode) => {
+    setResult(node);
+    setSheet(null);
     void queryClient.invalidateQueries({ queryKey: ["operator", "operators"] });
     void queryClient.invalidateQueries({ queryKey: ["operator", "approvals"] });
-  }, [queryClient]);
-
-  const onQueued = React.useCallback((approval: ApprovalQueued) => {
-    setQueued(approval);
-    toast.success(queuedMessage(approval));
-  }, []);
-
-  // ── Add (A-12) ────────────────────────────────────────────────────────────
-  const [addOpen, setAddOpen] = React.useState(false);
-  const [addForm, setAddForm] = React.useState<AddOperatorInput>(EMPTY_ADD);
-  const [addErrors, setAddErrors] = React.useState<FormErrors<keyof AddOperatorInput>>({});
-  const [addServerError, setAddServerError] = React.useState<string | null>(null);
-  const walletPreview = checkEvmAddress(addForm.walletAddress);
-
-  const add = useMutation({
-    mutationFn: addOperator,
-    onSuccess: (answer) => {
-      setAddForm(EMPTY_ADD);
-      setAddErrors({});
-      setAddServerError(null);
-      setAddOpen(false);
-      if (answer.kind === "queued") onQueued(answer.approval);
-      else toast.success(`Added ${answer.result.subject}.`);
-      invalidate();
-    },
-    onError: (error) => setAddServerError(directoryErrorMessage(error)),
-  });
-
-  // Editing a field drops its stale error: it was about the old value.
-  function editAdd<K extends keyof AddOperatorInput>(key: K, value: AddOperatorInput[K]) {
-    setAddForm((f) => ({ ...f, [key]: value }));
-    setAddErrors((errors) => {
-      if (!(key in errors)) return errors;
-      const next = { ...errors };
-      delete next[key];
-      return next;
-    });
-  }
-  const addErrorCount = Object.keys(addErrors).length;
-
-  function submitAdd(event: React.FormEvent) {
-    event.preventDefault();
-    setAddServerError(null);
-    const result = validateAddOperator(addForm);
-    if (!result.ok) {
-      setAddErrors(result.errors);
-      return;
-    }
-    setAddErrors({});
-    add.mutate(result.body);
-  }
-
-  // ── Change (A-13) and remove (A-14) ───────────────────────────────────────
-  const [editing, setEditing] = React.useState<Editing>(null);
-  const [changeForm, setChangeForm] = React.useState<ChangeOperatorInput | null>(null);
-  const [changeErrors, setChangeErrors] = React.useState<FormErrors<keyof ChangeOperatorInput | "change">>({});
-  const [removeForm, setRemoveForm] = React.useState<RemoveOperatorInput>({ reasonCode: "", note: "" });
-  const [removeErrors, setRemoveErrors] = React.useState<FormErrors<keyof RemoveOperatorInput>>({});
-  const [editServerError, setEditServerError] = React.useState<string | null>(null);
-
-  const closeEditing = React.useCallback(() => {
-    setEditing(null);
-    setChangeForm(null);
-    setChangeErrors({});
-    setRemoveForm({ reasonCode: "", note: "" });
-    setRemoveErrors({});
-    setEditServerError(null);
-  }, []);
-
-  const startChange = (row: OperatorDirectoryEntry) => {
-    closeEditing();
-    setEditing({ kind: "change", row });
-    setChangeForm({ roles: [...row.roles], limit: limitInputOf(row), reasonCode: "", note: "" });
   };
-
-  const startRemove = (row: OperatorDirectoryEntry) => {
-    closeEditing();
-    setEditing({ kind: "remove", row });
-  };
-
-  const change = useMutation({
-    mutationFn: (args: { id: string; body: Parameters<typeof changeOperator>[1] }) =>
-      changeOperator(args.id, args.body),
-    onSuccess: (answer) => {
-      if (answer.kind === "queued") onQueued(answer.approval);
-      else toast.success(`Changed ${answer.result.subject}. Lowering applies at once.`);
-      closeEditing();
-      invalidate();
-    },
-    onError: (error) => setEditServerError(directoryErrorMessage(error)),
-  });
-
-  const remove = useMutation({
-    mutationFn: (args: { id: string; body: RemoveOperatorInput }) => removeOperator(args.id, args.body),
-    onSuccess: (result) => {
-      toast.success(`Removed ${result.subject}. Every session they held has ended.`);
-      closeEditing();
-      invalidate();
-    },
-    onError: (error) => setEditServerError(directoryErrorMessage(error)),
-  });
-
-  function submitChange(event: React.FormEvent) {
-    event.preventDefault();
-    if (editing?.kind !== "change" || !changeForm) return;
-    setEditServerError(null);
-    const result = validateChangeOperator(editing.row, changeForm);
-    if (!result.ok) {
-      setChangeErrors(result.errors);
-      return;
-    }
-    setChangeErrors({});
-    change.mutate({ id: editing.row.id, body: result.body });
-  }
-
-  function submitRemove(event: React.FormEvent) {
-    event.preventDefault();
-    if (editing?.kind !== "remove") return;
-    setEditServerError(null);
-    const result = validateRemoveOperator(removeForm);
-    if (!result.ok) {
-      setRemoveErrors(result.errors);
-      return;
-    }
-    setRemoveErrors({});
-    remove.mutate({ id: editing.row.id, body: result.body });
-  }
-
-  // ── Table ─────────────────────────────────────────────────────────────────
-  const columns: TableColumn<OperatorRow>[] = [
-    {
-      key: "operator",
-      header: "Operator",
-      noTruncate: true,
-      cell: (row) => (
-        <span className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-label-13 text-01">
-            {row.displayName}
-            {row.id === me.id ? <span className="text-03"> (you)</span> : null}
-          </span>
-          <span className="font-mono text-mono-12 text-02">{row.subject}</span>
-          {row.email ? <span className="text-body-xs text-03">{row.email}</span> : null}
-        </span>
+  const queuedOrDone = (answer: TwoPersonAnswer<OperatorDirectoryEntry>, what: string) =>
+    done(
+      answer.kind === "queued" ? (
+        <ResultCard
+          tone="queued"
+          title={`${what}: waiting for a second admin`}
+          next="Nothing has changed yet. It applies when another admin approves it, within 24 h. Send them the link."
+          link={{ label: "Open the request", href: approvalHref(answer.approval.approvalId) }}
+          onDismiss={() => setResult(null)}
+        />
+      ) : (
+        <ResultCard title={`${what}: done`} next="It applies from their next request." activityHref="/operator/override-log?kind=operators" onDismiss={() => setResult(null)} />
       ),
-    },
-    {
-      key: "wallet",
-      header: "Wallet",
-      noTruncate: true,
-      cell: (row) => (
-        <span className="break-all font-mono text-mono-12 text-01">
-          {row.walletAddress ? toChecksumAddress(row.walletAddress) : DASH}
-        </span>
-      ),
-    },
-    {
-      key: "roles",
-      header: "Roles",
-      noTruncate: true,
-      cell: (row) => (
-        <span className="flex flex-wrap gap-1">
-          {row.roles.length === 0
-            ? DASH
-            : row.roles.map((role) => (
-                <Tag key={role} variant="secondary" size="sm">
-                  {role}
-                </Tag>
-              ))}
-        </span>
-      ),
-    },
-    { key: "limit", header: "Authority limit", width: 130, cell: (row) => limitText(row) },
-    {
-      key: "status",
-      header: "Status",
-      width: 100,
-      cell: (row) => <span className="font-mono text-mono-12 text-01">{row.status}</span>,
-    },
-    { key: "seen", header: "Last seen", width: 170, cell: (row) => when(row.lastSeenAt) },
-    {
-      key: "actions",
-      header: "",
-      width: 170,
-      noTruncate: true,
-      cell: (row) =>
-        mayEditRow(me, row) ? (
-          <span className="flex flex-wrap gap-1.5">
-            <Button type="button" size="sm" variant="secondary" onClick={() => startChange(row)}>
-              Edit
-            </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={() => startRemove(row)}>
-              Remove
-            </Button>
-          </span>
-        ) : null,
-    },
-  ];
+    );
 
   return (
     <>
-      <header className="flex w-full flex-wrap items-end justify-between gap-2">
-        <div className="flex flex-col gap-0.5">
-          <h1 className="text-heading-md text-01">Operators</h1>
-          <p className="text-body-sm text-03">
-            who may sign in to this console · add is A-12, change A-13, remove A-14
+      <header className="flex w-full flex-wrap items-end justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h1 className="text-heading-md text-01">Team</h1>
+          <p className="text-body-13 text-03">
+            Who can sign in to this console and what each person can do.{canManage ? "" : " Changing the team needs an admin."}
           </p>
         </div>
-        {canManage && !addOpen ? (
-          <Button type="button" onClick={() => setAddOpen(true)}>
-            Add operator
+        {canManage ? (
+          <Button icon={<Plus aria-hidden="true" />} onClick={() => setSheet({ kind: "add" })} className="w-full tablet:w-auto">
+            Add someone
           </Button>
         ) : null}
       </header>
 
-      {!canManage ? (
-        <Banner
-          tone="primary"
-          title="You can read the directory, not change it"
-          description={`Adding, changing and removing operators needs the OPS_ADMIN role. You hold ${
-            me.roles.length > 0 ? me.roles.join(", ") : "no role"
-          }.`}
+      {result ? <div className="w-full">{result}</div> : null}
+
+      <Segmented value={status} onValueChange={(value) => setStatus(value as "ACTIVE" | "")} aria-label="Who to show" className="self-start">
+        <SegmentedItem value="ACTIVE">Active</SegmentedItem>
+        <SegmentedItem value="">Everyone</SegmentedItem>
+      </Segmented>
+
+      {list.isLoading ? (
+        <PageState kind="loading" rows={4} label="Loading the team" />
+      ) : list.isError ? (
+        <PageState
+          kind="error"
+          description={directoryErrorMessage(list.error).replace(/\s*\([A-Z_]+\)$/, "")}
+          onRetry={() => void list.refetch()}
+          code={list.error instanceof ApiError ? list.error.code : null}
         />
-      ) : null}
-
-      {queued ? <QueuedNotice approval={queued} onDismiss={() => setQueued(null)} /> : null}
-
-      {canManage && addOpen ? (
-        <Panel className="w-full">
-          <PanelHeader>
-            <PanelTitles>
-              <PanelTitle>Add an operator</PanelTitle>
-              <PanelDescription>
-                A-12 · two-person: a second OPS_ADMIN approves it in the approvals inbox
-              </PanelDescription>
-            </PanelTitles>
-          </PanelHeader>
-          <PanelBody className="p-4 tablet:p-5">
-            <form onSubmit={submitAdd} className="flex w-full max-w-[720px] flex-col gap-4" noValidate>
-              <Field
-                label="Wallet address"
-                value={addForm.walletAddress}
-                onChange={(e) => editAdd("walletAddress", e.target.value)}
-                placeholder="0x…"
-                autoComplete="off"
-                spellCheck={false}
-                error={addErrors.walletAddress}
-                hint={
-                  walletPreview.ok
-                    ? `Checksummed: ${walletPreview.checksummed}`
-                    : "The EVM address they will sign in with. Mixed case must match its EIP-55 checksum."
-                }
-              />
-              <Field
-                label="Subject"
-                value={addForm.subject}
-                onChange={(e) => editAdd("subject", e.target.value)}
-                placeholder="dan@"
-                autoComplete="off"
-                spellCheck={false}
-                error={addErrors.subject}
-                hint="A short unique handle, shown in the override log."
-              />
-              <Field
-                label="Display name (optional)"
-                value={addForm.displayName}
-                onChange={(e) => editAdd("displayName", e.target.value)}
-                placeholder="Dan Smith"
-                autoComplete="off"
-                error={addErrors.displayName}
-                hint="Defaults to the subject."
-              />
-              <RolesField
-                value={addForm.roles}
-                onChange={(roles) => editAdd("roles", roles)}
-                error={addErrors.roles}
-              />
-              <LimitField
-                value={addForm.limit}
-                onChange={(limit) => editAdd("limit", limit)}
-                error={addErrors.limit}
-              />
-              <Field
-                label="Reason code"
-                value={addForm.reasonCode}
-                onChange={(e) => editAdd("reasonCode", e.target.value)}
-                maxLength={64}
-                placeholder="NEW_HIRE"
-                autoComplete="off"
-                error={addErrors.reasonCode}
-              />
-              <NoteBox
-                id="add-note"
-                value={addForm.note}
-                onChange={(note) => editAdd("note", note)}
-                error={addErrors.note}
-                placeholder="Who they are and why they need these roles."
-              />
-              {addServerError ? (
-                <p className="text-body-13 text-danger-600" role="alert">
-                  {addServerError}
+      ) : rows.length === 0 ? (
+        <PageState kind="empty" title="Nobody here" />
+      ) : (
+        <ul className="flex w-full flex-col gap-2">
+          {rows.map((row) => (
+            <li key={row.id} className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:gap-5">
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <p className="flex flex-wrap items-center gap-x-2 text-label-13 text-01">
+                  {operatorLabel(row)}
+                  {row.id === me.id ? <span className="text-body-xs text-03">(you)</span> : null}
+                  {row.status !== "ACTIVE" ? <span className="text-body-xs text-danger-600">{row.status.toLowerCase()}</span> : null}
                 </p>
-              ) : null}
-              {addErrorCount > 0 ? (
-                <p className="text-body-13 text-danger-600" role="alert">
-                  Nothing was sent. Fix the {addErrorCount === 1 ? "field" : `${addErrorCount} fields`} marked
-                  above.
+                <p className="text-body-13 text-02">
+                  {roleTitle(row.roles)} · {limitLabel(row)}
                 </p>
-              ) : null}
-              <div className="flex flex-wrap gap-2.5">
-                <Button type="submit" loading={add.isPending}>
-                  Send for approval
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    setAddOpen(false);
-                    setAddErrors({});
-                    setAddServerError(null);
-                  }}
-                >
-                  Cancel
-                </Button>
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-03">
+                  {row.subject}
+                  {row.walletAddress ? <CopyChip value={toChecksumAddress(row.walletAddress)} label="wallet address" /> : null}
+                  {row.lastSeenAt ? (
+                    <span>
+                      seen <LocalTime value={row.lastSeenAt} />
+                    </span>
+                  ) : (
+                    <span>never signed in</span>
+                  )}
+                </p>
               </div>
-            </form>
-          </PanelBody>
-        </Panel>
-      ) : null}
-
-      {editing?.kind === "change" && changeForm ? (
-        <Panel className="w-full">
-          <PanelHeader>
-            <PanelTitles>
-              <PanelTitle>Change {editing.row.subject}</PanelTitle>
-              <PanelDescription>
-                A-13 · lowering applies at once; adding a role or raising the limit needs a second
-                OPS_ADMIN
-              </PanelDescription>
-            </PanelTitles>
-          </PanelHeader>
-          <PanelBody className="p-4 tablet:p-5">
-            <form onSubmit={submitChange} className="flex w-full max-w-[720px] flex-col gap-4" noValidate>
-              <RolesField
-                value={changeForm.roles}
-                onChange={(roles) => setChangeForm((f) => (f ? { ...f, roles } : f))}
-                error={changeErrors.roles}
-              />
-              <LimitField
-                value={changeForm.limit}
-                onChange={(limit) => setChangeForm((f) => (f ? { ...f, limit } : f))}
-                error={changeErrors.limit}
-              />
-              <Field
-                label="Reason code"
-                value={changeForm.reasonCode}
-                onChange={(e) => setChangeForm((f) => (f ? { ...f, reasonCode: e.target.value } : f))}
-                maxLength={64}
-                placeholder="ROLE_CHANGE"
-                autoComplete="off"
-                error={changeErrors.reasonCode}
-              />
-              <NoteBox
-                id="change-note"
-                value={changeForm.note}
-                onChange={(note) => setChangeForm((f) => (f ? { ...f, note } : f))}
-                error={changeErrors.note}
-                placeholder="Why the access changes."
-              />
-              {changeErrors.change ? (
-                <p className="text-body-13 text-danger-600">{changeErrors.change}</p>
+              {mayEditRow(me, row) ? (
+                <div className="flex shrink-0 gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => setSheet({ kind: "change", row })}>
+                    Change access
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setSheet({ kind: "remove", row })}>
+                    Remove
+                  </Button>
+                </div>
               ) : null}
-              {editServerError ? (
-                <p className="text-body-13 text-danger-600" role="alert">
-                  {editServerError}
-                </p>
-              ) : null}
-              <div className="flex flex-wrap gap-2.5">
-                <Button type="submit" loading={change.isPending}>
-                  Save change
-                </Button>
-                <Button type="button" variant="secondary" onClick={closeEditing}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </PanelBody>
-        </Panel>
-      ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
 
-      {editing?.kind === "remove" ? (
-        <Panel className="w-full">
-          <PanelHeader>
-            <PanelTitles>
-              <PanelTitle>Remove {editing.row.subject}</PanelTitle>
-              <PanelDescription>
-                A-14 · at once, and every session they hold ends on every instance
-              </PanelDescription>
-            </PanelTitles>
-          </PanelHeader>
-          <PanelBody className="p-4 tablet:p-5">
-            <form onSubmit={submitRemove} className="flex w-full max-w-[720px] flex-col gap-4" noValidate>
-              <Field
-                label="Reason code"
-                value={removeForm.reasonCode}
-                onChange={(e) => setRemoveForm((f) => ({ ...f, reasonCode: e.target.value }))}
-                maxLength={64}
-                placeholder="LEFT_TEAM"
-                autoComplete="off"
-                error={removeErrors.reasonCode}
-              />
-              <NoteBox
-                id="remove-note"
-                value={removeForm.note}
-                onChange={(note) => setRemoveForm((f) => ({ ...f, note }))}
-                error={removeErrors.note}
-                placeholder="Why their access ends."
-              />
-              {editServerError ? (
-                <p className="text-body-13 text-danger-600" role="alert">
-                  {editServerError}
-                </p>
-              ) : null}
-              <div className="flex flex-wrap gap-2.5">
-                <Button type="submit" variant="danger" loading={remove.isPending}>
-                  Remove operator
-                </Button>
-                <Button type="button" variant="secondary" onClick={closeEditing}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </PanelBody>
-        </Panel>
-      ) : null}
-
-      <Panel className="w-full">
-        <PanelHeader>
-          <PanelTitles>
-            <PanelTitle>Directory</PanelTitle>
-            <PanelDescription>newest first</PanelDescription>
-          </PanelTitles>
-        </PanelHeader>
-        <PanelBody className="p-4 tablet:p-5">
-          <div className="mb-4 w-full max-w-[240px]">
-            <Select
-              label="Status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value as "" | OperatorStatus)}
-            >
-              <option value="ACTIVE">Active</option>
-              <option value="SUSPENDED">Suspended</option>
-              <option value="REMOVED">Removed</option>
-              <option value="">All</option>
-            </Select>
-          </div>
-
-          {list.isLoading ? (
-            <p className="text-body-13 text-03">Loading…</p>
-          ) : list.isError ? (
-            <p className="text-body-13 text-danger-600" role="alert">
-              {directoryErrorMessage(list.error)}
-            </p>
-          ) : rows.length === 0 ? (
-            <EmptyState title="No operators" description="No operator has this status." />
-          ) : (
-            <div className="w-full overflow-x-auto">
-              <Table columns={columns} rows={rows} caption="Operators" className="min-w-[1080px]" />
-            </div>
-          )}
-        </PanelBody>
-      </Panel>
-
-      {list.hasNextPage ? (
-        <Button
-          variant="secondary"
-          className="self-start"
-          loading={list.isFetchingNextPage}
-          onClick={() => list.fetchNextPage()}
-        >
-          Load more
-        </Button>
+      {canManage ? (
+        <>
+          <AddSheet
+            open={sheet?.kind === "add"}
+            onClose={() => setSheet(null)}
+            decimals={decimals}
+            approvers={eligibleApprovers("A-12", rows, me.id)}
+            onDone={(answer, name) => queuedOrDone(answer, `Adding ${name}`)}
+          />
+          <ChangeSheet
+            row={sheet?.kind === "change" ? sheet.row : null}
+            onClose={() => setSheet(null)}
+            decimals={decimals}
+            asset={asset}
+            approvers={eligibleApprovers("A-13", rows, me.id)}
+            onDone={(answer, name) => queuedOrDone(answer, `Changing ${name}`)}
+          />
+          <RemoveSheet
+            row={sheet?.kind === "remove" ? sheet.row : null}
+            warnings={sheet?.kind === "remove" ? removalWarnings(rows, sheet.row.id) : []}
+            onClose={() => setSheet(null)}
+            onDone={(row) =>
+              done(
+                <ResultCard
+                  title={`${operatorLabel(row)} was removed`}
+                  next="Every session they held has ended. Their past actions stay in Activity."
+                  activityHref={`/operator/override-log?targetId=${encodeURIComponent(row.id)}`}
+                  onDismiss={() => setResult(null)}
+                />,
+              )
+            }
+          />
+        </>
       ) : null}
     </>
   );
 }
 
-function RolesField({
-  value,
-  onChange,
-  error,
-}: {
-  value: readonly OperatorRole[];
-  onChange: (next: OperatorRole[]) => void;
-  error?: string;
-}) {
-  return (
-    <fieldset className="flex w-full flex-col gap-2">
-      <legend className="mb-1.5 text-label-13 text-01">Roles</legend>
-      <div className="grid w-full grid-cols-1 gap-2 tablet:grid-cols-2">
-        {ROLE_OPTIONS.map(({ role, label }) => (
-          <Checkbox
-            key={role}
-            checked={value.includes(role)}
-            onChange={(e) =>
-              onChange(e.target.checked ? [...value, role] : value.filter((r) => r !== role))
-            }
-            label={
-              <>
-                <span className="font-mono text-mono-12">{role}</span> · {label}
-              </>
-            }
-          />
-        ))}
-      </div>
-      {error ? <p className="text-body-xs text-danger-600">{error}</p> : null}
-    </fieldset>
-  );
-}
+// ── Shared fields ───────────────────────────────────────────────────────────
 
-function LimitField({
-  value,
-  onChange,
-  error,
-}: {
-  value: LimitInput;
-  onChange: (next: LimitInput) => void;
-  error?: string;
-}) {
+function RoleField({ roles, onChange, error }: { roles: OperatorRole[]; onChange: (roles: OperatorRole[]) => void; error?: string }) {
+  const preset = presetOf(roles);
+  const [custom, setCustom] = React.useState(() => roles.length > 0 && preset === null);
+  const value = custom ? "custom" : (preset?.id ?? "");
   return (
     <div className="flex w-full flex-col gap-2">
-      <Select
-        label="Authority limit"
-        value={value.mode}
-        onChange={(e) => onChange({ ...value, mode: e.target.value as LimitMode })}
-        hint="The largest amount one action of theirs may move. Zero suits roles that move no money."
-      >
-        <option value="zero">Zero</option>
-        <option value="amount">An amount (minor units)</option>
-        <option value="unbounded">Unbounded</option>
-      </Select>
-      {value.mode === "amount" ? (
-        <Field
-          label="Limit in minor units"
-          value={value.amount}
-          onChange={(e) => onChange({ ...value, amount: e.target.value })}
-          inputMode="numeric"
-          placeholder="1000000000"
-          autoComplete="off"
-          error={error}
-          hint="Minor units of the platform asset: 1000000 is 1.00 of a 6-decimal asset."
-        />
-      ) : error ? (
-        <p className="text-body-xs text-danger-600">{error}</p>
+      <span className="text-label-13 text-01">What they do</span>
+      <PresetChips
+        label="Role"
+        presets={[
+          ...ROLE_PRESETS.map((p) => ({ value: p.id, label: p.label, description: p.description, onPick: () => onChange([...p.roles]) })),
+          { value: "custom", label: "Customize", description: "Pick the roles one by one", onPick: () => undefined },
+        ]}
+        value={value}
+        onChange={(next) => setCustom(next === "custom")}
+        allowCustom={false}
+      />
+      {custom ? (
+        <div className="grid w-full grid-cols-1 gap-2 rounded-lg border border-01 bg-02 p-3 min-[480px]:grid-cols-2">
+          {ROLE_OPTIONS.map((option) => (
+            <Checkbox
+              key={option.role}
+              label={`${option.label} (${option.role})`}
+              checked={roles.includes(option.role)}
+              onChange={(e) => onChange(e.target.checked ? [...roles, option.role] : roles.filter((r) => r !== option.role))}
+            />
+          ))}
+        </div>
       ) : null}
+      <p className={cn("min-h-[18px] text-body-xs", error ? "text-danger-600" : "text-03")}>{error ?? RESERVED}</p>
     </div>
   );
 }
 
-function NoteBox({
-  id,
-  value,
-  onChange,
-  error,
-  placeholder,
-}: {
-  id: string;
-  value: string;
-  onChange: (next: string) => void;
-  error?: string;
-  placeholder?: string;
-}) {
-  const length = value.trim().length;
+/** Limit in dollars → `{ choice, atomic, error }`. */
+function useLimit(initial: string) {
+  const [choice, setChoice] = React.useState(initial);
+  return { choice, setChoice };
+}
+
+function parseLimit(choice: string, decimals: number): { atomic: string | null; error: string | null } {
+  if (choice === "unlimited") return { atomic: null, error: null };
+  if (choice === "") return { atomic: null, error: "Choose a limit." };
+  if (choice === "0") return { atomic: "0", error: null };
+  const parsed = parseAmountInput(choice, { decimals });
+  return { atomic: parsed.atomic, error: parsed.error };
+}
+
+function LimitField({ choice, onChange, error }: { choice: string; onChange: (value: string) => void; error?: string | null }) {
   return (
-    <div className="flex w-full flex-col gap-1.5">
-      <label htmlFor={id} className="text-label-13 text-01">
-        Note
-      </label>
-      <textarea
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={3}
-        placeholder={placeholder}
-        aria-invalid={error ? true : undefined}
-        className={
-          error
-            ? "w-full rounded-md border-[1.5px] border-danger-500 bg-01 px-3 py-2.5 text-body-sm text-01 outline-none placeholder:text-03"
-            : "w-full rounded-md border border-02 bg-01 px-3 py-2.5 text-body-sm text-01 outline-none placeholder:text-03 focus:border-[1.5px] focus:border-primary-500"
-        }
+    <div className="flex w-full flex-col gap-2">
+      <span className="text-label-13 text-01">The most they can act on, per action</span>
+      <PresetChips
+        label="Authority limit"
+        presets={["0", "100", { value: "1000", label: "$1,000" }, { value: "unlimited", label: "No limit" }]}
+        value={choice}
+        onChange={onChange}
+        error={error ?? undefined}
+        hint="Penalties and compensations above it need someone with a higher limit."
       />
-      <p className={error ? "text-body-xs text-danger-600" : "font-mono text-mono-12 text-03"}>
-        {error ?? `${length} / ${DIRECTORY_NOTE_MIN} minimum`}
-      </p>
     </div>
+  );
+}
+
+function initialLimit(row: Pick<OperatorDirectoryEntry, "authorityLimit">): string {
+  if (row.authorityLimit === null) return "unlimited";
+  return formatMoney(row.authorityLimit, { symbol: "", grouped: false }).replace(/\.00$/, "");
+}
+
+function Footer({
+  busy,
+  error,
+  summary,
+  confirmLabel,
+  tone = "primary",
+  onConfirm,
+}: {
+  busy: boolean;
+  error: unknown;
+  summary: string | null;
+  confirmLabel: string;
+  tone?: "primary" | "danger";
+  onConfirm: () => void;
+}) {
+  return (
+    <SheetFooter className="sticky bottom-0 bg-01">
+      <div role="alert" className={cn("min-h-[18px] text-body-xs text-danger-600")}>
+        {error ? directoryErrorMessage(error).replace(/\s*\([A-Z_]+\)$/, "") : (summary ?? "")}
+        {error instanceof ApiError ? (
+          <details className="mt-1 text-03">
+            <summary className="cursor-pointer select-none text-label-xs">Details</summary>
+            <span className="font-mono text-mono-xs">{error.code}</span>
+          </details>
+        ) : null}
+      </div>
+      <div className="flex w-full flex-col-reverse gap-2 tablet:flex-row tablet:justify-end">
+        <SheetClose asChild>
+          <Button variant="secondary" disabled={busy}>
+            Cancel
+          </Button>
+        </SheetClose>
+        <Button variant={tone} loading={busy} onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
+      </div>
+    </SheetFooter>
+  );
+}
+
+function summaryOf(errors: Record<string, string | null | undefined>, names: Record<string, string>): string | null {
+  const wrong = Object.entries(errors)
+    .filter(([, value]) => Boolean(value))
+    .map(([key]) => names[key] ?? key);
+  if (wrong.length === 0) return null;
+  return `Fix ${wrong.length === 1 ? "one thing" : `${wrong.length} things`} above: ${wrong.join(", ")}.`;
+}
+
+// ── Add (A-12, always two-person) ───────────────────────────────────────────
+
+function AddSheet({
+  open,
+  onClose,
+  decimals,
+  approvers,
+  onDone,
+}: {
+  open: boolean;
+  onClose: () => void;
+  decimals: number;
+  approvers: string[];
+  onDone: (answer: TwoPersonAnswer<OperatorDirectoryEntry>, name: string) => void;
+}) {
+  const [name, setName] = React.useState("");
+  const [handle, setHandle] = React.useState<string | null>(null);
+  const [wallet, setWallet] = React.useState("");
+  const [roles, setRoles] = React.useState<OperatorRole[]>([]);
+  const limit = useLimit("0");
+  const [reason, setReason] = React.useState("");
+  const [note, setNote] = React.useState("");
+  const [errors, setErrors] = React.useState<Record<string, string | null | undefined>>({});
+
+  const subject = handle ?? deriveSubject(name);
+  const walletCheck = wallet.trim() ? checkEvmAddress(wallet) : null;
+
+  const add = useMutation({
+    mutationFn: addOperator,
+    onSuccess: (answer) => {
+      onDone(answer, name.trim() || subject);
+      setName("");
+      setHandle(null);
+      setWallet("");
+      setRoles([]);
+      limit.setChoice("0");
+      setReason("");
+      setNote("");
+      setErrors({});
+    },
+  });
+
+  const submit = () => {
+    const parsedLimit = parseLimit(limit.choice, decimals);
+    const validated = validateAddOperator({
+      walletAddress: wallet,
+      subject,
+      displayName: name,
+      roles,
+      limit: limitInputFromChoice(limit.choice, parsedLimit.atomic),
+      reasonCode: reason || "",
+      note,
+    });
+    const next = {
+      name: name.trim() ? undefined : "Enter their name.",
+      wallet: validated.ok ? undefined : validated.errors.walletAddress,
+      roles: validated.ok ? undefined : validated.errors.roles,
+      limit: parsedLimit.error,
+      reason: reason ? undefined : "Pick a reason.",
+      note: validated.ok ? undefined : validated.errors.note,
+      subject: validated.ok ? undefined : validated.errors.subject,
+    };
+    setErrors(next);
+    if (!validated.ok || Object.values(next).some(Boolean)) return;
+    add.mutate(validated.body);
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={(next) => (!next && !add.isPending ? onClose() : undefined)}>
+      <SheetContent showCloseButton={!add.isPending}>
+        <SheetHeader className="tablet:pt-5">
+          <SheetTitle className="pr-8">Add someone to the team</SheetTitle>
+          <SheetDescription>They sign in with the wallet you enter. A second admin approves it first.</SheetDescription>
+        </SheetHeader>
+        <div className="flex w-full flex-col gap-3 px-[18px] pt-4">
+          <Field
+            label="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Noor Hassan"
+            maxLength={128}
+            error={errors.name ?? errors.subject ?? undefined}
+            hint={
+              subject ? (
+                <>
+                  Recorded as <span className="font-mono">{subject}</span>{" "}
+                  {handle === null ? (
+                    <button type="button" className="text-primary-600 hover:underline" onClick={() => setHandle(subject)}>
+                      change
+                    </button>
+                  ) : null}
+                </>
+              ) : (
+                RESERVED
+              )
+            }
+          />
+          {handle !== null ? (
+            <Field label="Handle" value={handle} onChange={(e) => setHandle(e.target.value)} maxLength={256} hint="The short name Activity uses, e.g. noor@." />
+          ) : null}
+          <Field
+            label="Their wallet"
+            value={wallet}
+            onChange={(e) => setWallet(e.target.value)}
+            placeholder="0x…"
+            autoComplete="off"
+            spellCheck={false}
+            error={errors.wallet ?? undefined}
+            hint={walletCheck && walletCheck.ok ? `Checks out: ${walletCheck.checksummed.slice(0, 6)}…${walletCheck.checksummed.slice(-4)}` : RESERVED}
+          />
+          <RoleField roles={roles} onChange={setRoles} error={errors.roles ?? undefined} />
+          <LimitField choice={limit.choice} onChange={limit.setChoice} error={errors.limit} />
+          <ReasonChips
+            label="Why"
+            options={OPERATOR_ADD_REASONS}
+            value={reason}
+            onChange={setReason}
+            note={note}
+            onNoteChange={setNote}
+            noteMin={DIRECTORY_NOTE_MIN}
+            noteMax={2048}
+            notePlaceholder="What they will work on."
+            errors={{ reason: errors.reason, note: errors.note }}
+          />
+          <ApprovalFooter needs={approvalNeeds("A-12")} approvers={approvers} />
+        </div>
+        <Footer
+          busy={add.isPending}
+          error={add.error}
+          summary={summaryOf(errors, { name: "name", wallet: "wallet", roles: "role", limit: "limit", reason: "reason", note: "note", subject: "handle" })}
+          confirmLabel="Send for approval"
+          onConfirm={submit}
+        />
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ── Change (A-13: lowering applies at once, raising is two-person) ──────────
+
+function ChangeSheet({
+  row,
+  onClose,
+  decimals,
+  asset,
+  approvers,
+  onDone,
+}: {
+  row: OperatorDirectoryEntry | null;
+  onClose: () => void;
+  decimals: number;
+  asset: string;
+  approvers: string[];
+  onDone: (answer: TwoPersonAnswer<OperatorDirectoryEntry>, name: string) => void;
+}) {
+  const [roles, setRoles] = React.useState<OperatorRole[]>([]);
+  const limit = useLimit("0");
+  const [reason, setReason] = React.useState("");
+  const [note, setNote] = React.useState("");
+  const [errors, setErrors] = React.useState<Record<string, string | null | undefined>>({});
+  const { setChoice } = limit;
+
+  React.useEffect(() => {
+    if (!row) return;
+    setRoles([...row.roles]);
+    setChoice(initialLimit(row));
+    setReason("");
+    setNote("");
+    setErrors({});
+  }, [row, setChoice]);
+
+  const change = useMutation({
+    mutationFn: (input: { id: string; body: Parameters<typeof changeOperator>[1] }) => changeOperator(input.id, input.body),
+    onSuccess: (answer) => row && onDone(answer, operatorLabel(row)),
+  });
+
+  if (!row) return <Sheet open={false} />;
+
+  const parsedLimit = parseLimit(limit.choice, decimals);
+  const addsRole = roles.some((role) => !row.roles.includes(role));
+  const raisesLimit =
+    parsedLimit.error === null &&
+    (row.authorityLimit === null
+      ? false
+      : parsedLimit.atomic === null || BigInt(parsedLimit.atomic) > BigInt(row.authorityLimit.amount));
+  const raising = addsRole || raisesLimit;
+
+  const submit = () => {
+    const validated = validateChangeOperator(row, {
+      roles,
+      limit: limitInputFromChoice(limit.choice, parsedLimit.atomic),
+      reasonCode: reason,
+      note,
+    });
+    const next = {
+      roles: validated.ok ? undefined : validated.errors.roles,
+      limit: parsedLimit.error ?? (validated.ok ? undefined : validated.errors.change),
+      reason: reason ? undefined : "Pick a reason.",
+      note: validated.ok ? undefined : validated.errors.note,
+    };
+    setErrors(next);
+    if (!validated.ok || Object.values(next).some(Boolean)) return;
+    change.mutate({ id: row.id, body: validated.body });
+  };
+
+  const newLimit =
+    limit.choice === "unlimited" ? "no limit" : parsedLimit.atomic !== null ? formatMoney({ amount: parsedLimit.atomic, asset, decimals }) : "—";
+
+  return (
+    <Sheet open onOpenChange={(next) => (!next && !change.isPending ? onClose() : undefined)}>
+      <SheetContent showCloseButton={!change.isPending}>
+        <SheetHeader className="tablet:pt-5">
+          <SheetTitle className="pr-8">Change what {operatorLabel(row)} can do</SheetTitle>
+          <SheetDescription>
+            Now: {roleTitle(row.roles)}, {limitLabel(row)}. {raising ? "Adding a role or raising the limit needs a second admin." : "Lowering applies at once."}
+          </SheetDescription>
+        </SheetHeader>
+        <div className="flex w-full flex-col gap-3 px-[18px] pt-4">
+          <RoleField roles={roles} onChange={setRoles} error={errors.roles ?? undefined} />
+          <LimitField choice={limit.choice} onChange={limit.setChoice} error={errors.limit} />
+          <p className="text-body-13 text-02">
+            After: {roleTitle(roles)}, {newLimit === "no limit" ? "no limit" : `${newLimit} limit`}.
+          </p>
+          <ReasonChips
+            label="Why"
+            options={OPERATOR_CHANGE_REASONS}
+            value={reason}
+            onChange={setReason}
+            note={note}
+            onNoteChange={setNote}
+            noteMin={DIRECTORY_NOTE_MIN}
+            noteMax={2048}
+            errors={{ reason: errors.reason, note: errors.note }}
+          />
+          {raising ? <ApprovalFooter needs={approvalNeeds("A-13")} approvers={approvers.filter((name) => name !== operatorLabel(row))} /> : null}
+        </div>
+        <Footer
+          busy={change.isPending}
+          error={change.error}
+          summary={summaryOf(errors, { roles: "role", limit: "limit", reason: "reason", note: "note" })}
+          confirmLabel={raising ? "Send for approval" : "Apply now"}
+          onConfirm={submit}
+        />
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ── Remove (A-14, immediate) ────────────────────────────────────────────────
+
+function RemoveSheet({
+  row,
+  warnings,
+  onClose,
+  onDone,
+}: {
+  row: OperatorDirectoryEntry | null;
+  warnings: string[];
+  onClose: () => void;
+  onDone: (row: OperatorDirectoryEntry) => void;
+}) {
+  const [reason, setReason] = React.useState("");
+  const [note, setNote] = React.useState("");
+  const [errors, setErrors] = React.useState<{ reason?: string; note?: string }>({});
+  React.useEffect(() => {
+    setReason("");
+    setNote("");
+    setErrors({});
+  }, [row]);
+
+  const remove = useMutation({
+    mutationFn: (input: { id: string; reasonCode: string; note: string }) => removeOperator(input.id, { reasonCode: input.reasonCode, note: input.note }),
+    onSuccess: () => row && onDone(row),
+  });
+
+  if (!row) return <Sheet open={false} />;
+  const options: readonly ReasonOption[] = OPERATOR_REMOVE_REASONS;
+
+  const submit = () => {
+    const validated = validateRemoveOperator({ reasonCode: reason, note });
+    const next = { reason: reason ? undefined : "Pick a reason.", note: validated.ok ? undefined : validated.errors.note };
+    setErrors(next);
+    if (!validated.ok || next.reason) return;
+    remove.mutate({ id: row.id, ...validated.body });
+  };
+
+  return (
+    <Sheet open onOpenChange={(next) => (!next && !remove.isPending ? onClose() : undefined)}>
+      <SheetContent showCloseButton={!remove.isPending}>
+        <SheetHeader className="tablet:pt-5">
+          <SheetTitle className="pr-8">Remove {operatorLabel(row)}?</SheetTitle>
+          <SheetDescription>It applies at once: every session they hold ends and their wallet can no longer sign in.</SheetDescription>
+        </SheetHeader>
+        <div className="flex w-full flex-col gap-3 px-[18px] pt-4">
+          {warnings.length > 0 ? (
+            <div role="alert" className="flex w-full gap-2.5 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5">
+              <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
+              <div className="flex flex-col gap-1 text-body-13 text-warning-700">
+                {warnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+                <p className="text-02">Add someone with that role first, or those requests will stall.</p>
+              </div>
+            </div>
+          ) : null}
+          <ReasonChips
+            label="Why"
+            options={options}
+            value={reason}
+            onChange={setReason}
+            note={note}
+            onNoteChange={setNote}
+            noteMin={DIRECTORY_NOTE_MIN}
+            noteMax={2048}
+            errors={errors}
+          />
+        </div>
+        <Footer busy={remove.isPending} error={remove.error} summary={null} confirmLabel={`Remove ${operatorLabel(row)}`} tone="danger" onConfirm={submit} />
+      </SheetContent>
+    </Sheet>
   );
 }

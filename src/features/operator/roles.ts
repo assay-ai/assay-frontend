@@ -159,3 +159,33 @@ export function listPhrase(items: readonly string[]): string {
   if (items.length <= 1) return items[0] ?? "";
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
+
+/**
+ * What removing an operator would break: every two-person action whose
+ * approvers drop below two. With one holder left, that person's own requests
+ * can never be approved, and with none nobody's can.
+ */
+export function removalWarnings(
+  operators: readonly { id: string; status: string; roles: readonly OperatorRole[] }[],
+  removeId: string,
+): string[] {
+  const active = operators.filter((op) => op.status === "ACTIVE");
+  const removed = active.find((op) => op.id === removeId);
+  if (!removed) return [];
+  const groups = new Map<string, { who: string; left: number; whats: string[] }>();
+  for (const [code, roles] of Object.entries(APPROVER_ROLES)) {
+    if (!removed.roles.some((role) => roles.includes(role))) continue;
+    const left = active.filter((op) => op.id !== removeId && op.roles.some((role) => roles.includes(role))).length;
+    if (left >= 2) continue;
+    const who = rolesPhrase(roles);
+    const key = `${who}|${left}`;
+    const group = groups.get(key) ?? { who, left, whats: [] };
+    group.whats.push(APPROVAL_WHAT[code] ?? code);
+    groups.set(key, group);
+  }
+  return [...groups.values()].map(({ who, left, whats }) =>
+    left === 0
+      ? `Nobody else is ${who}: ${listPhrase(whats)} could no longer be approved.`
+      : `Only one other ${who} would be left: their own requests for ${listPhrase(whats)} could not be approved.`,
+  );
+}
