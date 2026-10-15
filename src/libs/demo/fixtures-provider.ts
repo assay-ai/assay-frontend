@@ -7,6 +7,7 @@ import {
 import {
   DEMO_ASSET,
   DEMO_CHAIN_ID,
+  justNow,
   minutesAgo,
   money,
   type DemoFixture,
@@ -1524,7 +1525,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
           ],
           verdict: "PASS",
         },
-        ranAt: minutesAgo(1),
+        ranAt: justNow(),
       };
     },
   },
@@ -1579,7 +1580,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
       const binding = bindingFor(id);
       return {
         ...bindingDetail({ ...binding, status: "ACTIVE", publishedVersion: binding.version }, id),
-        publishedAt: minutesAgo(0),
+        publishedAt: justNow(),
       };
     },
   },
@@ -1592,7 +1593,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
       return {
         ...bindingDetail({ ...bindingFor(id), status: pausing ? "PAUSED" : "ACTIVE" }, id),
         pauseReason: pausing ? "PROVIDER_REQUESTED" : null,
-        pausedAt: pausing ? minutesAgo(0) : null,
+        pausedAt: pausing ? justNow() : null,
       };
     },
   },
@@ -1611,7 +1612,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
       firstRespondedAt: null,
       resolutionNote: null,
       closedAt: null,
-      createdAt: minutesAgo(0),
+      createdAt: justNow(),
     }),
   },
 

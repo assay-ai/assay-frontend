@@ -1,3 +1,5 @@
+import { DEMO_NOW_MS } from "./demo-clock";
+
 /**
  * DEMO ONLY: the on-chain penalty records the demo provider has.
  *
@@ -10,15 +12,16 @@
  */
 
 /**
- * The one clock every demo penalty date counts from: the start of the current
- * UTC hour, read once when this module loads.
+ * The one clock every demo penalty date counts from: the shared demo clock
+ * (`demo-clock.ts`), fixed for the browser tab's session.
  *
  * The chain rows and the Assay cases both count from it, so a deadline is the
- * same instant on Home, the Penalties list, the Why drawer and after a reload
- * (within the hour). Counting from "now" at each render made the same deadline
- * drift a minute at a time between screens (provider review 2026-10-16b).
+ * same instant on Home, the Penalties list, the Why drawer and after a reload.
+ * Counting from "now" at each render made the same deadline drift a minute at
+ * a time between screens, and the start of the current hour still jumped an
+ * hour on a reload (provider review 2026-10-16b).
  */
-export const DEMO_PENALTY_ANCHOR_SECONDS = Math.floor(Date.now() / 3_600_000) * 3600;
+export const DEMO_PENALTY_ANCHOR_SECONDS = Math.floor(DEMO_NOW_MS / 1000);
 
 /** ISO time `minutes` after the anchor (negative: before it). */
 export function demoPenaltyTime(minutes: number): string {
