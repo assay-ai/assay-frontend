@@ -20,7 +20,7 @@ import {
 import { Radio } from "@/components/ui/radio";
 import { signerRoleLabel } from "@/features/chain-calls/send-contract-call";
 import { arbiterErrorMessage } from "@/features/operator/arbiter";
-import { ContractCallPanel } from "@/features/operator/contract-call-panel";
+import { ConfirmedCancelCall } from "@/features/operator/confirmed-cancel-call";
 import {
   ALL_OUTCOMES,
   DECISION_NOTE_MIN_LENGTH,
@@ -1787,19 +1787,15 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                     the build is refused with CHAIN_ARBITER_NOT_SET. Signed
                     through the same panel the arbiter page uses.
                   */
-                  <ContractCallPanel
+                  /*
+                    The case brief carries no on-chain request id to compare
+                    the call with (frontend review N3), so the id decoded from
+                    the calldata is shown and the operator ticks it; the panel
+                    then refuses anything but that id.
+                  */
+                  <ConfirmedCancelCall
                     call={evmCancelCall(cancelIntent, casePenalty.asset)}
-                    /*
-                      The request id is the intent's own: the case brief carries
-                      no on-chain id to compare it with. The function, the
-                      pinned contract and the single id are still checked.
-                    */
-                    expected={{
-                      contract: "stake",
-                      functionName: "cancelSlash",
-                      args: evmCancelCall(cancelIntent, casePenalty.asset).requestIds,
-                    }}
-                    title={`cancelSlash for ${cancelIntent.requestId}`}
+                    title="cancelSlash of one on-chain record"
                     afterSend="The case moves to cancelled once the reconcile sweep reads the record back off the chain."
                     onSent={setCancelSignature}
                   />
