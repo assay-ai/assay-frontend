@@ -1,6 +1,6 @@
 import type { Signer } from "@/hooks/useSigner";
 import {
-  broadcastAndWait,
+  broadcast,
   encodeApprove,
   encodeDepositFor,
   fillTransaction,
@@ -45,16 +45,23 @@ export type EvmDepositSubmission =
   | { readonly kind: "signed"; readonly rawTransaction: `0x${string}` }
   | { readonly kind: "broadcast"; readonly transactionHash: `0x${string}` };
 
-export async function signEvmDeposit(input: {
+export interface EvmDepositInput {
   signer: Signer;
   requirements: EvmDepositRequirements;
   amountAtomic: bigint;
-  /** Called when the approve transaction goes to the wallet, so the button can say so. */
-  onApproving?: () => void;
-}): Promise<EvmDepositSubmission> {
-  const { signer, requirements, amountAtomic } = input;
-  const chainId = requirements.chainId;
+  /** Called with the hash the moment a transaction is broadcast, before the wait. */
+  onSubmitted?: (hash: `0x${string}`) => void;
+}
 
+/**
+ * Every refusal that can be raised before a prompt: wrong wallet, amount
+ * drift, not enough token, no ETH. Returns what the steps below need.
+ */
+export async function checkEvmDeposit(input: Omit<EvmDepositInput, "onSubmitted">): Promise<{
+  needsApprove: boolean;
+  nativeWei: bigint;
+}> {
+  const { signer, requirements, amountAtomic } = input;
   // `depositFor` pulls from msg.sender, and the settle route refuses a signer
   // who is not the buyer credited. Say it here, where it can be fixed.
   if (signer.address.toLowerCase() !== requirements.buyer.toLowerCase()) {
@@ -63,16 +70,12 @@ export async function signEvmDeposit(input: {
         `Nothing was sent.`,
     );
   }
-  // What the API asked for, not what the screen computed: a mismatch is a bug
-  // somewhere, and signing either number would be signing a guess.
+  // What the API asked for, not what the screen computed.
   if (BigInt(requirements.amount) !== amountAtomic) {
-    throw new EvmDepositRefused(
-      "The deposit amount changed while it was being prepared. Nothing was sent.",
-    );
+    throw new EvmDepositRefused("The deposit amount changed while it was being prepared. Nothing was sent.");
   }
-
   const readiness = await readDepositReadiness({
-    chainId,
+    chainId: requirements.chainId,
     owner: signer.address,
     token: requirements.asset,
     spender: requirements.spender,
@@ -88,56 +91,66 @@ export async function signEvmDeposit(input: {
         "the wallet that signs it. Add a little ETH and retry. Nothing was sent.",
     );
   }
+  return { needsApprove: readiness.allowanceAtomic < amountAtomic, nativeWei: readiness.nativeWei };
+}
 
-  let nativeLeft = readiness.nativeWei;
-  if (readiness.allowanceAtomic < amountAtomic) {
-    const approve = await fillTransaction({
-      chainId,
-      from: signer.address,
-      to: requirements.asset,
-      data: encodeApprove(requirements.spender, amountAtomic),
-    });
-    if (maxGasCostWei(approve) > nativeLeft) {
-      throw new EvmDepositRefused(
-        "This wallet does not hold enough ETH for the network fee. Add a little ETH and retry. Nothing was sent.",
-      );
-    }
-    input.onApproving?.();
-    if (signer.kind === "external") {
-      // An injected wallet signs and sends in one step; wait for it to land,
-      // because `depositFor` reverts in estimation until the allowance exists.
-      await waitForSuccess(chainId, (await signer.signAndSend(approve)) as `0x${string}`);
-    } else {
-      const signedApprove = await signer.signTransaction(approve);
-      if (signedApprove.namespace !== "eip155") {
-        throw new Error(`Expected an eip155 signature, got ${signedApprove.namespace}.`);
-      }
-      await broadcastAndWait(chainId, signedApprove.rawTransaction);
-    }
-    nativeLeft -= maxGasCostWei(approve);
+/**
+ * `approve(spender, amount)`: signed, broadcast and waited for, because
+ * `depositFor` reverts in estimation until the allowance exists. For exactly
+ * the amount, never unlimited.
+ */
+export async function approveEvmDeposit(input: EvmDepositInput & { nativeWei: bigint }): Promise<bigint> {
+  const { signer, requirements, amountAtomic } = input;
+  const chainId = requirements.chainId;
+  const approve = await fillTransaction({
+    chainId,
+    from: signer.address,
+    to: requirements.asset,
+    data: encodeApprove(requirements.spender, amountAtomic),
+  });
+  if (maxGasCostWei(approve) > input.nativeWei) {
+    throw new EvmDepositRefused(
+      "This wallet does not hold enough ETH for the network fee. Add a little ETH and retry. Nothing was sent.",
+    );
   }
+  let hash: `0x${string}`;
+  if (signer.kind === "external") {
+    hash = (await signer.signAndSend(approve)) as `0x${string}`;
+  } else {
+    const signedApprove = await signer.signTransaction(approve);
+    if (signedApprove.namespace !== "eip155") {
+      throw new Error(`Expected an eip155 signature, got ${signedApprove.namespace}.`);
+    }
+    hash = await broadcast(chainId, signedApprove.rawTransaction);
+  }
+  input.onSubmitted?.(hash);
+  await waitForSuccess(chainId, hash);
+  return input.nativeWei - maxGasCostWei(approve);
+}
 
-  // Estimated only now: before the approval is mined, `depositFor` reverts in
-  // estimation and there is nothing to estimate.
+/**
+ * `depositFor(buyer, amount)`: an embedded wallet signs it UNSENT (the settle
+ * route broadcasts it); an injected wallet sends it itself and the hash is
+ * settled once mined.
+ */
+export async function sendEvmDepositFor(input: EvmDepositInput & { nativeWei?: bigint }): Promise<EvmDepositSubmission> {
+  const { signer, requirements, amountAtomic } = input;
+  const chainId = requirements.chainId;
   const deposit = await fillTransaction({
     chainId,
     from: signer.address,
     to: requirements.contract,
     data: encodeDepositFor(requirements.buyer, amountAtomic),
   });
-  if (maxGasCostWei(deposit) > nativeLeft) {
+  if (input.nativeWei !== undefined && maxGasCostWei(deposit) > input.nativeWei) {
     throw new EvmDepositRefused(
       "This wallet does not hold enough ETH for the network fee. Add a little ETH and retry. " +
         "Your approval is kept, so the next attempt asks for one signature.",
     );
   }
   if (signer.kind === "external") {
-    /*
-      Sent by the wallet itself, then waited on: the backend reads this
-      transaction's receipt at `confirmed`, and a hash reported before it is
-      mined would be read as "no transfer" and fail the deposit.
-    */
     const transactionHash = (await signer.signAndSend(deposit)) as `0x${string}`;
+    input.onSubmitted?.(transactionHash);
     await waitForSuccess(chainId, transactionHash);
     return { kind: "broadcast", transactionHash };
   }
@@ -146,4 +159,15 @@ export async function signEvmDeposit(input: {
     throw new Error(`Expected an eip155 signature, got ${signed.namespace}.`);
   }
   return { kind: "signed", rawTransaction: signed.rawTransaction };
+}
+
+/** The whole deposit in one call: checks, `approve` when needed, then `depositFor`. */
+export async function signEvmDeposit(input: EvmDepositInput & { onApproving?: () => void }): Promise<EvmDepositSubmission> {
+  const check = await checkEvmDeposit(input);
+  let nativeWei = check.nativeWei;
+  if (check.needsApprove) {
+    input.onApproving?.();
+    nativeWei = await approveEvmDeposit({ ...input, nativeWei });
+  }
+  return sendEvmDepositFor({ ...input, nativeWei });
 }
