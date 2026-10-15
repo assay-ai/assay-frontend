@@ -6,6 +6,9 @@ import {
   money,
   type DemoFixture,
 } from "./fixtures";
+import { ApiError } from "@/libs/ApiClient";
+
+import { freshAtLeast, freshStage } from "./fresh-account";
 
 /**
  * DEMO ONLY — see `demo-api.ts` for the rules. The buyer surface.
@@ -898,6 +901,65 @@ const prodDelegate = () => `${DEMO_CHAIN_ID}:0x18aB4c7E92d05F3b6A1c8D4e7F2a9B0c3
  * Order matters where two entries could match one path: the specific string is
  * always listed before the regex that would also take it.
  */
+/* ------------------------------------------------- a fresh account (?fresh=) */
+
+function freshDeposits() {
+  const stage = freshStage();
+  if (!stage || freshAtLeast(stage, "bind")) return null;
+  return { items: [], pageInfo: { nextCursor: null, hasMore: false } };
+}
+
+function freshEscrow() {
+  const stage = freshStage();
+  if (!stage) return null;
+  const opened = freshAtLeast(stage, "bind");
+  return {
+    exists: opened,
+    chainReadable: true,
+    account: DEMO_BUYER_ACCOUNT,
+    escrowPda: null,
+    escrowTokenAccount: null,
+    balance: opened ? money("20.00") : null,
+    openHolds: opened ? money("0") : null,
+    spendable: opened ? money("20.00") : null,
+    withdrawRequested: opened ? money("0") : null,
+    withdrawAvailableAt: null,
+    serverTime: minutesAgo(0),
+    maxVoucherAmount: opened ? money("1.00") : null,
+    maxPerWindow: opened ? money("20.00") : null,
+    spentInWindow: opened ? money("0") : null,
+    windowStartedAt: null,
+    windowSeconds: 86400,
+    observedAt: minutesAgo(1),
+  };
+}
+
+function freshCredentials(agentId: string) {
+  const stage = freshStage();
+  if (!stage) return null;
+  const page = { nextCursor: null, hasMore: false };
+  if (stage === "new") return { items: [], pageInfo: page };
+  return {
+    items: [
+      {
+        id: "cred_fresh",
+        agentId,
+        name: "My agent",
+        prefix: "x402_live_f00d",
+        scopes: ["tools:call"],
+        lastUsedAt: stage === "call" ? null : minutesAgo(3),
+        expiresAt: null,
+        revokedAt: null,
+        rotatedFromId: null,
+        delegateAccount: stage === "pay" ? prodDelegate() : null,
+        delegateBoundAt: stage === "pay" ? minutesAgo(2) : null,
+        createdAt: minutesAgo(30),
+      },
+    ],
+    pageInfo: page,
+  };
+}
+
 export const BUYER_FIXTURES: readonly DemoFixture[] = [
   /* ---------------------------------------------------------- the guarantee */
   {
@@ -939,7 +1001,13 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: /^\/tool-calls\/[^/]+$/,
-    body: (path) => toolCallRow(findCallByIntent(segment(path))),
+    // An id the demo does not know is a 404, as the API answers: a payment
+    // link to nothing must read "not found", not show some other call.
+    body: (path) => {
+      const call = CALLS.find((c) => c.intentId === segment(path));
+      if (!call) throw new ApiError("TOOL_CALL_NOT_FOUND", "No tool call with this id.", 404, path);
+      return toolCallRow(call);
+    },
   },
 
   /* ------------------------------------------------------------- receipts */
@@ -979,7 +1047,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/deposits",
     override: "always",
-    body: () => ({
+    body: () => freshDeposits() ?? ({
       items: [
         {
           id: "dep_7f2a91c4",
@@ -1065,7 +1133,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/escrow",
     override: "always",
-    body: () => ({
+    body: () => freshEscrow() ?? ({
       exists: true,
       chainReadable: true,
       account: DEMO_BUYER_ACCOUNT,
@@ -1248,6 +1316,9 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           chainId: DEMO_CHAIN_ID,
           credentialCount: 2,
         },
+        ...(freshStage()
+          ? []
+          : [
         {
           agentId: STAGING_AGENT,
           label: "staging",
@@ -1255,6 +1326,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           chainId: DEMO_CHAIN_ID,
           credentialCount: 1,
         },
+            ]),
       ],
       pageInfo: { nextCursor: null, hasMore: false },
     }),
@@ -1266,6 +1338,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     match: /^\/agents\/[^/]+\/credentials$/,
     body: (path) => {
       const agentId = segment(path, 1);
+      const fresh = freshCredentials(agentId);
+      if (fresh) return fresh;
       const staging = agentId === STAGING_AGENT;
       return {
         items: [
@@ -1312,7 +1386,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/escrow/delegates",
     override: "always",
-    body: () => ({
+    body: () => (freshStage() ? { account: DEMO_BUYER_ACCOUNT, delegates: [] } : ({
       account: DEMO_BUYER_ACCOUNT,
       delegates: [
         {
@@ -1324,7 +1398,25 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           status: "ACTIVE",
         },
       ],
-    }),
+    })),
+  },
+  {
+    // "Create key": a made-up key, shown once like the real one. Nothing is
+    // stored, so the list does not grow — the reveal is what a reviewer needs.
+    method: "POST",
+    match: /^\/agents\/[^/]+\/credentials$/,
+    body: (path, _query, body) => {
+      const name = (body as { name?: unknown } | undefined)?.name;
+      return {
+        id: "cred_demo_new",
+        agentId: segment(path, 1),
+        name: typeof name === "string" && name.trim() ? name.trim() : "My agent",
+        prefix: "x402_live_d3m0",
+        token: "x402_live_d3m0_demo-key-shown-once-not-a-real-secret",
+        scopes: ["tools:call"],
+        createdAt: new Date().toISOString(),
+      };
+    },
   },
   {
     method: "GET",

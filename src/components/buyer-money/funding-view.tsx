@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpFromLine, ExternalLink, Plus, RotateCw, TriangleAlert } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 
@@ -87,6 +88,11 @@ export function FundingView() {
   const router = useRouter();
   const pathname = usePathname();
   const requested = useSearchParam("action");
+  // Statements is its own page; an old `?tab=statements` link goes there.
+  const tab = useSearchParam("tab");
+  React.useEffect(() => {
+    if (tab === "statements") router.replace("/statements");
+  }, [tab, router]);
   const [action, setAction] = React.useState<MoneyAction | null>(null);
   const [seenRequest, setSeenRequest] = React.useState("");
   if (requested !== seenRequest) {
@@ -138,7 +144,7 @@ export function FundingView() {
       {/* Hero: the one number, and the two things to do with it. */}
       <section aria-label="Spendable balance" className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 p-5 shadow-soft tablet:flex-row tablet:items-end tablet:justify-between tablet:p-6">
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-body-13 text-02">Your agents can spend</span>
+          <span className="text-body-13 text-02">Available now: your agents can spend it, or you can withdraw it</span>
           {escrowQuery.isPending ? (
             <Skeleton className="h-10 w-44" />
           ) : (
@@ -148,7 +154,9 @@ export function FundingView() {
           )}
           <span className="text-body-xs text-03">
             {money.symbol} on {money.chainName ?? "your chain"}
-            {escrow?.openHolds && positive(escrow.openHolds) ? ` · ${formatLimit(escrow.openHolds)} held for calls being checked` : ""}
+            {escrow?.openHolds && positive(escrow.openHolds)
+              ? ` · ${formatLimit(escrow.openHolds)} more is held by calls being checked; it comes back or goes to providers within minutes`
+              : ""}
           </span>
           {runway ? <span className="text-body-13 text-02">{runway}</span> : null}
         </div>
@@ -269,27 +277,35 @@ function EscrowCard({
         />
       ) : null}
 
-      {/* Safety caps. */}
+      {/* Account ceiling. */}
       <div className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-02 p-3.5">
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
-          <span className="text-label-13 text-01">Safety caps</span>
+          <span className="text-label-13 text-01">Account ceiling (on chain)</span>
           <Button size="sm" variant={money.capsSet ? "secondary" : "primary"} type="button" onClick={() => onAction("caps")}>
-            {money.capsSet ? "Change caps" : "Set safety caps"}
+            {money.capsSet ? "Change account ceiling" : "Set account ceiling"}
           </Button>
         </div>
         {money.capsSet ? (
           <>
-            <p className="text-body-xs text-03">Up to {formatLimit(escrow.maxVoucherAmount)} a call.</p>
+            <p className="text-body-xs text-03">
+              Up to {formatLimit(escrow.maxVoucherAmount)} a call, for all your agents together. Each agent&apos;s own
+              spending limits sit under it:{" "}
+              <Link href="/limits" className="font-semibold text-primary-600 hover:underline">
+                Spending limits
+              </Link>
+              .
+            </p>
             <CapMeter
-              label="Spent in the last 24 hours"
+              label="Spent from your escrow in the last 24 hours, all agents"
               used={escrow.spentInWindow ?? { amount: "0", asset: "", decimals: money.decimals }}
               limit={escrow.maxPerWindow}
               refillsAt={refillsAt}
+              refillHint="your time; 24 h after the first payment in the window"
             />
           </>
         ) : (
           <p className="text-body-13 text-warning-700">
-            Paid calls are refused until you set them. It takes one free signature.
+            Paid calls are refused until you set it. It takes one free signature.
           </p>
         )}
       </div>

@@ -41,7 +41,13 @@ export function ApprovalLinkView({ approvalId }: { approvalId: string }) {
   });
 
   const shell = (children: React.ReactNode) => (
-    <div className="mx-auto flex w-full max-w-[420px] flex-1 flex-col gap-4 px-4 py-6">{children}</div>
+    <div className="mx-auto flex w-full max-w-[420px] flex-1 flex-col gap-4 px-4 py-6">
+      <header className="flex flex-col gap-0.5">
+        <h1 className="text-heading-md text-01">Payment</h1>
+        <p className="text-body-13 text-02">A paid call from a link you were sent.</p>
+      </header>
+      {children}
+    </div>
   );
 
   if (call.isPending && approvalId !== "") return shell(<PageState kind="loading" rows={2} label="Opening the payment" />);
@@ -51,10 +57,10 @@ export function ApprovalLinkView({ approvalId }: { approvalId: string }) {
     return shell(
       <PageState
         kind="empty"
-        title={notFound ? "Nothing is waiting here" : "This link could not be opened"}
+        title={notFound ? "Payment not found" : "This link could not be opened"}
         description={
           notFound
-            ? "This link has no payment on it. Your calls and their receipts are under Activity."
+            ? "No payment matches this link. It may be mistyped or too old. Your calls and their receipts are under Activity."
             : "Try again in a moment. Your calls and their receipts are under Activity."
         }
         action={{ label: "Open Activity", href: "/spend/calls" }}
@@ -82,12 +88,12 @@ export function ApprovalLinkView({ approvalId }: { approvalId: string }) {
           <Link href={routes.receipt(data.intentId)}>See the receipt</Link>
         </Button>
         <Button variant="secondary" asChild>
-          <Link href="/limits">Budgets</Link>
+          <Link href="/limits">Spending limits</Link>
         </Button>
       </div>
       <p className="text-body-xs text-03">
-        Payments can&apos;t be approved by hand yet. A call that costs more than your budget allows is refused, so
-        you are never charged above it.
+        Payments can&apos;t be approved by hand yet. A call that costs more than your spending limits allow is refused,
+        so you are never charged above them.
       </p>
     </section>,
   );
