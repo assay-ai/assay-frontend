@@ -160,6 +160,30 @@ describe("how a row reads", () => {
       expect(d.sentence).toBe("Lift the block on block 7b2acf05… (r).");
     });
 
+    it("names an added operator without their bare handle, and writes the limit as Team does", () => {
+      const d = describeApproval(
+        {
+          action: "operator.add",
+          target: "operator_wallet:0x4d2e8a1c6b9f3e07d5a2c8b1e4f7a0d3c6b9e258",
+          payload: {
+            body: {
+              subject: "noor@",
+              displayName: "Noor Hassan",
+              roles: ["ADJ"],
+              reasonCode: "JOINING",
+              walletAddress: "0x4d2e8a1c6b9f3e07d5a2c8b1e4f7a0d3c6b9e258",
+              authorityLimitMinor: "1000000000",
+            },
+          },
+        },
+        context,
+      );
+      expect(d.fields).toContainEqual({ label: "Operator", value: "Noor Hassan" });
+      expect(d.fields).toContainEqual({ label: "Authority limit", value: "$1,000" });
+      expect(d.sentence).toMatch(/^Add operator Noor Hassan with wallet/);
+      expect(JSON.stringify(d)).not.toContain("noor@");
+    });
+
     it("spells out an operator add with labels, a checksummed wallet and money", () => {
       const d = describeApproval(
         {
@@ -180,14 +204,14 @@ describe("how a row reads", () => {
         context,
       );
       expect(d.sentence).toBe(
-        "Add operator r15-throwaway@example.test with wallet 0x07cd…D711, roles Policy author, limit $0.00 (e2e test).",
+        "Add operator r15-throwaway@example.test with wallet 0x07cd…D711, roles Policy author, limit $0 (e2e test).",
       );
       expect(d.target.label).toBe("Wallet 0x07cd29d00E0F6f86B9e061F5d15c65D5edf4D711");
       expect(d.fields).toEqual([
         { label: "Operator", value: "R15 Throwaway (r15-throwaway@example.test)" },
         { label: "Wallet", value: "0x07cd29d00E0F6f86B9e061F5d15c65D5edf4D711" },
         { label: "Roles", value: "Policy author" },
-        { label: "Authority limit", value: "$0.00" },
+        { label: "Authority limit", value: "$0" },
         { label: "Reason", value: "E2e test" },
         { label: "Note", value: "R15 e2e throwaway operator, removed afterwards" },
       ]);
@@ -229,7 +253,7 @@ describe("how a row reads", () => {
         label: "Roles requested (at request time)",
         value: "Policy author, Treasury, Lead adjudicator",
       });
-      expect(d.fields).toContainEqual({ label: "Limit requested (at request time)", value: "$5.00" });
+      expect(d.fields).toContainEqual({ label: "Limit requested (at request time)", value: "$5" });
       expect(labels).not.toContain("Roles before (at request time)");
     });
 
@@ -248,7 +272,7 @@ describe("how a row reads", () => {
         context,
       );
       expect(d.fields).toContainEqual({ label: "Roles before (at request time)", value: "Policy author" });
-      expect(d.fields).toContainEqual({ label: "Limit before (at request time)", value: "$0.00" });
+      expect(d.fields).toContainEqual({ label: "Limit before (at request time)", value: "$0" });
     });
 
     it("keeps the live row on a pending change", () => {

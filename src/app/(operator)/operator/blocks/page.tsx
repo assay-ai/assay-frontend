@@ -3,7 +3,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, Clock, MoreHorizontal, Plus, Search, ShieldCheck, Undo2, Users } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { ApprovalFooter } from "@/components/patterns/approval-footer";
@@ -38,6 +38,7 @@ import { approvalHref, approverPhrase, sentForApproval } from "@/features/operat
 import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-operator-lookups";
 import { WhatHappens } from "@/features/operator/what-happens";
 import { WhyNot } from "@/features/operator/why-not";
+import { dropUrlParams } from "@/features/operator/url-params";
 import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
 import type { AccountBlock, BlockSubjectKind, OperatorApproval } from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
@@ -87,8 +88,6 @@ function BlocksScreen() {
   const providers = useProviderNames();
   const directory = useOperatorDirectory();
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
 
   const [filter, setFilter] = React.useState<Filter>("active");
   const [search, setSearch] = React.useState("");
@@ -126,7 +125,7 @@ function BlocksScreen() {
   // The link's params go when the sheet closes, so a reload does not open it again.
   const onBlockOpenChange = (open: boolean) => {
     setBlockOpen(open);
-    if (!open && (searchParams.has("new") || searchParams.has("block"))) router.replace(pathname, { scroll: false });
+    if (!open) dropUrlParams(["new", "block", "kind"]);
   };
 
   const list = useInfiniteQuery({
@@ -179,7 +178,7 @@ function BlocksScreen() {
               setPrefill(null);
               setBlockOpen(true);
             }}
-            className="w-full tablet:w-auto"
+            className="touch-target w-full sm:w-auto"
           >
             Block an account
           </Button>
@@ -201,14 +200,14 @@ function BlocksScreen() {
           {(["active", "lifted"] as const).map((tab) => {
             const count = countOf(tab);
             return (
-              <SegmentedItem key={tab} value={tab}>
+              <SegmentedItem key={tab} value={tab} className="touch-target">
                 {tab === "active" ? "Active" : "Lifted"}
                 {count !== null ? <span className="ml-1.5 tabular-nums text-03">{count}</span> : null}
               </SegmentedItem>
             );
           })}
         </Segmented>
-        <label className="flex w-full items-center gap-2 rounded-md border border-02 bg-01 px-3 py-2 focus-within:ring-2 focus-within:ring-primary-500 tablet:max-w-[320px]">
+        <label className="touch-target flex w-full items-center gap-2 rounded-md border border-02 bg-01 px-3 py-2 focus-within:ring-2 focus-within:ring-primary-500 tablet:max-w-[320px]">
           <Search aria-hidden="true" className="size-4 shrink-0 text-03" />
           <span className="sr-only">Search blocks</span>
           <input
@@ -285,11 +284,11 @@ function BlocksScreen() {
                     </span>
                     <div className="mt-1 flex w-full min-w-0 flex-wrap items-center gap-2 tablet:mt-0 tablet:w-auto tablet:justify-end">
                       {waiting ? (
-                        <Button variant="secondary" size="sm" asChild className="min-w-0 flex-1 tablet:flex-none">
+                        <Button variant="secondary" size="sm" asChild className="touch-target min-w-0 flex-1 tablet:flex-none">
                           <Link href={approvalHref(waiting.id)}>View request</Link>
                         </Button>
                       ) : block.active && canAct ? (
-                        <Button variant="secondary" size="sm" onClick={() => setLifting(block)} className="min-w-0 flex-1 tablet:flex-none">
+                        <Button variant="secondary" size="sm" onClick={() => setLifting(block)} className="touch-target min-w-0 flex-1 tablet:flex-none">
                           Lift block
                         </Button>
                       ) : null}
@@ -395,6 +394,8 @@ function BlockSheet({
   const [ticket, setTicket] = React.useState("");
   const [onChain, setOnChain] = React.useState(false);
   const [errors, setErrors] = React.useState<{ target?: string; reason?: string; note?: string }>({});
+  const titleRef = React.useRef<HTMLHeadingElement>(null);
+  const reasonsRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (!open) return;
@@ -468,7 +469,7 @@ function BlockSheet({
                 signLabel="Sign and send the on-chain block"
                 successTitle="Blocked on chain"
                 successDescription="The contracts refuse the wallet once this lands. Only the admin can lift it."
-                afterExport="Import the file in the Safe that holds the arbiter key and sign it there. The contracts refuse the wallet once it lands."
+                afterExport="Open the file in the arbiter's multi-signer wallet and sign it there. The contracts refuse the wallet once it lands."
               />
             </section>
           ) : null}
@@ -505,11 +506,18 @@ function BlockSheet({
       <SheetContent
         showCloseButton={!block.isPending}
         // Never focus (and so open) the account search on opening: its list would cover the reason and note,
-        // and on a phone raise the keyboard. The list opens when the person taps or types.
-        onOpenAutoFocus={(event) => event.preventDefault()}
+        // and on a phone raise the keyboard. The list opens when the person taps or types. Focus still
+        // moves into the sheet: to the first reason when the account came with the link, else the title.
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          const firstReason = prefill ? reasonsRef.current?.querySelector<HTMLElement>('[role="radio"]') : null;
+          (firstReason ?? titleRef.current)?.focus();
+        }}
       >
         <SheetHeader className="tablet:pt-5">
-          <SheetTitle className="pr-8">Block an account</SheetTitle>
+          <SheetTitle ref={titleRef} tabIndex={-1} className="pr-8 focus:outline-none">
+            Block an account
+          </SheetTitle>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pt-3">
           <WhatHappens
@@ -553,19 +561,21 @@ function BlockSheet({
               {alreadyBlocked ? <p className="text-danger-600">It is already blocked, by {directory.nameOf(alreadyBlocked.blockedBy)}.</p> : null}
             </div>
           ) : null}
-          <ReasonChips
-            label="Why"
-            options={BLOCK_REASONS}
-            value={reason}
-            onChange={setReason}
-            note={note}
-            onNoteChange={setNote}
-            noteLabel="Note (internal, never shown to the account)"
-            noteMin={BLOCK_NOTE_MIN}
-            noteMax={BLOCK_NOTE_MAX}
-            notePlaceholder="What happened, and who reported it."
-            errors={errors}
-          />
+          <div ref={reasonsRef} className="contents">
+            <ReasonChips
+              label="Why"
+              options={BLOCK_REASONS}
+              value={reason}
+              onChange={setReason}
+              note={note}
+              onNoteChange={setNote}
+              noteLabel="Note (internal, never shown to the account)"
+              noteMin={BLOCK_NOTE_MIN}
+              noteMax={BLOCK_NOTE_MAX}
+              notePlaceholder="What happened, and who reported it."
+              errors={errors}
+            />
+          </div>
           <Field label="Ticket (optional)" value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="INC-123" maxLength={128} />
           {canChain ? (
             <div className="flex w-full flex-col gap-1">
@@ -676,7 +686,7 @@ function ChainBlockSheet({ block, label, onClose }: { block: AccountBlock | null
               signLabel="Sign and send the on-chain block"
               successTitle="Blocked on chain"
               successDescription="The contracts refuse the wallet once this lands."
-              afterExport="Import the file in the Safe that holds the arbiter key and sign it there."
+              afterExport="Open the file in the arbiter's multi-signer wallet and sign it there."
               onBusyChange={setSigning}
             />
           ) : null}

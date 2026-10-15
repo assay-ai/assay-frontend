@@ -99,7 +99,27 @@ export function rolePillText(identity: Pick<OperatorIdentity, "roles" | "authori
   return limit ? `${roleTitle(identity.roles)} · ${limit.replace(/ limit$/, "")}` : roleTitle(identity.roles);
 }
 
-const LIST_ACTIONS: readonly ConsoleAction[] = ["rule", "suspend", "compensate", "block", "blockOnChain", "manageTeam"];
+// "block" and "blockOnChain" are one line, written by `blockLine`.
+const LIST_ACTIONS: readonly ConsoleAction[] = ["rule", "suspend", "compensate", "block", "manageTeam"];
+
+/**
+ * Blocking is one line, not two: a block stops an account in Assay; for a
+ * wallet it can also go into the contracts ("on chain"), which may need
+ * another role.
+ *   both:      can "block an account (a wallet also on chain)"
+ *   Assay only: can "block an account (on chain too needs Lead adjudicator)"
+ *   neither:   others "block an account (Lead adjudicator or Support / on-call; on chain: Lead adjudicator)"
+ */
+function blockLine(identity: Pick<OperatorIdentity, "roles" | "authorityLimit">): { can: boolean; text: string } {
+  const block = checkAction(identity, "block");
+  const chain = checkAction(identity, "blockOnChain");
+  if (block.allowed) {
+    return { can: true, text: chain.allowed ? `${ACTION_WHAT.block} (a wallet also on chain)` : `${ACTION_WHAT.block} (on chain too needs ${rolesPhrase(chain.roles)})` };
+  }
+  if (chain.allowed) return { can: true, text: `${ACTION_WHAT.blockOnChain} (in Assay too needs ${rolesPhrase(block.roles)})` };
+  const sameRoles = rolesPhrase(block.roles) === rolesPhrase(chain.roles);
+  return { can: false, text: `${ACTION_WHAT.block} (${rolesPhrase(block.roles)}${sameRoles ? "" : `; on chain: ${rolesPhrase(chain.roles)}`})` };
+}
 
 /**
  * The two short lists of the popover. Pure.
@@ -111,6 +131,11 @@ export function roleCapabilityLists(identity: Pick<OperatorIdentity, "roles" | "
   const can: string[] = [];
   const others: string[] = [];
   for (const action of LIST_ACTIONS) {
+    if (action === "block") {
+      const line = blockLine(identity);
+      (line.can ? can : others).push(line.text);
+      continue;
+    }
     const check = checkAction(identity, action);
     if (check.allowed) {
       const upTo = MONEY_ACTIONS.has(action) && identity.authorityLimit ? ` up to ${formatMoney(identity.authorityLimit).replace(/\.00$/, "")}` : "";
@@ -201,7 +226,7 @@ export function RoleIntro({ identity, onDismiss }: { identity: OperatorIdentity;
         type="button"
         onClick={onDismiss}
         aria-label="Hide this"
-        className="hit-area flex size-7 shrink-0 items-center justify-center rounded-full text-03 hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        className="touch-target flex size-7 shrink-0 items-center justify-center rounded-full text-03 hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
         <X aria-hidden="true" className="size-4" />
       </button>
