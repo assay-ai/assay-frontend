@@ -27,12 +27,15 @@ import type { DemoFixture } from "./fixtures";
  * Each preset has its own requests (Lead asked for a suspension, Support for a
  * lift, the admin for a new operator), so "your requests" differs by role.
  *
- * A write is remembered for this page load only (`memory` below): a request
- * sent for approval shows up in the inbox, an approve takes it off the list,
- * a suspension changes the penalty and lands in Activity with the reason that
- * was picked. Without that the demo would contradict its own result cards.
- * A reload starts the stage set over. It is still not a mock backend: nothing
- * is validated, nothing persists.
+ * A write is remembered for the browser tab's demo session (`memory` below,
+ * kept in sessionStorage next to the demo clock): a request sent for approval
+ * shows up in the inbox, an approve takes it off the list, a suspension or a
+ * pay-back changes the penalty and lands in Activity with the reason that was
+ * picked. Without that the demo would contradict its own result cards, and a
+ * reload would undo what the viewer just did. It lives exactly as long as the
+ * demo clock: a new tab, or a session past six hours, starts the stage set
+ * over. It is still not a mock backend: nothing is validated, and nothing
+ * leaves the tab.
  *
  * Provider ids are the explorer fixtures' own, so `/catalogue/providers`
  * names them.
@@ -58,10 +61,23 @@ const DAY = 24 * HOUR;
   time on Home, Arbiter and the penalty page, and after a reload — not 03:39
   on one page and 03:43 on the next. A session older than six hours starts
   over, so the deadlines stay plausible.
+
+  Every time below is relative to this one base, and every deadline still
+  running (a request waiting for approval, a cancel waiting for its
+  signature, a dispute window) ends at least SESSION_SAFE_MINUTES after it:
+  countdowns tick with the real clock, but nothing lapses or expires while a
+  session lasts. `operator-fixes.test.ts` holds the fixtures to that.
 */
 const NOW_KEY = "demo-operator-now";
 const NOW_MAX_AGE_MS = 6 * 3_600_000;
+/** The earliest a running deadline may end, in minutes after the session base: the session's six hours plus slack. */
+export const SESSION_SAFE_MINUTES = 7 * 60;
 const NOW = demoNow(Date.now());
+
+/** The session base, for tests that check the fixtures against it. */
+export function demoSessionBase(): number {
+  return NOW;
+}
 
 function demoNow(real: number): number {
   const rounded = Math.floor(real / 60_000) * 60_000;
@@ -210,14 +226,23 @@ interface Suspension {
   at: string;
 }
 
+interface Lift {
+  by: string;
+  approvedBy: string;
+  at: string;
+  note: string;
+}
+
 const memory = {
   /** Approvals decided here, by id: the row as it now reads. */
   decided: new Map<string, OperatorApproval>(),
   /** Requests sent for approval here, newest first. */
   added: [] as OperatorApproval[],
   suspended: new Map<string, Suspension>(),
+  /** Executed penalties paid back by an approved pay-back here: case id → who asked and when. */
+  compensated: new Map<string, { by: string; at: string }>(),
   /** Blocks lifted by an approval here: block id → who and when. */
-  lifted: new Map<string, { by: string; approvedBy: string; at: string; note: string }>(),
+  lifted: new Map<string, Lift>(),
   /** Blocks created here, newest first. */
   blocks: [] as AccountBlock[],
   removed: new Set<string>(),
@@ -225,20 +250,94 @@ const memory = {
   seq: 0,
 };
 
+/*
+  The memory, kept in sessionStorage under the session base it belongs to:
+  a reload keeps what was done, and a new demo clock (a new tab, or a session
+  past six hours) starts with a clean stage set, because the stored base no
+  longer matches.
+*/
+const MEMORY_KEY = "demo-operator-memory";
+
+interface StoredMemory {
+  base: number;
+  decided: [string, OperatorApproval][];
+  added: OperatorApproval[];
+  suspended: [string, Suspension][];
+  compensated: [string, { by: string; at: string }][];
+  lifted: [string, Lift][];
+  blocks: AccountBlock[];
+  removed: string[];
+  log: OverrideLogEntry[];
+  seq: number;
+}
+
+function loadMemory(): void {
+  try {
+    const raw = window.sessionStorage.getItem(MEMORY_KEY);
+    if (!raw) return;
+    const stored = JSON.parse(raw) as StoredMemory;
+    if (stored.base !== NOW) {
+      window.sessionStorage.removeItem(MEMORY_KEY);
+      return;
+    }
+    memory.decided = new Map(stored.decided);
+    memory.added = stored.added;
+    memory.suspended = new Map(stored.suspended);
+    memory.compensated = new Map(stored.compensated);
+    memory.lifted = new Map(stored.lifted);
+    memory.blocks = stored.blocks;
+    memory.removed = new Set(stored.removed);
+    memory.log = stored.log;
+    memory.seq = stored.seq;
+  } catch {
+    /* no window, no storage or a damaged entry: this load starts clean */
+  }
+}
+
+/** Called after every write, so the next load (or a reload) reads what was done. */
+function saveMemory(): void {
+  const stored: StoredMemory = {
+    base: NOW,
+    decided: [...memory.decided],
+    added: memory.added,
+    suspended: [...memory.suspended],
+    compensated: [...memory.compensated],
+    lifted: [...memory.lifted],
+    blocks: memory.blocks,
+    removed: [...memory.removed],
+    log: memory.log,
+    seq: memory.seq,
+  };
+  try {
+    window.sessionStorage.setItem(MEMORY_KEY, JSON.stringify(stored));
+  } catch {
+    /* no window or no storage (build, tests, private mode): remembered for this load only */
+  }
+}
+
+loadMemory();
+
 function nextId(prefix: string): string {
   memory.seq += 1;
   return `${prefix}-demo-${memory.seq}`;
 }
 
 function caseNow(c: DemoCase): DemoCase {
+  // Paid back by an approved pay-back: executed on chain, then compensated (the list's "Closed · paid back").
+  if (memory.compensated.has(c.id)) return { ...c, status: "REVERSED" };
   if (!memory.suspended.has(c.id)) return c;
   // Suspending closes the case; a record standing on chain gets its cancel requested.
   const standing = c.chainStatus === "PENDING" || c.chainStatus === "DISPUTED";
   return { ...c, status: "OVERTURNED", chainStatus: standing ? "CANCEL_REQUESTED" : c.chainStatus, outcome: "OVERTURNED_PLATFORM_DEFECT" };
 }
 
+/** Every request as it reads now: decided here, or lapsed — a pending one past its deadline is EXPIRED, as the API answers. */
 function approvalsNow(): OperatorApproval[] {
-  return [...memory.added, ...APPROVALS].map((a) => memory.decided.get(a.id) ?? a);
+  const now = Date.now();
+  return [...memory.added, ...APPROVALS].map((a) => {
+    const row = memory.decided.get(a.id) ?? a;
+    return row.status === "PENDING" && Date.parse(row.expiresAt) <= now ? { ...row, status: "EXPIRED" as const, decidedAt: row.expiresAt } : row;
+  });
 }
 
 function blocksNow(): AccountBlock[] {
@@ -274,6 +373,7 @@ function queue(action: string, code: string, target: string, payload: Record<str
     expiresAt: new Date(Date.now() + 24 * 3_600_000).toISOString(),
   };
   memory.added.unshift(approval);
+  saveMemory();
   return { approvalId: approval.id, status: "PENDING" as const, action, expiresAt: approval.expiresAt };
 }
 
@@ -288,6 +388,7 @@ function remember(entry: Omit<OverrideLogEntry, "createdAt" | "family" | "organi
     approvalMode: entry.approvalMode ?? (entry.approverSubject ? "TWO_PERSON" : "SINGLE"),
     ...entry,
   });
+  saveMemory();
 }
 
 function suspend(caseId: string, reasonCode: string, note: string, by: string, approver: string | null): void {
@@ -323,7 +424,12 @@ function approve(id: string) {
     remember({ id: nextId("log"), code: "A-10", label: "Lift account block", action: "account.unblock", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "account_block", targetId: blockId, reasonCode, reason: note, ticketRef: null });
   } else if (approval.action === "slash.suspend") {
     suspend(String(approval.payload.proposalId ?? ""), reasonCode, note, approval.requestedBy, self.subject);
+  } else if (approval.action === "slash.compensated") {
+    const caseId = String(approval.payload.proposalId ?? "");
+    memory.compensated.set(caseId, { by: approval.requestedBy, at: nowIso() });
+    remember({ id: nextId("log"), code: "S-5", label: "Compensate executed slash", action: "slash.compensated", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "slash_proposal", targetId: caseId, reasonCode, reason: note, ticketRef: null });
   }
+  saveMemory();
   return { approval: decided, result };
 }
 
@@ -506,6 +612,7 @@ const CASE_BY_ID = new Map(CASES.map((c) => [c.id, c]));
 function caseBrief(original: DemoCase): OperatorCaseBrief {
   const c = caseNow(original);
   const suspended = memory.suspended.get(c.id);
+  const paidBack = memory.compensated.get(c.id);
   const proposedAt = minutesAgo(c.proposedMinutesAgo);
   const executableAt = inMinutes(c.executableIn);
   const disputedAt = c.disputedMinutesAgo === null ? null : minutesAgo(c.disputedMinutesAgo);
@@ -543,7 +650,9 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
         disputeId: null,
         outcome: c.outcome ?? null,
         resolutionKind: c.expired ? "AUTO_CHAIN_VOIDED" : null,
-        resolvedAt: executed
+        resolvedAt: paidBack
+          ? paidBack.at
+          : executed
           ? minutesAgo(c.executedMinutesAgo ?? 0)
           : suspended
             ? suspended.at
@@ -596,8 +705,11 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
       ...(suspended
         ? [{ id: `${c.id}-s`, occurredAt: suspended.at, kind: "SUSPENDED", actorType: "operator" as const, actorId: suspended.by, summary: `Suspended: ${suspended.note}`, detail: {} }]
         : []),
-      ...(executed
-        ? [{ id: `${c.id}-4`, occurredAt: minutesAgo(c.executedMinutesAgo ?? 0), kind: "EXECUTED", actorType: "system" as const, actorId: null, summary: "Executed on chain", detail: {} }]
+      ...(c.executedMinutesAgo !== undefined
+        ? [{ id: `${c.id}-4`, occurredAt: minutesAgo(c.executedMinutesAgo), kind: "EXECUTED", actorType: "system" as const, actorId: null, summary: "Executed on chain", detail: {} }]
+        : []),
+      ...(paidBack
+        ? [{ id: `${c.id}-5`, occurredAt: paidBack.at, kind: "COMPENSATED", actorType: "operator" as const, actorId: paidBack.by, summary: `Paid back into the provider's stake · $${c.penalty}`, detail: {} }]
         : []),
     ],
     restoration: [
@@ -826,9 +938,10 @@ const APPROVALS: OperatorApproval[] = [
     requestedById: "op-jordan",
     approvedBy: null,
     rejectedBy: null,
-    createdAt: minutesAgo(20 * HOUR),
+    // Asked 16 h ago: 8 h left, so it outlives the demo session (SESSION_SAFE_MINUTES).
+    createdAt: minutesAgo(16 * HOUR),
     decidedAt: null,
-    expiresAt: inMinutes(4 * HOUR),
+    expiresAt: inMinutes(8 * HOUR),
   },
   {
     id: "apr-add-1",
@@ -1108,6 +1221,7 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
       const approval = approvalsNow().find((a) => a.id === lastSegment(path, 1)) ?? APPROVALS[0];
       const decided: OperatorApproval = { ...approval, status: "REJECTED", rejectedBy: me().subject, decidedAt: nowIso() };
       memory.decided.set(approval.id, decided);
+      saveMemory();
       return { approval: decided };
     },
   },
