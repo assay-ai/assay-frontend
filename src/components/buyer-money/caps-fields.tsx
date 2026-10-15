@@ -29,8 +29,11 @@ export function CapsFields({
   idPrefix,
   label = "Caps",
   unit = "USD",
+  who,
 }: {
   unit?: string;
+  /** Who the per-24-hours number limits, for the sentence under the choice. */
+  who?: string;
   value: CapsValue;
   onChange: (next: CapsValue) => void;
   parsed: ParsedCaps;
@@ -40,7 +43,7 @@ export function CapsFields({
   const derived = presetFor(value.perCall, value.perDay);
   const [customOpen, setCustomOpen] = React.useState(derived === "custom" && value.perCall !== "");
   const choice: CapsChoice | "" = customOpen ? "custom" : value.perCall === "" && value.perDay === "" ? "" : derived;
-  const sentence = capsSentence(value.perCall, value.perDay);
+  const sentence = capsSentence(value.perCall, value.perDay, who);
 
   return (
     <div className="flex flex-col gap-3">

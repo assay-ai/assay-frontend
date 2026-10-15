@@ -4,8 +4,8 @@ import type { Money } from "@/interfaces";
 import { formatDecimal, parseAmountInput, toDecimal } from "@/utils/money";
 
 /**
- * Safety caps: the two on-chain ceilings a buyer signs for their escrow (and
- * the same two numbers an agent's pay permission is given). Presets so a new
+ * The account ceiling: the two on-chain limits a buyer signs for their whole
+ * escrow (and the same two numbers an agent's own spending limit is given). Presets so a new
  * buyer never has to invent numbers; Custom for anyone who wants to.
  */
 export interface CapsPreset {
@@ -24,7 +24,7 @@ export type CapsChoice = CapsPreset["id"] | "custom";
 
 /** "$0.50 a call · $5 a day", the chip's second line. */
 export function presetDescription(preset: Pick<CapsPreset, "perCall" | "perDay">): string {
-  return `${short(preset.perCall)} a call · ${short(preset.perDay)} a day`;
+  return `${short(preset.perCall)} a call · ${short(preset.perDay)} per 24 h`;
 }
 
 /** The preset these two numbers are, or "custom". Numeric: "1.00" is "1". */
@@ -36,11 +36,11 @@ export function presetFor(perCall: string, perDay: string): CapsChoice {
 }
 
 /** The plain sentence under the choice: what the caps mean for a call. */
-export function capsSentence(perCall: string, perDay: string): string | null {
+export function capsSentence(perCall: string, perDay: string, who = "your agents together"): string | null {
   const call = safeDecimal(perCall);
   const day = safeDecimal(perDay);
   if (!call || !day) return null;
-  return `Any one call can cost at most ${formatDecimal(call)}, and your agents can spend at most ${formatDecimal(day)} in any 24 hours.`;
+  return `Any one call can cost at most ${formatDecimal(call)}, and ${who} can spend at most ${formatDecimal(day)} in any 24 hours.`;
 }
 
 export interface ParsedCaps {

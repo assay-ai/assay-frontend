@@ -54,8 +54,16 @@ export function WithdrawSheet({
   const escrow = money.escrow;
   const balance = escrow?.balance ?? null;
   const standing = positive(escrow?.withdrawRequested?.amount) ? escrow!.withdrawRequested : null;
-  const all = balance ? toDecimal(balance).toString() : null;
-  const parsed = parseAmountInput(amount, { decimals: money.decimals, max: all ?? undefined });
+  // What can be withdrawn NOW: the balance minus what calls being checked hold
+  // — the same figure as the Funding hero. Held money is not withdrawable yet.
+  const available = escrow?.spendable ?? null;
+  const held = escrow?.openHolds && positive(escrow.openHolds.amount) ? escrow.openHolds : null;
+  const all = available && toDecimal(available).gt(0) ? toDecimal(available).toString() : null;
+  const raw = parseAmountInput(amount, { decimals: money.decimals });
+  const overMax = Boolean(raw.value && available && raw.value.gt(toDecimal(available)));
+  const parsed = overMax
+    ? { ...raw, value: null, atomic: null, error: `You can withdraw at most ${formatLimit(available)} now.` }
+    : raw;
   const cancelling = mode === "cancel";
   const walletBlocker = useWalletBlocker(money.signerState, money.ownerShort);
 
@@ -67,6 +75,8 @@ export function WithdrawSheet({
         ? walletBlocker
         : !balance || toDecimal(balance).lte(0)
           ? "Your escrow is empty."
+          : !all
+            ? "Everything in your escrow is held by calls being checked. Try again in a few minutes."
           : !parsed.value
             ? amount.trim() === ""
               ? "Pick or enter an amount."
@@ -147,13 +157,18 @@ export function WithdrawSheet({
             <span className="text-label-sm text-01">Amount</span>
             <PresetChips
               label="Withdrawal amount"
-              presets={all ? [{ value: all, label: "Use all", description: formatLimit(balance) }] : []}
+              presets={all ? [{ value: all, label: "Use all", description: formatLimit(available) }] : []}
               value={amount}
               onChange={setAmount}
               error={amount.trim() !== "" ? parsed.error : null}
-              hint={balance ? `In your escrow: ${formatLimit(balance)}` : undefined}
+              hint={available ? `Available to withdraw now: ${formatLimit(available)}` : undefined}
             />
           </div>
+          {held ? (
+            <p className="text-body-13 text-02" data-testid="withdraw-held-note">
+              {formatLimit(held)} is held by calls being checked; it comes back or goes to providers within minutes.
+            </p>
+          ) : null}
           {standing ? (
             <p className="rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700">
               You already asked for {formatLimit(standing)}. A new request replaces it (it does not add to it) and starts the
@@ -161,7 +176,7 @@ export function WithdrawSheet({
             </p>
           ) : null}
           <p className="text-body-xs text-03">
-            Calls already made still settle first, so you receive at most the amount you ask for.
+            Calls already made settle first, so you receive at most the amount you ask for.
           </p>
         </>
       )}
