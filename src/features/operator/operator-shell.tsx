@@ -207,7 +207,8 @@ export function OperatorTopBar({ identity, pathname, needsYou, expiresAt, onSign
             href={item.href}
             aria-current={item.id === active ? "page" : undefined}
             className={cn(
-              "inline-flex items-center rounded-md px-[11px] py-[7px] text-label-13 transition-colors",
+              // 40px tall on a tablet or any touch screen; a desktop with a mouse keeps the compact 34px. The bar stays 56px.
+              "touch-target inline-flex items-center rounded-md px-[11px] py-[7px] text-label-13 transition-colors max-lg:min-h-10",
               "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500",
               item.id === active ? "bg-03 text-01" : "text-02 hover:bg-03",
             )}
