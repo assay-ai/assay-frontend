@@ -103,6 +103,12 @@ export interface ClosedStage {
    * `DISPUTED` or `CANCEL_REQUESTED`): its cancellation has not landed yet.
    */
   readonly recordStanding: boolean;
+  /**
+   * Review R2-3: an `executed` case whose other on-chain records were
+   * cancelled or expired in the provider's favour (`chainState`
+   * `PARTIALLY_EXECUTED`): how many, of how many. `null` otherwise.
+   */
+  readonly partly: { readonly cancelledRecords: number; readonly records: number } | null;
 }
 
 export type CaseStage = CaseChainStage | ClosedStage;
@@ -142,12 +148,22 @@ export function caseStageOf(proposal: SlashProposalSummary): CaseStage {
             : chain === "CANCELLED"
               ? "released"
               : "cancelled";
+  const partly =
+    outcome === "executed" && clocks.chainState === "PARTIALLY_EXECUTED"
+      ? { cancelledRecords: clocks.cancelledRecords ?? 0, records: clocks.chainRecords ?? 0 }
+      : null;
   return {
     kind: "closed",
     outcome,
     executedAt: proposal.executedAt,
     recordStanding: chain !== undefined && STANDING_CHAIN_STATUSES.includes(chain),
+    partly,
   };
+}
+
+/** The closed headline, with an execution in part said as such (review R2-3). */
+export function closedHeadlineOf(stage: ClosedStage): string {
+  return stage.partly ? "Executed in part" : CLOSED_HEADLINE[stage.outcome];
 }
 
 /**
@@ -195,6 +211,14 @@ export function closedSentence(stage: ClosedStage, when: (iso: string) => string
       "This case is closed. Its on-chain record was cancelled or expired, the reserved stake is released, and nothing is taken.",
     cancelled: "This case is closed without a penalty. Nothing is taken from your stake.",
   };
+  if (stage.partly) {
+    const { cancelledRecords, records } = stage.partly;
+    const counted =
+      cancelledRecords > 0 && records > 0
+        ? ` ${cancelledRecords} of its ${records} on-chain records ${cancelledRecords === 1 ? "was" : "were"} cancelled or expired in your favour, and nothing was taken for ${cancelledRecords === 1 ? "it" : "them"}.`
+        : " Some of its on-chain records were cancelled or expired in your favour, and nothing was taken for them.";
+    base.executed = `This case is closed. The penalty was executed on chain in part${executedOn} and that part taken from your stake.${counted}`;
+  }
   const standing = stage.recordStanding
     ? " Its on-chain record still stands until its cancellation lands; the penalties on chain page shows it."
     : "";

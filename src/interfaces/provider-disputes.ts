@@ -154,8 +154,12 @@ export type OnChainDisputeState =
   | "CANCELLED"
   | "EXECUTED"
   | "EXPIRED"
-  /** Never disputed nor executed, then expired: nobody ruled for the provider, nothing taken. */
-  | "LAPSED";
+  /** Never executed, then expired: nobody ruled for the provider in the end, nothing taken. */
+  | "LAPSED"
+  /** Review R2-3: some records executed, the others were cancelled or expired (nothing taken for them). */
+  | "PARTIALLY_EXECUTED"
+  /** Review R2-8: cancelled or expired for a reason never recorded; nothing taken. */
+  | "RELEASED";
 
 /**
  * Both sides' clocks, together — `SlashProposalClocksDto`. the case timeline's subtitle
@@ -222,6 +226,10 @@ export interface SlashProposalClocks {
    * say. Null when no record can be disputed.
    */
   disputeBy?: string | null;
+  /** Review R2-3: how many on-chain records (current parts) the case has. `undefined` on older backends. */
+  chainRecords?: number;
+  /** Of those, how many were cancelled or expired on chain with nothing taken. */
+  cancelledRecords?: number;
   secondsRemaining: number | null;
   runningClock: SlashProposalRunningClock;
 }

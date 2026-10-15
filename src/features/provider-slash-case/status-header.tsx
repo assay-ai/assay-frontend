@@ -8,7 +8,7 @@ import { caseChainStatusLabel } from "@/libs/chains/status-labels";
 import { formatMoney } from "@/utils/money";
 
 import {
-  CLOSED_HEADLINE,
+  closedHeadlineOf,
   TERMINAL_CASE_STATUSES,
   caseStageOf,
   disputeDeadlineOf,
@@ -134,7 +134,7 @@ export function waitingFigure(data: SlashProposalCaseDetail, stage: CaseStage): 
     return {
       label: "Case",
       value: "Closed",
-      caption: `${CLOSED_HEADLINE[stage.outcome].toLowerCase()}; no deadline runs and there is nothing for you to do`,
+      caption: `${closedHeadlineOf(stage).toLowerCase()}; no deadline runs and there is nothing for you to do`,
     };
   }
   if (stage.kind === "disputed") {
@@ -224,7 +224,9 @@ export function executesFigure(stage: CaseStage): FigureCopy {
         caption:
           stage.outcome === "compensated"
             ? "taken from stake, then deposited back by Assay"
-            : "taken from stake; nothing more will be",
+            : stage.partly
+              ? "taken from stake in part; the cancelled records took nothing, and nothing more will be"
+              : "taken from stake; nothing more will be",
       };
     }
     return { label: "Execution", value: "None", caption: "nothing will be taken from your stake" };

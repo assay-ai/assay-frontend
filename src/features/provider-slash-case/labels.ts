@@ -144,6 +144,8 @@ const EVENT_LABEL: Record<string, string> = {
   CHAIN_UPHELD: "Upheld on chain by the arbiter",
   CHAIN_CANCELLED: "Reservation released",
   CHAIN_VOIDED: "Reservation released",
+  CHAIN_PART_READOPTED: "Late record adopted",
+  CHAIN_SUPERSEDED_RECORD: "Earlier record landed late — the arbiter is asked to cancel it",
   EXECUTED: "Penalty taken",
   EXECUTED_AFTER_CLOSURE: "Penalty taken after closure",
   REVERSED: "Stake restored",
