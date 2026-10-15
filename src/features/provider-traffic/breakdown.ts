@@ -129,3 +129,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export function looksLikeUuid(value: string): boolean {
   return UUID_RE.test(value.trim());
 }
+
+/** "Agent a1b2" — a buyer's agent as a provider sees it: no name is shared, so a short tag of its id. */
+export function agentLabel(id: string): string {
+  return `Agent ${id.replace(/[^0-9a-z]/gi, "").slice(0, 4).toLowerCase()}`;
+}

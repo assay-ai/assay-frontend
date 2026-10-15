@@ -5,7 +5,7 @@ import * as React from "react";
 
 import { cn } from "@/utils";
 
-import { shortAgentId } from "./breakdown";
+import { agentLabel } from "./breakdown";
 
 /**
  * `payment_intents.agent_id` is an opaque UUID with no short-ref form on the
@@ -40,7 +40,7 @@ export function AgentIdCell({ agentId, className }: { agentId: string; className
 
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-1.5", className)} title={agentId}>
-      <span className="truncate font-mono">{shortAgentId(agentId)}…</span>
+      <span className="truncate">{agentLabel(agentId)}</span>
       <button
         type="button"
         onClick={handleCopy}
