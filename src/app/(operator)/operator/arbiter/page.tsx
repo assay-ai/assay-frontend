@@ -48,6 +48,7 @@ import { ApprovedArbiterBlocks } from "@/features/operator/approved-arbiter-bloc
 import { BLOCK_NOTE_MAX } from "@/features/operator/blocks";
 import { ContractCallPanel } from "@/features/operator/contract-call-panel";
 import { QueuedNotice } from "@/features/operator/queued-notice";
+import { SupersededRecords } from "@/features/operator/superseded-records";
 import { queuedMessage } from "@/features/operator/two-person";
 import { useOperatorSession } from "@/features/operator/session-context";
 import type {
@@ -372,6 +373,22 @@ export default function ArbiterPage() {
               </ul>
             </>
           )}
+        </PanelBody>
+      </Panel>
+
+      {/* ── Superseded earlier-epoch records (review R2-6) ──────────────── */}
+      <Panel className="w-full">
+        <PanelHeader>
+          <PanelTitles>
+            <PanelTitle>Superseded records</PanelTitle>
+            <PanelDescription>
+              an earlier proposal of a case landed on chain late · it would charge the same calls twice · the
+              arbiter cancels it (S-13) before it can be executed
+            </PanelDescription>
+          </PanelTitles>
+        </PanelHeader>
+        <PanelBody className="p-4 tablet:p-5">
+          <SupersededRecords canCancel={canRule} onSent={refreshAll} />
         </PanelBody>
       </Panel>
 
