@@ -33,7 +33,7 @@ describe("ruling sheet: what happens", () => {
 
 describe("one-line why-not", () => {
   it("drops the full stop so the Ask link can follow", () => {
-    expect(whyLine("Block an account needs Lead adjudicator or On-call (SRE).")).toBe("Block an account needs Lead adjudicator or On-call (SRE)");
+    expect(whyLine("Block an account needs Lead adjudicator or Support / on-call.")).toBe("Block an account needs Lead adjudicator or Support / on-call");
   });
 });
 

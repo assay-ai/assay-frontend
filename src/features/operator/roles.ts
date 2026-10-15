@@ -300,10 +300,9 @@ function sentence(text: string): string {
 
 /**
  * A role set in a few short sentences — "Blocks accounts. Suspends penalties
- * within its authority limit." — from the same role tables `checkAction` reads
+ * up to its limit (none at $0)." — from the same role tables `checkAction` reads
  * and the approver table. The limit is picked separately, so actions on money
- * say "within its authority limit" (at $0 that is none, as the Home banner
- * then says). Pure.
+ * say "up to its limit (none at $0)", as the Home banner then says. Pure.
  */
 export function roleDescription(roles: readonly OperatorRole[]): string {
   const allowed = BANNER_ACTIONS.filter((action) => holds(roles, ACTION_ROLES[action]));
@@ -312,7 +311,7 @@ export function roleDescription(roles: readonly OperatorRole[]): string {
   const approves = [...new Set(APPROVES.filter((row) => holds(roles, row.roles)).map((row) => APPROVAL_SHORT[row.code] ?? row.what))];
   const parts = [
     ...(plain.length > 0 ? [sentence(listPhrase(plain))] : []),
-    ...(money.length > 0 ? [sentence(`${listPhrase(money)} within its authority limit`)] : []),
+    ...(money.length > 0 ? [sentence(`${listPhrase(money)} up to its limit (none at $0)`)] : []),
     ...(approves.length > 0 ? [sentence(`approves ${listPhrase(approves)}`)] : []),
   ];
   return parts.length > 0 ? parts.join(" ") : "Reads every screen.";
@@ -330,7 +329,7 @@ export const ROLE_PRESETS: readonly RolePreset[] = Object.freeze(
     [
       { id: "lead", label: "Lead adjudicator", short: "Rules disputes, blocks accounts, approves lifts", roles: ["ADJL"] },
       { id: "adjudicator", label: "Adjudicator", short: "Suspends penalties, approves suspensions", roles: ["ADJ"] },
-      { id: "support", label: "Support / on-call", short: "Blocks accounts in an incident", roles: ["SRE", "SUP"] },
+      { id: "support", label: "Support / on-call", short: "Blocks accounts; suspends penalties within a limit", roles: ["SRE", "SUP"] },
       { id: "treasury", label: "Treasury", short: "Rules disputes, compensates providers", roles: ["TRE"] },
       { id: "admin", label: "Admin", short: "Adds and changes who is on the team", roles: ["OPS_ADMIN"] },
     ] as const
