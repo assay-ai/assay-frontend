@@ -186,7 +186,8 @@ describe("beneficiaryCheck", () => {
   it("passes when the backend's check passes, counting the failed calls", () => {
     const check = beneficiaryCheck(dispute(1, { beneficiaryEvidence: evidence }));
     expect(check).toMatchObject({ status: "ok", reason: null });
-    expect(check.headline).toMatch(/paid for 3 failed calls/);
+    expect(check.headline).toBe("Paid to an account that paid for 3 failed calls, and this penalty is within its share.");
+    expect(check.headline).not.toMatch(/payee|who gets paid/i);
     expect(beneficiaryCheck(dispute(1, { beneficiaryEvidence: { ...evidence, failedCalls: 1 } })).headline).toMatch(
       /1 failed call,/,
     );

@@ -732,10 +732,10 @@ function RulingSheet({
               <p className="flex items-start gap-2 text-body-13 text-02">
                 <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
                 <span>
-                  Upholding pays the payee (who gets paid) of {single ? "the penalty" : "each penalty"}.{" "}
+                  Upholding pays {single ? "the penalty" : "each penalty"} out.{" "}
                   {single
-                    ? `Assay could not confirm the payee paid for the failed calls${beneficiaryCheck(single).reason ? ` (${beneficiaryCheck(single).reason})` : ""}. Check it on the penalty before upholding.`
-                    : `For ${unchecked.length} of them (${unchecked.map((row) => providerName(row.providerId)).join(", ")}) Assay could not confirm the payee paid for the failed calls. Check them on their penalties, or leave them out of this batch.`}
+                    ? `Assay could not confirm that the account receiving it paid for the failed calls${beneficiaryCheck(single).reason ? ` (${beneficiaryCheck(single).reason})` : ""}. Check it on the penalty before upholding.`
+                    : `For ${unchecked.length} of them (${unchecked.map((row) => providerName(row.providerId)).join(", ")}) Assay could not confirm that the account receiving the money paid for the failed calls. Check them on their penalties, or leave them out of this batch.`}
                 </span>
               </p>
               <Checkbox
