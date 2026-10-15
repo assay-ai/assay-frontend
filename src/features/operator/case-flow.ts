@@ -143,24 +143,38 @@ export function caseTimelineSteps(
     { id: "proposed", label: "Proposed", state: "done", date: proposal.clocks.proposedAt },
   ];
 
+  /*
+    A step is never done in the future. A cancel waiting for the arbiter's
+    signature on an undisputed record leaves the window running: it ends at
+    the very instant the cancel must be signed by (after it anyone can
+    execute), so the window points at that deadline instead of repeating it,
+    and the signature step below carries the date and the countdown.
+  */
+  const executableMs = facts.executableAt ? Date.parse(facts.executableAt) : Number.NaN;
+  const windowRunsToSignDeadline =
+    stage === "cancel-requested" && !wasDisputed && !Number.isNaN(executableMs) && executableMs > now;
+
   // The window: open until the record is executable, unless a dispute froze it first.
-  steps.push({
-    id: "window",
-    label: windowLabel,
-    state:
-      stage === "window-open" ? "current" : stage === "not-on-chain" ? "upcoming" : "done",
-    date: wasDisputed ? facts.disputedAt : cutShort ? proposal.resolvedAt : facts.executableAt,
-    dateLabel:
-      stage === "not-on-chain"
-        ? "starts once it is on chain"
-        : wasDisputed
-          ? "provider disputed"
-          : cutShort
-            ? "ended early by the cancel"
-            : undefined,
-    countdown: stage === "window-open",
-    description: stage === "window-open" ? "The provider can dispute on chain until then." : undefined,
-  });
+  steps.push(
+    windowRunsToSignDeadline
+      ? { id: "window", label: windowLabel, state: "current", dateLabel: "open until the signing deadline" }
+      : {
+          id: "window",
+          label: windowLabel,
+          state: stage === "window-open" ? "current" : stage === "not-on-chain" ? "upcoming" : "done",
+          date: wasDisputed ? facts.disputedAt : cutShort ? proposal.resolvedAt : facts.executableAt,
+          dateLabel:
+            stage === "not-on-chain"
+              ? "starts once it is on chain"
+              : wasDisputed
+                ? "provider disputed"
+                : cutShort
+                  ? "ended early by the cancel"
+                  : undefined,
+          countdown: stage === "window-open",
+          description: stage === "window-open" ? "The provider can dispute on chain until then." : undefined,
+        },
+  );
 
   const day = facts.disputedAt ? Math.floor((now - Date.parse(facts.disputedAt)) / 86_400_000) : null;
   if (wasDisputed) {
@@ -436,10 +450,27 @@ export function requestNoun(action: string): string {
  * "waiting" step (a pay-back pending on an executed penalty), never an action
  * the operator could take themselves. Pure.
  */
-export function pendingRequestStep(request: PendingRequest, format: (iso: string) => string): CaseNextStep {
+export function pendingRequestStep(
+  request: PendingRequest,
+  format: (iso: string) => string,
+  now: number = Date.now(),
+): CaseNextStep {
   const words = REQUEST_WORDS[request.action] ?? { noun: "request", does: "act on this penalty" };
   const noun = requestNoun(request.action);
   const who = namesOr(request.approvers, "a second approver");
+  const end = Date.parse(request.expiresAt);
+  if (!Number.isNaN(end) && end <= now) {
+    // Past its deadline it waits for nobody: never "Lapses <a time already gone>".
+    return {
+      kind: "done",
+      title: `${noun} request expired`,
+      description: `${request.mine ? "You" : request.requestedBy} asked ${format(request.createdAt)} to ${words.does}. Nobody approved it in time, so nothing changed.`,
+      action: null,
+      secondary: null,
+      until: null,
+      meta: `Expired ${format(request.expiresAt)}.`,
+    };
+  }
   const meta = `Lapses ${format(request.expiresAt)} if nobody decides.`;
   if (request.canApprove) {
     return {
