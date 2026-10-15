@@ -47,14 +47,14 @@ function markup(): string {
   );
 }
 
-describe("LimitsView — an account with no policy yet", () => {
+describe("LimitsView (Budgets) — an account with no budget yet", () => {
   // BUG-J-BUY-01: the page said "the limits below are what a policy would set"
   // and drew nothing below — no form and no button, so a first policy could
   // not be written from the UI at all.
   it("offers to create the first policy, in the agent's own chain's asset", () => {
     const html = markup();
-    expect(html).toContain("No policy has been written yet");
-    expect(html).toContain("Create policy");
+    expect(html).toContain("No budget yet");
+    expect(html).toContain("Set a budget");
     expect(html).toContain("USDG on Robinhood Chain testnet");
     expect(html).not.toContain("USDC");
   });

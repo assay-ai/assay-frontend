@@ -1,0 +1,146 @@
+"use client";
+
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { CirclePause, CirclePlay } from "lucide-react";
+import * as React from "react";
+
+import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { ApiError } from "@/libs/ApiClient";
+import { plainError } from "@/libs/plain-language";
+import { updateSpendPolicy, type SpendPolicy } from "@/services/limits.service";
+import { cn } from "@/utils";
+import { toast } from "@/utils/toast";
+
+import { useSpendPolicyQuery } from "./use-agents";
+
+/**
+ * The kill switch: pause every paid call at once. On Budgets as a large
+ * switch, in the top bar as a button, and as a red banner across the app while
+ * it is on. Always confirmed, always reversible, free calls unaffected.
+ *
+ * Needs a budget to exist (the pause is a field of it). Without one, the
+ * control does not render rather than offering a switch that cannot work.
+ */
+export function usePauseAll() {
+  const queryClient = useQueryClient();
+  const policyQuery = useSpendPolicyQuery();
+  const policy = policyQuery.data ?? null;
+  const mutation = useMutation({
+    mutationFn: (paused: boolean) =>
+      updateSpendPolicy({ paused, changeReason: paused ? "Paused all paid calls" : "Resumed paid calls" }),
+    onSuccess: (next: SpendPolicy) => {
+      queryClient.setQueryData<SpendPolicy | null>(["spend-policy"], (previous) =>
+        next.usage === undefined && previous?.usage ? { ...next, usage: previous.usage } : next,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["spend-policy"] });
+      void queryClient.invalidateQueries({ queryKey: ["spend-policy-history"] });
+      toast.success(next.paused ? "All paid calls are paused. Free calls still work." : "Paid calls are running again.");
+    },
+  });
+  return { policy, paused: policy?.paused === true, available: policy !== null, mutation };
+}
+
+export function PauseAllConfirm({
+  open,
+  onOpenChange,
+  pausing,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  pausing: boolean;
+  onConfirm: () => Promise<unknown>;
+}) {
+  return (
+    <ConfirmSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      tone={pausing ? "danger" : "primary"}
+      title={pausing ? "Pause all paid calls?" : "Resume paid calls?"}
+      description={
+        pausing
+          ? "Every agent's paid calls are refused from now until you resume. Free calls keep working, and nothing already charged changes."
+          : "Your agents can pay for calls again, within their caps and budgets."
+      }
+      changes={[{ label: "Paid calls", before: pausing ? "Running" : "Paused", after: pausing ? "Paused" : "Running" }]}
+      confirmLabel={pausing ? "Pause all paid calls" : "Resume paid calls"}
+      onConfirm={onConfirm}
+      describeError={(error) => (error instanceof ApiError ? plainError(error.code) : "That did not go through. Try again.")}
+    />
+  );
+}
+
+/** The large switch at the top of Budgets. */
+export function PauseAllCard({ className }: { className?: string }) {
+  const { paused, available, mutation } = usePauseAll();
+  const [confirming, setConfirming] = React.useState(false);
+  if (!available) return null;
+  return (
+    <section
+      aria-label="Pause all paid calls"
+      className={cn(
+        "flex w-full flex-wrap items-center gap-3 rounded-xl border p-4 tablet:p-5",
+        paused ? "border-danger-20 bg-danger-10" : "border-01 bg-01",
+        className,
+      )}
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className={cn("text-label-md", paused ? "text-danger-700" : "text-01")}>
+          {paused ? "All paid calls are paused" : "Pause all paid calls"}
+        </span>
+        <span className={cn("text-body-13", paused ? "text-danger-700" : "text-02")}>
+          {paused ? "Your agents cannot pay until you resume. Free calls still work." : "An emergency stop for every agent. Free calls keep working."}
+        </span>
+      </div>
+      <Switch
+        checked={paused}
+        label={paused ? "Paused" : "Running"}
+        onChange={() => setConfirming(true)}
+        disabled={mutation.isPending}
+      />
+      <PauseAllConfirm open={confirming} onOpenChange={setConfirming} pausing={!paused} onConfirm={() => mutation.mutateAsync(!paused)} />
+    </section>
+  );
+}
+
+/** The top-bar button, so the stop is one click from every screen. */
+export function PauseAllButton({ className }: { className?: string }) {
+  const { paused, available, mutation } = usePauseAll();
+  const [confirming, setConfirming] = React.useState(false);
+  if (!available) return null;
+  return (
+    <>
+      <Button
+        type="button"
+        size="sm"
+        variant={paused ? "danger" : "ghost"}
+        icon={paused ? <CirclePlay /> : <CirclePause />}
+        className={className}
+        onClick={() => setConfirming(true)}
+        aria-label={paused ? "Paid calls are paused. Resume them" : "Pause all paid calls"}
+      >
+        <span className={paused ? undefined : "hidden lg:inline"}>{paused ? "Paused · Resume" : "Pause all"}</span>
+      </Button>
+      <PauseAllConfirm open={confirming} onOpenChange={setConfirming} pausing={!paused} onConfirm={() => mutation.mutateAsync(!paused)} />
+    </>
+  );
+}
+
+/** Shell-wide banner while paid calls are paused. */
+export function PausedBanner() {
+  const { paused, mutation } = usePauseAll();
+  const [confirming, setConfirming] = React.useState(false);
+  if (!paused) return null;
+  return (
+    <div role="status" className="flex w-full flex-wrap items-center gap-3 border-b border-danger-20 bg-danger-10 px-4 py-2.5 md:px-6">
+      <CirclePause aria-hidden="true" className="size-4 shrink-0 text-danger-600" />
+      <p className="min-w-0 flex-1 text-body-13 text-danger-700">All paid calls are paused. Free calls still work.</p>
+      <Button size="sm" variant="secondary" type="button" onClick={() => setConfirming(true)}>
+        Resume
+      </Button>
+      <PauseAllConfirm open={confirming} onOpenChange={setConfirming} pausing={false} onConfirm={() => mutation.mutateAsync(false)} />
+    </div>
+  );
+}

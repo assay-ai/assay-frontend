@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Toaster } from "sonner";
 
+import { PauseAllButton, PausedBanner } from "@/components/buyer-money/pause-all";
 import { AlertFill, CheckCircle } from "@/components/icons";
 import { BottomTabBar } from "@/components/layout/bottom-tab-bar";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
@@ -36,11 +37,6 @@ const TITLES: Record<string, string> = {
   "/spend/calls": "Calls",
   "/guarantee": "Not charged",
   "/funding": "Funding",
-  "/funding/deposit": "Deposit",
-  "/funding/auto-top-up": "Auto top-up",
-  "/funding/withdraw": "Withdraw",
-  "/funding/escrow": "Escrow",
-  "/funding/escrow/limits": "On-chain limits",
   "/limits": "Budgets",
   "/alerts": "Alerts",
   "/approvals": "Approvals",
@@ -91,7 +87,12 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
           alertCount={alertCount}
           onAlertsClick={openAlerts}
           avatar={<WalletMenu />}
-          actions={<ThemeToggle />}
+          actions={
+            <div className="flex items-center gap-1.5">
+              <PauseAllButton />
+              <ThemeToggle />
+            </div>
+          }
         />
       </div>
 
@@ -107,6 +108,8 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
 
       {/* pb-24 keeps the last row clear of the fixed tab bar at mobile widths. */}
       <main className="flex w-full flex-1 flex-col pb-24 md:pb-0">
+        {/* The kill switch's state, on every screen while paid calls are paused. */}
+        <PausedBanner />
         {/* The section's own tabs (Activity, Money, Controls), from nav-config. */}
         <BuyerSectionTabs section={sectionFor(pathname)} />
         {/* Shell level, above every buyer screen: see `features/account-block`. */}
