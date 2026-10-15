@@ -18,6 +18,7 @@ import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { CopyChip, shortId } from "@/components/patterns/copy-chip";
+import { useHandoff } from "@/components/patterns/handoff-record";
 import { LocalTime } from "@/components/patterns/local-time";
 import { PageState } from "@/components/patterns/page-state";
 import { ReasonChips } from "@/components/patterns/reason-chips";
@@ -55,6 +56,7 @@ import {
   validateRulingForm,
 } from "@/features/operator/arbiter";
 import { ApprovedArbiterBlocks } from "@/features/operator/approved-arbiter-blocks";
+import { callSummary } from "@/features/operator/call-summary";
 import { BLOCK_NOTE_MAX, mayBlock } from "@/features/operator/blocks";
 import { disputeUrgency, sortDisputesByDaysLeft } from "@/features/operator/inbox";
 import { splitSharesText } from "@/features/operator/penalty-money";
@@ -73,11 +75,12 @@ import type { Money } from "@/interfaces/api";
 import type { ArbiterDispute, ArbiterRuling, ArbiterTerms, ChainStateHealth } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { sameEvmAddress } from "@/libs/chains/evm/contract-call";
-import { assertContractCall, type ExpectedCall } from "@/libs/chains/evm/signing-guard";
+import { assertContractCall, formatCallArg, type DecodedCall, type ExpectedCall } from "@/libs/chains/evm/signing-guard";
 import { ROBINHOOD_TESTNET_STAKE, explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { routes } from "@/libs/routes";
 import { createArbiterRulingIntent, getArbiterTerms, getPlatformHealth, listArbiterDisputes } from "@/services/operator.service";
 import { cn } from "@/utils";
+import { formatClock } from "@/libs/local-time";
 import { formatMoney } from "@/utils/money";
 
 import { Deadline } from "@/features/operator/deadline";
@@ -237,7 +240,6 @@ function ArbiterScreen() {
         />
       ) : null}
 
-
       {disputes.isLoading ? (
         <PageState kind="loading" rows={3} label="Loading disputes" />
       ) : disputes.isError ? (
@@ -270,30 +272,10 @@ function ArbiterScreen() {
         </ul>
       )}
 
-      {/* Records of an earlier proposal that landed on chain late (review R2-6): executing one would charge the same calls twice. */}
-      <section aria-labelledby="superseded-records" className="flex w-full flex-col gap-2">
-        <h2 id="superseded-records" className="text-label-13 text-02">
-          Superseded records
-        </h2>
-        <p className="text-body-xs text-03">
-          An earlier proposal of a case that landed on chain late. It covers the same calls as the case&rsquo;s current
-          penalty, so the arbiter cancels it before anyone can execute it.
-        </p>
-        <SupersededRecords canCancel={canRule} onSent={refresh} />
-      </section>
-
-      {/* Approved on-chain blocks (A-11) the arbiter's wallet may still have to sign (frontend review N5). */}
-      {canBlock ? (
-        <section aria-labelledby="approved-blocks" className="flex w-full flex-col gap-2">
-          <h2 id="approved-blocks" className="text-label-13 text-02">
-            Approved on-chain blocks
-          </h2>
-          <p className="text-body-xs text-03">
-            Approved in the inbox by a second operator. The arbiter&rsquo;s wallet signs each one here.
-          </p>
-          <ApprovedArbiterBlocks onSent={refresh} />
-        </section>
-      ) : null}
+      {/* Records of an earlier proposal that landed on chain late (review R2-6), and approved
+          on-chain blocks (A-11) still to sign (review N5). Each section shows only when it has rows. */}
+      <SupersededRecords canCancel={canRule} providerName={providers.name} onSent={refresh} />
+      {canBlock ? <ApprovedArbiterBlocks onSent={refresh} /> : null}
 
       {/* The selection's actions: a bar fixed to the bottom of the screen (above
           the phone's tab bar), out of the flow, so selecting never moves a row.
@@ -349,7 +331,6 @@ function ArbiterScreen() {
           }}
         />
       ) : null}
-
     </>
   );
 }
@@ -515,6 +496,8 @@ function DisputeRow({
   const evidence = row.beneficiaryEvidence;
   const paid = evidence ? disputeAmount(row.chainId, evidence.paidAmount) : null;
   const checkboxId = `select-${row.requestId}`;
+  // What this browser did with a ruling on it: a downloaded Safe file, or a sent transaction.
+  const handed = useHandoff([row.requestId]);
 
   return (
     <li
@@ -568,6 +551,13 @@ function DisputeRow({
               </span>
               <PayeeChip row={row} />
             </p>
+            {handed ? (
+              <p role="status" className="text-body-xs text-02">
+                {handed.kind === "file"
+                  ? `Ruling file downloaded here at ${formatClock(handed.at)} · waiting for the arbiter's signature`
+                  : `Ruling sent at ${formatClock(handed.at)} · waiting for the chain watcher`}
+              </p>
+            ) : null}
           </div>
         </div>
         <div className={cn("flex shrink-0 items-center gap-2", !canRule && "absolute right-3 top-2.5 tablet:static")}>
@@ -662,6 +652,8 @@ function RulingSheet({
   });
   const arbiter = terms.data?.arbiter ?? null;
   const [signing, setSigning] = React.useState(false);
+  // The call as decoded from the calldata once it is built: what the summary and details then show.
+  const [built, setBuilt] = React.useState<{ key: string; decoded: DecodedCall } | null>(null);
 
   const rulingKey = ruling ? `${ruling.kind}:${ruling.ids.join(",")}` : "";
   React.useEffect(() => {
@@ -708,7 +700,8 @@ function RulingSheet({
       if (refused && refused.length > 0) onRefused(refusalsById(refused, "arbiter"));
       throw error;
     }
-    assertContractCall(call, expected);
+    const decoded = assertContractCall(call, expected);
+    setBuilt({ key: rulingKey, decoded });
     return { call, expected };
   };
 
@@ -745,6 +738,17 @@ function RulingSheet({
       },
     },
   ];
+
+  const functionName = kind === "UPHOLD" ? "upholdSlashBatch" : "cancelSlashBatch";
+  const decoded = built && built.key === rulingKey ? built.decoded : null;
+  const summary = callSummary({
+    functionName: decoded?.functionName ?? functionName,
+    args: decoded?.args ?? [ruling?.ids ?? []],
+    contract: "stake",
+    to: decoded?.to ?? stakeDeploymentFor(chainId)?.stakeContract ?? "",
+    chainId,
+    signer: arbiter,
+  });
 
   const errorText = (error: unknown) => arbiterErrorMessage(error, "ruling").replace(/\s*\([A-Z_]+\)$/, "");
 
@@ -824,16 +828,27 @@ function RulingSheet({
             describeError={errorText}
             onSigned={(results) => {
               const hash = results[results.length - 1]?.data;
-              onDone(kind === "UPHOLD" ? `Upheld ${noun}` : `Cancelled ${noun}`, typeof hash === "string" ? hash : null, chainId);
+              onDone(kind === "UPHOLD" ? `Uphold of ${noun} sent` : `Cancel of ${noun} sent`, typeof hash === "string" ? hash : null, chainId);
             }}
-            functionName={kind === "UPHOLD" ? "upholdSlashBatch" : "cancelSlashBatch"}
+            functionName={functionName}
             chainId={chainId}
+            summary={summary}
+            summaryNote={
+              decoded
+                ? "Read from the transaction itself, and checked against the penalties you picked."
+                : "The transaction is built when you press the button, and only offered if it is exactly this."
+            }
+            trackIds={ruling?.ids}
             prepare={async () => {
               const { call } = await prepare();
               return [{ to: call.to, value: call.value, data: call.data }];
             }}
-            afterExport={`Downloaded. In the arbiter's multi-signer wallet (Safe), open Transaction Builder, drop the file in and sign. ${count === 1 ? "The penalty moves" : "The penalties move"} once it lands.`}
-            details={rows.map((row) => ({ label: `${providerName(row.providerId)} request id`, value: row.requestId }))}
+            afterExport={`In the arbiter's multi-signer wallet (Safe), open Transaction Builder, drop the file in and sign. ${count === 1 ? "The penalty moves" : "The penalties move"} once it lands.`}
+            details={
+              decoded
+                ? decoded.args.map((arg, i) => ({ label: `Argument ${i + 1} (decoded from the calldata)`, value: formatCallArg(arg) }))
+                : rows.map((row) => ({ label: `${providerName(row.providerId)} request id (selected)`, value: row.requestId }))
+            }
           />
         </div>
         <div ref={setFooter} className={cn(OPERATOR_SHEET_FOOTER, "mt-auto flex w-full flex-col gap-2 px-[18px] pt-3")} />

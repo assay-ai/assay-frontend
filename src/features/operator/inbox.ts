@@ -19,8 +19,8 @@ import { approveBlockedBecause, approverRolesFor, isOwnRequest } from "./approva
  * What the Home heading and the nav badge both count: approvals this operator
  * can decide, plus — for whoever can rule — every open on-chain dispute.
  */
-export function needsYouCount(needsYouApprovals: number, openDisputes: number, canRule: boolean): number {
-  return needsYouApprovals + (canRule ? openDisputes : 0);
+export function needsYouCount(needsYouApprovals: number, openDisputes: number, canRule: boolean, toSign: number = 0): number {
+  return needsYouApprovals + (canRule ? openDisputes + toSign : 0);
 }
 
 // ── Approvals ───────────────────────────────────────────────────────────────
@@ -62,9 +62,14 @@ export function waitingSummary(counts: { needsYou: number; yours: number; others
  * approvals and disputes: "2 to approve · 2 to rule". Null when it is one kind
  * only (the section below says it). Pure.
  */
-export function needsYouBreakdown(approvals: number, disputes: number, canRule: boolean): string | null {
-  if (!canRule || approvals === 0 || disputes === 0) return null;
-  return `${approvals} to approve · ${disputes} to rule`;
+export function needsYouBreakdown(approvals: number, disputes: number, canRule: boolean, toSign: number = 0): string | null {
+  if (!canRule) return null;
+  const parts = [
+    ...(approvals > 0 ? [`${approvals} to approve`] : []),
+    ...(disputes > 0 ? [`${disputes} to rule`] : []),
+    ...(toSign > 0 ? [`${toSign} to sign`] : []),
+  ];
+  return parts.length < 2 ? null : parts.join(" · ");
 }
 
 /** The nav badge's tooltip and screen-reader text: "4 need you". */

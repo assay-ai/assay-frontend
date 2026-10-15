@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OperatorApproval, OperatorCaseBrief, OperatorCaseListRow } from "@/interfaces/operator";
 import { caseFacts, caseTimelineSteps } from "@/features/operator/case-flow";
 import { isLiveApproval } from "@/features/operator/inbox";
+import { assertContractCall } from "@/libs/chains/evm/signing-guard";
 
 type Fixtures = typeof import("./fixtures-operator");
 
@@ -27,12 +28,18 @@ async function load(): Promise<Fixtures> {
   return import("./fixtures-operator");
 }
 
-function call(fixtures: Fixtures, method: string, path: string, query: Record<string, unknown> = {}): unknown {
+function call(
+  fixtures: Fixtures,
+  method: string,
+  path: string,
+  query: Record<string, unknown> = {},
+  data: Record<string, unknown> = {},
+): unknown {
   const found = fixtures.OPERATOR_FIXTURES.find(
     (f) => f.method === method && (f.match instanceof RegExp ? f.match.test(path) : f.match === path),
   );
   if (!found) throw new Error(`no fixture for ${method} ${path}`);
-  return found.body(path, query, {});
+  return found.body(path, query, data);
 }
 
 afterEach(() => {
@@ -140,5 +147,47 @@ describe("demo actions survive a reload in the same tab", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+/* Chrome review 2026-10-16b: the demo reached the real API (401, session over) and its calldata failed the guard. */
+describe("the arbiter's calls in the demo pass the signing guard unchanged", () => {
+  const CALL = { chainId: "", to: "", data: "", value: "" };
+  type Call = typeof CALL;
+
+  it("answers every arbiter read the Arbiter page makes", async () => {
+    const fixtures = await load();
+    const superseded = call(fixtures, "GET", "/operator/arbiter/superseded") as { items: { requestId: string; executableAt: string }[] };
+    expect(superseded.items.length).toBeGreaterThan(0);
+    expect(Date.parse(superseded.items[0]!.executableAt)).toBeGreaterThan(fixtures.demoSessionBase());
+  });
+
+  it("builds a ruling for exactly the selected records", async () => {
+    const fixtures = await load();
+    const ids = [`0x${"b2".repeat(32)}`, `0x${"c3".repeat(32)}`];
+    const built = call(fixtures, "POST", "/operator/arbiter/ruling-intent", {}, { ruling: "UPHOLD", requestIds: ids }) as Call;
+    expect(() => assertContractCall(built, { contract: "stake", functionName: "upholdSlashBatch", args: [ids] })).not.toThrow();
+  });
+
+  it("builds a superseded record's cancel for that one id", async () => {
+    const fixtures = await load();
+    const id = `0x${"e5".repeat(32)}`;
+    const built = call(fixtures, "POST", "/operator/arbiter/superseded/cancel-intent", {}, { requestId: id }) as Call;
+    expect(() => assertContractCall(built, { contract: "stake", functionName: "cancelSlashBatch", args: [[id]] })).not.toThrow();
+  });
+
+  it("queues an on-chain block for a second Lead, and the approved one's call is setBlocked(that wallet, true)", async () => {
+    const fixtures = await load();
+    const account = "0x1111111111111111111111111111111111111111";
+    const queued = call(fixtures, "POST", "/operator/arbiter/block-intent", {}, { chainId: "eip155:46630", account }) as { approvalId: string; status: string };
+    expect(queued.status).toBe("PENDING");
+
+    const approved = (call(fixtures, "GET", "/operator/approvals", { status: "APPROVED", action: "arbiter.block" }) as { items: OperatorApproval[] }).items;
+    expect(approved.length).toBeGreaterThan(0);
+    const first = approved[0]!;
+    const built = call(fixtures, "GET", `/operator/arbiter/blocks/${first.id}/call`) as Call;
+    expect(() =>
+      assertContractCall(built, { contract: "config", functionName: "setBlocked", args: [first.payload.account, true] }),
+    ).not.toThrow();
   });
 });

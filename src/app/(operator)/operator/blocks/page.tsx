@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, Clock, MoreHorizontal, Plus, Search, ShieldCheck, Undo2, Users } from "lucide-react";
+import { Ban, Clock, Link2, MoreHorizontal, PenLine, Plus, Search, ShieldCheck, Undo2, Users } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -14,6 +14,7 @@ import { ReasonChips } from "@/components/patterns/reason-chips";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Field } from "@/components/ui/field";
+import { Select } from "@/components/ui/select";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
@@ -29,6 +30,7 @@ import {
   walletLabel,
 } from "@/features/operator/block-targets";
 import { BLOCK_NOTE_MAX, BLOCK_NOTE_MIN, blockErrorMessage, mayBlock, validateBlockForm, validateUnblockForm } from "@/features/operator/blocks";
+import { callSummary, chainDisplayName } from "@/features/operator/call-summary";
 import { ContractCallAction } from "@/features/operator/contract-call-action";
 import { eligibleApprovers } from "@/features/operator/inbox";
 import { BLOCK_REASONS, UNBLOCK_REASONS, reasonLabel } from "@/features/operator/reasons";
@@ -43,7 +45,7 @@ import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operat
 import type { AccountBlock, ApprovalQueued, BlockSubjectKind, OperatorApproval } from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
-import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
+import { ROBINHOOD_TESTNET_STAKE, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import {
   createAccountBlock,
   createArbiterBlockIntent,
@@ -78,6 +80,10 @@ import { formatMoney } from "@/utils/money";
  */
 
 const LIST_LIMIT = 50;
+
+function capitalFirst(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
 
 type Filter = "active" | "lifted";
 
@@ -340,6 +346,10 @@ function BlocksScreen() {
           canChain={canChain}
           activeBlocks={filter === "active" ? rows : []}
           onDone={setResult}
+          onRetryChain={(created) => {
+            setResult(null);
+            setChainBlocking(created);
+          }}
         />
       ) : null}
       {canChain ? (
@@ -380,6 +390,7 @@ function BlockSheet({
   canChain,
   activeBlocks,
   onDone,
+  onRetryChain,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -387,6 +398,8 @@ function BlockSheet({
   canChain: boolean;
   activeBlocks: readonly AccountBlock[];
   onDone: (node: React.ReactNode) => void;
+  /** Open "Block on chain" for a block just made, when its call was refused. */
+  onRetryChain?: (block: AccountBlock) => void;
 }) {
   const queryClient = useQueryClient();
   const me = useOperatorSession();
@@ -395,7 +408,8 @@ function BlockSheet({
   // The on-chain block (A-11) is two-person: a first request is queued for an approver.
   const chainNeeds = approverPhrase("A-11", me.roles);
   const chainApprovers = directory.isPending ? undefined : eligibleApprovers("A-11", directory.operators, me.id);
-  const health = useQuery({ queryKey: ["operator", "health"], queryFn: getPlatformHealth, enabled: open && canChain, retry: 0 });
+  const chains = useBlockChains(open && canChain);
+  const [pickedChain, setPickedChain] = React.useState<string | null>(null);
   const [target, setTarget] = React.useState<string | null>(null);
   const [targetLabel, setTargetLabel] = React.useState<string | undefined>(undefined);
   const [reason, setReason] = React.useState("");
@@ -429,7 +443,8 @@ function BlockSheet({
   const alreadyBlocked = picked
     ? activeBlocks.find((b) => b.subjectKind === picked.kind && (b.subject === picked.subject.toLowerCase() || b.subjectKey.endsWith(picked.subject.toLowerCase())))
     : undefined;
-  const chainId = health.data ? (health.data.chainState?.[0]?.chainId ?? ROBINHOOD_TESTNET_STAKE.chainId) : null;
+  // One chain: that one, named. Several: the one picked, never the first silently.
+  const chainId = chains.ids.length === 1 ? chains.ids[0]! : pickedChain && chains.ids.includes(pickedChain) ? pickedChain : null;
 
   const block = useMutation({
     mutationFn: async () => {
@@ -465,11 +480,11 @@ function BlockSheet({
             title={`${name} is blocked`}
             next={
               call
-                ? "It applies within seconds. Now have the arbiter sign the on-chain block below."
+                ? "It applies within seconds in Assay. The on-chain block for the arbiter's wallet is below."
                 : queued
-                  ? "It applies within seconds. The on-chain block went to a second operator for approval, below."
+                  ? "It applies within seconds in Assay. The on-chain block went to a second operator for approval, below; nothing is blocked on chain yet."
                   : chainError
-                  ? `It applies within seconds. The on-chain block could not be prepared: ${arbiterErrorMessage(chainError, "block").replace(/\s*\([A-Z_]+\)$/, "")} Use "Block on chain" on its row to try again.`
+                  ? `It applies within seconds in Assay, but not on chain yet: the on-chain block could not be prepared. ${arbiterErrorMessage(chainError, "block").replace(/\s*\([A-Z_]+\)$/, "")} Use "Block on chain" on its row to try again.`
                   : "It applies within seconds on every instance. Lifting it needs two people."
             }
             activityHref={`/operator/override-log?targetId=${encodeURIComponent(created.id)}`}
@@ -487,8 +502,9 @@ function BlockSheet({
                 expected={{ contract: "config", functionName: "setBlocked", args: [call.account, true] }}
                 signLabel="Sign and send the on-chain block"
                 successTitle="Blocked on chain"
-                successDescription="The contracts refuse the wallet once this lands. Only the admin can lift it."
+                successDescription="The contracts refuse the wallet once this lands. Only the contracts' admin key can lift it on chain."
                 afterExport="Open the file in the arbiter's multi-signer wallet and sign it there. The contracts refuse the wallet once it lands."
+                onRetry={onRetryChain ? () => onRetryChain(created) : undefined}
               />
             </section>
           ) : null}
@@ -499,6 +515,7 @@ function BlockSheet({
       setNote("");
       setTicket("");
       setOnChain(false);
+      setPickedChain(null);
       onOpenChange(false);
     },
   });
@@ -517,6 +534,8 @@ function BlockSheet({
     };
     setErrors(next);
     if (next.target || next.reason || next.note) return;
+    // Several chains and none picked: say so rather than block off-chain only.
+    if (onChain && evm && chainId === null) return;
     block.mutate();
   };
 
@@ -542,7 +561,15 @@ function BlockSheet({
           <WhatHappens
             lines={[
               { icon: Ban, text: "It stops paying and being paid through Assay within seconds" },
-              { icon: Users, text: "Lifting it later needs two people" },
+              { icon: Users, text: "Lifting the Assay block later needs two people" },
+              ...(onChain && evm && chainId
+                ? [
+                    {
+                      icon: Link2,
+                      text: `On ${chainDisplayName(chainId)}: ${chainNeeds} approves, then the arbiter signs. Only the contracts' admin key can lift it there`,
+                    },
+                  ]
+                : []),
               { icon: ShieldCheck, text: "Recorded in Activity under your name" },
             ]}
           />
@@ -599,8 +626,8 @@ function BlockSheet({
           {canChain ? (
             <div className="flex w-full flex-col gap-1">
               <Switch
-                checked={onChain && evm !== null && chainId !== null}
-                disabled={evm === null || chainId === null}
+                checked={onChain && evm !== null && chains.ids.length > 0}
+                disabled={evm === null || chains.ids.length === 0}
                 onChange={(e) => setOnChain(e.target.checked)}
                 label="Also block on chain"
               />
@@ -609,12 +636,16 @@ function BlockSheet({
                   ? "For a wallet only: pick a wallet (0x…) above to turn this on. An organization is blocked here, not on chain."
                   : evm === null
                   ? "Only an EVM wallet can be blocked on chain."
-                  : chainId === null
-                    ? health.isError
-                      ? "The chain could not be read just now, so this cannot be built. Block it on chain from its row later."
-                      : "Reading the chain…"
-                  : "The contracts then refuse the wallet too. The arbiter signs it next; only the admin can lift it."}
+                  : chains.isError
+                    ? "The chain could not be read just now, so this cannot be built. Block it on chain from its row later."
+                    : chains.isLoading
+                      ? "Reading the chain…"
+                      : chainId === null
+                        ? "Pick the chain to block it on."
+                        : `The contracts on ${chainDisplayName(chainId)} then refuse the wallet too. ${capitalFirst(chainNeeds)} approves it, then the arbiter signs; only the contracts' admin key can lift it there.`}
               </p>
+              {onChain && evm ? <ChainChoice ids={chains.ids} value={chainId} onChange={setPickedChain} /> : null}
+              {onChain && evm && chainId ? <ChainBlockPreview account={evm} chainId={chainId} /> : null}
             </div>
           ) : null}
         </div>
@@ -634,8 +665,8 @@ function BlockSheet({
                 Cancel
               </Button>
             </SheetClose>
-            <Button variant="danger" loading={block.isPending} onClick={submit}>
-              {onChain && evm && chainId ? "Block, then sign on chain" : "Block account"}
+            <Button variant="danger" loading={block.isPending} onClick={submit} disabled={onChain && evm !== null && chainId === null}>
+              {onChain && evm ? "Block, and ask to block on chain" : "Block account"}
             </Button>
           </div>
         </SheetFooter>
@@ -645,6 +676,65 @@ function BlockSheet({
 }
 
 // ── On-chain block of an existing wallet block (A-11) ──────────────────────
+
+/**
+ * The chains an on-chain block can be built for: the ones the platform reports
+ * that this build has pinned contracts for (the guard refuses any other).
+ * With several, the operator picks one; it is never chosen silently, and the
+ * one used is always named (operator review 2026-10-16b, P1-5).
+ */
+function useBlockChains(enabled: boolean) {
+  const health = useQuery({ queryKey: ["operator", "health"], queryFn: getPlatformHealth, enabled, retry: 0 });
+  const ids = React.useMemo(() => {
+    if (!health.data) return [];
+    const reported = (health.data.chainState ?? []).map((state) => state.chainId).filter((id) => stakeDeploymentFor(id) !== null);
+    return reported.length > 0 ? [...new Set(reported)] : [ROBINHOOD_TESTNET_STAKE.chainId];
+  }, [health.data]);
+  return { ids, isError: health.isError, isLoading: health.isLoading, refetch: health.refetch };
+}
+
+/** One chain named, or a picker when there are several. */
+function ChainChoice({ ids, value, onChange }: { ids: readonly string[]; value: string | null; onChange: (id: string) => void }) {
+  if (ids.length <= 1) return null;
+  return (
+    <Select label="Chain" value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
+      <option value="" disabled>
+        Pick the chain to block on
+      </option>
+      {ids.map((id) => (
+        <option key={id} value={id}>
+          {chainDisplayName(id)}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+/** The call the arbiter will sign, in plain words, before anything is sent. */
+function ChainBlockPreview({ account, chainId }: { account: string; chainId: string }) {
+  const lines = callSummary({
+    functionName: "setBlocked",
+    args: [account, true],
+    contract: "config",
+    to: stakeDeploymentFor(chainId)?.configContract ?? "",
+    chainId,
+    signer: null,
+  });
+  return (
+    <section aria-label="What the arbiter will sign" className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-02 px-3 py-2.5">
+      <h3 className="text-label-13 text-01">What the arbiter will sign</h3>
+      <dl className="grid w-full grid-cols-[88px_minmax(0,1fr)] gap-x-3 gap-y-1 text-body-13">
+        {lines.map((line) => (
+          <React.Fragment key={line.label}>
+            <dt className="text-03">{line.label}</dt>
+            <dd className="min-w-0 text-01 [overflow-wrap:anywhere]">{line.value}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+      <p className="text-body-xs text-03">The call is built once approved, and only offered for signing if it is exactly this.</p>
+    </section>
+  );
+}
 
 /** An on-chain block request (A-11) queued for a second operator: who approves it, and that nothing is blocked on chain yet. */
 function QueuedChainBlock({
@@ -678,12 +768,15 @@ function ChainBlockSheet({ block, label, onClose }: { block: AccountBlock | null
   const directory = useOperatorDirectory();
   const needs = approverPhrase("A-11", me.roles);
   const approvers = directory.isPending ? undefined : eligibleApprovers("A-11", directory.operators, me.id);
-  const health = useQuery({ queryKey: ["operator", "health"], queryFn: getPlatformHealth, enabled: block !== null, retry: 0 });
-  const chainId = health.data?.chainState?.[0]?.chainId ?? ROBINHOOD_TESTNET_STAKE.chainId;
+  const chains = useBlockChains(block !== null);
+  const [pickedChain, setPickedChain] = React.useState<string | null>(null);
+  const chainId = chains.ids.length === 1 ? chains.ids[0]! : pickedChain && chains.ids.includes(pickedChain) ? pickedChain : null;
+  const account = block ? evmAddressOf(block.subject) : null;
+  // Nothing is sent when the sheet opens: only on "Send for approval" (operator review 2026-10-16b, P1-5).
   const build = useMutation({
-    mutationFn: (input: AccountBlock) =>
+    mutationFn: ({ input, chain }: { input: AccountBlock; chain: string }) =>
       createArbiterBlockIntent({
-        chainId,
+        chainId: chain,
         account: evmAddressOf(input.subject)!,
         reasonCode: input.reasonCode,
         // The block's own reason and note (at least 20 characters, as every block has) go on the record.
@@ -691,46 +784,24 @@ function ChainBlockSheet({ block, label, onClose }: { block: AccountBlock | null
         ...(input.ticketRef ? { ticketRef: input.ticketRef } : {}),
       }),
   });
-  const { mutate, reset } = build;
+  const { reset } = build;
   const [signing, setSigning] = React.useState(false);
-  const chainKnown = health.data !== undefined;
   React.useEffect(() => {
-    // Built only once the chain is known: a fallback chain would build the block for the wrong one.
-    if (block && chainKnown) mutate(block);
-    if (!block) reset();
-  }, [block, chainKnown, mutate, reset]);
+    if (!block) {
+      reset();
+      setPickedChain(null);
+    }
+  }, [block, reset]);
+  const send = () => block && chainId && build.mutate({ input: block, chain: chainId });
 
   return (
-    <Sheet open={block !== null} onOpenChange={(open) => (!open && !signing ? onClose() : undefined)}>
-      <SheetContent showCloseButton={!signing}>
+    <Sheet open={block !== null} onOpenChange={(open) => (!open && !signing && !build.isPending ? onClose() : undefined)}>
+      <SheetContent showCloseButton={!signing} aria-describedby={undefined}>
         <SheetHeader className="tablet:pt-5">
-          <SheetTitle className="pr-8">Also block {label} on chain?</SheetTitle>
-          <SheetDescription>
-            The contracts then refuse it as a party to payments, deposits, withdrawals and execution. The arbiter signs it; only the
-            admin can lift it.
-          </SheetDescription>
+          <SheetTitle className="pr-8">Block {label} on chain</SheetTitle>
         </SheetHeader>
-        <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
-          {health.isError ? (
-            <PageState
-              kind="error"
-              title="The chain could not be read"
-              description="Assay could not tell which chain to block on. Try again in a moment."
-              onRetry={() => void health.refetch()}
-              bare
-            />
-          ) : build.isPending || build.isIdle ? (
-            <PageState kind="loading" rows={2} label="Preparing the on-chain block" bare />
-          ) : build.isError ? (
-            <PageState
-              kind="error"
-              title="The on-chain block could not be prepared"
-              description={arbiterErrorMessage(build.error, "block").replace(/\s*\([A-Z_]+\)$/, "")}
-              onRetry={() => block && mutate(block)}
-              code={build.error instanceof ApiError ? build.error.code : null}
-              bare
-            />
-          ) : build.data?.kind === "queued" ? (
+        <div className="flex w-full flex-col gap-4 px-[18px] pb-4 pt-3">
+          {build.data?.kind === "queued" ? (
             <QueuedChainBlock approval={build.data.approval} needs={needs} approvers={approvers} />
           ) : build.data && block ? (
             <ContractCallAction
@@ -739,12 +810,69 @@ function ChainBlockSheet({ block, label, onClose }: { block: AccountBlock | null
               expected={{ contract: "config", functionName: "setBlocked", args: [evmAddressOf(block.subject)!, true] }}
               signLabel="Sign and send the on-chain block"
               successTitle="Blocked on chain"
-              successDescription="The contracts refuse the wallet once this lands."
+              successDescription="The contracts refuse the wallet once this lands. Only the contracts' admin key can lift it on chain."
               afterExport="Open the file in the arbiter's multi-signer wallet and sign it there."
               onBusyChange={setSigning}
+              onRetry={send}
             />
-          ) : null}
+          ) : (
+            <>
+              <WhatHappens
+                lines={[
+                  {
+                    icon: Ban,
+                    text: `The contracts${chainId ? ` on ${chainDisplayName(chainId)}` : ""} refuse the wallet as a party to payments, deposits, withdrawals and execution`,
+                  },
+                  { icon: Users, text: `${capitalFirst(needs)} approves the request first` },
+                  { icon: PenLine, text: "Then the arbiter's wallet signs it. Nothing is blocked on chain until it lands" },
+                  { icon: Link2, text: "Only the contracts' admin key can lift it on chain" },
+                ]}
+              />
+              {chains.isError ? (
+                <PageState
+                  kind="error"
+                  title="The chain could not be read"
+                  description="Assay could not tell which chains it can block on. Try again in a moment."
+                  onRetry={() => void chains.refetch()}
+                  bare
+                />
+              ) : chains.isLoading ? (
+                <PageState kind="loading" rows={1} label="Reading the chain" bare />
+              ) : (
+                <>
+                  <ChainChoice ids={chains.ids} value={chainId} onChange={setPickedChain} />
+                  {account && chainId ? <ChainBlockPreview account={account} chainId={chainId} /> : null}
+                  <ApprovalFooter needs={needs} approvers={approvers} />
+                </>
+              )}
+              {build.isError ? (
+                <div role="alert" className="flex flex-col gap-1 text-body-13 text-danger-600">
+                  <p>The request could not be sent. {arbiterErrorMessage(build.error, "block").replace(/\s*\([A-Z_]+\)$/, "")}</p>
+                  {build.error instanceof ApiError ? (
+                    <details className="text-03">
+                      <summary className="cursor-pointer select-none text-label-xs">Details</summary>
+                      <span className="font-mono text-mono-xs">{build.error.code}</span>
+                    </details>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
+        {!build.data ? (
+          <SheetFooter className={OPERATOR_SHEET_FOOTER}>
+            <div className={OPERATOR_SHEET_BUTTONS}>
+              <SheetClose asChild>
+                <Button variant="secondary" disabled={build.isPending}>
+                  Cancel
+                </Button>
+              </SheetClose>
+              <Button variant="danger" loading={build.isPending} disabled={!chainId || !account} onClick={send}>
+                Send for approval
+              </Button>
+            </div>
+          </SheetFooter>
+        ) : null}
       </SheetContent>
     </Sheet>
   );

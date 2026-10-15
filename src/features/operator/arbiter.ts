@@ -263,6 +263,13 @@ export const SUPERSEDED_REASON_SUGGESTIONS: readonly string[] = Object.freeze([
   "DOUBLE_CHARGE_RISK",
 ]);
 
+/** The superseded-record cancel's reasons, as chips; the codes are what the override register records. */
+export const SUPERSEDED_REASONS: readonly { value: string; label: string; hint: string }[] = Object.freeze([
+  { value: "SUPERSEDED_EPOCH", label: "Replaced by a later penalty", hint: "The case's current penalty covers these calls." },
+  { value: "DOUBLE_CHARGE_RISK", label: "Would charge twice", hint: "Executing it would take for the same calls again." },
+  { value: "OTHER", label: "Other", hint: "Say why in the note." },
+]);
+
 /**
  * Review R2-6: the guarded cancel of ONE superseded record. The body names
  * exactly the row's id and chain; the backend refuses (409) any id that is

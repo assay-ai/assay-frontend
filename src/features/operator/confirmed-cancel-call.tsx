@@ -72,6 +72,8 @@ export function ConfirmedCancelCall({
           {...action}
           call={call}
           expected={{ contract: "stake", functionName: "cancelSlash", args: [confirmed] }}
+          // Remembers a downloaded file or a sent cancel for this record across reloads.
+          trackIds={action.trackIds ?? [confirmed]}
         />
       ) : null}
     </div>

@@ -165,6 +165,7 @@ function TeamScreen() {
   };
   const addApprovers = eligibleApprovers("A-12", rows, me.id);
   const changeApprovers = eligibleApprovers("A-13", rows, me.id);
+  const removeApprovers = eligibleApprovers("A-14", rows, me.id);
 
   return (
     <>
@@ -341,6 +342,7 @@ function TeamScreen() {
           <RemoveSheet
             row={sheet?.kind === "remove" ? sheet.row : null}
             warnings={sheet?.kind === "remove" ? removalWarnings(rows, sheet.row.id) : []}
+            approvers={sheet?.kind === "remove" ? removeApprovers.filter((n) => n !== operatorLabel(sheet.row)) : []}
             onClose={closeSheet}
             onDone={(row, answer) => {
               if (answer.kind === "queued") {
@@ -767,7 +769,7 @@ function AddSheet({
   );
 }
 
-// ── Change (A-13: lowering applies at once, raising is two-person) ──────────
+// ── Change (A-13: raising is two-person; A-14: so is taking the Admin role away; other lowering applies at once) ──
 
 function ChangeSheet({
   row,
@@ -811,9 +813,9 @@ function ChangeSheet({
   const change = useMutation({
     mutationFn: (input: { id: string; body: Parameters<typeof changeOperator>[1] }) => changeOperator(input.id, input.body),
     onSuccess: (answer) => row && onDone(answer, operatorLabel(row)),
-  });  const { reset: resetChange } = change;
+  });
+  const { reset: resetChange } = change;
   React.useEffect(() => resetChange(), [row?.id, resetChange]);
-
 
   if (!row) return <Sheet open={false} />;
 
@@ -831,6 +833,15 @@ function ChangeSheet({
       ? false
       : parsedLimit.atomic === null || BigInt(parsedLimit.atomic) > BigInt(row.authorityLimit.amount));
   const raising = addsRole || raisesLimit;
+  // Taking the Admin role away is queued for a second admin too (A-14), like a raise.
+  const removesAdmin = row.roles.includes("OPS_ADMIN") && !roles.includes("OPS_ADMIN");
+  const needsSecond = raising || removesAdmin;
+  const secondNeeded = removesAdmin && raising
+    ? "Taking the Admin role away and adding access need a second admin."
+    : removesAdmin
+      ? "Taking the Admin role away needs a second admin."
+      : "Adding a role or raising the limit needs a second admin.";
+  const changeApprovers = approvers.filter((name) => name !== operatorLabel(row));
 
   const submit = () => {
     const validated = validateChangeOperator(row, {
@@ -859,7 +870,7 @@ function ChangeSheet({
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Change what {operatorLabel(row)} can do</SheetTitle>
           <SheetDescription>
-            Now: {roleTitle(row.roles)}, {limitLabel(row)}. {raising ? "Adding a role or raising the limit needs a second admin." : "Lowering applies at once."}
+            Now: {roleTitle(row.roles)}, {limitLabel(row)}. {needsSecond ? secondNeeded : "Lowering applies at once."}
           </SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-3 px-[18px] pt-4">
@@ -879,15 +890,19 @@ function ChangeSheet({
             noteMax={2048}
             errors={{ reason: errors.reason, note: errors.note }}
           />
-          {raising ? <ApprovalFooter needs={approverPhrase("A-13", me.roles)} approvers={approvers.filter((name) => name !== operatorLabel(row))} /> : null}
+          {needsSecond ? <ApprovalFooter needs={approverPhrase(removesAdmin ? "A-14" : "A-13", me.roles)} approvers={changeApprovers} /> : null}
         </div>
         <Footer
           busy={change.isPending}
           error={change.error}
           summary={summaryOf(errors, { roles: "role", limit: "limit", reason: "reason", note: "note" })}
-          confirmLabel={raising ? "Send for approval" : "Apply now"}
+          confirmLabel={needsSecond ? "Send for approval" : "Apply now"}
           onConfirm={submit}
-          blocked={raising && approvers.filter((name) => name !== operatorLabel(row)).length === 0 ? "Held back: no other admin can approve a raise yet. Lowering still applies at once." : null}
+          blocked={
+            needsSecond && changeApprovers.length === 0
+              ? `Held back: no other admin can approve this yet.${removesAdmin ? "" : " Lowering still applies at once."}`
+              : null
+          }
           idle={changed ? null : "Change the role or the limit first."}
         />
       </SheetContent>
@@ -895,20 +910,24 @@ function ChangeSheet({
   );
 }
 
-// ── Remove (A-14, immediate) ────────────────────────────────────────────────
+// ── Remove (immediate; an Admin's removal is two-person, A-14) ──────────────
 
 function RemoveSheet({
   row,
   warnings,
+  approvers,
   onClose,
   onDone,
 }: {
   row: OperatorDirectoryEntry | null;
   warnings: string[];
+  /** Who could approve an Admin's removal (not the person removed). */
+  approvers: string[];
   onClose: () => void;
   /** Removing an OPS_ADMIN is two-person (A-14): the answer is then queued until approved. */
   onDone: (row: OperatorDirectoryEntry, answer: TwoPersonAnswer<OperatorDirectoryEntry>) => void;
 }) {
+  const me = useOperatorSession();
   const [reason, setReason] = React.useState("");
   const [note, setNote] = React.useState("");
   const [errors, setErrors] = React.useState<{ reason?: string; note?: string }>({});
@@ -921,11 +940,12 @@ function RemoveSheet({
   const remove = useMutation({
     mutationFn: (input: { id: string; reasonCode: string; note: string }) => removeOperator(input.id, { reasonCode: input.reasonCode, note: input.note }),
     onSuccess: (answer) => row && onDone(row, answer),
-  });  const { reset: resetRemove } = remove;
+  });
+  const { reset: resetRemove } = remove;
   React.useEffect(() => resetRemove(), [row?.id, resetRemove]);
 
-
   if (!row) return <Sheet open={false} />;
+  const isAdmin = row.roles.includes("OPS_ADMIN");
   const options: readonly ReasonOption[] = OPERATOR_REMOVE_REASONS;
 
   const submit = () => {
@@ -946,8 +966,8 @@ function RemoveSheet({
           <WhatHappens
             lines={[
               { icon: LogOut, text: "Every session they hold ends now, and their wallet can no longer sign in" },
-              row.roles.includes("OPS_ADMIN")
-                ? { icon: Zap, text: "They hold OPS_ADMIN, so a second admin approves it first; until then nothing changes" }
+              isAdmin
+                ? { icon: Zap, text: "They are an Admin, so a second admin approves it first; until then nothing changes" }
                 : { icon: Zap, text: "No second admin needed, so access can be cut at once in an incident" },
               { icon: UserPlus, text: "Adding them back later needs a second admin" },
               { icon: ShieldCheck, text: "Recorded in Activity under your name" },
@@ -975,8 +995,17 @@ function RemoveSheet({
             noteMax={2048}
             errors={errors}
           />
+          {isAdmin ? <ApprovalFooter needs={approverPhrase("A-14", me.roles)} approvers={approvers} /> : null}
         </div>
-        <Footer busy={remove.isPending} error={remove.error} summary={null} confirmLabel={`Remove ${operatorLabel(row)}`} tone="danger" onConfirm={submit} />
+        <Footer
+          busy={remove.isPending}
+          error={remove.error}
+          summary={null}
+          confirmLabel={isAdmin ? "Send for approval" : `Remove ${operatorLabel(row)}`}
+          tone="danger"
+          onConfirm={submit}
+          blocked={isAdmin && approvers.length === 0 ? "Held back: no other admin can approve removing an Admin yet." : null}
+        />
       </SheetContent>
     </Sheet>
   );

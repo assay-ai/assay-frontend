@@ -379,7 +379,7 @@ function CompensateForm({ brief, proposalId, me }: { brief: OperatorCaseBrief; p
     return (
       <Queued
         answer={record.data}
-        what="Recording the compensation"
+        what="Recording the pay-back"
         needs={approvalNeeds("S-5", me.roles)}
         approvers={directory.isPending ? undefined : eligibleApprovers("S-5", directory.operators, me.id)}
       />
