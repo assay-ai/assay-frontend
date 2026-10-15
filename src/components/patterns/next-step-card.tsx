@@ -50,26 +50,25 @@ export interface NextStepCardProps {
   title: React.ReactNode;
   /** One or two sentences: what the action does, or what is being waited for and until when. */
   description?: React.ReactNode;
-  /** A short line in mono under the description: a countdown, "needs a second ADJ". */
+  /** A short line under the description, e.g. "needs a second Lead adjudicator". Not the deadline again. */
   meta?: React.ReactNode;
   action?: NextStepAction;
   /** A quiet second action, e.g. "Block this provider". */
   secondary?: NextStepAction;
-  /** Small label above the title. Default: "Your next step" / "Waiting" / "Closed". */
+  /** Small label above the title. None by default: the title is the information. */
   eyebrow?: React.ReactNode;
+  /** One line under the body, e.g. a one-line "why you can't · ask" for a read-only role. */
+  footer?: React.ReactNode;
+  /** "stack" keeps text over buttons at every width, for a narrow side column. */
+  layout?: "row" | "stack";
   className?: string;
 }
 
-const EYEBROW: Record<NextStepCardProps["kind"], string> = {
-  action: "Your next step",
-  waiting: "Waiting",
-  done: "Closed",
-};
-
-function ActionButton({ action, variant }: { action: NextStepAction; variant: "primary" | "danger" | "secondary" }) {
+function ActionButton({ action, variant, full }: { action: NextStepAction; variant: "primary" | "danger" | "secondary"; full: boolean }) {
+  const width = full ? "w-full" : "w-full tablet:w-auto";
   if (action.href && !action.disabled) {
     return (
-      <Button variant={variant} asChild className="w-full tablet:w-auto">
+      <Button variant={variant} asChild className={width}>
         <Link href={action.href}>
           {action.label}
           {variant !== "secondary" ? <ArrowRight aria-hidden="true" /> : null}
@@ -84,20 +83,22 @@ function ActionButton({ action, variant }: { action: NextStepAction; variant: "p
       onClick={action.onClick}
       disabled={action.disabled}
       loading={action.loading}
-      className="w-full tablet:w-auto"
+      className={width}
     >
       {action.label}
     </Button>
   );
 }
 
-export function NextStepCard({ kind, title, description, meta, action, secondary, eyebrow, className }: NextStepCardProps) {
+export function NextStepCard({ kind, title, description, meta, action, secondary, eyebrow, footer, layout = "row", className }: NextStepCardProps) {
   const Icon = kind === "action" ? ArrowRight : kind === "waiting" ? Clock : CheckCircle2;
+  const stack = layout === "stack";
   return (
     <section
       aria-label={typeof title === "string" ? `Next step: ${title}` : "Next step"}
       className={cn(
-        "flex w-full flex-col gap-3 rounded-xl border p-4 tablet:flex-row tablet:items-center tablet:gap-5 tablet:p-5",
+        "flex w-full flex-col gap-3 rounded-xl border p-4",
+        !stack && "tablet:flex-row tablet:items-center tablet:gap-5 tablet:p-5",
         kind === "action" ? "border-primary-20 bg-primary-10" : kind === "done" ? "border-01 bg-02" : "border-01 bg-01",
         className,
       )}
@@ -113,16 +114,17 @@ export function NextStepCard({ kind, title, description, meta, action, secondary
           <Icon className="size-4" />
         </span>
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-label-xs uppercase tracking-[0.04em] text-03">{eyebrow ?? EYEBROW[kind]}</p>
+          {eyebrow ? <p className="text-label-xs text-03">{eyebrow}</p> : null}
           <p className="text-label-md text-01">{title}</p>
           {description ? <p className="text-body-13 text-02">{description}</p> : null}
-          {meta ? <p className="font-mono text-mono-12 text-02">{meta}</p> : null}
+          {meta ? <p className="text-body-xs tabular-nums text-03">{meta}</p> : null}
+          {footer ? <div className="pt-1">{footer}</div> : null}
         </div>
       </div>
       {action || secondary ? (
-        <div className="flex w-full shrink-0 flex-col gap-2 tablet:w-auto tablet:flex-row tablet:items-center">
-          {secondary ? <ActionButton action={secondary} variant="secondary" /> : null}
-          {action ? <ActionButton action={action} variant={action.tone === "danger" ? "danger" : "primary"} /> : null}
+        <div className={cn("flex w-full shrink-0 flex-col gap-2", !stack && "tablet:w-auto tablet:flex-row tablet:items-center")}>
+          {secondary ? <ActionButton action={secondary} variant="secondary" full={stack} /> : null}
+          {action ? <ActionButton action={action} variant={action.tone === "danger" ? "danger" : "primary"} full={stack} /> : null}
         </div>
       ) : null}
     </section>
