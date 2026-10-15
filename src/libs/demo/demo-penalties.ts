@@ -23,10 +23,14 @@ export const DEMO_PENALTY_REQUESTS = [
   "0x1d3f5b7d9f1b3d5f7b9d1f3b5d7f9b1d3f5b7d9f1b3d5f7b9d1f3b5d7f9b1d3f",
 ] as const;
 
-/** Major amounts, 6 decimals. */
-export const DEMO_PENALTY_AMOUNTS = ["28.47", "5.00", "12.60"] as const;
+/**
+ * Major amounts, 6 decimals — the real formula applied to each subject window
+ * (see the WINDOWS note in `fixtures-provider.ts`), so the drawer's
+ * derivation, the Quality tab and the amount agree.
+ */
+export const DEMO_PENALTY_AMOUNTS = ["28.408752", "11.041313", "7.542652"] as const;
 
-/** Binding index (in the provider fixtures) and window index per record. */
+/** Binding index (in the provider fixtures) and window index per record: w_117, w_46, w_45 — each a window that went over the promise. */
 export const DEMO_PENALTY_SUBJECTS = [
   { bindingIndex: 0, windowIndex: 1 },
   { bindingIndex: 1, windowIndex: 2 },

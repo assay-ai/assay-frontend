@@ -4,6 +4,7 @@ import { CircleAlert, CircleCheck, Clock } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { LocalTime } from "@/components/patterns/local-time";
 import { Button } from "@/components/ui/button";
 import { formatRemaining, useCountdown } from "@/hooks/useCountdown";
 import { formatLocalDateTime } from "@/libs/local-time";
@@ -27,6 +28,11 @@ function Deadline({ at }: { at: string }) {
     >
       <Clock aria-hidden="true" className="size-3" />
       {hasPassed ? "Time is up" : `${formatRemaining(msLeft)} left`}
+      {hasPassed ? null : (
+        <>
+          {" "}· by <LocalTime value={at} withZone />
+        </>
+      )}
     </span>
   );
 }

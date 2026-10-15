@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { formatLocalDate, formatLocalDateTime, utcTitle } from "@/libs/local-time";
+import { formatLocalDate, formatLocalDateTime, utcTitle, zoneLabel } from "@/libs/local-time";
 import { cn } from "@/utils";
 
 /**
@@ -19,9 +19,11 @@ import { cn } from "@/utils";
 export interface LocalTimeProps extends React.TimeHTMLAttributes<HTMLTimeElement> {
   value: string | number | Date | null | undefined;
   dateOnly?: boolean;
+  /** Append the zone ("Oct 18, 14:00 GMT+1"): use it for deadlines. */
+  withZone?: boolean;
 }
 
-export function LocalTime({ value, dateOnly = false, className, ...props }: LocalTimeProps) {
+export function LocalTime({ value, dateOnly = false, withZone = false, className, ...props }: LocalTimeProps) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
 
@@ -31,7 +33,9 @@ export function LocalTime({ value, dateOnly = false, className, ...props }: Loca
     ? (utcTitle(value) ?? "—")
     : dateOnly
       ? formatLocalDate(value)
-      : formatLocalDateTime(value);
+      : withZone
+        ? `${formatLocalDateTime(value)} ${zoneLabel(value)}`.trim()
+        : formatLocalDateTime(value);
 
   return (
     <time dateTime={iso} title={utcTitle(value)} className={cn("tabular-nums", className)} {...props}>

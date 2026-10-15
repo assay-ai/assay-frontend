@@ -43,7 +43,7 @@ export function openWindowStanding(position: StandingInput): WindowStanding {
       tone: "primary",
       sentence: `${count(position.verifiedCalls)} of ${count(
         position.minVerifiedCalls
-      )} verified calls carry a quality verdict. Below the gate, this window cannot be slashed at all — whatever the observed rate looks like.${
+      )} verified calls carry a quality verdict. Below the gate, no penalty can come from this window — whatever the observed rate looks like.${
         position.projectedBreach
           ? " The rate so far is above the threshold, but it is too few calls to judge."
           : ""

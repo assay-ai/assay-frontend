@@ -12,12 +12,11 @@ import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { foldClasses, foldNotCredited, rowsInAsset } from "@/features/call-classes/csv";
-import { classLabel } from "@/features/call-classes/labels";
+import { foldNotCredited, rowsInAsset } from "@/features/call-classes/csv";
 import { downloadCallsCsv, useCallsExport } from "@/features/call-classes/use-calls-export";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
-import { earningsSplit } from "@/features/provider-earnings/earned-tile";
-import { notCreditedReason } from "@/features/provider-earnings/not-credited";
+import { earningsSplit, type EarningsSplit } from "@/features/provider-earnings/earned-tile";
+import { callCount, notCreditedReason, partsThatAddUp } from "@/features/provider-earnings/not-credited";
 import { useChains } from "@/hooks/useChains";
 import type { Money, ProviderPayout } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
@@ -25,6 +24,7 @@ import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts
 import { getProviderEarnings } from "@/services/provider-reports.service";
 import { chainIdOfAsset } from "@/utils/chain";
 import { formatMoney, toDecimal } from "@/utils/money";
+import { toast } from "@/utils/toast";
 
 /**
  * Money — "how much did I earn, and is it in my wallet?"
@@ -74,6 +74,13 @@ export default function ProviderMoneyPage() {
 
   const rows = React.useMemo(() => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)), [calls.rows, assetPending, displayAsset]);
   const notCredited = React.useMemo(() => foldNotCredited(rows), [rows]);
+  /* Each reason card's amount, adjusted by whole cents so the cards add up to their total on screen. */
+  const reasonAmounts = React.useMemo(() => {
+    const parts = notCredited.buckets.map((bucket) => bucket.notCredited);
+    const decimals = parts.find(Boolean)?.decimals ?? 6;
+    const shown = partsThatAddUp(parts.map((part) => part?.amount ?? "0"), decimals);
+    return parts.map((part, index) => (part ? { ...part, amount: shown[index] } : null));
+  }, [notCredited.buckets]);
   const split = earningsSplit(earnings.data?.totals);
   const monthName = MONTH.format(now);
 
@@ -91,7 +98,15 @@ export default function ProviderMoneyPage() {
           icon={<Download />}
           loading={calls.isFetching && !calls.data}
           disabled={!calls.data}
-          onClick={() => calls.data && downloadCallsCsv(calls.data.csv, calls.data.filename, calls.meta)}
+          onClick={() => {
+            if (!calls.data) return;
+            downloadCallsCsv(calls.data.csv, calls.data.filename, calls.meta);
+            if (calls.meta && !calls.meta.truncated) {
+              toast.success(`${monthName} CSV downloaded`, {
+                description: `${callCount(calls.meta.rowCount)}, one row each. Check your downloads folder.`,
+              });
+            }
+          }}
         >
           Download {monthName} CSV
         </Button>
@@ -113,7 +128,7 @@ export default function ProviderMoneyPage() {
             <PanelTitles>
               <PanelTitle>{monthName}</PanelTitle>
               <PanelDescription>
-                {(earnings.data?.totals.calls ?? 0).toLocaleString("en-US")} calls served this month
+                {callCount(earnings.data?.totals.calls ?? 0)} served this month
               </PanelDescription>
             </PanelTitles>
           </PanelHeader>
@@ -130,7 +145,7 @@ export default function ProviderMoneyPage() {
                   split.notCredited
                     ? {
                         label: "Not credited",
-                        note: `${split.notCreditedCalls} call${split.notCreditedCalls === 1 ? "" : "s"}, see below`,
+                        note: `${callCount(split.notCreditedCalls)}, see below`,
                         value: amountOf(split.notCredited),
                         amount: formatMoney(split.notCredited, { decimals: 2 }),
                         tone: "danger",
@@ -141,8 +156,7 @@ export default function ProviderMoneyPage() {
             />
             {split.uncollected ? (
               <p className="text-body-xs text-03">
-                {formatMoney(split.uncollected, { decimals: 2 })} for {split.uncollectedCalls} call
-                {split.uncollectedCalls === 1 ? "" : "s"} could not be collected from the buyer, so it is not in your wallet and not
+                {formatMoney(split.uncollected, { decimals: 2 })} for {callCount(split.uncollectedCalls)} could not be collected from the buyer, so it is not in your wallet and not
                 counted above.
               </p>
             ) : null}
@@ -155,7 +169,7 @@ export default function ProviderMoneyPage() {
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>Recent payments</PanelTitle>
-            <PanelDescription>each one is a transaction you can check on the explorer</PanelDescription>
+            <PanelDescription>money sent to your wallet, each one a transaction you can check on the explorer</PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="p-2">
@@ -192,7 +206,7 @@ export default function ProviderMoneyPage() {
           {calls.isPending ? (
             <PageState kind="loading" rows={2} bare label="Loading calls" />
           ) : calls.data && notCredited.buckets.length > 0 ? (
-            notCredited.buckets.map((bucket) => {
+            notCredited.buckets.map((bucket, index) => {
               const reason = notCreditedReason(bucket.className);
               const tools = [...new Set(rows.filter((r) => r.classification === bucket.className).map((r) => r.toolId))];
               return (
@@ -205,10 +219,8 @@ export default function ProviderMoneyPage() {
                     ) : null}
                   </div>
                   <div className="flex shrink-0 items-baseline gap-3 tablet:flex-col tablet:items-end tablet:gap-0.5">
-                    <span className="font-mono text-mono-sm font-semibold text-01">{formatMoney(bucket.notCredited, { decimals: 2 })}</span>
-                    <span className="text-body-xs text-03">
-                      {bucket.calls} call{bucket.calls === 1 ? "" : "s"}
-                    </span>
+                    <span className="font-mono text-mono-sm font-semibold text-01">{formatMoney(reasonAmounts[index], { decimals: 2 })}</span>
+                    <span className="text-body-xs text-03">{callCount(bucket.calls)}</span>
                   </div>
                 </div>
               );
@@ -223,7 +235,7 @@ export default function ProviderMoneyPage() {
                 <div key={group.key} className="flex w-full items-center justify-between gap-3 rounded-lg border border-01 bg-02 p-3.5">
                   <span className="text-label-13 text-01">{names.toolName(group.key) ?? "A tool"}</span>
                   <span className="text-body-xs text-03">
-                    {group.withheldCalls} calls · {formatMoney(group.withheld, { decimals: 2 })}
+                    {callCount(group.withheldCalls)} · {formatMoney(group.withheld, { decimals: 2 })}
                   </span>
                 </div>
               ))
@@ -237,7 +249,7 @@ export default function ProviderMoneyPage() {
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <p className="text-label-13 text-01">Your logs say something different?</p>
             <p className="text-body-xs text-02">
-              Every call in the CSV carries the call id we send you in the <code className="font-mono">X-X402-Call-Id</code> header. Match it
+              Every call in the CSV carries the call id we send you in the <code className="font-mono">X-Assay-Call-Id</code> header. Match it
               against your access log.
             </p>
           </div>
@@ -247,7 +259,20 @@ export default function ProviderMoneyPage() {
         </PanelBody>
       </Panel>
 
-      <ExplainSheet open={explainOpen} onOpenChange={setExplainOpen} rows={rows} loading={calls.isPending} />
+      <ExplainSheet
+        open={explainOpen}
+        onOpenChange={setExplainOpen}
+        monthName={monthName}
+        calls={earnings.data?.totals.calls ?? null}
+        split={split}
+        loading={earnings.isPending}
+        reasons={notCredited.buckets.map((bucket, index) => ({
+          key: bucket.className,
+          title: notCreditedReason(bucket.className).title,
+          calls: bucket.calls,
+          amount: reasonAmounts[index],
+        }))}
+      />
     </>
   );
 }
@@ -258,7 +283,10 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
   const href = chain && payout.chainTxRef ? explorerTxUrl(chain, payout.chainTxRef) : null;
   return (
     <li className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-md px-3 py-3 hover:bg-02">
-      <LocalTime value={payout.createdAt} className="min-w-0 flex-1 text-body-13 text-02" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-body-13 text-01">Paid to your wallet</span>
+        <LocalTime value={payout.createdAt} className="text-body-xs text-03" />
+      </span>
       <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(payout.amount, { decimals: 2 })}</span>
       {href ? (
         <a
@@ -270,7 +298,7 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
           View transaction <ExternalLink aria-hidden="true" className="size-3" />
         </a>
       ) : (
-        <span className="w-36 text-right text-body-xs text-03">{payout.chainTxRef ? "On chain" : "Being sent"}</span>
+        <span className="w-36 text-right text-body-xs text-03">{payout.chainTxRef ? "Sent on chain" : "Being sent"}</span>
       )}
     </li>
   );
@@ -279,42 +307,77 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
 function ExplainSheet({
   open,
   onOpenChange,
-  rows,
+  monthName,
+  calls,
+  split,
+  reasons,
   loading,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  rows: ReturnType<typeof rowsInAsset>;
+  monthName: string;
+  calls: number | null;
+  split: EarningsSplit;
+  reasons: { key: string; title: string; calls: number; amount: Money | null }[];
   loading: boolean;
 }) {
-  const table = foldClasses(rows);
+  const lines: { label: string; detail?: string; amount: string }[] = [
+    { label: "Paid to your wallet", amount: formatMoney(split.inWallet, { decimals: 2 }) },
+    ...(split.fee ? [{ label: "Assay fee", detail: "taken from each paid call", amount: formatMoney(split.fee, { decimals: 2 }) }] : []),
+    ...(split.notCredited
+      ? [{ label: "Not credited", detail: callCount(split.notCreditedCalls), amount: formatMoney(split.notCredited, { decimals: 2 }) }]
+      : []),
+    ...(split.uncollected
+      ? [
+          {
+            label: "Could not be collected from the buyer",
+            detail: callCount(split.uncollectedCalls),
+            amount: formatMoney(split.uncollected, { decimals: 2 }),
+          },
+        ]
+      : []),
+  ];
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent>
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Explain a difference</SheetTitle>
-          <SheetDescription>How the calls you served this month turned into money, and how to match them to your logs.</SheetDescription>
+          <SheetDescription>How the calls you served in {monthName} turned into money, and how to match them to your logs.</SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-5 overflow-y-auto px-[18px] pb-6 pt-4 text-body-13 text-02">
           <section className="flex flex-col gap-2">
-            <h3 className="text-label-13 text-01">Your calls this month, by outcome</h3>
+            <h3 className="text-label-13 text-01">
+              {monthName}
+              {calls !== null ? `: ${callCount(calls)} served` : ""}
+            </h3>
             {loading ? (
-              <PageState kind="loading" rows={3} bare label="Loading calls" />
-            ) : table.buckets.length === 0 ? (
-              <p>No calls this month yet.</p>
+              <PageState kind="loading" rows={3} bare label="Loading this month" />
             ) : (
               <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01">
-                {table.buckets.map((bucket) => (
-                  <li key={bucket.className} className="flex items-center justify-between gap-3 px-3 py-2.5">
-                    <span className="min-w-0 flex-1 text-01">{classLabel(bucket.className)}</span>
-                    <span className="text-body-xs text-03">{bucket.calls} calls</span>
-                    <span className="w-20 text-right font-mono text-mono-12 text-01">
-                      {bucket.credited ? formatMoney(bucket.credited, { decimals: 2 }) : "$0.00"}
-                    </span>
+                {lines.map((line) => (
+                  <li key={line.label} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                    <span className="min-w-0 flex-1 text-01">{line.label}</span>
+                    {line.detail ? <span className="text-body-xs text-03">{line.detail}</span> : null}
+                    <span className="w-20 text-right font-mono text-mono-12 text-01">{line.amount}</span>
                   </li>
                 ))}
               </ul>
             )}
+            {reasons.length > 0 ? (
+              <>
+                <p className="pt-1 text-label-xs text-02">Not credited, by reason</p>
+                <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01">
+                  {reasons.map((reason) => (
+                    <li key={reason.key} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                      <span className="min-w-0 flex-1 text-01">{reason.title}</span>
+                      <span className="text-body-xs text-03">{callCount(reason.calls)}</span>
+                      <span className="w-20 text-right font-mono text-mono-12 text-01">{formatMoney(reason.amount, { decimals: 2 })}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+            <p className="text-body-xs text-03">The rest of the calls were free calls or are still being checked; they earn nothing yet.</p>
           </section>
           <section className="flex flex-col gap-2">
             <h3 className="text-label-13 text-01">Why your count and ours can differ</h3>
@@ -329,7 +392,7 @@ function ExplainSheet({
             <h3 className="text-label-13 text-01">Match a call</h3>
             <p>
               Download the CSV, then look up each <code className="font-mono">call_id</code> in your access log by the{" "}
-              <code className="font-mono">X-X402-Call-Id</code> request header. A call in your log but not in the CSV never reached
+              <code className="font-mono">X-Assay-Call-Id</code> request header. A call in your log but not in the CSV never reached
               settlement; a call in the CSV but not in your log never reached your API.
             </p>
           </section>

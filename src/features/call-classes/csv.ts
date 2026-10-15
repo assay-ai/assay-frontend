@@ -7,7 +7,7 @@ import type { Money } from "@/interfaces";
  * built around.
  *
  * `GET /providers/me/calls/export` is the only provider endpoint that emits a
- * row per call, and `X-X402-Call-Id` is its first column — which is the whole
+ * row per call, and `X-Assay-Call-Id` is its first column — which is the whole
  * reason both screens exist. A provider counts N requests in their access log,
  * we count M, and the join key that explains the difference is in this file.
  *

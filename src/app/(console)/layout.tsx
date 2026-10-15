@@ -18,8 +18,7 @@ import { SlashHoldBanner } from "@/features/slash-hold/slash-hold-banner";
 import { ChecklistPill } from "@/components/patterns/setup-checklist";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { useListingProgress } from "@/features/provider-home/use-listing-progress";
-import { usePenaltySummary } from "@/features/provider-penalties/use-penalty-summary";
-import { getUnreadCount } from "@/services/account.service";
+import { useProviderInbox } from "@/features/provider-home/use-provider-inbox";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
 import { useTheme } from "@/providers/ThemeProvider";
@@ -82,7 +81,7 @@ function PhoneIconLink({
   return (
     <Link
       href={href}
-      aria-label={count > 0 ? `${label}, ${count} unread` : label}
+      aria-label={count > 0 ? `${label}, ${count} new` : label}
       aria-current={active ? "page" : undefined}
       className={cn(
         "relative flex size-9 items-center justify-center rounded-md border border-02 bg-01 text-02",
@@ -125,13 +124,9 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
     queryFn: () => listToolBindings({ limit: 50 }),
   });
   const names = useProviderToolNames();
-  const unread = useQuery({
-    queryKey: ["notifications", "unread-count"],
-    queryFn: getUnreadCount,
-    refetchInterval: 60_000,
-    retry: 0,
-  });
-  const penalties = usePenaltySummary();
+  // The same read as the Inbox page, so the badge equals what the page says.
+  const inbox = useProviderInbox();
+  const penalties = inbox.penalties;
   const progress = useListingProgress();
 
   const bindings: SidebarBindingItem[] = (data?.items ?? []).map((binding) => ({
@@ -143,7 +138,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
 
   const section = providerSectionFor(pathname);
   const activeId = bindingIdFrom(pathname, bindingParam) ?? section ?? undefined;
-  const counts = { penalties: penalties.count, inbox: unread.data?.count ?? 0 };
+  const counts = { penalties: penalties.count, inbox: inbox.count };
 
   // "Get listed 2/5" until the first tool is live. Not on Home, which shows the checklist itself.
   const showPill = !progress.loading && !progress.live && !progress.isError;

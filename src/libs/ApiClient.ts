@@ -446,7 +446,7 @@ class ApiClient {
       whose answer was going to be discarded. A stage set that waits for the
       stage is not a stage set.
     */
-    const canned = demoResponse(config.method, config.url, config.params);
+    const canned = demoResponse(config.method, config.url, config.params, config.data);
     if (canned !== undefined) return { status: 200, data: canned as T };
 
     /*

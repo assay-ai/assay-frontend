@@ -55,3 +55,56 @@ export function periodLabel(periodMs: number | null): string | null {
   const hours = Math.max(1, Math.round(periodMs / 3_600_000));
   return `${hours} hour${hours === 1 ? "" : "s"}`;
 }
+
+/**
+ * The contract's minimum unbonding period (`MIN_UNBONDING_PERIOD_SECONDS`,
+ * eleven days). The live period is a chain parameter the console cannot read
+ * yet; until a withdrawal is running (which shows the real dates), this is
+ * the honest lower bound to quote.
+ */
+export const MIN_UNBONDING_MS = 11 * 86_400_000;
+
+export interface WithdrawPlan {
+  /** What can leave without pausing a paid tool or touching penalty reserves. Null when unknown. */
+  free: Money | null;
+  /** Held for open (pending or disputed) penalties. */
+  reserved: Money | null;
+  /** Per paid tool, highest requirement first: the stake below which it stops taking paid calls. */
+  thresholds: { toolId: string; bindingId: string; minimum: Money }[];
+}
+
+const atomic = (money: Money | null | undefined): bigint => (money ? BigInt(money.amount || "0") : 0n);
+
+/**
+ * Withdraw planning, in atomic units:
+ *   free = staked − required − reserved   (never below zero)
+ * `required` is the account requirement (the `max` over paid tools, as the API
+ * computes it), and `reserved` the sum of open penalties, which the chain holds
+ * back from any withdrawal anyway.
+ */
+export function withdrawPlan(input: {
+  staked: Money | null;
+  required: Money | null;
+  reserved: readonly Money[];
+  requirement: readonly { toolId: string; bindingId: string; minimum: Money | null }[];
+}): WithdrawPlan {
+  const { staked, required } = input;
+  const reservedAtomic = input.reserved.reduce((sum, item) => sum + atomic(item), 0n);
+  const like = staked ?? required ?? input.reserved[0] ?? null;
+  const reserved = like && reservedAtomic > 0n ? { ...like, amount: reservedAtomic.toString() } : null;
+  let free: Money | null = null;
+  if (staked) {
+    const value = atomic(staked) - atomic(required) - reservedAtomic;
+    free = { ...staked, amount: (value > 0n ? value : 0n).toString() };
+  }
+  const thresholds = input.requirement
+    .filter((item): item is { toolId: string; bindingId: string; minimum: Money } => Boolean(item.minimum && atomic(item.minimum) > 0n))
+    .map((item) => ({ toolId: item.toolId, bindingId: item.bindingId, minimum: item.minimum }))
+    .sort((a, b) => (atomic(b.minimum) > atomic(a.minimum) ? 1 : atomic(b.minimum) < atomic(a.minimum) ? -1 : 0));
+  return { free, reserved, thresholds };
+}
+
+/** The paid tools that stop taking paid calls if `remaining` stake is left. */
+export function toolsPausedAt(plan: WithdrawPlan, remainingAtomic: bigint): WithdrawPlan["thresholds"] {
+  return plan.thresholds.filter((item) => remainingAtomic < atomic(item.minimum));
+}

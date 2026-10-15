@@ -1,3 +1,4 @@
+import Decimal from "decimal.js";
 import { describe, expect, it } from "vitest";
 
 import type { Money, ProviderStake } from "@/interfaces";
@@ -13,6 +14,7 @@ import {
   stakeRuleOf,
   takeRateOf,
   timeoutFromSeconds,
+  stakeSummary,
   totalStakeWith,
 } from "./go-live";
 
@@ -84,5 +86,32 @@ describe("go-live arithmetic", () => {
   it("maps choices and modes both ways", () => {
     expect(modeOfChoice(choiceOfMode("FREEMIUM"))).toBe("FREEMIUM");
     expect(choiceOfMode("PAID")).toBe("paid");
+  });
+});
+
+describe("stakeSummary", () => {
+  const rule = { floor: new Decimal(50), multiplier: new Decimal(1000), fromServer: true };
+
+  it("separates this tool's need from the largest tool's and says when it is covered", () => {
+    const summary = stakeSummary({
+      needed: usd("300"),
+      total: usd("450"),
+      have: usd("600"),
+      price: usd("0.30"),
+      rule,
+      largestToolName: "Market quote",
+    });
+    expect(summary.perTool).toBe("This tool alone needs $300.00 (1,000 × $0.30).");
+    expect(summary.total).toBe("Your stake has to cover your largest paid tool, Market quote: $450.00; you have $600.00 ✓.");
+    expect(summary.tone).toBe("ok");
+    expect(summary.exposure).toContain("1,000 calls' worth of refunds");
+    expect(summary.recommended).toContain("We recommend $675.00 (1.5 × $450.00)");
+  });
+
+  it("names the minimum when the floor wins, and the shortfall", () => {
+    const summary = stakeSummary({ needed: usd("50"), total: usd("50"), have: usd("20"), price: usd("0.01"), rule });
+    expect(summary.perTool).toBe("This tool alone needs $50.00 (the minimum for any paid tool).");
+    expect(summary.total).toBe("That is all the stake you need; you have $20.00, $30.00 short.");
+    expect(summary.tone).toBe("short");
   });
 });
