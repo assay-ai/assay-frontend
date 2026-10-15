@@ -19,8 +19,8 @@ import { checkEvmAddress } from "@/libs/chains/evm/operator-wallet";
 /** Every role, in the order the console lists them, with what each one is for. */
 export const ROLE_OPTIONS: readonly { role: OperatorRole; label: string }[] = Object.freeze([
   { role: "ADJ", label: "Adjudicator" },
-  { role: "ADJL", label: "Adjudication lead" },
-  { role: "SRE", label: "On-call / SRE" },
+  { role: "ADJL", label: "Lead adjudicator" },
+  { role: "SRE", label: "On-call (SRE)" },
   { role: "TRE", label: "Treasury" },
   { role: "TREA", label: "Treasury approver" },
   { role: "POL", label: "Policy author" },
@@ -28,8 +28,8 @@ export const ROLE_OPTIONS: readonly { role: OperatorRole; label: string }[] = Ob
   { role: "BD", label: "Provider success" },
   { role: "SUP", label: "Support" },
   { role: "CMP", label: "Compliance" },
-  { role: "SEC", label: "Security / keys" },
-  { role: "OPS_ADMIN", label: "Operator administrator" },
+  { role: "SEC", label: "Security" },
+  { role: "OPS_ADMIN", label: "Admin" },
 ]);
 
 export const DIRECTORY_NOTE_MIN = 10;
