@@ -335,8 +335,9 @@ export default function ReconciliationPage() {
   return (
     <>
       {/* Page Header. */}
-      <header className="flex w-full items-center justify-between gap-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      {/* Stacked below tablet, and the buttons wrap: side by side they are wider than 390. */}
+      <header className="flex w-full flex-col items-start gap-4 tablet:flex-row tablet:items-center tablet:justify-between">
+        <div className="flex w-full min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">
             Reconciliation · {MONTH.format(new Date(period.from))} · all bindings
           </h1>
@@ -345,7 +346,7 @@ export default function ReconciliationPage() {
             our bug report, not your support ticket
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-2.5">
           {/*
             Drawn enabled on the frame, rendered disabled here. No endpoint
             accepts a provider's access log — there is no upload route and no
@@ -430,7 +431,8 @@ export default function ReconciliationPage() {
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
-        <PanelBody className="px-2.5 pb-2.5 pt-1.5">
+        {/* The tables scroll inside their panels, as on the earnings screen. */}
+        <PanelBody className="overflow-x-auto px-2.5 pb-2.5 pt-1.5">
           {classes.totalCalls > 0 ? (
             <Table
               columns={classColumns}
@@ -486,7 +488,7 @@ export default function ReconciliationPage() {
             <PanelDescription>reconciles to the batch list on the earnings screen</PanelDescription>
           </PanelTitles>
         </PanelHeader>
-        <PanelBody className="px-2.5 pb-2.5 pt-1.5">
+        <PanelBody className="overflow-x-auto px-2.5 pb-2.5 pt-1.5">
           <Table
             columns={settlementColumns}
             rows={settlementRows}
