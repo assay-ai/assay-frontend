@@ -12,6 +12,7 @@ import { MobileTopBar } from "@/components/layout/mobile-top-bar";
 import { BuyerSectionTabs } from "@/components/layout/section-tabs";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { BUYER_NAV_ITEMS, sectionFor } from "@/components/layout/nav-config";
+import { AlertsMenu } from "@/components/layout/alerts-menu";
 import { BuyerSearch } from "@/components/layout/buyer-search";
 import { TopBar } from "@/components/layout/top-bar";
 import { WalletMenu } from "@/components/layout/wallet-menu";
@@ -88,6 +89,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
           activeNavId={activeNavId}
           alertCount={alertCount}
           onAlertsClick={openAlerts}
+          alerts={<AlertsMenu count={alertCount} />}
           search={<BuyerSearch />}
           avatar={<WalletMenu />}
           actions={
@@ -104,6 +106,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
           title={titleFor(pathname)}
           alertCount={alertCount}
           onAlertsClick={openAlerts}
+          alerts={<AlertsMenu count={alertCount} variant="mobile" />}
           onSearch={() => router.push(routes.calls())}
           avatar={<WalletMenu />}
         />

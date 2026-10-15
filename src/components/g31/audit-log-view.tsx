@@ -5,6 +5,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { Bot, Building2, ShieldCheck, User } from "lucide-react";
 import * as React from "react";
 
+import { CopyChip } from "@/components/patterns/copy-chip";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { auditSentence, groupByDay } from "@/features/buyer/audit-sentence";
@@ -167,6 +168,11 @@ export function AuditLogView() {
                       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="text-label-sm text-01">{sentence.title}</span>
                         <span className="break-words text-body-13 text-02">{sentence.line}</span>
+                        {entry.resourceId ? (
+                          <span className="pt-0.5">
+                            <CopyChip value={entry.resourceId} label="Reference" />
+                          </span>
+                        ) : null}
                       </div>
                       <span className="shrink-0 text-body-xs text-03">{formatClock(entry.createdAt)}</span>
                     </li>
