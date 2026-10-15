@@ -217,6 +217,13 @@ describe("round 4: ruling from the penalty page", () => {
 });
 
 describe("round 5: the Context tab reads time like the rest of the console", () => {
+  it("counts every window the Context strip draws, the breached one included", async () => {
+    const { priorWindowsLabel } = await import("@/features/provider-slash-case/context");
+    expect(priorWindowsLabel(3)).toBe("Last 3 closed windows");
+    expect(priorWindowsLabel(1)).toBe("Last 1 closed window");
+    expect(priorWindowsLabel(6, true)).toBe("last 6 closed windows");
+  });
+
   it("is local with its zone for operators, UTC for the provider page", async () => {
     const { contextStamp } = await import("@/features/provider-slash-case/context");
     const { zoneLabel } = await import("@/libs/local-time");
