@@ -10,6 +10,7 @@ import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-a
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { runApproveStep, runDepositStep, type DepositAttempt, type DepositRun } from "@/features/buyer-money/deposit-flow";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
+import { DEPOSIT_MINIMUM_USD } from "@/features/explorer/buyer-costs";
 import { depositChoice } from "@/features/funding/deposit-chain";
 import { depositUnavailableOn, depositableChains, offeredChains } from "@/features/funding/depositable-chains";
 import { chainBalances } from "@/features/g30/balance";
@@ -35,7 +36,7 @@ import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-mone
  * - Approve → Deposit as a tracked two-signature flow; "Confirmed" at the end.
  * - After a first deposit the next step is offered in place: set the account ceiling.
  */
-const MINIMUM = "5";
+const MINIMUM = DEPOSIT_MINIMUM_USD;
 const DECIMALS = 6;
 const PRESETS = ["5", "20", "50"];
 
