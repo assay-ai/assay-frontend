@@ -103,7 +103,7 @@ export function AuditLogView() {
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
       <PageHeader title="Activity log" />
       <p className="-mt-2 text-body-13 text-03">
-        Who changed what on your account: budgets, agent keys and alerts. Individual calls are under Activity › Calls.
+        Who changed what on your account: spending limits, agent keys and alerts. Individual calls are under Activity › Calls.
       </p>
 
       <div role="radiogroup" aria-label="Show" className="flex flex-wrap gap-2">
@@ -147,8 +147,8 @@ export function AuditLogView() {
           <PageState
             kind="empty"
             title="No changes yet"
-            description="When you change a budget, create or revoke an agent key, or change alerts, it shows here."
-            action={{ label: "Set a budget", href: "/limits" }}
+            description="When you change spending limits, create or revoke an agent key, or change alerts, it shows here."
+            action={{ label: "Set spending limits", href: "/limits" }}
           />
         )
       ) : (

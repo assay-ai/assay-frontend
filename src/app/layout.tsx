@@ -20,9 +20,11 @@ const jetbrainsMono = JetBrains_Mono({
 
 // Brand and wording follow the landing page (assay-landing-page/src/pages.mjs),
 // so a shared link reads the same wherever it points.
-const TITLE = "Assay — The credit layer for agentic payments";
+// The product's own promise, as How it works states it: agents pay for a
+// tool call only when the result passes Assay's check.
+const TITLE = "Assay — Agents pay for tools only when they work";
 const DESCRIPTION =
-  "The credit layer for agentic payments. Assay measures what every paid endpoint actually delivers — then bonds it, so agents get recourse when it doesn’t.";
+  "Your agent calls a paid tool. Assay checks the result before the money moves, so you don't pay for results you can't use.";
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
 
 export const metadata: Metadata = {

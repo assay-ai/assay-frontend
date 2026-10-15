@@ -29,11 +29,11 @@ export function VerifiedMark({ verified, className }: { verified: boolean; class
   if (!verified) return null;
   return (
     <span
-      title="Assay checked who this company is. This is not a quality score."
+      title="Assay checked who this company is. This is not a quality score, and it says nothing about stake."
       className={cn("inline-flex items-center gap-1 whitespace-nowrap text-label-xs text-primary-600", className)}
     >
       <BadgeCheck aria-hidden="true" className="size-3.5" />
-      Verified
+      Identity verified
     </span>
   );
 }

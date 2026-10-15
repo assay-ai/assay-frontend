@@ -16,6 +16,7 @@ import { AlertsMenu } from "@/components/layout/alerts-menu";
 import { BuyerSearch } from "@/components/layout/buyer-search";
 import { TopBar } from "@/components/layout/top-bar";
 import { WalletMenu } from "@/components/layout/wallet-menu";
+import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
 import { routes } from "@/libs/routes";
 import { getUnreadCount } from "@/services";
@@ -94,6 +95,8 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
           avatar={<WalletMenu />}
           actions={
             <div className="flex items-center gap-1.5">
+              {/* Test money is never left to a chain name in small print. */}
+              <TestnetChip />
               <PauseAllButton />
               <ThemeToggle />
             </div>
@@ -110,6 +113,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
           onSearch={() => router.push(routes.calls())}
           avatar={
             <>
+              <TestnetChip compact />
               {/* The same theme switch as the desktop bar, so the choice is reachable at every width. */}
               <ThemeToggle />
               <WalletMenu />

@@ -14,14 +14,21 @@ import { ThemeToggle } from "./theme-toggle";
  * The marketing shell (How it works, Explore, Demo, provider pages), distinct
  * from the buyer console's `Top Bar` (56px).
  *
- *   How it works · Explore · Demo · For providers · Docs      Sign in  [+ List a tool]
- *   (signed in: "Open app" in place of "Sign in")
+ *   Assay [Testnet]  How it works · Explore · Demo · For providers · Docs
+ *                                          Sign in  (+ List a tool)  [Start free]
+ *   (signed in: [Open app] in place of "Sign in" and "Start free")
+ *
+ * The filled button is the buyer's: "Start free" signed out, "Open app"
+ * signed in. "List a tool" is the outlined secondary, so a buyer and a
+ * provider each see their path, and neither is hidden behind the other.
+ * Below `tablet`, "Sign in" and the filled button stay in the bar (a phone
+ * visitor must not have to open a menu to sign in); the links, "List a tool"
+ * and the theme switch move into the menu.
  *
  * "For providers" is one page (the offer with the earnings calculator
  * embedded); "Demo" shows only where it is configured. "Docs" appears
  * only when `NEXT_PUBLIC_DOCS_URL` is set — a link to nowhere is worse than
- * no link. Below `tablet` the links move into a menu button; "List a tool"
- * stays in the bar.
+ * no link.
  */
 
 export interface PublicTopBarLink {
@@ -75,7 +82,14 @@ export interface PublicTopBarProps extends React.HTMLAttributes<HTMLElement> {
   /** A signed-in visitor sees "Open app" (to `appHref`) where "Sign in" would be. */
   signedIn?: boolean;
   appHref?: string;
+  /** Where "Start free" goes for a signed-out visitor. */
+  startFreeHref?: string;
+  /** Next to the logo, e.g. the testnet chip. */
+  badge?: React.ReactNode;
 }
+
+const FILLED_CLASS =
+  "flex items-center gap-[7px] whitespace-nowrap rounded-md bg-primary-400 px-3 py-[9px] text-label-sm font-sans text-on-primary shadow-hair hover:bg-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:px-[14px]";
 
 const LINK_CLASS =
   "inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1.5 text-body-13 font-sans text-02 transition-colors hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500";
@@ -118,6 +132,8 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
       onListToolClick,
       signedIn = false,
       appHref = "/",
+      startFreeHref = "/login",
+      badge,
       ...props
     },
     ref
@@ -146,6 +162,7 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
             <img src="/images/logo.png" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 rounded-md object-cover" />
             <span className="text-[17px] font-medium leading-none tracking-[-0.025em] text-01">Assay</span>
           </LinkComponent>
+          {badge}
 
           <nav aria-label="Primary" className="hidden min-w-0 flex-1 items-center gap-1 tablet:flex">
             {navItems.map((item) =>
@@ -187,21 +204,26 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
           </nav>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            <ThemeToggle />
-            <a
-              href={signedIn ? appHref : signInHref}
-              onClick={signedIn ? undefined : onSignInClick}
-              className="hidden rounded-md px-[14px] py-[9px] text-label-sm font-sans text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:inline-flex"
-            >
-              {signedIn ? "Open app" : "Sign in"}
-            </a>
+            <ThemeToggle className="hidden tablet:inline-flex" />
+            {signedIn ? null : (
+              <a
+                href={signInHref}
+                onClick={onSignInClick}
+                className="inline-flex whitespace-nowrap rounded-md px-2 py-[9px] text-label-sm font-sans text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:px-[14px]"
+              >
+                Sign in
+              </a>
+            )}
             <a
               href={listToolHref}
               onClick={onListToolClick}
-              className="flex items-center gap-[7px] whitespace-nowrap rounded-md bg-primary-400 px-3 py-[9px] text-label-sm font-sans text-on-primary shadow-hair hover:bg-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:px-[14px]"
+              className="hidden items-center gap-[7px] whitespace-nowrap rounded-md border border-02 px-[14px] py-[8px] text-label-sm font-sans text-01 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:flex"
             >
               <Plus aria-hidden="true" className="h-[15px] w-[15px]" />
               List a tool
+            </a>
+            <a href={signedIn ? appHref : startFreeHref} className={FILLED_CLASS}>
+              {signedIn ? "Open app" : "Start free"}
             </a>
             <button
               type="button"
@@ -248,15 +270,20 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
             )}
             <div className="my-2 h-px bg-03" role="separator" />
             <a
-              href={signedIn ? appHref : signInHref}
+              href={listToolHref}
               onClick={() => {
-                if (!signedIn) onSignInClick?.();
+                onListToolClick?.();
                 close();
               }}
-              className="flex items-center justify-center rounded-md border border-02 px-3 py-2.5 text-label-sm text-01 hover:bg-02"
+              className="flex items-center justify-center gap-[7px] rounded-md border border-02 px-3 py-2.5 text-label-sm text-01 hover:bg-02"
             >
-              {signedIn ? "Open app" : "Sign in"}
+              <Plus aria-hidden="true" className="h-[15px] w-[15px]" />
+              List a tool
             </a>
+            <div className="flex items-center justify-between px-2 pt-2">
+              <span className="text-body-sm text-02">Theme</span>
+              <ThemeToggle />
+            </div>
           </nav>
         ) : null}
       </header>

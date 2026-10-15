@@ -13,9 +13,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import type { Chain } from "@/interfaces/chain";
+import { demoEnabled } from "@/libs/demo/demo-api";
 import { cn } from "@/utils";
 
 import { ChangeRows, type ConfirmChange } from "./change-rows";
+import { TestnetChip } from "./testnet-chip";
 import {
   IDLE,
   isUserRejection,
@@ -402,6 +405,12 @@ export function SignAction({
  *     steps={steps} label="Request withdrawal" successTitle="Withdrawal requested"
  *     doneAction={{ label: "Close", onClick: () => setOpen(false) }} />
  */
+/** Shown at the top of every signing sheet on a demo build. */
+export const DEMO_SIGNING_NOTE =
+  "Demo: nothing is signed and no money moves. You can fill this in and read every step; on a live site the button opens your wallet.";
+/** The sign button's reason on a demo build. */
+export const DEMO_SIGNING_REASON = "This is a demo, so nothing is signed.";
+
 export interface WalletActionSheetProps extends SignActionProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -412,6 +421,11 @@ export interface WalletActionSheetProps extends SignActionProps {
   changes?: ConfirmChange[];
   /** A required checkbox; the sign button stays disabled until it is ticked. */
   acknowledge?: React.ReactNode;
+  /**
+   * The chain this signature moves money on, for the "Testnet" chip in the
+   * header. Omitted, the chip follows every chain the deployment serves.
+   */
+  chain?: Pick<Chain, "displayName" | "chainId"> | null;
   children?: React.ReactNode;
 }
 
@@ -422,6 +436,7 @@ export function WalletActionSheet({
   description,
   changes,
   acknowledge,
+  chain,
   children,
   onPhaseChange,
   disabled,
@@ -438,6 +453,10 @@ export function WalletActionSheet({
     if (!open) setAcknowledged(false);
   }
   const needsAck = Boolean(acknowledge) && !acknowledged;
+  // DEMO ONLY: the screens read fixtures, so a signature would move real
+  // test money against figures that are not real. Every step up to the
+  // button works; the button says why it stops.
+  const demo = demoEnabled();
 
   return (
     <Sheet
@@ -450,11 +469,17 @@ export function WalletActionSheet({
     >
       <SheetContent showCloseButton={!busy} {...(description ? {} : { "aria-describedby": undefined })}>
         <SheetHeader className="tablet:pt-5">
+          <TestnetChip chain={chain} className="self-start" />
           <SheetTitle className="pr-8">{title}</SheetTitle>
           {description ? <SheetDescription>{description}</SheetDescription> : null}
         </SheetHeader>
-        {children || changes?.length || acknowledge ? (
+        {children || changes?.length || acknowledge || demo ? (
           <div className="flex w-full flex-col gap-4 px-[18px] pt-4">
+            {demo ? (
+              <p className="rounded-lg bg-info-10 px-3 py-2 text-body-13 text-01" data-testid="demo-signing-note">
+                {DEMO_SIGNING_NOTE}
+              </p>
+            ) : null}
             {children}
             {changes?.length ? <ChangeRows changes={changes} /> : null}
             {acknowledge ? (
@@ -472,8 +497,16 @@ export function WalletActionSheet({
         <SheetFooter className="sticky bottom-0 bg-01">
           <SignAction
             {...signProps}
-            disabled={disabled || needsAck}
-            disabledReason={disabled ? disabledReason : needsAck ? "Tick the box above to continue." : undefined}
+            disabled={demo || disabled || needsAck}
+            disabledReason={
+              demo
+                ? DEMO_SIGNING_REASON
+                : disabled
+                  ? disabledReason
+                  : needsAck
+                    ? "Tick the box above to continue."
+                    : undefined
+            }
             onPhaseChange={(phase) => {
               setBusy(phase === "running");
               onPhaseChange?.(phase);

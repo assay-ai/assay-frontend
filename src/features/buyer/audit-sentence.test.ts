@@ -19,12 +19,12 @@ describe("auditSentence", () => {
       () => null,
       "me@example.com",
     ).line;
-    expect(line).toBe("ops@team.example changed daily budget from $40.00 to $75.00");
+    expect(line).toBe("ops@team.example changed daily spending limit from $40.00 to $75.00");
   });
   it("says who changed what, from what to what", () => {
     expect(
       auditSentence(entry({ before: { dailyCap: "40.00" }, after: { dailyCap: "75.00" } }), () => null, "me@example.com"),
-    ).toEqual({ title: "Budget changed", line: "You changed daily budget from $40.00 to $75.00" });
+    ).toEqual({ title: "Spending limits changed", line: "You changed daily spending limit from $40.00 to $75.00" });
   });
   it("names agents and Assay, and never prints raw ids", () => {
     expect(
@@ -45,11 +45,11 @@ describe("auditSentence", () => {
     expect(refund.title).toBe("Refund: $6.00 not charged");
     expect(refund.line).toMatch(/failed our checks/);
     const session = auditSentence(
-      entry({ actorType: "agent", actorId: "a1", action: "session.created", after: { credential: "x402_live_31ac" } }),
+      entry({ actorType: "agent", actorId: "a1", action: "session.created", after: { credential: "assay_live_31ac" } }),
       () => "prod",
     );
     expect(session.title).toBe("Agent connected");
-    expect(session.line).not.toMatch(/x402_/);
+    expect(session.line).not.toMatch(/assay_live_/);
     expect(auditSentence(entry({ action: "session.created" }), () => null, "me@example.com").title).toBe("Signed in");
     const revoked = auditSentence(
       entry({ action: "credential.revoked", before: { name: "CI deploy", revokedAt: null }, after: { name: "CI deploy", revokedAt: "immediately" } }),

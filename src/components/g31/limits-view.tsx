@@ -91,17 +91,60 @@ export function LimitsView() {
           <AccountCeilingCard ctx={ctx} />
           <OldRuleLine policy={ctx.policy} />
 
-          <p className="text-body-13 text-02">
-            You get an alert at 50%, 80% and 100% of a daily or monthly limit.{" "}
-            <Link href="/alerts" className="font-semibold text-primary-600 hover:underline">
-              Alert settings
-            </Link>
-          </p>
+          <HowLimitsStop />
 
           {ctx.policy ? <History /> : null}
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * How a limit stops a call, in the words BEFORE had and AFTER had dropped:
+ * which limits are software and which are on chain, the duplicate-call
+ * rule, what the agent gets back, and that alerts never refuse anything.
+ */
+function HowLimitsStop() {
+  return (
+    <section
+      aria-labelledby="how-limits-stop"
+      className="flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 px-4 py-3.5 tablet:px-5"
+      data-testid="how-limits-stop"
+    >
+      <h2 id="how-limits-stop" className="text-label-13 text-01">
+        How a limit stops a call
+      </h2>
+      <ul className="flex list-disc flex-col gap-1.5 pl-4 text-body-13 text-02">
+        <li>
+          <span className="text-01">Hard stops.</span> Every limit above refuses the call; nothing is charged for it.
+        </li>
+        <li>
+          <span className="text-01">On chain:</span> your account ceiling and each agent&apos;s per call and per 24 hours
+          limits. The contract refuses anything over them, Assay included.
+        </li>
+        <li>
+          <span className="text-01">Checked by Assay:</span> the monthly limit, rate limits, allowed tools and Pause all.
+          They are enforced by our software, not by your wallet, so treat them as a control and not as a guarantee.
+        </li>
+        <li>
+          Separately, a call repeated with the same tool and the same arguments is refused as a duplicate from the fifth
+          time within one minute, for the rest of that minute. It uses up no limit and nothing is charged.
+        </li>
+        <li>
+          <span className="text-01">What your agent sees:</span> an error for that call that names the reason (for example
+          &ldquo;This call would go over your spend limit.&rdquo;), and nothing is held or charged. Spending limits and Pause
+          all stop paid calls only: free calls keep working.
+        </li>
+        <li>
+          <span className="text-01">Alerts only:</span> you get an alert at 50%, 80% and 100% of a daily or monthly limit.
+          An alert never refuses a call.{" "}
+          <Link href="/alerts" className="font-semibold text-primary-600 hover:underline">
+            Alert settings
+          </Link>
+        </li>
+      </ul>
+    </section>
   );
 }
 

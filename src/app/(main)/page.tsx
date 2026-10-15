@@ -7,7 +7,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 
 import { WalletSetupBanner } from "@/components/auth/wallet-setup-banner";
 import { AgentHealthList } from "@/components/buyer-money/agent-health";
-import { GetStarted } from "@/components/buyer-money/get-started";
+import { GetStarted, useGetStartedShown } from "@/components/buyer-money/get-started";
 import { Button } from "@/components/ui/button";
 import { EntityName } from "@/components/patterns/entity-name";
 import { LocalTime } from "@/components/patterns/local-time";
@@ -82,6 +82,9 @@ export default function OverviewPage() {
   const { data, loading, error, reload } = useOverview(anchor, assetPick);
   const names = useEntityNames({ kinds: ["tool"] });
   const chainName = useChainName();
+  // While Get started is on screen its step is the next thing to do, so the
+  // header's "Add funds" steps back to a secondary button.
+  const gettingStarted = useGetStartedShown();
   // The month is a fact about the calendar, not about the response, so the
   // tile labels stay correct even when every request failed.
   const monthLabel = useMemo(() => monthPeriod(anchor).label, [anchor]);
@@ -150,6 +153,10 @@ export default function OverviewPage() {
     return { ...capped, scaleMax: max };
   }, [data?.chart, data?.chartTools, names]);
 
+  // A new or quiet account: no spend in the chart, nothing on hold, no calls.
+  // The three empty panels fold into one line instead of three "nothing yet"s.
+  const nothingYet = Boolean(data) && scaleMax === 0 && openHolds.length === 0 && (data?.recentCalls.length ?? 0) === 0;
+
   const decimals = balance?.decimals ?? 6;
   const asset = balance?.asset ?? "";
   const ticks = useMemo(() => {
@@ -176,7 +183,7 @@ export default function OverviewPage() {
               Explore spend
             </Link>
           </Button>
-          <Button asChild>
+          <Button variant={gettingStarted ? "secondary" : "primary"} asChild>
             <Link href="/funding?action=deposit">
               <Plus className="size-[15px]" />
               Add funds
@@ -247,19 +254,20 @@ export default function OverviewPage() {
           className="order-2 col-span-2 tablet:col-span-1 desktop:order-3"
           tone="teal"
           label={`Not charged · ${monthLabel}`}
-          // Never a zero here: a zero on the guarantee reads as broken rather
-          // than as unused. the guarantee screen carries the sentence that explains it.
-          value={!data || nothingWithheld ? "—" : formatMoney(withheldAmount)}
+          // A real zero is "$0.00"; "—" is kept for a figure that could not be read.
+          value={!data ? "—" : nothingWithheld ? formatMoney(null) : formatMoney(withheldAmount)}
           sub={
             !data
               ? "not available"
               : nothingWithheld
-                ? "nothing withheld yet"
+                ? isZeroMoney(data.monthListed)
+                  ? "no paid calls yet this month"
+                  : "every paid call passed its check"
                 : `${formatCount(withheldCalls)} ${withheldCalls === 1 ? "call" : "calls"}`
           }
           meta={
             nothingWithheld
-              ? "Refunds are a released hold, so your balance never moves. This is where you see them."
+              ? "A call whose result fails its check is not charged: the hold is released, so your balance never moves. This is where you see it."
               : `${withheldShare ?? "—"} of ${formatMoney(data?.monthListed ?? null)} listed this month`
           }
         />
@@ -277,8 +285,22 @@ export default function OverviewPage() {
             share of a penalty yet, and a tile that can only say "—" is noise. */}
       </section>
 
-      <section className="flex w-full flex-col gap-3.5 desktop:flex-row desktop:gap-4">
-        <Panel className="order-2 min-w-0 flex-1 tablet:order-1">
+      {nothingYet ? (
+        <Panel className="w-full" data-testid="overview-nothing-yet">
+          <PanelBody className="flex-row flex-wrap items-center gap-3 px-4 py-4 tablet:px-5">
+            <p className="min-w-0 flex-1 text-body-13 text-02">
+              <span className="text-label-13 text-01">No calls yet.</span> Spend, money on hold and recent calls appear here
+              after your agent&apos;s first call. {notifications.length === 0 ? "Nothing needs your attention." : null}
+            </p>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={routes.calls()}>See calls</Link>
+            </Button>
+          </PanelBody>
+        </Panel>
+      ) : null}
+
+      <section className={nothingYet && notifications.length === 0 ? "hidden" : "flex w-full flex-col gap-3.5 desktop:flex-row desktop:gap-4"}>
+        <Panel className={nothingYet ? "hidden" : "order-2 min-w-0 flex-1 tablet:order-1"}>
           <PanelHeader>
             <PanelTitles>
               <PanelTitle>Spend, last 7 days</PanelTitle>
@@ -351,6 +373,7 @@ export default function OverviewPage() {
       {/* items-start: the design's bottom row holds two SHORT panels, so a
           stretched Open-holds card next to a tall Recent-calls list would read
           as a panel that failed to load rather than one that is simply small. */}
+      {nothingYet ? null : (
       <section className="flex w-full flex-col gap-3.5 desktop:flex-row desktop:items-start desktop:gap-4">
         <Panel className="min-w-0 flex-1">
           <PanelHeader>
@@ -369,7 +392,7 @@ export default function OverviewPage() {
               value={openHolds.length > 0 ? formatAge(oldestHold) : "—"}
             />
             <Button variant="secondary" size="sm" className="shrink-0" asChild>
-              <Link href="/funding">View holds</Link>
+              <Link href={routes.calls()}>See calls</Link>
             </Button>
           </PanelBody>
         </Panel>
@@ -438,6 +461,7 @@ export default function OverviewPage() {
           </PanelBody>
         </Panel>
       </section>
+      )}
       </>
       )}
     </div>

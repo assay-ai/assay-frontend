@@ -53,7 +53,7 @@ function markup(policy: Record<string, unknown> | null): string {
         id: "k1",
         agentId: "f64b7b6e",
         name: "orchestrator",
-        prefix: "x402_live_31ac",
+        prefix: "assay_live_31ac",
         scopes: ["tools:call"],
         lastUsedAt: new Date().toISOString(),
         expiresAt: null,

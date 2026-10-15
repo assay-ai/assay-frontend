@@ -13,7 +13,7 @@ import { SetupChecklist, type SetupStep } from "@/components/patterns/setup-chec
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import { capsAreSet } from "@/features/buyer-money/caps";
-import { getStartedStates, payStage, type GetStartedFacts } from "@/features/buyer-money/get-started";
+import { AGENT_CLI_SOURCE, getStartedStates, payStage, type GetStartedFacts } from "@/features/buyer-money/get-started";
 import { supportsDelegation } from "@/features/delegation/delegation-form";
 
 import { CapsSheet } from "./caps-sheet";
@@ -65,16 +65,10 @@ function Listening({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function GetStarted({ placement }: { placement: "overview" | "page" }) {
-  const [poll, setPoll] = React.useState<number | false>(false);
-  const data = useAgentsAndKeys({ pollMs: poll });
-  const [dismissed, setDismissed] = React.useState(false);
-  React.useEffect(() => setDismissed(readDismissed()), []);
+type AgentsAndKeys = ReturnType<typeof useAgentsAndKeys>;
 
-  const [sheet, setSheet] = React.useState<"deposit" | "caps" | "pay" | null>(null);
-  const [revealing, setRevealing] = React.useState(false);
-  const [expanded, setExpanded] = React.useState<string | null | undefined>(undefined);
-
+/** The facts Get started ticks from, read off the agents, keys and escrow. */
+function getStartedFactsFrom(data: AgentsAndKeys) {
   const agent = data.agents[0] ?? null;
   const allKeys = data.agents.flatMap((a) => data.keys[a.agentId] ?? []);
   const liveKeys = allKeys.filter((k) => !k.revokedAt);
@@ -93,6 +87,48 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
     grantActive: readiness?.grant?.status === "ACTIVE",
     needsDelegation: supportsDelegation(agent?.agentAccount),
   };
+  return { agent, liveKeys, escrow, readiness, bound, facts };
+}
+
+function dataLoading(data: AgentsAndKeys): boolean {
+  return data.agentsQuery.isPending || (data.agents.length > 0 && data.keysQuery.isPending) || data.escrowQuery.isPending;
+}
+
+const DISMISS_EVENT = "assay:get-started-dismissed";
+
+/**
+ * Whether Overview is showing Get started right now (loaded, not complete,
+ * not dismissed), so the page around it can step back: "Add funds" turns
+ * secondary while step 1 is "Create a key".
+ */
+export function useGetStartedShown(): boolean {
+  const data = useAgentsAndKeys();
+  const [dismissed, setDismissed] = React.useState(false);
+  React.useEffect(() => {
+    setDismissed(readDismissed());
+    const onDismiss = () => setDismissed(true);
+    window.addEventListener(DISMISS_EVENT, onDismiss);
+    return () => window.removeEventListener(DISMISS_EVENT, onDismiss);
+  }, []);
+  if (dismissed || dataLoading(data)) return false;
+  const states = getStartedStates(getStartedFactsFrom(data).facts);
+  return !Object.values(states).every((state) => state === "done");
+}
+
+export function GetStarted({ placement }: { placement: "overview" | "page" }) {
+  const [poll, setPoll] = React.useState<number | false>(false);
+  const data = useAgentsAndKeys({ pollMs: poll });
+  const [dismissed, setDismissed] = React.useState(false);
+  React.useEffect(() => setDismissed(readDismissed()), []);
+
+  const [sheet, setSheet] = React.useState<"deposit" | "caps" | "pay" | null>(null);
+  const [revealing, setRevealing] = React.useState(false);
+  // The key made on this visit, kept in memory only (never stored), so the
+  // config stays ready to paste after "I've pasted it".
+  const [createdToken, setCreatedToken] = React.useState<string | null>(null);
+  const [expanded, setExpanded] = React.useState<string | null | undefined>(undefined);
+
+  const { agent, liveKeys, escrow, readiness, bound, facts } = getStartedFactsFrom(data);
   const states = getStartedStates(facts);
   const firstCallAt = liveKeys.map((k) => k.lastUsedAt).filter((v): v is string => Boolean(v)).sort()[0] ?? null;
   const { chains } = useChains();
@@ -112,7 +148,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   const currentId = revealing ? "key" : (Object.entries(states).find(([, s]) => s === "current")?.[0] ?? null);
   React.useEffect(() => setExpanded(undefined), [currentId]);
 
-  const loading = data.agentsQuery.isPending || (data.agents.length > 0 && data.keysQuery.isPending) || data.escrowQuery.isPending;
+  const loading = dataLoading(data);
   // On Overview, render nothing until the data says it is needed: a set-up
   // account should not see a checklist skeleton flash on every visit.
   if (placement === "overview" && (loading || complete || dismissed)) return null;
@@ -124,18 +160,27 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
       id: "key",
       title: "Create a key and connect your agent",
       description: "Your agent uses the key to call tools through Assay.",
-      state: revealing ? "current" : states.key,
+      // Done as soon as the key exists, so the count says 1 of 4 while the
+      // key is still on screen; the step stays open until "I've pasted it".
+      state: revealing && !facts.hasLiveKey ? "current" : states.key,
       blockedReason: agent ? undefined : "Your account is still being set up. Reload in a moment.",
       content: agent ? (
         facts.hasLiveKey && !revealing ? (
           <div className="flex min-w-0 flex-col gap-2">
-            <p className="text-body-13 text-02">Your key is ready. Paste this into your MCP client, with your key in place of the placeholder:</p>
-            <McpConfigTabs token={null} />
+            <p className="text-body-13 text-02">
+              {createdToken
+                ? "Your key is ready, and the config below already carries it:"
+                : "Your key is ready. Paste this into your MCP client, with your full key in place of the placeholder:"}
+            </p>
+            <McpConfigTabs token={createdToken} keyPrefix={liveKeys[0]?.prefix ?? null} />
           </div>
         ) : (
           <CreateKeyForm
             agentId={agent.agentId}
-            onCreated={() => setRevealing(true)}
+            onCreated={(key) => {
+              setCreatedToken(key.token);
+              setRevealing(true);
+            }}
             onDone={() => {
               setRevealing(false);
               setExpanded("call");
@@ -210,6 +255,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
           <div className="flex min-w-0 flex-col gap-2.5">
             <p className="text-body-13 text-02">To pay, {agentName} makes its own payment key. Run this on its machine:</p>
             <CodeBlock title="Terminal" code={BIND_COMMAND} />
+            <p className="text-body-xs text-03" data-testid="agent-cli-source">{AGENT_CLI_SOURCE}</p>
             <Listening>Waiting for the key. This updates by itself.</Listening>
             {!facts.capsSet ? (
               <Button type="button" variant="secondary" className="self-start" onClick={() => setSheet("caps")}>
@@ -224,6 +270,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
             </Button>
             <p className="text-body-13 text-02">Then run this on {agentName}&apos;s machine so it gets its payment key:</p>
             <CodeBlock title="Terminal" code={BIND_COMMAND} />
+            <p className="text-body-xs text-03" data-testid="agent-cli-source">{AGENT_CLI_SOURCE}</p>
           </div>
         ) : stage === "caps" && !facts.needsDelegation ? (
           <Button type="button" onClick={() => setSheet("caps")}>
@@ -244,7 +291,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
         description="Four steps to your agent's first paid call. Free calls work after step 2."
         steps={steps}
         loading={loading}
-        expandedId={expanded}
+        expandedId={revealing ? "key" : expanded}
         onExpandedChange={setExpanded}
         doneTitle="All set: your agent can call tools and pay for them"
         doneDescription="Watch its calls under Activity. Change its spending limits under Controls."
@@ -257,6 +304,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
                   // Not remembered; hidden for this visit.
                 }
                 setDismissed(true);
+                window.dispatchEvent(new Event(DISMISS_EVENT));
               }
             : undefined
         }

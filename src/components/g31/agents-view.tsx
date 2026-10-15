@@ -20,6 +20,9 @@ import { StatusChip } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import type { AgentReadiness } from "@/features/buyer-money/agent-readiness";
+import { capsToForm } from "@/features/buyer-money/caps";
+import { AGENT_CLI_SOURCE } from "@/features/buyer-money/get-started";
+import { permissionExpiry } from "@/features/buyer-money/permission-expiry";
 import { type DelegateBinding, supportsDelegation } from "@/features/delegation/delegation-form";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
@@ -81,7 +84,11 @@ export function AgentsView() {
   // The last target, so the sheet's title does not go blank while it animates out.
   const [lastRevoke, setLastRevoke] = React.useState<{ agent: AgentRow; key: KeyRow } | null>(null);
   if (revoking && revoking !== lastRevoke) setLastRevoke(revoking);
-  const [payFor, setPayFor] = React.useState<{ agent: AgentRow; delegate: string } | null>(null);
+  const [payFor, setPayFor] = React.useState<{
+    agent: AgentRow;
+    delegate: string;
+    renew?: { perCall: string; perDay: string } | null;
+  } | null>(null);
 
   const revoke = useMutation({
     mutationFn: (input: { agentId: string; id: string }) => revokeCredential(input.agentId, input.id),
@@ -149,7 +156,7 @@ export function AgentsView() {
             escrowReady={Boolean(data.escrowQuery.data?.exists)}
             onNewKey={() => setNewKeyFor(agent)}
             onRevokeKey={(key) => setRevoking({ agent, key })}
-            onLetPay={(delegate) => setPayFor({ agent, delegate })}
+            onLetPay={(delegate, renew) => setPayFor({ agent, delegate, renew })}
             onChanged={refresh}
           />
         ))
@@ -195,6 +202,7 @@ export function AgentsView() {
         }}
         agentName={payFor?.agent.label ?? "your agent"}
         delegateAccount={payFor?.delegate ?? null}
+        renew={payFor?.renew ?? null}
       />
     </div>
   );
@@ -232,7 +240,7 @@ function AgentCard({
   escrowReady: boolean;
   onNewKey: () => void;
   onRevokeKey: (key: KeyRow) => void;
-  onLetPay: (delegate: string) => void;
+  onLetPay: (delegate: string, renew?: { perCall: string; perDay: string } | null) => void;
   onChanged: () => void;
 }) {
   const [showRevoked, setShowRevoked] = React.useState(false);
@@ -244,6 +252,8 @@ function AgentCard({
   const grant = readiness.grant;
   const delegation = supportsDelegation(agent.agentAccount);
   const chainId = chainIdOfAccount(bound?.delegateAccount);
+  const [now] = React.useState(() => Date.now());
+  const expiry = permissionExpiry(grant, now);
 
   return (
     <section
@@ -286,7 +296,7 @@ function AgentCard({
                 </div>
                 {configFor === key.id ? (
                   <div className="min-w-0">
-                    <McpConfigTabs token={null} />
+                    <McpConfigTabs token={null} keyPrefix={key.prefix} />
                   </div>
                 ) : null}
               </li>
@@ -329,6 +339,7 @@ function AgentCard({
                 To pay, the agent makes its own payment key. Run this on the agent&apos;s machine:
               </p>
               <CodeBlock title="Terminal" code={BIND_COMMAND} />
+              <p className="text-body-xs text-03" data-testid="agent-cli-source">{AGENT_CLI_SOURCE}</p>
               <p className="flex items-center gap-1.5 text-body-xs text-03" aria-live="polite">
                 <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-primary-500 motion-reduce:animate-none" />
                 Waiting for the key. This updates by itself.
@@ -344,6 +355,23 @@ function AgentCard({
             <>
               <EffectiveLimitLines lines={limitLines(rowsFor(ctx, agent))} />
               <CapMeter label="Spent by this agent in the last 24 hours" used={grant.spentInWindow} limit={grant.maxPerWindow} />
+              {expiry ? (
+                <div className="flex flex-wrap items-center gap-2" data-testid="permission-expiry">
+                  <StatusChip status="expires-soon" detail={expiry.label} />
+                  <span className="text-body-13 text-02">After that, paid calls are refused until you renew it.</span>
+                  <Button
+                    size="sm"
+                    type="button"
+                    disabled={!bound?.delegateAccount || !escrowReady}
+                    onClick={() =>
+                      bound?.delegateAccount &&
+                      onLetPay(bound.delegateAccount, capsToForm(grant) ?? null)
+                    }
+                  >
+                    Renew
+                  </Button>
+                </div>
+              ) : null}
               <p className="text-body-xs text-03">
                 Allowed to pay until <LocalTime value={grant.validUntil} dateOnly />. Stop it paying removes that permission; its API key
                 keeps working for free calls.
