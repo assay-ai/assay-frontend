@@ -21,7 +21,9 @@ import {
 import { percentOf, timestamp } from "@/components/g31/format";
 import { UnsettledPayments, useSettleWait } from "@/components/g31/unsettled-payments";
 import {
+  hasTightenDelay,
   isUnsettledRefusal,
+  loweredDelayNote,
   strandReasons,
   UNSETTLED_POLL_MS,
 } from "@/features/delegation/unsettled";
@@ -240,6 +242,12 @@ function EscrowLimitsPageContent() {
     queryFn: () => getEscrowUnsettled(Date.now()),
   });
   const unsettled = unsettledQuery.data?.unsettled;
+  /*
+    An escrow with the tighten delay (assay-evm D-21) applies lower limits to
+    payments already signed only after that delay, so nothing can be stranded:
+    no warning, no "continue anyway" — just say when they apply.
+  */
+  const tightenDelay = unsettledQuery.data?.tightenDelaySeconds;
   const { refetch: refetchUnsettled } = unsettledQuery;
   const refreshUnsettled = React.useCallback(() => {
     void refetchUnsettled({ cancelRefetch: false });
@@ -253,9 +261,21 @@ function EscrowLimitsPageContent() {
             maxPerWindow: escrow.maxPerWindow.amount,
           },
           preview.body,
+          tightenDelay,
         )
       : [];
   const strand = strandsWith(unsettled);
+  const loweredNote =
+    preview.ok && escrow?.maxVoucherAmount && escrow.maxPerWindow
+      ? loweredDelayNote(
+          tightenDelay,
+          {
+            maxVoucherAmount: escrow.maxVoucherAmount.amount,
+            maxPerWindow: escrow.maxPerWindow.amount,
+          },
+          preview.body,
+        )
+      : null;
   const settle = useSettleWait(
     { count: unsettled?.count, strands: strand.length > 0, readAt: unsettledQuery.dataUpdatedAt },
     refreshUnsettled,
@@ -308,7 +328,8 @@ function EscrowLimitsPageContent() {
     // since it loaded (BUG-D1-08). The backend still refuses at build time.
     if (escrow?.exists) {
       const fresh = await refetchUnsettled({ cancelRefetch: false });
-      if (strandsWith(fresh.data?.unsettled).length > 0) return;
+      const delayed = hasTightenDelay(fresh.data?.tightenDelaySeconds);
+      if (!delayed && strandsWith(fresh.data?.unsettled).length > 0) return;
     }
     await buildRequest(false);
   }
@@ -680,6 +701,12 @@ function EscrowLimitsPageContent() {
                       <p className="text-body-xs text-danger-700">{errors.confirmZero}</p>
                     ) : null}
                   </div>
+                ) : null}
+
+                {loweredNote ? (
+                  <p className="text-body-13 text-02" data-testid="limits-tighten-delay">
+                    {loweredNote}
+                  </p>
                 ) : null}
 
                 <UnsettledPayments
