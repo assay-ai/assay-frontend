@@ -1,5 +1,7 @@
 "use client";
 
+import { useConnectWallet } from "@privy-io/react-auth";
+
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -92,6 +94,14 @@ export default function PenaltiesPage() {
       : signerState.status === "hydrating" || signerState.status === "chain-unknown"
         ? "Reading the wallets connected in this browser…"
         : `Connect your stake wallet (${penalties.ownAddress.slice(0, 6)}…${penalties.ownAddress.slice(-4)}) to dispute.`;
+
+  const { connectWallet } = useConnectWallet();
+  const needsConnect =
+    Boolean(penalties.ownAddress) &&
+    signerState.status !== "ready" &&
+    signerState.status !== "hydrating" &&
+    signerState.status !== "chain-unknown";
+  const onConnect = needsConnect ? () => connectWallet({ walletChainType: "ethereum-and-solana" }) : undefined;
 
   const [disputing, setDisputing] = React.useState<PenaltyRow | null>(null);
   const steps = disputing
@@ -191,6 +201,7 @@ export default function PenaltiesPage() {
               onWhy={() => setQuery({ case: row.id })}
               onDispute={() => setDisputing(row)}
               disputeBlocked={disputeBlocked}
+              onConnect={onConnect}
             />
           ))}
         </ul>
@@ -216,6 +227,7 @@ export default function PenaltiesPage() {
           setQuery({ case: null });
         }}
         disputeBlocked={disputeBlocked}
+              onConnect={onConnect}
       />
 
       <DisputeSheet

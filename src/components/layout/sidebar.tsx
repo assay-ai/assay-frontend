@@ -130,6 +130,12 @@ const Sidebar = React.forwardRef<HTMLElement, SidebarProps>(
         )}
         {...props}
       >
+        {/* Brand, as on the buyer and public bars: the icon alone on the narrow rail. */}
+        <div className="flex items-center gap-2 px-2 pb-3 pt-1 tablet:justify-center desktop:justify-start">
+          <img src="/images/logo.png" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 rounded-md object-cover" />
+          <span className="hidden text-[17px] font-medium leading-none tracking-[-0.025em] text-01 desktop:inline">Assay</span>
+          <span className="sr-only desktop:hidden">Assay</span>
+        </div>
         {header ? <div className="hidden pb-2 desktop:block">{header}</div> : null}
         {PROVIDER_NAV_ITEMS.map((item) => {
           const Icon = PROVIDER_NAV_ICONS[item.id];
