@@ -240,3 +240,27 @@ export function directoryErrorMessage(error: unknown): string {
       return `${error.message}${tail}`;
   }
 }
+
+// ── Plain-language form helpers ─────────────────────────────────────────────
+
+/** "Noor Hassan" → "noor@", the short handle the register names people by. */
+export function deriveSubject(name: string): string {
+  const first = name.trim().split(/\s+/)[0] ?? "";
+  const handle = first
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\u0111/g, "d")
+    .replace(/[^a-z0-9._-]/g, "");
+  return handle ? `${handle}@` : "";
+}
+
+/**
+ * The limit chosen in dollars ("0", "100", "1000", "unlimited" or a typed
+ * amount already converted to minor units) as the form's `LimitInput`.
+ */
+export function limitInputFromChoice(choice: string, atomic: string | null): LimitInput {
+  if (choice === "unlimited") return { mode: "unbounded", amount: "" };
+  if (choice === "0" || atomic === "0") return { mode: "zero", amount: "" };
+  return { mode: "amount", amount: atomic ?? "" };
+}

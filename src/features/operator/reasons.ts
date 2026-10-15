@@ -38,6 +38,13 @@ export const OPERATOR_ADD_REASONS: readonly ReasonOption[] = Object.freeze([
   OTHER,
 ]);
 
+export const OPERATOR_CHANGE_REASONS: readonly ReasonOption[] = Object.freeze([
+  { value: "ROLE_CHANGE", label: "Role change" },
+  { value: "ACCESS_REVIEW", label: "Access review" },
+  { value: "INCIDENT_COVER", label: "Incident cover" },
+  OTHER,
+]);
+
 export const OPERATOR_REMOVE_REASONS: readonly ReasonOption[] = Object.freeze([
   { value: "OFFBOARDED", label: "Left the team" },
   { value: "ACCESS_REVIEW", label: "Access no longer needed" },
@@ -48,7 +55,7 @@ export const OPERATOR_REMOVE_REASONS: readonly ReasonOption[] = Object.freeze([
 /** A reason code in words, from any vocabulary above; unknown codes are humanised. */
 export function reasonLabel(code: string | null | undefined): string {
   if (!code) return "";
-  for (const list of [BLOCK_REASONS, UNBLOCK_REASONS, SUSPEND_REASONS, OPERATOR_ADD_REASONS, OPERATOR_REMOVE_REASONS]) {
+  for (const list of [BLOCK_REASONS, UNBLOCK_REASONS, SUSPEND_REASONS, OPERATOR_ADD_REASONS, OPERATOR_CHANGE_REASONS, OPERATOR_REMOVE_REASONS]) {
     const found = list.find((option) => option.value === code);
     if (found && found.value !== "OTHER") return found.label;
   }

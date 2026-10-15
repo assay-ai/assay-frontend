@@ -512,11 +512,12 @@ function RulingSheet({
   const kind = ruling?.kind ?? "CANCEL";
   const chainId = chainForSelection ?? FALLBACK_CHAIN;
 
+  const rulingKey = ruling ? `${ruling.kind}:${ruling.ids.join(",")}` : "";
   React.useEffect(() => {
     setReason("");
     setNote("");
     setTicket("");
-  }, [ruling?.kind, ruling?.ids.join(",")]);
+  }, [rulingKey]);
 
   const connected = useConnectedAddresses();
   const signerState = useSigner({ chainId, address: arbiter ? connectedSpelling(connected, arbiter) : undefined });

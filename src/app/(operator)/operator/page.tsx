@@ -16,6 +16,7 @@ import { checkedAgo, groupApprovals, sortDisputesByDaysLeft } from "@/features/o
 import { RoleIntro, useRoleIntro } from "@/features/operator/role-intro";
 import { capabilitiesFor } from "@/features/operator/roles";
 import { useOperatorSession } from "@/features/operator/session-context";
+import { sortHoldsOldestFirst } from "@/features/operator/slash-holds-panel";
 import { useApprovalContext } from "@/features/operator/use-approval-context";
 import { useProviderNames } from "@/features/operator/use-operator-lookups";
 import { holdChainName } from "@/features/slash-hold/model";
@@ -117,7 +118,7 @@ export default function OperatorHome() {
   const groups = React.useMemo(() => groupApprovals(pending.data?.items ?? [], me, now), [pending.data, me, now]);
   const { context, approversFor, nameOf } = useApprovalContext([...groups.needsYou, ...groups.yours], me);
   const disputeRows = React.useMemo(() => sortDisputesByDaysLeft(disputes.data ?? []), [disputes.data]);
-  const holds = health.data?.slashHolds ?? [];
+  const holds = sortHoldsOldestFirst(health.data?.slashHolds ?? []);
   const blockCount = activeBlocks.data?.items.length ?? null;
 
   const lastChecked = Math.max(pending.dataUpdatedAt, disputes.dataUpdatedAt, health.dataUpdatedAt);
