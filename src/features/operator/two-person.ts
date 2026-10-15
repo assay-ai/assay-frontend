@@ -1,8 +1,7 @@
 import type { ApprovalQueued, OperatorRole } from "@/interfaces/operator";
 import type { StatusAnswer } from "@/libs/ApiClient";
 
-import { approverRolesFor } from "./approvals";
-import { ROLE_OPTIONS } from "./directory";
+import { approvalNeeds } from "./approvals";
 
 /**
  * A two-person route's answer.
@@ -45,7 +44,6 @@ export function approvalHref(approvalId: string): string {
   return `${APPROVALS_HREF}?id=${encodeURIComponent(approvalId)}`;
 }
 
-const ROLE_LABEL: Readonly<Record<string, string>> = Object.fromEntries(ROLE_OPTIONS.map((option) => [option.role, option.label]));
 
 /**
  * Who must approve a request with this register code, said from the
@@ -57,12 +55,7 @@ const ROLE_LABEL: Readonly<Record<string, string>> = Object.fromEntries(ROLE_OPT
  *   approverPhrase("A-10", ["ADJL"])       → "a second Lead adjudicator"
  */
 export function approverPhrase(code: string, requesterRoles: readonly OperatorRole[]): string {
-  const roles = approverRolesFor(code);
-  if (!roles || roles.length === 0) return "a second operator";
-  const names = roles.map((role) => ROLE_LABEL[role] ?? role);
-  const joined = names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
-  if (requesterRoles.some((role) => roles.includes(role))) return `a second ${joined}`;
-  return `${/^[AEIOU]/i.test(joined) ? "an" : "a"} ${joined}`;
+  return approvalNeeds(code, requesterRoles);
 }
 
 /** "Riley Brooks", "Riley Brooks or Iris Park", "a second Lead adjudicator" when nobody is named. */
