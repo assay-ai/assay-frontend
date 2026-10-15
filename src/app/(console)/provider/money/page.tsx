@@ -490,7 +490,10 @@ export default function ProviderMoneyPage() {
             /* Ours — the frame draws no empty state. This is also the
                `?persona=new-provider` branch: 200 with no groups, not a 404. */
             <p className="px-3 py-6 text-body-13 text-02">
-              Every call this month was credited: none was rejected and none failed.
+              {/* No calls is not "every call credited" (BUG-R17-P-02). */}
+              {(totals?.calls ?? 0) === 0
+                ? "No calls this month yet."
+                : "Every call this month was credited: none was rejected and none failed."}
             </p>
           )}
         </PanelBody>

@@ -8,6 +8,7 @@ import {
   foldNotCredited,
   observedTakeRate,
   pendingNote,
+  PENDING_PAYMENT_NOTE,
   rowsInAsset,
 } from "./csv";
 
@@ -220,16 +221,17 @@ describe("pendingNote — true to why the rows are pending", () => {
   const inFlight = row({ classification: "PENDING", status: "VERIFYING" });
 
   it("does not call a settled, uncredited call in flight", () => {
-    expect(pendingNote([settled, row({})])).toBe("settled, no credit recorded · not paid to you");
+    expect(pendingNote([settled, row({})])).toBe(PENDING_PAYMENT_NOTE);
+    expect(PENDING_PAYMENT_NOTE).toMatch(/still being checked/);
   });
 
   it("says in flight only when the calls are", () => {
-    expect(pendingNote([inFlight])).toBe("still in flight — no money has moved");
+    expect(pendingNote([inFlight])).toBe("the response is still being checked · no money has moved");
   });
 
   it("splits a mixed bucket by count", () => {
     expect(pendingNote([settled, settled, inFlight])).toBe(
-      "2 settled, no credit recorded · 1 still in flight"
+      "2 with the payment still being checked (no credit recorded yet) · 1 with the response still being checked · not paid to you yet"
     );
   });
 });
