@@ -34,8 +34,9 @@ const originOf = (value) => {
 /**
  * Security headers (frontend review 2026-10-15, F2).
  *
- * Enforced: no framing anywhere (the signing pages could otherwise be
- * clickjacked, Privy's confirmation modal included), no MIME sniffing, a
+ * Enforced: no framing by any other origin (the signing pages could otherwise
+ * be clickjacked, Privy's confirmation modal included; the app may frame itself,
+ * which the narrow-viewport checks use), no MIME sniffing, a
  * referrer cut to the origin cross-site, and no camera, microphone or
  * geolocation. HSTS only in production, where the site is served over HTTPS.
  *
@@ -59,7 +60,7 @@ const REPORT_ONLY_POLICY = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
-  "frame-ancestors 'none'",
+  "frame-ancestors 'self'",
   `child-src ${PRIVY_FRAMES.join(" ")}`,
   `frame-src ${PRIVY_FRAMES.join(" ")}`,
   [
@@ -84,9 +85,9 @@ const REPORT_ONLY_POLICY = [
 ].join("; ");
 
 const SECURITY_HEADERS = [
-  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
   { key: "Content-Security-Policy-Report-Only", value: REPORT_ONLY_POLICY },
-  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
