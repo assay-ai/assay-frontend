@@ -8,7 +8,8 @@ import * as React from "react";
 import { LocalTime } from "@/components/patterns/local-time";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
-import { ApprovalItem } from "@/features/operator/approval-item";
+import { ApprovalItem, type ApprovalResult } from "@/features/operator/approval-item";
+import { ResultCard } from "@/features/operator/result-card";
 import { approvalErrorMessage } from "@/features/operator/approvals";
 import { DisputeLine } from "@/features/operator/dispute-line";
 import { HealthStrip } from "@/features/operator/health-strip";
@@ -130,6 +131,9 @@ export default function OperatorHome() {
     void queryClient.invalidateQueries({ queryKey: ["operator", "blocks"] });
   };
 
+  const [results, setResults] = React.useState<ApprovalResult[]>([]);
+  const onDecided = React.useCallback((result: ApprovalResult) => setResults((list) => [result, ...list.filter((r) => r.id !== result.id)]), []);
+
   const needsYouCount = groups.needsYou.length + (caps.rule ? disputeRows.length : 0);
   const loading = pending.isLoading || (caps.rule && disputes.isLoading);
 
@@ -158,6 +162,16 @@ export default function OperatorHome() {
       {intro.open ? <RoleIntro identity={me} waiting={groups.needsYou.length} onDismiss={intro.dismiss} /> : null}
 
       <HealthStrip health={health.data} error={health.isError} />
+
+      {results.map((result) => (
+        <ResultCard
+          key={result.id}
+          title={result.title}
+          next={result.next}
+          activityHref={result.activityHref}
+          onDismiss={() => setResults((list) => list.filter((r) => r.id !== result.id))}
+        />
+      ))}
 
       {loading ? (
         <PageState kind="loading" rows={3} label="Loading what needs you" />
@@ -188,6 +202,7 @@ export default function OperatorHome() {
                   approval={approval}
                   context={context}
                   mode="decide"
+                  onDecided={onDecided}
                   approvers={approversFor(approval)}
                   nameOf={nameOf}
                   compact

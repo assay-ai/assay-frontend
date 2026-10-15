@@ -49,7 +49,20 @@ export interface ApprovalItemProps {
   highlighted?: boolean;
   /** Smaller: no field list (Home). */
   compact?: boolean;
+  /**
+   * Receives the outcome. A decided request leaves the waiting list on the
+   * next refresh, so the page shows the result card where it stays visible.
+   * Without it the card shows in place.
+   */
+  onDecided?: (result: ApprovalResult) => void;
   className?: string;
+}
+
+export interface ApprovalResult {
+  id: string;
+  title: string;
+  next?: string;
+  activityHref?: string | null;
 }
 
 type Outcome = { kind: "approved" | "rejected" | "withdrawn"; text: string; next?: string };
@@ -63,7 +76,7 @@ const NEXT: Readonly<Record<string, string>> = {
   "slash.sweep": "Matching cases are decided in the background.",
 };
 
-export function ApprovalItem({ approval, context, mode, approvers, nameOf, highlighted, compact, className }: ApprovalItemProps) {
+export function ApprovalItem({ approval, context, mode, approvers, nameOf, highlighted, compact, onDecided, className }: ApprovalItemProps) {
   const queryClient = useQueryClient();
   const [confirm, setConfirm] = React.useState<"approve" | "reject" | null>(null);
   const [outcome, setOutcome] = React.useState<Outcome | null>(null);
@@ -76,15 +89,26 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
     void queryClient.invalidateQueries({ queryKey: ["operator"] });
   };
 
+  const settle = (next: Outcome) => {
+    if (onDecided) {
+      onDecided({
+        id: approval.id,
+        title: next.text,
+        next: next.next,
+        activityHref: next.kind === "approved" ? approvalActivityHref(approval) : null,
+      });
+    } else {
+      setOutcome(next);
+    }
+    refresh();
+  };
   const onApprove = async () => {
     const decision = await approveApproval(approval.id);
-    setOutcome({ kind: "approved", text: approvedResultSentence(approval.action, decision.result), next: NEXT[approval.action] });
-    refresh();
+    settle({ kind: "approved", text: approvedResultSentence(approval.action, decision.result), next: NEXT[approval.action] });
   };
   const onReject = async () => {
     await rejectApproval(approval.id);
-    setOutcome(mode === "own" ? { kind: "withdrawn", text: "Request withdrawn. Nothing ran." } : { kind: "rejected", text: "Request rejected. Nothing ran." });
-    refresh();
+    settle(mode === "own" ? { kind: "withdrawn", text: "Request withdrawn. Nothing ran." } : { kind: "rejected", text: "Request rejected. Nothing ran." });
   };
   const describe = (kind: "approve" | "reject") => (error: unknown) => {
     if (error instanceof ApiError && error.code === "OPERATOR_APPROVAL_NOT_PENDING") refresh();

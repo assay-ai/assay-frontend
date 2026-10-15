@@ -9,7 +9,8 @@ import * as React from "react";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
-import { ApprovalItem } from "@/features/operator/approval-item";
+import { ApprovalItem, type ApprovalResult } from "@/features/operator/approval-item";
+import { ResultCard } from "@/features/operator/result-card";
 import { approvalErrorMessage } from "@/features/operator/approvals";
 import { groupApprovals } from "@/features/operator/inbox";
 import { useOperatorSession } from "@/features/operator/session-context";
@@ -95,6 +96,9 @@ function ApprovalsInbox() {
   const highlightGone =
     tab === "waiting" && highlight !== null && pending.data !== undefined && !pending.data.items.some((row) => row.id === highlight);
 
+  const [results, setResults] = React.useState<ApprovalResult[]>([]);
+  const onDecided = React.useCallback((result: ApprovalResult) => setResults((list) => [result, ...list.filter((r) => r.id !== result.id)]), []);
+
   const waitingCount = groups.needsYou.length + groups.yours.length + groups.others.length;
 
   return (
@@ -145,7 +149,17 @@ function ApprovalsInbox() {
           />
         ) : (
           <>
-            {highlightGone ? (
+            {results.map((result) => (
+              <ResultCard
+                key={result.id}
+                title={result.title}
+                next={result.next}
+                activityHref={result.activityHref}
+                onDismiss={() => setResults((list) => list.filter((r) => r.id !== result.id))}
+              />
+            ))}
+
+            {highlightGone && !results.some((r) => r.id === highlight) ? (
               <p role="status" className="w-full rounded-lg border border-01 bg-01 px-3.5 py-2.5 text-body-13 text-02">
                 The request you opened is no longer waiting: it was decided, withdrawn or has expired.{" "}
                 <button type="button" onClick={() => setTab("history")} className="text-primary-600 hover:underline">
@@ -166,6 +180,7 @@ function ApprovalsInbox() {
                     approval={row}
                     context={context}
                     mode="decide"
+                    onDecided={onDecided}
                     approvers={approversFor(row)}
                     nameOf={nameOf}
                     highlighted={row.id === highlight}
@@ -182,6 +197,7 @@ function ApprovalsInbox() {
                     approval={row}
                     context={context}
                     mode="own"
+                    onDecided={onDecided}
                     approvers={approversFor(row)}
                     nameOf={nameOf}
                     highlighted={row.id === highlight}
