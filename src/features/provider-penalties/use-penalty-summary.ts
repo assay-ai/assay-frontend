@@ -1,6 +1,9 @@
 "use client";
 
 import type { Money } from "@/interfaces";
+import { routes } from "@/libs/routes";
+
+import { usePenalties } from "./use-penalties";
 
 /**
  * Penalties that need the provider now (pending on chain, still disputable),
@@ -24,7 +27,20 @@ export interface PenaltySummary {
   count: number;
 }
 
-// STUB — the penalties work replaces this with the chain read.
+/**
+ * Reads the same chain query and case queries as the Penalties page, so the
+ * badge, Home and the page never disagree and never cost a second read.
+ */
 export function usePenaltySummary(): PenaltySummary {
-  return { isLoading: false, needsAction: [], count: 0 };
+  const penalties = usePenalties({ withCases: "open" });
+  const needsAction = penalties.rows
+    .filter((row) => row.canDispute)
+    .map((row) => ({
+      id: row.id,
+      toolName: penalties.caseFor(row)?.proposal.toolName ?? null,
+      amount: row.amount,
+      executableAt: row.executableAt,
+      href: routes.penalty(row.id),
+    }));
+  return { isLoading: penalties.isLoading, needsAction, count: needsAction.length };
 }

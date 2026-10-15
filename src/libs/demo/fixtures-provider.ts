@@ -1,3 +1,4 @@
+import { DEMO_PENALTY_AMOUNTS, DEMO_PENALTY_PROPOSALS, DEMO_PENALTY_SUBJECTS } from "./demo-penalties";
 import {
   DEMO_ASSET,
   DEMO_CHAIN_ID,
@@ -819,11 +820,16 @@ const DISPUTE_REASON =
   "19 of the 27 failures in this window came from one caller, which re-sent the same stale-window query every 40 seconds for two hours. Excluding that caller the observed rate is 3.74%, inside the declared 5.00%.";
 
 function slashProposalSummary(proposalId: string) {
-  const subject = WINDOWS[SUBJECT_WINDOW_INDEX];
-  const binding = BINDINGS[subject.bindingIndex];
-  return {
+  /* Three demo cases — needs action, disputed on chain, executed — matching
+     the on-chain rows in `demo-penalties.ts`. Any other id reads as the
+     disputed one, as before. */
+  const known = DEMO_PENALTY_PROPOSALS.indexOf(proposalId as (typeof DEMO_PENALTY_PROPOSALS)[number]);
+  const which = known === -1 ? 1 : known;
+  const subject = WINDOWS[DEMO_PENALTY_SUBJECTS[which].windowIndex];
+  const binding = BINDINGS[DEMO_PENALTY_SUBJECTS[which].bindingIndex];
+  const penalty = money(DEMO_PENALTY_AMOUNTS[which]);
+  const base = {
     id: proposalId,
-    status: "DISPUTED",
     providerId: PROVIDER_ID,
     bindingId: binding.id,
     bindingLabel: `${binding.toolName} · ${binding.endpoint}`,
@@ -831,24 +837,74 @@ function slashProposalSummary(proposalId: string) {
     toolName: binding.toolName,
     windowId: subject.windowId,
     windowLabel: subject.label,
-    penaltyAmount: money("5.00"),
+    penaltyAmount: penalty,
+    outcome: null,
+    resolutionKind: null,
+    resolvedAt: null,
+  };
+  if (which === 0) {
+    return {
+      ...base,
+      status: "PROPOSED",
+      appliedAmount: null,
+      clocks: {
+        proposedAt: minutesAgo(1200),
+        notifiedAt: minutesAgo(1190),
+        acknowledgedAt: null,
+        respondByAt: inMinutes(3120),
+        platformDecisionDueAt: null,
+        earliestExecutionAt: inMinutes(3120),
+        chainExecutableAt: inMinutes(3120),
+        chainStatus: "PENDING",
+        secondsRemaining: 3120 * 60,
+        runningClock: "PROVIDER",
+      },
+      disputeId: null,
+      executedAt: null,
+    };
+  }
+  if (which === 2) {
+    return {
+      ...base,
+      status: "EXECUTED",
+      appliedAmount: penalty,
+      clocks: {
+        proposedAt: minutesAgo(28800),
+        notifiedAt: minutesAgo(28790),
+        acknowledgedAt: null,
+        respondByAt: minutesAgo(24480),
+        platformDecisionDueAt: null,
+        earliestExecutionAt: minutesAgo(24480),
+        chainExecutableAt: minutesAgo(24480),
+        chainStatus: "EXECUTED",
+        secondsRemaining: null,
+        runningClock: "NONE",
+      },
+      disputeId: null,
+      outcome: "EXECUTED",
+      resolvedAt: minutesAgo(24000),
+      executedAt: minutesAgo(24000),
+    };
+  }
+  return {
+    ...base,
+    status: "DISPUTED",
     appliedAmount: null,
     clocks: {
       proposedAt: minutesAgo(5700),
       notifiedAt: minutesAgo(5688),
-      acknowledgedAt: minutesAgo(4380),
-      respondByAt: inMinutes(2460),
+      acknowledgedAt: null,
+      respondByAt: null,
       platformDecisionDueAt: inMinutes(5340),
       earliestExecutionAt: inMinutes(2520),
       chainExecutableAt: inMinutes(2880),
-      chainStatus: "PENDING",
-      secondsRemaining: 2460 * 60,
-      runningClock: "PROVIDER",
+      chainStatus: "DISPUTED",
+      chainDisputedAt: minutesAgo(4320),
+      chainDisputedParts: 1,
+      secondsRemaining: null,
+      runningClock: "PLATFORM",
     },
     disputeId: DISPUTE_ID,
-    outcome: null,
-    resolutionKind: null,
-    resolvedAt: null,
     executedAt: null,
   };
 }
@@ -990,12 +1046,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
             label: "Take rate",
             value: "10%",
             caption: "Configurable; the rate in force is shown at registration.",
-          },
-          {
-            key: "penalty_ceiling",
-            label: "Penalty ceiling",
-            value: "$5.00 per window",
-            caption: "And at most 10% of bonded stake in any 24 hours.",
           },
           {
             key: "payout_rail",
@@ -1760,7 +1810,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
             kind: "DISPUTE_FILED",
             actorType: "provider",
             actorId: CONSOLE_CREDENTIAL,
-            summary: "objection filed · agent griefing · 3 calls cited",
+            summary: "disputed on chain by your stake wallet",
             detail: {},
           },
           {
