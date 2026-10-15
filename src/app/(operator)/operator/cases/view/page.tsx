@@ -264,7 +264,7 @@ export default function OperatorCasePage() {
 
   const onSuspended = (answer: TwoPersonAnswer<unknown>, reasonCode: string) => {
     if (answer.kind === "queued") {
-      const sent = sentForApproval(`Suspending ${penaltyName}`, suspendApprovers, approvalNeeds("S-1"), answer.approval.expiresAt);
+      const sent = sentForApproval(`Suspending ${penaltyName}`, suspendApprovers, approvalNeeds("S-1", identity.roles), answer.approval.expiresAt);
       setResult({
         ...sent,
         approvalId: answer.approval.approvalId,

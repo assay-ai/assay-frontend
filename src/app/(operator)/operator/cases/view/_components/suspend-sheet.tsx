@@ -43,7 +43,7 @@ export function SuspendSheet({
   proposalId: string;
   penaltyText: string;
   twoPerson: boolean;
-  me: Pick<OperatorIdentity, "id">;
+  me: Pick<OperatorIdentity, "id" | "roles">;
   /** A suspension of this penalty already waiting for approval: a second one is not sent. */
   waiting?: OperatorApproval | null;
   /** The answer, and the reason that was picked (so the result card says it back). */
@@ -137,7 +137,7 @@ export function SuspendSheet({
             errors={errors}
           />
           <Field label="Ticket (optional)" value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="OPS-1187" maxLength={128} className="font-sans text-body-sm" />
-          {twoPerson ? <ApprovalFooter needs={approvalNeeds("S-1")} approvers={approvers} /> : null}
+          {twoPerson ? <ApprovalFooter needs={approvalNeeds("S-1", me.roles)} approvers={approvers} /> : null}
         </div>
         <SheetFooter className={OPERATOR_SHEET_FOOTER}>
           <div role="alert" className={failure ? "text-body-xs text-danger-600" : "sr-only"}>

@@ -28,7 +28,7 @@ import { MAX_SLASH_BATCH } from "@/libs/chains/evm/stake-slashes/abi";
 import { normaliseEvmAddress } from "@/libs/chains/evm/stake-slashes/address";
 import { describeChainRefusal } from "@/libs/chains/status-labels";
 
-import { formatMoney } from "@/utils/money";
+import { formatMoney, splitForDisplay } from "@/utils/money";
 
 import { BLOCK_NOTE_MAX, BLOCK_NOTE_MIN, REASON_CODE_MAX, TICKET_REF_MAX } from "./blocks";
 import { penaltySplit } from "./penalty-money";
@@ -384,8 +384,11 @@ export function rulingOutcome(input: {
   const split = total && agentBps !== null ? penaltySplit(total, agentBps) : null;
   const it = count === 1 ? "it" : "they";
   if (kind === "UPHOLD") {
-    const money = split
-      ? `${formatMoney({ ...split.agents, amount: (BigInt(split.agents.amount) + BigInt(split.platform.amount)).toString() })} leaves the provider's stake: ${formatMoney(split.agents)} to the agents who paid · ${formatMoney(split.platform)} to the platform. ${formatMoney(split.neverTaken)} stays with the provider`
+    // Rounded so the three parts add up to the penalty shown (largest remainder).
+    const shown = split ? splitForDisplay([split.agents, split.platform, split.neverTaken]) : null;
+    const [agents, platform, stays] = shown ?? [];
+    const money = agents && platform && stays
+      ? `${formatMoney({ ...agents, amount: (BigInt(agents.amount) + BigInt(platform.amount)).toString() })} leaves the provider's stake: ${formatMoney(agents)} to the agents who paid · ${formatMoney(platform)} to the platform. ${formatMoney(stays)} stays with the provider`
       : total
         ? `The penalty (${formatMoney(total)}) is taken from the provider's stake`
         : "The penalty is taken from the provider's stake";
