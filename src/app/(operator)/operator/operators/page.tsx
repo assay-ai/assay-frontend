@@ -511,7 +511,9 @@ function ChangeSheet({
   const change = useMutation({
     mutationFn: (input: { id: string; body: Parameters<typeof changeOperator>[1] }) => changeOperator(input.id, input.body),
     onSuccess: (answer) => row && onDone(answer, operatorLabel(row)),
-  });
+  });  const { reset: resetChange } = change;
+  React.useEffect(() => resetChange(), [row?.id, resetChange]);
+
 
   if (!row) return <Sheet open={false} />;
 
@@ -610,7 +612,9 @@ function RemoveSheet({
   const remove = useMutation({
     mutationFn: (input: { id: string; reasonCode: string; note: string }) => removeOperator(input.id, { reasonCode: input.reasonCode, note: input.note }),
     onSuccess: () => row && onDone(row),
-  });
+  });  const { reset: resetRemove } = remove;
+  React.useEffect(() => resetRemove(), [row?.id, resetRemove]);
+
 
   if (!row) return <Sheet open={false} />;
   const options: readonly ReasonOption[] = OPERATOR_REMOVE_REASONS;

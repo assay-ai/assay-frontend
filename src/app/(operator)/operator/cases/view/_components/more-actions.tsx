@@ -163,7 +163,10 @@ function Expandable({
         </span>
         <ChevronDown aria-hidden="true" className={cn("mt-0.5 size-4 shrink-0 text-03 transition-transform", open && "rotate-180")} />
       </button>
-      {open ? <div className="flex w-full flex-col gap-3 pb-4">{children}</div> : null}
+      {/* Kept mounted while collapsed: a prepared deposit, a signature or a sent request must survive a toggle. */}
+      <div hidden={!open} className={open ? "flex w-full flex-col gap-3 pb-4" : undefined}>
+        {children}
+      </div>
     </div>
   );
 }

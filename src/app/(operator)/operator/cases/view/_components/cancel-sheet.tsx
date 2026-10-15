@@ -58,10 +58,11 @@ export function CancelSheet({
   }, [open, mutate, reset]);
 
   const intent = build.data;
+  const [signing, setSigning] = React.useState(false);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent showCloseButton>
+    <Sheet open={open} onOpenChange={(next) => (signing ? undefined : onOpenChange(next))}>
+      <SheetContent showCloseButton={!signing}>
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Get the cancel signed</SheetTitle>
           <SheetDescription>
@@ -89,6 +90,7 @@ export function CancelSheet({
               successDescription="The penalty shows as cancelled once the chain watcher reads it back, usually within a minute."
               afterExport="Import the file in the Safe that holds the arbiter key and sign it there. The penalty shows as cancelled once it lands."
               onSigned={onSigned}
+              onBusyChange={setSigning}
             />
           ) : intent ? (
             <div className="flex w-full flex-col gap-2">

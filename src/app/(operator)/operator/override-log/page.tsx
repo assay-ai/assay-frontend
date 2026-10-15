@@ -180,7 +180,18 @@ function ActivityScreen() {
           code={log.error instanceof ApiError ? log.error.code : null}
         />
       ) : rows.length === 0 ? (
-        <PageState kind="empty" title="Nothing here" description={q || targetId || kind !== "all" ? "Nothing matches these filters." : "No manual action has been taken yet."} />
+        <PageState
+          kind="empty"
+          title="Nothing here"
+          description={
+            kind === "arbiter" && log.hasNextPage
+              ? "No arbiter action in the latest entries. Older ones may still match."
+              : q || targetId || kind !== "all"
+                ? "Nothing matches these filters."
+                : "No manual action has been taken yet."
+          }
+          action={kind === "arbiter" && log.hasNextPage ? { label: "Look further back", onClick: () => void log.fetchNextPage() } : undefined}
+        />
       ) : (
         <ol className="flex w-full flex-col rounded-xl border border-01 bg-01">
           {rows.map((row) => {

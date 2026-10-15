@@ -7,7 +7,8 @@ import { Toaster } from "sonner";
 
 import { AlertFill, CheckCircle } from "@/components/icons";
 import { PageState } from "@/components/patterns/page-state";
-import { groupApprovals } from "@/features/operator/inbox";
+import { groupApprovals, needsYouCount } from "@/features/operator/inbox";
+import { capabilitiesFor } from "@/features/operator/roles";
 import { OperatorBottomTabs, OperatorMobileTopBar, OperatorTopBar } from "@/features/operator/operator-shell";
 import { OperatorRefusal, SuspendedBanner } from "@/features/operator/operator-refusal";
 import { OperatorSessionContext } from "@/features/operator/session-context";
@@ -21,7 +22,7 @@ import {
   type OperatorSessionEnd,
   type OperatorSessionRecord,
 } from "@/libs/operator-session";
-import { getOperatorIdentity, listApprovals, logoutOperator } from "@/services/operator.service";
+import { getOperatorIdentity, listApprovals, listArbiterDisputes, logoutOperator } from "@/services/operator.service";
 import { useTheme } from "@/providers/ThemeProvider";
 
 /**
@@ -96,8 +97,22 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
     refetchInterval: 30_000,
     retry: 0,
   });
-  // The badge counts only what this operator can decide — the same rule as the Home inbox.
-  const needsYou = pendingQuery.data && data ? groupApprovals(pendingQuery.data.items, data).needsYou.length : 0;
+  const canRule = data ? capabilitiesFor(data.roles).rule : false;
+  const disputesQuery = useQuery({
+    queryKey: ["operator", "arbiter", "disputes"],
+    queryFn: listArbiterDisputes,
+    enabled: Boolean(session && data && canRule),
+    refetchInterval: 60_000,
+    retry: 0,
+  });
+  // The badge counts what this operator can act on — the same rule as the Home heading.
+  const needsYou = data
+    ? needsYouCount(
+        pendingQuery.data ? groupApprovals(pendingQuery.data.items, data).needsYou.length : 0,
+        disputesQuery.data?.length ?? 0,
+        canRule,
+      )
+    : 0;
 
   // Ends the operator session only; the Privy login stays signed in.
   const signOut = React.useCallback(
@@ -159,7 +174,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
       <main
         className={
           shell
-            ? "mx-auto flex w-full min-w-0 max-w-[1200px] flex-1 flex-col gap-3.5 p-4 pb-28 md:pb-4 tablet:gap-4 tablet:px-[26px] tablet:py-[22px]"
+            ? "mx-auto flex w-full min-w-0 max-w-[1200px] flex-1 flex-col gap-3.5 p-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] md:pb-4 tablet:gap-4 tablet:px-[26px] tablet:py-[22px]"
             : "mx-auto flex w-full min-w-0 max-w-[1200px] flex-1 flex-col gap-3.5 p-4 tablet:gap-4 tablet:px-[26px] tablet:py-[22px]"
         }
       >

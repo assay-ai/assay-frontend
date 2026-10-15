@@ -13,7 +13,7 @@ import { ResultCard } from "@/features/operator/result-card";
 import { approvalErrorMessage } from "@/features/operator/approvals";
 import { DisputeLine } from "@/features/operator/dispute-line";
 import { HealthStrip } from "@/features/operator/health-strip";
-import { checkedAgo, groupApprovals, sortDisputesByDaysLeft } from "@/features/operator/inbox";
+import { checkedAgo, groupApprovals, needsYouCount, sortDisputesByDaysLeft } from "@/features/operator/inbox";
 import { RoleIntro, useRoleIntro } from "@/features/operator/role-intro";
 import { capabilitiesFor } from "@/features/operator/roles";
 import { useOperatorSession } from "@/features/operator/session-context";
@@ -111,7 +111,7 @@ export default function OperatorHome() {
     retry: 0,
   });
   const activeBlocks = useQuery({
-    queryKey: ["operator", "blocks", "list", { active: true }],
+    queryKey: ["operator", "blocks", "active-count"],
     queryFn: () => listAccountBlocks({ active: true, limit: 100 }),
     retry: 0,
   });
@@ -134,20 +134,25 @@ export default function OperatorHome() {
   const [results, setResults] = React.useState<ApprovalResult[]>([]);
   const onDecided = React.useCallback((result: ApprovalResult) => setResults((list) => [result, ...list.filter((r) => r.id !== result.id)]), []);
 
-  const needsYouCount = groups.needsYou.length + (caps.rule ? disputeRows.length : 0);
+  const needsYouTotal = needsYouCount(groups.needsYou.length, disputeRows.length, caps.rule);
   const loading = pending.isLoading || (caps.rule && disputes.isLoading);
 
   return (
     <>
       <header className="flex w-full flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <h1 className="text-heading-md text-01">Needs you{needsYouCount > 0 ? ` · ${needsYouCount}` : ""}</h1>
+          <h1 className="text-heading-md text-01">Needs you{needsYouTotal > 0 ? ` · ${needsYouTotal}` : ""}</h1>
           <p className="text-body-13 text-03" aria-live="polite">
             {lastChecked > 0 ? checkedAgo(lastChecked, now) : "checking…"}
             <span className="hidden tablet:inline"> · keys: j / k to move, Enter to act</span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/operator/approvals">
+              All approvals{groups.yours.length + groups.others.length > 0 ? ` · ${groups.needsYou.length + groups.yours.length + groups.others.length} open` : ""}
+            </Link>
+          </Button>
           {!intro.open ? (
             <Button type="button" variant="ghost" size="sm" onClick={intro.show}>
               What can I do?
@@ -183,7 +188,7 @@ export default function OperatorHome() {
           code={pending.error instanceof ApiError ? pending.error.code : null}
           details={pending.error instanceof Error ? pending.error.message : null}
         />
-      ) : needsYouCount === 0 ? (
+      ) : needsYouTotal === 0 ? (
         <PageState
           kind="empty"
           title="Nothing needs you"

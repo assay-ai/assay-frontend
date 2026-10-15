@@ -560,5 +560,7 @@ export function approvalActivityHref(approval: Pick<OperatorApproval, "target" |
 export function approvalNeeds(code: string): string {
   const roles = approverRolesFor(code);
   if (!roles || roles.length === 0) return "a second operator";
-  return rolePhrase(roles).replace(/^an? /, "a second ");
+  const names = roles.map((role) => ROLE_LABEL[role] ?? role);
+  const joined = names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+  return `a second ${joined}`;
 }

@@ -15,6 +15,14 @@ import { approveBlockedBecause, approverRolesFor, isOwnRequest } from "./approva
  * all read these, so the badge always equals the Needs-you count.
  */
 
+/**
+ * What the Home heading and the nav badge both count: approvals this operator
+ * can decide, plus — for whoever can rule — every open on-chain dispute.
+ */
+export function needsYouCount(needsYouApprovals: number, openDisputes: number, canRule: boolean): number {
+  return needsYouApprovals + (canRule ? openDisputes : 0);
+}
+
 // ── Approvals ───────────────────────────────────────────────────────────────
 
 export interface ApprovalGroups {

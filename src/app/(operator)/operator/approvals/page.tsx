@@ -87,11 +87,15 @@ function ApprovalsInbox() {
     if (highlightedInOthers) setOthersOpen(true);
   }, [highlightedInOthers]);
   // A shared link lands on its request.
+  // Once per link, not on every 30-second refresh.
+  const scrolledTo = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!highlight || !pending.data) return;
+    if (!highlight || !pending.data || scrolledTo.current === highlight) return;
     const element = document.getElementById(`approval-${highlight}`);
-    element?.scrollIntoView({ block: "center" });
-    element?.focus();
+    if (!element) return;
+    scrolledTo.current = highlight;
+    element.scrollIntoView({ block: "center" });
+    element.focus();
   }, [highlight, pending.data, othersOpen]);
   const highlightGone =
     tab === "waiting" && highlight !== null && pending.data !== undefined && !pending.data.items.some((row) => row.id === highlight);
@@ -114,7 +118,7 @@ function ApprovalsInbox() {
         <p className="text-body-13 text-03">Actions that need two people. Each request expires 24 h after it was asked.</p>
       </header>
 
-      <div role="tablist" aria-label="Approvals" className="flex w-full gap-4 border-b border-01">
+      <div role="group" aria-label="Approvals" className="flex w-full gap-4 border-b border-01">
         {(
           [
             ["waiting", `Waiting${waitingCount > 0 ? ` · ${waitingCount}` : ""}`],
@@ -124,8 +128,7 @@ function ApprovalsInbox() {
           <button
             key={value}
             type="button"
-            role="tab"
-            aria-selected={tab === value}
+            aria-pressed={tab === value}
             onClick={() => setTab(value)}
             className={cn(
               "-mb-px border-b-2 pb-2 text-label-13",
