@@ -327,7 +327,7 @@ export default function PenaltiesPage() {
           {recentLine.map((item, index) => (
             <React.Fragment key={item.id}>
               {index > 0 ? <span aria-hidden="true">·</span> : null}
-              <Link href={routes.operatorCase(item.id)} className="text-02 hover:text-01 hover:underline">
+              <Link href={routes.operatorCase(item.id)} className="hit-area text-02 hover:text-01 hover:underline">
                 {labelOf(item, providers.lookup(item.providerId))}
               </Link>
             </React.Fragment>

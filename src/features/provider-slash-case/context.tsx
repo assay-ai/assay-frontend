@@ -115,6 +115,15 @@ export function contextStamp(audience: ContextAudience): (iso: string) => string
     : (iso) => `${formatLocalDateTime(iso, { midSentence: true })} ${zoneLabel(iso)}`.trim();
 }
 
+/**
+ * The strip's label: it counts every bar drawn, this case's window included,
+ * so the number and the bars agree ("Last 3 closed windows", not "Previous 2"
+ * over three bars). Lower case on the provider page's mono line.
+ */
+export function priorWindowsLabel(count: number, mono = false): string {
+  return `${mono ? "l" : "L"}ast ${count} closed ${count === 1 ? "window" : "windows"}`;
+}
+
 /** The design's `ag_7K2`-width column, without inventing a new identifier. */
 function shortKey(key: string): string {
   return key.length > 18 ? `${key.slice(0, 8)}…` : key;
@@ -132,19 +141,13 @@ function Bars({ windows, mono, stamp }: { windows: SlashPriorWindow[]; mono: boo
 
   const peak = Math.max(...windows.map((w) => w.observedRate), 0.0001);
 
-  // The server sends the six most recent CLOSED windows for the binding,
-  // whichever one the case is about. That is normally the newest, and then the
-  // design's own words are exact. It is NOT the newest for an older case — and
-  // then "previous N windows" would be a claim about ordering that the strip
-  // itself contradicts, so the label says what is actually drawn instead.
-  const subjectIsNewest = windows[windows.length - 1]?.isSubject ?? false;
-
+  // The server sends the most recent CLOSED windows for the binding, and the
+  // strip draws every one of them, this case's window included (in red). The
+  // label counts what is drawn, so the number and the bars always agree.
   return (
     <div className="flex w-full items-end gap-3 overflow-x-auto px-5 py-4">
       <span className={mono ? "shrink-0 self-center font-mono text-mono-12 text-03" : "shrink-0 self-center text-body-xs text-03"}>
-        {subjectIsNewest
-          ? `${mono ? "p" : "P"}revious ${Math.max(0, windows.length - 1)} windows`
-          : `${mono ? "l" : "L"}ast ${windows.length} closed windows`}
+        {priorWindowsLabel(windows.length, mono)}
       </span>
       <div className="flex min-w-0 flex-1 items-end justify-end gap-2 tablet:gap-4">
         {windows.map((window) => {

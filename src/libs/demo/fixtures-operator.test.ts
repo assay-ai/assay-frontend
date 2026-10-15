@@ -112,6 +112,9 @@ describe("demo actions survive a reload in the same tab", () => {
     expect(reloaded.demoSessionBase()).toBe(first.demoSessionBase());
     const pending = (call(reloaded, "GET", "/operator/approvals", { status: "PENDING" }) as { items: OperatorApproval[] }).items;
     expect(pending.some((a) => a.id === "apr-comp-1")).toBe(false);
+    // History (no status filter, decided rows) lists it first: newest decision on top.
+    const history = (call(reloaded, "GET", "/operator/approvals") as { items: OperatorApproval[] }).items.filter((a) => a.status !== "PENDING");
+    expect(history[0]).toMatchObject({ id: "apr-comp-1", status: "APPROVED" });
     const row = (call(reloaded, "GET", "/operator/cases") as { items: OperatorCaseListRow[] }).items.find((r) => r.proposalId === MERIDIAN_CASE);
     expect(row?.status).toBe("COMPENSATED");
     const brief = call(reloaded, "GET", `/operator/cases/${MERIDIAN_CASE}`) as OperatorCaseBrief;

@@ -151,7 +151,7 @@ export function beneficiaryCheck(row: ArbiterDispute): {
   if (evidence.ok) {
     return {
       status: "ok",
-      headline: `The payee (who gets paid) paid for ${evidence.failedCalls} failed call${evidence.failedCalls === 1 ? "" : "s"}, and this penalty is within their share.`,
+      headline: `Paid to an account that paid for ${evidence.failedCalls} failed call${evidence.failedCalls === 1 ? "" : "s"}, and this penalty is within its share.`,
       reason: null,
     };
   }

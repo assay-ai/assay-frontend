@@ -119,7 +119,7 @@ export function SuspendSheet({
           {waiting ? (
             <p role="status" className="w-full rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5 text-body-13 text-02">
               A suspension of this penalty is already waiting for approval, so a second one is not sent.{" "}
-              <Link href={approvalHref(waiting.id)} className="text-primary-600 hover:underline">
+              <Link href={approvalHref(waiting.id)} className="hit-area text-primary-600 hover:underline">
                 Open the waiting request
               </Link>
             </p>

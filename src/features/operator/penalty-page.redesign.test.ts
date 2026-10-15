@@ -120,7 +120,7 @@ describe("round 4: the penalty page tells one story", () => {
     expect(window.date).toBeFalsy();
     expect(window.dateLabel).toBe("open until the signing deadline");
     // The signature step carries the one date and the countdown: the window's end.
-    expect(steps.at(-1)).toMatchObject({ state: "current", date: facts.executableAt, dateLabel: "sign before", countdown: true });
+    expect(steps.at(-1)).toMatchObject({ state: "current", date: facts.executableAt, dateLabel: "sign by", countdown: true });
     // Once that instant has passed, the window is done at it.
     const later = Date.parse(facts.executableAt!) + 60_000;
     expect(caseTimelineSteps(cobalt, caseFacts(cobalt, later), { now: later }).find((s) => s.id === "window")).toMatchObject({
@@ -136,6 +136,24 @@ describe("round 4: the penalty page tells one story", () => {
     expect(caseTimelineSteps(quanta, facts).find((s) => s.id === "ruling")).toMatchObject({ date: facts.disputeExpiresAt, dateLabel: "lapsed" });
     const lattice = await brief("f1b8d6a2-3e57-4c09-9b14-6a2e0d8c7f35");
     expect(caseTimelineSteps(lattice, caseFacts(lattice)).find((s) => s.id === "ruling")?.date).toBeTruthy();
+  });
+
+  it("says why an upheld penalty is executable only later: the timelock from the proposal", async () => {
+    const { caseFacts, caseTimelineSteps } = await import("./case-flow");
+    const lattice = await brief("f1b8d6a2-3e57-4c09-9b14-6a2e0d8c7f35");
+    const facts = caseFacts(lattice);
+    expect(facts.stage).toBe("upheld");
+    const steps = caseTimelineSteps(lattice, facts, { slashDelaySeconds: 259_200 });
+    const upheldAt = Date.parse(steps.find((s) => s.id === "ruling")!.date!);
+    // The contract's rule: executable from max(frozen executableAt, uphold), and the frozen one is proposal + 72 h.
+    expect(Date.parse(facts.executableAt!)).toBeGreaterThan(upheldAt);
+    expect(Date.parse(facts.executableAt!) - Date.parse(lattice.case.proposal.clocks.proposedAt)).toBe(72 * 3_600_000);
+    expect(steps.at(-1)).toMatchObject({
+      dateLabel: "executable from",
+      description: "The 72 h on-chain timelock from the proposal still runs; an uphold never shortens it.",
+    });
+    const later = Date.parse(facts.executableAt!) + 60_000;
+    expect(caseTimelineSteps(lattice, caseFacts(lattice, later), { now: later }).at(-1)?.description).toBeUndefined();
   });
 
   it("varies the measurement per penalty, and each one is a breach", async () => {
@@ -217,6 +235,13 @@ describe("round 4: ruling from the penalty page", () => {
 });
 
 describe("round 5: the Context tab reads time like the rest of the console", () => {
+  it("counts every window the Context strip draws, the breached one included", async () => {
+    const { priorWindowsLabel } = await import("@/features/provider-slash-case/context");
+    expect(priorWindowsLabel(3)).toBe("Last 3 closed windows");
+    expect(priorWindowsLabel(1)).toBe("Last 1 closed window");
+    expect(priorWindowsLabel(6, true)).toBe("last 6 closed windows");
+  });
+
   it("is local with its zone for operators, UTC for the provider page", async () => {
     const { contextStamp } = await import("@/features/provider-slash-case/context");
     const { zoneLabel } = await import("@/libs/local-time");

@@ -96,7 +96,7 @@ export function DisputeLine({
 
   return (
     <article data-inbox-row="" tabIndex={-1} className={rowClass}>
-      <Link href={caseHref} className="min-w-0 flex-1 [overflow-wrap:anywhere] hover:underline">
+      <Link href={caseHref} className="hit-area min-w-0 flex-1 [overflow-wrap:anywhere] hover:underline">
         {name}
       </Link>
       <span className="flex flex-wrap items-center gap-x-4 gap-y-1">{facts}</span>
