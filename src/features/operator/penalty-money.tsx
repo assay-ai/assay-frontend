@@ -66,6 +66,8 @@ export function PenaltyMoney({
   const taken = stage === "executed";
   const repaid = stage === "compensated";
   const released = stage === "cancelled";
+  // Suspended here: the arbiter's cancel is pending, so the split below is what would have happened, not what will.
+  const cancelling = stage === "cancel-requested";
   return (
     <section aria-label="Where the money goes" className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 p-4 tablet:p-5">
       <div className="flex flex-col gap-0.5">
@@ -77,7 +79,9 @@ export function PenaltyMoney({
               ? "Taken from the provider's stake, then paid back by the treasury."
               : released
                 ? "Nothing was taken: the reserved stake went back to the provider."
-                : "Reserved in the provider's stake. Nothing has moved yet."}
+                : cancelling
+                  ? `Cancel requested: the reserved ${formatMoney(penalty)} goes back to the provider once the arbiter signs. Nothing has moved.`
+                  : "Reserved in the provider's stake. Nothing has moved yet."}
         </p>
       </div>
       <MoneyFlow
@@ -94,8 +98,14 @@ export function PenaltyMoney({
                 </>
               ) : undefined,
           },
-          ...(released || repaid
-            ? [{ label: repaid ? "Paid back by the treasury" : "Back to the provider", amount: formatMoney(penalty), tone: "teal" as const }]
+          ...(released || repaid || cancelling
+            ? [
+                {
+                  label: repaid ? "Paid back by the treasury" : cancelling ? "Back to the provider, once signed" : "Back to the provider",
+                  amount: formatMoney(penalty),
+                  tone: "teal" as const,
+                },
+              ]
             : split
               ? [
                   { label: "Agents who paid", amount: formatMoney(split.agents), tone: "primary" as const },
@@ -104,7 +114,7 @@ export function PenaltyMoney({
               : []),
         ]}
       />
-      {split && agentBps !== null && !released && !repaid ? (
+      {split && agentBps !== null && !released && !repaid && !cancelling ? (
         <div className="flex flex-col gap-2">
           <MoneySplit
             segments={[
