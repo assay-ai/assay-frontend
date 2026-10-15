@@ -1,7 +1,9 @@
 import { Check, CircleAlert, CircleDot, FileX, Loader, Minus, ServerCrash, X } from "lucide-react";
 import * as React from "react";
 
+import { Term } from "@/components/patterns/term";
 import { receiptStateLabel } from "@/features/call-classes/labels";
+import type { GlossaryKey } from "@/libs/glossary";
 import { cn } from "@/utils";
 
 import type { StateCard, StateTone } from "./receipt-state";
@@ -115,6 +117,8 @@ export interface NotChargedHeadlineProps {
    * stands alone when the second half would not be true.
    */
   failedChecks: boolean;
+  /** What happened to the money, for this call's reason. Replaces the default line. */
+  explain?: string;
 }
 
 /**
@@ -128,15 +132,17 @@ export function NotChargedHeadline({
   paid,
   notCharged,
   failedChecks,
+  explain,
 }: NotChargedHeadlineProps) {
   return (
     <section className="flex w-full flex-col gap-6 rounded-xl border border-teal-20 bg-teal-10 px-6 py-5 tablet:flex-row tablet:items-center">
       <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
         <h2 className="text-heading-sm text-teal-600">{headline}</h2>
         <p className="text-body-sm text-02">
-          {failedChecks
-            ? "Refunds are a released hold, so your balance never changes. The money was reserved, the call failed our checks, and the reservation was lifted."
-            : "Refunds are a released hold, so your balance never changes."}
+          {explain ??
+            (failedChecks
+              ? "Refunds are a released hold, so your balance never changes. The money was reserved, the call failed our checks, and the reservation was lifted."
+              : "Refunds are a released hold, so your balance never changes.")}
         </p>
       </div>
       <div className="flex w-full items-end gap-3 tablet:w-auto tablet:shrink-0 tablet:gap-8">
@@ -256,7 +262,7 @@ const MOBILE_WORD: Record<string, string> = {
 };
 
 export interface MobileStageListProps {
-  checks: { id?: string; name: string; status: string; note?: string }[];
+  checks: { id?: string; name: string; term?: GlossaryKey; status: string; note?: string; detail?: string }[];
 }
 
 /**
@@ -278,11 +284,18 @@ export function MobileStageList({ checks }: MobileStageListProps) {
           <li key={check.id ?? index} className="flex w-full items-center gap-2.5 py-3">
             <Icon aria-hidden="true" className={cn("size-[15px] shrink-0", mark.className)} />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="text-label-13 text-01">{check.name}</span>
+              <span className="text-label-13 text-01">
+                {check.term ? <Term k={check.term}>{check.name}</Term> : check.name}
+              </span>
               <span className="text-body-xs text-03">
                 {MOBILE_WORD[check.status] ?? check.status}
                 {check.note ? ` · ${check.note}` : ""}
               </span>
+              {check.detail ? (
+                <span className={cn("text-body-xs", check.status === "failed" ? "text-danger-600" : "text-03")}>
+                  {check.detail}
+                </span>
+              ) : null}
             </div>
           </li>
         );

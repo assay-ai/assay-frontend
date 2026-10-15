@@ -118,5 +118,5 @@ export async function getDemoStatus(): Promise<{
 export const DEMO_STAGE_LABELS: Record<string, string> = {
   SCHEMA: "Response shape",
   DETERMINISTIC_RULES: "Result quality rules",
-  SEMANTIC: "Relevance judgement",
+  SEMANTIC: "Relevance check",
 };

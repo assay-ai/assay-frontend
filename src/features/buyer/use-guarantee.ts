@@ -6,6 +6,7 @@ import type { CursorPage, Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { getWithheld, getReceiptsSummary, listToolCalls, type ToolCall } from "@/services";
 import { listVerdicts, type VerdictRow } from "@/services/guarantee.service";
+import { plain } from "@/libs/plain-language";
 import { notCharged, toDecimal } from "@/utils/money";
 
 import { monthPeriod, recentMonths, sumMoney, type Period } from "./period";
@@ -49,8 +50,10 @@ async function collectPages<T>(
 }
 
 export interface FailureReason {
-  /** The API's own `reasonCode`. Not a verdict — see rule 3. */
+  /** A stable key: the verdict's `reasonCode` for a failed check, else the class. */
   reason: string;
+  /** The plain sentence a buyer reads. */
+  label: string;
   calls: number;
   amount: Money | null;
   /** The tool most of these calls went to, and the provider that served it. */
@@ -102,30 +105,42 @@ export interface GuaranteeState {
   onSelectMonth: (key: string) => void;
 }
 
-function foldReasons(verdicts: VerdictRow[], calls: ToolCall[]): FailureReason[] {
-  const callById = new Map(calls.map((c) => [c.intentId, c]));
+/** The statuses that end a call without a charge (see the backend's `withheld` buckets). */
+const NOT_CHARGED_STATUSES = new Set(["REFUNDED", "VOIDED", "EXPIRED"]);
+
+/**
+ * Why each not-charged call was not charged, for EVERY such call — not only the
+ * ones with a verdict. Grouped by the call's real reason, the same classes the
+ * receipt tells (`notChargedReason` in features/g30/receipt-state):
+ *  - REFUNDED with a FAIL verdict: failed our checks, split by the verdict's reason;
+ *  - REFUNDED with no verdict: the result was in the wrong format;
+ *  - a MISAPPLIED verdict: outside what the tool covers;
+ *  - VOIDED: no usable result (provider error, rejected request or no answer);
+ *  - EXPIRED: did not finish in time.
+ */
+export function foldReasons(verdicts: VerdictRow[], calls: ToolCall[]): FailureReason[] {
+  const reasonByIntent = new Map(verdicts.map((v) => [v.intentId, v.reasonCode]));
   const byReason = new Map<
     string,
-    { calls: number; amounts: Money[]; tools: Map<string, number>; providers: Map<string, number> }
+    { label: string; calls: number; amounts: Money[]; tools: Map<string, number>; providers: Map<string, number> }
   >();
 
-  for (const verdict of verdicts) {
-    const reason = verdict.reasonCode;
-    if (!reason) continue;
+  for (const call of calls) {
+    if (!NOT_CHARGED_STATUSES.has(call.status) || !toDecimal(call.charged).isZero()) continue;
+    if (toDecimal(call.price).isZero()) continue; // free-tier calls are counted separately
+    const { key, label } = reasonOf(call, reasonByIntent.get(call.intentId) ?? null);
 
-    let entry = byReason.get(reason);
+    let entry = byReason.get(key);
     if (!entry) {
-      entry = { calls: 0, amounts: [], tools: new Map(), providers: new Map() };
-      byReason.set(reason, entry);
+      entry = { label, calls: 0, amounts: [], tools: new Map(), providers: new Map() };
+      byReason.set(key, entry);
     }
     entry.calls += 1;
-    entry.tools.set(verdict.toolId, (entry.tools.get(verdict.toolId) ?? 0) + 1);
-    if (verdict.providerId) {
-      entry.providers.set(verdict.providerId, (entry.providers.get(verdict.providerId) ?? 0) + 1);
+    entry.tools.set(call.toolId, (entry.tools.get(call.toolId) ?? 0) + 1);
+    if (call.providerId) {
+      entry.providers.set(call.providerId, (entry.providers.get(call.providerId) ?? 0) + 1);
     }
-
-    const call = callById.get(verdict.intentId);
-    if (call) entry.amounts.push(notCharged(call.price, call.charged));
+    entry.amounts.push(notCharged(call.price, call.charged));
   }
 
   const dominant = (counts: Map<string, number>): string | null => {
@@ -143,12 +158,36 @@ function foldReasons(verdicts: VerdictRow[], calls: ToolCall[]): FailureReason[]
   return [...byReason.entries()]
     .map(([reason, entry]) => ({
       reason,
+      label: entry.label,
       calls: entry.calls,
       amount: sumMoney(entry.amounts, null),
       mostlyToolId: dominant(entry.tools),
       mostlyProviderId: dominant(entry.providers),
     }))
     .sort((a, b) => b.calls - a.calls);
+}
+
+function reasonOf(call: ToolCall, reasonCode: string | null): { key: string; label: string } {
+  if (call.verdict === "FAIL") {
+    if (!reasonCode || /^quorum_/i.test(reasonCode)) {
+      return { key: "FAILED_CHECKS", label: "Failed our checks" };
+    }
+    return { key: `FAIL:${reasonCode}`, label: `Failed our checks: ${lowerFirst(plain(reasonCode))}` };
+  }
+  if (call.verdict === "MISAPPLIED") {
+    return { key: "MISAPPLIED", label: "Outside what the tool covers" };
+  }
+  if (call.status === "REFUNDED") {
+    return { key: "WRONG_FORMAT", label: "Result in the wrong format" };
+  }
+  if (call.status === "EXPIRED") {
+    return { key: "EXPIRED", label: "Did not finish in time" };
+  }
+  return { key: "NO_USABLE_RESULT", label: "No usable result: the provider errored, rejected the request or never answered" };
+}
+
+function lowerFirst(text: string): string {
+  return text ? text.charAt(0).toLowerCase() + text.slice(1) : text;
 }
 
 function asApiError(cause: unknown): ApiError {

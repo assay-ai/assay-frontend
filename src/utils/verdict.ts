@@ -52,14 +52,14 @@ const FROM_DESIGN: Record<string, VerdictPresentation> = {
   },
   DEGRADED: {
     shownAs:
-      "Rule checks passed. We could not run the relevance judgement, so it was not counted either way.",
+      "Rule checks passed. We could not run the relevance check, so it was not counted either way.",
     mark: "bang",
     charged: true,
     provisional: false,
   },
   SKIPPED: {
     // The design appends the sample rate at the call site; see `withRate`.
-    shownAs: "Not sampled for relevance judgement",
+    shownAs: "Not sampled for the relevance check",
     mark: "dash",
     charged: true,
     provisional: false,

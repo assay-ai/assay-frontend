@@ -4,9 +4,11 @@ import {
   STATE_CARDS,
   canContestRejection,
   deriveReceiptState,
+  notChargedStory,
   receiptFlow,
   relevanceReached,
   samplingExplainerCopy,
+  toStageChecks,
 } from "./receipt-state";
 import type { Receipt } from "./wire";
 
@@ -102,5 +104,66 @@ describe("receiptFlow and relevanceReached", () => {
     expect(relevanceReached(r("0", [{ stage: "SEMANTIC", status: "NOT_REACHED" }]))).toBe(false);
     expect(relevanceReached(r("0", [{ stage: "SEMANTIC", status: "SKIPPED" }]))).toBe(true);
     expect(relevanceReached(r("0", []))).toBe(false);
+  });
+});
+
+describe("notChargedStory — one story per not-charged class", () => {
+  const money = (amount: string) => ({ amount, asset: "x", decimals: 6 });
+  const stage = (name: string, status = "NOT_REACHED") => ({
+    stage: name,
+    status,
+    label: "not reached",
+    note: "checks stop at the first failure",
+    detail: "checks stop at the first failure",
+  });
+  const make = (over: Partial<Receipt>): Receipt =>
+    ({
+      intentId: "i",
+      toolId: "t",
+      providerId: null,
+      classification: null,
+      status: "VOIDED",
+      listedPrice: money("50000"),
+      chargedPrice: money("0"),
+      withheld: money("50000"),
+      verdict: { status: null },
+      stages: ["SCHEMA", "DETERMINISTIC_RULES", "CROSS_CHECK", "SEMANTIC"].map((s) => stage(s)),
+      policy: {},
+      sampling: {},
+      createdAt: "2026-10-13T17:55:23Z",
+      expiresAt: "2026-10-13T18:00:23Z",
+      updatedAt: "2026-10-13T17:55:24Z",
+      ...over,
+    }) as Receipt;
+
+  it("REFUNDED with a data result and no verdict is a wrong-format result, shown as a failed shape check", () => {
+    const receipt = make({ status: "REFUNDED", classification: "DATA_RESULT" });
+    const story = notChargedStory(receipt);
+    expect(story.reason).toBe("WRONG_FORMAT");
+    expect(story.headline).not.toMatch(/No result recorded/);
+    const checks = toStageChecks(receipt);
+    expect(checks[0]).toMatchObject({ status: "failed" });
+    expect(checks.slice(1).every((c) => c.note === "not run: an earlier check failed" && !c.detail)).toBe(true);
+    expect(receiptFlow(receipt, "NOT_CHARGED")[1]?.label).toBe("Wrong result format");
+  });
+
+  it("a provider error never says a check failed", () => {
+    const receipt = make({ classification: "SYSTEM_ERROR" });
+    const story = notChargedStory(receipt);
+    expect(story.reason).toBe("PROVIDER_ERROR");
+    expect(story.checksSummary).toMatch(/No checks ran/);
+    expect(receiptFlow(receipt, "SYSTEM_ERROR")[1]?.label).toBe("Provider error");
+    expect(toStageChecks(receipt).every((c) => c.status === "not-reached" && c.note === "not run: no result")).toBe(true);
+  });
+
+  it("separates rejected requests, no answer, expiry and failed checks", () => {
+    expect(notChargedStory(make({ classification: "REQUEST_ERROR" })).reason).toBe("REQUEST_REJECTED");
+    expect(notChargedStory(make({})).reason).toBe("NO_ANSWER");
+    expect(notChargedStory(make({ status: "EXPIRED", classification: "DATA_RESULT" })).headline).toMatch(/did not finish in time/);
+    expect(notChargedStory(make({ status: "REFUNDED", verdict: { status: "FAIL" } })).reason).toBe("FAILED_CHECKS");
+  });
+
+  it("a settled free call is charged, not 'not charged'", () => {
+    expect(deriveReceiptState(make({ status: "SETTLED", listedPrice: money("0"), withheld: money("0") }))).toBe("CHARGED");
   });
 });
