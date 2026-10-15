@@ -1,0 +1,463 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, Minus, Plus, Rocket } from "lucide-react";
+import Link from "next/link";
+import * as React from "react";
+
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { StakeSheet } from "@/features/provider-stake/stake-sheet";
+import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
+import type {
+  CatalogueSettlementAsset,
+  CatalogueTool,
+  Money,
+  ProviderTermsSummary,
+  PublishRequirement,
+  ToolBindingDetail,
+  UpdateToolBindingBody,
+} from "@/interfaces";
+import { getPublishCheck } from "@/services/provider-tool-bindings.service";
+import { cn } from "@/utils";
+import { formatMoney, formatMoneyNonZero, toDecimal } from "@/utils/money";
+
+import { BuyerPreview } from "../buyer-preview";
+import { minorUnitsFromMajorInput, majorInputFromMoney } from "../chrome";
+import {
+  choiceOfMode,
+  DEFAULT_FAILURE_PERCENT,
+  DEFAULT_FREE_CALLS_PER_AGENT,
+  failureRateFromPercent,
+  freeCallsFromInput,
+  modeOfChoice,
+  percentText,
+  PRICE_CHOICES,
+  providerShare,
+  stakeNeededFor,
+  stakeRuleOf,
+  takeRateOf,
+  timeoutFromSeconds,
+  totalStakeWith,
+  type PriceChoice,
+} from "../go-live";
+
+/** Why publishing cannot happen yet, in the provider's words. */
+export const REQUIREMENT_SENTENCE: Record<PublishRequirement, string> = {
+  TESTER_RUN: "Run a test of your current connection.",
+  TESTER_PASSED: "Get a passing test.",
+  PAYOUT_ACCOUNT: "Add a payout wallet so you can be paid.",
+  STAKE_AT_MINIMUM_ON_EVERY_CHAIN: "Add stake to cover paid calls.",
+};
+
+export interface LiveForm {
+  choice: PriceChoice;
+  price: string;
+  freeCalls: string;
+  failurePercent: string;
+  timeoutSeconds: string;
+}
+
+export function liveFormOf(binding: ToolBindingDetail, priceHint: string | null): LiveForm {
+  const fresh = binding.status === "DRAFT" && binding.pricingMode === "FREE";
+  const choice: PriceChoice = fresh && priceHint ? "paid" : choiceOfMode(binding.pricingMode);
+  return {
+    choice,
+    price: binding.pricingMode !== "FREE" ? majorInputFromMoney(binding.price) : (priceHint ?? ""),
+    freeCalls: String(binding.freeQuotaPerAgent ?? DEFAULT_FREE_CALLS_PER_AGENT),
+    failurePercent: binding.slaFailureRate > 0 ? percentText(binding.slaFailureRate) : String(DEFAULT_FAILURE_PERCENT),
+    timeoutSeconds: String(binding.timeoutMs / 1000),
+  };
+}
+
+export interface ParsedLive {
+  body: UpdateToolBindingBody | null;
+  errors: Partial<Record<keyof LiveForm, string>>;
+  price: Money | null;
+  freeCalls: number | null;
+  failureRate: number | null;
+}
+
+/** The form → the PATCH body (only what changed), or the errors. */
+export function parseLiveForm(form: LiveForm, binding: ToolBindingDetail, asset: CatalogueSettlementAsset): ParsedLive {
+  const errors: ParsedLive["errors"] = {};
+  const mode = modeOfChoice(form.choice);
+  let price: Money | null = null;
+  let priceAmount = "0";
+  if (mode !== "FREE") {
+    const minor = minorUnitsFromMajorInput(form.price.replace(/^\$/, ""), asset.decimals);
+    if (form.price.trim() === "") errors.price = "Enter a price per call, like 0.10.";
+    else if (minor.error) errors.price = minor.error;
+    else if (!minor.amount || /^0*$/.test(minor.amount)) errors.price = "More than $0. Choose Free for no charge.";
+    else {
+      priceAmount = minor.amount;
+      price = { amount: minor.amount, asset: asset.assetId, decimals: asset.decimals };
+    }
+  }
+  let freeCalls: number | null = null;
+  if (mode === "FREEMIUM") {
+    const parsed = freeCallsFromInput(form.freeCalls);
+    if (parsed.error) errors.freeCalls = parsed.error;
+    freeCalls = parsed.value;
+  }
+  const failure = failureRateFromPercent(form.failurePercent);
+  if (failure.error) errors.failurePercent = failure.error;
+  const timeout = timeoutFromSeconds(form.timeoutSeconds);
+  if (timeout.error) errors.timeoutSeconds = timeout.error;
+
+  if (Object.keys(errors).length > 0) return { body: null, errors, price, freeCalls, failureRate: failure.value };
+
+  const body: UpdateToolBindingBody = {};
+  if (mode !== binding.pricingMode) body.pricingMode = mode;
+  if (priceAmount !== (binding.pricingMode === "FREE" ? "0" : binding.price.amount) || body.pricingMode) {
+    body.priceAmount = priceAmount;
+    body.assetId = asset.assetId;
+  }
+  const quota = mode === "FREEMIUM" ? freeCalls : null;
+  if (quota !== binding.freeQuotaPerAgent) body.freeQuotaPerAgent = quota;
+  if (failure.value !== binding.slaFailureRate) body.slaFailureRate = failure.value!;
+  if (timeout.value !== binding.timeoutMs) body.timeoutMs = timeout.value!;
+  return { body, errors, price, freeCalls, failureRate: failure.value };
+}
+
+function PercentStepper({
+  value,
+  onChange,
+  error,
+  disabled,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  error?: string;
+  disabled?: boolean;
+}) {
+  const step = (delta: number) => {
+    const current = Number(value.replace("%", ""));
+    const next = Math.max(0.5, Math.min(100, (Number.isFinite(current) ? current : DEFAULT_FAILURE_PERCENT) + delta));
+    onChange(String(Number(next.toFixed(2))));
+  };
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-label-13 text-01">Failures you promise to stay under</span>
+      <div className="flex items-center gap-2">
+        <Button type="button" variant="secondary" size="sm" aria-label="Lower" disabled={disabled} onClick={() => step(-0.5)} icon={<Minus aria-hidden="true" />} />
+        <label className="flex w-28 items-center gap-1 rounded-md border border-02 bg-01 px-3 py-2 focus-within:border-primary-500">
+          <span className="sr-only">Failure rate in percent</span>
+          <input
+            inputMode="decimal"
+            value={value}
+            disabled={disabled}
+            onChange={(event) => onChange(event.target.value)}
+            className="w-full min-w-0 bg-transparent text-right font-mono text-mono-sm text-01 outline-none"
+          />
+          <span className="font-mono text-mono-13 text-03">%</span>
+        </label>
+        <Button type="button" variant="secondary" size="sm" aria-label="Raise" disabled={disabled} onClick={() => step(0.5)} icon={<Plus aria-hidden="true" />} />
+      </div>
+      <p className={cn("text-body-xs", error ? "text-danger-500" : "text-03")}>
+        {error ??
+          "Out of every 100 checked calls in a window. Go over it and part of your stake can be taken as a penalty. A higher number is safer for you but looks weaker to buyers."}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Stage 3: the price, the promise, and one Publish. A live summary says what a
+ * buyer pays, what the provider receives and what stake it needs; when the
+ * stake falls short the button becomes "Add $X stake and publish" and opens
+ * the Stake sheet, publishing as soon as the stake lands.
+ */
+export function LiveStage({
+  tool,
+  binding,
+  asset,
+  terms,
+  priceHint,
+  readOnly,
+  onSave,
+  onPublish,
+  onBackToTest,
+}: {
+  tool: CatalogueTool;
+  binding: ToolBindingDetail;
+  asset: CatalogueSettlementAsset;
+  terms: ProviderTermsSummary | null;
+  priceHint: string | null;
+  readOnly: boolean;
+  onSave: (body: UpdateToolBindingBody) => Promise<ToolBindingDetail>;
+  onPublish: () => Promise<void>;
+  onBackToTest: () => void;
+}) {
+  const [form, setForm] = React.useState<LiveForm>(() => liveFormOf(binding, priceHint));
+  const [advanced, setAdvanced] = React.useState(false);
+  const [saveState, setSaveState] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [publishing, setPublishing] = React.useState(false);
+  const [publishError, setPublishError] = React.useState<string | null>(null);
+  const [stakeOpen, setStakeOpen] = React.useState(false);
+
+  const stake = useStakeStatus();
+  const check = useQuery({
+    queryKey: ["provider", "tool-binding", binding.id, "publish-check"],
+    queryFn: () => getPublishCheck(binding.id),
+    retry: 0,
+  });
+
+  const parsed = parseLiveForm(form, binding, asset);
+  const mode = modeOfChoice(form.choice);
+  const set = (patch: Partial<LiveForm>) => setForm((current) => ({ ...current, ...patch }));
+
+  // Autosave: a valid change is saved a moment after the provider stops typing.
+  const pendingBody = parsed.body && Object.keys(parsed.body).length > 0 ? parsed.body : null;
+  const bodyKey = pendingBody ? JSON.stringify(pendingBody) : "";
+  const save = React.useCallback(async () => {
+    if (!pendingBody || readOnly) return;
+    setSaveState("saving");
+    try {
+      await onSave(pendingBody);
+      setSaveState("saved");
+      void check.refetch();
+    } catch {
+      setSaveState("error");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bodyKey, readOnly]);
+  React.useEffect(() => {
+    if (!pendingBody) return;
+    const timer = setTimeout(() => void save(), 1200);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bodyKey]);
+
+  // The arithmetic for the summary.
+  const take = takeRateOf(terms);
+  const rule = stakeRuleOf(stake.stake);
+  const needed = stakeNeededFor(parsed.price, mode, rule);
+  const totalNeeded = totalStakeWith(needed, stake.stake, binding.id);
+  const have = stake.staked;
+  const shortfall: Money | null =
+    needed && totalNeeded
+      ? (() => {
+          const gap = toDecimal(totalNeeded).minus(have ? toDecimal(have) : 0);
+          return gap.gt(0)
+            ? { amount: gap.mul(10 ** totalNeeded.decimals).toFixed(0), asset: totalNeeded.asset, decimals: totalNeeded.decimals }
+            : null;
+        })()
+      : null;
+  const currentTerms = !take.fromServer || !rule.fromServer;
+
+  const unmet = (check.data?.requirements ?? []).filter((requirement) => !requirement.met);
+  const testMissing = unmet.find((r) => r.requirement === "TESTER_RUN" || r.requirement === "TESTER_PASSED");
+  const payoutMissing = unmet.find((r) => r.requirement === "PAYOUT_ACCOUNT");
+  const hasErrors = Object.keys(parsed.errors).length > 0;
+
+  let blockReason: React.ReactNode = null;
+  if (readOnly) blockReason = "Your account is blocked, so publishing is paused.";
+  else if (hasErrors) blockReason = "Fix the fields marked above.";
+  else if (testMissing)
+    blockReason = (
+      <>
+        {REQUIREMENT_SENTENCE[testMissing.requirement]}{" "}
+        <button type="button" className="text-primary-600 underline" onClick={onBackToTest}>
+          Back to Connect &amp; test
+        </button>
+      </>
+    );
+  else if (payoutMissing)
+    blockReason = (
+      <>
+        {REQUIREMENT_SENTENCE.PAYOUT_ACCOUNT}{" "}
+        <Link href="/provider/setup" className="text-primary-600 underline">
+          Add it in setup
+        </Link>
+      </>
+    );
+
+  const needsStake = mode !== "FREE" && shortfall !== null && stake.stake !== null;
+
+  const publish = async () => {
+    setPublishError(null);
+    setPublishing(true);
+    try {
+      if (pendingBody) await onSave(pendingBody);
+      await onPublish();
+    } catch (error) {
+      setPublishError(error instanceof Error ? error.message : "Publishing did not work. Try again.");
+      void check.refetch();
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const priceMoney = parsed.price;
+  const youGet = priceMoney ? providerShare(priceMoney, take) : null;
+
+  return (
+    <section aria-labelledby="live-stage-title" className="flex w-full flex-col gap-5">
+      <div className="flex flex-col gap-1">
+        <h2 id="live-stage-title" className="text-label-md text-01">
+          Set your price and go live
+        </h2>
+        <p className="text-body-13 text-02">Changes save as you go. Nothing is public until you publish.</p>
+      </div>
+
+      <div className="flex w-full flex-col gap-5 tablet:flex-row tablet:items-start">
+        <div className="flex min-w-0 flex-1 flex-col gap-5 rounded-lg border border-01 bg-01 p-4">
+          <div className="flex flex-col gap-2">
+            <span className="text-label-13 text-01">How agents pay</span>
+            <Segmented value={form.choice} onValueChange={(value) => set({ choice: value as PriceChoice })} aria-label="How agents pay">
+              {PRICE_CHOICES.map((choice) => (
+                <SegmentedItem key={choice.value} value={choice.value} disabled={readOnly}>
+                  {choice.label}
+                </SegmentedItem>
+              ))}
+            </Segmented>
+            <p className="text-body-xs text-03">{PRICE_CHOICES.find((c) => c.value === form.choice)?.hint}</p>
+          </div>
+
+          {mode !== "FREE" ? (
+            <Field
+              label="Price per call"
+              inputMode="decimal"
+              suffix={asset.symbol}
+              value={form.price}
+              disabled={readOnly}
+              onChange={(event) => set({ price: event.target.value })}
+              error={parsed.errors.price}
+              placeholder="0.10"
+            />
+          ) : null}
+
+          {mode === "FREEMIUM" ? (
+            <Field
+              label="Free calls per agent per day"
+              inputMode="numeric"
+              value={form.freeCalls}
+              disabled={readOnly}
+              onChange={(event) => set({ freeCalls: event.target.value })}
+              error={parsed.errors.freeCalls}
+              hint="Each agent gets this many free calls a day on this tool, then pays the price above."
+            />
+          ) : null}
+
+          <PercentStepper
+            value={form.failurePercent}
+            onChange={(next) => set({ failurePercent: next })}
+            error={parsed.errors.failurePercent}
+            disabled={readOnly}
+          />
+
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              aria-expanded={advanced}
+              onClick={() => setAdvanced((open) => !open)}
+              className="flex items-center gap-1.5 self-start text-label-13 text-02 hover:text-01"
+            >
+              <ChevronDown aria-hidden="true" className={cn("size-4 transition-transform", advanced && "rotate-180")} />
+              Advanced
+            </button>
+            {advanced ? (
+              <Field
+                label="Time we wait for your API"
+                inputMode="decimal"
+                suffix="seconds"
+                value={form.timeoutSeconds}
+                disabled={readOnly}
+                onChange={(event) => set({ timeoutSeconds: event.target.value })}
+                error={parsed.errors.timeoutSeconds}
+                hint="A call that takes longer counts as a failure and is not paid."
+              />
+            ) : null}
+          </div>
+          <p aria-live="polite" className="min-h-4 text-body-xs text-03">
+            {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Draft saved" : saveState === "error" ? "Could not save. We will try again when you publish." : null}
+          </p>
+        </div>
+
+        <div className="flex w-full flex-col gap-4 tablet:w-[360px] tablet:shrink-0">
+          <div className="flex flex-col gap-2 rounded-lg border border-01 bg-01 p-4" aria-live="polite">
+            <span className="text-label-13 text-01">Summary</span>
+            {mode === "FREE" ? (
+              <p className="text-body-13 text-02">Free for every agent. No revenue, no stake needed, no penalty risk on money.</p>
+            ) : priceMoney && youGet ? (
+              <p className="text-body-13 text-01">
+                Buyers pay {formatMoneyNonZero(priceMoney)} → you get {formatMoneyNonZero(youGet)} a call
+                {mode === "FREEMIUM" && parsed.freeCalls ? ` after ${parsed.freeCalls.toLocaleString("en-US")} free calls per agent a day` : ""}.
+              </p>
+            ) : (
+              <p className="text-body-13 text-03">Enter a price to see what you earn.</p>
+            )}
+            {mode !== "FREE" && needed ? (
+              <p className="flex flex-wrap items-center gap-1 text-body-13 text-01">
+                Needs {formatMoney(totalNeeded)} stake
+                {stake.isLoading ? null : have ? (
+                  <span className={shortfall ? "text-warning-700" : "text-success-700"}>
+                    {`(you have ${formatMoney(have)}${shortfall ? `, ${formatMoney(shortfall)} short)` : " ✓)"}`}
+                  </span>
+                ) : (
+                  <span className="text-warning-700">(you have none yet)</span>
+                )}
+              </p>
+            ) : null}
+            {mode !== "FREE" ? (
+              <p className="text-body-xs text-03">
+                Stake is your guarantee to buyers: {formatMoney({ amount: rule.floor.mul(10 ** asset.decimals).toFixed(0), asset: asset.assetId, decimals: asset.decimals })} or{" "}
+                {rule.multiplier.toFixed()} × your price, whichever is more. It stays yours unless you break your promise.
+                {currentTerms ? " Figures use the current published terms." : null}
+              </p>
+            ) : null}
+          </div>
+
+          <BuyerPreview
+            toolName={tool.name}
+            description={tool.description}
+            mode={mode}
+            price={priceMoney}
+            freeCalls={parsed.freeCalls}
+            failureRate={parsed.failureRate}
+          />
+        </div>
+      </div>
+
+      <div className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:justify-between">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-label-sm text-01">Publish {tool.name}</span>
+          <span className="text-body-xs text-03">
+            {blockReason ??
+              (needsStake
+                ? `Your stake is ${formatMoney(shortfall)} short. Add it in one sheet; we publish as soon as it lands.`
+                : "Agents can call it as soon as you publish. You can pause it any time.")}
+          </span>
+          {publishError ? (
+            <span role="alert" className="text-body-xs text-danger-600">
+              {publishError}
+            </span>
+          ) : null}
+        </div>
+        <Button
+          icon={<Rocket aria-hidden="true" />}
+          loading={publishing}
+          disabled={Boolean(blockReason) || check.isLoading || publishing}
+          onClick={() => (needsStake ? setStakeOpen(true) : void publish())}
+          className="w-full tablet:w-auto"
+        >
+          {needsStake ? `Add ${formatMoney(shortfall)} stake and publish` : "Publish"}
+        </Button>
+      </div>
+
+      <StakeSheet
+        open={stakeOpen}
+        onOpenChange={setStakeOpen}
+        amount={shortfall}
+        reason={`${tool.name} needs ${formatMoney(totalNeeded)} of stake to take paid calls.`}
+        onStaked={() => {
+          setStakeOpen(false);
+          void stake.refetch();
+          void publish();
+        }}
+      />
+    </section>
+  );
+}

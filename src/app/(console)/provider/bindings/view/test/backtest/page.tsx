@@ -1,10 +1,9 @@
 "use client";
 
-import { useSearchParam } from "@/hooks/useSearchParam";
+import { ClientRedirect } from "@/components/layout/client-redirect";
+import { RETIRED_BINDING_PAGES } from "@/features/provider-binding/screens";
 
-import { BacktestView } from "./_components/backtest-view";
-
-/** Corpus backtest. The binding id rides in `?binding=` (see `libs/routes.ts`). */
-export default function BacktestPage() {
-  return <BacktestView bindingId={useSearchParam("binding")} />;
+/** Retired: this page now lives in the listing's three tabs or the wizard. Keeps `?binding=`. */
+export default function RetiredBindingPage() {
+  return <ClientRedirect to={RETIRED_BINDING_PAGES["test/backtest"]!} />;
 }

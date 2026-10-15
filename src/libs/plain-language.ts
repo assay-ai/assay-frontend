@@ -111,6 +111,13 @@ export function plainRule(type: string, params: RuleParams = {}): string {
 
 /** Why a rule failed or did not run (`rule.code` on evidence). */
 const RULE_CODES: Record<string, string> = {
+  // Verdict reason codes as the verdict feed sends them (upper case).
+  FRESHNESS_STALE: "The data was older than allowed",
+  VALUE_RANGE_OUT_OF_BOUNDS: "A value was outside the allowed range",
+  REQUIRED_FIELDS_MISSING: "A required field was missing",
+  MIN_ARRAY_LENGTH_NOT_MET: "Too few results",
+  INVALID_URL: "A link was not a valid address",
+  DUPLICATE_VALUES: "The same value appeared more than once",
   stale_timestamp: "The data was older than allowed",
   future_timestamp: "A timestamp was in the future",
   missing_timestamp: "A timestamp was missing",
