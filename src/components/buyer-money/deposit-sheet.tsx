@@ -192,6 +192,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
     <WalletActionSheet
       open={open}
       onOpenChange={onOpenChange}
+      chain={chain}
       title="Add funds"
       description="Money goes into your escrow, which only your wallet controls."
       steps={steps}

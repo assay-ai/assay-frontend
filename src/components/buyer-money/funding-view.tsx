@@ -13,6 +13,7 @@ import { MoneyFlow, MoneySplit } from "@/components/patterns/money-flow";
 import { PageState, Skeleton, SkeletonRows } from "@/components/patterns/page-state";
 import { StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
 import { StatusTimeline } from "@/components/patterns/status-timeline";
+import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
 import { windowRefillAt } from "@/features/buyer-money/refill";
@@ -149,8 +150,9 @@ export function FundingView() {
       {/* Hero: the one number, and the two things to do with it. */}
       <section aria-label="Spendable balance" className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 p-5 shadow-soft tablet:flex-row tablet:items-end tablet:justify-between tablet:p-6">
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-body-13 text-02">
+          <span className="flex flex-wrap items-center gap-2 text-body-13 text-02">
             {noEscrow ? "No money added yet" : "Available now: your agents can spend it, or you can withdraw it"}
+            <TestnetChip chain={money.chain} />
           </span>
           {escrowQuery.isPending ? (
             <Skeleton className="h-10 w-44" />

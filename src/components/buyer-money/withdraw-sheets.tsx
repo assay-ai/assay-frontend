@@ -117,6 +117,7 @@ export function WithdrawSheet({
     <WalletActionSheet
       open={open}
       onOpenChange={onOpenChange}
+      chain={money.chain}
       title={cancelling ? "Cancel your withdrawal request?" : "Withdraw"}
       description={
         cancelling
@@ -253,6 +254,7 @@ export function ClaimSheet({ open, onOpenChange }: { open: boolean; onOpenChange
     <WalletActionSheet
       open={open}
       onOpenChange={onOpenChange}
+      chain={money.chain}
       title="Claim your withdrawal"
       description={`${payout ? formatLimit(payout) : "The amount"} goes to your wallet${money.ownerShort ? ` ${money.ownerShort}` : ""}.`}
       steps={steps}

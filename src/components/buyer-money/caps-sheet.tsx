@@ -124,6 +124,7 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
     <WalletActionSheet
       open={open}
       onOpenChange={onOpenChange}
+      chain={money.chain}
       title="Account ceiling (on chain)"
       description="Protects your whole escrow: the most any one call can cost, and the most all your agents together can spend in 24 hours. Nobody can go past it, Assay included. Each agent's own spending limits sit under it."
       steps={steps}

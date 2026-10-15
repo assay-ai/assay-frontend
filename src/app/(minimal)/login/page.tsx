@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { Button } from "@/components/ui/button";
 import { safeNextPath } from "@/libs/login-redirect";
 
@@ -88,6 +89,8 @@ export default function LoginPage() {
   // (where a brand-new account finds its Get started checklist).
   const next = safeNextPath(searchParams.get("next"));
   const expired = searchParams.get("reason") === "expired";
+  // Sent here from a provider page (List a tool, Start listing): say so.
+  const listing = next.startsWith("/provider");
 
   useEffect(() => {
     if (ready && authenticated) router.replace(next);
@@ -170,7 +173,10 @@ export default function LoginPage() {
       {/* Form pane. */}
       <section className="flex flex-1 flex-col items-center justify-center bg-01 px-6 py-14 tablet:px-10">
         <div className="flex w-full max-w-[368px] flex-col gap-8">
-          <BrandLockup className="flex items-center gap-2 text-01 tablet:hidden" />
+          <div className="flex items-center justify-between gap-3">
+            <BrandLockup className="flex items-center gap-2 text-01 tablet:hidden" />
+            <TestnetChip className="ml-auto" />
+          </div>
 
           {expired ? (
             <p
@@ -182,7 +188,7 @@ export default function LoginPage() {
           ) : null}
 
           <div className="flex flex-col gap-2">
-            <h1 className="text-heading-lg text-01">Sign in</h1>
+            <h1 className="text-heading-lg text-01">{listing ? "Sign in to start listing" : "Sign in"}</h1>
             <p className="text-body-sm text-02">
               Continue to your Assay account. Email or wallet — there is no password to remember.
             </p>
