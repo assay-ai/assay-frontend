@@ -1,7 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
-import { applyIdentityChange, isOperatorConsolePath, type BuyerSessionEffects } from "./buyer-session";
+import {
+  applyIdentityChange,
+  isOperatorConsolePath,
+  signedOutLanding,
+  unauthorizedTarget,
+  type BuyerSessionEffects,
+} from "./buyer-session";
 
 function effects() {
   const queryClient = {
@@ -113,5 +119,35 @@ describe("applyIdentityChange", () => {
     await flush();
     expect(fx.startWalletLink).not.toHaveBeenCalled();
     expect(fx.queryClient.resetQueries).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("unauthorizedTarget", () => {
+  it("says the session expired only when this page load had one", () => {
+    expect(unauthorizedTarget({ pathname: "/funding", search: "?action=deposit", previous: "did:privy:1" })).toBe(
+      "/login?next=%2Ffunding%3Faction%3Ddeposit&reason=expired",
+    );
+    expect(unauthorizedTarget({ pathname: "/", search: "", previous: "did:privy:1" })).toBe("/login?reason=expired");
+  });
+
+  it("sends a first-time visitor at / to How it works, elsewhere to plain sign-in", () => {
+    expect(unauthorizedTarget({ pathname: "/", search: "", previous: null })).toBe("/how-it-works");
+    expect(unauthorizedTarget({ pathname: "/", search: "", previous: undefined })).toBe("/how-it-works");
+    expect(unauthorizedTarget({ pathname: "/provider/setup", search: "", previous: null })).toBe(
+      "/login?next=%2Fprovider%2Fsetup",
+    );
+  });
+});
+
+describe("signedOutLanding", () => {
+  it("sends a settled, signed-out visitor at / to How it works", () => {
+    expect(signedOutLanding({ ready: true, authenticated: false, pathname: "/", demo: false })).toBe("/how-it-works");
+  });
+
+  it("does nothing while resolving, when signed in, off /, or on a demo build", () => {
+    expect(signedOutLanding({ ready: false, authenticated: false, pathname: "/", demo: false })).toBeNull();
+    expect(signedOutLanding({ ready: true, authenticated: true, pathname: "/", demo: false })).toBeNull();
+    expect(signedOutLanding({ ready: true, authenticated: false, pathname: "/funding", demo: false })).toBeNull();
+    expect(signedOutLanding({ ready: true, authenticated: false, pathname: "/", demo: true })).toBeNull();
   });
 });
