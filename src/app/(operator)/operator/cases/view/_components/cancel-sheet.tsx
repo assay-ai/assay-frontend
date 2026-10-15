@@ -38,15 +38,15 @@ export function CancelSheet({
   onOpenChange,
   proposalId,
   penaltyAsset,
-  deadlineText,
+  deadlineSentence,
   onSigned,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   proposalId: string;
   penaltyAsset: string;
-  /** "before 18 Oct, 14:00" */
-  deadlineText: string;
+  /** When it must be signed by and what happens if not (`cancelDeadlineSentence`). */
+  deadlineSentence: string;
   onSigned: (hash: string | null) => void;
 }) {
   const build = useMutation({ mutationFn: () => createCancelIntent(proposalId) });
@@ -66,8 +66,8 @@ export function CancelSheet({
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Get the cancel signed</SheetTitle>
           <SheetDescription>
-            The penalty is cancelled in Assay, but its record still holds the provider&rsquo;s stake on chain. Only the
-            arbiter&rsquo;s key can retire it, {deadlineText}; after that anyone can execute the penalty.
+            The penalty is suspended in Assay, but its record still holds the provider&rsquo;s stake on chain. Only the
+            arbiter&rsquo;s key can retire it. {deadlineSentence}
           </SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
