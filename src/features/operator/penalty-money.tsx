@@ -54,9 +54,14 @@ export function keptShareText(agentBps: number, platformBps: number = SLASH_PLAT
   return pct(Math.max(0, 10_000 - agentBps - platformBps));
 }
 
-/** How much the provider's stake goes down if it executes: agents plus platform. Null while the split is unknown. */
-export function stakeReduction(penalty: Money, agentBps: number | null): Money | null {
-  const split = agentBps === null ? null : penaltySplit(penalty, agentBps);
+/**
+ * How much the provider's stake goes down if it executes: agents plus
+ * platform. With `display`, the two parts as the money card draws them (to the
+ * cent, adding up to the total), so the fact and the card agree. Null while the
+ * split is unknown.
+ */
+export function stakeReduction(penalty: Money, agentBps: number | null, display = false): Money | null {
+  const split = agentBps === null ? null : display ? displaySplit(penalty, agentBps) : penaltySplit(penalty, agentBps);
   return split ? { ...penalty, amount: (BigInt(split.agents.amount) + BigInt(split.platform.amount)).toString() } : null;
 }
 

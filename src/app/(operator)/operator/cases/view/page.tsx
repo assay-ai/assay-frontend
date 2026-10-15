@@ -283,7 +283,7 @@ export default function OperatorCasePage() {
   // Ruling is neutral: Cancel and Uphold carry equal weight, each opening its sheet on the Arbiter.
   const ruling = next.kind === "action" && next.action === "rule";
   const primary = next.kind === "action" && !ruling ? actionFor(next.action, true) : undefined;
-  const reduction = stakeReduction(proposal.appliedAmount ?? proposal.penaltyAmount, terms.data?.slashAgentBps ?? null);
+  const reduction = stakeReduction(proposal.appliedAmount ?? proposal.penaltyAmount, terms.data?.slashAgentBps ?? null, true);
   const readOnlyRuling = facts.stage === "disputed" && !authority.rule;
   const restoration = showsRestoration(facts.stage, brief, facts.expired);
   const pendingActions = (pending.data?.items ?? [])

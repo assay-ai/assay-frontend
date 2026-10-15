@@ -153,11 +153,15 @@ export default function PenaltiesPage() {
     for (const approval of pending.data?.items ?? []) {
       const code = PENALTY_APPROVAL_CODES[approval.action];
       if (!code || approval.status !== "PENDING") continue;
-      const names = directory.isPending ? [] : eligibleApprovers(code, directory.operators, approval.requestedById);
+      const myName = directory.nameOf(me.id);
+      // "Waiting for you or Iris to approve" when the signed-in operator is one of them.
+      const names = directory.isPending
+        ? []
+        : eligibleApprovers(code, directory.operators, approval.requestedById).map((name) => (name === myName ? "you" : name));
       map.set(approvalTargetId(approval), { action: approval.action, text: waitingText(names) });
     }
     return map;
-  }, [pending.data, directory]);
+  }, [pending.data, directory, me.id]);
 
   let rows: PenaltyRow[];
   let loading: boolean;
