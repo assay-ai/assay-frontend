@@ -3,7 +3,7 @@ import Decimal from "decimal.js";
 import { type DelegationFormInput, findDelegation } from "@/features/delegation/delegation-form";
 import type { EscrowDelegate, Money, UnsettledVouchers } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { formatMoney } from "@/utils/money";
+import { formatMoney, toDecimal } from "@/utils/money";
 
 /**
  * Payments still being settled, and the caps that would strand them
@@ -95,16 +95,18 @@ export function editedToast(current: AtomicCaps | null, next: AtomicCaps): strin
     : "Updated. The new caps apply from the agent’s next payment.";
 }
 
-/** "2 payments (0.600000 USDG) still being settled", or null when there are none. */
+/**
+ * "2 payments ($0.60) still being settled", or null when there are none.
+ * Money in dollars at two decimals (sub-cent amounts keep their digits).
+ * `_unit` is kept for callers that still pass the token symbol.
+ */
 export function unsettledLine(
   unsettled: UnsettledVouchers | null | undefined,
-  unit: string,
+  _unit?: string,
 ): string | null {
   if (!unsettled || unsettled.count === 0) return null;
-  const amount = `${formatMoney(unsettled.amount, {
-    decimals: unsettled.amount.decimals,
-    symbol: "",
-  })} ${unit}`.trim();
+  const value = toDecimal(unsettled.amount);
+  const amount = formatMoney(unsettled.amount, { decimals: !value.isZero() && value.lt("0.01") ? 4 : 2 });
   return `${unsettled.count} payment${unsettled.count === 1 ? "" : "s"} (${amount}) still being settled`;
 }
 

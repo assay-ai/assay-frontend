@@ -1,0 +1,122 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import * as React from "react";
+
+import { capsAreSet } from "@/features/buyer-money/caps";
+import { WalletNotReady } from "@/features/buyer-money/money-errors";
+import type { FullBalance } from "@/features/g30/balance";
+import { useChains } from "@/hooks/useChains";
+import { type Signer, type UseSignerResult, useSigner } from "@/hooks/useSigner";
+import type { BuyerEscrow } from "@/interfaces";
+import type { ApiError } from "@/libs/ApiClient";
+import { shortAddress } from "@/libs/chains/format";
+import { getBalances } from "@/services";
+import { chainDisplayName, findChain, settlementSymbol } from "@/services/chains.service";
+import { getEscrow } from "@/services/escrow.service";
+import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
+
+/**
+ * What every money surface reads: the escrow (from the chain, through the
+ * API), the ledger balances, the chain list, and a signer for the escrow's
+ * owner. Same query keys as the rest of the app, so opening a drawer reads
+ * what the page already has.
+ *
+ * `retry: 0` + `networkMode: "always"`: React Query pauses a pending retry on
+ * a network error, which left money screens spinning forever with the API
+ * down. A money screen that cannot read must say so at once.
+ */
+export function useEscrowQuery(options: { refetchInterval?: number | false } = {}) {
+  return useQuery<BuyerEscrow, ApiError>({
+    queryKey: ["escrow", null],
+    queryFn: () => getEscrow(null),
+    retry: 0,
+    networkMode: "always" as const,
+    refetchInterval: options.refetchInterval,
+  });
+}
+
+export function useBalancesQuery() {
+  return useQuery<{ balances: FullBalance[] }, ApiError>({
+    queryKey: ["balances"],
+    queryFn: () => getBalances() as Promise<{ balances: FullBalance[] }>,
+    retry: 0,
+    networkMode: "always" as const,
+  });
+}
+
+export function useBuyerMoney(options: { refetchInterval?: number | false } = {}) {
+  const escrowQuery = useEscrowQuery(options);
+  const balancesQuery = useBalancesQuery();
+  const { chains, status: chainsStatus } = useChains();
+  const escrow = escrowQuery.data ?? null;
+  const chainId = chainIdOfAccount(escrow?.account);
+  const owner = addressOfAccount(escrow?.account);
+  const signerState = useSigner({ chainId, address: owner });
+  const chain = chainId ? findChain(chains, chainId) : null;
+
+  return {
+    escrowQuery,
+    balancesQuery,
+    escrow,
+    chains,
+    chainsStatus,
+    chain,
+    chainId,
+    owner,
+    chainName: chainId ? chainDisplayName(chains, chainId) : null,
+    symbol: (chainId && settlementSymbol(chains, chainId)) || "USD",
+    decimals: escrow?.balance?.decimals ?? escrow?.maxVoucherAmount?.decimals ?? 6,
+    capsSet: capsAreSet(escrow),
+    signerState,
+    ownerShort: chainId && owner ? shortAddress(chainId, owner) : null,
+  };
+}
+
+export type BuyerMoney = ReturnType<typeof useBuyerMoney>;
+
+/**
+ * The signer, or a sentence the person can act on. Thrown from inside a wallet
+ * step, so the message lands in SignAction's failure line (via
+ * `describeMoneyError`) rather than as a generic error.
+ */
+export function requireSigner(state: UseSignerResult, owner?: string | null): Signer {
+  if (state.status === "ready") return state.signer;
+  if (state.status === "address-not-connected") {
+    throw new WalletNotReady(
+      owner
+        ? `Connect the wallet ${owner}. It is the only one that can sign for your escrow.`
+        : "Connect the wallet that owns your escrow.",
+    );
+  }
+  if (state.status === "hydrating") throw new WalletNotReady("Still connecting your wallet. Try again in a moment.");
+  if (state.status === "chain-unknown") throw new WalletNotReady("Still reading which chain you are on. Try again in a moment.");
+  throw new WalletNotReady("Connect a wallet first.");
+}
+
+/**
+ * Why the sign button cannot be pressed yet, or `null` when it can. Waits a
+ * while before blaming the wallet connection, then says what to do.
+ */
+export function useWalletBlocker(state: UseSignerResult, owner?: string | null): string | null {
+  const [slow, setSlow] = React.useState(false);
+  const hydrating = state.status === "hydrating" || state.status === "chain-unknown";
+  React.useEffect(() => {
+    if (!hydrating) {
+      setSlow(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setSlow(true), 10_000);
+    return () => window.clearTimeout(timer);
+  }, [hydrating]);
+  if (state.status === "ready") return null;
+  if (hydrating) {
+    return slow
+      ? "Your wallet is taking a long time to connect. Reload the page if this does not change."
+      : "Connecting your wallet…";
+  }
+  if (state.status === "address-not-connected") {
+    return owner ? `Connect the wallet ${owner} to sign. It is the only one your escrow answers to.` : "Connect the wallet that owns your escrow.";
+  }
+  return "Connect a wallet to sign.";
+}
