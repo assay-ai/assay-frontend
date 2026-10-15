@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { TriangleAlert, Wallet } from "lucide-react";
 import * as React from "react";
 
+import { DEMO_SIGNING_NOTE } from "@/components/patterns/sign-action";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
@@ -54,6 +55,7 @@ import { isUserRejection, type Signer, useSigner } from "@/hooks/useSigner";
 import type { BuyerEscrow, DelegateIntent, EscrowDelegate } from "@/interfaces";
 import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import { ApiError } from "@/libs/ApiClient";
+import { demoEnabled } from "@/libs/demo/demo-api";
 import { settlementSymbol } from "@/services/chains.service";
 import {
   createDelegateIntent,
@@ -166,6 +168,11 @@ function explain(error: unknown, fallback: string): string {
     return "Nothing was signed — the wallet prompt was closed or declined.";
   // A relay refusal in words, with when to retry (BUG-D1-06) — never a raw account string.
   if (isRelayedRefusal(error)) return relayedRefusal(error).text;
+  // A rejected sign-in (401) is never shown as the server's own words
+  // ("MCP credential is missing or invalid" reached a buyer this way).
+  if (error instanceof ApiError && error.status === 401) {
+    return "Your session has ended, so nothing was changed. Sign in again, then try once more.";
+  }
   if (error instanceof ApiError || error instanceof Error) return error.message;
   return fallback;
 }
@@ -780,6 +787,8 @@ function AuthorizeSheet({
   // The server's clock, carried forward from the escrow read by the time elapsed
   // since (BUG-D1-05; review S3-11: the chain checks `validUntil` against its own).
   const nowSeconds = serverNowSeconds(escrow?.serverTime, escrowReceivedAt, Date.now());
+  // DEMO ONLY: the sheet works through to its result; nothing is signed or sent.
+  const demo = demoEnabled();
 
   // Seeded when the sheet opens for a target — not on every escrow refetch, which
   // would wipe what the person typed.
@@ -910,6 +919,16 @@ function AuthorizeSheet({
     }
     if (!keyConfirmed) return;
     if (extra && !extra.validate()) return;
+    if (demo) {
+      // DEMO ONLY: the same walk as a live signature, with nothing built,
+      // signed or sent (no intent request, no wallet, no relay).
+      setBusy(true);
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      setBusy(false);
+      toast.success("Demo: nothing was signed. On a live site these limits would now apply.");
+      onFinished();
+      return;
+    }
     // Exactly what the sheet shows this second, computed on the server's clock.
     const body = preview.body;
     const acknowledged = acknowledgeUnsettled ? { acknowledgeUnsettled: true } : {};
@@ -996,6 +1015,11 @@ function AuthorizeSheet({
           </SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
+          {demo ? (
+            <p className="rounded-lg bg-info-10 px-3 py-2 text-body-13 text-01" data-testid="demo-signing-note">
+              {DEMO_SIGNING_NOTE}
+            </p>
+          ) : null}
           <div className="flex flex-col gap-1">
             <span className="text-label-sm text-02">Payment key</span>
             <span
