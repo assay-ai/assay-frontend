@@ -72,8 +72,10 @@ export const APPROVAL_WHAT: Readonly<Record<string, string>> = Object.freeze({
   "S-11": "bulk decisions",
   "S-5": "provider compensations",
   "A-10": "lifting account blocks",
+  "A-11": "on-chain blocks",
   "A-12": "new operators",
   "A-13": "raised roles and limits",
+  "A-14": "admin removals",
 });
 
 const APPROVES = Object.entries(APPROVER_ROLES).map(([code, roles]) => ({
@@ -290,8 +292,10 @@ const APPROVAL_SHORT: Readonly<Record<string, string>> = {
   "S-11": "bulk decisions",
   "S-5": "compensations",
   "A-10": "block lifts",
+  "A-11": "on-chain blocks",
   "A-12": "new operators",
   "A-13": "raised roles and limits",
+  "A-14": "admin removals",
 };
 
 function sentence(text: string): string {

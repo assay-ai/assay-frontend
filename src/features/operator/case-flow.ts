@@ -1,5 +1,5 @@
 import type { StatusTimelineStep } from "@/components/patterns/status-timeline";
-import { caseChainStageOf } from "@/features/provider-slash-case/chain-stage";
+import { caseChainStageOf, disputesOnChain } from "@/features/provider-slash-case/chain-stage";
 import type { Money } from "@/interfaces/api";
 import type { OperatorCaseBrief, OperatorIdentity, SlashProposalStatus } from "@/interfaces/operator";
 import { formatMoney } from "@/utils/money";
@@ -288,8 +288,22 @@ export function caseAuthority(
   const status = facts.status;
   // Role and authority limit: the same check the Home banner reads.
   const check = checkAction(identity, "suspend", penalty);
-  const legal = Boolean(status && isLegalInStatus("suspend", status)) && facts.stage !== "executed" && facts.stage !== "cancelled";
-  const suspendReason = !legal ? "This penalty can no longer be suspended." : check.why;
+  /*
+    EVM: the backend refuses an S-1 suspension (SLASH_ARBITER_RULES_ON_CHAIN,
+    review N-2). Only the arbiter's cancelSlash stops an on-chain penalty, so
+    suspend is never offered there.
+  */
+  const ruledOnChain = disputesOnChain(brief.case.proposal.clocks);
+  const legal =
+    !ruledOnChain &&
+    Boolean(status && isLegalInStatus("suspend", status)) &&
+    facts.stage !== "executed" &&
+    facts.stage !== "cancelled";
+  const suspendReason = ruledOnChain
+    ? "This penalty is on chain: only the arbiter's cancel stops it, so it cannot be suspended."
+    : !legal
+      ? "This penalty can no longer be suspended."
+      : check.why;
 
   return {
     suspend: { allowed: legal && check.allowed, open: legal, twoPerson: status ? suspendIsTwoPerson(status) : false, reason: suspendReason },

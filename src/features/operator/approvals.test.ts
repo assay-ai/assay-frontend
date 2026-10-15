@@ -218,6 +218,37 @@ describe("how a row reads", () => {
       expect(JSON.stringify(d.fields)).not.toMatch(/authorityLimitMinor|walletAddress|displayName|reasonCode/);
     });
 
+    it("says when a change takes OPS_ADMIN away, and names a removal", () => {
+      const admin: ApprovalContext = {
+        ...context,
+        operators: new Map([[OP_ID, { ...context.operators.get(OP_ID)!, roles: ["OPS_ADMIN", "ADJ"] as OperatorRole[] }]]),
+      };
+      expect(
+        describeApproval(
+          { action: "operator.change", target: `operator:${OP_ID}`, payload: { body: { roles: ["ADJ"], reasonCode: "R" }, operatorId: OP_ID } },
+          admin,
+        ).sentence,
+      ).toBe("Take OPS_ADMIN away from Test Op B (test-op-b@): roles become Adjudicator (r).");
+      expect(
+        describeApproval(
+          { action: "operator.remove", target: `operator:${OP_ID}`, payload: { body: { reasonCode: "R" }, operatorId: OP_ID } },
+          admin,
+        ).sentence,
+      ).toBe("Remove Test Op B (test-op-b@), ending every session they hold (r).");
+    });
+
+    it("names the address an arbiter block would freeze, and that the arbiter still signs", () => {
+      const d = describeApproval({
+        action: "arbiter.block",
+        target: "chain_blocklist:eip155:46630:0xabc",
+        payload: { chainId: "eip155:46630", account: "0xAbC", reasonCode: "R", note: "n" },
+      });
+      expect(d.sentence).toMatch(/^Prepare the arbiter's on-chain block of 0xAbC \(r\)\./);
+      expect(d.sentence).toContain("the arbiter's wallet still has to sign it");
+      expect(d.fields[0]).toEqual({ label: "Chain", value: "eip155:46630" });
+      expect(actionLabel("arbiter.block")).toMatch(/on-chain block/);
+    });
+
     it("names the operator a change raises, with roles before and after", () => {
       const d = describeApproval(
         {
@@ -337,6 +368,7 @@ describe("how a row reads", () => {
       /^Block lifted on Wallet 0x9[fF]3[cC]…[fF]36[cC]\.$/,
     );
     expect(approvedResultSentence("account.unblock", {}, "Wallet 0x9F3c…F36c")).toBe("Block lifted on Wallet 0x9F3c…F36c.");
+    expect(approvedResultSentence("arbiter.block", {})).toMatch(/Nothing is blocked until the arbiter's wallet signs/);
   });
 
   it("badges the pending count, with a plus past one page", () => {

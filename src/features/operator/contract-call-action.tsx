@@ -13,6 +13,7 @@ import {
 } from "@/features/chain-calls/send-contract-call";
 import { useConnectedAddresses, useSigner } from "@/hooks/useSigner";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
+import { assertContractCall, formatCallArg, type ExpectedCall } from "@/libs/chains/evm/signing-guard";
 import { explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 
 /**
@@ -26,7 +27,21 @@ import { explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slas
  * every other transaction in the app, which refuses a call from another
  * account, a call with value, and a call for another chain before the wallet
  * is asked anything.
+ *
+ * The server's `functionName` and `requestIds` are labels, and `data` is what
+ * is signed (operator review 2026-10-15, F1). So the calldata is decoded here
+ * against the pinned contract and must be exactly `expected` — what the
+ * operator chose on this screen. When it is not, neither the wallet nor the
+ * file is offered, and the details show the decoded call, never the labels.
  */
+/** The pinned contracts, by the name the details show. */
+const CONTRACT_LABEL: Record<ExpectedCall["contract"], string> = {
+  escrow: "Escrow contract",
+  stake: "Stake contract",
+  config: "Config contract",
+  token: "settlement token",
+};
+
 /** What a built call does, in words, for the message to its signer. */
 const CALL_WHAT: Readonly<Record<string, string>> = {
   setBlocked: "the on-chain block of a wallet",
@@ -37,6 +52,7 @@ const CALL_WHAT: Readonly<Record<string, string>> = {
 
 export function ContractCallAction({
   call,
+  expected,
   signLabel,
   afterExport,
   successTitle,
@@ -46,6 +62,8 @@ export function ContractCallAction({
   handoff,
 }: {
   call: SlashContractCall;
+  /** The call the operator chose here; anything else is refused. */
+  expected: ExpectedCall;
   signLabel: string;
   /** What to do with the file, and what happens once it lands. */
   afterExport: React.ReactNode;
@@ -60,7 +78,15 @@ export function ContractCallAction({
   const connected = useConnectedAddresses();
   const signerState = useSigner({ chainId: call.chainId, address: connectedSpelling(connected, call.signer) });
   const walletAddress = signerState.status === "ready" ? signerState.signer.address : null;
-  const canSign = signerMatches(walletAddress, call);
+  const checked = React.useMemo(() => {
+    try {
+      return { decoded: assertContractCall(call, expected), refusal: null };
+    } catch (e) {
+      return { decoded: null, refusal: e instanceof Error ? e.message : String(e) };
+    }
+  }, [call, expected]);
+  const decoded = checked.decoded;
+  const canSign = decoded !== null && signerMatches(walletAddress, call);
   const deployment = stakeDeploymentFor(call.chainId);
 
   const steps: WalletStep[] = React.useMemo(
@@ -72,7 +98,7 @@ export function ContractCallAction({
         run: async ({ report }) => {
           if (signerState.status !== "ready") throw new Error("Connect the arbiter's wallet to sign here.");
           report({ stage: "wallet" });
-          const hash = await sendSlashContractCall(call, signerState.signer);
+          const hash = await sendSlashContractCall(call, signerState.signer, expected);
           report({
             stage: "submitted",
             data: hash,
@@ -82,12 +108,20 @@ export function ContractCallAction({
         },
       },
     ],
-    [call, deployment, signLabel, signerState],
+    [call, deployment, expected, signLabel, signerState],
   );
 
   const signer = `${signerRoleLabel(call.signerRole).toLowerCase()} key ${shortId(call.signer)}`;
-  const what = CALL_WHAT[call.functionName] ?? "this transaction";
+  const what = (decoded && CALL_WHAT[decoded.functionName]) ?? "this transaction";
   const here = typeof window === "undefined" ? "/operator" : `${window.location.pathname}${window.location.search}`;
+
+  if (decoded === null) {
+    return (
+      <p role="alert" className="text-body-13 text-danger-600">
+        This is not the transaction you asked for, so it is not offered for signing or as a file. {checked.refusal}
+      </p>
+    );
+  }
 
   return (
     <SignOrExport
@@ -103,15 +137,17 @@ export function ContractCallAction({
       }}
       describeError={(error) => (error instanceof Error ? error.message.split("\n")[0]! : "The wallet did not complete this.")}
       onPhaseChange={(phase) => onBusyChange?.(phase === "running")}
-      functionName={call.functionName}
+      functionName={decoded.functionName}
       chainId={call.chainId}
       transactions={[{ to: call.to, value: call.value, data: call.data }]}
       afterExport={afterExport}
       signerWallet={call.signerRole === "ARBITER" ? "the arbiter's multi-signer wallet" : undefined}
       handoff={handoff ?? { link: here, message: `Please sign ${what} with the ${signerRoleLabel(call.signerRole).toLowerCase()} key. The file is attached; the record is here:` }}
       details={[
+        { label: "Function (decoded from the calldata)", value: decoded.functionName },
+        { label: "To", value: `${decoded.to} (${CONTRACT_LABEL[decoded.contract]})` },
+        ...decoded.args.map((arg, i) => ({ label: `Argument ${i + 1} (decoded)`, value: formatCallArg(arg) })),
         { label: "Must be signed by", value: call.signer },
-        ...(call.requestIds.length > 0 ? [{ label: "Penalty request ids", value: call.requestIds.join(", ") }] : []),
       ]}
     />
   );

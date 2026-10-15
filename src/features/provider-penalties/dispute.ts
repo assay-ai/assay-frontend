@@ -56,7 +56,9 @@ export function disputeStep(input: {
         );
       }
       report({ stage: "wallet" });
-      await sendSlashContractCall(call, signer, {
+      // Signed only if the calldata decodes to exactly this dispute on the pinned stake contract.
+      const expected = { contract: "stake", functionName: "disputeSlashBatch", args: [[requestId]] } as const;
+      await sendSlashContractCall(call, signer, expected, {
         fill: fillTransaction,
         wait: (chainId, hash, functionName) => {
           report({ stage: "submitted", data: hash, explorerUrl: input.explorerUrl(hash) });

@@ -512,7 +512,14 @@ function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
         ) : null}
         {error ? <p className="text-body-xs text-danger-600">{error}</p> : null}
       </div>
-      <Button className="self-stretch tablet:self-end" icon={<ArrowRight />} loading={saving} onClick={() => void finish()}>
+      {/* Not while a re-check runs: saving re-runs the check server-side, and one provider gets one connectivity check at a time. */}
+      <Button
+        className="self-stretch tablet:self-end"
+        icon={<ArrowRight />}
+        loading={saving}
+        disabled={checking}
+        onClick={() => void finish()}
+      >
         Finish setup
       </Button>
     </Card>

@@ -31,6 +31,7 @@ import { useCatalogue } from "./use-catalogue";
  * agents — the same allowlist as Budgets. Your own recent calls to them sit
  * below, each opening its receipt.
  */
+
 export function ProviderDetailView({ providerId }: { providerId: string }) {
   const chainName = useChainName();
   const { calls, tools } = useCatalogue();

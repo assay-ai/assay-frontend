@@ -76,11 +76,16 @@ export function CloseAccountView() {
               <li key={line.asset} className="flex flex-wrap items-center gap-3 rounded-lg border border-01 bg-02 px-3.5 py-2.5">
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="font-mono text-mono-md font-semibold text-01">
-                    {line.complete ? formatMoney(line.amount) : `at least ${formatMoney(line.amount)}`}
+                    {line.complete
+                      ? formatMoney(line.amount)
+                      : BigInt(line.amount.amount) === 0n
+                        ? "Unknown"
+                        : `at least ${formatMoney(line.amount)}`}
                   </span>
                   <span className="text-body-xs text-03">
                     on {chainName(line.chainId)}
                     {line.accounts > 1 ? ` · across ${line.accounts} accounts` : ""}
+                    {line.complete ? "" : " · could not read this chain"}
                   </span>
                 </div>
                 <Button size="sm" asChild>

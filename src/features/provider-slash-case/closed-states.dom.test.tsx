@@ -220,3 +220,37 @@ describe("cases that are not closed stay open", () => {
     expect(caseStageOf(caseOf(status).proposal).kind).toBe("open");
   });
 });
+
+describe("R2-3: a case executed in part, the rest cancelled for the provider", () => {
+  const data = caseOf(
+    "EXECUTED",
+    { chainStatus: "EXECUTED", chainState: "PARTIALLY_EXECUTED", chainRecords: 3, cancelledRecords: 1 },
+    { executedAt: EXECUTED_AT },
+  );
+  const stage = caseStageOf(data.proposal);
+
+  it("is closed as executed, flagged partial with the records cancelled", () => {
+    expect(stage).toMatchObject({
+      kind: "closed",
+      outcome: "executed",
+      partly: { cancelledRecords: 1, records: 3 },
+    });
+  });
+
+  it("says it was executed in part and that nothing was taken for the cancelled record", () => {
+    if (stage.kind !== "closed") throw new Error("not closed");
+    const panel = render(<CaseClosed stage={stage} />);
+    expect(panel).toContain("executed on chain in part");
+    expect(panel).toContain("1 of its 3 on-chain records was cancelled or expired in your favour");
+    const header = render(<StatusHeader data={data} />);
+    expect(header).toContain("executed in part");
+  });
+
+  it("is not flagged when every record executed", () => {
+    const whole = caseStageOf(
+      caseOf("EXECUTED", { chainStatus: "EXECUTED", chainState: "EXECUTED" }, { executedAt: EXECUTED_AT })
+        .proposal,
+    );
+    expect(whole).toMatchObject({ kind: "closed", outcome: "executed", partly: null });
+  });
+});

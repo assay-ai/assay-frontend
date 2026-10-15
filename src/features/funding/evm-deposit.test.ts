@@ -31,11 +31,11 @@ const BUYER = "0x4924000000000000000000000000000000000d89";
 const REQUIREMENTS = {
   namespace: "eip155",
   chainId: "eip155:46630",
-  contract: "0x60aBdb81796322b1bA6674068a3861309a9f8D37",
+  contract: "0x1D2625efD87c2fc10b8563f3F0890072845Fcf41",
   method: "depositFor(address,uint64)",
-  spender: "0x60aBdb81796322b1bA6674068a3861309a9f8D37",
+  spender: "0x1D2625efD87c2fc10b8563f3F0890072845Fcf41",
   buyer: BUYER,
-  asset: "0x915Ef7c9F9f80a69e3BE47A38EE0Bb47607103ec",
+  asset: "0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3",
   amount: "5000000",
   decimals: 6,
   plainTransferCreditsNobody: true,
@@ -169,6 +169,34 @@ describe("the two deposit steps, as the Add funds drawer runs them", () => {
     await expect(
       checkEvmDeposit({ signer: { ...s, address: "0x1111111111111111111111111111111111111111" } as Signer, requirements: REQUIREMENTS, amountAtomic: 5_000_000n }),
     ).rejects.toThrow(/connected wallet/);
+    expect(raw.signAndSend).not.toHaveBeenCalled();
+  });
+});
+
+/* Frontend review 2026-10-15, F1: the token, spender and escrow are the API's, so they are pinned. */
+describe("signEvmDeposit refuses a deposit aimed anywhere but the pinned token and escrow", () => {
+  const ATTACKER = "0x000000000000000000000000000000000000dEaD";
+
+  it.each([
+    ["spender", { spender: ATTACKER }],
+    ["contract", { contract: ATTACKER }],
+    ["asset", { asset: ATTACKER }],
+  ])("refuses another %s, before anything is read or signed", async (_field, change) => {
+    const { signer: s, raw } = signer("external");
+    vi.mocked(tx.readDepositReadiness).mockClear();
+
+    await expect(
+      signEvmDeposit({ signer: s, requirements: { ...REQUIREMENTS, ...change }, amountAtomic: 5_000_000n }),
+    ).rejects.toThrow(/another token or escrow/);
+    expect(tx.readDepositReadiness).not.toHaveBeenCalled();
+    expect(raw.signAndSend).not.toHaveBeenCalled();
+  });
+
+  it("refuses a chain with no pinned contracts", async () => {
+    const { signer: s, raw } = signer("external");
+    await expect(
+      signEvmDeposit({ signer: s, requirements: { ...REQUIREMENTS, chainId: "eip155:1" }, amountAtomic: 5_000_000n }),
+    ).rejects.toThrow(/no pinned contracts/);
     expect(raw.signAndSend).not.toHaveBeenCalled();
   });
 });

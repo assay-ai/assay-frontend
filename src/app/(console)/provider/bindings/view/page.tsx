@@ -11,12 +11,15 @@ import { CopyChip } from "@/components/patterns/copy-chip";
 import { LocalTime } from "@/components/patterns/local-time";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusTimeline, type StatusTimelineStep } from "@/components/patterns/status-timeline";
+import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { BindingHeader, bindingQueryKey, useBinding } from "@/features/provider-binding/binding-header";
 import { BuyerPreview } from "@/features/provider-binding/buyer-preview";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { slaReading } from "@/features/provider-sla/reading";
+import { isAssetMismatch, readableDerivation } from "@/features/provider-stake/derivation";
+import { useChains } from "@/hooks/useChains";
 import type { SlaWindow, ToolBindingDetail } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
@@ -24,6 +27,7 @@ import { routes } from "@/libs/routes";
 import { getPublishCheck, pauseToolBinding, resumeToolBinding } from "@/services/provider-tool-bindings.service";
 import { getProviderEarnings } from "@/services/provider-reports.service";
 import { listSlaWindows } from "@/services/provider-sla-windows.service";
+import { revalidateProviderStake } from "@/services/provider-stake.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
@@ -216,6 +220,21 @@ function OverviewContent() {
   });
   const group = binding ? earnings.data?.groups.find((entry) => entry.key === binding.toolId) : undefined;
 
+  // An ACTIVE paid binding priced in another asset than the stake floor is
+  // live and still takes no paid traffic; say so here, not only on Capital.
+  const stakeQuery = useQuery({
+    queryKey: ["provider", "stake"],
+    queryFn: revalidateProviderStake,
+    enabled: binding?.status === "ACTIVE",
+    retry: 0,
+  });
+  const { chains } = useChains();
+  const stakeLine = stakeQuery.data?.requirement.find((item) => item.bindingId === bindingId)?.derivation;
+  const assetMismatch =
+    binding?.status === "ACTIVE" && stakeLine && isAssetMismatch(stakeLine)
+      ? readableDerivation(stakeLine, chains)
+      : null;
+
   const apply = (updated: ToolBindingDetail) => {
     queryClient.setQueryData(bindingQueryKey(bindingId), updated);
     void queryClient.invalidateQueries({ queryKey: ["provider", "tool-bindings"] });
@@ -295,6 +314,10 @@ function OverviewContent() {
             <p className="rounded-lg bg-warning-10 px-4 py-3 text-body-13 text-warning-700">
               Assay paused this tool, so agents cannot call it. Check your Inbox for why and what to do.
             </p>
+          ) : null}
+
+          {assetMismatch ? (
+            <Banner tone="warning" title="This listing takes no paid traffic" description={assetMismatch} />
           ) : null}
 
           {showFirstRun ? <FirstRunCard binding={binding} toolName={toolName} description={tool?.description ?? null} /> : null}

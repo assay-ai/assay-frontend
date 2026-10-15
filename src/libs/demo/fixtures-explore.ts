@@ -460,6 +460,7 @@ function toolRow(tool: DemoTool): CatalogueTool {
     price: dearest(prices),
     pricingMode: tool.pricingMode,
     routable: tool.offers.length > 0,
+    routableBindings: tool.offers.length,
     unroutableReason: tool.unroutableReason ?? null,
     settlementChains: [DEMO_CHAIN_ID],
   };
@@ -673,7 +674,7 @@ export const EXPLORE_FIXTURES: readonly DemoFixture[] = [
         {
           id: "9f2a1c74-6b08-4e35-a9d7-21c4f0b6e83a",
           name: "demo-laptop",
-          prefix: "x402_pk_7c41",
+          prefix: "assay_pk_7c41",
           lastUsedAt: minutesAgo(3),
           revokedAt: null,
           createdAt: daysAgo(6),

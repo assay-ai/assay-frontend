@@ -13,6 +13,7 @@ import { signProofChallenge } from "@/features/provider-proof/sign-proof-challen
 import type { Signer } from "@/hooks/useSigner";
 import type { Chain } from "@/interfaces/chain";
 import type { StakeIntent } from "@/interfaces/provider-stake";
+import { assertStakeIntent, type StakeExpectation } from "@/features/provider-stake/run-stake-intent";
 import { ApiError } from "@/libs/ApiClient";
 import {
   broadcast,
@@ -21,6 +22,7 @@ import {
   readDepositReadiness,
   waitForSuccess,
 } from "@/libs/chains/evm/deposit-transaction";
+import { pinnedDeployment } from "@/libs/chains/evm/signing-guard";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { plainError } from "@/libs/plain-language";
 import {
@@ -83,7 +85,7 @@ export function proveWalletStep(input: {
       report({ stage: "preparing" });
       const challenge = await createStakeAuthorityChallenge({ chainId: input.chainId, address: input.address });
       report({ stage: "wallet" });
-      const signature = await signProofChallenge(signer, challenge);
+      const signature = await signProofChallenge(signer, challenge, "STAKE_AUTHORITY");
       report({ stage: "preparing" });
       const proved = await proveStakeAuthority({ challengeId: challenge.challengeId, signature });
       input.onProved(proved.stakeAuthority);
@@ -92,8 +94,14 @@ export function proveWalletStep(input: {
   };
 }
 
+/**
+ * Signs and sends one stake intent — only when it is the action and amount the
+ * provider chose (`expected`) and, on EVM, exactly that call on the pinned
+ * stake contract (frontend review 2026-10-15, F1: the API builds the bytes).
+ */
 async function sendIntent(
   intent: StakeIntent,
+  expected: StakeExpectation,
   signer: Signer,
   chain: Chain | null,
   report: Parameters<WalletStep["run"]>[0]["report"],
@@ -101,6 +109,7 @@ async function sendIntent(
   if (!intent.transaction) {
     throw new ApiError(intent.blockedBy ?? "STAKE_INTENT_EMPTY", "No transaction was built.", 409);
   }
+  assertStakeIntent(intent, expected);
   report({ stage: "wallet" });
   const hash = await signer.signAndSend(intent.transaction);
   const explorerUrl = txLink(chain, hash);
@@ -140,8 +149,16 @@ export function depositSteps(input: {
       const deposit = await intent();
       const tx = deposit.transaction;
       if (!tx || tx.namespace !== "eip155" || tx.kind !== "transaction" || !deposit.amount) return;
+      // The deposit must be exactly depositStake(amount) on the pinned stake
+      // contract, or the approval below would name an unchecked spender.
+      assertStakeIntent(deposit, { kind: "DEPOSIT", amount: amountAtomic });
       const token = deposit.amount.asset.split("/erc20:")[1];
       if (!token) return;
+      // The approval is the one call the API names nothing of: only the pinned
+      // settlement token, approving the pinned stake contract (`tx.to`, checked above).
+      if (token.toLowerCase() !== pinnedDeployment(tx.chainId).settlementToken.toLowerCase()) {
+        throw new Error(`The stake asset ${token} is not this chain's settlement token. Nothing was sent.`);
+      }
       const amount = BigInt(deposit.amount.amount);
       const { allowanceAtomic } = await readDepositReadiness({
         chainId: tx.chainId,
@@ -181,7 +198,7 @@ export function depositSteps(input: {
       report({ stage: "preparing" });
       try {
         const opened = await createOpenStakeIntent();
-        return await sendIntent(opened, signer, chain, report);
+        return await sendIntent(opened, { kind: "OPEN_STAKE", amount: null }, signer, chain, report);
       } catch (error) {
         // Already open is the goal reached, not a failure.
         if (error instanceof ApiError && error.code === "PROVIDER_STAKE_ACCOUNT_ALREADY_OPEN") return;
@@ -201,7 +218,7 @@ export function depositSteps(input: {
         return;
       }
       report({ stage: "preparing" });
-      return sendIntent(await intent(), signer, chain, report);
+      return sendIntent(await intent(), { kind: "DEPOSIT", amount: amountAtomic }, signer, chain, report);
     },
   };
 
@@ -221,7 +238,13 @@ export function unstakeStep(input: { amountAtomic: string; amountLabel: string; 
         return;
       }
       report({ stage: "preparing" });
-      return sendIntent(await createUnstakeIntent({ amount: input.amountAtomic }), signer, input.chain, report);
+      return sendIntent(
+        await createUnstakeIntent({ amount: input.amountAtomic }),
+        { kind: "UNSTAKE", amount: input.amountAtomic },
+        signer,
+        input.chain,
+        report,
+      );
     },
   };
 }
@@ -239,7 +262,13 @@ export function withdrawStep(input: { amountAtomic: string; amountLabel: string;
         return;
       }
       report({ stage: "preparing" });
-      return sendIntent(await createStakeWithdrawIntent({ amount: input.amountAtomic }), signer, input.chain, report);
+      return sendIntent(
+        await createStakeWithdrawIntent({ amount: input.amountAtomic }),
+        { kind: "WITHDRAW", amount: input.amountAtomic },
+        signer,
+        input.chain,
+        report,
+      );
     },
   };
 }

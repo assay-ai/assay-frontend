@@ -29,11 +29,61 @@ describe("a fresh case, record pending on chain", () => {
     );
   });
 
-  it("counts down the provider's own response window", () => {
+  it("counts down to the record's executableAt, the one deadline to dispute on chain", () => {
     const header = render(<StatusHeader data={data} />);
+    expect(header).toContain("Dispute on chain by 2026-10-15 09:37 UTC");
+    expect(header).toContain("1h 0m remaining");
+    expect(header).toContain("disputing freezes the penalty on chain until the arbiter decides");
+    expect(header).not.toContain("Respond by");
+    expect(header).toContain("On chain: Pending on chain");
+  });
+
+  it("keeps the in-app response window on a Solana case", () => {
+    const header = render(<StatusHeader data={caseOf("PROPOSED", { disputeOnChain: false })} />);
     expect(header).toContain("Respond by 2026-10-17 08:36 UTC");
     expect(header).toContain("1h 0m remaining");
-    expect(header).toContain("On chain: Pending on chain");
+  });
+});
+
+// BUG-R16-V4-01: "still above your $0.00 minimum" when no requirement was computed.
+describe("what happens if you do nothing, with no known minimum", () => {
+  it("names the minimum when there is one", () => {
+    expect(render(<WhatHappensIfYouDoNothing data={caseOf("PROPOSED")} />)).toContain(
+      "still above your $0.50 minimum",
+    );
+  });
+
+  it("does not claim a $0.00 minimum", () => {
+    const data = caseOf("PROPOSED");
+    const zero = {
+      ...data,
+      inaction: { ...data.inaction, minimumRequired: { ...data.inaction.minimumRequired, amount: "0" } },
+    };
+    const text = render(<WhatHappensIfYouDoNothing data={zero} />);
+    expect(text).not.toMatch(/minimum/);
+    expect(text).toContain("and no grace period opens because of it.");
+  });
+});
+
+describe("a partly disputed case (review N-4)", () => {
+  it("still offers the dispute of the parts nobody disputed, whatever the case status", () => {
+    const data = caseOf("UPHELD", {
+      chainStatus: "PENDING",
+      chainDisputedAt: "2026-10-15T08:58:08.000Z",
+      chainDisputedParts: 1,
+      chainState: "DISPUTED",
+      disputeBy: "2026-10-15T09:37:00.000Z",
+      runningClock: "PROVIDER",
+      secondsRemaining: 3600,
+    });
+    const header = render(<StatusHeader data={data} />);
+    expect(header).toContain("Dispute on chain by 2026-10-15 09:37 UTC");
+    expect(header).not.toContain("past the point of a dispute");
+  });
+
+  it("says the dispute is over once no record can be disputed", () => {
+    const data = caseOf("UPHELD", { chainState: "PENDING", disputeBy: null, runningClock: "NONE" });
+    expect(render(<StatusHeader data={data} />)).toContain("past the point of a dispute");
   });
 });
 

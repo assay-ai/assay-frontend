@@ -20,8 +20,8 @@ import { parseCallsCsv, type CallRow } from "./csv";
  *
  * ## The three cap headers, and why `meta` must never be defaulted
  *
- * The export caps itself and says so in `X-X402-Export-Row-Count`,
- * `X-X402-Export-Total-Matching` and `X-X402-Export-Truncated`. A browser can
+ * The export caps itself and says so in `X-Assay-Export-Row-Count`,
+ * `X-Assay-Export-Total-Matching` and `X-Assay-Export-Truncated`. A browser can
  * only read a response header the server names in `Access-Control-Expose-Headers`;
  * the API now names all three plus `Content-Disposition` (verified on the wire),
  * so `meta` is populated today. It stays nullable because a `truncated: false`
@@ -71,7 +71,7 @@ export function downloadCallsCsv(
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = filename ?? "x402-calls.csv";
+  anchor.download = filename ?? "assay-calls.csv";
   anchor.click();
   URL.revokeObjectURL(url);
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assetScopeNote,
   type CallRow,
   callsOnDay,
   foldClasses,
@@ -137,5 +138,20 @@ describe("pendingNote — true to why the rows are pending", () => {
     expect(pendingNote([settled, settled, inFlight])).toBe(
       "2 settled, no credit recorded · 1 still in flight"
     );
+  });
+});
+
+// BUG-R16-V3-03: the class table said 4 calls beside a 50,000-row file, because
+// it counts one asset and the file holds every asset.
+describe("assetScopeNote", () => {
+  it("says nothing when the table covers the whole file", () => {
+    expect(assetScopeNote(4, 4, "USDG on Robinhood Chain testnet")).toBeNull();
+  });
+
+  it("says the table is one asset's share of the file", () => {
+    const note = assetScopeNote(50_000, 4, "USDG on Robinhood Chain testnet");
+    expect(note).toContain("4 calls in USDG on Robinhood Chain testnet");
+    expect(note).toContain("50,000 calls in every asset");
+    expect(note).toContain("other 49,996 are in another asset");
   });
 });

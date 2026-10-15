@@ -342,7 +342,22 @@ function TeamScreen() {
             row={sheet?.kind === "remove" ? sheet.row : null}
             warnings={sheet?.kind === "remove" ? removalWarnings(rows, sheet.row.id) : []}
             onClose={closeSheet}
-            onDone={(row) =>
+            onDone={(row, answer) => {
+              if (answer.kind === "queued") {
+                // Removing an OPS_ADMIN is two-person: nothing has happened until it is approved.
+                const approvers = eligibleApprovers("A-14", rows, me.id).filter((n) => n !== operatorLabel(row));
+                const sent = sentForApproval(`Removing ${operatorLabel(row)}`, approvers, approverPhrase("A-14", me.roles), answer.approval.expiresAt);
+                done(
+                  <ResultCard
+                    tone="queued"
+                    title={sent.title}
+                    next={sent.next}
+                    link={{ label: "Open the request", href: approvalHref(answer.approval.approvalId) }}
+                    onDismiss={() => setResult(null)}
+                  />,
+                );
+                return;
+              }
               done(
                 <ResultCard
                   title={`${operatorLabel(row)} was removed`}
@@ -350,8 +365,8 @@ function TeamScreen() {
                   activityHref={`/operator/override-log?targetId=${encodeURIComponent(row.id)}`}
                   onDismiss={() => setResult(null)}
                 />,
-              )
-            }
+              );
+            }}
           />
         </>
       ) : null}
@@ -891,7 +906,8 @@ function RemoveSheet({
   row: OperatorDirectoryEntry | null;
   warnings: string[];
   onClose: () => void;
-  onDone: (row: OperatorDirectoryEntry) => void;
+  /** Removing an OPS_ADMIN is two-person (A-14): the answer is then queued until approved. */
+  onDone: (row: OperatorDirectoryEntry, answer: TwoPersonAnswer<OperatorDirectoryEntry>) => void;
 }) {
   const [reason, setReason] = React.useState("");
   const [note, setNote] = React.useState("");
@@ -904,7 +920,7 @@ function RemoveSheet({
 
   const remove = useMutation({
     mutationFn: (input: { id: string; reasonCode: string; note: string }) => removeOperator(input.id, { reasonCode: input.reasonCode, note: input.note }),
-    onSuccess: () => row && onDone(row),
+    onSuccess: (answer) => row && onDone(row, answer),
   });  const { reset: resetRemove } = remove;
   React.useEffect(() => resetRemove(), [row?.id, resetRemove]);
 
@@ -930,7 +946,9 @@ function RemoveSheet({
           <WhatHappens
             lines={[
               { icon: LogOut, text: "Every session they hold ends now, and their wallet can no longer sign in" },
-              { icon: Zap, text: "No second admin needed, so access can be cut at once in an incident" },
+              row.roles.includes("OPS_ADMIN")
+                ? { icon: Zap, text: "They hold OPS_ADMIN, so a second admin approves it first; until then nothing changes" }
+                : { icon: Zap, text: "No second admin needed, so access can be cut at once in an incident" },
               { icon: UserPlus, text: "Adding them back later needs a second admin" },
               { icon: ShieldCheck, text: "Recorded in Activity under your name" },
             ]}

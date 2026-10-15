@@ -209,6 +209,7 @@ function ReceiptPageContent() {
 
   const checks = toStageChecks(receipt);
   const listed = formatMoney(receipt.listedPrice, { decimals: 4 });
+  const samplingExplainer = samplingExplainerCopy(receipt, listed);
   const paid = formatMoney(receipt.chargedPrice, { decimals: 4 });
   const withheld = formatMoney(receipt.withheld, { decimals: 4 });
 
@@ -337,8 +338,12 @@ function ReceiptPageContent() {
             </div>
             {relevanceReached(receipt) ? (
               <SamplingExplainer
-                rate={receipt.sampling.display ?? "This tool publishes no sample rate."}
-                {...samplingExplainerCopy(receipt, listed)}
+                {...samplingExplainer}
+                rate={
+                  samplingExplainer.rate ??
+                  receipt.sampling.display ??
+                  "This tool publishes no sample rate."
+                }
               />
             ) : null}
           </PanelBody>

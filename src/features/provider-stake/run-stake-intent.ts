@@ -29,7 +29,8 @@
 
 import type { Signer } from "@/hooks/useSigner";
 import type { Eip155UnsignedTransaction } from "@/interfaces/chain-transaction";
-import type { StakeIntent } from "@/interfaces/provider-stake";
+import type { StakeIntent, StakeIntentKind } from "@/interfaces/provider-stake";
+import { assertContractCall, pinnedDeployment } from "@/libs/chains/evm/signing-guard";
 import {
   broadcastAndWait,
   encodeApprove,
@@ -71,9 +72,47 @@ export function caip2Of(account: string): string {
  * reach here holding a perfectly valid response. A thrown sentence is what the
  * screen can show; a dereference is a `TypeError` about a property of null.
  */
+/**
+ * What the provider chose on the screen: the action, and its amount in atomic
+ * units (`null` for OPEN_STAKE). The intent is signed only when it says this.
+ */
+export interface StakeExpectation {
+  readonly kind: StakeIntentKind;
+  readonly amount: string | null;
+}
+
+/** The X402Stake function each eip155 intent kind may call. OPEN_STAKE has none on EVM. */
+const STAKE_FUNCTION: Partial<Record<StakeIntentKind, string>> = {
+  DEPOSIT: "depositStake",
+  UNSTAKE: "requestUnstake",
+  WITHDRAW: "withdrawStake",
+};
+
+/**
+ * Refuses an intent other than the one asked for (frontend review
+ * 2026-10-15, F1): another kind or amount, or on eip155 a call that is not
+ * exactly `<function>(amount)` on the pinned stake contract.
+ */
+export function assertStakeIntent(intent: StakeIntent, expected: StakeExpectation): void {
+  if (intent.kind !== expected.kind) {
+    throw new Error(`This screen asked for ${expected.kind} and the intent is ${intent.kind}. Nothing was sent.`);
+  }
+  if ((intent.amount?.amount ?? null) !== expected.amount) {
+    throw new Error("The intent is for another amount than the one asked for. Nothing was sent.");
+  }
+  const transaction = intent.transaction;
+  if (transaction?.namespace !== "eip155") return;
+  const functionName = STAKE_FUNCTION[intent.kind];
+  if (transaction.kind !== "transaction" || !functionName || expected.amount === null) {
+    throw new Error(`An eip155 ${intent.kind} intent has nothing this app sends. Nothing was sent.`);
+  }
+  assertContractCall(transaction, { contract: "stake", functionName, args: [expected.amount] });
+}
+
 export async function runStakeIntent(
   intent: StakeIntent,
   signer: Signer,
+  expected: StakeExpectation,
 ): Promise<{ signature: string }> {
   if (!intent.transaction) {
     throw new Error(
@@ -89,6 +128,7 @@ export async function runStakeIntent(
     `caip2Of(intent.account)`, whose only check was that the string had three
     segments.
   */
+  assertStakeIntent(intent, expected);
   const { transaction } = intent;
   if (
     intent.kind === "DEPOSIT" &&
@@ -124,6 +164,11 @@ async function approveStakeDeposit(
     throw new Error(
       `The stake asset ${intent.amount.asset} is not an ERC-20 on this chain. Nothing was sent.`,
     );
+  }
+  // The approval is the one call here the API names nothing of: it must be the
+  // pinned token, approving the pinned stake contract (`deposit.to` was checked).
+  if (token.toLowerCase() !== pinnedDeployment(deposit.chainId).settlementToken.toLowerCase()) {
+    throw new Error(`The stake asset ${token} is not this chain's settlement token. Nothing was sent.`);
   }
   const amount = BigInt(intent.amount.amount);
 

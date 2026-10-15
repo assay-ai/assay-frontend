@@ -175,8 +175,8 @@ export interface ProviderCallsExportQuery extends ProviderReportWindow {
 
 /**
  * The visible-cap headers this endpoint sets before the first CSV byte:
- * `X-X402-Export-Row-Count`, `X-X402-Export-Total-Matching` and
- * `X-X402-Export-Truncated`.
+ * `X-Assay-Export-Row-Count`, `X-Assay-Export-Total-Matching` and
+ * `X-Assay-Export-Truncated`.
  *
  * They exist because the export deliberately caps its own output and the
  * no-silent-caps rule cannot ride in a JSON envelope here — the body is a CSV

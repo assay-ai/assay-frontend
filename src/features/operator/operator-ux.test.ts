@@ -198,9 +198,9 @@ describe("roles in plain words", () => {
     expect(removalWarnings(team, "jordan")).toEqual([
       "Only one other Adjudicator or Lead adjudicator would be left: their own requests for suspensions of upheld penalties and bulk decisions could not be approved.",
       "Only one other Lead adjudicator or Treasury would be left: their own requests for provider compensations could not be approved.",
-      "Only one other Lead adjudicator would be left: their own requests for lifting account blocks could not be approved.",
+      "Only one other Lead adjudicator would be left: their own requests for lifting account blocks and on-chain blocks could not be approved.",
     ]);
-    expect(removalWarnings(team, "dan")[0]).toBe("Nobody else is Admin: new operators and raised roles and limits could no longer be approved.");
+    expect(removalWarnings(team, "dan")[0]).toBe("Nobody else is Admin: new operators, raised roles and limits and admin removals could no longer be approved.");
     expect(removalWarnings([...team, operator("iris", ["ADJL", "OPS_ADMIN"])], "jordan")).toEqual([]);
   });
 });
@@ -230,6 +230,8 @@ function brief(overrides: {
   executableAt?: string | null;
   disputedAt?: string | null;
   parts?: number;
+  /** False for a Solana case; absent (or true) is an EVM case, ruled on chain only. */
+  disputeOnChain?: boolean;
 }): OperatorCaseBrief {
   const proposedAt = iso(NOW - 2 * DAY);
   return {
@@ -256,6 +258,7 @@ function brief(overrides: {
           chainDisputedAt: overrides.disputedAt ?? null,
           secondsRemaining: null,
           runningClock: "NONE",
+          ...(overrides.disputeOnChain === undefined ? {} : { disputeOnChain: overrides.disputeOnChain }),
         },
         disputeId: null,
         outcome: null,
@@ -337,7 +340,8 @@ describe("the next step for this operator", () => {
   });
 
   it("offers Suspend quietly while the window is open, and hides it above the authority limit", () => {
-    const b = brief({});
+    // A Solana case: an EVM one is never suspended (below).
+    const b = brief({ disputeOnChain: false });
     const facts = caseFacts(b, NOW);
     expect(caseNextStep(facts, caseAuthority(b, lead, facts), fmt)).toMatchObject({ kind: "waiting", secondary: "suspend" });
     const sreAuthority = caseAuthority(b, sre, facts);
@@ -347,8 +351,18 @@ describe("the next step for this operator", () => {
   });
 
   it("makes a suspension of an upheld penalty two-person", () => {
-    const b = brief({ status: "UPHELD", disputedAt: iso(NOW - 5 * DAY) });
+    const b = brief({ status: "UPHELD", disputedAt: iso(NOW - 5 * DAY), disputeOnChain: false });
     expect(caseAuthority(b, lead, caseFacts(b, NOW)).suspend).toMatchObject({ allowed: true, twoPerson: true });
+  });
+
+  // Review N-2: the backend refuses an S-1 suspension of an EVM case; only the arbiter's cancel stops it.
+  it("never offers Suspend on an EVM case", () => {
+    const b = brief({});
+    const facts = caseFacts(b, NOW);
+    const authority = caseAuthority(b, lead, facts);
+    expect(authority.suspend.allowed).toBe(false);
+    expect(authority.suspend.reason).toMatch(/arbiter's cancel/);
+    expect(caseNextStep(facts, authority, fmt).secondary).toBeNull();
   });
 
   it("asks for the cancel signature when one is waiting", () => {
