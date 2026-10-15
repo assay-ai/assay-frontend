@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Download, ExternalLink, HelpCircle } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
@@ -15,11 +16,15 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { assetScopeNote, foldNotCredited, rowsInAsset } from "@/features/call-classes/csv";
 import { downloadCallsCsv, useCallsExport } from "@/features/call-classes/use-calls-export";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
+import { lossOf } from "@/features/provider-penalties/model";
+import { usePenalties } from "@/features/provider-penalties/use-penalties";
+import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import { earningsSplit, type EarningsSplit } from "@/features/provider-earnings/earned-tile";
 import { callCount, notCreditedReason, partsThatAddUp } from "@/features/provider-earnings/not-credited";
 import { useChains } from "@/hooks/useChains";
 import type { Money, ProviderPayout } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
+import { routes } from "@/libs/routes";
 import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
 import { getProviderEarnings } from "@/services/provider-reports.service";
 import { chainIdOfAsset } from "@/utils/chain";
@@ -69,6 +74,16 @@ export default function ProviderMoneyPage() {
   });
   const calls = useCallsExport(month);
   const names = useProviderToolNames();
+  const stake = useStakeStatus();
+  const penalties = usePenalties({ withCases: "none" });
+  // What executed penalties took from the stake, read from the chain (all time: the chain record has no execution date here).
+  const takenByPenalties = penalties.rows
+    .filter((row) => row.closedAs === "executed")
+    .map((row) => lossOf(row))
+    .filter((money): money is Money => money !== null);
+  const takenTotal = takenByPenalties.length
+    ? { ...takenByPenalties[0]!, amount: takenByPenalties.reduce((sum, m) => sum + BigInt(m.amount || "0"), 0n).toString() }
+    : null;
   const { chains } = useChains();
   const { current: displayAsset, isPending: assetPending } = useDisplayAsset("provider");
 
@@ -159,6 +174,30 @@ export default function ProviderMoneyPage() {
                 ].filter(Boolean) as MoneySplitSegment[]
               }
             />
+            <dl className="grid grid-cols-1 gap-2 rounded-lg border border-01 bg-02 px-3.5 py-3 text-body-13 tablet:grid-cols-2 tablet:gap-4">
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-02">Locked as stake</dt>
+                <dd className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-mono text-mono-13 font-semibold text-01">
+                    {stake.isLoading ? "…" : formatMoney(stake.staked, { decimals: 2 })}
+                  </span>
+                  <Link href={routes.stake()} className="text-body-xs text-03 underline underline-offset-2">
+                    Still yours, not earnings. See Stake
+                  </Link>
+                </dd>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-02">Taken by penalties, so far</dt>
+                <dd className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-mono text-mono-13 font-semibold text-01">
+                    {penalties.isLoading ? "…" : penalties.isError ? "Could not be read" : formatMoney(takenTotal, { decimals: 2 })}
+                  </span>
+                  <Link href={routes.penalties("closed")} className="text-body-xs text-03 underline underline-offset-2">
+                    From your stake, not your earnings. See Penalties
+                  </Link>
+                </dd>
+              </div>
+            </dl>
             {split.uncollected ? (
               <p className="text-body-xs text-03">
                 {formatMoney(split.uncollected, { decimals: 2 })} for {callCount(split.uncollectedCalls)} could not be collected from the buyer, so it is not in your wallet and not

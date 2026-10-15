@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { BindingTestLayer, BindingTestLayerResult, BindingTestReport } from "@/interfaces";
 
-import { isEmptyResult, testPipeline } from "./pipeline";
+import { isEmptyResult, testGate, testPipeline } from "./pipeline";
 
 const LAYERS: BindingTestLayer[] = ["REQUEST_MAPPING", "UPSTREAM", "CLASSIFICATION", "RESPONSE_MAPPING", "VERIFICATION"];
 
@@ -102,5 +102,22 @@ describe("isEmptyResult", () => {
     expect(isEmptyResult({ a: [], b: "" })).toBe(true);
     expect(isEmptyResult({ a: 0 })).toBe(false);
     expect(isEmptyResult([1])).toBe(false);
+  });
+});
+
+describe("testGate", () => {
+  it("does not let an empty-result pass through without an acknowledgement", () => {
+    const empty = { passed: true, emptyResult: true };
+    expect(testGate(empty, { stale: false, emptyAcknowledged: false })).toEqual({ passed: false, needsEmptyAck: true });
+    expect(testGate(empty, { stale: false, emptyAcknowledged: true })).toEqual({ passed: true, needsEmptyAck: true });
+  });
+
+  it("passes a real pass, and never a stale or failed run", () => {
+    expect(testGate({ passed: true, emptyResult: false }, { stale: false, emptyAcknowledged: false }).passed).toBe(true);
+    expect(testGate({ passed: true, emptyResult: false }, { stale: true, emptyAcknowledged: false }).passed).toBe(false);
+    expect(testGate({ passed: false, emptyResult: true }, { stale: false, emptyAcknowledged: true })).toEqual({
+      passed: false,
+      needsEmptyAck: false,
+    });
   });
 });

@@ -142,7 +142,7 @@ function FirstRunCard({ binding, toolName, description }: { binding: ToolBinding
                 <Link href={routes.binding(binding.id, "quality")} className="text-primary-600 underline">
                   Watch quality
                 </Link>
-                : your failure rate against your promise. We message your Inbox if it gets close.
+                : your failure rate against your promise. Home and your Inbox warn you if it gets close.
               </li>
               <li>
                 <a href={routes.publicTool(binding.toolId)} target="_blank" rel="noreferrer" className="text-primary-600 underline">

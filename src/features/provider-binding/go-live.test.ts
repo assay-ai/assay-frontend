@@ -15,8 +15,7 @@ import {
   takeRateOf,
   timeoutFromSeconds,
   stakeSummary,
-  totalStakeWith,
-} from "./go-live";
+  totalStakeWith, stakeEffectOf } from "./go-live";
 
 const usd = (major: string): Money => ({ amount: String(Math.round(Number(major) * 1e6)), asset: "USDG", decimals: 6 });
 
@@ -113,5 +112,24 @@ describe("stakeSummary", () => {
     expect(summary.perTool).toBe("This tool alone needs $50.00 (the minimum for any paid tool).");
     expect(summary.total).toBe("That is all the stake you need; you have $20.00, $30.00 short.");
     expect(summary.tone).toBe("short");
+  });
+});
+
+describe("stakeEffectOf", () => {
+  const usd = (major: string) => ({ amount: String(Math.round(Number(major) * 1e6)), asset: "usd", decimals: 6 });
+  const binding = { id: "b1", price: usd("0.05"), pricingMode: "PAID" as const };
+
+  it("names the stake needed before and after a price rise, and the shortfall", () => {
+    const effect = stakeEffectOf({ binding, price: usd("0.30"), mode: "PAID", stake: null, staked: usd("100") });
+    expect(effect.before?.amount).toBe(usd("50").amount);
+    expect(effect.after?.amount).toBe(usd("300").amount);
+    expect(effect.shortfall?.amount).toBe(usd("200").amount);
+  });
+
+  it("has no shortfall when the stake covers the new price, and none for a switch to free", () => {
+    expect(stakeEffectOf({ binding, price: usd("0.30"), mode: "PAID", stake: null, staked: usd("400") }).shortfall).toBeNull();
+    const free = stakeEffectOf({ binding, price: null, mode: "FREE", stake: null, staked: null });
+    expect(free.after).toBeNull();
+    expect(free.shortfall).toBeNull();
   });
 });

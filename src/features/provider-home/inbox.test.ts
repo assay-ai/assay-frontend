@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { inboxCount, isProviderEvent } from "./inbox";
+import { inboxBreakdown, inboxCount, inboxHeadline, isProviderEvent } from "./inbox";
 
 describe("provider inbox audience", () => {
   it("keeps provider events only", () => {
@@ -22,5 +22,21 @@ describe("provider inbox audience", () => {
         ],
       }),
     ).toBe(2);
+  });
+});
+
+describe("inboxHeadline", () => {
+  it("breaks the badge's number into what it counts", () => {
+    const breakdown = inboxBreakdown({
+      urgent: [["0xabc", "p1"]],
+      notifications: [
+        { event: "provider.slash_proposed", readAt: null, subjectId: "p1" },
+        { event: "provider.sla_window_warning", readAt: null, subjectId: "b1" },
+        { event: "provider.slash_executed", readAt: "2026-10-01T00:00:00Z", subjectId: "p3" },
+      ],
+    });
+    expect(breakdown).toEqual({ penalties: 1, notices: 1 });
+    expect(inboxHeadline(breakdown)).toBe("2 new: 1 penalty to decide on, 1 unread notice (marked with a dot).");
+    expect(inboxHeadline({ penalties: 0, notices: 0 })).toMatch(/^Nothing new/);
   });
 });

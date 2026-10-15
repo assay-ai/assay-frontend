@@ -6,7 +6,7 @@ import { isNotification, type NotificationItem } from "@/app/(console)/provider/
 import { usePenaltySummary } from "@/features/provider-penalties/use-penalty-summary";
 import { listNotifications } from "@/services/account.service";
 
-import { inboxCount, isProviderEvent, PROVIDER_NOTIFICATION_EVENTS } from "./inbox";
+import { inboxBreakdown, isProviderEvent, PROVIDER_NOTIFICATION_EVENTS } from "./inbox";
 
 /**
  * The provider Inbox, read once for the page and the nav badge (same query
@@ -24,10 +24,11 @@ export function useProviderInbox() {
   const items: NotificationItem[] = (notifications.data?.items ?? [])
     .filter(isNotification)
     .filter((item) => isProviderEvent(item.event));
-  const count = inboxCount({
+  const breakdown = inboxBreakdown({
     urgent: penalties.needsAction.map((notice) => [notice.id, ...(notice.proposalId ? [notice.proposalId] : [])]),
     notifications: items,
   });
+  const count = breakdown.penalties + breakdown.notices;
 
-  return { notifications, items, penalties, count };
+  return { notifications, items, penalties, count, breakdown };
 }

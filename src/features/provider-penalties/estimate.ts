@@ -4,31 +4,30 @@ import type { Money } from "@/interfaces";
 
 /**
  * A penalty estimate from inputs, with the backend's formula
- * (`sla-window.service.ts` / `sla-statistics.ts`):
+ * (`sla-window.ts` `penaltyFor`):
  *
- *     penalty = min( totalCallAmount × (observedRate − declaredRate) × multiplier,
- *                    max($5, 100 × price) )
+ *     penalty = totalCallAmount × (observedRate − declaredRate) × multiplier
  *
- * `multiplier` is `SLA_PENALTY_MULTIPLIER` (2). The per-window cap
- * `max($5, 100 × price)` is enforced on chain. A further cap of 10% of the
- * stake per provider per day also exists; it can only lower the result, so an
- * estimate without it is an upper bound and is labelled "about".
+ * `multiplier` is `SLA_PENALTY_MULTIPLIER` (2).
+ *
+ * What the chain enforces on top (X402Stake `proposeSlash`/`executeSlash`):
+ * each penalty is at most a fixed maximum set on chain (`penaltyAmount`), and
+ * penalties take at most a set share of the stake per rolling 24 hours
+ * (`slashCapBps`). Both can only lower the result, and neither is known here,
+ * so the estimate is an upper bound and is labelled "about".
+ *
+ * There is NO per-window cap such as max($5, 100 × price): an earlier version
+ * applied one here and called it "enforced on chain", but neither the
+ * contracts nor the backend apply it (provider review 2026-10-16b, P0).
  *
  * There is no window volume on the wire before a tool is live, so the caller
  * states the one it assumes (`calls`).
  */
 export const PENALTY_MULTIPLIER = 2;
-export const PENALTY_CAP_FLOOR = 5;
-export const PENALTY_CAP_PRICE_MULTIPLE = 100;
 
 export interface PenaltyEstimate {
-  /** What is taken from the stake, after the per-window cap. Zero when within the promise. */
+  /** The formula result: the most this window could take, before the chain's limits. Zero within the promise. */
   penalty: Money;
-  /** The formula result before the cap. */
-  uncapped: Money;
-  /** The per-window cap. */
-  cap: Money;
-  capped: boolean;
 }
 
 function scale(money: Pick<Money, "decimals">): Decimal {
@@ -63,15 +62,7 @@ export function estimatePenalty({
   const unit = new Decimal(price.amount || "0").div(scale(price));
   const total = unit.mul(calls);
   const excess = Decimal.max(new Decimal(observedRate).minus(declaredRate), 0);
-  const raw = total.mul(excess).mul(multiplier);
-  const cap = Decimal.max(new Decimal(PENALTY_CAP_FLOOR), unit.mul(PENALTY_CAP_PRICE_MULTIPLE));
-  const taken = Decimal.min(raw, cap);
-  return {
-    penalty: toMoney(taken, price),
-    uncapped: toMoney(raw, price),
-    cap: toMoney(cap, price),
-    capped: raw.gt(cap),
-  };
+  return { penalty: toMoney(total.mul(excess).mul(multiplier), price) };
 }
 
 /**

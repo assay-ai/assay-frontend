@@ -1,7 +1,8 @@
 "use client";
 
+import { useConnectWallet } from "@privy-io/react-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CircleAlert } from "lucide-react";
+import { CircleAlert, Wallet } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -9,6 +10,7 @@ import { LocalTime } from "@/components/patterns/local-time";
 import { PresetChips } from "@/components/patterns/preset-chips";
 import { WalletActionSheet } from "@/components/patterns/sign-action";
 import { StatusTimeline } from "@/components/patterns/status-timeline";
+import { Button } from "@/components/ui/button";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { openPenaltyHold, openPenaltyPhrase } from "@/features/provider-penalties/model";
 import { usePenalties } from "@/features/provider-penalties/use-penalties";
@@ -17,9 +19,12 @@ import { getProviderRegistration } from "@/services/provider-registration.servic
 import { formatDecimal, formatMoney, parseAmountInput, toDecimal } from "@/utils/money";
 
 import { stakeActionChain } from "./chain-stake";
+import { trackSubmissions } from "./pending-chain-tx";
+import { useProviderPendingTransactions } from "./pending-chain-tx-list";
 import { describeStakeError, unstakeStep, withdrawStep } from "./stake-steps";
 import { PROVIDER_STAKE_KEY, useStakeStatus } from "./use-stake-status";
 import { useStakeWallet, walletBlocker } from "./use-stake-wallet";
+import { DEMO_SIGNING_NOTE, simulatedSteps } from "./wallet-readiness";
 import {
   availableAfterRequest,
   toolsPausedAt,
@@ -88,7 +93,9 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
   const blocker = walletBlocker(wallet);
 
   const ready = state.phase === "ready" && state.unbonding;
-  const steps = ready
+  const pending = useProviderPendingTransactions();
+  const { connectWallet } = useConnectWallet();
+  const realSteps = ready
     ? [
         withdrawStep({
           amountAtomic: state.unbonding!.amount,
@@ -98,6 +105,18 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
         }),
       ]
     : [unstakeStep({ amountAtomic: parsed.atomic ?? "0", amountLabel, signer: wallet.signer, chain: wallet.chain })];
+  const steps = wallet.simulated
+    ? simulatedSteps(realSteps)
+    : trackSubmissions(
+        realSteps,
+        {
+          kind: ready ? "withdraw" : "unstake",
+          chainId: wallet.chainId,
+          idPrefix: ready ? "withdraw" : "unstake",
+          label: (step) => step.label,
+        },
+        pending,
+      );
 
   const timeline = (
     <StatusTimeline
@@ -203,6 +222,18 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
       onSuccess={() => void queryClient.invalidateQueries({ queryKey: [...PROVIDER_STAKE_KEY] })}
       doneAction={{ label: "Done", onClick: () => onOpenChange(false) }}
     >
+      {wallet.simulated ? <p className="text-body-xs text-03">{DEMO_SIGNING_NOTE}</p> : null}
+      {wallet.canConnect ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={<Wallet aria-hidden="true" />}
+          className="self-start"
+          onClick={() => connectWallet({ walletChainType: "ethereum-and-solana" })}
+        >
+          Connect your stake wallet
+        </Button>
+      ) : null}
       {state.phase !== "none" ? timeline : null}
 
       {!ready && state.staked ? (

@@ -16,6 +16,7 @@ import type { Money } from "@/interfaces";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
 import type { SlashStatusKey } from "@/libs/chains/evm/stake-slashes/status";
+import { splitPenalty } from "@/features/provider-slash-case/distribution";
 
 export type PenaltyTab = "needs-action" | "disputed" | "closed";
 export const PENALTY_TABS: readonly { id: PenaltyTab; label: string }[] = [
@@ -41,6 +42,12 @@ export interface PenaltyRow {
   chainKey: SlashStatusKey;
   tab: PenaltyTab;
   amount: Money;
+  /**
+   * What the chain set aside for it at proposal: the penalty, cut to the
+   * chain's limits. Execution applies exactly this (all or wait). Null when the
+   * record carries none.
+   */
+  reserved: Money | null;
   /** What an executed penalty actually took. */
   applied: Money | null;
   proposedAt: string;
@@ -91,6 +98,7 @@ export function penaltyRowOf(
     chainKey: row.status.key,
     tab: tabOf(row.status.key),
     amount: money(row.penalty),
+    reserved: row.reserved > 0n ? money(row.reserved) : null,
     applied: row.applied === null ? null : money(row.applied),
     proposedAt: iso(row.proposedAt) ?? new Date(0).toISOString(),
     executableAt: iso(row.executableAt) ?? new Date(0).toISOString(),
@@ -171,7 +179,19 @@ export function penaltyTimeline(row: PenaltyRow): PenaltyTimelineStep[] {
  * platform's shares (60% + 30% under the current terms); the remaining 10%
  * is never taken. Split exactly as the program does (floors), see
  * `provider-slash-case/distribution.ts`.
+ *
+ * The basis is what was applied, else what the chain reserved (execution
+ * applies exactly that), else the penalty. Null for a record that took nothing.
  */
+export function lossBasis(row: Pick<PenaltyRow, "applied" | "reserved" | "amount">): Money {
+  return row.applied ?? row.reserved ?? row.amount;
+}
+
+export function lossOf(row: Pick<PenaltyRow, "applied" | "reserved" | "amount" | "closedAs">): Money | null {
+  if (row.closedAs === "cancelled" || row.closedAs === "expired") return null;
+  return splitPenalty(lossBasis(row)).taken;
+}
+
 export interface PenaltyCase {
   toolName: string | null;
   bindingId: string | null;
