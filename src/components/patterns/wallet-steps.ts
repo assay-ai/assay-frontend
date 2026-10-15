@@ -16,6 +16,35 @@ export interface WalletStepResult {
   data?: unknown;
 }
 
+/** Where a running step is. Reported by the step itself through `context.report`. */
+export type WalletStepStage = "preparing" | "wallet" | "submitted";
+
+export interface WalletStepReport {
+  stage: WalletStepStage;
+  /** Once submitted: the transaction on an explorer. */
+  explorerUrl?: string;
+  /** Once submitted: whatever identifies it (a tx hash), handed back on a retry. */
+  data?: unknown;
+}
+
+export interface WalletStepContext {
+  /** What the earlier steps returned. */
+  results: readonly (WalletStepResult | undefined)[];
+  /**
+   * Tell the tracker where you are: `"preparing"` while building the
+   * transaction, `"wallet"` when the prompt is open, `"submitted"` (with the
+   * explorer link and tx hash) the moment it is broadcast. Report
+   * `"submitted"` BEFORE waiting for confirmation: it is what makes a retry safe.
+   */
+  report: (report: WalletStepReport) => void;
+  /**
+   * Set on a retry of a step that had already been submitted when it failed
+   * (e.g. the receipt wait timed out). Do NOT send again: check the status of
+   * `previousAttempt.data` (the tx hash) and resolve or throw from that.
+   */
+  previousAttempt?: WalletStepReport;
+}
+
 export interface WalletStep {
   id: string;
   /** What the person approves, in their words: "Approve USDG", "Deposit $20". */
@@ -23,19 +52,39 @@ export interface WalletStep {
   /** "free" for a signature only, "gas" when the person pays a network fee. */
   cost: WalletStepCost;
   /**
-   * Opens the wallet and resolves when this step is done. Receives what the
-   * earlier steps returned. Throw (or reject) to stop the sequence.
+   * Leave this step out — e.g. "approve" when the allowance already covers the
+   * amount. Decided by the caller from data it already has, so the tracker
+   * never promises a prompt that does not come.
    */
-  run: (context: { results: readonly (WalletStepResult | undefined)[] }) => Promise<WalletStepResult | void>;
+  skip?: boolean;
+  /**
+   * Opens the wallet and resolves when this step is done (confirmed). Throw
+   * (or reject) to stop the sequence. See `WalletStepContext` for `report`.
+   */
+  run: (context: WalletStepContext) => Promise<WalletStepResult | void>;
 }
 
 export type StepStatus = "upcoming" | "active" | "done" | "declined" | "failed";
 
 export type WalletRunState =
   | { phase: "idle"; results: (WalletStepResult | undefined)[] }
-  | { phase: "running"; index: number; results: (WalletStepResult | undefined)[] }
+  | {
+      phase: "running";
+      index: number;
+      /** Where the step says it is; "wallet" until it reports otherwise. */
+      stage: WalletStepStage;
+      explorerUrl?: string;
+      results: (WalletStepResult | undefined)[];
+    }
   | { phase: "declined"; index: number; results: (WalletStepResult | undefined)[] }
-  | { phase: "failed"; index: number; error: unknown; results: (WalletStepResult | undefined)[] }
+  | {
+      phase: "failed";
+      index: number;
+      error: unknown;
+      /** Present when the step had been broadcast before it failed: retrying must not resend. */
+      submitted?: WalletStepReport;
+      results: (WalletStepResult | undefined)[];
+    }
   | { phase: "success"; results: (WalletStepResult | undefined)[] };
 
 export const IDLE: WalletRunState = { phase: "idle", results: [] };
@@ -73,14 +122,15 @@ export function stepStatuses(count: number, state: WalletRunState): StepStatus[]
 /**
  * Runs `steps` from `startAt`, calling `onChange` on every transition, and
  * returns the final state. A retry passes the previous state's `index` as
- * `startAt` and its `results`, so steps that already went through are not
- * signed twice.
+ * `startAt` and its `results` (steps that went through are not signed twice),
+ * and `previousAttempt` when the failed step had been submitted.
  */
 export async function runWalletSteps(
   steps: readonly WalletStep[],
   options: {
     startAt?: number;
     results?: (WalletStepResult | undefined)[];
+    previousAttempt?: WalletStepReport;
     onChange?: (state: WalletRunState) => void;
     isRejection?: (error: unknown) => boolean;
   } = {},
@@ -89,14 +139,29 @@ export async function runWalletSteps(
   const results = [...(options.results ?? [])].slice(0, startAt);
 
   for (let index = startAt; index < steps.length; index++) {
-    onChange?.({ phase: "running", index, results: [...results] });
+    const previousAttempt = index === startAt ? options.previousAttempt : undefined;
+    let submitted: WalletStepReport | undefined = previousAttempt;
+    let running: Extract<WalletRunState, { phase: "running" }> = {
+      phase: "running",
+      index,
+      stage: previousAttempt ? "submitted" : "wallet",
+      explorerUrl: previousAttempt?.explorerUrl,
+      results: [...results],
+    };
+    onChange?.(running);
+    const report = (next: WalletStepReport) => {
+      if (next.stage === "submitted") submitted = next;
+      running = { ...running, stage: next.stage, explorerUrl: next.explorerUrl ?? running.explorerUrl };
+      onChange?.(running);
+    };
     try {
-      const result = await steps[index]!.run({ results: [...results] });
-      results[index] = result ?? {};
+      const result = await steps[index]!.run({ results: [...results], report, previousAttempt });
+      results[index] = { explorerUrl: submitted?.explorerUrl, ...(result ?? {}) };
     } catch (error) {
-      const state: WalletRunState = isRejection(error)
-        ? { phase: "declined", index, results: [...results] }
-        : { phase: "failed", index, error, results: [...results] };
+      const state: WalletRunState =
+        isRejection(error) && !submitted
+          ? { phase: "declined", index, results: [...results] }
+          : { phase: "failed", index, error, submitted, results: [...results] };
       onChange?.(state);
       return state;
     }

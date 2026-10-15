@@ -99,7 +99,7 @@ export default function CallsPage() {
                 >
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span className="flex min-w-0 items-center gap-2 text-label-sm text-01">
-                      <EntityName kind="tool" id={call.toolId} />
+                      <EntityName kind="tool" id={call.toolId} copyable={false} />
                     </span>
                     <span className="truncate text-body-xs text-03">
                       <LocalTime value={call.createdAt} /> · {verdict.shownAs}
@@ -107,7 +107,7 @@ export default function CallsPage() {
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-0.5">
                     <span className="font-mono text-mono-13 font-semibold text-01">
-                      {formatMoney(call.charged, { decimals: 4 })}
+                      {toDecimal(call.price).isZero() ? "Free" : formatMoney(call.charged, { decimals: 4 })}
                     </span>
                     {toDecimal(uncharged).gt(0) ? (
                       <span className="font-mono text-mono-xs text-teal-600">

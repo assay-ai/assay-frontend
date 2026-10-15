@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
+import { shortId } from "@/components/patterns/copy-chip";
 import { listAgents, listCredentials } from "@/services/account.service";
 import { listCatalogueProviders } from "@/services/catalogue.service";
 import { listTools } from "@/services/tools.service";
@@ -25,6 +26,10 @@ import { listTools } from "@/services/tools.service";
  * endpoint leaves it exactly as it was (ids in copy chips). Lists are fetched
  * only for the kinds asked for — pass `kinds` on a screen that only shows
  * tools, so it does not fetch every agent's keys.
+ *
+ * Buyer and provider sessions only (these endpoints need the Privy session,
+ * not the operator token). A CSV should use `name()` for the label column and
+ * keep the raw id in its own column.
  */
 
 export type EntityKind = "tool" | "provider" | "agent" | "credential";
@@ -67,7 +72,7 @@ export function entityName(index: EntityIndex, kind: EntityKind, id: string | nu
 const ALL_KINDS: readonly EntityKind[] = ["tool", "provider", "agent", "credential"];
 
 export interface UseEntityNamesResult {
-  /** The name, or the id itself when no name is known. */
+  /** The name, or the SHORT id ("06399979…") when no name is known — for text, titles and CSV. */
   name: (kind: EntityKind, id: string) => string;
   /** The name, or null — for a screen that wants to render the id differently (a CopyChip). */
   lookup: (kind: EntityKind, id: string | null | undefined) => string | null;
@@ -134,7 +139,7 @@ export function useEntityNames(options: { kinds?: readonly EntityKind[] } = {}):
     (kind: EntityKind, id: string | null | undefined) => entityName(index, kind, id),
     [index],
   );
-  const name = React.useCallback((kind: EntityKind, id: string) => entityName(index, kind, id) ?? id, [index]);
+  const name = React.useCallback((kind: EntityKind, id: string) => entityName(index, kind, id) ?? shortId(id), [index]);
 
   const isPending =
     (wants("tool") && tools.isPending) ||

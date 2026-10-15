@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +14,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/utils";
+
+import { ChangeRows, type ConfirmChange } from "./change-rows";
+
+export type { ConfirmChange } from "./change-rows";
 
 /**
  * Confirm an important or destructive action. Names the object and the
@@ -35,12 +38,6 @@ import { cn } from "@/utils";
  * `onConfirm` may return a promise: the button shows progress, the sheet
  * stays open on failure and shows the error, and closes on success.
  */
-export interface ConfirmChange {
-  label: React.ReactNode;
-  before: React.ReactNode;
-  after: React.ReactNode;
-}
-
 export interface ConfirmSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -56,7 +53,7 @@ export interface ConfirmSheetProps {
   cancelLabel?: string;
   tone?: "danger" | "primary";
   onConfirm: () => void | Promise<unknown>;
-  /** One sentence for a failure. Default uses the error's message. */
+  /** One sentence for a failure (e.g. `plainError(e.code)`). The raw message goes under Details. */
   describeError?: (error: unknown) => string;
   children?: React.ReactNode;
 }
@@ -77,7 +74,7 @@ export function ConfirmSheet({
 }: ConfirmSheetProps) {
   const [acknowledged, setAcknowledged] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<{ sentence: string; raw: string | null } | null>(null);
 
   React.useEffect(() => {
     if (!open) {
@@ -94,10 +91,11 @@ export function ConfirmSheet({
       await onConfirm();
       onOpenChange(false);
     } catch (caught) {
-      setError(
-        describeError?.(caught) ??
-          (caught instanceof Error && caught.message ? caught.message : "That did not go through. Try again."),
-      );
+      // A plain sentence; the raw message (often an API code) only under Details.
+      setError({
+        sentence: describeError?.(caught) ?? "That did not go through. Nothing changed; you can try again.",
+        raw: caught instanceof Error && caught.message ? caught.message : null,
+      });
     } finally {
       setBusy(false);
     }
@@ -113,23 +111,7 @@ export function ConfirmSheet({
 
         {changes?.length || children || acknowledge ? (
           <div className="flex w-full flex-col gap-4 px-[18px] pt-4">
-            {changes?.length ? (
-              <dl className="flex w-full flex-col overflow-hidden rounded-lg border border-01">
-                {changes.map((change, index) => (
-                  <div
-                    key={index}
-                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-01 px-3.5 py-2.5 last:border-b-0 tablet:grid-cols-[140px_minmax(0,1fr)]"
-                  >
-                    <dt className="text-body-13 text-03">{change.label}</dt>
-                    <dd className="col-span-2 flex flex-wrap items-center gap-2 text-body-13 tablet:col-span-1">
-                      <span className="text-02 line-through decoration-03">{change.before}</span>
-                      <ArrowRight aria-label="becomes" className="size-3.5 shrink-0 text-03" />
-                      <span className="font-semibold text-01">{change.after}</span>
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            ) : null}
+            {changes?.length ? <ChangeRows changes={changes} /> : null}
             {children}
             {acknowledge ? (
               <Checkbox
@@ -142,10 +124,16 @@ export function ConfirmSheet({
           </div>
         ) : null}
 
-        <SheetFooter>
-          <p role="alert" className={cn("min-h-4 text-body-xs text-danger-600", !error && "sr-only")}>
-            {error ?? ""}
-          </p>
+        <SheetFooter className="sticky bottom-0 bg-01">
+          <div role="alert" className={cn("text-body-xs text-danger-600", !error && "sr-only")}>
+            {error?.sentence ?? ""}
+            {error?.raw ? (
+              <details className="mt-1 text-03">
+                <summary className="cursor-pointer select-none text-label-xs">Details</summary>
+                <span className="mt-1 block break-all font-mono text-mono-xs">{error.raw}</span>
+              </details>
+            ) : null}
+          </div>
           <div className="flex w-full flex-col-reverse gap-2 tablet:flex-row tablet:justify-end">
             <SheetClose asChild>
               <Button variant="secondary" disabled={busy}>
