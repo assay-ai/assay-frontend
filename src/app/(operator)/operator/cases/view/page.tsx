@@ -74,7 +74,7 @@ const STAGE_CHIP: Record<CaseStage, { status: StatusChipKey; detail?: string }> 
   executable: { status: "waiting", detail: "executable" },
   disputed: { status: "disputed" },
   upheld: { status: "upheld" },
-  "cancel-requested": { status: "waiting", detail: "cancel to sign" },
+  "cancel-requested": { status: "waiting-signature", detail: "cancel" },
   executed: { status: "executed" },
   compensated: { status: "closed", detail: "paid back" },
   cancelled: { status: "cancelled" },

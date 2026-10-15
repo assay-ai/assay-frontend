@@ -11,7 +11,7 @@ import { routes } from "@/libs/routes";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
-import { Deadline } from "./deadline";
+import { Deadline } from "@/features/operator/deadline";
 
 /**
  * The Penalties table: provider, amount, status, what happens next, proposed.
