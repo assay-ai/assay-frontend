@@ -179,7 +179,10 @@ export function isCredited(row: ProviderCallRow): boolean {
     // Buyer debt (not paid yet) and uncollected (never paid): nothing reached
     // the provider, and the platform never pays in the buyer's place.
     row.classification !== "PAID_BUYER_DEBT" &&
-    row.classification !== "PAID_UNCOLLECTED"
+    row.classification !== "PAID_UNCOLLECTED" &&
+    // A buyer debt voided by a late failing verdict stays SETTLED, but is
+    // PAID_UNCREDITED with zero amounts: nobody was credited.
+    row.classification !== "PAID_UNCREDITED"
   );
 }
 
