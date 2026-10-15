@@ -393,7 +393,7 @@ describe("the next step for this operator", () => {
     expect(next.description).not.toMatch(/deadline has passed/);
     const end = caseTimelineSteps(b, facts, { now: NOW }).at(-1);
     expect(end).toMatchObject({ date: iso(NOW + 7 * DAY), urgent: false, countdown: false });
-    expect(end?.dateLabel).toBe("7 days left · sign before");
+    expect(end?.dateLabel).toBe("7 days left · sign by");
     expect(cancelDeadlineSentence(facts, fmt)).toMatch(/cannot be executed/);
   });
 

@@ -120,7 +120,7 @@ describe("round 4: the penalty page tells one story", () => {
     expect(window.date).toBeFalsy();
     expect(window.dateLabel).toBe("open until the signing deadline");
     // The signature step carries the one date and the countdown: the window's end.
-    expect(steps.at(-1)).toMatchObject({ state: "current", date: facts.executableAt, dateLabel: "sign before", countdown: true });
+    expect(steps.at(-1)).toMatchObject({ state: "current", date: facts.executableAt, dateLabel: "sign by", countdown: true });
     // Once that instant has passed, the window is done at it.
     const later = Date.parse(facts.executableAt!) + 60_000;
     expect(caseTimelineSteps(cobalt, caseFacts(cobalt, later), { now: later }).find((s) => s.id === "window")).toMatchObject({

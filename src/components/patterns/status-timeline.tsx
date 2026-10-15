@@ -110,11 +110,13 @@ function StepDate({
   highlighted,
   onElapsed,
   alwaysDay,
+  orientation,
 }: {
   step: StatusTimelineStep;
   highlighted: boolean;
   onElapsed?: (stepId: string) => void;
   alwaysDay?: boolean;
+  orientation: NonNullable<StatusTimelineProps["orientation"]>;
 }) {
   const { msLeft, hasPassed } = useCountdown(step.countdown ? step.date : null);
   const [mounted, setMounted] = React.useState(false);
@@ -151,9 +153,19 @@ function StepDate({
         </time>
       ) : null}
       {step.countdown && msLeft !== null ? (
-        <span className={cn("whitespace-nowrap", highlighted && "font-semibold")}>
+        <span
+          className={cn(
+            "whitespace-nowrap",
+            highlighted && "font-semibold",
+            // A horizontal step is a narrow column: the countdown takes its own line, so the date reads whole on the first.
+            orientation === "horizontal" ? "basis-full" : orientation === "auto" && "tablet:basis-full",
+          )}
+        >
           {/* Never "now": under a minute reads "in under a minute" (useCountdown), so nobody acts before the chain ticks over. */}
-          · {hasPassed ? "time is up" : `in ${formatRemaining(msLeft)}`}
+          <span className={cn(orientation === "horizontal" ? "hidden" : orientation === "auto" && "tablet:hidden")}>
+            ·{" "}
+          </span>
+          {hasPassed ? "time is up" : `in ${formatRemaining(msLeft)}`}
         </span>
       ) : null}
     </span>
@@ -213,7 +225,7 @@ export function StatusTimeline({ steps, label = "Status", orientation = "auto", 
                 {step.label}
                 <span className="sr-only">, {STATE_WORD[step.state]}</span>
               </span>
-              <StepDate step={step} highlighted={index === next} onElapsed={onElapsed} alwaysDay={alwaysDay} />
+              <StepDate step={step} highlighted={index === next} onElapsed={onElapsed} alwaysDay={alwaysDay} orientation={orientation} />
               {step.description ? <span className="text-body-xs text-03">{step.description}</span> : null}
             </div>
           </li>
