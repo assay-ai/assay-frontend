@@ -9,6 +9,14 @@ import type { SlaWindow, SlaWindowOutcome } from "@/interfaces";
  *   "Oct 13, 15:00 – 17:00"                           a window by its dates, never "w_48"
  */
 
+/**
+ * The minimum sample before a window can lead to a penalty, for copy written
+ * before any window exists (landing, wizard). The backend's
+ * `MIN_VERIFIED_CALLS` (400), frozen onto each window when it opens; a live
+ * window's own `minVerifiedCalls` always wins over this.
+ */
+export const MIN_CHECKED_CALLS = 400;
+
 export type SlaTone = "ok" | "warning" | "danger" | "neutral";
 
 function pct(rate: number): string {

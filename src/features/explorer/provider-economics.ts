@@ -8,8 +8,11 @@ import { formatDecimal } from "@/utils/money";
  * Illustrative published terms; the live values are configurable on chain:
  *  - platform fee: 10% of each paid call (`PLATFORM_FEE_BPS`);
  *  - stake per paid listing: max($50, 1000 × price);
- *  - most a penalty can take per window: max($5, 100 × price);
- *  - most per 24 h: 10% of the stake.
+ *  - most taken per 24 h: 10% of the stake. This is the one limit on what a
+ *    penalty takes that the chain enforces (`slashCapBps`, a rolling 24 h
+ *    window in X402Stake), next to a fixed maximum per penalty
+ *    (`penaltyAmount`). No per-window cap such as max($5, 100 × price) is
+ *    enforced anywhere, so none is shown (provider review 2026-10-16b, P0).
  * A free listing earns nothing, posts no stake and cannot be penalised.
  * Paid calls are served only by staked listings (owner decision), so there is
  * one column, not an "unverified" path.
@@ -20,9 +23,9 @@ export type ListingMode = "FREE" | "FREEMIUM" | "PAID";
 export const FEE_RATE = new Decimal("0.10");
 const STAKE_FLOOR = new Decimal("50");
 const STAKE_PRICE_MULTIPLE = new Decimal("1000");
-const WINDOW_CAP_FLOOR = new Decimal("5");
-const WINDOW_CAP_PRICE_MULTIPLE = new Decimal("100");
-const DAILY_CAP_SHARE = new Decimal("0.10");
+/** The share of stake the chain lets penalties take per rolling 24 hours, in these illustrative terms. */
+export const DAILY_CAP_PERCENT = 10;
+const DAILY_CAP_SHARE = new Decimal(DAILY_CAP_PERCENT).div(100);
 const DAYS_PER_MONTH = new Decimal("30");
 
 /** Bounds that keep the inputs sane: a price over $100 per call or a billion calls a month is a typo. */
@@ -55,7 +58,7 @@ export interface Economics {
   perCall: { price: string; fee: string; youGet: string } | null;
   netPerMonth: string;
   stake: string;
-  worstPerWindow: string | null;
+  /** The most penalties can take in any 24 hours: the chain-enforced share of the stake. */
   worstPer24h: string | null;
   /** Days of earnings that add up to the stake, or null when it does not apply. */
   daysToCoverStake: string | null;
@@ -75,7 +78,6 @@ export function economics(mode: ListingMode, price: Decimal | null, calls: Decim
       perCall: null,
       netPerMonth: usd(new Decimal(0)),
       stake: usd(new Decimal(0)),
-      worstPerWindow: null,
       worstPer24h: null,
       daysToCoverStake: null,
     };
@@ -91,7 +93,6 @@ export function economics(mode: ListingMode, price: Decimal | null, calls: Decim
     perCall: { price: perCallUsd(price), fee: perCallUsd(fee), youGet: perCallUsd(youGet) },
     netPerMonth: usd(net),
     stake: usd(stake),
-    worstPerWindow: usd(Decimal.max(WINDOW_CAP_FLOOR, WINDOW_CAP_PRICE_MULTIPLE.mul(price))),
     worstPer24h: usd(stake.mul(DAILY_CAP_SHARE)),
     daysToCoverStake: perDay.gt(0) ? stake.div(perDay).toDecimalPlaces(1, Decimal.ROUND_UP).toString() : null,
   };
