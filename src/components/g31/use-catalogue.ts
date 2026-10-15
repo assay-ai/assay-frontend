@@ -96,6 +96,8 @@ export interface ToolRow {
   /** Bindings the quote was taken over; above one, the quote reads "up to". */
   routableBindings: number | undefined;
   pricingMode: string | null;
+  /** Free calls per agent per day before a FREEMIUM tool's quote applies. */
+  freeCallsPerDay?: number | null;
   routable: boolean;
   unroutableReason: string | null;
   /**
@@ -200,6 +202,7 @@ export function useCatalogue() {
         price: row.price,
         routableBindings: row.routableBindings,
         pricingMode: row.pricingMode,
+        freeCallsPerDay: row.freeCallsPerDay,
         routable: row.routable,
         unroutableReason: row.unroutableReason,
         settlementChains: row.settlementChains,

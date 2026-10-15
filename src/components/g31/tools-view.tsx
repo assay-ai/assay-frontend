@@ -18,7 +18,7 @@ import { formatMoney, differs, notCharged } from "@/utils/money";
 
 import { MicroLabel, PageHeader } from "./chrome";
 import { ExploreNav } from "./explore-nav";
-import { formatPrice, formatQuote } from "./format";
+import { formatOffer, formatPrice, formatQuote, freeFirstLead } from "./format";
 import { settlementReach } from "./settlement-reach";
 import { useCatalogue, type ToolRow } from "./use-catalogue";
 import { shortToolId } from "./use-tool-names";
@@ -50,6 +50,24 @@ import { shortToolId } from "./use-tool-names";
  * both, even when they are equal**, with the difference shown as an amount
  * and never as a badge.
  */
+
+/**
+ * The Quote column: what a call is held for, led for a FREEMIUM tool by the
+ * free calls a day it gets first — "100 free per day, then up to $0.0200".
+ * Free first, then paid, even when some of the tool's providers are PAID. The
+ * lead sits on its own line so the narrow column still shows the price whole.
+ *
+ * Exported for its own DOM test, for the reason `SettlesElsewhere` is.
+ */
+export function QuoteCell({ tool }: { tool: ToolRow }) {
+  const lead = freeFirstLead(tool.pricingMode, tool.freeCallsPerDay);
+  return (
+    <>
+      {lead ? <span className="block font-sans text-body-xs text-03">{lead}</span> : null}
+      {formatQuote(tool.price, tool.routableBindings, tool.pricingMode)}
+    </>
+  );
+}
 
 /**
  * A tool's market depth: how many providers you could be routed to.
@@ -177,6 +195,8 @@ export function ToolsView() {
           the router can use right now, so it reads &ldquo;up to&rdquo; when more than one could
           serve. You are charged the price of the provider that serves the call and the rest of
           the hold comes back. A listed provider the router cannot use right now is not in the
+          quote. A tool with a free tier is free first: your agent&rsquo;s free calls per day are
+          served by free-tier providers, and only after they run out is a call charged at the
           quote. The last two columns are your own spend, and are empty until you call the tool.
         </p>
       </div>
@@ -248,7 +268,7 @@ export function ToolsView() {
                       {formatPrice(tool.fromPrice)}
                     </div>
                     <div className="w-[100px] text-right font-mono text-mono-12 text-01">
-                      {formatQuote(tool.price, tool.routableBindings, tool.pricingMode)}
+                      <QuoteCell tool={tool} />
                     </div>
                     <div className="w-[110px] text-right font-mono text-mono-12 text-01">
                       {formatMoney(tool.charged, { decimals: 4 })}
@@ -306,7 +326,7 @@ export function ToolsView() {
                 <div className="flex w-full items-center justify-between gap-2.5 border-t border-01 pt-2.5">
                   <span className="font-mono text-mono-xs text-03">
                     from {formatPrice(tool.fromPrice)} · quote{" "}
-                    {formatQuote(tool.price, tool.routableBindings, tool.pricingMode)}
+                    {formatOffer(tool.price, tool.routableBindings, tool.pricingMode, tool.freeCallsPerDay)}
                     {tool.listed && tool.charged && differs(tool.listed, tool.charged)
                       ? " · some calls were not charged"
                       : ""}
