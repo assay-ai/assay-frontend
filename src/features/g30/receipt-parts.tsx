@@ -214,7 +214,7 @@ export function StateCardBlock({ card, receipt, current, className }: StateCardB
         className,
       )}
     >
-      {/* The name in words; the API's own value stays beside it as a small code. */}
+      {/* The name in words; the API's own value stays in the raw JSON. */}
       <div className="flex w-full items-start gap-2">
         <Icon
           aria-hidden="true"
@@ -224,7 +224,6 @@ export function StateCardBlock({ card, receipt, current, className }: StateCardB
           <span className={cn("text-label-13", TONE_CODE[card.tone])}>
             {receiptStateLabel(card.code)}
           </span>
-          <span className="break-all font-mono text-mono-2xs text-03">{card.code}</span>
         </div>
       </div>
       <p className="w-full text-body-13 text-01">{card.sentence}</p>
