@@ -1,8 +1,10 @@
 import { Check, CircleCheck, Info, Lock, ScanSearch, Split, Terminal } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import * as React from "react";
 
+import { BuyerCosts } from "@/components/explorer/buyer-costs";
 import { Term } from "@/components/patterns/term";
 import { MoneyPair } from "@/components/ui/money-pair";
 import {
@@ -51,6 +53,12 @@ import { HeroCtas } from "./demo-cta";
  * because the right one is a fixed 520px in the frame and there is no width
  * left for the other at 834.
  */
+
+export const metadata: Metadata = {
+  title: "How it works",
+  description:
+    "Your agent calls a tool, we hold the price, check the result, and charge only if it passes. Free calls need no deposit.",
+};
 
 interface FlowStep {
   n: string;
@@ -167,6 +175,19 @@ export default function HowItWorksPage() {
             );
           })}
         </div>
+
+        {/* What a buyer pays besides the price, before anyone signs up. */}
+        <Panel className="w-full">
+          <PanelHeader>
+            <PanelTitles>
+              <PanelTitle>What it costs you</PanelTitle>
+              <PanelDescription>the price, and what you need before your agent can pay</PanelDescription>
+            </PanelTitles>
+          </PanelHeader>
+          <PanelBody className="p-5">
+            <BuyerCosts />
+          </PanelBody>
+        </Panel>
 
         {/* Row */}
         <div className="flex w-full flex-col items-start gap-4 desktop:flex-row">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import * as React from "react";
 
 import { FailsOftenChip, Fact, FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { BuyerCosts } from "@/components/explorer/buyer-costs";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
 import { StartFreeCta } from "@/components/explorer/start-free";
 import { PageState } from "@/components/patterns/page-state";
@@ -62,6 +63,10 @@ function ToolPage() {
       .map((d) => d.data)
       .find((d) => d?.providerId === providerId)
       ?.tools.find((t) => t.toolId === tool?.id);
+  // A static export cannot set per-tool metadata; name the tool in the tab.
+  React.useEffect(() => {
+    if (tool) document.title = `${tool.name}: price and record — Assay`;
+  }, [tool]);
   const freeAllowance = smallestFreeAllowance(serving.map((p) => listingOf(p.providerId)?.freeCallsPerAgentPerDay));
 
   if (tools.isPending) {
@@ -123,6 +128,7 @@ function ToolPage() {
               {freeAllowance ? "You need funds there once the free calls run out." : "You pay from funds you hold there."}
             </p>
           ) : null}
+          <BuyerCosts className="border-t border-01 pt-3" />
         </section>
 
         <section className="flex flex-col gap-3 rounded-xl border border-01 bg-01 p-4 tablet:p-5">
