@@ -21,9 +21,12 @@ import { ThemeToggle } from "./theme-toggle";
  * The filled button is the buyer's: "Start free" signed out, "Open app"
  * signed in. "List a tool" is the outlined secondary, so a buyer and a
  * provider each see their path, and neither is hidden behind the other.
- * Below `tablet`, "Sign in" and the filled button stay in the bar (a phone
- * visitor must not have to open a menu to sign in); the links, "List a tool"
- * and the theme switch move into the menu.
+ * Below `tablet`, the filled button stays in the bar; the links, "List a tool"
+ * and the theme switch move into the menu. "Sign in" stays in the bar down to
+ * 420px; narrower than that (a 360-390px phone) the bar cannot hold the chip,
+ * "Sign in", "Start free" and the menu button without scrolling sideways, so
+ * "Sign in" moves to the top of the menu. Signing in is still one tap away:
+ * "Start free" opens the same sign-in page.
  *
  * "For providers" is one page (the offer with the earnings calculator
  * embedded); "Demo" shows only where it is configured. "Docs" appears
@@ -89,7 +92,7 @@ export interface PublicTopBarProps extends React.HTMLAttributes<HTMLElement> {
 }
 
 const FILLED_CLASS =
-  "flex items-center gap-[7px] whitespace-nowrap rounded-md bg-primary-400 px-3 py-[9px] text-label-sm font-sans text-on-primary shadow-hair hover:bg-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:px-[14px]";
+  "flex min-h-10 shrink-0 items-center gap-[7px] whitespace-nowrap rounded-md bg-primary-400 px-3 py-[9px] text-label-sm font-sans text-on-primary shadow-hair hover:bg-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:px-[14px]";
 
 const LINK_CLASS =
   "inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1.5 text-body-13 font-sans text-02 transition-colors hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500";
@@ -157,8 +160,8 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
         className={cn("relative w-full border-b border-01 bg-01", className)}
         {...props}
       >
-        <div className="flex h-[60px] w-full items-center gap-x-[18px] px-4 tablet:px-7">
-          <LinkComponent href="/how-it-works" className="flex shrink-0 items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+        <div className="flex h-[60px] w-full min-w-0 items-center gap-x-3 px-4 min-[420px]:gap-x-[18px] tablet:px-7">
+          <LinkComponent href="/how-it-works" className="flex min-h-10 shrink-0 items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
             <img src="/images/logo.png" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 rounded-md object-cover" />
             <span className="text-[17px] font-medium leading-none tracking-[-0.025em] text-01">Assay</span>
           </LinkComponent>
@@ -209,7 +212,8 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
               <a
                 href={signInHref}
                 onClick={onSignInClick}
-                className="inline-flex whitespace-nowrap rounded-md px-2 py-[9px] text-label-sm font-sans text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:px-[14px]"
+                data-testid="public-bar-sign-in"
+                className="hidden min-h-10 items-center whitespace-nowrap rounded-md px-2 py-[9px] text-label-sm font-sans text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 min-[420px]:inline-flex tablet:px-[14px]"
               >
                 Sign in
               </a>
@@ -231,7 +235,7 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
               aria-controls={menuId}
               aria-label={menuOpen ? "Close menu" : "Open menu"}
               onClick={() => setMenuOpen((open) => !open)}
-              className="flex size-9 items-center justify-center rounded-md border border-02 text-02 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:hidden"
+              className="flex size-10 shrink-0 items-center justify-center rounded-md border border-02 text-02 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:hidden"
             >
               {menuOpen ? <X aria-hidden="true" className="size-4" /> : <Menu aria-hidden="true" className="size-4" />}
             </button>
@@ -244,6 +248,19 @@ const PublicTopBar = React.forwardRef<HTMLElement, PublicTopBarProps>(
             aria-label="Menu"
             className="absolute inset-x-0 top-full z-40 flex flex-col gap-1 border-b border-01 bg-01 px-4 pb-4 pt-2 shadow-lifted tablet:hidden"
           >
+            {signedIn ? null : (
+              <a
+                href={signInHref}
+                onClick={() => {
+                  onSignInClick?.();
+                  close();
+                }}
+                data-testid="public-menu-sign-in"
+                className="flex items-center gap-1 rounded-md px-2 py-2.5 text-body-sm text-01 hover:bg-02 min-[420px]:hidden"
+              >
+                Sign in
+              </a>
+            )}
             {navItems.map((item) =>
               item.items ? (
                 <div key={item.id} className="flex flex-col gap-0.5 pt-2">
