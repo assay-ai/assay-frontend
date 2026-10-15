@@ -90,7 +90,12 @@ function TeamScreen() {
 
   // Home's "Add someone" links here with `?new=1`.
   React.useEffect(() => {
-    if (searchParams.get("new") !== "1" || !canManage) return;
+    if (searchParams.get("new") !== "1") return;
+    // Without the right no sheet opens to clear it, so the param goes now.
+    if (!canManage) {
+      dropUrlParams(["new"]);
+      return;
+    }
     setSheet({ kind: "add" });
   }, [searchParams, canManage]);
   // `?new=1` goes when the sheet closes, so a reload does not open it again.
