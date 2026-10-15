@@ -19,9 +19,11 @@ import {
   formatCallPrice,
   freeTierLabel,
   heldPriceSentence,
+  notTakingPaidCalls,
   plural,
   priceRange,
   priceSentence,
+  routingNotes,
   smallestFreeAllowance,
   stakeSummary,
 } from "@/features/explorer/explorer-text";
@@ -95,6 +97,7 @@ function ToolDetail({
   buyerChains,
   chains,
   allToolIds,
+  callsWindow,
 }: {
   tool: ToolRow;
   providers: ProviderRow[];
@@ -103,6 +106,7 @@ function ToolDetail({
   buyerChains: readonly string[];
   chains: readonly Chain[];
   allToolIds: readonly string[];
+  callsWindow: string;
 }) {
   const chainName = useChainName();
   const uncharged = tool.listed && tool.charged ? notCharged(tool.listed, tool.charged) : null;
@@ -160,7 +164,10 @@ function ToolDetail({
                           {failsOften(provider) ? <FailsOftenChip /> : null}
                         </span>
                         {listing ? (
-                          <span className="text-body-xs text-03">{formatCallPrice(listing.price)} per call</span>
+                          <span className="text-body-xs text-03">
+                            {formatCallPrice(listing.price)} per call
+                            {notTakingPaidCalls(tool.price, listing.price) ? " · not taking paid calls right now" : ""}
+                          </span>
                         ) : null}
                       </div>
                       <Fact label="Observed failures">
@@ -175,20 +182,32 @@ function ToolDetail({
             })}
           </ul>
         )}
+        {routingNotes(
+          tool.price,
+          providers.map((p) => ({
+            name: p.name,
+            price: details.get(p.providerId)?.tools.find((t) => t.toolId === tool.toolId)?.price,
+            quality: p.quality == null ? null : p,
+          })),
+        ).map((note) => (
+          <p key={note} className="text-body-13 text-02" data-testid="routing-note">
+            {note}
+          </p>
+        ))}
       </div>
 
       <div className="flex flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
         <p className="text-body-13 text-02">
           {tool.yourCalls > 0 ? (
             <>
-              Your agents made {plural(tool.yourCalls, "call")}: {formatMoney(tool.charged, { decimals: 4 })} charged
+              Your agents made {plural(tool.yourCalls, "call")} {callsWindow}: {formatMoney(tool.charged, { decimals: 4 })} charged
               {uncharged && toDecimal(uncharged).gt(0) ? `, ${formatMoney(uncharged, { decimals: 4 })} not charged` : ""}.{" "}
               <Link href={routes.calls({ tool: tool.toolId })} className="text-primary-600 hover:underline">
                 See the calls
               </Link>
             </>
           ) : (
-            "Your agents have not called it yet."
+            `Your agents have not called it ${callsWindow}.`
           )}
         </p>
         <ToolAccessControl toolId={tool.toolId} toolName={tool.name} allToolIds={allToolIds} />
@@ -198,7 +217,7 @@ function ToolDetail({
 }
 
 function ToolsList() {
-  const { tools, providers, isPending, isError, error } = useCatalogue();
+  const { tools, providers, isPending, isError, error, callsWindow } = useCatalogue();
   const params = useSearchParams();
   const router = useRouter();
   const openId = params.get("tool");
@@ -331,7 +350,7 @@ function ToolsList() {
                     </span>
                     <span className={cn("text-body-xs text-03", open ? "" : "line-clamp-1")}>
                       {serving.length > 0 ? `Served by ${plural(serving.length, "provider")}` : "Nobody serves it yet"}
-                      {tool.yourCalls > 0 ? ` · ${plural(tool.yourCalls, "call")} from your agents` : ""}
+                      {tool.yourCalls > 0 ? ` · ${plural(tool.yourCalls, "call")} from your agents ${callsWindow}` : ""}
                     </span>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
@@ -362,6 +381,7 @@ function ToolsList() {
                     buyerChains={buyerChains}
                     chains={chains}
                     allToolIds={allToolIds}
+                    callsWindow={callsWindow}
                   />
                 ) : null}
               </li>

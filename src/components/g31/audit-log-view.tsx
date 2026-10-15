@@ -170,7 +170,7 @@ export function AuditLogView() {
                         <span className="break-words text-body-13 text-02">{sentence.line}</span>
                         {entry.resourceId ? (
                           <span className="pt-0.5">
-                            <CopyChip value={entry.resourceId} label="Reference" />
+                            <CopyChip value={entry.resourceId} label="reference" display="Copy reference" />
                           </span>
                         ) : null}
                       </div>

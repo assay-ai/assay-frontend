@@ -156,8 +156,14 @@ export function useCatalogue() {
   const callsQuery = useQuery({
     queryKey: ["tool-calls", "catalogue"],
     retry: false,
-    queryFn: () => listToolCalls({ limit: 100 }),
+    queryFn: () => listToolCalls({ limit: 100, from: new Date(Date.now() - 30 * 86_400_000).toISOString() }),
   });
+  /**
+   * The window the "your calls" counts cover, said next to every count: the
+   * last 30 days, or — when the agents made more than one page of calls in that
+   * time — only the most recent 100.
+   */
+  const callsWindow = callsQuery.data?.pageInfo?.hasMore ? "in your last 100 calls" : "in the last 30 days";
 
   const calls = React.useMemo(() => callsQuery.data?.items ?? [], [callsQuery.data]);
 
@@ -220,6 +226,7 @@ export function useCatalogue() {
     isError: providersQuery.isError || toolsQuery.isError,
     error: providersQuery.error ?? toolsQuery.error,
     calls,
+    callsWindow,
     providers,
     tools,
   };

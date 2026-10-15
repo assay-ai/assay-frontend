@@ -14,7 +14,13 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import type { AgentReadiness } from "@/features/buyer-money/agent-readiness";
 import { capsAreSet } from "@/features/buyer-money/caps";
 import { nextUtcMidnight, nextUtcMonth, windowRefillAt } from "@/features/buyer-money/refill";
-import { agentLimitRows, budgetAgentId, limitLines, type LimitLine } from "@/features/buyer-money/spending-limits";
+import {
+  agentLimitRows,
+  budgetAgentId,
+  ceilingCountsMoreThanAgents,
+  limitLines,
+  type LimitLine,
+} from "@/features/buyer-money/spending-limits";
 import { supportsDelegation } from "@/features/delegation/delegation-form";
 import { policyBootstrapAsset } from "@/features/limits/policy-bootstrap";
 import { useChains } from "@/hooks/useChains";
@@ -381,6 +387,19 @@ export function AccountCeilingCard({ ctx }: { ctx: LimitsContext }) {
           refillHint={REFILL_HINT.rolling}
         />
       ) : null}
+      {set &&
+      ceilingCountsMoreThanAgents(
+        escrow.spentInWindow,
+        ctx.agents.map((agent) => {
+          const grant = ctx.readiness[agent.agentId]?.grant;
+          return grant?.status === "ACTIVE" ? grant.spentInWindow : null;
+        }),
+      ) ? (
+        <p className="text-body-xs text-03" data-testid="ceiling-counts-all">
+          This counts every payment from your escrow, including keys you revoked and agents you removed, so it can be more
+          than the agents above add up to.
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -404,7 +423,9 @@ export function OldRuleLine({ policy }: { policy: SpendPolicy | null }) {
   const amount = formatLimit(policy.requireApprovalAbove);
   return (
     <div className="flex w-full flex-wrap items-center gap-3 rounded-lg border border-01 bg-01 px-4 py-3" data-testid="old-rule-line">
-      <p className="min-w-0 flex-1 text-body-13 text-02">An older rule also refuses any call above {amount}.</p>
+      <p className="min-w-0 flex-1 text-body-13 text-02">
+        An older account-wide rule also refuses any single call above {amount}, for every agent.
+      </p>
       <Button size="sm" variant="secondary" type="button" onClick={() => setConfirming(true)}>
         Remove it
       </Button>
@@ -412,8 +433,8 @@ export function OldRuleLine({ policy }: { policy: SpendPolicy | null }) {
         open={confirming}
         onOpenChange={setConfirming}
         tone="primary"
-        title="Remove the older rule?"
-        description={`Calls above ${amount} are no longer refused by it. Your spending limits and account ceiling still apply.`}
+        title="Remove the older account-wide rule?"
+        description={`Calls above ${amount} are no longer refused by it. Each agent's spending limits and your account ceiling still apply.`}
         changes={[{ label: "Refuse calls above", before: amount, after: "No rule" }]}
         confirmLabel="Remove the rule"
         onConfirm={() => remove.mutateAsync()}

@@ -25,23 +25,44 @@ export function parseFreshStage(value: string | null | undefined): FreshStage | 
   return (STAGES as readonly string[]).includes(value) ? (value as FreshStage) : null;
 }
 
+/**
+ * A stage the demo moved to by itself (e.g. "Create key" on a `new` account
+ * makes it a `call` account), so the screens update without a reload. Kept in
+ * memory only: a full reload of `?fresh=new` starts the walkthrough again.
+ */
+let advanced: FreshStage | null = null;
+
+function readStage(): FreshStage | null | "clear" {
+  const asked = parseFreshStage(new URLSearchParams(window.location.search).get("fresh"));
+  if (asked === "clear") {
+    window.sessionStorage.removeItem(KEY);
+    return "clear";
+  }
+  if (asked) {
+    window.sessionStorage.setItem(KEY, asked);
+    return asked;
+  }
+  const kept = parseFreshStage(window.sessionStorage.getItem(KEY));
+  return kept && kept !== "clear" ? kept : null;
+}
+
 export function freshStage(): FreshStage | null {
   if (typeof window === "undefined") return null;
   try {
-    const asked = parseFreshStage(new URLSearchParams(window.location.search).get("fresh"));
-    if (asked === "clear") {
-      window.sessionStorage.removeItem(KEY);
+    const stage = readStage();
+    if (stage === "clear" || stage === null) {
+      if (stage === "clear") advanced = null;
       return null;
     }
-    if (asked) {
-      window.sessionStorage.setItem(KEY, asked);
-      return asked;
-    }
-    const kept = parseFreshStage(window.sessionStorage.getItem(KEY));
-    return kept && kept !== "clear" ? kept : null;
+    return advanced && freshAtLeast(advanced, stage) ? advanced : stage;
   } catch {
     return null;
   }
+}
+
+/** Move a fresh demo account on to `to`, when it is currently at `from`. */
+export function advanceFreshStage(from: FreshStage, to: FreshStage): void {
+  if (freshStage() === from) advanced = to;
 }
 
 /** At or past `stage` in the order above. */

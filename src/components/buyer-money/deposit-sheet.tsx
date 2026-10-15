@@ -172,13 +172,18 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
           : "We could not read which chains take deposits. Try again in a moment."
       : chainId === null
         ? "Choose a chain first."
-        : unavailable
-          ? unavailable
-          : !parsed.value
-            ? amount.trim() === ""
-              ? "Pick or enter an amount."
-              : (parsed.error ?? "Enter an amount.")
-            : walletBlocker;
+        : // No wallet yet is the common case and has a one-click fix, so it is
+          // said first; "not available on this chain" is kept for the real case
+          // (a connected wallet that still cannot build the transaction).
+          walletBlocker
+          ? walletBlocker
+          : unavailable
+            ? unavailable
+            : !parsed.value
+              ? amount.trim() === ""
+                ? "Pick or enter an amount."
+                : (parsed.error ?? "Enter an amount.")
+              : null;
 
   const needsCaps = !money.capsSet;
   const close = () => onOpenChange(false);

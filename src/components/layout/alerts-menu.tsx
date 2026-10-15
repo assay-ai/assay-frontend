@@ -126,6 +126,14 @@ export function AlertsMenu({ count, variant = "desktop" }: { count: number; vari
           )}
         </div>
         <DropdownMenuSeparator className="my-0" />
+        {/* The badge counts unread alerts; the list above is only the latest few,
+            so the way to all of them carries the badge's number. */}
+        <DropdownMenuItem asChild className="cursor-pointer px-4 py-2.5 text-label-13 text-primary-600">
+          <Link href="/alerts?view=recent">
+            <Bell aria-hidden="true" className="mr-2 size-3.5" />
+            {count > 0 ? `See all alerts (${count} unread)` : "See all alerts"}
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild className="cursor-pointer px-4 py-2.5 text-label-13 text-primary-600">
           <Link href="/alerts">
             <Settings aria-hidden="true" className="mr-2 size-3.5" />

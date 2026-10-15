@@ -116,8 +116,13 @@ export function FundingView() {
   });
   const charged7d = (weekSpend.data as { totals?: { chargedTotal?: Money } } | undefined)?.totals?.chargedTotal ?? null;
 
-  const spendable = escrow?.spendable ?? (balances.length === 1 ? balances[0]!.available : null);
-  const runway = runwayLine(runwayDays(spendable, charged7d));
+  // No escrow yet means nothing to spend: never fall back to a ledger figure,
+  // or a brand-new account reads as funded.
+  const noEscrow = escrow !== null && escrow.exists === false;
+  const spendable = noEscrow
+    ? null
+    : (escrow?.spendable ?? (balances.length === 1 ? balances[0]!.available : null));
+  const runway = noEscrow ? null : runwayLine(runwayDays(spendable, charged7d));
   const withdrawalPending = positive(escrow?.withdrawRequested);
   const { hasPassed: matured } = useCountdown(escrow?.withdrawAvailableAt);
   const unreadable = escrowQuery.isError || (escrow !== null && !escrow.chainReadable);
@@ -144,20 +149,28 @@ export function FundingView() {
       {/* Hero: the one number, and the two things to do with it. */}
       <section aria-label="Spendable balance" className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 p-5 shadow-soft tablet:flex-row tablet:items-end tablet:justify-between tablet:p-6">
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-body-13 text-02">Available now: your agents can spend it, or you can withdraw it</span>
+          <span className="text-body-13 text-02">
+            {noEscrow ? "No money added yet" : "Available now: your agents can spend it, or you can withdraw it"}
+          </span>
           {escrowQuery.isPending ? (
             <Skeleton className="h-10 w-44" />
           ) : (
             <span className="font-mono text-[34px] font-semibold leading-tight tracking-[-0.02em] text-01" data-testid="funding-spendable">
-              {spendable ? formatMoney(spendable) : "—"}
+              {noEscrow ? "$0.00" : spendable ? formatMoney(spendable) : "—"}
             </span>
           )}
-          <span className="text-body-xs text-03">
-            {money.symbol} on {money.chainName ?? "your chain"}
-            {escrow?.openHolds && positive(escrow.openHolds)
-              ? ` · ${formatLimit(escrow.openHolds)} more is held by calls being checked; it comes back or goes to providers within minutes`
-              : ""}
-          </span>
+          {noEscrow ? (
+            <span className="text-body-13 text-02">
+              Add funds to let your agent pay; free calls already work. Your first deposit opens your escrow.
+            </span>
+          ) : (
+            <span className="text-body-xs text-03">
+              {money.symbol} on {money.chainName ?? "your chain"}
+              {escrow?.openHolds && positive(escrow.openHolds)
+                ? ` · ${formatLimit(escrow.openHolds)} more is held by calls being checked; it comes back or goes to providers within minutes`
+                : ""}
+            </span>
+          )}
           {runway ? <span className="text-body-13 text-02">{runway}</span> : null}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2.5">
@@ -194,14 +207,7 @@ export function FundingView() {
         <div className="rounded-xl border border-01 bg-01 p-5">
           <SkeletonRows rows={4} />
         </div>
-      ) : escrow && escrow.exists === false ? (
-        <PageState
-          kind="empty"
-          title="No escrow yet"
-          description="Your first deposit opens it. Free calls work without one."
-          action={{ label: "Add funds", onClick: () => onAction("deposit") }}
-        />
-      ) : escrow ? (
+      ) : noEscrow ? null : escrow ? (
         <EscrowCard
           money={money}
           matured={matured}
