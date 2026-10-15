@@ -17,6 +17,7 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { OperatorIdentity } from "@/interfaces/operator";
 import { toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
+import { STAKE_DEPLOYMENTS } from "@/libs/chains/evm/stake-slashes/deployments";
 import type { DemoOperatorPreset } from "@/libs/demo/fixtures-operator";
 import { formatClock } from "@/libs/local-time";
 import { useTheme } from "@/providers/ThemeProvider";
@@ -33,6 +34,10 @@ import { roleTitle } from "./roles";
  * the right), and below it a compact top bar (brand and avatar: each page has
  * its own H1) with the bottom tab bar. The Home item carries the "Needs you"
  * count — and only that count.
+ *
+ * The brand carries a "Testnet" tag while every chain the console signs for is
+ * a testnet, and the account menu names the chains (operator review
+ * 2026-10-16b, P2-12): which network an action lands on is never hidden.
  *
  * The role pill opens "What can I do?". The account menu holds who you are,
  * the session end, the theme, Keyboard shortcuts and — in the demo — the role
@@ -110,6 +115,19 @@ export function SessionChip({ expiresAt, within, className }: { expiresAt: strin
   );
 }
 
+/** The chains the console builds and signs calls for: pinned in the bundle, never served. The tag hides at 768-1023px, where the nav needs the room; the menu still names the chain. */
+const CHAIN_NAMES = STAKE_DEPLOYMENTS.map((deployment) => deployment.displayName);
+const ALL_TESTNET = STAKE_DEPLOYMENTS.length > 0 && STAKE_DEPLOYMENTS.every((deployment) => /testnet/i.test(deployment.displayName));
+
+function NetworkTag() {
+  if (!ALL_TESTNET) return null;
+  return (
+    <span title={`On-chain actions use ${CHAIN_NAMES.join(", ")}`} className="rounded-sm bg-warning-10 px-1.5 py-0.5 text-label-xs text-warning-700 md:max-lg:hidden">
+      Testnet
+    </span>
+  );
+}
+
 function AccountMenu({ identity, expiresAt, onSignOut, demo, onShortcuts }: Pick<OperatorShellProps, "identity" | "expiresAt" | "onSignOut" | "demo" | "onShortcuts">) {
   const wallet = identity.walletAddress ? toChecksumAddress(identity.walletAddress) : null;
   const { themeType, setTheme } = useTheme();
@@ -132,6 +150,7 @@ function AccountMenu({ identity, expiresAt, onSignOut, demo, onShortcuts }: Pick
             {limit ? ` · ${limit} per action` : ""}
           </span>
           {wallet ? <CopyChip value={wallet} label="wallet address" className="self-start" /> : null}
+          {CHAIN_NAMES.length > 0 ? <span className="text-body-xs text-03">Chain: {CHAIN_NAMES.join(", ")}</span> : null}
           <SessionChip expiresAt={expiresAt} className="mt-1 self-start" />
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -190,6 +209,7 @@ function Brand() {
       <img src="/images/logo.png" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 rounded-md object-cover" />
       <span className="text-[17px] font-medium leading-none tracking-[-0.025em] text-01">Assay</span>
       <span className="rounded-sm bg-03 px-1.5 py-0.5 text-label-xs text-02">Operator</span>
+      <NetworkTag />
     </Link>
   );
 }
