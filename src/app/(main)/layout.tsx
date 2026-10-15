@@ -120,7 +120,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
         {children}
       </main>
 
-      <div className="md:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-30 md:hidden">
         <BottomTabBar
           linkAs={Link}
           active={sectionFor(pathname)}
