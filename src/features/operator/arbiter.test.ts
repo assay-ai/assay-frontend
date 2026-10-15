@@ -180,6 +180,7 @@ describe("beneficiaryCheck", () => {
   it("is unchecked when the backend sends no evidence", () => {
     expect(beneficiaryCheck(dispute(1))).toMatchObject({ status: "unchecked", reason: null });
     expect(beneficiaryCheck(dispute(1)).headline).toMatch(/by hand/);
+    expect(beneficiaryCheck(dispute(1)).headline).not.toMatch(/beneficiary/i);
   });
 
   it("passes when the backend's check passes, counting the failed calls", () => {

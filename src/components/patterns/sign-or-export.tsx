@@ -68,7 +68,8 @@ export interface SignOrExportProps {
   onPhaseChange?: (phase: WalletRunState["phase"]) => void;
   /**
    * When this browser cannot sign: a link the signer opens (path or URL) and
-   * the message to send with it. Drawn as "Copy link for the signer".
+   * the message to send with it. Drawn as "Copy link for the signer"; held
+   * back with Download while `disabled` (the message says the file is attached).
    */
   handoff?: { link: string; message: string };
   /**
@@ -178,6 +179,8 @@ export function SignOrExport({
       variant="secondary"
       icon={linkCopied ? <Check aria-hidden="true" /> : <Link2 aria-hidden="true" />}
       onClick={() => void copyHandoff()}
+      // The signer needs the file too: the link waits with the download, and the same reason shows under both.
+      disabled={disabled}
       className={actionsContainer ? undefined : "w-full tablet:w-auto"}
     >
       {linkCopied ? "Link copied" : "Copy link for the signer"}
