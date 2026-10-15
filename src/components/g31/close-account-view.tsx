@@ -6,6 +6,7 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
+import { chainFigure } from "@/features/chain-read/chain-read";
 import { chainBalances } from "@/features/g30/balance";
 import type { Money } from "@/interfaces";
 import { getBalances, getHolds } from "@/services/balances.service";
@@ -198,25 +199,39 @@ export function CloseAccountView() {
                   <div className="w-[240px] text-right font-mono text-mono-12 text-02">balances</div>
                 </div>
               ) : (
-                rows.map((row) => (
-                  <div
-                    key={`withdrawable-${row.accountId}`}
-                    className="flex items-center gap-3 border-b border-01 px-3 py-2.5"
-                  >
-                    <div className="min-w-0 flex-1 truncate font-mono text-mono-12 font-semibold text-01">
-                      Withdrawable balance{suffix(row.chainId)}
+                rows.map((row) => {
+                  /*
+                    The same three states as Funding's Withdrawable row, read off
+                    this row: an unreadable chain is "Unknown", never the ledger's
+                    `available` printed as if the chain had confirmed it.
+                  */
+                  const figure = chainFigure(row.chainReadable, row.withdrawable, {
+                    absentText: "None yet",
+                  });
+                  return (
+                    <div
+                      key={`withdrawable-${row.accountId}`}
+                      className="flex items-center gap-3 border-b border-01 px-3 py-2.5"
+                    >
+                      <div className="min-w-0 flex-1 truncate font-mono text-mono-12 font-semibold text-01">
+                        Withdrawable balance{suffix(row.chainId)}
+                      </div>
+                      <div className="w-[140px] text-right font-mono text-mono-12 text-02">
+                        {figure.text}
+                      </div>
+                      <div className="w-[220px] text-right font-mono text-mono-12 text-02">
+                        {figure.state === "unreadable"
+                          ? "could not read this chain"
+                          : figure.state === "absent"
+                            ? "no escrow on this chain yet"
+                            : "must be withdrawn first"}
+                      </div>
+                      <div className="w-[240px] truncate text-right font-mono text-mono-12 text-02">
+                        {chainLabel(row.chainId)}
+                      </div>
                     </div>
-                    <div className="w-[140px] text-right font-mono text-mono-12 text-02">
-                      {formatMoney(row.withdrawable ?? row.available, { decimals: 2 })}
-                    </div>
-                    <div className="w-[220px] text-right font-mono text-mono-12 text-02">
-                      must be withdrawn first
-                    </div>
-                    <div className="w-[240px] truncate text-right font-mono text-mono-12 text-02">
-                      {chainLabel(row.chainId)}
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
 
               <div className="flex items-center gap-3 px-3 py-2.5">
