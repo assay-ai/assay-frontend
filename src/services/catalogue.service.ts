@@ -101,6 +101,8 @@ export interface CatalogueProviderTool {
   name: string;
   pricingMode: string;
   price: CatalogueMoney;
+  /** Free calls one agent gets per UTC day on this listing; null for a PAID one. Absent on older APIs. */
+  freeCallsPerAgentPerDay?: number | null;
 }
 
 export interface CatalogueProviderDetail extends CatalogueProvider {

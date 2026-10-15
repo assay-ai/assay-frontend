@@ -488,6 +488,7 @@ function providerTools(provider: DemoProvider): CatalogueProviderTool[] {
     name: tool.name,
     pricingMode: tool.pricingMode ?? "PAID",
     price,
+    freeCallsPerAgentPerDay: tool.pricingMode === "FREEMIUM" || tool.pricingMode === "FREE" ? 100 : null,
   }));
 }
 

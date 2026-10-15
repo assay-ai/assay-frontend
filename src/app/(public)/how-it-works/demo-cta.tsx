@@ -2,50 +2,37 @@
 
 import { Play } from "lucide-react";
 import Link from "next/link";
-import * as React from "react";
 
-import { getDemoStatus } from "@/services";
+import { usePublicFeatures } from "@/features/explorer/use-public-explorer";
 
-const BASE = "flex items-center gap-[7px] rounded-md px-[18px] py-3 text-label-sm";
+const PRIMARY =
+  "flex items-center gap-[7px] rounded-md bg-primary-400 px-[18px] py-3 text-label-sm text-on-primary shadow-hair hover:bg-primary-300";
+const SECONDARY =
+  "flex items-center rounded-md border border-02 bg-01 px-[18px] py-3 text-label-sm text-01 shadow-hair hover:bg-02";
 
 /**
- * The page's primary CTA. It leads to `/demo`, which has nothing to run on a
- * deployment with no demo credential — so there the button is disabled and
- * says why, instead of sending the visitor to a dead end.
+ * The hero's buttons. The live demo leads only where it is configured
+ * (`GET /public/features`); elsewhere it is not shown at all — a CTA that can
+ * only say "not available" is a dead end — and the tools lead instead.
  */
-export function DemoCta() {
-  const [configured, setConfigured] = React.useState(true);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    getDemoStatus()
-      .then((status) => {
-        if (!cancelled) setConfigured(status.configured);
-      })
-      // Unknown is not "unconfigured": the demo page reports its own failures.
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!configured) {
-    return (
-      <span
-        aria-disabled="true"
-        title="The live demo is not available yet"
-        className={`${BASE} cursor-not-allowed bg-03 text-03`}
-      >
-        <Play aria-hidden="true" className="h-[15px] w-[15px]" />
-        Live demo not available yet
-      </span>
-    );
-  }
-
+export function HeroCtas() {
+  const { demo } = usePublicFeatures();
   return (
-    <Link href="/demo" className={`${BASE} bg-primary-400 text-on-primary shadow-hair hover:bg-primary-300`}>
-      <Play aria-hidden="true" className="h-[15px] w-[15px]" />
-      Watch it refuse to charge
-    </Link>
+    <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+      {demo ? (
+        <Link href="/demo" className={PRIMARY}>
+          <Play aria-hidden="true" className="h-[15px] w-[15px]" />
+          Watch it refuse to charge
+        </Link>
+      ) : null}
+      <Link href="/catalogue" className={demo ? SECONDARY : PRIMARY}>
+        See the tools and prices
+      </Link>
+      {demo ? null : (
+        <Link href="/login" className={SECONDARY}>
+          Start free
+        </Link>
+      )}
+    </div>
   );
 }

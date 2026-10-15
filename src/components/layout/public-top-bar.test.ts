@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_PUBLIC_NAV_ITEMS, flattenPublicNav } from "./public-top-bar";
+import { DEFAULT_PUBLIC_NAV_ITEMS, flattenPublicNav, publicNavItems } from "./public-top-bar";
 
 const APP_DIR = join(__dirname, "../../app");
 
@@ -53,7 +53,12 @@ describe("public top bar links", () => {
       "For providers",
     ]);
     expect(flattenPublicNav(DEFAULT_PUBLIC_NAV_ITEMS).map((i) => i.href)).toEqual(
-      expect.arrayContaining(["/why-list-here", "/calculator", "/catalogue", "/demo", "/how-it-works"]),
+      expect.arrayContaining(["/why-list-here", "/catalogue", "/demo", "/how-it-works"]),
     );
+  });
+
+  it("hides Demo while the demo is not configured", () => {
+    expect(publicNavItems({ demo: false }).map((i) => i.id)).not.toContain("demo");
+    expect(publicNavItems({ demo: true }).map((i) => i.id)).toContain("demo");
   });
 });

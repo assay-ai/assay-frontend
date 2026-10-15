@@ -1,182 +1,242 @@
 "use client";
 
-import { Plus, Target } from "lucide-react";
+import { ArrowRight, ChevronRight, Store } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { NotChargedProof } from "@/components/explorer/not-charged-proof";
+import { PageState } from "@/components/patterns/page-state";
+import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
+import { Search } from "@/components/ui/search";
+import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import {
-  Panel,
-  PanelBody,
-  PanelDescription,
-  PanelHeader,
-  PanelTitle,
-  PanelTitles,
-} from "@/components/ui/panel";
-import { Table, type TableColumn } from "@/components/ui/table";
-
+  failRateLabel,
+  formatCallPrice,
+  freeTierLabel,
+  plural,
+  stakeSummary,
+} from "@/features/explorer/explorer-text";
 import {
-  CATALOGUE_DEMAND_FIXTURE,
-  TOOLS_WITH_CONTRACT_PAGE,
-  type CatalogueDemandRow,
-} from "./catalogue-fixture";
+  publicErrorText,
+  usePublicFeatures,
+  usePublicProviders,
+  usePublicTools,
+} from "@/features/explorer/use-public-explorer";
+import { useChainName } from "@/hooks/useChainName";
+import { ApiError } from "@/libs/ApiClient";
+import { loginHref } from "@/libs/login-redirect";
+import { routes } from "@/libs/routes";
+import type { PublicProvider, PublicTool } from "@/services/public-explorer.service";
 
 /**
- * Catalogue and demand — route `/catalogue`.
+ * The public Explorer — route `/catalogue`, no sign-in.
  *
- * The Public Top Bar is applied by `(public)/layout.tsx`; this file
- * is the frame's `Body` only — vertical, gap 18, padding [22, 28].
- *
- * **The rows are a design fixture, not live data.** There is no catalogue
- * endpoint in the API, public or otherwise. Read `./catalogue-fixture.ts`
- * before touching anything here — it names the exact endpoint that would have
- * to exist.
- *
- * Two things the design draws that this page handles its own way, and one it
- * cannot do:
- *
- * 1. **A row links to `/catalogue/[toolId]` only where that page exists.** The
- *    tool contract screen resolves `TOOLS_WITH_CONTRACT_PAGE` and `notFound()`s
- *    every other id, so the remaining rows stay plain text and say on hover
- *    that no contract is published yet.
- * 2. **"Request a tool" goes to the provider console's request queue**
- *    (`/provider/tool-requests`), the one screen that takes a tool request. A
- *    signed-out visitor is sent through sign-in first.
- * 3. **No empty state.** The design draws none for this screen — no the design
- *    ref anywhere in the design — and with a static fixture no empty path is
- *    reachable. The nearest thing the design does draw is a *row-level* empty:
- *    `transcribe_audio`, demand with zero bindings, which is the page's point.
+ * What a newcomer needs, in order: the promise and its live proof (what our
+ * checks refused to charge, across every buyer), then every tool with its
+ * price, free tier and who serves it; each row opens the tool's page. Data is
+ * the platform's aggregate only (`GET /public/*`).
  */
-export default function CataloguePage() {
-  const columns: TableColumn<CatalogueDemandRow>[] = React.useMemo(
-    () => [
-      {
-        key: "tool",
-        header: "Tool",
-        mono: true,
-        // The design paints the tool name `$text-01` at weight 600 while every
-        // figure to its right is `$text-02` at normal weight. Table's own
-        // `valueClass` paints all cells `text-01`/normal, so the tone is set
-        // per cell here rather than by patching a shared component.
-        cell: (row) =>
-          TOOLS_WITH_CONTRACT_PAGE.includes(row.id) ? (
-            <Link href={`/catalogue/${row.id}`} className="font-semibold underline">
-              {row.tool}
-            </Link>
-          ) : (
-            <span className="font-semibold" title="No contract page is published for this tool yet">
-              {row.tool}
-            </span>
-          ),
-      },
-      {
-        key: "paidCalls30d",
-        header: "Paid calls 30d",
-        width: 150,
-        align: "end",
-        mono: true,
-        cell: (row) => <span className="text-02">{row.paidCalls30d}</span>,
-      },
-      {
-        key: "freeCalls30d",
-        header: "Free calls 30d",
-        width: 150,
-        align: "end",
-        mono: true,
-        cell: (row) => <span className="text-02">{row.freeCalls30d}</span>,
-      },
-      {
-        key: "bindings",
-        header: "Bindings",
-        width: 110,
-        align: "end",
-        mono: true,
-        cell: (row) => <span className="text-02">{row.bindings}</span>,
-      },
-      {
-        key: "priceRange",
-        header: "Price range",
-        width: 170,
-        align: "end",
-        mono: true,
-        // `transcribe_audio`'s "no provider serves this yet" is 27 characters of
-        // 13px JetBrains Mono (~210px) inside a 170px column. The design lets it
-        // overflow into the neighbouring cells; Table clips and ellipsises it.
-        // `title` keeps the string readable on hover.
-        cell: (row) => (
-          <span className="text-02" title={row.priceRange}>
-            {row.priceRange}
-          </span>
-        ),
-      },
-      {
-        key: "observedFail",
-        header: "Observed fail",
-        width: 140,
-        align: "end",
-        mono: true,
-        cell: (row) => <span className="text-02">{row.observedFail}</span>,
-      },
-      {
-        key: "firstParty",
-        header: "First-party",
-        width: 130,
-        align: "end",
-        mono: true,
-        cell: (row) => <span className="text-02">{row.firstParty}</span>,
-      },
-    ],
-    []
-  );
 
+function errorCode(error: unknown): string | null {
+  return error instanceof ApiError ? error.code : null;
+}
+
+function matches(needle: string, ...fields: (string | null | undefined)[]): boolean {
+  return fields.some((field) => (field ?? "").toLowerCase().includes(needle));
+}
+
+function ToolRow({ tool }: { tool: PublicTool }) {
+  const free = freeTierLabel(tool.pricingMode);
   return (
-    <div className="flex w-full flex-1 flex-col gap-[18px] px-7 py-[22px]">
-      {/* Page Header the design */}
-      <div className="flex w-full items-center justify-between gap-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <h1 className="text-heading-md text-01">Where the demand is</h1>
-          <p className="text-mono-12 font-mono text-03">
-            30-day volume across all bindings
+    <li>
+      <Link
+        href={routes.publicTool(tool.id)}
+        className="group flex w-full items-center gap-3 px-4 py-3.5 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 tablet:px-5"
+      >
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
+            <FreeTierBadge label={free} />
+            {tool.routable ? null : <UnavailableTag />}
+          </div>
+          {tool.description ? <p className="line-clamp-2 text-body-13 text-02">{tool.description}</p> : null}
+          <p className="text-body-xs text-03">
+            {tool.providerCount > 0 ? `Served by ${plural(tool.providerCount, "provider")}` : "Nobody serves it yet"}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2.5">
-          <Button asChild variant="secondary">
-            <Link href="/provider/tool-requests">
-              <Plus className="size-[15px]" />
-              Request a tool
+        <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
+          <span className="font-mono text-mono-13 font-semibold text-01">
+            {tool.price ? formatCallPrice(tool.price) : "—"}
+          </span>
+          <span className="hidden text-body-xs text-03 tablet:block">{tool.price ? "per call, only if it passes" : ""}</span>
+        </div>
+        <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03 group-hover:text-02" />
+      </Link>
+    </li>
+  );
+}
+
+function ProviderRow({ provider, chainName }: { provider: PublicProvider; chainName: (id: string) => string }) {
+  return (
+    <li>
+      <Link
+        href={routes.publicProvider(provider.providerId)}
+        className="group flex w-full items-center gap-3 px-4 py-3.5 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 tablet:px-5"
+      >
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-label-sm text-01">{provider.name}</span>
+            <VerifiedMark verified={provider.verified} />
+          </div>
+          <p className="text-body-xs text-03">
+            {plural(provider.toolIds.length, "tool")} · {failRateLabel(provider.quality)}
+          </p>
+          <p className="text-body-xs text-03">
+            <Term k="stake" inline>Stake</Term>: {stakeSummary(provider.stake, chainName)}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
+          <span className="font-mono text-mono-13 text-01">
+            {provider.fromPrice ? `from ${formatCallPrice(provider.fromPrice)}` : "—"}
+          </span>
+        </div>
+        <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03 group-hover:text-02" />
+      </Link>
+    </li>
+  );
+}
+
+export default function CataloguePage() {
+  const [view, setView] = React.useState<"tools" | "providers">("tools");
+  const [query, setQuery] = React.useState("");
+  const tools = usePublicTools();
+  const providers = usePublicProviders();
+  const features = usePublicFeatures();
+  const chainName = useChainName();
+  const needle = query.trim().toLowerCase();
+
+  const toolRows = React.useMemo(() => {
+    const rows = [...(tools.data?.tools ?? [])].sort(
+      (a, b) => Number(b.routable) - Number(a.routable) || b.providerCount - a.providerCount || a.name.localeCompare(b.name),
+    );
+    return needle ? rows.filter((t) => matches(needle, t.name, t.description, t.id)) : rows;
+  }, [tools.data, needle]);
+
+  const providerRows = React.useMemo(() => {
+    const rows = [...(providers.data?.providers ?? [])].sort((a, b) => b.toolIds.length - a.toolIds.length);
+    return needle ? rows.filter((p) => matches(needle, p.name, p.providerId)) : rows;
+  }, [providers.data, needle]);
+
+  const active = view === "tools" ? tools : providers;
+  const total = view === "tools" ? (tools.data?.tools.length ?? 0) : (providers.data?.providers.length ?? 0);
+  const visible = view === "tools" ? toolRows.length : providerRows.length;
+
+  return (
+    <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-4 py-6 tablet:px-7 tablet:py-8">
+      <header className="flex flex-col gap-3">
+        <h1 className="text-heading-lg text-01 tablet:text-display-md">Tools your agent can pay for — only when they work</h1>
+        <p className="max-w-[720px] text-body-md text-02">
+          Every tool here is served by providers who put up a <Term k="stake">stake</Term>. Each result is checked
+          before money moves; if it fails, nobody is charged.
+        </p>
+        <div className="flex flex-wrap gap-2.5 pt-1">
+          <Button asChild>
+            <Link href={loginHref({ next: "/" })}>
+              Start free
+              <ArrowRight aria-hidden="true" />
             </Link>
           </Button>
+          {features.demo ? (
+            <Button asChild variant="secondary">
+              <Link href="/demo">Watch it refuse to charge</Link>
+            </Button>
+          ) : null}
         </div>
-      </div>
+      </header>
 
-      {/* Panel — "Tools by demand" */}
-      <Panel>
-        <PanelHeader>
-          <PanelTitles>
-            <PanelTitle>Tools by demand</PanelTitle>
-            <PanelDescription>
-              first-party share is shown, because a tool we serve ourselves is a different
-              proposition
-            </PanelDescription>
-          </PanelTitles>
-        </PanelHeader>
-        <PanelBody className="px-2.5 pb-2.5 pt-1.5">
-          <Table columns={columns} rows={CATALOGUE_DEMAND_FIXTURE} caption="Tools by demand" />
-        </PanelBody>
-      </Panel>
+      <NotChargedProof />
 
-      {/* Note the design */}
-      <div className="flex w-full items-start gap-2.5 rounded-lg border border-teal-20 bg-teal-10 p-[15px]">
-        <Target
-          aria-hidden="true"
-          className="h-[15px] w-[15px] shrink-0 text-teal-600"
-          strokeWidth={1.5}
-        />
-        <p className="min-w-0 flex-1 text-body-13 text-01">
-          transcribe_audio has demand recorded against it and no binding. A schema already
-          exists — the first provider to list it takes all of it.
-        </p>
-      </div>
+      <section aria-labelledby="list-title" className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
+          <div className="flex items-center gap-3">
+            <h2 id="list-title" className="sr-only">
+              {view === "tools" ? "Tools" : "Providers"}
+            </h2>
+            <Segmented
+              value={view}
+              onValueChange={(value) => setView(value as "tools" | "providers")}
+              aria-label="Show"
+              className="inline-flex rounded-md bg-03 p-0.5"
+            >
+              <SegmentedItem value="tools">Tools</SegmentedItem>
+              <SegmentedItem value="providers">Providers</SegmentedItem>
+            </Segmented>
+            {active.isSuccess ? (
+              <span className="text-body-xs text-03">
+                {needle ? `${visible} of ${total}` : total}
+              </span>
+            ) : null}
+          </div>
+          <Search
+            wrapperClassName="w-full tablet:w-[300px]"
+            shortcut={null}
+            placeholder={view === "tools" ? "Search tools by name or what they do" : "Search providers"}
+            aria-label={view === "tools" ? "Search tools" : "Search providers"}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
+
+        {active.isPending ? (
+          <div className="rounded-xl border border-01 bg-01 px-4">
+            <PageState kind="loading" rows={5} label={`Loading ${view}`} />
+          </div>
+        ) : active.isError ? (
+          <PageState
+            kind="error"
+            title={`The ${view} could not be loaded`}
+            description={publicErrorText(active.error, `the ${view}`)}
+            onRetry={() => void active.refetch()}
+            code={errorCode(active.error)}
+            details={active.error instanceof Error ? active.error.message : null}
+          />
+        ) : total === 0 ? (
+          <PageState
+            kind="empty"
+            icon={<Store aria-hidden="true" width={22} height={22} />}
+            title="No tools are listed yet"
+            description="The platform is just opening. If you run an API that agents would pay for, you can be the first to list it."
+            action={{ label: "List your API", href: "/why-list-here" }}
+          />
+        ) : visible === 0 ? (
+          <PageState
+            kind="empty"
+            title={`Nothing matches “${query.trim()}”`}
+            description={view === "tools" ? "Search looks at a tool's name and description." : "Search looks at a provider's name."}
+            action={{ label: "Clear the search", onClick: () => setQuery("") }}
+          />
+        ) : (
+          <ul className="flex flex-col divide-y divide-01 overflow-hidden rounded-xl border border-01 bg-01">
+            {view === "tools"
+              ? toolRows.map((tool) => <ToolRow key={tool.id} tool={tool} />)
+              : providerRows.map((provider) => (
+                  <ProviderRow key={provider.providerId} provider={provider} chainName={chainName} />
+                ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-xl border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:justify-between tablet:p-6">
+        <div className="flex flex-col gap-1">
+          <p className="text-label-md text-01">Have an API agents would pay for?</p>
+          <p className="text-body-13 text-02">List it, set your price, and get paid per call that passes.</p>
+        </div>
+        <Button asChild variant="secondary">
+          <Link href="/why-list-here">See what you would earn</Link>
+        </Button>
+      </section>
     </div>
   );
 }

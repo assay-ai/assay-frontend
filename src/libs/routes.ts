@@ -20,6 +20,17 @@ export const routes = {
   receipt: (intentId: string) => withQuery("/receipts/view", { id: intentId }),
   approval: (approvalId: string) => withQuery("/approvals/view", { id: approvalId }),
   exploreProvider: (providerId: string) => withQuery("/explore/providers/view", { id: providerId }),
+  /** The signed-in tool list, opened at one tool. */
+  exploreTool: (toolId: string) => withQuery("/explore", { tool: toolId }),
+  /** The public (signed-out) tool page. Takes a tool id, or a tool name for old links. */
+  publicTool: (toolIdOrName: string) => withQuery("/catalogue/view", { tool: toolIdOrName }),
+  /** The public (signed-out) provider page. */
+  publicProvider: (providerId: string) => withQuery("/catalogue/provider", { id: providerId }),
+  /** The Calls list, optionally filtered: status is all | charged | not-charged | free. */
+  calls: (filters: { status?: string; tool?: string; agent?: string; reason?: string } = {}) => {
+    const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => Boolean(v))) as Record<string, string>;
+    return Object.keys(params).length > 0 ? withQuery("/spend/calls", params) : "/spend/calls";
+  },
   operatorCase: (proposalId: string) => withQuery("/operator/cases/view", { id: proposalId }),
   providerCase: (proposalId: string) => withQuery("/provider/cases/view", { id: proposalId }),
   dispute: (disputeId: string) => withQuery("/provider/disputes/view", { id: disputeId }),
