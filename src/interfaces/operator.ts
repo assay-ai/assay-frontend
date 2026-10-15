@@ -260,6 +260,47 @@ export interface AdjudicationQueueRow {
   coFailureCount: number;
 }
 
+/**
+ * Where a penalty stands, as `GET /operator/cases` groups it: the case status
+ * and the mirrored on-chain status read in the case screen's precedence.
+ * `DISPUTED` is the retired off-chain objection process; a dispute on chain is
+ * `CHAIN_DISPUTED`.
+ */
+export type OperatorCaseStatus =
+  | "PROPOSED"
+  | "DISPUTED"
+  | "CHAIN_DISPUTED"
+  | "CANCEL_REQUESTED"
+  | "EXECUTED"
+  | "CANCELLED"
+  | "COMPENSATED"
+  | "EXPIRED";
+
+/** One row of `GET /operator/cases`. Fixed order: next deadline, then amount, then newest. */
+export interface OperatorCaseListRow {
+  proposalId: string;
+  providerId: string;
+  providerName: string;
+  toolName: string | null;
+  amount: Money;
+  /** CAIP-2. */
+  chainId: string;
+  status: OperatorCaseStatus;
+  proposedAt: string;
+  /** When the provider disputed it on chain. */
+  disputedAt: string | null;
+  /** The next instant it moves on its own (lapses, must be signed by, executable from). Null once closed. */
+  nextDeadline: string | null;
+}
+
+export interface ListOperatorCasesQuery {
+  status?: OperatorCaseStatus[];
+  providerId?: string;
+  cursor?: string;
+  /** 1 to 100. */
+  limit?: number;
+}
+
 export interface ListQueueQuery extends ListQuery {
   mine?: boolean;
   unassigned?: boolean;
