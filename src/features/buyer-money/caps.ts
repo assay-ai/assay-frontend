@@ -43,6 +43,36 @@ export function capsSentence(perCall: string, perDay: string, who = "your agents
   return `Any one call can cost at most ${formatDecimal(call)}, and ${who} can spend at most ${formatDecimal(day)} in any 24 hours.`;
 }
 
+/**
+ * What picking `next` does to the ceiling now in force, in words: "lowers
+ * your ceiling from $10.00 to $0.50 a call and from $120.00 to $5.00 per 24
+ * hours". `null` when nothing is set yet, a number is unreadable, or nothing
+ * changes. Said on a preset chip and under the choice, so a preset far below
+ * the current ceiling is never picked as if it were a starting point.
+ */
+export function ceilingChange(
+  current: { perCall: string; perDay: string } | null | undefined,
+  next: { perCall: string; perDay: string },
+): string | null {
+  if (!current) return null;
+  const parts: { verb: "raises" | "lowers"; text: string }[] = [];
+  for (const [from, to, unit] of [
+    [current.perCall, next.perCall, "a call"],
+    [current.perDay, next.perDay, "per 24 hours"],
+  ] as const) {
+    const a = safeDecimal(from);
+    const b = safeDecimal(to);
+    if (!a || !b) return null;
+    if (a.eq(b)) continue;
+    parts.push({ verb: b.lt(a) ? "lowers" : "raises", text: `from ${formatDecimal(a)} to ${formatDecimal(b)} ${unit}` });
+  }
+  if (parts.length === 0) return null;
+  if (parts.length === 2 && parts[0]!.verb === parts[1]!.verb) {
+    return `${parts[0]!.verb} your ceiling ${parts[0]!.text} and ${parts[1]!.text}`;
+  }
+  return parts.map((part, i) => `${part.verb} ${i === 0 ? "your ceiling " : ""}${part.text}`).join(", and ");
+}
+
 export interface ParsedCaps {
   perCall: { atomic: string | null; error: string | null };
   perDay: { atomic: string | null; error: string | null };

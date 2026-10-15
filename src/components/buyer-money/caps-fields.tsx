@@ -7,6 +7,7 @@ import { Field } from "@/components/ui/field";
 import {
   CAP_PRESETS,
   capsSentence,
+  ceilingChange,
   presetDescription,
   presetFor,
   type CapsChoice,
@@ -30,8 +31,14 @@ export function CapsFields({
   label = "Account ceiling",
   unit = "USD",
   who,
+  current,
 }: {
   unit?: string;
+  /**
+   * The ceiling now in force, as form strings. Given, each preset and the
+   * choice say whether they raise or lower it, and from what to what.
+   */
+  current?: CapsValue | null;
   /** Who the per-24-hours number limits, for the sentence under the choice. */
   who?: string;
   value: CapsValue;
@@ -44,6 +51,7 @@ export function CapsFields({
   const [customOpen, setCustomOpen] = React.useState(derived === "custom" && value.perCall !== "");
   const choice: CapsChoice | "" = customOpen ? "custom" : value.perCall === "" && value.perDay === "" ? "" : derived;
   const sentence = capsSentence(value.perCall, value.perDay, who);
+  const change = ceilingChange(current, value);
 
   return (
     <div className="flex flex-col gap-3">
@@ -56,7 +64,10 @@ export function CapsFields({
           ...CAP_PRESETS.map((preset) => ({
             value: preset.id,
             label: preset.label,
-            description: presetDescription(preset),
+            description: (() => {
+              const presetChange = ceilingChange(current, preset);
+              return presetChange ? `${presetDescription(preset)}; ${presetChange}` : presetDescription(preset);
+            })(),
             onPick: () => {
               setCustomOpen(false);
               onChange({ perCall: preset.perCall, perDay: preset.perDay });
@@ -97,6 +108,11 @@ export function CapsFields({
         </div>
       ) : null}
       {sentence && parsed.ok ? <p className="text-body-13 text-02">{sentence}</p> : null}
+      {change && parsed.ok ? (
+        <p className="text-body-13 text-01" data-testid="ceiling-change">
+          This {change}.
+        </p>
+      ) : null}
     </div>
   );
 }
