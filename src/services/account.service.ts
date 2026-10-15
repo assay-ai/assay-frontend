@@ -34,7 +34,9 @@ export function listAuditLog(query: ListQuery = {}): Promise<CursorPage<unknown>
 }
 
 /** GET /notifications. An alert blocks nothing. */
-export function listNotifications(query: ListQuery = {}): Promise<CursorPage<unknown>> {
+export function listNotifications(
+  query: ListQuery & { event?: string[]; unreadOnly?: boolean } = {}
+): Promise<CursorPage<unknown>> {
   return api.get<CursorPage<unknown>>("/notifications", query as Record<string, unknown>);
 }
 

@@ -13,7 +13,7 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { BindingHeader, useBinding } from "@/features/provider-binding/binding-header";
 import { BuyerPreview } from "@/features/provider-binding/buyer-preview";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
-import { slaReading, WINDOW_OUTCOME, windowRange } from "@/features/provider-sla/reading";
+import { recentWindows, slaReading, WINDOW_OUTCOME, windowRange, windowRate } from "@/features/provider-sla/reading";
 import { AgentIdCell } from "@/features/provider-traffic/agent-id-cell";
 import { verdictChip, verdictFilterStatuses, type VerdictFilter } from "@/features/provider-verdicts/present";
 import type { SlaWindow, SlaWindowEvidence } from "@/interfaces";
@@ -110,7 +110,7 @@ function QualityContent() {
     refetchInterval: REFRESH_MS,
     retry: 0,
   });
-  const windows = windowsQuery.data?.items ?? [];
+  const windows = React.useMemo(() => recentWindows(windowsQuery.data?.items ?? [], bindingId), [windowsQuery.data, bindingId]);
   const current = windows.find((window) => window.status === "OPEN") ?? windows[0] ?? null;
 
   const evidenceQuery = useQuery({
@@ -207,10 +207,14 @@ function QualityContent() {
                       {windows.slice(0, 5).map((window) => (
                         <li key={window.windowId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 border-t border-01 py-2.5 first:border-t-0">
                           <span className="text-body-13 text-01">{windowRange(window)}</span>
-                          <span className="text-body-xs text-02">
-                            {window.status === "OPEN"
-                              ? `Open · ${window.verifiedCalls.toLocaleString("en-US")} checked calls`
-                              : `${window.outcome ? WINDOW_OUTCOME[window.outcome] : "Closed"} · ${window.verifiedCalls.toLocaleString("en-US")} checked calls`}
+                          <span className={cn("text-body-xs", window.outcome === "BREACH_PROPOSED" ? "text-danger-600" : "text-02")}>
+                            {[
+                              window.status === "OPEN" ? "Open now" : window.outcome ? WINDOW_OUTCOME[window.outcome] : "Closed",
+                              windowRate(window) ? `${windowRate(window)} failed` : null,
+                              `${window.verifiedCalls.toLocaleString("en-US")} checked call${window.verifiedCalls === 1 ? "" : "s"}`,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
                           </span>
                         </li>
                       ))}

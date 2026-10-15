@@ -73,7 +73,7 @@ describe("needsActionItems", () => {
       ...base,
       openWindows: [window({ observedFailureRate: 0.03 })],
       stake: { enough: false, shortfall: usd("25000000") },
-      penalties: [{ id: "p1", toolName: "Market quote", amount: usd("12500000"), executableAt: "2026-10-18T00:00:00Z", href: "/provider/penalties?case=p1" }],
+      penalties: [{ id: "p1", proposalId: null, toolName: "Market quote", amount: usd("12500000"), executableAt: "2026-10-18T00:00:00Z", href: "/provider/penalties?case=p1" }],
     });
     expect(items.map((item) => item.kind)).toEqual(["penalty", "stake", "sla"]);
     expect(items[0]!.title).toBe("Penalty on Market quote: $12.50");
