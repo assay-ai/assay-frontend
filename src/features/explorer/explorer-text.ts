@@ -82,6 +82,45 @@ export function failRateLabel(quality: { measuredCalls: number; failedCalls: num
   return `${shown} failed · ${quality.measuredCalls.toLocaleString("en-US")} ${quality.measuredCalls === 1 ? "call" : "calls"} checked`;
 }
 
+/** A failure rate at or above this, over enough calls, earns a warning chip. */
+export const HIGH_FAILURE_RATE = 0.2;
+/** Fewer measured calls than this is too few to call a provider unreliable. */
+export const HIGH_FAILURE_MIN_CALLS = 5;
+
+/**
+ * Whether a provider fails often enough that a buyer should know before
+ * routing to it: at least 20% of at least 5 measured calls. Shown, never
+ * hidden — a failed call is not charged, but it still costs the agent time.
+ */
+export function failsOften(quality: { measuredCalls: number; failedCalls: number } | null | undefined): boolean {
+  if (!quality || quality.measuredCalls < HIGH_FAILURE_MIN_CALLS) return false;
+  return quality.failedCalls / quality.measuredCalls >= HIGH_FAILURE_RATE;
+}
+
+/**
+ * A tool's price when its providers charge different prices. The backend holds
+ * a call at the quote — the dearest provider that can take it now — and then
+ * charges the price of the provider that actually served it (rail A re-prices
+ * the intent to the serving listing; a rail-B voucher signs that listing's own
+ * price). So the headline is "from $min" and the line says both halves.
+ */
+export function priceRange(
+  held: Money | null | undefined,
+  listed: readonly (Money | null | undefined)[],
+): { from: Money; held: Money; differs: boolean } | null {
+  if (!held) return null;
+  const prices = listed.filter((m): m is Money => Boolean(m) && m!.asset === held.asset);
+  const eligible = prices.filter((m) => toDecimal(m).lte(toDecimal(held)));
+  const from = eligible.reduce<Money>((min, m) => (toDecimal(m).lt(toDecimal(min)) ? m : min), held);
+  return { from, held, differs: !toDecimal(from).eq(toDecimal(held)) };
+}
+
+/** The sentence under a "from $X" price. */
+export function heldPriceSentence(range: { from: Money; held: Money; differs: boolean }): string | null {
+  if (!range.differs) return null;
+  return `Providers charge from ${formatCallPrice(range.from)} to ${formatCallPrice(range.held)}. You are held at most ${formatCallPrice(range.held)}; you pay the price of the provider that served the call, and only if the result passes.`;
+}
+
 /**
  * Stake, one line per chain (never a sum across chains). Empty means nobody
  * could read it — "Not known", never "$0".

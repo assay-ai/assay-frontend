@@ -48,6 +48,8 @@ export interface TopBarProps extends React.HTMLAttributes<HTMLElement> {
   linkAs?: React.ElementType;
   alertCount: number;
   onAlertsClick?: () => void;
+  /** Replaces the bell with an interactive one (the buyer shell's recent-alerts popover). */
+  alerts?: React.ReactNode;
   avatarName?: string;
   avatarSrc?: string;
   searchPlaceholder?: string;
@@ -84,6 +86,7 @@ const TopBar = React.forwardRef<HTMLElement, TopBarProps>(
       avatarSrc,
       searchPlaceholder = "Find a call by id or tool",
       search,
+      alerts,
       avatar,
       actions,
       ...props
@@ -132,7 +135,7 @@ const TopBar = React.forwardRef<HTMLElement, TopBarProps>(
 
         <div className="flex shrink-0 items-center gap-2.5">
           {search ?? <DefaultSearchField placeholder={searchPlaceholder} />}
-          <AlertBadge count={alertCount} onClick={onAlertsClick} />
+          {alerts ?? <AlertBadge count={alertCount} onClick={onAlertsClick} />}
           {avatar ?? <Avatar name={avatarName} src={avatarSrc} size="md" />}
           {actions}
         </div>

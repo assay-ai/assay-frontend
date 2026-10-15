@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { formatLocalDate, formatLocalDateTime, utcTitle } from "@/libs/local-time";
+import { formatLocalDate, formatLocalDateTime, formatRelative, utcTitle } from "@/libs/local-time";
 import { cn } from "@/utils";
 
 /**
@@ -19,9 +19,11 @@ import { cn } from "@/utils";
 export interface LocalTimeProps extends React.TimeHTMLAttributes<HTMLTimeElement> {
   value: string | number | Date | null | undefined;
   dateOnly?: boolean;
+  /** "4 min ago" within the hour, "Today 14:20" later today — for live lists. */
+  relative?: boolean;
 }
 
-export function LocalTime({ value, dateOnly = false, className, ...props }: LocalTimeProps) {
+export function LocalTime({ value, dateOnly = false, relative = false, className, ...props }: LocalTimeProps) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
 
@@ -31,7 +33,9 @@ export function LocalTime({ value, dateOnly = false, className, ...props }: Loca
     ? (utcTitle(value) ?? "—")
     : dateOnly
       ? formatLocalDate(value)
-      : formatLocalDateTime(value);
+      : relative
+        ? formatRelative(value)
+        : formatLocalDateTime(value);
 
   return (
     <time dateTime={iso} title={utcTitle(value)} className={cn("tabular-nums", className)} {...props}>

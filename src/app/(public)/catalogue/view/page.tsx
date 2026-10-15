@@ -4,7 +4,7 @@ import { ArrowLeft, Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { Fact, FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, Fact, FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
@@ -12,6 +12,9 @@ import { Button } from "@/components/ui/button";
 import {
   checkSentences,
   failRateLabel,
+  failsOften,
+  heldPriceSentence,
+  priceRange,
   formatCallPrice,
   freeTierLabel,
   priceSentence,
@@ -86,6 +89,10 @@ function ToolPage() {
   }
 
   const settles = tool.settlementChains ?? [];
+  // What the providers charge, against what a call is held for (the dearest
+  // provider that can take it now). See `priceRange`.
+  const range = priceRange(tool.price, [tool.fromPrice, ...serving.map((p) => listingOf(p.providerId)?.price)]);
+  const rangeLine = range ? heldPriceSentence(range) : null;
 
   return (
     <>
@@ -102,18 +109,13 @@ function ToolPage() {
         <section className="flex flex-col gap-3 rounded-xl border border-01 bg-01 p-4 tablet:p-5">
           <h2 className="text-label-md text-01">What a call costs</h2>
           <p className="font-mono text-mono-xl font-semibold text-01">
-            {tool.price ? formatCallPrice(tool.price) : "—"}
+            {range?.differs ? <span className="mr-1.5 font-sans text-body-13 font-normal text-03">from</span> : null}
+            {range ? formatCallPrice(range.from) : tool.price ? formatCallPrice(tool.price) : "—"}
             {tool.price ? <span className="ml-1.5 font-sans text-body-13 font-normal text-03">per call</span> : null}
           </p>
           <p className="text-body-13 text-02">
-            {priceSentence({ mode: tool.pricingMode, price: tool.price, freeCallsPerDay: freeAllowance })}
+            {rangeLine ?? priceSentence({ mode: tool.pricingMode, price: tool.price, freeCallsPerDay: freeAllowance })}
           </p>
-          {tool.fromPrice && tool.price && tool.fromPrice.amount !== tool.price.amount ? (
-            <p className="text-body-xs text-03">
-              Providers list it from {formatCallPrice(tool.fromPrice)}. A call is held at the higher price so it can
-              move to another provider if one fails; you are charged only what was held, and only if it passes.
-            </p>
-          ) : null}
           {settles.length > 0 ? (
             <p className="text-body-xs text-03">
               Paid on {settles.map((c) => chainName(c)).join(", ")}.{" "}
@@ -161,6 +163,11 @@ function ToolPage() {
           <ul className="flex flex-col divide-y divide-01 overflow-hidden rounded-xl border border-01 bg-01">
             {serving.map((provider) => {
               const listing = listingOf(provider.providerId);
+              // Priced above the hold: the router's quote is the dearest provider
+              // that can take a call now, so this one is not being routed to.
+              const notRouted = Boolean(
+                listing && tool.price && listing.price.asset === tool.price.asset && BigInt(listing.price.amount) > BigInt(tool.price.amount),
+              );
               return (
                 <li key={provider.providerId}>
                   <Link
@@ -172,10 +179,12 @@ function ToolPage() {
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="text-label-sm text-01">{provider.name}</span>
                           <VerifiedMark verified={provider.verified} />
+                          {failsOften(provider.quality) ? <FailsOftenChip /> : null}
                         </span>
                         <span className="text-body-xs text-03">
                           {listing ? `${formatCallPrice(listing.price)} per call` : ""}
                           {listing?.freeCallsPerAgentPerDay ? ` · ${listing.freeCallsPerAgentPerDay} free calls/day` : ""}
+                          {notRouted ? " · not taking paid calls right now" : ""}
                         </span>
                       </div>
                       <Fact label="Observed failures">{failRateLabel(provider.quality)}</Fact>

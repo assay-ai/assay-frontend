@@ -4,10 +4,10 @@ import { ArrowLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { Fact, FreeTierBadge, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, Fact, FreeTierBadge, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
-import { failRateLabel, formatCallPrice, freeTierLabel, plural, stakeSummary } from "@/features/explorer/explorer-text";
+import { failRateLabel, failsOften, formatCallPrice, freeTierLabel, plural, stakeSummary } from "@/features/explorer/explorer-text";
 import { publicErrorText, usePublicProvider } from "@/features/explorer/use-public-explorer";
 import { useChainName } from "@/hooks/useChainName";
 import { useSearchParam } from "@/hooks/useSearchParam";
@@ -54,6 +54,7 @@ function ProviderPage() {
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-heading-md text-01">{provider.name}</h1>
           <VerifiedMark verified={provider.verified} />
+          {failsOften(provider.quality) ? <FailsOftenChip /> : null}
         </div>
         <p className="text-body-13 text-02">Serves {plural(provider.tools.length, "tool")} on Assay.</p>
       </header>
@@ -63,7 +64,7 @@ function ProviderPage() {
         <Fact label="Stake at risk">{stakeSummary(provider.stake, chainName)}</Fact>
         <p className="text-body-xs text-03 tablet:col-span-2">
           Failures are measured by Assay on real calls, not reported by the provider. If they fail more often than they
-          promised, part of their <Term k="stake">stake</Term> is taken and shared with the buyers affected.
+          promised, they pay a <Term k="penalty">penalty</Term> from their <Term k="stake">stake</Term>, shared with the buyers affected.
         </p>
       </section>
 

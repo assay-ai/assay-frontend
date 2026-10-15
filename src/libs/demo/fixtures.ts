@@ -16,7 +16,8 @@ import { PUBLIC_FIXTURES } from "./fixtures-public";
 export interface DemoFixture {
   readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   readonly match: string | RegExp;
-  readonly body: (path: string, query: Record<string, unknown>) => unknown;
+  /** `data` is the request body of a write, when there is one. */
+  readonly body: (path: string, query: Record<string, unknown>, data?: unknown) => unknown;
   /**
    * Vestigial. It marked the routes whose real answer had to be overridden
    * rather than merely filled; every fixture now answers before the network

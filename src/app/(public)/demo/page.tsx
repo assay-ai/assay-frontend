@@ -220,7 +220,7 @@ export default function DemoPage() {
             {`And ${formatMoney(money(compensation.agentAmount, compensation), { decimals: 2 })} came back to the agent from the provider's stake.`}
           </h2>
           <p className="mt-2 max-w-[820px] text-body-13 text-02">
-            This is a real slash that was already executed on chain — not the call you just ran. A
+            This is a real penalty that was already executed on chain — not the call you just ran. A
             penalty needs a violated service window, a signed attestation and a 72-hour timelock,
             so it cannot be about a call from a moment ago. The provider lost{" "}
             {formatMoney(money(compensation.appliedAmount, compensation), { decimals: 2 })} from the
@@ -347,7 +347,7 @@ function Checks({ state }: { state: ColumnState }) {
   if (!verdict || verdict.state === DemoVerdictState.PENDING) {
     return (
       <ul className="flex flex-col gap-2">
-        {["Response shape", "Result quality rules", "Relevance judgement"].map((label) => (
+        {["Response shape", "Result quality rules", "Relevance check"].map((label) => (
           <li key={label} className="flex items-center gap-2 text-body-13 text-03">
             <Minus className="h-4 w-4" />
             {label}

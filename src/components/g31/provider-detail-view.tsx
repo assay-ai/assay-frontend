@@ -5,7 +5,7 @@ import { ArrowLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { Fact, FreeTierBadge, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, Fact, FreeTierBadge, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { ToolAccessControl } from "@/components/explorer/tool-access-control";
 import { EntityName } from "@/components/patterns/entity-name";
 import { LocalTime } from "@/components/patterns/local-time";
@@ -14,7 +14,7 @@ import { StatusChip } from "@/components/patterns/status-chip";
 import { Term } from "@/components/patterns/term";
 import { Panel, PanelBody, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { callOutcome } from "@/features/buyer/call-outcome";
-import { failRateLabel, formatCallPrice, freeTierLabel, plural, stakeSummary } from "@/features/explorer/explorer-text";
+import { failRateLabel, failsOften, formatCallPrice, freeTierLabel, plural, stakeSummary } from "@/features/explorer/explorer-text";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
@@ -99,6 +99,7 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
         <div className="flex flex-wrap items-center gap-2.5">
           <h1 className="text-heading-md text-01">{provider.legalName}</h1>
           <VerifiedMark verified={provider.verified} />
+          {failsOften(provider.quality) ? <FailsOftenChip /> : null}
         </div>
         <p className="text-body-13 text-02">Serves {plural(provider.tools.length, "tool")} on Assay.</p>
       </header>

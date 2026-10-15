@@ -11,7 +11,7 @@ import { GetStarted } from "@/components/buyer-money/get-started";
 import { Button } from "@/components/ui/button";
 import { EntityName } from "@/components/patterns/entity-name";
 import { LocalTime } from "@/components/patterns/local-time";
-import { PageState } from "@/components/patterns/page-state";
+import { PageState, Skeleton, SkeletonRows } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -114,6 +114,18 @@ export default function OverviewPage() {
   const openHolds = (data?.holds ?? []).filter((h) => h.status === "OPEN");
   const oldestHold = openHolds.reduce((max, h) => Math.max(max, h.ageSeconds), 0);
 
+  // The same alert raised twice in the same minute (two workers, one event)
+  // is one thing that needs you, not two.
+  const notifications = useMemo(() => {
+    const seen = new Set<string>();
+    return (data?.notifications ?? []).filter((note) => {
+      const key = `${note.title}|${String(note.createdAt).slice(0, 16)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [data?.notifications]);
+
   const withheldAmount = data?.withheld?.withheld.amount ?? null;
   const withheldCalls = data?.withheld?.withheld.calls ?? 0;
   const withheldShare = sharePercent(withheldAmount, data?.monthListed ?? null);
@@ -195,13 +207,13 @@ export default function OverviewPage() {
         />
       ) : null}
 
-      {loading && !data ? (
-        <PageState kind="loading" rows={4} label="Loading your account" />
-      ) : null}
+      {loading && !data ? <OverviewSkeleton /> : null}
 
       {/* Foundations > Breakpoints, row "Metric tiles": 1 column at 390 with the
           two HEADLINE figures — balance and not charged — full width and the
           secondary pair 2-across; 2 columns at 834; 4 at 1440. */}
+      {loading && !data ? null : (
+      <>
       <section className="grid w-full grid-cols-2 gap-3 tablet:grid-cols-2 tablet:gap-3.5 desktop:grid-cols-3 desktop:gap-4">
         <MetricTile
           className="order-1 col-span-2 tablet:col-span-1"
@@ -297,17 +309,15 @@ export default function OverviewPage() {
             <PanelTitles>
               <PanelTitle>Needs attention</PanelTitle>
               <PanelDescription>
-                {(data?.notifications.length ?? 0) === 1
-                  ? "1 item"
-                  : `${formatCount(data?.notifications.length ?? 0)} items`}
+                {notifications.length === 1 ? "1 item" : `${formatCount(notifications.length)} items`}
               </PanelDescription>
             </PanelTitles>
           </PanelHeader>
           <PanelBody>
-            {(data?.notifications.length ?? 0) === 0 ? (
+            {notifications.length === 0 ? (
               <p className="px-5 py-4 text-body-sm text-02">Nothing needs your attention.</p>
             ) : (
-              data?.notifications.map((note, i) => {
+              notifications.map((note, i) => {
                 const action = attentionAction(note);
                 return (
                   <div
@@ -398,7 +408,10 @@ export default function OverviewPage() {
                           </span>
                           <span className="flex flex-wrap items-center gap-2 text-body-xs text-03">
                             <StatusChip status={outcome} />
-                            <LocalTime value={call.createdAt} />
+                            <span>
+                              {outcome === "checking" ? "started " : null}
+                              <LocalTime value={call.createdAt} relative />
+                            </span>
                           </span>
                         </div>
                         <div className="flex shrink-0 flex-col items-end gap-0.5">
@@ -425,6 +438,46 @@ export default function OverviewPage() {
           </PanelBody>
         </Panel>
       </section>
+      </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The page's shape while the first figures load: grey blocks where the tiles,
+ * the panels and the call list will be, instead of tiles reading "—, not
+ * available" (which says the figures could not be read, not that they are on
+ * their way).
+ */
+function OverviewSkeleton() {
+  return (
+    <div role="status" aria-label="Loading your account" className="flex w-full flex-col gap-3.5 tablet:gap-4 desktop:gap-5">
+      <div className="grid w-full grid-cols-2 gap-3 tablet:gap-3.5 desktop:grid-cols-3 desktop:gap-4">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className={
+              i < 2
+                ? "col-span-2 flex flex-col gap-2.5 rounded-xl border border-01 bg-01 p-4 tablet:col-span-1 tablet:p-5"
+                : "col-span-2 flex flex-col gap-2.5 rounded-xl border border-01 bg-01 p-4 tablet:col-span-1 tablet:p-5 desktop:col-span-1"
+            }
+          >
+            <Skeleton className="h-3.5 w-24" />
+            <Skeleton className="h-7 w-32" />
+            <Skeleton className="h-3 w-40" />
+          </div>
+        ))}
+      </div>
+      <div className="flex w-full flex-col gap-3.5 desktop:flex-row desktop:gap-4">
+        <div className="min-w-0 flex-1 rounded-xl border border-01 bg-01 p-5">
+          <Skeleton className="mb-4 h-4 w-40" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+        <div className="rounded-xl border border-01 bg-01 px-5 py-3 desktop:w-[440px] desktop:shrink-0">
+          <SkeletonRows rows={3} />
+        </div>
+      </div>
     </div>
   );
 }
