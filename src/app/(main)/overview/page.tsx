@@ -1,10 +1,12 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { ClientRedirect } from "@/components/layout/client-redirect";
 
 /**
- * The shared Top Bar links "Overview" at `/overview`, but the buyer home lives at `/`. Rather
- * than edit the shared nav, `/overview` sends you to the one screen. One of
- * the two should eventually go.
+ * `/overview` is an old name for the buyer home at `/`. A client redirect
+ * (static export: no server to answer), so the query string — e.g. the demo's
+ * `?fresh=new` — rides along.
  */
-export default function OverviewRedirect(): never {
-  redirect("/");
+export default function OverviewRedirect() {
+  return <ClientRedirect to="/" />;
 }
