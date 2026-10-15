@@ -212,7 +212,7 @@ export default function OperatorCasePage() {
   const penaltyText = formatMoney(proposal.penaltyAmount);
   const penaltyName = penaltyPhrase(providerName, penaltyText);
   const suspendApprovers = directory.isPending ? undefined : eligibleApprovers("S-1", directory.operators, identity.id);
-  const chip = STAGE_CHIP[facts.stage];
+  const chip = facts.expired ? { status: "expired" as const } : STAGE_CHIP[facts.stage];
 
   const actionFor = (id: CaseActionId | null, primary: boolean): NextStepAction | undefined => {
     switch (id) {

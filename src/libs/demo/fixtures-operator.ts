@@ -514,7 +514,7 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
         },
         disputeId: null,
         outcome: c.outcome ?? null,
-        resolutionKind: null,
+        resolutionKind: c.expired ? "AUTO_CHAIN_VOIDED" : null,
         resolvedAt: executed
           ? minutesAgo(c.executedMinutesAgo ?? 0)
           : suspended

@@ -62,3 +62,25 @@ describe("a refused action in one line", () => {
     expect(shortWhyNot(adjudicator, "suspend", USD("28470000"), [])).toBeNull();
   });
 });
+
+describe("a dispute nobody ruled on", () => {
+  it("reads as expired, not cancelled, on the page and in the list", async () => {
+    const { demoResponse } = await import("@/libs/demo/demo-api");
+    const { caseFacts, caseNextStep, caseAuthority, caseTimelineSteps } = await import("./case-flow");
+    const { rowFromBrief } = await import("./penalty-list");
+    process.env.NEXT_PUBLIC_DEMO_CHAINS = "robinhood";
+    try {
+      const brief = demoResponse("GET", "/operator/cases/93d0e7b5-4c18-4a2f-8e61-7b5c0a9d2e13") as import("@/interfaces/operator").OperatorCaseBrief;
+      const facts = caseFacts(brief);
+      expect(facts).toMatchObject({ stage: "cancelled", expired: true });
+      const lead = { roles: ["ADJL"] as OperatorRole[], authorityLimit: null };
+      expect(caseNextStep(facts, caseAuthority(brief, lead, facts), (x) => x).title).toBe("Penalty expired");
+      const steps = caseTimelineSteps(brief, facts);
+      expect(steps.find((s) => s.id === "ruling")).toMatchObject({ label: "Not ruled in 30 days", state: "skipped" });
+      expect(steps.at(-1)?.label).toBe("Expired");
+      expect(rowFromBrief(brief, "Quanta Signals").status).toBe("EXPIRED");
+    } finally {
+      delete process.env.NEXT_PUBLIC_DEMO_CHAINS;
+    }
+  });
+});
