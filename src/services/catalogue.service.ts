@@ -140,6 +140,12 @@ export interface CatalogueTool {
    * Optional for a backend that predates the field.
    */
   routableBindings?: number;
+  /**
+   * How many of `routableBindings` can be charged (PAID or FREEMIUM). "up to
+   * $X" is about these only: a FREE binding beside one paid binding does not
+   * make the paid price a range. Optional for a backend that predates the field.
+   */
+  paidBindings?: number;
   unroutableReason: string | null;
   /**
    * CAIP-2, the chains any ACTIVE binding for this tool settles on.

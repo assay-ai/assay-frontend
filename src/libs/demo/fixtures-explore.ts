@@ -463,6 +463,8 @@ function toolRow(tool: DemoTool): CatalogueTool {
     freeCallsPerDay: tool.pricingMode === "FREE" || tool.pricingMode === "FREEMIUM" ? 100 : null,
     routable: tool.offers.length > 0,
     routableBindings: tool.offers.length,
+    /* Every demo offer carries a price, so each one can be charged — except on a FREE tool. */
+    paidBindings: tool.pricingMode === "FREE" ? 0 : tool.offers.length,
     unroutableReason: tool.unroutableReason ?? null,
     settlementChains: [DEMO_CHAIN_ID],
   };

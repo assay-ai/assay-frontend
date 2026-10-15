@@ -107,11 +107,13 @@ describe("chainLabel", () => {
 describe("formatQuote", () => {
   const price = { amount: "250000", asset: "eip155:46630/erc20:0xabc", decimals: 6 };
 
-  it("says 'up to' when more than one binding could serve", () => {
+  it("says 'up to' when more than one binding that can be charged could serve", () => {
     expect(formatQuote(price, 2, "PAID")).toBe("up to $0.2500");
   });
 
-  it("is a plain price when exactly one binding could serve", () => {
+  // Review 2026-10-15, L2: counted over paid bindings, so one FREE binding
+  // beside one paid binding (paidBindings 1) is a single price, not a range.
+  it("is a plain price when exactly one paid binding could serve", () => {
     expect(formatQuote(price, 1, "PAID")).toBe("$0.2500");
     expect(formatQuote(price, undefined, "PAID")).toBe("$0.2500");
   });

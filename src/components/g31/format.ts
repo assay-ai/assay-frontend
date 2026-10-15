@@ -75,17 +75,20 @@ export function formatPrice(money: Money | null | undefined): string {
 
 /**
  * The quote — what a call is held for — worded the way MCP `tools/list` words
- * it: "up to $X" when more than one binding could serve, because the call pays
- * the serving binding and that may be cheaper than the hold (BUG-R16-B3-03).
+ * it: "up to $X" when more than one binding that can be charged could serve,
+ * because the call pays the serving binding and that may be cheaper than the
+ * hold (BUG-R16-B3-03). Counted over `paidBindings` (PAID or FREEMIUM), not
+ * every routable binding: a FREE binding beside one paid binding does not make
+ * the paid price a range (review 2026-10-15, L2).
  */
 export function formatQuote(
   price: Money | null | undefined,
-  routableBindings: number | undefined,
+  paidBindings: number | undefined,
   pricingMode?: string | null,
 ): string {
   if (!price) return "—";
   const shown = formatPrice(price);
-  return pricingMode !== "FREE" && (routableBindings ?? 0) > 1 ? `up to ${shown}` : shown;
+  return pricingMode !== "FREE" && (paidBindings ?? 0) > 1 ? `up to ${shown}` : shown;
 }
 
 /**
@@ -94,8 +97,10 @@ export function formatQuote(
  *
  * A FREEMIUM tool is served free while the agent's daily allowance lasts, even
  * when some of its providers are PAID, and only then at the quote. Worded the
- * way MCP `tools/list` words it. Without a known allowance it still says the
- * tool has a free tier rather than inventing a number.
+ * way MCP `tools/list` words it. `freeCallsPerDay` is the backend's total over
+ * every free-capable binding, capped by the platform ceiling, so it is shown
+ * as is. Without a known allowance it still says the tool has a free tier
+ * rather than inventing a number.
  */
 export function freeFirstLead(
   pricingMode: string | null | undefined,
@@ -108,11 +113,11 @@ export function freeFirstLead(
 /** {@link formatQuote}, led by {@link freeFirstLead} for a FREEMIUM tool. */
 export function formatOffer(
   price: Money | null | undefined,
-  routableBindings: number | undefined,
+  paidBindings: number | undefined,
   pricingMode: string | null | undefined,
   freeCallsPerDay: number | null | undefined,
 ): string {
-  const quote = formatQuote(price, routableBindings, pricingMode);
+  const quote = formatQuote(price, paidBindings, pricingMode);
   const lead = freeFirstLead(pricingMode, freeCallsPerDay);
   return lead ? `${lead} ${quote}` : quote;
 }
