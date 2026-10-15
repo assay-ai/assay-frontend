@@ -16,7 +16,7 @@ import { disputeAmount, durationText } from "./arbiter";
 import { evmAddressOf, noTargetText, pickedTarget, searchBlockTargets, walletLabel } from "./block-targets";
 import { cancelDeadlineSentence, caseAuthority, caseFacts, caseNextStep, caseTimelineSteps } from "./case-flow";
 import { deriveSubject, limitInputFromChoice } from "./directory";
-import { allWaitingLabel, checkedAgo, disputeUrgency, eligibleApprovers, groupApprovals, healthIssues, needsYouBadgeText, needsYouCount, sortDisputesByDaysLeft } from "./inbox";
+import { allWaitingLabel, checkedAgo, disputeUrgency, eligibleApprovers, groupApprovals, healthIssues, needsYouBadgeText, needsYouBreakdown, needsYouCount, ofWaitingText, sortDisputesByDaysLeft } from "./inbox";
 import { activeOperatorNav, operatorNavFor, operatorTitleFor } from "./nav";
 import { penaltySplit } from "./penalty-money";
 import { capabilitiesFor, presetOf, removalWarnings, roleTitle, rolesPhrase } from "./roles";
@@ -84,9 +84,16 @@ describe("the Needs-you groups", () => {
   });
 
   it("names every open request 'All waiting', apart from the Needs you count", () => {
-    expect(allWaitingLabel(5)).toBe("All waiting approvals · 5");
-    expect(allWaitingLabel(5, "tab")).toBe("All waiting · 5");
-    expect(allWaitingLabel(0, "tab")).toBe("All waiting");
+    expect(allWaitingLabel(5)).toBe("All waiting · 5");
+    expect(allWaitingLabel(0)).toBe("All waiting");
+    // Home: the section count against all waiting, as one phrase.
+    expect(ofWaitingText(2, 4)).toBe("2 of 4 waiting");
+    expect(ofWaitingText(2, 2)).toBe("2");
+    // The heading's number, explained when it mixes approvals and disputes.
+    expect(needsYouBreakdown(2, 2, true)).toBe("2 to approve · 2 to rule");
+    expect(needsYouBreakdown(2, 0, true)).toBeNull();
+    expect(needsYouBreakdown(0, 3, true)).toBeNull();
+    expect(needsYouBreakdown(2, 2, false)).toBeNull();
     expect(needsYouBadgeText(1)).toBe("1 needs you");
     expect(needsYouBadgeText(4)).toBe("4 need you");
   });

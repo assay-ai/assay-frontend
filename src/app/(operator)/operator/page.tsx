@@ -13,7 +13,7 @@ import { ApprovalItem, RowSection, type ApprovalResult } from "@/features/operat
 import { approvalErrorMessage } from "@/features/operator/approvals";
 import { DisputeLine } from "@/features/operator/dispute-line";
 import { HealthStrip } from "@/features/operator/health-strip";
-import { allWaitingLabel, checkedAgo, groupApprovals, needsYouCount, sortDisputesByDaysLeft } from "@/features/operator/inbox";
+import { checkedAgo, groupApprovals, needsYouBreakdown, needsYouCount, ofWaitingText, sortDisputesByDaysLeft } from "@/features/operator/inbox";
 import { ResultCard } from "@/features/operator/result-card";
 import { RoleIntro, useRoleIntro } from "@/features/operator/role-intro";
 import { capabilitiesFor } from "@/features/operator/roles";
@@ -58,7 +58,7 @@ function useNow(intervalMs: number): number {
   return now;
 }
 
-/** "All waiting approvals · 5 →": a text link that reads as one. */
+/** "All approvals →": a text link that reads as one. */
 function ViewAll({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <Link href={href} className="touch-target inline-flex items-center gap-1 text-label-13 text-primary-700 underline-offset-2 hover:underline">
@@ -167,20 +167,24 @@ export default function OperatorHome() {
   const onDecided = React.useCallback((result: ApprovalResult) => setResults((list) => [result, ...list.filter((r) => r.id !== result.id)]), []);
 
   const needsYouTotal = needsYouCount(groups.needsYou.length, disputeRows.length, caps.rule);
+  const breakdown = needsYouBreakdown(groups.needsYou.length, disputeRows.length, caps.rule);
   const loading = pending.isLoading || (caps.rule && disputes.isLoading);
   const nothing = needsYouTotal === 0 && groups.yours.length === 0;
 
   return (
     <>
       <header className="flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <h1 className="flex items-center gap-2 text-heading-md text-01">
-          Needs you
-          {needsYouTotal > 0 ? (
-            <span className="rounded-full bg-danger-10 px-2 py-0.5 text-label-13 tabular-nums text-danger-700">
-              {needsYouTotal}
-            </span>
-          ) : null}
-        </h1>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h1 className="flex items-center gap-2 text-heading-md text-01">
+            Needs you
+            {needsYouTotal > 0 ? (
+              <span className="rounded-full bg-danger-10 px-2 py-0.5 text-label-13 tabular-nums text-danger-700">
+                {needsYouTotal}
+              </span>
+            ) : null}
+          </h1>
+          {breakdown ? <p className="text-body-13 tabular-nums text-03">{breakdown}</p> : null}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           {!nothing ? <QuickAction caps={caps} /> : null}
           <Button
@@ -241,9 +245,9 @@ export default function OperatorHome() {
             <RowSection
               id="to-approve"
               title="To approve"
-              count={groups.needsYou.length}
-              hint="Requests your roles can approve: Waiting for you on Approvals."
-              action={<ViewAll href="/operator/approvals">{allWaitingLabel(openApprovals)}</ViewAll>}
+              count={ofWaitingText(groups.needsYou.length, openApprovals)}
+              hint="Requests your roles can approve (Waiting for you on Approvals), out of every request waiting (All waiting)."
+              action={<ViewAll href="/operator/approvals">All approvals</ViewAll>}
             >
               {groups.needsYou.map((approval) => (
                 <ApprovalItem
@@ -278,8 +282,8 @@ export default function OperatorHome() {
             <RowSection
               id="waiting-on-others"
               title="Waiting on others"
-              count={groups.yours.length}
-              action={groups.needsYou.length === 0 ? <ViewAll href="/operator/approvals">{allWaitingLabel(openApprovals)}</ViewAll> : undefined}
+              count={groups.needsYou.length === 0 ? ofWaitingText(groups.yours.length, openApprovals) : groups.yours.length}
+              action={groups.needsYou.length === 0 ? <ViewAll href="/operator/approvals">All approvals</ViewAll> : undefined}
             >
               {groups.yours.map((approval) => (
                 <ApprovalItem

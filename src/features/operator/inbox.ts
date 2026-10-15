@@ -26,15 +26,30 @@ export function needsYouCount(needsYouApprovals: number, openDisputes: number, c
 // ── Approvals ───────────────────────────────────────────────────────────────
 
 /**
- * The one name for every open request, yours or not, so it never reads as a
- * rival to the "Needs you" / "Waiting for you" counts:
- *   link (Home)      "All waiting approvals · 5"
- *   tab (Approvals)  "All waiting · 5"
- * No count when nothing waits.
+ * The one name for every open request, yours or not, on the Approvals tab:
+ * "All waiting · 4" (no count when nothing waits). Home says the same thing
+ * from the other side: "To approve · 2 of 4 waiting" (`ofWaitingText`).
  */
-export function allWaitingLabel(count: number, where: "link" | "tab" = "link"): string {
-  const name = where === "tab" ? "All waiting" : "All waiting approvals";
-  return count > 0 ? `${name} · ${count}` : name;
+export function allWaitingLabel(count: number): string {
+  return count > 0 ? `All waiting · ${count}` : "All waiting";
+}
+
+/**
+ * A Home section's count against every waiting request, so the two numbers
+ * read as one: "2 of 4 waiting", or just "2" when they are all of them. Pure.
+ */
+export function ofWaitingText(part: number, total: number): string {
+  return total > part ? `${part} of ${total} waiting` : `${part}`;
+}
+
+/**
+ * What the "Needs you" number adds up, under the heading, when it mixes
+ * approvals and disputes: "2 to approve · 2 to rule". Null when it is one kind
+ * only (the section below says it). Pure.
+ */
+export function needsYouBreakdown(approvals: number, disputes: number, canRule: boolean): string | null {
+  if (!canRule || approvals === 0 || disputes === 0) return null;
+  return `${approvals} to approve · ${disputes} to rule`;
 }
 
 /** The nav badge's tooltip and screen-reader text: "4 need you". */

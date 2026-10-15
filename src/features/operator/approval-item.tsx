@@ -381,7 +381,8 @@ export function RowSection({
 }: {
   id: string;
   title: string;
-  count?: number;
+  /** A number, or a phrase such as "2 of 4 waiting". */
+  count?: number | string;
   /** Shown on hover of the header (the rule behind the order). */
   hint?: string;
   action?: React.ReactNode;
