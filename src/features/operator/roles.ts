@@ -271,9 +271,16 @@ export function removalWarnings(
   }
   return [...groups.values()].map(({ who, left, whats }) =>
     left === 0
-      ? `Nobody else is ${who}: ${listPhrase(whats)} could no longer be approved.`
-      : `Only one other ${who} would be left: their own requests for ${listPhrase(whats)} could not be approved.`,
+      ? `Nobody else holds the ${who} role, so nobody could approve ${serialList(whats, "or")}.`
+      : `Only one other ${who} would be left, so their own requests for ${serialList(whats, "and")} could not be approved.`,
   );
+}
+
+/** "a and b", "a, b, and c": a serial comma once a listed item may hold its own "and". */
+function serialList(items: readonly string[], joiner: "and" | "or"): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} ${joiner} ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, ${joiner} ${items[items.length - 1]}`;
 }
 
 /** Each action in the third person, for a role card. */
