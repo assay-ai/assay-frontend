@@ -82,10 +82,10 @@ describe("runway", () => {
 describe("mcp config", () => {
   const url = "https://mcp.example/mcp";
   it("wraps the remote server in mcp-remote for Claude Desktop", () => {
-    const parsed = JSON.parse(mcpConfig("claude-desktop", { url, token: "x402_sk_1" }));
+    const parsed = JSON.parse(mcpConfig("claude-desktop", { url, token: "assay_live_sk1" }));
     expect(parsed.mcpServers.assay.command).toBe("npx");
     expect(parsed.mcpServers.assay.args).toContain(url);
-    expect(parsed.mcpServers.assay.env.ASSAY_AUTH).toBe("Bearer x402_sk_1");
+    expect(parsed.mcpServers.assay.env.ASSAY_AUTH).toBe("Bearer assay_live_sk1");
   });
   it("gives Cursor and other clients the URL and header, with a placeholder when the key is not on screen", () => {
     expect(JSON.parse(mcpConfig("cursor", { url, token: "k" })).mcpServers.assay).toEqual({
