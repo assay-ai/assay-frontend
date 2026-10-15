@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -25,7 +25,7 @@ import {
 import { approvalNeeds, approvalTargetId, penaltyPhrase } from "@/features/operator/approvals";
 import { eligibleApprovers } from "@/features/operator/inbox";
 import { OperatorMeasurement } from "@/features/operator/operator-measurement";
-import { PenaltyMoney } from "@/features/operator/penalty-money";
+import { PenaltyMoney, stakeReduction } from "@/features/operator/penalty-money";
 import { reasonLabel } from "@/features/operator/reasons";
 import { rememberRecentPenalty } from "@/features/operator/recent-penalties";
 import { ResultCard } from "@/features/operator/result-card";
@@ -33,7 +33,6 @@ import { useOperatorSession } from "@/features/operator/session-context";
 import { suspendedNotice } from "@/features/operator/state";
 import { approvalHref, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
 import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-operator-lookups";
-import { WhyNot } from "@/features/operator/why-not";
 import { CaseContext } from "@/features/provider-slash-case/context";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
@@ -45,6 +44,7 @@ import { formatMoney } from "@/utils/money";
 import { CancelSheet } from "./_components/cancel-sheet";
 import { MoreActions } from "./_components/more-actions";
 import { SuspendSheet } from "./_components/suspend-sheet";
+import { WhyNotLine } from "./_components/why-not-line";
 
 /**
  * A penalty, route `/operator/cases/view?id=`.
@@ -56,10 +56,15 @@ import { SuspendSheet } from "./_components/suspend-sheet";
  * The money is drawn, with the split read from the chain's current terms.
  * The evidence, the context, the history and the restoration are tabs.
  *
+ * Two columns from 1280px: the timeline, the money and the tabs on the left;
+ * the next step and the key facts in a sticky side column, so the action
+ * stays in view while the tabs are read. The rare actions (suspend, block,
+ * pay back, sweep, history) sit in the header's ⋯ menu, never at the bottom.
+ *
  * The off-chain objection controls (claim, decide, second signature, extend
  * the deadline) are gone from the UI: the owner removed that process
  * (business.md #3/#4/#12). [backend] Retiring their endpoints and the sweeper
- * is separate work. Sweep and Compensate stay, under More actions.
+ * is separate work.
  */
 
 const STAGE_CHIP: Record<CaseStage, { status: StatusChipKey; detail?: string }> = {
@@ -68,9 +73,9 @@ const STAGE_CHIP: Record<CaseStage, { status: StatusChipKey; detail?: string }> 
   executable: { status: "waiting", detail: "executable" },
   disputed: { status: "disputed" },
   upheld: { status: "upheld" },
-  "cancel-requested": { status: "needs-action", detail: "cancel to sign" },
+  "cancel-requested": { status: "waiting", detail: "cancel to sign" },
   executed: { status: "executed" },
-  compensated: { status: "closed", detail: "compensated" },
+  compensated: { status: "closed", detail: "paid back" },
   cancelled: { status: "cancelled" },
 };
 
@@ -225,41 +230,46 @@ export default function OperatorCasePage() {
     refetch();
   };
 
+  const primary = next.kind === "action" ? actionFor(next.action, true) : undefined;
+  const reduction = stakeReduction(proposal.appliedAmount ?? proposal.penaltyAmount, terms.data?.slashAgentBps ?? null);
+  const readOnlyRuling = facts.stage === "disputed" && !authority.rule;
+
   return (
     <>
       <BackToPenalties />
 
-      <header className="flex w-full min-w-0 flex-col gap-1.5">
-        <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 className="min-w-0 text-heading-sm text-01 tablet:text-heading-md">
-            {providerName} · {penaltyText} penalty
-          </h1>
-          <StatusChip status={chip.status} detail={chip.detail} />
-        </div>
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-13 text-02">
-          <span>
-            {proposal.toolName} · {proposal.bindingLabel}
-            {proposal.windowLabel ? ` · window ${proposal.windowLabel}` : ""}
-          </span>
-          <span className="text-03">·</span>
-          <span>
-            proposed <LocalTime value={proposal.clocks.proposedAt} />
-          </span>
-          <CopyChip value={proposalId} label="penalty id" />
-        </p>
-        {facts.legacyStatus ? (
-          <p className="text-body-xs text-03">
-            Opened under the retired objection process; it now follows the on-chain steps below.
+      <header className="flex w-full min-w-0 flex-col gap-3 tablet:flex-row tablet:items-start tablet:justify-between">
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="min-w-0 text-heading-sm text-01 tablet:text-heading-md">
+              {providerName} · {penaltyText} penalty
+            </h1>
+            <StatusChip status={chip.status} detail={chip.detail} />
+          </div>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-13 text-02">
+            <span>{proposal.toolName}</span>
+            <span aria-hidden="true" className="text-03">·</span>
+            <span>
+              proposed <LocalTime value={proposal.clocks.proposedAt} />
+            </span>
+            <span aria-hidden="true" className="text-03">·</span>
+            <CopyChip value={proposalId} label="penalty id" />
           </p>
-        ) : null}
+          {facts.legacyStatus ? (
+            <p className="text-body-xs text-03">Opened under the retired objection process; it now follows the on-chain steps below.</p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {primary ? <HeaderAction action={primary} /> : null}
+          <MoreActions
+            brief={brief}
+            proposalId={proposalId}
+            identity={identity}
+            authority={authority}
+            onSuspend={authority.suspend.allowed ? () => setSheet("suspend") : null}
+          />
+        </div>
       </header>
-
-      <section aria-label="Where it stands" className="w-full rounded-xl border border-01 bg-01 p-4 tablet:p-5">
-        <StatusTimeline
-          steps={caseTimelineSteps(brief, facts, { slashDelaySeconds: terms.data?.slashDelaySeconds, now })}
-          onElapsed={refetch}
-        />
-      </section>
 
       {result ? (
         <ResultCard
@@ -274,116 +284,119 @@ export default function OperatorCasePage() {
       ) : null}
 
       {waitingSuspend && !result?.approvalId ? (
-        <p role="status" className="w-full rounded-lg border border-primary-20 bg-primary-10 px-3.5 py-2.5 text-body-13 text-01">
+        <p role="status" className="w-full rounded-lg border border-01 bg-02 px-3.5 py-2.5 text-body-13 text-01">
           A suspension of this penalty is waiting for approval: {directory.nameOf(waitingSuspend.requestedBy)} asked{" "}
           <LocalTime value={waitingSuspend.createdAt} />.{" "}
-          <Link href={approvalHref(waitingSuspend.id)} className="text-primary-600 hover:underline">
+          <Link href={approvalHref(waitingSuspend.id)} className="text-primary-700 underline-offset-2 hover:underline">
             Open the request
           </Link>
         </p>
       ) : null}
 
-      <NextStepCard
-        kind={next.kind}
-        title={next.title}
-        description={next.description}
-        meta={next.meta ?? undefined}
-        action={next.kind === "action" ? actionFor(next.action, true) : undefined}
-        secondary={next.secondary ? actionFor(next.secondary, false) : undefined}
-      />
+      <div className="grid w-full min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)] xl:gap-5">
+        <section aria-label="Where it stands" className="w-full min-w-0 rounded-xl border border-01 bg-01 p-4 tablet:p-5 xl:col-start-1 xl:row-start-1">
+          <StatusTimeline
+            steps={caseTimelineSteps(brief, facts, { slashDelaySeconds: terms.data?.slashDelaySeconds, now })}
+            onElapsed={refetch}
+          />
+        </section>
 
-      {facts.stage === "disputed" && !authority.rule ? (
-        <WhyNot
-          action="rule"
-          me={identity}
-          title="Ruling on this dispute"
-          ask={`Can you rule on ${penaltyName}? The provider disputed it on chain.`}
-        />
-      ) : null}
+        <aside className="flex w-full min-w-0 flex-col gap-4 xl:sticky xl:top-4 xl:col-start-2 xl:row-span-3 xl:row-start-1 xl:self-start">
+          <NextStepCard
+            layout="stack"
+            kind={next.kind}
+            title={next.title}
+            description={next.description}
+            meta={next.meta ?? undefined}
+            action={primary}
+            secondary={next.secondary ? actionFor(next.secondary, false) : undefined}
+            footer={
+              readOnlyRuling ? (
+                <WhyNotLine action="rule" me={identity} ask={`Can you rule on ${penaltyName}? The provider disputed it on chain.`} />
+              ) : undefined
+            }
+          />
+          <dl className="flex w-full flex-col rounded-xl border border-01 bg-01 text-body-13">
+            <Fact label="Provider">
+              <Link
+                href={`/operator/cases?tab=all&q=${encodeURIComponent(providerName)}`}
+                className="inline-flex items-center gap-1 text-01 underline-offset-2 hover:underline"
+              >
+                {providerName}
+                <ArrowRight aria-hidden="true" className="size-3.5 text-03" />
+              </Link>
+            </Fact>
+            <Fact label="Tool">{proposal.bindingLabel || proposal.toolName}</Fact>
+            {reduction ? <Fact label="Stake goes down by">{formatMoney(reduction)}</Fact> : null}
+            <Fact label="Proposed">
+              <LocalTime value={proposal.clocks.proposedAt} />
+            </Fact>
+            {brief.upheldViolations30d ? <Fact label="Upheld in 30 days">{brief.upheldViolations30d}</Fact> : null}
+          </dl>
+        </aside>
 
-      <PenaltyMoney
-        penalty={proposal.appliedAmount ?? proposal.penaltyAmount}
-        stage={facts.stage}
-        executableAt={facts.executableAt}
-        agentBps={terms.data?.slashAgentBps ?? null}
-      />
-
-      <Tabs defaultValue="measurement" className="flex w-full flex-col gap-4">
-        <div className="w-full overflow-x-auto">
-          <TabsList className="min-w-max">
-            <TabsTrigger value="measurement">Measurement</TabsTrigger>
-            <TabsTrigger value="context">Context</TabsTrigger>
-            <TabsTrigger value="history">History</TabsTrigger>
-            <TabsTrigger value="restoration">If cancelled</TabsTrigger>
-          </TabsList>
+        <div className="w-full min-w-0 xl:col-start-1 xl:row-start-2">
+          <PenaltyMoney penalty={proposal.appliedAmount ?? proposal.penaltyAmount} stage={facts.stage} agentBps={terms.data?.slashAgentBps ?? null} />
         </div>
-        <TabsContent value="measurement">
-          <OperatorMeasurement data={brief.case} />
-        </TabsContent>
-        <TabsContent value="context">
-          <CaseContext data={brief.case} />
-        </TabsContent>
-        <TabsContent value="history">
-          {brief.timeline.length === 0 ? (
-            <PageState kind="empty" title="Nothing has happened yet" bare />
-          ) : (
-            <ol className="flex w-full flex-col rounded-xl border border-01 bg-01">
-              {[...brief.timeline]
-                .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))
-                .map((event) => (
-                  <li key={event.id} className="flex w-full flex-col gap-0.5 border-b border-01 px-4 py-3 last:border-b-0 tablet:flex-row tablet:gap-4">
-                    <LocalTime value={event.occurredAt} className="w-[150px] shrink-0 font-mono text-mono-12 text-03" />
-                    <span className="min-w-0 flex-1 text-body-13 text-01">{event.summary}</span>
-                    <span className="shrink-0 text-body-xs text-03">
-                      {event.actorType === "system" ? "Assay" : event.actorType === "provider" ? "Provider" : directory.nameOf(event.actorId)}
-                    </span>
-                  </li>
-                ))}
-            </ol>
-          )}
-          <p className="pt-3 text-body-13">
-            <Link href={`/operator/override-log?targetId=${encodeURIComponent(proposalId)}`} className="text-primary-600 hover:underline">
-              Operator actions on this penalty, in Activity
-            </Link>
-          </p>
-        </TabsContent>
-        <TabsContent value="restoration">
-          {brief.restoration.length === 0 ? (
-            <PageState kind="empty" title="Nothing to put back" description="Nothing is recorded as restorable on this penalty." bare />
-          ) : (
-            <dl className="flex w-full flex-col rounded-xl border border-01 bg-01">
-              {brief.restoration.map((row) => (
-                <div key={row.label} className="flex w-full flex-col gap-0.5 border-b border-01 px-4 py-3 last:border-b-0 tablet:flex-row tablet:gap-4">
-                  <dt className="w-[160px] shrink-0 text-body-13 text-03">{row.label}</dt>
-                  <dd className="min-w-0 flex-1 text-body-13 text-01">{row.value}</dd>
-                  <span className="shrink-0 text-body-xs text-03">
-                    {row.status === "RESTORED" ? "put back" : row.status === "ON_DECISION" ? "if cancelled" : "not affected"}
-                  </span>
-                </div>
-              ))}
-            </dl>
-          )}
-        </TabsContent>
-      </Tabs>
 
-      <MoreActions
-        brief={brief}
-        proposalId={proposalId}
-        identity={identity}
-        authority={authority}
-        onSuspend={authority.suspend.allowed && next.secondary !== "suspend" ? () => setSheet("suspend") : null}
-        suspendBlocked={
-          authority.suspend.open && !authority.suspend.allowed ? (
-            <WhyNot
-              action="suspend"
-              me={identity}
-              amount={proposal.penaltyAmount}
-              title="Suspend this penalty"
-              ask={`Can you suspend ${penaltyName}? It looks wrong to me.`}
-            />
-          ) : null
-        }
-      />
+        <Tabs defaultValue="measurement" className="flex w-full min-w-0 flex-col gap-4 xl:col-start-1 xl:row-start-3">
+          <div className="w-full overflow-x-auto">
+            <TabsList className="min-w-max">
+              <TabsTrigger value="measurement">Measurement</TabsTrigger>
+              <TabsTrigger value="context">Context</TabsTrigger>
+              <TabsTrigger value="history">History</TabsTrigger>
+              <TabsTrigger value="restoration">If cancelled</TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="measurement">
+            <OperatorMeasurement data={brief.case} />
+          </TabsContent>
+          <TabsContent value="context">
+            <CaseContext data={brief.case} />
+          </TabsContent>
+          <TabsContent value="history">
+            {brief.timeline.length === 0 ? (
+              <PageState kind="empty" title="Nothing has happened yet" bare />
+            ) : (
+              <ol className="flex w-full flex-col rounded-xl border border-01 bg-01">
+                {[...brief.timeline]
+                  .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))
+                  .map((event) => (
+                    <li key={event.id} className="flex w-full flex-col gap-0.5 border-b border-01 px-4 py-3 last:border-b-0 tablet:flex-row tablet:gap-4">
+                      <LocalTime value={event.occurredAt} className="w-[150px] shrink-0 text-body-xs text-03" />
+                      <span className="min-w-0 flex-1 text-body-13 text-01">{event.summary}</span>
+                      <span className="shrink-0 text-body-xs text-03">
+                        {event.actorType === "system" ? "Assay" : event.actorType === "provider" ? "Provider" : directory.nameOf(event.actorId)}
+                      </span>
+                    </li>
+                  ))}
+              </ol>
+            )}
+            <p className="pt-3 text-body-13">
+              <Link href={`/operator/override-log?targetId=${encodeURIComponent(proposalId)}`} className="text-primary-700 underline-offset-2 hover:underline">
+                Operator actions on this penalty, in Activity
+              </Link>
+            </p>
+          </TabsContent>
+          <TabsContent value="restoration">
+            {brief.restoration.length === 0 ? (
+              <PageState kind="empty" title="Nothing to put back" description="Nothing is recorded as restorable on this penalty." bare />
+            ) : (
+              <dl className="flex w-full flex-col rounded-xl border border-01 bg-01">
+                {brief.restoration.map((row) => (
+                  <div key={row.label} className="flex w-full flex-col gap-0.5 border-b border-01 px-4 py-3 last:border-b-0 tablet:flex-row tablet:gap-4">
+                    <dt className="w-[160px] shrink-0 text-body-13 text-03">{row.label}</dt>
+                    <dd className="min-w-0 flex-1 text-body-13 text-01">{row.value}</dd>
+                    <span className="shrink-0 text-body-xs text-03">
+                      {row.status === "RESTORED" ? "put back" : row.status === "ON_DECISION" ? "if cancelled" : "not affected"}
+                    </span>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
 
       {authority.suspend.allowed ? (
         <SuspendSheet
@@ -411,5 +424,28 @@ export default function OperatorCasePage() {
         />
       ) : null}
     </>
+  );
+}
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex w-full items-baseline justify-between gap-3 border-b border-01 px-4 py-2.5 last:border-b-0">
+      <dt className="shrink-0 text-03">{label}</dt>
+      <dd className="min-w-0 truncate text-right tabular-nums text-01">{children}</dd>
+    </div>
+  );
+}
+
+/** The header's one primary action, the same one the next-step card carries. */
+function HeaderAction({ action }: { action: NextStepAction }) {
+  const variant = action.tone === "danger" ? "danger" : "primary";
+  return action.href ? (
+    <Button variant={variant} asChild>
+      <Link href={action.href}>{action.label}</Link>
+    </Button>
+  ) : (
+    <Button variant={variant} onClick={action.onClick} disabled={action.disabled} loading={action.loading}>
+      {action.label}
+    </Button>
   );
 }

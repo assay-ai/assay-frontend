@@ -374,7 +374,8 @@ export interface OperatorCaseBrief {
    * With `chainStatus: PENDING` and a non-zero count the case is partly
    * disputed: the other parts keep executing. Absent from an older backend.
    */
-  chainDisputedParts?: number;
+  chainDisputedParts?: number;  /** The provider's penalties upheld or executed in the last 30 days (follow-up C4). Absent from an older backend. */
+  upheldViolations30d?: number;
 }
 
 /** `POST /operator/cases/:id/decide`. */

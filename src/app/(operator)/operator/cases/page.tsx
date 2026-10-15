@@ -68,7 +68,12 @@ export default function PenaltiesPage() {
   const directory = useOperatorDirectory();
   const tabParam = useSearchParam("tab");
   const [tabId, setTabId] = React.useState<PenaltyTabId | null>(null);
+  const queryParam = useSearchParam("q");
   const [query, setQuery] = React.useState("");
+  // A link from a penalty's "Provider" fact arrives with the name to search for.
+  React.useEffect(() => {
+    if (queryParam) setQuery(queryParam);
+  }, [queryParam]);
   const [queryError, setQueryError] = React.useState<string | null>(null);
   const [recent, setRecent] = React.useState<RecentPenalty[]>([]);
   const [now, setNow] = React.useState(() => Date.now());
