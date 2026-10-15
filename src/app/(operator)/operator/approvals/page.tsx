@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -9,7 +9,7 @@ import * as React from "react";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
-import { ApprovalItem, type ApprovalResult } from "@/features/operator/approval-item";
+import { ApprovalItem, RowSection, type ApprovalResult } from "@/features/operator/approval-item";
 import { ResultCard } from "@/features/operator/result-card";
 import { approvalErrorMessage } from "@/features/operator/approvals";
 import { groupApprovals } from "@/features/operator/inbox";
@@ -25,12 +25,15 @@ import { cn } from "@/utils";
  * Approvals, route `/operator/approvals` (reached from Home).
  *
  * Three groups, so nobody has to work out which requests are theirs:
- *  - **Waiting for your approval**: someone else asked, and your roles can
+ *  - **Waiting for you**: someone else asked, and your roles can
  *    decide it. Home's "Needs you" adds the disputes to rule; this page is
  *    approvals only, so it is labelled differently rather than counted
  *    differently under the same name.
  *  - **Your requests**: who can approve each one, and a link to send them.
  *  - **Others**: waiting for a role you do not hold; collapsed.
+ *
+ * Each is one bordered list of rows (the same row as Home); a row's chevron
+ * opens the request's fields.
  *
  * `?id=` opens on one request (the link an approver is sent); `?tab=history`
  * shows decided ones, with "withdrawn" for a request its requester took back.
@@ -176,15 +179,15 @@ function ApprovalsInbox() {
             ) : null}
 
             {waitingCount === 0 ? (
-              <PageState kind="empty" title="Nothing waiting" description="No two-person request is open right now." />
+              <PageState
+                kind="empty"
+                title="Nothing waiting"
+                description={`No two-person request is open right now.${canRule ? " Disputes to rule are on Home and Arbiter, not here." : ""}`}
+              />
             ) : null}
 
             {groups.needsYou.length > 0 ? (
-              <Group
-                id="needs-you"
-                title={`Waiting for your approval · ${groups.needsYou.length}`}
-                note={canRule ? "Disputes to rule are on Home and Arbiter, not here." : undefined}
-              >
+              <RowSection id="needs-you" title="Waiting for you" count={groups.needsYou.length}>
                 {groups.needsYou.map((row) => (
                   <ApprovalItem
                     key={row.id}
@@ -197,11 +200,11 @@ function ApprovalsInbox() {
                     highlighted={row.id === highlight}
                   />
                 ))}
-              </Group>
+              </RowSection>
             ) : null}
 
             {groups.yours.length > 0 ? (
-              <Group id="yours" title={`Your requests · ${groups.yours.length}`} note="Send the link to someone who can approve.">
+              <RowSection id="yours" title="Your requests" count={groups.yours.length} hint="Send the link to someone who can approve.">
                 {groups.yours.map((row) => (
                   <ApprovalItem
                     key={row.id}
@@ -214,33 +217,38 @@ function ApprovalsInbox() {
                     highlighted={row.id === highlight}
                   />
                 ))}
-              </Group>
+              </RowSection>
             ) : null}
 
             {groups.others.length > 0 ? (
-              <details
-                open={othersOpen}
-                onToggle={(event) => setOthersOpen((event.currentTarget as HTMLDetailsElement).open)}
-                className="flex w-full flex-col"
-              >
-                <summary className="cursor-pointer select-none text-label-md text-02 hover:text-01">
-                  Others · {groups.others.length} <span className="text-body-13 text-03">waiting for a role you do not hold</span>
-                </summary>
-                <div className="mt-2.5 flex w-full flex-col gap-2.5">
-                  {groups.others.map((row) => (
-                    <ApprovalItem
-                      key={row.id}
-                      approval={row}
-                      context={context}
-                      mode="other"
-                      approvers={approversFor(row)}
-                      nameOf={nameOf}
-                      highlighted={row.id === highlight}
-                      compact
-                    />
-                  ))}
-                </div>
-              </details>
+              <section aria-labelledby="others" className="flex w-full min-w-0 flex-col gap-2">
+                <button
+                  type="button"
+                  id="others"
+                  aria-expanded={othersOpen}
+                  onClick={() => setOthersOpen((open) => !open)}
+                  className="inline-flex items-center gap-1 self-start rounded-md text-label-13 text-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                >
+                  <ChevronRight aria-hidden="true" className={cn("size-4 transition-transform", othersOpen && "rotate-90")} />
+                  Others<span className="tabular-nums text-03"> · {groups.others.length}</span>
+                  <span className="font-normal text-03"> · waiting for a role you do not hold</span>
+                </button>
+                {othersOpen ? (
+                  <div className="flex w-full min-w-0 flex-col divide-y divide-01 overflow-hidden rounded-xl border border-01 bg-01">
+                    {groups.others.map((row) => (
+                      <ApprovalItem
+                        key={row.id}
+                        approval={row}
+                        context={context}
+                        mode="other"
+                        approvers={approversFor(row)}
+                        nameOf={nameOf}
+                        highlighted={row.id === highlight}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </section>
             ) : null}
           </>
         )
@@ -264,9 +272,9 @@ function ApprovalsInbox() {
           ) : historyRows.length === 0 ? (
             <PageState kind="empty" title="No history" description="No request has been decided with this outcome yet." />
           ) : (
-            <div className="flex w-full flex-col gap-2.5">
+            <div className="flex w-full min-w-0 flex-col divide-y divide-01 overflow-hidden rounded-xl border border-01 bg-01">
               {historyRows.map((row) => (
-                <ApprovalItem key={row.id} approval={row} context={context} mode="history" nameOf={nameOf} compact />
+                <ApprovalItem key={row.id} approval={row} context={context} mode="history" nameOf={nameOf} />
               ))}
             </div>
           )}
@@ -278,20 +286,6 @@ function ApprovalsInbox() {
         </>
       )}
     </>
-  );
-}
-
-function Group({ id, title, note, children }: { id: string; title: string; note?: string; children: React.ReactNode }) {
-  return (
-    <section aria-labelledby={id} className="flex w-full flex-col gap-2.5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id={id} className="text-label-md text-01">
-          {title}
-        </h2>
-        {note ? <p className="text-body-xs text-03">{note}</p> : null}
-      </div>
-      {children}
-    </section>
   );
 }
 

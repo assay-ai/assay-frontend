@@ -5,10 +5,11 @@ import * as React from "react";
 
 import type { OperatorApproval, OperatorIdentity } from "@/interfaces/operator";
 import { listAccountBlocks } from "@/services/operator.service";
+import { formatMoney } from "@/utils/money";
 
 import { approvalTargetId, type ApprovalContext } from "./approvals";
 import { eligibleApprovers } from "./inbox";
-import { useOperatorDirectory, usePenaltyNames } from "./use-operator-lookups";
+import { useOperatorDirectory, usePenaltyBriefs, usePenaltyNames, useProviderNames } from "./use-operator-lookups";
 
 /** The API's page ceiling. Enough to name what a pending request is about. */
 const LOOKUP_LIMIT = 100;
@@ -42,6 +43,14 @@ export function useApprovalContext(
   );
   const penalties = usePenaltyNames(penaltyIds);
   const penaltiesKey = [...penalties.entries()].map(([id, name]) => `${id}=${name}`).join("|");
+  // The same cached reads, with provider and amount apart for the confirm's money line.
+  const briefs = usePenaltyBriefs(penaltyIds);
+  const providers = useProviderNames();
+  const penaltyParts = new Map<string, { provider: string; amount: string }>();
+  briefs.forEach((brief, id) => {
+    const proposal = brief.case.proposal;
+    penaltyParts.set(id, { provider: providers.name(proposal.providerId), amount: formatMoney(proposal.penaltyAmount) });
+  });
 
   const context = React.useMemo<ApprovalContext>(() => {
     const operators = directory.operators;
@@ -51,6 +60,7 @@ export function useApprovalContext(
       operators: new Map(operators.map((op) => [op.id, op])),
       asset: withLimit ? { asset: withLimit.asset, decimals: withLimit.decimals } : null,
       penalties,
+      penaltyParts,
     };
     // `penalties` is rebuilt every render; its content is `penaltiesKey`.
     // eslint-disable-next-line react-hooks/exhaustive-deps

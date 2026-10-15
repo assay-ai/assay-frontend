@@ -112,6 +112,8 @@ export interface ApprovalContext {
   readonly asset: Pick<Money, "asset" | "decimals"> | null;
   /** Penalty id → "Northwind Geo's $28.47 penalty", for the ones already read. */
   readonly penalties?: ReadonlyMap<string, string>;
+  /** Penalty id → its provider and amount apart, for the money line of a confirm. */
+  readonly penaltyParts?: ReadonlyMap<string, { readonly provider: string; readonly amount: string }>;
 }
 
 export const EMPTY_APPROVAL_CONTEXT: ApprovalContext = {
@@ -130,6 +132,13 @@ export function penaltyPhrase(providerName: string, amount: string): string {
 export interface ApprovalDescription {
   /** One sentence: what approving runs. */
   readonly sentence: string;
+  /**
+   * The short form for a list row and a confirm title: no reason, no
+   * trailing period ("Pay back Meridian Index's $3.75 penalty").
+   */
+  readonly title: string;
+  /** The request's reason in words ("Key rotated"), or null. */
+  readonly reason: string | null;
   readonly target: { readonly label: string; readonly href: string | null };
   /** Labelled fields, in reading order. */
   readonly fields: readonly { readonly label: string; readonly value: string }[];
@@ -266,6 +275,158 @@ export function describeApproval(
   approval: Pick<OperatorApproval, "action" | "target" | "payload"> & Partial<Pick<OperatorApproval, "status">>,
   context: ApprovalContext = EMPTY_APPROVAL_CONTEXT,
 ): ApprovalDescription {
+  const body = bodyOf(approval.payload);
+  const reason = text(body.reasonCode);
+  return {
+    ...describeLong(approval, context),
+    title: approvalTitle(approval, context),
+    reason: reason ? reasonText(reason) : null,
+  };
+}
+
+function bodyOf(payload: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  const outer = payload ?? {};
+  return outer.body && typeof outer.body === "object" && !Array.isArray(outer.body) ? (outer.body as Record<string, unknown>) : outer;
+}
+
+function capitalFirst(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/** A person in a title: their name, else their handle, else a short id. */
+function personName(
+  operator: Pick<OperatorDirectoryEntry, "subject" | "displayName"> | undefined,
+  id: string,
+): string {
+  return operator?.displayName?.trim() || operator?.subject || `operator ${shortId(id)}`;
+}
+
+/** "Noor Hassan's", "Iris'": a possessive that reads right after an s. */
+function possessive(name: string): string {
+  return /s$/i.test(name) ? `${name}'` : `${name}'s`;
+}
+
+/**
+ * The short title of a request, for a list row (≤ 70 characters in practice)
+ * and the confirm sheet. Sentence case, no period, no reason.
+ */
+export function approvalTitle(
+  approval: Pick<OperatorApproval, "action" | "target" | "payload">,
+  context: ApprovalContext = EMPTY_APPROVAL_CONTEXT,
+): string {
+  const payload = approval.payload ?? {};
+  const body = bodyOf(payload);
+  const colon = approval.target.indexOf(":");
+  const targetId = colon === -1 ? "" : approval.target.slice(colon + 1);
+  switch (approval.action) {
+    case "account.unblock": {
+      const blockId = text(payload.blockId) ?? targetId;
+      const block = context.blocks.get(blockId);
+      return `Lift the block on ${block ? capitalFirst(blockSubject(block)) : `block ${shortId(blockId)}`}`;
+    }
+    case "operator.add": {
+      const name = text(body.displayName) ?? text(body.subject) ?? "a new operator";
+      const roles = rolesOf(body.roles) ?? [];
+      return roles.length > 0 ? `Add ${name} as ${rolesText(roles)}` : `Add ${name} as an operator`;
+    }
+    case "operator.change": {
+      const operatorId = text(payload.operatorId) ?? targetId;
+      const who = personName(context.operators.get(operatorId), operatorId);
+      const roles = rolesOf(body.roles);
+      const hasLimit = Object.prototype.hasOwnProperty.call(body, "authorityLimitMinor");
+      const limit = hasLimit ? limitText(body.authorityLimitMinor, context.asset) : null;
+      if (roles && limit) return `Change ${possessive(who)} roles and limit`;
+      if (roles) return `Make ${who} ${rolesText(roles)}`;
+      if (limit) return `Raise ${possessive(who)} limit to ${limit.replace(/\.00$/, "")}`;
+      return `Change ${possessive(who)} access`;
+    }
+    case "slash.suspend":
+      return `Suspend ${penaltyName(text(payload.proposalId) ?? targetId, context)}`;
+    case "slash.sweep": {
+      const defect = text(body.defectKey);
+      return defect ? `Decide every penalty with defect ${defect}` : "Decide every penalty with the same defect";
+    }
+    case "slash.compensated":
+      return `Pay back ${penaltyName(text(payload.proposalId) ?? targetId, context)}`;
+    default:
+      return actionLabel(approval.action);
+  }
+}
+
+/** One line of what approving does, for the confirm's "What happens". */
+export interface ApprovalOutcomeLine {
+  readonly kind: "money" | "access" | "chain" | "runs" | "record";
+  readonly text: string;
+}
+
+/**
+ * What approving does, in short lines, money first: "Treasury pays $3.75 to
+ * Meridian Index", "Wallet 0x9F3c…F36c can pay again within seconds". The
+ * last line is always where it is recorded.
+ */
+export function approvalOutcome(
+  approval: Pick<OperatorApproval, "action" | "target" | "payload">,
+  context: ApprovalContext = EMPTY_APPROVAL_CONTEXT,
+): ApprovalOutcomeLine[] {
+  const payload = approval.payload ?? {};
+  const body = bodyOf(payload);
+  const colon = approval.target.indexOf(":");
+  const targetId = colon === -1 ? "" : approval.target.slice(colon + 1);
+  const lines: ApprovalOutcomeLine[] = [];
+  const penaltyId = text(payload.proposalId) ?? targetId;
+  const parts = context.penaltyParts?.get(penaltyId);
+  switch (approval.action) {
+    case "slash.compensated":
+      lines.push({
+        kind: "money",
+        text: parts ? `Treasury pays ${parts.amount} to ${parts.provider}` : "Treasury pays the provider back the penalty",
+      });
+      lines.push({ kind: "record", text: "The penalty is closed as compensated" });
+      break;
+    case "slash.suspend":
+      lines.push({
+        kind: "money",
+        text: parts ? `The penalty is cancelled: ${parts.provider} keeps its ${parts.amount}` : "The penalty is cancelled: the provider keeps the amount",
+      });
+      lines.push({ kind: "chain", text: "If it stands on chain, the arbiter must still sign the cancel" });
+      break;
+    case "slash.sweep":
+      lines.push({ kind: "record", text: "Every matching penalty is decided like this one, in the background" });
+      break;
+    case "account.unblock": {
+      const block = context.blocks.get(text(payload.blockId) ?? targetId);
+      const who = block ? capitalFirst(blockSubject(block)) : "The account";
+      lines.push({
+        kind: "access",
+        text: block?.subjectKind === "WALLET" ? `${who} can pay again within seconds` : `${who} can use Assay again within seconds`,
+      });
+      break;
+    }
+    case "operator.add": {
+      const name = text(body.displayName) ?? text(body.subject) ?? "They";
+      lines.push({ kind: "access", text: `${name} can sign in with their wallet at once` });
+      break;
+    }
+    case "operator.change": {
+      const operatorId = text(payload.operatorId) ?? targetId;
+      lines.push({
+        kind: "access",
+        text: `${possessive(personName(context.operators.get(operatorId), operatorId))} new access applies from their next request`,
+      });
+      break;
+    }
+    default:
+      break;
+  }
+  lines.push({ kind: "runs", text: "Runs at once, re-checked against how things stand now" });
+  lines.push({ kind: "record", text: "Recorded in Activity under your name" });
+  return lines;
+}
+
+function describeLong(
+  approval: Pick<OperatorApproval, "action" | "target" | "payload"> & Partial<Pick<OperatorApproval, "status">>,
+  context: ApprovalContext,
+): Omit<ApprovalDescription, "title" | "reason"> {
   // Absent status: treat as pending, the only state where "now" is the point.
   const pending = (approval.status ?? "PENDING") === "PENDING";
   const payload = approval.payload ?? {};

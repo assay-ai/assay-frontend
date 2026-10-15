@@ -1,11 +1,10 @@
 "use client";
 
-import { Activity, Gavel, House, LogOut, ShieldBan, Timer, Users, Scale } from "lucide-react";
+import { Activity, Check, CircleHelp, Gavel, House, Keyboard, LogOut, Moon, Scale, ShieldBan, Sun, Timer, Users } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
 import { CopyChip } from "@/components/patterns/copy-chip";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Avatar } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -15,19 +14,28 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { OperatorIdentity } from "@/interfaces/operator";
 import { toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
+import type { DemoOperatorPreset } from "@/libs/demo/fixtures-operator";
 import { formatClock } from "@/libs/local-time";
+import { useTheme } from "@/providers/ThemeProvider";
 import { cn } from "@/utils";
 
-import { activeOperatorNav, operatorNavFor, operatorTitleFor, type OperatorNavId } from "./nav";
+import { activeOperatorNav, operatorNavFor, type OperatorNavId } from "./nav";
+import { RoleCapabilities, RoleCapabilitiesPanel, roleLimitText, rolePillText } from "./role-intro";
 import { roleTitle } from "./roles";
 
 /**
  * The operator console's chrome, matching the buyer shell: a 56px top bar
- * from `md` (logo, the sections, then the account menu and the theme toggle
- * on the right), and below it a compact top bar with the bottom tab bar. The
- * Home item carries the "Needs you" count — and only that count.
+ * from `md` (logo, the sections, then your role pill and the account menu on
+ * the right), and below it a compact top bar (brand and avatar: each page has
+ * its own H1) with the bottom tab bar. The Home item carries the "Needs you"
+ * count — and only that count.
+ *
+ * The role pill opens "What can I do?". The account menu holds who you are,
+ * the session end, the theme, Keyboard shortcuts and — in the demo — the role
+ * switch. The session end shows in the bar only in its last 30 minutes.
  */
 
 const ICONS: Record<OperatorNavId, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
@@ -45,20 +53,33 @@ export interface OperatorShellProps {
   needsYou: number;
   expiresAt: string | null;
   onSignOut: () => void;
+  /** Demo only: the role being shown, and how to switch it. */
+  demo?: { current: DemoOperatorPreset | null; onSwitch: (preset: DemoOperatorPreset) => void } | null;
+  /** Opens the keyboard shortcut list. */
+  onShortcuts?: () => void;
 }
+
+const DEMO_ROLES: readonly { id: DemoOperatorPreset; label: string }[] = [
+  { id: "lead", label: "Lead adjudicator" },
+  { id: "support", label: "Support / on-call" },
+  { id: "admin", label: "Admin" },
+];
 
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="ml-1.5 rounded-full bg-danger-500 px-1.5 py-px font-mono text-mono-2xs font-semibold text-on-color">
+    <span className="ml-1.5 rounded-full bg-danger-500 px-1.5 py-px text-[11px] font-semibold leading-4 tabular-nums text-on-color">
       {count > 99 ? "99+" : count}
       <span className="sr-only"> waiting for you</span>
     </span>
   );
 }
 
-/** "Session ends 18:40" — red in the last 15 minutes. */
-export function SessionChip({ expiresAt, className }: { expiresAt: string | null; className?: string }) {
+/**
+ * "Session ends 18:40" — red in the last 15 minutes. `within` (minutes)
+ * hides it until then: the bar shows it only near the end.
+ */
+export function SessionChip({ expiresAt, within, className }: { expiresAt: string | null; within?: number; className?: string }) {
   const [now, setNow] = React.useState<number | null>(null);
   React.useEffect(() => {
     setNow(Date.now());
@@ -68,6 +89,7 @@ export function SessionChip({ expiresAt, className }: { expiresAt: string | null
   if (!expiresAt || now === null) return null;
   const end = Date.parse(expiresAt);
   if (Number.isNaN(end)) return null;
+  if (within !== undefined && end - now > within * 60_000) return null;
   const soon = end - now < 15 * 60_000;
   return (
     <span
@@ -84,9 +106,13 @@ export function SessionChip({ expiresAt, className }: { expiresAt: string | null
   );
 }
 
-function AccountMenu({ identity, expiresAt, onSignOut }: Pick<OperatorShellProps, "identity" | "expiresAt" | "onSignOut">) {
+function AccountMenu({ identity, expiresAt, onSignOut, demo, onShortcuts }: Pick<OperatorShellProps, "identity" | "expiresAt" | "onSignOut" | "demo" | "onShortcuts">) {
   const wallet = identity.walletAddress ? toChecksumAddress(identity.walletAddress) : null;
+  const { themeType, setTheme } = useTheme();
+  const limit = roleLimitText(identity);
+  const [capsOpen, setCapsOpen] = React.useState(false);
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`Account: ${identity.displayName}`}
@@ -97,10 +123,41 @@ function AccountMenu({ identity, expiresAt, onSignOut }: Pick<OperatorShellProps
       <DropdownMenuContent align="end" className="w-[280px]">
         <DropdownMenuLabel className="flex flex-col gap-1 py-2">
           <span className="truncate text-label-13 text-01">{identity.displayName}</span>
-          <span className="truncate text-body-xs text-02">{roleTitle(identity.roles)}</span>
+          <span className="truncate text-body-xs text-02">
+            {roleTitle(identity.roles)}
+            {limit ? ` · ${limit} per action` : ""}
+          </span>
           {wallet ? <CopyChip value={wallet} label="wallet address" className="self-start" /> : null}
           <SessionChip expiresAt={expiresAt} className="mt-1 self-start" />
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => setCapsOpen(true)} className="gap-2">
+          <CircleHelp aria-hidden="true" className="size-4" />
+          What can I do?
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setTheme(themeType === "light" ? "dark" : "light")} className="gap-2">
+          {themeType === "light" ? <Moon aria-hidden="true" className="size-4" /> : <Sun aria-hidden="true" className="size-4" />}
+          {themeType === "light" ? "Dark theme" : "Light theme"}
+        </DropdownMenuItem>
+        {onShortcuts ? (
+          <DropdownMenuItem onSelect={onShortcuts} className="gap-2">
+            <Keyboard aria-hidden="true" className="size-4" />
+            Keyboard shortcuts
+            <span className="ml-auto text-body-xs text-03">?</span>
+          </DropdownMenuItem>
+        ) : null}
+        {demo ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-label-xs text-03">Switch demo role</DropdownMenuLabel>
+            {DEMO_ROLES.map((role) => (
+              <DropdownMenuItem key={role.id} onSelect={() => demo.onSwitch(role.id)} className="gap-2">
+                <Check aria-hidden="true" className={cn("size-4", demo.current === role.id ? "text-primary-600" : "invisible")} />
+                {role.label}
+              </DropdownMenuItem>
+            ))}
+          </>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onSignOut} className="gap-2">
           <LogOut aria-hidden="true" className="size-4" />
@@ -108,20 +165,37 @@ function AccountMenu({ identity, expiresAt, onSignOut }: Pick<OperatorShellProps
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    <Sheet open={capsOpen} onOpenChange={setCapsOpen}>
+      <SheetContent aria-describedby={undefined}>
+        <SheetHeader className="tablet:pt-5">
+          <SheetTitle>What can I do?</SheetTitle>
+        </SheetHeader>
+        <div className="px-1.5 pb-4">
+          <RoleCapabilitiesPanel identity={identity} />
+        </div>
+      </SheetContent>
+    </Sheet>
+    </>
   );
 }
 
-export function OperatorTopBar({ identity, pathname, needsYou, expiresAt, onSignOut }: OperatorShellProps) {
+function Brand() {
+  return (
+    <Link href="/operator" className="flex shrink-0 items-center gap-2">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/images/logo.png" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 rounded-md object-cover" />
+      <span className="text-[17px] font-medium leading-none tracking-[-0.025em] text-01">Assay</span>
+      <span className="rounded-sm bg-03 px-1.5 py-0.5 text-label-xs text-02">Operator</span>
+    </Link>
+  );
+}
+
+export function OperatorTopBar({ identity, pathname, needsYou, expiresAt, onSignOut, demo, onShortcuts }: OperatorShellProps) {
   const items = operatorNavFor(identity.roles);
   const active = activeOperatorNav(pathname);
   return (
     <header className="flex h-14 w-full items-center gap-6 border-b border-01 bg-01 px-5">
-      <Link href="/operator" className="flex shrink-0 items-center gap-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/logo.png" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 rounded-md object-cover" />
-        <span className="text-[17px] font-medium leading-none tracking-[-0.025em] text-01">Assay</span>
-        <span className="rounded-sm bg-03 px-1.5 py-0.5 text-label-xs text-02">Operator</span>
-      </Link>
+      <Brand />
       <nav aria-label="Operator console" className="flex min-w-0 flex-1 items-center gap-1">
         {items.map((item) => (
           <Link
@@ -140,25 +214,29 @@ export function OperatorTopBar({ identity, pathname, needsYou, expiresAt, onSign
         ))}
       </nav>
       <div className="flex shrink-0 items-center gap-2.5">
-        <SessionChip expiresAt={expiresAt} className="hidden desktop:inline-flex" />
-        <AccountMenu identity={identity} expiresAt={expiresAt} onSignOut={onSignOut} />
-        <ThemeToggle />
+        <SessionChip expiresAt={expiresAt} within={30} />
+        <RoleCapabilities identity={identity}>
+          <button
+            type="button"
+            className="max-w-[260px] truncate rounded-full border border-01 px-2.5 py-1 text-label-xs text-02 hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          >
+            {rolePillText(identity)}
+          </button>
+        </RoleCapabilities>
+        <AccountMenu identity={identity} expiresAt={expiresAt} onSignOut={onSignOut} demo={demo} onShortcuts={onShortcuts} />
       </div>
     </header>
   );
 }
 
-export function OperatorMobileTopBar({ identity, pathname, expiresAt, onSignOut }: OperatorShellProps) {
+export function OperatorMobileTopBar({ identity, expiresAt, onSignOut, demo, onShortcuts }: OperatorShellProps) {
   return (
-    <header className="flex w-full items-center gap-3 border-b border-01 bg-01 px-4 py-2.5">
-      <div className="flex min-w-0 flex-1 flex-col gap-px">
-        <p className="truncate text-label-md text-01">{operatorTitleFor(pathname)}</p>
-        <p className="truncate font-mono text-mono-xs text-03">Operator · {roleTitle(identity.roles)}</p>
+    <header className="flex h-12 w-full items-center gap-3 border-b border-01 bg-01 px-4">
+      <div className="min-w-0 flex-1">
+        <Brand />
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <AccountMenu identity={identity} expiresAt={expiresAt} onSignOut={onSignOut} />
-        <ThemeToggle />
-      </div>
+      <SessionChip expiresAt={expiresAt} within={30} />
+      <AccountMenu identity={identity} expiresAt={expiresAt} onSignOut={onSignOut} demo={demo} onShortcuts={onShortcuts} />
     </header>
   );
 }
@@ -184,7 +262,7 @@ export function OperatorBottomTabs({ identity, pathname, needsYou }: Pick<Operat
             <span className="relative flex size-5 items-center justify-center">
               <Icon aria-hidden="true" className={cn("size-5", isActive ? "text-primary-500" : "text-03")} />
               {item.id === "home" && needsYou > 0 ? (
-                <span className="absolute -right-2 -top-1.5 rounded-full bg-danger-500 px-1 font-mono text-mono-2xs font-semibold leading-[14px] text-on-color">
+                <span className="absolute -right-2 -top-1.5 rounded-full bg-danger-500 px-1 text-[10px] font-semibold leading-[14px] tabular-nums text-on-color">
                   {needsYou > 9 ? "9+" : needsYou}
                 </span>
               ) : null}

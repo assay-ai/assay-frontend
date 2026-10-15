@@ -37,14 +37,33 @@ export type { ConfirmChange } from "./change-rows";
  *
  * `onConfirm` may return a promise: the button shows progress, the sheet
  * stays open on failure and shows the error, and closes on success.
+ *
+ * `outcome` puts the consequence first: a "What happens" block of 2–4 short
+ * lines right under the title — money moved and to whom, who must approve or
+ * sign, whether it can be undone. With it, `description` may be left out.
+ *
+ *   outcome={[
+ *     { icon: Banknote, text: "Treasury pays $3.75 to Meridian Index" },
+ *     { icon: History, text: "Recorded in Activity under your name" },
+ *   ]}
+ *
+ * The footer is sticky: the buttons stay in view, and in the same place, as
+ * the body grows.
  */
+export interface ConfirmOutcome {
+  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
+  text: React.ReactNode;
+}
+
 export interface ConfirmSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Names the object: "Pause all agents?", "Revoke the key “prod”?" */
   title: React.ReactNode;
-  /** The effect, in one or two sentences. */
-  description: React.ReactNode;
+  /** The effect, in one or two sentences. Optional when `outcome` says it. */
+  description?: React.ReactNode;
+  /** "What happens", one short line each, shown first. */
+  outcome?: readonly ConfirmOutcome[];
   changes?: ConfirmChange[];
   /** A required checkbox. Leave out for no acknowledgement. */
   acknowledge?: React.ReactNode;
@@ -63,6 +82,7 @@ export function ConfirmSheet({
   onOpenChange,
   title,
   description,
+  outcome,
   changes,
   acknowledge,
   confirmLabel,
@@ -103,10 +123,27 @@ export function ConfirmSheet({
 
   return (
     <Sheet open={open} onOpenChange={(next) => (busy ? undefined : onOpenChange(next))}>
-      <SheetContent showCloseButton={!busy}>
+      {/* Without a description Radix wants aria-describedby unset explicitly. */}
+      <SheetContent showCloseButton={!busy} {...(description ? {} : { "aria-describedby": undefined })}>
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">{title}</SheetTitle>
-          <SheetDescription>{description}</SheetDescription>
+          {description ? <SheetDescription>{description}</SheetDescription> : null}
+          {outcome?.length ? (
+            <div className="flex w-full flex-col gap-1.5">
+              <p className="text-label-13 text-02">What happens</p>
+              <ul className="flex w-full flex-col gap-1.5">
+                {outcome.map((line, index) => {
+                  const Icon = line.icon;
+                  return (
+                    <li key={index} className="flex items-start gap-2 text-body-13 text-01">
+                      <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-03" />
+                      <span className="min-w-0 [overflow-wrap:anywhere]">{line.text}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
         </SheetHeader>
 
         {changes?.length || children || acknowledge ? (
@@ -124,7 +161,7 @@ export function ConfirmSheet({
           </div>
         ) : null}
 
-        <SheetFooter className="sticky bottom-0 bg-01">
+        <SheetFooter className="sticky bottom-0 mt-4 border-t border-01 bg-01">
           <div role="alert" className={cn("text-body-xs text-danger-600", !error && "sr-only")}>
             {error?.sentence ?? ""}
             {error?.raw ? (

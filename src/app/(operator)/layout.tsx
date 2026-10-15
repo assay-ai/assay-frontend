@@ -13,11 +13,15 @@ import { OperatorBottomTabs, OperatorMobileTopBar, OperatorTopBar } from "@/feat
 import { OperatorRefusal, SuspendedBanner } from "@/features/operator/operator-refusal";
 import { OperatorSessionContext } from "@/features/operator/session-context";
 import { msUntilExpiry, signOutOperator } from "@/features/operator/sign-in";
+import { ConsoleShortcuts } from "@/features/operator/shortcuts";
 import { OperatorSignInScreen } from "@/features/operator/sign-in-screen";
 import { ApiError } from "@/libs/ApiClient";
+import { demoEnabled } from "@/libs/demo/demo-api";
+import { DEMO_OPERATOR_TOKEN_PREFIX, type DemoOperatorPreset } from "@/libs/demo/fixtures-operator";
 import {
   clearOperatorSession,
   readOperatorSession,
+  saveOperatorSession,
   subscribeOperatorSession,
   type OperatorSessionEnd,
   type OperatorSessionRecord,
@@ -150,9 +154,33 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
     );
   }
 
+  const [shortcutsOpen, setShortcutsOpen] = React.useState(false);
+
+  // Demo only: switch the role shown without going back to sign-in. What the
+  // last role could see is dropped first, as on a real sign-out.
+  const demoPreset: DemoOperatorPreset | null = session?.token.startsWith(DEMO_OPERATOR_TOKEN_PREFIX)
+    ? (session.token.slice(DEMO_OPERATOR_TOKEN_PREFIX.length) as DemoOperatorPreset)
+    : null;
+  const switchDemoRole = React.useCallback(
+    (preset: DemoOperatorPreset) => {
+      if (!session) return;
+      queryClient.removeQueries({ queryKey: ["operator"] });
+      saveOperatorSession({ token: `${DEMO_OPERATOR_TOKEN_PREFIX}${preset}`, expiresAt: session.expiresAt });
+    },
+    [queryClient, session],
+  );
+
   const signedIn = Boolean(session && data && data.status === "ACTIVE" && !isError);
   const shell = signedIn && data && session
-    ? { identity: data, pathname, needsYou, expiresAt: session.expiresAt, onSignOut: () => void signOut() }
+    ? {
+        identity: data,
+        pathname,
+        needsYou,
+        expiresAt: session.expiresAt,
+        onSignOut: () => void signOut(),
+        demo: demoEnabled() && demoPreset ? { current: demoPreset, onSwitch: switchDemoRole } : null,
+        onShortcuts: () => setShortcutsOpen(true),
+      }
     : null;
 
   return (
@@ -182,9 +210,12 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
       </main>
 
       {shell ? (
-        <div className="md:hidden">
-          <OperatorBottomTabs identity={shell.identity} pathname={pathname} needsYou={needsYou} />
-        </div>
+        <>
+          <div className="md:hidden">
+            <OperatorBottomTabs identity={shell.identity} pathname={pathname} needsYou={needsYou} />
+          </div>
+          <ConsoleShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+        </>
       ) : null}
 
       <Toaster
