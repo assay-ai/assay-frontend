@@ -5,21 +5,17 @@ import { estimatePenalty, exampleFailureRate } from "./estimate";
 const usd = (amount: string) => ({ amount, asset: "x", decimals: 6 });
 
 describe("estimatePenalty", () => {
-  it("applies the per-window cap of max($5, 100 × price)", () => {
-    // 1,000 × $0.30 = $300 × 9% × 2 = $54, capped at 100 × $0.30 = $30.
+  it("is the formula result, with no per-window cap (none is enforced)", () => {
+    // 1,000 × $0.30 = $300 × 9% × 2 = $54. No max($5, 100 × price) cap: the chain has none.
     const result = estimatePenalty({ price: usd("300000"), calls: 1000, observedRate: 0.12, declaredRate: 0.03 });
-    expect(result.uncapped.amount).toBe("54000000");
-    expect(result.cap.amount).toBe("30000000");
-    expect(result.penalty.amount).toBe("30000000");
-    expect(result.capped).toBe(true);
+    expect(result.penalty.amount).toBe("54000000");
+    expect(result).not.toHaveProperty("capped");
   });
 
-  it("uses the $5 floor for cheap tools and the formula when under the cap", () => {
-    // 1,000 × $0.01 = $10 × 2% × 2 = $0.40; cap max($5, $1) = $5.
+  it("works for cheap tools", () => {
+    // 1,000 × $0.01 = $10 × 2% × 2 = $0.40.
     const result = estimatePenalty({ price: usd("10000"), calls: 1000, observedRate: 0.05, declaredRate: 0.03 });
-    expect(result.cap.amount).toBe("5000000");
     expect(result.penalty.amount).toBe("400000");
-    expect(result.capped).toBe(false);
   });
 
   it("is zero within the promise", () => {

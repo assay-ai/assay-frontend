@@ -24,14 +24,14 @@ describe("economics", () => {
     const e = economics("FREE", null, null)!;
     expect(e.netPerMonth).toBe("$0.00");
     expect(e.stake).toBe("$0.00");
-    expect(e.worstPerWindow).toBeNull();
+    expect(e.worstPer24h).toBeNull();
   });
   it("paid: fee, net, stake and caps", () => {
     const e = economics("PAID", parsePrice("0.001").value, parseCalls("1000000").value)!;
     expect(e.perCall).toEqual({ price: "$0.001", fee: "$0.0001", youGet: "$0.0009" });
     expect(e.netPerMonth).toBe("$900.00");
     expect(e.stake).toBe("$50.00");
-    expect(e.worstPerWindow).toBe("$5.00");
+    expect(e).not.toHaveProperty("worstPerWindow");
     expect(e.worstPer24h).toBe("$5.00");
     expect(e.daysToCoverStake).toBe("1.7");
   });
