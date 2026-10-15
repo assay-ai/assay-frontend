@@ -18,8 +18,9 @@ import { explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slas
 /**
  * One unsigned contract call the console built for the arbiter's key (a
  * ruling, an on-chain block, a cancel), as `SignOrExport`: one "Sign and
- * send" when the wallet connected here IS the signer, otherwise "Download
- * Safe batch". The calldata and signer sit under Technical details.
+ * send" when the wallet connected here IS the signer, otherwise a file to
+ * sign in the arbiter's multi-signer wallet. The calldata and signer sit
+ * under Technical details.
  *
  * Signing goes through the same `useSigner` → `sendSlashContractCall` path as
  * every other transaction in the app, which refuses a call from another
@@ -106,6 +107,7 @@ export function ContractCallAction({
       chainId={call.chainId}
       transactions={[{ to: call.to, value: call.value, data: call.data }]}
       afterExport={afterExport}
+      signerWallet={call.signerRole === "ARBITER" ? "the arbiter's multi-signer wallet" : undefined}
       handoff={handoff ?? { link: here, message: `Please sign ${what} with the ${signerRoleLabel(call.signerRole).toLowerCase()} key. The file is attached; the record is here:` }}
       details={[
         { label: "Must be signed by", value: call.signer },
