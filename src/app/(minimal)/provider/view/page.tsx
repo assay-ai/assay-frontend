@@ -1,6 +1,10 @@
 "use client";
 
-import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
+import {
+  DisplayAssetSelect,
+  displayAssetLabel,
+  useDisplayAsset,
+} from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { CircleCheck, Download, Info } from "lucide-react";
@@ -34,6 +38,7 @@ import {
   foldTraffic,
   observedTakeRate,
   rowsInAsset,
+  assetScopeNote,
   type CallRow,
 } from "@/features/call-classes/csv";
 import { ClassName } from "@/features/call-classes/class-name";
@@ -43,6 +48,7 @@ import {
   useCallsExport,
 } from "@/features/call-classes/use-calls-export";
 import type { Money, ProviderPayout } from "@/interfaces";
+import { useChains } from "@/hooks/useChains";
 import { ApiError } from "@/libs/ApiClient";
 import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
 import { getProviderEarnings, getProviderQuality } from "@/services/provider-reports.service";
@@ -64,7 +70,7 @@ import { toast } from "@/utils/toast";
  *
  * A provider counts N requests in their access log and we count M. The
  * "Why our count differs from your access log" panel is the answer, and every
- * row in it is joinable to their log line by line on `X-X402-Call-Id` — the
+ * row in it is joinable to their log line by line on `X-Assay-Call-Id` — the
  * per-call CSV's first column, and the header the router puts on every upstream
  * request. That panel is the screen; the three above it are context.
  *
@@ -241,6 +247,11 @@ export default function ProviderViewPage() {
     [calls.rows, assetPending, displayAsset]
   );
   const callsLoading = calls.isLoading || assetPending;
+  const { chains } = useChains();
+  const scopeNote =
+    callsLoading || !displayAsset || !calls.data
+      ? null
+      : assetScopeNote(calls.rows.length, rows.length, displayAssetLabel(displayAsset, chains));
   // The payout batches are money too: only the display asset's are listed.
   const payoutItems = useMemo(
     () => (assetPending ? [] : payoutsInAsset(payouts.data?.items ?? [], displayAsset)),
@@ -531,8 +542,11 @@ export default function ProviderViewPage() {
         <Banner
           tone="warning"
           title="This export is capped"
-          description={`The window matched ${formatCount(calls.meta.totalMatching)} calls and the file holds ${formatCount(calls.meta.rowCount)}. Every figure below is computed over the capped file.`}
+          description={`The window matched ${formatCount(calls.meta.totalMatching)} calls in every asset and the file holds ${formatCount(calls.meta.rowCount)}. Every figure below is computed over the capped file.`}
         />
+      ) : null}
+      {scopeNote ? (
+        <Banner tone="primary" title="One asset at a time" description={scopeNote} />
       ) : null}
       {calls.data && !calls.meta ? (
         <Banner
@@ -690,7 +704,7 @@ export default function ProviderViewPage() {
           <PanelTitles>
             <PanelTitle>Why our count differs from your access log</PanelTitle>
             <PanelDescription>
-              every upstream request carries X-X402-Call-Id · the per-call CSV carries the same id
+              every upstream request carries X-Assay-Call-Id · the per-call CSV carries the same id
               and one of these classes, so the two can be joined line by line
             </PanelDescription>
           </PanelTitles>
@@ -747,7 +761,7 @@ export default function ProviderViewPage() {
               className="m-2.5"
               icon={null}
               title="No calls this month"
-              description="Once a call reaches your endpoint it appears here with its class and its X-X402-Call-Id, and the same id is on the request we sent you."
+              description="Once a call reaches your endpoint it appears here with its class and its X-Assay-Call-Id, and the same id is on the request we sent you."
             />
           )}
         </PanelBody>

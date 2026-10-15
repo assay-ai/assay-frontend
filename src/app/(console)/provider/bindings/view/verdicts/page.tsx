@@ -392,8 +392,9 @@ export default function ProviderVerdictFeedPage() {
     <>
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <header className="flex w-full flex-col items-start gap-4 tablet:flex-row tablet:items-center tablet:justify-between">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <h1 className="truncate text-heading-lg text-01">
+        {/* w-full: under items-start the column would size to the title and overflow at 390. */}
+        <div className="flex w-full min-w-0 flex-1 flex-col gap-0.5">
+          <h1 className="break-words text-heading-lg text-01">
             Verdicts · {bindingLabel}
           </h1>
           <p className="text-body-13 text-02">

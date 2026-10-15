@@ -44,10 +44,20 @@ import {
   type ChainBlockFormInput,
   type RulingFormInput,
 } from "@/features/operator/arbiter";
+import { ApprovedArbiterBlocks } from "@/features/operator/approved-arbiter-blocks";
 import { BLOCK_NOTE_MAX } from "@/features/operator/blocks";
 import { ContractCallPanel } from "@/features/operator/contract-call-panel";
+import { QueuedNotice } from "@/features/operator/queued-notice";
+import { SupersededRecords } from "@/features/operator/superseded-records";
+import { queuedMessage } from "@/features/operator/two-person";
 import { useOperatorSession } from "@/features/operator/session-context";
-import type { ArbiterDispute, ArbiterRuling, ArbiterTerms, ChainStateHealth } from "@/interfaces/operator";
+import type {
+  ApprovalQueued,
+  ArbiterDispute,
+  ArbiterRuling,
+  ArbiterTerms,
+  ChainStateHealth,
+} from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ROBINHOOD_TESTNET_STAKE, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { DISPUTED_ON_CHAIN_LABEL, chainStatusLabel } from "@/libs/chains/status-labels";
@@ -59,6 +69,7 @@ import {
   listArbiterDisputes,
 } from "@/services/operator.service";
 import { cn } from "@/utils";
+import { toast } from "@/utils/toast";
 import { routes } from "@/libs/routes";
 
 /**
@@ -200,12 +211,24 @@ export default function ArbiterPage() {
   const [blockErrors, setBlockErrors] = React.useState<ArbiterFormErrors<keyof ChainBlockFormInput>>({});
   const [blockError, setBlockError] = React.useState<string | null>(null);
   const [blockCall, setBlockCall] = React.useState<SlashContractCall | null>(null);
+  const [blockQueued, setBlockQueued] = React.useState<ApprovalQueued | null>(null);
 
+  /*
+    Two-person (A-11): the first operator's request is queued (202). The
+    approver gets the unsigned call as the approval's result in the approvals
+    inbox, and the arbiter's wallet signs it there. A 200 (an approver already
+    attached) carries the call itself.
+  */
   const prepareBlock = useMutation({
     mutationFn: createArbiterBlockIntent,
-    onSuccess: (call) => {
-      setBlockCall(call);
+    onSuccess: (answer) => {
       setBlockError(null);
+      if (answer.kind === "queued") {
+        setBlockQueued(answer.approval);
+        toast.success(queuedMessage(answer.approval));
+      } else {
+        setBlockCall(answer.result);
+      }
     },
     onError: (error) => setBlockError(arbiterErrorMessage(error, "block")),
   });
@@ -214,6 +237,7 @@ export default function ArbiterPage() {
     event.preventDefault();
     setBlockError(null);
     setBlockCall(null);
+    setBlockQueued(null);
     const result = validateChainBlockForm(block, chainId);
     if (!result.ok) {
       setBlockErrors(result.errors);
@@ -262,7 +286,7 @@ export default function ArbiterPage() {
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>Terms on chain</PanelTitle>
-            <PanelDescription>X402Config, read live · and what the chain-state indexer last saw</PanelDescription>
+            <PanelDescription>Config contract, read live · and what the chain-state indexer last saw</PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="flex flex-col gap-4 p-4 tablet:p-5">
@@ -352,6 +376,22 @@ export default function ArbiterPage() {
         </PanelBody>
       </Panel>
 
+      {/* ── Superseded earlier-epoch records (review R2-6) ──────────────── */}
+      <Panel className="w-full">
+        <PanelHeader>
+          <PanelTitles>
+            <PanelTitle>Superseded records</PanelTitle>
+            <PanelDescription>
+              an earlier proposal of a case landed on chain late · it would charge the same calls twice · the
+              arbiter cancels it (S-13) before it can be executed
+            </PanelDescription>
+          </PanelTitles>
+        </PanelHeader>
+        <PanelBody className="p-4 tablet:p-5">
+          <SupersededRecords canCancel={canRule} onSent={refreshAll} />
+        </PanelBody>
+      </Panel>
+
       {/* ── Ruling ────────────────────────────────────────────────────── */}
       {canRule ? (
         <Panel className="w-full">
@@ -428,10 +468,16 @@ export default function ArbiterPage() {
                     : "Prepare ruling"}
               </Button>
             </form>
-            {rulingCall ? (
+            {rulingCall && prepareRuling.variables ? (
               <div className="mt-4">
                 <ContractCallPanel
                   call={rulingCall}
+                  expected={{
+                    contract: "stake",
+                    functionName:
+                      prepareRuling.variables.ruling === "UPHOLD" ? "upholdSlashBatch" : "cancelSlashBatch",
+                    args: [prepareRuling.variables.requestIds],
+                  }}
                   title="The arbiter's unsigned ruling"
                   afterSend="The cases move once the chain watcher sees it land; this list refreshes then."
                   onSent={refreshAll}
@@ -464,7 +510,9 @@ export default function ArbiterPage() {
               <p className="text-body-13 text-02">
                 The contracts then refuse the address as a party to payments, deposits, withdrawals and
                 execution on {stakeDeploymentFor(chainId)?.displayName ?? chainId}. It can still revoke a
-                delegate and dispute a penalty. Only the admin can lift it. For Assay&apos;s own, off-chain
+                delegate and dispute a penalty. Only the admin can lift it. Preparing it is two-person: a
+                second operator holding ADJL approves it in the approvals inbox, which hands them the
+                unsigned call for the arbiter&apos;s wallet to sign. For Assay&apos;s own, off-chain
                 block, use{" "}
                 <Link href="/operator/blocks" className="text-primary-600 underline">
                   Blocks
@@ -511,16 +559,43 @@ export default function ArbiterPage() {
                 Prepare on-chain block
               </Button>
             </form>
-            {blockCall ? (
+            {blockQueued ? (
+              <div className="mt-4">
+                <QueuedNotice approval={blockQueued} onDismiss={() => setBlockQueued(null)} />
+              </div>
+            ) : null}
+            {blockCall && prepareBlock.variables ? (
               <div className="mt-4">
                 <ContractCallPanel
                   call={blockCall}
+                  expected={{
+                    contract: "config",
+                    functionName: "setBlocked",
+                    args: [prepareBlock.variables.account, true],
+                  }}
                   title="The arbiter's unsigned block"
                   afterSend="The indexer counts it in the blocked addresses once it lands."
                   onSent={refreshAll}
                 />
               </div>
             ) : null}
+          </PanelBody>
+        </Panel>
+      ) : null}
+
+      {/* ── Approved blocks the arbiter still has to sign (frontend review N5) ── */}
+      {canBlock ? (
+        <Panel className="w-full">
+          <PanelHeader>
+            <PanelTitles>
+              <PanelTitle>Approved on-chain blocks</PanelTitle>
+              <PanelDescription>
+                A-11 approved in the inbox · the arbiter&apos;s wallet signs the unsigned setBlocked here
+              </PanelDescription>
+            </PanelTitles>
+          </PanelHeader>
+          <PanelBody className="p-4 tablet:p-5">
+            <ApprovedArbiterBlocks onSent={refreshAll} />
           </PanelBody>
         </Panel>
       ) : null}

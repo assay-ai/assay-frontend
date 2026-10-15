@@ -20,7 +20,7 @@ import {
 import { Radio } from "@/components/ui/radio";
 import { signerRoleLabel } from "@/features/chain-calls/send-contract-call";
 import { arbiterErrorMessage } from "@/features/operator/arbiter";
-import { ContractCallPanel } from "@/features/operator/contract-call-panel";
+import { ConfirmedCancelCall } from "@/features/operator/confirmed-cancel-call";
 import {
   ALL_OUTCOMES,
   DECISION_NOTE_MIN_LENGTH,
@@ -86,6 +86,7 @@ import {
   secondCase,
   suspendCase,
 } from "@/services/operator.service";
+import { disputesOnChain } from "@/features/provider-slash-case/chain-stage";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
@@ -214,6 +215,9 @@ interface Gate {
 }
 
 /** The panel's own label for each action, used in the "nothing is available" list. */
+/** The off-chain decision path, which an on-chain (EVM) case does not have. */
+const OFF_CHAIN_DECISIONS: readonly OperatorAction[] = ["claim", "decide", "second", "extendDeadline", "suspend"];
+
 const ACTION_LABEL: Partial<Record<OperatorAction, string>> = {
   claim: "Claim",
   decide: "Decide",
@@ -694,10 +698,21 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
         }
       : base;
 
-  const claimGate = gate("claim");
-  const decideGate = gate("decide");
-  const secondGate = withinAuthority(gate("second"));
-  const suspendGate = withinAuthority(gate("suspend"));
+  /*
+    EVM: the case is disputed and ruled on chain only. The provider disputes
+    with `disputeSlash` from its own wallet and Assay's arbiter rules on the
+    arbiter page; the backend refuses an off-chain claim, decision, second
+    signature, extension or S-1 suspension (`SLASH_ARBITER_RULES_ON_CHAIN`,
+    review N-2: only the arbiter's cancelSlash stops an EVM penalty), so none
+    is drawn.
+  */
+  const ruledOnChain = disputesOnChain(brief.case.proposal.clocks);
+  const offChainDecision = (base: Gate): Gate => (ruledOnChain ? { ...base, offered: false } : base);
+
+  const claimGate = offChainDecision(gate("claim"));
+  const decideGate = offChainDecision(gate("decide"));
+  const secondGate = offChainDecision(withinAuthority(gate("second")));
+  const suspendGate = offChainDecision(withinAuthority(gate("suspend")));
 
   /*
     `extendDeadline` is the one action with a THIRD gate, and it is not a role
@@ -713,8 +728,9 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
   */
   const providerDeadline = brief.case.proposal.clocks.respondByAt;
   const baseExtendGate = gate("extendDeadline");
-  const extendGate: Gate =
-    baseExtendGate.offered && providerDeadline === null
+  const extendGate: Gate = ruledOnChain
+    ? offChainDecision(baseExtendGate)
+    : baseExtendGate.offered && providerDeadline === null
       ? {
           ...baseExtendGate,
           offered: false,
@@ -816,16 +832,18 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
       ? REASON_CODES[sourceOutcome as ArbitrationOutcome]
       : [];
 
-  const gates: ReadonlyArray<readonly [OperatorAction, Gate]> = [
-    ["claim", claimGate],
-    ["decide", decideGate],
-    ["second", secondGate],
-    ["suspend", suspendGate],
-    ["extendDeadline", extendGate],
-    ["sweep", sweepGate],
-    ["compensate", compensateGate],
-    ["cancel", cancelGate],
-  ];
+  const gates: ReadonlyArray<readonly [OperatorAction, Gate]> = (
+    [
+      ["claim", claimGate],
+      ["decide", decideGate],
+      ["second", secondGate],
+      ["suspend", suspendGate],
+      ["extendDeadline", extendGate],
+      ["sweep", sweepGate],
+      ["compensate", compensateGate],
+      ["cancel", cancelGate],
+    ] as const
+  ).filter(([action]) => !(ruledOnChain && OFF_CHAIN_DECISIONS.includes(action)));
   const offered = gates.filter(([, g]) => g.offered);
   /* Withheld for the authority limit alone — said even when other actions are offered. */
   const withheldForAuthority = overAuthority
@@ -1124,6 +1142,18 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
         </PanelTitles>
       </PanelHeader>
       <PanelBody className="p-4 tablet:p-5">
+        {ruledOnChain ? (
+          <p className="mb-3 text-body-13 text-02">
+            This case is disputed and ruled on chain only. The provider disputes it with
+            disputeSlash from its own wallet, which freezes the penalty until Assay&rsquo;s arbiter
+            decides; the arbiter rules on the{" "}
+            <Link href="/operator/arbiter" className="underline">
+              arbiter page
+            </Link>{" "}
+            (upholdSlash or cancelSlash). There is no off-chain decision, second signature or
+            deadline extension for it.
+          </p>
+        ) : null}
         {queued ? (
           <div className="mb-3">
             <QueuedNotice approval={queued} onDismiss={() => setQueued(null)} />
@@ -1759,9 +1789,15 @@ export function ActionPanel({ brief, proposalId }: ActionPanelProps) {
                     the build is refused with CHAIN_ARBITER_NOT_SET. Signed
                     through the same panel the arbiter page uses.
                   */
-                  <ContractCallPanel
+                  /*
+                    The case brief carries no on-chain request id to compare
+                    the call with (frontend review N3), so the id decoded from
+                    the calldata is shown and the operator ticks it; the panel
+                    then refuses anything but that id.
+                  */
+                  <ConfirmedCancelCall
                     call={evmCancelCall(cancelIntent, casePenalty.asset)}
-                    title={`cancelSlash for ${cancelIntent.requestId}`}
+                    title="cancelSlash of one on-chain record"
                     afterSend="The case moves to cancelled once the reconcile sweep reads the record back off the chain."
                     onSent={setCancelSignature}
                   />

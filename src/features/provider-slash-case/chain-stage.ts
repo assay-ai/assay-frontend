@@ -103,6 +103,12 @@ export interface ClosedStage {
    * `DISPUTED` or `CANCEL_REQUESTED`): its cancellation has not landed yet.
    */
   readonly recordStanding: boolean;
+  /**
+   * Review R2-3: an `executed` case whose other on-chain records were
+   * cancelled or expired in the provider's favour (`chainState`
+   * `PARTIALLY_EXECUTED`): how many, of how many. `null` otherwise.
+   */
+  readonly partly: { readonly cancelledRecords: number; readonly records: number } | null;
 }
 
 export type CaseStage = CaseChainStage | ClosedStage;
@@ -142,12 +148,22 @@ export function caseStageOf(proposal: SlashProposalSummary): CaseStage {
             : chain === "CANCELLED"
               ? "released"
               : "cancelled";
+  const partly =
+    outcome === "executed" && clocks.chainState === "PARTIALLY_EXECUTED"
+      ? { cancelledRecords: clocks.cancelledRecords ?? 0, records: clocks.chainRecords ?? 0 }
+      : null;
   return {
     kind: "closed",
     outcome,
     executedAt: proposal.executedAt,
     recordStanding: chain !== undefined && STANDING_CHAIN_STATUSES.includes(chain),
+    partly,
   };
+}
+
+/** The closed headline, with an execution in part said as such (review R2-3). */
+export function closedHeadlineOf(stage: ClosedStage): string {
+  return stage.partly ? "Executed in part" : CLOSED_HEADLINE[stage.outcome];
 }
 
 /**
@@ -195,8 +211,69 @@ export function closedSentence(stage: ClosedStage, when: (iso: string) => string
       "This case is closed. Its on-chain record was cancelled or expired, the reserved stake is released, and nothing is taken.",
     cancelled: "This case is closed without a penalty. Nothing is taken from your stake.",
   };
+  if (stage.partly) {
+    const { cancelledRecords, records } = stage.partly;
+    const counted =
+      cancelledRecords > 0 && records > 0
+        ? ` ${cancelledRecords} of its ${records} on-chain records ${cancelledRecords === 1 ? "was" : "were"} cancelled or expired in your favour, and nothing was taken for ${cancelledRecords === 1 ? "it" : "them"}.`
+        : " Some of its on-chain records were cancelled or expired in your favour, and nothing was taken for them.";
+    base.executed = `This case is closed. The penalty was executed on chain in part${executedOn} and that part taken from your stake.${counted}`;
+  }
   const standing = stage.recordStanding
     ? " Its on-chain record still stands until its cancellation lands; the penalties on chain page shows it."
     : "";
   return `${base[stage.outcome]}${standing} There is no deadline and nothing for you to do.`;
+}
+
+/**
+ * Whether the case's dispute is the on-chain one (EVM): the provider sends
+ * `disputeSlash` from its own stake wallet and Assay's arbiter rules on chain.
+ * There is no in-app objection, extension or platform deadline for it. An
+ * older backend that does not say is read as on chain.
+ */
+export function disputesOnChain(clocks: SlashProposalClocks): boolean {
+  return clocks.disputeOnChain !== false;
+}
+
+/** The one deadline to dispute on chain: the record's `executableAt`. Null when none stands. */
+export function disputeDeadlineOf(clocks: SlashProposalClocks): string | null {
+  return clocks.disputeBy ?? clocks.chainExecutableAt ?? null;
+}
+
+/**
+ * Whether a record of the case can still be disputed on chain at `nowMs`.
+ * Per record (review N-4): the backend's `disputeBy` is the earliest door of a
+ * record still Pending and never disputed, so a sibling's dispute or a case
+ * that moved on does not close it. An older backend that sends no `disputeBy`
+ * keeps the case-level rule: `PROPOSED`, record `PENDING`, never disputed.
+ */
+export function disputeWindowOpen(proposal: SlashProposalSummary, nowMs: number): boolean {
+  const { clocks } = proposal;
+  if (!disputesOnChain(clocks)) return false;
+  if (clocks.disputeBy !== undefined) {
+    const byMs = clocks.disputeBy ? new Date(clocks.disputeBy).getTime() : Number.NaN;
+    return Number.isFinite(byMs) && byMs > nowMs;
+  }
+  if (proposal.status !== "PROPOSED") return false;
+  if (clocks.chainStatus !== "PENDING" || clocks.chainDisputedAt) return false;
+  const by = disputeDeadlineOf(clocks);
+  const byMs = by ? new Date(by).getTime() : Number.NaN;
+  return Number.isFinite(byMs) && byMs > nowMs;
+}
+
+/** Whether to offer the on-chain dispute: the case is still open on chain and a record can be disputed. */
+export function mayDisputeOnChain(proposal: SlashProposalSummary, stage: CaseStage, nowMs: number): boolean {
+  return stage.kind === "open" && disputeWindowOpen(proposal, nowMs);
+}
+
+/** The penalties-on-chain page, with this case's records selected for the dispute. */
+export function onChainDisputeHref(proposalId: string): string {
+  return `/provider/capital/penalties?case=${encodeURIComponent(proposalId)}`;
+}
+
+/** The plain rule, said everywhere a provider can dispute. `when` formats a timestamp. */
+export function onChainDisputeSentence(deadline: string | null, when: (iso: string) => string): string {
+  return deadline
+    ? `Disputing freezes the penalty on chain until the arbiter decides; you must dispute before ${when(deadline)} UTC.`
+    : "Disputing freezes the penalty on chain until the arbiter decides; you can dispute once its record is on chain, and you must dispute before the time the record can execute.";
 }

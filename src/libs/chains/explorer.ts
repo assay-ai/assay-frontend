@@ -14,20 +14,30 @@ import type { Chain } from "@/interfaces/chain";
  * Both namespaces use `/tx/` and `/address/`, so nothing here branches on the
  * namespace. If a future chain's explorer does not, it gets its path from the
  * API rather than an `if` here.
+ *
+ * **Only http(s).** The base is served by the API, and `new URL("javascript:…")`
+ * ignores the pathname setter, so a hostile base would stay a `javascript:`
+ * href (frontend review 2026-10-15, F5). Anything else gives no link.
  */
-function explorerUrl(chain: Chain, segment: "tx" | "address", value: string): string {
-  const url = new URL(chain.explorerBaseUrl);
+function explorerUrl(chain: Chain, segment: "tx" | "address", value: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(chain.explorerBaseUrl);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return undefined;
   const base = url.pathname.replace(/\/$/, "");
   url.pathname = `${base}/${segment}/${encodeURIComponent(value)}`;
   return url.toString();
 }
 
 /** A link to one transaction, by whatever this chain calls a reference. */
-export function explorerTxUrl(chain: Chain, ref: string): string {
+export function explorerTxUrl(chain: Chain, ref: string): string | undefined {
   return explorerUrl(chain, "tx", ref);
 }
 
 /** A link to one account. */
-export function explorerAddressUrl(chain: Chain, address: string): string {
+export function explorerAddressUrl(chain: Chain, address: string): string | undefined {
   return explorerUrl(chain, "address", address);
 }

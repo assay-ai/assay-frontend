@@ -6,6 +6,7 @@ import type {
 } from "@/interfaces/provider-disputes";
 
 import type { TimelineEvent } from "@/components/ui/timeline";
+import { disputesOnChain } from "@/features/provider-slash-case/chain-stage";
 import { eventLabel, eventSummary } from "@/features/provider-slash-case/labels";
 
 /**
@@ -61,7 +62,7 @@ export function buildRichTimeline(
   const rows: TimelineEvent[] = all.map((event, index) => ({
     id: event.id,
     time: stampUtc(event.occurredAt),
-    label: eventLabel(event.kind),
+    label: eventLabel(event.kind, event.detail),
     meta: eventSummary(event.summary, {
       ...proposal.penaltyAmount,
       toolName: proposal.toolName,
@@ -74,7 +75,9 @@ export function buildRichTimeline(
 
   const { clocks } = proposal;
 
-  if (clocks.platformDecisionDueAt && !proposal.resolvedAt) {
+  // An on-chain (EVM) case is disputed and ruled on chain, with no platform
+  // deadline — the same rule the case page's header follows (BUG-R16-V4-02).
+  if (clocks.platformDecisionDueAt && !proposal.resolvedAt && !disputesOnChain(clocks)) {
     rows.push({
       id: "milestone-platform-decision-due",
       time: stampUtc(clocks.platformDecisionDueAt),

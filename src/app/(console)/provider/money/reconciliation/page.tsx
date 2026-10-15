@@ -5,7 +5,11 @@ import { Download, EyeOff, Upload } from "lucide-react";
 import * as React from "react";
 import { useMemo, useState } from "react";
 
-import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
+import {
+  DisplayAssetSelect,
+  displayAssetLabel,
+  useDisplayAsset,
+} from "@/components/display-asset-select";
 import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -20,6 +24,7 @@ import {
 import { Table, type TableColumn } from "@/components/ui/table";
 import { formatCount } from "@/features/buyer/period";
 import {
+  assetScopeNote,
   foldClasses,
   observedTakeRate,
   pendingNote,
@@ -32,6 +37,7 @@ import {
   useCallsExport,
 } from "@/features/call-classes/use-calls-export";
 import type { Money } from "@/interfaces";
+import { useChains } from "@/hooks/useChains";
 import { ApiError } from "@/libs/ApiClient";
 import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
 import { cn } from "@/utils";
@@ -60,7 +66,7 @@ import { toast } from "@/utils/toast";
  * The half of the reconciliation that lives on our side: how many calls we
  * recorded in the window, what class each fell into, and how the credited
  * classes add up to the money that left. Every row is joinable to the
- * provider's own log on `X-X402-Call-Id`, which is the CSV's first column —
+ * provider's own log on `X-Assay-Call-Id`, which is the CSV's first column —
  * so the provider can complete the join themselves with the file the button
  * hands them, which is exactly what they would upload here if there were
  * anywhere to upload it to.
@@ -194,6 +200,11 @@ export default function ReconciliationPage() {
   const loading = calls.isLoading || assetPending;
 
   const classes = useMemo(() => foldClasses(rows), [rows]);
+  const { chains } = useChains();
+  const scopeNote =
+    loading || !displayAsset || !calls.data
+      ? null
+      : assetScopeNote(calls.rows.length, rows.length, displayAssetLabel(displayAsset, chains));
   /*
     DELIBERATE DEPARTURE from the design's copy, and the same derivation the
     provider view uses so the two screens cannot disagree.
@@ -324,17 +335,18 @@ export default function ReconciliationPage() {
   return (
     <>
       {/* Page Header. */}
-      <header className="flex w-full items-center justify-between gap-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      {/* Stacked below tablet, and the buttons wrap: side by side they are wider than 390. */}
+      <header className="flex w-full flex-col items-start gap-4 tablet:flex-row tablet:items-center tablet:justify-between">
+        <div className="flex w-full min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">
             Reconciliation · {MONTH.format(new Date(period.from))} · all bindings
           </h1>
           <p className="font-mono text-mono-12 text-03">
-            joined on X-X402-Call-Id · the unexplained bucket must be zero, and a non-zero one is
+            joined on X-Assay-Call-Id · the unexplained bucket must be zero, and a non-zero one is
             our bug report, not your support ticket
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-2.5">
           {/*
             Drawn enabled on the frame, rendered disabled here. No endpoint
             accepts a provider's access log — there is no upload route and no
@@ -370,7 +382,7 @@ export default function ReconciliationPage() {
         <Banner
           tone="warning"
           title="This reconciliation is computed over a capped export"
-          description={`The month matched ${formatCount(calls.meta.totalMatching)} calls and the file holds ${formatCount(calls.meta.rowCount)}. The classes below do not cover the whole month.`}
+          description={`The month matched ${formatCount(calls.meta.totalMatching)} calls in every asset and the file holds ${formatCount(calls.meta.rowCount)}. The classes below do not cover the whole month.`}
         />
       ) : null}
       {calls.data && !calls.meta ? (
@@ -379,6 +391,10 @@ export default function ReconciliationPage() {
           title="Whether this export is complete is not visible"
           description="The cap headers were not readable from the browser, so we cannot tell you whether the month matched more calls than the file holds."
         />
+      ) : null}
+
+      {scopeNote ? (
+        <Banner tone="primary" title="One asset at a time" description={scopeNote} />
       ) : null}
 
       {/* Join — bg-01, radius-xl, 1px border-01, gap 40, padding [18, 22]. */}
@@ -391,7 +407,7 @@ export default function ReconciliationPage() {
         <JoinStat
           label="Our ledger"
           value={loading ? DASH : `${formatCount(classes.totalCalls)} calls`}
-          caption={`as of ${stamp(period.to)}`}
+          caption={`${displayAsset ? `in ${displayAssetLabel(displayAsset, chains)} · ` : ""}as of ${stamp(period.to)}`}
         />
         {/*
           Matched and Unexplained are the OUTPUT of a join with the provider's
@@ -415,7 +431,8 @@ export default function ReconciliationPage() {
             </PanelDescription>
           </PanelTitles>
         </PanelHeader>
-        <PanelBody className="px-2.5 pb-2.5 pt-1.5">
+        {/* The tables scroll inside their panels, as on the earnings screen. */}
+        <PanelBody className="overflow-x-auto px-2.5 pb-2.5 pt-1.5">
           {classes.totalCalls > 0 ? (
             <Table
               columns={classColumns}
@@ -457,7 +474,7 @@ export default function ReconciliationPage() {
               className="m-2.5"
               icon={null}
               title="No calls this month"
-              description="There is nothing to reconcile yet. Once a call reaches your endpoint it appears here with its class and its X-X402-Call-Id."
+              description="There is nothing to reconcile yet. Once a call reaches your endpoint it appears here with its class and its X-Assay-Call-Id."
             />
           )}
         </PanelBody>
@@ -471,7 +488,7 @@ export default function ReconciliationPage() {
             <PanelDescription>reconciles to the batch list on the earnings screen</PanelDescription>
           </PanelTitles>
         </PanelHeader>
-        <PanelBody className="px-2.5 pb-2.5 pt-1.5">
+        <PanelBody className="overflow-x-auto px-2.5 pb-2.5 pt-1.5">
           <Table
             columns={settlementColumns}
             rows={settlementRows}

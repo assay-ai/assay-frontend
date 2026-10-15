@@ -868,6 +868,16 @@ describe("the eip155 branch", () => {
     expect(privyEvm.typedDataCalls).toHaveLength(0);
   });
 
+  it("refuses a typed-data request whose DOMAIN names another chain than the signer's", async () => {
+    // Frontend review 2026-10-15, F1: the wrapper said 46630 and the domain
+    // said 1, and the embedded wallet signed for chain 1.
+    const state = evmSignerFor({ chainId: EVM_TESTNET, wallets: [evmEmbedded] });
+    await expect(
+      state.signer!.signTypedData({ ...TYPED_DATA, domain: { ...TYPED_DATA.domain, chainId: "1" } }),
+    ).rejects.toThrow(/domain names chain "1"/);
+    expect(privyEvm.typedDataCalls).toHaveLength(0);
+  });
+
   it("refuses a typed-data request carrying a salt, rather than dropping it", async () => {
     /*
       Measured: Privy's `SignTypedDataParams` declares `domain.salt?: ArrayBuffer`

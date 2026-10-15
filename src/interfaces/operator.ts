@@ -640,12 +640,49 @@ export interface ArbiterDispute {
   executableAt: string | null;
   /** `disputedAt + 30 d`: from then `expireSlash` releases it with `DisputeUnresolved`. */
   expiresAt: string | null;
-  /** The provider's slash cases upheld or executed in the last 30 days (follow-up C4). */
+  /**
+   * The provider's slash cases it lost in the last 30 days (follow-up C4,
+   * review R2-1): a record executed on chain, or the arbiter's on-chain uphold.
+   * Never a case closed in its favour, a key lapse, or a record the platform
+   * did not execute in time.
+   */
   upheldViolations30d: number;
   /** CAIP-10: who the record pays its agent share to. */
   beneficiary: string;
   /** `null` when the backend could not check it (no window, or the chain's terms unreadable). */
   beneficiaryEvidence: ArbiterBeneficiaryEvidence | null;
+}
+
+/**
+ * Review R2-6: `GET /operator/arbiter/superseded` — a record of an EARLIER
+ * proposal of its case that landed on chain late and still stands. It covers
+ * the same calls as the case's current records, so executing it would charge
+ * them twice; Assay never executes it, and the arbiter cancels it.
+ */
+export interface ArbiterSupersededRecord {
+  /** `0x` + 64 lower-case hex. */
+  requestId: string;
+  proposalId: string;
+  providerId: string;
+  chainId: string;
+  /** `PENDING` or `DISPUTED` on chain. */
+  chainStatus: string;
+  /** The record's epoch, and the case's current one (always later). */
+  recordEpoch: number;
+  caseEpoch: number;
+  penaltyAmount: string;
+  reservedAmount: string | null;
+  /** From then anyone can execute it: the arbiter's deadline to cancel. */
+  executableAt: string | null;
+}
+
+/** `POST /operator/arbiter/superseded/cancel-intent` — `S-13`, one superseded record. */
+export interface ArbiterSupersededCancelBody {
+  chainId: string;
+  requestId: string;
+  reasonCode: string;
+  note: string;
+  ticketRef?: string;
 }
 
 export type ArbiterRuling = "UPHOLD" | "CANCEL";

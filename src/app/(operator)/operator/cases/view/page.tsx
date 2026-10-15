@@ -21,7 +21,11 @@ import { DASH, stampUtc } from "@/features/g34a/stats";
 import { asProposalStatus, caseBadgeVariant, disputedPartsNote } from "@/features/operator/state";
 import { SLASH_DELAY_HOURS } from "@/libs/chains/solana/delays";
 import { caseChainStatusLabel } from "@/libs/chains/status-labels";
-import { caseChainStageOf } from "@/features/provider-slash-case/chain-stage";
+import {
+  caseChainStageOf,
+  disputeDeadlineOf,
+  disputesOnChain,
+} from "@/features/provider-slash-case/chain-stage";
 import { CaseContext } from "@/features/provider-slash-case/context";
 import { Measurement } from "@/features/provider-slash-case/measurement";
 import { remaining } from "@/features/provider-slash-case/status-header";
@@ -209,6 +213,8 @@ export default function OperatorCasePage() {
   };
   const chainStage = caseChainStageOf(chainMirror);
   const dispute = brief.dispute;
+  /* EVM: one clock, the record's executableAt; the arbiter rules on chain. */
+  const ruledOnChain = disputesOnChain(clocks);
 
   /*
     ONE countdown for the whole object. `secondsRemaining` belongs to whichever
@@ -289,24 +295,39 @@ export default function OperatorCasePage() {
           </PanelTitles>
         </PanelHeader>
         <PanelBody>
-          <ClockRow
-            label="Provider responds by"
-            at={clocks.respondByAt}
-            caption={
-              chainStage.kind !== "open"
-                ? "no longer running — the provider disputed on chain"
-                : clocks.respondByAt
-                  ? "their window to object, opened when the notification was delivered"
-                  : "their window has not opened — delivery of the notification is not confirmed yet"
-            }
-            left={clocks.runningClock === "PROVIDER" ? left : null}
-          />
-          <ClockRow
-            label="We decide by"
-            at={clocks.platformDecisionDueAt}
-            caption="our own deadline, set only once an objection is filed — nothing to run against before that"
-            left={clocks.runningClock === "PLATFORM" ? left : null}
-          />
+          {ruledOnChain ? (
+            <ClockRow
+              label="Provider disputes on chain by"
+              at={proposal.status === "PROPOSED" ? disputeDeadlineOf(clocks) : null}
+              caption={
+                chainStage.kind !== "open"
+                  ? "no longer running — the provider disputed on chain; the arbiter rules on the arbiter page"
+                  : "the record's executableAt: disputeSlash before it freezes the penalty until the arbiter decides"
+              }
+              left={clocks.runningClock === "PROVIDER" ? left : null}
+            />
+          ) : (
+            <>
+              <ClockRow
+                label="Provider responds by"
+                at={clocks.respondByAt}
+                caption={
+                  chainStage.kind !== "open"
+                    ? "no longer running — the provider disputed on chain"
+                    : clocks.respondByAt
+                      ? "their window to object, opened when the notification was delivered"
+                      : "their window has not opened — delivery of the notification is not confirmed yet"
+                }
+                left={clocks.runningClock === "PROVIDER" ? left : null}
+              />
+              <ClockRow
+                label="We decide by"
+                at={clocks.platformDecisionDueAt}
+                caption="our own deadline, set only once an objection is filed — nothing to run against before that"
+                left={clocks.runningClock === "PLATFORM" ? left : null}
+              />
+            </>
+          )}
           <ClockRow
             label="Earliest execution"
             at={clocks.earliestExecutionAt}
@@ -345,15 +366,24 @@ export default function OperatorCasePage() {
               }
             />
           ) : null}
-          <p className="border-t border-01 px-5 py-3.5 text-body-xs leading-[1.55] text-02">
-            The provider gets 48 hours to object and we get 23 to decide, inside a{" "}
-            {SLASH_DELAY_HOURS}-hour timelock — one hour short of filling it, deliberately. The
-            hour is not spare change:
-            the provider&rsquo;s window opens when the notification is <em>delivered</em>, not when
-            the case was proposed, so every hour of delivery lag pushes our decision deadline
-            later, and once the chain&rsquo;s own deadline passes anyone at all can execute the
-            judgement. The hour is the band in which we can still cancel.
-          </p>
+          {ruledOnChain ? (
+            <p className="border-t border-01 px-5 py-3.5 text-body-xs leading-[1.55] text-02">
+              On chain the only deadline is the record&rsquo;s executableAt. The provider disputes
+              with disputeSlash from its own wallet before then, which freezes the penalty until
+              Assay&rsquo;s arbiter upholds or cancels it; unruled, it expires after 30 days. There
+              is no off-chain decision deadline.
+            </p>
+          ) : (
+            <p className="border-t border-01 px-5 py-3.5 text-body-xs leading-[1.55] text-02">
+              The provider gets 48 hours to object and we get 23 to decide, inside a{" "}
+              {SLASH_DELAY_HOURS}-hour timelock — one hour short of filling it, deliberately. The
+              hour is not spare change:
+              the provider&rsquo;s window opens when the notification is <em>delivered</em>, not when
+              the case was proposed, so every hour of delivery lag pushes our decision deadline
+              later, and once the chain&rsquo;s own deadline passes anyone at all can execute the
+              judgement. The hour is the band in which we can still cancel.
+            </p>
+          )}
         </PanelBody>
       </Panel>
 

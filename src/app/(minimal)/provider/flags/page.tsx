@@ -337,7 +337,7 @@ export default function VerdictsAndFlagsPage() {
               );
               const anchor = document.createElement("a");
               anchor.href = url;
-              anchor.download = exported.filename ?? `calls-${range?.from}_${range?.to}.csv`;
+              anchor.download = exported.filename ?? "assay-calls.csv";
               anchor.click();
               URL.revokeObjectURL(url);
             }}

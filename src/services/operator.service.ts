@@ -3,7 +3,8 @@ import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { toTwoPersonAnswer, type TwoPersonAnswer } from "@/features/operator/two-person";
 import type {
   AccountBlock, AddOperatorBody, AdjudicationQueueRow, ApprovalDecision, ApprovalQueued,
-  ArbiterBlockBody, ArbiterDispute, ArbiterRulingBody, ArbiterTerms, CancelIntent,
+  ArbiterBlockBody, ArbiterDispute, ArbiterRulingBody, ArbiterSupersededCancelBody,
+  ArbiterSupersededRecord, ArbiterTerms, CancelIntent,
   ChangeOperatorBody, CreateAccountBlockBody, ListAccountBlocksQuery, ListOverrideLogQuery,
   OperatorApproval, OperatorApprovalStatus, OperatorChallenge, OperatorDirectoryEntry,
   OperatorSignIn, OperatorStatus, OverrideLogEntry, RemoveOperatorBody, UnblockAccountBody,
@@ -278,9 +279,47 @@ export function createArbiterRulingIntent(body: ArbiterRulingBody): Promise<Slas
   return operatorApi.post<SlashContractCall>("/operator/arbiter/ruling-intent", body);
 }
 
-/** `POST /operator/arbiter/block-intent` — `A-11`, `ADJL`, `SRE` or `TRE`. The arbiter's unsigned `setBlocked(account, true)`. */
-export function createArbiterBlockIntent(body: ArbiterBlockBody): Promise<SlashContractCall> {
-  return operatorApi.post<SlashContractCall>("/operator/arbiter/block-intent", body);
+/**
+ * `GET /operator/arbiter/superseded` — review R2-6: records of an earlier
+ * proposal of their case that landed late and still stand, soonest door first.
+ */
+export async function listSupersededRecords(): Promise<ArbiterSupersededRecord[]> {
+  const page = await operatorApi.get<{ items: ArbiterSupersededRecord[] }>("/operator/arbiter/superseded");
+  return page.items;
+}
+
+/**
+ * `POST /operator/arbiter/superseded/cancel-intent` — `S-13`, `ADJL` or `TRE`.
+ * The arbiter's unsigned `cancelSlashBatch` of ONE superseded record; 409 when
+ * the id is not one. Builds and logs; nothing is sent.
+ */
+export function createSupersededCancelIntent(body: ArbiterSupersededCancelBody): Promise<SlashContractCall> {
+  return operatorApi.post<SlashContractCall>("/operator/arbiter/superseded/cancel-intent", body);
+}
+
+/**
+ * `POST /operator/arbiter/block-intent` — `A-11`, `ADJL`, `SRE` or `TRE`. The
+ * arbiter's unsigned `setBlocked(account, true)`. Two-person: answered 202, and
+ * the approver gets the unsigned call as the approval's result.
+ */
+export async function createArbiterBlockIntent(
+  body: ArbiterBlockBody,
+): Promise<TwoPersonAnswer<SlashContractCall>> {
+  return toTwoPersonAnswer(
+    await operatorApi.postWithStatus<SlashContractCall | ApprovalQueued>("/operator/arbiter/block-intent", body),
+  );
+}
+
+/**
+ * `GET /operator/arbiter/blocks/:approvalId/call` — the unsigned
+ * `setBlocked(account, true)` of an APPROVED `A-11`, rebuilt from the approved
+ * payload for the arbiter's wallet (frontend review N5). 409 once the address
+ * is blocked on chain, or for any other approval.
+ */
+export function getApprovedArbiterBlockCall(approvalId: string): Promise<SlashContractCall> {
+  return operatorApi.get<SlashContractCall>(
+    `/operator/arbiter/blocks/${encodeURIComponent(approvalId)}/call`,
+  );
 }
 
 // ── The operator directory (`OPS_ADMIN` writes) ─────────────────────────────
@@ -301,7 +340,10 @@ export async function addOperator(
   );
 }
 
-/** `PATCH /operator/operators/:id` — `A-13`. Lowering: 200, applied. Adding a role or raising the limit: 202. */
+/**
+ * `PATCH /operator/operators/:id` — `A-13`. Lowering: 200, applied. Adding a
+ * role, raising the limit or taking `OPS_ADMIN` away: 202.
+ */
 export async function changeOperator(
   operatorId: string, body: ChangeOperatorBody,
 ): Promise<TwoPersonAnswer<OperatorDirectoryEntry>> {
@@ -312,20 +354,25 @@ export async function changeOperator(
   );
 }
 
-/** `POST /operator/operators/:id/remove` — `A-14`, single-person; ends every session they hold. */
-export function removeOperator(
+/**
+ * `POST /operator/operators/:id/remove` — `A-14`; ends every session they
+ * hold. Single-person, except removing an `OPS_ADMIN`: answered 202.
+ */
+export async function removeOperator(
   operatorId: string, body: RemoveOperatorBody,
-): Promise<OperatorDirectoryEntry> {
-  return operatorApi.post<OperatorDirectoryEntry>(
-    `/operator/operators/${encodeURIComponent(operatorId)}/remove`, body,
+): Promise<TwoPersonAnswer<OperatorDirectoryEntry>> {
+  return toTwoPersonAnswer(
+    await operatorApi.postWithStatus<OperatorDirectoryEntry | ApprovalQueued>(
+      `/operator/operators/${encodeURIComponent(operatorId)}/remove`, body,
+    ),
   );
 }
 
 // ── Two-person approvals ────────────────────────────────────────────────────
 
-/** `GET /operator/approvals[?status=]` — newest first. Any operator. */
+/** `GET /operator/approvals[?status=&action=]` — newest first. Any operator. */
 export function listApprovals(
-  query: { status?: OperatorApprovalStatus; cursor?: string; limit?: number } = {},
+  query: { status?: OperatorApprovalStatus; action?: string; cursor?: string; limit?: number } = {},
 ): Promise<CursorPage<OperatorApproval>> {
   return operatorApi.get<CursorPage<OperatorApproval>>("/operator/approvals", query);
 }

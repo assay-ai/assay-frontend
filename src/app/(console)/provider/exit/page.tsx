@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/sheet";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { dateOnly } from "@/components/g31/format";
-import { runStakeIntent } from "@/features/provider-stake/run-stake-intent";
+import { runStakeIntent, type StakeExpectation } from "@/features/provider-stake/run-stake-intent";
 import { isUserRejection, useSigner, type UseSignerResult } from "@/hooks/useSigner";
 import type {
   ProviderPayoutAccount,
@@ -267,10 +267,13 @@ const COLUMNS: TableColumn<ChecklistRow>[] = [
  */
 function IntentResult({
   intent,
+  requested,
   stakeAuthorityAddress,
   signerState,
 }: {
   intent: StakeIntent;
+  /** What the button asked for; the intent is signed only if it says this. */
+  requested: StakeExpectation;
   stakeAuthorityAddress: string;
   signerState: UseSignerResult;
 }) {
@@ -350,7 +353,7 @@ function IntentResult({
       // Throws a readable sentence when `intent.transaction` is null — a
       // legitimate 201 carrying `blockedBy`, not an error path. Unreachable
       // here (guarded above), but `runStakeIntent` still owns that check.
-      const result = await runStakeIntent(intent, signerState.signer);
+      const result = await runStakeIntent(intent, signerState.signer, requested);
       setSignature(result.signature);
     } catch (e) {
       if (isUserRejection(e)) {
@@ -399,6 +402,7 @@ function IntentResult({
 export default function ProviderExitPage() {
   const queryClient = useQueryClient();
   const [intent, setIntent] = React.useState<StakeIntent | null>(null);
+  const [requested, setRequested] = React.useState<StakeExpectation | null>(null);
   const [actionError, setActionError] = React.useState<ApiError | null>(null);
   const [exportNote, setExportNote] = React.useState<string | null>(null);
   const [proving, setProving] = React.useState(false);
@@ -551,8 +555,9 @@ export default function ProviderExitPage() {
 
   const unstake = useMutation({
     mutationFn: (amount: string) => createUnstakeIntent({ amount }),
-    onSuccess: (result) => {
+    onSuccess: (result, amount) => {
       setActionError(null);
+      setRequested({ kind: "UNSTAKE", amount });
       setIntent(result);
     },
     onError: (error) => {
@@ -563,8 +568,9 @@ export default function ProviderExitPage() {
 
   const withdraw = useMutation({
     mutationFn: (amount: string) => createStakeWithdrawIntent({ amount }),
-    onSuccess: (result) => {
+    onSuccess: (result, amount) => {
       setActionError(null);
+      setRequested({ kind: "WITHDRAW", amount });
       setIntent(result);
     },
     onError: (error) => {
@@ -604,7 +610,7 @@ export default function ProviderExitPage() {
       const url = URL.createObjectURL(new Blob([file.csv], { type: "text/csv" }));
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = file.filename ?? "x402-calls.csv";
+      anchor.download = file.filename ?? "assay-calls.csv";
       anchor.click();
       URL.revokeObjectURL(url);
     },
@@ -700,7 +706,7 @@ export default function ProviderExitPage() {
 
       {exportNote ? <Banner tone="warning" title="Your export may be incomplete" description={exportNote} /> : null}
 
-      {intent ? (
+      {intent && requested ? (
         <IntentResult
           // Forces a remount — and so a reset of the signature/broadcasting
           // state below — when a NEW intent replaces this one (e.g. pressing
@@ -714,6 +720,7 @@ export default function ProviderExitPage() {
               : `${intent.kind}:${intent.blockedBy}`
           }
           intent={intent}
+          requested={requested}
           stakeAuthorityAddress={stakeAuthority}
           signerState={signerState}
         />
@@ -958,7 +965,7 @@ function ProveAuthoritySheet({
       const result = await proveStakeAuthority({
         challengeId: issued.challengeId,
         // Typed data on eip155 (hex back), the message on Solana (base58 back).
-        signature: await signProofChallenge(signer, issued),
+        signature: await signProofChallenge(signer, issued, "STAKE_AUTHORITY"),
       });
       setWallet("idle");
       setSignature("");

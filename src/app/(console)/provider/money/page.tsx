@@ -321,7 +321,7 @@ export default function ProviderMoneyPage() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = result.filename ?? "x402-calls.csv";
+      anchor.download = result.filename ?? "assay-calls.csv";
       anchor.click();
       URL.revokeObjectURL(url);
 
@@ -334,8 +334,8 @@ export default function ProviderMoneyPage() {
         because the API app "enables CORS with no exposedHeaders at all". That
         is now **stale**: measured cross-origin from this page, the response
         carries `Access-Control-Expose-Headers: Content-Disposition,
-        X-X402-Export-Total-Matching, X-X402-Export-Row-Count,
-        X-X402-Export-Truncated`, and all three read back (148/148/false). The
+        X-Assay-Export-Total-Matching, X-Assay-Export-Row-Count,
+        X-Assay-Export-Truncated`, and all three read back (148/148/false). The
         branch stays because a header can stop being exposed again.
       */
       if (result.meta?.truncated) {

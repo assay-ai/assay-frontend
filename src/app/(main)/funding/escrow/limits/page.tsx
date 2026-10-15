@@ -357,9 +357,12 @@ function EscrowLimitsPageContent() {
     setBroadcasting(true);
     try {
       const signed = setLimits.variables;
+      if (!signed) throw new Error("The limits this request was built for are gone. Prepare it again.");
       const result = await runEscrowAction(
         intent,
         signerState.signer,
+        // Signed only if the payload carries exactly the limits typed here.
+        { kind: "SET_LIMITS", maxVoucherAmount: signed.maxVoucherAmount, maxPerWindow: signed.maxPerWindow },
         acknowledged
           ? {
               ...ESCROW_SUBMITTERS,
@@ -380,17 +383,13 @@ function EscrowLimitsPageContent() {
       // HTTP cache so the meter and the "currently set" figures below stop
       // reading the pre-write state, and keep polling until a read actually
       // shows the signed limits. See `applyLimitsSubmitted`.
-      if (signed) {
-        setAwaitingLimits({ body: signed, since: Date.now() });
-        void applyLimitsSubmitted(
-          queryClient,
-          requestedChain,
-          signed,
-          result.kind === "relayed" ? result.relayed.escrow : null,
-        );
-      } else {
-        void queryClient.invalidateQueries({ queryKey: ["escrow"] });
-      }
+      setAwaitingLimits({ body: signed, since: Date.now() });
+      void applyLimitsSubmitted(
+        queryClient,
+        requestedChain,
+        signed,
+        result.kind === "relayed" ? result.relayed.escrow : null,
+      );
     } catch (e) {
       if (isUserRejection(e)) {
         setSignError("Nothing was signed — the wallet prompt was closed or declined.");

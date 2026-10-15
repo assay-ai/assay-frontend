@@ -28,7 +28,9 @@ const ACTION_LABEL: Readonly<Record<string, string>> = {
   "slash.compensated": "Record a treasury compensation and close the case as compensated",
   "account.unblock": "Lift an account block",
   "operator.add": "Add an operator",
-  "operator.change": "Raise an operator's roles or authority limit",
+  "operator.change": "Raise an operator's roles or authority limit, or take OPS_ADMIN away",
+  "operator.remove": "Remove an operator who holds OPS_ADMIN",
+  "arbiter.block": "Prepare the arbiter's on-chain block of an address",
 };
 
 export function actionLabel(action: string): string {
@@ -43,6 +45,8 @@ export const APPROVER_ROLES: Readonly<Record<string, readonly OperatorRole[]>> =
   "A-10": ["ADJL"],
   "A-12": ["OPS_ADMIN"],
   "A-13": ["OPS_ADMIN"],
+  "A-14": ["OPS_ADMIN"],
+  "A-11": ["ADJL"],
 };
 
 export function approverRolesFor(code: string): readonly OperatorRole[] | null {
@@ -291,8 +295,11 @@ export function describeApproval(
       const roles = rolesOf(body.roles);
       const hasLimit = Object.prototype.hasOwnProperty.call(body, "authorityLimitMinor");
       const limit = hasLimit ? limitText(body.authorityLimitMinor, context.asset) : null;
-      const sentence =
-        roles && limit
+      const demotes =
+        roles !== null && operator !== undefined && operator.roles.includes("OPS_ADMIN") && !roles.includes("OPS_ADMIN");
+      const sentence = demotes
+        ? `Take OPS_ADMIN away from ${who}: roles become ${rolesText(roles ?? [])}`
+        : roles && limit
           ? `Raise the roles of ${who} to ${rolesText(roles)} and the authority limit to ${limit}`
           : roles
             ? `Raise the roles of ${who} to ${rolesText(roles)}`
@@ -332,6 +339,31 @@ export function describeApproval(
         sentence: `${sentence}${because}.`,
         target: { label: operator ? `Operator ${operator.subject}` : `Operator ${shortId(operatorId)}`, href: "/operator/operators" },
         fields: [...fields, ...commonFields(body), ...extraFields(body)],
+      };
+    }
+
+    case "operator.remove": {
+      const operatorId = text(payload.operatorId) ?? targetId;
+      const operator = context.operators.get(operatorId);
+      const who = operatorName(operator, operatorId);
+      return {
+        sentence: `Remove ${who}, ending every session they hold${because}.`,
+        target: { label: operator ? `Operator ${operator.subject}` : `Operator ${shortId(operatorId)}`, href: "/operator/operators" },
+        fields: [
+          ...(operator ? [{ label: "Roles now", value: rolesText(operator.roles) }] : []),
+          ...commonFields(body),
+          ...extraFields(body),
+        ],
+      };
+    }
+
+    case "arbiter.block": {
+      const account = text(payload.account) ?? targetId;
+      const chainId = text(payload.chainId);
+      return {
+        sentence: `Prepare the arbiter's on-chain block of ${account}${because}. Approving builds the unsigned setBlocked call; the arbiter's wallet still has to sign it.`,
+        target: { label: `Address ${account}`, href: "/operator/arbiter" },
+        fields: [...(chainId ? [{ label: "Chain", value: chainId }] : []), ...commonFields(body), ...extraFields(body)],
       };
     }
 
@@ -419,6 +451,10 @@ export function approvedResultSentence(action: string, result: unknown): string 
       return `Operator added${typeof r.subject === "string" ? `: ${r.subject}` : ""}. They can sign in with their wallet now.`;
     case "operator.change":
       return `Operator changed${typeof r.subject === "string" ? `: ${r.subject}` : ""}.`;
+    case "operator.remove":
+      return `Operator removed${typeof r.subject === "string" ? `: ${r.subject}` : ""}. Every session they held has ended.`;
+    case "arbiter.block":
+      return "The arbiter's unsigned block is built. Nothing is blocked until the arbiter's wallet signs and sends it below.";
     default:
       return "Approved. The action ran.";
   }

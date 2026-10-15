@@ -195,10 +195,10 @@ const SEAT_COLUMNS: TableColumn<SeatRow>[] = [
 
 /**
  * Same arithmetic, smaller margin: the design is a fixed 520 and its Scope 190 +
- * Last used 160 leave the token prefix 102px, where `x402_sk_live_8xifRJT…`
+ * Last used 160 leave the token prefix 102px, where `assay_sk_live_8xifRJT…`
  * needs about 165. The frame gets away with it because a design-tool text node
  * overflows into the next column's slack; `truncate` here does not, and clipped
- * it to `x402_sk_liv…` — which is no longer a prefix you can disambiguate two
+ * it to `assay_sk_li…` — which is no longer a prefix you can disambiguate two
  * tokens by, i.e. the column's only job. Scope 120 / Last used 150 plus a
  * non-clipping cell restores it.
  */

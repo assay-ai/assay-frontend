@@ -7,6 +7,7 @@ import Link from "next/link";
 import { BindingNav } from "@/features/provider-binding/binding-nav";
 import * as React from "react";
 
+import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -48,6 +49,9 @@ import { formatMoney } from "@/utils/money";
 import { labelForEndpoint } from "@/utils/provider-label";
 import { wilson99 } from "@/features/g34a/stats";
 import { useSearchParam } from "@/hooks/useSearchParam";
+import { useChains } from "@/hooks/useChains";
+import { isAssetMismatch, readableDerivation } from "@/features/provider-stake/derivation";
+import { revalidateProviderStake } from "@/services/provider-stake.service";
 import { routes } from "@/libs/routes";
 
 /**
@@ -268,6 +272,21 @@ export default function BindingOverviewPage() {
     retry: 0,
   });
   const slaWindow: SlaWindow | null = slaQuery.data?.items[0] ?? null;
+
+  // An ACTIVE paid binding priced in another asset than the stake floor is
+  // live and still takes no paid traffic; say so here, not only on Capital.
+  const stakeQuery = useQuery({
+    queryKey: ["provider", "stake"],
+    queryFn: revalidateProviderStake,
+    retry: 0,
+  });
+  const { chains } = useChains();
+  const stakeLine = stakeQuery.data?.requirement.find((item) => item.bindingId === bindingId)
+    ?.derivation;
+  const assetMismatch =
+    binding?.status === "ACTIVE" && stakeLine && isAssetMismatch(stakeLine)
+      ? readableDerivation(stakeLine, chains)
+      : null;
 
   const [confirmingPause, setConfirmingPause] = React.useState(false);
 
@@ -510,6 +529,10 @@ export default function BindingOverviewPage() {
       </header>
 
       <BindingNav bindingId={bindingId} />
+
+      {assetMismatch ? (
+        <Banner tone="warning" title="This binding takes no paid traffic" description={assetMismatch} />
+      ) : null}
 
       {/* ── Tiles ───────────────────────────────────────────────── */}
       {/*

@@ -8,6 +8,7 @@ import {
   readDepositReadiness,
   waitForSuccess,
 } from "@/libs/chains/evm/deposit-transaction";
+import { pinnedDeployment } from "@/libs/chains/evm/signing-guard";
 import type { EvmDepositRequirements } from "@/services/funding.service";
 
 /**
@@ -68,6 +69,21 @@ export async function signEvmDeposit(input: {
   if (BigInt(requirements.amount) !== amountAtomic) {
     throw new EvmDepositRefused(
       "The deposit amount changed while it was being prepared. Nothing was sent.",
+    );
+  }
+
+  // The API names the token, the spender and the escrow; the approval is only
+  // ever for the pinned token and the pinned escrow (frontend review
+  // 2026-10-15, F1), or a compromised API could aim it at itself.
+  const pinned = pinnedDeployment(chainId);
+  const same = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
+  if (
+    !same(requirements.asset, pinned.settlementToken) ||
+    !same(requirements.spender, pinned.escrowContract) ||
+    !same(requirements.contract, pinned.escrowContract)
+  ) {
+    throw new EvmDepositRefused(
+      "This deposit names another token or escrow than the ones this app knows for this chain. Nothing was sent.",
     );
   }
 

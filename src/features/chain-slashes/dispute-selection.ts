@@ -133,7 +133,7 @@ export function disputeErrorMessage(error: unknown, chainName: string): string {
     case "SLASH_CHAIN_BATCH_REFUSED":
       return `Nothing was sent: the chain would refuse the whole ${refusedFunctionOf(error) ?? "batch"}. The penalties it would refuse are marked below; unselect them and try again.`;
     case "PROVIDER_STAKE_AUTHORITY_UNPROVEN":
-      return `Assay has no proved stake wallet for you on ${chainName}, so it cannot name the wallet that disputes. Nothing was sent. Dispute from the case page, or contact Assay support.`;
+      return `Assay has no proved stake wallet for you on ${chainName}, so it cannot name the wallet that disputes. Nothing was sent. Contact Assay support.`;
     case "SLASH_CHAIN_UNAVAILABLE":
       return `The dispute transaction cannot be built right now: Assay cannot reach ${chainName}. Nothing was sent; try again in a moment.`;
     case "CHAIN_UNSUPPORTED":

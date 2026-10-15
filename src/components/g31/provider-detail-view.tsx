@@ -46,6 +46,18 @@ import { shortToolId, useToolNames } from "./use-tool-names";
  * design states, not a per-provider fact, so it is rendered as written.
  */
 
+/**
+ * The "serves N tools" clause, from the provider's own catalogue entry — the
+ * same `toolIds` the list card counts. Unknown while that entry is loading or
+ * failed, rather than a "0" that contradicts the card (BUG-R16-B3-02). Zero is
+ * real: a provider who paused every binding still has a page.
+ */
+export function servedToolsLine(toolIds: readonly string[] | undefined): string {
+  if (toolIds === undefined) return "tools served not known";
+  if (toolIds.length === 0) return "serves no tool right now";
+  return `serves ${toolIds.length} ${toolIds.length === 1 ? "tool" : "tools"} right now`;
+}
+
 export function ProviderDetailView({ providerId }: { providerId: string }) {
   const identity = useQuery({
     queryKey: ["provider-verification", providerId],
@@ -179,7 +191,7 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
         <StatCard
           label="Calls"
           value={own.length}
-          sub={`yours · this provider serves ${row?.toolIds.length ?? 0} ${(row?.toolIds.length ?? 0) === 1 ? "tool" : "tools"}`}
+          sub={`yours · ${servedToolsLine(row?.toolIds)}`}
         />
         <StatCard
           label="Not charged"
@@ -191,7 +203,11 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
           }
           sub="calls that failed our checks — you were not charged, and part of each penalty came back to you"
         />
-        <StatCard label="From" value={formatPrice(row?.fromPrice ?? null)} sub="per call" />
+        <StatCard
+          label="From"
+          value={formatPrice(row?.fromPrice ?? null)}
+          sub={row && row.toolIds.length === 0 ? "nothing served right now" : "per call, cheapest tool it serves now"}
+        />
       </div>
 
       <div className="flex w-full flex-col gap-4 tablet:flex-row tablet:items-start">
@@ -199,9 +215,10 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
         <Panel className="min-w-0 flex-1">
           <PanelHeader className="bg-02">
             <PanelTitles>
-              <PanelTitle>Tools</PanelTitle>
+              <PanelTitle>Your calls</PanelTitle>
               <PanelDescription className="whitespace-normal">
-                what this provider has served to this account
+                what this provider has served to this account, including tools it no longer
+                serves
               </PanelDescription>
             </PanelTitles>
           </PanelHeader>

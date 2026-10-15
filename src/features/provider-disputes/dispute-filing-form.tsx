@@ -30,10 +30,20 @@ import { fileSlashDispute, getSlashProposalCase } from "@/services/provider-disp
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
+import {
+  disputeDeadlineOf,
+  disputesOnChain,
+  onChainDisputeHref,
+  onChainDisputeSentence,
+} from "@/features/provider-slash-case/chain-stage";
 import { routes } from "@/libs/routes";
 
 /**
- * Dispute filing.
+ * Dispute filing — the in-app objection, for Solana cases only.
+ *
+ * An EVM case (`clocks.disputeOnChain`) is disputed on chain and nowhere else:
+ * the form then only says so and links to the penalties on chain page, which
+ * sends `disputeSlash` from the provider's own stake wallet.
  *
  * Exported as a standalone component (not just the route at
  * `/provider/disputes/new`) so the slash-proposal case screen can
@@ -275,6 +285,26 @@ export function DisputeFilingForm({
   }
 
   const { proposal } = data;
+
+  // EVM: the dispute is the on-chain one, sent from the provider's own stake
+  // wallet on the penalties on chain page. No in-app objection exists for it.
+  if (disputesOnChain(proposal.clocks)) {
+    return (
+      <Banner
+        tone="warning"
+        title="This penalty is disputed on chain, not here."
+        description={
+          <>
+            {onChainDisputeSentence(disputeDeadlineOf(proposal.clocks), stampUtc)}{" "}
+            <Link href={onChainDisputeHref(proposal.id)} className="underline">
+              Dispute it on chain from your stake wallet
+            </Link>
+            .
+          </>
+        }
+      />
+    );
+  }
 
   // A proposal that already carries a dispute cannot take a second one; point at the one on file.
   if (proposal.status === "DISPUTED" || proposal.disputeId) {

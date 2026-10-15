@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { caseChainStageOf, executionFloorOf, mayAcknowledge, respondByApplies } from "./chain-stage";
+import {
+  caseChainStageOf,
+  caseStageOf,
+  disputeDeadlineOf,
+  disputesOnChain,
+  executionFloorOf,
+  mayAcknowledge,
+  mayDisputeOnChain,
+  onChainDisputeHref,
+  onChainDisputeSentence,
+  respondByApplies,
+} from "./chain-stage";
 import { DISPUTED_CLOCKS, R13, UPHELD_CLOCKS, caseOf, clocksOf } from "./fixtures/r13-case";
 
 describe("executionFloorOf", () => {
@@ -44,6 +55,15 @@ describe("caseChainStageOf", () => {
       disputedAt: null,
       expiresAt: null,
     });
+  });
+
+  it("N-4: is not upheld when the backend's per-record state says a record stands undisputed", () => {
+    // The arbiter cancelled the disputed part; another part stands undisputed.
+    expect(
+      caseChainStageOf(
+        clocksOf({ chainStatus: "PENDING", chainDisputedAt: R13.chainDisputedAt, chainDisputedParts: 0, chainState: "PENDING" }),
+      ).kind,
+    ).toBe("open");
   });
 
   it("is upheld when the record is Pending again with a disputedAt and no disputed part", () => {
@@ -108,5 +128,66 @@ describe("respondByApplies and mayAcknowledge", () => {
   it("respond-by stops applying once the case is disputed in the app", () => {
     const data = caseOf("DISPUTED", {}, { disputeId: "d1" });
     expect(respondByApplies(data.proposal, caseChainStageOf(data.proposal.clocks))).toBe(false);
+  });
+});
+
+describe("the on-chain dispute, the only dispute on EVM", () => {
+  const before = new Date(R13.chainExecutableAt).getTime() - 60_000;
+  const after = new Date(R13.chainExecutableAt).getTime() + 60_000;
+
+  it("is the dispute unless the backend says the case is Solana", () => {
+    expect(disputesOnChain(clocksOf())).toBe(true);
+    expect(disputesOnChain(clocksOf({ disputeOnChain: true }))).toBe(true);
+    expect(disputesOnChain(clocksOf({ disputeOnChain: false }))).toBe(false);
+  });
+
+  it("has one deadline: disputeBy, else the record's executableAt", () => {
+    expect(disputeDeadlineOf(clocksOf({ disputeBy: "2026-10-15T10:00:00.000Z" }))).toBe("2026-10-15T10:00:00.000Z");
+    expect(disputeDeadlineOf(clocksOf())).toBe(R13.chainExecutableAt);
+    expect(disputeDeadlineOf(clocksOf({ chainExecutableAt: null }))).toBeNull();
+  });
+
+  it("can be sent while the case is PROPOSED and its record Pending, before the door", () => {
+    const data = caseOf("PROPOSED");
+    const stage = caseStageOf(data.proposal);
+    expect(mayDisputeOnChain(data.proposal, stage, before)).toBe(true);
+    expect(mayDisputeOnChain(data.proposal, stage, after)).toBe(false);
+  });
+
+  it("cannot be sent twice, nor before the record is on chain, nor on Solana", () => {
+    for (const data of [
+      caseOf("DISPUTED", DISPUTED_CLOCKS, { disputeId: "d1" }),
+      caseOf("PROPOSED", UPHELD_CLOCKS),
+      caseOf("PROPOSED", { chainStatus: "NONE", chainExecutableAt: null }),
+      caseOf("PROPOSED", { disputeOnChain: false }),
+    ]) {
+      expect(mayDisputeOnChain(data.proposal, caseStageOf(data.proposal), before)).toBe(false);
+    }
+  });
+
+  it("N-4: follows the backend's per-record disputeBy, whatever the case status or a sibling's dispute", () => {
+    const partly = caseOf("UPHELD", {
+      chainStatus: "PENDING",
+      chainDisputedAt: R13.chainDisputedAt,
+      chainDisputedParts: 1,
+      chainState: "DISPUTED",
+      disputeBy: R13.chainExecutableAt,
+    });
+    expect(mayDisputeOnChain(partly.proposal, caseStageOf(partly.proposal), before)).toBe(true);
+    expect(mayDisputeOnChain(partly.proposal, caseStageOf(partly.proposal), after)).toBe(false);
+
+    const none = caseOf("PROPOSED", { disputeBy: null, chainState: "UPHELD" });
+    expect(mayDisputeOnChain(none.proposal, caseStageOf(none.proposal), before)).toBe(false);
+  });
+
+  it("links to the penalties on chain page with the case selected", () => {
+    expect(onChainDisputeHref("p 1")).toBe("/provider/capital/penalties?case=p%201");
+  });
+
+  it("says plainly that disputing freezes the penalty, and by when", () => {
+    expect(onChainDisputeSentence("2026-10-15T09:37:00.000Z", () => "2026-10-15 09:37")).toBe(
+      "Disputing freezes the penalty on chain until the arbiter decides; you must dispute before 2026-10-15 09:37 UTC.",
+    );
+    expect(onChainDisputeSentence(null, (iso) => iso)).toMatch(/^Disputing freezes the penalty on chain until the arbiter decides;/);
   });
 });
