@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search } from "lucide-react";
+import { Ban, Clock, MoreHorizontal, Plus, Search, ShieldCheck, Undo2, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -11,8 +11,8 @@ import { EntityPicker } from "@/components/patterns/entity-picker";
 import { LocalTime } from "@/components/patterns/local-time";
 import { PageState } from "@/components/patterns/page-state";
 import { ReasonChips } from "@/components/patterns/reason-chips";
-import { StatusChip } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -36,6 +36,7 @@ import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { approvalHref, sentForApproval } from "@/features/operator/two-person";
 import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-operator-lookups";
+import { WhatHappens } from "@/features/operator/what-happens";
 import { WhyNot } from "@/features/operator/why-not";
 import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
 import type { AccountBlock, BlockSubjectKind, OperatorApproval } from "@/interfaces/operator";
@@ -50,6 +51,7 @@ import {
   listApprovals,
   unblockAccount,
 } from "@/services/operator.service";
+import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -63,7 +65,15 @@ import { formatMoney } from "@/utils/money";
  * its row, and a second identical request is not sent.
  *
  * `?block=<id>&kind=ORGANIZATION|WALLET` opens the form prefilled — the case
- * and arbiter pages link here with it.
+ * and arbiter pages link here with it. `?new=1` opens it empty (Home's quick
+ * action for Support).
+ *
+ * The list is one table: account, kind, reason (and ticket), who and when, and
+ * one button — Lift, or the waiting lift request. The note, the history and
+ * "Block on chain" are in the row's menu.
+ *
+ * [backend] Whether a wallet is blocked on chain is not on the block record;
+ * an "On chain" column needs it.
  */
 
 const LIST_LIMIT = 50;
@@ -86,6 +96,7 @@ function BlocksScreen() {
   const [prefill, setPrefill] = React.useState<{ kind: BlockSubjectKind; subject: string } | null>(null);
   const [lifting, setLifting] = React.useState<AccountBlock | null>(null);
   const [chainBlocking, setChainBlocking] = React.useState<AccountBlock | null>(null);
+  const [openNote, setOpenNote] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<React.ReactNode>(null);
 
   // Lifts already waiting for approval, by block id — the same query as the badge.
@@ -103,12 +114,13 @@ function BlocksScreen() {
     return map;
   }, [pendingQuery.data]);
 
-  // A link from a case or the arbiter page opens the form prefilled, once.
+  // A link opens the form once: prefilled from a case or the arbiter page
+  // (`?block=…&kind=…`), or empty from Home's quick action (`?new=1`).
   React.useEffect(() => {
     const subject = searchParams.get("block");
-    if (!subject || !canAct) return;
-    const kind = searchParams.get("kind") === "WALLET" ? "WALLET" : "ORGANIZATION";
-    setPrefill({ kind, subject });
+    const fresh = searchParams.get("new") === "1";
+    if ((!subject && !fresh) || !canAct) return;
+    setPrefill(subject ? { kind: searchParams.get("kind") === "WALLET" ? "WALLET" : "ORGANIZATION", subject } : null);
     setBlockOpen(true);
     router.replace(pathname, { scroll: false });
   }, [searchParams, canAct, router, pathname]);
@@ -120,7 +132,21 @@ function BlocksScreen() {
     getNextPageParam: (last) => last.pageInfo.nextCursor ?? undefined,
     retry: 0,
   });
+  // The other tab's count, for its label.
+  const other = useQuery({
+    queryKey: ["operator", "blocks", "list", { active: filter !== "active" }, "count"],
+    queryFn: () => listAccountBlocks({ active: filter !== "active", limit: LIST_LIMIT }),
+    retry: 0,
+  });
   const rows = React.useMemo(() => (list.data?.pages ?? []).flatMap((page) => page.items), [list.data]);
+  const countOf = (tab: Filter): string | null => {
+    if (tab === filter) {
+      if (!list.data) return null;
+      return `${rows.length}${list.hasNextPage ? "+" : ""}`;
+    }
+    if (!other.data) return null;
+    return `${other.data.items.length}${other.data.pageInfo.nextCursor ? "+" : ""}`;
+  };
   const label = React.useCallback((block: AccountBlock) => blockSubjectLabel(block, providers.lookup), [providers]);
   const shown = React.useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -132,13 +158,15 @@ function BlocksScreen() {
         .includes(q),
     );
   }, [rows, search, label, directory]);
+  const approversOf = (approval: OperatorApproval) =>
+    directory.isPending ? [] : eligibleApprovers("A-10", directory.operators, approval.requestedById);
 
   return (
     <>
       <header className="flex w-full flex-wrap items-end justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">Blocks</h1>
-          <p className="text-body-13 text-03">A blocked account cannot pay or be paid through Assay. It applies within seconds.</p>
+          <p className="text-body-13 text-03">A blocked account cannot pay or be paid through Assay.</p>
         </div>
         {canAct ? (
           <Button
@@ -154,26 +182,28 @@ function BlocksScreen() {
         ) : null}
       </header>
 
-      {result ? <div className="w-full">{result}</div> : null}
-
       {!canAct ? (
         <WhyNot
           action="block"
           me={me}
-          title="Blocking and lifting blocks"
-          why={
-            me.roles.includes("OPS_ADMIN")
-              ? "Admins manage the team. Blocking an account, or asking to lift a block, needs a Lead adjudicator or On-call (SRE)."
-              : undefined
-          }
+          why={me.roles.includes("OPS_ADMIN") ? "Admins manage the team; blocking and lifting needs Lead adjudicator or On-call (SRE)" : undefined}
           ask="Can you help with an account block on Assay? My role cannot block or lift accounts."
         />
       ) : null}
 
+      {result ? <div className="w-full">{result}</div> : null}
+
       <div className="flex w-full flex-col gap-2.5 tablet:flex-row tablet:items-center tablet:justify-between">
         <Segmented value={filter} onValueChange={(value) => setFilter(value as Filter)} aria-label="Which blocks" className="self-start">
-          <SegmentedItem value="active">Active</SegmentedItem>
-          <SegmentedItem value="lifted">Lifted</SegmentedItem>
+          {(["active", "lifted"] as const).map((tab) => {
+            const count = countOf(tab);
+            return (
+              <SegmentedItem key={tab} value={tab}>
+                {tab === "active" ? "Active" : "Lifted"}
+                {count !== null ? <span className="ml-1.5 tabular-nums text-03">{count}</span> : null}
+              </SegmentedItem>
+            );
+          })}
         </Segmented>
         <label className="flex w-full items-center gap-2 rounded-md border border-02 bg-01 px-3 py-2 focus-within:ring-2 focus-within:ring-primary-500 tablet:max-w-[320px]">
           <Search aria-hidden="true" className="size-4 shrink-0 text-03" />
@@ -181,7 +211,7 @@ function BlocksScreen() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, wallet, reason, who"
+            placeholder="Name, wallet, reason, who"
             className="w-full min-w-0 bg-transparent text-body-sm text-01 outline-none placeholder:text-03"
           />
         </label>
@@ -203,50 +233,90 @@ function BlocksScreen() {
           description={search ? "Try a name, a wallet or a reason." : filter === "active" ? "Blocked accounts appear here until a block is lifted." : undefined}
         />
       ) : (
-        <ul className="flex w-full flex-col gap-2">
-          {shown.map((block) => (
-            <li key={block.id} className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:gap-5">
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-label-13 text-01">{label(block)}</span>
-                  <StatusChip status={block.active ? "blocked" : "closed"} detail={block.active ? undefined : "lifted"} />
-                  {block.active && pendingLift.has(block.id) ? <StatusChip status="waiting" detail="lift waiting for approval" /> : null}
-                  <span className="text-body-xs text-03">{block.subjectKind === "ORGANIZATION" ? "Organization" : "Wallet"}</span>
-                </div>
-                <p className="text-body-13 text-02">
-                  {reasonLabel(block.reasonCode)} · blocked by {directory.nameOf(block.blockedBy)} · <LocalTime value={block.blockedAt} />
-                  {block.ticketRef ? ` · ${block.ticketRef}` : ""}
-                </p>
-                {block.unblockedAt ? (
-                  <p className="text-body-xs text-03">
-                    Lifted by {directory.nameOf(block.unblockedBy)}, approved by {directory.nameOf(block.unblockApprovedBy)} ·{" "}
-                    <LocalTime value={block.unblockedAt} />
-                  </p>
-                ) : null}
-                <p className="text-body-xs text-03 [overflow-wrap:anywhere]">{block.note}</p>
-              </div>
-              <div className="flex shrink-0 flex-row gap-2">
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href={`/operator/override-log?targetId=${encodeURIComponent(block.id)}`}>History</Link>
-                </Button>
-                {block.active && canChain && block.subjectKind === "WALLET" && evmAddressOf(block.subject) ? (
-                  <Button variant="ghost" size="sm" onClick={() => setChainBlocking(block)}>
-                    Block on chain
-                  </Button>
-                ) : null}
-                {block.active && pendingLift.has(block.id) ? (
-                  <Button variant="secondary" size="sm" asChild>
-                    <Link href={approvalHref(pendingLift.get(block.id)!.id)}>Open the lift request</Link>
-                  </Button>
-                ) : block.active && canAct ? (
-                  <Button variant="secondary" size="sm" onClick={() => setLifting(block)}>
-                    Lift block
-                  </Button>
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="w-full overflow-hidden rounded-xl border border-01 bg-01">
+          <div aria-hidden="true" className={cn(BLOCK_GRID, "hidden border-b border-01 px-4 py-2 text-label-13 text-03 tablet:grid")}>
+            <span>Account</span>
+            <span>Kind</span>
+            <span>Reason</span>
+            <span>{filter === "active" ? "Blocked by" : "Lifted by"}</span>
+            <span />
+          </div>
+          <ul className="flex w-full flex-col divide-y divide-01">
+            {shown.map((block) => {
+              const waiting = block.active ? pendingLift.get(block.id) : undefined;
+              const walletOnChain = block.active && canChain && block.subjectKind === "WALLET" && evmAddressOf(block.subject) !== null;
+              const noteOpen = openNote === block.id;
+              return (
+                <li key={block.id} className="flex w-full min-w-0 flex-col gap-2 px-4 py-3">
+                  <div className={cn(BLOCK_GRID, "flex flex-col gap-2 tablet:grid tablet:items-center")}>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className="min-w-0 truncate text-label-13 text-01" title={label(block)}>
+                        {label(block)}
+                        <span className="text-body-xs text-03 tablet:hidden"> · {block.subjectKind === "ORGANIZATION" ? "Organization" : "Wallet"}</span>
+                      </span>
+                      {waiting ? (
+                        <span className="inline-flex flex-wrap items-center gap-1 text-body-xs text-02">
+                          <Clock aria-hidden="true" className="size-3.5 shrink-0 text-03" />
+                          Lift waiting for approval
+                          {approversOf(waiting).length > 0 ? <span className="text-03">· {askNames(approversOf(waiting))}</span> : null}
+                        </span>
+                      ) : null}
+                    </div>
+                    <span className="hidden text-body-13 text-02 tablet:block">{block.subjectKind === "ORGANIZATION" ? "Organization" : "Wallet"}</span>
+                    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-body-13 text-02">
+                      {reasonLabel(block.reasonCode)}
+                      {block.ticketRef ? <span className="rounded bg-03 px-1.5 py-px font-mono text-mono-12 text-02">{block.ticketRef}</span> : null}
+                    </span>
+                    <span className="min-w-0 text-body-13 text-02">
+                      {block.active || !block.unblockedAt ? (
+                        <>
+                          {directory.nameOf(block.blockedBy)} · <LocalTime value={block.blockedAt} dateOnly />
+                        </>
+                      ) : (
+                        <>
+                          {directory.nameOf(block.unblockedBy)}
+                          {block.unblockApprovedBy ? <span className="text-03">, approved by {directory.nameOf(block.unblockApprovedBy)}</span> : null} ·{" "}
+                          <LocalTime value={block.unblockedAt} dateOnly />
+                        </>
+                      )}
+                    </span>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 tablet:justify-end">
+                      {waiting ? (
+                        <Button variant="secondary" size="sm" asChild className="min-w-0 flex-1 tablet:flex-none">
+                          <Link href={approvalHref(waiting.id)}>Open lift request</Link>
+                        </Button>
+                      ) : block.active && canAct ? (
+                        <Button variant="secondary" size="sm" onClick={() => setLifting(block)} className="min-w-0 flex-1 tablet:flex-none">
+                          Lift block
+                        </Button>
+                      ) : null}
+                      <DropdownMenu modal={false}>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" aria-label={`More for ${label(block)}`} className="ml-auto tablet:ml-0">
+                            <MoreHorizontal aria-hidden="true" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-[200px] border border-01">
+                          <DropdownMenuItem onSelect={() => setOpenNote(noteOpen ? null : block.id)}>{noteOpen ? "Hide the note" : "Show the note"}</DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/operator/override-log?targetId=${encodeURIComponent(block.id)}`}>History in Activity</Link>
+                          </DropdownMenuItem>
+                          {walletOnChain ? <DropdownMenuItem onSelect={() => setChainBlocking(block)}>Block on chain</DropdownMenuItem> : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                  {noteOpen ? (
+                    <div className="flex w-full flex-col gap-1 rounded-md bg-02 px-3 py-2 text-body-13 text-02 [overflow-wrap:anywhere]">
+                      <p>{block.note}</p>
+                      {block.unblockNote ? <p className="text-03">Lifted: {block.unblockNote}</p> : null}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
 
       {list.hasNextPage ? (
@@ -281,6 +351,23 @@ function BlocksScreen() {
       ) : null}
     </>
   );
+}
+
+/** The desktop columns: account, kind, reason, who and when, actions. */
+const BLOCK_GRID = "tablet:grid-cols-[minmax(0,1.5fr)_100px_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,auto)] tablet:gap-4";
+
+/** "Riley Brooks or Jordan Blake", "Riley Brooks, Jordan Blake or Iris Park" — for a sentence. */
+function askNamesOr(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+}
+
+/** "Riley or Jordan", "Riley Brooks" — who can approve, short. */
+function askNames(names: readonly string[]): string {
+  if (names.length === 1) return names[0]!;
+  const first = (name: string) => name.split(/\s+/)[0] ?? name;
+  if (names.length === 2) return `${first(names[0]!)} or ${first(names[1]!)}`;
+  return `${first(names[0]!)} or ${names.length - 1} others`;
 }
 
 // ── Block (A-9), with the optional on-chain block (A-11) ────────────────────
@@ -427,10 +514,17 @@ function BlockSheet({
       >
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Block an account</SheetTitle>
-          <SheetDescription>It stops paying and being paid through Assay within seconds. Lifting it later needs two people.</SheetDescription>
         </SheetHeader>
-        <div className="flex w-full flex-col gap-4 px-[18px] pt-4">
+        <div className="flex w-full flex-col gap-4 px-[18px] pt-3">
+          <WhatHappens
+            lines={[
+              { icon: Ban, text: "It stops paying and being paid through Assay within seconds" },
+              { icon: Users, text: "Lifting it later needs two people" },
+              { icon: ShieldCheck, text: "Recorded in Activity under your name" },
+            ]}
+          />
           <EntityPicker
+            inline
             label="Who"
             value={target}
             selectedLabel={shownLabel}
@@ -673,9 +767,15 @@ function LiftSheet({
       <SheetContent showCloseButton={!lift.isPending}>
         <SheetHeader className="tablet:pt-5">
           <SheetTitle className="pr-8">Lift the block on {label}?</SheetTitle>
-          <SheetDescription>Nothing changes until a second operator approves it. Then the account can use Assay again.</SheetDescription>
         </SheetHeader>
-        <div className="flex w-full flex-col gap-4 px-[18px] pt-4">
+        <div className="flex w-full flex-col gap-4 px-[18px] pt-3">
+          <WhatHappens
+            lines={[
+              { icon: Users, text: approvers && approvers.length > 0 ? `Nothing changes until ${askNamesOr(approvers)} approves` : "Nothing changes until a second Lead adjudicator approves" },
+              { icon: Undo2, text: `Then ${label} can use Assay again, within seconds` },
+              { icon: Clock, text: "The request expires after 24 hours if nobody approves it" },
+            ]}
+          />
           {waiting ? (
             <div role="status" className="flex w-full flex-col gap-1 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5 text-body-13 text-02">
               <p className="text-label-13 text-01">A request to lift this block is already waiting</p>
