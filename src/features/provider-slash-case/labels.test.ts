@@ -92,6 +92,13 @@ describe("eventLabel", () => {
     expect(eventLabel("DISPUTE_FILED")).toBe("Dispute filed");
     expect(eventLabel("SOMETHING_NEW")).toBe("Something new");
   });
+
+  it("R2-6: names the superseded-record and re-adopted entries", () => {
+    expect(eventLabel("CHAIN_SUPERSEDED_RECORD")).toBe(
+      "Earlier record landed late — the arbiter is asked to cancel it",
+    );
+    expect(eventLabel("CHAIN_PART_READOPTED")).toBe("Late record adopted");
+  });
 });
 
 describe("eventSummary", () => {
