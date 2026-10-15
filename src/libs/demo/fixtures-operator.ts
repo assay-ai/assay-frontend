@@ -1,5 +1,3 @@
-import { encodeFunctionData, parseAbi } from "viem";
-
 import type { CursorPage } from "@/interfaces/api";
 import type {
   AccountBlock,
@@ -14,6 +12,7 @@ import type {
   OverrideLogEntry,
   PlatformHealth,
 } from "@/interfaces/operator";
+import { encodeCall } from "@/libs/chains/evm/calldata-fixtures";
 import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
 import { readOperatorSession } from "@/libs/operator-session";
 
@@ -1199,19 +1198,12 @@ function health(): PlatformHealth {
   every call and refuses anything else) passes in the demo too. The guard is
   never loosened for the demo: the fixture is made right instead.
 */
-const DEMO_CALL_ABI = parseAbi([
-  "function upholdSlashBatch(bytes32[] requestIds)",
-  "function cancelSlashBatch(bytes32[] requestIds)",
-  "function cancelSlash(bytes32 requestId)",
-  "function setBlocked(address account, bool value)",
-]);
-
 function contractCall(functionName: "upholdSlashBatch" | "cancelSlashBatch", requestIds: string[]) {
   const ids = requestIds.map((id) => id.toLowerCase() as `0x${string}`);
   return {
     chainId: DEMO_CHAIN_ID,
     to: STAKE_CONTRACT,
-    data: encodeFunctionData({ abi: DEMO_CALL_ABI, functionName, args: [ids] }),
+    data: encodeCall(`${functionName}(bytes32[])`, [ids]),
     value: "0",
     signer: ARBITER,
     signerRole: "ARBITER" as const,
@@ -1222,7 +1214,7 @@ function contractCall(functionName: "upholdSlashBatch" | "cancelSlashBatch", req
 
 /** `cancelSlash(requestId)`, the calldata of a penalty's cancel. */
 function cancelSlashData(requestId: string): string {
-  return encodeFunctionData({ abi: DEMO_CALL_ABI, functionName: "cancelSlash", args: [requestId.toLowerCase() as `0x${string}`] });
+  return encodeCall("cancelSlash(bytes32)", [requestId.toLowerCase()]);
 }
 
 /** The arbiter's unsigned `setBlocked(account, true)` on the config contract. */
@@ -1230,7 +1222,7 @@ function setBlockedCall(account: string) {
   return {
     chainId: DEMO_CHAIN_ID,
     to: CONFIG_CONTRACT,
-    data: encodeFunctionData({ abi: DEMO_CALL_ABI, functionName: "setBlocked", args: [account.toLowerCase() as `0x${string}`, true] }),
+    data: encodeCall("setBlocked(address,bool)", [account.toLowerCase(), true]),
     value: "0",
     signer: ARBITER,
     signerRole: "ARBITER" as const,
