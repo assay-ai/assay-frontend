@@ -884,6 +884,12 @@ function evidenceBody(call: DemoCall) {
 const PROD_AGENT = "9d4c1f80-6b2e-4a57-8c31-7e05b9a2d146";
 const STAGING_AGENT = "b71e05a3-2c48-4d90-9f61-38ca7d0b2e54";
 const STAGING_ADDRESS = "0x2F5d8B17aC93e04f6b1D7c8A05E2f9B34cD61a70";
+/**
+ * The prod agent's own payment key (bound with `agent-cli bind`), authorised to
+ * pay below. A function, not a constant: `fixtures.ts` imports this file, so
+ * `DEMO_CHAIN_ID` is not initialised yet while this module evaluates.
+ */
+const prodDelegate = () => `${DEMO_CHAIN_ID}:0x18aB4c7E92d05F3b6A1c8D4e7F2a9B0c3D5e7296`;
 
 /* --------------------------------------------------------------- fixtures */
 
@@ -1272,6 +1278,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
             expiresAt: null,
             revokedAt: null,
             rotatedFromId: null,
+            delegateAccount: staging ? null : prodDelegate(),
+            delegateBoundAt: staging ? null : minutesAgo(64000),
             createdAt: minutesAgo(staging ? 46080 : 66240),
           },
           ...(staging
@@ -1294,6 +1302,34 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
         pageInfo: { nextCursor: null, hasMore: false },
       };
     },
+  },
+
+  /* ------------------------------------------------- pay permissions */
+  {
+    // The prod agent's key may pay up to $2 a call and $40 in 24 h; staging has
+    // no payment key yet, so it shows the bind step.
+    method: "GET",
+    match: "/escrow/delegates",
+    override: "always",
+    body: () => ({
+      account: DEMO_BUYER_ACCOUNT,
+      delegates: [
+        {
+          delegate: prodDelegate(),
+          maxVoucherAmount: money("2.00"),
+          maxPerWindow: money("40.00"),
+          spentInWindow: money("15.75"),
+          validUntil: new Date(Date.now() + 26 * 86_400_000).toISOString(),
+          status: "ACTIVE",
+        },
+      ],
+    }),
+  },
+  {
+    method: "GET",
+    match: "/escrow/unsettled",
+    override: "always",
+    body: () => ({ account: DEMO_BUYER_ACCOUNT, unsettled: null }),
   },
 
   /* ------------------------------------------------------------ audit log */

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { FullBalance } from "@/features/g30/balance";
 import type { ToolCall } from "@/services/tool-calls.service";
 
-import { ApprovalLinkView } from "./approval-link-view";
+import { ApprovalLinkView, outcomeOf } from "./approval-link-view";
 
 /**
  * This suite exists because of a measured miss on a sibling file.
@@ -83,48 +83,31 @@ function markup(balances?: FullBalance[]): string {
   );
 }
 
-describe("ApprovalLinkView — balance after is one chain's, or nothing", () => {
-  it("shows the balance after on a single-chain account", () => {
-    // 12.50 available − 2.50 price = 10.00.
+describe("ApprovalLinkView — the outcome, never dead approve buttons", () => {
+  it("shows a call still in progress with its price and a receipt link", () => {
     const html = markup([SOLANA_ROW]);
-    expect(html).toContain("$10.00");
+    expect(html).toContain("Still in progress");
     expect(html).toContain("$2.50");
+    expect(html).toContain("/receipts/view?id=intent-1");
+    expect(html).not.toContain("Decline");
+    expect(html).not.toContain('disabled=""');
   });
 
-  it("shows NO balance after when the buyer has two chains, rather than picking one", () => {
-    /*
-      The original defect: `balances[0]?.available` subtracted this call's price
-      from whichever chain happened to be first and printed the result as a
-      fact. The router picks the paying chain per call and nothing on
-      this screen carries the answer, so the honest answer is a dash.
-    */
-    const html = markup([SOLANA_ROW, EVM_ROW]);
-    // Neither chain's "after" figure appears: 12.50−2.50 and 4.00−2.50.
-    expect(html).not.toContain("$10.00");
-    expect(html).not.toContain("$1.50");
-    // …and certainly not the sum of the two balances, minus the price.
-    expect(html).not.toContain("$14.00");
-    // The price itself is still on screen — the decision needs it.
-    expect(html).toContain("$2.50");
+  it("says a settled call is already settled", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["tool-call", "approval-1"], { ...CALL, status: "SETTLED", charged: money("250000") });
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <ApprovalLinkView approvalId="approval-1" />
+      </QueryClientProvider>,
+    );
+    expect(html).toContain("Already settled");
+    expect(html).toContain("$0.25");
   });
 
-  it("shows NO balance after when the balance could not be read, and never $0.00", () => {
-    const html = markup();
-    expect(html).not.toContain("$10.00");
-    /*
-      `formatMoney(undefined)` is `$0.00`, and "we could not read your balance"
-      is not "you have nothing". Only one of those is a reason to decline.
-    */
-    expect(html).not.toContain("$0.00");
-  });
-
-  it("still renders both decision controls, and says why neither can be submitted", () => {
-    // An approval that offers one outcome is not an approval; and a control
-    // that looks live while silently dropping the decision is worse than a
-    // disabled one, because the call then expires unanswered.
-    const html = markup([SOLANA_ROW]);
-    expect(html).toContain("Decline");
-    expect(html).toContain("Approving or declining a call is not available yet");
-    expect(html.match(/disabled=""/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  it("maps every status to one of three outcomes", () => {
+    expect(outcomeOf("SETTLED").chip).toBe("charged");
+    expect(outcomeOf("REFUNDED").chip).toBe("not-charged");
+    expect(outcomeOf("VERIFYING").chip).toBe("checking");
   });
 });
