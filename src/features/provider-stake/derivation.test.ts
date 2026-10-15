@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Chain } from "@/interfaces/chain";
 
-import { readableDerivation } from "./derivation";
+import { isAssetMismatch, missingRequirementNote, readableDerivation } from "./derivation";
 
 const USDC = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1/token:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 const USDG = "eip155:46630/erc20:0xDbbC0000000000000000000000000000000000aa";
@@ -27,5 +27,27 @@ describe("readableDerivation", () => {
   it("leaves the arithmetic of a matching binding as it is", () => {
     const line = "max(floor $500.00, 1000 × $0.0100) = $500.00";
     expect(readableDerivation(line, chains)).toBe(line);
+  });
+});
+
+// BUG-R16-V3-01: an ACTIVE binding with no requirement row was labelled "not active".
+describe("missingRequirementNote", () => {
+  it("never calls an ACTIVE binding not active", () => {
+    expect(missingRequirementNote("ACTIVE")).not.toMatch(/not active/);
+    expect(missingRequirementNote("ACTIVE")).toMatch(/^active/);
+  });
+
+  it("names the real state of a binding that is not live", () => {
+    expect(missingRequirementNote("PAUSED")).toMatch(/^paused/);
+    expect(missingRequirementNote("DRAFT")).toMatch(/^draft/);
+  });
+});
+
+describe("isAssetMismatch", () => {
+  it("tells the mismatch refusal from ordinary arithmetic", () => {
+    expect(
+      isAssetMismatch(`priced in ${USDC}, stake floor in ${USDG} — not routable (STAKE_ASSET_MISMATCH)`)
+    ).toBe(true);
+    expect(isAssetMismatch("max(floor $500.00, 1000 × $0.0100) = $500.00")).toBe(false);
   });
 });
