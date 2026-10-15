@@ -44,9 +44,8 @@ export function windowRange(win: SpendWindow, now = Date.now()): { from: string;
  *
  * `agent` groups by `payment_intents.agent_id`, the agent whose credential
  * made the call, so a call an agent paid for with its own delegate key lands
- * under that agent. The design's third segment reads "hour"; the wire's
- * `groupBy` enum has `day` and no finer grain, so this build offers `day` under
- * the design's own "upstream/hour" vocabulary. Reported as a divergence.
+ * under that agent. Verdict and status are not groupings a person asks for —
+ * they are Calls filters — so Spend offers tool, agent and provider only.
  */
 export interface SpendDimension {
   id: "tool" | "provider" | "day" | "status" | "verdict" | "agent";
@@ -58,12 +57,9 @@ export interface SpendDimension {
 }
 
 export const SPEND_DIMENSIONS: SpendDimension[] = [
-  { id: "tool", label: "tool", header: "Tool" },
-  { id: "provider", label: "upstream", header: "Upstream" },
-  { id: "day", label: "day", header: "Day" },
-  { id: "status", label: "status", header: "Status" },
-  { id: "verdict", label: "verdict", header: "Verdict" },
-  { id: "agent", label: "agent", header: "Agent" },
+  { id: "tool", label: "Tool", header: "Tool" },
+  { id: "agent", label: "Agent", header: "Agent" },
+  { id: "provider", label: "Provider", header: "Provider" },
 ];
 
 export function dimensionById(id: string): SpendDimension {

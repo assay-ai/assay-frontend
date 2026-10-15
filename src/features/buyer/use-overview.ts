@@ -104,7 +104,8 @@ async function loadChart(days: Period[]): Promise<{ chart: ChartDay[]; tools: st
   return { chart, tools };
 }
 
-export function useOverview(anchor: Date): OverviewState {
+/** `assetKey`: the display-asset pick; a change refetches without a reload. */
+export function useOverview(anchor: Date, assetKey: string | null = null): OverviewState {
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
@@ -178,7 +179,7 @@ export function useOverview(anchor: Date): OverviewState {
     return () => {
       cancelled = true;
     };
-  }, [month, days, today, yesterday, nonce]);
+  }, [month, days, today, yesterday, nonce, assetKey]);
 
   const reload = useCallback(() => setNonce((n) => n + 1), []);
 

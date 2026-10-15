@@ -14,9 +14,10 @@ import { ThemeToggle } from "./theme-toggle";
  * The marketing shell (How it works, Explore, Demo, provider pages), distinct
  * from the buyer console's `Top Bar` (56px).
  *
- *   How it works · Explore · Demo · For providers ▾ · Docs      Sign in  [+ List a tool]
+ *   How it works · Explore · Demo · For providers · Docs      Sign in  [+ List a tool]
  *
- * "For providers" groups Why list here and the Calculator. "Docs" appears
+ * "For providers" is one page (the offer with the earnings calculator
+ * embedded); "Demo" shows only where it is configured. "Docs" appears
  * only when `NEXT_PUBLIC_DOCS_URL` is set — a link to nowhere is worse than
  * no link. Below `tablet` the links move into a menu button; "List a tool"
  * stays in the bar.
@@ -43,26 +44,18 @@ const DEFAULT_NAV_ITEMS: PublicTopBarNavItem[] = [
   { id: "how-it-works", label: "How it works", href: "/how-it-works" },
   { id: "explore", label: "Explore", href: "/catalogue" },
   { id: "demo", label: "Demo", href: "/demo" },
-  {
-    id: "providers",
-    label: "For providers",
-    items: [
-      {
-        id: "why-list-here",
-        label: "Why list here",
-        href: "/why-list-here",
-        description: "What you earn, what you risk",
-      },
-      {
-        id: "calculator",
-        label: "Calculator",
-        href: "/calculator",
-        description: "Your payout at your price and volume",
-      },
-    ],
-  },
+  { id: "providers", label: "For providers", href: "/why-list-here" },
   ...(DOCS_URL ? [{ id: "docs", label: "Docs", href: DOCS_URL, external: true }] : []),
 ];
+
+/**
+ * The bar's items for this deployment: "Demo" only where the live demo is
+ * configured (`GET /public/features`), so the bar never links to a page that
+ * can only say "not available".
+ */
+export function publicNavItems({ demo }: { demo: boolean }): PublicTopBarNavItem[] {
+  return demo ? DEFAULT_NAV_ITEMS : DEFAULT_NAV_ITEMS.filter((item) => item.id !== "demo");
+}
 
 /** Every link in the bar, groups flattened. */
 export function flattenPublicNav(items: readonly PublicTopBarNavItem[]): PublicTopBarLink[] {

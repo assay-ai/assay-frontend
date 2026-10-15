@@ -1,6 +1,7 @@
 import { BUYER_FIXTURES } from "./fixtures-buyer";
 import { EXPLORE_FIXTURES } from "./fixtures-explore";
 import { PROVIDER_FIXTURES } from "./fixtures-provider";
+import { PUBLIC_FIXTURES } from "./fixtures-public";
 
 /**
  * The stage set — DEMO ONLY. See `demo-api.ts` for the rules these obey.
@@ -55,6 +56,7 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
   ...BUYER_FIXTURES,
   ...EXPLORE_FIXTURES,
   ...PROVIDER_FIXTURES,
+  ...PUBLIC_FIXTURES,
   {
     /*
       A MetaMask-only Privy identity has no Solana wallet, so the API's link

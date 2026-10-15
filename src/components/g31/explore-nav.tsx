@@ -6,23 +6,12 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/utils";
 
 /**
- * The single "Explore" surface: two tabs, Providers and Tools, over three
- * routes (`/explore/providers`, `/explore/tools`, `/explore/providers/[id]`).
- *
- * The design draws seven tabs on both explore screens — "Providers, Tools,
- * Failed 92, Passing 60, Excluded 38, Policy v3, Attestation". The last five
- * are stale: they are the Verdicts screen's tab strip, carried over when the
- * screen was copied in the design, and they name counts and a policy version that have
- * nothing to do with a catalogue. Only the two that belong are rendered.
- *
- * Styling is `TabsList`/`TabsTrigger`'s (26px gap, 1px `$border-01` rule, 2px
- * `$text-01` underline on the selected tab) rather than the component itself,
- * because these tabs are routes: each must be a real link so that a tab can be
- * opened in a new window and deep-linked.
+ * Explore's two views as route tabs: Tools (`/explore`, the main list) and
+ * Providers (`/explore/providers`). Real links, so each can be deep-linked.
  */
 const TABS = [
-  { href: "/explore/providers", label: "Providers" },
-  { href: "/explore/tools", label: "Tools" },
+  { href: "/explore", label: "Tools", match: (p: string) => p === "/explore" || p.startsWith("/explore/tools") },
+  { href: "/explore/providers", label: "Providers", match: (p: string) => p.startsWith("/explore/providers") },
 ];
 
 export function ExploreNav() {
@@ -31,7 +20,7 @@ export function ExploreNav() {
   return (
     <div role="tablist" aria-label="Explore" className="flex w-full items-end gap-[26px] border-b border-01">
       {TABS.map((tab) => {
-        const selected = pathname.startsWith(tab.href);
+        const selected = tab.match(pathname);
         return (
           <Link
             key={tab.href}

@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { Term } from "@/components/patterns/term";
 import { MoneyPair } from "@/components/ui/money-pair";
 import {
   Panel,
@@ -13,7 +14,7 @@ import {
   PanelTitles,
 } from "@/components/ui/panel";
 
-import { DemoCta } from "./demo-cta";
+import { HeroCtas } from "./demo-cta";
 
 /**
  * How it works — route `/how-it-works`.
@@ -25,13 +26,6 @@ import { DemoCta } from "./demo-cta";
  * buyer. That is the design's call, not an inference: the frame names the
  * component. This file is therefore the frame's two remaining children only,
  * `Hero` and `Body`.
- *
- * **The nav does not link here, anywhere in the design.** The top bar carries
- * five nav items (Why list here · Calculator · Catalogue · Docs · CLI) and
- * this page overrides none of them; no other screen in the design links to
- * this page either. `public-top-bar.tsx`
- * is deliberately left alone — inventing a sixth nav label would be inventing
- * marketing copy.
  *
  * Static — no service call. Every figure is an illustrative constant drawn in
  * the frame ($0.0100 listed / held / charged), not a measurement.
@@ -62,7 +56,7 @@ interface FlowStep {
   n: string;
   icon: LucideIcon;
   title: string;
-  detail: string;
+  detail: React.ReactNode;
   note: string;
   /** The fourth step's note is `$teal-600`; the first three are `$text-03`. */
   noteTeal?: boolean;
@@ -80,7 +74,11 @@ const FLOW: FlowStep[] = [
     n: "2",
     icon: Lock,
     title: "We hold, not charge",
-    detail: "The amount is reserved from your balance. Nothing has left it yet.",
+    detail: (
+      <>
+        The amount is <Term k="hold">held</Term> from your balance. Nothing has left it yet.
+      </>
+    ),
     note: "$0.0100 held",
   },
   {
@@ -94,7 +92,12 @@ const FLOW: FlowStep[] = [
     n: "4",
     icon: Split,
     title: "Money moves, or it does not",
-    detail: "Passed: the hold is charged. Failed: the hold is released and you keep the money.",
+    detail: (
+      <>
+        Passed: the hold is charged. Failed: the hold is released and the amount is{" "}
+        <Term k="not-charged">not charged</Term>.
+      </>
+    ),
     note: "charged $0.0100  ·  or  ·  $0.0000",
     noteTeal: true,
   },
@@ -128,16 +131,8 @@ export default function HowItWorksPage() {
           unusable, the charge never happens — and we show you the amount we did not take.
         </p>
 
-        {/* CTAs */}
-        <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
-          <DemoCta />
-          <Link
-            href="/catalogue"
-            className="flex items-center rounded-md border border-02 bg-01 px-[18px] py-3 text-label-sm text-01 shadow-hair hover:bg-02"
-          >
-            See the tools and prices
-          </Link>
-        </div>
+        {/* CTAs: the demo leads only where it is configured; otherwise the tools do. */}
+        <HeroCtas />
       </section>
 
       {/* Body */}
@@ -227,8 +222,16 @@ export default function HowItWorksPage() {
               <div className="flex w-full items-start gap-2.5 rounded-lg border border-01 bg-02 p-[15px]">
                 <Info aria-hidden="true" className="h-[15px] w-[15px] shrink-0 text-03" />
                 <p className="min-w-0 flex-1 text-body-13 text-02">
-                  Relevance is judged on a sample, and the rate is published on each tool page
-                  before you spend anything.
+                  Some tools also check relevance — does the answer fit the question — on every call
+                  or on a sample. Each tool&apos;s page says which, before you spend anything.
+                </p>
+              </div>
+              <div className="flex w-full items-start gap-2.5 rounded-lg border border-01 bg-02 p-[15px]">
+                <Info aria-hidden="true" className="h-[15px] w-[15px] shrink-0 text-03" />
+                <p className="min-w-0 flex-1 text-body-13 text-02">
+                  Providers put up a <Term k="stake">stake</Term>. One that fails more often than it
+                  promised gets a <Term k="slash">penalty</Term>, and part of it goes to the buyers it
+                  served badly.
                 </p>
               </div>
             </PanelBody>

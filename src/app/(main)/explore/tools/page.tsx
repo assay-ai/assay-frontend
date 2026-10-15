@@ -1,6 +1,6 @@
-import { ToolsView } from "@/components/g31/tools-view";
+import { redirect } from "next/navigation";
 
-/** Tools. */
-export default function ExploreToolsPage() {
-  return <ToolsView />;
+/** The tool list moved to `/explore` itself. */
+export default function ExploreToolsRedirect(): never {
+  redirect("/explore");
 }

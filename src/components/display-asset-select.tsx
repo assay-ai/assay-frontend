@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useSyncExternalStore } from "react";
 
 import { useChains } from "@/hooks/useChains";
 import type { Chain } from "@/interfaces/chain";
@@ -11,6 +12,7 @@ import {
   storeDisplayAsset,
   storedDisplayAsset,
 } from "@/services";
+import { subscribeDisplayAsset } from "@/services/display-asset";
 import { assetName, chainDisplayName } from "@/services/chains.service";
 
 /** `USDG on Robinhood Chain testnet`. */
@@ -19,6 +21,14 @@ export function displayAssetLabel(asset: string, chains: readonly Chain[]): stri
 }
 
 type Scope = "buyer" | "provider";
+
+/**
+ * The stored pick, re-read whenever it changes. Put it in a query key (or an
+ * effect's deps) so a screen refetches on a switch instead of reloading.
+ */
+export function useDisplayAssetPick(): string | null {
+  return useSyncExternalStore(subscribeDisplayAsset, storedDisplayAsset, () => null);
+}
 
 /**
  * The asset the selector shows as picked, for a page that scopes its own rows
@@ -32,9 +42,10 @@ export function useDisplayAsset(scope: Scope) {
     staleTime: 60_000,
   });
   const assets = query.data ?? [];
+  const stored = useDisplayAssetPick();
   return {
     assets,
-    current: pickDisplayAsset(assets, storedDisplayAsset()),
+    current: pickDisplayAsset(assets, stored),
     isPending: query.isPending,
   };
 }
@@ -43,9 +54,11 @@ export function useDisplayAsset(scope: Scope) {
  * Which asset this page's period figures are in — shown only to an account
  * with more than one, because the summary APIs answer in one asset at a time.
  * `scope` says whose assets: what a buyer holds, or what a provider earned in.
- * Picking reloads the page: every figure on it was fetched for the old asset.
+ * With `live`, picking only stores the choice and the page refetches (its
+ * loaders key on `useDisplayAssetPick()`); without it, the page reloads,
+ * because every figure on it was fetched for the old asset.
  */
-export function DisplayAssetSelect({ scope = "buyer" }: { scope?: Scope }) {
+export function DisplayAssetSelect({ scope = "buyer", live = false }: { scope?: Scope; live?: boolean }) {
   const { chains } = useChains();
   const { assets, current } = useDisplayAsset(scope);
   if (!current) return null;
@@ -60,7 +73,7 @@ export function DisplayAssetSelect({ scope = "buyer" }: { scope?: Scope }) {
         value={current}
         onChange={(event) => {
           storeDisplayAsset(event.target.value);
-          window.location.reload();
+          if (!live) window.location.reload();
         }}
       >
         {assets.map((asset) => (
