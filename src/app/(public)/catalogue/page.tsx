@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowRight, ChevronRight, Store } from "lucide-react";
+import { ChevronRight, Store } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
 import { FailsOftenChip, FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
+import { StartFreeCta } from "@/components/explorer/start-free";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,6 @@ import {
 } from "@/features/explorer/use-public-explorer";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
-import { loginHref } from "@/libs/login-redirect";
 import { routes } from "@/libs/routes";
 import type { PublicProvider, PublicTool } from "@/services/public-explorer.service";
 
@@ -161,13 +161,8 @@ export default function CataloguePage() {
           Every tool here is served by providers who put up a <Term k="stake">stake</Term>. Each result is checked
           before money moves; if it fails, nobody is charged.
         </p>
-        <div className="flex flex-wrap gap-2.5 pt-1">
-          <Button asChild>
-            <Link href={loginHref({ next: "/" })}>
-              Start free
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </Button>
+        <div className="flex flex-wrap items-start gap-2.5 pt-1">
+          <StartFreeCta next="/" />
           {features.demo ? (
             <Button asChild variant="secondary">
               <Link href="/demo">Watch it refuse to charge</Link>
