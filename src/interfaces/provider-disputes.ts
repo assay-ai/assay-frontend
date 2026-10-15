@@ -175,7 +175,11 @@ export interface SlashProposalClocks {
   respondByAt: string | null;
   /** OUR deadline to decide an in-app objection (Solana only). Null on EVM. */
   platformDecisionDueAt: string | null;
-  /** Nothing executes before this, even on total inaction. */
+  /**
+   * Assay's own floor: Assay's executor does not execute before this. It binds
+   * only while the record is not on chain; once it is, `chainExecutableAt`
+   * governs, because anyone may execute from then (`executionFloorOf`).
+   */
   earliestExecutionAt: string;
   /**
    * When the CHAIN will let a judgement be executed — `chain_proposed_at +

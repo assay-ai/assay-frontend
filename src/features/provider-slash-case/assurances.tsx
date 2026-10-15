@@ -19,6 +19,7 @@ import { formatMoney, toDecimal } from "@/utils/money";
 import {
   caseStageOf,
   closedSentence,
+  chainExecutableOf,
   executionFloorOf,
   type CaseChainStage,
   type ClosedStage,
@@ -155,11 +156,15 @@ function minimumKnown(minimum: Money | null | undefined): minimum is Money {
 export function WhatHappensIfYouDoNothing({ data }: { data: SlashProposalCaseDetail }) {
   const { inaction } = data;
   /*
-    `inaction.executesAt` is Assay's off-chain promise. The on-chain record
-    can open later than that, and nothing is taken before both have passed, so
-    the sentence names the later of the two (`executionFloorOf`).
+    `inaction.executesAt` is Assay's off-chain promise. Once the record is on
+    chain, anyone can execute it from the chain's own date, so that date is the
+    one named (`executionFloorOf`), earlier or later. Before then, the later of
+    Assay's two off-chain dates.
   */
-  const executesAt = laterOf(inaction.executesAt, executionFloorOf(data.proposal.clocks));
+  const clocks = data.proposal.clocks;
+  const executesAt = chainExecutableOf(clocks)
+    ? executionFloorOf(clocks)
+    : laterOf(inaction.executesAt, executionFloorOf(clocks));
 
   const floorSentence = inaction.fallsBelowMinimum
     ? `below your ${formatMoney(inaction.minimumRequired)} minimum. ` +

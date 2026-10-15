@@ -19,10 +19,19 @@ describe("executionFloorOf", () => {
     expect(executionFloorOf(clocksOf())).toBe(R13.chainExecutableAt);
   });
 
-  it("keeps Assay's promise when it is the later one", () => {
-    expect(executionFloorOf(clocksOf({ earliestExecutionAt: "2026-10-16T00:00:00.000Z" }))).toBe(
-      "2026-10-16T00:00:00.000Z",
-    );
+  it("takes the chain's executableAt even when Assay's own floor is later: anyone can execute at the chain's door", () => {
+    expect(executionFloorOf(clocksOf({ earliestExecutionAt: "2099-10-16T00:00:00.000Z" }))).toBe(R13.chainExecutableAt);
+  });
+
+  it("matches the operator case screen's rule (chainExecutableAt ?? earliestExecutionAt)", () => {
+    for (const overrides of [
+      {},
+      { earliestExecutionAt: "2099-10-16T00:00:00.000Z" },
+      { chainExecutableAt: null },
+    ]) {
+      const clocks = clocksOf(overrides);
+      expect(executionFloorOf(clocks)).toBe(clocks.chainExecutableAt ?? clocks.earliestExecutionAt);
+    }
   });
 
   it("falls back to Assay's promise when the chain date is absent or unparseable", () => {
