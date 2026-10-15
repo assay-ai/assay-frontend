@@ -24,7 +24,8 @@ import {
 import { usePenaltySummary } from "@/features/provider-penalties/use-penalty-summary";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
-import type { BindingStatus, ProviderEarnings, ToolBindingSummary } from "@/interfaces";
+import { earningsSplit } from "@/features/provider-earnings/earned-tile";
+import type { BindingStatus, Money, ProviderEarnings, ToolBindingSummary } from "@/interfaces";
 import { routes } from "@/libs/routes";
 import { getProviderEarnings } from "@/services/provider-reports.service";
 import { listSlaWindows } from "@/services/provider-sla-windows.service";
@@ -232,19 +233,17 @@ function EarningsPanel({ earnings, loading }: { earnings: ProviderEarnings | und
   if (loading) return <PageState kind="loading" rows={2} label="Loading this month's earnings" />;
   const totals = earnings?.totals;
   if (!totals) return null;
-  const earned = totals.earned;
-  const fee = totals.platformFee;
-  const withheld = totals.withheld;
-  const value = (money: typeof earned) => (money ? toDecimal(money).toNumber() : 0);
+  const split = earningsSplit(totals);
+  const value = (money: Money | null) => (money ? toDecimal(money).toNumber() : 0);
   const segments = [
-    earned ? { label: "Paid to your wallet", value: value(earned), amount: formatMoney(earned, { decimals: 2 }), tone: "success" as const } : null,
-    fee && value(fee) > 0 ? { label: "Assay fee", value: value(fee), amount: formatMoney(fee, { decimals: 2 }), tone: "neutral" as const } : null,
-    withheld && value(withheld) > 0
+    { label: "In your wallet", value: value(split.inWallet), amount: formatMoney(split.inWallet, { decimals: 2 }), tone: "success" as const },
+    split.fee ? { label: "Assay fee", value: value(split.fee), amount: formatMoney(split.fee, { decimals: 2 }), tone: "neutral" as const } : null,
+    split.notCredited
       ? {
           label: "Not credited",
-          note: `${totals.withheldCalls} call${totals.withheldCalls === 1 ? "" : "s"} failed the check`,
-          value: value(withheld),
-          amount: formatMoney(withheld, { decimals: 2 }),
+          note: `${split.notCreditedCalls} call${split.notCreditedCalls === 1 ? "" : "s"} failed the check`,
+          value: value(split.notCredited),
+          amount: formatMoney(split.notCredited, { decimals: 2 }),
           tone: "danger" as const,
         }
       : null,
@@ -265,8 +264,8 @@ function EarningsPanel({ earnings, loading }: { earnings: ProviderEarnings | und
       </PanelHeader>
       <PanelBody className="flex flex-col gap-4 p-4 tablet:p-5">
         <div className="flex flex-col gap-0.5">
-          <span className="text-body-13 text-02">Earned this month</span>
-          <span className="font-mono text-heading-md text-01">{formatMoney(earned, { decimals: 2 })}</span>
+          <span className="text-body-13 text-02">In your wallet this month</span>
+          <span className="font-mono text-heading-md text-01">{formatMoney(split.inWallet, { decimals: 2 })}</span>
         </div>
         {segments.length > 1 ? <MoneySplit segments={segments} /> : null}
       </PanelBody>
