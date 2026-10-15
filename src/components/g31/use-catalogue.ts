@@ -79,6 +79,8 @@ export interface ProviderRow {
   quality: number | null;
   /** The denominator behind `quality`. 0 when `quality` is null. */
   measuredCalls: number;
+  /** Measured calls that failed. 0 when `quality` is null. */
+  failedCalls: number;
   /** Calls **your** organization made to them. Zero is the normal case now. */
   yourCalls: number;
 }
@@ -87,6 +89,10 @@ export interface ToolRow {
   toolId: string;
   name: string;
   description: string;
+  /** UNVERIFIED | VERIFIED | GUARANTEED — how much of each call is checked. */
+  tier: string;
+  /** FREE | FREEMIUM | PAID, or null when nothing is routable. */
+  pricingMode: string | null;
   /** Distinct providers with an ACTIVE binding — the depth of the market. */
   providerCount: number;
   /** The market floor. */
@@ -170,6 +176,7 @@ export function useCatalogue() {
       stake: row.stake,
       quality: row.quality ? row.quality.rate : null,
       measuredCalls: row.quality ? row.quality.measuredCalls : 0,
+      failedCalls: row.quality ? row.quality.failedCalls : 0,
       yourCalls: calls.filter((call) => call.providerId === row.providerId).length,
     }));
   }, [providersQuery.data, calls]);
@@ -192,6 +199,8 @@ export function useCatalogue() {
         toolId: row.id,
         name: row.name,
         description: row.description,
+        tier: row.tier,
+        pricingMode: row.pricingMode,
         providerCount: row.providerCount,
         fromPrice: row.fromPrice,
         price: row.price,
