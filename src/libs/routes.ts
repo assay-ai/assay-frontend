@@ -21,8 +21,8 @@ export const routes = {
   approval: (approvalId: string) => withQuery("/approvals/view", { id: approvalId }),
   exploreProvider: (providerId: string) => withQuery("/explore/providers/view", { id: providerId }),
   operatorCase: (proposalId: string) => withQuery("/operator/cases/view", { id: proposalId }),
-  providerCase: (proposalId: string) => withQuery("/provider/cases/view", { id: proposalId }),
-  dispute: (disputeId: string) => withQuery("/provider/disputes/view", { id: disputeId }),
+  /** A provider's penalty case: the Penalties page with its "Why?" drawer open. */
+  providerCase: (proposalId: string) => withQuery("/provider/penalties", { case: proposalId }),
   toolRequest: (requestId: string) => withQuery("/provider/tool-requests/view", { id: requestId }),
   /** A binding screen: `sub` is the path below the binding, e.g. "configuration/pricing". */
   binding: (bindingId: string, sub?: string) =>
