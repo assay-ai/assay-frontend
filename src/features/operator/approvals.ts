@@ -301,6 +301,17 @@ function personName(
   return operator?.displayName?.trim() || operator?.subject || `operator ${shortId(id)}`;
 }
 
+/**
+ * A person known by their handle (`jordan@`): their display name from the
+ * directory. A handle nobody in the directory holds is shown as it is.
+ */
+function subjectName(subject: string, context: ApprovalContext): string {
+  for (const operator of context.operators.values()) {
+    if (operator.subject === subject) return personName(operator, subject);
+  }
+  return subject;
+}
+
 /** "Noor Hassan's", "Iris'": a possessive that reads right after an s. */
 function possessive(name: string): string {
   return /s$/i.test(name) ? `${name}'` : `${name}'s`;
@@ -446,7 +457,7 @@ function describeLong(
       const who = block ? blockSubject(block) : `block ${shortId(blockId)}`;
       const fields: { label: string; value: string }[] = [];
       if (block) {
-        fields.push({ label: "Blocked for", value: `${reasonText(block.reasonCode)} · by ${block.blockedBy}` });
+        fields.push({ label: "Blocked for", value: `${reasonText(block.reasonCode)} · by ${subjectName(block.blockedBy, context)}` });
         if (!block.active) fields.push({ label: "Block now", value: "already lifted" });
       }
       return {

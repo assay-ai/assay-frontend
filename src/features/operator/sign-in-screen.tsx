@@ -55,10 +55,23 @@ function storage(): Storage | null {
   }
 }
 
+/** One plain line each: what the role does, and where it needs a second person. */
 const DEMO_PRESETS: readonly { id: DemoOperatorPreset; label: string; sees: string }[] = [
-  { id: "lead", label: "Lead adjudicator", sees: "Rules disputes, approves lifts" },
-  { id: "support", label: "Support / on-call", sees: "Blocks accounts" },
-  { id: "admin", label: "Admin", sees: "Manages the team" },
+  {
+    id: "lead",
+    label: "Lead adjudicator",
+    sees: "Rules on disputed penalties, blocks accounts and approves lifting a block, up to $1,000 per action.",
+  },
+  {
+    id: "support",
+    label: "Support / on-call",
+    sees: "Blocks an account during an incident. Lifting a block needs a Lead adjudicator.",
+  },
+  {
+    id: "admin",
+    label: "Admin",
+    sees: "Adds people to the team and changes their access. Both need a second Admin to approve.",
+  },
 ];
 
 export function OperatorSignInScreen({
@@ -264,7 +277,7 @@ export function OperatorSignInScreen({
         <div className="flex w-full flex-col gap-2 rounded-lg border border-dashed border-02 p-3.5">
           <p className="text-label-13 text-01">Demo console</p>
           <p className="text-body-xs text-03">Sample data, no wallet. Pick a role to see the console as that person.</p>
-          <div className="grid w-full grid-cols-1 gap-2 min-[480px]:grid-cols-3">
+          <div className="flex w-full flex-col gap-2">
             {DEMO_PRESETS.map((preset) => (
               <button
                 key={preset.id}
@@ -276,10 +289,10 @@ export function OperatorSignInScreen({
                   });
                   onSignedIn();
                 }}
-                className="flex min-w-0 flex-col items-start gap-0.5 rounded-lg border border-02 bg-01 px-3 py-2 text-left hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                className="flex min-w-0 flex-col items-start gap-1 rounded-lg border border-02 bg-01 px-3 py-2.5 text-left hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
               >
                 <span className="text-label-13 text-01">{preset.label}</span>
-                <span className="text-body-xs text-03">{preset.sees}</span>
+                <span className="text-body-13 text-02">{preset.sees}</span>
               </button>
             ))}
           </div>

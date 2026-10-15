@@ -100,7 +100,7 @@ export function DisputeLine({
         {name}
       </Link>
       <span className="flex flex-wrap items-center gap-x-4 gap-y-1">{facts}</span>
-      <Button asChild size="sm" className="w-full tablet:w-auto" data-primary="">
+      <Button asChild size="sm" className="touch-target w-full sm:w-auto sm:self-end tablet:self-auto" data-primary="">
         <Link href={`/operator/arbiter?focus=${encodeURIComponent(row.requestId)}`}>Rule</Link>
       </Button>
     </article>
