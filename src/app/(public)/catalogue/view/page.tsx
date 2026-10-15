@@ -4,7 +4,7 @@ import { ArrowLeft, Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { FailsOftenChip, Fact, FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, Fact, FreeTierBadge, ObservedFailuresLabel, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { BuyerCosts } from "@/components/explorer/buyer-costs";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
 import { StartFreeCta } from "@/components/explorer/start-free";
@@ -191,7 +191,7 @@ function ToolPage() {
                           {notRouted ? " · not taking paid calls right now" : ""}
                         </span>
                       </div>
-                      <Fact label="Observed failures">{failRateLabel(provider.quality)}</Fact>
+                      <Fact label={<ObservedFailuresLabel />}>{failRateLabel(provider.quality)}</Fact>
                       <Fact label="Stake at risk">{stakeSummary(provider.stake, chainName)}</Fact>
                     </div>
                     <ChevronRight aria-hidden="true" className="mt-1 size-4 shrink-0 text-03 group-hover:text-02" />

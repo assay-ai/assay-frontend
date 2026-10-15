@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import { FailsOftenChip, Fact, FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, Fact, FreeTierBadge, ObservedFailuresLabel, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { ToolAccessControl, useSpendPolicy } from "@/components/explorer/tool-access-control";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
@@ -170,7 +170,7 @@ function ToolDetail({
                           </span>
                         ) : null}
                       </div>
-                      <Fact label="Observed failures">
+                      <Fact label={<ObservedFailuresLabel />}>
                         {failRateLabel(provider.quality == null ? null : provider)}
                       </Fact>
                       <Fact label="Stake at risk">{stakeSummary(provider.stake, chainName)}</Fact>

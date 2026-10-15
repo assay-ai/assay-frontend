@@ -4,7 +4,7 @@ import { ArrowLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { FailsOftenChip, Fact, FreeTierBadge, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, Fact, FreeTierBadge, ObservedFailuresLabel, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 import { failRateLabel, failsOften, formatCallPrice, freeTierLabel, plural, stakeSummary } from "@/features/explorer/explorer-text";
@@ -56,14 +56,14 @@ function ProviderPage() {
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-heading-md text-01">{provider.name}</h1>
-          <VerifiedMark verified={provider.verified} />
+          <VerifiedMark verified={provider.verified} interactive />
           {failsOften(provider.quality) ? <FailsOftenChip /> : null}
         </div>
         <p className="text-body-13 text-02">Serves {plural(provider.tools.length, "tool")} on Assay.</p>
       </header>
 
       <section className="grid grid-cols-1 gap-4 rounded-xl border border-01 bg-01 p-4 tablet:grid-cols-2 tablet:p-5">
-        <Fact label="Observed failures">{failRateLabel(provider.quality)}</Fact>
+        <Fact label={<ObservedFailuresLabel interactive />}>{failRateLabel(provider.quality)}</Fact>
         <Fact label="Stake at risk">{stakeSummary(provider.stake, chainName)}</Fact>
         <p className="text-body-xs text-03 tablet:col-span-2">
           Failures are measured by Assay on real calls, not reported by the provider. If they fail more often than they

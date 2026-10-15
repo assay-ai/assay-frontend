@@ -5,7 +5,7 @@ import { ArrowLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { FailsOftenChip, Fact, FreeTierBadge, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, Fact, FreeTierBadge, ObservedFailuresLabel, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { ToolAccessControl } from "@/components/explorer/tool-access-control";
 import { EntityName } from "@/components/patterns/entity-name";
 import { LocalTime } from "@/components/patterns/local-time";
@@ -98,14 +98,14 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
       <header className="flex flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-2.5">
           <h1 className="text-heading-md text-01">{provider.legalName}</h1>
-          <VerifiedMark verified={provider.verified} />
+          <VerifiedMark verified={provider.verified} interactive />
           {failsOften(provider.quality) ? <FailsOftenChip /> : null}
         </div>
         <p className="text-body-13 text-02">Serves {plural(provider.tools.length, "tool")} on Assay.</p>
       </header>
 
       <section className="grid grid-cols-1 gap-4 rounded-xl border border-01 bg-01 p-4 tablet:grid-cols-3 tablet:p-5">
-        <Fact label="Observed failures">{failRateLabel(provider.quality)}</Fact>
+        <Fact label={<ObservedFailuresLabel interactive />}>{failRateLabel(provider.quality)}</Fact>
         <Fact label="Stake at risk">{stakeSummary(provider.stake, chainName)}</Fact>
         <Fact label="Cheapest call">{provider.fromPrice ? formatCallPrice(provider.fromPrice) : "—"}</Fact>
         <p className="text-body-xs text-03 tablet:col-span-3">
