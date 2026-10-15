@@ -253,7 +253,7 @@ export default function DemoPage() {
         href="/login"
         className="fixed inset-x-4 bottom-4 z-10 block rounded-lg bg-primary-400 px-4 py-3 text-center text-label-sm text-on-primary shadow-lg lg:hidden"
       >
-        Start with 1,000 free calls a day
+        Start free: many tools include free calls every day
       </a>
     </Shell>
   );
