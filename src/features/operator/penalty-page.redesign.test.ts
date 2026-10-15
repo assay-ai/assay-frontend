@@ -138,6 +138,24 @@ describe("round 4: the penalty page tells one story", () => {
     expect(caseTimelineSteps(lattice, caseFacts(lattice)).find((s) => s.id === "ruling")?.date).toBeTruthy();
   });
 
+  it("says why an upheld penalty is executable only later: the timelock from the proposal", async () => {
+    const { caseFacts, caseTimelineSteps } = await import("./case-flow");
+    const lattice = await brief("f1b8d6a2-3e57-4c09-9b14-6a2e0d8c7f35");
+    const facts = caseFacts(lattice);
+    expect(facts.stage).toBe("upheld");
+    const steps = caseTimelineSteps(lattice, facts, { slashDelaySeconds: 259_200 });
+    const upheldAt = Date.parse(steps.find((s) => s.id === "ruling")!.date!);
+    // The contract's rule: executable from max(frozen executableAt, uphold), and the frozen one is proposal + 72 h.
+    expect(Date.parse(facts.executableAt!)).toBeGreaterThan(upheldAt);
+    expect(Date.parse(facts.executableAt!) - Date.parse(lattice.case.proposal.clocks.proposedAt)).toBe(72 * 3_600_000);
+    expect(steps.at(-1)).toMatchObject({
+      dateLabel: "executable from",
+      description: "The 72 h on-chain timelock from the proposal still runs; an uphold never shortens it.",
+    });
+    const later = Date.parse(facts.executableAt!) + 60_000;
+    expect(caseTimelineSteps(lattice, caseFacts(lattice, later), { now: later }).at(-1)?.description).toBeUndefined();
+  });
+
   it("varies the measurement per penalty, and each one is a breach", async () => {
     const { breachVerdict } = await import("./operator-measurement");
     const northwind = await brief("8b3f2e9a-1c74-4d05-b6e2-7f0a9c3d5e18");
