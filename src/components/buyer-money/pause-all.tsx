@@ -62,7 +62,7 @@ export function PauseAllConfirm({
       description={
         pausing
           ? "Every agent's paid calls are refused from now until you resume. Free calls keep working, and nothing already charged changes."
-          : "Your agents can pay for calls again, within their caps and budgets."
+          : "Your agents can pay for calls again, within your account ceiling and their spending limits."
       }
       changes={[{ label: "Paid calls", before: pausing ? "Running" : "Paused", after: pausing ? "Paused" : "Running" }]}
       confirmLabel={pausing ? "Pause all paid calls" : "Resume paid calls"}

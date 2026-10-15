@@ -5,7 +5,7 @@ import { humanize, plainAuditAction } from "@/libs/plain-language";
  * entries grouped by day.
  *
  *   { actorType: "user", action: "spend_policy.updated", before: { dailyCap: "40.00" }, after: { dailyCap: "75.00" } }
- *   → title "Budget changed", line "You changed daily cap from 40.00 to 75.00"
+ *   → title "Spending limits changed", line "You changed daily spending limit from $40.00 to $75.00"
  */
 
 export interface AuditEntryLike {
@@ -30,8 +30,8 @@ const MONEY_KEY = /(cap|limit|amount|budget|charged|price|balance)$/i;
 
 /** Field names said in the product's words rather than humanized. */
 const KEY_WORDS: Record<string, string> = {
-  dailyCap: "daily budget",
-  monthlyCap: "monthly budget",
+  dailyCap: "daily spending limit",
+  monthlyCap: "monthly spending limit",
   perCallCap: "per-call limit",
   maxCallsPerMinute: "calls per minute limit",
   revokedAt: "revoked",

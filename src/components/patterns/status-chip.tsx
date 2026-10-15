@@ -27,11 +27,11 @@ export const STATUS_CHIPS = {
   // Buyer: agents, escrow and money
   paying: { label: "Paying", tone: "success" },
   ready: { label: "Ready", tone: "success" },
-  "caps-not-set": { label: "Caps not set", tone: "warning" },
+  "caps-not-set": { label: "Ceiling not set", tone: "warning" },
   "needs-authorisation": { label: "Needs authorisation", tone: "warning" },
   "no-key": { label: "No key", tone: "neutral" },
   paused: { label: "Paused", tone: "warning" },
-  "cap-reached": { label: "Cap reached", tone: "warning" },
+  "cap-reached": { label: "Limit reached", tone: "warning" },
   revoked: { label: "Revoked", tone: "neutral" },
   "withdrawal-pending": { label: "Withdrawal pending", tone: "primary" },
   claimable: { label: "Ready to claim", tone: "success" },

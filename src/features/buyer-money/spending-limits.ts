@@ -60,9 +60,11 @@ export function agentLimitRows(input: AgentLimitsInput): EffectiveLimitRow[] {
   const { policy, grant } = input;
   const active = grant && grant.status === "ACTIVE" ? grant : null;
   const ceilingSet = capsAreSet(input.ceiling);
-  const ceilingCall: LimitSource[] = ceilingSet ? [{ source: LIMIT_SOURCE.ceiling, value: input.ceiling!.maxVoucherAmount }] : [];
+  const ceilingCall: LimitSource[] = ceilingSet
+    ? [{ source: LIMIT_SOURCE.ceiling, value: input.ceiling!.maxVoucherAmount, onChain: true }]
+    : [];
   const ceilingWindow: LimitSource[] = ceilingSet
-    ? [{ source: LIMIT_SOURCE.ceiling, value: input.ceiling!.maxPerWindow, used: input.ceiling!.spentInWindow ?? null }]
+    ? [{ source: LIMIT_SOURCE.ceiling, value: input.ceiling!.maxPerWindow, used: input.ceiling!.spentInWindow ?? null, onChain: true }]
     : [];
   const rule: LimitSource[] = policy?.requireApprovalAbove ? [{ source: LIMIT_SOURCE.oldRule, value: policy.requireApprovalAbove }] : [];
   const month: EffectiveLimitRow = {
@@ -77,7 +79,7 @@ export function agentLimitRows(input: AgentLimitsInput): EffectiveLimitRow[] {
         id: "call",
         label: "Per call",
         sources: [
-          { source: LIMIT_SOURCE.agent, value: active?.maxVoucherAmount ?? null },
+          { source: LIMIT_SOURCE.agent, value: active?.maxVoucherAmount ?? null, onChain: true },
           ...(policy?.perCallMax ? [{ source: LIMIT_SOURCE.oldBudget, value: policy.perCallMax }] : []),
           ...rule,
           ...ceilingCall,
@@ -87,7 +89,7 @@ export function agentLimitRows(input: AgentLimitsInput): EffectiveLimitRow[] {
         id: "window",
         label: "Per 24 hours",
         sources: [
-          { source: LIMIT_SOURCE.agent, value: active?.maxPerWindow ?? null, used: active?.spentInWindow ?? null },
+          { source: LIMIT_SOURCE.agent, value: active?.maxPerWindow ?? null, used: active?.spentInWindow ?? null, onChain: true },
           ...(policy?.dailyCap ? [{ source: LIMIT_SOURCE.oldBudget, value: policy.dailyCap, used: input.spentToday ?? null }] : []),
           ...ceilingWindow,
         ],
@@ -113,6 +115,16 @@ export function agentLimitRows(input: AgentLimitsInput): EffectiveLimitRow[] {
   ];
 }
 
+/**
+ * Every limit on this page is a hard stop: the call is refused, not just
+ * flagged. Only who enforces it differs. The alerts at 50/80/100% are the
+ * only part that never refuses anything.
+ */
+export const HARD_STOP = {
+  chain: "hard stop, enforced on chain",
+  assay: "hard stop, checked by Assay's software",
+} as const;
+
 const UNIT: Record<string, string> = {
   call: "a call",
   window: "per 24 hours",
@@ -127,6 +139,8 @@ export interface LimitLine {
   setBy: string | null;
   /** "$24.25 left now", when a source reports what was used. */
   left: string | null;
+  /** How the binding limit stops a call: every limit refuses the call; only who enforces it differs. */
+  stop: string | null;
   value: Money | null;
 }
 
@@ -142,6 +156,7 @@ export function limitLines(rows: readonly EffectiveLimitRow[], options: { dayLab
         amount: `${formatLimit(resolved.value)} ${unit}`,
         setBy: resolved.source ? `set by ${resolved.source}` : null,
         left: resolved.left ? `${formatLimit(resolved.left)} left now` : null,
+        stop: resolved.source ? (resolved.onChain ? HARD_STOP.chain : HARD_STOP.assay) : null,
         value: resolved.value,
       },
     ];

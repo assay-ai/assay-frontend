@@ -19,12 +19,12 @@ describe("auditSentence", () => {
       () => null,
       "me@example.com",
     ).line;
-    expect(line).toBe("ops@team.example changed daily budget from $40.00 to $75.00");
+    expect(line).toBe("ops@team.example changed daily spending limit from $40.00 to $75.00");
   });
   it("says who changed what, from what to what", () => {
     expect(
       auditSentence(entry({ before: { dailyCap: "40.00" }, after: { dailyCap: "75.00" } }), () => null, "me@example.com"),
-    ).toEqual({ title: "Budget changed", line: "You changed daily budget from $40.00 to $75.00" });
+    ).toEqual({ title: "Spending limits changed", line: "You changed daily spending limit from $40.00 to $75.00" });
   });
   it("names agents and Assay, and never prints raw ids", () => {
     expect(
