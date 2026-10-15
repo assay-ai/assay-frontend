@@ -401,3 +401,8 @@ export function rulingOutcome(input: {
     { icon: "sign", text: signer },
   ];
 }
+
+/** "Northwind Geo's", "Tidewater Markets'" — a name in the possessive. Pure. */
+export function possessive(name: string): string {
+  return /s$/i.test(name.trim()) ? `${name}'` : `${name}'s`;
+}

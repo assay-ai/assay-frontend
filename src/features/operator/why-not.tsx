@@ -8,7 +8,7 @@ import type { OperatorIdentity } from "@/interfaces/operator";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
-import { checkAction, MONEY_ACTIONS, rolesPhrase, whoCan, type ConsoleAction } from "./roles";
+import { ACTION_DOING, checkAction, MONEY_ACTIONS, rolesPhrase, whoCan, type ConsoleAction } from "./roles";
 import { useOperatorDirectory } from "./use-operator-lookups";
 
 /**
@@ -20,7 +20,7 @@ import { useOperatorDirectory } from "./use-operator-lookups";
  *
  *   <WhyNot action="suspend" me={identity} amount={penalty}
  *           ask="Can you suspend Northwind Geo's $28.47 penalty?" />
- *     → [lock] Suspend a penalty needs Adjudicator, Lead adjudicator or On-call (SRE) · Ask Riley or Iris
+ *     → [lock] Suspending a penalty needs Adjudicator, Lead adjudicator or On-call (SRE) · Ask Riley or Iris
  *
  * One line by default (two at most on a phone); the full "who can" sentence is
  * its tooltip. `variant="box"` is the older panel with a title and both
@@ -129,7 +129,7 @@ export function WhyNot({ action, me, amount, ask, link, why, title, variant = "i
     return (
       <p className={cn("flex w-full flex-wrap items-center gap-x-2 gap-y-0.5 text-body-13 text-02", className)} title={directory.isPending ? undefined : who}>
         <Lock aria-hidden="true" className="size-3.5 shrink-0 text-03" />
-        <span className="min-w-0">{whyLine(why ?? check.why ?? "")}</span>
+        <span className="min-w-0">{whyLine(why ?? (check.limitOnly ? (check.why ?? "") : `${ACTION_DOING[action]} needs ${phrase}`))}</span>
         {directory.isPending ? null : (
           <>
             <span aria-hidden="true" className="text-03">

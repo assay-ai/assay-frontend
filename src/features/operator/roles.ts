@@ -127,6 +127,16 @@ export const ACTION_WHAT: Readonly<Record<ConsoleAction, string>> = {
   manageTeam: "add and change operators",
 };
 
+/** The action as a subject, for the one-line why-not: "Blocking accounts needs …". */
+export const ACTION_DOING: Readonly<Record<ConsoleAction, string>> = {
+  rule: "Ruling on disputes",
+  suspend: "Suspending a penalty",
+  block: "Blocking accounts",
+  blockOnChain: "Blocking a wallet on chain",
+  compensate: "Compensating a provider",
+  manageTeam: "Changing the team",
+};
+
 /** Actions on money: the authority limit applies (the backend refuses above it). */
 export const MONEY_ACTIONS: ReadonlySet<ConsoleAction> = new Set(["suspend", "compensate"]);
 

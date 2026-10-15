@@ -46,6 +46,7 @@ import {
   disputeAmount,
   durationText,
   mayRule,
+  possessive,
   pruneArbiterSelection,
   rulingOutcome,
   selectionChain,
@@ -334,7 +335,12 @@ function ArbiterStatus({
       ? null
       : arbiterConnected
         ? "The arbiter's wallet is connected here, so rulings are signed in this browser."
-        : `Rulings are signed by the arbiter key ${shortId(terms.arbiter)}. It isn't connected here, so each ruling downloads as a file to sign.`;
+        : (
+          <>
+            Rulings are signed by the arbiter key <span className="font-mono text-mono-12">{shortId(terms.arbiter)}</span>. It isn&rsquo;t
+            connected here, so each ruling downloads as a file to sign.
+          </>
+        );
   const warn = problems.length > 0;
 
   return (
@@ -465,7 +471,7 @@ function DisputeRow({
               className="mt-[3px] size-4 shrink-0 accent-primary-600"
               checked={selected}
               onChange={onToggle}
-              aria-label={`Select ${providerName}'s penalty for a combined ruling`}
+              aria-label={`Select ${possessive(providerName)} penalty for a combined ruling`}
             />
           ) : null}
           <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -498,17 +504,17 @@ function DisputeRow({
         <div className="flex shrink-0 items-center gap-2 tablet:pl-0">
           {canRule ? (
             <>
-              <Button size="sm" variant="secondary" onClick={() => onRule("CANCEL")} className="flex-1 tablet:flex-none">
+              <Button size="sm" variant="secondary" onClick={() => onRule("CANCEL")} className="flex-1 tablet:flex-none" aria-label={`Cancel ${possessive(providerName)} penalty`}>
                 Cancel
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => onRule("UPHOLD")} className="flex-1 tablet:flex-none">
+              <Button size="sm" variant="secondary" onClick={() => onRule("UPHOLD")} className="flex-1 tablet:flex-none" aria-label={`Uphold ${possessive(providerName)} penalty`}>
                 Uphold
               </Button>
             </>
           ) : null}
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="ghost" aria-label={`More for ${providerName}'s penalty`} className={canRule ? undefined : "ml-auto"}>
+              <Button size="sm" variant="ghost" aria-label={`More for ${possessive(providerName)} penalty`} className={canRule ? undefined : "ml-auto"}>
                 <MoreHorizontal aria-hidden="true" />
               </Button>
             </DropdownMenuTrigger>
@@ -631,7 +637,7 @@ function RulingSheet({
   const noun = `${count} penalt${count === 1 ? "y" : "ies"}`;
   const verb = kind === "UPHOLD" ? "Uphold" : "Cancel";
   const title = single
-    ? `${verb} ${providerName(single.providerId)}'s ${totalMoney ? `${formatMoney(totalMoney)} ` : ""}penalty?`
+    ? `${verb} ${possessive(providerName(single.providerId))} ${totalMoney ? `${formatMoney(totalMoney)} ` : ""}penalty?`
     : `${verb} ${noun}${totalMoney ? ` (${formatMoney(totalMoney)})` : ""}?`;
   const signer = canSign
     ? "Signed here, with the arbiter wallet connected in this browser"
