@@ -11,6 +11,7 @@ import {
   PanelTitles,
 } from "@/components/ui/panel";
 import { count, percent, stampUtc } from "@/features/g34a/stats";
+import { cn } from "@/utils";
 import type { SlashAttributionRow } from "@/interfaces/provider-disputes";
 import type { SlashProposalCaseDetail, SlashPriorWindow } from "@/interfaces/provider-slash-cases";
 
@@ -62,14 +63,52 @@ import type { SlashProposalCaseDetail, SlashPriorWindow } from "@/interfaces/pro
  *
  * Both lists are already truncated server-side to the top three plus an
  * "N others" row, so this renders whatever arrives without re-truncating.
+ *
+ * ## Two audiences
+ *
+ * The provider page speaks to the provider ("your failures", "our side").
+ * The operator console reads the same panel about the provider, in Assay's
+ * voice, with sans labels (mono is for ids and formulas only there):
+ * `audience="operator"`.
  */
+
+export type ContextAudience = "provider" | "operator";
+
+const COPY: Record<
+  ContextAudience,
+  {
+    subtitle: string;
+    overlayHead: (after: string, total: string, at: string, by: string) => string;
+    overlayDefect: string;
+    noOverlay: string;
+    byRule: string;
+    byAgent: string;
+  }
+> = {
+  provider: {
+    subtitle: "we build your strongest argument for you — we would rather find our own defect than win a dispute about it",
+    overlayHead: (after, total, at, by) => `${after} of your ${total} failures occurred after a binding change on ${at} by ${by}`,
+    overlayDefect: "This may be a mapping defect on our side rather than a change in your data.",
+    noOverlay: "No binding or mapping edit published inside this window, so nothing here correlates the failures with a change on our side.",
+    byRule: "failures by rule",
+    byAgent: "failures by agent",
+  },
+  operator: {
+    subtitle: "Whether Assay itself could have caused the failures: earlier windows, recent changes, and where the failures came from.",
+    overlayHead: (after, total, at, by) => `${after} of the provider's ${total} failures came after a binding change on ${at} by ${by}`,
+    overlayDefect: "This may be a mapping defect at Assay rather than a change in the provider's data.",
+    noOverlay: "No binding or mapping change was published inside this window, so nothing ties the failures to a change at Assay.",
+    byRule: "Failures by rule",
+    byAgent: "Failures by agent",
+  },
+};
 
 /** The design's `ag_7K2`-width column, without inventing a new identifier. */
 function shortKey(key: string): string {
   return key.length > 18 ? `${key.slice(0, 8)}…` : key;
 }
 
-function Bars({ windows }: { windows: SlashPriorWindow[] }) {
+function Bars({ windows, mono }: { windows: SlashPriorWindow[]; mono: boolean }) {
   if (windows.length === 0) {
     return (
       <p className="px-5 py-4 text-body-13 text-02">
@@ -90,10 +129,10 @@ function Bars({ windows }: { windows: SlashPriorWindow[] }) {
 
   return (
     <div className="flex w-full items-end gap-3 overflow-x-auto px-5 py-4">
-      <span className="shrink-0 self-center font-mono text-mono-12 text-03">
+      <span className={mono ? "shrink-0 self-center font-mono text-mono-12 text-03" : "shrink-0 self-center text-body-xs text-03"}>
         {subjectIsNewest
-          ? `previous ${Math.max(0, windows.length - 1)} windows`
-          : `last ${windows.length} closed windows`}
+          ? `${mono ? "p" : "P"}revious ${Math.max(0, windows.length - 1)} windows`
+          : `${mono ? "l" : "L"}ast ${windows.length} closed windows`}
       </span>
       <div className="flex min-w-0 flex-1 items-end justify-end gap-2 tablet:gap-4">
         {windows.map((window) => {
@@ -115,11 +154,10 @@ function Bars({ windows }: { windows: SlashPriorWindow[] }) {
               />
               <span
                 aria-hidden="true"
-                className={
-                  window.isSubject
-                    ? "font-mono text-mono-12 font-semibold text-danger-600"
-                    : "font-mono text-mono-12 text-03"
-                }
+                className={cn(
+                  mono ? "font-mono text-mono-12" : "text-body-xs tabular-nums",
+                  window.isSubject ? "font-semibold text-danger-600" : "text-03",
+                )}
               >
                 {percent(window.observedRate, 1)}
               </span>
@@ -135,14 +173,17 @@ function AttributionColumn({
   title,
   rows,
   mono,
+  monoTitle = true,
 }: {
   title: string;
   rows: SlashAttributionRow[];
   mono?: boolean;
+  /** The provider page's mono title; the operator console's is sans. */
+  monoTitle?: boolean;
 }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-      <p className="font-mono text-mono-12 text-03">{title}</p>
+      <p className={monoTitle ? "font-mono text-mono-12 text-03" : "text-label-13 text-03"}>{title}</p>
       {rows.length === 0 ? (
         <p className="text-body-13 text-02">nothing recorded</p>
       ) : (
@@ -152,7 +193,7 @@ function AttributionColumn({
               <dt title={row.key} className="min-w-0 truncate font-mono text-mono-13 text-01">
                 {mono ? shortKey(row.key) : row.key}
               </dt>
-              <dd className="shrink-0 font-mono text-mono-13 font-semibold text-01">
+              <dd className={monoTitle ? "shrink-0 font-mono text-mono-13 font-semibold text-01" : "shrink-0 text-body-13 font-medium tabular-nums text-01"}>
                 {count(row.count)}
               </dd>
             </div>
@@ -163,7 +204,9 @@ function AttributionColumn({
   );
 }
 
-export function CaseContext({ data }: { data: SlashProposalCaseDetail }) {
+export function CaseContext({ data, audience = "provider" }: { data: SlashProposalCaseDetail; audience?: ContextAudience }) {
+  const copy = COPY[audience];
+  const provider = audience === "provider";
   const overlay = data.changeOverlay;
   const totalOverlayFailures = overlay ? overlay.failuresBefore + overlay.failuresAfter : 0;
   const prefilled = data.suggestedClaim === "PLATFORM_MAPPING_CHANGE";
@@ -175,31 +218,25 @@ export function CaseContext({ data }: { data: SlashProposalCaseDetail }) {
           <PanelTitle>Context</PanelTitle>
           {/* Not `PanelDescription`: that primitive truncates to one line, and
               this subtitle is two sentences the design wraps. */}
-          <p className="text-body-xs leading-[1.5] text-03">
-            we build your strongest argument for you — we would rather find our own defect than win
-            a dispute about it
-          </p>
+          <p className="text-body-xs leading-[1.5] text-03">{copy.subtitle}</p>
         </PanelTitles>
       </PanelHeader>
 
       <PanelBody>
-        <Bars windows={data.priorWindows} />
+        <Bars windows={data.priorWindows} mono={provider} />
 
         {overlay ? (
           <div className="mx-5 mb-4 flex w-auto items-start gap-3 rounded-lg bg-warning-10 px-4 py-3.5">
             <GitCompare aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <p className="text-label-sm text-01">
-                {count(overlay.failuresAfter)} of your {count(totalOverlayFailures)} failures
-                occurred after a binding change on {stampUtc(overlay.changedAt)} by{" "}
-                {overlay.changedBy}
+                {copy.overlayHead(count(overlay.failuresAfter), count(totalOverlayFailures), stampUtc(overlay.changedAt), overlay.changedBy)}
               </p>
               <p className="text-body-13 leading-[1.55] text-02">
                 {percent(overlay.rateBefore, 1)} before the change ({count(overlay.verifiedBefore)}{" "}
                 verified calls) against {percent(overlay.rateAfter, 1)} after (
-                {count(overlay.verifiedAfter)}). This may be a mapping defect on our side rather
-                than a change in your data.
-                {prefilled ? " It is prefilled as a dispute claim." : ""}
+                {count(overlay.verifiedAfter)}). {copy.overlayDefect}
+                {prefilled && provider ? " It is prefilled as a dispute claim." : ""}
               </p>
               <p className="font-mono text-mono-12 text-03">
                 {overlay.fromVersion} → {overlay.toVersion}
@@ -207,15 +244,12 @@ export function CaseContext({ data }: { data: SlashProposalCaseDetail }) {
             </div>
           </div>
         ) : (
-          <p className="border-t border-01 px-5 py-3.5 text-body-13 text-02">
-            No binding or mapping edit published inside this window, so nothing here correlates the
-            failures with a change on our side.
-          </p>
+          <p className="border-t border-01 px-5 py-3.5 text-body-13 text-02">{copy.noOverlay}</p>
         )}
 
         <div className="flex w-full flex-col gap-5 border-t border-01 px-5 py-4 tablet:flex-row tablet:gap-8">
-          <AttributionColumn title="failures by rule" rows={data.failuresByRule} />
-          <AttributionColumn title="failures by agent" rows={data.failuresByAgent} mono />
+          <AttributionColumn title={copy.byRule} rows={data.failuresByRule} monoTitle={provider} />
+          <AttributionColumn title={copy.byAgent} rows={data.failuresByAgent} mono monoTitle={provider} />
         </div>
       </PanelBody>
     </Panel>

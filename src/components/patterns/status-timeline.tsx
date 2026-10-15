@@ -50,6 +50,8 @@ export interface StatusTimelineProps {
   label?: string;
   /** Force one orientation. Default: vertical on mobile, horizontal from tablet. */
   orientation?: "auto" | "horizontal" | "vertical";
+  /** Every date carries its day ("Today 18:41", never a bare "18:41"). */
+  alwaysDay?: boolean;
   className?: string;
 }
 
@@ -107,10 +109,12 @@ function StepDate({
   step,
   highlighted,
   onElapsed,
+  alwaysDay,
 }: {
   step: StatusTimelineStep;
   highlighted: boolean;
   onElapsed?: (stepId: string) => void;
+  alwaysDay?: boolean;
 }) {
   const { msLeft, hasPassed } = useCountdown(step.countdown ? step.date : null);
   const [mounted, setMounted] = React.useState(false);
@@ -142,7 +146,7 @@ function StepDate({
       {step.dateLabel ? <span>{step.dateLabel}</span> : null}
       {step.date ? (
         <time dateTime={step.date} title={utcTitle(step.date)}>
-          {mounted ? formatLocalDateTime(step.date) : utcTitle(step.date)}
+          {mounted ? formatLocalDateTime(step.date, { alwaysDay }) : utcTitle(step.date)}
         </time>
       ) : null}
       {step.countdown && msLeft !== null ? (
@@ -155,7 +159,7 @@ function StepDate({
   );
 }
 
-export function StatusTimeline({ steps, label = "Status", orientation = "auto", onElapsed, className }: StatusTimelineProps) {
+export function StatusTimeline({ steps, label = "Status", orientation = "auto", onElapsed, alwaysDay, className }: StatusTimelineProps) {
   const next = nextDatedStepIndex(steps);
   const horizontal = orientation === "horizontal";
   const vertical = orientation === "vertical";
@@ -208,7 +212,7 @@ export function StatusTimeline({ steps, label = "Status", orientation = "auto", 
                 {step.label}
                 <span className="sr-only">, {STATE_WORD[step.state]}</span>
               </span>
-              <StepDate step={step} highlighted={index === next} onElapsed={onElapsed} />
+              <StepDate step={step} highlighted={index === next} onElapsed={onElapsed} alwaysDay={alwaysDay} />
               {step.description ? <span className="text-body-xs text-03">{step.description}</span> : null}
             </div>
           </li>

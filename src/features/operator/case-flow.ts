@@ -134,6 +134,10 @@ export function caseTimelineSteps(
   const { stage } = facts;
   const wasDisputed = facts.disputedAt !== null || stage === "disputed";
   const closed = stage === "executed" || stage === "cancelled" || stage === "compensated";
+  // A penalty cancelled inside its window ends there: the window step stops at the cancel, not at a later date.
+  const before = (a: string | null | undefined, b: string | null | undefined) =>
+    Boolean(a && b) && Date.parse(a!) < Date.parse(b!);
+  const cutShort = !wasDisputed && stage === "cancelled" && before(proposal.resolvedAt, facts.executableAt);
 
   const steps: StatusTimelineStep[] = [
     { id: "proposed", label: "Proposed", state: "done", date: proposal.clocks.proposedAt },
@@ -145,8 +149,15 @@ export function caseTimelineSteps(
     label: windowLabel,
     state:
       stage === "window-open" ? "current" : stage === "not-on-chain" ? "upcoming" : "done",
-    date: wasDisputed ? facts.disputedAt : facts.executableAt,
-    dateLabel: stage === "not-on-chain" ? "starts once it is on chain" : wasDisputed ? "provider disputed" : undefined,
+    date: wasDisputed ? facts.disputedAt : cutShort ? proposal.resolvedAt : facts.executableAt,
+    dateLabel:
+      stage === "not-on-chain"
+        ? "starts once it is on chain"
+        : wasDisputed
+          ? "provider disputed"
+          : cutShort
+            ? "ended early by the cancel"
+            : undefined,
     countdown: stage === "window-open",
     description: stage === "window-open" ? "The provider can dispute on chain until then." : undefined,
   });
@@ -154,13 +165,20 @@ export function caseTimelineSteps(
   const day = facts.disputedAt ? Math.floor((now - Date.parse(facts.disputedAt)) / 86_400_000) : null;
   if (wasDisputed) {
     const ruled = stage === "upheld" || closed || stage === "cancel-requested";
+    // When it was ruled: the uphold on record, the cancel that closed it, or the 30 days running out.
+    const upheldAt = brief.timeline.find((event) => event.kind === "CHAIN_UPHELD")?.occurredAt ?? null;
+    const ruledAt = facts.expired ? facts.disputeExpiresAt : stage === "cancelled" ? proposal.resolvedAt : upheldAt;
     steps.push({
       id: "ruling",
       label: stage === "upheld" ? "Arbiter upheld it" : facts.expired ? "Not ruled in 30 days" : "Arbiter rules",
       state: ruled ? (facts.expired ? "skipped" : "done") : "current",
-      date: ruled ? null : facts.disputeExpiresAt,
+      date: ruled ? ruledAt : facts.disputeExpiresAt,
       // "7 days left · rule by Oct 23": the same days-left as the Deadline elsewhere, not a second countdown.
-      dateLabel: ruled ? undefined : `${disputeUrgency({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }, now).label} · rule by`,
+      dateLabel: ruled
+        ? facts.expired
+          ? "lapsed"
+          : undefined
+        : `${disputeUrgency({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }, now).label} · rule by`,
       countdown: false,
       urgent: !ruled && day !== null && day >= DISPUTE_RED_FROM_DAY,
       description: ruled ? undefined : "If nobody rules by then, the penalty lapses.",
@@ -212,7 +230,7 @@ export function caseTimelineSteps(
 
 // ── The next step ───────────────────────────────────────────────────────────
 
-export type CaseActionId = "suspend" | "rule" | "cancel" | "compensate" | "sweep" | "block";
+export type CaseActionId = "suspend" | "rule" | "cancel" | "compensate" | "sweep" | "block" | "approve" | "open-request";
 
 export interface CaseNextStep {
   kind: "action" | "waiting" | "done";
@@ -374,6 +392,83 @@ export function caseNextStep(
         until: null,
       };
   }
+}
+
+// ── A two-person request already waiting on this penalty ────────────────────
+
+/** What each two-person request on a penalty is called, and what it does. */
+const REQUEST_WORDS: Record<string, { noun: string; does: string }> = {
+  "slash.compensated": { noun: "pay-back", does: "pay the penalty back into the provider's stake" },
+  "slash.suspend": { noun: "suspension", does: "suspend this penalty" },
+  "slash.sweep": { noun: "fleet sweep", does: "decide every case with the same defect the way this one was decided" },
+};
+
+export interface PendingRequest {
+  action: string;
+  /** The requester's name. */
+  requestedBy: string;
+  createdAt: string;
+  expiresAt: string;
+  /** This operator asked for it. */
+  mine: boolean;
+  /** This operator may approve it (someone else's, and their roles cover it). */
+  canApprove: boolean;
+  /** Who may approve it, the requester left out. */
+  approvers: readonly string[];
+}
+
+/** "Riley Brooks", "Riley Brooks or Iris Park", "Jordan Blake, Riley Brooks or Iris Park". Pure. */
+export function namesOr(names: readonly string[], none: string): string {
+  if (names.length === 0) return none;
+  if (names.length === 1) return names[0]!;
+  return `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+}
+
+/** "Pay-back", "Suspension": the noun for a request, capitalised. Pure. */
+export function requestNoun(action: string): string {
+  const noun = REQUEST_WORDS[action]?.noun ?? "request";
+  return noun.charAt(0).toUpperCase() + noun.slice(1);
+}
+
+/**
+ * The next step while a two-person request on this penalty waits: approve it
+ * when this operator may, else who it waits for. It replaces a "done" or
+ * "waiting" step (a pay-back pending on an executed penalty), never an action
+ * the operator could take themselves. Pure.
+ */
+export function pendingRequestStep(request: PendingRequest, format: (iso: string) => string): CaseNextStep {
+  const words = REQUEST_WORDS[request.action] ?? { noun: "request", does: "act on this penalty" };
+  const noun = requestNoun(request.action);
+  const who = namesOr(request.approvers, "a second approver");
+  const meta = `Lapses ${format(request.expiresAt)} if nobody decides.`;
+  if (request.canApprove) {
+    return {
+      kind: "action",
+      title: `Approve the ${words.noun}`,
+      description: `${request.requestedBy} asked ${format(request.createdAt)} to ${words.does}. It needs a second person, and you can approve it.`,
+      action: "approve",
+      secondary: null,
+      until: request.expiresAt,
+      meta,
+    };
+  }
+  return {
+    kind: "waiting",
+    title: request.mine ? `Your ${words.noun} is waiting for approval` : `${noun} waiting for approval`,
+    description: request.mine
+      ? `You asked ${format(request.createdAt)} to ${words.does}. Waiting for ${who} to approve it.`
+      : `${request.requestedBy} asked ${format(request.createdAt)} to ${words.does}. Waiting for ${who} to approve it.`,
+    action: null,
+    secondary: "open-request",
+    until: request.expiresAt,
+    meta,
+  };
+}
+
+/** Why a ⋯ item is held back while the same request already waits. Null when none does. Pure. */
+export function alreadyWaiting(action: string, pendingActions: readonly string[]): string | null {
+  if (!pendingActions.includes(action)) return null;
+  return `A ${REQUEST_WORDS[action]?.noun ?? "request"} request is already waiting`;
 }
 
 /**

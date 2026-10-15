@@ -19,16 +19,19 @@ import {
   caseFacts,
   caseNextStep,
   caseTimelineSteps,
+  pendingRequestStep,
   type CaseActionId,
   type CaseStage,
+  type PendingRequest,
 } from "@/features/operator/case-flow";
-import { approvalNeeds, approvalTargetId, penaltyPhrase } from "@/features/operator/approvals";
+import { approvalNeeds, approvalTargetId, approveBlockedBecause, isOwnRequest, penaltyPhrase } from "@/features/operator/approvals";
 import { eligibleApprovers } from "@/features/operator/inbox";
 import { OperatorMeasurement } from "@/features/operator/operator-measurement";
 import { PENALTY_APPROVAL_CODES } from "@/features/operator/penalty-list";
-import { PenaltyMoney, stakeReduction } from "@/features/operator/penalty-money";
+import { keptShareText, PenaltyMoney, stakeReduction } from "@/features/operator/penalty-money";
 import { reasonLabel } from "@/features/operator/reasons";
 import { rememberRecentPenalty } from "@/features/operator/recent-penalties";
+import { rulingHref } from "@/features/operator/ruling-link";
 import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { suspendedNotice } from "@/features/operator/state";
@@ -39,6 +42,7 @@ import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
 import { explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { formatLocalDateTime } from "@/libs/local-time";
+import type { OperatorCaseBrief } from "@/interfaces/operator";
 import { getArbiterTerms, getOperatorCase, listApprovals } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
 
@@ -59,8 +63,11 @@ import { WhyNotLine } from "./_components/why-not-line";
  *
  * Two columns from 1280px: the timeline, the money and the tabs on the left;
  * the next step and the key facts in a sticky side column, so the action
- * stays in view while the tabs are read. The rare actions (suspend, block,
- * pay back, sweep, history) sit in the header's ⋯ menu, never at the bottom.
+ * stays in view while the tabs are read. The one primary action lives in that
+ * next-step card only (never repeated in the header, at any width); the rare
+ * actions (suspend, block, pay back, sweep, history) sit in the header's ⋯
+ * menu, never at the bottom. A two-person request already waiting on the
+ * penalty becomes the next step: approve it, or who it waits for.
  *
  * The off-chain objection controls (claim, decide, second signature, extend
  * the deadline) are gone from the UI: the owner removed that process
@@ -85,6 +92,16 @@ const WAITING_WHAT: Record<string, string> = {
   "slash.compensated": "A pay-back of this penalty",
   "slash.sweep": "A fleet sweep from this penalty",
 };
+
+/** Instants in sentences and on the timeline always carry their day ("Today 18:41"). */
+const when = (iso: string) => formatLocalDateTime(iso, { alwaysDay: true });
+
+/** "If cancelled" only says something while the penalty can still be cancelled. */
+const RESTORATION_STAGES: readonly CaseStage[] = ["not-on-chain", "window-open", "executable", "disputed", "upheld", "cancel-requested"];
+
+function showsRestoration(stage: CaseStage, brief: OperatorCaseBrief, expired: boolean): boolean {
+  return !expired && RESTORATION_STAGES.includes(stage) && brief.restoration.length > 0;
+}
 
 /** Stages where the stake will not go down: nothing to say about by how much. */
 const MOVES_NOTHING: readonly CaseStage[] = ["cancelled", "cancel-requested", "compensated"];
@@ -207,7 +224,23 @@ export default function OperatorCasePage() {
   const proposal = brief.case.proposal;
   const facts = caseFacts(brief, now);
   const authority = caseAuthority(brief, identity, facts);
-  const next = caseNextStep(facts, authority, (iso) => formatLocalDateTime(iso));
+  const baseNext = caseNextStep(facts, authority, when);
+  // A request already waiting on this penalty is the next step, unless this operator has an action of their own.
+  const pendingRequest: PendingRequest | null = waitingAny
+    ? {
+        action: waitingAny.action,
+        requestedBy: directory.nameOf(waitingAny.requestedBy),
+        createdAt: waitingAny.createdAt,
+        expiresAt: waitingAny.expiresAt,
+        mine: isOwnRequest(waitingAny, identity),
+        canApprove: !isOwnRequest(waitingAny, identity) && approveBlockedBecause(waitingAny, identity) === null,
+        approvers: directory.isPending
+          ? []
+          : eligibleApprovers(PENALTY_APPROVAL_CODES[waitingAny.action] ?? "", directory.operators, waitingAny.requestedById),
+      }
+    : null;
+  const pendingInCard = pendingRequest !== null && baseNext.kind !== "action";
+  const next = pendingInCard ? pendingRequestStep(pendingRequest, when) : baseNext;
   const providerName = providers.name(proposal.providerId);
   const penaltyText = formatMoney(proposal.penaltyAmount);
   const penaltyName = penaltyPhrase(providerName, penaltyText);
@@ -220,8 +253,10 @@ export default function OperatorCasePage() {
         return { label: authority.suspend.twoPerson ? "Suspend (needs approval)" : "Suspend penalty", onClick: () => setSheet("suspend"), tone: primary ? "danger" : undefined };
       case "cancel":
         return { label: "Get the cancel signed", onClick: () => setSheet("cancel") };
-      case "rule":
-        return { label: "Rule on it", href: `/operator/arbiter?case=${encodeURIComponent(proposalId)}` };
+      case "approve":
+        return waitingAny ? { label: "Review and approve", href: approvalHref(waitingAny.id) } : undefined;
+      case "open-request":
+        return waitingAny ? { label: "Open the request", href: approvalHref(waitingAny.id) } : undefined;
       default:
         return undefined;
     }
@@ -245,16 +280,22 @@ export default function OperatorCasePage() {
     refetch();
   };
 
-  const primary = next.kind === "action" ? actionFor(next.action, true) : undefined;
+  // Ruling is neutral: Cancel and Uphold carry equal weight, each opening its sheet on the Arbiter.
+  const ruling = next.kind === "action" && next.action === "rule";
+  const primary = next.kind === "action" && !ruling ? actionFor(next.action, true) : undefined;
   const reduction = stakeReduction(proposal.appliedAmount ?? proposal.penaltyAmount, terms.data?.slashAgentBps ?? null);
   const readOnlyRuling = facts.stage === "disputed" && !authority.rule;
+  const restoration = showsRestoration(facts.stage, brief, facts.expired);
+  const pendingActions = (pending.data?.items ?? [])
+    .filter((a) => a.status === "PENDING" && approvalTargetId(a) === proposalId)
+    .map((a) => a.action);
 
   return (
     <>
       <BackToPenalties />
 
-      <header className="flex w-full min-w-0 flex-col gap-3 tablet:flex-row tablet:items-start tablet:justify-between">
-        <div className="flex min-w-0 flex-col gap-1">
+      <header className="flex w-full min-w-0 items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className="min-w-0 text-heading-sm text-01 tablet:text-heading-md">
               {providerName} · {penaltyText} penalty
@@ -274,13 +315,14 @@ export default function OperatorCasePage() {
             <p className="text-body-xs text-03">Opened under the retired objection process; it now follows the on-chain steps below.</p>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {primary ? <HeaderAction action={primary} /> : null}
+        <div className="flex shrink-0 items-center">
           <MoreActions
             brief={brief}
             proposalId={proposalId}
             identity={identity}
             authority={authority}
+            penaltyName={penaltyName}
+            pendingActions={pendingActions}
             onSuspend={authority.suspend.allowed ? () => setSheet("suspend") : null}
           />
         </div>
@@ -298,7 +340,7 @@ export default function OperatorCasePage() {
         />
       ) : null}
 
-      {waitingAny && !result?.approvalId ? (
+      {waitingAny && !pendingInCard && !result?.approvalId ? (
         <p role="status" className="w-full rounded-lg border border-01 bg-02 px-3.5 py-2.5 text-body-13 text-01">
           {WAITING_WHAT[waitingAny.action] ?? "A request on this penalty"} is waiting for approval: {directory.nameOf(waitingAny.requestedBy)} asked{" "}
           <LocalTime value={waitingAny.createdAt} />.{" "}
@@ -313,6 +355,7 @@ export default function OperatorCasePage() {
           <StatusTimeline
             steps={caseTimelineSteps(brief, facts, { slashDelaySeconds: terms.data?.slashDelaySeconds, now })}
             onElapsed={refetch}
+            alwaysDay
           />
         </section>
 
@@ -326,7 +369,20 @@ export default function OperatorCasePage() {
             action={primary}
             secondary={next.secondary ? actionFor(next.secondary, false) : undefined}
             footer={
-              readOnlyRuling ? (
+              ruling ? (
+                <div className="flex w-full flex-col gap-2 pt-1 sm:flex-row sm:justify-end">
+                  <Button variant="secondary" asChild className="touch-target w-full sm:w-auto">
+                    <Link href={rulingHref(proposalId, "CANCEL")} aria-label={`Cancel ${penaltyName}`}>
+                      Cancel
+                    </Link>
+                  </Button>
+                  <Button variant="secondary" asChild className="touch-target w-full sm:w-auto">
+                    <Link href={rulingHref(proposalId, "UPHOLD")} aria-label={`Uphold ${penaltyName}`}>
+                      Uphold
+                    </Link>
+                  </Button>
+                </div>
+              ) : readOnlyRuling ? (
                 <WhyNotLine action="rule" me={identity} ask={`Can you rule on ${penaltyName}? The provider disputed it on chain.`} />
               ) : undefined
             }
@@ -342,13 +398,22 @@ export default function OperatorCasePage() {
               </Link>
             </Fact>
             <Fact label="Tool">{proposal.bindingLabel || proposal.toolName}</Fact>
-            {reduction && (facts.stage === "executed" || !MOVES_NOTHING.includes(facts.stage)) ? (
-              <Fact label={facts.stage === "executed" ? "Stake went down by" : "Stake goes down by"}>{formatMoney(reduction)}</Fact>
+            {reduction && terms.data && (facts.stage === "executed" || !MOVES_NOTHING.includes(facts.stage)) ? (
+              <Fact
+                label={facts.stage === "executed" ? "Taken from the stake" : "Taken from the stake if upheld"}
+                hint={`The agents' and the platform's shares. The provider's ${keptShareText(terms.data.slashAgentBps)} is never taken.`}
+              >
+                {formatMoney(reduction)}
+              </Fact>
             ) : null}
             <Fact label="Proposed">
               <LocalTime value={proposal.clocks.proposedAt} />
             </Fact>
-            {brief.upheldViolations30d ? <Fact label="Upheld in 30 days">{brief.upheldViolations30d}</Fact> : null}
+            {brief.upheldViolations30d ? (
+              <Fact label="Other penalties upheld" hint="Against this provider in the last 30 days.">
+                {brief.upheldViolations30d}
+              </Fact>
+            ) : null}
           </dl>
         </aside>
 
@@ -362,14 +427,14 @@ export default function OperatorCasePage() {
               <TabsTrigger value="measurement">Measurement</TabsTrigger>
               <TabsTrigger value="context">Context</TabsTrigger>
               <TabsTrigger value="history">History</TabsTrigger>
-              <TabsTrigger value="restoration">If cancelled</TabsTrigger>
+              {restoration ? <TabsTrigger value="restoration">If cancelled</TabsTrigger> : null}
             </TabsList>
           </div>
           <TabsContent value="measurement">
             <OperatorMeasurement data={brief.case} />
           </TabsContent>
           <TabsContent value="context">
-            <CaseContext data={brief.case} />
+            <CaseContext data={brief.case} audience="operator" />
           </TabsContent>
           <TabsContent value="history">
             {brief.timeline.length === 0 ? (
@@ -395,10 +460,8 @@ export default function OperatorCasePage() {
               </Link>
             </p>
           </TabsContent>
-          <TabsContent value="restoration">
-            {brief.restoration.length === 0 ? (
-              <PageState kind="empty" title="Nothing to put back" description="Nothing is recorded as restorable on this penalty." bare />
-            ) : (
+          {restoration ? (
+            <TabsContent value="restoration">
               <dl className="flex w-full flex-col rounded-xl border border-01 bg-01">
                 {brief.restoration.map((row) => (
                   <div key={row.label} className="flex w-full flex-col gap-0.5 border-b border-01 px-4 py-3 last:border-b-0 tablet:flex-row tablet:gap-4">
@@ -410,8 +473,8 @@ export default function OperatorCasePage() {
                   </div>
                 ))}
               </dl>
-            )}
-          </TabsContent>
+            </TabsContent>
+          ) : null}
         </Tabs>
       </div>
 
@@ -433,7 +496,7 @@ export default function OperatorCasePage() {
           onOpenChange={(open) => setSheet(open ? "cancel" : null)}
           proposalId={proposalId}
           penaltyAsset={proposal.penaltyAmount.asset}
-          deadlineSentence={cancelDeadlineSentence(facts, (iso) => formatLocalDateTime(iso))}
+          deadlineSentence={cancelDeadlineSentence(facts, when)}
           onSigned={(hash) => {
             setResult({ title: "Cancel sent", next: "The penalty shows as cancelled once the chain watcher reads it back.", txHash: hash });
             refetch();
@@ -444,25 +507,12 @@ export default function OperatorCasePage() {
   );
 }
 
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+function Fact({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="flex w-full items-baseline justify-between gap-3 border-b border-01 px-4 py-2.5 last:border-b-0">
-      <dt className="shrink-0 text-03">{label}</dt>
-      <dd className="min-w-0 truncate text-right tabular-nums text-01">{children}</dd>
+    <div className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-0.5 border-b border-01 px-4 py-2.5 last:border-b-0">
+      <dt className="text-03">{label}</dt>
+      <dd className="truncate text-right tabular-nums text-01">{children}</dd>
+      {hint ? <dd className="col-span-2 text-body-xs text-03">{hint}</dd> : null}
     </div>
-  );
-}
-
-/** The header's one primary action, the same one the next-step card carries. */
-function HeaderAction({ action }: { action: NextStepAction }) {
-  const variant = action.tone === "danger" ? "danger" : "primary";
-  return action.href ? (
-    <Button variant={variant} asChild>
-      <Link href={action.href}>{action.label}</Link>
-    </Button>
-  ) : (
-    <Button variant={variant} onClick={action.onClick} disabled={action.disabled} loading={action.loading}>
-      {action.label}
-    </Button>
   );
 }
