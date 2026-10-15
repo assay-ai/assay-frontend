@@ -419,16 +419,32 @@ export function OldRuleLine({ policy }: { policy: SpendPolicy | null }) {
       toast.success("Removed. Only your spending limits and account ceiling apply now.");
     },
   });
-  if (!policy?.requireApprovalAbove) return null;
-  const amount = formatLimit(policy.requireApprovalAbove);
+  const oldBudget = [
+    policy?.perCallMax ? `${formatLimit(policy.perCallMax)} a call` : null,
+    policy?.dailyCap ? `${formatLimit(policy.dailyCap)} a day` : null,
+  ].filter(Boolean);
+  if (!policy?.requireApprovalAbove && oldBudget.length === 0) return null;
+  const amount = policy?.requireApprovalAbove ? formatLimit(policy.requireApprovalAbove) : "";
+  // Both leftovers in one place, each with its own way out, so nobody meets
+  // one here and a different set of numbers in an agent's sheet.
   return (
-    <div className="flex w-full flex-wrap items-center gap-3 rounded-lg border border-01 bg-01 px-4 py-3" data-testid="old-rule-line">
-      <p className="min-w-0 flex-1 text-body-13 text-02">
-        An older account-wide rule also refuses any single call above {amount}, for every agent.
-      </p>
-      <Button size="sm" variant="secondary" type="button" onClick={() => setConfirming(true)}>
-        Remove it
-      </Button>
+    <div className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-01 px-4 py-3" data-testid="old-rule-line">
+      <p className="text-label-13 text-01">Older rules still checked</p>
+      {policy?.requireApprovalAbove ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="min-w-0 flex-1 text-body-13 text-02">
+            For every agent: any single call above {amount} is refused.
+          </p>
+          <Button size="sm" variant="secondary" type="button" onClick={() => setConfirming(true)}>
+            Remove it
+          </Button>
+        </div>
+      ) : null}
+      {oldBudget.length > 0 ? (
+        <p className="text-body-13 text-02">
+          For this agent: an older budget of {oldBudget.join(" and ")}. Saving its spending limits replaces it.
+        </p>
+      ) : null}
       <ConfirmSheet
         open={confirming}
         onOpenChange={setConfirming}

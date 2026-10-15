@@ -141,7 +141,8 @@ describe("LimitsView (Spending limits) — two layers, one effective limit per a
 
   it("shows the older refuse-above rule only while it is set, with a way to remove it", () => {
     const html = markup({ ...POLICY, requireApprovalAbove: usd("25") });
-    expect(html).toContain("An older account-wide rule also refuses any single call above $25.00, for every agent.");
+    expect(html).toContain("Older rules still checked");
+    expect(html).toContain("For every agent: any single call above $25.00 is refused.");
     expect(html).toContain("Remove it");
   });
 
