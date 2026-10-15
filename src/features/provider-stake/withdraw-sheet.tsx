@@ -24,7 +24,7 @@ import { useProviderPendingTransactions } from "./pending-chain-tx-list";
 import { describeStakeError, unstakeStep, withdrawStep } from "./stake-steps";
 import { PROVIDER_STAKE_KEY, useStakeStatus } from "./use-stake-status";
 import { useStakeWallet, walletBlocker } from "./use-stake-wallet";
-import { DEMO_SIGNING_NOTE, simulatedSteps } from "./wallet-readiness";
+import { simulatedSteps } from "./wallet-readiness";
 import {
   availableAfterRequest,
   toolsPausedAt,
@@ -222,7 +222,6 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
       onSuccess={() => void queryClient.invalidateQueries({ queryKey: [...PROVIDER_STAKE_KEY] })}
       doneAction={{ label: "Done", onClick: () => onOpenChange(false) }}
     >
-      {wallet.simulated ? <p className="text-body-xs text-03">{DEMO_SIGNING_NOTE}</p> : null}
       {wallet.canConnect ? (
         <Button
           variant="secondary"

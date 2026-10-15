@@ -19,7 +19,7 @@ import { stakePreflight, useStakeBalances } from "./stake-preflight";
 import { depositSteps, describeStakeError, proveWalletStep } from "./stake-steps";
 import { PROVIDER_STAKE_KEY, useStakeStatus } from "./use-stake-status";
 import { short, useStakeWallet, walletBlocker } from "./use-stake-wallet";
-import { DEMO_SIGNING_NOTE, simulatedSteps } from "./wallet-readiness";
+import { simulatedSteps } from "./wallet-readiness";
 
 /** The gas token of every pinned stake deployment (Robinhood Chain testnet; see `providers/index.tsx`). */
 const NATIVE_SYMBOL = "ETH";
@@ -210,7 +210,6 @@ export function StakeSheet({ open, onOpenChange, amount, reason, onStaked }: Sta
             only ever touch this wallet&apos;s stake.
           </span>
         ) : null}
-        {wallet.simulated ? <span className="text-body-xs text-03">{DEMO_SIGNING_NOTE}</span> : null}
         {wallet.canConnect ? (
           <Button
             variant="secondary"

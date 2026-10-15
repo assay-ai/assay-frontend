@@ -2,8 +2,6 @@
 
 import * as React from "react";
 
-import type { WalletStep } from "@/components/patterns/wallet-steps";
-
 /**
  * Two things every provider wallet sheet (Stake, Withdraw, Dispute) needs
  * beyond `useSigner`'s five states:
@@ -13,10 +11,10 @@ import type { WalletStep } from "@/components/patterns/wallet-steps";
  *   `WALLET_READ_STALL_MS`, the person gets a reason and a next step instead
  *   of "Reading…" for ever.
  * - **DEMO ONLY: simulated signing.** The demo has no wallet session, so the
- *   review steps could never be reached. With the build-time demo flag on, the
- *   sheets run `simulatedSteps` instead: same step names, same tracker, no
- *   wallet asked, nothing sent. A real build never takes this path, and the
- *   real steps (and their signing guards) are untouched.
+ *   review steps could never be reached. With the build-time demo flag on,
+ *   every `WalletActionSheet` runs `simulatedSteps` instead: same step names,
+ *   same tracker, no wallet asked, nothing sent. A real build never takes this
+ *   path, and the real steps (and their signing guards) are untouched.
  */
 
 export const WALLET_READ_STALL_MS = 8_000;
@@ -41,21 +39,5 @@ export function useStalled(reading: boolean, ms: number = WALLET_READ_STALL_MS):
 /** The sentence under a disabled sign button while the wallet list is read. */
 export const WALLET_READING = "Reading the wallets connected in this browser…";
 
-export const DEMO_SIGNING_NOTE = "Demo: no wallet is asked and nothing is sent. The steps below only show what would happen.";
-
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** DEMO ONLY: the same steps, walked through without a wallet. */
-export function simulatedSteps(steps: readonly WalletStep[], delayMs = 700): WalletStep[] {
-  return steps.map((step) => ({
-    id: step.id,
-    label: step.label,
-    cost: step.cost,
-    skip: step.skip,
-    run: async ({ report }) => {
-      report({ stage: "wallet" });
-      await wait(delayMs);
-      return { data: `demo:${step.id}` };
-    },
-  }));
-}
+/** DEMO ONLY: see `simulatedSteps` in the shared wallet steps. */
+export { simulatedSteps } from "@/components/patterns/wallet-steps";

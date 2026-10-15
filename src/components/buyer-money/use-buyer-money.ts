@@ -12,6 +12,7 @@ import { type Signer, type UseSignerResult, useSigner } from "@/hooks/useSigner"
 import type { BuyerEscrow } from "@/interfaces";
 import type { ApiError } from "@/libs/ApiClient";
 import { shortAddress } from "@/libs/chains/format";
+import { demoEnabled } from "@/libs/demo/demo-api";
 import { getBalances } from "@/services";
 import { chainDisplayName, findChain, settlementSymbol } from "@/services/chains.service";
 import { getEscrow } from "@/services/escrow.service";
@@ -103,6 +104,9 @@ export function requireSigner(state: UseSignerResult, owner?: string | null): Si
  */
 export function useWalletBlocker(state: UseSignerResult, owner?: string | null): React.ReactNode | null {
   const text = useWalletBlockerText(state, owner);
+  // DEMO ONLY: no wallet session exists, and the signing sheets run simulated
+  // steps that never reach a wallet, so a missing wallet blocks nothing.
+  if (demoEnabled()) return null;
   if (text === null) return null;
   const connectable = state.status === "address-not-connected" || state.status === "no-wallet";
   return connectable ? React.createElement(ConnectWalletNote, { text }) : text;

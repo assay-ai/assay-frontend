@@ -188,3 +188,25 @@ export function trackerHeadline(count: number, state: WalletRunState, noun = "Si
   const index = state.phase === "idle" ? 0 : state.index;
   return `${noun} ${index + 1} of ${count}`;
 }
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * DEMO ONLY: the same steps, walked through without a wallet. Same ids,
+ * labels, costs and skips, so the tracker and the success state look exactly
+ * like the real run; each `run` waits a moment and returns `demo:<id>`. The
+ * real `run` is never called, so nothing is signed or sent.
+ */
+export function simulatedSteps(steps: readonly WalletStep[], delayMs = 700): WalletStep[] {
+  return steps.map((step) => ({
+    id: step.id,
+    label: step.label,
+    cost: step.cost,
+    skip: step.skip,
+    run: async ({ report }) => {
+      report({ stage: "wallet" });
+      await wait(delayMs);
+      return { data: `demo:${step.id}` };
+    },
+  }));
+}

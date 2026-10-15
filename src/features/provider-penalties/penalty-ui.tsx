@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Measurement } from "@/features/provider-slash-case/measurement";
 import { SLASH_AGENT_BPS, SLASH_PLATFORM_BPS, splitPenalty } from "@/features/provider-slash-case/distribution";
-import { DEMO_SIGNING_NOTE } from "@/features/provider-stake/wallet-readiness";
 import { formatRemaining, useCountdown } from "@/hooks/useCountdown";
 import type { Money } from "@/interfaces";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
@@ -368,15 +367,12 @@ export function DisputeSheet({
   steps,
   onOpenChange,
   onDisputed,
-  simulated = false,
 }: {
   row: PenaltyRow | null;
   toolName: string | null;
   steps: React.ComponentProps<typeof WalletActionSheet>["steps"];
   onOpenChange: (open: boolean) => void;
   onDisputed: () => void;
-  /** DEMO ONLY: say that nothing is signed. */
-  simulated?: boolean;
 }) {
   const loss = row ? lossOf(row) : null;
   const split = row ? splitPenalty(lossBasis(row)) : null;
@@ -428,7 +424,6 @@ export function DisputeSheet({
               <dd className="text-02">One network fee, paid in ETH by your stake wallet. The dispute itself is free.</dd>
             </div>
           </dl>
-          {simulated ? <p className="text-body-xs text-03">{DEMO_SIGNING_NOTE}</p> : null}
         </>
       ) : null}
     </WalletActionSheet>
