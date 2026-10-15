@@ -31,6 +31,7 @@ import {
   writeSignInMethod,
   type SignInMethod,
 } from "./sign-in";
+import { dropUrlParams } from "./url-params";
 
 /**
  * `/operator…` when nobody is signed in. One primary way in — "Sign in with
@@ -90,6 +91,9 @@ export function OperatorSignInScreen({
 
   const [method, setMethod] = React.useState<SignInMethod>("privy");
   React.useEffect(() => setMethod(readSignInMethod(storage())), []);
+  // A sheet's "open on arrival" param (Team's or Blocks' `?new=1`) has no sheet
+  // to open here, and would open one by surprise after signing in again.
+  React.useEffect(() => dropUrlParams(["new"]), []);
 
   /** The user chose the Privy path and it is not finished. */
   const [privyPending, setPrivyPending] = React.useState(false);

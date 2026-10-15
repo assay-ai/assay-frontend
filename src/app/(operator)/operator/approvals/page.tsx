@@ -128,7 +128,7 @@ function ApprovalsInbox() {
       <div role="group" aria-label="Approvals" className="flex w-full gap-4 border-b border-01">
         {(
           [
-            ["waiting", allWaitingLabel(waitingCount, "tab")],
+            ["waiting", allWaitingLabel(waitingCount)],
             ["history", "History"],
           ] as const
         ).map(([value, label]) => (

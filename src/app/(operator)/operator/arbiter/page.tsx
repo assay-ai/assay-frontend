@@ -48,6 +48,7 @@ import {
   mayRule,
   possessive,
   pruneArbiterSelection,
+  rulingMissingText,
   rulingOutcome,
   selectionChain,
   toggleArbiterSelection,
@@ -64,6 +65,7 @@ import { OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
 import { useProviderNames } from "@/features/operator/use-operator-lookups";
 import { WhatHappens } from "@/features/operator/what-happens";
 import { WhyNot } from "@/features/operator/why-not";
+import { dropUrlParams } from "@/features/operator/url-params";
 import { useConnectedAddresses, useSigner } from "@/hooks/useSigner";
 import type { Money } from "@/interfaces/api";
 import type { ArbiterDispute, ArbiterRuling, ArbiterTerms, ChainStateHealth } from "@/interfaces/operator";
@@ -178,6 +180,13 @@ function ArbiterScreen() {
   };
   // "Cancel" / "Uphold" on a penalty page lands here with that dispute's sheet open.
   useRulingFromLink({ rows, proposalId: focusCase, rule: searchParams.get("rule"), canRule, open: openRuling });
+  // A link's `?case=…&rule=…` opened the sheet; closing it drops both, so Back
+  // or a reload does not open it again (a plain `?case=` link keeps its highlight).
+  const closeRuling = () => {
+    setRuling(null);
+    if (searchParams.has("rule")) dropUrlParams(["rule", "case"]);
+  };
+  const barOpen = canRule && (selected.size > 0 || notice !== null);
   const soonest = rows[0] ? disputeUrgency(rows[0], now) : null;
 
   return (
@@ -258,31 +267,42 @@ function ArbiterScreen() {
         </ul>
       )}
 
-      {/* The selection's actions stick to the bottom of the screen, under the list, so selecting never moves a row. */}
-      {canRule && (selected.size > 0 || notice) ? (
-        <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+84px)] z-30 flex w-full flex-col gap-1.5 rounded-xl border border-02 bg-01 px-3.5 py-2.5 shadow-soft md:bottom-4">
-          {selected.size > 0 ? (
-            <div className="flex w-full flex-wrap items-center gap-2">
-              <span className="mr-auto text-label-13 tabular-nums text-01" aria-live="polite">
-                {selected.size} selected
-              </span>
-              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} className="min-h-10 tablet:min-h-8">
-                Clear
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => openRuling("CANCEL", [...selected])} className="min-h-10 tablet:min-h-8">
-                Cancel {selected.size}
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => openRuling("UPHOLD", [...selected])} className="min-h-10 tablet:min-h-8">
-                Uphold {selected.size}
-              </Button>
+      {/* The selection's actions: a bar fixed to the bottom of the screen (above
+          the phone's tab bar), out of the flow, so selecting never moves a row.
+          The spacer keeps the last row scrollable above it. */}
+      {barOpen ? (
+        <>
+          <div aria-hidden="true" className="h-16 w-full shrink-0" />
+          <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+76px)] z-30 px-4 md:bottom-4 tablet:px-[26px]">
+            <div
+              role="region"
+              aria-label="Selected disputes"
+              className="pointer-events-auto mx-auto flex w-full max-w-[1148px] flex-col gap-1.5 rounded-xl border border-02 bg-01 px-3.5 py-2.5 shadow-lifted"
+            >
+              {selected.size > 0 ? (
+                <div className="flex w-full flex-wrap items-center gap-2">
+                  <span className="mr-auto text-label-13 tabular-nums text-01" aria-live="polite">
+                    {selected.size} selected
+                  </span>
+                  <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} className="touch-target">
+                    Clear
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => openRuling("CANCEL", [...selected])} className="touch-target">
+                    Cancel {selected.size}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => openRuling("UPHOLD", [...selected])} className="touch-target">
+                    Uphold {selected.size}
+                  </Button>
+                </div>
+              ) : null}
+              {notice ? (
+                <p className="text-body-xs text-warning-700" role="status">
+                  {notice}
+                </p>
+              ) : null}
             </div>
-          ) : null}
-          {notice ? (
-            <p className="text-body-xs text-warning-700" role="status">
-              {notice}
-            </p>
-          ) : null}
-        </div>
+          </div>
+        </>
       ) : null}
 
       {canRule ? (
@@ -291,12 +311,12 @@ function ArbiterScreen() {
           rows={ruling ? ruling.ids.map((id) => rowsById.get(id)).filter((r): r is ArbiterDispute => Boolean(r)) : []}
           providerName={providers.name}
           chainForSelection={ruling ? selectionChain(new Set(ruling.ids), rows) : null}
-          onClose={() => setRuling(null)}
+          onClose={closeRuling}
           onRefused={setRowRefusals}
           onDone={(title, hash, chain) => {
             setResult({ title, hash, chainId: chain });
             setSelected(new Set());
-            setRuling(null);
+            closeRuling();
             refresh();
           }}
         />
@@ -524,10 +544,10 @@ function DisputeRow({
         <div className={cn("flex shrink-0 items-center gap-2", !canRule && "absolute right-3 top-2.5 tablet:static")}>
           {canRule ? (
             <>
-              <Button size="sm" variant="secondary" onClick={() => onRule("CANCEL")} className="flex-1 tablet:flex-none" aria-label={`Cancel ${possessive(providerName)} penalty`}>
+              <Button size="sm" variant="secondary" onClick={() => onRule("CANCEL")} className="touch-target flex-1 tablet:flex-none" aria-label={`Cancel ${possessive(providerName)} penalty`}>
                 Cancel
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => onRule("UPHOLD")} className="flex-1 tablet:flex-none" aria-label={`Uphold ${possessive(providerName)} penalty`}>
+              <Button size="sm" variant="secondary" onClick={() => onRule("UPHOLD")} className="touch-target flex-1 tablet:flex-none" aria-label={`Uphold ${possessive(providerName)} penalty`}>
                 Uphold
               </Button>
             </>
@@ -630,15 +650,14 @@ function RulingSheet({
   const canSign = arbiter !== null && signerState.status === "ready" && sameEvmAddress(signerState.signer.address, arbiter);
 
   const validated = validateRulingForm({ ruling: kind, reasonCode: reason, note, ticketRef: ticket }, chainForSelection, ruling?.ids ?? []);
-  const notReady = unchecked.length > 0 && !acknowledged
-    ? `Confirm the payee warning${unchecked.length === 1 ? "" : "s"} first.`
-    : !validated.ok
-    ? reason === ""
-      ? "Pick a reason first."
-      : note.trim().length < ARBITER_NOTE_MIN
-        ? `Write at least ${ARBITER_NOTE_MIN} characters in the note.`
-        : (Object.values(validated.errors)[0] ?? "Check the form.")
-    : null;
+  // Everything still missing in one line, not one item at a time.
+  const notReady = rulingMissingText({
+    warnings: unchecked.length,
+    acknowledged,
+    reason,
+    note,
+    otherError: validated.ok ? null : (Object.values(validated.errors)[0] ?? "Check the form."),
+  });
 
   const prepare = async () => {
     if (!validated.ok) throw new Error(notReady ?? "Check the form.");
