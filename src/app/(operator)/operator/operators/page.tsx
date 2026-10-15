@@ -178,7 +178,7 @@ function TeamScreen() {
           )}
         </div>
         {canManage ? (
-          <Button icon={<Plus aria-hidden="true" />} onClick={() => setSheet({ kind: "add" })} className="w-full tablet:w-auto">
+          <Button icon={<Plus aria-hidden="true" />} onClick={() => setSheet({ kind: "add" })} className="touch-target w-full tablet:w-auto">
             Add someone
           </Button>
         ) : null}
