@@ -34,3 +34,38 @@ export function earnedTileSub(
     `${calls} call${calls === 1 ? "" : "s"} whose voucher could not be redeemed`
   );
 }
+
+export interface EarningsSplit {
+  /** What actually reached the wallet: earned minus what could not be collected. */
+  inWallet: Money | null;
+  /**
+   * Earned on calls whose payment could not be collected from the buyer
+   * (`absorbed`). Nothing pays these out yet (business #13), so it is never
+   * shown as "owed" — only named, with its call count.
+   */
+  uncollected: Money | null;
+  uncollectedCalls: number;
+  fee: Money | null;
+  notCredited: Money | null;
+  notCreditedCalls: number;
+}
+
+function positive(value: Money | null | undefined): Money | null {
+  return value && new Decimal(value.amount || "0").gt(0) ? value : null;
+}
+
+/** The month's money as the provider reads it: in the wallet, Assay's fee, not credited. */
+export function earningsSplit(totals: ProviderEarningsFigures | null | undefined): EarningsSplit {
+  const earned = totals?.earned ?? null;
+  const absorbed = positive(totals?.absorbed);
+  const inWallet =
+    earned && absorbed ? { ...earned, amount: Decimal.max(0, new Decimal(earned.amount).minus(absorbed.amount)).toFixed(0) } : earned;
+  return {
+    inWallet,
+    uncollected: absorbed,
+    uncollectedCalls: absorbed ? (totals?.absorbedCalls ?? 0) : 0,
+    fee: positive(totals?.platformFee),
+    notCredited: positive(totals?.withheld),
+    notCreditedCalls: totals?.withheldCalls ?? 0,
+  };
+}

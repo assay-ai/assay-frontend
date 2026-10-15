@@ -19,7 +19,10 @@ import {
 } from "@/components/ui/panel";
 import { SamplingExplainer } from "@/components/ui/sampling-explainer";
 import { StageList } from "@/components/ui/stage-list";
-import { DASH, stampUtc } from "@/features/g34a/stats";
+import { DASH } from "@/features/g34a/stats";
+import { CopyChip } from "@/components/patterns/copy-chip";
+import { LocalTime } from "@/components/patterns/local-time";
+import { PageState } from "@/components/patterns/page-state";
 import { ruleOutcomeLabel, shortId, toStageChecks } from "@/features/provider-evidence/stage-format";
 // Imported by path, not through the `@/interfaces` / `@/services` barrels.
 import type { EvidenceRuleResult, ProviderVerdictEvidence } from "@/interfaces/provider-evidence";
@@ -161,11 +164,7 @@ export default function EvidencePackBrowserPage() {
   const backHref = routes.verdict(bindingId, verdictId);
 
   if (evidenceQuery.isPending) {
-    return (
-      <div className="flex w-full items-center justify-center py-16">
-        <p className="text-body-13 text-03">Loading evidence pack…</p>
-      </div>
-    );
+    return <PageState kind="loading" rows={5} label="Loading the evidence" />;
   }
 
   const error = evidenceQuery.error;
@@ -178,7 +177,7 @@ export default function EvidencePackBrowserPage() {
             className="flex w-fit items-center gap-1.5 text-label-13 text-03 hover:text-01"
           >
             <ArrowLeft aria-hidden="true" className="size-[14px]" />
-            Back to verdict
+            Back to the call
           </Link>
           <EmptyState
             icon={<FileWarning aria-hidden="true" width={22} height={22} />}
@@ -227,14 +226,13 @@ export default function EvidencePackBrowserPage() {
             className="flex w-fit items-center gap-1.5 text-label-13 text-03 hover:text-01"
           >
             <ArrowLeft aria-hidden="true" className="size-[14px]" />
-            Back to verdict
+            Back to the call
           </Link>
           <h1 className="truncate text-heading-sm text-01 tablet:text-heading-md">
-            Evidence · {shortId(evidence.id)}
+            Evidence for this call
           </h1>
-          <p className="font-mono text-mono-12 text-03 tablet:truncate">
-            intent {shortId(evidence.intentId)} · tool {shortId(evidence.toolId)} · sealed{" "}
-            {stampUtc(evidence.integrity.sealedAt)} UTC
+          <p className="text-body-xs text-03">
+            Sealed <LocalTime value={evidence.integrity.sealedAt} /> · <CopyChip value={evidence.id} label="evidence id" />
           </p>
         </div>
 
@@ -300,7 +298,7 @@ export default function EvidencePackBrowserPage() {
             <div className="flex w-full items-center justify-between gap-3 py-1">
               <span className="text-body-xs text-03">sealed</span>
               <span className="font-mono text-mono-12 text-01">
-                {stampUtc(evidence.integrity.sealedAt)} UTC
+                <LocalTime value={evidence.integrity.sealedAt} />
               </span>
             </div>
             <div className="flex w-full items-center justify-between gap-3 py-1">

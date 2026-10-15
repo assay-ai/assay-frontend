@@ -1,0 +1,153 @@
+"use client";
+
+import { useQueries, useQuery } from "@tanstack/react-query";
+import * as React from "react";
+
+import type { AssayCaseIndex } from "@/features/chain-slashes/assay-match";
+import { useChainSlashes, useNowSeconds } from "@/features/chain-slashes/use-chain-slashes";
+import { stakeChains } from "@/features/provider-stake/chain-stake";
+import { PROVIDER_STAKE_KEY } from "@/features/provider-stake/use-stake-status";
+import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
+import { demoEnabled } from "@/libs/demo/demo-api";
+import {
+  DEMO_PENALTY_AMOUNTS,
+  DEMO_PENALTY_PROPOSALS,
+  DEMO_PENALTY_REQUESTS,
+} from "@/libs/demo/demo-penalties";
+import { normaliseEvmAddress, type HexString } from "@/libs/chains/evm/stake-slashes/address";
+import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
+import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
+import { slashStatusOf } from "@/libs/chains/evm/stake-slashes/status";
+import { getSlashProposalCaseDetail } from "@/services/provider-slash-cases.service";
+import { getProviderStake } from "@/services/provider-stake.service";
+import { addressOfAccount } from "@/utils/chain";
+
+import { penaltyRowOf, sortPenalties, type PenaltyRow } from "./model";
+
+export const PENALTY_DEPLOYMENT = ROBINHOOD_TESTNET_STAKE;
+
+/** The query key of one Assay case, shared with every surface that reads it. */
+export const caseKey = (proposalId: string) => ["provider", "slash-proposal-case", proposalId] as const;
+
+/** DEMO ONLY: the three records, dated relative to now. */
+function demoChain(nowSeconds: number): { rows: ChainSlashRow[]; index: AssayCaseIndex } {
+  const atomic = (major: string) => BigInt(Math.round(Number(major) * 1_000_000));
+  const base = {
+    beneficiary: "0x0000000000000000000000000000000000000000" as const,
+    cancelReason: null,
+    upheld: false,
+    upheldAt: null,
+    upheldTx: null,
+    disputeTx: null,
+    proposeTx: null,
+    closeTx: null,
+    stateSource: "record" as const,
+  };
+  const h = 3600;
+  const rows: ChainSlashRow[] = [
+    {
+      ...base,
+      requestId: DEMO_PENALTY_REQUESTS[0],
+      status: slashStatusOf(1),
+      penalty: atomic(DEMO_PENALTY_AMOUNTS[0]),
+      reserved: atomic(DEMO_PENALTY_AMOUNTS[0]),
+      applied: null,
+      proposedAt: nowSeconds - 20 * h,
+      executableAt: nowSeconds + 52 * h,
+      disputedAt: null,
+      disputeExpiresAt: null,
+    },
+    {
+      ...base,
+      requestId: DEMO_PENALTY_REQUESTS[1],
+      status: slashStatusOf(4),
+      penalty: atomic(DEMO_PENALTY_AMOUNTS[1]),
+      reserved: atomic(DEMO_PENALTY_AMOUNTS[1]),
+      applied: null,
+      proposedAt: nowSeconds - 95 * h,
+      executableAt: nowSeconds + 48 * h,
+      disputedAt: nowSeconds - 72 * h,
+      disputeExpiresAt: nowSeconds - 72 * h + 30 * 86_400,
+    },
+    {
+      ...base,
+      requestId: DEMO_PENALTY_REQUESTS[2],
+      status: slashStatusOf(2),
+      penalty: atomic(DEMO_PENALTY_AMOUNTS[2]),
+      reserved: atomic(DEMO_PENALTY_AMOUNTS[2]),
+      applied: atomic(DEMO_PENALTY_AMOUNTS[2]),
+      proposedAt: nowSeconds - 480 * h,
+      executableAt: nowSeconds - 408 * h,
+      disputedAt: null,
+      disputeExpiresAt: null,
+    },
+  ];
+  const known = new Map(DEMO_PENALTY_REQUESTS.map((id, i) => [id.toLowerCase(), { proposalId: DEMO_PENALTY_PROPOSALS[i] }]));
+  return { rows, index: { status: "checked", known } };
+}
+
+/**
+ * Every penalty on the provider's own stake wallet, read from the chain and
+ * matched to Assay's cases. Shared by the Penalties page, the nav badge and
+ * Home (same query keys, so one read serves all).
+ */
+export function usePenalties(options: { withCases?: "open" | "all" | "none" } = {}) {
+  const { withCases = "open" } = options;
+  const nowSeconds = useNowSeconds();
+  const demo = demoEnabled();
+
+  const stake = useQuery({ queryKey: PROVIDER_STAKE_KEY, queryFn: getProviderStake, retry: 0 });
+  const authority =
+    stakeChains(stake.data).find((entry) => entry.chainId === PENALTY_DEPLOYMENT.chainId)?.stakeAuthority ?? null;
+  const ownAddress: HexString | null = authority ? normaliseEvmAddress(addressOfAccount(authority)) : null;
+
+  const { chain, assay } = useChainSlashes(PENALTY_DEPLOYMENT, demo ? null : ownAddress, !demo);
+  // The demo's rows are fixed per minute, so they do not churn every render.
+  const minute = Math.floor(nowSeconds / 60);
+  const demoData = React.useMemo(() => (demo ? demoChain(minute * 60) : null), [demo, minute]);
+
+  const asset = demo
+    ? { decimals: 6, symbol: "USDG", fromChain: true }
+    : (chain.data?.asset ?? { decimals: PENALTY_DEPLOYMENT.fallbackAssetDecimals, symbol: PENALTY_DEPLOYMENT.fallbackAssetSymbol, fromChain: false });
+  const index = demo ? demoData!.index : (assay.data ?? null);
+  const chainRows = demo ? demoData!.rows : chain.data?.rows;
+
+  const { decimals, symbol } = asset;
+  const rows: PenaltyRow[] = React.useMemo(
+    () => sortPenalties((chainRows ?? []).map((row) => penaltyRowOf(row, { decimals, symbol }, index, nowSeconds))),
+    [chainRows, decimals, symbol, index, nowSeconds],
+  );
+
+  const wanted = rows.filter((row) => row.proposalId && (withCases === "all" || (withCases === "open" && row.tab !== "closed")));
+  const cases = useQueries({
+    queries: wanted.map((row) => ({
+      queryKey: caseKey(row.proposalId!),
+      queryFn: () => getSlashProposalCaseDetail(row.proposalId!),
+      retry: 0,
+      staleTime: 60_000,
+    })),
+  });
+  const caseById = new Map<string, SlashProposalCaseDetail>();
+  wanted.forEach((row, i) => {
+    const data = cases[i]?.data;
+    if (data) caseById.set(row.proposalId!, data);
+  });
+
+  return {
+    rows,
+    caseFor: (row: PenaltyRow) => (row.proposalId ? (caseById.get(row.proposalId) ?? null) : null),
+    ownAddress: demo ? ("0x9F2c8A1e5D7b30C4f6A8e2B915D3c7E04A6b1F82" as HexString) : ownAddress,
+    demo,
+    nowSeconds,
+    asset,
+    isLoading: stake.isLoading || (!demo && ownAddress !== null && chain.isLoading),
+    isFetching: chain.isFetching,
+    isError: !demo && chain.isError,
+    error: chain.error,
+    noStakeWallet: !demo && stake.isSuccess && ownAddress === null,
+    lookupUnavailable: !demo && assay.data?.status === "unavailable",
+    refetch: () => (demo ? Promise.resolve() : chain.refetch()),
+  };
+}
+
+export type PenaltiesData = ReturnType<typeof usePenalties>;

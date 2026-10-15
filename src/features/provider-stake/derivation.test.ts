@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Chain } from "@/interfaces/chain";
 
-import { readableDerivation } from "./derivation";
+import { readableDerivation, stakeReason } from "./derivation";
 
 const USDC = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1/token:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 const USDG = "eip155:46630/erc20:0xDbbC0000000000000000000000000000000000aa";
@@ -27,5 +27,19 @@ describe("readableDerivation", () => {
   it("leaves the arithmetic of a matching binding as it is", () => {
     const line = "max(floor $500.00, 1000 × $0.0100) = $500.00";
     expect(readableDerivation(line, chains)).toBe(line);
+  });
+});
+
+describe("stakeReason", () => {
+  it("names the price when it drives the requirement", () => {
+    expect(stakeReason("max(floor 50.000000, 1000 × 0.450000) = 450.000000", chains)).toBe("price $0.45 × 1,000 calls");
+  });
+  it("names the floor when it binds", () => {
+    expect(stakeReason("max(floor 50.000000, 1000 × 0.010000) = 50.000000", chains)).toBe(
+      "the $50.00 minimum for a paid tool",
+    );
+  });
+  it("never prints a formula it cannot read", () => {
+    expect(stakeReason("something else", chains)).toBe("the minimum for this tool");
   });
 });

@@ -1,574 +1,340 @@
 "use client";
 
-import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
 import { useQuery } from "@tanstack/react-query";
-import Decimal from "decimal.js";
-import { Download } from "lucide-react";
+import { Download, ExternalLink, HelpCircle } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import * as React from "react";
-import { useMemo, useState } from "react";
 
-import { Banner } from "@/components/ui/banner";
+import { DisplayAssetSelect, useDisplayAsset } from "@/components/display-asset-select";
+import { LocalTime } from "@/components/patterns/local-time";
+import { MoneySplit, type MoneySplitSegment } from "@/components/patterns/money-flow";
+import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
-import { MetricTile } from "@/components/ui/metric-tile";
-import {
-  Panel,
-  PanelBody,
-  PanelDescription,
-  PanelHeader,
-  PanelTitle,
-  PanelTitles,
-} from "@/components/ui/panel";
-import { Table, type TableColumn } from "@/components/ui/table";
-import { formatCount } from "@/features/buyer/period";
-import { earnedTileSub } from "@/features/provider-earnings/earned-tile";
-import type { Money, ProviderEarningsGroup, ProviderPayout } from "@/interfaces";
-import { ApiError } from "@/libs/ApiClient";
+import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { foldClasses, foldNotCredited, rowsInAsset } from "@/features/call-classes/csv";
+import { classLabel } from "@/features/call-classes/labels";
+import { downloadCallsCsv, useCallsExport } from "@/features/call-classes/use-calls-export";
+import { useProviderToolNames } from "@/features/provider-binding/tool-name";
+import { earningsSplit } from "@/features/provider-earnings/earned-tile";
+import { notCreditedReason } from "@/features/provider-earnings/not-credited";
+import { useChains } from "@/hooks/useChains";
+import type { Money, ProviderPayout } from "@/interfaces";
+import { explorerTxUrl } from "@/libs/chains/explorer";
 import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
-import { exportProviderCalls, getProviderEarnings } from "@/services/provider-reports.service";
-import { listToolBindings } from "@/services/provider-tool-bindings.service";
-import { formatMoney } from "@/utils/money";
-import { labelForEndpoint } from "@/utils/provider-label";
-import { toast } from "@/utils/toast";
+import { getProviderEarnings } from "@/services/provider-reports.service";
+import { chainIdOfAsset } from "@/utils/chain";
+import { formatMoney, toDecimal } from "@/utils/money";
 
 /**
- * Earnings and payouts — route `/provider/money`.
+ * Money — "how much did I earn, and is it in my wallet?"
  *
- * Page Header · four Tiles · panel "Rejected calls, itemised" · panel "Payout
- * history", straight down the frame's `Main`. The shell is the
- * `(console)` layout's.
- *
- * The batch payout writer is retired, and so is the two-step earnings
- * withdrawal that briefly replaced it. `redeem_voucher` now pays the
- * provider's own token account inside the settling transaction, so there is no
- * balance held anywhere on the provider's behalf and nothing to claim:
- * `provider_payouts` rows are frozen history, not a live feed, so this screen
- * claims no cadence anywhere — the "Payout threshold" control is gone, the
- * "Withdraw" action is gone, and the table below reads as a record of what
- * already happened, not a preview of what happens next.
- *
- * ## Two endpoints, and what each one cannot say
- *
- * `GET /providers/me/earnings` takes a required `from`/`to` and a
- * `groupBy=day|tool`, and returns the whole document — no cursor, no paging.
- * `GET /providers/me/payouts` is cursor-paged and accepts a `search` parameter
- * it **silently ignores**, so this screen offers no search box.
- *
- * It also accepts `from` and `to` and **silently ignores those too** — new,
- * and measured on the wire: `from=2020-01-01&to=2020-01-02` returns the same
- * four 2026 rows as an unfiltered call. `earnings` honours the same two
- * parameters (a 2020 window there returns zero groups), so this is one
- * resource's defect and not a house style. Every payout window on this screen
- * is therefore computed client-side, and gated on the page being complete.
- *
- * Between them they carry the four tiles and the two tables only partly:
- *
- * - **There is no accrued balance to have an endpoint.** Nothing is held for
- *   the provider between the redemption and the wallet, so the tile that once
- *   said `—` now reports `totals.earned` for the window instead. A zero
- *   "Accrued" beside a real earned figure would read as money gone missing,
- *   which is worse than either number alone.
- * - **`Reason` has no endpoint.** The frame itemises withheld money by the rule
- *   that rejected the call (`MIN_ARRAY_LENGTH`, `FRESHNESS`, …). `earnings`
- *   groups by day or by tool and nothing else; `quality.verdictMix` groups by
- *   verdict status, which is a different axis and carries no money. So the
- *   table is grouped by binding — the one axis that exists — and the Reason
- *   cell is the unknown treatment on every row.
- * - **A payout row is a ledger entry, not a batch**, and it carries `batchId`,
- *   `amount`, `chainTxRef`, `createdAt`. The frame's Period, Calls, Gross and
- *   Take columns have no field behind them and no join that would produce one:
- *   nothing links a `PAYOUT` entry to the calls it settled. Four dashed
- *   columns, left unknown rather than filled.
- * - **There is no read endpoint for the payout address** — only the
- *   challenge/prove pair that writes one. The frame does not draw the address,
- *   so nothing is missing here; it is recorded because the neighbouring
- *   screens ask.
- *
- * ## The backend defect this screen sits on top of
- *
- * `/providers/me/payouts` filters `PAYOUT` ledger entries on
- * `batch_id IS NOT NULL`, and no writer in `src/` stamps one — the only writer
- * that could refuses `PAYOUT` outright, and the ledger refuses UPDATE. The
- * seeder works around it, so rows appear here; the production path cannot
- * produce a payout row at all. Not chased, not papered over.
- *
- * ## Money
- *
- * Minor units in a string, always through `formatMoney`, never `Number(…)`.
- * `formatMoney(null)` answers `"$0.00"`, so every null goes through `money()`
- * and comes out as a dash instead.
+ *  - This month: earned, as a split (in your wallet / Assay's fee / not
+ *    credited). An amount that could not be collected from a buyer is named,
+ *    never shown as "owed": nothing pays it out yet (business #13).
+ *  - Recent payments: one row per payment with its transaction on the explorer.
+ *  - Not credited, grouped by plain reason (from the per-call export), with
+ *    the tools it happened on.
+ *  - Check against your logs: download the per-call CSV, and an "Explain a
+ *    difference" drawer (what each outcome means, how to join on the call id).
+ *    `/provider/money/reconciliation` opens that drawer.
  */
 
-const DASH = "—";
-
-/** `formatMoney` renders a null as `$0.00`; on this screen that is a lie. */
-function money(value: Money | null | undefined, decimals = 2): string {
-  if (!value) return DASH;
-  return formatMoney(value, { decimals });
-}
-
-/** `[from, to)` for the current UTC calendar day. */
-function todayUtc(now: Date): { from: string; to: string } {
-  const start = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+function monthWindow(now: Date) {
   return {
-    from: new Date(start).toISOString(),
-    to: new Date(start + 86_400_000).toISOString(),
+    from: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
+    to: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString(),
   };
 }
 
-/** `[from, to)` for the current UTC calendar month. */
-function monthUtc(now: Date): { from: string; to: string } {
-  const from = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
-  const to = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
-  return { from: new Date(from).toISOString(), to: new Date(to).toISOString() };
+function amountOf(money: Money | null | undefined): number {
+  return money ? toDecimal(money).toNumber() : 0;
 }
 
-/**
- * `5j7s…Qm2A`, the frame's own elision for a transaction reference.
- *
- * The seeded refs are Squads proposal ids rather than signatures and are short
- * enough to print whole, so this only bites on a real one.
- */
-function shortTx(ref: string | null): string {
-  if (!ref) return DASH;
-  if (ref.length <= 12) return ref;
-  return `${ref.slice(0, 4)}…${ref.slice(-4)}`;
-}
-
-/**
- * Σ of a set of amounts, or `null` when the set is empty.
- *
- * Summed in **minor units**, which is where the wire keeps them — no division
- * to major units and back, and no `Number(…)` anywhere near an amount. An
- * empty set returns null rather than a zero because there is then no asset to
- * denominate a zero in, the same distinction `ProviderEarnings.asset` makes.
- *
- * The MVP settles in one asset. A second one would make a single total wrong
- * rather than imprecise, so a mixed set is refused instead of added up.
- */
-function sumMoney(values: Money[]): Money | null {
-  if (values.length === 0) return null;
-  const { asset, decimals } = values[0];
-  if (values.some((v) => v.asset !== asset || v.decimals !== decimals)) return null;
-
-  const total = values.reduce((acc, v) => acc.plus(new Decimal(v.amount || "0")), new Decimal(0));
-  return { amount: total.toFixed(0), asset, decimals };
-}
-
-interface WithheldRow {
-  id: string;
-  calls: string;
-  gross: string;
-  binding: string;
-}
-
-interface PayoutRow {
-  id: string;
-  batch: string;
-  period: string;
-  calls: string;
-  gross: string;
-  take: string;
-  net: string;
-  tx: string;
-}
+const MONTH = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" });
 
 export default function ProviderMoneyPage() {
-  const now = useMemo(() => new Date(), []);
-  const today = useMemo(() => todayUtc(now), [now]);
-  const month = useMemo(() => monthUtc(now), [now]);
+  const now = React.useMemo(() => new Date(), []);
+  const month = React.useMemo(() => monthWindow(now), [now]);
+  const params = useSearchParams();
+  const [explainOpen, setExplainOpen] = React.useState(params.get("explain") === "1");
 
-  const [exporting, setExporting] = useState(false);
-
-  /* Withheld, itemised — grouped by tool, the only axis the wire offers. */
-  const earningsByTool = useQuery({
+  const earnings = useQuery({
     queryKey: ["provider", "earnings", "tool", month.from, month.to],
     queryFn: () => getProviderEarnings({ ...month, groupBy: "tool" }),
   });
-
-  /* Shared with the `(console)` rail's query key — no second round trip. */
-  const bindings = useQuery({
-    queryKey: ["provider", "tool-bindings", "sidebar"],
-    queryFn: () => listToolBindings({ limit: 50 }),
-  });
-
-  /*
-    ONE payouts query, deliberately unwindowed.
-
-    `ListProviderPayoutsQuery` declares `from` and `to`, and the resource
-    **silently ignores both** — measured: `from=2020-01-01&to=2020-01-02`
-    returns the same four 2026 rows as no filter at all, as does a `to` that
-    precedes every row. It is the `search` defect a second time on the same
-    endpoint. Two windowed queries would therefore have produced two identical
-    responses, and "Paid today" would have reported the entire payout history
-    as today's — a real-looking figure with nothing behind it.
-
-    So the window is applied here, on `createdAt`, over one page. That is only
-    sound while the page is the whole set, which is why `hasMore` gates the
-    two tiles below rather than being ignored.
-  */
   const payouts = useQuery({
     queryKey: ["provider", "payouts", "all"],
     queryFn: () => listProviderPayouts({ limit: 100 }),
   });
-
-  const labelByTool = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const binding of bindings.data?.items ?? []) {
-      map.set(binding.toolId, labelForEndpoint(binding.endpoint));
-    }
-    return map;
-  }, [bindings.data]);
-
-  const totals = earningsByTool.data?.totals;
-
-  const withheldRows: WithheldRow[] = (earningsByTool.data?.groups ?? [])
-    .filter((group: ProviderEarningsGroup) => group.withheldCalls > 0)
-    .map((group) => ({
-      id: group.key,
-      calls: formatCount(group.withheldCalls),
-      gross: money(group.withheld),
-      binding: labelByTool.get(group.key) ?? DASH,
-    }));
-
-  const withheldColumns: TableColumn<WithheldRow>[] = [
-    // One row per binding. The API does not split these calls by reason, so
-    // there is no Reason column: the description says what the rows include.
-    {
-      key: "binding",
-      header: "Binding",
-      mono: true,
-      cell: (row) => <span className="font-semibold">{row.binding}</span>,
-    },
-    { key: "calls", header: "Calls", width: 130, align: "end", mono: true, cell: (r) => r.calls },
-    { key: "gross", header: "Not credited", width: 130, align: "end", mono: true, cell: (r) => r.gross },
-  ];
-
-  const withheldTotal = {
-    label: "Total not credited",
-    values: {
-      calls: totals ? formatCount(totals.withheldCalls) : DASH,
-      gross: money(totals?.withheld),
-    } as Partial<Record<string, React.ReactNode>>,
-  };
-
-  /*
-    One money figure, one asset. The earnings tiles are already the display
-    asset's, so the payouts beside them — the history rows and both "Paid"
-    tiles — are scoped to it too, never summed across assets.
-  */
+  const calls = useCallsExport(month);
+  const names = useProviderToolNames();
+  const { chains } = useChains();
   const { current: displayAsset, isPending: assetPending } = useDisplayAsset("provider");
-  const payoutItems = assetPending ? [] : payoutsInAsset(payouts.data?.items ?? [], displayAsset);
 
-  /*
-    A page that says `hasMore` is a page that cannot be summed: a window
-    computed over it would silently exclude whatever is on page two. The wire
-    cannot narrow the window for us (see the query above), so the honest answer
-    for both money tiles is then the unknown treatment.
-  */
-  const payoutsComplete =
-    Boolean(payouts.data) && !assetPending && !payouts.data!.pageInfo.hasMore;
+  const rows = React.useMemo(() => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)), [calls.rows, assetPending, displayAsset]);
+  const notCredited = React.useMemo(() => foldNotCredited(rows), [rows]);
+  const split = earningsSplit(earnings.data?.totals);
+  const monthName = MONTH.format(now);
 
-  function within(payout: ProviderPayout, w: { from: string; to: string }): boolean {
-    return payout.createdAt >= w.from && payout.createdAt < w.to;
-  }
-
-  const payoutRows: PayoutRow[] = payoutItems.map(
-    (payout: ProviderPayout) => ({
-      id: payout.id,
-      /*
-        The frame keys this column on a batch id, and one batch can hold two
-        entries when a provider is paid in two assets. The wire's `batchId` is
-        also deterministic, so the same id recurs across runs — grouping on it
-        would merge two different payout runs into one row. So the table is one
-        row per ledger entry, which is what the resource actually pages.
-      */
-      batch: payout.batchId.slice(0, 8),
-      // A `PAYOUT` entry has a `createdAt` and no period. Nothing on the wire
-      // says which interval of calls it settled.
-      period: DASH,
-      calls: DASH,
-      gross: DASH,
-      take: DASH,
-      net: money(payout.amount),
-      tx: shortTx(payout.chainTxRef),
-    })
-  );
-
-  const todayItems = payoutItems.filter((p) => within(p, today));
-  const monthItems = payoutItems.filter((p) => within(p, month));
-
-  const paidToday = payoutsComplete ? sumMoney(todayItems.map((p) => p.amount)) : null;
-  const paidMonth = payoutsComplete ? sumMoney(monthItems.map((p) => p.amount)) : null;
-
-  /*
-    `batchId` is deterministic and recurs across runs, so a distinct count is
-    a count of distinct batch IDENTITIES in the window, not of payout runs.
-    Two runs of the same batch collapse into one here — visible in the seed,
-    where four entries carry two ids.
-  */
-  const batchesToday = new Set(todayItems.map((p) => p.batchId)).size;
-  const batchesMonth = new Set(monthItems.map((p) => p.batchId)).size;
-
-  const error = [earningsByTool.error, bindings.error, payouts.error].find(
-    (e): e is ApiError => e instanceof ApiError
-  );
-
-  async function onExport() {
-    setExporting(true);
-    try {
-      const result = await exportProviderCalls(month);
-      const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = result.filename ?? "x402-calls.csv";
-      anchor.click();
-      URL.revokeObjectURL(url);
-
-      /*
-        `meta` null means the cap headers were not readable, which is "the cap
-        is unknown", never "not truncated" — a provider must not be told a
-        capped export is the whole answer.
-
-        `interfaces/provider-reports.ts` says that branch is the live case,
-        because the API app "enables CORS with no exposedHeaders at all". That
-        is now **stale**: measured cross-origin from this page, the response
-        carries `Access-Control-Expose-Headers: Content-Disposition,
-        X-X402-Export-Total-Matching, X-X402-Export-Row-Count,
-        X-X402-Export-Truncated`, and all three read back (148/148/false). The
-        branch stays because a header can stop being exposed again.
-      */
-      if (result.meta?.truncated) {
-        toast.warning(
-          `Exported ${formatCount(result.meta.rowCount)} of ${formatCount(result.meta.totalMatching)} rows — the file is capped.`
-        );
-      } else if (!result.meta) {
-        toast.info("Export downloaded. Whether it was capped is not visible from the browser.");
-      }
-    } catch (e) {
-      toast.error(e instanceof ApiError ? `${e.code} · ${e.message}` : "The export failed.");
-    } finally {
-      setExporting(false);
-    }
-  }
+  const payoutItems = (assetPending ? [] : payoutsInAsset(payouts.data?.items ?? [], displayAsset)).slice(0, 8);
 
   return (
     <>
-      {/* Page Header. */}
-      <header className="flex w-full items-center justify-between gap-4">
+      <header className="flex w-full flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <h1 className="text-heading-md text-01">Earnings</h1>
-          <p className="font-mono text-mono-12 text-03">
-            paid to your wallet as each call settles
-          </p>
+          <h1 className="text-heading-sm text-01 tablet:text-heading-md">Money</h1>
+          <p className="text-body-13 text-03">Paid to your wallet, on chain, as each call settles. Nothing to withdraw.</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2.5">
-          {/*
-            This one is real: `GET /providers/me/calls/export` returns the CSV
-            for the same window the tiles are measured over.
-          */}
-          <Button onClick={onExport} loading={exporting} icon={<Download />}>
-            Export CSV
-          </Button>
-        </div>
+        <Button
+          variant="secondary"
+          icon={<Download />}
+          loading={calls.isFetching && !calls.data}
+          disabled={!calls.data}
+          onClick={() => calls.data && downloadCallsCsv(calls.data.csv, calls.data.filename, calls.meta)}
+        >
+          Download {monthName} CSV
+        </Button>
       </header>
+      {!calls.data && calls.isError ? (
+        <p className="-mt-2 text-right text-body-xs text-03">The per-call file could not be prepared right now.</p>
+      ) : null}
 
       <DisplayAssetSelect scope="provider" />
 
-      {error ? (
-        <Banner
-          tone="danger"
-          title="Your earnings could not be loaded"
-          description={`${error.code} · ${error.message}`}
-        />
-      ) : null}
+      {/* ── This month ─────────────────────────────────────────────── */}
+      {earnings.isPending ? (
+        <PageState kind="loading" rows={3} label="Loading this month's earnings" />
+      ) : earnings.isError ? (
+        <PageState kind="error" description="This month's earnings could not be loaded." onRetry={() => void earnings.refetch()} />
+      ) : (
+        <Panel className="w-full">
+          <PanelHeader>
+            <PanelTitles>
+              <PanelTitle>{monthName}</PanelTitle>
+              <PanelDescription>
+                {(earnings.data?.totals.calls ?? 0).toLocaleString("en-US")} calls served this month
+              </PanelDescription>
+            </PanelTitles>
+          </PanelHeader>
+          <PanelBody className="flex flex-col gap-4 p-4 tablet:p-5">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-body-13 text-02">In your wallet this month</span>
+              <span className="font-mono text-heading-md text-01">{formatMoney(split.inWallet, { decimals: 2 })}</span>
+            </div>
+            <MoneySplit
+              segments={
+                [
+                  { label: "In your wallet", value: amountOf(split.inWallet), amount: formatMoney(split.inWallet, { decimals: 2 }), tone: "success" },
+                  split.fee ? { label: "Assay fee", value: amountOf(split.fee), amount: formatMoney(split.fee, { decimals: 2 }), tone: "neutral" } : null,
+                  split.notCredited
+                    ? {
+                        label: "Not credited",
+                        note: `${split.notCreditedCalls} call${split.notCreditedCalls === 1 ? "" : "s"}, see below`,
+                        value: amountOf(split.notCredited),
+                        amount: formatMoney(split.notCredited, { decimals: 2 }),
+                        tone: "danger",
+                      }
+                    : null,
+                ].filter(Boolean) as MoneySplitSegment[]
+              }
+            />
+            {split.uncollected ? (
+              <p className="text-body-xs text-03">
+                {formatMoney(split.uncollected, { decimals: 2 })} for {split.uncollectedCalls} call
+                {split.uncollectedCalls === 1 ? "" : "s"} could not be collected from the buyer, so it is not in your wallet and not
+                counted above.
+              </p>
+            ) : null}
+          </PanelBody>
+        </Panel>
+      )}
 
-      {/* Tiles. */}
-      <section className="grid w-full grid-cols-1 gap-3.5 mobile:grid-cols-2 tablet:grid-cols-4">
-        <MetricTile
-          // There is no accrued balance to report any more, and the honest
-          // replacement is what was actually earned. `redeem_voucher` pays the
-          // provider's own token account at the moment of redemption, so
-          // nothing is ever held on the provider's behalf: an "Accrued" tile
-          // here could only ever read zero, and a zero next to a real earned
-          // figure reads as money that went missing.
-          label="Earned this month"
-          value={money(totals?.earned)}
-          sub={earnedTileSub(totals, (value) => money(value))}
-        />
-        <MetricTile
-          label="Paid today"
-          value={money(paidToday)}
-          sub={
-            payoutsComplete
-              ? `${formatCount(batchesToday)} batch${batchesToday === 1 ? "" : "es"}`
-              : // Ours. More payouts exist than were read, so neither the sum
-                // nor the count of the window is knowable from one page.
-                "too many payouts to total here"
-          }
-        />
-        <MetricTile
-          label="Paid this month"
-          value={money(paidMonth)}
-          sub={
-            payoutsComplete
-              ? `${formatCount(batchesMonth)} batch${batchesMonth === 1 ? "" : "es"}`
-              : "too many payouts to total here"
-          }
-        />
-        <MetricTile
-          // The frame names the node "Withheld this month" and labels it
-          // "Not credited". The label is what ships.
-          label="Not credited"
-          value={money(totals?.withheld)}
-          sub="rejected by our checks or failed with an error — no stake is taken yet"
-          // `$danger-600` on the value. MetricTile's tone vocabulary is
-          // `default | teal`, so the value node is reached the way the
-          // binding-detail screen already reaches it. A known gap.
-          className="[&>p:nth-child(2)]:text-danger-600"
-        />
-      </section>
-
-      {/* Withheld, itemised. */}
-      <Panel>
+      {/* ── Recent payments ───────────────────────────────────────── */}
+      <Panel className="w-full">
         <PanelHeader>
           <PanelTitles>
-            <PanelTitle>Calls not credited, by binding</PanelTitle>
-            <PanelDescription>
-              calls our checks rejected, and calls that failed with a system or request error ·
-              the split by class is on Reconciliation · no stake is taken yet
-            </PanelDescription>
+            <PanelTitle>Recent payments</PanelTitle>
+            <PanelDescription>each one is a transaction you can check on the explorer</PanelDescription>
           </PanelTitles>
         </PanelHeader>
-        {/* Body — padding [6, 10, 10, 10]. The scroll is not in the
-            frame: the frame is a 1440 canvas and the console renders down to
-            tablet, where the design's own fixed column widths no longer fit.
-            Contained here rather than left to push the whole page sideways. */}
-        <PanelBody className="overflow-x-auto px-2.5 pb-2.5 pt-1.5">
-          {withheldRows.length > 0 ? (
-            <Table
-              className="min-w-[520px]"
-              columns={withheldColumns}
-              rows={withheldRows}
-              total={withheldTotal}
-              caption="Calls not credited, by binding"
+        <PanelBody className="p-2">
+          {payouts.isPending ? (
+            <PageState kind="loading" rows={3} bare label="Loading payments" />
+          ) : payouts.isError ? (
+            <PageState kind="error" bare description="Your payments could not be loaded." onRetry={() => void payouts.refetch()} />
+          ) : payoutItems.length === 0 ? (
+            <PageState
+              kind="empty"
+              bare
+              title="No payments yet"
+              description="When a buyer's call to your tool settles, the payment shows up here with its transaction."
             />
-          ) : earningsByTool.isError ? (
-            /* A failed read is not a zero (BUG-R2-V3-02). */
-            <p className="px-3 py-6 text-body-13 text-danger-600">
-              These calls could not be loaded, so this table is unknown, not empty.
-            </p>
-          ) : earningsByTool.isPending ? (
-            <p className="px-3 py-6 font-mono text-mono-13 text-03">Loading…</p>
           ) : (
-            /* Ours — the frame draws no empty state. This is also the
-               `?persona=new-provider` branch: 200 with no groups, not a 404. */
-            <p className="px-3 py-6 text-body-13 text-02">
-              Every call this month was credited: none was rejected and none failed.
-            </p>
+            <ul className="flex flex-col">
+              {payoutItems.map((payout) => (
+                <PaymentRow key={payout.id} payout={payout} chains={chains} />
+              ))}
+            </ul>
           )}
         </PanelBody>
       </Panel>
 
-      {/* Payout history. */}
-      <Panel>
+      {/* ── Not credited ───────────────────────────────────────────── */}
+      <Panel className="w-full">
         <PanelHeader>
           <PanelTitles>
-            <PanelTitle>Payout history</PanelTitle>
-            <PanelDescription>
-              Earnings are paid to your own wallet, on chain, as each call settles, so there is
-              nothing to withdraw. The rows below are earlier scheduled payouts · we do not
-              claw back a payment and hold no reserve against your account.
-            </PanelDescription>
+            <PanelTitle>Not credited this month</PanelTitle>
+            <PanelDescription>calls that earned nothing, by reason · no stake is taken for these</PanelDescription>
           </PanelTitles>
         </PanelHeader>
-        <PanelBody className="overflow-x-auto px-2.5 pb-2.5 pt-1.5">
-          {payoutRows.length > 0 ? (
-            <Table
-              className="min-w-[1100px]"
-              columns={[
-                {
-                  key: "batch",
-                  header: "Batch",
-                  mono: true,
-                  cell: (row: PayoutRow) => <span className="font-semibold">{row.batch}</span>,
-                },
-                {
-                  key: "period",
-                  header: "Period",
-                  width: 230,
-                  align: "end",
-                  mono: true,
-                  cell: (r: PayoutRow) => r.period,
-                },
-                {
-                  key: "calls",
-                  header: "Calls",
-                  width: 130,
-                  align: "end",
-                  mono: true,
-                  cell: (r: PayoutRow) => r.calls,
-                },
-                {
-                  key: "gross",
-                  header: "Gross",
-                  width: 130,
-                  align: "end",
-                  mono: true,
-                  cell: (r: PayoutRow) => r.gross,
-                },
-                {
-                  key: "take",
-                  header: "Take",
-                  width: 130,
-                  align: "end",
-                  mono: true,
-                  cell: (r: PayoutRow) => r.take,
-                },
-                {
-                  key: "net",
-                  header: "Net",
-                  width: 130,
-                  align: "end",
-                  mono: true,
-                  cell: (r: PayoutRow) => r.net,
-                },
-                {
-                  key: "tx",
-                  header: "Tx",
-                  width: 160,
-                  align: "end",
-                  mono: true,
-                  cell: (r: PayoutRow) => r.tx,
-                },
-              ]}
-              rows={payoutRows}
-              caption="Payout history"
-            />
+        <PanelBody className="flex flex-col gap-2 p-3 tablet:p-4">
+          {calls.isPending ? (
+            <PageState kind="loading" rows={2} bare label="Loading calls" />
+          ) : calls.data && notCredited.buckets.length > 0 ? (
+            notCredited.buckets.map((bucket) => {
+              const reason = notCreditedReason(bucket.className);
+              const tools = [...new Set(rows.filter((r) => r.classification === bucket.className).map((r) => r.toolId))];
+              return (
+                <div key={bucket.className} className="flex w-full flex-col gap-1 rounded-lg border border-01 bg-02 p-3.5 tablet:flex-row tablet:items-start tablet:gap-4">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <p className="text-label-13 text-01">{reason.title}</p>
+                    <p className="text-body-xs text-02">{reason.detail}</p>
+                    {tools.length > 0 ? (
+                      <p className="text-body-xs text-03">On {tools.map((tool) => names.toolName(tool) ?? "a tool").join(", ")}</p>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-baseline gap-3 tablet:flex-col tablet:items-end tablet:gap-0.5">
+                    <span className="font-mono text-mono-sm font-semibold text-01">{formatMoney(bucket.notCredited, { decimals: 2 })}</span>
+                    <span className="text-body-xs text-03">
+                      {bucket.calls} call{bucket.calls === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          ) : calls.data || !split.notCredited ? (
+            <p className="px-1 py-3 text-body-13 text-02">Every call this month was credited.</p>
           ) : (
-            /* Ours. Past tense and terminal: the batch writer is retired, so an
-               empty table here is not "nothing has arrived yet" — it is the
-               complete record, and it stays empty. Nothing replaces it: money
-               reaches the provider on chain, per call, without passing through
-               this platform's hands at all. */
-            <p className="px-3 py-6 text-body-13 text-02">
-              No scheduled payouts were ever made, and none will be — your share of every
-              settled call is paid straight to your wallet when the voucher is redeemed.
-            </p>
+            // The per-call file is unavailable: the earnings totals still say how much, per tool.
+            (earnings.data?.groups ?? [])
+              .filter((group) => group.withheldCalls > 0)
+              .map((group) => (
+                <div key={group.key} className="flex w-full items-center justify-between gap-3 rounded-lg border border-01 bg-02 p-3.5">
+                  <span className="text-label-13 text-01">{names.toolName(group.key) ?? "A tool"}</span>
+                  <span className="text-body-xs text-03">
+                    {group.withheldCalls} calls · {formatMoney(group.withheld, { decimals: 2 })}
+                  </span>
+                </div>
+              ))
           )}
         </PanelBody>
       </Panel>
 
-      {/*
-        Ours, and it is the honest caption for four dashed columns: nothing on
-        the wire links a PAYOUT ledger entry to the calls it settled, so the
-        per-batch decomposition the header promises cannot be drawn yet.
-      */}
-      <p className="text-body-13 text-03">
-        Period, Calls, Gross and Take are not available for these payouts. Use Export CSV for
-        the per-call detail, which is also the per-payment detail: there is one on-chain
-        payment per settled call.
-      </p>
+      {/* ── Check against your logs ───────────────────────────────── */}
+      <Panel className="w-full">
+        <PanelBody className="flex flex-col gap-3 p-4 tablet:flex-row tablet:items-center tablet:p-5">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <p className="text-label-13 text-01">Your logs say something different?</p>
+            <p className="text-body-xs text-02">
+              Every call in the CSV carries the call id we send you in the <code className="font-mono">X-X402-Call-Id</code> header. Match it
+              against your access log.
+            </p>
+          </div>
+          <Button variant="secondary" icon={<HelpCircle />} onClick={() => setExplainOpen(true)}>
+            Explain a difference
+          </Button>
+        </PanelBody>
+      </Panel>
+
+      <ExplainSheet open={explainOpen} onOpenChange={setExplainOpen} rows={rows} loading={calls.isPending} />
     </>
+  );
+}
+
+function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: ReturnType<typeof useChains>["chains"] }) {
+  const chainId = chainIdOfAsset(payout.amount.asset);
+  const chain = chains.find((c) => c.chainId === chainId);
+  const href = chain && payout.chainTxRef ? explorerTxUrl(chain, payout.chainTxRef) : null;
+  return (
+    <li className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-md px-3 py-3 hover:bg-02">
+      <LocalTime value={payout.createdAt} className="min-w-0 flex-1 text-body-13 text-02" />
+      <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(payout.amount, { decimals: 2 })}</span>
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex w-36 items-center justify-end gap-1 text-label-xs text-primary-600 underline-offset-2 hover:underline"
+        >
+          View transaction <ExternalLink aria-hidden="true" className="size-3" />
+        </a>
+      ) : (
+        <span className="w-36 text-right text-body-xs text-03">{payout.chainTxRef ? "On chain" : "Being sent"}</span>
+      )}
+    </li>
+  );
+}
+
+function ExplainSheet({
+  open,
+  onOpenChange,
+  rows,
+  loading,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  rows: ReturnType<typeof rowsInAsset>;
+  loading: boolean;
+}) {
+  const table = foldClasses(rows);
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent>
+        <SheetHeader className="tablet:pt-5">
+          <SheetTitle className="pr-8">Explain a difference</SheetTitle>
+          <SheetDescription>How the calls you served this month turned into money, and how to match them to your logs.</SheetDescription>
+        </SheetHeader>
+        <div className="flex w-full flex-col gap-5 overflow-y-auto px-[18px] pb-6 pt-4 text-body-13 text-02">
+          <section className="flex flex-col gap-2">
+            <h3 className="text-label-13 text-01">Your calls this month, by outcome</h3>
+            {loading ? (
+              <PageState kind="loading" rows={3} bare label="Loading calls" />
+            ) : table.buckets.length === 0 ? (
+              <p>No calls this month yet.</p>
+            ) : (
+              <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01">
+                {table.buckets.map((bucket) => (
+                  <li key={bucket.className} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                    <span className="min-w-0 flex-1 text-01">{classLabel(bucket.className)}</span>
+                    <span className="text-body-xs text-03">{bucket.calls} calls</span>
+                    <span className="w-20 text-right font-mono text-mono-12 text-01">
+                      {bucket.credited ? formatMoney(bucket.credited, { decimals: 2 }) : "$0.00"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="flex flex-col gap-2">
+            <h3 className="text-label-13 text-01">Why your count and ours can differ</h3>
+            <ul className="flex list-disc flex-col gap-1.5 pl-5">
+              <li>Free calls and test calls are served but earn nothing.</li>
+              <li>A call whose answer fails Assay&apos;s check is not charged to the buyer, so it is not credited to you.</li>
+              <li>Calls still being checked are credited when the check finishes, usually within a minute.</li>
+              <li>Retries: if your API failed and Assay tried another provider, you see the request but no payment.</li>
+            </ul>
+          </section>
+          <section className="flex flex-col gap-2">
+            <h3 className="text-label-13 text-01">Match a call</h3>
+            <p>
+              Download the CSV, then look up each <code className="font-mono">call_id</code> in your access log by the{" "}
+              <code className="font-mono">X-X402-Call-Id</code> request header. A call in your log but not in the CSV never reached
+              settlement; a call in the CSV but not in your log never reached your API.
+            </p>
+          </section>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

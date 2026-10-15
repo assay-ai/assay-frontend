@@ -1,10 +1,9 @@
 "use client";
 
-import { useSearchParam } from "@/hooks/useSearchParam";
+import { ClientRedirect } from "@/components/layout/client-redirect";
+import { RETIRED_BINDING_PAGES } from "@/features/provider-binding/screens";
 
-import { PublishChecklistView } from "./_components/publish-checklist-view";
-
-/** Publish checklist. The binding id rides in `?binding=` (see `libs/routes.ts`). */
-export default function PublishChecklistPage() {
-  return <PublishChecklistView bindingId={useSearchParam("binding")} />;
+/** Retired: this page now lives in the listing's three tabs or the wizard. Keeps `?binding=`. */
+export default function RetiredBindingPage() {
+  return <ClientRedirect to={RETIRED_BINDING_PAGES["publish"]!} />;
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Money, ProviderEarningsFigures } from "@/interfaces";
 
-import { EARNED_IN_WALLET, earnedTileSub } from "./earned-tile";
+import { EARNED_IN_WALLET, earnedTileSub, earningsSplit } from "./earned-tile";
 
 const USDG = "eip155:46630/erc20:0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
 const usdg = (amount: string): Money => ({ amount, asset: USDG, decimals: 6 });
@@ -43,5 +43,24 @@ describe("earnedTileSub", () => {
     expect(earnedTileSub(totals({ absorbed: usdg("90000"), absorbedCalls: 1 }), format)).toMatch(
       /for 1 call whose/,
     );
+  });
+});
+
+describe("earningsSplit", () => {
+  const usd = (amount: string) => ({ amount, asset: "usdg", decimals: 6 });
+  it("takes what could not be collected out of the wallet figure and never calls it owed", () => {
+    const split = earningsSplit({
+      calls: 10,
+      earned: usd("5000000"),
+      platformFee: usd("500000"),
+      withheld: usd("0"),
+      withheldCalls: 0,
+      absorbed: usd("1000000"),
+      absorbedCalls: 2,
+    });
+    expect(split.inWallet?.amount).toBe("4000000");
+    expect(split.uncollected?.amount).toBe("1000000");
+    expect(split.uncollectedCalls).toBe(2);
+    expect(split.notCredited).toBeNull();
   });
 });

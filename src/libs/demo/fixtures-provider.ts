@@ -1,3 +1,4 @@
+import { DEMO_PENALTY_AMOUNTS, DEMO_PENALTY_PROPOSALS, DEMO_PENALTY_SUBJECTS } from "./demo-penalties";
 import {
   DEMO_ASSET,
   DEMO_CHAIN_ID,
@@ -819,11 +820,16 @@ const DISPUTE_REASON =
   "19 of the 27 failures in this window came from one caller, which re-sent the same stale-window query every 40 seconds for two hours. Excluding that caller the observed rate is 3.74%, inside the declared 5.00%.";
 
 function slashProposalSummary(proposalId: string) {
-  const subject = WINDOWS[SUBJECT_WINDOW_INDEX];
-  const binding = BINDINGS[subject.bindingIndex];
-  return {
+  /* Three demo cases — needs action, disputed on chain, executed — matching
+     the on-chain rows in `demo-penalties.ts`. Any other id reads as the
+     disputed one, as before. */
+  const known = DEMO_PENALTY_PROPOSALS.indexOf(proposalId as (typeof DEMO_PENALTY_PROPOSALS)[number]);
+  const which = known === -1 ? 1 : known;
+  const subject = WINDOWS[DEMO_PENALTY_SUBJECTS[which].windowIndex];
+  const binding = BINDINGS[DEMO_PENALTY_SUBJECTS[which].bindingIndex];
+  const penalty = money(DEMO_PENALTY_AMOUNTS[which]);
+  const base = {
     id: proposalId,
-    status: "DISPUTED",
     providerId: PROVIDER_ID,
     bindingId: binding.id,
     bindingLabel: `${binding.toolName} · ${binding.endpoint}`,
@@ -831,24 +837,74 @@ function slashProposalSummary(proposalId: string) {
     toolName: binding.toolName,
     windowId: subject.windowId,
     windowLabel: subject.label,
-    penaltyAmount: money("5.00"),
+    penaltyAmount: penalty,
+    outcome: null,
+    resolutionKind: null,
+    resolvedAt: null,
+  };
+  if (which === 0) {
+    return {
+      ...base,
+      status: "PROPOSED",
+      appliedAmount: null,
+      clocks: {
+        proposedAt: minutesAgo(1200),
+        notifiedAt: minutesAgo(1190),
+        acknowledgedAt: null,
+        respondByAt: inMinutes(3120),
+        platformDecisionDueAt: null,
+        earliestExecutionAt: inMinutes(3120),
+        chainExecutableAt: inMinutes(3120),
+        chainStatus: "PENDING",
+        secondsRemaining: 3120 * 60,
+        runningClock: "PROVIDER",
+      },
+      disputeId: null,
+      executedAt: null,
+    };
+  }
+  if (which === 2) {
+    return {
+      ...base,
+      status: "EXECUTED",
+      appliedAmount: penalty,
+      clocks: {
+        proposedAt: minutesAgo(28800),
+        notifiedAt: minutesAgo(28790),
+        acknowledgedAt: null,
+        respondByAt: minutesAgo(24480),
+        platformDecisionDueAt: null,
+        earliestExecutionAt: minutesAgo(24480),
+        chainExecutableAt: minutesAgo(24480),
+        chainStatus: "EXECUTED",
+        secondsRemaining: null,
+        runningClock: "NONE",
+      },
+      disputeId: null,
+      outcome: "EXECUTED",
+      resolvedAt: minutesAgo(24000),
+      executedAt: minutesAgo(24000),
+    };
+  }
+  return {
+    ...base,
+    status: "DISPUTED",
     appliedAmount: null,
     clocks: {
       proposedAt: minutesAgo(5700),
       notifiedAt: minutesAgo(5688),
-      acknowledgedAt: minutesAgo(4380),
-      respondByAt: inMinutes(2460),
+      acknowledgedAt: null,
+      respondByAt: null,
       platformDecisionDueAt: inMinutes(5340),
       earliestExecutionAt: inMinutes(2520),
       chainExecutableAt: inMinutes(2880),
-      chainStatus: "PENDING",
-      secondsRemaining: 2460 * 60,
-      runningClock: "PROVIDER",
+      chainStatus: "DISPUTED",
+      chainDisputedAt: minutesAgo(4320),
+      chainDisputedParts: 1,
+      secondsRemaining: null,
+      runningClock: "PLATFORM",
     },
     disputeId: DISPUTE_ID,
-    outcome: null,
-    resolutionKind: null,
-    resolvedAt: null,
     executedAt: null,
   };
 }
@@ -990,12 +1046,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
             label: "Take rate",
             value: "10%",
             caption: "Configurable; the rate in force is shown at registration.",
-          },
-          {
-            key: "penalty_ceiling",
-            label: "Penalty ceiling",
-            value: "$5.00 per window",
-            caption: "And at most 10% of bonded stake in any 24 hours.",
           },
           {
             key: "payout_rail",
@@ -1177,6 +1227,35 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
             },
           },
         },
+        {
+          id: "weather-now",
+          name: "Weather now",
+          description: "Current temperature and conditions for a city.",
+          tier: "VERIFIED",
+          inputSchema: {
+            type: "object",
+            required: ["city"],
+            properties: { city: { type: "string", examples: ["Lisbon"] }, units: { type: "string", enum: ["metric", "imperial"] } },
+          },
+          outputSchema: {
+            type: "object",
+            required: ["temperature", "conditions", "observedAt"],
+            properties: {
+              temperature: { type: "number" },
+              conditions: { type: "string" },
+              observedAt: { type: "string", format: "date-time" },
+            },
+          },
+        },
+        {
+          /* Seeded for tests; the listing wizard must never offer it. */
+          id: "fixture-echo",
+          name: "Echo (DEMO FIXTURE — DO NOT CALL)",
+          description: "DEMO FIXTURE — DO NOT CALL",
+          tier: "UNVERIFIED",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { type: "object", properties: {} },
+        },
       ],
       settlementAsset: { assetId: DEMO_ASSET, symbol: "USDG", decimals: 6 },
     }),
@@ -1292,6 +1371,69 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         ranAt: minutesAgo(1),
       };
     },
+  },
+
+  /*
+    Writes from the listing wizard and a listing's Settings. Stand-ins only:
+    they echo a plausible answer and remember nothing, so the screens can be
+    walked through without a backend. A new draft answers as the demo's one
+    draft (Vessel positions), so the wizard continues on a listing GET knows.
+  */
+  {
+    method: "POST",
+    match: "/providers/me/tool-bindings",
+    body: () => bindingDetail(BINDINGS[3], BINDINGS[3].id),
+  },
+  {
+    method: "PATCH",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+$/,
+    body: (path) => {
+      const id = idIn(path, 3) ?? BINDINGS[0].id;
+      return bindingDetail(bindingFor(id), id);
+    },
+  },
+  {
+    method: "POST",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+\/publish$/,
+    body: (path) => {
+      const id = idIn(path, 3) ?? BINDINGS[0].id;
+      const binding = bindingFor(id);
+      return {
+        ...bindingDetail({ ...binding, status: "ACTIVE", publishedVersion: binding.version }, id),
+        publishedAt: minutesAgo(0),
+      };
+    },
+  },
+  {
+    method: "POST",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+\/(pause|resume)$/,
+    body: (path) => {
+      const id = idIn(path, 3) ?? BINDINGS[0].id;
+      const pausing = path.endsWith("/pause");
+      return {
+        ...bindingDetail({ ...bindingFor(id), status: pausing ? "PAUSED" : "ACTIVE" }, id),
+        pauseReason: pausing ? "PROVIDER_REQUESTED" : null,
+        pausedAt: pausing ? minutesAgo(0) : null,
+      };
+    },
+  },
+  {
+    method: "POST",
+    match: "/tool-requests",
+    body: () => ({
+      id: "3f9c7a21-5e08-4d6b-9b2a-8c1e4f7d0a35",
+      title: "Your requested tool",
+      description: "Returns: what you described",
+      upstreamUrl: null,
+      expectedMonthlyCalls: null,
+      status: "OPEN",
+      ownerOperatorId: null,
+      firstResponseDueAt: minutesAgo(-2880),
+      firstRespondedAt: null,
+      resolutionNote: null,
+      closedAt: null,
+      createdAt: minutesAgo(0),
+    }),
   },
 
   // ── Reports ──────────────────────────────────────────────────────────────
@@ -1760,7 +1902,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
             kind: "DISPUTE_FILED",
             actorType: "provider",
             actorId: CONSOLE_CREDENTIAL,
-            summary: "objection filed · agent griefing · 3 calls cited",
+            summary: "disputed on chain by your stake wallet",
             detail: {},
           },
           {
@@ -1949,6 +2091,20 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     match: "/tool-requests",
     body: () =>
       page([
+        {
+          id: "9a2e51d0-7c43-4b8e-a1f6-3d5c0b9e8a12",
+          title: "Tide predictions",
+          description: "Returns: high and low tide times and heights for a port.",
+          upstreamUrl: null,
+          expectedMonthlyCalls: 20000,
+          status: "OPEN",
+          ownerOperatorId: null,
+          firstResponseDueAt: minutesAgo(-1900),
+          firstRespondedAt: null,
+          resolutionNote: null,
+          closedAt: null,
+          createdAt: minutesAgo(980),
+        },
         {
           id: "6b1d907c-42e5-4a38-9f07-c3e18b0d5246",
           title: "Port congestion index",
