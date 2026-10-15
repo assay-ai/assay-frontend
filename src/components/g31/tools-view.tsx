@@ -189,6 +189,7 @@ function ToolDetail({
             price: details.get(p.providerId)?.tools.find((t) => t.toolId === tool.toolId)?.price,
             quality: p.quality == null ? null : p,
           })),
+          chainName,
         ).map((note) => (
           <p key={note} className="text-body-13 text-02" data-testid="routing-note">
             {note}

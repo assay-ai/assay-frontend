@@ -152,3 +152,20 @@ describe("routingNotes", () => {
     expect(routingNotes(usd("0.10"), [{ name: "A", price: usd("0.10"), quality: null }])).toEqual([]);
   });
 });
+
+describe("routingNotes across chains", () => {
+  const evm = { amount: "100000", asset: "eip155:46630/erc20:0xusdg", decimals: 6 };
+  const sol = { amount: "250000", asset: "solana:devnet/token:usdg", decimals: 6 };
+  const names: Record<string, string> = { "eip155:46630": "Robinhood Chain testnet", "solana:devnet": "Solana devnet" };
+  it("says a provider priced on another chain is on that chain, not idle", () => {
+    const notes = routingNotes(
+      evm,
+      [
+        { name: "E2E Weather", price: evm, quality: null },
+        { name: "Open-Meteo", price: sol, quality: null },
+      ],
+      (id) => names[id] ?? id,
+    );
+    expect(notes).toEqual(["The price above is for Robinhood Chain testnet. Open-Meteo charges $0.25 a call on Solana devnet."]);
+  });
+});
