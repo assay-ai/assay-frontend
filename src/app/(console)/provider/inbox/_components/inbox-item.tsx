@@ -1,5 +1,9 @@
 import { CircleCheck, FileDiff, Scale } from "lucide-react";
+import Link from "next/link";
 
+import { LocalTime } from "@/components/patterns/local-time";
+import { Button } from "@/components/ui/button";
+import { routes } from "@/libs/routes";
 import { formatMoney, symbolForAsset } from "@/utils/money";
 
 /**
@@ -54,11 +58,6 @@ const SEVERITY_ICON = {
 } as const;
 
 /** `2026-08-01 00:12 UTC` — the mono line's format on the frame's third card. */
-function utcStamp(iso: string): string {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return iso;
-  return `${at.toISOString().slice(0, 10)} ${at.toISOString().slice(11, 16)} UTC`;
-}
 
 /** The platform settles in 6-decimal stablecoins; the notification carries no scale. */
 const NOTIFICATION_ASSET_DECIMALS = 6;
@@ -89,40 +88,45 @@ export function formatNotificationTitle(title: string): string {
   );
 }
 
+/** Where a notification's subject lives, when the console has a page for it. */
+export function notificationHref(item: Pick<NotificationItem, "subjectType" | "subjectId">): { href: string; label: string } | null {
+  const id = item.subjectId;
+  if (!id) return null;
+  switch (item.subjectType) {
+    case "slash_proposal":
+    case "slash_execution":
+      return { href: routes.penalty(id), label: "Open the penalty" };
+    case "binding":
+      return { href: routes.binding(id), label: "Open the tool" };
+    case "policy_change":
+      return { href: "/provider/policy-changes", label: "Review the change" };
+    case "tool_request":
+      return { href: routes.toolRequest(id), label: "Open the request" };
+    default:
+      return null;
+  }
+}
+
 export function InboxItem({ item }: { item: NotificationItem }) {
   const { Icon, tone, border } = SEVERITY_ICON[item.severity] ?? SEVERITY_ICON.INFO;
+  const target = notificationHref(item);
 
   return (
-    <article
-      className={`flex w-full items-center gap-3.5 rounded-lg border bg-01 p-[18px] ${border}`}
-    >
-      <Icon
-        width={18}
-        height={18}
-        strokeWidth={1.5}
-        aria-hidden="true"
-        className={`shrink-0 ${tone}`}
-      />
+    <article className={`flex w-full flex-col gap-3 rounded-lg border bg-01 p-4 tablet:flex-row tablet:items-center tablet:gap-3.5 ${border}`}>
+      <Icon width={18} height={18} strokeWidth={1.5} aria-hidden="true" className={`hidden shrink-0 tablet:block ${tone}`} />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="text-label-sm leading-[1.4] text-01">{formatNotificationTitle(item.title)}</p>
-        <p className="break-words text-body-13 leading-[1.55] text-02 [overflow-wrap:anywhere]">
-          {formatNotificationBody(item.body)}
+        <p className="text-label-sm leading-[1.4] text-01">
+          {item.readAt ? null : <span className="mr-1.5 inline-block size-2 rounded-full bg-primary-500 align-middle" aria-label="Unread" />}
+          {formatNotificationTitle(item.title)}
         </p>
-        {/*
-          The frame's `C` line is a deadline ("respond by … · 2d 21h") on the
-          two items that have one. **No deadline field exists on the wire** —
-          `NotificationDto` carries no due-at of any kind — so this is
-          `createdAt`, the only timestamp there is.
-        */}
-        <p className="font-mono text-mono-xs text-03">{utcStamp(item.createdAt)}</p>
+        <p className="break-words text-body-13 leading-[1.55] text-02 [overflow-wrap:anywhere]">{formatNotificationBody(item.body)}</p>
+        <LocalTime value={item.createdAt} className="text-body-xs text-03" />
       </div>
-      {/*
-        No CTA. Every card on the frame ends in one — "Open the case", "Review
-        the 14", "Reconcile" — and no field on the DTO names a destination.
-        `subjectType`/`subjectId` might route one day, but no producer has ever
-        written a value, so there is no mapping to write against. An inert
-        button on every row would be worse than none.
-      */}
+      {target ? (
+        <Button size="sm" variant="secondary" asChild className="self-start tablet:self-center">
+          <Link href={target.href}>{target.label}</Link>
+        </Button>
+      ) : null}
     </article>
   );
 }
