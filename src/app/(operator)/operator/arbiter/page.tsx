@@ -1,673 +1,456 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, CheckCircle2, ChevronDown, Wallet } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import { Banner, BannerAction } from "@/components/ui/banner";
+import { CopyChip, shortId } from "@/components/patterns/copy-chip";
+import { LocalTime } from "@/components/patterns/local-time";
+import { PageState } from "@/components/patterns/page-state";
+import { ReasonChips } from "@/components/patterns/reason-chips";
+import { SignOrExport } from "@/components/patterns/sign-or-export";
+import type { WalletStep } from "@/components/patterns/sign-action";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
-import {
-  Panel,
-  PanelBody,
-  PanelDescription,
-  PanelHeader,
-  PanelTitle,
-  PanelTitles,
-} from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { refusalsById, refusalsOf } from "@/features/chain-calls/refusals";
-import { formatAtomic, shortRequestId } from "@/features/chain-slashes/format";
-import { useNowSeconds } from "@/features/chain-slashes/use-chain-slashes";
-import { DASH, stampUtc } from "@/features/g34a/stats";
+import { connectedSpelling, sendSlashContractCall } from "@/features/chain-calls/send-contract-call";
 import {
-  ARBITER_BLOCK_ROLES,
   ARBITER_NOTE_MIN,
-  ARBITER_RULING_ROLES,
   ARBITER_SELECTION_MAX,
-  CHAIN_BLOCK_REASON_SUGGESTIONS,
-  RULING_LABEL,
-  RULING_REASON_SUGGESTIONS,
-  agentShareText,
+  RULING_REASONS,
   arbiterErrorMessage,
   beneficiaryCheck,
+  disputeAmount,
+  durationText,
   mayBlockOnChain,
   mayRule,
   pruneArbiterSelection,
   selectionChain,
-  sortDisputesOldestFirst,
   toggleArbiterSelection,
-  validateChainBlockForm,
   validateRulingForm,
-  type ArbiterFormErrors,
-  type ChainBlockFormInput,
-  type RulingFormInput,
 } from "@/features/operator/arbiter";
 import { BLOCK_NOTE_MAX } from "@/features/operator/blocks";
-import { ContractCallPanel } from "@/features/operator/contract-call-panel";
+import { DisputeProgress } from "@/features/operator/dispute-line";
+import { sortDisputesByDaysLeft } from "@/features/operator/inbox";
+import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
+import { mayBlock } from "@/features/operator/blocks";
+import { useProviderNames } from "@/features/operator/use-operator-lookups";
+import { useConnectedAddresses, useSigner } from "@/hooks/useSigner";
 import type { ArbiterDispute, ArbiterRuling, ArbiterTerms, ChainStateHealth } from "@/interfaces/operator";
-import type { SlashContractCall } from "@/interfaces/slash-dispute";
-import { ROBINHOOD_TESTNET_STAKE, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
-import { DISPUTED_ON_CHAIN_LABEL, chainStatusLabel } from "@/libs/chains/status-labels";
-import {
-  createArbiterBlockIntent,
-  createArbiterRulingIntent,
-  getArbiterTerms,
-  getPlatformHealth,
-  listArbiterDisputes,
-} from "@/services/operator.service";
-import { cn } from "@/utils";
+import { ApiError } from "@/libs/ApiClient";
+import { sameEvmAddress } from "@/libs/chains/evm/contract-call";
+import { ROBINHOOD_TESTNET_STAKE, explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { routes } from "@/libs/routes";
+import { createArbiterRulingIntent, getArbiterTerms, getPlatformHealth, listArbiterDisputes } from "@/services/operator.service";
+import { cn } from "@/utils";
+import { formatMoney } from "@/utils/money";
 
 /**
- * The arbiter page, route `/operator/arbiter` (assay-evm D-19).
+ * Arbiter, route `/operator/arbiter` (assay-evm D-19).
  *
- * The provider can dispute a pending penalty on chain (`disputeSlash`), which
- * freezes it. Only the ARBITER rules on it: `upholdSlashBatch` (against the
- * provider: back to Pending, executable from the ruling) or
- * `cancelSlashBatch` (for the provider: the stake is released). Unruled for 30
- * days, anyone can expire it. The arbiter can also put an address on the
- * contracts' own blocklist (`setBlocked(account, true)`); only the admin lifts it.
+ * A provider disputes a pending penalty on chain; only the arbiter rules:
+ * uphold (the penalty executes) or cancel (the stake is released). Unruled
+ * for 30 days, anyone can expire it. Each dispute is a card with its 30-day
+ * bar, the evidence in one line and two buttons. The ruling sheet takes a
+ * reason chip and a note, then signs in the same step when this browser holds
+ * the arbiter's wallet — otherwise it downloads a Safe batch. Several disputes
+ * can be ruled in one transaction.
  *
- * The backend holds no arbiter key. Every action here BUILDS an unsigned
- * transaction, writes the override register (`S-13`, `A-11`) and shows the
- * call with its signer. It is signed here only when the wallet connected in
- * this browser IS the signer; otherwise it is copied into the Safe that holds
- * the arbiter key. Cases move when the chain watcher sees the transaction land.
+ * `?focus=<requestId>` or `?case=<proposalId>` scrolls to one dispute.
+ *
+ * [backend] A "Routine cancels" list (CANCEL_REQUESTED records) needs a list
+ * endpoint; each one is reachable from its penalty page meanwhile.
  */
 
 const FALLBACK_CHAIN = ROBINHOOD_TESTNET_STAKE.chainId;
 
-const EMPTY_RULING: RulingFormInput = { ruling: "", reasonCode: "", note: "", ticketRef: "" };
-const EMPTY_BLOCK: ChainBlockFormInput = { account: "", reasonCode: "", note: "", ticketRef: "" };
-
-function when(iso: string | null | undefined): string {
-  if (!iso) return DASH;
-  return Number.isNaN(Date.parse(iso)) ? iso : `${stampUtc(iso)} UTC`;
-}
-
-function duration(seconds: number | null | undefined): string {
-  if (seconds === null || seconds === undefined) return DASH;
-  const days = Math.floor(seconds / 86_400);
-  const hours = Math.floor((seconds % 86_400) / 3_600);
-  const minutes = Math.floor((seconds % 3_600) / 60);
-  const parts = [days ? `${days}d` : "", hours ? `${hours}h` : "", minutes ? `${minutes}m` : ""].filter(Boolean);
-  const short = parts.length > 0 ? parts.join(" ") : `${seconds}s`;
-  // Whole hours past a day read as hours too, the unit the dispute copy uses.
-  if (days > 0 && seconds % 3_600 === 0) {
-    return `${(seconds / 3_600).toLocaleString()} h (${short}, ${seconds.toLocaleString()} s)`;
-  }
-  return `${short} (${seconds.toLocaleString()} s)`;
-}
-
-/** Atomic units at the chain's stake asset scale, when this build pins one; raw otherwise. */
-function amount(chainId: string, atomic: string | null): string {
-  if (atomic === null) return DASH;
-  const deployment = stakeDeploymentFor(chainId);
-  if (!deployment || !/^\d+$/.test(atomic)) return `${atomic} (atomic units)`;
-  return formatAtomic(BigInt(atomic), deployment.fallbackAssetDecimals, deployment.fallbackAssetSymbol);
-}
-
-export default function ArbiterPage() {
-  const identity = useOperatorSession();
+function ArbiterScreen() {
+  const me = useOperatorSession();
   const queryClient = useQueryClient();
-  const canRule = mayRule(identity.roles);
-  const canBlock = mayBlockOnChain(identity.roles);
+  const canRule = mayRule(me.roles);
+  const canBlock = mayBlock(me.roles);
+  const providers = useProviderNames();
+  const searchParams = useSearchParams();
+  const focus = searchParams.get("focus")?.toLowerCase() ?? null;
+  const focusCase = searchParams.get("case");
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
-  // ── Which chain ───────────────────────────────────────────────────────────
   const health = useQuery({ queryKey: ["operator", "health"], queryFn: getPlatformHealth, retry: 0 });
-  const chainStates: readonly ChainStateHealth[] = React.useMemo(
-    () => health.data?.chainState ?? [],
-    [health.data],
-  );
+  const chainStates: readonly ChainStateHealth[] = React.useMemo(() => health.data?.chainState ?? [], [health.data]);
   const chainIds = React.useMemo(() => {
     const ids = chainStates.map((state) => state.chainId);
     return ids.length > 0 ? ids : [FALLBACK_CHAIN];
   }, [chainStates]);
   const [chosenChain, setChosenChain] = React.useState<string | null>(null);
-  const chainId = chosenChain && chainIds.includes(chosenChain) ? chosenChain : chainIds[0];
+  const chainId = chosenChain && chainIds.includes(chosenChain) ? chosenChain : chainIds[0]!;
   const chainState = chainStates.find((state) => state.chainId === chainId) ?? null;
 
-  // ── Terms and the queue ───────────────────────────────────────────────────
-  const terms = useQuery({
-    queryKey: ["operator", "arbiter", "terms", chainId],
-    queryFn: () => getArbiterTerms(chainId),
-    retry: 0,
-  });
-  const disputes = useQuery({
-    queryKey: ["operator", "arbiter", "disputes"],
-    queryFn: listArbiterDisputes,
-    retry: 0,
-  });
-  const rows = React.useMemo(() => sortDisputesOldestFirst(disputes.data ?? []), [disputes.data]);
+  const terms = useQuery({ queryKey: ["operator", "arbiter", "terms", chainId], queryFn: () => getArbiterTerms(chainId), retry: 0 });
+  const disputes = useQuery({ queryKey: ["operator", "arbiter", "disputes"], queryFn: listArbiterDisputes, refetchInterval: 60_000, retry: 0 });
+  const rows = React.useMemo(() => sortDisputesByDaysLeft(disputes.data ?? []), [disputes.data]);
 
-  // ── Selection ─────────────────────────────────────────────────────────────
+  const connected = useConnectedAddresses();
+  const arbiter = terms.data?.arbiter ?? null;
+  const arbiterConnected = arbiter !== null && connected.some((address) => sameEvmAddress(address, arbiter));
+
   const [selected, setSelected] = React.useState<ReadonlySet<string>>(() => new Set());
-  const [selectionNotice, setSelectionNotice] = React.useState<string | null>(null);
+  const [notice, setNotice] = React.useState<string | null>(null);
   React.useEffect(() => setSelected((current) => pruneArbiterSelection(current, rows)), [rows]);
-  const selectedChain = selectionChain(selected, rows);
+  const [ruling, setRuling] = React.useState<{ kind: ArbiterRuling; ids: string[] } | null>(null);
+  const [rowRefusals, setRowRefusals] = React.useState<ReadonlyMap<string, readonly string[]>>(() => new Map());
+  const [result, setResult] = React.useState<{ title: string; hash: string | null; chainId: string } | null>(null);
+
+  // Land on the dispute a link named.
+  React.useEffect(() => {
+    if (!disputes.data) return;
+    const row = rows.find((r) => r.requestId.toLowerCase() === focus || (focusCase && r.proposalId === focusCase));
+    if (row) document.getElementById(`dispute-${row.requestId}`)?.scrollIntoView({ block: "center" });
+  }, [disputes.data, rows, focus, focusCase]);
 
   const toggle = (row: ArbiterDispute) => {
-    const result = toggleArbiterSelection(selected, row, rows);
-    setSelected(result.selected);
-    setSelectionNotice(
-      result.ok
+    const next = toggleArbiterSelection(selected, row, rows);
+    setSelected(next.selected);
+    setNotice(
+      next.ok
         ? null
-        : result.reason === "limit"
+        : next.reason === "limit"
           ? `At most ${ARBITER_SELECTION_MAX} penalties go into one transaction.`
-          : `One transaction is one chain: ${row.chainId} is not ${selectedChain ?? "the chain already selected"}. Clear the selection first.`,
+          : "One transaction is on one chain. Clear the selection to pick a penalty on another chain.",
     );
   };
 
-  // ── Ruling (S-13) ─────────────────────────────────────────────────────────
-  const [ruling, setRuling] = React.useState<RulingFormInput>(EMPTY_RULING);
-  const [rulingErrors, setRulingErrors] = React.useState<ArbiterFormErrors<keyof RulingFormInput | "selection">>({});
-  const [rulingError, setRulingError] = React.useState<string | null>(null);
-  const [rowRefusals, setRowRefusals] = React.useState<ReadonlyMap<string, readonly string[]>>(() => new Map());
-  const [rulingCall, setRulingCall] = React.useState<SlashContractCall | null>(null);
-
-  const prepareRuling = useMutation({
-    mutationFn: createArbiterRulingIntent,
-    onSuccess: (call) => {
-      setRulingCall(call);
-      setRulingError(null);
-      setRowRefusals(new Map());
-    },
-    onError: (error) => {
-      const refused = refusalsOf(error);
-      setRowRefusals(refused && refused.length > 0 ? refusalsById(refused, "arbiter") : new Map());
-      setRulingError(arbiterErrorMessage(error, "ruling"));
-    },
-  });
-
-  function submitRuling(event: React.FormEvent) {
-    event.preventDefault();
-    setRulingError(null);
-    setRulingCall(null);
-    const result = validateRulingForm(ruling, selectedChain, [...selected]);
-    if (!result.ok) {
-      setRulingErrors(result.errors);
-      return;
-    }
-    setRulingErrors({});
-    prepareRuling.mutate(result.body);
-  }
-
-  // ── Block on chain (A-11) ─────────────────────────────────────────────────
-  const [block, setBlock] = React.useState<ChainBlockFormInput>(EMPTY_BLOCK);
-  const [blockErrors, setBlockErrors] = React.useState<ArbiterFormErrors<keyof ChainBlockFormInput>>({});
-  const [blockError, setBlockError] = React.useState<string | null>(null);
-  const [blockCall, setBlockCall] = React.useState<SlashContractCall | null>(null);
-
-  const prepareBlock = useMutation({
-    mutationFn: createArbiterBlockIntent,
-    onSuccess: (call) => {
-      setBlockCall(call);
-      setBlockError(null);
-    },
-    onError: (error) => setBlockError(arbiterErrorMessage(error, "block")),
-  });
-
-  function submitBlock(event: React.FormEvent) {
-    event.preventDefault();
-    setBlockError(null);
-    setBlockCall(null);
-    const result = validateChainBlockForm(block, chainId);
-    if (!result.ok) {
-      setBlockErrors(result.errors);
-      return;
-    }
-    setBlockErrors({});
-    prepareBlock.mutate(result.body);
-  }
-
-  const refreshAll = () => {
+  const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["operator", "arbiter"] });
     void queryClient.invalidateQueries({ queryKey: ["operator", "health"] });
   };
 
-  const nowMs = useNowSeconds() * 1000;
+  const rowsById = new Map(rows.map((row) => [row.requestId.toLowerCase(), row]));
+  const openRuling = (kind: ArbiterRuling, ids: string[]) => {
+    setRowRefusals(new Map());
+    setRuling({ kind, ids });
+  };
 
   return (
     <>
-      <header className="flex w-full flex-wrap items-end justify-between gap-2">
-        <div className="flex flex-col gap-0.5">
+      <header className="flex w-full flex-wrap items-end justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">Arbiter</h1>
-          <p className="text-body-sm text-03">
-            on-chain disputes · ruling is S-13, an on-chain block is A-11 · the arbiter&apos;s wallet signs
-          </p>
+          <p className="text-body-13 text-03">Rule on disputed penalties before their 30 days run out. Fewest days left first.</p>
         </div>
-        <div className="flex items-end gap-3">
-          {chainIds.length > 1 ? (
-            <Select label="Chain" value={chainId} onChange={(e) => setChosenChain(e.target.value)}>
-              {chainIds.map((id) => (
-                <option key={id} value={id}>
-                  {stakeDeploymentFor(id)?.displayName ?? id}
-                </option>
-              ))}
-            </Select>
-          ) : (
-            <span className="font-mono text-mono-12 text-03">{stakeDeploymentFor(chainId)?.displayName ?? chainId}</span>
-          )}
-          <Button type="button" variant="secondary" size="sm" onClick={refreshAll}>
-            Refresh
-          </Button>
-        </div>
+        {chainIds.length > 1 ? (
+          <Select label="Chain" value={chainId} onChange={(e) => setChosenChain(e.target.value)}>
+            {chainIds.map((id) => (
+              <option key={id} value={id}>
+                {stakeDeploymentFor(id)?.displayName ?? id}
+              </option>
+            ))}
+          </Select>
+        ) : null}
       </header>
 
-      {/* ── Terms ─────────────────────────────────────────────────────── */}
-      <Panel className="w-full">
-        <PanelHeader>
-          <PanelTitles>
-            <PanelTitle>Terms on chain</PanelTitle>
-            <PanelDescription>X402Config, read live · and what the chain-state indexer last saw</PanelDescription>
-          </PanelTitles>
-        </PanelHeader>
-        <PanelBody className="flex flex-col gap-4 p-4 tablet:p-5">
-          {terms.isLoading ? (
-            <p className="text-body-13 text-03">Reading the Config…</p>
-          ) : terms.isError ? (
-            <Banner
-              tone="danger"
-              title="The terms could not be read"
-              description={arbiterErrorMessage(terms.error, "terms")}
-              action={<BannerAction onClick={() => void terms.refetch()}>Try again</BannerAction>}
-            />
-          ) : terms.data ? (
-            <TermsGrid terms={terms.data} />
-          ) : null}
+      <ArbiterStatus
+        terms={terms.data}
+        termsError={terms.isError ? terms.error : null}
+        chainState={chainState}
+        arbiterConnected={arbiterConnected}
+        onRetry={() => void terms.refetch()}
+      />
 
-          {terms.data?.paused ? (
-            <Banner
-              tone="warning"
-              title="Contracts paused — try after unpause"
-              description="Execution, deposits and withdrawals are refused while paused. Providers can still dispute, and the arbiter can still uphold, cancel and block: none of those is pause-gated."
-            />
-          ) : null}
+      {!canRule ? (
+        <p className="w-full rounded-lg border border-01 bg-01 px-3.5 py-2.5 text-body-13 text-02">
+          You can read the disputes. Ruling needs a Lead adjudicator or Treasury.
+        </p>
+      ) : null}
 
-          <ChainStateBlock state={chainState} loading={health.isLoading} />
-        </PanelBody>
-      </Panel>
-
-      {/* ── Disputes ──────────────────────────────────────────────────── */}
-      <Panel className="w-full">
-        <PanelHeader>
-          <PanelTitles>
-            <PanelTitle>Disputed on chain</PanelTitle>
-            <PanelDescription>
-              oldest dispute first · {rows.length} open · select up to {ARBITER_SELECTION_MAX} for one ruling
-            </PanelDescription>
-          </PanelTitles>
-        </PanelHeader>
-        <PanelBody className="flex flex-col gap-3 p-4 tablet:p-5">
-          {disputes.isLoading ? (
-            <p className="text-body-13 text-03">Loading the disputes…</p>
-          ) : disputes.isError ? (
-            <Banner
-              tone="danger"
-              title="The disputes could not be loaded"
-              description={arbiterErrorMessage(disputes.error, "disputes")}
-              action={<BannerAction onClick={() => void disputes.refetch()}>Try again</BannerAction>}
-            />
-          ) : rows.length === 0 ? (
-            <EmptyState
-              title="Nothing disputed on chain"
-              description="No provider has an open on-chain dispute. A new one appears here once the chain watcher sees its SlashDisputed event."
-            />
-          ) : (
-            <>
-              <div className="flex w-full flex-wrap items-center gap-3">
-                <span className="text-label-13 text-01" aria-live="polite">
-                  {selected.size} of {ARBITER_SELECTION_MAX} selected
-                  {selectedChain ? ` · ${selectedChain}` : ""}
-                </span>
-                {selected.size > 0 ? (
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-                    Clear
-                  </Button>
-                ) : null}
-              </div>
-              {selectionNotice ? (
-                <p className="text-body-xs text-warning-700" role="status">
-                  {selectionNotice}
-                </p>
-              ) : null}
-              <ul className="flex w-full min-w-0 flex-col gap-2">
-                {rows.map((row) => (
-                  <DisputeRow
-                    key={row.requestId}
-                    row={row}
-                    selected={selected.has(row.requestId.toLowerCase())}
-                    selectable={canRule}
-                    onToggle={() => toggle(row)}
-                    refusals={rowRefusals.get(row.requestId.toLowerCase()) ?? []}
-                    nowMs={nowMs}
-                  />
-                ))}
-              </ul>
-            </>
-          )}
-        </PanelBody>
-      </Panel>
-
-      {/* ── Ruling ────────────────────────────────────────────────────── */}
-      {canRule ? (
-        <Panel className="w-full">
-          <PanelHeader>
-            <PanelTitles>
-              <PanelTitle>Rule on the selected disputes</PanelTitle>
-              <PanelDescription>S-13 · {ARBITER_RULING_ROLES.join(" or ")} · builds the arbiter&apos;s transaction</PanelDescription>
-            </PanelTitles>
-          </PanelHeader>
-          <PanelBody className="p-4 tablet:p-5">
-            <form onSubmit={submitRuling} className="flex w-full max-w-[720px] flex-col gap-4" noValidate>
-              <p className="text-body-13 text-02">
-                Uphold puts the penalty back to Pending, executable from the ruling; the ordinary execution
-                then takes the stake. Cancel releases the reservation whole. Both are atomic over the
-                selection: one penalty the chain would refuse refuses them all, and nothing is built.
-              </p>
-              {rulingErrors.selection ? (
-                <p className="text-body-xs text-danger-600">{rulingErrors.selection}</p>
-              ) : null}
-              <Select
-                label="Ruling"
-                value={ruling.ruling}
-                onChange={(e) => setRuling((f) => ({ ...f, ruling: e.target.value as ArbiterRuling | "" }))}
-                hint={
-                  rulingErrors.ruling ? (
-                    <span className="text-danger-600">{rulingErrors.ruling}</span>
-                  ) : (
-                    "Both are the arbiter's: Assay builds an uphold or a cancel for the arbiter only."
-                  )
-                }
-              >
-                <option value="">Choose…</option>
-                <option value="UPHOLD">{RULING_LABEL.UPHOLD}</option>
-                <option value="CANCEL">{RULING_LABEL.CANCEL}</option>
-              </Select>
-              <ReasonCodeField
-                id="ruling-reason"
-                value={ruling.reasonCode}
-                onChange={(reasonCode) => setRuling((f) => ({ ...f, reasonCode }))}
-                suggestions={ruling.ruling === "" ? RULING_REASON_SUGGESTIONS.CANCEL : RULING_REASON_SUGGESTIONS[ruling.ruling]}
-                error={rulingErrors.reasonCode}
-              />
-              <NoteBox
-                id="ruling-note"
-                value={ruling.note}
-                onChange={(note) => setRuling((f) => ({ ...f, note }))}
-                error={rulingErrors.note}
-                placeholder="Why this ruling, and on what evidence. Written to the override register."
-              />
-              <Field
-                label="Ticket (optional)"
-                value={ruling.ticketRef}
-                onChange={(e) => setRuling((f) => ({ ...f, ticketRef: e.target.value }))}
-                placeholder="INC-123"
-                autoComplete="off"
-                error={rulingErrors.ticketRef}
-              />
-              {rulingError ? (
-                <p className="text-body-13 text-danger-600" role="alert">
-                  {rulingError}
-                </p>
-              ) : null}
-              <Button
-                type="submit"
-                className="self-start"
-                variant={ruling.ruling === "UPHOLD" ? "danger" : "primary"}
-                loading={prepareRuling.isPending}
-                disabled={selected.size === 0}
-              >
-                {ruling.ruling === "UPHOLD"
-                  ? `Prepare uphold of ${selected.size}`
-                  : ruling.ruling === "CANCEL"
-                    ? `Prepare cancel of ${selected.size}`
-                    : "Prepare ruling"}
-              </Button>
-            </form>
-            {rulingCall ? (
-              <div className="mt-4">
-                <ContractCallPanel
-                  call={rulingCall}
-                  title="The arbiter's unsigned ruling"
-                  afterSend="The cases move once the chain watcher sees it land; this list refreshes then."
-                  onSent={refreshAll}
-                />
-              </div>
-            ) : null}
-          </PanelBody>
-        </Panel>
-      ) : (
-        <Banner
-          tone="primary"
-          title="You can read the disputes, not rule on them"
-          description={`Preparing a ruling needs ${ARBITER_RULING_ROLES.join(" or ")}. You hold ${
-            identity.roles.length > 0 ? identity.roles.join(", ") : "no role"
-          }.`}
+      {result ? (
+        <ResultCard
+          title={result.title}
+          next="The penalties move once the chain watcher sees the transaction, usually within a minute."
+          txUrl={result.hash && stakeDeploymentFor(result.chainId) ? explorerTxLink(stakeDeploymentFor(result.chainId)!, result.hash) : null}
+          activityHref="/operator/override-log?kind=arbiter"
+          onDismiss={() => setResult(null)}
         />
+      ) : null}
+
+      {canRule && selected.size > 0 ? (
+        <div className="sticky top-2 z-10 flex w-full flex-wrap items-center gap-2 rounded-xl border border-primary-20 bg-primary-10 px-3.5 py-2.5 shadow-soft">
+          <span className="mr-auto text-label-13 text-01" aria-live="polite">
+            {selected.size} selected
+          </span>
+          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+            Clear
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => openRuling("CANCEL", [...selected])}>
+            Cancel {selected.size}
+          </Button>
+          <Button size="sm" variant="danger" onClick={() => openRuling("UPHOLD", [...selected])}>
+            Uphold {selected.size}
+          </Button>
+        </div>
+      ) : null}
+      {notice ? (
+        <p className="text-body-xs text-warning-700" role="status">
+          {notice}
+        </p>
+      ) : null}
+
+      {disputes.isLoading ? (
+        <PageState kind="loading" rows={3} label="Loading disputes" />
+      ) : disputes.isError ? (
+        <PageState
+          kind="error"
+          description={arbiterErrorMessage(disputes.error, "disputes").replace(/\s*\([A-Z_]+\)$/, "")}
+          onRetry={() => void disputes.refetch()}
+          code={disputes.error instanceof ApiError ? disputes.error.code : null}
+        />
+      ) : rows.length === 0 ? (
+        <PageState kind="empty" title="Nothing to rule on" description="No penalty is disputed on chain. A new dispute appears here within a minute of the provider filing it." />
+      ) : (
+        <ul className="flex w-full flex-col gap-2.5">
+          {rows.map((row) => (
+            <DisputeCard
+              key={row.requestId}
+              row={row}
+              providerName={providers.name(row.providerId)}
+              now={now}
+              canRule={canRule}
+              canBlock={canBlock}
+              selected={selected.has(row.requestId.toLowerCase())}
+              focused={row.requestId.toLowerCase() === focus || (focusCase !== null && row.proposalId === focusCase)}
+              refusals={rowRefusals.get(row.requestId.toLowerCase()) ?? []}
+              onToggle={() => toggle(row)}
+              onRule={(kind) => openRuling(kind, [row.requestId.toLowerCase()])}
+            />
+          ))}
+        </ul>
       )}
 
-      {/* ── Block on chain ────────────────────────────────────────────── */}
-      {canBlock ? (
-        <Panel className="w-full">
-          <PanelHeader>
-            <PanelTitles>
-              <PanelTitle>Block address on chain</PanelTitle>
-              <PanelDescription>A-11 · {ARBITER_BLOCK_ROLES.join(", ")} · setBlocked(account, true) · block only</PanelDescription>
-            </PanelTitles>
-          </PanelHeader>
-          <PanelBody className="p-4 tablet:p-5">
-            <form onSubmit={submitBlock} className="flex w-full max-w-[720px] flex-col gap-4" noValidate>
-              <p className="text-body-13 text-02">
-                The contracts then refuse the address as a party to payments, deposits, withdrawals and
-                execution on {stakeDeploymentFor(chainId)?.displayName ?? chainId}. It can still revoke a
-                delegate and dispute a penalty. Only the admin can lift it. For Assay&apos;s own, off-chain
-                block, use{" "}
-                <Link href="/operator/blocks" className="text-primary-600 underline">
-                  Blocks
-                </Link>
-                .
-              </p>
-              <Field
-                label="Address"
-                value={block.account}
-                onChange={(e) => setBlock((f) => ({ ...f, account: e.target.value }))}
-                placeholder="0x…"
-                autoComplete="off"
-                spellCheck={false}
-                error={blockErrors.account}
-              />
-              <ReasonCodeField
-                id="chain-block-reason"
-                value={block.reasonCode}
-                onChange={(reasonCode) => setBlock((f) => ({ ...f, reasonCode }))}
-                suggestions={CHAIN_BLOCK_REASON_SUGGESTIONS}
-                error={blockErrors.reasonCode}
-              />
-              <NoteBox
-                id="chain-block-note"
-                value={block.note}
-                onChange={(note) => setBlock((f) => ({ ...f, note }))}
-                error={blockErrors.note}
-                placeholder="What happened, and who reported it."
-              />
-              <Field
-                label="Ticket (optional)"
-                value={block.ticketRef}
-                onChange={(e) => setBlock((f) => ({ ...f, ticketRef: e.target.value }))}
-                placeholder="INC-123"
-                autoComplete="off"
-                error={blockErrors.ticketRef}
-              />
-              {blockError ? (
-                <p className="text-body-13 text-danger-600" role="alert">
-                  {blockError}
-                </p>
-              ) : null}
-              <Button type="submit" variant="danger" className="self-start" loading={prepareBlock.isPending}>
-                Prepare on-chain block
-              </Button>
-            </form>
-            {blockCall ? (
-              <div className="mt-4">
-                <ContractCallPanel
-                  call={blockCall}
-                  title="The arbiter's unsigned block"
-                  afterSend="The indexer counts it in the blocked addresses once it lands."
-                  onSent={refreshAll}
-                />
-              </div>
-            ) : null}
-          </PanelBody>
-        </Panel>
+      {mayBlockOnChain(me.roles) ? (
+        <p className="text-body-xs text-03">
+          To block a wallet on chain, block it on{" "}
+          <Link href="/operator/blocks" className="text-primary-600 hover:underline">
+            Blocks
+          </Link>{" "}
+          and turn on &ldquo;also block on chain&rdquo;.
+        </p>
+      ) : null}
+
+      {canRule ? (
+        <RulingSheet
+          ruling={ruling}
+          rows={ruling ? ruling.ids.map((id) => rowsById.get(id)).filter((r): r is ArbiterDispute => Boolean(r)) : []}
+          providerName={providers.name}
+          arbiter={arbiter}
+          chainForSelection={ruling ? selectionChain(new Set(ruling.ids), rows) : null}
+          onClose={() => setRuling(null)}
+          onRefused={setRowRefusals}
+          onDone={(title, hash, chain) => {
+            setResult({ title, hash, chainId: chain });
+            setSelected(new Set());
+            setRuling(null);
+            refresh();
+          }}
+        />
       ) : null}
     </>
   );
 }
 
-function Fact({ label, children, tone }: { label: string; children: React.ReactNode; tone?: "warning" }) {
+// ── The status strip ────────────────────────────────────────────────────────
+
+function ArbiterStatus({
+  terms,
+  termsError,
+  chainState,
+  arbiterConnected,
+  onRetry,
+}: {
+  terms: ArbiterTerms | undefined;
+  termsError: unknown;
+  chainState: ChainStateHealth | null;
+  arbiterConnected: boolean;
+  onRetry: () => void;
+}) {
+  if (termsError) {
+    return (
+      <PageState
+        kind="error"
+        title="The chain's terms could not be read"
+        description={arbiterErrorMessage(termsError, "terms").replace(/\s*\([A-Z_]+\)$/, "")}
+        onRetry={onRetry}
+        code={termsError instanceof ApiError ? termsError.code : null}
+      />
+    );
+  }
+  if (!terms) return <PageState kind="loading" rows={1} label="Reading the chain's terms" />;
+
+  const lagMin = chainState?.lagSeconds != null ? Math.round(chainState.lagSeconds / 60) : null;
+  const parts: { ok: boolean; text: string }[] = [
+    terms.arbiter === null
+      ? { ok: false, text: "No arbiter appointed" }
+      : arbiterConnected
+        ? { ok: true, text: "Arbiter wallet connected" }
+        : { ok: true, text: `Arbiter is ${shortId(terms.arbiter)} (not this browser: you download a Safe batch)` },
+    chainState === null
+      ? { ok: true, text: "Indexer not reported" }
+      : chainState.stale
+        ? { ok: false, text: lagMin === null ? "Indexer has not caught up" : `Indexer ${lagMin} min behind` }
+        : { ok: true, text: "Indexer up to date" },
+    terms.paused ? { ok: false, text: "Contracts paused" } : { ok: true, text: "Contracts running" },
+  ];
+  const red = parts.some((p) => !p.ok);
+
+  return (
+    <details className={cn("group w-full rounded-lg border", red ? "border-warning-20 bg-warning-10" : "border-01 bg-01")}>
+      <summary className="flex cursor-pointer list-none items-center gap-2.5 px-3.5 py-2.5 text-body-13">
+        {arbiterConnected ? (
+          <Wallet aria-hidden="true" className="size-4 shrink-0 text-success-500" />
+        ) : red ? (
+          <AlertTriangle aria-hidden="true" className="size-4 shrink-0 text-warning-600" />
+        ) : (
+          <CheckCircle2 aria-hidden="true" className="size-4 shrink-0 text-success-500" />
+        )}
+        <span className="min-w-0 flex-1 text-02">
+          {parts.map((part, index) => (
+            <React.Fragment key={part.text}>
+              {index > 0 ? " · " : ""}
+              <span className={part.ok ? undefined : "text-warning-700"}>{part.text}</span>
+            </React.Fragment>
+          ))}
+        </span>
+        <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-03 transition-transform group-open:rotate-180" />
+      </summary>
+      <dl className="grid w-full grid-cols-1 gap-x-5 gap-y-2.5 border-t border-01 px-3.5 py-3 text-body-13 min-[480px]:grid-cols-2 desktop:grid-cols-3">
+        <Fact label="Dispute window">{durationText(terms.slashDelaySeconds)}</Fact>
+        <Fact label="Time to rule">30 days from the dispute</Fact>
+        <Fact label="Agents' share of a penalty">{`${terms.slashAgentBps / 100}%`}</Fact>
+        <Fact label="Arbiter">{terms.arbiter ? <CopyChip value={terms.arbiter} label="arbiter address" /> : "None"}</Fact>
+        <Fact label="Admin">
+          <CopyChip value={terms.admin} label="admin address" />
+        </Fact>
+        <Fact label="Chain">{stakeDeploymentFor(terms.chainId)?.displayName ?? terms.chainId}</Fact>
+        {chainState ? (
+          <>
+            <Fact label="Blocked on chain">{String(chainState.blockedCount)}</Fact>
+            <Fact label="Last reconciled">{chainState.reconciledAt ? <LocalTime value={chainState.reconciledAt} /> : "never"}</Fact>
+          </>
+        ) : null}
+      </dl>
+    </details>
+  );
+}
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <dt className="text-body-xs text-03">{label}</dt>
-      <dd className={cn("min-w-0 break-all font-mono text-mono-12", tone === "warning" ? "text-warning-700" : "text-01")}>
-        {children}
-      </dd>
+      <dd className="min-w-0 text-01">{children}</dd>
     </div>
   );
 }
 
-function TermsGrid({ terms }: { terms: ArbiterTerms }) {
-  return (
-    <dl className="grid w-full grid-cols-1 gap-x-5 gap-y-3 tablet:grid-cols-2 desktop:grid-cols-3">
-      <Fact label="Arbiter" tone={terms.arbiter ? undefined : "warning"}>
-        {terms.arbiter ?? "None appointed — Assay cannot build an uphold, a cancel or a block"}
-      </Fact>
-      <Fact label="Admin">{terms.admin}</Fact>
-      <Fact label="Paused" tone={terms.paused ? "warning" : undefined}>
-        {terms.paused ? "Yes — contracts paused" : "No"}
-      </Fact>
-      <Fact label="Slash delay (the dispute window)">{duration(terms.slashDelaySeconds)}</Fact>
-      <Fact label="Beneficiary share (slashAgentBps)">{agentShareText(terms.slashAgentBps)}</Fact>
-      <Fact label="Chain">{terms.chainId}</Fact>
-    </dl>
-  );
-}
+// ── One dispute ─────────────────────────────────────────────────────────────
 
-function ChainStateBlock({ state, loading }: { state: ChainStateHealth | null; loading: boolean }) {
-  if (loading) return <p className="text-body-xs text-03">Reading the indexer&apos;s state…</p>;
-  if (!state) {
-    return (
-      <p className="text-body-xs text-03">
-        The chain-state indexer reports nothing for this chain (or this backend does not report it).
-      </p>
-    );
-  }
-  return (
-    <div
-      className={cn(
-        "flex w-full flex-col gap-2 rounded-md border p-3",
-        state.stale ? "border-warning-20 bg-warning-10" : "border-01 bg-02",
-      )}
-    >
-      <p className={cn("text-label-13", state.stale ? "text-warning-700" : "text-01")}>
-        {state.stale
-          ? "Indexer STALE — it never caught up, or lags more than the allowed bound. Trust the live terms above."
-          : "Indexer up to date"}
-      </p>
-      <dl className="grid w-full grid-cols-1 gap-x-5 gap-y-2 tablet:grid-cols-2 desktop:grid-cols-4">
-        <Fact label="Indexed block">{state.indexedBlock ?? DASH}</Fact>
-        <Fact label="Head block">{state.headBlock ?? DASH}</Fact>
-        <Fact label="Lag">{state.lagSeconds === null ? "never caught up" : `${state.lagSeconds} s`}</Fact>
-        <Fact label="Reconciled">{when(state.reconciledAt)}</Fact>
-        <Fact label="Paused (indexed)">{state.paused ? "Yes" : "No"}</Fact>
-        <Fact label="Arbiter (indexed)">{state.arbiter ?? "none"}</Fact>
-        <Fact label="Blocked on chain">{String(state.blockedCount)}</Fact>
-      </dl>
-    </div>
-  );
-}
-
-function DisputeRow({
+function DisputeCard({
   row,
+  providerName,
+  now,
+  canRule,
+  canBlock,
   selected,
-  selectable,
-  onToggle,
+  focused,
   refusals,
-  nowMs,
+  onToggle,
+  onRule,
 }: {
   row: ArbiterDispute;
+  providerName: string;
+  now: number;
+  canRule: boolean;
+  canBlock: boolean;
   selected: boolean;
-  selectable: boolean;
-  onToggle: () => void;
+  focused: boolean;
   refusals: readonly string[];
-  nowMs: number;
+  onToggle: () => void;
+  onRule: (kind: ArbiterRuling) => void;
 }) {
-  const expired = row.expiresAt !== null && Date.parse(row.expiresAt) <= nowMs;
-  const id = `arbiter-${row.requestId}`;
+  const amount = disputeAmount(row.chainId, row.penaltyAmount);
+  const check = beneficiaryCheck(row);
+  const evidence = row.beneficiaryEvidence;
+  const paid = evidence ? disputeAmount(row.chainId, evidence.paidAmount) : null;
+  const share = evidence ? disputeAmount(row.chainId, evidence.shareAmount) : null;
+  const checkboxId = `select-${row.requestId}`;
+
   return (
     <li
+      id={`dispute-${row.requestId}`}
       className={cn(
-        "flex w-full min-w-0 flex-col gap-2 rounded-lg border bg-01 p-3",
+        "flex w-full min-w-0 flex-col gap-3 rounded-xl border bg-01 p-4",
         selected ? "border-primary-500" : "border-01",
+        focused && "ring-2 ring-primary-500",
       )}
     >
-      <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-        {selectable ? (
+      <div className="flex w-full min-w-0 items-start gap-3">
+        {canRule ? (
           <input
-            id={id}
+            id={checkboxId}
             type="checkbox"
-            className="size-4 accent-primary-600"
+            className="mt-1 size-4 shrink-0 accent-primary-600"
             checked={selected}
             onChange={onToggle}
-            aria-label={`Select ${row.requestId}`}
+            aria-label={`Select ${providerName}'s penalty for a combined ruling`}
           />
         ) : null}
-        <label htmlFor={selectable ? id : undefined} className="font-mono text-mono-13 text-01" title={row.requestId}>
-          {shortRequestId(row.requestId)}
-        </label>
-        {/*
-          Every row here is a record that is Disputed on chain (the backend lists
-          DISPUTED parts only). The case's mirror can still read PENDING — the
-          case's other parts are pending — so it is shown beside, not instead.
-        */}
-        <span className="rounded-full bg-primary-10 px-[9px] py-0.5 text-label-13 text-primary-700">
-          {DISPUTED_ON_CHAIN_LABEL}
-        </span>
-        {row.caseChainStatus === "PENDING" ? (
-          <span className="text-body-xs text-03">case partly disputed: its other parts are pending on chain</span>
-        ) : row.caseChainStatus !== "DISPUTED" ? (
-          <span className="text-body-xs text-03">
-            {`case on chain: ${chainStatusLabel(row.caseChainStatus, row.chainId)}`}
-          </span>
-        ) : null}
-        <span className="text-body-xs text-03">case {row.caseStatus.toLowerCase().replace(/_/g, " ")}</span>
-        <Link
-          href={routes.operatorCase(row.proposalId)}
-          className="ml-auto text-label-13 text-primary-600 hover:underline"
-        >
-          Open case
-        </Link>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <p className="text-body-sm text-01">
+            <span className="font-medium">{providerName}</span> · <span className="font-mono">{amount ? formatMoney(amount) : "penalty"}</span>
+            {row.disputedAt ? (
+              <span className="text-03">
+                {" "}
+                · disputed <LocalTime value={row.disputedAt} />
+              </span>
+            ) : null}
+          </p>
+          <DisputeProgress row={row} now={now} />
+        </div>
       </div>
-      <dl className="grid w-full grid-cols-1 gap-x-5 gap-y-1.5 min-[480px]:grid-cols-2 tablet:grid-cols-3 desktop:grid-cols-7">
-        <Fact label="Provider">{row.providerId}</Fact>
-        <Fact label="Penalty">{amount(row.chainId, row.penaltyAmount)}</Fact>
-        <Fact label="Reserved">{amount(row.chainId, row.reservedAmount)}</Fact>
-        <Fact label="Disputed">{when(row.disputedAt)}</Fact>
-        <Fact label="Expires unruled" tone={expired ? "warning" : undefined}>
-          {when(row.expiresAt)}
-          {expired ? " · past: it can only be expired now" : ""}
-        </Fact>
-        <Fact label="Chain">{row.chainId}</Fact>
-        <Fact label="Provider: upheld, last 30 days" tone={row.upheldViolations30d > 0 ? "warning" : undefined}>
-          {String(row.upheldViolations30d)}
-        </Fact>
-      </dl>
-      <BeneficiaryEvidenceBlock row={row} />
+
+      <p className="text-body-13 text-02">
+        {evidence ? (
+          <>
+            {evidence.failedCalls} failed call{evidence.failedCalls === 1 ? "" : "s"}
+            {paid ? `, ${formatMoney(paid)} paid for them` : ""}
+          </>
+        ) : (
+          "Payments for the failed calls not matched"
+        )}
+        {" · "}
+        {row.upheldViolations30d === 0 ? "no penalty upheld in the last 30 days" : `${row.upheldViolations30d} upheld in the last 30 days`}
+        {share ? ` · agents get ${formatMoney(share)} if upheld` : ""}
+      </p>
+
+      <details className={cn("rounded-md border px-3 py-2", check.status === "ok" ? "border-01 bg-02" : check.status === "failed" ? "border-danger-20 bg-danger-10" : "border-warning-20 bg-warning-10")}>
+        <summary className={cn("cursor-pointer select-none text-label-13", check.status === "ok" ? "text-02" : check.status === "failed" ? "text-danger-700" : "text-warning-700")}>
+          Who gets paid: {check.status === "ok" ? "checked" : check.status === "failed" ? "check fails" : "not checked"}
+        </summary>
+        <p className="mt-1.5 text-body-13 text-02">{check.headline}</p>
+        {check.reason ? <p className="mt-1 text-body-13 text-danger-700">{check.reason}</p> : null}
+        <p className="mt-1.5 flex flex-wrap items-center gap-2 text-body-xs text-03">
+          Beneficiary <CopyChip value={row.beneficiary} label="beneficiary" /> · request <CopyChip value={row.requestId} label="request id" />
+        </p>
+      </details>
+
       {refusals.length > 0 ? (
-        <div className="flex flex-col gap-0.5 rounded-md border border-danger-20 bg-danger-10 px-3 py-2" role="alert">
+        <div role="alert" className="flex flex-col gap-0.5 rounded-md border border-danger-20 bg-danger-10 px-3 py-2">
           {refusals.map((text) => (
             <p key={text} className="text-body-13 text-danger-700">
               {text}
@@ -675,139 +458,183 @@ function DisputeRow({
           ))}
         </div>
       ) : null}
+
+      <div className="flex w-full flex-col gap-2 tablet:flex-row tablet:items-center">
+        <div className="flex gap-2 tablet:mr-auto">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={routes.operatorCase(row.proposalId)}>Open penalty</Link>
+          </Button>
+          {canBlock ? (
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={`/operator/blocks?block=${encodeURIComponent(row.providerId)}&kind=ORGANIZATION`}>Block this provider</Link>
+            </Button>
+          ) : null}
+        </div>
+        {canRule ? (
+          <>
+            <Button variant="secondary" onClick={() => onRule("CANCEL")} className="w-full tablet:w-auto">
+              Cancel penalty
+            </Button>
+            <Button variant="danger" onClick={() => onRule("UPHOLD")} className="w-full tablet:w-auto">
+              Uphold penalty
+            </Button>
+          </>
+        ) : null}
+      </div>
     </li>
   );
 }
 
-/**
- * Follow-up C5: the beneficiary of the record, whether it paid for the failed
- * calls, and whether this penalty is within its share of the formula penalty.
- * Upholding a record that fails this pays an account that was not harmed, or
- * pays it too much.
- */
-function BeneficiaryEvidenceBlock({ row }: { row: ArbiterDispute }) {
-  const check = beneficiaryCheck(row);
-  const evidence = row.beneficiaryEvidence;
+// ── The ruling sheet: reason + note, then sign (or export) in one step ─────
+
+function RulingSheet({
+  ruling,
+  rows,
+  providerName,
+  arbiter,
+  chainForSelection,
+  onClose,
+  onRefused,
+  onDone,
+}: {
+  ruling: { kind: ArbiterRuling; ids: string[] } | null;
+  rows: ArbiterDispute[];
+  providerName: (id: string) => string;
+  arbiter: string | null;
+  chainForSelection: string | null;
+  onClose: () => void;
+  onRefused: (refusals: ReadonlyMap<string, readonly string[]>) => void;
+  onDone: (title: string, hash: string | null, chainId: string) => void;
+}) {
+  const [reason, setReason] = React.useState("");
+  const [note, setNote] = React.useState("");
+  const [ticket, setTicket] = React.useState("");
+  const kind = ruling?.kind ?? "CANCEL";
+  const chainId = chainForSelection ?? FALLBACK_CHAIN;
+
+  React.useEffect(() => {
+    setReason("");
+    setNote("");
+    setTicket("");
+  }, [ruling?.kind, ruling?.ids.join(",")]);
+
+  const connected = useConnectedAddresses();
+  const signerState = useSigner({ chainId, address: arbiter ? connectedSpelling(connected, arbiter) : undefined });
+  const canSign = arbiter !== null && signerState.status === "ready" && sameEvmAddress(signerState.signer.address, arbiter);
+
+  const validated = validateRulingForm({ ruling: kind, reasonCode: reason, note, ticketRef: ticket }, chainForSelection, ruling?.ids ?? []);
+  const notReady = !validated.ok
+    ? reason === ""
+      ? "Pick a reason first."
+      : note.trim().length < ARBITER_NOTE_MIN
+        ? `Write at least ${ARBITER_NOTE_MIN} characters in the note.`
+        : (Object.values(validated.errors)[0] ?? "Check the form.")
+    : null;
+
+  const prepare = async () => {
+    if (!validated.ok) throw new Error(notReady ?? "Check the form.");
+    try {
+      return await createArbiterRulingIntent(validated.body);
+    } catch (error) {
+      const refused = refusalsOf(error);
+      if (refused && refused.length > 0) onRefused(refusalsById(refused, "arbiter"));
+      throw error;
+    }
+  };
+
+  const total = rows.reduce((sum, row) => sum + BigInt(/^\d+$/.test(row.penaltyAmount) ? row.penaltyAmount : "0"), BigInt(0));
+  const totalMoney = rows[0] ? disputeAmount(rows[0].chainId, total.toString()) : null;
+  const count = rows.length;
+  const noun = `${count} penalt${count === 1 ? "y" : "ies"}`;
+  const title = kind === "UPHOLD" ? `Uphold ${count === 1 ? "this penalty" : noun}?` : `Cancel ${count === 1 ? "this penalty" : noun}?`;
+
+  const steps: WalletStep[] = [
+    {
+      id: "rule",
+      label: kind === "UPHOLD" ? `Uphold ${noun}` : `Cancel ${noun}`,
+      cost: "gas",
+      run: async ({ report }) => {
+        if (signerState.status !== "ready") throw new Error("Connect the arbiter's wallet to sign here.");
+        report({ stage: "preparing" });
+        const call = await prepare();
+        report({ stage: "wallet" });
+        const hash = await sendSlashContractCall(call, signerState.signer);
+        const deployment = stakeDeploymentFor(call.chainId);
+        const explorerUrl = deployment ? (explorerTxLink(deployment, hash) ?? undefined) : undefined;
+        report({ stage: "submitted", data: hash, explorerUrl });
+        return { data: hash, explorerUrl };
+      },
+    },
+  ];
+
+  const errorText = (error: unknown) => arbiterErrorMessage(error, "ruling").replace(/\s*\([A-Z_]+\)$/, "");
+
   return (
-    <div
-      className={cn(
-        "flex w-full min-w-0 flex-col gap-2 rounded-md border px-3 py-2",
-        check.status === "ok"
-          ? "border-01 bg-02"
-          : check.status === "failed"
-            ? "border-danger-20 bg-danger-10"
-            : "border-warning-20 bg-warning-10",
-      )}
-    >
-      <p
-        className={cn(
-          "text-label-13",
-          check.status === "ok" ? "text-01" : check.status === "failed" ? "text-danger-700" : "text-warning-700",
-        )}
-      >
-        Beneficiary check · {check.headline}
-      </p>
-      {check.reason ? <p className="text-body-13 text-danger-700">{check.reason}</p> : null}
-      <dl className="grid w-full grid-cols-1 gap-x-5 gap-y-1.5 tablet:grid-cols-2 desktop:grid-cols-3">
-        <Fact label="Beneficiary">{row.beneficiary}</Fact>
-        {evidence ? (
-          <>
-            <Fact
-              label="Payer of the failed calls"
-              tone={evidence.payer === null ? "warning" : undefined}
-            >
-              {evidence.payer ?? "None found in this window"}
-            </Fact>
-            <Fact label="Failed calls">{String(evidence.failedCalls)}</Fact>
-            <Fact label="Paid for them">{amount(row.chainId, evidence.paidAmount)}</Fact>
-            <Fact label="Of which redeemed">{amount(row.chainId, evidence.redeemedAmount)}</Fact>
-            <Fact label="Its share of the formula penalty" tone={evidence.ok ? undefined : "warning"}>
-              {evidence.formulaShareAmount === undefined
-                ? "Not reported"
-                : amount(row.chainId, evidence.formulaShareAmount)}
-            </Fact>
-            <Fact label="This penalty">{amount(row.chainId, row.penaltyAmount)}</Fact>
-            <Fact label="Paid to the beneficiary if executed">{amount(row.chainId, evidence.shareAmount)}</Fact>
-          </>
-        ) : null}
-      </dl>
-    </div>
+    <Sheet open={ruling !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <SheetContent showCloseButton>
+        <SheetHeader className="tablet:pt-5">
+          <SheetTitle className="pr-8">{title}</SheetTitle>
+          <SheetDescription>
+            {kind === "UPHOLD"
+              ? `${count === 1 ? "The penalty becomes" : "The penalties become"} executable at once: anyone can then execute it and the stake${totalMoney ? ` (${formatMoney(totalMoney)})` : ""} is taken. It cannot be disputed again.`
+              : `The reserved stake${totalMoney ? ` (${formatMoney(totalMoney)})` : ""} goes back to the provider${count === 1 ? "" : "s"}. Nothing is taken.`}
+          </SheetDescription>
+        </SheetHeader>
+        <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
+          <ul className="flex w-full flex-col rounded-lg border border-01">
+            {rows.map((row) => {
+              const amount = disputeAmount(row.chainId, row.penaltyAmount);
+              return (
+                <li key={row.requestId} className="flex items-center justify-between gap-3 border-b border-01 px-3 py-2 text-body-13 last:border-b-0">
+                  <span className="min-w-0 truncate text-01">{providerName(row.providerId)}</span>
+                  <span className="shrink-0 font-mono text-mono-12 text-02">{amount ? formatMoney(amount) : ""}</span>
+                </li>
+              );
+            })}
+          </ul>
+          <ReasonChips
+            label="Why"
+            options={RULING_REASONS[kind]}
+            value={reason}
+            onChange={setReason}
+            note={note}
+            onNoteChange={setNote}
+            noteMin={ARBITER_NOTE_MIN}
+            noteMax={BLOCK_NOTE_MAX}
+            notePlaceholder="Why, and on what evidence. It is recorded in Activity."
+          />
+          <Field label="Ticket (optional)" value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="INC-123" maxLength={128} />
+          <SignOrExport
+            canSign={canSign}
+            signerLabel={arbiter ? `the arbiter (${shortId(arbiter)})` : "the arbiter"}
+            signLabel={kind === "UPHOLD" ? `Uphold and sign` : `Cancel and sign`}
+            steps={steps}
+            disabled={notReady !== null}
+            disabledReason={notReady}
+            describeError={errorText}
+            onSigned={(results) => {
+              const hash = results[results.length - 1]?.data;
+              onDone(kind === "UPHOLD" ? `Upheld ${noun}` : `Cancelled ${noun}`, typeof hash === "string" ? hash : null, chainId);
+            }}
+            functionName={kind === "UPHOLD" ? "upholdSlashBatch" : "cancelSlashBatch"}
+            chainId={chainId}
+            prepare={async () => {
+              const call = await prepare();
+              return [{ to: call.to, value: call.value, data: call.data }];
+            }}
+            afterExport="Import the file in the Safe that holds the arbiter key and sign it there. The penalties move once it lands."
+            details={rows.map((row) => ({ label: `${providerName(row.providerId)} request id`, value: row.requestId }))}
+          />
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-/** A reason code: free text up to 64 characters, with the usual ones offered. */
-function ReasonCodeField({
-  id,
-  value,
-  onChange,
-  suggestions,
-  error,
-}: {
-  id: string;
-  value: string;
-  onChange: (next: string) => void;
-  suggestions: readonly string[];
-  error?: string;
-}) {
+export default function ArbiterPage() {
   return (
-    <>
-      <Field
-        label="Reason code"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        list={`${id}-options`}
-        autoComplete="off"
-        spellCheck={false}
-        placeholder={suggestions[0]}
-        error={error}
-        hint={`Short and closed-list, e.g. ${suggestions.join(", ")}.`}
-      />
-      <datalist id={`${id}-options`}>
-        {suggestions.map((code) => (
-          <option key={code} value={code} />
-        ))}
-      </datalist>
-    </>
-  );
-}
-
-/** A prose note with a live counter. */
-function NoteBox({
-  id,
-  value,
-  onChange,
-  error,
-  placeholder,
-}: {
-  id: string;
-  value: string;
-  onChange: (next: string) => void;
-  error?: string;
-  placeholder?: string;
-}) {
-  const length = value.trim().length;
-  return (
-    <div className="flex w-full flex-col gap-1.5">
-      <label htmlFor={id} className="text-label-13 text-01">
-        Internal note
-      </label>
-      <textarea
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={4}
-        maxLength={BLOCK_NOTE_MAX + 200}
-        placeholder={placeholder}
-        aria-invalid={error ? true : undefined}
-        className={
-          error
-            ? "w-full rounded-md border-[1.5px] border-danger-500 bg-01 px-3 py-2.5 text-body-sm text-01 outline-none placeholder:text-03"
-            : "w-full rounded-md border border-02 bg-01 px-3 py-2.5 text-body-sm text-01 outline-none placeholder:text-03 focus:border-[1.5px] focus:border-primary-500"
-        }
-      />
-      <p className={error ? "text-body-xs text-danger-600" : "font-mono text-mono-12 text-03"}>
-        {error ?? `${length} / ${ARBITER_NOTE_MIN} minimum, ${BLOCK_NOTE_MAX} maximum`}
-      </p>
-    </div>
+    <React.Suspense fallback={null}>
+      <ArbiterScreen />
+    </React.Suspense>
   );
 }

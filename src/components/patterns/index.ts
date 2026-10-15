@@ -22,6 +22,15 @@
  * | A raw key / error code                 | `libs/plain-language.ts`                      | `${code} · ${message}`                     |
  * | A chain                                | `useChainName()` / `chainName` (utils/chain)  | CAIP-2 ids as labels                       |
  *
+ * Added with the operator screens:
+ *
+ * | Need                                   | Use                                           | Not                                        |
+ * |----------------------------------------|-----------------------------------------------|--------------------------------------------|
+ * | The one thing to do next on a record   | `NextStepCard` (next-step-card)               | a panel of every action, most disabled     |
+ * | End of a two-person form / request     | `ApprovalFooter` (approval-footer)            | "a second operator approves it" prose      |
+ * | A reason + written note                | `ReasonChips` (reason-chips)                  | free-text reason codes, datalists          |
+ * | A tx for someone else's key            | `SignOrExport` (sign-or-export, safe-batch)   | calldata + Safe JSON in the page body      |
+ *
  * Breakpoints: the buyer shell switches chrome at `md` (768); page layouts
  * and these patterns switch at `tablet` (834). Between 768 and 833 the desktop
  * top bar sits over single-column content, which is intended.

@@ -1,5 +1,6 @@
 import { BUYER_FIXTURES } from "./fixtures-buyer";
 import { EXPLORE_FIXTURES } from "./fixtures-explore";
+import { OPERATOR_FIXTURES } from "./fixtures-operator";
 import { PROVIDER_FIXTURES } from "./fixtures-provider";
 
 /**
@@ -55,6 +56,7 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
   ...BUYER_FIXTURES,
   ...EXPLORE_FIXTURES,
   ...PROVIDER_FIXTURES,
+  ...OPERATOR_FIXTURES,
   {
     /*
       A MetaMask-only Privy identity has no Solana wallet, so the API's link
