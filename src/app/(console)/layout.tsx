@@ -1,17 +1,27 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Inbox as InboxIcon, UserRound } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import type * as React from "react";
 import { Toaster } from "sonner";
 
 import { AlertFill, CheckCircle } from "@/components/icons";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
+import { providerSectionFor, providerTitleFor } from "@/components/layout/provider-nav-config";
+import { ProviderTabBar } from "@/components/layout/provider-tab-bar";
 import { Sidebar, type SidebarBindingItem } from "@/components/layout/sidebar";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
 import { SlashHoldBanner } from "@/features/slash-hold/slash-hold-banner";
+import { ChecklistPill } from "@/components/patterns/setup-checklist";
+import { useProviderToolNames } from "@/features/provider-binding/tool-name";
+import { useListingProgress } from "@/features/provider-home/use-listing-progress";
+import { usePenaltySummary } from "@/features/provider-penalties/use-penalty-summary";
+import { getUnreadCount } from "@/services/account.service";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
-import { labelForEndpoint } from "@/utils/provider-label";
+import { cn } from "@/utils";
 import { useTheme } from "@/providers/ThemeProvider";
 import { routes } from "@/libs/routes";
 
@@ -51,74 +61,42 @@ import { routes } from "@/libs/routes";
  * `(main)/layout.tsx`, so the first paint is correct at either width.
  */
 
-/** `/provider/bindings/<id>/…` → `<id>`, else null. */
 /** The binding a screen is about: its id rides in `?binding=` (see `libs/routes.ts`). */
 function bindingIdFrom(pathname: string, bindingParam: string | null): string | null {
   return pathname.startsWith("/provider/bindings/view") && bindingParam ? bindingParam : null;
 }
 
-const SECTIONS: { prefix: string; id: string }[] = [
-  { prefix: "/provider/inbox", id: "inbox" },
-  { prefix: "/provider/capital", id: "capital" },
-  { prefix: "/provider/money", id: "money" },
-  { prefix: "/provider/policy-changes", id: "policy-changes" },
-  { prefix: "/provider/account", id: "account" },
-];
-
-function activeItemFor(pathname: string, bindingParam: string | null): string | undefined {
-  if (pathname === "/provider") return "home";
-  const binding = bindingIdFrom(pathname, bindingParam);
-  if (binding) return binding;
-  return SECTIONS.find((s) => pathname.startsWith(s.prefix))?.id;
+function PhoneIconLink({
+  href,
+  label,
+  count = 0,
+  active,
+  children,
+}: {
+  href: string;
+  label: string;
+  count?: number;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-label={count > 0 ? `${label}, ${count} unread` : label}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "relative flex size-9 items-center justify-center rounded-md border border-02 bg-01 text-02",
+        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500",
+        active && "border-primary-500 text-primary-600",
+      )}
+    >
+      {children}
+      {count > 0 ? (
+        <span aria-hidden="true" className="absolute -right-1 -top-1 size-2.5 rounded-full bg-danger-500" />
+      ) : null}
+    </Link>
+  );
 }
-
-/** Titles for the mobile chrome. Longest prefix wins, as in `(main)`. */
-const TITLES: Record<string, string> = {
-  "/provider": "Home",
-  "/provider/inbox": "Inbox",
-  "/provider/register": "Registration",
-  "/provider/listing-path": "Listing path",
-  "/provider/capital": "Capital",
-  "/provider/capital/penalties": "Penalties on chain",
-  "/provider/money": "Money",
-  "/provider/money/reconciliation": "Reconciliation",
-  "/provider/policy-changes": "Policy changes",
-  "/provider/portfolio": "Portfolio",
-  "/provider/account": "Account",
-  "/provider/account/notifications": "Notifications",
-  "/provider/disputes": "Disputes",
-  "/provider/exit": "Exit checklist",
-  "/provider/tool-requests": "Tool requests",
-  "/provider/cases": "Case",
-  "/provider/agent-traffic": "Agent traffic",
-  "/provider/bindings": "Binding",
-};
-
-function titleFor(pathname: string): string {
-  if (TITLES[pathname]) return TITLES[pathname];
-  const match = Object.keys(TITLES)
-    .filter((href) => href !== "/provider" && pathname.startsWith(href))
-    .sort((a, b) => b.length - a.length)[0];
-  return match ? TITLES[match] : "Assay";
-}
-
-/**
- * The design labels each binding row with the tool's slug (`search_web`,
- * `ais_lookup`). `GET /providers/me/tool-bindings` returns `toolId` as a bare
- * UUID and the detail route adds nothing, so the rail shows the endpoint's
- * host — the only human-readable identifier those responses carry.
- *
- * **A tool name is now reachable** — `GET
- * /providers/me/tool-bindings/catalogue` — and `/provider/bindings`
- * renders real names from it. The rail does not, because it would have to hold
- * a second query for chrome that every screen underneath already resolves for
- * itself. That is a deliberate stop, not an oversight: it costs one request on
- * every console page to relabel a list the user is about to click through.
- *
- * If it is taken, take it in `labelForEndpoint`'s caller, not by re-deriving a
- * name here — five copies of that helper is what the shared version exists to
- * undo.
- */
 
 export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
   const { themeType } = useTheme();
@@ -146,42 +124,77 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
     queryKey: ["provider", "tool-bindings", "sidebar"],
     queryFn: () => listToolBindings({ limit: 50 }),
   });
+  const names = useProviderToolNames();
+  const unread = useQuery({
+    queryKey: ["notifications", "unread-count"],
+    queryFn: getUnreadCount,
+    refetchInterval: 60_000,
+    retry: 0,
+  });
+  const penalties = usePenaltySummary();
+  const progress = useListingProgress();
 
   const bindings: SidebarBindingItem[] = (data?.items ?? []).map((binding) => ({
     id: binding.id,
-    label: labelForEndpoint(binding.endpoint),
+    label: names.bindingLabel(binding),
     status: binding.status === "ACTIVE" ? "live" : "paused",
     href: routes.binding(binding.id),
   }));
 
+  const section = providerSectionFor(pathname);
+  const activeId = bindingIdFrom(pathname, bindingParam) ?? section ?? undefined;
+  const counts = { penalties: penalties.count, inbox: unread.data?.count ?? 0 };
+
+  // "Get listed 2/5" until the first tool is live. Not on Home, which shows the checklist itself.
+  const showPill = !progress.loading && !progress.live && !progress.isError;
+  const pill = showPill ? (
+    <ChecklistPill label="Get listed" steps={progress.steps} href="/provider" linkAs={Link} />
+  ) : null;
+
   return (
     <div className="flex min-h-screen flex-col bg-02 tablet:flex-row">
-      <div className="tablet:hidden">
-        <MobileTopBar title={titleFor(pathname)} showSearch={false} showAlerts={false} />
+      <div className="sticky top-0 z-30 tablet:hidden">
+        <MobileTopBar
+          title={providerTitleFor(pathname)}
+          showSearch={false}
+          showAlerts={false}
+          avatar={
+            <div className="flex items-center gap-2">
+              {pathname !== "/provider" ? pill : null}
+              <PhoneIconLink href="/provider/inbox" label="Inbox" count={counts.inbox} active={section === "inbox"}>
+                <InboxIcon aria-hidden="true" className="size-4" />
+              </PhoneIconLink>
+              <PhoneIconLink href="/provider/account" label="Account" active={section === "account"}>
+                <UserRound aria-hidden="true" className="size-4" />
+              </PhoneIconLink>
+            </div>
+          }
+        />
       </div>
 
       <Sidebar
-        className="rounded-none border-0 border-r bg-01"
-        activeItemId={activeItemFor(pathname, bindingParam)}
-        homeHref="/provider"
-        inboxHref="/provider/inbox"
-        capitalHref="/provider/capital"
-        moneyHref="/provider/money"
-        policyChangesHref="/provider/policy-changes"
-        accountHref="/provider/account"
+        className="sticky top-0 h-screen shrink-0 overflow-y-auto rounded-none border-0 border-r bg-01"
+        activeItemId={activeId}
+        counts={counts}
         bindings={bindings}
+        header={pill}
+        linkAs={Link}
         footer={<ThemeToggle />}
       />
 
       {/* Desktop Main: gap 16, padding [22, 26]. Mobile Content
           (mobile 390): gap 14, padding 16. */}
-      <main className="flex min-w-0 flex-1 flex-col gap-3.5 p-4 tablet:gap-4 tablet:px-[26px] tablet:py-[22px]">
+      <main className="flex min-w-0 flex-1 flex-col gap-3.5 p-4 pb-28 tablet:gap-4 tablet:px-[26px] tablet:py-[22px]">
         {/* Shell level, above every console screen: see `features/account-block`. */}
         <AccountBlockBanner wrapperClassName="w-full" />
         {/* Shell level too: a slash hold stops routing on every binding at once. */}
         <SlashHoldBanner wrapperClassName="w-full" />
         {children}
       </main>
+
+      <div className="tablet:hidden">
+        <ProviderTabBar active={section} counts={counts} linkAs={Link} />
+      </div>
 
       {/* Without a mounted Toaster every `toast()` on a console screen is a
           silent no-op — BUG-J-PROV-02's "Publish gives no feedback" was this.

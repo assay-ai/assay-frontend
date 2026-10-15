@@ -53,8 +53,9 @@ describe("provider navigation", () => {
     const outside = consoleRoutes.filter(
       (route) => providerSectionFor(route) === null && !route.startsWith("/provider/setup"),
     );
-    // The minimal-shell redirects (view, traffic, flags) have no section; everything else does.
-    expect(outside.filter((route) => !["/provider/view", "/provider/traffic", "/provider/flags"].includes(route))).toEqual([]);
+    // Retired URLs that only redirect elsewhere have no section; everything else does.
+    const redirectsOnly = ["/provider/view", "/provider/traffic", "/provider/flags", "/provider/listing-path"];
+    expect(outside.filter((route) => !redirectsOnly.includes(route))).toEqual([]);
   });
 
   it("picks the longest prefix", () => {

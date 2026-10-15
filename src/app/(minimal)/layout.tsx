@@ -39,10 +39,7 @@ import { AccountBlockBanner } from "@/features/account-block/account-block-banne
   live status in the bar has to lift real data here first.
 */
 const BAR_CONTEXT: Record<string, string> = {
-  "/provider/view": "Provider view",
   "/provider/setup": "Provider setup",
-  "/provider/traffic": "Binding and traffic",
-  "/provider/flags": "Verdicts",
 };
 
 function contextFor(pathname: string): string {
