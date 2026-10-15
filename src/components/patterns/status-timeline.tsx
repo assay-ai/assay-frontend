@@ -94,12 +94,12 @@ function Mark({ state, index }: { state: TimelineStepState; index: number }) {
       );
     case "current":
       return (
-        <span className={cn(base, "bg-primary-400 font-mono text-mono-12 font-semibold text-on-primary ring-4 ring-primary-10")}>
+        <span className={cn(base, "bg-primary-400 text-label-xs tabular-nums text-on-primary ring-4 ring-primary-10")}>
           {index + 1}
         </span>
       );
     default:
-      return <span className={cn(base, "border border-02 bg-01 font-mono text-mono-12 text-03")}>{index + 1}</span>;
+      return <span className={cn(base, "border border-02 bg-01 text-label-xs tabular-nums text-03")}>{index + 1}</span>;
   }
 }
 

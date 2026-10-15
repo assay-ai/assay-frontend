@@ -96,7 +96,7 @@ export function MoneyFlow({ nodes, ariaLabel, className }: MoneyFlowProps) {
               )}
             >
               <span className="text-label-xs">{node.label}</span>
-              {node.amount ? <span className="font-mono text-mono-12 font-semibold">{node.amount}</span> : null}
+              {node.amount ? <span className="text-body-xs font-semibold tabular-nums">{node.amount}</span> : null}
             </span>
             {node.note ? <span className="pl-0.5 text-body-xs text-03">{node.note}</span> : null}
           </span>
@@ -152,7 +152,7 @@ export function MoneySplit({ segments, total, showPercent = true, className }: M
       {total ? (
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-body-13 text-02">{total.label}</span>
-          <span className="font-mono text-mono-sm font-semibold text-01">{total.amount}</span>
+          <span className="text-body-sm font-semibold tabular-nums text-01">{total.amount}</span>
         </div>
       ) : null}
       <div aria-hidden="true" className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-03">
@@ -177,9 +177,9 @@ export function MoneySplit({ segments, total, showPercent = true, className }: M
               {segment.note ? <span className="text-03"> · {segment.note}</span> : null}
             </span>
             {showPercent && !empty ? (
-              <span className="shrink-0 font-mono text-mono-12 text-03">{formatPercent(percents[index]!)}</span>
+              <span className="w-12 shrink-0 text-right text-body-xs tabular-nums text-03">{formatPercent(percents[index]!)}</span>
             ) : null}
-            <span className="w-[84px] shrink-0 text-right font-mono text-mono-13 font-semibold text-01">{segment.amount}</span>
+            <span className="w-[84px] shrink-0 text-right text-body-13 font-medium tabular-nums text-01">{segment.amount}</span>
           </li>
         ))}
       </ul>

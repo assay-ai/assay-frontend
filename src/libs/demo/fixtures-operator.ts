@@ -4,6 +4,8 @@ import type {
   ArbiterDispute,
   OperatorApproval,
   OperatorCaseBrief,
+  OperatorCaseListRow,
+  OperatorCaseStatus,
   OperatorDirectoryEntry,
   OperatorIdentity,
   OverrideLogEntry,
@@ -326,6 +328,10 @@ interface DemoCase {
   disputedMinutesAgo: number | null;
   requestId: string;
   executedMinutesAgo?: number;
+  /** When a closed case was closed, for its timeline. */
+  resolvedMinutesAgo?: number;
+  /** Disputed on chain and left unruled for 30 days. */
+  expired?: boolean;
   outcome?: string | null;
 }
 
@@ -418,6 +424,54 @@ const CASES: DemoCase[] = [
     executedMinutesAgo: 9 * DAY - 2 * HOUR,
     outcome: "UPHELD",
   },
+  {
+    id: "6f2a8c41-0b93-4d7e-a5c2-1e9b7d3f0a64",
+    providerId: VERDANT,
+    tool: "maps_tiles",
+    binding: "Verdant tiles",
+    window: "w_63",
+    penalty: "7.20",
+    status: "CANCELLED",
+    chainStatus: "CANCELLED",
+    proposedMinutesAgo: 15 * DAY,
+    executableIn: -12 * DAY,
+    disputedMinutesAgo: null,
+    requestId: `0x${"a7".repeat(32)}`,
+    resolvedMinutesAgo: 14 * DAY,
+  },
+  {
+    id: "93d0e7b5-4c18-4a2f-8e61-7b5c0a9d2e13",
+    providerId: QUANTA,
+    tool: "signals",
+    binding: "Quanta signals",
+    window: "w_12",
+    penalty: "15.60",
+    status: "CANCELLED",
+    chainStatus: "CANCELLED",
+    proposedMinutesAgo: 40 * DAY,
+    executableIn: -37 * DAY,
+    disputedMinutesAgo: 38 * DAY,
+    requestId: `0x${"b8".repeat(32)}`,
+    resolvedMinutesAgo: 8 * DAY,
+    expired: true,
+  },
+  {
+    id: "d48b1f6e-2a07-4c93-b5e8-0f6a3c9d7e21",
+    providerId: HELIOS,
+    tool: "search_web",
+    binding: "Helios search",
+    window: "w_88",
+    penalty: "4.10",
+    status: "REVERSED",
+    chainStatus: "EXECUTED",
+    proposedMinutesAgo: 30 * DAY,
+    executableIn: -27 * DAY,
+    disputedMinutesAgo: null,
+    requestId: `0x${"c9".repeat(32)}`,
+    executedMinutesAgo: 27 * DAY,
+    resolvedMinutesAgo: 20 * DAY,
+    outcome: "UPHELD",
+  },
 ];
 
 const CASE_BY_ID = new Map(CASES.map((c) => [c.id, c]));
@@ -460,9 +514,17 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
         },
         disputeId: null,
         outcome: c.outcome ?? null,
-        resolutionKind: null,
-        resolvedAt: executed ? minutesAgo(c.executedMinutesAgo ?? 0) : suspended ? suspended.at : c.status === "OVERTURNED" ? minutesAgo(5 * HOUR) : null,
-        executedAt: executed ? minutesAgo(c.executedMinutesAgo ?? 0) : null,
+        resolutionKind: c.expired ? "AUTO_CHAIN_VOIDED" : null,
+        resolvedAt: executed
+          ? minutesAgo(c.executedMinutesAgo ?? 0)
+          : suspended
+            ? suspended.at
+            : c.resolvedMinutesAgo !== undefined
+              ? minutesAgo(c.resolvedMinutesAgo)
+              : c.status === "OVERTURNED"
+                ? minutesAgo(5 * HOUR)
+                : null,
+        executedAt: c.executedMinutesAgo !== undefined ? minutesAgo(c.executedMinutesAgo) : null,
       },
       changeOverlay: null,
       failuresByAgent: [
@@ -526,6 +588,7 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
     chainStatus: c.chainStatus,
     chainExecutableAt: executableAt,
     chainDisputedParts: original.chainStatus === "DISPUTED" ? 1 : 0,
+    upheldViolations30d: c.providerId === NORTHWIND ? 2 : 0,
   };
 }
 
@@ -563,6 +626,76 @@ function arbiterDispute(original: DemoCase): ArbiterDispute {
 }
 
 const DISPUTED = CASES.filter((c) => c.chainStatus === "DISPUTED");
+
+const PROVIDER_NAMES: Record<string, string> = {
+  [HELIOS]: "Helios Data Labs",
+  [MERIDIAN]: "Meridian Index",
+  [NORTHWIND]: "Northwind Geo",
+  [TIDEWATER]: "Tidewater Markets",
+  [COBALT]: "Cobalt Street Data",
+  [QUANTA]: "Quanta Signals",
+  [VERDANT]: "Verdant Atlas",
+  [LATTICE]: "Lattice Retrieval",
+};
+
+const CLOSED_WITHOUT_PENALTY = ["OVERTURNED", "WAIVED", "CANCELLED"];
+
+/** The backend's list status for a demo case, in the same precedence (`findOperatorCasePage`). */
+function listStatus(c: DemoCase): OperatorCaseStatus {
+  if (c.status === "REVERSED") return "COMPENSATED";
+  if (c.chainStatus === "EXECUTED" || c.status === "EXECUTED") return "EXECUTED";
+  if (c.chainStatus === "CANCEL_REQUESTED") return "CANCEL_REQUESTED";
+  if (c.expired) return "EXPIRED";
+  if (c.chainStatus === "CANCELLED" || CLOSED_WITHOUT_PENALTY.includes(c.status)) return "CANCELLED";
+  if (c.chainStatus === "DISPUTED") return "CHAIN_DISPUTED";
+  return "PROPOSED";
+}
+
+function caseListRow(original: DemoCase): OperatorCaseListRow {
+  const c = caseNow(original);
+  const status = listStatus(c);
+  const disputedAt = c.disputedMinutesAgo === null ? null : minutesAgo(c.disputedMinutesAgo);
+  const disputeEnds = disputedAt ? new Date(Date.parse(disputedAt) + 30 * 86_400_000).toISOString() : null;
+  const executableAt = inMinutes(c.executableIn);
+  const nextDeadline =
+    status === "CHAIN_DISPUTED"
+      ? disputeEnds
+      : status === "CANCEL_REQUESTED"
+        ? original.chainStatus === "DISPUTED"
+          ? disputeEnds
+          : executableAt
+        : status === "PROPOSED"
+          ? executableAt
+          : null;
+  return {
+    proposalId: c.id,
+    providerId: c.providerId,
+    providerName: PROVIDER_NAMES[c.providerId] ?? c.providerId,
+    toolName: c.binding,
+    amount: usd(c.penalty),
+    chainId: DEMO_CHAIN_ID,
+    status,
+    proposedAt: minutesAgo(c.proposedMinutesAgo),
+    disputedAt,
+    nextDeadline,
+  };
+}
+
+/** `GET /operator/cases`: next deadline first, then the larger penalty, then the newest. */
+function caseList(query: Record<string, unknown>): CursorPage<OperatorCaseListRow> {
+  const wanted = typeof query.status === "string" && query.status ? query.status.split(",") : null;
+  const provider = typeof query.providerId === "string" ? query.providerId : null;
+  const at = (iso: string | null) => (iso ? Date.parse(iso) : Number.POSITIVE_INFINITY);
+  const rows = CASES.map(caseListRow)
+    .filter((row) => (wanted ? wanted.includes(row.status) : true) && (provider ? row.providerId === provider : true))
+    .sort(
+      (a, b) =>
+        at(a.nextDeadline) - at(b.nextDeadline) ||
+        Number(b.amount.amount) - Number(a.amount.amount) ||
+        Date.parse(b.proposedAt) - Date.parse(a.proposedAt),
+    );
+  return page(rows);
+}
 
 // ── Approvals ───────────────────────────────────────────────────────────────
 
@@ -832,6 +965,7 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
   { method: "GET", match: "/operator/health", body: () => health() },
   // The retired off-chain queue: empty, as it is once the objection process is gone.
   { method: "GET", match: "/operator/queue", body: () => page([]) },
+  { method: "GET", match: "/operator/cases", body: (_path, query) => caseList(query) },
   {
     method: "GET",
     match: /^\/operator\/cases\/[^/]+$/,

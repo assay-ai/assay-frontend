@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown } from "lucide-react";
+import { Ban, History, Layers, Lock, MoreHorizontal, PauseCircle, Undo2 } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -9,18 +9,28 @@ import { ApprovalFooter } from "@/components/patterns/approval-footer";
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { ReasonChips, type ReasonOption } from "@/components/patterns/reason-chips";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Field } from "@/components/ui/field";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { approvalHref, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
 import { approvalNeeds, reasonText } from "@/features/operator/approvals";
-import type { CaseAuthority } from "@/features/operator/case-flow";
+import { shortWhyNot, type CaseAuthority } from "@/features/operator/case-flow";
 import { eligibleApprovers } from "@/features/operator/inbox";
 import { operatorErrorSentence } from "@/features/operator/operator-errors";
 import { DECISION_NOTE_MIN_LENGTH, REASON_CODES, SHORT_NOTE_MIN_LENGTH } from "@/features/operator/reason-codes";
 import { ResultCard } from "@/features/operator/result-card";
 import { chainIdOf, runOperatorIntent, signerIsHolder } from "@/features/operator/run-operator-intent";
+import { whoCan, type ConsoleAction } from "@/features/operator/roles";
 import { isSweepable, may } from "@/features/operator/state";
 import { useOperatorDirectory } from "@/features/operator/use-operator-lookups";
 import { isUserRejection, useSigner } from "@/hooks/useSigner";
+import type { Money } from "@/interfaces/api";
 import type { ArbitrationOutcome, CompensationIntent, OperatorCaseBrief, OperatorIdentity } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { createCompensationIntent, openFleetSweep, recordCompensation } from "@/services/operator.service";
@@ -28,10 +38,11 @@ import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
 /**
- * The rare actions on a penalty, collapsed under "More actions": block the
- * provider, open a fleet sweep (two-person), compensate an executed penalty
- * (two-person), and its history in Activity. Only what this operator may do
- * is listed; the rest is not drawn.
+ * The rare actions on a penalty, behind the header's ⋯ menu: suspend it,
+ * block the provider, pay an executed penalty back (two-person), open a
+ * fleet sweep (two-person), and its history in Activity. An action this
+ * operator may not take is still listed, disabled, with a one-line reason
+ * and who to ask — never hidden. The two forms open in sheets.
  */
 
 const COMPENSATE_REASONS: readonly ReasonOption[] = [
@@ -48,136 +59,152 @@ export function MoreActions({
   identity,
   authority,
   onSuspend,
-  suspendBlocked = null,
 }: {
   brief: OperatorCaseBrief;
   proposalId: string;
   identity: OperatorIdentity;
   authority: CaseAuthority;
-  /** Shown here when Suspend is not already on the next-step card. */
+  /** Opens the suspend sheet; null when this operator may not suspend. */
   onSuspend: (() => void) | null;
-  /** "Why you can't, and who can", when the penalty can be suspended but not by this operator. */
-  suspendBlocked?: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState<Open>(null);
-  const outcome = brief.case.proposal.outcome;
+  const directory = useOperatorDirectory();
+  const proposal = brief.case.proposal;
+  const outcome = proposal.outcome;
   const canSweep = may(identity.roles, "sweep") && isSweepable(outcome);
-  const providerId = brief.case.proposal.providerId;
+  const providerId = proposal.providerId;
+  const penalty = proposal.penaltyAmount;
+  const executed = proposal.status === "EXECUTED";
+  const names = (action: ConsoleAction, amount: Money | null) =>
+    directory.isPending ? null : whoCan(action, directory.operators, { amount, exceptId: identity.id });
 
-  const items: React.ReactNode[] = [];
-  if (onSuspend) {
-    items.push(
-      <Row key="suspend" title="Suspend this penalty" description="Cancels it before it executes. Use it for a penalty proposed in error.">
-        <Button variant="secondary" size="sm" onClick={onSuspend}>
-          Suspend
-        </Button>
-      </Row>,
-    );
-  }
-  if (suspendBlocked) {
-    items.push(
-      <div key="suspend-blocked" className="border-t border-01 py-3 first:border-t-0">
-        {suspendBlocked}
-      </div>,
-    );
-  }
-  if (authority.block) {
-    items.push(
-      <Row key="block" title="Block this provider" description="Stops the provider's organization from using Assay, at once.">
-        <Button variant="secondary" size="sm" asChild>
-          <Link href={`/operator/blocks?block=${encodeURIComponent(providerId)}&kind=ORGANIZATION`}>Block provider</Link>
-        </Button>
-      </Row>,
-    );
-  }
-  if (canSweep) {
-    items.push(
-      <Expandable
-        key="sweep"
-        title="Open a fleet sweep"
-        description="Decides every case the same defect touched the way this one was decided. Needs a second adjudicator."
+  const suspendWhy = authority.suspend.open && !authority.suspend.allowed
+    ? (shortWhyNot(identity, "suspend", penalty, names("suspend", penalty)) ?? authority.suspend.reason)
+    : null;
+  const blockWhy = authority.block ? null : shortWhyNot(identity, "block", null, names("block", null));
+  const compensateWhy = executed && !authority.compensate ? shortWhyNot(identity, "compensate", penalty, names("compensate", penalty)) : null;
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="secondary" aria-label="More actions on this penalty" className="px-2.5">
+            <MoreHorizontal aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[300px] border border-01">
+          {authority.suspend.open ? (
+            <MenuItem
+              icon={<PauseCircle />}
+              label={authority.suspend.twoPerson ? "Suspend penalty (needs approval)" : "Suspend penalty"}
+              why={onSuspend ? null : suspendWhy}
+              onSelect={onSuspend ?? undefined}
+            />
+          ) : null}
+          {authority.block ? (
+            <DropdownMenuItem asChild>
+              <Link href={`/operator/blocks?block=${encodeURIComponent(providerId)}&kind=ORGANIZATION`} className="cursor-pointer">
+                <Ban aria-hidden="true" />
+                Block provider
+              </Link>
+            </DropdownMenuItem>
+          ) : (
+            <MenuItem icon={<Ban />} label="Block provider" why={blockWhy} />
+          )}
+          {executed ? (
+            <MenuItem
+              icon={<Undo2 />}
+              label="Pay the provider back"
+              why={authority.compensate ? null : compensateWhy}
+              onSelect={authority.compensate ? () => setOpen("compensate") : undefined}
+            />
+          ) : null}
+          {canSweep ? <MenuItem icon={<Layers />} label="Open a fleet sweep" why={null} onSelect={() => setOpen("sweep")} /> : null}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <Link href={`/operator/override-log?targetId=${encodeURIComponent(proposalId)}`} className="cursor-pointer">
+              <History aria-hidden="true" />
+              History in Activity
+            </Link>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <FormSheet
         open={open === "sweep"}
-        onToggle={() => setOpen(open === "sweep" ? null : "sweep")}
+        onOpenChange={(next) => setOpen(next ? "sweep" : null)}
+        title="Open a fleet sweep?"
+        description="Decides every case the same defect touched the way this one was decided. Needs a second adjudicator."
       >
-        <SweepForm proposalId={proposalId} outcome={outcome as ArbitrationOutcome} me={identity} />
-      </Expandable>,
-    );
-  }
-  if (authority.compensate) {
-    items.push(
-      <Expandable
-        key="compensate"
-        title="Compensate the provider"
-        description="Pays an executed penalty back into the provider's stake, from the treasury. Needs a second approver."
+        {canSweep ? <SweepForm proposalId={proposalId} outcome={outcome as ArbitrationOutcome} me={identity} /> : null}
+      </FormSheet>
+      <FormSheet
         open={open === "compensate"}
-        onToggle={() => setOpen(open === "compensate" ? null : "compensate")}
+        onOpenChange={(next) => setOpen(next ? "compensate" : null)}
+        title={`Pay back this ${formatMoney(proposal.appliedAmount ?? penalty)} penalty?`}
+        description="The treasury deposits it back into the provider's stake. Needs a second approver."
       >
-        <CompensateForm brief={brief} proposalId={proposalId} me={identity} />
-      </Expandable>,
-    );
-  }
-
-  return (
-    <details className="group w-full rounded-xl border border-01 bg-01">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 tablet:px-5">
-        <span className="text-label-md text-01">More actions</span>
-        <ChevronDown aria-hidden="true" className="size-4 text-03 transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="flex w-full flex-col border-t border-01 px-4 tablet:px-5">
-        {items.length === 0 ? (
-          <p className="py-3 text-body-13 text-02">Nothing else on this penalty is open to your roles.</p>
-        ) : (
-          items
-        )}
-        <p className="border-t border-01 py-3 text-body-13 text-02">
-          <Link href={`/operator/override-log?targetId=${encodeURIComponent(proposalId)}`} className="text-primary-600 hover:underline">
-            History of this penalty in Activity
-          </Link>
-        </p>
-      </div>
-    </details>
+        {authority.compensate ? <CompensateForm brief={brief} proposalId={proposalId} me={identity} /> : null}
+      </FormSheet>
+    </>
   );
 }
 
-function Row({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+function MenuItem({
+  icon,
+  label,
+  why,
+  onSelect,
+}: {
+  icon: React.ReactElement;
+  label: string;
+  /** Set when refused: the item is disabled and says why. */
+  why: string | null;
+  onSelect?: () => void;
+}) {
+  const disabled = why !== null || !onSelect;
   return (
-    <div className="flex w-full flex-col gap-2 border-t border-01 py-3 first:border-t-0 tablet:flex-row tablet:items-center tablet:justify-between tablet:gap-4">
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <p className="text-label-13 text-01">{title}</p>
-        <p className="text-body-xs text-03">{description}</p>
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
+    <DropdownMenuItem disabled={disabled} onSelect={onSelect} className="items-start data-[disabled]:opacity-100">
+      <span aria-hidden="true" className={cn("mt-0.5 [&>svg]:size-4", disabled ? "text-03" : "text-02")}>
+        {icon}
+      </span>
+      <span className="flex min-w-0 flex-col">
+        <span className={cn("text-body-13", disabled ? "text-03" : "text-01")}>{label}</span>
+        {why ? (
+          <span className="flex items-start gap-1 text-body-xs text-03">
+            <Lock aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
+            {why}
+          </span>
+        ) : null}
+      </span>
+    </DropdownMenuItem>
   );
 }
 
-function Expandable({
+function FormSheet({
+  open,
+  onOpenChange,
   title,
   description,
-  open,
-  onToggle,
   children,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
-  open: boolean;
-  onToggle: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex w-full flex-col border-t border-01 first:border-t-0">
-      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-start justify-between gap-3 py-3 text-left">
-        <span className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-label-13 text-01">{title}</span>
-          <span className="text-body-xs text-03">{description}</span>
-        </span>
-        <ChevronDown aria-hidden="true" className={cn("mt-0.5 size-4 shrink-0 text-03 transition-transform", open && "rotate-180")} />
-      </button>
-      {/* Kept mounted while collapsed: a prepared deposit, a signature or a sent request must survive a toggle. */}
-      <div hidden={!open} className={open ? "flex w-full flex-col gap-3 pb-4" : undefined}>
-        {children}
-      </div>
-    </div>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent>
+        <SheetHeader className="tablet:pt-5">
+          <SheetTitle className="pr-8">{title}</SheetTitle>
+          <SheetDescription>{description}</SheetDescription>
+        </SheetHeader>
+        {/* Kept mounted while closed: a prepared deposit or a sent request must survive closing the sheet. */}
+        <div className="flex w-full flex-col gap-3 px-[18px] pb-5 pt-4">{children}</div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
