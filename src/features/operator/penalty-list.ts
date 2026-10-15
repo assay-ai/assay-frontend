@@ -145,7 +145,7 @@ export function statusOfStage(stage: CaseStage): OperatorCaseStatus {
 export function rowFromBrief(brief: OperatorCaseBrief, providerName: string, now: number = Date.now()): PenaltyRow {
   const proposal = brief.case.proposal;
   const facts = caseFacts(brief, now);
-  const status = statusOfStage(facts.stage);
+  const status = facts.expired ? "EXPIRED" : statusOfStage(facts.stage);
   const nextDeadline =
     status === "CHAIN_DISPUTED"
       ? facts.disputeExpiresAt

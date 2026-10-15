@@ -44,6 +44,8 @@ export interface CaseFacts {
   disputeExpiresAt: string | null;
   /** True when the case still carries a status of the retired off-chain objection process. */
   legacyStatus: boolean;
+  /** Cancelled because the dispute went unruled for 30 days and lapsed (`AUTO_CHAIN_VOIDED` after a dispute). */
+  expired: boolean;
   /**
    * While a cancel waits for the arbiter (`cancel-requested`): the instant it
    * must be signed by, and what happens if nobody signs. A record still
@@ -99,6 +101,8 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
         ? { deadline: disputeExpiresAt, ifUnsigned: "expires" as const }
         : { deadline: executableAt, ifUnsigned: "executes" as const };
 
+  const expired = stage === "cancelled" && disputedAt !== null && proposal.resolutionKind === "AUTO_CHAIN_VOIDED";
+
   return {
     stage,
     status,
@@ -106,6 +110,7 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
     disputedAt,
     disputeExpiresAt,
     legacyStatus,
+    expired,
     cancel,
   };
 }
@@ -151,8 +156,8 @@ export function caseTimelineSteps(
     const ruled = stage === "upheld" || closed || stage === "cancel-requested";
     steps.push({
       id: "ruling",
-      label: stage === "upheld" ? "Arbiter upheld it" : "Arbiter rules",
-      state: ruled ? "done" : "current",
+      label: stage === "upheld" ? "Arbiter upheld it" : facts.expired ? "Not ruled in 30 days" : "Arbiter rules",
+      state: ruled ? (facts.expired ? "skipped" : "done") : "current",
       date: ruled ? null : facts.disputeExpiresAt,
       // "7 days left · rule by Oct 23": the same days-left as the Deadline elsewhere, not a second countdown.
       dateLabel: ruled ? undefined : `${disputeUrgency({ disputedAt: facts.disputedAt, expiresAt: facts.disputeExpiresAt }, now).label} · rule by`,
@@ -174,7 +179,7 @@ export function caseTimelineSteps(
   } else if (stage === "compensated") {
     steps.push({ id: "end", label: "Executed, then compensated", state: "done", date: proposal.resolvedAt });
   } else if (stage === "cancelled") {
-    steps.push({ id: "end", label: "Cancelled", state: "done", date: proposal.resolvedAt });
+    steps.push({ id: "end", label: facts.expired ? "Expired" : "Cancelled", state: "done", date: proposal.resolvedAt });
   } else if (stage === "cancel-requested") {
     const disputedRecord = facts.cancel?.ifUnsigned === "expires";
     steps.push({
@@ -350,6 +355,16 @@ export function caseNextStep(
           until: null,
         };
     case "cancelled":
+      if (facts.expired) {
+        return {
+          kind: "done",
+          title: "Penalty expired",
+          description: "Nobody ruled within 30 days, so it lapsed. Nothing was taken from the provider's stake.",
+          action: null,
+          secondary: null,
+          until: null,
+        };
+      }
       return {
         kind: "done",
         title: "Penalty cancelled",
