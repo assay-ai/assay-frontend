@@ -396,7 +396,7 @@ export default function OperatorCasePage() {
             <Fact label="Tool">{proposal.bindingLabel || proposal.toolName}</Fact>
             {reduction && terms.data && (facts.stage === "executed" || !MOVES_NOTHING.includes(facts.stage)) ? (
               <Fact
-                label={facts.stage === "executed" ? "Taken from the stake" : "Taken from the stake if upheld"}
+                label={facts.stage === "executed" ? "Taken from the stake" : facts.stage === "upheld" ? "Taken from the stake when it executes" : "Taken from the stake if upheld"}
                 hint={`The agents' and the platform's shares. The provider's ${keptShareText(terms.data.slashAgentBps)} is never taken.`}
               >
                 {formatMoney(reduction)}
