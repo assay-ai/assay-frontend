@@ -50,11 +50,12 @@ import {
 } from "@/features/delegation/unsettled";
 import { isRelayedRefusal, relayedRefusal } from "@/features/escrow/relayed-refusal";
 import { useChains } from "@/hooks/useChains";
+import { isRailNotOffered, railNotOfferedText, servesPaidCalls } from "@/libs/chains/paid-rails";
 import { isUserRejection, type Signer, useSigner } from "@/hooks/useSigner";
 import type { BuyerEscrow, DelegateIntent, EscrowDelegate } from "@/interfaces";
 import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import { ApiError } from "@/libs/ApiClient";
-import { settlementSymbol } from "@/services/chains.service";
+import { chainDisplayName, settlementSymbol } from "@/services/chains.service";
 import {
   createDelegateIntent,
   createRevokeDelegateIntent,
@@ -150,6 +151,7 @@ function useDelegationContext(account: string | undefined, version: number) {
 
   return {
     chainId,
+    chains,
     enabled,
     unit,
     escrowQuery,
@@ -164,6 +166,8 @@ function explain(error: unknown, fallback: string): string {
     return "Nothing was signed — the wallet prompt was closed or declined.";
   // A relay refusal in words, with when to retry (BUG-D1-06) — never a raw account string.
   if (isRelayedRefusal(error)) return relayedRefusal(error).text;
+  // 409 CHAIN_RAIL_NOT_OFFERED: the chain serves free calls only.
+  if (isRailNotOffered(error)) return railNotOfferedText(null);
   if (error instanceof ApiError || error instanceof Error) return error.message;
   return fallback;
 }
@@ -561,7 +565,21 @@ export function AgentPaymentDelegation({
 }) {
   const ctx = useDelegationContext(agentAccount, version);
   const [authorizing, setAuthorizing] = React.useState<SheetTarget | null>(null);
-  if (!ctx.enabled) return null;
+  if (!ctx.enabled) {
+    // Solana serves free calls only (paid rails A and B are off): say so, offer nothing to sign.
+    if (ctx.chainId && !servesPaidCalls(ctx.chainId)) {
+      return (
+        <div className="flex w-full flex-col gap-2.5 pt-2" data-testid="agent-payment-free-only">
+          <MicroLabel>AGENT PAYMENTS</MicroLabel>
+          <p className="text-body-13 text-02">
+            {chainDisplayName(ctx.chains, ctx.chainId)} currently serves free calls only, so this
+            agent makes free calls there and pays for none. Paid calls are not offered on it.
+          </p>
+        </div>
+      );
+    }
+    return null;
+  }
 
   const bound = credentials.filter((c) => !c.revokedAt && c.delegateAccount);
   const delegates = ctx.delegatesQuery.data?.delegates;

@@ -130,3 +130,20 @@ describe("AgentPaymentDelegation", () => {
     expect(html).toContain('data-testid="edit-agent-delegate"');
   });
 });
+
+// Paid rails A and B are off on Solana: nothing to authorise, and the agent is told why.
+describe("AgentPaymentDelegation — a Solana agent (free calls only)", () => {
+  it("says the chain serves free calls only and offers nothing to sign", () => {
+    const html = render(
+      <AgentPaymentDelegation
+        agentAccount="solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1:AgentAccount1111111111111111111111111111111"
+        credentials={[]}
+        version={0}
+        onChanged={() => {}}
+      />,
+    );
+    expect(html).toContain('data-testid="agent-payment-free-only"');
+    expect(html).toContain("currently serves free calls only");
+    expect(html).not.toContain("Authorize agent to pay");
+  });
+});

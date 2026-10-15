@@ -119,6 +119,16 @@ describe("BalanceCards", () => {
     expect(html).toContain("Robinhood Chain testnet");
   });
 
+  // Paid rails A and B are off on Solana: its balance is not spent on calls.
+  it("says a Solana balance serves free calls only, and an EVM one is spent there", () => {
+    const html = markup([SOLANA_ROW, EVM_ROW]);
+    const cards = html.split('data-testid="balance-card"').slice(1);
+    const solana = cards.find((card) => card.includes(SOLANA)) ?? "";
+    const evm = cards.find((card) => card.includes(EVM)) ?? "";
+    expect(solana).toContain("free calls only here, so it is not spent on calls");
+    expect(evm).toContain("held on this chain and spent on this chain");
+  });
+
   it("shows BOTH amounts — the second chain is not dropped", () => {
     // Literals, not `formatMoney(row.available)`: an expectation derived from
     // the same expression the component uses changes with it and can never
