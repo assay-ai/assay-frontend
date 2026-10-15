@@ -91,7 +91,7 @@ interface DemoCall {
   /**
    * Buyer debt: a served, passed call whose payment could not be collected.
    * `OUTSTANDING` keeps its charge (it is charged once the buyer settles) and
-   * is the one debt `GET /escrow/debts` lists — see {@link DEMO_DEBT}.
+   * is the one debt `GET /escrow/debts` lists — see {@link demoDebt}.
    */
   readonly debt?: "OUTSTANDING" | "WRITTEN_OFF" | "VOIDED";
   /** The lapse cause recorded with a debt. */
@@ -706,7 +706,14 @@ function debtView(call: DemoCall) {
   };
 }
 
-export const DEMO_DEBT = debtView(CALLS.find((call) => call.debt === "OUTSTANDING")!);
+/**
+ * Built on first use, not at module load: `fixtures.ts` imports this file and
+ * owns DEMO_BUYER_ACCOUNT, so reading it here at load time hits the import cycle
+ * before the constant exists (the static export failed with a TDZ error).
+ */
+export function demoDebt() {
+  return debtView(CALLS.find((call) => call.debt === "OUTSTANDING")!);
+}
 
 /* ----------------------------------------------------------------- receipt */
 
@@ -1103,7 +1110,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/escrow/debts",
-    body: () => ({ account: DEMO_BUYER_ACCOUNT, debts: [DEMO_DEBT] }),
+    body: () => ({ account: DEMO_BUYER_ACCOUNT, debts: [demoDebt()] }),
   },
 
   /* --------------------------------------------------------------- escrow */
