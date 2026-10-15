@@ -3,7 +3,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowUpRight, Clock, LogOut, MoreHorizontal, Plus, ShieldCheck, UserPlus, Users, Wallet, Zap } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { ApprovalFooter } from "@/components/patterns/approval-footer";
@@ -40,6 +40,7 @@ import { useOperatorSession } from "@/features/operator/session-context";
 import { approvalHref, approverPhrase, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
 import { WhatHappens } from "@/features/operator/what-happens";
 import { WhyNot } from "@/features/operator/why-not";
+import { dropUrlParams } from "@/features/operator/url-params";
 import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operator/sheet-footer";
 import type { OperatorApproval, OperatorDirectoryEntry, OperatorRole } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
@@ -83,8 +84,6 @@ function TeamScreen() {
   const queryClient = useQueryClient();
   const canManage = mayManageOperators(me.roles);
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
   const [status, setStatus] = React.useState<"ACTIVE" | "">("ACTIVE");
   const [sheet, setSheet] = React.useState<SheetState>(null);
   const [result, setResult] = React.useState<React.ReactNode>(null);
@@ -97,7 +96,7 @@ function TeamScreen() {
   // `?new=1` goes when the sheet closes, so a reload does not open it again.
   const closeSheet = () => {
     setSheet(null);
-    if (searchParams.has("new")) router.replace(pathname, { scroll: false });
+    dropUrlParams(["new"]);
   };
 
   const list = useInfiniteQuery({
@@ -241,9 +240,11 @@ function TeamScreen() {
                   <span className="hidden text-right text-body-13 tabular-nums text-02 tablet:block">{limitCell(row)}</span>
                   <span className="flex min-w-0 items-center gap-2 text-body-xs text-03">
                     {row.walletAddress ? <CopyChip value={toChecksumAddress(row.walletAddress)} label="wallet address" /> : <span>No wallet</span>}
-                    <span className="tablet:hidden">· {row.lastSeenAt ? <LocalTime value={row.lastSeenAt} /> : "never signed in"}</span>
+                    <span className="tablet:hidden">· {row.lastSeenAt ? <>last seen <LocalTime value={row.lastSeenAt} /></> : "never signed in"}</span>
                   </span>
                   <span className="hidden text-body-13 text-02 tablet:block">
+                    {/* The column header is aria-hidden: the label is read here. */}
+                    <span className="sr-only">Last seen </span>
                     {row.lastSeenAt ? <LocalTime value={row.lastSeenAt} /> : <span className="text-03">Never</span>}
                   </span>
                   <span className="absolute right-3 top-2 tablet:static tablet:flex tablet:justify-end">
