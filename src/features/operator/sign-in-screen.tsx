@@ -8,48 +8,59 @@ import {
   useWallets,
   type ConnectedWallet,
 } from "@privy-io/react-auth";
+import { Check, Copy } from "lucide-react";
 import * as React from "react";
 
+import { CopyChip } from "@/components/patterns/copy-chip";
 import { Button } from "@/components/ui/button";
-import {
-  Panel,
-  PanelBody,
-  PanelDescription,
-  PanelHeader,
-  PanelTitle,
-  PanelTitles,
-} from "@/components/ui/panel";
-import { CopyValue } from "@/features/chain-slashes/copy-value";
 import { personalSign, toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
-import type { OperatorSessionEnd } from "@/libs/operator-session";
+import { demoEnabled } from "@/libs/demo/demo-api";
+import { DEMO_OPERATOR_TOKEN_PREFIX, type DemoOperatorPreset } from "@/libs/demo/fixtures-operator";
+import { saveOperatorSession, type OperatorSessionEnd } from "@/libs/operator-session";
 import { requestOperatorChallenge, verifyOperatorSignature } from "@/services/operator.service";
 
 import {
   SESSION_HOURS,
+  accessRequestText,
   isNotAnOperator,
   privyWalletStep,
+  readSignInMethod,
   sessionEndMessage,
   signInErrorMessage,
   signInWithWallet,
+  writeSignInMethod,
+  type SignInMethod,
 } from "./sign-in";
 
 /**
- * `/operator` when nobody is signed in. Two ways in, both ending in the same
- * EIP-4361 signature; the operator is always the WALLET ADDRESS that signs.
+ * `/operator…` when nobody is signed in. One primary way in — "Sign in with
+ * your wallet", which opens Privy (email or a wallet in one modal) and signs
+ * with the Privy wallet — and a small "Use a browser wallet instead" for an
+ * injected wallet (MetaMask, or a hardware wallet behind one). Whichever was
+ * used last in this browser is offered first next time.
  *
- *  1. **Sign in with Privy** (email or social). Opens Privy's login if needed,
- *     then signs with the user's Privy embedded EVM wallet — created if the
- *     account has none, as the app does on login. One click, apart from
- *     Privy's own modals. The operator address is the embedded wallet's.
- *  2. **Connect wallet**: an injected wallet (MetaMask, or a hardware wallet
- *     behind one) through Privy's `useConnectWallet`, no Privy login needed.
- *
- * The address is shown before signing and again after a 403, with a copy
- * button, so a new operator can send it to an OPS_ADMIN to be added.
+ * Either way the operator is the WALLET ADDRESS that signs one EIP-4361
+ * message: no transaction, no gas. A wallet that signs but is not an operator
+ * gets its address and a "Copy access request" to send to an admin.
  *
  * Signing in here does not sign anyone in to the buyer or provider app, and
  * operator sign-out never signs out of Privy.
  */
+
+function storage(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+const DEMO_PRESETS: readonly { id: DemoOperatorPreset; label: string }[] = [
+  { id: "lead", label: "Lead adjudicator" },
+  { id: "support", label: "Support / on-call" },
+  { id: "admin", label: "Admin" },
+];
+
 export function OperatorSignInScreen({
   lastEnd,
   onSignedIn,
@@ -64,7 +75,10 @@ export function OperatorSignInScreen({
   // argument crashes PrivyProvider ("Cannot destructure property 'onSuccess'").
   const { createWallet } = useCreateWallet({ onSuccess: () => {}, onError: () => {} });
 
-  /** The user chose "Sign in with Privy" and the flow is not finished. */
+  const [method, setMethod] = React.useState<SignInMethod>("privy");
+  React.useEffect(() => setMethod(readSignInMethod(storage())), []);
+
+  /** The user chose the Privy path and it is not finished. */
   const [privyPending, setPrivyPending] = React.useState(false);
   const { login } = useLogin({ onError: () => setPrivyPending(false) });
   const creating = React.useRef(false);
@@ -77,18 +91,16 @@ export function OperatorSignInScreen({
 
   const accountHasEmbeddedWallet =
     user?.linkedAccounts.some(
-      (account) =>
-        account.type === "wallet" && account.walletClientType === "privy" && account.chainType === "ethereum",
+      (account) => account.type === "wallet" && account.walletClientType === "privy" && account.chainType === "ethereum",
     ) ?? false;
   const step = privyWalletStep({ ready, authenticated, walletsReady, wallets, accountHasEmbeddedWallet });
-  const embedded = step.step === "sign" ? step.wallet : null;
   const externalWallets = wallets.filter((wallet) => wallet.walletClientType !== "privy");
 
   const signIn = React.useCallback(
-    async (wallet: ConnectedWallet, via: string) => {
+    async (wallet: ConnectedWallet, via: SignInMethod, key: string) => {
       setError(null);
       setNotOperator(null);
-      setSigningWith(via);
+      setSigningWith(key);
       try {
         const provider = await wallet.getEthereumProvider();
         await signInWithWallet(wallet.address, {
@@ -96,10 +108,11 @@ export function OperatorSignInScreen({
           sign: (message) => personalSign(provider, wallet.address, message),
           verify: verifyOperatorSignature,
         });
+        writeSignInMethod(storage(), via);
         onSignedIn();
       } catch (e) {
         if (isNotAnOperator(e)) setNotOperator(toChecksumAddress(wallet.address));
-        setError(signInErrorMessage(e));
+        else setError(signInErrorMessage(e));
       } finally {
         setSigningWith(null);
       }
@@ -107,7 +120,7 @@ export function OperatorSignInScreen({
     [onSignedIn],
   );
 
-  // Carry "Sign in with Privy" through login and wallet creation to the signature.
+  // Carry the Privy path through login and wallet creation to the signature.
   React.useEffect(() => {
     if (!privyPending) return;
     if (step.step === "create" && !creating.current) {
@@ -115,14 +128,14 @@ export function OperatorSignInScreen({
       createWallet()
         .catch((e: unknown) => {
           setPrivyPending(false);
-          setError(`Your Privy wallet could not be created: ${e instanceof Error ? e.message : String(e)}`);
+          setError(`Your wallet could not be created: ${e instanceof Error ? e.message : String(e)}`);
         })
         .finally(() => {
           creating.current = false;
         });
     } else if (step.step === "sign") {
       setPrivyPending(false);
-      void signIn(step.wallet, "privy");
+      void signIn(step.wallet, "privy", "privy");
     }
   }, [privyPending, step, createWallet, signIn]);
 
@@ -136,158 +149,164 @@ export function OperatorSignInScreen({
   const notice = sessionEndMessage(lastEnd);
   const busy = signingWith !== null || privyPending;
 
+  const privyButton = (primary: boolean) => (
+    <Button
+      type="button"
+      variant={primary ? "primary" : "secondary"}
+      className="w-full"
+      disabled={!ready || (busy && signingWith !== "privy")}
+      loading={signingWith === "privy" || privyPending}
+      onClick={startPrivy}
+    >
+      {primary ? "Sign in with your wallet" : "Sign in with email or your Privy wallet"}
+    </Button>
+  );
+
+  const browserWallets = (
+    <div className="flex w-full flex-col gap-2">
+      {walletsReady && externalWallets.length > 0 ? (
+        <ul className="flex w-full flex-col gap-2">
+          {externalWallets.map((wallet) => (
+            <li
+              key={`${wallet.walletClientType}:${wallet.address}`}
+              className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-01 bg-01 p-3"
+            >
+              <span className="flex min-w-0 flex-col gap-1">
+                <span className="text-label-13 text-01">{wallet.meta?.name || "Browser wallet"}</span>
+                <CopyChip value={toChecksumAddress(wallet.address)} label="wallet address" className="self-start" />
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                loading={signingWith === wallet.address}
+                disabled={busy && signingWith !== wallet.address}
+                onClick={() => void signIn(wallet, "wallet", wallet.address)}
+              >
+                Sign in
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <Button
+        type="button"
+        variant={method === "wallet" && externalWallets.length === 0 ? "primary" : "secondary"}
+        className="w-full"
+        disabled={busy}
+        // Through an arrow: handing `connectWallet` the click event drops the chain filter.
+        onClick={() => connectWallet({ walletChainType: "ethereum-only" })}
+      >
+        {externalWallets.length > 0 ? "Connect another browser wallet" : "Connect a browser wallet"}
+      </Button>
+    </div>
+  );
+
   return (
-    <div className="flex w-full max-w-[560px] flex-col gap-4">
-      <div className="flex flex-col gap-1.5">
-        <h1 className="text-heading-md text-01">Operator console</h1>
-        <p className="text-body-13 text-02">
-          Sign in with the wallet your operator administrator registered for you. This is separate
-          from the platform session: signing out here does not sign you out of Assay.
-        </p>
+    <div className="mx-auto flex w-full max-w-[440px] flex-col gap-5 pt-6 tablet:pt-16">
+      <div className="flex flex-col items-start gap-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/logo.png" alt="" aria-hidden="true" className="size-8 rounded-md" />
+        <h1 className="text-heading-md text-01">Assay operator console</h1>
+        <p className="text-body-13 text-02">Sign in with the wallet your admin registered for you. You sign one message; nothing is sent on chain.</p>
       </div>
 
       {notice ? (
-        <p className="text-body-13 text-warning-600" role="status">
+        <p className="rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5 text-body-13 text-warning-700" role="status">
           {notice}
         </p>
       ) : null}
 
-      {notOperator ? (
-        <div role="alert" className="flex w-full flex-col gap-2 rounded-md border border-danger-20 bg-danger-10 p-3">
-          <p className="text-label-13 text-01">This wallet is not an Assay operator</p>
-          <p className="text-body-13 text-02">
-            It signed correctly, but it is not an active operator. Send this address to an operator
-            administrator (OPS_ADMIN) to be added, then sign in again.
-          </p>
-          <AddressLine address={notOperator} />
-        </div>
-      ) : error ? (
+      {notOperator ? <NotAnOperator address={notOperator} /> : null}
+      {error ? (
         <p className="text-body-13 text-danger-600" role="alert">
           {error}
         </p>
       ) : null}
 
-      <Panel className="w-full">
-        <PanelHeader>
-          <PanelTitles>
-            <PanelTitle>1. Sign in with Privy</PanelTitle>
-            <PanelDescription>email or social login · uses your Privy embedded wallet</PanelDescription>
-          </PanelTitles>
-        </PanelHeader>
-        <PanelBody className="flex flex-col gap-3 p-4 tablet:p-5">
-          {embedded ? (
-            <div className="flex flex-col gap-1">
-              <span className="text-label-13 text-02">Your operator address (Privy embedded wallet)</span>
-              <AddressLine address={toChecksumAddress(embedded.address)} />
-            </div>
-          ) : authenticated ? (
-            <p className="text-body-13 text-02">
-              Your Privy wallet is being prepared; its address appears here before anything is signed.
-            </p>
-          ) : (
-            <p className="text-body-13 text-02">
-              Opens the Privy login. Your operator address is your Privy wallet&rsquo;s, shown before
-              you sign.
-            </p>
-          )}
-          <Button
-            type="button"
-            className="self-start"
-            disabled={!ready || (busy && signingWith !== "privy")}
-            loading={signingWith === "privy" || privyPending}
-            onClick={startPrivy}
-          >
-            Sign in with Privy
-          </Button>
-        </PanelBody>
-      </Panel>
+      {method === "privy" ? (
+        <div className="flex w-full flex-col gap-3">
+          {privyButton(true)}
+          <details className="group w-full">
+            <summary className="cursor-pointer list-none text-center text-label-13 text-primary-600 hover:underline">
+              Use a browser wallet instead
+            </summary>
+            <div className="pt-3">{browserWallets}</div>
+          </details>
+        </div>
+      ) : (
+        <div className="flex w-full flex-col gap-3">
+          <p className="text-label-13 text-01">Last time you used a browser wallet</p>
+          {browserWallets}
+          <details className="group w-full">
+            <summary className="cursor-pointer list-none text-center text-label-13 text-primary-600 hover:underline">
+              Use email or your Privy wallet instead
+            </summary>
+            <div className="pt-3">{privyButton(false)}</div>
+          </details>
+        </div>
+      )}
 
-      <Panel className="w-full">
-        <PanelHeader>
-          <PanelTitles>
-            <PanelTitle>2. Connect wallet</PanelTitle>
-            <PanelDescription>MetaMask or another browser wallet; a hardware wallet works through it</PanelDescription>
-          </PanelTitles>
-        </PanelHeader>
-        <PanelBody className="flex flex-col gap-3 p-4 tablet:p-5">
-          {!walletsReady ? (
-            <p className="text-body-13 text-03">Looking for connected wallets…</p>
-          ) : externalWallets.length === 0 ? (
-            <p className="text-body-13 text-02">No browser wallet is connected yet.</p>
-          ) : (
-            <ul className="flex w-full flex-col gap-2">
-              {externalWallets.map((wallet) => (
-                <li
-                  key={`${wallet.walletClientType}:${wallet.address}`}
-                  className="flex w-full flex-wrap items-center justify-between gap-2 rounded-md border border-01 p-3"
-                >
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-label-13 text-01">
-                      {wallet.meta?.name || wallet.walletClientType || "Wallet"}
-                    </span>
-                    <AddressLine address={toChecksumAddress(wallet.address)} />
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    loading={signingWith === wallet.address}
-                    disabled={busy && signingWith !== wallet.address}
-                    onClick={() => void signIn(wallet, wallet.address)}
-                  >
-                    Sign in with this wallet
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <Button
-            type="button"
-            variant="secondary"
-            className="self-start"
-            disabled={busy}
-            // Through an arrow: handing `connectWallet` the click event drops the chain filter.
-            onClick={() => connectWallet({ walletChainType: "ethereum-only" })}
-          >
-            Connect wallet
-          </Button>
-        </PanelBody>
-      </Panel>
+      <details className="w-full rounded-lg border border-01 bg-01 px-3.5 py-2.5">
+        <summary className="cursor-pointer select-none text-label-13 text-02">What happens when I sign?</summary>
+        <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-body-13 text-02">
+          <li>Your wallet shows a short &ldquo;Sign in to the Assay operator console&rdquo; message. Signing proves you hold the wallet.</li>
+          <li>It is not a transaction: nothing moves and it costs no gas.</li>
+          <li>
+            Your session lasts {SESSION_HOURS} h; the top bar shows when it ends. Signing out of the console does not sign you out of
+            Assay.
+          </li>
+        </ul>
+      </details>
 
-      <Panel className="w-full">
-        <PanelHeader>
-          <PanelTitles>
-            <PanelTitle>What signing does</PanelTitle>
-          </PanelTitles>
-        </PanelHeader>
-        <PanelBody className="p-4 tablet:p-5">
-          <ul className="flex list-disc flex-col gap-1.5 pl-5 text-body-13 text-02">
-            <li>
-              Your wallet shows a short &ldquo;Sign in to the Assay operator console&rdquo; message.
-              Signing it proves you control the wallet. Nothing else.
-            </li>
-            <li>
-              It is not a transaction: nothing is sent on chain, no funds move, and it costs no gas.
-            </li>
-            <li>The message can be used once, within five minutes, and only on this console.</li>
-            <li>
-              Your session lasts {SESSION_HOURS} hours. After that, or if your access is removed,
-              you are asked to sign in again. Sign out ends it at once.
-            </li>
-          </ul>
-        </PanelBody>
-      </Panel>
+      {demoEnabled() ? (
+        <div className="flex w-full flex-col gap-2 rounded-lg border border-dashed border-02 p-3.5">
+          <p className="text-label-13 text-01">Demo console</p>
+          <p className="text-body-xs text-03">Sample data, no wallet. Pick a role to see the console as that person.</p>
+          <div className="flex flex-wrap gap-2">
+            {DEMO_PRESETS.map((preset) => (
+              <Button
+                key={preset.id}
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  saveOperatorSession({
+                    token: `${DEMO_OPERATOR_TOKEN_PREFIX}${preset.id}`,
+                    expiresAt: new Date(Date.now() + SESSION_HOURS * 3_600_000).toISOString(),
+                  });
+                  onSignedIn();
+                }}
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-/** A full address, never shortened, with a copy button. */
-function AddressLine({ address }: { address: string }) {
+/** A wallet that signed but is not an operator: its address and a request to copy. */
+function NotAnOperator({ address }: { address: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(accessRequestText(address));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* the address stays visible to copy by hand */
+    }
+  };
   return (
-    <CopyValue
-      value={address}
-      display={address}
-      label="address"
-      className="max-w-full text-mono-12 text-01 [&>span:first-child]:break-all [&>span:first-child]:whitespace-normal"
-    />
+    <div role="alert" className="flex w-full flex-col gap-2 rounded-lg border border-danger-20 bg-danger-10 p-3.5">
+      <p className="text-label-13 text-01">This wallet is not an Assay operator</p>
+      <p className="text-body-13 text-02">It signed correctly but is not on the team. Send this to an admin, then sign in again once they have added you.</p>
+      <CopyChip value={address} label="wallet address" className="self-start" />
+      <Button type="button" size="sm" variant="secondary" className="self-start" icon={copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />} onClick={() => void copy()}>
+        {copied ? "Copied" : "Copy access request"}
+      </Button>
+    </div>
   );
 }

@@ -65,6 +65,7 @@ import { TopBar } from "@/components/layout/top-bar";
 
 import { cn } from "@/utils";
 
+import { OperatorPatternsGallery } from "./operator-patterns-gallery";
 import { PatternsGallery } from "./patterns-gallery";
 
 /* ------------------------------------------------------------------------
@@ -907,6 +908,7 @@ export default function KitchenSinkPage() {
          * ============================================================== */}
         <Group index="08" title="Patterns">
           <PatternsGallery />
+          <OperatorPatternsGallery />
         </Group>
       </div>
     </div>

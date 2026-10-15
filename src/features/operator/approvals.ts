@@ -75,7 +75,7 @@ export function approveBlockedBecause(
 ): string | null {
   if (holdsApproverRole(approval.code, me.roles)) return null;
   const required = approverRolesFor(approval.code) ?? [];
-  return `Approving ${approval.code} needs ${required.join(" or ")}.`;
+  return `Only ${rolePhrase(required)} can approve this.`;
 }
 
 /**
@@ -145,13 +145,27 @@ function rolesOf(value: unknown): string[] | null {
 }
 
 function rolesText(roles: readonly string[]): string {
-  return roles.length === 0 ? "none" : roles.join(", ");
+  return roles.length === 0 ? "no role" : roles.map((role) => ROLE_LABEL[role] ?? role).join(", ");
 }
 
 function rolesLong(roles: readonly string[]): string {
-  return roles.length === 0
-    ? "none"
-    : roles.map((role) => (ROLE_LABEL[role] ? `${role} (${ROLE_LABEL[role]})` : role)).join(", ");
+  return rolesText(roles);
+}
+
+/** "a Lead adjudicator", "an Adjudicator or a Lead adjudicator". */
+export function rolePhrase(roles: readonly string[]): string {
+  const names = roles.map((role) => {
+    const name = ROLE_LABEL[role] ?? role;
+    return `${/^[AEIOU]/.test(name) ? "an" : "a"} ${name}`;
+  });
+  if (names.length <= 1) return names[0] ?? "another operator";
+  return `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+}
+
+/** `KEY_ROTATED` → "Key rotated". */
+export function reasonText(code: string): string {
+  const words = code.replace(/[_-]+/g, " ").trim().toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 /** `0x07cd29…` → `0x07cd…4D711` checksummed; anything else unchanged. */
@@ -191,7 +205,7 @@ function operatorName(
 function commonFields(body: Record<string, unknown>): { label: string; value: string }[] {
   const fields: { label: string; value: string }[] = [];
   const reason = text(body.reasonCode);
-  if (reason) fields.push({ label: "Reason code", value: reason });
+  if (reason) fields.push({ label: "Reason", value: reasonText(reason) });
   const ticket = text(body.ticketRef);
   if (ticket) fields.push({ label: "Ticket", value: ticket });
   const note = text(body.note);
@@ -246,7 +260,7 @@ export function describeApproval(
   const colon = approval.target.indexOf(":");
   const targetId = colon === -1 ? "" : approval.target.slice(colon + 1);
   const reason = text(body.reasonCode);
-  const because = reason ? ` (reason ${reason})` : "";
+  const because = reason ? ` (${reasonText(reason).toLowerCase()})` : "";
 
   switch (approval.action) {
     case "account.unblock": {
@@ -255,7 +269,7 @@ export function describeApproval(
       const who = block ? blockSubject(block) : `block ${shortId(blockId)}`;
       const fields: { label: string; value: string }[] = [];
       if (block) {
-        fields.push({ label: "Blocked", value: `${block.subject} · by ${block.blockedBy} · ${block.reasonCode}` });
+        fields.push({ label: "Blocked for", value: `${reasonText(block.reasonCode)} · by ${block.blockedBy}` });
         if (!block.active) fields.push({ label: "Block now", value: "already lifted" });
       }
       return {
@@ -432,7 +446,8 @@ export function approvalErrorMessage(error: unknown, kind: "approve" | "reject" 
   if (!(error instanceof ApiError)) {
     return kind === "list" ? "The approvals could not be loaded." : "The request could not be completed.";
   }
-  const tail = ` (${error.code})`;
+  // The code is not part of the sentence: screens show it under Details.
+  const tail = "";
   switch (error.code) {
     case "OPERATOR_SELF_APPROVAL_REFUSED":
       return `You asked for this action, so you cannot approve it. A different operator must.${tail}`;
@@ -452,7 +467,7 @@ export function approvalErrorMessage(error: unknown, kind: "approve" | "reject" 
       return `The API could not be reached. Check the list before you try again.${tail}`;
     default:
       if (kind === "approve") {
-        return `The action was re-checked against the current state and refused: ${error.message}.${tail} It is still pending: retry once the cause is fixed, reject it, or let it expire.`;
+        return "The action was re-checked against how things stand now and refused. It is still pending: retry once the cause is fixed, reject it, or let it expire.";
       }
       return `${error.message}${tail}`;
   }
@@ -462,4 +477,90 @@ export function approvalErrorMessage(error: unknown, kind: "approve" | "reject" 
 export function pendingBadge(count: number, hasMore: boolean): string | null {
   if (count <= 0) return null;
   return hasMore ? `${count}+` : String(count);
+}
+
+// ── Before → after, and where it leads ──────────────────────────────────────
+
+export interface ApprovalChange {
+  readonly label: string;
+  readonly before: string;
+  readonly after: string;
+}
+
+/**
+ * What approving changes, as before → after rows for the confirm step and the
+ * card. Read off the request and what the inbox already knows; an unknown
+ * "before" is said as such rather than guessed.
+ */
+export function approvalChanges(
+  approval: Pick<OperatorApproval, "action" | "target" | "payload">,
+  context: ApprovalContext = EMPTY_APPROVAL_CONTEXT,
+): ApprovalChange[] {
+  const payload = approval.payload ?? {};
+  const body =
+    payload.body && typeof payload.body === "object" && !Array.isArray(payload.body)
+      ? (payload.body as Record<string, unknown>)
+      : payload;
+  const colon = approval.target.indexOf(":");
+  const targetId = colon === -1 ? "" : approval.target.slice(colon + 1);
+
+  switch (approval.action) {
+    case "account.unblock": {
+      const block = context.blocks.get(text(payload.blockId) ?? targetId);
+      return [{ label: "Account", before: block && !block.active ? "Already lifted" : "Blocked", after: "Can use Assay again" }];
+    }
+    case "operator.add": {
+      const roles = rolesOf(body.roles) ?? [];
+      const limit = limitText(body.authorityLimitMinor === undefined ? "0" : body.authorityLimitMinor, context.asset);
+      return [
+        { label: "Access", before: "Not an operator", after: rolesText(roles) },
+        ...(limit ? [{ label: "Authority limit", before: "None", after: limit }] : []),
+      ];
+    }
+    case "operator.change": {
+      const operator = context.operators.get(text(payload.operatorId) ?? targetId);
+      const changes: ApprovalChange[] = [];
+      const roles = rolesOf(body.roles);
+      if (roles) changes.push({ label: "Roles", before: operator ? rolesText(operator.roles) : "Unknown", after: rolesText(roles) });
+      if (Object.prototype.hasOwnProperty.call(body, "authorityLimitMinor")) {
+        changes.push({
+          label: "Authority limit",
+          before: operator ? (operator.authorityLimit === null ? "unbounded" : formatMoney(operator.authorityLimit)) : "Unknown",
+          after: limitText(body.authorityLimitMinor, context.asset) ?? "Unknown",
+        });
+      }
+      return changes;
+    }
+    case "slash.suspend":
+      return [{ label: "Penalty", before: "Stands", after: "Cancelled" }];
+    case "slash.compensated":
+      return [{ label: "Penalty", before: "Executed", after: "Paid back to the provider" }];
+    case "slash.sweep":
+      return [{ label: "Cases with this defect", before: "Open", after: "Decided like this one" }];
+    default:
+      return [];
+  }
+}
+
+/** The id the request is about (`account_block:blk-2` → `blk-2`). */
+export function approvalTargetId(approval: Pick<OperatorApproval, "target" | "payload">): string {
+  const payload = approval.payload ?? {};
+  const fromPayload = text(payload.blockId) ?? text(payload.proposalId) ?? text(payload.operatorId);
+  if (fromPayload) return fromPayload;
+  const colon = approval.target.indexOf(":");
+  return colon === -1 ? approval.target : approval.target.slice(colon + 1);
+}
+
+/** The Activity log, filtered to what the request is about. */
+export function approvalActivityHref(approval: Pick<OperatorApproval, "target" | "payload">): string {
+  return `/operator/override-log?targetId=${encodeURIComponent(approvalTargetId(approval))}`;
+}
+
+/** "a second Lead adjudicator" — who must approve a register code, for `ApprovalFooter`. */
+export function approvalNeeds(code: string): string {
+  const roles = approverRolesFor(code);
+  if (!roles || roles.length === 0) return "a second operator";
+  const names = roles.map((role) => ROLE_LABEL[role] ?? role);
+  const joined = names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+  return `a second ${joined}`;
 }
