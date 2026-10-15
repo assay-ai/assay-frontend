@@ -337,7 +337,7 @@ export function approvalTitle(
       const limit = hasLimit ? limitText(body.authorityLimitMinor, context.asset) : null;
       if (roles && limit) return `Change ${possessive(who)} roles and limit`;
       if (roles) return `Make ${who} ${rolesText(roles)}`;
-      if (limit) return `Raise ${possessive(who)} limit to ${limit}`;
+      if (limit) return `Raise ${possessive(who)} limit to ${limit.replace(/\.00$/, "")}`;
       return `Change ${possessive(who)} access`;
     }
     case "slash.suspend":

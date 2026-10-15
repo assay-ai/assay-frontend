@@ -144,6 +144,8 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
 
   const { title, reason, target, fields } = describeApproval(approval, context);
   const changes = approvalChanges(approval, context);
+  // A decided request: today's "before" says nothing about it, so no diff in its row.
+  const rowChanges = mode === "history" ? [] : changes;
   const pending = approval.status === "PENDING";
   const names = approverNames(approvers);
   const needs = `Needs ${approvalNeeds(approval.code)}${names ? `: ${names}` : ""}`;
@@ -228,12 +230,12 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
               <span className="min-w-0 text-label-sm text-01 [overflow-wrap:anywhere]">{title}</span>
             )}
           </p>
-          {changes.length > 0 || reason ? (
+          {rowChanges.length > 0 || reason ? (
             <p className="text-body-13 [overflow-wrap:anywhere]">
-              <ChangeInline changes={changes} />
+              <ChangeInline changes={rowChanges} />
               {reason ? (
                 <span className="text-03">
-                  {changes.length > 0 ? " · " : ""}
+                  {rowChanges.length > 0 ? " · " : ""}
                   {reason}
                 </span>
               ) : null}
@@ -297,7 +299,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
           {pending ? (
             <>
               <dt className="text-label-13 text-02">Who can approve</dt>
-              <dd className="text-01">{needs.replace(/^Needs /, "")}</dd>
+              <dd className="text-01">{needs.replace(/^Needs a/, "A")}</dd>
             </>
           ) : null}
           {fields.map((line) => (
