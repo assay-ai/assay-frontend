@@ -34,15 +34,36 @@ describe("security headers", () => {
 
   it("adds HSTS in production only", async () => {
     // Production is a static export: next.config sends nothing there, and
-    // Cloudflare Pages serves `public/_headers` instead.
-    const config = (await import("node:fs")).readFileSync(
-      require.resolve("../../public/_headers"),
-      "utf8",
+    // Cloudflare Pages serves `public/_headers` instead. Its `/*` block must be
+    // exactly the enforced set next dev sends, plus HSTS.
+    const text = (await import("node:fs")).readFileSync(require.resolve("../../public/_headers"), "utf8");
+    const all: Record<string, string> = {};
+    let inAll = false;
+    for (const line of text.split("\n")) {
+      if (/^\S/.test(line)) inAll = line.trim() === "/*";
+      else if (inAll && line.includes(":")) {
+        const i = line.indexOf(":");
+        all[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+      }
+    }
+    const dev = await headersFor("development");
+    const enforced = Object.fromEntries(
+      Object.entries(dev).filter(([key]) => key !== "Content-Security-Policy-Report-Only"),
     );
-    expect(config).toContain("Content-Security-Policy: frame-ancestors 'none'");
-    expect(config).toContain("X-Frame-Options: DENY");
-    expect(config).toContain("X-Content-Type-Options: nosniff");
-    expect(config).toMatch(/Strict-Transport-Security: max-age=\d+/);
-    expect((await headersFor("development"))["Strict-Transport-Security"]).toBeUndefined();
+    const { "Strict-Transport-Security": hsts, ...rest } = all;
+    expect(rest).toEqual(enforced);
+    expect(hsts).toMatch(/^max-age=\d+/);
+    expect(dev["Strict-Transport-Security"]).toBeUndefined();
+
+    // And next.config sends nothing in production, where it could not anyway.
+    const previous = process.env.NODE_ENV;
+    (process.env as Record<string, string>).NODE_ENV = "production";
+    try {
+      const path = require.resolve("../../next.config.js");
+      delete require.cache[path];
+      expect((require(path) as { headers?: unknown }).headers).toBeUndefined();
+    } finally {
+      (process.env as Record<string, string>).NODE_ENV = previous ?? "test";
+    }
   });
 });
