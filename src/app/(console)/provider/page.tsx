@@ -164,7 +164,7 @@ export default function ProviderHomePage() {
       <header className="flex w-full flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="truncate text-heading-sm text-01 desktop:text-heading-md">{title}</h1>
-          {subtitle ? <p className="truncate text-body-13 text-03">{subtitle}</p> : null}
+          {subtitle ? <p className="text-body-13 text-03 tablet:truncate">{subtitle}</p> : null}
         </div>
         {record ? (
           <Button asChild>

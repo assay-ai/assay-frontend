@@ -62,7 +62,7 @@ PanelTitle.displayName = "PanelTitle";
 
 const PanelDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
   ({ className, ...props }, ref) => (
-    <p ref={ref} className={cn("truncate text-body-xs text-03", className)} {...props} />
+    <p ref={ref} className={cn("text-body-xs text-03 tablet:truncate", className)} {...props} />
   )
 );
 PanelDescription.displayName = "PanelDescription";
