@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const services = vi.hoisted(() => ({ unstake: vi.fn(), withdraw: vi.fn() }));
+const services = vi.hoisted(() => ({ unstake: vi.fn(), withdraw: vi.fn(), deposit: vi.fn() }));
 
 vi.mock("@/services/provider-stake.service", () => ({
   createOpenStakeIntent: vi.fn(),
-  createStakeDepositIntent: vi.fn(),
+  createStakeDepositIntent: services.deposit,
   createUnstakeIntent: services.unstake,
   createStakeWithdrawIntent: services.withdraw,
 }));
@@ -21,7 +21,7 @@ import type { StakeIntent } from "@/interfaces/provider-stake";
 import { encodeCall } from "@/libs/chains/evm/calldata-fixtures";
 import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
 
-import { unstakeStep, withdrawStep } from "./stake-steps";
+import { depositSteps, unstakeStep, withdrawStep } from "./stake-steps";
 
 const OWNER = "0x2222222222222222222222222222222222222222";
 
@@ -80,6 +80,22 @@ describe("stake steps send only the chosen stake call", () => {
     );
     await expect(run(step("5000000"))).rejects.toThrow(/none of this app's contracts/);
 
+    expect(s.signAndSend).not.toHaveBeenCalled();
+  });
+});
+
+/* Merge audit L1: the approve step refuses, as main did, instead of quietly skipping. */
+describe("approve step", () => {
+  it("refuses a deposit whose asset is not an ERC-20, before the wallet is asked", async () => {
+    const deposit = intent("DEPOSIT", "depositStake(uint64)", "5000000", ROBINHOOD_TESTNET_STAKE.stakeContract);
+    services.deposit.mockResolvedValue({
+      ...deposit,
+      amount: { ...deposit.amount!, asset: `${ROBINHOOD_TESTNET_STAKE.chainId}/slip44:60` },
+    });
+    const s = signer();
+    const approve = depositSteps({ amountAtomic: "5000000", amountLabel: "$5", isEvm: true, signer: s as unknown as Signer, chain: null })
+      .find((step) => step.id === "approve")!;
+    await expect(approve.run({ report: () => undefined } as never)).rejects.toThrow(/not an ERC-20/);
     expect(s.signAndSend).not.toHaveBeenCalled();
   });
 });
