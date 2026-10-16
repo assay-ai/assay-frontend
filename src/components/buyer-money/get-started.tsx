@@ -168,7 +168,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
     </p>
   ) : null;
 
-  const steps: SetupStep[] = [
+  const allSteps: SetupStep[] = [
     {
       id: "key",
       title: "Create a key and connect your agent",
@@ -303,13 +303,17 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
     },
   ];
 
+  // Free calls only: funding and paying do not apply, so they are not steps
+  // (counted as done they made the bar read "2 of 4" before anything was done).
+  const steps = facts.freeOnly ? allSteps.filter((step) => step.id === "key" || step.id === "call") : allSteps;
+
   return (
     <>
       <SetupChecklist
         title="Get started"
         description={
           facts.freeOnly
-            ? "Two steps to your agent's first call. This chain serves free calls only, so steps 3 and 4 are not needed."
+            ? "Two steps to your agent's first call. This chain serves free calls only, so adding funds and letting your agent pay are not needed."
             : "Four steps to your agent's first paid call. Free calls work after step 2."
         }
         steps={steps}

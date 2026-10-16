@@ -146,7 +146,11 @@ export function SetupChecklist({
 
   // When the data moves the current step on, follow it — unless the person
   // has opened another step themselves.
-  const currentId = steps.find((step) => step.state === "current")?.id ?? null;
+  // Keyed on whether the current step has its content yet too: on load the
+  // current step is known before its content (the data behind it is still
+  // being read), and it must still open once the content arrives.
+  const currentStep = steps.find((step) => step.state === "current");
+  const currentId = currentStep ? `${currentStep.id}:${currentStep.content ? "ready" : "empty"}` : null;
   const lastCurrent = React.useRef(currentId);
   React.useEffect(() => {
     if (lastCurrent.current === currentId) return;

@@ -49,7 +49,9 @@ export function AgentHealthList({ className }: { className?: string }) {
           const expiry = readiness.freeOnly ? null : permissionExpiry(readiness.grant, now);
           return (
             <li key={agent.agentId} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 tablet:px-5">
-              <span className="min-w-0 flex-1">
+              {/* A floor on the text's width: in a narrow column the chip and
+                  Renew wrap below it instead of squeezing it to one word a line. */}
+              <span className="min-w-[12rem] flex-1 basis-[12rem]">
                 <span className="block text-label-13 text-01">{agent.label ?? "Agent"}</span>
                 <AgentHealthLine readiness={readiness} className="text-body-xs" />
                 {expiry ? (
