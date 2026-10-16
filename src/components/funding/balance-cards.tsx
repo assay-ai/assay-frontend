@@ -93,8 +93,8 @@ export interface BalanceCardsProps {
   readonly balances: readonly FullBalance[];
   /** From `useChains()`. Display names only — an empty list still renders every card. */
   readonly chains: readonly Chain[];
-  /** Open holds, for the held row's subtitle. Omitted means no subtitle. */
-  readonly openHoldCount?: number;
+  /** The held row's subtitle (`heldCallsText`). Omitted means no subtitle. */
+  readonly heldSub?: string;
   /**
    * Whether any deposit is confirming on chain, for the pending row's subtitle.
    * Omitted means no subtitle.
@@ -123,7 +123,7 @@ export interface BalanceCardsProps {
 export function BalanceCards({
   balances,
   chains,
-  openHoldCount,
+  heldSub,
   depositsConfirming,
   emptyNote,
 }: BalanceCardsProps) {
@@ -209,11 +209,7 @@ export function BalanceCards({
               />
               <KeyValueRow
                 label="Held"
-                sub={
-                  openHoldCount === undefined
-                    ? undefined
-                    : `${openHoldCount} ${openHoldCount === 1 ? "call" : "calls"} in flight — returns within 24h`
-                }
+                sub={heldSub}
                 value={formatMoney(balance.held)}
               />
               <KeyValueRow
