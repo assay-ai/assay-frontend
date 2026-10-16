@@ -117,8 +117,8 @@ describe("classNote", () => {
   });
 
   it("says the buyer pays for trial traffic, not the platform", () => {
-    expect(classNote("EXPLORATION")).toMatch(/buyer pays for them as usual/);
-    expect(classNote("EXPLORATION")).toMatch(/Assay pays only for checking them/);
+    expect(classNote("EXPLORATION")).toMatch(/buyer pays as usual/);
+    expect(classNote("EXPLORATION")).toMatch(/Assay pays only for the checks/);
   });
 
   it("falls back to the ledger's note for a class it does not know", () => {
