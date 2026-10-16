@@ -86,7 +86,10 @@ export function demoDebtVariant(): DemoDebtVariant {
  */
 export function demoDebtNote(variant: DemoDebtVariant = demoDebtVariant()): string | null {
   if (process.env.NEXT_PUBLIC_DEMO_CHAINS !== "robinhood" || variant === "open") return null;
-  return `Demo: the "${variant}" debt picture (?debt=${variant}) is kept for this tab. Add ?debt=open to any page to go back.`;
+  const dated = writtenOffVariant(variant)
+    ? " Its written-off call is dated 32 days back, as a write-off comes 30 days after the payment lapsed; the open pictures owe a call made today."
+    : "";
+  return `Demo: the "${variant}" debt picture (?debt=${variant}) is kept for this tab.${dated} Add ?debt=open to any page to go back.`;
 }
 
 /** Whether the variant shows the owed call as written off (`short` is a written-off debt too). */
