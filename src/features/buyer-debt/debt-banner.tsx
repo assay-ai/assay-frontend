@@ -1,168 +1,90 @@
 "use client";
 
-import { usePrivy } from "@privy-io/react-auth";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { TriangleAlert } from "lucide-react";
 import * as React from "react";
 
-import { useToolNames } from "@/components/g31/use-tool-names";
-import { bannerVariants } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
-import { hasBlockStatusSession } from "@/features/account-block/state";
-import { useAccountReadOnly } from "@/features/account-block/use-account-block";
-import { isUserRejection, useSigner } from "@/hooks/useSigner";
-import type { BuyerDebts } from "@/interfaces/buyer-debt";
-import { ApiError, getSessionToken } from "@/libs/ApiClient";
-import { createDebtVoucherIntent, getBuyerDebts, submitDebtVoucher } from "@/services/escrow.service";
+import { debtCauseText } from "@/features/call-classes/labels";
+import { useEntityNames } from "@/hooks/useEntityNames";
 import { cn } from "@/utils";
-import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
-import { toast } from "@/utils/toast";
+import { formatMoney } from "@/utils/money";
 
-import {
-  debtBannerDescription,
-  debtBannerTitle,
-  debtRowText,
-  debtsToSign,
-  settledToast,
-  settleDebtErrorSentence,
-  splitDebts,
-} from "./debt-copy";
-import { settleDebt } from "./settle-debt";
+import { debtStateOf, splitDebts } from "./debt-copy";
+import { debtBannerSummary } from "./debt-summary";
+import { BUYER_DEBTS_KEY, useBuyerDebtsQuery, useSettleDebt } from "./settle-debt-sheet";
 
-export const BUYER_DEBTS_KEY = ["escrow", "debts"] as const;
+export { BUYER_DEBTS_KEY };
+
+const ROW_STATE = { OPEN: null, REPLACING: "being collected", WRITTEN_OFF: "written off" } as const;
 
 /**
- * The buyer-debt banner, mounted once in the buyer shell, so it is above the
- * console, the funding and escrow screens and the agents page alike.
+ * The buyer-debt banner, mounted once in the buyer shell (see `BuyerBannerStack`
+ * for its place among the other account banners).
  *
- * Reads `GET /escrow/debts`. Nothing shows while there is no debt, or when
- * the read fails (an older backend has no such route). Every debt listed
- * pauses paid calls, whatever its state: `OPEN` and `WRITTEN_OFF` need a
- * signature (settling a written-off one still pays the provider), `REPLACING`
- * is signed and being collected, and paid calls resume once it lands. The
- * banner says so in plain words, and "Sign to settle" settles the oldest one
- * the session's wallet still has to sign: the replacement voucher is fetched,
- * checked against the pinned escrow and the debt (`settle-debt.ts`), signed by
- * the payer's wallet, and sent back.
+ * One line says what is owed and what it stops (paid calls), one short line
+ * says the deadline or the write-off and that free calls still work, and one
+ * button opens the settle sheet (`settle-debt-sheet.tsx`), where the person
+ * sees what they sign, what it costs and the balance after. Which call, which
+ * tool and why sit under Details. Nothing shows while nothing is owed or the
+ * list cannot be read (an older backend has no such route).
  */
 export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: string }) {
-  const { ready, authenticated } = usePrivy();
-  const [hasStoredToken, setHasStoredToken] = React.useState(false);
-  React.useEffect(() => setHasStoredToken(getSessionToken() !== null), []);
+  const query = useBuyerDebtsQuery();
+  const { openSettle } = useSettleDebt();
+  const names = useEntityNames({ kinds: ["tool"] });
 
-  const query = useQuery<BuyerDebts, ApiError>({
-    queryKey: BUYER_DEBTS_KEY,
-    queryFn: getBuyerDebts,
-    enabled: hasBlockStatusSession({ ready, authenticated, hasStoredToken }),
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
-    retry: 0,
-  });
-
-  const account = query.data?.account ?? null;
-  const signerState = useSigner({
-    chainId: chainIdOfAccount(account),
-    address: addressOfAccount(account) || undefined,
-  });
-  const readOnly = useAccountReadOnly();
-  const { nameOf } = useToolNames();
-  const queryClient = useQueryClient();
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
+  const summary = debtBannerSummary(query.data);
+  if (!summary) return null;
   const { own, others } = splitDebts(query.data);
   const all = [...own, ...others];
-  if (all.length === 0) return null;
-  const ownToSign = debtsToSign(own);
-  const next = ownToSign[0] ?? null;
-  const othersToSign = debtsToSign(others);
-
-  async function onSettle() {
-    if (!next) return;
-    if (signerState.status !== "ready") {
-      setError(
-        signerState.status === "address-not-connected"
-          ? `Connect the wallet that holds ${signerState.requested} — it is the wallet that owes this.`
-          : signerState.status === "hydrating" || signerState.status === "chain-unknown"
-            ? "Still loading your wallet. Try again in a moment."
-            : "Connect a wallet to sign this.",
-      );
-      return;
-    }
-    setError(null);
-    setBusy(true);
-    try {
-      const result = await settleDebt(next, signerState.signer, {
-        createIntent: createDebtVoucherIntent,
-        submit: submitDebtVoucher,
-      });
-      toast.success(settledToast(result.remainingDebts));
-      void queryClient.invalidateQueries({ queryKey: BUYER_DEBTS_KEY });
-      void queryClient.invalidateQueries({ queryKey: ["escrow"] });
-    } catch (e) {
-      if (isUserRejection(e)) {
-        setError("Nothing was signed — the wallet prompt was closed or declined.");
-      } else if (e instanceof ApiError) {
-        setError(settleDebtErrorSentence(e) ?? e.message);
-        if (e.code === "PAYMENT_DEBT_NOT_FOUND" || e.code === "PAYMENT_DEBT_REPLACEMENT_PENDING") {
-          void queryClient.invalidateQueries({ queryKey: BUYER_DEBTS_KEY });
-        }
-      } else {
-        setError(e instanceof Error ? e.message : "The voucher could not be signed.");
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
+  const collecting = summary.kind === "collecting";
 
   return (
     <div className={wrapperClassName}>
       <div
         role="alert"
         data-testid="buyer-debt-banner"
+        data-kind={summary.kind}
         className={cn(
-          bannerVariants({ tone: "warning" }),
-          "flex-col items-start gap-3 tablet:flex-row tablet:items-center",
+          "flex w-full flex-col gap-3 rounded-lg border px-4 py-3.5 tablet:flex-row tablet:items-start",
+          collecting ? "border-primary-20 bg-primary-10" : "border-warning-20 bg-warning-10",
         )}
       >
-        <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-          <p className="text-label-sm text-01">{debtBannerTitle(all)}</p>
-          <p className="text-body-13 text-02 [overflow-wrap:anywhere]">{debtBannerDescription(all)}</p>
-          {all.length > 1 ? (
-            <ul className="mt-1 flex flex-col gap-0.5 font-mono text-mono-12 text-02">
-              {all.map((debt) => (
-                <li key={debt.intentId} className="[overflow-wrap:anywhere]">
-                  {debtRowText(debt, nameOf)}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {othersToSign.length > 0 ? (
-            <p className="text-body-13 text-02">
-              {othersToSign.length === all.length
-                ? othersToSign.length === 1
-                  ? "It is"
-                  : "These are"
-                : `${othersToSign.length} of them ${othersToSign.length === 1 ? "is" : "are"}`}{" "}
-              owed by another wallet of your organization: sign in with that wallet to settle{" "}
-              {othersToSign.length === 1 ? "it" : "them"}.
-            </p>
-          ) : null}
-          {error ? (
-            <p role="status" className="text-body-13 text-danger-600 [overflow-wrap:anywhere]">
-              {error}
-            </p>
-          ) : null}
+        <div className="flex min-w-0 flex-1 gap-3">
+          <TriangleAlert
+            aria-hidden="true"
+            className={cn("mt-0.5 size-[17px] shrink-0", collecting ? "text-primary-600" : "text-warning-600")}
+          />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <p className="text-label-sm text-01 [overflow-wrap:anywhere]">{summary.title}</p>
+            <p className="text-body-13 text-02 [overflow-wrap:anywhere]">{summary.detail}</p>
+            <details className="group text-body-13 text-02">
+              <summary className="hit-area cursor-pointer select-none text-label-xs text-02 underline-offset-2 hover:underline">
+                Details ({all.length === 1 ? "1 call" : `${all.length} calls`})
+              </summary>
+              <ul className="mt-1.5 flex flex-col gap-1">
+                {all.map((debt) => {
+                  const state = ROW_STATE[debtStateOf(debt)];
+                  const elsewhere = others.includes(debt);
+                  return (
+                    <li key={debt.intentId} className="[overflow-wrap:anywhere]">
+                      <span className="font-mono text-mono-12 font-semibold text-01">
+                        {formatMoney(debt.amount, { decimals: 4 })}
+                      </span>{" "}
+                      · <span className="font-mono text-mono-12">{names.name("tool", debt.toolId)}</span> ·{" "}
+                      {debtCauseText(debt.cause)}
+                      {state ? ` · ${state}` : ""}
+                      {elsewhere ? " · another wallet" : ""}
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
+          </div>
         </div>
-        {next ? (
-          <Button
-            size="sm"
-            className="shrink-0"
-            onClick={() => void onSettle()}
-            loading={busy}
-            disabled={busy || readOnly}
-          >
-            {ownToSign.length > 1 ? `Sign to settle (1 of ${ownToSign.length})` : "Sign to settle"}
+        {summary.actionLabel ? (
+          <Button size="sm" className="shrink-0 self-start tablet:self-center" onClick={() => openSettle()}>
+            {summary.actionLabel}
           </Button>
         ) : null}
       </div>

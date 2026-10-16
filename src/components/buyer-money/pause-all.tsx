@@ -128,19 +128,29 @@ export function PauseAllButton({ className }: { className?: string }) {
   );
 }
 
-/** Shell-wide banner while paid calls are paused. */
-export function PausedBanner() {
+/**
+ * Shell-wide banner while paid calls are paused by the kill switch. It sits
+ * last in `BuyerBannerStack`: a pause the person chose is the least severe of
+ * the account banners. With a payment owed, resuming alone does not restart
+ * paid calls, and the banner says so.
+ */
+export function PausedBanner({ owed = false, wrapperClassName }: { owed?: boolean; wrapperClassName?: string }) {
   const { paused, mutation } = usePauseAll();
   const [confirming, setConfirming] = React.useState(false);
   if (!paused) return null;
   return (
-    <div role="status" className="flex w-full flex-wrap items-center gap-3 border-b border-danger-20 bg-danger-10 px-4 py-2.5 md:px-6">
-      <CirclePause aria-hidden="true" className="size-4 shrink-0 text-danger-600" />
-      <p className="min-w-0 flex-1 text-body-13 text-danger-700">All paid calls are paused. Free calls still work.</p>
-      <Button size="sm" variant="secondary" type="button" onClick={() => setConfirming(true)}>
-        Resume
-      </Button>
-      <PauseAllConfirm open={confirming} onOpenChange={setConfirming} pausing={false} onConfirm={() => mutation.mutateAsync(false)} />
+    <div className={wrapperClassName}>
+      <div role="status" className="flex w-full flex-wrap items-center gap-3 rounded-lg border border-danger-20 bg-danger-10 px-4 py-3">
+        <CirclePause aria-hidden="true" className="size-4 shrink-0 text-danger-600" />
+        <p className="min-w-0 flex-1 text-body-13 text-danger-700">
+          You paused all paid calls. Free calls still work.
+          {owed ? " Paid calls also need the payment above settled before they restart." : null}
+        </p>
+        <Button size="sm" variant="secondary" type="button" onClick={() => setConfirming(true)}>
+          Resume
+        </Button>
+        <PauseAllConfirm open={confirming} onOpenChange={setConfirming} pausing={false} onConfirm={() => mutation.mutateAsync(false)} />
+      </div>
     </div>
   );
 }

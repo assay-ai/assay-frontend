@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Toaster } from "sonner";
 
-import { PauseAllButton, PausedBanner } from "@/components/buyer-money/pause-all";
+import { BuyerBannerStack } from "@/components/buyer-money/buyer-banners";
+import { PauseAllButton } from "@/components/buyer-money/pause-all";
 import { AlertFill, CheckCircle } from "@/components/icons";
 import { BottomTabBar } from "@/components/layout/bottom-tab-bar";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
@@ -17,9 +18,8 @@ import { BuyerSearch } from "@/components/layout/buyer-search";
 import { TopBar } from "@/components/layout/top-bar";
 import { WalletMenu } from "@/components/layout/wallet-menu";
 import { TestnetChip } from "@/components/patterns/testnet-chip";
-import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
 import { routes } from "@/libs/routes";
-import { BuyerDebtBanner } from "@/features/buyer-debt/debt-banner";
+import { SettleDebtProvider } from "@/features/buyer-debt/settle-debt-sheet";
 import { getUnreadCount } from "@/services";
 import { useTheme } from "@/providers/ThemeProvider";
 
@@ -128,15 +128,17 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
         the bar's own height plus the home-indicator inset it pads itself by.
       */}
       <main className="flex w-full flex-1 flex-col bg-02 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0">
-        {/* The kill switch's state, on every screen while paid calls are paused. */}
-        <PausedBanner />
         {/* The section's own tabs (Activity, Money, Controls), from nav-config. */}
         <BuyerSectionTabs section={sectionFor(pathname)} />
-        {/* Shell level, above every buyer screen: see `features/account-block`. */}
-        <AccountBlockBanner wrapperClassName="w-full px-4 pt-4 md:px-6" />
-        {/* Buyer debt: paid calls are paused until it is settled (`features/buyer-debt`). */}
-        <BuyerDebtBanner wrapperClassName="w-full px-4 pt-4 md:px-6" />
-        {children}
+        {/*
+          Shell level, above every buyer screen: blocked, then owed, then
+          paused by you — most severe first (`BuyerBannerStack`). The settle
+          sheet lives here too, so a call row, a receipt or Spend can open it.
+        */}
+        <SettleDebtProvider>
+          <BuyerBannerStack />
+          {children}
+        </SettleDebtProvider>
       </main>
 
       {/* Pinned to the viewport, so the tabs stay in reach while the page scrolls. */}

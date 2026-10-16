@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { EscrowDelegate, Money } from "@/interfaces";
 
 import { agentReadiness, type ReadinessCredential } from "./agent-readiness";
-import { capsAreSet, capsSentence, capsToForm, keyGroups, parseCaps, presetDescription, presetFor } from "./caps";
+import { capsAreSet, capsSentence, capsSuccessText, capsToForm, keyGroups, parseCaps, presetDescription, presetFor } from "./caps";
 import { getStartedStates, payStage, type GetStartedFacts } from "./get-started";
 import { KEY_PLACEHOLDER, keyPlaceholder, mcpConfig } from "./mcp-config";
 import { PENDING_TX_MAX_AGE_MS, parsePending, withPending, withoutPending, type PendingTx } from "./pending-tx";
@@ -128,6 +128,17 @@ describe("agent readiness", () => {
     ...over,
   });
 
+  it("says up front that a free-calls-only chain needs no paying step (Solana)", () => {
+    const r = agentReadiness(
+      { agentAccount: "solana:devnet:abc", credentials: [key()], delegates: [], escrow: { ...escrow, exists: false }, paused: false, freeOnlyChain: "Solana Devnet" },
+      now,
+    );
+    expect(r.next).toBeNull();
+    expect(r.sentence).toBe("Free calls only: Solana Devnet serves free calls only, so this agent makes free calls there and pays for none.");
+    // A key is still needed first.
+    expect(agentReadiness({ agentAccount: evm, credentials: [], delegates: [], escrow, paused: false, freeOnlyChain: "Solana" }, now).next).toBe("key");
+  });
+
   it("walks the setup states in order", () => {
     expect(agentReadiness({ agentAccount: evm, credentials: [], delegates: [], escrow, paused: false }, now).status).toBe("no-key");
     expect(
@@ -219,6 +230,21 @@ describe("get started", () => {
       }),
     ).toEqual({ key: "done", call: "done", funds: "done", pay: "done" });
   });
+  it("finishes after the first call on a free-calls-only chain (Solana): no deposit or paying possible there", () => {
+    const solana = { ...none, freeOnly: true };
+    expect(getStartedStates({ ...solana, hasLiveKey: true })).toEqual({
+      key: "done",
+      call: "current",
+      funds: "done",
+      pay: "done",
+    });
+    expect(getStartedStates({ ...solana, hasLiveKey: true, firstCallSeen: true })).toEqual({
+      key: "done",
+      call: "done",
+      funds: "done",
+      pay: "done",
+    });
+  });
   it("orders the parts of step 4", () => {
     expect(payStage({ capsSet: false, keyBound: true, grantActive: false, needsDelegation: true })).toBe("caps");
     expect(payStage({ capsSet: true, keyBound: false, grantActive: false, needsDelegation: true })).toBe("bind");
@@ -265,5 +291,20 @@ describe("keyGroups", () => {
       "0000",
       "729f",
     ]);
+  });
+});
+
+describe("capsSuccessText", () => {
+  const now = { maxVoucherAmount: "1000000", maxPerWindow: "20000000" };
+  it("promises no pause for a raise", () => {
+    expect(capsSuccessText(now, { ...now, maxPerWindow: "30000000" }, 0)).toBe("It applies from the next payment.");
+    expect(capsSuccessText(null, now, undefined)).toBe("It applies from the next payment.");
+  });
+  it("says a lowering pauses payments only without the tighten delay", () => {
+    const lower = { ...now, maxVoucherAmount: "500000" };
+    expect(capsSuccessText(now, lower, 0)).toMatch(/about 30 seconds/);
+    const delayed = capsSuccessText(now, lower, 3600);
+    expect(delayed).not.toMatch(/30 seconds/);
+    expect(delayed).toMatch(/keep the old ones for 1 hour/);
   });
 });

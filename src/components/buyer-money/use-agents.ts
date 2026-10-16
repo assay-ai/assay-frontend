@@ -5,11 +5,15 @@ import * as React from "react";
 
 import { agentReadiness, type AgentReadiness } from "@/features/buyer-money/agent-readiness";
 import { supportsDelegation } from "@/features/delegation/delegation-form";
+import { useChains } from "@/hooks/useChains";
 import type { EscrowDelegate } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
+import { servesPaidCalls } from "@/libs/chains/paid-rails";
 import { listAgents, listCredentials } from "@/services/account.service";
+import { chainDisplayName } from "@/services/chains.service";
 import { listDelegates } from "@/services/delegation.service";
 import { getSpendPolicyTyped, type SpendPolicy } from "@/services/limits.service";
+import { chainIdOfAccount } from "@/utils/chain";
 
 import { useEscrowQuery } from "./use-buyer-money";
 
@@ -100,6 +104,14 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
   const policyQuery = useSpendPolicyQuery();
 
   const delegates: EscrowDelegate[] | undefined = delegatesQuery.data?.delegates;
+  const { chains } = useChains();
+  const freeOnlyChainName = React.useCallback(
+    (account: string | null | undefined): string | null => {
+      const chainId = chainIdOfAccount(account);
+      return chainId && !servesPaidCalls(chainId) ? chainDisplayName(chains, chainId) : null;
+    },
+    [chains],
+  );
   const readiness = React.useMemo(() => {
     const map: Record<string, AgentReadiness> = {};
     for (const agent of agents) {
@@ -110,10 +122,11 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
         escrow: escrowQuery.data,
         escrowUnreadable: escrowQuery.isError,
         paused: policyQuery.data?.paused === true,
+        freeOnlyChain: freeOnlyChainName(escrowQuery.data?.account ?? agent.agentAccount),
       });
     }
     return map;
-  }, [agents, keysQuery.data, delegates, escrowQuery.data, escrowQuery.isError, policyQuery.data]);
+  }, [agents, keysQuery.data, delegates, escrowQuery.data, escrowQuery.isError, policyQuery.data, freeOnlyChainName]);
 
   return {
     agentsQuery,

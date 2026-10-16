@@ -12,6 +12,7 @@ import { type Signer, type UseSignerResult, useSigner } from "@/hooks/useSigner"
 import type { BuyerEscrow } from "@/interfaces";
 import type { ApiError } from "@/libs/ApiClient";
 import { shortAddress } from "@/libs/chains/format";
+import { servesPaidCalls } from "@/libs/chains/paid-rails";
 import { demoEnabled } from "@/libs/demo/demo-api";
 import { getBalances } from "@/services";
 import { chainDisplayName, findChain, settlementSymbol } from "@/services/chains.service";
@@ -28,13 +29,14 @@ import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
  * a network error, which left money screens spinning forever with the API
  * down. A money screen that cannot read must say so at once.
  */
-export function useEscrowQuery(options: { refetchInterval?: number | false } = {}) {
+export function useEscrowQuery(options: { refetchInterval?: number | false; enabled?: boolean } = {}) {
   return useQuery<BuyerEscrow, ApiError>({
     queryKey: ["escrow", null],
     queryFn: () => getEscrow(null),
     retry: 0,
     networkMode: "always" as const,
     refetchInterval: options.refetchInterval,
+    enabled: options.enabled,
   });
 }
 
@@ -146,4 +148,21 @@ export function walletBlockerText(
     return owner ? `Connect the wallet ${owner} to sign. It is the only one your escrow answers to.` : "Connect the wallet that owns your escrow.";
   }
   return "Connect a wallet to sign.";
+}
+
+/**
+ * Whether the account's chain serves free calls only (Solana today,
+ * `paid-rails.ts`), with its name — for every entry point that would send the
+ * buyer to a deposit or a payment that cannot happen there.
+ */
+export function useFreeOnlyChain(options: { enabled?: boolean } = {}): {
+  freeOnly: boolean;
+  chainName: string | null;
+  chainId: string | null;
+} {
+  const escrowQuery = useEscrowQuery({ enabled: options.enabled });
+  const { chains } = useChains();
+  const chainId = chainIdOfAccount(escrowQuery.data?.account);
+  const freeOnly = chainId !== null && !servesPaidCalls(chainId);
+  return { freeOnly, chainId, chainName: chainId ? chainDisplayName(chains, chainId) : null };
 }

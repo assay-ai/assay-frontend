@@ -66,14 +66,26 @@ export function tightenDelayLabel(tightenDelaySeconds: number): string {
 /** The Revoke sheet, on an escrow with the tighten delay (D-21). */
 export function revokeDelayedText(tightenDelaySeconds: number): string {
   return (
-    `Vouchers your agent already signed stay collectable for ${tightenDelayLabel(tightenDelaySeconds)}, ` +
+    `Payments your agent already signed can still be collected for ${tightenDelayLabel(tightenDelaySeconds)}, ` +
     "so providers you already used get paid. New paid calls stop now."
   );
 }
 
 /** Lowering escrow limits or a delegate's caps, on an escrow with the tighten delay (D-21). */
 export function loweredDelayedText(tightenDelaySeconds: number): string {
-  return `Lower limits apply to already-signed vouchers after ${tightenDelayLabel(tightenDelaySeconds)}.`;
+  return (
+    "New payments get the lower limits now; payments your agent already signed keep the old ones for " +
+    `${tightenDelayLabel(tightenDelaySeconds)}.`
+  );
+}
+
+/**
+ * When a lowering binds every payment, the ones already signed included: now
+ * plus the escrow's tighten delay (D-21), as an ISO instant, or null without a
+ * delay (then it binds at once).
+ */
+export function loweredFullyAt(nowMs: number, tightenDelaySeconds: number | null | undefined): string | null {
+  return hasTightenDelay(tightenDelaySeconds) ? new Date(nowMs + tightenDelaySeconds! * 1000).toISOString() : null;
 }
 
 /** What the Revoke sheet says about signed payments, or null to keep the strand warning. */

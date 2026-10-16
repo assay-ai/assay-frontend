@@ -382,7 +382,7 @@ function EscrowCard({
   );
 }
 
-function AccountBalances({
+export function AccountBalances({
   balances,
   chains,
 }: {

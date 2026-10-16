@@ -60,23 +60,23 @@ describe("BuyerDebtBanner", () => {
     expect(render({ account: ACCOUNT, debts: [] })).toBe("");
   });
 
-  it("explains the debt in plain words and offers to sign", () => {
+  it("says in one line what is owed and what it stops, with the deadline, and offers to settle", () => {
     const html = render({ account: ACCOUNT, debts: [debt()] });
-    expect(html).toContain("could not be collected from your escrow");
+    expect(html).toContain("You owe $2.50 for 1 call. Paid calls are paused until you settle.");
+    expect(html).toContain("Settle by 15 Nov 2026, or the provider is not paid");
+    expect(html).toContain("Free calls still work.");
     expect(html).toContain("the payment voucher expired before it could be collected");
-    expect(html).toContain("Paid calls are paused until you settle it. Free calls still work.");
-    expect(html).toContain("If not settled by 15 Nov 2026, it is written off and the provider goes unpaid");
-    expect(html).toContain("Sign to settle");
+    expect(html).toContain("Settle $2.50");
   });
 
-  it("still offers to sign a written-off debt, and says it pauses paid calls", () => {
+  it("still offers to settle a written-off debt, and says settling pays the provider", () => {
     const html = render({
       account: ACCOUNT,
       debts: [debt({ state: "WRITTEN_OFF", writeOffAt: "2026-10-01T00:00:00.000Z" })],
     });
-    expect(html).toContain("written off on 1 Oct 2026");
-    expect(html).toContain("Paid calls stay paused until you settle it, and settling it pays the provider.");
-    expect(html).toContain("Sign to settle");
+    expect(html).toContain("Written off on 1 Oct 2026: the provider was not paid, and settling pays them.");
+    expect(html).toContain("Paid calls are paused until you settle.");
+    expect(html).toContain("Settle $2.50");
   });
 
   it("offers no button while the only debt is being collected", () => {
@@ -84,9 +84,8 @@ describe("BuyerDebtBanner", () => {
       account: ACCOUNT,
       debts: [debt({ state: "REPLACING", replacedAt: "2026-10-16T00:05:00.000Z" })],
     });
-    expect(html).toContain("Collecting the payment you signed");
-    expect(html).toContain("Paid calls resume once it is collected.");
-    expect(html).not.toContain("Sign to settle");
+    expect(html).toContain("Collecting $2.50 you signed. Paid calls resume in about a minute.");
+    expect(html).not.toContain("Settle $");
   });
 
   it("does not ask another wallet to sign a debt that is being collected", () => {
@@ -95,19 +94,21 @@ describe("BuyerDebtBanner", () => {
       state: "REPLACING",
     });
     const html = render({ account: ACCOUNT, debts: [other] });
-    expect(html).not.toContain("owed by another wallet");
+    expect(html).not.toContain("another wallet of your organization");
   });
 
   it("offers no button for another wallet's debt, and says which wallet settles it", () => {
     const other = debt({ payer: "eip155:46630:0x2222222222222222222222222222222222222222" });
     const html = render({ account: ACCOUNT, debts: [other] });
-    expect(html).not.toContain("Sign to settle");
-    expect(html).toContain("owed by another wallet of your organization");
+    expect(html).not.toContain("Settle $");
+    expect(html).toContain("Your organization owes $2.50 for 1 call");
+    expect(html).toContain("sign in with that wallet to settle");
   });
 
-  it("counts several own debts on the button, leaving out the one being collected", () => {
+  it("adds up several own debts on the button, leaving out the one being collected", () => {
     const html = render({ account: ACCOUNT, debts: [debt(), debt({ intentId: "int_2" })] });
-    expect(html).toContain("Sign to settle (1 of 2)");
+    expect(html).toContain("You owe $5.00 for 2 calls.");
+    expect(html).toContain("Settle $5.00");
     const mixed = render({
       account: ACCOUNT,
       debts: [
@@ -116,7 +117,8 @@ describe("BuyerDebtBanner", () => {
         debt({ intentId: "int_3" }),
       ],
     });
-    expect(mixed).toContain("Sign to settle (1 of 2)");
-    expect(mixed).toContain("signed, being collected");
+    expect(mixed).toContain("Settle $5.00");
+    expect(mixed).toContain("1 more payment you signed is being collected.");
+    expect(mixed).toContain("being collected");
   });
 });

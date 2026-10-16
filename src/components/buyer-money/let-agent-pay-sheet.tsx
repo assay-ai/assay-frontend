@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
 import { LocalTime } from "@/components/patterns/local-time";
@@ -10,11 +10,12 @@ import { CAP_PRESETS, capsToForm, keyGroups, parseCaps } from "@/features/buyer-
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { DEFAULT_DELEGATION_DAYS, parseDelegationForm, serverNowSeconds } from "@/features/delegation/delegation-form";
 import { submitRelayedDelegation } from "@/features/delegation/relayed-delegation";
+import { hasTightenDelay, loweredDelayNote, loweredFullyAt, lowersCaps } from "@/features/delegation/unsettled";
 import { applyLimitsSubmitted } from "@/features/escrow/after-set-limits";
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { servesPaidCalls } from "@/libs/chains/paid-rails";
-import { createDelegateIntent, submitDelegate } from "@/services/delegation.service";
+import { createDelegateIntent, getEscrowUnsettled, submitDelegate } from "@/services/delegation.service";
 import { createEscrowLimitsIntent } from "@/services/escrow.service";
 import { cn } from "@/utils";
 import { addressOfAccount } from "@/utils/chain";
@@ -128,13 +129,38 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
   const nowSeconds = serverNowSeconds(escrow?.serverTime, money.escrowQuery.dataUpdatedAt, Date.now());
   const until = new Date((nowSeconds + DEFAULT_DELEGATION_DAYS * 86_400) * 1000).toISOString();
 
+  /*
+    Renewing with lower numbers tightens the agent's grant. On an escrow with
+    the tighten delay (assay-evm D-21) new payments get the lower limits at
+    once and payments it already signed keep the old ones for that delay: say
+    so, with the moment it is fully in effect. Without the delay, a lowering
+    pauses the agent's payments for about 30 seconds while it settles.
+  */
+  const unsettled = useQuery({
+    queryKey: ["escrow-unsettled", null],
+    enabled: open && Boolean(renew) && Boolean(escrow?.exists),
+    retry: 0,
+    staleTime: 0,
+    queryFn: () => getEscrowUnsettled(Date.now()),
+  });
+  const tightenDelay = unsettled.data?.tightenDelaySeconds;
+  const renewParsed = renew ? parseCaps(renew.perCall, renew.perDay, money.decimals) : null;
+  const currentGrant =
+    renewParsed?.ok && renewParsed.perCall.atomic && renewParsed.perDay.atomic
+      ? { maxVoucherAmount: renewParsed.perCall.atomic, maxPerWindow: renewParsed.perDay.atomic }
+      : null;
+  // Only once the delay is known: an unread delay must not promise a pause or a time.
+  const lowering = unsettled.isSuccess && Boolean(currentGrant && chosen && lowersCaps(currentGrant, chosen));
+  const delayNote = loweredDelayNote(tightenDelay, currentGrant, chosen);
+  const fullyAt = lowering ? loweredFullyAt(nowSeconds * 1000, tightenDelay) : null;
+
   const walletBlocker = useWalletBlocker(money.signerState, money.ownerShort);
   const disabledReason = readOnly
     ? "Your account is blocked, so no agent can be allowed to pay now."
-    : !delegateAccount
-      ? "The agent has no payment key yet. Run agent-cli bind on its machine first."
-      : money.chainId && !servesPaidCalls(money.chainId)
-        ? `${money.chainName ?? "This chain"} currently serves free calls only, so this agent makes free calls there and pays for none.`
+    : money.chainId && !servesPaidCalls(money.chainId)
+      ? `${money.chainName ?? "This chain"} currently serves free calls only, so this agent makes free calls there and pays for none.`
+      : !delegateAccount
+        ? "The agent has no payment key yet. Run agent-cli bind on its machine first."
         : !escrow?.exists
         ? "Add funds first: your first deposit opens your escrow."
         : !chosen
@@ -226,10 +252,21 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
       acknowledge={delegateAccount ? "These characters match the key agent-cli printed." : undefined}
       successTitle={`${agentName} can pay now`}
       successDescription={
-        <>
-          Within these limits until <LocalTime value={until} dateOnly />. Next: its next paid call goes through; you can
-          watch it under Activity.
-        </>
+        lowering && delayNote ? (
+          <>
+            Within these limits until <LocalTime value={until} dateOnly />. {delayNote}
+          </>
+        ) : lowering && !hasTightenDelay(tightenDelay) ? (
+          <>
+            Within these limits until <LocalTime value={until} dateOnly />. Its payments pause for about 30 seconds while
+            the lower limits settle, then go on.
+          </>
+        ) : (
+          <>
+            Within these limits until <LocalTime value={until} dateOnly />. Next: its next paid call goes through; you
+            can watch it under Activity.
+          </>
+        )
       }
       doneAction={{ label: "Done", onClick: () => onOpenChange(false) }}
     >
@@ -249,6 +286,17 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
           ? "One signature."
           : "Two signatures: your account ceiling is raised to fit, then the agent's spending limits."}
       </p>
+      {lowering ? (
+        <p className="rounded-lg bg-02 px-3 py-2 text-body-13 text-02" data-testid="agent-pay-lower-delay">
+          {delayNote && fullyAt ? (
+            <>
+              Lower than now. {delayNote} Fully in effect at <LocalTime value={fullyAt} midSentence />.
+            </>
+          ) : (
+            "Lower than now. Its payments pause for about 30 seconds while the lower limits settle."
+          )}
+        </p>
+      ) : null}
     </WalletActionSheet>
   );
 }

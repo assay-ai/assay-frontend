@@ -121,5 +121,8 @@ describe("outcomeOf — buyer debt (final review M1/M2)", () => {
   it("keeps a voided debt and an ordinary call on their own outcome", () => {
     expect(outcomeOf("SETTLED", null).chip).toBe("charged");
     expect(outcomeOf("REFUNDED", "VOIDED").chip).toBe("not-charged");
+    // A voided debt and a forfeited payment keep the SETTLED status: never "Already settled · Charged".
+    expect(outcomeOf("SETTLED", "VOIDED")).toEqual({ chip: "not-charged", headline: "Not charged" });
+    expect(outcomeOf("SETTLED", null, true)).toEqual({ chip: "not-charged", headline: "Not charged" });
   });
 });
