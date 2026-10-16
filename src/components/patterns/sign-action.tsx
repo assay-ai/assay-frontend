@@ -528,8 +528,11 @@ export function WalletActionSheet({
             ) : null}
           </div>
         ) : null}
-        {/* Sticky, so the button stays on screen when a long form scrolls on a phone. */}
-        <SheetFooter className="sticky bottom-0 bg-01">
+        {/*
+          Sticky, so the button stays on screen when a long form scrolls on a phone. Above the
+          content: a timeline's step circles are positioned (z-[1]) and would paint over it.
+        */}
+        <SheetFooter className="sticky bottom-0 z-10 bg-01">
           <SignAction
             {...signProps}
             steps={signing.steps}
