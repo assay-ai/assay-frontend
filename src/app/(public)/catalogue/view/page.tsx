@@ -4,7 +4,7 @@ import { ArrowLeft, Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { FailsOftenChip, Fact, FreeTierBadge, ObservedFailuresLabel, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { BuyerCosts } from "@/components/explorer/buyer-costs";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
 import { StartFreeCta } from "@/components/explorer/start-free";
@@ -19,7 +19,7 @@ import {
   priceRange,
   routingNotes,
   formatCallPrice,
-  freeTierLabel,
+  offerLine,
   priceSentence,
   smallestFreeAllowance,
   stakeSummary,
@@ -104,7 +104,6 @@ function ToolPage() {
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="break-all font-mono text-heading-md text-01">{tool.name}</h1>
-          <FreeTierBadge label={freeTierLabel(tool.pricingMode, freeAllowance)} />
           {tool.routable ? null : <UnavailableTag />}
         </div>
         {tool.description ? <p className="max-w-[760px] text-body-md text-02">{tool.description}</p> : null}
@@ -113,11 +112,8 @@ function ToolPage() {
       <div className="grid grid-cols-1 gap-4 tablet:grid-cols-2">
         <section className="flex flex-col gap-3 rounded-xl border border-01 bg-01 p-4 tablet:p-5">
           <h2 className="text-label-md text-01">What a call costs</h2>
-          <p className="font-mono text-mono-xl font-semibold text-01">
-            {range?.differs ? <span className="mr-1.5 font-sans text-body-13 font-normal text-03">from</span> : null}
-            {range ? formatCallPrice(range.from) : tool.price ? formatCallPrice(tool.price) : "—"}
-            {tool.price ? <span className="ml-1.5 font-sans text-body-13 font-normal text-03">per call</span> : null}
-          </p>
+          {/* One price line, free first: the free tier and the price together. */}
+          <OfferPrice size="lg" offer={offerLine({ mode: tool.pricingMode, range, freeCallsPerDay: freeAllowance })} />
           <p className="text-body-13 text-02">
             {rangeLine ?? priceSentence({ mode: tool.pricingMode, price: tool.price, freeCallsPerDay: freeAllowance })}
           </p>
