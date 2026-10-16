@@ -47,8 +47,10 @@ import {
   type ReceiptState,
 } from "@/features/g30/receipt-state";
 import { ErrorBlock } from "@/features/g30/ui";
-import { collectionView, isCollectionState } from "@/features/g30/receipt-collection";
+import { collectionAt, collectionView, isCollectionState, timelineStamp } from "@/features/g30/receipt-collection";
 import { OwedReceiptAction } from "@/features/buyer-debt/owed-row-action";
+import { owedCallState } from "@/features/buyer-debt/debt-summary";
+import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 import type { Receipt } from "@/features/g30/wire";
 import { ApiError } from "@/libs/ApiClient";
 import { getReceipt } from "@/services";
@@ -56,7 +58,6 @@ import { getProviderVerification } from "@/services/providers.service";
 import { getVerdictEvidence, resolveVerdictIdForIntent } from "@/services/verdicts.service";
 import { responseClassLabel } from "@/features/call-classes/labels";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { formatClock, utcTitle } from "@/libs/local-time";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { formatMoney } from "@/utils/money";
@@ -96,10 +97,9 @@ const OVERRIDABLE: ReceiptState[] = [
   "FORFEITED",
 ];
 
-/** "11:42:07.221" — the Timeline's own format. */
-/** A timeline stamp: local clock with seconds, the exact UTC instant on hover. */
+/** A timeline stamp: local day and clock with seconds, the exact UTC instant on hover. */
 function stamp(iso: string): Pick<TimelineEvent, "time" | "timeTitle"> {
-  return { time: formatClock(iso, { seconds: true }), timeTitle: utcTitle(iso, { seconds: true }) };
+  return timelineStamp(iso);
 }
 
 function pretty(value: unknown): string {
@@ -111,6 +111,8 @@ function ReceiptPageContent() {
   const search = useSearchParams();
   const intentId = search.get("id") ?? "";
   const names = useEntityNames({ kinds: ["tool", "provider"] });
+  // The same debts query as the banner (one request): a written-off row takes its write-off time from it.
+  const debtsQuery = useBuyerDebtsQuery();
 
   const receiptQuery = useQuery<Receipt, ApiError>({
     queryKey: ["receipt", intentId],
@@ -244,10 +246,11 @@ function ReceiptPageContent() {
   if (receipt.evaluatedAt) {
     events.push({ ...stamp(receipt.evaluatedAt), label: "Result checked", tone: "neutral" });
   }
-  if (receipt.settledAt && collection) {
+  if (receipt.settledAt && collection && isCollectionState(state)) {
     // A debt, a voided debt or a forfeit, in what it means for the buyer.
+    const listedDebt = owedCallState(debtsQuery.data, receipt.intentId);
     events.push({
-      ...stamp(receipt.settledAt),
+      ...stamp(collectionAt(state, receipt.settledAt, listedDebt.kind === "unknown" ? null : listedDebt.debt)),
       label: collection.timeline.label,
       meta: collection.timeline.meta,
       tone: collection.owed ? "primary" : "teal",

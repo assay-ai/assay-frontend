@@ -47,7 +47,8 @@ export const Timeline = React.forwardRef<HTMLOListElement, TimelineProps>(
       {events.map((event, index) => (
         <li
           key={event.id ?? `${event.label}-${index}`}
-          className="flex w-full items-center gap-3.5 py-2.5"
+          // On a phone the meta wraps under the label: a stamp carries its day ("Sep 15, 02:11:30").
+          className="flex w-full flex-wrap items-center gap-x-3.5 gap-y-1 py-2.5 tablet:flex-nowrap"
         >
           <span className="sr-only">
             {event.time} — {event.label}
@@ -57,11 +58,11 @@ export const Timeline = React.forwardRef<HTMLOListElement, TimelineProps>(
             {event.time}
           </span>
           <span aria-hidden="true" className={dotVariants({ tone: event.tone })} />
-          <span aria-hidden="true" className="w-[180px] shrink-0 text-label-sm text-01">
+          <span aria-hidden="true" className="min-w-0 flex-1 text-label-sm text-01 tablet:w-[180px] tablet:flex-none tablet:shrink-0">
             {event.label}
           </span>
           {event.meta ? (
-            <span aria-hidden="true" className="min-w-0 flex-1 text-mono-12 font-mono text-02">
+            <span aria-hidden="true" className="min-w-0 basis-full text-mono-12 font-mono text-02 tablet:basis-auto tablet:flex-1">
               {event.meta}
             </span>
           ) : null}
