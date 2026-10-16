@@ -201,7 +201,7 @@ export function WithdrawSheet({
             </p>
           ) : null}
           <p className="text-body-xs text-03">
-            Calls already made settle first, so you receive at most the amount you ask for.
+            Calls your agents already made are paid first, so you may receive less than you ask for, never more.
           </p>
         </>
       )}
