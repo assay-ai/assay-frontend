@@ -302,9 +302,9 @@ describe("heldCallsText", () => {
     expect(heldCallsText([], new Set())).toBe("0 calls in flight — returns within 24h");
   });
   it("does not call a held debt a call in flight", () => {
-    expect(heldCallsText(["d1"], owed)).toBe("1 unpaid call — held until you settle");
+    expect(heldCallsText(["d1"], owed)).toBe("1 unpaid call — held until it is collected");
     expect(heldCallsText(["a", "d1"], owed)).toBe(
-      "1 call in flight — returns within 24h · 1 unpaid call — held until you settle",
+      "1 call in flight — returns within 24h · 1 unpaid call — held until it is collected",
     );
     expect(heldCallsText(["a", "d1"], owed, { short: true })).toBe("1 call in flight · 1 unpaid");
   });
