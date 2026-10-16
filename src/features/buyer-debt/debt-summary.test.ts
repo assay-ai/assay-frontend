@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BuyerDebt } from "@/interfaces/buyer-debt";
 import { ApiError } from "@/libs/ApiClient";
@@ -31,6 +31,12 @@ const debt = (overrides: Partial<BuyerDebt> = {}): BuyerDebt => ({
   ...overrides,
 });
 
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-17T00:00:00.000Z"));
+});
+afterEach(() => vi.useRealTimers());
+
 describe("debtTotal", () => {
   it("adds the amounts, and refuses to add different assets", () => {
     expect(debtTotal([debt(), debt({ amount: { amount: "405000", asset: ASSET, decimals: 6 } })])).toEqual({
@@ -54,7 +60,7 @@ describe("debtBannerSummary", () => {
     expect(summary.kind).toBe("settle");
     expect(summary.title).toBe("You owe $2.50 for 1 call. Paid calls are paused until you settle.");
     expect(summary.detail).toBe(
-      "Settle by 15 Nov 2026, or the provider is not paid (paid calls stay paused either way). Free calls still work.",
+      "Settle by Nov 15, 00:00 UTC (in 29 days), or the provider is not paid (paid calls stay paused either way). Free calls still work.",
     );
     expect(summary.actionLabel).toBe("Settle $2.50");
     expect(summary.toSign.map((d) => d.intentId)).toEqual(["int_1"]);
@@ -65,7 +71,7 @@ describe("debtBannerSummary", () => {
       account: ACCOUNT,
       debts: [debt({ writeOffAt: "2026-11-20T00:00:00.000Z" }), debt({ intentId: "int_2", writeOffAt: "2026-11-10T00:00:00.000Z" })],
     })!;
-    expect(summary.detail).toContain("Settle by 10 Nov 2026, or the providers are not paid");
+    expect(summary.detail).toContain("Settle by Nov 10, 00:00 UTC (in 24 days), or the providers are not paid");
     expect(summary.title).toBe("You owe $5.00 for 2 calls. Paid calls are paused until you settle.");
   });
 

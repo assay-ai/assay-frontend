@@ -1,6 +1,8 @@
 import { shortToolId } from "@/components/g31/use-tool-names";
 import { debtCauseText } from "@/features/call-classes/labels";
+import { formatRemaining } from "@/hooks/useCountdown";
 import type { BuyerDebt, BuyerDebtState, CallDebt } from "@/interfaces/buyer-debt";
+import { formatLocalDateTime, zoneLabel } from "@/libs/local-time";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -8,16 +10,38 @@ import { formatMoney } from "@/utils/money";
  * a refused call say the same thing.
  */
 
-/** `16 Nov 2026`, in UTC — the day the debt is written off. */
-export function debtDate(iso: string): string {
+export interface DeadlineOptions {
+  /** IANA zone; defaults to the reader's own. */
+  timeZone?: string;
+  /** "Now"; defaults to `Date.now()`. */
+  now?: number;
+}
+
+/**
+ * "in 12 days", "in 5h 20m", or `null` once it has passed. Days are whole
+ * days from two on, so a far deadline does not read as a timer.
+ */
+export function deadlineCountdown(iso: string, options: DeadlineOptions = {}): string | null {
+  const at = new Date(iso).getTime();
+  if (Number.isNaN(at)) return null;
+  const msLeft = at - (options.now ?? Date.now());
+  if (msLeft <= 0) return null;
+  const days = Math.floor(msLeft / 86_400_000);
+  return days >= 2 ? `in ${days} days` : `in ${formatRemaining(msLeft)}`;
+}
+
+/**
+ * The write-off moment in the reader's own time zone, with the zone and,
+ * while it is ahead, a countdown: "Nov 15, 18:00 GMT-8 (in 12 days)". A UTC
+ * date alone read a day late west of UTC (review 2026-10-17 P2-1). The
+ * debts are read client-side only, so the local zone is safe to print.
+ */
+export function debtDeadline(iso: string, options: DeadlineOptions = {}): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  const when = `${formatLocalDateTime(date, { ...options, alwaysDay: true, midSentence: true })} ${zoneLabel(date, options)}`.trim();
+  const countdown = deadlineCountdown(iso, options);
+  return countdown ? `${when} (${countdown})` : when;
 }
 
 /** A debt's state; an older backend sends none, and every debt it lists is open. */
@@ -60,14 +84,14 @@ export function debtSentence(debt: Pick<BuyerDebt, "cause" | "writeOffAt" | "sta
   const why = `A call your agent made could not be collected from your escrow (${debtCauseText(debt.cause)})`;
   if (state === "WRITTEN_OFF") {
     return (
-      `${why}, and it was written off on ${debtDate(debt.writeOffAt)}: the funds held for it were released ` +
+      `${why}, and it was written off on ${debtDeadline(debt.writeOffAt)}: the funds held for it were released ` +
       "and the provider was not paid. Paid calls stay paused until you settle it, and settling it pays " +
       "the provider. Free calls still work."
     );
   }
   return (
     `${why}. Paid calls are paused until you settle it. Free calls still work. ` +
-    `If not settled by ${debtDate(debt.writeOffAt)}, it is written off and the provider goes unpaid, ` +
+    `If not settled by ${debtDeadline(debt.writeOffAt)}, it is written off and the provider goes unpaid, ` +
     "but paid calls stay paused until you settle it."
   );
 }
@@ -103,8 +127,8 @@ export function debtBannerDescription(debts: readonly BuyerDebt[]): string {
     const earliest = open.reduce((first, debt) => (debt.writeOffAt < first.writeOffAt ? debt : first));
     parts.push(
       open.length === 1
-        ? `If the open one is not settled by ${debtDate(earliest.writeOffAt)}, it is written off and its provider goes unpaid.`
-        : `If not settled by ${debtDate(earliest.writeOffAt)} (the earliest), the open ones are written off and those providers go unpaid.`,
+        ? `If the open one is not settled by ${debtDeadline(earliest.writeOffAt)}, it is written off and its provider goes unpaid.`
+        : `If the earliest is not settled by ${debtDeadline(earliest.writeOffAt)}, the open ones are written off from then on and those providers go unpaid.`,
     );
   }
   return parts.join(" ");

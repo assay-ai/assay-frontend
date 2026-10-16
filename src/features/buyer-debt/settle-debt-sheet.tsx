@@ -23,7 +23,7 @@ import { createDebtVoucherIntent, getBuyerDebts, submitDebtVoucher } from "@/ser
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { formatMoney } from "@/utils/money";
 
-import { debtDate, debtStateOf, debtsToSign, settledToast, splitDebts } from "./debt-copy";
+import { debtDeadline, debtStateOf, debtsToSign, settledToast, splitDebts } from "./debt-copy";
 import { balanceAfterSettling, debtTotal, resumesAfterSettling } from "./debt-summary";
 import { settleDebt } from "./settle-debt";
 import { refreshesDebts, settleDebtFailure } from "./settle-debt-errors";
@@ -252,8 +252,8 @@ function SettleDebtSheet({
                   <dd className="text-02 [overflow-wrap:anywhere]">
                     {debtCauseText(debt.cause)}
                     {debtStateOf(debt) === "WRITTEN_OFF"
-                      ? `. Written off on ${debtDate(debt.writeOffAt)}: the provider was not paid; this pays them.`
-                      : `. Settle by ${debtDate(debt.writeOffAt)}, or the provider goes unpaid.`}
+                      ? `. Written off on ${debtDeadline(debt.writeOffAt)}: the provider was not paid; this pays them.`
+                      : `. Settle by ${debtDeadline(debt.writeOffAt)}, or the provider goes unpaid.`}
                   </dd>
                 </dl>
               </li>
