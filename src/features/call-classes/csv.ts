@@ -254,8 +254,10 @@ export const PENDING_NOTE =
  * PAID_BUYER_DEBT is a call that passed but whose payment could not be
  * collected from the buyer yet (the `reason` column names why): the price is
  * still held in the buyer's escrow, and it is paid once the buyer signs again.
- * PAID_UNCOLLECTED is one the buyer never settled, written off after 30 days:
- * not paid, no fee, and nobody owes it — the platform never pays providers.
+ * PAID_UNCOLLECTED is one the buyer did not settle within 30 days, written off:
+ * not paid and no fee taken. The buyer still owes it (its paid calls stay
+ * refused) and the provider is paid if it settles later; the platform never
+ * pays providers. A legacy platform absorb lands here too, and nobody owes that.
  * PROVIDER_FORFEITED sits beside them: a rail-B call whose voucher was not
  * collected because the provider's stake was below the minimum or it was
  * blocked. Nobody was charged or credited and no fee was taken; the `reason`

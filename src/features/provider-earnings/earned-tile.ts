@@ -51,12 +51,12 @@ export interface UnpaidLine {
 export const UNPAID_COPY: Record<UnpaidLine["key"], { reason: string; action: string; actionable: boolean }> = {
   debtOutstanding: {
     reason: "Passed our checks, but the buyer's payment did not go through yet. The money is still in their escrow.",
-    action: "Nothing to do: it is the buyer's debt. Paid to you when they settle; written off if they do not within 30 days.",
+    action: "Nothing to do: it is the buyer's debt. Paid to you when they settle. After 30 days it is written off, but still owed.",
     actionable: false,
   },
   uncollected: {
-    reason: "Passed our checks, but the buyer did not settle within 30 days, so it was written off.",
-    action: "Nothing to do. No fee was taken, and nobody owes it: Assay does not pay for unpaid calls.",
+    reason: "Passed our checks, but the buyer did not settle within 30 days, so it was written off. You were not paid.",
+    action: "Nothing to do. The buyer still owes it and cannot make paid calls until they settle; you are paid then.",
     actionable: false,
   },
   forfeited: {
@@ -91,7 +91,8 @@ export function unpaidLines(
         `${format(totals.debtOutstanding)} for ${calls(n)} that passed our checks, but the ` +
         "buyer's payment could not be collected from their escrow. The money is still held " +
         "there; you are paid as soon as the buyer signs again. If they do not within 30 days, " +
-        "it is written off and you are not paid. The platform does not pay it in their place.",
+        "it is written off but the buyer still owes it, and you are paid if they settle later. " +
+        "The platform does not pay it in their place.",
     });
   }
   if (nonZero(totals.uncollected, totals.uncollectedCalls)) {
@@ -105,8 +106,9 @@ export function unpaidLines(
       calls: n,
       explanation:
         `${format(totals.uncollected)} for ${calls(n)} that passed our checks, but the buyer ` +
-        "never settled the payment, so it was written off. You were not paid, no fee was " +
-        "taken, and nobody owes it — the platform does not cover unpaid calls.",
+        "did not settle the payment within 30 days, so it was written off: you were not paid " +
+        "and no fee was taken. The buyer still owes it and cannot make paid calls until they " +
+        "settle; if they do, you are paid then. The platform does not pay it in their place.",
     });
   }
   if (nonZero(totals.forfeited, totals.forfeitedCalls)) {
@@ -136,8 +138,8 @@ export interface EarningsSplit {
   inWallet: Money | null;
   /**
    * Open buyer debt: passed our checks, the buyer's payment is not collected
-   * yet. Not in `earned`; paid once the buyer signs again (or never, if it is
-   * written off). Never shown as owed by the platform.
+   * yet. Not in `earned`; paid once the buyer signs again — even after it is
+   * written off, since the buyer still owes it. Never shown as owed by the platform.
    */
   waitingOnBuyers: Money | null;
   waitingOnBuyersCalls: number;

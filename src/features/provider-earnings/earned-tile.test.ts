@@ -66,7 +66,9 @@ describe("unpaidLines", () => {
     expect(lines.map((l) => l.key)).toEqual(["debtOutstanding", "uncollected", "forfeited"]);
     expect(lines[0].explanation).toMatch(/^\$0\.09 for 1 call that passed/);
     expect(lines[0].explanation).toMatch(/platform does not pay it/);
-    expect(lines[1].explanation).toMatch(/nobody owes it/);
+    expect(lines[1].explanation).toMatch(/buyer still owes it/);
+    expect(lines[1].explanation).toMatch(/you are paid then/);
+    expect(lines[1].explanation).not.toMatch(/nobody owes/);
     expect(lines[2].explanation).toMatch(/buyer was not charged/);
     for (const line of lines) expect(line.explanation).not.toMatch(/owed by the platform/);
   });
@@ -123,7 +125,9 @@ describe("unpaidLines: reason and next step", () => {
     expect(lines[0].action).toMatch(/^Nothing to do/);
     expect(lines[0].action).toMatch(/30 days/);
     expect(lines[1].actionable).toBe(false);
-    expect(lines[1].action).toMatch(/nobody owes it/);
+    expect(lines[1].action).toMatch(/buyer still owes it/);
+    expect(lines[1].action).toMatch(/you are paid then/);
+    expect(lines[0].action).toMatch(/written off, but still owed/);
   });
 
   it("tells the provider how to avoid a forfeit", () => {
