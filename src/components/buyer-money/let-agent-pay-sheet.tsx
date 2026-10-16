@@ -157,10 +157,10 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
   const walletBlocker = useWalletBlocker(money.signerState, money.ownerShort);
   const disabledReason = readOnly
     ? "Your account is blocked, so no agent can be allowed to pay now."
-    : !delegateAccount
-      ? "The agent has no payment key yet. Run agent-cli bind on its machine first."
-      : money.chainId && !servesPaidCalls(money.chainId)
-        ? `${money.chainName ?? "This chain"} currently serves free calls only, so this agent makes free calls there and pays for none.`
+    : money.chainId && !servesPaidCalls(money.chainId)
+      ? `${money.chainName ?? "This chain"} currently serves free calls only, so this agent makes free calls there and pays for none.`
+      : !delegateAccount
+        ? "The agent has no payment key yet. Run agent-cli bind on its machine first."
         : !escrow?.exists
         ? "Add funds first: your first deposit opens your escrow."
         : !chosen
