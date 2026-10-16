@@ -13,11 +13,12 @@ import { Term } from "@/components/patterns/term";
 import {
   checkSentences,
   failRateLabel,
+  listingOfferText,
+  normalisedMode,
   failsOften,
   notTakingPaidCalls,
   priceRange,
   routingNotes,
-  formatCallPrice,
   offerLine,
   costSentence,
   smallestFreeAllowance,
@@ -186,8 +187,7 @@ function ToolPage() {
                           {failsOften(provider.quality) ? <FailsOftenChip /> : null}
                         </span>
                         <span className="text-body-xs text-03">
-                          {listing ? `${formatCallPrice(listing.price)} per call` : ""}
-                          {listing?.freeCallsPerAgentPerDay ? ` · ${listing.freeCallsPerAgentPerDay} free calls/day per agent` : ""}
+                          {listing ? listingOfferText(listing) : ""}
                           {notRouted ? " · not taking paid calls right now" : ""}
                         </span>
                       </div>
@@ -224,7 +224,9 @@ function ToolPage() {
         <div className="flex flex-col gap-1">
           <p className="text-label-md text-01">Let your agent use {tool.name}</p>
           <p className="text-body-13 text-02">
-            {freeAllowance
+            {freeAllowance && normalisedMode(tool.pricingMode) === "FREE"
+              ? `Sign up, create an agent key, and every call is free, up to ${freeAllowance} a day for each agent — no deposit needed.`
+              : freeAllowance
               ? `Sign up, create an agent key, and the first ${freeAllowance} calls a day are free for each agent — no deposit needed.`
               : "Sign up, create an agent key and add funds. You pay only for results that pass."}
           </p>

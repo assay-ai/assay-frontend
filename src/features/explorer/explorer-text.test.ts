@@ -12,6 +12,7 @@ import {
   priceRange,
   formatCallPrice,
   freeTierLabel,
+  listingOfferText,
   moneyByAsset,
   costSentence,
   offerLine,
@@ -449,5 +450,27 @@ describe("notChargedPrivacyNote", () => {
     for (const note of [withheld, notChargedPrivacyNote(false, 5)]) {
       expect(note).not.toMatch(/\. [a-z]/);
     }
+  });
+});
+
+describe("FREE listing with a daily cap (final2 P3)", () => {
+  const free = { amount: "0", asset: "usdg", decimals: 6 };
+  const paid = { amount: "120000", asset: "usdg", decimals: 6 };
+  it("says every call is free, up to the cap, never a price per call", () => {
+    expect(listingOfferText({ pricingMode: "FREE", price: free, freeCallsPerAgentPerDay: 100 })).toBe(
+      "Free, up to 100 calls/day per agent",
+    );
+    expect(listingOfferText({ pricingMode: "FREE", price: free, freeCallsPerAgentPerDay: null })).toBe("Free");
+    expect(offerLine({ mode: "FREE", range: null, freeCallsPerDay: 100 })).toMatchObject({
+      price: "Free",
+      cap: ", up to 100 calls/day per agent",
+    });
+    expect(freeTierLabel("FREE", 100)).toBe("Free, up to 100 calls/day per agent");
+  });
+  it("keeps the freemium and paid wording", () => {
+    expect(listingOfferText({ pricingMode: "FREEMIUM", price: paid, freeCallsPerAgentPerDay: 50 })).toBe(
+      "Free for 50 calls/day per agent, then $0.12 per call",
+    );
+    expect(listingOfferText({ pricingMode: "PAID", price: paid, freeCallsPerAgentPerDay: null })).toBe("$0.12 per call");
   });
 });

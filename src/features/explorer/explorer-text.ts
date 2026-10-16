@@ -36,11 +36,11 @@ export function hasFreeTier(mode: string | null | undefined): boolean {
  * The free-tier badge text: "Free · 100 calls/day per agent" (the backend
  * counts free calls per agent, per listing, per UTC day). With no number known yet
  * (the list endpoint does not carry it), just "Free tier"; for a fully free
- * tool, "Free".
+ * tool, "Free" — "Free, up to 100 calls/day per agent" when it has a daily cap.
  */
 export function freeTierLabel(mode: string | null | undefined, callsPerDay?: number | null): string | null {
   const m = normalisedMode(mode);
-  if (m === "FREE") return "Free";
+  if (m === "FREE") return `Free${freeCap(callsPerDay)}`;
   if (m !== "FREEMIUM") return null;
   if (callsPerDay && callsPerDay > 0) return `Free · ${callsPerDay.toLocaleString("en-US")} calls/day per agent`;
   return "Free tier";
@@ -149,7 +149,33 @@ export interface OfferLine {
   price: string;
   /** " per call" after a paid price; empty for "Free" and "—". */
   unit: string;
+  /** ", up to 100 calls/day per agent" after "Free": a FREE listing's daily cap, as wrapping text. */
+  cap?: string;
   text: string;
+}
+
+/** ", up to 100 calls/day per agent", or "" without a cap. */
+function freeCap(freeCallsPerDay: number | null | undefined): string {
+  return freeCallsPerDay && freeCallsPerDay > 0 ? `, up to ${freeCallsPerDay.toLocaleString("en-US")} calls/day per agent` : "";
+}
+
+/**
+ * One provider's listing of a tool, in the same words as `offerLine`: "Free,
+ * up to 100 calls/day per agent" (FREE), "Free for 50 calls/day per agent,
+ * then $0.12 per call" (FREEMIUM), "$0.12 per call" (PAID). For the "Who
+ * serves it" rows, where a bare price plus "100 free calls/day" contradicted
+ * itself on a FREE listing.
+ */
+export function listingOfferText(listing: {
+  pricingMode: string | null | undefined;
+  price: Money | null | undefined;
+  freeCallsPerAgentPerDay?: number | null;
+}): string {
+  return offerLine({
+    mode: listing.pricingMode,
+    range: listing.price ? { from: listing.price, held: listing.price, differs: false } : null,
+    freeCallsPerDay: listing.freeCallsPerAgentPerDay,
+  }).text;
 }
 
 export function offerLine(input: {
@@ -158,7 +184,11 @@ export function offerLine(input: {
   freeCallsPerDay?: number | null;
 }): OfferLine {
   const m = normalisedMode(input.mode);
-  if (m === "FREE") return { lead: null, price: "Free", unit: "", text: "Free" };
+  if (m === "FREE") {
+    // Every call is free, up to a daily cap: never "Free per call · 100 free calls/day" (final2 P3).
+    const cap = freeCap(input.freeCallsPerDay);
+    return cap ? { lead: null, price: "Free", unit: "", cap, text: `Free${cap}` } : { lead: null, price: "Free", unit: "", text: "Free" };
+  }
   const lead =
     m === "FREEMIUM"
       ? input.freeCallsPerDay && input.freeCallsPerDay > 0
