@@ -18,6 +18,7 @@ import {
   offerSubLine,
   notChargedEmptyText,
   notChargedRowText,
+  notChargedReasonTones,
   notChargedSplit,
   plural,
   priceSentence,
@@ -377,10 +378,17 @@ describe("notChargedSplit (public not-charged totals)", () => {
       ["Provider returned an error", 30],
       ["No usable result", 20],
       ["Payment not collected", 10],
-      ["The rest, grouped for privacy (counts are rounded down to tens)", 11],
+      ["The rest, incl. rounding remainders, grouped for privacy", 11],
     ]);
     expect(lines[0]!.tone).toBe("teal");
     expect(new Set(lines.map((l) => l.tone)).size).toBe(lines.length);
+  });
+
+  it("gives every reason its own hue, none of them the guarantee's teal or a green next to it", () => {
+    const tones = Object.values(notChargedReasonTones());
+    expect(new Set(tones).size).toBe(tones.length);
+    expect(tones.filter((tone) => tone === "teal")).toHaveLength(1);
+    expect(tones).not.toContain("success");
   });
 
   it("gives a reason the same tone whatever its place in the list", () => {

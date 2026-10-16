@@ -280,7 +280,7 @@ function EarningsPanel({
           <span className="font-mono text-heading-md text-01">{formatMoney(split.inWallet, { decimals: 2 })}</span>
         </div>
         {segments.length > 1 ? <MoneySplit segments={segments} /> : null}
-        {/* Passed but not in the wallet: open buyer debt (nothing to do) and forfeits (keep the stake up). */}
+        {/* Passed but not in the wallet: the same lines as Money (buyer debt, never collected, forfeits). */}
         {unpaidNotes.length > 0 ? (
           <ul className="flex flex-col gap-1.5" data-testid="provider-home-unpaid">
             {unpaidNotes.map((note) => {

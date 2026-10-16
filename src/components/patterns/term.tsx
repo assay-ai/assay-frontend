@@ -13,9 +13,10 @@ import { cn } from "@/utils";
  *   <Term k="escrow">escrow</Term>
  *   <Term k="binding" />            // renders the glossary's own term ("Listing")
  *
- * The definition is always in the DOM (visually hidden) and wired to the
- * trigger with `aria-describedby`, so a screen reader reads it whether or not
- * the tooltip is open. The tooltip is the visual layer on top: it opens on
+ * The definition is always in the DOM (`hidden`) and wired to the trigger
+ * with `aria-describedby`, so a screen reader reads it as the term's
+ * description whether or not the tooltip is open — and never as part of the
+ * surrounding sentence. The tooltip is the visual layer on top: it opens on
  * hover and keyboard focus like any tooltip, and also on tap, because a touch
  * screen has no hover and the people who most need a definition are on
  * phones as often as not.
@@ -98,7 +99,9 @@ export function Term({ k, inline = false, children, className }: TermProps) {
           </TooltipPrimitive.Content>
         </TooltipPrimitive.Portal>
       </TooltipPrimitive.Root>
-      <span id={id} className="sr-only">
+      {/* `hidden`, not `sr-only`: aria-describedby still reads a hidden element, but an sr-only one is
+          also part of the sentence it sits in, so the definition was read (and copied) mid-paragraph. */}
+      <span id={id} hidden>
         {entry.definition}
       </span>
     </TooltipPrimitive.Provider>

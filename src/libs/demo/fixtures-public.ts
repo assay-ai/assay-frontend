@@ -62,38 +62,83 @@ function utcDay(daysAgo: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+const REASON_TEXT: Record<string, [string, PublicNotChargedCall["bucket"]]> = {
+  FAILED_CHECK: ["The result failed our check, so the buyer got the held amount back.", "FAILED_VERIFICATION"],
+  PROVIDER_ERROR: [
+    "The provider returned an error instead of a result, so the call was not charged.",
+    "PROVIDER_OR_PLATFORM_ERROR",
+  ],
+  EXPIRED: ["The call did not finish in time, so the held amount was released.", "PROVIDER_OR_PLATFORM_ERROR"],
+  NOT_COLLECTED: ["Payment for this call was not collected, so the buyer was not charged.", "PROVIDER_OR_PLATFORM_ERROR"],
+};
+
+/**
+ * The recent feed: tool, the provider that SERVED the call, reason, days ago.
+ * Spread over most paid tools, so a tool page (public or signed in) has its
+ * own rows rather than an empty record next to a busy platform-wide one.
+ */
+const RECENT: readonly [tool: string, provider: string, reason: keyof typeof REASON_TEXT, daysAgo: number][] = [
+  ["get_weather", "Northwind Geo", "FAILED_CHECK", 1],
+  ["search_web", "Helios Data Labs", "FAILED_CHECK", 1],
+  ["market-quote", "Harborlight Data Ltd", "FAILED_CHECK", 1],
+  ["get_weather", "Helios Data Labs", "PROVIDER_ERROR", 2],
+  ["extract_page_text", "Cobalt Street Data", "FAILED_CHECK", 2],
+  ["geocode_place", "Northwind Geo", "FAILED_CHECK", 3],
+  ["search_web", "Verdant Atlas", "FAILED_CHECK", 3],
+  ["get_usd_eur_rate", "Meridian Index", "PROVIDER_ERROR", 3],
+  ["get_token_market", "Tidewater Markets", "FAILED_CHECK", 4],
+  ["get_weather", "Quanta Signals", "EXPIRED", 4],
+  ["search_wikipedia", "Lattice Retrieval", "FAILED_CHECK", 5],
+  ["search_web", "Cobalt Street Data", "NOT_COLLECTED", 5],
+  ["scrape_url", "Cobalt Street Data", "FAILED_CHECK", 5],
+  ["summarize_document", "Quanta Signals", "FAILED_CHECK", 6],
+  ["deep_research", "Helios Data Labs", "EXPIRED", 6],
+  ["get_weather", "Northwind Geo", "FAILED_CHECK", 6],
+];
+
+/**
+ * The not-charged calls that did not fail the check, by reason, as counted.
+ * The wire carries them the way the server does: a reason is named only when
+ * enough buyers stand behind it, and named counts are rounded down to tens; the
+ * rare reasons and every rounding remainder make up the grouped rest.
+ */
+const OTHER_REASONS: readonly { reason: string; calls: number; named: boolean }[] = [
+  { reason: "PROVIDER_ERROR", calls: 34, named: true },
+  { reason: "EXPIRED", calls: 27, named: true },
+  { reason: "NOT_COLLECTED", calls: 13, named: true },
+  { reason: "REQUEST_REJECTED", calls: 7, named: false },
+  { reason: "NO_USABLE_RESULT", calls: 5, named: false },
+  { reason: "OUT_OF_SCOPE", calls: 3, named: false },
+];
+const FAILED_CHECK_CALLS = 241;
+
 function notCharged(): PublicNotCharged {
   const tools = signedIn<{ tools: CatalogueTool[] }>("/catalogue/tools")?.tools ?? [];
   const providers = signedIn<{ providers: CatalogueProvider[] }>("/catalogue/providers")?.providers ?? [];
   const byName = new Map(tools.map((t) => [t.name, t]));
-  const providerOf = (toolId: string) =>
-    providers.find((p) => p.toolIds.includes(toolId))?.legalName ?? "A listed provider";
+  const byLegalName = new Map(providers.map((p) => [p.legalName, p]));
 
-  const rows: [string, string, string, PublicNotChargedCall["bucket"], number][] = [
-    ["get_weather", "FAILED_CHECK", "The result failed our check, so the buyer got the held amount back.", "FAILED_VERIFICATION", 1],
-    ["search_web", "FAILED_CHECK", "The result failed our check, so the buyer got the held amount back.", "FAILED_VERIFICATION", 1],
-    ["get_weather", "PROVIDER_ERROR", "The provider returned an error instead of a result, so the call was not charged.", "PROVIDER_OR_PLATFORM_ERROR", 2],
-    ["search_web", "FAILED_CHECK", "The result failed our check, so the buyer got the held amount back.", "FAILED_VERIFICATION", 3],
-    ["get_weather", "EXPIRED", "The call did not finish in time, so the held amount was released.", "PROVIDER_OR_PLATFORM_ERROR", 4],
-    ["search_web", "NOT_COLLECTED", "Payment for this call was not collected, so the buyer was not charged.", "PROVIDER_OR_PLATFORM_ERROR", 5],
-    ["get_weather", "FAILED_CHECK", "The result failed our check, so the buyer got the held amount back.", "FAILED_VERIFICATION", 6],
-  ];
-  const recent: PublicNotChargedCall[] = rows.flatMap(([name, reason, reasonText, bucket, ago]) => {
-    const tool = byName.get(name) ?? tools.find((t) => t.routable);
-    if (!tool || !tool.price) return [];
-    return [
-      {
-        toolId: tool.id,
-        toolName: tool.name,
-        providerName: providerOf(tool.id),
-        price: tool.price,
-        reason,
-        reasonText,
-        bucket,
-        day: utcDay(ago),
-      },
-    ];
+  // A call's amount is the price of the provider that served it (the backend's
+  // `price`); the held maximum applies only when no provider served it.
+  const servedPrice = (providerId: string, toolId: string) =>
+    signedIn<CatalogueProviderDetail>(`/catalogue/providers/${providerId}`)?.tools.find((t) => t.toolId === toolId)
+      ?.price;
+
+  const recent: PublicNotChargedCall[] = RECENT.flatMap(([name, providerName, reason, ago]) => {
+    const tool = byName.get(name);
+    const provider = byLegalName.get(providerName);
+    if (!tool || !provider || !provider.toolIds.includes(tool.id)) return [];
+    const price = servedPrice(provider.providerId, tool.id) ?? tool.price;
+    if (!price) return [];
+    const [reasonText, bucket] = REASON_TEXT[reason];
+    return [{ toolId: tool.id, toolName: tool.name, providerName, price, reason, reasonText, bucket, day: utcDay(ago) }];
   });
+
+  const named = OTHER_REASONS.filter((r) => r.named).map((r) => ({
+    reason: r.reason,
+    calls: Math.floor(r.calls / 10) * 10,
+  }));
+  const rest = OTHER_REASONS.reduce((sum, r) => sum + r.calls, 0);
   const asset = recent[0]?.price;
   return {
     windowDays: 30,
@@ -103,17 +148,11 @@ function notCharged(): PublicNotCharged {
     withheldForPrivacy: true,
     totals: {
       callsChecked: 18_420,
-      callsNotCharged: 312,
-      callsFailedCheck: 241,
+      callsNotCharged: FAILED_CHECK_CALLS + rest,
+      callsFailedCheck: FAILED_CHECK_CALLS,
       amountNotCharged: asset ? [{ amount: "1874000", asset: asset.asset, decimals: asset.decimals }] : [],
-      // 312 − 241 = 71 split by reason, each rounded down to tens as the
-      // server does; the remainders are grouped for privacy.
-      notChargedByReason: [
-        { reason: "PROVIDER_ERROR", calls: 30 },
-        { reason: "EXPIRED", calls: 20 },
-        { reason: "NOT_COLLECTED", calls: 10 },
-      ],
-      callsNotChargedOther: 11,
+      notChargedByReason: named,
+      callsNotChargedOther: rest - named.reduce((sum, r) => sum + r.calls, 0),
     },
     recent,
   };

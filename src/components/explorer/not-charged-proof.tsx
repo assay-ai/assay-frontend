@@ -42,7 +42,7 @@ const DOT_TONE: Record<ReturnType<typeof notChargedRowText>["tone"], string> = {
   primary: "bg-primary-500",
   warning: "bg-warning-500",
   danger: "bg-danger-500",
-  success: "bg-success-500",
+  pink: "bg-pink-500",
   neutral: "bg-chart-6",
 };
 
