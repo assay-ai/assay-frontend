@@ -1,12 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { routes } from "@/libs/routes";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
-import { owedCallState } from "./debt-summary";
+import { debtBannerSummary, owedCallState } from "./debt-summary";
 import { useBuyerDebtsQuery, useSettleDebt } from "./settle-debt-sheet";
 
 /**
@@ -68,4 +70,36 @@ export function OwedReceiptAction({ intentId }: { intentId: string }) {
           ? null
           : "Nothing to sign for it from this session right now.";
   return text ? <p className="text-body-xs text-02">{text}</p> : null;
+}
+
+/**
+ * Owed on a summary screen (Spend): the figure stays in the headline; this
+ * says what it stops and gives the way out — settle now (when this wallet can
+ * sign), and the owed calls themselves.
+ */
+export function OwedSummaryAction({ owed, calls }: { owed: string; calls: number }) {
+  const debts = useBuyerDebtsQuery();
+  const { openSettle } = useSettleDebt();
+  const summary = debtBannerSummary(debts.data);
+  return (
+    <div
+      data-testid="owed-summary-action"
+      className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5"
+    >
+      <p className="min-w-0 flex-1 text-body-13 text-warning-700">
+        <span className="font-mono font-semibold">{owed}</span> owed for {calls === 1 ? "1 call" : `${calls} calls`}: its
+        payment was not collected, and paid calls are paused until it is settled.
+      </p>
+      <div className="flex shrink-0 items-center gap-2">
+        <Button size="sm" variant="ghost" asChild>
+          <Link href={routes.calls({ status: "owed" })}>See owed calls</Link>
+        </Button>
+        {summary?.actionLabel ? (
+          <Button size="sm" type="button" onClick={() => openSettle()}>
+            {summary.actionLabel}
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
 }

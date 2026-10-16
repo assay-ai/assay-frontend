@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ToolCall } from "@/services/tool-calls.service";
 
-import { callBuckets, reconcileSentence, spentFromTotals } from "./spend-buckets";
+import { callBuckets, reconcileSentence, spendBreakdown, spentFromTotals } from "./spend-buckets";
 import type { SummaryFigures } from "./wire";
 
 const ASSET = "eip155:46630/erc20:0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
@@ -99,5 +99,30 @@ describe("spentFromTotals — charged plus owed (final review M1)", () => {
   it("is null without a charged figure", () => {
     expect(spentFromTotals(undefined)).toBeNull();
     expect(spentFromTotals({ owedTotal: m("250000") })).toBeNull();
+  });
+});
+
+describe("spendBreakdown", () => {
+  const totals = (over: Partial<SummaryFigures>): SummaryFigures => ({
+    calls: 13,
+    refundedCalls: 0,
+    listedTotal: m("3000000"),
+    chargedTotal: m("1500000"),
+    withheldTotal: m("750000"),
+    notChargedTotal: m("1250000"),
+    notChargedCalls: 5,
+    owedTotal: m("250000"),
+    owedCalls: 1,
+    inProgressTotal: m("0"),
+    inProgressCalls: 0,
+    failRate: 0,
+    ...over,
+  });
+  it("lists listed, then the parts that add up to it, owed included only when there is some", () => {
+    const rows = spendBreakdown(totals({}));
+    expect(rows.map((r) => r.key)).toEqual(["listed", "charged", "not-charged", "owed"]);
+    expect(rows.find((r) => r.key === "owed")?.amount).toMatch(/0\.25$/);
+    expect(spendBreakdown(totals({ owedCalls: 0, owedTotal: m("0") })).map((r) => r.key)).not.toContain("owed");
+    expect(spendBreakdown(totals({ inProgressCalls: 1, inProgressTotal: m("100000") })).at(-1)?.key).toBe("in-progress");
   });
 });
