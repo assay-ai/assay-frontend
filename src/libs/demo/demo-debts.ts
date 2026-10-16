@@ -63,6 +63,17 @@ export function demoDebtVariant(): DemoDebtVariant {
   }
 }
 
+/**
+ * The line the debt banner adds while a `?debt=` picture other than the
+ * default is in force: it is kept for the tab, so it follows the person to
+ * pages whose link never asked for it (verify-r12: `/funding?rails=free-only`
+ * still showed `?debt=many`). `null` outside a demo build and for the default.
+ */
+export function demoDebtNote(variant: DemoDebtVariant = demoDebtVariant()): string | null {
+  if (process.env.NEXT_PUBLIC_DEMO_CHAINS !== "robinhood" || variant === "open") return null;
+  return `Demo: the "${variant}" debt picture (?debt=${variant}) is kept for this tab. Add ?debt=open to any page to go back.`;
+}
+
 /** Whether the variant shows the owed call as written off (`short` is a written-off debt too). */
 export function writtenOffVariant(variant: DemoDebtVariant): boolean {
   return variant === "written-off" || variant === "short";
