@@ -7,7 +7,7 @@ import * as React from "react";
 import { MoneySplit } from "@/components/patterns/money-flow";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
-import { formatCallPrice, notChargedEmptyText, notChargedRowText, plural, shortDay } from "@/features/explorer/explorer-text";
+import { formatCallPrice, notChargedEmptyText, notChargedRowText, notChargedSplit, plural, shortDay } from "@/features/explorer/explorer-text";
 import { publicErrorText, usePublicNotCharged } from "@/features/explorer/use-public-explorer";
 import { useChainName } from "@/hooks/useChainName";
 import type { Money } from "@/interfaces";
@@ -78,9 +78,28 @@ export function NotChargedSummary({ className }: { className?: string }) {
   );
 }
 
-export function NotChargedProof({ toolId, limit = 6, className }: { toolId?: string; limit?: number; className?: string }) {
+/**
+ * `toolId` scopes the record to one tool (the tool pages); `provider` to the
+ * calls one provider served (the provider page), matched on the registered
+ * name the feed carries and limited to their tools. Both only filter rows the
+ * server already published under its k rule, so neither reveals anything the
+ * full record does not.
+ */
+export function NotChargedProof({
+  toolId,
+  provider,
+  limit = 6,
+  className,
+}: {
+  toolId?: string;
+  provider?: { name: string; toolIds: readonly string[] };
+  limit?: number;
+  className?: string;
+}) {
   const query = usePublicNotCharged();
   const chainName = useChainName();
+  const titleId = React.useId();
+  const scope = toolId ? "tool" : provider ? "provider" : "all";
 
   if (query.isPending) {
     return (
@@ -104,32 +123,45 @@ export function NotChargedProof({ toolId, limit = 6, className }: { toolId?: str
   }
 
   const data = query.data;
-  const recent = (toolId ? data.recent.filter((row) => row.toolId === toolId) : data.recent).slice(0, limit);
-  const { callsChecked, callsNotCharged, callsFailedCheck, amountNotCharged } = data.totals;
-  const otherNotCharged = Math.max(0, callsNotCharged - callsFailedCheck);
+  const recent = data.recent
+    .filter((row) =>
+      toolId
+        ? row.toolId === toolId
+        : provider
+          ? row.providerName === provider.name && provider.toolIds.includes(row.toolId)
+          : true,
+    )
+    .slice(0, limit);
+  const { callsChecked, callsNotCharged, amountNotCharged } = data.totals;
   const quiet = callsChecked === 0 && !data.withheldForPrivacy;
 
   return (
     <section
-      id={toolId ? undefined : "not-charged"}
-      aria-labelledby="proof-title"
+      id={scope === "all" ? "not-charged" : undefined}
+      aria-labelledby={titleId}
       className={cn("flex w-full scroll-mt-4 flex-col gap-4 rounded-xl border border-teal-20 bg-01 p-4 tablet:p-6", className)}
     >
       <div className="flex items-start gap-3">
         <ShieldCheck aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-teal-600" />
         <div className="flex min-w-0 flex-col gap-0.5">
-          <h2 id="proof-title" className="text-heading-sm text-01">
-            {toolId ? "Recently not charged on this tool" : "You don't pay for results you can't use"}
+          <h2 id={titleId} className="text-heading-sm text-01">
+            {scope === "tool"
+              ? "Recently not charged on this tool"
+              : scope === "provider"
+                ? "Recently not charged on their tools"
+                : "You don't pay for results you can't use"}
           </h2>
           <p className="text-body-13 text-02">
-            {toolId
+            {scope === "tool"
               ? "Calls to this tool that ended without a charge, across every buyer."
-              : `What our checks refused to charge, across every buyer, in the last ${data.windowDays} days.`}
+              : scope === "provider"
+                ? `Calls they served that ended without a charge, across every buyer, in the last ${data.windowDays} days.`
+                : `What our checks refused to charge, across every buyer, in the last ${data.windowDays} days.`}
           </p>
         </div>
       </div>
 
-      {!toolId && !quiet ? (
+      {scope === "all" && !quiet ? (
         <div className="grid grid-cols-1 gap-4 tablet:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] tablet:gap-6">
           <dl className="grid grid-cols-3 gap-3">
             <div className="flex flex-col gap-0.5">
@@ -150,20 +182,12 @@ export function NotChargedProof({ toolId, limit = 6, className }: { toolId?: str
           {callsNotCharged > 0 ? (
             <MoneySplit
               showPercent={false}
-              segments={[
-                {
-                  label: "Result failed our check",
-                  value: callsFailedCheck,
-                  amount: plural(callsFailedCheck, "call"),
-                  tone: "teal",
-                },
-                {
-                  label: "Provider error, no usable result, or provider forfeited",
-                  value: otherNotCharged,
-                  amount: plural(otherNotCharged, "call"),
-                  tone: "neutral",
-                },
-              ]}
+              segments={notChargedSplit(data.totals).map((line) => ({
+                label: line.label,
+                value: line.calls,
+                amount: plural(line.calls, "call"),
+                tone: line.tone,
+              }))}
             />
           ) : null}
         </div>
@@ -201,7 +225,7 @@ export function NotChargedProof({ toolId, limit = 6, className }: { toolId?: str
         </ul>
       ) : (
         <p className="text-body-13 text-02" data-testid="not-charged-empty">
-          {notChargedEmptyText(Boolean(toolId), data.withheldForPrivacy)}
+          {notChargedEmptyText(scope, data.withheldForPrivacy)}
         </p>
       )}
 
@@ -209,7 +233,7 @@ export function NotChargedProof({ toolId, limit = 6, className }: { toolId?: str
         <p className="flex items-start gap-2 text-body-xs text-03">
           <EyeOff aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
           <span>
-            Some activity is hidden for privacy: a tool&apos;s calls are listed, and totals counted, only once at least{" "}
+            Some activity is hidden or grouped for privacy: a tool&apos;s calls are listed, and totals and reasons counted, only once at least{" "}
             {data.minBuyers} different buyers stand behind them.
           </span>
         </p>

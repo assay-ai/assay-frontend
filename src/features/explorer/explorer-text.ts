@@ -385,14 +385,82 @@ export function notChargedRowText(row: { reason: string; reasonText: string; buc
   return { tag: "No usable result", tone: "neutral", text: row.reasonText || "The call was not charged." };
 }
 
+const NOT_CHARGED_REASON_LABEL: Record<string, string> = {
+  PROVIDER_ERROR: "Provider returned an error",
+  REQUEST_REJECTED: "Provider rejected the request",
+  NO_USABLE_RESULT: "No usable result",
+  OUT_OF_SCOPE: "Request outside what the tool covers",
+  EXPIRED: "Did not finish in time",
+  NOT_COLLECTED: "Payment not collected (provider forfeited)",
+};
+
+const REASON_TONES = ["info", "indigo", "primary", "warning", "success", "danger"] as const;
+
+export interface NotChargedSplitLine {
+  key: string;
+  label: string;
+  calls: number;
+  tone: "teal" | "neutral" | (typeof REASON_TONES)[number];
+}
+
+/**
+ * The lines of the "not charged" split on the public proof: the guarantee
+ * firing first, then each reason the server could name under the k rule, then
+ * one honest "other" line for what it could not. A backend without the split
+ * (or one that named nothing) gets a single merged line, worded so it does not
+ * read as one reason. Lines with no calls are left out, except the failed-check
+ * line, which is the claim itself.
+ */
+export function notChargedSplit(totals: {
+  callsNotCharged: number;
+  callsFailedCheck: number;
+  notChargedByReason?: { reason: string; calls: number }[];
+  callsNotChargedOther?: number;
+}): NotChargedSplitLine[] {
+  const failed: NotChargedSplitLine = {
+    key: "FAILED_CHECK",
+    label: "Result failed our check",
+    calls: totals.callsFailedCheck,
+    tone: "teal",
+  };
+  const rest = Math.max(0, totals.callsNotCharged - totals.callsFailedCheck);
+  const named = (totals.notChargedByReason ?? []).filter((r) => r.calls > 0);
+  if (totals.notChargedByReason === undefined || named.length === 0) {
+    if (rest === 0) return [failed];
+    return [
+      failed,
+      { key: "OTHER", label: "Not charged for another reason (provider error, no usable result, or not collected)", calls: rest, tone: "neutral" },
+    ];
+  }
+  const lines: NotChargedSplitLine[] = [
+    failed,
+    ...named.map((r, i) => ({
+      key: r.reason,
+      label: NOT_CHARGED_REASON_LABEL[r.reason] ?? "Another reason",
+      calls: r.calls,
+      tone: REASON_TONES[i % REASON_TONES.length]!,
+    })),
+  ];
+  const other = totals.callsNotChargedOther ?? Math.max(0, rest - named.reduce((sum, r) => sum + r.calls, 0));
+  if (other > 0) {
+    lines.push({ key: "OTHER", label: "Other reasons, grouped for privacy", calls: other, tone: "neutral" });
+  }
+  return lines;
+}
+
 /**
  * The sentence when no row is listed. With rows withheld for privacy it does
  * not claim nothing happened: it says none can be listed, and the privacy note
  * below says why.
  */
-export function notChargedEmptyText(forTool: boolean, withheldForPrivacy: boolean): string {
+export function notChargedEmptyText(scope: boolean | "all" | "tool" | "provider", withheldForPrivacy: boolean): string {
+  const of = scope === true || scope === "tool" ? "tool" : scope === "provider" ? "provider" : "all";
   if (withheldForPrivacy) {
-    return forTool ? "No uncharged call to this tool can be listed right now." : "No uncharged call can be listed right now.";
+    if (of === "tool") return "No uncharged call to this tool can be listed right now.";
+    if (of === "provider") return "No uncharged call to their tools can be listed right now.";
+    return "No uncharged call can be listed right now.";
   }
-  return forTool ? "No call to this tool went uncharged recently." : "No call went uncharged in this period.";
+  if (of === "tool") return "No call to this tool went uncharged recently.";
+  if (of === "provider") return "No call to their tools went uncharged recently.";
+  return "No call went uncharged in this period.";
 }

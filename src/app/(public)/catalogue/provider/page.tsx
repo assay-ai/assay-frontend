@@ -5,10 +5,11 @@ import Link from "next/link";
 import * as React from "react";
 
 import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { NotChargedProof } from "@/components/explorer/not-charged-proof";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
-import { failRateLabel, failsOften, offerLine, plural, stakeSummary } from "@/features/explorer/explorer-text";
-import { publicErrorText, usePublicProvider } from "@/features/explorer/use-public-explorer";
+import { failRateLabel, failsOften, formatCallPrice, offerLine, plural, stakeSummary } from "@/features/explorer/explorer-text";
+import { publicErrorText, usePublicProvider, usePublicTools } from "@/features/explorer/use-public-explorer";
 import { useChainName } from "@/hooks/useChainName";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useSearchParam } from "@/hooks/useSearchParam";
@@ -17,13 +18,21 @@ import { routes } from "@/libs/routes";
 
 /**
  * One provider, public — route `/catalogue/provider?id=`. Their measured
- * failure record, the stake they put up per chain, and the tools they serve.
+ * failure record, the stake they put up per chain, the tools they serve (each
+ * with what it does and their own price line), and the calls they served that
+ * were not charged. Every figure comes from the public routes the Explorer
+ * already reads; nothing here is per buyer.
  */
 
 function ProviderPage() {
   const id = useSearchParam("id");
   const query = usePublicProvider(id);
+  const tools = usePublicTools();
   const chainName = useChainName();
+  const describe = React.useMemo(
+    () => new Map((tools.data?.tools ?? []).map((tool) => [tool.id, tool.description])),
+    [tools.data],
+  );
   // A static export cannot set per-provider metadata; name the provider in the tab.
   useDocumentTitle(query.data ? `${query.data.name} — Assay` : null);
 
@@ -59,7 +68,11 @@ function ProviderPage() {
           <VerifiedMark verified={provider.verified} interactive />
           {failsOften(provider.quality) ? <FailsOftenChip /> : null}
         </div>
-        <p className="text-body-13 text-02">Serves {plural(provider.tools.length, "tool")} on Assay.</p>
+        <p className="text-body-13 text-02">
+          Serves {plural(provider.tools.length, "tool")} on Assay
+          {provider.fromPrice && Number(provider.fromPrice.amount) > 0 && provider.tools.length > 0 ? `, from ${formatCallPrice(provider.fromPrice)} per call` : ""}. You pay
+          only for results that pass our checks.
+        </p>
       </header>
 
       <section className="grid grid-cols-1 gap-4 rounded-xl border border-01 bg-01 p-4 tablet:grid-cols-2 tablet:p-5">
@@ -85,9 +98,14 @@ function ProviderPage() {
                 >
                   {/* This provider's own listing: one price, its free calls first. */}
                   <div className="flex min-w-0 flex-1 flex-col gap-1 tablet:flex-row tablet:items-center tablet:justify-between tablet:gap-3">
-                    <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
+                      {describe.get(tool.toolId) ? (
+                        <span className="line-clamp-2 text-body-xs text-02">{describe.get(tool.toolId)}</span>
+                      ) : null}
+                    </span>
                     <OfferPrice
-                      className="tablet:text-right"
+                      className="tablet:shrink-0 tablet:text-right"
                       offer={offerLine({
                         mode: tool.pricingMode,
                         range: tool.price ? { from: tool.price, held: tool.price, differs: false } : null,
@@ -102,6 +120,10 @@ function ProviderPage() {
           </ul>
         )}
       </section>
+
+      {provider.tools.length > 0 ? (
+        <NotChargedProof provider={{ name: provider.name, toolIds: provider.tools.map((tool) => tool.toolId) }} limit={5} />
+      ) : null}
     </>
   );
 }
