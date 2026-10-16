@@ -33,16 +33,18 @@ const SOLANA: Chain = {
   displayName: "Solana devnet",
   explorerBaseUrl: "https://explorer.solana.com/?cluster=devnet",
   settlementAsset: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1/token:4zMM",
-  settlementSymbol: "USDC",
-} as Chain;
+  settlementAssetSymbol: "USDC",
+  decimals: 6,
+};
 const EVM: Chain = {
   chainId: "eip155:46630",
   namespace: "eip155",
   displayName: "Robinhood Chain testnet",
   explorerBaseUrl: "https://explorer.testnet.chain.robinhood.com",
   settlementAsset: "eip155:46630/erc20:0x915Ef7c9F9f80a69e3BE47A38EE0Bb47607103ec",
-  settlementSymbol: "USDG",
-} as Chain;
+  settlementAssetSymbol: "USDG",
+  decimals: 6,
+};
 
 const row = (chain: Chain, account: string): FullBalance =>
   ({
