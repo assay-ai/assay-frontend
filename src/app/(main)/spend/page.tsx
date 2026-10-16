@@ -657,7 +657,7 @@ export default function SpendPage() {
                     {formatMoney(summary.totals.owedTotal)}
                   </span>
                   <span className="font-mono text-mono-xs text-03">
-                    {summary.totals.owedCalls.toLocaleString("en-US")} calls
+                    {summary.totals.owedCalls.toLocaleString("en-US")} {summary.totals.owedCalls === 1 ? "call" : "calls"}
                   </span>
                 </div>
               ) : null}
@@ -697,7 +697,7 @@ export default function SpendPage() {
                   {formatMoney(summary.totals.owedTotal)}
                 </span>
                 <span className="font-mono text-mono-12 text-03">
-                  {summary.totals.owedCalls.toLocaleString("en-US")} calls · not collected yet
+                  {summary.totals.owedCalls.toLocaleString("en-US")} {summary.totals.owedCalls === 1 ? "call" : "calls"} · not collected yet
                 </span>
               </div>
             ) : null}
