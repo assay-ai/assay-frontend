@@ -22,6 +22,9 @@ import {
   debtBannerTitle,
   debtRowText,
   debtsToSign,
+  isReplaceable,
+  nextReplaceableAt,
+  notYetReplaceableSentence,
   settledToast,
   settleDebtErrorSentence,
   splitDebts,
@@ -70,15 +73,32 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // A debt is signable only once its original voucher is past its on-chain
+  // deadline (`replaceableAt`). `now` moves on at the earliest such time, and
+  // with every new list, so the button turns on without a reload.
+  const [tick, setTick] = React.useState(() => Date.now());
+  const now = Math.max(tick, query.dataUpdatedAt);
+  const wakeAt = nextReplaceableAt(debtsToSign(splitDebts(query.data).own), now);
+  React.useEffect(() => {
+    if (wakeAt === null) return;
+    // setTimeout holds at most ~24.8 days; a longer wait is caught by a refetch.
+    const delay = Math.min(Math.max(wakeAt - Date.now(), 0) + 250, 2 ** 31 - 1);
+    const timer = setTimeout(() => setTick(Date.now()), delay);
+    return () => clearTimeout(timer);
+  }, [wakeAt]);
+
   const { own, others } = splitDebts(query.data);
   const all = [...own, ...others];
   if (all.length === 0) return null;
   const ownToSign = debtsToSign(own);
-  const next = ownToSign[0] ?? null;
+  // The oldest one that can be signed now; else the oldest, shown disabled.
+  const next = ownToSign.find((debt) => isReplaceable(debt, now)) ?? ownToSign[0] ?? null;
+  const nextWaiting = next !== null && !isReplaceable(next, now);
+  const waiting = ownToSign.filter((debt) => !isReplaceable(debt, now));
   const othersToSign = debtsToSign(others);
 
   async function onSettle() {
-    if (!next) return;
+    if (!next || nextWaiting) return;
     if (signerState.status !== "ready") {
       setError(
         signerState.status === "address-not-connected"
@@ -104,7 +124,12 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
         setError("Nothing was signed — the wallet prompt was closed or declined.");
       } else if (e instanceof ApiError) {
         setError(settleDebtErrorSentence(e) ?? e.message);
-        if (e.code === "PAYMENT_DEBT_NOT_FOUND" || e.code === "PAYMENT_DEBT_REPLACEMENT_PENDING") {
+        if (
+          e.code === "PAYMENT_DEBT_NOT_FOUND" ||
+          e.code === "PAYMENT_DEBT_REPLACEMENT_PENDING" ||
+          e.code === "PAYMENT_DEBT_NOT_YET_REPLACEABLE" ||
+          e.code === "PAYMENT_DEBT_REPLACEMENT_REFUSED"
+        ) {
           void queryClient.invalidateQueries({ queryKey: BUYER_DEBTS_KEY });
         }
       } else {
@@ -148,6 +173,17 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
               {othersToSign.length === 1 ? "it" : "them"}.
             </p>
           ) : null}
+          {waiting.length > 0 ? (
+            <p data-testid="buyer-debt-not-yet" className="text-body-13 text-02 [overflow-wrap:anywhere]">
+              {waiting.length < ownToSign.length
+                ? `${waiting.length} of them ${waiting.length === 1 ? "is" : "are"} not ready to sign yet: `
+                : ""}
+              {notYetReplaceableSentence(
+                new Date(nextReplaceableAt(waiting, now)!).toISOString(),
+                waiting.length < ownToSign.length ? (waiting.length === 1 ? "it" : "the first") : "this",
+              )}
+            </p>
+          ) : null}
           {error ? (
             <p role="status" className="text-body-13 text-danger-600 [overflow-wrap:anywhere]">
               {error}
@@ -160,7 +196,7 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
             className="shrink-0"
             onClick={() => void onSettle()}
             loading={busy}
-            disabled={busy || readOnly}
+            disabled={busy || readOnly || nextWaiting}
           >
             {ownToSign.length > 1 ? `Sign to settle (1 of ${ownToSign.length})` : "Sign to settle"}
           </Button>

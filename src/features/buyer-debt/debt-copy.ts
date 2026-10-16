@@ -33,6 +33,27 @@ export function debtsToSign<T extends Pick<BuyerDebt, "state">>(debts: readonly 
   return debts.filter((debt) => debtStateOf(debt) !== "REPLACING");
 }
 
+/**
+ * Whether a debt can be settled at `nowMs`: its original voucher is past its
+ * on-chain deadline (`replaceableAt`). One without the field (an older
+ * backend) or with an unreadable one can be settled at once.
+ */
+export function isReplaceable(debt: Pick<BuyerDebt, "replaceableAt">, nowMs: number): boolean {
+  const at = debt.replaceableAt ? Date.parse(debt.replaceableAt) : Number.NaN;
+  return Number.isNaN(at) || at <= nowMs;
+}
+
+/** The earliest `replaceableAt` still ahead of `nowMs`, in ms, or `null`. */
+export function nextReplaceableAt(debts: readonly Pick<BuyerDebt, "replaceableAt">[], nowMs: number): number | null {
+  let next: number | null = null;
+  for (const debt of debts) {
+    if (isReplaceable(debt, nowMs)) continue;
+    const at = Date.parse(debt.replaceableAt!);
+    if (next === null || at < next) next = at;
+  }
+  return next;
+}
+
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 export function debtBannerTitle(debts: readonly Pick<BuyerDebt, "amount" | "state">[]): string {
@@ -141,7 +162,13 @@ export function settledToast(remaining: number): string {
     : `Signed. ${remaining} more call${remaining === 1 ? " is" : "s are"} still to settle before paid calls resume.`;
 }
 
-export { debtOutstandingContext, debtRefusalSentence, settleDebtErrorSentence } from "@/libs/buyer-debt";
+export {
+  debtLocalTime,
+  debtOutstandingContext,
+  debtRefusalSentence,
+  notYetReplaceableSentence,
+  settleDebtErrorSentence,
+} from "@/libs/buyer-debt";
 
 /**
  * The debts this session can settle: the session account's own, oldest first.

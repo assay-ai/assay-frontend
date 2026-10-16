@@ -34,6 +34,13 @@ export interface BuyerDebt {
   replacedAt: string | null;
   /** When the call was made (ISO 8601). */
   createdAt: string;
+  /**
+   * From when it can be settled (ISO 8601): the original voucher must be past
+   * its on-chain deadline first, or both could be collected. Before it, the
+   * settle routes answer `PAYMENT_DEBT_NOT_YET_REPLACEABLE`. An older backend
+   * sends none (settle at once).
+   */
+  replaceableAt?: string | null;
 }
 
 /**
@@ -127,10 +134,14 @@ export interface DebtOutstandingContext {
   count: number;
   /** The total, formatted by the backend (`"2.50 USDG"`), or null across assets. */
   owed: string | null;
-  debts: Omit<BuyerDebt, "createdAt" | "replacedAt">[];
+  debts: Omit<BuyerDebt, "createdAt" | "replacedAt" | "replaceableAt">[];
   settleWith: string;
 }
 
 export const PAYMENT_DEBT_OUTSTANDING = "PAYMENT_DEBT_OUTSTANDING";
 export const PAYMENT_DEBT_NOT_FOUND = "PAYMENT_DEBT_NOT_FOUND";
 export const PAYMENT_DEBT_REPLACEMENT_PENDING = "PAYMENT_DEBT_REPLACEMENT_PENDING";
+/** 409: the original voucher is still inside its on-chain window; `context.replaceableAt` says until when. */
+export const PAYMENT_DEBT_NOT_YET_REPLACEABLE = "PAYMENT_DEBT_NOT_YET_REPLACEABLE";
+/** 409: the replacement was refused (the debt changed meanwhile); nothing was changed. */
+export const PAYMENT_DEBT_REPLACEMENT_REFUSED = "PAYMENT_DEBT_REPLACEMENT_REFUSED";

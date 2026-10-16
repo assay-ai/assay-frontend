@@ -26,6 +26,7 @@ vi.mock("@privy-io/react-auth", () => ({
 }));
 
 import { BUYER_DEBTS_KEY, BuyerDebtBanner } from "./debt-banner";
+import { notYetReplaceableSentence } from "./debt-copy";
 
 const ACCOUNT = "eip155:46630:0x7FD9A17dE9fd64b35081FbAbaa9f3bb85e59F8d1";
 const ASSET = "eip155:46630/erc20:0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
@@ -118,5 +119,38 @@ describe("BuyerDebtBanner", () => {
     });
     expect(mixed).toContain("Sign to settle (1 of 2)");
     expect(mixed).toContain("signed, being collected");
+  });
+
+  describe("before the original payment expires on chain", () => {
+    const soon = () => new Date(Date.now() + 30 * 60_000).toISOString();
+    const signButton = (html: string) => html.match(/<button[^>]*>(?:(?!<\/button>).)*Sign to settle/)?.[0] ?? "";
+
+    it("disables Sign to settle and says from when, in plain words", () => {
+      const at = soon();
+      const html = render({ account: ACCOUNT, debts: [debt({ replaceableAt: at })] });
+      expect(signButton(html)).toMatch(/disabled=""/);
+      expect(html).toContain(notYetReplaceableSentence(at));
+      expect(html).toContain("so you never pay twice");
+    });
+
+    it("offers it once replaceableAt has passed, or when the backend sends none", () => {
+      for (const replaceableAt of [new Date(Date.now() - 60_000).toISOString(), null, undefined]) {
+        const html = render({ account: ACCOUNT, debts: [debt({ replaceableAt })] });
+        expect(signButton(html)).not.toBe("");
+        expect(signButton(html)).not.toMatch(/disabled=""/);
+        expect(html).not.toContain("never pay twice");
+      }
+    });
+
+    it("settles one that is ready first, and says when the waiting one can be", () => {
+      const at = soon();
+      const html = render({
+        account: ACCOUNT,
+        debts: [debt({ replaceableAt: at }), debt({ intentId: "int_2" })],
+      });
+      expect(signButton(html)).not.toMatch(/disabled=""/);
+      expect(html).toContain("Sign to settle (1 of 2)");
+      expect(html).toContain("1 of them is not ready to sign yet: you can settle it from");
+    });
   });
 });
