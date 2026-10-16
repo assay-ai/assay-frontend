@@ -1,5 +1,5 @@
 import { debtCauseText } from "@/features/call-classes/labels";
-import { formatLocalDateTime, utcTitle, type LocalTimeOptions } from "@/libs/local-time";
+import { formatLocalDateTime, utcTitle, zoneLabel, type LocalTimeOptions } from "@/libs/local-time";
 import { formatMoney } from "@/utils/money";
 
 import type { ReceiptState } from "./receipt-state";
@@ -101,6 +101,18 @@ export function timelineStamp(
     time: formatLocalDateTime(iso, { ...options, seconds: true, alwaysDay: true }),
     timeTitle: utcTitle(iso, { seconds: true }),
   };
+}
+
+/**
+ * The one line above the receipt timeline that says how to read its stamps:
+ * "Times in GMT+9, to the second". The rows keep seconds because the steps of
+ * one call (made, held, checked, charged) are often seconds apart; every
+ * other time a person reads (receipt header, debt banner) is day + HH:MM with
+ * the same zone label next to it.
+ */
+export function timelineZoneNote(options: Pick<LocalTimeOptions, "timeZone" | "now"> = {}): string {
+  const zone = zoneLabel(options.now ?? Date.now(), { timeZone: options.timeZone });
+  return zone ? `Times in ${zone}, to the second` : "Your local time, to the second";
 }
 
 /**

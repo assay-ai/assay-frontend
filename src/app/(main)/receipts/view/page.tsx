@@ -47,7 +47,7 @@ import {
   type ReceiptState,
 } from "@/features/g30/receipt-state";
 import { ErrorBlock } from "@/features/g30/ui";
-import { collectionAt, collectionView, isCollectionState, timelineStamp } from "@/features/g30/receipt-collection";
+import { collectionAt, collectionView, isCollectionState, timelineStamp, timelineZoneNote } from "@/features/g30/receipt-collection";
 import { OwedReceiptAction } from "@/features/buyer-debt/owed-row-action";
 import { owedCallState } from "@/features/buyer-debt/debt-summary";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
@@ -292,8 +292,8 @@ function ReceiptPageContent() {
       <div className="flex min-w-0 flex-col gap-1">
         <h1 className="break-all font-mono text-heading-md text-01">{names.name("tool", receipt.toolId)}</h1>
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-13 text-03">
-          {/* The day always named, as on the timeline below and the debt banner ("Today 07:32", "Sep 15, 08:40"). */}
-          <LocalTime value={receipt.createdAt} alwaysDay />
+          {/* Day + HH:MM + zone, as the debt banner ("Today 07:32 GMT+9", "Sep 15, 08:40 GMT+9"). */}
+          <LocalTime value={receipt.createdAt} alwaysDay withZone />
           <span aria-hidden="true">·</span>
           <span>{providerName}</span>
           <span aria-hidden="true">·</span>
@@ -388,7 +388,7 @@ function ReceiptPageContent() {
           <PanelHeader>
             <PanelTitles>
               <PanelTitle>Timeline</PanelTitle>
-              <PanelDescription>Your local time</PanelDescription>
+              <PanelDescription>{timelineZoneNote()}</PanelDescription>
             </PanelTitles>
           </PanelHeader>
           <PanelBody className="px-5 pb-3.5 pt-1">

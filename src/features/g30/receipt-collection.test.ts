@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { collectionAt, collectionView, isCollectionState, timelineStamp } from "./receipt-collection";
+import { collectionAt, collectionView, isCollectionState, timelineStamp, timelineZoneNote } from "./receipt-collection";
 
 const listedPrice = { amount: "2500000", asset: "a", decimals: 6 };
 
@@ -68,5 +68,13 @@ describe("receipt timeline stamps (verify-r12 P3)", () => {
     expect(collectionAt("DEBT_WRITTEN_OFF", settledAt, writtenOff)).toBe("2026-10-15T02:20:00.000Z");
     expect(collectionAt("DEBT_WRITTEN_OFF", settledAt, null)).toBe(settledAt);
     expect(collectionAt("DEBT_OUTSTANDING", settledAt, { state: "OPEN", writeOffAt: "2026-10-15T02:20:00.000Z" })).toBe(settledAt);
+  });
+});
+
+describe("receipt timeline zone note (final3 N2)", () => {
+  it("names the zone once and says why the rows keep seconds", () => {
+    const now = Date.parse("2026-10-17T10:00:00.000Z");
+    expect(timelineZoneNote({ now, timeZone: "Asia/Tokyo" })).toBe("Times in GMT+9, to the second");
+    expect(timelineZoneNote({ now, timeZone: "UTC" })).toBe("Times in UTC, to the second");
   });
 });

@@ -401,7 +401,7 @@ function SettleDebtSheet({
                   <dt className="text-03">For</dt>
                   <dd className="text-01 [overflow-wrap:anywhere]">
                     a <span className="font-mono text-mono-13">{toolName(debt.toolId)}</span> call,{" "}
-                    <LocalTime value={debt.createdAt} midSentence />
+                    <LocalTime value={debt.createdAt} midSentence alwaysDay withZone />
                   </dd>
                   <dt className="text-03">From</dt>
                   <dd className="text-01 [overflow-wrap:anywhere]">your escrow{ownerShort ? ` (${ownerShort})` : ""}</dd>
