@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { collectionView, isCollectionState } from "./receipt-collection";
+import { collectionAt, collectionView, isCollectionState, timelineStamp } from "./receipt-collection";
 
 const listedPrice = { amount: "2500000", asset: "a", decimals: 6 };
 
@@ -46,5 +46,27 @@ describe("collectionView", () => {
     expect(view.explain).toMatch(/had no usable result/);
     expect(view.explain).not.toMatch(/failed its checks/);
     expect(view.timeline.label).toBe("Debt cancelled: no usable result");
+  });
+});
+
+describe("receipt timeline stamps (verify-r12 P3)", () => {
+  const now = Date.parse("2026-10-17T10:00:00.000Z");
+  const timeZone = "UTC";
+
+  it("gives every row its day as well as its time", () => {
+    expect(timelineStamp("2026-10-17T00:40:07.000Z", { now, timeZone }).time).toBe("Today 00:40:07");
+    expect(timelineStamp("2026-10-16T23:05:00.000Z", { now, timeZone }).time).toBe("Yesterday 23:05:00");
+    expect(timelineStamp("2026-09-15T02:11:30.000Z", { now, timeZone })).toEqual({
+      time: "Sep 15, 02:11:30",
+      timeTitle: "2026-09-15 02:11:30.000 UTC",
+    });
+  });
+
+  it("dates a written-off row at the write-off the banner shows, else at the receipt's settlement", () => {
+    const settledAt = "2026-09-15T02:11:00.000Z";
+    const writtenOff = { state: "WRITTEN_OFF", writeOffAt: "2026-10-15T02:20:00.000Z" };
+    expect(collectionAt("DEBT_WRITTEN_OFF", settledAt, writtenOff)).toBe("2026-10-15T02:20:00.000Z");
+    expect(collectionAt("DEBT_WRITTEN_OFF", settledAt, null)).toBe(settledAt);
+    expect(collectionAt("DEBT_OUTSTANDING", settledAt, { state: "OPEN", writeOffAt: "2026-10-15T02:20:00.000Z" })).toBe(settledAt);
   });
 });

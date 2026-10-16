@@ -16,6 +16,7 @@ import {
   owedRowText,
   paidCallsAfterSettling,
   resumesAfterSettling,
+  settleBlockedSummary,
   settleEscrowCheck,
   settleReadiness,
   type SettleEscrowReading,
@@ -211,7 +212,9 @@ describe("settleReadiness (P1-3)", () => {
     const [block] = settleReadiness(escrow({ maxVoucherAmount: usd("1") }), [debt()]);
     expect(block.kind).toBe("per-call");
     expect(block.action.label).toBe("Raise the per-call ceiling to $2.50");
-    expect(block.action.href).toBe("/funding?action=caps");
+    // The ceiling sheet opens prefilled with the amount needed (verify-r12 P3).
+    expect(block.action.href).toBe("/funding?action=caps&perCall=2.5");
+    expect(block.missing).toBe("a per-call ceiling of $2.50 (now $1.00)");
   });
 
   it("asks to raise the 24-hour ceiling when the window has no room left", () => {
@@ -219,6 +222,7 @@ describe("settleReadiness (P1-3)", () => {
     expect(block.kind).toBe("window");
     expect(block.text).toContain("Only $1.00 of your 24-hour ceiling is left");
     expect(block.action.label).toBe("Raise the 24-hour ceiling to $3.50");
+    expect(block.action.href).toBe("/funding?action=caps&perDay=3.5");
   });
 
   it("counts an ended window as unspent", () => {
@@ -273,6 +277,31 @@ describe("settleEscrowCheck (review 2026-10-17 P2-a)", () => {
 
   it("is pending only while the first read is on its way", () => {
     expect(settleEscrowCheck(read(null, { isPending: true }), [debt()], now)).toEqual({ kind: "pending" });
+  });
+});
+
+describe("settleBlockedSummary (verify-r12 P3)", () => {
+  it("says what is owed, what is missing and the next step, never the outcome", () => {
+    const blocks = settleReadiness(escrow({ balance: usd("1"), spendable: usd("1"), maxVoucherAmount: usd("2") }), [
+      debt({ state: "WRITTEN_OFF" }),
+    ]);
+    const rows = settleBlockedSummary([debt({ state: "WRITTEN_OFF" })], blocks);
+    expect(rows).toEqual([
+      { label: "You owe", value: "$2.50, still owed: nothing is signed yet" },
+      { label: "Missing", value: "$1.50 in your escrow; a per-call ceiling of $2.50 (now $2.00)" },
+      {
+        label: "Next step",
+        value:
+          "Add $1.50, then raise the per-call ceiling to $2.50, then come back to sign. Paid calls stay paused until it is settled.",
+      },
+    ]);
+    const text = rows.map((row) => row.value).join(" ");
+    expect(text).not.toContain("$0.00");
+    expect(text).not.toContain("about a minute");
+  });
+
+  it("is empty when nothing blocks signing", () => {
+    expect(settleBlockedSummary([debt()], [])).toEqual([]);
   });
 });
 

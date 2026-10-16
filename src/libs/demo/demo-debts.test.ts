@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { demoDebtSigned, markDemoDebtsSigned, parseDebtVariant } from "./demo-debts";
+import { demoDebtNote, demoDebtSigned, markDemoDebtsSigned, parseDebtVariant } from "./demo-debts";
 import "./fixtures";
 import { demoDebts } from "./fixtures-buyer";
 
@@ -10,6 +10,21 @@ describe("demo debt pictures", () => {
     expect(parseDebtVariant("written-off")).toBe("written-off");
     expect(parseDebtVariant("bogus")).toBeNull();
     expect(parseDebtVariant(null)).toBeNull();
+  });
+
+  it("says a kept picture is a demo one, only in a demo build and only off the default", () => {
+    const prev = process.env.NEXT_PUBLIC_DEMO_CHAINS;
+    try {
+      process.env.NEXT_PUBLIC_DEMO_CHAINS = "robinhood";
+      expect(demoDebtNote("many")).toBe(
+        'Demo: the "many" debt picture (?debt=many) is kept for this tab. Add ?debt=open to any page to go back.',
+      );
+      expect(demoDebtNote("open")).toBeNull();
+      process.env.NEXT_PUBLIC_DEMO_CHAINS = "";
+      expect(demoDebtNote("many")).toBeNull();
+    } finally {
+      process.env.NEXT_PUBLIC_DEMO_CHAINS = prev;
+    }
   });
 
   it("serves one open debt by default, and shows a debt signed in the demo as being collected", () => {
@@ -37,6 +52,34 @@ describe("demo totals agree with the demo debt", () => {
       }) as { totals: { owedTotal: { amount: string }; owedCalls: number } };
       expect(body.totals.owedCalls).toBe(1);
       expect(body.totals.owedTotal.amount).toBe("2500000");
+    } finally {
+      process.env.NEXT_PUBLIC_DEMO_CHAINS = prev;
+    }
+  });
+
+  it("counts a reader's calendar day as one demo day, not the two UTC days it straddles", async () => {
+    const { demoResponse } = await import("./demo-api");
+    const prev = process.env.NEXT_PUBLIC_DEMO_CHAINS;
+    process.env.NEXT_PUBLIC_DEMO_CHAINS = "robinhood";
+    try {
+      const now = new Date();
+      const utcToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      const totals = (from: number, to: number) =>
+        (
+          demoResponse("GET", "/receipts/summary", {
+            from: new Date(from).toISOString(),
+            to: new Date(to).toISOString(),
+            groupBy: "tool",
+          }) as { totals: { calls: number; chargedTotal: { amount: string } } }
+        ).totals;
+      const day = 86_400_000;
+      const hour = 3_600_000;
+      // The reader's today and yesterday, in a zone east and one west of Greenwich.
+      for (const offset of [7, -5]) {
+        const zoneToday = Math.floor((now.getTime() + offset * hour) / day) * day - offset * hour;
+        expect(totals(zoneToday, zoneToday + day)).toEqual(totals(utcToday, utcToday + day));
+        expect(totals(zoneToday - day, zoneToday)).toEqual(totals(utcToday - day, utcToday));
+      }
     } finally {
       process.env.NEXT_PUBLIC_DEMO_CHAINS = prev;
     }
