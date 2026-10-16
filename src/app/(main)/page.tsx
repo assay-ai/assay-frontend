@@ -337,7 +337,7 @@ export default function OverviewPage() {
               <PanelTitle>Open holds</PanelTitle>
               <PanelDescription>
                 {openHolds.some((h) => owedIntentIds.has(h.intentId))
-                  ? "Reserved, not spent — unpaid calls stay held until you settle them"
+                  ? "Reserved, not spent — unpaid calls stay held until they are collected"
                   : "Reserved, not spent — released or charged within 24h"}
               </PanelDescription>
             </PanelTitles>
