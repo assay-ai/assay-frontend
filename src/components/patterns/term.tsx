@@ -32,6 +32,15 @@ export interface TermProps {
   className?: string;
 }
 
+/** Whether an element's focus is keyboard focus; false where the selector is not supported. */
+export function isFocusVisible(element: Element): boolean {
+  try {
+    return element.matches(":focus-visible");
+  } catch {
+    return false;
+  }
+}
+
 export function Term({ k, inline = false, children, className }: TermProps) {
   const entry = GLOSSARY[k];
   const id = React.useId();
@@ -58,6 +67,12 @@ export function Term({ k, inline = false, children, className }: TermProps) {
             onClick={(event) => {
               event.preventDefault();
               setOpen((value) => !value);
+            }}
+            onFocus={(event) => {
+              // A sheet focuses its first focusable element when it opens; when that is a term in its
+              // description, the definition would sit over the sheet's text until the pointer moved.
+              // Open on focus only for keyboard focus (focus-visible); hover and tap still open it.
+              if (!isFocusVisible(event.currentTarget)) event.preventDefault();
             }}
             className={cn(
               "inline cursor-help rounded-sm p-0 align-baseline [font:inherit] [color:inherit] underline decoration-03 decoration-dotted underline-offset-[3px]",

@@ -66,7 +66,9 @@ describe("unpaidLines", () => {
     expect(lines.map((l) => l.key)).toEqual(["debtOutstanding", "uncollected", "forfeited"]);
     expect(lines[0].explanation).toMatch(/^\$0\.09 for 1 call that passed/);
     expect(lines[0].explanation).toMatch(/platform does not pay it/);
-    expect(lines[1].explanation).toMatch(/nobody owes it/);
+    expect(lines[1].explanation).toMatch(/buyer still owes it/);
+    expect(lines[1].explanation).toMatch(/you are paid then/);
+    expect(lines[1].explanation).not.toMatch(/nobody owes/);
     expect(lines[2].explanation).toMatch(/buyer was not charged/);
     for (const line of lines) expect(line.explanation).not.toMatch(/owed by the platform/);
   });
@@ -123,7 +125,9 @@ describe("unpaidLines: reason and next step", () => {
     expect(lines[0].action).toMatch(/^Nothing to do/);
     expect(lines[0].action).toMatch(/30 days/);
     expect(lines[1].actionable).toBe(false);
-    expect(lines[1].action).toMatch(/nobody owes it/);
+    expect(lines[1].action).toMatch(/buyer still owes it/);
+    expect(lines[1].action).toMatch(/you are paid then/);
+    expect(lines[0].action).toMatch(/written off, but still owed/);
   });
 
   it("tells the provider how to avoid a forfeit", () => {
@@ -165,8 +169,19 @@ describe("homeUnpaidNotes", () => {
     );
     expect(notes.map((n) => n.key)).toEqual(["forfeited"]);
     expect(notes[0].tone).toBe("warning");
-    expect(notes[0].text).toMatch(/^\$0\.07 for 2 calls was forfeited/);
+    expect(notes[0].text).toMatch(/^\$0\.07 for 2 calls was forfeited this month/);
     expect(notes[0].link).toEqual({ label: "Check your stake", href: hrefs.stake });
+  });
+
+  it("warns while the stake is short or unknown, and is calm once it covers the minimum again", () => {
+    const forfeit = totals({ forfeited: usdg("72000"), forfeitedCalls: 1 });
+    expect(homeUnpaidNotes(forfeit, format, hrefs, false)[0].tone).toBe("warning");
+    expect(homeUnpaidNotes(forfeit, format, hrefs, null)[0].tone).toBe("warning");
+    const [calm] = homeUnpaidNotes(forfeit, format, hrefs, true);
+    expect(calm.tone).toBe("neutral");
+    expect(calm.text).toMatch(/earlier this month/);
+    expect(calm.text).toMatch(/covers the minimum now/);
+    expect(calm.link.href).toBe(hrefs.money);
   });
 });
 

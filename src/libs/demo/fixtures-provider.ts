@@ -1705,15 +1705,17 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         asset: DEMO_ASSET,
         callCount: totals.calls,
         // Adds up to `earningsTotals`: 836 credited, 1 waiting on the buyer, 2 never collected,
-        // 1 forfeited, 4 not credited, 7 free.
+        // 1 forfeited, 4 not credited (2 failed checks, 1 endpoint error, 1 refused request, as
+        // in the per-call file), 7 free.
         classBreakdown: [
           row("PAID_CREDITED", 836, "181.44", "settled to you"),
           row("PAID_AWAITING_REDEMPTION", 0, "0", ""),
           row("PAID_BUYER_DEBT", 1, "0", "the buyer's payment could not be collected yet"),
           row("PAID_UNCOLLECTED", 2, "0", "the buyer never settled it"),
           row("PROVIDER_FORFEITED", 1, "0", "your stake was below the minimum"),
-          row("PAID_UNCREDITED", 3, "0", "our checks rejected the response"),
+          row("PAID_UNCREDITED", 2, "0", "our checks rejected the response"),
           row("SYSTEM_ERROR", 1, "0", "your endpoint timed out or returned 5xx"),
+          row("REQUEST_ERROR", 1, "0", "4xx from your endpoint"),
           row("FREE", 7, "0", "free-tier call"),
         ],
         unexplained: { calls: 0, reference: null },

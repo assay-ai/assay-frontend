@@ -187,7 +187,7 @@ function ToolPage() {
                         </span>
                         <span className="text-body-xs text-03">
                           {listing ? `${formatCallPrice(listing.price)} per call` : ""}
-                          {listing?.freeCallsPerAgentPerDay ? ` · ${listing.freeCallsPerAgentPerDay} free calls/day` : ""}
+                          {listing?.freeCallsPerAgentPerDay ? ` · ${listing.freeCallsPerAgentPerDay} free calls/day per agent` : ""}
                           {notRouted ? " · not taking paid calls right now" : ""}
                         </span>
                       </div>
@@ -225,7 +225,7 @@ function ToolPage() {
           <p className="text-label-md text-01">Let your agent use {tool.name}</p>
           <p className="text-body-13 text-02">
             {freeAllowance
-              ? `Sign up, create an agent key, and the first ${freeAllowance} calls a day are free — no deposit needed.`
+              ? `Sign up, create an agent key, and the first ${freeAllowance} calls a day are free for each agent — no deposit needed.`
               : "Sign up, create an agent key and add funds. You pay only for results that pass."}
           </p>
         </div>
