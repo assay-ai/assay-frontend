@@ -97,7 +97,7 @@ const OVERRIDABLE: ReceiptState[] = [
   "FORFEITED",
 ];
 
-/** A timeline stamp: local day and clock with seconds, the exact UTC instant on hover. */
+/** A timeline stamp: UTC day and clock with seconds, labelled, the exact instant on hover. */
 function stamp(iso: string): Pick<TimelineEvent, "time" | "timeTitle"> {
   return timelineStamp(iso);
 }
@@ -292,8 +292,8 @@ function ReceiptPageContent() {
       <div className="flex min-w-0 flex-col gap-1">
         <h1 className="break-all font-mono text-heading-md text-01">{names.name("tool", receipt.toolId)}</h1>
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-13 text-03">
-          {/* Day + HH:MM + zone, as the debt banner ("Today 07:32 GMT+9", "Sep 15, 08:40 GMT+9"). */}
-          <LocalTime value={receipt.createdAt} alwaysDay withZone />
+          {/* Day + HH:MM in UTC, labelled, as the debt banner ("Today 07:32 UTC", "Sep 15, 08:40 UTC"). */}
+          <LocalTime value={receipt.createdAt} alwaysDay utc />
           <span aria-hidden="true">·</span>
           <span>{providerName}</span>
           <span aria-hidden="true">·</span>

@@ -1,5 +1,5 @@
 import { debtCauseText } from "@/features/call-classes/labels";
-import { formatLocalDateTime, utcTitle, zoneLabel, type LocalTimeOptions } from "@/libs/local-time";
+import { formatUtcDateTime, utcTitle, type LocalTimeOptions } from "@/libs/local-time";
 import { formatMoney } from "@/utils/money";
 
 import type { ReceiptState } from "./receipt-state";
@@ -88,31 +88,29 @@ export function collectionView(state: CollectionState, receipt: Pick<Receipt, "l
 }
 
 /**
- * A receipt timeline stamp: the reader's local day and clock with seconds
- * ("Today 00:40:07", "Sep 15, 02:10:05"), the exact UTC instant on hover.
+ * A receipt timeline stamp: the UTC day and clock with seconds, labelled
+ * ("Today 00:40:07 UTC", "Sep 15, 02:10:05 UTC"), the exact instant on hover.
  * Every row carries its day, so a write-off a month after the call reads as
  * such instead of a bare "02:11" (verify-r12 P3).
  */
 export function timelineStamp(
   iso: string,
-  options: Pick<LocalTimeOptions, "timeZone" | "now"> = {},
+  options: Pick<LocalTimeOptions, "now"> = {},
 ): { time: string; timeTitle: string | undefined } {
   return {
-    time: formatLocalDateTime(iso, { ...options, seconds: true, alwaysDay: true }),
+    time: formatUtcDateTime(iso, { ...options, seconds: true, alwaysDay: true }),
     timeTitle: utcTitle(iso, { seconds: true }),
   };
 }
 
 /**
- * The one line above the receipt timeline that says how to read its stamps:
- * "Times in GMT+9, to the second". The rows keep seconds because the steps of
- * one call (made, held, checked, charged) are often seconds apart; every
- * other time a person reads (receipt header, debt banner) is day + HH:MM with
- * the same zone label next to it.
+ * The one line above the receipt timeline that says how to read its stamps.
+ * The rows keep seconds because the steps of one call (made, held, checked,
+ * charged) are often seconds apart; every other time a person reads (receipt
+ * header, debt banner, deadlines) is day + HH:MM, also in UTC and labelled.
  */
-export function timelineZoneNote(options: Pick<LocalTimeOptions, "timeZone" | "now"> = {}): string {
-  const zone = zoneLabel(options.now ?? Date.now(), { timeZone: options.timeZone });
-  return zone ? `Times in ${zone}, to the second` : "Your local time, to the second";
+export function timelineZoneNote(): string {
+  return "Times in UTC, to the second";
 }
 
 /**

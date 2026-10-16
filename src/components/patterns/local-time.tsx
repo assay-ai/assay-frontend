@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { formatLocalDate, formatLocalDateTime, formatRelative, utcTitle, zoneLabel } from "@/libs/local-time";
+import { formatLocalDate, formatLocalDateTime, formatRelative, formatUtcDateTime, utcTitle, zoneLabel } from "@/libs/local-time";
 import { cn } from "@/utils";
 
 /**
@@ -22,6 +22,8 @@ export interface LocalTimeProps extends React.TimeHTMLAttributes<HTMLTimeElement
   dateOnly?: boolean;
   /** Append the zone ("Oct 18, 14:00 GMT+1"): use it for deadlines. */
   withZone?: boolean;
+  /** In UTC, labelled ("Today 07:32 UTC"): the money-screen convention (`formatUtcDateTime`). */
+  utc?: boolean;
   /** "4 min ago" within the hour, "Today 14:20" later today — for live lists. */
   relative?: boolean;
   /** The time sits inside a sentence: "asked yesterday 14:20", not "asked Yesterday 14:20". */
@@ -34,6 +36,7 @@ export function LocalTime({
   value,
   dateOnly = false,
   withZone = false,
+  utc = false,
   relative = false,
   midSentence = false,
   alwaysDay = false,
@@ -50,7 +53,9 @@ export function LocalTime({
     ? (utcTitle(value) ?? "—")
     : dateOnly
       ? formatLocalDate(value)
-      : withZone
+      : utc
+        ? formatUtcDateTime(value, options)
+        : withZone
         ? `${formatLocalDateTime(value, options)} ${zoneLabel(value)}`.trim()
         : relative
           ? formatRelative(value, { midSentence })

@@ -96,7 +96,7 @@ export function deadlineReading(
 }
 
 /**
- * The tooltip for a deadline: "Rule by Nov 11, 10:06 GMT+9 · 2026-11-11 03:06 UTC" —
+ * The tooltip for a deadline: "Rule by Nov 11, 12:06 GMT+9 · 2026-11-11 03:06 UTC" —
  * the local end with its zone, then the exact UTC instant. Shared with the
  * Penalties list's Next column, so a row and its page name the same instant.
  */

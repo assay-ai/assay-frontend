@@ -54,10 +54,10 @@ describe("receipt timeline stamps (verify-r12 P3)", () => {
   const timeZone = "UTC";
 
   it("gives every row its day as well as its time", () => {
-    expect(timelineStamp("2026-10-17T00:40:07.000Z", { now, timeZone }).time).toBe("Today 00:40:07");
-    expect(timelineStamp("2026-10-16T23:05:00.000Z", { now, timeZone }).time).toBe("Yesterday 23:05:00");
-    expect(timelineStamp("2026-09-15T02:11:30.000Z", { now, timeZone })).toEqual({
-      time: "Sep 15, 02:11:30",
+    expect(timelineStamp("2026-10-17T00:40:07.000Z", { now }).time).toBe("Today 00:40:07 UTC");
+    expect(timelineStamp("2026-10-16T23:05:00.000Z", { now }).time).toBe("Yesterday 23:05:00 UTC");
+    expect(timelineStamp("2026-09-15T02:11:30.000Z", { now })).toEqual({
+      time: "Sep 15, 02:11:30 UTC",
       timeTitle: "2026-09-15 02:11:30.000 UTC",
     });
   });
@@ -72,9 +72,7 @@ describe("receipt timeline stamps (verify-r12 P3)", () => {
 });
 
 describe("receipt timeline zone note (final3 N2)", () => {
-  it("names the zone once and says why the rows keep seconds", () => {
-    const now = Date.parse("2026-10-17T10:00:00.000Z");
-    expect(timelineZoneNote({ now, timeZone: "Asia/Tokyo" })).toBe("Times in GMT+9, to the second");
-    expect(timelineZoneNote({ now, timeZone: "UTC" })).toBe("Times in UTC, to the second");
+  it("says the rows are UTC, to the second", () => {
+    expect(timelineZoneNote()).toBe("Times in UTC, to the second");
   });
 });

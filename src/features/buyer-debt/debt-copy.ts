@@ -2,7 +2,7 @@ import { shortToolId } from "@/components/g31/use-tool-names";
 import { debtCauseText } from "@/features/call-classes/labels";
 import { formatRemaining } from "@/hooks/useCountdown";
 import type { BuyerDebt, BuyerDebtState, CallDebt } from "@/interfaces/buyer-debt";
-import { formatLocalDateTime, zoneLabel } from "@/libs/local-time";
+import { formatUtcDateTime } from "@/libs/local-time";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -11,8 +11,6 @@ import { formatMoney } from "@/utils/money";
  */
 
 export interface DeadlineOptions {
-  /** IANA zone; defaults to the reader's own. */
-  timeZone?: string;
   /** "Now"; defaults to `Date.now()`. */
   now?: number;
 }
@@ -31,15 +29,15 @@ export function deadlineCountdown(iso: string, options: DeadlineOptions = {}): s
 }
 
 /**
- * The write-off moment in the reader's own time zone, with the zone and,
- * while it is ahead, a countdown: "Nov 15, 18:00 GMT-8 (in 12 days)". A UTC
- * date alone read a day late west of UTC (review 2026-10-17 P2-1). The
- * debts are read client-side only, so the local zone is safe to print.
+ * The write-off moment in UTC, labelled, and while it is ahead a countdown:
+ * "Nov 15, 18:00 UTC (in 12 days)". Day and time, never a bare date, which
+ * read a day late west of UTC (review 2026-10-17 P2-1).
  */
 export function debtDeadline(iso: string, options: DeadlineOptions = {}): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  const when = `${formatLocalDateTime(date, { ...options, alwaysDay: true, midSentence: true })} ${zoneLabel(date, options)}`.trim();
+  // Always UTC, labelled: the money screens' convention (`local-time.ts`).
+  const when = formatUtcDateTime(date, { ...options, alwaysDay: true, midSentence: true });
   const countdown = deadlineCountdown(iso, options);
   return countdown ? `${when} (${countdown})` : when;
 }
@@ -79,8 +77,8 @@ export function nextReplaceableAt(debts: readonly Pick<BuyerDebt, "replaceableAt
 }
 
 /**
- * Why a debt cannot be settled yet, with the moment in the reader's own time
- * zone and a countdown: "You can settle this from today 14:05 GMT+9 (in 12m):
+ * Why a debt cannot be settled yet, with the moment in UTC and a countdown:
+ * "You can settle this from today 07:05 UTC (in 12m):
  * the original payment must expire on chain first, so you never pay twice."
  * `subject: "the first"` is for several waiting debts (the time is the
  * earliest); `midSentence` starts it in lowercase, after a colon.

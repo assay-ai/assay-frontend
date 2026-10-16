@@ -253,7 +253,7 @@ function SettleDebtSheet({
     : null;
   const holdReason =
     holding && refusal
-      ? `Assay said this payment is not ready to sign yet. You can try again from ${formatClock(refusal.retryAt, { seconds: true })}.`
+      ? `Assay said this payment is not ready to sign yet. You can try again from ${formatClock(refusal.retryAt, { seconds: true, timeZone: "UTC" })} UTC.`
       : null;
   const disabledReason = readOnly
     ? "Your account is blocked, so nothing can be signed now. Contact Assay support."
@@ -401,7 +401,7 @@ function SettleDebtSheet({
                   <dt className="text-03">For</dt>
                   <dd className="text-01 [overflow-wrap:anywhere]">
                     a <span className="font-mono text-mono-13">{toolName(debt.toolId)}</span> call,{" "}
-                    <LocalTime value={debt.createdAt} midSentence alwaysDay withZone />
+                    <LocalTime value={debt.createdAt} midSentence alwaysDay utc />
                   </dd>
                   <dt className="text-03">From</dt>
                   <dd className="text-01 [overflow-wrap:anywhere]">your escrow{ownerShort ? ` (${ownerShort})` : ""}</dd>
