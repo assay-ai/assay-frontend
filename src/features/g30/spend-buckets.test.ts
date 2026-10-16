@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import type { ToolCall } from "@/services/tool-calls.service";
 
-import { callBuckets, reconcileSentence, spendBreakdown, spentFromTotals } from "./spend-buckets";
+import {
+  callBuckets,
+  chargedFromTotals,
+  owedFromTotals,
+  reconcileSentence,
+  spendBreakdown,
+  spentFromTotals,
+} from "./spend-buckets";
 import type { SummaryFigures } from "./wire";
 
 const ASSET = "eip155:46630/erc20:0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
@@ -124,5 +131,15 @@ describe("spendBreakdown", () => {
     expect(rows.find((r) => r.key === "owed")?.amount).toMatch(/0\.25$/);
     expect(spendBreakdown(totals({ owedCalls: 0, owedTotal: m("0") })).map((r) => r.key)).not.toContain("owed");
     expect(spendBreakdown(totals({ inProgressCalls: 1, inProgressTotal: m("100000") })).at(-1)?.key).toBe("in-progress");
+  });
+});
+
+describe("one meaning of spent (P2-3)", () => {
+  const m = (amount: string) => ({ amount, asset: "a", decimals: 6 });
+  it("is charged only, with owed beside it", () => {
+    expect(chargedFromTotals({ chargedTotal: m("1500000"), owedTotal: m("250000") } as never)).toEqual(m("1500000"));
+    expect(owedFromTotals({ owedTotal: m("250000") })).toEqual(m("250000"));
+    expect(owedFromTotals({ owedTotal: m("0") })).toBeNull();
+    expect(chargedFromTotals(undefined)).toBeNull();
   });
 });

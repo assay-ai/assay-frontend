@@ -1,6 +1,6 @@
 "use client";
 
-import { spentFromTotals } from "@/features/g30/spend-buckets";
+import { chargedFromTotals, owedFromTotals } from "@/features/g30/spend-buckets";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { CursorPage, Money } from "@/interfaces";
@@ -52,6 +52,8 @@ export interface OverviewData {
   withheld: WithheldForAsset | null;
   monthListed: Money | null;
   todayCharged: Money | null;
+  /** Owed today (buyer debt not collected), shown beside the charged figure. */
+  todayOwed: Money | null;
   todayCalls: number;
   yesterdayCharged: Money | null;
   chart: ChartDay[];
@@ -157,10 +159,11 @@ export function useOverview(anchor: Date, assetKey: string | null = null): Overv
           holds: holds.items ?? [],
           withheld: readWithheld(withheldRaw, monthSummary.asset),
           monthListed: monthSummary.totals?.listedTotal ?? null,
-          // Charged plus owed: an open or written-off debt is spend the buyer still owes.
-          todayCharged: spentFromTotals(todayGroup),
+          // "Spent" is charged only (one meaning on every screen); owed sits beside it.
+          todayCharged: chargedFromTotals(todayGroup),
+          todayOwed: owedFromTotals(todayGroup),
           todayCalls: todayGroup?.calls ?? 0,
-          yesterdayCharged: spentFromTotals(byDay.get(yesterday.key)),
+          yesterdayCharged: chargedFromTotals(byDay.get(yesterday.key)),
           chart: chart.chart,
           chartTools: chart.tools,
           recentCalls: calls.items ?? [],

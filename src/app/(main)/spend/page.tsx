@@ -227,7 +227,9 @@ export default function SpendPage() {
             <div className="flex min-w-0 flex-col gap-1">
               <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <span className="font-mono text-mono-2xl font-semibold text-01">{formatMoney(summary.totals.chargedTotal)}</span>
-                <span className="text-body-md text-02">spent</span>
+                <span className="text-body-md text-02">
+                  <Term k="spent">spent</Term>
+                </span>
                 <span aria-hidden="true" className="text-03">·</span>
                 <span className="font-mono text-mono-md font-semibold text-teal-600">
                   {formatMoney(summary.totals.notChargedTotal ?? summary.totals.withheldTotal)}
@@ -239,7 +241,9 @@ export default function SpendPage() {
                   <>
                     <span aria-hidden="true" className="text-03">·</span>
                     <span className="font-mono text-mono-md font-semibold text-warning-700">{formatMoney(summary.totals.owedTotal)}</span>
-                    <span className="text-body-md text-02">owed</span>
+                    <span className="text-body-md text-02">
+                      <Term k="owed">owed</Term>
+                    </span>
                   </>
                 ) : null}
                 {change ? (
