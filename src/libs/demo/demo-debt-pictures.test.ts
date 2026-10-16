@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { heldSegmentLabel } from "@/features/buyer-debt/debt-copy";
+import { chargedCallsFromTotals } from "@/features/g30/spend-buckets";
 import { debtBannerSummary, owedChangeRow, settleEscrowCheck } from "@/features/buyer-debt/debt-summary";
 import type { BuyerDebt } from "@/interfaces/buyer-debt";
 
@@ -76,7 +77,13 @@ describe("demo debt pictures and the settle sheet's escrow check", () => {
   });
 
   it("?debt=written-off counts the owed call on the day it was made, not in today's figures", () => {
-    type Totals = { calls: number; owedCalls: number; chargedTotal: { amount: string } };
+    type Totals = {
+      calls: number;
+      owedCalls: number;
+      notChargedCalls?: number;
+      inProgressCalls?: number;
+      chargedTotal: { amount: string };
+    };
     const summary = (from: number, to: number) =>
       (
         demoResponse("GET", "/receipts/summary", {
@@ -100,6 +107,9 @@ describe("demo debt pictures and the settle sheet's escrow check", () => {
     expect(writtenOffToday.owedCalls).toBe(0);
     expect(writtenOffToday.calls).toBe(openToday.calls - 1);
     expect(writtenOffToday.chargedTotal).toEqual(openToday.chargedTotal);
+    // "Spent today" counts the charged calls: the same count whether the owed call is today's or not.
+    expect(chargedCallsFromTotals(openToday)).toBe(chargedCallsFromTotals(writtenOffToday));
+    expect(chargedCallsFromTotals(openToday)).toBe(openToday.calls - 1 - (openToday.notChargedCalls ?? 0) - (openToday.inProgressCalls ?? 0));
     // Its own day still has it, owed.
     const madeAt = Date.parse(debts[0]!.createdAt);
     const madeDay = Date.UTC(new Date(madeAt).getUTCFullYear(), new Date(madeAt).getUTCMonth(), new Date(madeAt).getUTCDate());

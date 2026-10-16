@@ -1,6 +1,6 @@
 "use client";
 
-import { chargedFromTotals, owedFromTotals } from "@/features/g30/spend-buckets";
+import { chargedCallsFromTotals, chargedFromTotals, owedFromTotals } from "@/features/g30/spend-buckets";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { CursorPage, Money } from "@/interfaces";
@@ -56,7 +56,10 @@ export interface OverviewData {
   todayCharged: Money | null;
   /** Owed today (buyer debt not collected), shown beside the charged figure. */
   todayOwed: Money | null;
+  /** The calls behind `todayCharged` (owed, not charged and in-progress calls left out). */
   todayCalls: number;
+  /** Today's calls owed as buyer debt, counted apart from `todayCalls`. */
+  todayOwedCalls: number;
   yesterdayCharged: Money | null;
   chart: ChartDay[];
   /** Tool ids seen in the 7-day window, most-spent first. */
@@ -160,7 +163,9 @@ export function useOverview(anchor: Date, assetKey: string | null = null): Overv
           // "Spent" is charged only (one meaning on every screen); owed sits beside it.
           todayCharged: chargedFromTotals(todayGroup),
           todayOwed: owedFromTotals(todayGroup),
-          todayCalls: todayGroup?.calls ?? 0,
+          // The count matches the amount: charged calls only; an owed call is named apart.
+          todayCalls: chargedCallsFromTotals(todayGroup),
+          todayOwedCalls: todayGroup?.owedCalls ?? 0,
           yesterdayCharged: chargedFromTotals(yesterdaySummary.totals),
           chart: chart.chart,
           chartTools: chart.tools,
