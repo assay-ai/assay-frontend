@@ -21,6 +21,7 @@ import {
   readExplorerState,
   formatCallPrice,
   offerLine,
+  offerSubLine,
   priceRange,
   plural,
   smallestFreeAllowance,
@@ -58,10 +59,10 @@ function matches(needle: string, ...fields: (string | null | undefined)[]): bool
 }
 
 function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: number | null }) {
-  // "from" only over paid listings: `priceRange` ignores free ones.
-  const range = priceRange(tool.price, [tool.fromPrice]);
+  // "from" only over paid listings: gated on `paidBindings` when the API sends it; `priceRange` ignores free ones.
+  const range = priceRange(tool.price, (tool.paidBindings ?? 2) > 1 ? [tool.fromPrice] : []);
   const offer = offerLine({ mode: tool.pricingMode, range, freeCallsPerDay: freeAllowance });
-  const sub = range?.differs ? `held at most ${formatCallPrice(range.held)}, paid only if it passes` : range ? "paid only if it passes" : "";
+  const sub = offerSubLine(tool.pricingMode, range);
   return (
     <li>
       <Link

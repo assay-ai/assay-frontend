@@ -42,6 +42,19 @@ export interface PublicTool {
   routable: boolean;
   /** CAIP-2 chains a call would settle on; null when nothing is routable. */
   settlementChains: string[] | null;
+  /**
+   * Routable listings that can be charged (PAID or FREEMIUM), as the signed-in
+   * catalogue sends it. The public DTO does not carry it today; when it does,
+   * "from" is printed only over more than one. Without it, `priceRange` still
+   * ignores free listings.
+   */
+  paidBindings?: number;
+  /**
+   * The backend's free calls per agent per day for a FREEMIUM tool. Not on the
+   * public DTO today; the screens fall back to the smallest per-listing figure
+   * from the provider details.
+   */
+  freeCallsPerDay?: number | null;
 }
 
 export interface PublicProvider {
