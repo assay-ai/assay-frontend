@@ -50,13 +50,17 @@ export function parseCallsFilter(raw: string | null | undefined): CallsFilter {
 }
 
 /**
- * The `status` the API filters on for a chip; `undefined` for All, Owed and
- * Free (filtered here: the API has no debt filter, and an owed call's status
- * is not one fixed value).
+ * The `status` the API filters on for a chip; `undefined` for All and Free.
+ * The API has no debt or forfeit filter, so every chip is also filtered here
+ * on `callOutcome`.
  */
 export function statusesFor(filter: CallsFilter): string[] | undefined {
   if (filter === "charged") return [...CHARGED_STATUSES];
-  if (filter === "not-charged") return [...NOT_CHARGED_STATUSES];
+  // A forfeited call or a voided debt is not charged but stays SETTLED, so the
+  // chip asks for SETTLED too and keeps only the not-charged ones here.
+  if (filter === "not-charged") return [...NOT_CHARGED_STATUSES, ...CHARGED_STATUSES];
+  // Buyer debt (open or written off) is a SETTLED intent.
+  if (filter === "owed") return [...CHARGED_STATUSES];
   return undefined;
 }
 
