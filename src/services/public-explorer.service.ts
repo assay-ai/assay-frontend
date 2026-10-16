@@ -126,6 +126,16 @@ export interface PublicNotCharged {
     callsFailedCheck: number;
     /** One entry per asset — a list, never a sum. */
     amountNotCharged: Money[];
+    /**
+     * The not-charged calls that did not fail the check, by reason, largest
+     * first (never `FAILED_CHECK`). A reason is listed only when every part of
+     * its figure comes from at least `minBuyers` buyers. Optional: a backend
+     * before the split does not send it, and the screens then show one merged
+     * line.
+     */
+    notChargedByReason?: { reason: NotChargedReason | (string & {}); calls: number }[];
+    /** The rest of those calls: reasons too rare to list on their own. */
+    callsNotChargedOther?: number;
   };
   recent: PublicNotChargedCall[];
 }
