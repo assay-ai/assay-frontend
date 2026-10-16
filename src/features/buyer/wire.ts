@@ -52,8 +52,19 @@ export interface SummaryTotals {
   calls: number;
   refundedCalls: number;
   listedTotal: Money;
+  /** Served and collected. Open or written-off buyer debt is in `owedTotal`. */
   chargedTotal: Money;
+  /** The guarantee's withheld figure: a part of `notChargedTotal`, not all of it. */
   withheldTotal: Money;
+  /** `listedTotal = chargedTotal + notChargedTotal + owedTotal + inProgressTotal`. */
+  notChargedTotal: Money;
+  notChargedCalls: number;
+  /** Buyer debt, open or written off: served, not collected yet, still owed. */
+  owedTotal: Money;
+  owedCalls: number;
+  /** Calls not finished yet, at their listed price. */
+  inProgressTotal: Money;
+  inProgressCalls: number;
   failRate: number;
 }
 

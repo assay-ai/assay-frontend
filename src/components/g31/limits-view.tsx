@@ -21,6 +21,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { spentFromTotals } from "@/features/g30/spend-buckets";
 import { policyBootstrapAsset, type PolicyBootstrapAsset } from "@/features/limits/policy-bootstrap";
 import { useChains } from "@/hooks/useChains";
 import type { Money } from "@/interfaces";
@@ -139,12 +140,13 @@ import {
 
 interface SummaryTotals {
   chargedTotal?: Money;
+  owedTotal?: Money;
   calls?: number;
 }
 
+/** The fallback's spend: charged plus owed (open or written-off debt is still spend). */
 function summaryCharged(summary: unknown): Money | null {
-  const totals = (summary as { totals?: SummaryTotals } | undefined)?.totals;
-  return totals?.chargedTotal ?? null;
+  return spentFromTotals((summary as { totals?: SummaryTotals } | undefined)?.totals);
 }
 
 /** Same shape as `percentOf` (`format.ts`) but for the two count-based ceilings, which are not `Money`. */

@@ -178,6 +178,20 @@ export default function GuaranteePage() {
       cell: (r) => formatMoney(r.notCharged),
     },
     {
+      key: "owed",
+      header: "Owed",
+      width: 100,
+      mono: true,
+      cell: (r) => formatMoney(r.owed),
+    },
+    {
+      key: "inProgress",
+      header: "In progress",
+      width: 100,
+      mono: true,
+      cell: (r) => formatMoney(r.inProgress),
+    },
+    {
       key: "share",
       header: "%",
       width: 60,
@@ -274,6 +288,9 @@ export default function GuaranteePage() {
             <p className="text-body-md text-02">
               You were billed {formatMoney(data?.charged ?? null)} of{" "}
               {formatMoney(data?.listed ?? null)} worth of calls this month
+              {isZeroMoney(data?.owed ?? null)
+                ? ""
+                : `, and you still owe ${formatMoney(data?.owed ?? null)} not collected yet`}
               {percent ? ` — ${percent} withheld.` : "."}
             </p>
           </div>
@@ -397,15 +414,19 @@ export default function GuaranteePage() {
                           value: formatMoney(m.notCharged),
                           tone: "teal",
                         },
+                        ...(isZeroMoney(m.owed) ? [] : [{ label: "Owed", value: formatMoney(m.owed) }]),
+                        ...(isZeroMoney(m.inProgress)
+                          ? []
+                          : [{ label: "In progress", value: formatMoney(m.inProgress) }]),
                       ]}
-                      meta={`${sharePercent(m.notCharged, m.listed) ?? "—"} withheld`}
+                      meta={`${sharePercent(m.notCharged, m.listed) ?? "—"} not charged`}
                     />
                   ))}
                 </div>
                 <div className="hidden w-full overflow-x-auto tablet:block">
                   <Table
                     caption="Not charged, by month"
-                    className="min-w-[560px]"
+                    className="min-w-[760px]"
                     columns={monthColumns}
                     rows={monthRows}
                   />
