@@ -42,3 +42,30 @@ export function OwedRowAction({ intentId, className }: { intentId: string; class
     </div>
   );
 }
+
+/**
+ * On an owed receipt: settle this call here, or say why there is nothing to
+ * sign (signed and being collected, owed by another wallet, or no longer in
+ * the debts list).
+ */
+export function OwedReceiptAction({ intentId }: { intentId: string }) {
+  const debts = useBuyerDebtsQuery();
+  const { openSettle } = useSettleDebt();
+  const state = owedCallState(debts.data, intentId);
+  if (state.kind === "settle") {
+    return (
+      <Button size="sm" type="button" className="mt-1 self-start" onClick={() => openSettle(intentId)}>
+        Settle {formatMoney(state.debt.amount, { decimals: 4 })}
+      </Button>
+    );
+  }
+  const text =
+    state.kind === "collecting"
+      ? "You signed it: it is being collected, and paid calls resume once it is."
+      : state.kind === "other-wallet"
+        ? "Another wallet of your organization owes it: sign in with that wallet to settle."
+        : debts.isPending
+          ? null
+          : "Nothing to sign for it from this session right now.";
+  return text ? <p className="text-body-xs text-02">{text}</p> : null;
+}
