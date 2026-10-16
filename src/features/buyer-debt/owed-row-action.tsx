@@ -8,7 +8,10 @@ import { routes } from "@/libs/routes";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
-import { debtBannerSummary, owedCallState } from "./debt-summary";
+import type { CallDebt } from "@/interfaces/buyer-debt";
+
+import { debtDeadline } from "./debt-copy";
+import { debtBannerSummary, debtDeadlineLine, earliestWriteOff, owedCallState, owedRowText } from "./debt-summary";
 import { useBuyerDebtsQuery, useSettleDebt } from "./settle-debt-sheet";
 
 /**
@@ -17,7 +20,16 @@ import { useBuyerDebtsQuery, useSettleDebt } from "./settle-debt-sheet";
  * "Settle $2.50" opens the settle sheet for this one call; a call that is
  * signed already, or owed by another wallet, says so instead.
  */
-export function OwedRowAction({ intentId, className }: { intentId: string; className?: string }) {
+export function OwedRowAction({
+  intentId,
+  debt,
+  className,
+}: {
+  intentId: string;
+  /** The row's own debt flag, so a written-off call says so (P3-3). */
+  debt?: CallDebt | null;
+  className?: string;
+}) {
   const debts = useBuyerDebtsQuery();
   const { openSettle } = useSettleDebt();
   const state = owedCallState(debts.data, intentId);
@@ -30,11 +42,7 @@ export function OwedRowAction({ intentId, className }: { intentId: string; class
       )}
     >
       <span className="min-w-0 flex-1 text-body-xs text-warning-700">
-        {state.kind === "collecting"
-          ? "Signed · being collected. Paid calls resume once it is."
-          : state.kind === "other-wallet"
-            ? "Owed by another wallet of your organization: sign in with it to settle."
-            : "Payment not collected · paid calls paused until you settle."}
+        {owedRowText(state, { pending: debts.isPending, callDebt: debt ?? null })}
       </span>
       {state.kind === "settle" ? (
         <Button size="sm" variant="secondary" type="button" onClick={() => openSettle(intentId)}>
@@ -55,17 +63,25 @@ export function OwedReceiptAction({ intentId }: { intentId: string }) {
   const { openSettle } = useSettleDebt();
   const state = owedCallState(debts.data, intentId);
   if (state.kind === "settle") {
+    const deadline = debtDeadlineLine(state.debt);
     return (
-      <Button size="sm" type="button" className="mt-1 self-start" onClick={() => openSettle(intentId)}>
-        Settle {formatMoney(state.debt.amount, { decimals: 4 })}
-      </Button>
+      <>
+        {deadline ? (
+          <p className="text-body-13 font-medium text-warning-700" data-testid="receipt-settle-by">
+            {deadline}
+          </p>
+        ) : null}
+        <Button size="sm" type="button" className="mt-1 self-start" onClick={() => openSettle(intentId)}>
+          Settle {formatMoney(state.debt.amount, { decimals: 4 })}
+        </Button>
+      </>
     );
   }
   const text =
     state.kind === "collecting"
       ? "You signed it: it is being collected, and paid calls resume once it is."
       : state.kind === "other-wallet"
-        ? "Another wallet of your organization owes it: sign in with that wallet to settle."
+        ? `Another wallet of your organization owes it: sign in with that wallet to settle. ${debtDeadlineLine(state.debt) ?? ""}`.trim()
         : debts.isPending
           ? null
           : "Nothing to sign for it from this session right now.";
@@ -81,6 +97,7 @@ export function OwedSummaryAction({ owed, calls }: { owed: string; calls: number
   const debts = useBuyerDebtsQuery();
   const { openSettle } = useSettleDebt();
   const summary = debtBannerSummary(debts.data);
+  const settleBy = earliestWriteOff(debts.data);
   return (
     <div
       data-testid="owed-summary-action"
@@ -90,6 +107,7 @@ export function OwedSummaryAction({ owed, calls }: { owed: string; calls: number
         <span className="font-mono font-semibold">{owed}</span> owed
         {calls === null ? "" : ` for ${calls === 1 ? "1 call" : `${calls} calls`}`}: payment not collected, and paid calls
         are paused until it is settled.
+        {settleBy ? ` Settle by ${debtDeadline(settleBy)}, or the provider goes unpaid.` : ""}
       </p>
       <div className="flex shrink-0 items-center gap-2">
         <Button size="sm" variant="ghost" asChild>

@@ -106,6 +106,36 @@ export function loweredDelayNote(
   return lowersCaps(current, next) ? loweredDelayedText(tightenDelaySeconds!) : null;
 }
 
+/**
+ * What a lowering does, said BEFORE signing (review 2026-10-17 P2-11): with
+ * the tighten delay (D-21) the delayed-apply note; without it, the ~30-second
+ * pause the backend puts on the agents' payments while it lands; and when the
+ * delay could not be read (`tightenDelaySeconds === undefined`), the honest
+ * "may pause briefly". `null` when nothing goes down.
+ */
+export function loweringBeforeSignNote(
+  tightenDelaySeconds: number | null | undefined,
+  current: AtomicCaps | null | undefined,
+  next: AtomicCaps | null | undefined,
+): string | null {
+  if (!current || !next || !lowersCaps(current, next)) return null;
+  if (hasTightenDelay(tightenDelaySeconds)) return loweredDelayedText(tightenDelaySeconds!);
+  if (tightenDelaySeconds === undefined) {
+    return "Lower than now: your agents' payments may pause briefly while it lands.";
+  }
+  return "Lower than now: your agents' payments pause for about 30 seconds while it lands.";
+}
+
+/**
+ * A lowering when the payments still being settled could not be read: the
+ * screen cannot tell whether it strands any, so it says that it may, and what
+ * that costs (P2-11).
+ */
+export const LOWERING_UNREAD_NOTE =
+  "Lower than now. Its payments may pause briefly while the lower limits land. Payments still being settled " +
+  "could not be checked: if any no longer fit, each becomes a payment you owe, and paid calls pause until you " +
+  "sign it again. Waiting about a minute after its last call avoids this.";
+
 /** True when `next` lowers either cap, or (when both carry one) the expiry. */
 export function lowersCaps(current: AtomicCaps, next: AtomicCaps): boolean {
   return (
@@ -198,22 +228,36 @@ const REASON_TEXT: Record<StrandReason, string> = {
   revoked: "a revoked key's payments cannot be redeemed",
 };
 
+/**
+ * What a stranded payment turns into (assay-backend
+ * `voucher-redemption.service.ts` BUYER_TIGHTENING_ERRORS, review-buyer-debt
+ * M3): the chain refuses it, the platform retries until about a minute before
+ * the voucher's on-chain deadline (about 35 minutes after it was signed), and
+ * a re-grant or a raised cap in that time makes it redeemable again. After
+ * that it becomes BUYER DEBT: the buyer owes it, paid calls are refused until
+ * the buyer signs it again, free calls keep working.
+ */
+const STRAND_CONSEQUENCE =
+  "becomes a payment you owe: your paid calls pause until you sign it again (Settle in the banner). " +
+  "Free calls keep working.";
+
 /** What the screen says about a change that strands them. */
 export function strandWarning(reasons: readonly StrandReason[], count: number): string {
   const them = count === 1 ? "it" : "them";
   const why = reasons.map((r) => REASON_TEXT[r]).join("; ");
   return (
     `This change would leave ${them} unredeemable${why ? ` (${why})` : ""}: the chain refuses ` +
-    `${them} and the provider is not paid for work already done. They usually settle within a ` +
-    `minute.`
+    `${them}, so the provider is not paid for work already done. Unless you undo the change within about ` +
+    `30 minutes, each one ${STRAND_CONSEQUENCE} They usually settle within a minute, so waiting avoids this.`
   );
 }
 
 /**
  * The acknowledgement on a signing screen whose change strands payments
- * still being settled: the count, the amount and the effect in plain words
- * (the chain refuses them, the provider is not paid for calls it served,
- * the money stays in the escrow), and the way to avoid it.
+ * still being settled: the count, the amount and the true effect in plain
+ * words (the chain refuses them and, unless the change is undone in time,
+ * they become payments the buyer owes, which pauses paid calls), and the way
+ * to avoid it.
  */
 export function strandAcknowledgement(unsettled: UnsettledVouchers | null | undefined): string | null {
   const line = unsettledLine(unsettled);
@@ -223,8 +267,9 @@ export function strandAcknowledgement(unsettled: UnsettledVouchers | null | unde
   const amount = formatMoney(unsettled.amount, { decimals: !value.isZero() && value.lt("0.01") ? 4 : 2 });
   return (
     `${line.charAt(0).toUpperCase()}${line.slice(1)} would no longer fit. I accept that the chain then refuses ` +
-    `${one ? "it" : "them"}: the provider is not paid for ${one ? "a call" : "calls"} it already served, and the ` +
-    `${amount} stays in my escrow. (Waiting about a minute for ${one ? "it" : "them"} to settle avoids this.)`
+    `${one ? "it" : "them"} and, unless I undo this change within about 30 minutes, the ${amount} ` +
+    `becomes a payment I owe: my paid calls pause until I sign ${one ? "it" : "them"} again (Settle in the banner). ` +
+    `Free calls keep working. (Waiting about a minute for ${one ? "it" : "them"} to settle avoids this.)`
   );
 }
 

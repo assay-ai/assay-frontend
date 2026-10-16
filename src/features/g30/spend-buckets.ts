@@ -61,6 +61,27 @@ export function reconcileSentence(totals: ReceiptsSummary["totals"]): string {
  * it out only by understating the day (final review M1). In-progress calls are
  * not spent yet. `null` when the summary carries no charged figure.
  */
+/**
+ * What "spent" means on every buyer screen (Overview's Today tile, Funding's
+ * 7-day runway, Activity › Spend's headline): CHARGED only — money that left
+ * the escrow. Owed (buyer debt not collected yet) is never folded in; each
+ * screen shows it beside the figure as "owed" (review 2026-10-17 P2-3).
+ */
+export function chargedFromTotals(
+  totals: { chargedTotal?: Money | null } | null | undefined,
+): Money | null {
+  return totals?.chargedTotal ?? null;
+}
+
+/** The owed figure beside "spent", or `null` when nothing is owed. */
+export function owedFromTotals(
+  totals: { owedTotal?: Money | null; owedCalls?: number | null } | null | undefined,
+): Money | null {
+  const owed = totals?.owedTotal ?? null;
+  if (!owed || BigInt(owed.amount || "0") <= 0n) return null;
+  return owed;
+}
+
 export function spentFromTotals(
   totals: { chargedTotal?: Money | null; owedTotal?: Money | null } | null | undefined,
 ): Money | null {

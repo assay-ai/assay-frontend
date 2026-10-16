@@ -6,10 +6,11 @@ import * as React from "react";
 import { formatLimit } from "@/components/g31/format";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
-import { capsSuccessText, capsToForm, parseCaps } from "@/features/buyer-money/caps";
+import { capsSuccessText, capsToForm, ceilingBelowSpentNote, parseCaps } from "@/features/buyer-money/caps";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
+import { windowRefillAt } from "@/features/buyer-money/refill";
 import {
-  loweredDelayNote,
+  loweringBeforeSignNote,
   strandAcknowledgement,
   strandReasons,
 } from "@/features/delegation/unsettled";
@@ -17,6 +18,8 @@ import { applyLimitsSubmitted } from "@/features/escrow/after-set-limits";
 import { ESCROW_SUBMITTERS, runEscrowAction } from "@/features/escrow/relayed-submission";
 import type { EscrowLimitsBody } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
+import { demoEnabled } from "@/libs/demo/demo-api";
+import { rememberDemoEscrowCaps } from "@/libs/demo/demo-stage";
 import { freeCallsOnlyText, servesPaidCalls } from "@/libs/chains/paid-rails";
 import { getEscrowUnsettled } from "@/services/delegation.service";
 import { createEscrowLimitsIntent, submitEscrowLimits } from "@/services/escrow.service";
@@ -83,7 +86,20 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
       : null;
   const strands = body && currentCaps ? strandReasons(unsettled.data?.unsettled, currentCaps, body, tightenDelay) : [];
   const atRisk = strands.length > 0;
-  const loweredNote = body && currentCaps ? loweredDelayNote(tightenDelay, currentCaps, body) : null;
+  // Before signing: the delayed apply (D-21), the ~30 s pause, or "may pause
+  // briefly" when the delay could not be read (P2-11).
+  const loweredNote =
+    body && currentCaps
+      ? loweringBeforeSignNote(unsettled.isSuccess ? (tightenDelay ?? null) : undefined, currentCaps, body)
+      : null;
+  const overSpentNote = body
+    ? ceilingBelowSpentNote(
+        money.escrow?.spentInWindow,
+        body.maxPerWindow,
+        windowRefillAt(money.escrow?.windowStartedAt, money.escrow?.windowSeconds ?? 0),
+        (atomic) => formatLimit({ amount: atomic, asset: money.escrow?.maxPerWindow?.asset ?? "", decimals: money.decimals }),
+      )
+    : null;
   // Solana serves free calls only (paid rails off): the ceiling caps no call there today.
   const freeOnly = money.chainId !== null && !servesPaidCalls(money.chainId);
 
@@ -144,6 +160,13 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
       disabledReason={disabledReason}
       describeError={describeMoneyError}
       acknowledge={atRisk ? (strandAcknowledgement(unsettled.data?.unsettled) ?? undefined) : undefined}
+      onSuccess={() => {
+        // DEMO ONLY: nothing was signed; show the new ceiling until reload.
+        if (demoEnabled() && body) {
+          rememberDemoEscrowCaps(body);
+          void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+        }
+      }}
       successTitle="Account ceiling set"
       successDescription={
         next
@@ -169,6 +192,11 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
       {loweredNote ? (
         <p className="text-body-13 text-02" data-testid="limits-tighten-delay">
           {loweredNote}
+        </p>
+      ) : null}
+      {overSpentNote ? (
+        <p className="text-body-13 text-warning-700" data-testid="limits-below-spent">
+          {overSpentNote}
         </p>
       ) : null}
       {freeOnly && money.chainName ? (

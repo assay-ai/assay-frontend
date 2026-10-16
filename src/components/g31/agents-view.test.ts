@@ -24,7 +24,16 @@ const paying = {
 
 describe("Revoke key says whether paying stops too", () => {
   it("on the key the agent pays through", () => {
-    expect(revokeKeyText(agent, key("eip155:1:0xd"), paying)).toContain("Paying stops too");
+    const text = revokeKeyText(agent, key("eip155:1:0xd"), paying);
+    expect(text).toContain("it makes no more paid calls through Assay");
+    expect(text).toContain("Its on-chain permission to pay is not removed by this: Stop it paying removes it.");
+    expect(text).not.toContain("Paying stops too");
+    expect(text).not.toContain("can still be collected");
+  });
+  it("says how long signed payments stay collectable on a D-21 escrow", () => {
+    expect(revokeKeyText(agent, key("eip155:1:0xd"), paying, 3600)).toContain(
+      "If you then Stop it paying, payments it already signed can still be collected for 1 hour.",
+    );
   });
   it("on a key with no payment key", () => {
     const text = revokeKeyText(agent, key(null), undefined);

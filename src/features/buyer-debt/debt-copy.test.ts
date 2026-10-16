@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BuyerDebt } from "@/interfaces/buyer-debt";
 import { ApiError } from "@/libs/ApiClient";
@@ -7,7 +7,8 @@ import {
   callPaymentNote,
   debtBannerDescription,
   debtBannerTitle,
-  debtDate,
+  deadlineCountdown,
+  debtDeadline,
   debtOutstandingContext,
   debtRefusalSentence,
   debtRowText,
@@ -39,19 +40,25 @@ function debt(overrides: Partial<BuyerDebt> = {}): BuyerDebt {
   };
 }
 
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-17T00:00:00.000Z"));
+});
+afterEach(() => vi.useRealTimers());
+
 describe("the debt banner", () => {
   it("says in plain words what happened, what it blocks and the write-off date", () => {
     expect(debtBannerDescription([debt()])).toBe(
       "A call your agent made could not be collected from your escrow (the agent key that signed it was revoked). " +
         "Paid calls are paused until you settle it. Free calls still work. " +
-        "If not settled by 15 Nov 2026, it is written off and the provider goes unpaid, " +
+        "If not settled by Nov 15, 00:00 UTC (in 29 days), it is written off and the provider goes unpaid, " +
         "but paid calls stay paused until you settle it.",
     );
   });
 
   it("says a written-off debt still pauses paid calls, and that settling it pays the provider", () => {
     const text = debtBannerDescription([debt({ state: "WRITTEN_OFF", writeOffAt: "2026-10-01T00:00:00.000Z" })]);
-    expect(text).toContain("written off on 1 Oct 2026");
+    expect(text).toContain("written off on Oct 1, 00:00 UTC");
     expect(text).toContain("the provider was not paid");
     expect(text).toContain("Paid calls stay paused until you settle it, and settling it pays the provider.");
     expect(debtBannerTitle([debt({ state: "WRITTEN_OFF" })])).toMatch(/^Settle .*\$2\.50 your agent owes/);
@@ -77,8 +84,8 @@ describe("the debt banner", () => {
     expect(text).toMatch(/^3 calls your agents made could not be collected/);
     expect(text).toContain("1 was written off: its provider was not paid, and settling it pays the provider.");
     expect(text).toContain("1 is signed and being collected.");
-    expect(text).toContain("If the open one is not settled by 15 Nov 2026");
-    expect(text).not.toContain("1 Oct 2026");
+    expect(text).toContain("If the open one is not settled by Nov 15, 00:00 UTC (in 29 days)");
+    expect(text).not.toContain("Oct 1,");
     expect(
       debtBannerTitle([debt(), debt({ state: "REPLACING" }), debt({ state: "WRITTEN_OFF" })]),
     ).toBe("Settle 2 payments your agents owe");
@@ -140,7 +147,7 @@ describe("the debt banner", () => {
     ]);
     expect(text).toMatch(/^2 calls your agents made/);
     expect(text).toContain("Paid calls are paused until every one is settled.");
-    expect(text).toContain("1 Nov 2026 (the earliest)");
+    expect(text).toContain("If the earliest is not settled by Nov 1, 00:00 UTC (in 15 days)");
     expect(debtBannerTitle([debt(), debt()])).toBe("Settle 2 payments your agents owe");
   });
 
@@ -148,8 +155,14 @@ describe("the debt banner", () => {
     expect(debtBannerTitle([debt()])).toMatch(/^Settle .*\$2\.50 your agent owes for a call$/);
   });
 
-  it("prints a date in UTC", () => {
-    expect(debtDate("2026-11-15T23:30:00.000Z")).toBe("15 Nov 2026");
+  it("prints the deadline in the reader's zone, with the time, the zone and a countdown", () => {
+    expect(debtDeadline("2026-11-16T02:00:00.000Z", { timeZone: "America/Los_Angeles" })).toBe(
+      "Nov 15, 18:00 PST (in 30 days)",
+    );
+    expect(debtDeadline("2026-11-16T02:00:00.000Z")).toBe("Nov 16, 02:00 UTC (in 30 days)");
+    expect(debtDeadline("2026-10-17T05:30:00.000Z")).toBe("today 05:30 UTC (in 5h 30m)");
+    expect(debtDeadline("2026-10-01T00:00:00.000Z")).toBe("Oct 1, 00:00 UTC");
+    expect(deadlineCountdown("2026-10-01T00:00:00.000Z")).toBeNull();
   });
 });
 
@@ -224,7 +237,7 @@ describe("call payment notes", () => {
   it("names a debt or a forfeit on a call row, and nothing for an ordinary call", () => {
     expect(callPaymentNote({ debt: "OUTSTANDING" })).toBe("Payment not collected · settle to resume paid calls");
     expect(callPaymentNote({ debt: "WRITTEN_OFF" })).toBe("Written off · still owed to resume paid calls");
-    expect(callPaymentNote({ debt: "VOIDED" })).toBe("Failed checks later · not charged");
+    expect(callPaymentNote({ debt: "VOIDED" })).toBe("Debt cancelled by a late verdict · not charged");
     expect(callPaymentNote({ forfeited: true })).toBe("Not charged · provider forfeited");
     expect(callPaymentNote({ forfeited: false, debt: null })).toBeNull();
   });

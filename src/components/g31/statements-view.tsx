@@ -81,8 +81,8 @@ export function StatementFigures({ totals, withheldSub }: { totals: SummaryFigur
       />
       {owedCalls > 0 || hasMoney(totals.owedTotal) ? (
         <KeyValueRow
-          label="Owed"
-          sub={`${plural(owedCalls, "call")} · not collected yet`}
+          label={<Term k="owed">Owed</Term>}
+          sub={`${plural(owedCalls, "call")} · still owed by you, not collected yet, so not in You paid`}
           value={`−${formatMoney(totals.owedTotal, { decimals: 2 })}`}
           valueClassName="text-warning-700"
         />
@@ -96,6 +96,7 @@ export function StatementFigures({ totals, withheldSub }: { totals: SummaryFigur
       ) : null}
       <KeyValueRow
         label="You paid"
+        sub="Listed price less the lines above"
         value={<span className="text-heading-sm">{formatMoney(totals.chargedTotal, { decimals: 2 })}</span>}
         divider={false}
       />
@@ -141,7 +142,7 @@ function StatementsContent() {
   // Why calls were withheld, from `GET /withheld`: a part of Not charged, never all of it.
   const withheldSub =
     notChargedCalls !== null && failedChecks !== null && noResult !== null
-      ? `${formatCount(failedChecks)} failed checks, ${formatCount(noResult)} no result`
+      ? `${formatCount(failedChecks)} failed checks, ${formatCount(noResult)} had no usable result or went uncollected`
       : null;
   const groups = summary.data?.groups ?? [];
 

@@ -4,7 +4,11 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
+import Link from "next/link";
+
+import { usePauseAll } from "@/components/buyer-money/pause-all";
 import { requireSigner, useEscrowQuery, useWalletBlocker } from "@/components/buyer-money/use-buyer-money";
+import { Button } from "@/components/ui/button";
 import { LocalTime } from "@/components/patterns/local-time";
 import { WalletActionSheet, type WalletStep, type WalletStepResult } from "@/components/patterns/sign-action";
 import { hasBlockStatusSession } from "@/features/account-block/state";
@@ -23,8 +27,14 @@ import { createDebtVoucherIntent, getBuyerDebts, submitDebtVoucher } from "@/ser
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { formatMoney } from "@/utils/money";
 
-import { debtDate, debtStateOf, debtsToSign, settledToast, splitDebts } from "./debt-copy";
-import { balanceAfterSettling, debtTotal, resumesAfterSettling } from "./debt-summary";
+import { debtDeadline, debtStateOf, debtsToSign, settledToast, splitDebts } from "./debt-copy";
+import {
+  balanceAfterSettling,
+  debtTotal,
+  paidCallsAfterSettling,
+  resumesAfterSettling,
+  settleReadiness,
+} from "./debt-summary";
 import { settleDebt } from "./settle-debt";
 import { refreshesDebts, settleDebtFailure } from "./settle-debt-errors";
 
@@ -42,7 +52,8 @@ export function useBuyerDebtsQuery() {
   return useQuery<BuyerDebts, ApiError>({
     queryKey: BUYER_DEBTS_KEY,
     queryFn: getBuyerDebts,
-    enabled: hasBlockStatusSession({ ready, authenticated, hasStoredToken }),
+    // The demo answers from fixtures with no session, like its other data.
+    enabled: demoEnabled() || hasBlockStatusSession({ ready, authenticated, hasStoredToken }),
     staleTime: 30_000,
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
@@ -144,8 +155,13 @@ function SettleDebtSheet({
   const total = debtTotal(settling);
   const totalText = total ? formatMoney(total, { decimals: 4 }) : `${settling.length} payments`;
   const balance = escrow.data?.balance ?? null;
-  const after = balanceAfterSettling(balance, settling);
+  const balanceAfter = balanceAfterSettling(balance, settling);
+  const after = balanceAfter?.after ?? null;
+  const blocks = settleReadiness(escrow.data ?? null, settling);
+  const escrowUnread = escrow.isError || escrow.data?.chainReadable === false;
   const resumes = resumesAfterSettling(query.data, settling);
+  const { paused: pausedByYou } = usePauseAll();
+  const paidCalls = paidCallsAfterSettling({ resumes, pausedByYou, blocked: readOnly });
   const [lastResult, setLastResult] = React.useState<SettleDebtResult | null>(null);
 
   const toolName = (toolId: string) => names.name("tool", toolId);
@@ -184,18 +200,26 @@ function SettleDebtSheet({
     ? "Your account is blocked, so nothing can be signed now. Contact Assay support."
     : nothingToSign
       ? "Nothing left for this wallet to sign: it is settled, being collected, or owed by another wallet."
-      : walletBlocker;
+      : blocks.length > 0
+        ? `Not yet: ${blocks.map((block) => block.text).join(" ")}`
+        : escrow.isPending && settling.length > 0
+          ? "Checking your escrow balance and ceilings first…"
+          : walletBlocker;
 
   const changes = [
     { label: "You owe", before: totalText, after: formatMoney(null) },
-    ...(balance && after
-      ? [{ label: "Escrow balance", before: formatMoney(balance, { decimals: 4 }), after: formatMoney(after, { decimals: 4 }) }]
+    ...(balance && balanceAfter
+      ? [
+          {
+            label: "Escrow balance",
+            before: formatMoney(balance, { decimals: 4 }),
+            after: balanceAfter.after
+              ? formatMoney(balanceAfter.after, { decimals: 4 })
+              : `Short by ${formatMoney(balanceAfter.shortBy, { decimals: 4 })}`,
+          },
+        ]
       : []),
-    {
-      label: "Paid calls",
-      before: "Paused",
-      after: resumes ? "Resume in about a minute" : "Still paused (more is owed)",
-    },
+    { label: "Paid calls", before: "Paused", after: paidCalls.short },
   ];
 
   return (
@@ -215,7 +239,7 @@ function SettleDebtSheet({
       successTitle={`Signed. Collecting ${totalText} from your escrow`}
       successDescription={
         <>
-          {lastResult ? settledToast(lastResult.remainingDebts) : resumes ? "Paid calls resume once it is collected, in about a minute." : "Paid calls stay paused until the rest is settled."}
+          {lastResult && lastResult.remainingDebts > 0 ? settledToast(lastResult.remainingDebts) : paidCalls.sentence}
           {after ? ` Escrow balance after: ${formatMoney(after, { decimals: 4 })}.` : null}
         </>
       }
@@ -228,6 +252,32 @@ function SettleDebtSheet({
       doneAction={{ label: "Close", onClick: () => onOpenChange(false) }}
     >
       {query.isPending ? <p className="text-body-13 text-03">Reading what is owed…</p> : null}
+      {blocks.length > 0 ? (
+        <section
+          aria-labelledby="settle-first"
+          className="flex flex-col gap-2 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-3"
+          data-testid="settle-blocked"
+        >
+          <h3 id="settle-first" className="text-label-13 text-warning-700">
+            Do this first, or the payment cannot be collected
+          </h3>
+          {blocks.map((block) => (
+            <div key={block.kind} className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <p className="min-w-0 flex-1 text-body-13 text-warning-700">{block.text}</p>
+              <Button size="sm" variant="secondary" asChild>
+                <Link href={block.action.href} onClick={() => onOpenChange(false)}>
+                  {block.action.label}
+                </Link>
+              </Button>
+            </div>
+          ))}
+        </section>
+      ) : escrowUnread && settling.length > 0 ? (
+        <p className="text-body-13 text-warning-700" data-testid="settle-escrow-unread">
+          Your escrow could not be read, so its balance and ceilings are not checked here. If it cannot pay this, the
+          collection fails and the debt stays open.
+        </p>
+      ) : null}
       {settling.length > 0 ? (
         <section aria-labelledby="settle-what-you-sign" className="flex flex-col gap-2">
           <h3 id="settle-what-you-sign" className="text-label-13 text-01">
@@ -252,8 +302,8 @@ function SettleDebtSheet({
                   <dd className="text-02 [overflow-wrap:anywhere]">
                     {debtCauseText(debt.cause)}
                     {debtStateOf(debt) === "WRITTEN_OFF"
-                      ? `. Written off on ${debtDate(debt.writeOffAt)}: the provider was not paid; this pays them.`
-                      : `. Settle by ${debtDate(debt.writeOffAt)}, or the provider goes unpaid.`}
+                      ? `. Written off on ${debtDeadline(debt.writeOffAt)}: the provider was not paid; this pays them.`
+                      : `. Settle by ${debtDeadline(debt.writeOffAt)}, or the provider goes unpaid.`}
                   </dd>
                 </dl>
               </li>
@@ -262,6 +312,9 @@ function SettleDebtSheet({
           <p className="text-body-xs text-03">
             Before your wallet opens, Assay checks the request pays exactly this amount, from your wallet, into your
             escrow contract, for this call. Anything else is refused and nothing is signed.
+          </p>
+          <p className="text-body-xs text-02" data-testid="settle-final">
+            Once collected, a payment cannot be taken back.
           </p>
         </section>
       ) : null}
