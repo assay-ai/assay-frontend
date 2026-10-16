@@ -15,6 +15,7 @@ import { formatMoney } from "@/utils/money";
 import { debtStateOf, splitDebts } from "./debt-copy";
 import { debtBannerSummary } from "./debt-summary";
 import { BUYER_DEBTS_KEY, useBuyerDebtsQuery, useSettleDebt } from "./settle-debt-sheet";
+import { useReplaceableNow } from "./use-replaceable-now";
 
 export { BUYER_DEBTS_KEY };
 
@@ -39,7 +40,9 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
   const { paused } = usePauseAll();
   const { freeOnly } = useFreeOnlyChain();
 
-  const summary = debtBannerSummary(query.data, { pausedByYou: paused, freeOnly });
+  // A debt before its `replaceableAt` cannot be signed yet; this moves on at that time.
+  const now = useReplaceableNow(query.data, query.dataUpdatedAt);
+  const summary = debtBannerSummary(query.data, { pausedByYou: paused, freeOnly, now });
   if (!summary) return null;
   const { own, others } = splitDebts(query.data);
   const all = [...own, ...others];
@@ -67,6 +70,11 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <p className="text-label-sm text-01 [overflow-wrap:anywhere]">{summary.title}</p>
             <p className="text-body-13 text-02 [overflow-wrap:anywhere]">{summary.detail}</p>
+            {summary.waitingNote ? (
+              <p data-testid="buyer-debt-not-yet" className="text-body-13 text-02 [overflow-wrap:anywhere]">
+                {summary.waitingNote}
+              </p>
+            ) : null}
             {demoNote ? (
               <p className="text-body-xs text-03 [overflow-wrap:anywhere]" data-testid="buyer-debt-demo-note">
                 {demoNote}
@@ -97,7 +105,12 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
           </div>
         </div>
         {summary.actionLabel ? (
-          <Button size="sm" className="shrink-0 self-start tablet:self-center" onClick={() => openSettle()}>
+          <Button
+            size="sm"
+            className="shrink-0 self-start tablet:self-center"
+            disabled={summary.actionDisabled}
+            onClick={() => openSettle()}
+          >
             {summary.actionLabel}
           </Button>
         ) : null}

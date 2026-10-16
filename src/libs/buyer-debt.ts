@@ -1,8 +1,10 @@
 import type { DebtOutstandingContext } from "@/interfaces/buyer-debt";
 import {
   PAYMENT_DEBT_NOT_FOUND,
+  PAYMENT_DEBT_NOT_YET_REPLACEABLE,
   PAYMENT_DEBT_OUTSTANDING,
   PAYMENT_DEBT_REPLACEMENT_PENDING,
+  PAYMENT_DEBT_REPLACEMENT_REFUSED,
 } from "@/interfaces/buyer-debt";
 
 /**
@@ -60,6 +62,31 @@ export function debtRefusalSentence(error: unknown): string | null {
   );
 }
 
+/** `17 Oct, 14:05`, in the viewer's own time zone; the text unchanged when it is not a time. */
+export function debtLocalTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Why a debt cannot be settled yet, with the time it can. */
+export function notYetReplaceableSentence(
+  replaceableAt: string | null | undefined,
+  subject: "this" | "it" | "the first" = "this",
+): string {
+  const from = replaceableAt ? `from ${debtLocalTime(replaceableAt)}` : "in a few minutes";
+  const you = subject === "this" ? "You" : "you";
+  return (
+    `${you} can settle ${subject} ${from} (the original payment must expire on chain first, ` +
+    "so you never pay twice)."
+  );
+}
+
 /** The voucher's window on the chain is full: the escrow's or the agent key's spending cap. */
 const WINDOW_LIMIT_CODES: ReadonlySet<string> = new Set([
   "PAYMENT_VOUCHER_ESCROW_LIMIT_EXCEEDED",
@@ -77,6 +104,13 @@ export function settleDebtErrorSentence(error: unknown): string | null {
   const debtText = debtRefusalSentence(error);
   if (debtText && err?.code !== PAYMENT_DEBT_OUTSTANDING) return debtText;
   const code = err?.code ?? "";
+  if (code === PAYMENT_DEBT_NOT_YET_REPLACEABLE) {
+    const at = err?.context?.replaceableAt;
+    return `${notYetReplaceableSentence(typeof at === "string" ? at : null)} Nothing was signed.`;
+  }
+  if (code === PAYMENT_DEBT_REPLACEMENT_REFUSED) {
+    return "This call changed while you were signing, so the payment was not accepted and nothing was charged. Try again.";
+  }
   if (code === "PAYMENT_NEXT_SEQ_RATE_LIMITED") {
     return "Too many signing attempts in a short time. Wait a minute and try again. Nothing was signed.";
   }

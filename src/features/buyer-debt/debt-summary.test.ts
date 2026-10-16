@@ -20,7 +20,9 @@ import {
   settleEscrowCheck,
   settleReadiness,
   type SettleEscrowReading,
+  waitingToSettleNote,
 } from "./debt-summary";
+import { notYetReplaceableSentence } from "./debt-copy";
 import { refreshesDebts, settleDebtFailure } from "./settle-debt-errors";
 
 const ACCOUNT = "eip155:46630:0x7FD9A17dE9fd64b35081FbAbaa9f3bb85e59F8d1";
@@ -386,5 +388,49 @@ describe("the Resume sheet while a debt is owed (buyer retest 2026-10-17)", () =
     expect(debtBlocksPaidCalls({ account: ACCOUNT, debts: [debt({ state: "REPLACING" })] })).toBe(false);
     expect(debtBlocksPaidCalls(undefined)).toBe(false);
     expect(resumeSheetCopy(false).after).toBe("Running");
+  });
+});
+
+describe("waiting for replaceableAt (main b6ca73a)", () => {
+  const now = Date.parse("2026-10-17T00:00:00.000Z");
+  const later = "2026-10-17T00:30:00.000Z";
+
+  it("signs only the debts past replaceableAt, and turns the button off while none is", () => {
+    const one = debtBannerSummary({ account: ACCOUNT, debts: [debt({ replaceableAt: later })] }, { now })!;
+    expect(one.ready).toEqual([]);
+    expect(one.actionDisabled).toBe(true);
+    expect(one.actionLabel).toBe("Settle $2.50");
+    expect(one.waitingNote).toBe(notYetReplaceableSentence(later));
+
+    const mixed = debtBannerSummary(
+      { account: ACCOUNT, debts: [debt({ replaceableAt: later }), debt({ intentId: "int_2" })] },
+      { now },
+    )!;
+    expect(mixed.ready.map((d) => d.intentId)).toEqual(["int_2"]);
+    expect(mixed.actionDisabled).toBe(false);
+    expect(mixed.actionLabel).toBe("Settle $2.50");
+    expect(mixed.waitingNote).toBe(`1 of them is not ready to sign yet: ${notYetReplaceableSentence(later, "it")}`);
+  });
+
+  it("waits for nothing once replaceableAt has passed or when the backend sends none", () => {
+    for (const replaceableAt of ["2026-10-16T23:00:00.000Z", null, undefined]) {
+      const summary = debtBannerSummary({ account: ACCOUNT, debts: [debt({ replaceableAt })] }, { now })!;
+      expect(summary.actionDisabled).toBe(false);
+      expect(summary.waitingNote).toBeNull();
+    }
+    expect(waitingToSettleNote([], now)).toBeNull();
+  });
+
+  it("refetches the debts after the two new refusals", () => {
+    for (const code of ["PAYMENT_DEBT_NOT_YET_REPLACEABLE", "PAYMENT_DEBT_REPLACEMENT_REFUSED"]) {
+      expect(refreshesDebts(new ApiError(code, "raw", 409, "/escrow/debts/int_1/voucher"))).toBe(true);
+    }
+  });
+
+  it("says from when in the sheet's failure line, and that nothing was signed", () => {
+    const error = new ApiError("PAYMENT_DEBT_NOT_YET_REPLACEABLE", "raw", 409, "/escrow/debts/int_1/voucher", {
+      replaceableAt: later,
+    });
+    expect(settleDebtFailure(error)).toBe(`${notYetReplaceableSentence(later)} Nothing was signed.`);
   });
 });

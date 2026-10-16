@@ -4,7 +4,15 @@ import type { Money } from "@/interfaces/api";
 import type { BuyerDebt, BuyerDebts, CallDebt } from "@/interfaces/buyer-debt";
 import { formatMoney, toDecimal } from "@/utils/money";
 
-import { debtDeadline, debtStateOf, debtsToSign, splitDebts } from "./debt-copy";
+import {
+  debtDeadline,
+  debtStateOf,
+  debtsToSign,
+  isReplaceable,
+  nextReplaceableAt,
+  notYetReplaceableSentence,
+  splitDebts,
+} from "./debt-copy";
 
 /**
  * The short form of buyer debt, for the banner, the settle sheet and the
@@ -45,8 +53,35 @@ export interface DebtBannerSummary {
   detail: string;
   /** The session wallet's own debts that still need a signature, oldest first. */
   toSign: BuyerDebt[];
+  /**
+   * Those of `toSign` that can be signed now: their original voucher is past
+   * its on-chain deadline (`replaceableAt`). Signing earlier is refused with
+   * `PAYMENT_DEBT_NOT_YET_REPLACEABLE`, since both could be collected.
+   */
+  ready: BuyerDebt[];
+  /** From when the waiting ones can be settled, and why; `null` when none waits. */
+  waitingNote: string | null;
   /** The button's label when there is something to sign. */
   actionLabel: string | null;
+  /** True while every debt to sign is still waiting for its `replaceableAt`. */
+  actionDisabled: boolean;
+}
+
+/**
+ * The line about debts that cannot be signed yet (their original payment may
+ * still be collected on chain until `replaceableAt`), or `null`.
+ */
+export function waitingToSettleNote(toSign: readonly BuyerDebt[], now: number): string | null {
+  const waiting = toSign.filter((debt) => !isReplaceable(debt, now));
+  if (waiting.length === 0) return null;
+  const some = waiting.length < toSign.length;
+  return (
+    (some ? `${waiting.length} of them ${waiting.length === 1 ? "is" : "are"} not ready to sign yet: ` : "") +
+    notYetReplaceableSentence(
+      new Date(nextReplaceableAt(waiting, now)!).toISOString(),
+      some ? (waiting.length === 1 ? "it" : "the first") : "this",
+    )
+  );
 }
 
 /**
@@ -56,7 +91,11 @@ export interface DebtBannerSummary {
  */
 export function debtBannerSummary(
   data: BuyerDebts | null | undefined,
-  { pausedByYou = false, freeOnly = false }: { pausedByYou?: boolean; freeOnly?: boolean } = {},
+  {
+    pausedByYou = false,
+    freeOnly = false,
+    now = Date.now(),
+  }: { pausedByYou?: boolean; freeOnly?: boolean; now?: number } = {},
 ): DebtBannerSummary | null {
   const { own, others } = splitDebts(data);
   const all = [...own, ...others];
@@ -99,6 +138,7 @@ export function debtBannerSummary(
           : `${writtenOff.length} ${writtenOff.length === 1 ? "was" : "were"} written off: settling pays ${writtenOff.length === 1 ? "that provider" : "those providers"}.`,
       );
     }
+    const ready = toSign.filter((debt) => isReplaceable(debt, now));
     return {
       kind: "settle",
       title: othersPart
@@ -106,7 +146,11 @@ export function debtBannerSummary(
         : `You owe ${totalText(toSign)} for ${plural(toSign.length, "call")}. Paid calls are paused until you settle.`,
       detail: [...when, ...extra, ...(freeOnlyNote ? [freeOnlyNote] : []), "Free calls still work."].join(" "),
       toSign,
-      actionLabel: `Settle ${totalText(toSign)}`,
+      ready,
+      waitingNote: waitingToSettleNote(toSign, now),
+      // The ready ones are what the sheet signs; while none is, the button names the whole and is off.
+      actionLabel: `Settle ${totalText(ready.length > 0 ? ready : toSign)}`,
+      actionDisabled: ready.length === 0,
     };
   }
 
@@ -121,7 +165,10 @@ export function debtBannerSummary(
         "Free calls still work.",
       ].join(" "),
       toSign: [],
+      ready: [],
+      waitingNote: null,
       actionLabel: null,
+      actionDisabled: false,
     };
   }
 
@@ -135,7 +182,10 @@ export function debtBannerSummary(
       ? "Nothing to do: it is collected from your escrow within about a minute. Resume in the banner below to restart paid calls. Free calls still work."
       : "Nothing to do: it is collected from your escrow, then paid calls resume. Free calls still work.",
     toSign: [],
+    ready: [],
+    waitingNote: null,
     actionLabel: null,
+    actionDisabled: false,
   };
 }
 
