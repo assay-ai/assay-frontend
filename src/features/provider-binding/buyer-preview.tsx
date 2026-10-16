@@ -49,7 +49,7 @@ export function BuyerPreview({
         <div className="flex flex-wrap gap-1.5">
           {mode === "FREEMIUM" && freeCalls ? (
             <span className="rounded-full bg-teal-10 px-2 py-0.5 text-label-xs text-teal-600">
-              {`Free · ${freeCalls.toLocaleString("en-US")} calls a day`}
+              {`Free · ${freeCalls.toLocaleString("en-US")} calls a day per agent`}
             </span>
           ) : null}
           {mode !== "FREE" ? (

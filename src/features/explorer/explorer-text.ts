@@ -33,7 +33,8 @@ export function hasFreeTier(mode: string | null | undefined): boolean {
 }
 
 /**
- * The free-tier badge text: "Free · 100 calls/day". With no number known yet
+ * The free-tier badge text: "Free · 100 calls/day per agent" (the backend
+ * counts free calls per agent, per listing, per UTC day). With no number known yet
  * (the list endpoint does not carry it), just "Free tier"; for a fully free
  * tool, "Free".
  */
@@ -41,7 +42,7 @@ export function freeTierLabel(mode: string | null | undefined, callsPerDay?: num
   const m = normalisedMode(mode);
   if (m === "FREE") return "Free";
   if (m !== "FREEMIUM") return null;
-  if (callsPerDay && callsPerDay > 0) return `Free · ${callsPerDay.toLocaleString("en-US")} calls/day`;
+  if (callsPerDay && callsPerDay > 0) return `Free · ${callsPerDay.toLocaleString("en-US")} calls/day per agent`;
   return "Free tier";
 }
 
@@ -60,6 +61,12 @@ export function priceSentence(input: {
   mode: string | null | undefined;
   price: Money | null | undefined;
   freeCallsPerDay?: number | null;
+  /**
+   * When paid providers charge different prices: the cheapest. The sentence
+   * then says the price after the free calls depends on who serves the call,
+   * rather than naming the dearest as if it were the one price.
+   */
+  from?: Money | null;
 }): string {
   const m = normalisedMode(input.mode);
   if (m === "FREE") return "Free to call. Results are still checked.";
@@ -69,6 +76,9 @@ export function priceSentence(input: {
     const free = input.freeCallsPerDay && input.freeCallsPerDay > 0
       ? `The first ${input.freeCallsPerDay.toLocaleString("en-US")} calls each day are free for each agent`
       : "Some calls each day are free for each agent";
+    if (input.from && !toDecimal(input.from).eq(toDecimal(input.price))) {
+      return `${free}, even when other providers charge for it. After that, a call costs the price of the provider that serves it, from ${formatCallPrice(input.from)} to ${price}, and you pay only if the result passes the check.`;
+    }
     return `${free}, even when other providers charge for it; after that ${price} per call, and you pay only if the result passes the check.`;
   }
   return `${price} per call. You pay only if the result passes the check.`;
@@ -119,7 +129,7 @@ export function priceRange(
 
 /**
  * The one price line a tool shows: the free tier and the price together, free
- * first — "Free for 100 calls/day, then $0.002/call". "from" leads the price
+ * first — "Free for 100 calls/day per agent, then $0.002/call". "from" leads the price
  * only when the paid listings charge different prices (see `priceRange`, which
  * ignores free listings), so a free listing beside one paid listing never turns
  * the paid price into a range.
@@ -128,9 +138,9 @@ export function priceRange(
  * the whole line.
  */
 export interface OfferLine {
-  /** "Free for 100 calls/day, then" / "Free tier, then"; null for a paid-only or free-only tool. */
+  /** "Free for 100 calls/day per agent, then" / "Free tier, then"; null for a paid-only or free-only tool. */
   lead: string | null;
-  /** "$0.002" / "from $0.002" / "Free" / "—". */
+  /** "$0.002" / "from $0.002" / "Free" / "—"; empty when the lead says it all. */
   price: string;
   /** "/call" after a paid price; empty for "Free" and "—". */
   unit: string;
@@ -147,12 +157,16 @@ export function offerLine(input: {
   const lead =
     m === "FREEMIUM"
       ? input.freeCallsPerDay && input.freeCallsPerDay > 0
-        ? `Free for ${input.freeCallsPerDay.toLocaleString("en-US")} calls/day, then`
+        ? `Free for ${input.freeCallsPerDay.toLocaleString("en-US")} calls/day per agent, then`
         : "Free tier, then"
       : null;
   if (!input.range) {
-    const text = lead ? "Free tier; paid calls not available right now" : "—";
-    return { lead: null, price: lead ? text : "—", unit: "", text };
+    // A freemium tool with no paid route: the sentence is the lead, not a price (an empty price slot).
+    if (lead) {
+      const text = "Free tier; paid calls not available right now";
+      return { lead: text, price: "", unit: "", text };
+    }
+    return { lead: null, price: "—", unit: "", text: "—" };
   }
   const price = `${input.range.differs ? "from " : ""}${formatCallPrice(input.range.from)}`;
   return { lead, price, unit: "/call", text: `${lead ? `${lead} ` : ""}${price}/call` };
@@ -179,8 +193,14 @@ export function costSentence(input: {
   freeCallsPerDay?: number | null;
 }): string {
   const rangeLine = input.range ? heldPriceSentence(input.range) : null;
+  if (normalisedMode(input.mode) === "FREEMIUM") {
+    // The range is said inside the free-first sentence; only the hold is added.
+    const from = input.range?.differs ? input.range.from : null;
+    const base = priceSentence({ mode: input.mode, price: input.price, freeCallsPerDay: input.freeCallsPerDay, from });
+    const held = input.range?.differs ? `You are held at most ${formatCallPrice(input.range.held)} a call.` : null;
+    return [base, held].filter(Boolean).join(" ");
+  }
   const base = priceSentence({ mode: input.mode, price: input.price, freeCallsPerDay: input.freeCallsPerDay });
-  if (normalisedMode(input.mode) === "FREEMIUM") return [base, rangeLine].filter(Boolean).join(" ");
   return rangeLine ?? base;
 }
 
@@ -200,7 +220,8 @@ export function stakeSummary(
 ): string {
   // An empty list is "the chain could not be read just now", never "no stake"
   // and never a doubt about who the provider is (Verified is about identity).
-  if (stake.length === 0) return "Could not be read just now";
+  // Said calmly: to a newcomer "could not be read" looks like an error on the page.
+  if (stake.length === 0) return "Not available yet";
   return stake
     .map((entry) => `${formatDecimal(toDecimal(entry), { decimals: 2 })} on ${chainName(entry.chainId)}`)
     .join(" · ");
@@ -356,10 +377,22 @@ export function notChargedRowText(row: { reason: string; reasonText: string; buc
   if (row.bucket === "FAILED_VERIFICATION") return { tag: "Failed our check", tone: "teal", text: row.reasonText };
   if (row.reason === "NOT_COLLECTED") {
     return {
-      tag: "Not collected",
+      tag: "Provider forfeited",
       tone: "neutral",
       text: "Not charged — the provider did not collect the payment, and the buyer does not owe it.",
     };
   }
   return { tag: "No usable result", tone: "neutral", text: row.reasonText || "The call was not charged." };
+}
+
+/**
+ * The sentence when no row is listed. With rows withheld for privacy it does
+ * not claim nothing happened: it says none can be listed, and the privacy note
+ * below says why.
+ */
+export function notChargedEmptyText(forTool: boolean, withheldForPrivacy: boolean): string {
+  if (withheldForPrivacy) {
+    return forTool ? "No uncharged call to this tool can be listed right now." : "No uncharged call can be listed right now.";
+  }
+  return forTool ? "No call to this tool went uncharged recently." : "No call went uncharged in this period.";
 }
