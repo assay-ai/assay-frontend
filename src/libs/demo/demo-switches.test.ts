@@ -51,6 +51,7 @@ describe("demo switch parsing", () => {
   it("reads only the known rails values", () => {
     expect(parseRailsSwitch("free-only")).toBe("free-only");
     expect(parseRailsSwitch("paid")).toBe("paid");
+    expect(parseRailsSwitch("all")).toBe("paid");
     expect(parseRailsSwitch("solana")).toBeNull();
     expect(parseRailsSwitch(null)).toBeNull();
   });
