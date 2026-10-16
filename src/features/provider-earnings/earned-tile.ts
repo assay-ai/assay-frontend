@@ -32,12 +32,39 @@ export function earnedTileSub(
 /** One way a call that passed paid the provider nothing (yet). */
 export interface UnpaidLine {
   readonly key: "debtOutstanding" | "uncollected" | "forfeited";
+  /** The call class of the per-call export these calls carry, for the drill-down. */
+  readonly className: "PAID_BUYER_DEBT" | "PAID_UNCOLLECTED" | "PROVIDER_FORFEITED";
   readonly label: string;
   readonly amount: Money;
   readonly calls: number;
   /** The plain-words explanation, said to the provider. */
   readonly explanation: string;
+  /** Why, in one short sentence (no amount: the row shows it). */
+  readonly reason: string;
+  /** What the provider can do about it, in one short sentence. */
+  readonly action: string;
+  /** Whether the provider can act on it (forfeits: keep the stake up) or not (the buyer's debt). */
+  readonly actionable: boolean;
 }
+
+/** The short reason and the provider's next step, per class. Deadlines stay in the words. */
+export const UNPAID_COPY: Record<UnpaidLine["key"], { reason: string; action: string; actionable: boolean }> = {
+  debtOutstanding: {
+    reason: "Passed our checks, but the buyer's payment did not go through yet. The money is still in their escrow.",
+    action: "Nothing to do: it is the buyer's debt. Paid to you when they settle; written off if they do not within 30 days.",
+    actionable: false,
+  },
+  uncollected: {
+    reason: "Passed our checks, but the buyer did not settle within 30 days, so it was written off.",
+    action: "Nothing to do. No fee was taken, and nobody owes it: Assay does not pay for unpaid calls.",
+    actionable: false,
+  },
+  forfeited: {
+    reason: "Not collected because of your account: your stake was below the minimum, or you were blocked. The buyer was not charged.",
+    action: "Keep your stake above the minimum to avoid this.",
+    actionable: true,
+  },
+};
 
 /**
  * The calls that passed our checks but were not paid, in plain words — open
@@ -55,6 +82,8 @@ export function unpaidLines(
     const n = totals.debtOutstandingCalls ?? 0;
     lines.push({
       key: "debtOutstanding",
+      className: "PAID_BUYER_DEBT",
+      ...UNPAID_COPY.debtOutstanding,
       label: "Waiting on the buyer",
       amount: totals.debtOutstanding,
       calls: n,
@@ -69,6 +98,8 @@ export function unpaidLines(
     const n = totals.uncollectedCalls ?? 0;
     lines.push({
       key: "uncollected",
+      className: "PAID_UNCOLLECTED",
+      ...UNPAID_COPY.uncollected,
       label: "Never collected",
       amount: totals.uncollected,
       calls: n,
@@ -82,6 +113,8 @@ export function unpaidLines(
     const n = totals.forfeitedCalls ?? 0;
     lines.push({
       key: "forfeited",
+      className: "PROVIDER_FORFEITED",
+      ...UNPAID_COPY.forfeited,
       label: "Forfeited by you",
       amount: totals.forfeited,
       calls: n,
@@ -128,4 +161,59 @@ export function earningsSplit(totals: ProviderEarningsFigures | null | undefined
     notCredited: positive(totals?.withheld),
     notCreditedCalls: totals?.withheldCalls ?? 0,
   };
+}
+
+/** A line under the provider home's "This month": what passed but is not in the wallet, and where to look. */
+export interface HomeUnpaidNote {
+  readonly key: "debtOutstanding" | "forfeited";
+  readonly text: string;
+  readonly tone: "neutral" | "warning";
+  readonly link: { readonly label: string; readonly href: string };
+}
+
+/**
+ * The provider home's short notes on passed-but-unpaid money. Open buyer debt
+ * says the provider has nothing to do (it is the buyer's debt); forfeited calls
+ * are the provider's to avoid, so they link to Stake. Written-off calls are
+ * only on Money: nothing can change them.
+ */
+export function homeUnpaidNotes(
+  totals: ProviderEarningsFigures | null | undefined,
+  format: (value: Money) => string,
+  hrefs: { money: string; stake: string },
+): HomeUnpaidNote[] {
+  const notes: HomeUnpaidNote[] = [];
+  if (!totals) return notes;
+  if (nonZero(totals.debtOutstanding, totals.debtOutstandingCalls)) {
+    const n = totals.debtOutstandingCalls ?? 0;
+    notes.push({
+      key: "debtOutstanding",
+      text: `${format(totals.debtOutstanding)} for ${calls(n)} is waiting on buyers. It reaches your wallet when they settle; nothing for you to do.`,
+      tone: "neutral",
+      link: { label: "Details", href: hrefs.money },
+    });
+  }
+  if (nonZero(totals.forfeited, totals.forfeitedCalls)) {
+    const n = totals.forfeitedCalls ?? 0;
+    notes.push({
+      key: "forfeited",
+      text: `${format(totals.forfeited)} for ${calls(n)} was forfeited: your stake was below the minimum, or you were blocked.`,
+      tone: "warning",
+      link: { label: "Check your stake", href: hrefs.stake },
+    });
+  }
+  return notes;
+}
+
+/** The per-call rows of one class, newest first, for a drill-down: the first `limit`, and how many more. */
+export function callsOfClass<T extends { classification: string; createdAt: string }>(
+  rows: readonly T[],
+  className: string,
+  limit = 10,
+): { items: T[]; total: number; more: number } {
+  const matching = rows
+    .filter((row) => row.classification === className)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+  const items = matching.slice(0, limit);
+  return { items, total: matching.length, more: matching.length - items.length };
 }
