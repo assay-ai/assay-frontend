@@ -50,7 +50,7 @@ export function OfferPrice({
         {amount}
         {offer.unit ? (
           <span className={cn("whitespace-pre font-sans font-normal text-03", size === "lg" ? "text-body-13" : "text-body-xs")}>
-            {size === "lg" ? " per call" : offer.unit}
+            {offer.unit}
           </span>
         ) : null}
       </span>

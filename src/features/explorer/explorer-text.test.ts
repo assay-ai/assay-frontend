@@ -146,7 +146,7 @@ describe("routingNotes", () => {
       { name: "Dear Co", price: usd("0.25"), quality: null },
     ]);
     expect(notes).toHaveLength(1);
-    expect(notes[0]).toContain("Dear Co ($0.25 a call) is not taking paid calls right now");
+    expect(notes[0]).toContain("Dear Co ($0.25 per call) is not taking paid calls right now");
   });
   it("says the only provider taking calls fails often, and that failures are never charged", () => {
     const notes = routingNotes(usd("0.10"), [
@@ -175,7 +175,7 @@ describe("routingNotes across chains", () => {
       ],
       (id) => names[id] ?? id,
     );
-    expect(notes).toEqual(["The price above is for Robinhood Chain testnet. Open-Meteo charges $0.25 a call on Solana devnet."]);
+    expect(notes).toEqual(["The price above is for Robinhood Chain testnet. Open-Meteo charges $0.25 per call on Solana devnet."]);
   });
 });
 
@@ -233,22 +233,22 @@ describe("offerLine", () => {
 
   it("merges the free tier and the price into one line, free first", () => {
     const line = offerLine({ mode: "FREEMIUM", range: one, freeCallsPerDay: 100 });
-    expect(line.text).toBe("Free for 100 calls/day per agent, then $0.002/call");
+    expect(line.text).toBe("Free for 100 calls/day per agent, then $0.002 per call");
     expect(line.lead).toBe("Free for 100 calls/day per agent, then");
     expect(line.price).toBe("$0.002");
-    expect(line.unit).toBe("/call");
+    expect(line.unit).toBe(" per call");
   });
 
   it("says 'from' only over paid listings that differ", () => {
     expect(offerLine({ mode: "FREEMIUM", range: two, freeCallsPerDay: 1500 }).text).toBe(
-      "Free for 1,500 calls/day per agent, then from $0.002/call",
+      "Free for 1,500 calls/day per agent, then from $0.002 per call",
     );
-    expect(offerLine({ mode: "PAID", range: freeBeside }).text).toBe("$0.002/call");
-    expect(offerLine({ mode: "PAID", range: two }).text).toBe("from $0.002/call");
+    expect(offerLine({ mode: "PAID", range: freeBeside }).text).toBe("$0.002 per call");
+    expect(offerLine({ mode: "PAID", range: two }).text).toBe("from $0.002 per call");
   });
 
   it("does not invent an allowance it does not know", () => {
-    expect(offerLine({ mode: "FREEMIUM", range: one, freeCallsPerDay: null }).text).toBe("Free tier, then $0.002/call");
+    expect(offerLine({ mode: "FREEMIUM", range: one, freeCallsPerDay: null }).text).toBe("Free tier, then $0.002 per call");
   });
 
   it("reads Free for a free tool, and a dash when nothing can be priced", () => {
@@ -274,7 +274,7 @@ describe("costSentence and offerSubLine (public catalogue, free first)", () => {
     // The price after the free calls depends on who serves it: the range, never the dearest alone.
     expect(text).toMatch(/the price of the provider that serves it, from \$0\.02 to \$0\.03/);
     expect(text).not.toMatch(/after that \$0\.03 per call/);
-    expect(text).toMatch(/held at most \$0\.03 a call/);
+    expect(text).toMatch(/held at most \$0\.03 per call/);
   });
 
   it("keeps one price after the free calls when the paid listings agree", () => {
@@ -318,25 +318,42 @@ describe("notChargedEmptyText", () => {
 });
 
 describe("notChargedRowText (public not-charged feed)", () => {
-  it("names a payment the provider did not collect plainly, never as 'No usable result'", () => {
+  it("tags each row with the same label and tone as its reason's count line", () => {
+    const keys = ["PROVIDER_ERROR", "REQUEST_REJECTED", "NO_USABLE_RESULT", "OUT_OF_SCOPE", "EXPIRED", "NOT_COLLECTED"];
+    const lines = notChargedSplit({
+      callsNotCharged: 70,
+      callsFailedCheck: 10,
+      notChargedByReason: keys.map((reason) => ({ reason, calls: 10 })),
+      callsNotChargedOther: 0,
+    });
+    for (const line of lines) {
+      const row = notChargedRowText({
+        reason: line.key,
+        reasonText: "A sentence.",
+        bucket: line.key === "FAILED_CHECK" ? "FAILED_VERIFICATION" : "PROVIDER_OR_PLATFORM_ERROR",
+      });
+      expect([row.tag, row.tone]).toEqual([line.label, line.tone]);
+    }
+  });
+
+  it("says 'Payment not collected' for NOT_COLLECTED, with the server's sentence", () => {
     const row = notChargedRowText({
       reason: "NOT_COLLECTED",
-      reasonText: "The provider could not collect payment for this call, so the buyer was not charged.",
+      reasonText: "Payment for this call was not collected, so the buyer was not charged.",
       bucket: "PROVIDER_OR_PLATFORM_ERROR",
     });
-    expect(row.tag).toBe("Provider forfeited");
-    expect(row.text).toMatch(/^Not charged — the provider did not collect/);
-    expect(row.tone).toBe("neutral");
+    expect(row.tag).toBe("Payment not collected");
+    expect(row.text).toBe("Payment for this call was not collected, so the buyer was not charged.");
   });
 
   it("keeps the guarantee firing apart, including a voided debt sent as FAILED_CHECK", () => {
     const row = notChargedRowText({ reason: "FAILED_CHECK", reasonText: "The result failed our check.", bucket: "FAILED_VERIFICATION" });
-    expect(row).toEqual({ tag: "Failed our check", tone: "teal", text: "The result failed our check." });
+    expect(row).toEqual({ tag: "Result failed our check", tone: "teal", text: "The result failed our check." });
   });
 
-  it("falls back to the server's sentence for any other or unknown reason", () => {
+  it("names an unknown reason neutrally, with the server's sentence", () => {
     expect(notChargedRowText({ reason: "SOMETHING_NEW", reasonText: "A new plain sentence.", bucket: "PROVIDER_OR_PLATFORM_ERROR" })).toEqual({
-      tag: "No usable result",
+      tag: "Another reason",
       tone: "neutral",
       text: "A new plain sentence.",
     });
@@ -349,21 +366,32 @@ describe("notChargedSplit (public not-charged totals)", () => {
       callsNotCharged: 312,
       callsFailedCheck: 241,
       notChargedByReason: [
-        { reason: "PROVIDER_ERROR", calls: 38 },
-        { reason: "NO_USABLE_RESULT", calls: 14 },
-        { reason: "NOT_COLLECTED", calls: 9 },
+        { reason: "PROVIDER_ERROR", calls: 30 },
+        { reason: "NO_USABLE_RESULT", calls: 20 },
+        { reason: "NOT_COLLECTED", calls: 10 },
       ],
-      callsNotChargedOther: 10,
+      callsNotChargedOther: 11,
     });
     expect(lines.map((l) => [l.label, l.calls])).toEqual([
       ["Result failed our check", 241],
-      ["Provider returned an error", 38],
-      ["No usable result", 14],
-      ["Payment not collected (provider forfeited)", 9],
-      ["Other reasons, grouped for privacy", 10],
+      ["Provider returned an error", 30],
+      ["No usable result", 20],
+      ["Payment not collected", 10],
+      ["The rest, grouped for privacy (counts are rounded down to tens)", 11],
     ]);
     expect(lines[0]!.tone).toBe("teal");
     expect(new Set(lines.map((l) => l.tone)).size).toBe(lines.length);
+  });
+
+  it("gives a reason the same tone whatever its place in the list", () => {
+    const toneOf = (reasons: string[]) =>
+      notChargedSplit({
+        callsNotCharged: 100,
+        callsFailedCheck: 0,
+        notChargedByReason: reasons.map((reason) => ({ reason, calls: 10 })),
+        callsNotChargedOther: 100 - reasons.length * 10,
+      }).find((l) => l.key === "EXPIRED")!.tone;
+    expect(toneOf(["EXPIRED"])).toBe(toneOf(["PROVIDER_ERROR", "OUT_OF_SCOPE", "EXPIRED"]));
   });
 
   it("leaves out the grouped line when nothing is in it", () => {
@@ -395,6 +423,7 @@ describe("notChargedSplit (public not-charged totals)", () => {
       expect(lines).toHaveLength(2);
       expect(lines[1]).toMatchObject({ key: "OTHER", calls: 71 });
       expect(lines[1]!.label).toMatch(/^Not charged for another reason/);
+      expect(lines[1]!.label).toMatch(/rejected or out-of-scope request, expired/);
     }
   });
 
