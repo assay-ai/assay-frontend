@@ -1,4 +1,5 @@
 import { ApiError } from "@/libs/ApiClient";
+import { demoFreeOnlyChain } from "@/libs/demo/demo-switches";
 
 import { namespaceOf } from "./registry";
 
@@ -19,6 +20,8 @@ import { namespaceOf } from "./registry";
 const FREE_ONLY_NAMESPACES: ReadonlySet<string> = new Set(["solana"]);
 
 export function servesPaidCalls(chainId: string): boolean {
+  // The demo's `?rails=free-only` switch; always false outside a demo build.
+  if (demoFreeOnlyChain(chainId)) return false;
   return !FREE_ONLY_NAMESPACES.has(namespaceOf(chainId));
 }
 

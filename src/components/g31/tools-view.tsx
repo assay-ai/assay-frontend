@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import { FailsOftenChip, Fact, FreeTierBadge, ObservedFailuresLabel, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { ToolAccessControl, useSpendPolicy } from "@/components/explorer/tool-access-control";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
@@ -14,16 +14,15 @@ import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
 import {
   checkSentences,
+  costSentence,
   failRateLabel,
   failsOften,
   formatCallPrice,
-  freeTierLabel,
-  heldPriceSentence,
-  normalisedMode,
   notTakingPaidCalls,
+  offerLine,
+  offerSubLine,
   plural,
   priceRange,
-  priceSentence,
   routingNotes,
   smallestFreeAllowance,
   stakeSummary,
@@ -111,18 +110,18 @@ function ToolDetail({
 }) {
   const chainName = useChainName();
   const uncharged = tool.listed && tool.charged ? notCharged(tool.listed, tool.charged) : null;
-  const range = priceRange(tool.price, [
-    tool.fromPrice,
-    ...providers.map((p) => details.get(p.providerId)?.tools.find((t) => t.toolId === tool.toolId)?.price),
-  ]);
-  const rangeLine = range ? heldPriceSentence(range) : null;
+  // Same as the public tool page: "from" only over more than one listing that can be charged.
+  const range = priceRange(
+    tool.price,
+    (tool.paidBindings ?? 2) > 1
+      ? [
+          tool.fromPrice,
+          ...providers.map((p) => details.get(p.providerId)?.tools.find((t) => t.toolId === tool.toolId)?.price),
+        ]
+      : [],
+  );
   // Free first, then paid: a FREEMIUM tool says its free calls before any range.
-  const freeFirst = normalisedMode(tool.pricingMode) === "FREEMIUM";
-  const costLine = freeFirst
-    ? [priceSentence({ mode: tool.pricingMode, price: tool.price, freeCallsPerDay: freeAllowance }), rangeLine]
-        .filter(Boolean)
-        .join(" ")
-    : (rangeLine ?? priceSentence({ mode: tool.pricingMode, price: tool.price, freeCallsPerDay: freeAllowance }));
+  const costLine = costSentence({ mode: tool.pricingMode, price: tool.price, range, freeCallsPerDay: freeAllowance });
 
   return (
     <div className="flex flex-col gap-4 border-t border-01 bg-02 px-4 py-4 tablet:px-5">
@@ -342,7 +341,9 @@ function ToolsList() {
             const freeAllowance = tool.freeCallsPerDay ?? freeAllowanceOf(tool.toolId);
             // "from" only over listings that can be charged: one paid listing is one price.
             const range = priceRange(tool.price, (tool.paidBindings ?? 2) > 1 ? [tool.fromPrice] : []);
-            const freeFirst = normalisedMode(tool.pricingMode) === "FREEMIUM";
+            // One price line, free first — the same line the public Explorer shows.
+            const offer = offerLine({ mode: tool.pricingMode, range, freeCallsPerDay: freeAllowance });
+            const sub = offerSubLine(tool.pricingMode, range);
             return (
               <li key={tool.toolId} ref={open ? openRef : undefined} className="border-b border-01 last:border-b-0">
                 <button
@@ -354,7 +355,6 @@ function ToolsList() {
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
-                      <FreeTierBadge label={freeTierLabel(tool.pricingMode, freeAllowance)} />
                       {tool.routable ? null : <UnavailableTag />}
                       {blocked ? (
                         <span className="rounded-full bg-danger-10 px-2 py-0.5 text-label-xs text-danger-700">Blocked</span>
@@ -364,21 +364,12 @@ function ToolsList() {
                       {serving.length > 0 ? `Served by ${plural(serving.length, "provider")}` : "Nobody serves it yet"}
                       {tool.yourCalls > 0 ? ` · ${plural(tool.yourCalls, "call")} from your agents ${callsWindow}` : ""}
                     </span>
+                    {/* Phones: the price line sits under the name, full width. */}
+                    <OfferPrice offer={offer} className="tablet:hidden" />
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
-                    <span className="font-mono text-mono-13 font-semibold text-01">
-                      {range?.differs ? <span className="font-sans text-body-xs font-normal text-03">from </span> : null}
-                      {range ? formatCallPrice(range.from) : "—"}
-                    </span>
-                    <span className="hidden text-body-xs text-03 tablet:block">
-                      {range?.differs
-                        ? `held at most ${formatCallPrice(range.held)}, paid only if it passes`
-                        : tool.price
-                          ? freeFirst
-                            ? "per call after the free calls, only if it passes"
-                            : "per call, only if it passes"
-                          : ""}
-                    </span>
+                  <div className="hidden w-[220px] shrink-0 flex-col items-end gap-0.5 text-right tablet:flex">
+                    <OfferPrice offer={offer} />
+                    {sub ? <span className="text-body-xs text-03">{sub}</span> : null}
                   </div>
                   {open ? (
                     <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-03" />

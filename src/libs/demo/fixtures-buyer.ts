@@ -11,6 +11,7 @@ import { ApiError } from "@/libs/ApiClient";
 
 import { DEMO_NOW_MS } from "./demo-clock";
 import { demoDebtSigned, demoDebtVariant } from "./demo-debts";
+import { demoTightenDelaySeconds } from "./demo-switches";
 import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
 
 /**
@@ -1545,8 +1546,10 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/escrow/delegates",
     override: "always",
-    body: () => (freshStage() ? { account: DEMO_BUYER_ACCOUNT, delegates: [] } : ({
+    body: () => (freshStage() ? { account: DEMO_BUYER_ACCOUNT, delegates: [], tightenDelaySeconds: demoTightenDelaySeconds() } : ({
       account: DEMO_BUYER_ACCOUNT,
+      // `?tighten=1h` shows an escrow that delays a tightening (D-21); 0 by default.
+      tightenDelaySeconds: demoTightenDelaySeconds(),
       delegates: [
         {
           delegate: prodDelegate(),
@@ -1585,7 +1588,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/escrow/unsettled",
     override: "always",
-    body: () => ({ account: DEMO_BUYER_ACCOUNT, unsettled: null }),
+    body: () => ({ account: DEMO_BUYER_ACCOUNT, unsettled: null, tightenDelaySeconds: demoTightenDelaySeconds() }),
   },
 
   /* ------------------------------------------------------------ audit log */
