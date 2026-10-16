@@ -10,6 +10,7 @@ import {
 import { ApiError } from "@/libs/ApiClient";
 
 import { DEMO_NOW_MS } from "./demo-clock";
+import { demoDebtSigned, demoDebtVariant } from "./demo-debts";
 import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
 
 /**
@@ -742,6 +743,56 @@ export function demoDebt() {
   return debtView(CALLS.find((call) => call.debt === "OUTSTANDING")!);
 }
 
+/** Another wallet of the demo organization, for the `other-wallet` and `many` pictures. */
+const DEMO_OTHER_PAYER = `${DEMO_CHAIN_ID}:0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF`;
+
+/**
+ * `GET /escrow/debts` for the picture `?debt=` asked for (see `demo-debts.ts`).
+ * A fresh demo account owes nothing; a debt signed in the demo's simulated
+ * settle sheet reads as being collected.
+ */
+export function demoDebts() {
+  const variant = demoDebtVariant();
+  if (freshStage() !== null || variant === "none") return [];
+  const base = demoDebt();
+  const debts =
+    variant === "written-off"
+      ? [{ ...base, state: "WRITTEN_OFF" as const, cause: `uncollected:${base.cause ?? "unknown"}`, writeOffAt: minutesAgo(60 * 24 * 2) }]
+      : variant === "other-wallet"
+        ? [{ ...base, payer: DEMO_OTHER_PAYER }]
+        : variant === "collecting"
+          ? [{ ...base, state: "REPLACING" as const, replacedAt: minutesAgo(1) }]
+          : variant === "many"
+            ? [
+                {
+                  ...base,
+                  intentId: "d1e4b7a0-3c62-4f95-8b18-6a0e2d97c5f3",
+                  toolId: "geocode",
+                  amount: { ...base.amount, amount: money("1.25").amount },
+                  state: "WRITTEN_OFF" as const,
+                  cause: "uncollected:VoucherExpired",
+                  lapsedAt: minutesAgo(60 * 24 * 33),
+                  writeOffAt: minutesAgo(60 * 24 * 3),
+                  createdAt: minutesAgo(60 * 24 * 33 + 5),
+                },
+                base,
+                {
+                  ...base,
+                  intentId: "7f20c9d3-e815-4a6b-9c47-1d3b8e05a2c6",
+                  payer: DEMO_OTHER_PAYER,
+                  toolId: "ocr_extract",
+                  amount: { ...base.amount, amount: money("6.00").amount },
+                  cause: "EscrowWindowLimitExceeded",
+                },
+              ]
+            : [base];
+  return debts.map((debt) =>
+    debt.state !== "REPLACING" && demoDebtSigned(debt.intentId)
+      ? { ...debt, state: "REPLACING" as const, replacedAt: justNow() }
+      : debt,
+  );
+}
+
 /* ----------------------------------------------------------------- receipt */
 
 interface WireStage {
@@ -1199,7 +1250,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/escrow/debts",
-    body: () => ({ account: DEMO_BUYER_ACCOUNT, debts: [demoDebt()] }),
+    body: () => ({ account: DEMO_BUYER_ACCOUNT, debts: demoDebts() }),
   },
 
   /* --------------------------------------------------------------- escrow */
