@@ -1261,6 +1261,7 @@ export function GrantActions({
   budget,
   budgetNote,
   showStop = true,
+  showChange = true,
 }: {
   account: string | undefined;
   delegation: EscrowDelegate;
@@ -1272,6 +1273,8 @@ export function GrantActions({
   /** Shown in the limits sheet when `budget` is left out: why the monthly part is not here. */
   budgetNote?: React.ReactNode;
   showStop?: boolean;
+  /** False on a free-calls-only chain: limits count no call there, so there is nothing to change. */
+  showChange?: boolean;
 }) {
   const ctx = useDelegationContext(account, 0);
   const [editing, setEditing] = React.useState<SheetTarget | null>(null);
@@ -1290,16 +1293,18 @@ export function GrantActions({
       : undefined;
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button
-        variant="secondary"
-        size="sm"
-        type="button"
-        data-testid="edit-agent-delegate"
-        disabled={!escrowCanDelegate(ctx.escrowQuery.data)}
-        onClick={() => setEditing({ delegateAccount: delegation.delegate, boundAt, current: delegation })}
-      >
-        Change spending limits
-      </Button>
+      {showChange ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          type="button"
+          data-testid="edit-agent-delegate"
+          disabled={!escrowCanDelegate(ctx.escrowQuery.data)}
+          onClick={() => setEditing({ delegateAccount: delegation.delegate, boundAt, current: delegation })}
+        >
+          Change spending limits
+        </Button>
+      ) : null}
       {showStop ? (
         <Button
           variant="secondary"
