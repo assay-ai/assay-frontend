@@ -492,14 +492,15 @@ function earningsGroups() {
       platformFee: money("18.36"),
       withheld: money("1.62"),
       withheldCalls: 4,
-      // One passed call whose buyer has not settled its payment yet, and two
-      // whose buyers never did (written off after 30 days).
+      // One passed call whose buyer has not settled its payment yet, and one
+      // whose buyer never did (written off after 30 days). One each, so the
+      // figure never equals the two failed checks' $0.81 on Money.
       debtOutstanding: money("0.405"),
       debtOutstandingCalls: 1,
       forfeited: money("0"),
       forfeitedCalls: 0,
-      uncollected: money("0.81"),
-      uncollectedCalls: 2,
+      uncollected: money("0.405"),
+      uncollectedCalls: 1,
     },
     {
       key: "fx-rates",
@@ -535,8 +536,8 @@ function earningsTotals() {
     debtOutstandingCalls: 1,
     forfeited: money("0.072"),
     forfeitedCalls: 1,
-    uncollected: money("0.81"),
-    uncollectedCalls: 2,
+    uncollected: money("0.405"),
+    uncollectedCalls: 1,
   };
 }
 
@@ -1704,19 +1705,19 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         to: justNow(),
         asset: DEMO_ASSET,
         callCount: totals.calls,
-        // Adds up to `earningsTotals`: 836 credited, 1 waiting on the buyer, 2 never collected,
+        // Adds up to `earningsTotals`: 836 credited, 1 waiting on the buyer, 1 never collected,
         // 1 forfeited, 4 not credited (2 failed checks, 1 endpoint error, 1 refused request, as
-        // in the per-call file), 7 free.
+        // in the per-call file), 8 free.
         classBreakdown: [
           row("PAID_CREDITED", 836, "181.44", "settled to you"),
           row("PAID_AWAITING_REDEMPTION", 0, "0", ""),
           row("PAID_BUYER_DEBT", 1, "0", "the buyer's payment could not be collected yet"),
-          row("PAID_UNCOLLECTED", 2, "0", "the buyer never settled it"),
+          row("PAID_UNCOLLECTED", 1, "0", "the buyer never settled it"),
           row("PROVIDER_FORFEITED", 1, "0", "your stake was below the minimum"),
           row("PAID_UNCREDITED", 2, "0", "our checks rejected the response"),
           row("SYSTEM_ERROR", 1, "0", "your endpoint timed out or returned 5xx"),
           row("REQUEST_ERROR", 1, "0", "4xx from your endpoint"),
-          row("FREE", 7, "0", "free-tier call"),
+          row("FREE", 8, "0", "free-tier call"),
         ],
         unexplained: { calls: 0, reference: null },
         gross: money("201.60"),
