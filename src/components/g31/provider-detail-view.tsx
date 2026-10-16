@@ -5,7 +5,7 @@ import { ArrowLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { FailsOftenChip, Fact, FreeTierBadge, ObservedFailuresLabel, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { ToolAccessControl } from "@/components/explorer/tool-access-control";
 import { EntityName } from "@/components/patterns/entity-name";
 import { LocalTime } from "@/components/patterns/local-time";
@@ -14,7 +14,7 @@ import { StatusChip } from "@/components/patterns/status-chip";
 import { Term } from "@/components/patterns/term";
 import { Panel, PanelBody, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { callOutcome } from "@/features/buyer/call-outcome";
-import { failRateLabel, failsOften, formatCallPrice, freeTierLabel, plural, stakeSummary } from "@/features/explorer/explorer-text";
+import { failRateLabel, failsOften, formatCallPrice, offerLine, plural, stakeSummary } from "@/features/explorer/explorer-text";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
@@ -130,9 +130,15 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
                   <Link href={routes.exploreTool(tool.toolId)} className="flex min-w-0 flex-1 flex-col gap-1 hover:underline">
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
-                      <FreeTierBadge label={freeTierLabel(tool.pricingMode, tool.freeCallsPerAgentPerDay)} />
                     </span>
-                    <span className="text-body-xs text-03">{formatCallPrice(tool.price)} per call, only if it passes</span>
+                    {/* This provider's own listing: one price, its free calls first (as on the public page). */}
+                    <OfferPrice
+                      offer={offerLine({
+                        mode: tool.pricingMode,
+                        range: tool.price ? { from: tool.price, held: tool.price, differs: false } : null,
+                        freeCallsPerDay: tool.freeCallsPerAgentPerDay,
+                      })}
+                    />
                   </Link>
                   <ToolAccessControl toolId={tool.toolId} toolName={tool.name} allToolIds={allToolIds} />
                 </li>
