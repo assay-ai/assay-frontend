@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
 
+import { hasTightenDelay, loweredDelayNote, lowersCaps } from "@/features/delegation/unsettled";
 import type { Money } from "@/interfaces";
 import { formatDecimal, parseAmountInput, toDecimal } from "@/utils/money";
 
@@ -144,3 +145,23 @@ export function keyGroups(address: string): string[] {
   const groups = body.match(/.{1,4}/g) ?? [];
   return raw.startsWith("0x") && groups.length > 0 ? [`0x${groups[0]}`, ...groups.slice(1)] : groups;
 }
+
+/**
+ * The success line. A lowering pauses payments for about 30 seconds while it
+ * settles, unless the escrow has the tighten delay (D-21): then the lower
+ * ceiling binds new payments at once and signed ones after the delay. A raise
+ * pauses nothing.
+ */
+export function capsSuccessText(
+  current: { maxVoucherAmount: string; maxPerWindow: string } | null,
+  next: { maxVoucherAmount: string; maxPerWindow: string } | null,
+  tightenDelaySeconds: number | null | undefined,
+): string {
+  const lowered = Boolean(current && next && lowersCaps(current, next));
+  if (!lowered) return "It applies from the next payment.";
+  if (hasTightenDelay(tightenDelaySeconds)) {
+    return `It applies from the next payment. ${loweredDelayNote(tightenDelaySeconds, current, next)}`;
+  }
+  return "It applies after a short pause: payments may stop for about 30 seconds while the lower ceiling settles.";
+}
+

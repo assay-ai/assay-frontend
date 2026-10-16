@@ -390,9 +390,9 @@ const OUTCOME_STEP: Record<Exclude<ReceiptState, "CHECKING" | "CHARGED">, { labe
   SYSTEM_ERROR: { label: "Provider error", tone: "danger" },
   REQUEST_ERROR: { label: "Request rejected", tone: "danger" },
   EXPIRED: { label: "Did not finish in time", tone: "warning" },
-  DEBT_OUTSTANDING: { label: "Check passed, payment not collected", tone: "warning" },
-  DEBT_WRITTEN_OFF: { label: "Written off for the provider", tone: "warning" },
-  DEBT_VOIDED: { label: "Voided", tone: "neutral" },
+  DEBT_OUTSTANDING: { label: "Passed, payment not taken", tone: "warning" },
+  DEBT_WRITTEN_OFF: { label: "Written off, provider not paid", tone: "warning" },
+  DEBT_VOIDED: { label: "Debt cancelled", tone: "neutral" },
   FORFEITED: { label: "Provider forfeited", tone: "neutral" },
 };
 

@@ -8,6 +8,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { WalletSetupBanner } from "@/components/auth/wallet-setup-banner";
 import { AgentHealthList } from "@/components/buyer-money/agent-health";
 import { GetStarted, useGetStartedShown } from "@/components/buyer-money/get-started";
+import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
 import { Button } from "@/components/ui/button";
 import { EntityName } from "@/components/patterns/entity-name";
 import { LocalTime } from "@/components/patterns/local-time";
@@ -35,6 +36,7 @@ import {
   trendLabel,
 } from "@/features/buyer/period";
 import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
+import { OwedRowAction } from "@/features/buyer-debt/owed-row-action";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
 import { attentionAction } from "@/features/buyer/attention-action";
 import { callOutcome } from "@/features/buyer/call-outcome";
@@ -86,6 +88,8 @@ export default function OverviewPage() {
   // While Get started is on screen its step is the next thing to do, so the
   // header's "Add funds" steps back to a secondary button.
   const gettingStarted = useGetStartedShown();
+  // Free calls only on this chain: no deposit is possible, so no "Add funds".
+  const freeOnly = useFreeOnlyChain();
   // The month is a fact about the calendar, not about the response, so the
   // tile labels stay correct even when every request failed.
   const monthLabel = useMemo(() => monthPeriod(anchor).label, [anchor]);
@@ -184,12 +188,21 @@ export default function OverviewPage() {
               Explore spend
             </Link>
           </Button>
-          <Button variant={gettingStarted ? "secondary" : "primary"} asChild>
-            <Link href="/funding?action=deposit">
-              <Plus className="size-[15px]" />
-              Add funds
-            </Link>
-          </Button>
+          {freeOnly.freeOnly ? (
+            <span
+              data-testid="overview-free-only"
+              className="inline-flex items-center rounded-full bg-teal-10 px-3 py-1.5 text-label-13 text-teal-700"
+            >
+              Free calls only on {freeOnly.chainName ?? "this chain"}
+            </span>
+          ) : (
+            <Button variant={gettingStarted ? "secondary" : "primary"} asChild>
+              <Link href="/funding?action=deposit">
+                <Plus className="size-[15px]" />
+                Add funds
+              </Link>
+            </Button>
+          )}
         </div>
       </header>
 
@@ -439,16 +452,8 @@ export default function OverviewPage() {
                               <LocalTime value={call.createdAt} relative />
                             </span>
                           </span>
-                          {paymentNote ? (
-                            <span
-                              className={
-                                outcome === "owed"
-                                  ? "text-body-xs text-warning-700"
-                                  : "text-body-xs text-03"
-                              }
-                            >
-                              {paymentNote}
-                            </span>
+                          {paymentNote && outcome !== "owed" ? (
+                            <span className="text-body-xs text-03">{paymentNote}</span>
                           ) : null}
                         </div>
                         <div className="flex shrink-0 flex-col items-end gap-0.5">
@@ -469,6 +474,8 @@ export default function OverviewPage() {
                         </div>
                         <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
                       </Link>
+                      {/* Owed: what it stops and the way out, beside the row's link. */}
+                      {outcome === "owed" ? <OwedRowAction intentId={call.intentId} /> : null}
                     </li>
                   );
                 })}

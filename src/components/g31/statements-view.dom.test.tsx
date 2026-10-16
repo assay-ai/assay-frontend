@@ -38,17 +38,20 @@ describe("StatementFigures — the statement adds up like /spend", () => {
     const html = markup();
     expect(html).toContain("$10.00");
     expect(html).toContain("−$2.00");
-    expect(html).toContain("includes $1.50 withheld by the guarantee");
+    expect(html).toContain("$1.50 by the guarantee");
     expect(html).toContain("−$1.25");
     expect(html).toContain("−$0.75");
     expect(html).toContain("$6.00");
     expect(html).toContain("Owed");
     expect(html).toContain("In progress");
     expect(html).not.toContain("Amount withheld");
+    // The withheld part stays one short fragment.
+    const withSub = renderToStaticMarkup(<StatementFigures totals={FIGURES} withheldSub="3 failed checks, 1 no result" />);
+    expect(withSub).toContain("$1.50 by the guarantee (3 failed checks, 1 no result)");
   });
 
   it("says 1 call, not 1 calls, on the owed line", () => {
-    expect(markup()).toContain("1 call · served, payment not collected yet");
+    expect(markup()).toContain("1 call · not collected yet");
   });
 
   it("leaves out owed and in progress when there are none", () => {

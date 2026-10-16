@@ -70,3 +70,35 @@ export function spentFromTotals(
   if (!owed || owed.asset !== charged.asset || owed.decimals !== charged.decimals) return charged;
   return { ...charged, amount: (BigInt(charged.amount) + BigInt(owed.amount)).toString() };
 }
+
+export interface SpendBreakdownRow {
+  key: "listed" | "charged" | "not-charged" | "owed" | "in-progress";
+  label: string;
+  amount: string;
+  calls: number | null;
+}
+
+/**
+ * The same sum as `reconcileSentence`, as rows for a compact breakdown: the
+ * listed total, then each part it splits into. Owed and in progress appear
+ * only when there are such calls, exactly as in the sentence.
+ */
+export function spendBreakdown(totals: ReceiptsSummary["totals"]): SpendBreakdownRow[] {
+  const rows: SpendBreakdownRow[] = [
+    { key: "listed", label: "Listed price of every call", amount: formatMoney(totals.listedTotal), calls: totals.calls },
+    { key: "charged", label: "Charged", amount: formatMoney(totals.chargedTotal), calls: null },
+    {
+      key: "not-charged",
+      label: "Not charged",
+      amount: formatMoney(totals.notChargedTotal),
+      calls: totals.notChargedCalls ?? null,
+    },
+  ];
+  if (totals.owedCalls > 0) {
+    rows.push({ key: "owed", label: "Owed (payment not collected yet)", amount: formatMoney(totals.owedTotal), calls: totals.owedCalls });
+  }
+  if (totals.inProgressCalls > 0) {
+    rows.push({ key: "in-progress", label: "In progress", amount: formatMoney(totals.inProgressTotal), calls: totals.inProgressCalls });
+  }
+  return rows;
+}

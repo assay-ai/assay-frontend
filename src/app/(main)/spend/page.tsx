@@ -22,7 +22,8 @@ import {
   windowById,
   windowRange,
 } from "@/features/g30/period";
-import { reconcileSentence } from "@/features/g30/spend-buckets";
+import { reconcileSentence, spendBreakdown } from "@/features/g30/spend-buckets";
+import { OwedSummaryAction } from "@/features/buyer-debt/owed-row-action";
 import { changePercent, previousTotal, rankRows, spendCsv, spendCsvFilename, type RankedRow } from "@/features/g30/spend-view";
 import type { ReceiptsSummary } from "@/features/g30/wire";
 import { useChains } from "@/hooks/useChains";
@@ -81,7 +82,7 @@ function BarRow({ row, href }: { row: RankedRow; href: string | null }) {
           <span>{plural(row.calls, "call")}</span>
           {row.free ? <span>free calls only</span> : null}
           {row.notCharged ? <span className="text-teal-600">{row.notCharged} not charged</span> : null}
-          {row.owed ? <span className="text-warning-700">{row.owed} owed, not collected yet</span> : null}
+          {row.owed ? <span className="text-warning-700">{row.owed} owed</span> : null}
           {row.delta ? <span>{row.delta} vs before</span> : null}
         </div>
       </div>
@@ -256,16 +257,35 @@ export default function SpendPage() {
                 {hasOwed ? ` · ${plural(summary.totals.owedCalls, "call")} owed` : ""}
                 {freeCalls > 0 ? ` · ${plural(freeCalls, "free call")}` : ""} · {win.label.toLowerCase()}
               </p>
-              {/* How the figures add up: listed = charged + not charged + owed (+ in progress). */}
-              <p className="text-body-xs text-03" data-testid="spend-reconcile">
-                {reconcileSentence(summary.totals)}
-              </p>
+              {/* Owed stays in the line above; here, what it stops and the way out. */}
               {hasOwed ? (
-                <p className="text-body-xs text-warning-700">
-                  Owed is buyer debt: calls your agent made whose payment could not be collected yet. Paid calls stay paused
-                  until it is settled from the banner at the top.
-                </p>
+                <OwedSummaryAction owed={formatMoney(summary.totals.owedTotal)} calls={summary.totals.owedCalls} />
               ) : null}
+              {/* How the figures add up (listed = charged + not charged + owed + in progress), one click away. */}
+              <details className="group text-body-xs text-03" data-testid="spend-reconcile">
+                <summary className="hit-area cursor-pointer select-none self-start text-label-xs text-02 underline-offset-2 hover:underline">
+                  How this adds up
+                </summary>
+                <dl className="mt-1.5 grid max-w-[420px] grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1">
+                  {spendBreakdown(summary.totals).map((row) => (
+                    <React.Fragment key={row.key}>
+                      <dt className={row.key === "listed" ? "text-02" : "pl-3 text-03"}>
+                        {row.key === "listed" ? row.label : `${row.key === "charged" ? "=" : "+"} ${row.label}`}
+                        {row.calls !== null && row.key !== "listed" ? ` · ${plural(row.calls, "call")}` : ""}
+                      </dt>
+                      <dd
+                        className={cn(
+                          "text-right font-mono text-mono-xs",
+                          row.key === "owed" ? "text-warning-700" : row.key === "not-charged" ? "text-teal-600" : "text-01",
+                        )}
+                      >
+                        {row.amount}
+                      </dd>
+                    </React.Fragment>
+                  ))}
+                </dl>
+                <p className="mt-1">{reconcileSentence(summary.totals)}</p>
+              </details>
             </div>
             <Sparkline
               values={sparkValues}
