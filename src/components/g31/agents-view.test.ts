@@ -23,21 +23,20 @@ const paying = {
 } as unknown as AgentReadiness;
 
 describe("Revoke key says whether paying stops too", () => {
-  it("on the key the agent pays through", () => {
-    const text = revokeKeyText(agent, key("eip155:1:0xd"), paying);
-    expect(text).toContain("it makes no more paid calls through Assay");
-    expect(text).toContain("Its on-chain permission to pay is not removed by this: Stop it paying removes it.");
-    expect(text).not.toContain("Paying stops too");
-    expect(text).not.toContain("can still be collected");
+  it("on the key the agent pays through: two short sentences, the on-chain detail apart", () => {
+    const { text, detail } = revokeKeyText(agent, key("eip155:1:0xd"), paying);
+    expect(text).toBe("prod can no longer call any tool with this key, free or paid. This cannot be undone; you can create a new key.");
+    expect(detail).toContain("Its on-chain permission to pay is not removed by this: Stop it paying removes it");
+    expect(detail).not.toContain("can still be collected");
   });
   it("says how long signed payments stay collectable on a D-21 escrow", () => {
-    expect(revokeKeyText(agent, key("eip155:1:0xd"), paying, 3600)).toContain(
-      "If you then Stop it paying, payments it already signed can still be collected for 1 hour.",
+    expect(revokeKeyText(agent, key("eip155:1:0xd"), paying, 3600).detail).toContain(
+      "After that, payments it already signed can still be collected for 1 hour.",
     );
   });
   it("on a key with no payment key", () => {
-    const text = revokeKeyText(agent, key(null), undefined);
+    const { text, detail } = revokeKeyText(agent, key(null), undefined);
     expect(text).toContain("free or paid");
-    expect(text).toContain("Nothing about paying changes");
+    expect(detail).toContain("Nothing about paying changes");
   });
 });

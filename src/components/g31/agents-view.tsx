@@ -72,23 +72,23 @@ export function revokeKeyText(
   key: KeyRow,
   readiness: AgentReadiness | undefined,
   tightenDelaySeconds?: number | null,
-): string {
+): { text: string; detail: string | null } {
   const name = agent.label ?? "The agent";
-  const base = `${name} can no longer call any tool with this key, free or paid, from now on. This cannot be undone; you can create a new key.`;
+  // Two short sentences up front; the on-chain detail below them (review 2026-10-17: one long paragraph).
+  const text = `${name} can no longer call any tool with this key, free or paid. This cannot be undone; you can create a new key.`;
   if (paysThrough(key, readiness)) {
     const delay = hasTightenDelay(tightenDelaySeconds)
-      ? ` If you then Stop it paying, payments it already signed can still be collected for ${tightenDelayLabel(tightenDelaySeconds!)}.`
+      ? ` After that, payments it already signed can still be collected for ${tightenDelayLabel(tightenDelaySeconds!)}.`
       : "";
-    return (
-      `${base} So it makes no more paid calls through Assay, because its payment key was set up on this key. ` +
-      "Its on-chain permission to pay is not removed by this: Stop it paying removes it. After this the payment key is listed " +
-      `lower on this page, under “Other keys that can still pay”.${delay}`
-    );
+    return {
+      text,
+      detail:
+        "Its on-chain permission to pay is not removed by this: Stop it paying removes it (its payment key is then " +
+        `listed under “Other keys that can still pay”).${delay}`,
+    };
   }
-  if (key.delegateAccount) {
-    return `${base} Its payment key was set up on this key, so it cannot be used to pay any more either.`;
-  }
-  return `${base} Nothing about paying changes: this key has no payment key.`;
+  if (key.delegateAccount) return { text, detail: "Its payment key was set up on this key, so it cannot pay any more either." };
+  return { text, detail: "Nothing about paying changes: this key has no payment key." };
 }
 
 export function AgentsView() {
@@ -123,6 +123,15 @@ export function AgentsView() {
     data.refetchDelegates();
     void queryClient.invalidateQueries({ queryKey: ["escrow"] });
   };
+
+  const revokeCopy = lastRevoke
+    ? revokeKeyText(
+        lastRevoke.agent,
+        lastRevoke.key,
+        data.readiness[lastRevoke.agent.agentId],
+        data.delegatesQuery.data?.tightenDelaySeconds,
+      )
+    : null;
 
   const payerAccount = data.agents.find((a) => supportsDelegation(a.agentAccount))?.agentAccount;
   const bindings: DelegateBinding[] = data.agents.flatMap((agent) =>
@@ -197,12 +206,7 @@ export function AgentsView() {
         onOpenChange={(open) => !open && setRevoking(null)}
         tone="danger"
         title={`Revoke the API key “${lastRevoke?.key.name ?? ""}”?`}
-        description={lastRevoke ? revokeKeyText(
-                lastRevoke.agent,
-                lastRevoke.key,
-                data.readiness[lastRevoke.agent.agentId],
-                data.delegatesQuery.data?.tightenDelaySeconds,
-              ) : ""}
+        description={revokeCopy?.text ?? ""}
         changes={
           lastRevoke && paysThrough(lastRevoke.key, data.readiness[lastRevoke.agent.agentId])
             ? [
@@ -214,7 +218,9 @@ export function AgentsView() {
         confirmLabel="Revoke key"
         onConfirm={() => revoke.mutateAsync({ agentId: lastRevoke!.agent.agentId, id: lastRevoke!.key.id })}
         describeError={(error) => (error instanceof ApiError ? plainError(error.code) : "The key could not be revoked. Try again.")}
-      />
+      >
+        {revokeCopy?.detail ? <p className="text-body-xs text-03">{revokeCopy.detail}</p> : null}
+      </ConfirmSheet>
 
       <LetAgentPaySheet
         open={payFor !== null}
