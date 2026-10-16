@@ -17,6 +17,7 @@ import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
 
 import { useSpendPolicyQuery } from "./use-agents";
+import { useFreeOnlyChain } from "./use-buyer-money";
 
 /**
  * The kill switch: pause every paid call at once. On Budgets as a large
@@ -25,6 +26,11 @@ import { useSpendPolicyQuery } from "./use-agents";
  *
  * Needs a budget to exist (the pause is a field of it). Without one, the
  * control does not render rather than offering a switch that cannot work.
+ *
+ * Not offered on a chain that serves free calls only (`useFreeOnlyChain`):
+ * the backend checks the pause on the paid path alone
+ * (`SpendPolicyEnforcementService.assertPolicyAdmits`; a free call is relayed
+ * before it), so there it would stop nothing and only show a red "Paused".
  */
 /**
  * Whether a debt still blocks paid calls, read from the debts list the buyer
@@ -41,6 +47,8 @@ export function usePauseAll() {
   const debtOwed = useDebtBlocksPaidCalls();
   const policyQuery = useSpendPolicyQuery();
   const policy = policyQuery.data ?? null;
+  // Read once the policy is (an authenticated session): the escrow names the chain.
+  const { freeOnly } = useFreeOnlyChain({ enabled: policy !== null });
   const mutation = useMutation({
     mutationFn: (paused: boolean) =>
       updateSpendPolicy({ paused, changeReason: paused ? "Paused all paid calls" : "Resumed paid calls" }),
@@ -53,7 +61,14 @@ export function usePauseAll() {
       toast.success(next.paused ? "All paid calls are paused. Free calls still work." : resumeSheetCopy(debtOwed).toast);
     },
   });
-  return { policy, paused: policy?.paused === true, available: policy !== null, mutation };
+  return {
+    policy,
+    // The stored flag, whatever the chain: the debt copy reads it.
+    paused: policy?.paused === true,
+    // Whether to offer the switch (and show its paused state) at all.
+    available: policy !== null && !freeOnly,
+    mutation,
+  };
 }
 
 export function PauseAllConfirm({
@@ -150,9 +165,9 @@ export function PauseAllButton({ className }: { className?: string }) {
  * paid calls, and the banner says so.
  */
 export function PausedBanner({ owed = false, wrapperClassName }: { owed?: boolean; wrapperClassName?: string }) {
-  const { paused, mutation } = usePauseAll();
+  const { paused, available, mutation } = usePauseAll();
   const [confirming, setConfirming] = React.useState(false);
-  if (!paused) return null;
+  if (!paused || !available) return null;
   return (
     <div className={wrapperClassName}>
       <div role="status" className="flex w-full flex-wrap items-center gap-3 rounded-lg border border-danger-20 bg-danger-10 px-4 py-3">
