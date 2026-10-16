@@ -32,6 +32,7 @@ function routesUnder(dir: string, segments: string[] = [], out: string[] = []): 
 /** Buyer pages that are deliberately not linked from the chrome, with the reason. */
 const UNLINKED: Record<string, string> = {
   "/overview": "redirects to /",
+  "/calls": "redirects to /spend/calls",
   "/explore/providers": "inside Explore",
   "/explore/providers/view": "a record page, opened from a row",
   "/explore/tools": "inside Explore",
