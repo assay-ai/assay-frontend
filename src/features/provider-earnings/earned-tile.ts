@@ -178,11 +178,16 @@ export interface HomeUnpaidNote {
  * says the provider has nothing to do (it is the buyer's debt); forfeited calls
  * are the provider's to avoid, so they link to Stake. Written-off calls are
  * only on Money: nothing can change them.
+ *
+ * Forfeits are this month's, and the cause may be over: when the stake covers
+ * the minimum now (`stakeEnough`), the note says it happened earlier and is
+ * calm; it warns only while the stake is short or cannot be read.
  */
 export function homeUnpaidNotes(
   totals: ProviderEarningsFigures | null | undefined,
   format: (value: Money) => string,
   hrefs: { money: string; stake: string },
+  stakeEnough: boolean | null = null,
 ): HomeUnpaidNote[] {
   const notes: HomeUnpaidNote[] = [];
   if (!totals) return notes;
@@ -197,12 +202,23 @@ export function homeUnpaidNotes(
   }
   if (nonZero(totals.forfeited, totals.forfeitedCalls)) {
     const n = totals.forfeitedCalls ?? 0;
-    notes.push({
-      key: "forfeited",
-      text: `${format(totals.forfeited)} for ${calls(n)} was forfeited: your stake was below the minimum, or you were blocked.`,
-      tone: "warning",
-      link: { label: "Check your stake", href: hrefs.stake },
-    });
+    notes.push(
+      stakeEnough === true
+        ? {
+            key: "forfeited",
+            text:
+              `${format(totals.forfeited)} for ${calls(n)} was forfeited earlier this month, while your stake was below ` +
+              "the minimum or you were blocked. Your stake covers the minimum now.",
+            tone: "neutral",
+            link: { label: "Details", href: hrefs.money },
+          }
+        : {
+            key: "forfeited",
+            text: `${format(totals.forfeited)} for ${calls(n)} was forfeited this month: your stake was below the minimum, or you were blocked.`,
+            tone: "warning",
+            link: { label: "Check your stake", href: hrefs.stake },
+          },
+    );
   }
   return notes;
 }

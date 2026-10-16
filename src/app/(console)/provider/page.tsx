@@ -202,7 +202,9 @@ export default function ProviderHomePage() {
         />
       ) : null}
 
-      {items.length > 0 ? <EarningsPanel earnings={earningsMonth.data} loading={earningsMonth.isLoading} /> : null}
+      {items.length > 0 ? (
+        <EarningsPanel earnings={earningsMonth.data} loading={earningsMonth.isLoading} stakeEnough={stake.isLoading ? null : stake.enough} />
+      ) : null}
 
       {items.length > 0 ? (
         <ToolsPanel items={items} earnings={earningsMonth.data} label={names.bindingLabel} />
@@ -223,15 +225,26 @@ export default function ProviderHomePage() {
   );
 }
 
-function EarningsPanel({ earnings, loading }: { earnings: ProviderEarnings | undefined; loading: boolean }) {
+function EarningsPanel({
+  earnings,
+  loading,
+  stakeEnough,
+}: {
+  earnings: ProviderEarnings | undefined;
+  loading: boolean;
+  /** Whether the stake covers the minimum now; null while unknown. */
+  stakeEnough: boolean | null;
+}) {
   if (loading) return <PageState kind="loading" rows={2} label="Loading this month's earnings" />;
   const totals = earnings?.totals;
   if (!totals) return null;
   const split = earningsSplit(totals);
-  const unpaidNotes = homeUnpaidNotes(totals, (money) => formatMoney(money, { decimals: 4 }), {
-    money: "/provider/money#passed-not-paid",
-    stake: routes.stake(),
-  });
+  const unpaidNotes = homeUnpaidNotes(
+    totals,
+    (money) => formatMoney(money, { decimals: 2 }),
+    { money: "/provider/money#passed-not-paid", stake: routes.stake() },
+    stakeEnough,
+  );
   const value = (money: Money | null) => (money ? toDecimal(money).toNumber() : 0);
   const segments = [
     { label: "In your wallet", value: value(split.inWallet), amount: formatMoney(split.inWallet, { decimals: 2 }), tone: "success" as const },
