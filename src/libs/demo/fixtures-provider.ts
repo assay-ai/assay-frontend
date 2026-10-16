@@ -322,11 +322,50 @@ function draftBinding(toolId: string): DemoBinding {
 
 /** The known binding for an id, a new draft's own tool, or the lead one standing in for an unknown id. */
 function bindingFor(id: string | null): DemoBinding {
-  if (id?.startsWith(DRAFT_PREFIX)) return draftBinding(id.slice(DRAFT_PREFIX.length));
-  return BINDINGS.find((binding) => binding.id === id) ?? BINDINGS[0];
+  const binding = id?.startsWith(DRAFT_PREFIX)
+    ? draftBinding(id.slice(DRAFT_PREFIX.length))
+    : (BINDINGS.find((known) => known.id === id) ?? BINDINGS[0]);
+  return withSavedBudget(binding);
 }
 
-/** A write's answer: the stored listing with what was sent laid over it. Echoed, not kept. */
+/*
+  DEMO ONLY: a listing's "Free calls per day" saved in Settings, kept for the
+  browser tab (sessionStorage) like the demo's spend-policy change, so the box
+  shows what was saved instead of snapping back. Keyed by binding id.
+*/
+const BUDGET_KEY = "assay.demo.free-daily-budget";
+let savedBudgets: Record<string, number | null> | null = null;
+
+function keptBudgets(): Record<string, number | null> {
+  if (savedBudgets) return savedBudgets;
+  savedBudgets = {};
+  if (typeof window === "undefined") return savedBudgets;
+  try {
+    const raw = window.sessionStorage.getItem(BUDGET_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) savedBudgets = parsed as Record<string, number | null>;
+  } catch {
+    // Storage blocked or a malformed value: start from the stage set.
+  }
+  return savedBudgets;
+}
+
+function rememberBudget(id: string, value: number | null): void {
+  savedBudgets = { ...keptBudgets(), [id]: value };
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(BUDGET_KEY, JSON.stringify(savedBudgets));
+  } catch {
+    // Storage blocked: the saved value still shows until reload.
+  }
+}
+
+function withSavedBudget(binding: DemoBinding): DemoBinding {
+  const saved = keptBudgets();
+  return binding.id in saved ? { ...binding, freeDailyBudget: saved[binding.id] ?? null } : binding;
+}
+
+/** A write's answer: the stored listing with what was sent laid over it. Echoed; only the free daily budget is kept (see `rememberBudget`). */
 function withWrite(binding: DemoBinding, data: Record<string, unknown>): DemoBinding {
   const next = { ...binding };
   if (typeof data.endpoint === "string") next.endpoint = data.endpoint;
@@ -337,6 +376,12 @@ function withWrite(binding: DemoBinding, data: Record<string, unknown>): DemoBin
   if (typeof data.slaFailureRate === "number") next.slaFailureRate = data.slaFailureRate;
   if (typeof data.timeoutMs === "number") next.timeoutMs = data.timeoutMs;
   if (data.freeQuotaPerAgent === null || typeof data.freeQuotaPerAgent === "number") next.freeQuotaPerAgent = data.freeQuotaPerAgent;
+  if (data.freeDailyBudget === null || typeof data.freeDailyBudget === "number") {
+    next.freeDailyBudget = data.freeDailyBudget;
+    rememberBudget(next.id, data.freeDailyBudget);
+  }
+  if (data.maxRps === null || typeof data.maxRps === "number") next.maxRps = data.maxRps;
+  if (data.maxDailyCalls === null || typeof data.maxDailyCalls === "number") next.maxDailyCalls = data.maxDailyCalls;
   return next;
 }
 

@@ -6,7 +6,10 @@ import type { Money, ProviderStake } from "@/interfaces";
 import {
   choiceOfMode,
   failureRateFromPercent,
+  freeBudgetFromInput,
+  freeBudgetWarning,
   freeCallsFromInput,
+  freeTermsChangeRows,
   modeOfChoice,
   percentText,
   providerShare,
@@ -131,5 +134,37 @@ describe("stakeEffectOf", () => {
     const free = stakeEffectOf({ binding, price: null, mode: "FREE", stake: null, staked: null });
     expect(free.after).toBeNull();
     expect(free.shortfall).toBeNull();
+  });
+});
+
+describe("free-call boxes (provider Settings)", () => {
+  it("validate both boxes with the same words", () => {
+    expect(freeCallsFromInput("x").error).toBe("A whole number of calls, like 100.");
+    expect(freeBudgetFromInput("x").error).toBe("A whole number of calls, like 100.");
+    expect(freeCallsFromInput("0").error).toBe("At least 1 call.");
+    expect(freeBudgetFromInput("0").error).toBe("At least 1 call. Leave it empty for the platform default.");
+    expect(freeCallsFromInput("2000000").error).toBe("At most 1,000,000 calls.");
+    expect(freeBudgetFromInput("3000000000").error).toBe("At most 2,147,483,647 calls.");
+    expect(freeBudgetFromInput("")).toEqual({ value: null, error: null });
+    expect(freeBudgetFromInput("5,000")).toEqual({ value: 5000, error: null });
+  });
+
+  it("warns when all agents together get fewer free calls a day than one agent", () => {
+    expect(freeBudgetWarning(50, 100)).toBe(
+      "Agents get at most 50 free calls a day in total, fewer than the 100 each agent is offered.",
+    );
+    expect(freeBudgetWarning(100, 100)).toBeNull();
+    expect(freeBudgetWarning(null, 100)).toBeNull();
+    expect(freeBudgetWarning(50, null)).toBeNull();
+  });
+
+  it("lists the pricing mode and free-call changes for the save confirm", () => {
+    const binding = { pricingMode: "PAID" as const, freeQuotaPerAgent: null, freeDailyBudget: 5000 };
+    expect(freeTermsChangeRows(binding, { pricingMode: "FREEMIUM", freeQuotaPerAgent: 100, freeDailyBudget: null })).toEqual([
+      { label: "How agents pay", before: "Paid", after: "Free + paid" },
+      { label: "Free calls per agent per day", before: "None", after: "100 calls" },
+      { label: "Free calls per day, all agents", before: "5,000 calls", after: "Platform default" },
+    ]);
+    expect(freeTermsChangeRows(binding, {})).toEqual([]);
   });
 });

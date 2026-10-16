@@ -17,8 +17,18 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { noteSaved } from "@/features/provider-binding/after-publish";
 import { BindingHeader, bindingQueryKey, useBinding } from "@/features/provider-binding/binding-header";
-import { dailyCallsFromInput, integerFromInput } from "@/features/provider-binding/chrome";
-import { modeOfChoice, percentText, PRICE_CHOICES, stakeEffectOf, type PriceChoice } from "@/features/provider-binding/go-live";
+import { integerFromInput } from "@/features/provider-binding/chrome";
+import {
+  freeBudgetFromInput,
+  freeBudgetWarning,
+  freeCallsFromInput,
+  freeTermsChangeRows,
+  modeOfChoice,
+  percentText,
+  PRICE_CHOICES,
+  stakeEffectOf,
+  type PriceChoice,
+} from "@/features/provider-binding/go-live";
 import { useProviderCatalogue } from "@/features/provider-binding/tool-name";
 import { liveFormOf, parseLiveForm, type LiveForm } from "@/features/provider-binding/wizard/live-stage";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
@@ -92,11 +102,15 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
   const body: UpdateToolBindingBody = { ...(parsed.body ?? {}) };
 
   const initialExtra = extraOf(binding);
-  if (extra.freeBudget !== initialExtra.freeBudget && mode === "FREEMIUM") {
-    const calls = dailyCallsFromInput(extra.freeBudget);
-    if (calls.error) errors.freeBudget = calls.error;
-    else body.freeDailyBudget = calls.value;
+  // Any pricing mode, as main's free-tier screen allowed (the binding-wide cap is its own field).
+  const budget = freeBudgetFromInput(extra.freeBudget);
+  if (extra.freeBudget !== initialExtra.freeBudget) {
+    if (budget.error) errors.freeBudget = budget.error;
+    else body.freeDailyBudget = budget.value;
   }
+  // Fewer free calls a day in total than one agent is offered: say what agents really get.
+  const budgetWarning =
+    mode === "FREEMIUM" && !budget.error ? freeBudgetWarning(budget.value, freeCallsFromInput(form.freeCalls).value) : null;
   for (const key of ["maxRps", "maxDailyCalls"] as const) {
     if (extra[key] === initialExtra[key]) continue;
     const parsedInt = integerFromInput(extra[key]);
@@ -108,6 +122,8 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
   const hasErrors = Object.keys(parsed.errors).length > 0 || Object.keys(errors).length > 0;
   const changed = Object.keys(body).length > 0;
   const pricingChanged = body.pricingMode !== undefined || body.priceAmount !== undefined || body.freeQuotaPerAgent !== undefined;
+  // The free terms changing, for the confirm's rows (the per-day total included once the confirm opens).
+  const freeTermsRows = freeTermsChangeRows(binding, body);
   const live = binding.status === "ACTIVE";
   const promiseStricter = body.slaFailureRate !== undefined && body.slaFailureRate < binding.slaFailureRate;
   const effect = stakeEffectOf({ binding, price: parsed.price, mode, stake: stake.stake, staked: stake.staked });
@@ -189,8 +205,9 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
               }
             />
           ) : null}
-          {mode === "FREEMIUM" ? (
-            <div className="grid w-full grid-cols-1 gap-4 tablet:grid-cols-2">
+          {/* The binding-wide cap is offered in every mode, as main's free-tier screen did. */}
+          <div className="grid w-full grid-cols-1 gap-4 tablet:grid-cols-2">
+            {mode === "FREEMIUM" ? (
               <Field
                 label="Free calls per agent per day"
                 inputMode="numeric"
@@ -201,18 +218,23 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
                 onChange={(event) => set({ freeCalls: event.target.value })}
                 error={parsed.errors.freeCalls}
               />
-              <Field
-                label="Free calls per day, all agents (optional)"
-                inputMode="numeric"
-                suffix="calls"
-                value={extra.freeBudget}
-                disabled={readOnly}
-                placeholder="Platform default"
-                onChange={(event) => setExtra((current) => ({ ...current, freeBudget: event.target.value }))}
-                error={errors.freeBudget}
-                hint="The most free calls this listing gives in a day, all agents together. Leave empty for the platform default. When they run out, agents are offered the paid option at your price."
-              />
-            </div>
+            ) : null}
+            <Field
+              label="Free calls per day, all agents (optional)"
+              inputMode="numeric"
+              suffix="calls"
+              value={extra.freeBudget}
+              disabled={readOnly}
+              placeholder="Platform default"
+              onChange={(event) => setExtra((current) => ({ ...current, freeBudget: event.target.value }))}
+              error={errors.freeBudget}
+              hint="The most free calls this listing gives in a day, all agents together. Leave empty for the platform default. Resets at 00:00 UTC. When they run out, agents are offered the paid option at your price."
+            />
+          </div>
+          {budgetWarning ? (
+            <p className="rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700" data-testid="free-budget-warning">
+              {budgetWarning}
+            </p>
           ) : null}
         </PanelBody>
       </Panel>
@@ -330,7 +352,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
           </>
         }
         changes={[
-          ...(pricingChanged
+          ...(body.priceAmount !== undefined
             ? [
                 {
                   label: "Price",
@@ -340,6 +362,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
                 },
               ]
             : []),
+          ...freeTermsRows,
           ...(pricingChanged && (effect.before || effect.after)
             ? [
                 {

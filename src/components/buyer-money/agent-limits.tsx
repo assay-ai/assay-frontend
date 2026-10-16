@@ -255,6 +255,9 @@ export function SpendingLimitsActions({
     );
   }
 
+  // A free-calls-only chain: the agent pays for none there, so there is nothing to let it pay for.
+  if (delegation && readiness.freeOnly) return null;
+
   if (delegation) {
     return (
       <div className="flex flex-col items-start gap-1.5">

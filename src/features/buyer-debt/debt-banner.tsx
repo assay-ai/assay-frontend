@@ -67,6 +67,7 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
 
   // A debt before its `replaceableAt` cannot be signed yet; this moves on at that time.
   const now = useReplaceableNow(query.data, query.dataUpdatedAt);
+  const noteId = React.useId();
   const summary = debtBannerSummary(query.data, { pausedByYou: paused, freeOnly, now });
   if (!summary) return null;
   const { own, others } = splitDebts(query.data);
@@ -96,7 +97,7 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
             <p className="text-label-sm text-01 [overflow-wrap:anywhere]">{summary.title}</p>
             <p className="text-body-13 text-02 [overflow-wrap:anywhere]">{summary.detail}</p>
             {summary.waitingNote ? (
-              <p data-testid="buyer-debt-not-yet" className="text-body-13 text-02 [overflow-wrap:anywhere]">
+              <p id={noteId} data-testid="buyer-debt-not-yet" className="text-body-13 text-02 [overflow-wrap:anywhere]">
                 {summary.waitingNote}
               </p>
             ) : null}
@@ -140,6 +141,7 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
             size="sm"
             className="shrink-0 self-start tablet:self-center"
             disabled={summary.actionDisabled}
+            aria-describedby={summary.actionDisabled && summary.waitingNote ? noteId : undefined}
             onClick={() => openSettle()}
           >
             {summary.actionLabel}

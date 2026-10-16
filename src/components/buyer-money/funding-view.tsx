@@ -20,6 +20,7 @@ import { windowRefillAt } from "@/features/buyer-money/refill";
 import { isLowBalance, runwayDays, runwayLine } from "@/features/buyer-money/runway";
 import { escrowHeldText, heldSegmentLabel } from "@/features/buyer-debt/debt-copy";
 import { debtBlocksPaidCalls } from "@/features/buyer-debt/debt-summary";
+import { useOpenHoldIntentIds } from "@/features/buyer-debt/use-open-hold-intent-ids";
 import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 import { chainBalances, type Hold } from "@/features/g30/balance";
@@ -285,7 +286,7 @@ function EscrowCard({
   withdrawalPending: boolean;
   /** A free-calls-only chain: no account ceiling or 24-hour meter, nothing is spent there. */
   freeOnly: boolean;
-  /** The held segment's label: calls in flight, unpaid calls (held until collected), or both. */
+  /** The held segment's label: calls being checked, unpaid calls (held until collected), or both. */
   heldLabel: string;
   onAction: (next: MoneyAction) => void;
 }) {
@@ -515,18 +516,4 @@ function DepositsList() {
       )}
     </section>
   );
-}
-
-/** The open holds' intents (`GET /holds`), to tell buyer debt apart from calls in flight. Empty until read. */
-function useOpenHoldIntentIds(): string[] {
-  const holds = useQuery({
-    queryKey: ["holds"],
-    retry: 0,
-    queryFn: () => getHolds() as Promise<{ items?: Hold[] } | Hold[]>,
-  });
-  return React.useMemo(() => {
-    const data = holds.data;
-    const items = Array.isArray(data) ? data : (data?.items ?? []);
-    return items.filter((hold) => hold.status === "OPEN").map((hold) => hold.intentId);
-  }, [holds.data]);
 }

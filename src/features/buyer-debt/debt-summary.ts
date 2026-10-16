@@ -10,7 +10,7 @@ import {
   debtsToSign,
   isReplaceable,
   nextReplaceableAt,
-  notYetReplaceableSentence,
+  notYetSettleSentence,
   splitDebts,
 } from "./debt-copy";
 
@@ -75,13 +75,33 @@ export function waitingToSettleNote(toSign: readonly BuyerDebt[], now: number): 
   const waiting = toSign.filter((debt) => !isReplaceable(debt, now));
   if (waiting.length === 0) return null;
   const some = waiting.length < toSign.length;
+  const at = new Date(nextReplaceableAt(waiting, now)!).toISOString();
+  // Several waiting: the time is the first one's, and the sentence says so.
+  const subject = waiting.length > 1 ? "the first" : some ? "it" : "this";
   return (
     (some ? `${waiting.length} of them ${waiting.length === 1 ? "is" : "are"} not ready to sign yet: ` : "") +
-    notYetReplaceableSentence(
-      new Date(nextReplaceableAt(waiting, now)!).toISOString(),
-      some ? (waiting.length === 1 ? "it" : "the first") : "this",
-    )
+    notYetSettleSentence(at, { subject, midSentence: some, now })
   );
+}
+
+/**
+ * The settle sheet's "You owe" before → after row: everything this wallet
+ * owes, and what stays owed after these signatures. With a debt still waiting
+ * for its `replaceableAt`, "after" names the amount left, so the row never
+ * reads "$0.00" beside "Paid calls: still paused" (review P2-1).
+ */
+export function owedChangeRow(
+  ownToSign: readonly Pick<BuyerDebt, "intentId" | "amount">[],
+  settling: readonly Pick<BuyerDebt, "intentId" | "amount">[],
+): { label: string; before: string; after: string } {
+  const ids = new Set(settling.map((debt) => debt.intentId));
+  const owed = ownToSign.length > 0 ? ownToSign : settling;
+  const left = ownToSign.filter((debt) => !ids.has(debt.intentId));
+  return {
+    label: "You owe",
+    before: totalText(owed),
+    after: left.length === 0 ? formatMoney(null) : `${totalText(left)} after this signature`,
+  };
 }
 
 /**
