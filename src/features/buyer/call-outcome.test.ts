@@ -19,4 +19,14 @@ describe("callOutcome", () => {
     expect(parseCallsFilter("nope")).toBe("all");
     expect(parseCallsFilter("free")).toBe("free");
   });
+  it("has an Owed chip that keeps owed calls, open or written off, and only those", () => {
+    expect(parseCallsFilter("owed")).toBe("owed");
+    expect(statusesFor("owed")).toBeUndefined();
+    const owed = { status: "SETTLED", price: m("1000"), charged: m("1000"), debt: "OUTSTANDING" as const };
+    expect(matchesFilter(owed, "owed")).toBe(true);
+    expect(matchesFilter({ ...owed, debt: "WRITTEN_OFF" as const }, "owed")).toBe(true);
+    expect(matchesFilter({ ...owed, debt: "VOIDED" as const }, "owed")).toBe(false);
+    expect(matchesFilter({ ...owed, debt: null }, "owed")).toBe(false);
+    expect(matchesFilter(owed, "charged")).toBe(false);
+  });
 });

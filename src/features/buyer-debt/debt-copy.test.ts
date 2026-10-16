@@ -222,10 +222,10 @@ describe("the settle refusals", () => {
 
 describe("call payment notes", () => {
   it("names a debt or a forfeit on a call row, and nothing for an ordinary call", () => {
-    expect(callPaymentNote({ debt: "OUTSTANDING" })).toMatch(/not collected yet/);
-    expect(callPaymentNote({ debt: "WRITTEN_OFF" })).toMatch(/written off for the provider.*you still owe it to resume paid calls/);
-    expect(callPaymentNote({ debt: "VOIDED" })).toMatch(/^voided · .*not charged, provider not paid/);
-    expect(callPaymentNote({ forfeited: true })).toMatch(/provider forfeited/);
+    expect(callPaymentNote({ debt: "OUTSTANDING" })).toBe("Payment not collected · settle to resume paid calls");
+    expect(callPaymentNote({ debt: "WRITTEN_OFF" })).toBe("Written off · still owed to resume paid calls");
+    expect(callPaymentNote({ debt: "VOIDED" })).toBe("Failed checks later · not charged");
+    expect(callPaymentNote({ forfeited: true })).toBe("Not charged · provider forfeited");
     expect(callPaymentNote({ forfeited: false, debt: null })).toBeNull();
   });
 

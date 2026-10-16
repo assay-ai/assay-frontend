@@ -9,6 +9,7 @@ import * as React from "react";
 import { PageHeader } from "@/components/g31/chrome";
 import { EntityName } from "@/components/patterns/entity-name";
 import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
+import { OwedRowAction } from "@/features/buyer-debt/owed-row-action";
 import { EntityPicker } from "@/components/patterns/entity-picker";
 import { LocalTime } from "@/components/patterns/local-time";
 import { PageState } from "@/components/patterns/page-state";
@@ -32,7 +33,7 @@ import { formatMoney, notCharged, toDecimal } from "@/utils/money";
 
 /**
  * Activity › Calls — every call, newest first, by tool name. Status chips
- * (All · Charged · Not charged · Free) and a tool filter live in the URL
+ * (All · Charged · Not charged · Owed · Free) and a tool filter live in the URL
  * (`?status=not-charged&tool=<id>`), so Not charged and Overview can link
  * straight to a filtered list. A row opens the receipt.
  *
@@ -145,20 +146,32 @@ function CallsList() {
             title={
               filter === "charged"
                 ? "No charged calls"
-                : filter === "not-charged"
+                : filter === "owed"
+                  ? query.hasNextPage
+                    ? "No owed calls among the latest"
+                    : "Nothing owed"
+                  : filter === "not-charged"
                   ? "Nothing went uncharged"
                   : filter === "free"
                     ? "No free calls"
                     : "No calls to this tool"
             }
             description={
-              filter === "not-charged"
+              filter === "owed"
+                ? query.hasNextPage
+                  ? "None of the calls loaded so far is owed. Older calls may be: load more to look further back."
+                  : "Every paid call's payment was collected. An owed call shows here until you settle it."
+                : filter === "not-charged"
                 ? "Every call here passed our checks, so each was charged at its listed price."
                 : filter === "free"
                   ? "Free calls appear here when your agent uses a tool's free tier."
                   : "Nothing matches these filters."
             }
-            action={{ label: "Show all calls", onClick: () => router.replace(routes.calls(), { scroll: false }) }}
+            action={
+              query.hasNextPage
+                ? { label: "Look further back", onClick: () => void query.fetchNextPage() }
+                : { label: "Show all calls", onClick: () => router.replace(routes.calls(), { scroll: false }) }
+            }
           />
         )
       ) : (
@@ -192,14 +205,8 @@ function CallsList() {
                           </>
                         ) : null}
                       </span>
-                      {paymentNote ? (
-                        <span
-                          className={
-                            outcome === "owed" ? "text-body-xs text-warning-700" : "text-body-xs text-03"
-                          }
-                        >
-                          {paymentNote}
-                        </span>
+                      {paymentNote && outcome !== "owed" ? (
+                        <span className="text-body-xs text-03">{paymentNote}</span>
                       ) : null}
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-0.5">
@@ -220,6 +227,8 @@ function CallsList() {
                     </div>
                     <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
                   </Link>
+                  {/* Owed: what it stops and the way out, beside the row's link. */}
+                  {outcome === "owed" ? <OwedRowAction intentId={call.intentId} /> : null}
                 </li>
               );
             })}
