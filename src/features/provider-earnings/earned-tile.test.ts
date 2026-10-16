@@ -161,16 +161,32 @@ describe("homeUnpaidNotes", () => {
     expect(note.text).not.toMatch(/platform (owes|pays)/);
   });
 
-  it("warns about forfeits and links to Stake; written-off calls stay on Money", () => {
+  it("names never-collected calls as Money does, calmly, and warns about forfeits with a link to Stake", () => {
     const notes = homeUnpaidNotes(
       totals({ forfeited: usdg("72000"), forfeitedCalls: 2, uncollected: usdg("810000"), uncollectedCalls: 2 }),
       format,
       hrefs,
     );
-    expect(notes.map((n) => n.key)).toEqual(["forfeited"]);
-    expect(notes[0].tone).toBe("warning");
-    expect(notes[0].text).toMatch(/^\$0\.07 for 2 calls was forfeited this month/);
-    expect(notes[0].link).toEqual({ label: "Check your stake", href: hrefs.stake });
+    expect(notes.map((n) => n.key)).toEqual(["uncollected", "forfeited"]);
+    expect(notes[0].text).toMatch(/^\$0\.81 for 2 calls was never collected/);
+    expect(notes[0].tone).toBe("neutral");
+    expect(notes[0].link.href).toBe(hrefs.money);
+    expect(notes[0].text).not.toMatch(/platform (owes|pays)/);
+    expect(notes[1].tone).toBe("warning");
+    expect(notes[1].text).toMatch(/^\$0\.07 for 2 calls was forfeited this month/);
+    expect(notes[1].link).toEqual({ label: "Check your stake", href: hrefs.stake });
+  });
+
+  it("lists the same lines, in the same order, as Money's Passed, but not paid", () => {
+    const all = totals({
+      debtOutstanding: usdg("405000"),
+      debtOutstandingCalls: 1,
+      uncollected: usdg("405000"),
+      uncollectedCalls: 1,
+      forfeited: usdg("72000"),
+      forfeitedCalls: 1,
+    });
+    expect(homeUnpaidNotes(all, format, hrefs).map((n) => n.key)).toEqual(unpaidLines(all, format).map((l) => l.key));
   });
 
   it("warns while the stake is short or unknown, and is calm once it covers the minimum again", () => {

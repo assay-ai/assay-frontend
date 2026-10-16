@@ -167,7 +167,7 @@ export function earningsSplit(totals: ProviderEarningsFigures | null | undefined
 
 /** A line under the provider home's "This month": what passed but is not in the wallet, and where to look. */
 export interface HomeUnpaidNote {
-  readonly key: "debtOutstanding" | "forfeited";
+  readonly key: "debtOutstanding" | "uncollected" | "forfeited";
   readonly text: string;
   readonly tone: "neutral" | "warning";
   readonly link: { readonly label: string; readonly href: string };
@@ -175,9 +175,10 @@ export interface HomeUnpaidNote {
 
 /**
  * The provider home's short notes on passed-but-unpaid money. Open buyer debt
- * says the provider has nothing to do (it is the buyer's debt); forfeited calls
- * are the provider's to avoid, so they link to Stake. Written-off calls are
- * only on Money: nothing can change them.
+ * says the provider has nothing to do (it is the buyer's debt); written-off
+ * (never collected) calls say the same, so Home names every line Money's
+ * "Passed, but not paid" lists, in its order; forfeited calls are the
+ * provider's to avoid, so they link to Stake.
  *
  * Forfeits are this month's, and the cause may be over: when the stake covers
  * the minimum now (`stakeEnough`), the note says it happened earlier and is
@@ -196,6 +197,15 @@ export function homeUnpaidNotes(
     notes.push({
       key: "debtOutstanding",
       text: `${format(totals.debtOutstanding)} for ${calls(n)} is waiting on buyers. It reaches your wallet when they settle; nothing for you to do.`,
+      tone: "neutral",
+      link: { label: "Details", href: hrefs.money },
+    });
+  }
+  if (nonZero(totals.uncollected, totals.uncollectedCalls)) {
+    const n = totals.uncollectedCalls ?? 0;
+    notes.push({
+      key: "uncollected",
+      text: `${format(totals.uncollected)} for ${calls(n)} was never collected: the buyer did not settle within 30 days. They still owe it; you are paid if they settle.`,
       tone: "neutral",
       link: { label: "Details", href: hrefs.money },
     });
