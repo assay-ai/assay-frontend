@@ -89,7 +89,7 @@ export function LimitsView() {
             <AgentLimitsCard key={agent.agentId} ctx={ctx} agent={agent} onChanged={refresh} />
           ))}
           <AccountCeilingCard ctx={ctx} />
-          <OldRuleLine policy={ctx.policy} />
+          <OldRuleLine policy={ctx.policy} freeOnly={Boolean(ctx.freeOnlyChainName)} />
 
           <HowLimitsStop />
 
