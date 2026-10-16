@@ -63,3 +63,26 @@ describe("demo listing Settings: free calls per day", () => {
     expect(call(fixtures, "PATCH", FX, { slaFailureRate: 0.03 }).freeDailyBudget).toBe(5000);
   });
 });
+
+describe("demo listing Settings: free calls per agent", () => {
+  it("keeps a saved freeQuotaPerAgent for the tab next to the all-agents value", async () => {
+    vi.stubGlobal("window", { sessionStorage: memoryStorage(), localStorage: memoryStorage(), location: { search: "" } });
+    let fixtures = await load();
+    expect(call(fixtures, "GET", FX).freeQuotaPerAgent).toBe(50);
+
+    const saved = call(fixtures, "PATCH", FX, { freeQuotaPerAgent: 30, freeDailyBudget: 400 });
+    expect(saved.freeQuotaPerAgent).toBe(30);
+    expect(saved.freeDailyBudget).toBe(400);
+
+    // A reload in the same tab still reads both.
+    fixtures = await load();
+    expect(call(fixtures, "GET", FX).freeQuotaPerAgent).toBe(30);
+    expect(call(fixtures, "GET", FX).freeDailyBudget).toBe(400);
+
+    // Saving only the all-agents value later leaves the per-agent one as saved.
+    call(fixtures, "PATCH", FX, { freeDailyBudget: 600 });
+    fixtures = await load();
+    expect(call(fixtures, "GET", FX).freeQuotaPerAgent).toBe(30);
+    expect(call(fixtures, "GET", FX).freeDailyBudget).toBe(600);
+  });
+});
