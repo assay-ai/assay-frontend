@@ -246,11 +246,12 @@ export function NotChargedProof({
         </ul>
       ) : (
         <p className="text-body-13 text-02" data-testid="not-charged-empty">
-          {notChargedEmptyText(scope, data.withheldForPrivacy)}
+          {notChargedEmptyText(scope, data.withheldForPrivacy, data.minBuyers)}
         </p>
       )}
 
-      {data.withheldForPrivacy || (scope === "all" && !quiet) ? (
+      {/* An empty tool or provider record already says why, in its own words: no second privacy note under it. */}
+      {(data.withheldForPrivacy || (scope === "all" && !quiet)) && !(scope !== "all" && !quiet && recent.length === 0) ? (
         <p className="flex items-start gap-2 text-body-xs text-03">
           <EyeOff aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
           <span>{notChargedPrivacyNote(data.withheldForPrivacy, data.minBuyers)}</span>

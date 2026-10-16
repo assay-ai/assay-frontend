@@ -80,6 +80,9 @@ const REASON_TEXT: Record<string, [string, PublicNotChargedCall["bucket"]]> = {
 const RECENT: readonly [tool: string, provider: string, reason: keyof typeof REASON_TEXT, daysAgo: number][] = [
   ["get_weather", "Northwind Geo", "FAILED_CHECK", 1],
   ["search_web", "Helios Data Labs", "FAILED_CHECK", 1],
+  // The demo provider's paid tool: a row of its own, so its public page and the signed-in tool detail are not
+  // empty. It fits the backend rules (`PublicNotChargedService`): a day old, and its rows stand for at least
+  // five eligible buyers. Its FREE chain-activity has no paid calls, and fx-rates' are under the buyer floor.
   ["market-quote", "Harborlight Data Ltd", "FAILED_CHECK", 1],
   ["get_weather", "Helios Data Labs", "PROVIDER_ERROR", 2],
   ["extract_page_text", "Cobalt Street Data", "FAILED_CHECK", 2],
@@ -115,7 +118,8 @@ const FAILED_CHECK_CALLS = 241;
 function notCharged(): PublicNotCharged {
   const tools = signedIn<{ tools: CatalogueTool[] }>("/catalogue/tools")?.tools ?? [];
   const providers = signedIn<{ providers: CatalogueProvider[] }>("/catalogue/providers")?.providers ?? [];
-  const byName = new Map(tools.map((t) => [t.name, t]));
+  // By name or by id: the demo provider's own tools have slug ids and display names ("market-quote", "Market quote").
+  const byName = new Map(tools.flatMap((t) => [[t.name, t] as const, [t.id, t] as const]));
   const byLegalName = new Map(providers.map((p) => [p.legalName, p]));
 
   // A call's amount is the price of the provider that served it (the backend's

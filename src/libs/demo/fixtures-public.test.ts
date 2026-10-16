@@ -84,3 +84,11 @@ describe("demo: the public not-charged record", () => {
     expect(lines.at(-1)?.label).toMatch(/remainders/);
   });
 });
+
+describe("demo: the signed-in provider's tools on the not-charged record (final2 P3)", () => {
+  it("lists a row for Harborlight's paid market-quote tool", () => {
+    const rows = get<PublicNotCharged>("/public/not-charged").recent;
+    const own = rows.filter((r) => r.providerName === "Harborlight Data Ltd");
+    expect(own.map((r) => r.toolId)).toContain("market-quote");
+  });
+});
