@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import { FailsOftenChip, FreeTierBadge, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { NotChargedProof, NotChargedSummary } from "@/components/explorer/not-charged-proof";
 import { StartFreeCta } from "@/components/explorer/start-free";
 import { PageState } from "@/components/patterns/page-state";
@@ -20,8 +20,8 @@ import {
   hasFreeCalls,
   readExplorerState,
   formatCallPrice,
+  offerLine,
   priceRange,
-  freeTierLabel,
   plural,
   smallestFreeAllowance,
   stakeSummary,
@@ -58,8 +58,10 @@ function matches(needle: string, ...fields: (string | null | undefined)[]): bool
 }
 
 function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: number | null }) {
-  const free = freeTierLabel(tool.pricingMode, freeAllowance);
+  // "from" only over paid listings: `priceRange` ignores free ones.
   const range = priceRange(tool.price, [tool.fromPrice]);
+  const offer = offerLine({ mode: tool.pricingMode, range, freeCallsPerDay: freeAllowance });
+  const sub = range?.differs ? `held at most ${formatCallPrice(range.held)}, paid only if it passes` : range ? "paid only if it passes" : "";
   return (
     <li>
       <Link
@@ -69,26 +71,18 @@ function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: num
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
-            <FreeTierBadge label={free} />
             {tool.routable ? null : <UnavailableTag />}
           </div>
           {tool.description ? <p className="line-clamp-2 text-body-13 text-02">{tool.description}</p> : null}
+          {/* Phones: the price line sits under the name, full width. */}
+          <OfferPrice offer={offer} className="tablet:hidden" />
           <p className="text-body-xs text-03">
             {tool.providerCount > 0 ? `Served by ${plural(tool.providerCount, "provider")}` : "Nobody serves it yet"}
           </p>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
-          <span className="font-mono text-mono-13 font-semibold text-01">
-            {range?.differs ? <span className="font-sans text-body-xs font-normal text-03">from </span> : null}
-            {range ? formatCallPrice(range.from) : "—"}
-          </span>
-          <span className="hidden text-body-xs text-03 tablet:block">
-            {range?.differs
-              ? `held at most ${formatCallPrice(range.held)}, paid only if it passes`
-              : tool.price
-                ? "per call, only if it passes"
-                : ""}
-          </span>
+        <div className="hidden w-[220px] shrink-0 flex-col items-end gap-0.5 text-right tablet:flex">
+          <OfferPrice offer={offer} />
+          {sub ? <span className="text-body-xs text-03">{sub}</span> : null}
         </div>
         <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03 group-hover:text-02" />
       </Link>
