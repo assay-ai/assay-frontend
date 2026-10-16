@@ -47,6 +47,21 @@ export function bindingStatusChip(status: BindingStatus): StatusChipKey {
 }
 
 /**
+ * What the header says in place of "How buyers see it" when the listing has no
+ * public page to open: only a LIVE listing is in the public catalogue.
+ */
+export function notPublicText(status: string): string {
+  switch (status) {
+    case "PAUSED":
+      return "Paused: not shown to buyers";
+    case "SUSPENDED":
+      return "Blocked: not shown to buyers";
+    default:
+      return "Not public yet: buyers see it once it is live";
+  }
+}
+
+/**
  * Every binding page's head: the tool's name as the title (never an id),
  * its status, the endpoint as the subtitle (the listing id is on Settings, for support), the page's one
  * primary action, then the three tabs.
@@ -95,7 +110,9 @@ export function BindingHeader({
                   How buyers see it
                   <ExternalLink aria-hidden="true" className="size-3" />
                 </a>
-              ) : null}
+              ) : (
+                <span data-testid="not-public-yet">{notPublicText(binding.status)}</span>
+              )}
             </p>
           ) : null}
         </div>
