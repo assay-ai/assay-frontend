@@ -243,6 +243,8 @@ export function directoryErrorMessage(error: unknown): string {
 
 // ── Plain-language form helpers ─────────────────────────────────────────────
 
+const STROKE_LETTERS: Record<string, string> = { "\u0111": "d", "\u0142": "l", "\u00f8": "o" };
+
 /** "Noor Hassan" → "noor@", the short handle the register names people by. */
 export function deriveSubject(name: string): string {
   const first = name.trim().split(/\s+/)[0] ?? "";
@@ -250,8 +252,8 @@ export function deriveSubject(name: string): string {
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    // Letters with a stroke (U+0111) do not decompose, so map them by hand.
-    .replace(/\u0111/g, "d")
+    // Letters with a stroke or slash do not decompose, so map them by hand.
+    .replace(/[\u0111\u0142\u00f8]/g, (letter) => STROKE_LETTERS[letter] ?? "")
     .replace(/[^a-z0-9._-]/g, "");
   return handle ? `${handle}@` : "";
 }
