@@ -174,3 +174,18 @@ describe("demo debt pictures and the settle sheet's escrow check", () => {
     }
   });
 });
+
+describe("demo written-off debts share one date (final2 P3)", () => {
+  it("dates the written-off debt the same in written-off, short and many", () => {
+    const dates = ["?debt=written-off", "?debt=short", "?debt=many"].map((search) => {
+      vi.stubGlobal("window", tabAt(search));
+      const { debts } = demoResponse("GET", "/escrow/debts") as { debts: BuyerDebt[] };
+      const off = debts.find((debt) => debt.state === "WRITTEN_OFF")!;
+      vi.unstubAllGlobals();
+      return [off.createdAt, off.writeOffAt];
+    });
+    expect(dates[1]).toEqual(dates[0]);
+    expect(dates[2]).toEqual(dates[0]);
+    expect(Date.parse(dates[0][0]!)).toBeLessThan(DEMO_NOW_MS - 30 * 86_400_000);
+  });
+});

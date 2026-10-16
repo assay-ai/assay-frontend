@@ -831,6 +831,23 @@ const WRITTEN_OFF_DAYS_AGO = 2;
 /** A demo debt's payment lapses this many minutes after its call. */
 const DEBT_LAPSE_MINUTES = 10;
 
+/**
+ * The call, lapse and write-off times every written-off demo debt carries —
+ * `?debt=written-off`, `?debt=short` and the written-off row of `?debt=many`
+ * alike — so the demo dates a write-off one way only (final2 P3: it read Sep 15
+ * in one picture and a different day in another). The call is
+ * `WRITE_OFF_DAYS + WRITTEN_OFF_DAYS_AGO` days back, as `callAge` puts it.
+ */
+function writtenOffDates() {
+  const callMinutes = (WRITE_OFF_DAYS + WRITTEN_OFF_DAYS_AGO) * 1440 + DEBT_LAPSE_MINUTES;
+  const lapsedMinutes = callMinutes - DEBT_LAPSE_MINUTES;
+  return {
+    createdAt: minutesAgo(callMinutes),
+    lapsedAt: minutesAgo(lapsedMinutes),
+    writeOffAt: minutesAgo(lapsedMinutes - WRITE_OFF_DAYS * 1440),
+  };
+}
+
 /** The one open debt, as `GET /escrow/debts` lists it (`state: "OPEN"`). */
 function debtView(call: DemoCall) {
   const lapsedMinutes = Math.max(callAge(call) - DEBT_LAPSE_MINUTES, 0);
@@ -956,9 +973,8 @@ export function demoDebts() {
                   amount: { ...base.amount, amount: money(TOOLS.geocode.price).amount },
                   state: "WRITTEN_OFF" as const,
                   cause: "uncollected:VoucherExpired",
-                  lapsedAt: minutesAgo(60 * 24 * 33),
-                  writeOffAt: minutesAgo(60 * 24 * 3),
-                  createdAt: minutesAgo(60 * 24 * 33 + 5),
+                  // The same dates as every written-off demo debt (`writtenOffDates`), so no picture dates a write-off differently.
+                  ...writtenOffDates(),
                 },
                 base,
                 {
