@@ -268,7 +268,7 @@ const STATUSES: Record<string, string> = {
   PAID: "Paid",
   FREE: "Free",
   TEST: "Test call",
-  EXPLORATION: "Trial traffic (the buyer pays; Assay pays only for checking it)",
+  EXPLORATION: "Trial traffic (the buyer pays as usual; Assay pays only for the checks)",
   PAUSED: "Paused",
   SUSPENDED: "Suspended",
   UNBONDING: "Leaving — stake unlocking",

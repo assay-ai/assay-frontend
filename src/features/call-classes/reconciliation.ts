@@ -90,7 +90,7 @@ const CLASS_NOTE: Record<string, string> = {
   PROVIDER_FORFEITED: "Not collected because your stake was below the minimum, or you were blocked.",
   PAID_UNCREDITED: "Your answer failed our checks, so the buyer was not charged.",
   FREE: "Free-tier calls: nothing charged, nothing paid.",
-  EXPLORATION: "Trial calls to a new listing. The buyer pays for them as usual; Assay pays only for checking them.",
+  EXPLORATION: "Trial calls to a new listing. The buyer pays as usual; Assay pays only for the checks.",
   EXCLUDED: "Taken out of the count by our team, for example during an incident on our side.",
   TEST: "Your own test runs.",
   SYSTEM_ERROR: "Your endpoint timed out or returned a 5xx error.",
