@@ -1312,6 +1312,7 @@ export function GrantActions({
         escrow={ctx.escrowQuery.data}
         escrowReceivedAt={ctx.escrowQuery.dataUpdatedAt}
         unit={ctx.unit}
+        tightenDelaySeconds={ctx.delegatesQuery.data?.tightenDelaySeconds}
         onClose={() => setEditing(null)}
         onFinished={() => {
           setEditing(null);
@@ -1325,6 +1326,7 @@ export function GrantActions({
         agentName={agentName}
         escrow={ctx.escrowQuery.data}
         unit={ctx.unit}
+        tightenDelaySeconds={ctx.delegatesQuery.data?.tightenDelaySeconds}
         onClose={() => setRevoking(null)}
         onFinished={() => {
           setRevoking(null);

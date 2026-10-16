@@ -16,6 +16,7 @@ import {
   liveDelegation,
   loweredDelayedText,
   loweredDelayNote,
+  loweredFullyAt,
   lowersCaps,
   revokeDelayedText,
   revokeDelayNote,
@@ -345,10 +346,10 @@ describe("tighten delay (D-21)", () => {
     expect(tightenDelayLabel(7200)).toBe("2 hours");
     expect(tightenDelayLabel(1800)).toBe("30 minutes");
     expect(revokeDelayedText(3600)).toBe(
-      "Vouchers your agent already signed stay collectable for 1 hour, so providers you already used get paid. New paid calls stop now.",
+      "Payments your agent already signed can still be collected for 1 hour, so providers you already used get paid. New paid calls stop now.",
     );
     expect(loweredDelayedText(3600)).toBe(
-      "Lower limits apply to already-signed vouchers after 1 hour.",
+      "New payments get the lower limits now; payments your agent already signed keep the old ones for 1 hour.",
     );
   });
 
@@ -362,7 +363,7 @@ describe("tighten delay (D-21)", () => {
   it("drops the 30-second pause from the edit toast", () => {
     const toast = editedToast(GRANT, { ...GRANT, maxVoucherAmount: "40000" }, 3600);
     expect(toast).not.toMatch(/paused/);
-    expect(toast).toMatch(/after 1 hour/);
+    expect(toast).toMatch(/keep the old ones for 1 hour/);
     expect(editedToast(GRANT, { ...GRANT, maxPerWindow: "9000000" }, 3600)).toBe(
       "Updated. The new caps apply from the agent’s next payment.",
     );
@@ -377,10 +378,13 @@ describe("tighten delay (D-21)", () => {
   it("says when lower limits apply only for a lowering on a delayed escrow", () => {
     const lower = { ...GRANT, maxPerWindow: "1" };
     expect(loweredDelayNote(3600, GRANT, lower)).toBe(
-      "Lower limits apply to already-signed vouchers after 1 hour.",
+      "New payments get the lower limits now; payments your agent already signed keep the old ones for 1 hour.",
     );
     expect(loweredDelayNote(3600, GRANT, { ...GRANT, maxPerWindow: "9000000" })).toBeNull();
     expect(loweredDelayNote(0, GRANT, lower)).toBeNull();
+    expect(loweredDelayNote(3600, GRANT, lower)).not.toMatch(/voucher/i);
+    expect(loweredFullyAt(Date.parse("2026-10-17T10:00:00Z"), 3600)).toBe("2026-10-17T11:00:00.000Z");
+    expect(loweredFullyAt(Date.parse("2026-10-17T10:00:00Z"), 0)).toBeNull();
     expect(loweredDelayNote(3600, null, lower)).toBeNull();
   });
 });

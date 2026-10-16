@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { EscrowDelegate, Money } from "@/interfaces";
 
 import { agentReadiness, type ReadinessCredential } from "./agent-readiness";
-import { capsAreSet, capsSentence, capsToForm, keyGroups, parseCaps, presetDescription, presetFor } from "./caps";
+import { capsAreSet, capsSentence, capsSuccessText, capsToForm, keyGroups, parseCaps, presetDescription, presetFor } from "./caps";
 import { getStartedStates, payStage, type GetStartedFacts } from "./get-started";
 import { KEY_PLACEHOLDER, keyPlaceholder, mcpConfig } from "./mcp-config";
 import { PENDING_TX_MAX_AGE_MS, parsePending, withPending, withoutPending, type PendingTx } from "./pending-tx";
@@ -280,5 +280,20 @@ describe("keyGroups", () => {
       "0000",
       "729f",
     ]);
+  });
+});
+
+describe("capsSuccessText", () => {
+  const now = { maxVoucherAmount: "1000000", maxPerWindow: "20000000" };
+  it("promises no pause for a raise", () => {
+    expect(capsSuccessText(now, { ...now, maxPerWindow: "30000000" }, 0)).toBe("It applies from the next payment.");
+    expect(capsSuccessText(null, now, undefined)).toBe("It applies from the next payment.");
+  });
+  it("says a lowering pauses payments only without the tighten delay", () => {
+    const lower = { ...now, maxVoucherAmount: "500000" };
+    expect(capsSuccessText(now, lower, 0)).toMatch(/about 30 seconds/);
+    const delayed = capsSuccessText(now, lower, 3600);
+    expect(delayed).not.toMatch(/30 seconds/);
+    expect(delayed).toMatch(/keep the old ones for 1 hour/);
   });
 });
