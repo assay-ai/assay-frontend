@@ -263,6 +263,13 @@ function EarningsPanel({ earnings, loading }: { earnings: ProviderEarnings | und
           <span className="font-mono text-heading-md text-01">{formatMoney(split.inWallet, { decimals: 2 })}</span>
         </div>
         {segments.length > 1 ? <MoneySplit segments={segments} /> : null}
+        {split.waitingOnBuyers ? (
+          <p className="text-body-xs text-03">
+            {formatMoney(split.waitingOnBuyers, { decimals: 2 })} more for {split.waitingOnBuyersCalls.toLocaleString("en-US")} call
+            {split.waitingOnBuyersCalls === 1 ? "" : "s"} is waiting on buyers: paid from their escrow once they settle, never by the
+            platform.
+          </p>
+        ) : null}
       </PanelBody>
     </Panel>
   );

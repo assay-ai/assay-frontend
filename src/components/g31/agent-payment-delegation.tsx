@@ -20,6 +20,7 @@ import {
   confirmsDelegateKey,
   type DelegateBinding,
   defaultDelegationForm,
+  delegationInvalidText,
   type DelegationFormErrors,
   type DelegationFormInput,
   delegationRows,
@@ -43,6 +44,8 @@ import {
   heldIsStale,
   heldStaleText,
   isUnsettledRefusal,
+  loweredDelayNote,
+  revokeDelayNote,
   liveDelegation,
   strandReasons,
   UNSETTLED_POLL_MS,
@@ -51,12 +54,13 @@ import {
 } from "@/features/delegation/unsettled";
 import { isRelayedRefusal, relayedRefusal } from "@/features/escrow/relayed-refusal";
 import { useChains } from "@/hooks/useChains";
+import { isRailNotOffered, railNotOfferedText, servesPaidCalls } from "@/libs/chains/paid-rails";
 import { isUserRejection, type Signer, useSigner } from "@/hooks/useSigner";
 import type { BuyerEscrow, DelegateIntent, EscrowDelegate } from "@/interfaces";
 import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import { ApiError } from "@/libs/ApiClient";
 import { demoEnabled } from "@/libs/demo/demo-api";
-import { settlementSymbol } from "@/services/chains.service";
+import { chainDisplayName, settlementSymbol } from "@/services/chains.service";
 import {
   createDelegateIntent,
   createRevokeDelegateIntent,
@@ -154,6 +158,7 @@ function useDelegationContext(account: string | undefined, version: number) {
 
   return {
     chainId,
+    chains,
     enabled,
     unit,
     escrowQuery,
@@ -173,6 +178,11 @@ function explain(error: unknown, fallback: string): string {
   if (error instanceof ApiError && error.status === 401) {
     return "Your session has ended, so nothing was changed. Sign in again, then try once more.";
   }
+  // 409 CHAIN_RAIL_NOT_OFFERED: the chain serves free calls only.
+  if (isRailNotOffered(error)) return railNotOfferedText(null);
+  // 400 SETTLEMENT_DELEGATION_INVALID: an expiry too soon (D-21) or caps the escrow refuses.
+  const invalid = delegationInvalidText(error);
+  if (invalid) return invalid;
   if (error instanceof ApiError || error instanceof Error) return error.message;
   return fallback;
 }
@@ -359,6 +369,7 @@ export function PayerDelegationsPanel({
         escrow={ctx.escrowQuery.data}
         escrowReceivedAt={ctx.escrowQuery.dataUpdatedAt}
         unit={ctx.unit}
+        tightenDelaySeconds={ctx.delegatesQuery.data?.tightenDelaySeconds}
         onClose={() => setEditing(null)}
         onFinished={() => {
           setEditing(null);
@@ -371,6 +382,7 @@ export function PayerDelegationsPanel({
         target={revoking}
         escrow={ctx.escrowQuery.data}
         unit={ctx.unit}
+        tightenDelaySeconds={ctx.delegatesQuery.data?.tightenDelaySeconds}
         onClose={() => setRevoking(null)}
         onFinished={() => {
           setRevoking(null);
@@ -424,7 +436,12 @@ function useLiveDelegation(
     // Only this opening's failure: an earlier one says nothing about now.
     failed: read.isError && read.errorUpdatedAt > openedAt,
   });
-  return { ...state, readAt: read.dataUpdatedAt, refresh };
+  return {
+    ...state,
+    readAt: read.dataUpdatedAt,
+    refresh,
+    tightenDelaySeconds: read.data?.tightenDelaySeconds,
+  };
 }
 
 /** The atomic caps of a standing grant, as `strandReasons` compares them. */
@@ -464,12 +481,15 @@ function LiveReadNote({ ready, gone }: { ready: boolean; gone: boolean }) {
  * signed that are still being settled become unredeemable the moment the
  * revocation lands — an accepted risk of the brake (risk register §14), so it
  * is never refused, but the sheet says so first and offers to wait (BUG-D1-07).
+ * On an escrow with the tighten delay (D-21) they stay collectable for that
+ * long instead, so the sheet says that and offers no wait.
  */
 function RevokeSheet({
   target,
   agentName,
   escrow,
   unit,
+  tightenDelaySeconds: listedDelay,
   onClose,
   onFinished,
   signer,
@@ -480,6 +500,8 @@ function RevokeSheet({
   agentName?: string;
   escrow: BuyerEscrow | undefined;
   unit: string;
+  /** From the page's list; the sheet's own read wins once it answers. */
+  tightenDelaySeconds?: number;
   onClose: () => void;
   onFinished: () => void;
   signer: () => Signer;
@@ -487,9 +509,12 @@ function RevokeSheet({
 }) {
   const open = target !== null;
   const delegate = target?.delegate ?? "";
-  const { live, ready, gone, readAt, refresh } = useLiveDelegation(delegate, target, open);
+  const { live, ready, gone, readAt, refresh, tightenDelaySeconds: liveDelay } =
+    useLiveDelegation(delegate, target, open);
+  const delay = liveDelay ?? listedDelay;
+  const delayNote = revokeDelayNote(delay);
   const unsettled = live?.unsettled;
-  const reasons = live ? strandReasons(unsettled, capsOf(live), "revoke") : [];
+  const reasons = live ? strandReasons(unsettled, capsOf(live), "revoke", delay) : [];
   const settle = useSettleWait(
     { count: gone ? 0 : unsettled?.count, strands: reasons.length > 0, readAt },
     refresh,
@@ -552,6 +577,11 @@ function RevokeSheet({
             Calls already made are still settled and paid for.
           </p>
           <LiveReadNote ready={ready} gone={gone} />
+          {delayNote ? (
+            <p className="text-body-13 text-02" data-testid="revoke-tighten-delay">
+              {delayNote}
+            </p>
+          ) : null}
           <UnsettledPayments
             unsettled={unsettled}
             unit={unit}
@@ -601,7 +631,21 @@ export function AgentPaymentDelegation({
 }) {
   const ctx = useDelegationContext(agentAccount, version);
   const [authorizing, setAuthorizing] = React.useState<SheetTarget | null>(null);
-  if (!ctx.enabled) return null;
+  if (!ctx.enabled) {
+    // Solana serves free calls only (paid rails A and B are off): say so, offer nothing to sign.
+    if (ctx.chainId && !servesPaidCalls(ctx.chainId)) {
+      return (
+        <div className="flex w-full flex-col gap-2.5 pt-2" data-testid="agent-payment-free-only">
+          <MicroLabel>AGENT PAYMENTS</MicroLabel>
+          <p className="text-body-13 text-02">
+            {chainDisplayName(ctx.chains, ctx.chainId)} currently serves free calls only, so this
+            agent makes free calls there and pays for none. Paid calls are not offered on it.
+          </p>
+        </div>
+      );
+    }
+    return null;
+  }
 
   const bound = credentials.filter((c) => !c.revokedAt && c.delegateAccount);
   const delegates = ctx.delegatesQuery.data?.delegates;
@@ -707,6 +751,7 @@ export function AgentPaymentDelegation({
         escrow={ctx.escrowQuery.data}
         escrowReceivedAt={ctx.escrowQuery.dataUpdatedAt}
         unit={ctx.unit}
+        tightenDelaySeconds={ctx.delegatesQuery.data?.tightenDelaySeconds}
         onClose={() => setAuthorizing(null)}
         onFinished={() => {
           setAuthorizing(null);
@@ -741,6 +786,7 @@ function AuthorizeSheet({
   escrow,
   escrowReceivedAt,
   unit,
+  tightenDelaySeconds: listedDelay,
   onClose,
   onFinished,
   signer,
@@ -753,6 +799,8 @@ function AuthorizeSheet({
   /** When `escrow` (and its `serverTime`) arrived, in epoch ms. */
   escrowReceivedAt: number;
   unit: string;
+  /** From the page's list; the sheet's own read wins once it answers. */
+  tightenDelaySeconds?: number;
   onClose: () => void;
   onFinished: () => void;
   signer: () => Signer;
@@ -777,6 +825,7 @@ function AuthorizeSheet({
   const editing = current !== null;
   const live = useLiveDelegation(target?.delegateAccount ?? "", current, open && editing);
   const grant = editing ? live.live : null;
+  const delay = live.tightenDelaySeconds ?? listedDelay;
   const unsettled = grant?.unsettled;
   // A signed request the backend held back because payments were still being
   // settled (BUG-D1-07): submitted again — not signed again — once they have,
@@ -821,7 +870,13 @@ function AuthorizeSheet({
     editing &&
     editIsUnchanged(seededForm.current, form, { expired: current?.status === "EXPIRED" });
   const reasons =
-    current && preview?.ok ? strandReasons(unsettled, capsOf(grant ?? current), preview.body) : [];
+    current && preview?.ok
+      ? strandReasons(unsettled, capsOf(grant ?? current), preview.body, delay)
+      : [];
+  const loweredNote =
+    current && preview?.ok
+      ? loweredDelayNote(delay, capsOf(grant ?? current), preview.body)
+      : null;
   const settle = useSettleWait(
     { count: live.gone ? 0 : unsettled?.count, strands: reasons.length > 0, readAt: live.readAt },
     live.refresh,
@@ -882,7 +937,8 @@ function AuthorizeSheet({
           ? `${editedToast(
               current ? capsOf(grant ?? current) : null,
               preview?.ok ? preview.body : capsOf(grant ?? current!),
-            )} Payments may pause for about 30 seconds while it applies.`
+              delay,
+            )}`
           : "Done. The agent can now pay within these limits.",
       );
     }
@@ -1101,6 +1157,11 @@ function AuthorizeSheet({
                 />
               )}
               {editing ? <LiveReadNote ready={live.ready} gone={live.gone} /> : null}
+              {loweredNote ? (
+                <p className="text-body-13 text-02" data-testid="edit-tighten-delay">
+                  {loweredNote}
+                </p>
+              ) : null}
               {editing ? (
                 <UnsettledPayments
                   unsettled={unsettled}

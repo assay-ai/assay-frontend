@@ -19,6 +19,7 @@ import {
   formatCallPrice,
   freeTierLabel,
   heldPriceSentence,
+  normalisedMode,
   notTakingPaidCalls,
   plural,
   priceRange,
@@ -115,6 +116,13 @@ function ToolDetail({
     ...providers.map((p) => details.get(p.providerId)?.tools.find((t) => t.toolId === tool.toolId)?.price),
   ]);
   const rangeLine = range ? heldPriceSentence(range) : null;
+  // Free first, then paid: a FREEMIUM tool says its free calls before any range.
+  const freeFirst = normalisedMode(tool.pricingMode) === "FREEMIUM";
+  const costLine = freeFirst
+    ? [priceSentence({ mode: tool.pricingMode, price: tool.price, freeCallsPerDay: freeAllowance }), rangeLine]
+        .filter(Boolean)
+        .join(" ")
+    : (rangeLine ?? priceSentence({ mode: tool.pricingMode, price: tool.price, freeCallsPerDay: freeAllowance }));
 
   return (
     <div className="flex flex-col gap-4 border-t border-01 bg-02 px-4 py-4 tablet:px-5">
@@ -126,7 +134,7 @@ function ToolDetail({
         <div className="flex flex-col gap-1.5">
           <h3 className="text-label-13 text-01">What a call costs</h3>
           <p className="text-body-13 text-02">
-            {rangeLine ?? priceSentence({ mode: tool.pricingMode, price: tool.price, freeCallsPerDay: freeAllowance })}
+            {costLine}
           </p>
         </div>
         <div className="flex flex-col gap-1.5">
@@ -330,8 +338,11 @@ function ToolsList() {
             const open = openId === tool.toolId;
             const blocked = policy.data ? toolAccess(policy.data.allowedTools, tool.toolId) === "blocked" : false;
             const serving = providers.filter((p) => p.toolIds.includes(tool.toolId));
-            const freeAllowance = freeAllowanceOf(tool.toolId);
-            const range = priceRange(tool.price, [tool.fromPrice]);
+            // The backend's own figure first (its total over every free-capable listing, capped).
+            const freeAllowance = tool.freeCallsPerDay ?? freeAllowanceOf(tool.toolId);
+            // "from" only over listings that can be charged: one paid listing is one price.
+            const range = priceRange(tool.price, (tool.paidBindings ?? 2) > 1 ? [tool.fromPrice] : []);
+            const freeFirst = normalisedMode(tool.pricingMode) === "FREEMIUM";
             return (
               <li key={tool.toolId} ref={open ? openRef : undefined} className="border-b border-01 last:border-b-0">
                 <button
@@ -363,7 +374,9 @@ function ToolsList() {
                       {range?.differs
                         ? `held at most ${formatCallPrice(range.held)}, paid only if it passes`
                         : tool.price
-                          ? "per call, only if it passes"
+                          ? freeFirst
+                            ? "per call after the free calls, only if it passes"
+                            : "per call, only if it passes"
                           : ""}
                     </span>
                   </div>
@@ -401,7 +414,8 @@ export function ToolsView() {
       <PageHeader title="Tools" />
       <p className="-mt-2 text-body-13 text-03">
         Every tool your agents can call through Assay. You pay only for results that pass the check; allow or block
-        each one for your agents. <Term k="free-tier">Free tier</Term> calls need no funds.
+        each one for your agents. <Term k="free-tier">Free tier</Term> calls need no funds, and come first: a tool with a
+        free tier serves your agent&apos;s free calls each day before any call is charged.
       </p>
       <React.Suspense fallback={<PageState kind="loading" rows={6} label="Loading tools" />}>
         <ToolsList />

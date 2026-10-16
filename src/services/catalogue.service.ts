@@ -127,6 +127,13 @@ export interface CatalogueTool {
    */
   price: CatalogueMoney | null;
   pricingMode: string | null;
+  /**
+   * Free first, then paid: the free calls a day one agent gets before a call
+   * is charged — set for FREE and FREEMIUM tools, `null` for a PAID one. A
+   * FREEMIUM tool reads "N free per day, then up to {price}". Optional for a
+   * backend that predates the field.
+   */
+  freeCallsPerDay?: number | null;
   routable: boolean;
   /**
    * Bindings the router could serve this tool from right now — the set `price`
@@ -135,6 +142,12 @@ export interface CatalogueTool {
    * Optional for a backend that predates the field.
    */
   routableBindings?: number;
+  /**
+   * How many of `routableBindings` can be charged (PAID or FREEMIUM). "up to
+   * $X" is about these only: a FREE binding beside one paid binding does not
+   * make the paid price a range. Optional for a backend that predates the field.
+   */
+  paidBindings?: number;
   unroutableReason: string | null;
   /**
    * CAIP-2, the chains any ACTIVE binding for this tool settles on.

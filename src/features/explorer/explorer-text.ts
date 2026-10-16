@@ -69,7 +69,7 @@ export function priceSentence(input: {
     const free = input.freeCallsPerDay && input.freeCallsPerDay > 0
       ? `The first ${input.freeCallsPerDay.toLocaleString("en-US")} calls each day are free for each agent`
       : "Some calls each day are free for each agent";
-    return `${free}; after that ${price} per call, and you pay only if the result passes the check.`;
+    return `${free}, even when other providers charge for it; after that ${price} per call, and you pay only if the result passes the check.`;
   }
   return `${price} per call. You pay only if the result passes the check.`;
 }
@@ -109,7 +109,9 @@ export function priceRange(
   listed: readonly (Money | null | undefined)[],
 ): { from: Money; held: Money; differs: boolean } | null {
   if (!held) return null;
-  const prices = listed.filter((m): m is Money => Boolean(m) && m!.asset === held.asset);
+  // A free binding is not a paid price: a FREE listing beside one paid listing
+  // does not make the paid price a range (review 2026-10-15, L2).
+  const prices = listed.filter((m): m is Money => Boolean(m) && m!.asset === held.asset && !toDecimal(m!).isZero());
   const eligible = prices.filter((m) => toDecimal(m).lte(toDecimal(held)));
   const from = eligible.reduce<Money>((min, m) => (toDecimal(m).lt(toDecimal(min)) ? m : min), held);
   return { from, held, differs: !toDecimal(from).eq(toDecimal(held)) };

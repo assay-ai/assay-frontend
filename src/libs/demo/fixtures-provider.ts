@@ -492,6 +492,13 @@ function earningsGroups() {
       platformFee: money("18.36"),
       withheld: money("1.62"),
       withheldCalls: 4,
+      // One passed call whose buyer has not settled its payment yet.
+      debtOutstanding: money("0.405"),
+      debtOutstandingCalls: 1,
+      forfeited: money("0"),
+      forfeitedCalls: 0,
+      uncollected: money("0"),
+      uncollectedCalls: 0,
     },
     {
       key: "fx-rates",
@@ -520,6 +527,12 @@ function earningsTotals() {
     platformFee: money("20.16"),
     withheld: money("1.62"),
     withheldCalls: 4,
+    debtOutstanding: money("0.405"),
+    debtOutstandingCalls: 1,
+    forfeited: money("0"),
+    forfeitedCalls: 0,
+    uncollected: money("0"),
+    uncollectedCalls: 0,
   };
 }
 
@@ -1666,6 +1679,46 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
       totals: earningsTotals(),
       asset: DEMO_ASSET,
     }),
+  },
+
+  // ── Reconciliation (the month's classes over the whole ledger) ───────────
+  {
+    method: "GET",
+    match: "/providers/me/reconciliation",
+    override: "always",
+    body: () => {
+      const totals = earningsTotals();
+      const row = (cls: string, calls: number, credited: string | null, note: string) => ({
+        class: cls,
+        calls,
+        share: calls / totals.calls,
+        credited: credited === null ? null : money(credited),
+        note,
+      });
+      return {
+        from: minutesAgo(60 * 24 * 16),
+        to: justNow(),
+        asset: DEMO_ASSET,
+        callCount: totals.calls,
+        // Adds up to `earningsTotals`: 836 credited, 1 waiting on the buyer, 4 not credited, 7 free.
+        classBreakdown: [
+          row("PAID_CREDITED", 836, "181.44", "settled to you"),
+          row("PAID_AWAITING_REDEMPTION", 0, "0", ""),
+          row("PAID_BUYER_DEBT", 1, "0", "the buyer's payment could not be collected yet"),
+          row("PAID_UNCOLLECTED", 0, "0", ""),
+          row("PROVIDER_FORFEITED", 0, "0", ""),
+          row("PAID_UNCREDITED", 3, "0", "our checks rejected the response"),
+          row("SYSTEM_ERROR", 1, "0", "your endpoint timed out or returned 5xx"),
+          row("FREE", 7, "0", "free-tier call"),
+        ],
+        unexplained: { calls: 0, reference: null },
+        gross: money("201.60"),
+        platformTakeRatePercent: 10,
+        platformTake: totals.platformFee,
+        net: totals.earned,
+        batches: { count: 3, paid: totals.earned, reconciles: true },
+      };
+    },
   },
 
   // ── Payouts ──────────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ import {
   windowById,
   windowRange,
 } from "@/features/g30/period";
+import { reconcileSentence } from "@/features/g30/spend-buckets";
 import { changePercent, previousTotal, rankRows, spendCsv, spendCsvFilename, type RankedRow } from "@/features/g30/spend-view";
 import type { ReceiptsSummary } from "@/features/g30/wire";
 import { useChains } from "@/hooks/useChains";
@@ -70,6 +71,9 @@ function BarRow({ row, href }: { row: RankedRow; href: string | null }) {
               {row.notChargedPct > 0 ? (
                 <span className="h-full bg-teal-500" style={{ width: `${Math.max(row.notChargedPct, 1)}%` }} />
               ) : null}
+              {row.owedPct > 0 ? (
+                <span className="h-full bg-warning-500" style={{ width: `${Math.max(row.owedPct, 1)}%` }} />
+              ) : null}
             </>
           )}
         </div>
@@ -77,6 +81,7 @@ function BarRow({ row, href }: { row: RankedRow; href: string | null }) {
           <span>{plural(row.calls, "call")}</span>
           {row.free ? <span>free calls only</span> : null}
           {row.notCharged ? <span className="text-teal-600">{row.notCharged} not charged</span> : null}
+          {row.owed ? <span className="text-warning-700">{row.owed} owed, not collected yet</span> : null}
           {row.delta ? <span>{row.delta} vs before</span> : null}
         </div>
       </div>
@@ -171,6 +176,7 @@ export default function SpendPage() {
   }, [summary, dimension, labelOf, chains, range]);
 
   const isEmpty = Boolean(summary) && summary!.groups.length === 0;
+  const hasOwed = Boolean(summary && (summary.totals.owedCalls ?? 0) > 0);
 
   return (
     <div className="flex w-full flex-col gap-4 bg-02 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
@@ -222,10 +228,19 @@ export default function SpendPage() {
                 <span className="font-mono text-mono-2xl font-semibold text-01">{formatMoney(summary.totals.chargedTotal)}</span>
                 <span className="text-body-md text-02">spent</span>
                 <span aria-hidden="true" className="text-03">·</span>
-                <span className="font-mono text-mono-md font-semibold text-teal-600">{formatMoney(summary.totals.withheldTotal)}</span>
+                <span className="font-mono text-mono-md font-semibold text-teal-600">
+                  {formatMoney(summary.totals.notChargedTotal ?? summary.totals.withheldTotal)}
+                </span>
                 <span className="text-body-md text-02">
                   <Term k="not-charged">not charged</Term>
                 </span>
+                {hasOwed ? (
+                  <>
+                    <span aria-hidden="true" className="text-03">·</span>
+                    <span className="font-mono text-mono-md font-semibold text-warning-700">{formatMoney(summary.totals.owedTotal)}</span>
+                    <span className="text-body-md text-02">owed</span>
+                  </>
+                ) : null}
                 {change ? (
                   <>
                     <span aria-hidden="true" className="text-03">·</span>
@@ -236,9 +251,21 @@ export default function SpendPage() {
                 ) : null}
               </p>
               <p className="text-body-13 text-03">
-                {plural(summary.totals.calls, "call")} · {plural(summary.totals.refundedCalls, "call")} not charged
+                {plural(summary.totals.calls, "call")} ·{" "}
+                {plural(summary.totals.notChargedCalls ?? summary.totals.refundedCalls, "call")} not charged
+                {hasOwed ? ` · ${plural(summary.totals.owedCalls, "call")} owed` : ""}
                 {freeCalls > 0 ? ` · ${plural(freeCalls, "free call")}` : ""} · {win.label.toLowerCase()}
               </p>
+              {/* How the figures add up: listed = charged + not charged + owed (+ in progress). */}
+              <p className="text-body-xs text-03" data-testid="spend-reconcile">
+                {reconcileSentence(summary.totals)}
+              </p>
+              {hasOwed ? (
+                <p className="text-body-xs text-warning-700">
+                  Owed is buyer debt: calls your agent made whose payment could not be collected yet. Paid calls stay paused
+                  until it is settled from the banner at the top.
+                </p>
+              ) : null}
             </div>
             <Sparkline
               values={sparkValues}

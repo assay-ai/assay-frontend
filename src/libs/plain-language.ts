@@ -268,7 +268,7 @@ const STATUSES: Record<string, string> = {
   PAID: "Paid",
   FREE: "Free",
   TEST: "Test call",
-  EXPLORATION: "Trial traffic paid by Assay",
+  EXPLORATION: "Trial traffic (the buyer pays; Assay pays only for checking it)",
   PAUSED: "Paused",
   SUSPENDED: "Suspended",
   UNBONDING: "Leaving — stake unlocking",
@@ -390,7 +390,12 @@ const ERRORS: Record<string, string> = {
   CHAIN_PROGRAM_PAUSED: "The contracts are paused. Try again after they resume.",
   CHAIN_ADDRESS_BLOCKED: "This address is blocked on chain.",
   CHAIN_TRANSACTION_FAILED: "The transaction failed on chain. Your balance did not change, though the network fee may have been spent.",
-  CHAIN_RAIL_NOT_OFFERED: "This way of paying is not offered on this chain.",
+  CHAIN_RAIL_NOT_OFFERED:
+    "This chain currently serves free calls only, so this paid action is not available on it. Nothing was charged.",
+  DEBT_OUTSTANDING:
+    "Paid calls are paused: your escrow owes for a call your agent already made. Settle it from the banner at the top. Free calls still work.",
+  DEBT_REPLACEMENT_PENDING:
+    "This call is signed already and its payment is being collected (about a minute). Nothing to sign.",
   VALIDATION_FAILED: "Some of the details are not valid.",
   UNAUTHORIZED: "Your session expired. Sign in again.",
   FORBIDDEN: "You do not have access to this.",

@@ -111,3 +111,15 @@ describe("ApprovalLinkView — the outcome, never dead approve buttons", () => {
     expect(outcomeOf("VERIFYING").chip).toBe("checking");
   });
 });
+
+describe("outcomeOf — buyer debt (final review M1/M2)", () => {
+  it("says an open or written-off debt is owed, not settled or not charged", () => {
+    expect(outcomeOf("SETTLED", "OUTSTANDING").chip).toBe("owed");
+    expect(outcomeOf("SETTLED", "WRITTEN_OFF").chip).toBe("owed");
+  });
+
+  it("keeps a voided debt and an ordinary call on their own outcome", () => {
+    expect(outcomeOf("SETTLED", null).chip).toBe("charged");
+    expect(outcomeOf("REFUNDED", "VOIDED").chip).toBe("not-charged");
+  });
+});

@@ -41,11 +41,23 @@ export interface RankedRow {
   /** Bar widths, 0–100, relative to the largest listed total. */
   chargedPct: number;
   notChargedPct: number;
+  /** Buyer debt (open or written off): served, not collected yet. */
+  owedPct: number;
   /** A group with calls and nothing listed: free calls only. */
   free: boolean;
   charged: string;
   notCharged: string | null;
+  owed: string | null;
   delta: string | null;
+}
+
+/**
+ * The summary's not-charged figure: everything not charged and not owed. An
+ * older API sends only `withheldTotal`, which was the same figure before buyer
+ * debt existed.
+ */
+function notChargedOf(g: SummaryGroup): Money {
+  return g.notChargedTotal ?? g.withheldTotal;
 }
 
 export function rankRows(groups: readonly SummaryGroup[], labelOf: (key: string) => string): RankedRow[] {
@@ -58,7 +70,8 @@ export function rankRows(groups: readonly SummaryGroup[], labelOf: (key: string)
     .map((g) => {
       const listed = toDecimal(g.listedTotal);
       const charged = toDecimal(g.chargedTotal);
-      const withheld = toDecimal(g.withheldTotal);
+      const notCharged = toDecimal(notChargedOf(g));
+      const owed = g.owedTotal ? toDecimal(g.owedTotal) : new Decimal(0);
       const pct = (v: Decimal) => (max.isZero() ? 0 : v.div(max).mul(100).toNumber());
       // A row only compares with a previous period that had spend on it: "+$52.50
       // vs before" on a group that is entirely new is the row's own total again.
@@ -69,10 +82,12 @@ export function rankRows(groups: readonly SummaryGroup[], labelOf: (key: string)
         label: labelOf(g.key),
         calls: g.calls,
         chargedPct: pct(charged),
-        notChargedPct: pct(withheld),
+        notChargedPct: pct(notCharged),
+        owedPct: pct(owed),
         free: listed.isZero() && g.calls > 0,
         charged: formatMoney(g.chargedTotal),
-        notCharged: withheld.gt(0) ? formatMoney(g.withheldTotal) : null,
+        notCharged: notCharged.gt(0) ? formatMoney(notChargedOf(g)) : null,
+        owed: owed.gt(0) && g.owedTotal ? formatMoney(g.owedTotal) : null,
         delta:
           deltaAmount && !deltaAmount.isZero()
             ? `${deltaAmount.isNegative() ? "▼ −" : "▲ +"}${formatMoney({ ...g.chargedTotal, amount: deltaAmount.abs().toFixed(0) })}`
@@ -90,7 +105,7 @@ export function spendCsv(
   groups: readonly SummaryGroup[],
   options: { dimensionHeader: string; labelOf: (key: string) => string; assetLabel: string },
 ): string {
-  const header = [options.dimensionHeader, `${options.dimensionHeader} id`, "Asset", "Calls", "Listed", "Charged", "Not charged", "Not charged calls"];
+  const header = [options.dimensionHeader, `${options.dimensionHeader} id`, "Asset", "Calls", "Listed", "Charged", "Not charged", "Not charged calls", "Owed", "Owed calls"];
   const rows = groups.map((g) => [
     options.labelOf(g.key),
     g.key,
@@ -98,8 +113,10 @@ export function spendCsv(
     String(g.calls),
     formatMoney(g.listedTotal, { grouped: false, exact: true, symbol: "", decimals: g.listedTotal.decimals }),
     formatMoney(g.chargedTotal, { grouped: false, exact: true, symbol: "", decimals: g.chargedTotal.decimals }),
-    formatMoney(g.withheldTotal, { grouped: false, exact: true, symbol: "", decimals: g.withheldTotal.decimals }),
-    String(g.refundedCalls),
+    formatMoney(notChargedOf(g), { grouped: false, exact: true, symbol: "", decimals: notChargedOf(g).decimals }),
+    String(g.notChargedCalls ?? g.refundedCalls),
+    g.owedTotal ? formatMoney(g.owedTotal, { grouped: false, exact: true, symbol: "", decimals: g.owedTotal.decimals }) : "0",
+    String(g.owedCalls ?? 0),
   ]);
   return [header, ...rows].map((r) => r.map(escape).join(",")).join("\n");
 }

@@ -1,7 +1,10 @@
+import { delegationInvalidText } from "@/features/delegation/delegation-form";
 import { isUnsettledRefusal } from "@/features/delegation/unsettled";
 import { isRelayedRefusal, relayedRefusal } from "@/features/escrow/relayed-refusal";
 import { EvmDepositRefused } from "@/features/funding/evm-deposit";
 import { ApiError } from "@/libs/ApiClient";
+import { debtRefusalSentence } from "@/libs/buyer-debt";
+import { isRailNotOffered, railNotOfferedText } from "@/libs/chains/paid-rails";
 import { knowsError, plainError } from "@/libs/plain-language";
 
 /**
@@ -32,6 +35,14 @@ export function describeMoneyError(error: unknown): string {
     return "Some payments are still being settled and these new limits would block them. Wait a minute and try again.";
   }
   if (isRelayedRefusal(error)) return relayedRefusal(error as ApiError).text;
+  // 409 CHAIN_RAIL_NOT_OFFERED: the chain serves free calls only.
+  if (isRailNotOffered(error)) return railNotOfferedText(null);
+  // 400 SETTLEMENT_DELEGATION_INVALID: an expiry too soon (D-21) or caps the escrow refuses.
+  const invalid = delegationInvalidText(error);
+  if (invalid) return invalid;
+  // A buyer-debt refusal: paid calls are paused until the debt is settled.
+  const debt = debtRefusalSentence(error);
+  if (debt) return debt;
   if (error instanceof ApiError) {
     if (ESCROW_REFUSALS[error.code]) return ESCROW_REFUSALS[error.code]!;
     return knowsError(error.code) ? plainError(error.code) : "That did not go through. Nothing was signed. Try again.";

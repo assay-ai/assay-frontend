@@ -34,6 +34,7 @@ import {
   trendIsUp,
   trendLabel,
 } from "@/features/buyer/period";
+import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
 import { attentionAction } from "@/features/buyer/attention-action";
 import { callOutcome } from "@/features/buyer/call-outcome";
@@ -419,6 +420,8 @@ export default function OverviewPage() {
                 {data?.recentCalls.map((call) => {
                   const outcome = callOutcome(call);
                   const uncharged = notCharged(call.price, call.charged);
+                  // Buyer debt or a forfeited payment: say why, beside the verdict.
+                  const paymentNote = callPaymentNote(call);
                   return (
                     <li key={call.intentId} className="border-b border-01 last:border-b-0">
                       <Link
@@ -436,6 +439,17 @@ export default function OverviewPage() {
                               <LocalTime value={call.createdAt} relative />
                             </span>
                           </span>
+                          {paymentNote ? (
+                            <span
+                              className={
+                                outcome === "owed"
+                                  ? "text-body-xs text-warning-700"
+                                  : "text-body-xs text-03"
+                              }
+                            >
+                              {paymentNote}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="flex shrink-0 flex-col items-end gap-0.5">
                           <span className="font-mono text-mono-13 font-semibold text-01">
@@ -443,9 +457,11 @@ export default function OverviewPage() {
                               ? "Free"
                               : outcome === "checking"
                                 ? `${formatMoney(call.price, { decimals: 4 })} held`
-                                : formatMoney(call.charged, { decimals: 4 })}
+                                : outcome === "owed"
+                                  ? `${formatMoney(call.price, { decimals: 4 })} owed`
+                                  : formatMoney(call.charged, { decimals: 4 })}
                           </span>
-                          {toDecimal(uncharged).gt(0) && outcome !== "checking" ? (
+                          {toDecimal(uncharged).gt(0) && outcome !== "checking" && outcome !== "owed" ? (
                             <span className="font-mono text-mono-xs text-teal-600">
                               {formatMoney(uncharged, { decimals: 4 })} not charged
                             </span>

@@ -41,6 +41,7 @@ export const STATUS_CHIPS = {
   "not-charged": { label: "Not charged", tone: "teal" },
   free: { label: "Free", tone: "teal" },
   checking: { label: "Checking", tone: "primary" },
+  owed: { label: "Owed", tone: "warning" },
   // Provider: listings and stake
   draft: { label: "Draft", tone: "neutral" },
   tested: { label: "Tested", tone: "primary" },

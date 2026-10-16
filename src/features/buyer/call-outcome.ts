@@ -1,4 +1,4 @@
-import type { Money } from "@/interfaces";
+import type { CallDebt, Money } from "@/interfaces";
 import { notCharged, toDecimal } from "@/utils/money";
 
 /**
@@ -8,17 +8,27 @@ import { notCharged, toDecimal } from "@/utils/money";
  * From `GET /tool-calls`: `status` is the payment intent's (`SETTLED` charged
  * the hold; `REFUNDED`, `VOIDED` and `EXPIRED` released it; the rest are still
  * in flight), `price` is the listed price and `charged` what was paid.
+ *
+ * A fifth word, Owed, is buyer debt (`debt` OUTSTANDING or WRITTEN_OFF): the
+ * call was served but its payment was not collected yet, so it is neither
+ * charged nor let off, and paid calls stay paused until it is settled.
  */
 
-export type CallOutcome = "charged" | "not-charged" | "free" | "checking";
+export type CallOutcome = "charged" | "not-charged" | "free" | "checking" | "owed";
 
 export const IN_FLIGHT_STATUSES = ["CREATED", "FUNDS_SECURED", "PROVIDER_EXECUTING", "VERIFYING"] as const;
 export const NOT_CHARGED_STATUSES = ["REFUNDED", "VOIDED", "EXPIRED"] as const;
 export const CHARGED_STATUSES = ["SETTLED"] as const;
 
-export function callOutcome(call: { status: string; price: Money; charged: Money }): CallOutcome {
+export function callOutcome(call: {
+  status: string;
+  price: Money;
+  charged: Money;
+  debt?: CallDebt | null;
+}): CallOutcome {
   if (toDecimal(call.price).isZero()) return "free";
   if ((IN_FLIGHT_STATUSES as readonly string[]).includes(call.status)) return "checking";
+  if (call.debt === "OUTSTANDING" || call.debt === "WRITTEN_OFF") return "owed";
   if (toDecimal(call.charged).gt(0) && !toDecimal(notCharged(call.price, call.charged)).gt(0)) return "charged";
   if ((NOT_CHARGED_STATUSES as readonly string[]).includes(call.status)) return "not-charged";
   return toDecimal(call.charged).gt(0) ? "charged" : "not-charged";
@@ -45,7 +55,9 @@ export function statusesFor(filter: CallsFilter): string[] | undefined {
   return undefined;
 }
 
-export function matchesFilter(call: { status: string; price: Money; charged: Money }, filter: CallsFilter): boolean {
+export function matchesFilter(
+  call: { status: string; price: Money; charged: Money; debt?: CallDebt | null },
+  filter: CallsFilter): boolean {
   if (filter === "all") return true;
   return callOutcome(call) === filter;
 }

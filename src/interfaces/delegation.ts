@@ -46,6 +46,13 @@ export interface EscrowDelegate {
 export interface ListEscrowDelegates {
   account: string;
   delegates: EscrowDelegate[];
+  /**
+   * How long a tightening (a revoke, a shorter expiry, lower caps) waits before
+   * it binds a payment already signed: 3600 on an escrow that keeps signed
+   * payments collectable (assay-evm D-21), 0 where it binds at once (BUG-D1-07
+   * applies). Absent from an older API, which means 0.
+   */
+  tightenDelaySeconds?: number;
 }
 
 /** `GET /escrow/unsettled`: every signer's unsettled payments, beside the escrow's own window. */
@@ -53,6 +60,13 @@ export interface EscrowUnsettled {
   account: string;
   /** null when the chain could not be read: unknown, not none. */
   unsettled: UnsettledVouchers | null;
+  /**
+   * How long a tightening (a revoke, a shorter expiry, lower caps) waits before
+   * it binds a payment already signed: 3600 on an escrow that keeps signed
+   * payments collectable (assay-evm D-21), 0 where it binds at once (BUG-D1-07
+   * applies). Absent from an older API, which means 0.
+   */
+  tightenDelaySeconds?: number;
 }
 
 export type DelegationKind = "AUTHORIZE_DELEGATE" | "REVOKE_DELEGATE";

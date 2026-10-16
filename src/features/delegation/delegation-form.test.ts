@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { EscrowDelegate, Money } from "@/interfaces";
+import { ApiError } from "@/libs/ApiClient";
 
 import {
   capsAboveEscrow,
   confirmsDelegateKey,
   type DelegateBinding,
+  delegationInvalidText,
   delegationRows,
   keyFingerprint,
   DEFAULT_DELEGATION_DAYS,
@@ -14,6 +16,7 @@ import {
   errorsAfterEdit,
   escrowCanDelegate,
   findDelegation,
+  MIN_VALID_UNTIL_LEAD_SECONDS,
   parseDelegationForm,
   serverNowSeconds,
   supportsDelegation,
@@ -322,17 +325,61 @@ describe("keeping the current expiry", () => {
     expect(parsed.ok && parsed.body.validUntil).toBe(String(NOW + 10 * 86_400));
   });
 
-  it("refuses to keep an expiry inside the 30-minute redeem grace (D1-P05)", () => {
-    const soon = NOW + 1_800;
+  it("refuses to keep an expiry closer than the D-21 floor (3900 s + margin)", () => {
+    // Past the old 30-minute grace, but inside the hour after the request's deadline.
+    const soon = NOW + 3_900;
     const form = { ...editDelegationForm(grant, NOW), keepExpiry: true };
     const parsed = parseDelegationForm(form, ESCROW, DELEGATE, NOW, soon);
     expect(parsed.ok).toBe(false);
-    expect(!parsed.ok && parsed.errors.validDays).toMatch(/less than 30 minutes/);
+    expect(!parsed.ok && parsed.errors.validDays).toMatch(/less than about 1 hour 5 minutes/);
     // And a grant that close to its end does not start on "keep".
     expect(
       editDelegationForm({ ...grant, validUntil: new Date(soon * 1000).toISOString() }, NOW)
         .keepExpiry,
     ).toBe(false);
+  });
+
+  it("keeps an expiry right at the floor", () => {
+    const edge = NOW + MIN_VALID_UNTIL_LEAD_SECONDS;
+    const form = { ...editDelegationForm(grant, NOW), keepExpiry: true };
+    const parsed = parseDelegationForm(form, ESCROW, DELEGATE, NOW, edge);
+    expect(parsed.ok && parsed.body.validUntil).toBe(String(edge));
+    expect(
+      editDelegationForm({ ...grant, validUntil: new Date(edge * 1000).toISOString() }, NOW)
+        .keepExpiry,
+    ).toBe(true);
+    expect(MIN_VALID_UNTIL_LEAD_SECONDS).toBeGreaterThan(3_900);
+    expect(MIN_VALID_UNTIL_LEAD_SECONDS).toBeLessThanOrEqual(3_900 + 300);
+  });
+});
+
+/** D-21: the backend refuses a grant the escrow would refuse, `SETTLEMENT_DELEGATION_INVALID`. */
+describe("delegationInvalidText", () => {
+  const refusal = (reason: string) =>
+    new ApiError(
+      "SETTLEMENT_DELEGATION_INVALID",
+      `This delegation cannot be authorised: ${reason}`,
+      400,
+      "/escrow/delegates/intent",
+      { reason },
+    );
+
+  it("says the expiry is too soon for DelegateValidUntilInvalid", () => {
+    const text = delegationInvalidText(
+      refusal("DelegateValidUntilInvalid — validUntil must be at least 1800004200"),
+    );
+    expect(text).toMatch(/expiry is too soon/);
+    expect(text).toMatch(/1 hour 5 minutes/);
+    expect(text).not.toMatch(/DelegateValidUntilInvalid|1800004200/);
+  });
+
+  it("explains the caps for any other reason", () => {
+    expect(delegationInvalidText(refusal("DelegateCapsInvalid"))).toMatch(/refuse these caps/);
+  });
+
+  it("is null for any other error", () => {
+    expect(delegationInvalidText(new ApiError("OTHER", "x", 400))).toBeNull();
+    expect(delegationInvalidText(new Error("x"))).toBeNull();
   });
 });
 

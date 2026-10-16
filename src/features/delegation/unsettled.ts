@@ -44,15 +44,81 @@ const atomic = (value: Money | string): bigint =>
   BigInt(typeof value === "string" ? value : value.amount);
 
 /**
+ * True when the payer's escrow keeps signed payments collectable for a while
+ * after a tightening (assay-evm D-21): `tightenDelaySeconds` above 0 on
+ * `GET /escrow/unsettled` or `GET /escrow/delegates`. Nothing can be stranded
+ * there, so the backend refuses nothing for it. Absent (an older API) is 0.
+ */
+export function hasTightenDelay(tightenDelaySeconds: number | null | undefined): boolean {
+  return typeof tightenDelaySeconds === "number" && tightenDelaySeconds > 0;
+}
+
+/** "1 hour", "2 hours", "30 minutes": the delay as the screen says it. */
+export function tightenDelayLabel(tightenDelaySeconds: number): string {
+  if (tightenDelaySeconds % 3_600 === 0) {
+    const hours = tightenDelaySeconds / 3_600;
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+  const minutes = Math.max(1, Math.round(tightenDelaySeconds / 60));
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
+/** The Revoke sheet, on an escrow with the tighten delay (D-21). */
+export function revokeDelayedText(tightenDelaySeconds: number): string {
+  return (
+    `Vouchers your agent already signed stay collectable for ${tightenDelayLabel(tightenDelaySeconds)}, ` +
+    "so providers you already used get paid. New paid calls stop now."
+  );
+}
+
+/** Lowering escrow limits or a delegate's caps, on an escrow with the tighten delay (D-21). */
+export function loweredDelayedText(tightenDelaySeconds: number): string {
+  return `Lower limits apply to already-signed vouchers after ${tightenDelayLabel(tightenDelaySeconds)}.`;
+}
+
+/** What the Revoke sheet says about signed payments, or null to keep the strand warning. */
+export function revokeDelayNote(tightenDelaySeconds: number | null | undefined): string | null {
+  return hasTightenDelay(tightenDelaySeconds) ? revokeDelayedText(tightenDelaySeconds!) : null;
+}
+
+/**
+ * What a screen lowering limits says instead of the strand warning (D-21), or
+ * null: only on an escrow with the delay, and only when `next` lowers something.
+ */
+export function loweredDelayNote(
+  tightenDelaySeconds: number | null | undefined,
+  current: AtomicCaps | null | undefined,
+  next: AtomicCaps | null | undefined,
+): string | null {
+  if (!hasTightenDelay(tightenDelaySeconds) || !current || !next) return null;
+  return lowersCaps(current, next) ? loweredDelayedText(tightenDelaySeconds!) : null;
+}
+
+/** True when `next` lowers either cap, or (when both carry one) the expiry. */
+export function lowersCaps(current: AtomicCaps, next: AtomicCaps): boolean {
+  return (
+    BigInt(next.maxVoucherAmount) < BigInt(current.maxVoucherAmount) ||
+    BigInt(next.maxPerWindow) < BigInt(current.maxPerWindow) ||
+    (next.validUntil !== undefined &&
+      current.validUntil !== undefined &&
+      BigInt(next.validUntil) < BigInt(current.validUntil))
+  );
+}
+
+/**
  * Why the chain would refuse a payment still being settled once `next` stands.
  * Only a cap that goes DOWN counts: a cap that stays or rises cannot strand a
- * payment that fits today. Empty when nothing is unsettled.
+ * payment that fits today. Empty when nothing is unsettled, and always empty on
+ * an escrow with the tighten delay (`tightenDelaySeconds` above 0, D-21): a
+ * tightening binds signed payments only after the delay, so none is stranded.
  */
 export function strandReasons(
   unsettled: UnsettledVouchers | null | undefined,
   current: AtomicCaps,
   next: AtomicCaps | "revoke",
+  tightenDelaySeconds?: number | null,
 ): StrandReason[] {
+  if (hasTightenDelay(tightenDelaySeconds)) return [];
   if (!unsettled || unsettled.count === 0) return [];
   if (next === "revoke") return ["revoked"];
   const reasons: StrandReason[] = [];
@@ -80,16 +146,19 @@ export function strandReasons(
  * The toast after an edit landed. The backend pauses the delegate's payments
  * for about 30 seconds after any cap, or the expiry, goes DOWN (it refuses
  * them with PAYMENT_VOUCHER_ADMISSION_PAUSED), so the toast must not promise
- * "the next payment" then (BUG-R3-J-04).
+ * "the next payment" then (BUG-R3-J-04). On an escrow with the tighten delay
+ * (D-21) there is no pause: new payments get the lower caps at once, payments
+ * already signed after the delay.
  */
-export function editedToast(current: AtomicCaps | null, next: AtomicCaps): string {
-  const lowered =
-    current !== null &&
-    (BigInt(next.maxVoucherAmount) < BigInt(current.maxVoucherAmount) ||
-      BigInt(next.maxPerWindow) < BigInt(current.maxPerWindow) ||
-      (next.validUntil !== undefined &&
-        current.validUntil !== undefined &&
-        BigInt(next.validUntil) < BigInt(current.validUntil)));
+export function editedToast(
+  current: AtomicCaps | null,
+  next: AtomicCaps,
+  tightenDelaySeconds?: number | null,
+): string {
+  const lowered = current !== null && lowersCaps(current, next);
+  if (lowered && hasTightenDelay(tightenDelaySeconds)) {
+    return `Updated. The new caps apply from the agent’s next payment. ${loweredDelayedText(tightenDelaySeconds!)}`;
+  }
   return lowered
     ? "Updated. The agent’s payments are paused for about 30 seconds while the change settles; then the new caps apply."
     : "Updated. The new caps apply from the agent’s next payment.";

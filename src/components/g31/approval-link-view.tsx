@@ -1,5 +1,7 @@
 "use client";
 
+import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
+import type { CallDebt } from "@/interfaces";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import * as React from "react";
@@ -25,7 +27,9 @@ import { useToolNames } from "./use-tool-names";
 const SETTLED = new Set(["SETTLED", "COMMITTED", "PAID"]);
 const NOT_CHARGED = new Set(["REFUNDED", "VOIDED", "EXPIRED", "RELEASED", "FAILED_VERIFICATION"]);
 
-export function outcomeOf(status: string): { chip: StatusChipKey; headline: string } {
+export function outcomeOf(status: string, debt?: CallDebt | null): { chip: StatusChipKey; headline: string } {
+  // Buyer debt: served, but the payment could not be collected; paid calls stay paused until it is settled.
+  if (debt === "OUTSTANDING" || debt === "WRITTEN_OFF") return { chip: "owed", headline: "Served, payment still owed" };
   if (SETTLED.has(status)) return { chip: "charged", headline: "Already settled" };
   if (NOT_CHARGED.has(status)) return { chip: "not-charged", headline: "Not charged" };
   return { chip: "checking", headline: "Still in progress" };
@@ -69,8 +73,8 @@ export function ApprovalLinkView({ approvalId }: { approvalId: string }) {
   }
 
   const data = call.data;
-  const outcome = outcomeOf(data.status);
-  const charged = SETTLED.has(data.status);
+  const outcome = outcomeOf(data.status, data.debt);
+  const charged = SETTLED.has(data.status) && outcome.chip === "charged";
   return shell(
     <section aria-label="Payment" className="flex w-full flex-col gap-3 rounded-xl border border-01 bg-01 p-5 shadow-soft">
       <div className="flex items-center justify-between gap-3">
@@ -81,8 +85,9 @@ export function ApprovalLinkView({ approvalId }: { approvalId: string }) {
         {formatMoney(charged ? data.charged : data.price, { decimals: 2 })}
       </p>
       <p className="text-body-13 text-02">
-        {nameOf(data.toolId)} · {plainStatus(data.status)}
+        {nameOf(data.toolId)} · {outcome.chip === "owed" ? "not collected yet" : plainStatus(data.status)}
       </p>
+      {callPaymentNote(data) ? <p className="text-body-13 text-warning-700">{callPaymentNote(data)}</p> : null}
       <div className="flex flex-wrap gap-2 pt-1">
         <Button asChild>
           <Link href={routes.receipt(data.intentId)}>See the receipt</Link>
