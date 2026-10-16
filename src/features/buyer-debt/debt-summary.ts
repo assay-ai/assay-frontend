@@ -353,3 +353,18 @@ export function paidCallsAfterSettling({
   }
   return { short: "Resume in about a minute", sentence: "Paid calls resume once it is collected, in about a minute." };
 }
+
+/**
+ * The Owed list on Activity › Calls, straight from `GET /escrow/debts` — every
+ * owed call, whatever page of history it sits on, so the chip agrees with the
+ * banner (review 2026-10-17 P2-6). Every wallet's debts, newest call first,
+ * narrowed to one tool when asked. `null` when the list could not be read (the
+ * screen then falls back to scanning loaded calls).
+ */
+export function owedCallsFromDebts(data: BuyerDebts | null | undefined, toolId?: string | null): BuyerDebt[] | null {
+  if (!data) return null;
+  const { own, others } = splitDebts(data);
+  return [...own, ...others]
+    .filter((debt) => !toolId || debt.toolId === toolId)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+}
