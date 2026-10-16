@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from "axios";
 
 import type { ApiEnvelope, ApiErrorBody } from "@/interfaces";
+import { debtRefusalSentence } from "@/libs/buyer-debt";
 import { demoEnabled, demoResponse } from "@/libs/demo/demo-api";
 import { SLASH_HOLD_ERROR_CODES, slashHoldAudienceOf, slashHoldErrorText } from "@/libs/slash-hold";
 
@@ -241,6 +242,15 @@ export function withSlashHoldWording(error: ApiError, requestUrl: string | null 
   return text ? new ApiError(error.code, text, error.status, error.path, error.context) : error;
 }
 
+/**
+ * A buyer-debt refusal (`PAYMENT_DEBT_OUTSTANDING`, `PAYMENT_DEBT_NOT_FOUND`)
+ * in the buyer's words. The code, status, path and context are kept.
+ */
+export function withDebtWording(error: ApiError): ApiError {
+  const text = debtRefusalSentence(error);
+  return text ? new ApiError(error.code, text, error.status, error.path, error.context) : error;
+}
+
 function toApiError(error: AxiosError): ApiError {
   const body = error.response?.data as Partial<ApiErrorBody> | undefined;
   const inner = body?.error;
@@ -379,7 +389,7 @@ class ApiClient {
           again comes back through here marked, and falls through below.
         */
         const config = error.config as RetriableConfig | undefined;
-        const apiError = withSlashHoldWording(toApiError(error), error.config?.url);
+        const apiError = withDebtWording(withSlashHoldWording(toApiError(error), error.config?.url));
         const failure = classifyAuthFailure(error.response?.status ?? apiError.status, apiError.code);
 
         /*

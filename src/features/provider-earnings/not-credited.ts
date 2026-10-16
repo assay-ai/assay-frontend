@@ -21,6 +21,16 @@ const REASONS: Record<string, NotCreditedReason> = {
     title: "Your API refused the request",
     detail: "It answered with a 4xx error. Usually the agent sent input your API does not accept; check your request mapping.",
   },
+  PAID_UNCOLLECTED: {
+    title: "The buyer never paid",
+    detail:
+      "These passed the check, but the buyer never settled the payment, so it was written off after 30 days. You were not paid, no fee was taken, and the platform does not pay it in their place.",
+  },
+  PROVIDER_FORFEITED: {
+    title: "Forfeited by you",
+    detail:
+      "The payment could not be collected because of your account: your stake was below the minimum, or you were blocked. The buyer was not charged and nobody was paid.",
+  },
   EXCLUDED: {
     title: "Excluded by Assay",
     detail: "Assay's team took these calls out of the count, for example during an incident on our side.",

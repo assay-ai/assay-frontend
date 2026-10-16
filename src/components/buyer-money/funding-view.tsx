@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpFromLine, ExternalLink, Plus, RotateCw, TriangleAlert } from "lucide-react";
+import { ArrowUpFromLine, ExternalLink, Info, Plus, RotateCw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
@@ -19,11 +19,13 @@ import { Button } from "@/components/ui/button";
 import { windowRefillAt } from "@/features/buyer-money/refill";
 import { isLowBalance, runwayDays, runwayLine } from "@/features/buyer-money/runway";
 import { chainBalances } from "@/features/g30/balance";
+import { spentFromTotals } from "@/features/g30/spend-buckets";
 import { useCountdown } from "@/hooks/useCountdown";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import type { Money } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { shortAddress } from "@/libs/chains/format";
+import { freeCallsOnlyText, servesPaidCalls } from "@/libs/chains/paid-rails";
 import { plainError } from "@/libs/plain-language";
 import { assetName, chainDisplayName, findChain } from "@/services/chains.service";
 import { listDeposits, type Deposit } from "@/services/funding.service";
@@ -115,7 +117,10 @@ export function FundingView() {
     queryFn: () => getReceiptsSummary({ from: week.from, to: week.to, groupBy: "tool" }),
     retry: 0,
   });
-  const charged7d = (weekSpend.data as { totals?: { chargedTotal?: Money } } | undefined)?.totals?.chargedTotal ?? null;
+  // Charged plus owed (buyer debt is spend still owed), as the summary counts it.
+  const charged7d = spentFromTotals(
+    (weekSpend.data as { totals?: { chargedTotal?: Money; owedTotal?: Money } } | undefined)?.totals,
+  );
 
   // No escrow yet means nothing to spend: never fall back to a ledger figure,
   // or a brand-new account reads as funded.
@@ -127,6 +132,8 @@ export function FundingView() {
   const withdrawalPending = positive(escrow?.withdrawRequested);
   const { hasPassed: matured } = useCountdown(escrow?.withdrawAvailableAt);
   const unreadable = escrowQuery.isError || (escrow !== null && !escrow.chainReadable);
+  // Solana serves free calls only (paid rails off): no deposit is offered there; withdrawing still works.
+  const freeOnly = money.chainId !== null && !servesPaidCalls(money.chainId);
 
   return (
     <div className="flex w-full flex-col gap-4 bg-02 px-4 py-5 tablet:gap-5 tablet:px-7 tablet:py-[22px]">
@@ -181,13 +188,27 @@ export function FundingView() {
               Withdraw
             </Button>
           ) : null}
-          <Button icon={<Plus />} type="button" onClick={() => onAction("deposit")}>
-            Add funds
-          </Button>
+          {freeOnly ? null : (
+            <Button icon={<Plus />} type="button" onClick={() => onAction("deposit")}>
+              Add funds
+            </Button>
+          )}
         </div>
       </section>
 
-      {spendable && isLowBalance(spendable) && !withdrawalPending ? (
+      {freeOnly ? (
+        <div
+          className="flex w-full items-start gap-3 rounded-lg border border-warning-20 bg-warning-10 px-4 py-3"
+          data-testid="escrow-free-calls-only"
+        >
+          <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
+          <p className="min-w-0 flex-1 text-body-13 text-warning-700">
+            {freeCallsOnlyText(money.chainName ?? "This chain")} You can still withdraw what it holds.
+          </p>
+        </div>
+      ) : null}
+
+      {spendable && isLowBalance(spendable) && !withdrawalPending && !freeOnly ? (
         <div className="flex w-full flex-wrap items-center gap-3 rounded-lg border border-warning-20 bg-warning-10 px-4 py-3">
           <p className="min-w-0 flex-1 text-body-13 text-warning-700">
             Your balance is below $5.00. Paid calls are refused once it runs out; free calls keep working.
@@ -378,6 +399,7 @@ function AccountBalances({
             <span className="min-w-0 truncate text-body-13 text-02">
               {chainDisplayName(chains, row.chainId)} · {assetName(chains, row.asset)} ·{" "}
               {shortAddress(row.chainId, row.accountId.split(":").slice(2).join(":"))}
+              {servesPaidCalls(row.chainId) ? null : " · free calls only here, so it is not spent on calls"}
             </span>
             <span className="shrink-0 font-mono text-mono-13 text-01">{formatMoney(row.available)}</span>
           </li>

@@ -1,5 +1,6 @@
 "use client";
 
+import { freeFirstHint } from "@/features/provider-binding/free-first";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Minus, Plus, Rocket } from "lucide-react";
 import Link from "next/link";
@@ -368,6 +369,8 @@ export function LiveStage({
               ))}
             </Segmented>
             <p className="text-body-xs text-03">{PRICE_CHOICES.find((c) => c.value === form.choice)?.hint}</p>
+            {/* Free first, then paid: say how a free tier is used beside a paid one. */}
+            {freeFirstHint(mode) ? <p className="text-body-xs text-03">{freeFirstHint(mode)}</p> : null}
           </div>
 
           {mode !== "FREE" ? (

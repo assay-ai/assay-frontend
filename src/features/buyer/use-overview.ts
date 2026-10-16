@@ -1,5 +1,6 @@
 "use client";
 
+import { spentFromTotals } from "@/features/g30/spend-buckets";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { CursorPage, Money } from "@/interfaces";
@@ -156,9 +157,10 @@ export function useOverview(anchor: Date, assetKey: string | null = null): Overv
           holds: holds.items ?? [],
           withheld: readWithheld(withheldRaw, monthSummary.asset),
           monthListed: monthSummary.totals?.listedTotal ?? null,
-          todayCharged: todayGroup?.chargedTotal ?? null,
+          // Charged plus owed: an open or written-off debt is spend the buyer still owes.
+          todayCharged: spentFromTotals(todayGroup),
           todayCalls: todayGroup?.calls ?? 0,
-          yesterdayCharged: byDay.get(yesterday.key)?.chargedTotal ?? null,
+          yesterdayCharged: spentFromTotals(byDay.get(yesterday.key)),
           chart: chart.chart,
           chartTools: chart.tools,
           recentCalls: calls.items ?? [],

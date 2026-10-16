@@ -1,5 +1,6 @@
 "use client";
 
+import { spentFromTotals } from "@/features/g30/spend-buckets";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import * as React from "react";
@@ -43,8 +44,9 @@ export const REFILL_HINT = {
   month: "your time; the month starts 00:00 UTC",
 } as const;
 
+/** The window's spend: charged plus owed (open or written-off buyer debt is still spend). */
 function summaryCharged(summary: unknown): Money | null {
-  return (summary as { totals?: { chargedTotal?: Money } } | undefined)?.totals?.chargedTotal ?? null;
+  return spentFromTotals((summary as { totals?: { chargedTotal?: Money; owedTotal?: Money } } | undefined)?.totals);
 }
 
 /**

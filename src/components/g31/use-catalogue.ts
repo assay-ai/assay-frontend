@@ -99,8 +99,14 @@ export interface ToolRow {
   fromPrice: Money | null;
   /** What a call would be held for — the dearest eligible binding, not the floor. */
   price: Money | null;
-  /** Bindings the quote was taken over; above one, the quote reads "up to". */
-  routableBindings: number | undefined;
+  /**
+   * Routable bindings that can be charged (PAID or FREEMIUM); above one, the
+   * quote reads "up to". Falls back to `routableBindings` for a backend that
+   * predates the field, the same fallback MCP `tools/list` uses.
+   */
+  paidBindings: number | undefined;
+  /** Free calls per agent per day before a FREEMIUM tool's quote applies (the backend's total, capped). */
+  freeCallsPerDay?: number | null;
   routable: boolean;
   unroutableReason: string | null;
   /**
@@ -212,7 +218,8 @@ export function useCatalogue() {
         providerCount: row.providerCount,
         fromPrice: row.fromPrice,
         price: row.price,
-        routableBindings: row.routableBindings,
+        paidBindings: row.paidBindings ?? row.routableBindings,
+        freeCallsPerDay: row.freeCallsPerDay,
         routable: row.routable,
         unroutableReason: row.unroutableReason,
         settlementChains: row.settlementChains,

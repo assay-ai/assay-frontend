@@ -8,11 +8,17 @@ import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-a
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { capsToForm, parseCaps } from "@/features/buyer-money/caps";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
-import { strandAcknowledgement, strandReasons } from "@/features/delegation/unsettled";
+import {
+  hasTightenDelay,
+  loweredDelayNote,
+  strandAcknowledgement,
+  strandReasons,
+} from "@/features/delegation/unsettled";
 import { applyLimitsSubmitted } from "@/features/escrow/after-set-limits";
 import { ESCROW_SUBMITTERS, runEscrowAction } from "@/features/escrow/relayed-submission";
 import type { EscrowLimitsBody } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
+import { freeCallsOnlyText, servesPaidCalls } from "@/libs/chains/paid-rails";
 import { getEscrowUnsettled } from "@/services/delegation.service";
 import { createEscrowLimitsIntent, submitEscrowLimits } from "@/services/escrow.service";
 
@@ -66,15 +72,21 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
     staleTime: 0,
     queryFn: () => getEscrowUnsettled(Date.now()),
   });
-  const strands =
-    body && money.escrow?.maxVoucherAmount && money.escrow.maxPerWindow
-      ? strandReasons(
-          unsettled.data?.unsettled,
-          { maxVoucherAmount: money.escrow.maxVoucherAmount.amount, maxPerWindow: money.escrow.maxPerWindow.amount },
-          body,
-        )
-      : [];
+  /*
+    An escrow with the tighten delay (assay-evm D-21) applies lower limits to
+    payments already signed only after that delay, so nothing can be stranded:
+    no warning, no acknowledgement — just say when they apply.
+  */
+  const tightenDelay = unsettled.data?.tightenDelaySeconds;
+  const currentCaps =
+    money.escrow?.maxVoucherAmount && money.escrow.maxPerWindow
+      ? { maxVoucherAmount: money.escrow.maxVoucherAmount.amount, maxPerWindow: money.escrow.maxPerWindow.amount }
+      : null;
+  const strands = body && currentCaps ? strandReasons(unsettled.data?.unsettled, currentCaps, body, tightenDelay) : [];
   const atRisk = strands.length > 0;
+  const loweredNote = body && currentCaps ? loweredDelayNote(tightenDelay, currentCaps, body) : null;
+  // Solana serves free calls only (paid rails off): the ceiling caps no call there today.
+  const freeOnly = money.chainId !== null && !servesPaidCalls(money.chainId);
 
   const walletBlocker = useWalletBlocker(money.signerState, money.ownerShort);
   const disabledReason = readOnly
@@ -137,7 +149,9 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
       successDescription={
         next
           ? "It applies from the next payment. Next: let your agent pay under it."
-          : "It applies from the next payment. Payments may pause for about 30 seconds while the change settles."
+          : loweredNote && hasTightenDelay(tightenDelay)
+            ? `It applies from the next payment. ${loweredNote}`
+            : "It applies from the next payment. Payments may pause for about 30 seconds while the change settles."
       }
       doneAction={next ?? { label: "Done", onClick: () => onOpenChange(false) }}
     >
@@ -153,6 +167,17 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
       {current ? (
         <p className="text-body-xs text-03">
           Now: {formatLimit(money.escrow?.maxVoucherAmount)} a call · {formatLimit(money.escrow?.maxPerWindow)} per 24 hours.
+        </p>
+      ) : null}
+      {loweredNote ? (
+        <p className="text-body-13 text-02" data-testid="limits-tighten-delay">
+          {loweredNote}
+        </p>
+      ) : null}
+      {freeOnly && money.chainName ? (
+        <p className="text-body-13 text-warning-700" data-testid="escrow-free-calls-only">
+          {freeCallsOnlyText(money.chainName)} This ceiling only applies to paid calls, so it has no effect on this
+          chain for now.
         </p>
       ) : null}
     </WalletActionSheet>

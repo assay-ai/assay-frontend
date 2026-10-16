@@ -1,5 +1,6 @@
 "use client";
 
+import { freeFirstHint } from "@/features/provider-binding/free-first";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
@@ -172,6 +173,8 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
             ))}
           </Segmented>
           <p className="text-body-xs text-03">{PRICE_CHOICES.find((c) => c.value === form.choice)?.hint}</p>
+          {/* Free first, then paid: say how a free tier is used beside a paid one. */}
+          {freeFirstHint(mode) ? <p className="text-body-xs text-03">{freeFirstHint(mode)}</p> : null}
           {mode !== "FREE" ? (
             <Field
               label="Price per call"
@@ -207,7 +210,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
                 placeholder="No limit"
                 onChange={(event) => setExtra((current) => ({ ...current, freeBudget: event.target.value }))}
                 error={errors.freeBudget}
-                hint="Counted at your price. Once reached, free calls stop until tomorrow."
+                hint="Counted at your price. When it runs out, agents are told the free budget is used up and are offered the tool's paid option with its price."
               />
             </div>
           ) : null}

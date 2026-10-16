@@ -459,8 +459,12 @@ function toolRow(tool: DemoTool): CatalogueTool {
     fromPrice: cheapest(prices),
     price: dearest(prices),
     pricingMode: tool.pricingMode,
+    /* The demo's daily free allowance — the platform default — on a free-tier tool. */
+    freeCallsPerDay: tool.pricingMode === "FREE" || tool.pricingMode === "FREEMIUM" ? 100 : null,
     routable: tool.offers.length > 0,
     routableBindings: tool.offers.length,
+    /* Every demo offer carries a price, so each one can be charged — except on a FREE tool. */
+    paidBindings: tool.pricingMode === "FREE" ? 0 : tool.offers.length,
     unroutableReason: tool.unroutableReason ?? null,
     settlementChains: [DEMO_CHAIN_ID],
   };

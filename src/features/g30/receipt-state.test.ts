@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  COLLECTION_STATES,
   STATE_CARDS,
   canContestRejection,
   deriveReceiptState,
@@ -180,5 +181,79 @@ describe("notChargedStory — one story per not-charged class", () => {
 
   it("a settled free call is charged, not 'not charged'", () => {
     expect(deriveReceiptState(make({ status: "SETTLED", listedPrice: money("0"), withheld: money("0") }))).toBe("CHARGED");
+  });
+});
+
+const usd = (amount: string) => ({ amount, asset: "eip155:46630/erc20:0x1", decimals: 6 });
+
+function settledReceipt(overrides: Partial<Receipt> = {}): Receipt {
+  return {
+    intentId: "int_1",
+    toolId: "tool",
+    providerId: "prv",
+    classification: "DATA_RESULT",
+    status: "SETTLED",
+    listedPrice: usd("2500000"),
+    chargedPrice: usd("2500000"),
+    withheld: usd("0"),
+    verdict: { status: "PASS" },
+    stages: [],
+    policy: {},
+    sampling: {},
+    createdAt: "2026-10-16T00:00:00.000Z",
+    expiresAt: "2026-10-16T00:05:00.000Z",
+    updatedAt: "2026-10-16T00:01:00.000Z",
+    ...overrides,
+  };
+}
+
+describe("deriveReceiptState — collection", () => {
+  it("keeps an ordinary settled call CHARGED", () => {
+    expect(deriveReceiptState(settledReceipt())).toBe("CHARGED");
+    expect(deriveReceiptState(settledReceipt({ forfeited: false, debt: null }))).toBe("CHARGED");
+  });
+
+  it("says an open debt is not collected yet, though it is charged", () => {
+    expect(deriveReceiptState(settledReceipt({ debt: "OUTSTANDING" }))).toBe("DEBT_OUTSTANDING");
+  });
+
+  // Forfeited and written-off calls have chargedPrice 0 AND withheld 0: they
+  // are not the guarantee's NOT_CHARGED (which says the checks failed).
+  it("does not read a forfeited or written-off call as failed checks", () => {
+    const zero = { chargedPrice: usd("0"), withheld: usd("0") };
+    expect(deriveReceiptState(settledReceipt({ ...zero, forfeited: true }))).toBe("FORFEITED");
+    expect(deriveReceiptState(settledReceipt({ ...zero, debt: "WRITTEN_OFF" }))).toBe("DEBT_WRITTEN_OFF");
+    expect(deriveReceiptState(settledReceipt({ ...zero, debt: "VOIDED" }))).toBe("DEBT_VOIDED");
+  });
+
+  it("has a card for every collection state", () => {
+    for (const state of COLLECTION_STATES) {
+      expect(STATE_CARDS[state as keyof typeof STATE_CARDS].sentence.length).toBeGreaterThan(0);
+    }
+    expect(STATE_CARDS.DEBT_OUTSTANDING.sentence).toMatch(/paid calls are paused/);
+    expect(STATE_CARDS.DEBT_WRITTEN_OFF.sentence).toMatch(/provider was not paid/);
+    expect(STATE_CARDS.DEBT_WRITTEN_OFF.sentence).toMatch(/Paid calls stay paused until you settle it/);
+    expect(STATE_CARDS.DEBT_WRITTEN_OFF.sentence).toMatch(/You still owe it to resume paid calls/);
+    expect(STATE_CARDS.DEBT_WRITTEN_OFF.sentence).not.toMatch(/not charged/);
+    expect(STATE_CARDS.DEBT_VOIDED.sentence).toMatch(/You were not charged.*provider was not paid/);
+    expect(COLLECTION_STATES.has("DEBT_VOIDED")).toBe(true);
+  });
+});
+
+describe("receiptFlow — collection states", () => {
+  it("draws an open or written-off debt as still owed, never released", () => {
+    const debt = settledReceipt({ debt: "OUTSTANDING" });
+    expect(receiptFlow(debt, "DEBT_OUTSTANDING").map((n) => [n.label, n.amount ?? null])).toEqual([
+      ["Held", "$2.50"],
+      ["Check passed, payment not collected", null],
+      ["Still owed by you", "$2.50"],
+    ]);
+    const off = settledReceipt({ debt: "WRITTEN_OFF", chargedPrice: usd("0") });
+    expect(receiptFlow(off, "DEBT_WRITTEN_OFF").at(-1)?.label).toBe("Still owed by you");
+  });
+
+  it("draws a forfeited call as released in full, though withheld is zero", () => {
+    const forfeited = settledReceipt({ forfeited: true, chargedPrice: usd("0") });
+    expect(receiptFlow(forfeited, "FORFEITED").at(-1)).toMatchObject({ label: "Released to you", amount: "$2.50" });
   });
 });

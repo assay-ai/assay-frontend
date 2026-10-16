@@ -35,6 +35,8 @@ import {
   notChargedStory,
   receiptFlow,
   relevanceReached,
+  canContestRejection,
+  COLLECTION_STATES,
   STATE_CARDS,
   STATE_CARD_ORDER,
   chargedHeadline,
@@ -86,6 +88,10 @@ const OVERRIDABLE: ReceiptState[] = [
   "SYSTEM_ERROR",
   "REQUEST_ERROR",
   "EXPIRED",
+  "DEBT_OUTSTANDING",
+  "DEBT_WRITTEN_OFF",
+  "DEBT_VOIDED",
+  "FORFEITED",
 ];
 
 /** "11:42:07.221" — the Timeline's own format. */
@@ -213,7 +219,11 @@ function ReceiptPageContent() {
   const paid = formatMoney(receipt.chargedPrice, { decimals: 4 });
   const withheld = formatMoney(receipt.withheld, { decimals: 4 });
 
-  const finalNotCharged = isFinalNotCharged(state, receipt);
+  // Buyer debt, open or written off: served, not collected, still owed (the listed price).
+  const owedState = state === "DEBT_OUTSTANDING" || state === "DEBT_WRITTEN_OFF";
+  const owed = listed;
+  // A debt or a forfeit is not one of the "ended without a charge" outcomes.
+  const finalNotCharged = isFinalNotCharged(state, receipt) && !COLLECTION_STATES.has(state);
   // Every finished call that was not charged tells ONE story — the banner, the
   // money strip, the check rows and the details all read from it — so a voided
   // call can never say "No result recorded" beside "Check failed".
@@ -231,12 +241,26 @@ function ReceiptPageContent() {
   if (receipt.evaluatedAt) {
     events.push({ ...stamp(receipt.evaluatedAt), label: "Result checked", tone: "neutral" });
   }
-  if (receipt.settledAt) {
+  if (receipt.settledAt && state === "DEBT_OUTSTANDING") {
+    // Served and passed, but nothing has been collected yet: not "Settled".
+    events.push({
+      ...stamp(receipt.settledAt),
+      label: "Payment not collected yet",
+      meta: `${listed} still held, to settle`,
+      tone: "primary",
+    });
+  } else if (receipt.settledAt) {
     const charged = receipt.chargedPrice.amount !== "0";
     events.push({
       ...stamp(receipt.settledAt),
-      label: charged ? "Charged" : releasedLabel,
-      meta: charged ? paid : "not charged",
+      label: charged
+        ? "Charged"
+        : state === "DEBT_WRITTEN_OFF"
+          ? "Written off for the provider"
+          : COLLECTION_STATES.has(state)
+            ? "Closed, not collected"
+            : releasedLabel,
+      meta: charged ? paid : state === "DEBT_WRITTEN_OFF" ? `${listed} still owed` : "not charged",
       tone: charged ? "success" : "teal",
     });
   } else if (receipt.holdReleasedAt) {
@@ -308,8 +332,17 @@ function ReceiptPageContent() {
           </div>
           <div className="flex w-full items-end gap-3 tablet:w-auto tablet:shrink-0 tablet:gap-8">
             <Amount label="Listed price" value={listed} align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
-            <Amount label="You paid" value={paid} align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
-            <Amount label="Not charged" value={withheld} teal align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
+            <Amount
+              label={owedState ? "Owed" : "You paid"}
+              value={owedState ? owed : paid}
+              align="start"
+              className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
+            />
+            {/* `withheld` is what the guarantee kept back. A debt or a forfeit
+                is not that (both are zero there), so the figure is not shown. */}
+            {COLLECTION_STATES.has(state) ? null : (
+              <Amount label="Not charged" value={withheld} teal align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
+            )}
           </div>
         </section>
       ) : null}

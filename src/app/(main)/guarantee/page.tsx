@@ -133,6 +133,9 @@ export default function GuaranteePage() {
     { key: "listed", header: "Listed", width: 100, mono: true, cell: (r) => formatMoney(r.listed) },
     { key: "charged", header: "Charged", width: 100, mono: true, cell: (r) => formatMoney(r.charged) },
     { key: "notCharged", header: "Not charged", width: 110, mono: true, cell: (r) => formatMoney(r.notCharged) },
+    // Buyer debt: served, payment not collected yet — neither charged nor not charged.
+    { key: "owed", header: "Owed", width: 100, mono: true, cell: (r) => formatMoney(r.owed) },
+    { key: "inProgress", header: "In progress", width: 100, mono: true, cell: (r) => formatMoney(r.inProgress) },
     { key: "share", header: "Share", width: 70, mono: true, cell: (r) => sharePercent(r.notCharged, r.listed) ?? "—" },
   ];
 
@@ -223,6 +226,9 @@ export default function GuaranteePage() {
               </p>
               <p className="text-body-md text-02">
                 You paid {formatMoney(charged)} for {formatMoney(listed)} worth of calls
+                {isZeroMoney(data?.owed ?? null)
+                  ? ""
+                  : `, and you still owe ${formatMoney(data?.owed ?? null)} not collected yet`}
                 {percent ? ` — ${percent} was not charged.` : "."}
               </p>
             </div>
@@ -233,6 +239,16 @@ export default function GuaranteePage() {
                 segments={[
                   { label: "Charged", value: toDecimal(charged).toNumber(), amount: formatMoney(charged), tone: "primary" },
                   { label: "Not charged", value: toDecimal(withheldTotal).toNumber(), amount: formatMoney(withheldTotal), tone: "teal" },
+                  ...(isZeroMoney(data?.owed ?? null) || !data?.owed
+                    ? []
+                    : [
+                        {
+                          label: "Owed, not collected yet",
+                          value: toDecimal(data.owed).toNumber(),
+                          amount: formatMoney(data.owed),
+                          tone: "warning" as const,
+                        },
+                      ]),
                 ]}
               />
             ) : null}
@@ -340,13 +356,15 @@ export default function GuaranteePage() {
                         { label: "Listed", value: formatMoney(m.listed) },
                         { label: "Charged", value: formatMoney(m.charged) },
                         { label: "Not charged", value: formatMoney(m.notCharged), tone: "teal" },
+                        ...(isZeroMoney(m.owed) ? [] : [{ label: "Owed", value: formatMoney(m.owed) }]),
+                        ...(isZeroMoney(m.inProgress) ? [] : [{ label: "In progress", value: formatMoney(m.inProgress) }]),
                       ]}
                       meta={`${sharePercent(m.notCharged, m.listed) ?? "—"} not charged`}
                     />
                   ))}
                 </div>
                 <div className="hidden w-full overflow-x-auto tablet:block">
-                  <Table caption="Not charged, by month" className="min-w-[560px]" columns={monthColumns} rows={monthRows} />
+                  <Table caption="Not charged, by month" className="min-w-[760px]" columns={monthColumns} rows={monthRows} />
                 </div>
               </PanelBody>
             </Panel>

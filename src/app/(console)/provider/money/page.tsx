@@ -13,20 +13,22 @@ import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { assetScopeNote, foldNotCredited, rowsInAsset } from "@/features/call-classes/csv";
+import { assetScopeNote, foldClasses, foldNotCredited, observedTakeRate, rowsInAsset } from "@/features/call-classes/csv";
+import { classLabel } from "@/features/call-classes/labels";
+import { fromExport, fromLedger, takeCopy, type ReconSummary } from "@/features/call-classes/reconciliation";
 import { downloadCallsCsv, useCallsExport } from "@/features/call-classes/use-calls-export";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { lossOf } from "@/features/provider-penalties/model";
 import { usePenalties } from "@/features/provider-penalties/use-penalties";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
-import { earningsSplit, type EarningsSplit } from "@/features/provider-earnings/earned-tile";
+import { earningsSplit, unpaidLines, type EarningsSplit, type UnpaidLine } from "@/features/provider-earnings/earned-tile";
 import { callCount, notCreditedReason, partsThatAddUp } from "@/features/provider-earnings/not-credited";
 import { useChains } from "@/hooks/useChains";
 import type { Money, ProviderPayout } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { routes } from "@/libs/routes";
 import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
-import { getProviderEarnings } from "@/services/provider-reports.service";
+import { getProviderEarnings, getProviderReconciliation } from "@/services/provider-reports.service";
 import { chainIdOfAsset } from "@/utils/chain";
 import { formatMoney, toDecimal } from "@/utils/money";
 import { toast } from "@/utils/toast";
@@ -35,8 +37,9 @@ import { toast } from "@/utils/toast";
  * Money — "how much did I earn, and is it in my wallet?"
  *
  *  - This month: earned, as a split (in your wallet / Assay's fee / not
- *    credited). An amount that could not be collected from a buyer is named,
- *    never shown as "owed": nothing pays it out yet (business #13).
+ *    credited). Calls that passed but paid nothing (yet): waiting on the
+ *    buyer (buyer debt), never collected (written off) and forfeited, each
+ *    named and explained, never as owed by the platform.
  *  - Recent payments: one row per payment with its transaction on the explorer.
  *  - Not credited, grouped by plain reason (from the per-call export), with
  *    the tools it happened on.
@@ -102,7 +105,25 @@ export default function ProviderMoneyPage() {
     return parts.map((part, index) => (part ? { ...part, amount: shown[index] } : null));
   }, [notCredited.buckets]);
   const split = earningsSplit(earnings.data?.totals);
+  const unpaid = unpaidLines(earnings.data?.totals, (value) => formatMoney(value, { decimals: 4 }));
   const monthName = MONTH.format(now);
+
+  /*
+    The month's class breakdown and settlement from the ledger
+    (`GET /providers/me/reconciliation`), aggregated over every call: the
+    per-call CSV is capped, so its fold only stands in when this cannot be read.
+  */
+  const ledger = useQuery({
+    queryKey: ["provider", "reconciliation", month.from, month.to, displayAsset ?? null],
+    queryFn: () => getProviderReconciliation(displayAsset ? { ...month, asset: displayAsset } : month),
+    enabled: explainOpen && !assetPending,
+  });
+  const classes = React.useMemo(() => foldClasses(rows), [rows]);
+  const observedTake = React.useMemo(() => observedTakeRate(rows), [rows]);
+  const recon = React.useMemo(
+    () => (ledger.data ? fromLedger(ledger.data) : ledger.isError && calls.data ? fromExport(classes, observedTake) : null),
+    [ledger.data, ledger.isError, calls.data, classes, observedTake],
+  );
 
   const payoutItems = (assetPending ? [] : payoutsInAsset(payouts.data?.items ?? [], displayAsset)).slice(0, 8);
 
@@ -198,11 +219,34 @@ export default function ProviderMoneyPage() {
                 </dd>
               </div>
             </dl>
-            {split.uncollected ? (
-              <p className="text-body-xs text-03">
-                {formatMoney(split.uncollected, { decimals: 2 })} for {callCount(split.uncollectedCalls)} could not be collected from the buyer, so it is not in your wallet and not
-                counted above.
-              </p>
+            {/* Passed but not paid (yet): buyer debt, written off, forfeited. Never paid by the platform. */}
+            {unpaid.length > 0 ? (
+              <section
+                aria-label="Passed, but not paid"
+                data-testid="provider-unpaid"
+                className="flex flex-col gap-2.5 rounded-lg border border-01 px-3.5 py-3"
+              >
+                <div className="flex flex-col gap-0.5">
+                  <h2 className="text-label-13 text-01">Passed, but not paid</h2>
+                  <p className="text-body-xs text-03">
+                    Not in your wallet figure above. You are only ever paid from the buyer&apos;s escrow, never by the platform.
+                  </p>
+                </div>
+                <ul className="flex flex-col gap-2.5">
+                  {unpaid.map((line) => (
+                    <li key={line.key} className="flex flex-col gap-0.5">
+                      <p className="flex flex-wrap items-baseline justify-between gap-x-3 text-body-13">
+                        <span className="font-semibold text-01">{line.label}</span>
+                        <span className="font-mono text-mono-13 font-semibold text-01">
+                          {formatMoney(line.amount, { decimals: 4 })}
+                          <span className="ml-2 font-sans text-body-xs font-normal text-03">{callCount(line.calls)}</span>
+                        </span>
+                      </p>
+                      <p className="text-body-xs text-02">{line.explanation}</p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ) : null}
           </PanelBody>
         </Panel>
@@ -270,7 +314,10 @@ export default function ProviderMoneyPage() {
               );
             })
           ) : calls.data || !split.notCredited ? (
-            <p className="px-1 py-3 text-body-13 text-02">Every call this month was credited.</p>
+            <p className="px-1 py-3 text-body-13 text-02">
+              {/* No calls is not "every call credited" (BUG-R17-P-02). */}
+              {(earnings.data?.totals.calls ?? 0) === 0 ? "No calls this month yet." : "Every call this month was credited."}
+            </p>
           ) : (
             // The per-call file is unavailable: the earnings totals still say how much, per tool.
             (earnings.data?.groups ?? [])
@@ -309,6 +356,10 @@ export default function ProviderMoneyPage() {
         monthName={monthName}
         calls={earnings.data?.totals.calls ?? null}
         split={split}
+        unpaid={unpaid}
+        recon={recon}
+        reconLoading={ledger.isPending && !ledger.isError}
+        reconCapped={recon?.source === "export" && Boolean(calls.meta?.truncated)}
         loading={earnings.isPending}
         scopeNote={scopeNote}
         reasons={notCredited.buckets.map((bucket, index) => ({
@@ -360,6 +411,10 @@ function ExplainSheet({
   monthName,
   calls,
   split,
+  unpaid,
+  recon,
+  reconLoading,
+  reconCapped,
   reasons,
   loading,
   scopeNote,
@@ -369,6 +424,10 @@ function ExplainSheet({
   monthName: string;
   calls: number | null;
   split: EarningsSplit;
+  unpaid: readonly UnpaidLine[];
+  recon: ReconSummary | null;
+  reconLoading: boolean;
+  reconCapped: boolean;
   reasons: { key: string; title: string; calls: number; amount: Money | null }[];
   loading: boolean;
   scopeNote: string | null;
@@ -379,15 +438,12 @@ function ExplainSheet({
     ...(split.notCredited
       ? [{ label: "Not credited", detail: callCount(split.notCreditedCalls), amount: formatMoney(split.notCredited, { decimals: 2 }) }]
       : []),
-    ...(split.uncollected
-      ? [
-          {
-            label: "Could not be collected from the buyer",
-            detail: callCount(split.uncollectedCalls),
-            amount: formatMoney(split.uncollected, { decimals: 2 }),
-          },
-        ]
-      : []),
+    // Passed, but not paid (yet): never part of the wallet figure, never paid by the platform.
+    ...unpaid.map((line) => ({
+      label: line.label,
+      detail: `${callCount(line.calls)} · not in your wallet`,
+      amount: formatMoney(line.amount, { decimals: 2 }),
+    })),
   ];
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -432,6 +488,7 @@ function ExplainSheet({
             ) : null}
             <p className="text-body-xs text-03">The rest of the calls were free calls or are still being checked; they earn nothing yet.</p>
           </section>
+          <ReconSection recon={recon} loading={reconLoading} capped={reconCapped} />
           <section className="flex flex-col gap-2">
             <h3 className="text-label-13 text-01">Why your count and ours can differ</h3>
             <ul className="flex list-disc flex-col gap-1.5 pl-5">
@@ -452,5 +509,55 @@ function ExplainSheet({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * Every call this month by outcome, with the settlement that adds up:
+ * Gross − Platform take = Net = the Credited (net) total. From the ledger,
+ * which counts every call; from the per-call file only when the ledger cannot
+ * be read, and then said when the file is capped.
+ */
+function ReconSection({ recon, loading, capped }: { recon: ReconSummary | null; loading: boolean; capped: boolean }) {
+  if (loading) return <PageState kind="loading" rows={3} bare label="Loading every call this month" />;
+  if (!recon) return null;
+  const take = takeCopy(recon);
+  return (
+    <section className="flex flex-col gap-2" data-testid="provider-reconciliation">
+      <h3 className="text-label-13 text-01">Every call, by outcome: {callCount(recon.totalCalls)}</h3>
+      {capped ? (
+        <p className="text-body-xs text-warning-700">
+          The month&apos;s totals could not be read, so these are counted from the per-call file, which is capped: they cover
+          only the calls in the file, not the whole month.
+        </p>
+      ) : null}
+      <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01">
+        {recon.rows.map((row) => (
+          <li key={row.className} className="flex items-center justify-between gap-3 px-3 py-2.5">
+            <span className="min-w-0 flex-1 text-01">{classLabel(row.className)}</span>
+            <span className="text-body-xs text-03">
+              {callCount(row.calls)} · {(row.share * 100).toFixed(1)}%
+            </span>
+            <span className="w-20 text-right font-mono text-mono-12 text-01">{formatMoney(row.credited, { decimals: 2 })}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-body-xs text-03">The amounts are what reached you, net of the platform&apos;s take.</p>
+      <dl className="flex flex-col divide-y divide-01 rounded-lg border border-01">
+        {[
+          { label: "Gross", note: "price of the credited calls, before the platform's take", amount: formatMoney(recon.gross, { decimals: 2 }) },
+          { label: take.label, note: take.note, amount: recon.take ? `−${formatMoney(recon.take, { decimals: 2 })}` : "—" },
+          { label: "Net", note: "gross − take · what reached your wallet", amount: formatMoney(recon.net, { decimals: 2 }) },
+        ].map((line) => (
+          <div key={line.label} className="flex items-start justify-between gap-3 px-3 py-2.5">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <dt className="text-01">{line.label}</dt>
+              <span className="text-body-xs text-03">{line.note}</span>
+            </div>
+            <dd className="w-20 text-right font-mono text-mono-12 text-01">{line.amount}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }

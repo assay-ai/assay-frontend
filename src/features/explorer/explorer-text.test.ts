@@ -189,3 +189,33 @@ describe("Explorer list state in the URL", () => {
     expect(hasFreeCalls("PAID")).toBe(false);
   });
 });
+
+/**
+ * Free first, then paid — the intent of main's QuoteCell test (catalogue
+ * free-first and "up to only over paid bindings"), on this explorer's own
+ * price words.
+ */
+describe("free first, then paid", () => {
+  it("does not make a range of a free listing beside one paid listing", () => {
+    const range = priceRange(usd("20000"), [usd("0"), usd("20000")]);
+    expect(range?.differs).toBe(false);
+    expect(heldPriceSentence(range!)).toBeNull();
+  });
+
+  it("still reads a range over two paid listings", () => {
+    expect(priceRange(usd("20000"), [usd("10000"), usd("20000")])?.differs).toBe(true);
+  });
+
+  it("leads a FREEMIUM tool with its free calls per day, then the price", () => {
+    expect(freeTierLabel("FREEMIUM", 100)).toBe("Free · 100 calls/day");
+    const sentence = priceSentence({ mode: "FREEMIUM", price: usd("20000"), freeCallsPerDay: 150 });
+    expect(sentence).toMatch(/^The first 150 calls each day are free/);
+    expect(sentence).toMatch(/even when other providers charge/);
+    expect(sentence).toMatch(/after that \$0\.02 per call/);
+  });
+
+  it("says nothing free for a PAID tool", () => {
+    expect(freeTierLabel("PAID", 100)).toBeNull();
+    expect(priceSentence({ mode: "PAID", price: usd("20000") })).not.toMatch(/free/);
+  });
+});

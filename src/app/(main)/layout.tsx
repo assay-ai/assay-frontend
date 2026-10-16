@@ -19,6 +19,7 @@ import { WalletMenu } from "@/components/layout/wallet-menu";
 import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
 import { routes } from "@/libs/routes";
+import { BuyerDebtBanner } from "@/features/buyer-debt/debt-banner";
 import { getUnreadCount } from "@/services";
 import { useTheme } from "@/providers/ThemeProvider";
 
@@ -133,6 +134,8 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
         <BuyerSectionTabs section={sectionFor(pathname)} />
         {/* Shell level, above every buyer screen: see `features/account-block`. */}
         <AccountBlockBanner wrapperClassName="w-full px-4 pt-4 md:px-6" />
+        {/* Buyer debt: paid calls are paused until it is settled (`features/buyer-debt`). */}
+        <BuyerDebtBanner wrapperClassName="w-full px-4 pt-4 md:px-6" />
         {children}
       </main>
 

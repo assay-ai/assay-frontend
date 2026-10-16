@@ -16,7 +16,8 @@ import { recentMonths } from "@/features/buyer/period";
 import { MATCHES_SENTENCE, ReconcileNote, reconcileState } from "@/features/buyer/reconcile-note";
 import { readWithheld } from "@/features/buyer/wire";
 import { spendCsv } from "@/features/g30/spend-view";
-import type { ReceiptsSummary } from "@/features/g30/wire";
+import type { ReceiptsSummary, SummaryFigures } from "@/features/g30/wire";
+import type { Money } from "@/interfaces";
 import { useChains } from "@/hooks/useChains";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
@@ -39,6 +40,68 @@ import { formatCount } from "./format";
  */
 
 const MONTHS_BACK = 6;
+
+function hasMoney(money: Money | null | undefined): boolean {
+  return Boolean(money) && BigInt(money!.amount || "0") > 0n;
+}
+
+/** The summary's not-charged bucket; an older API sends only `withheldTotal`. */
+function notChargedOf(figures: SummaryFigures): Money {
+  return figures.notChargedTotal ?? figures.withheldTotal;
+}
+
+/**
+ * The month's figures, adding up like /spend's buckets:
+ * listed = paid + not charged + owed + in progress. The guarantee's withheld
+ * amount is a part of not charged, not all of it (final review M1).
+ */
+export function StatementFigures({ totals, withheldSub }: { totals: SummaryFigures; withheldSub: string | null }) {
+  const notChargedCalls = totals.notChargedCalls ?? totals.refundedCalls;
+  const owedCalls = totals.owedCalls ?? 0;
+  const inProgressCalls = totals.inProgressCalls ?? 0;
+  return (
+    <>
+      <KeyValueRow
+        label="Calls at listed price"
+        sub={plural(totals.calls, "call")}
+        value={formatMoney(totals.listedTotal, { decimals: 2 })}
+      />
+      <KeyValueRow
+        label={<Term k="not-charged">Not charged</Term>}
+        sub={[
+          plural(notChargedCalls, "call"),
+          hasMoney(totals.withheldTotal)
+            ? `includes ${formatMoney(totals.withheldTotal, { decimals: 2 })} withheld by the guarantee${withheldSub ? ` (${withheldSub})` : ""}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+        value={`−${formatMoney(notChargedOf(totals), { decimals: 2 })}`}
+        valueClassName="text-teal-600"
+      />
+      {owedCalls > 0 || hasMoney(totals.owedTotal) ? (
+        <KeyValueRow
+          label="Owed"
+          sub={`${plural(owedCalls, "call")} · served, payment not collected yet · settle it from the banner at the top`}
+          value={`−${formatMoney(totals.owedTotal, { decimals: 2 })}`}
+          valueClassName="text-warning-700"
+        />
+      ) : null}
+      {inProgressCalls > 0 || hasMoney(totals.inProgressTotal) ? (
+        <KeyValueRow
+          label="In progress"
+          sub={`${plural(inProgressCalls, "call")} · not finished yet`}
+          value={`−${formatMoney(totals.inProgressTotal, { decimals: 2 })}`}
+        />
+      ) : null}
+      <KeyValueRow
+        label="You paid"
+        value={<span className="text-heading-sm">{formatMoney(totals.chargedTotal, { decimals: 2 })}</span>}
+        divider={false}
+      />
+    </>
+  );
+}
 
 function plural(n: number, one: string): string {
   return `${formatCount(n)} ${n === 1 ? one : `${one}s`}`;
@@ -75,6 +138,11 @@ function StatementsContent() {
   const noResult = withheld?.withheld.buckets.find((b) => b.bucket === "PROVIDER_OR_PLATFORM_ERROR")?.calls ?? null;
 
   const totals = summary.data?.totals;
+  // Why calls were withheld, from `GET /withheld`: a part of Not charged, never all of it.
+  const withheldSub =
+    notChargedCalls !== null && failedChecks !== null && noResult !== null
+      ? `${formatCount(failedChecks)} failed our checks, ${formatCount(noResult)} had no usable result`
+      : null;
   const groups = summary.data?.groups ?? [];
 
   const download = React.useCallback(() => {
@@ -87,7 +155,18 @@ function StatementsContent() {
     });
     const t = summary.data.totals;
     const plainAmount = (m: typeof t.listedTotal) => formatMoney(m, { grouped: false, exact: true, symbol: "", decimals: m.decimals });
-    const total = ["Total", "", assetLabel, String(t.calls), plainAmount(t.listedTotal), plainAmount(t.chargedTotal), plainAmount(t.withheldTotal), String(t.refundedCalls)].join(",");
+    const total = [
+      "Total",
+      "",
+      assetLabel,
+      String(t.calls),
+      plainAmount(t.listedTotal),
+      plainAmount(t.chargedTotal),
+      plainAmount(notChargedOf(t)),
+      String(t.notChargedCalls ?? t.refundedCalls),
+      t.owedTotal ? plainAmount(t.owedTotal) : "0",
+      String(t.owedCalls ?? 0),
+    ].join(",");
     const csv = `${body}\n${total}`;
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
@@ -154,32 +233,7 @@ function StatementsContent() {
               {!totals || totals.calls === 0 ? (
                 <p className="py-3 text-body-13 text-02">No paid calls in {period.label}, so there is nothing to itemise.</p>
               ) : (
-                <>
-                  <KeyValueRow
-                    label="Calls at listed price"
-                    sub={plural(totals.calls, "call")}
-                    value={formatMoney(totals.listedTotal, { decimals: 2 })}
-                  />
-                  <KeyValueRow
-                    label={<Term k="not-charged">Not charged</Term>}
-                    sub={
-                      notChargedCalls !== null
-                        ? `${plural(notChargedCalls, "call")}${
-                            failedChecks !== null && noResult !== null
-                              ? `: ${formatCount(failedChecks)} failed our checks, ${formatCount(noResult)} had no usable result`
-                              : ""
-                          }`
-                        : "Calls that failed our checks or had no usable result"
-                    }
-                    value={`−${formatMoney(totals.withheldTotal, { decimals: 2 })}`}
-                    valueClassName="text-teal-600"
-                  />
-                  <KeyValueRow
-                    label="You paid"
-                    value={<span className="text-heading-sm">{formatMoney(totals.chargedTotal, { decimals: 2 })}</span>}
-                    divider={false}
-                  />
-                </>
+                <StatementFigures totals={totals} withheldSub={withheldSub} />
               )}
             </PanelBody>
           </Panel>
@@ -204,9 +258,15 @@ function StatementsContent() {
                       <span className="flex flex-wrap gap-x-4 gap-y-0.5 text-body-xs text-03 tablet:text-body-13">
                         <span>{plural(group.calls, "call")}</span>
                         <span>listed {formatMoney(group.listedTotal, { decimals: 2 })}</span>
-                        {/* Nothing withheld says nothing: a "−$0.00" line is noise. */}
-                        {BigInt(group.withheldTotal?.amount || "0") > 0n ? (
-                          <span className="text-teal-600">−{formatMoney(group.withheldTotal, { decimals: 2 })} not charged</span>
+                        {/* Nothing not charged says nothing: a "−$0.00" line is noise. */}
+                        {hasMoney(notChargedOf(group)) ? (
+                          <span className="text-teal-600">−{formatMoney(notChargedOf(group), { decimals: 2 })} not charged</span>
+                        ) : null}
+                        {group.owedTotal && hasMoney(group.owedTotal) ? (
+                          <span className="text-warning-700">{formatMoney(group.owedTotal, { decimals: 2 })} owed</span>
+                        ) : null}
+                        {group.inProgressTotal && hasMoney(group.inProgressTotal) ? (
+                          <span>{formatMoney(group.inProgressTotal, { decimals: 2 })} in progress</span>
                         ) : null}
                         <span className="font-semibold text-01">paid {formatMoney(group.chargedTotal, { decimals: 2 })}</span>
                       </span>

@@ -8,6 +8,7 @@ import * as React from "react";
 
 import { PageHeader } from "@/components/g31/chrome";
 import { EntityName } from "@/components/patterns/entity-name";
+import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
 import { EntityPicker } from "@/components/patterns/entity-picker";
 import { LocalTime } from "@/components/patterns/local-time";
 import { PageState } from "@/components/patterns/page-state";
@@ -166,6 +167,8 @@ function CallsList() {
             {calls.map((call) => {
               const outcome = callOutcome(call);
               const uncharged = notCharged(call.price, call.charged);
+              // Buyer debt or a forfeited payment: say why, beside the verdict.
+              const paymentNote = callPaymentNote(call);
               return (
                 <li key={call.intentId} className="border-b border-01 last:border-b-0">
                   <Link
@@ -189,6 +192,15 @@ function CallsList() {
                           </>
                         ) : null}
                       </span>
+                      {paymentNote ? (
+                        <span
+                          className={
+                            outcome === "owed" ? "text-body-xs text-warning-700" : "text-body-xs text-03"
+                          }
+                        >
+                          {paymentNote}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-0.5">
                       <span className="font-mono text-mono-13 font-semibold text-01">
@@ -196,9 +208,11 @@ function CallsList() {
                               ? "Free"
                               : outcome === "checking"
                                 ? `${formatMoney(call.price, { decimals: 4 })} held`
-                                : formatMoney(call.charged, { decimals: 4 })}
+                                : outcome === "owed"
+                                  ? `${formatMoney(call.price, { decimals: 4 })} owed`
+                                  : formatMoney(call.charged, { decimals: 4 })}
                       </span>
-                      {outcome !== "checking" && toDecimal(uncharged).gt(0) ? (
+                      {outcome !== "checking" && outcome !== "owed" && toDecimal(uncharged).gt(0) ? (
                         <span className="font-mono text-mono-xs text-teal-600">
                           {formatMoney(uncharged, { decimals: 4 })} not charged
                         </span>

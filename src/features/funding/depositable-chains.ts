@@ -1,4 +1,5 @@
 import type { Chain } from "@/interfaces/chain";
+import { freeCallsOnlyText, servesPaidCalls } from "@/libs/chains/paid-rails";
 import { isEvmChain } from "@/libs/chains/registry";
 import { findChain } from "@/services/chains.service";
 
@@ -66,7 +67,10 @@ export function depositableChains(
   if (chains.length === 0) return { kind: "no-chains" };
   if (account.status === "loading") return { kind: "reading-account" };
   if (account.status === "error" || account.chainId === null) {
-    return { kind: "unfiltered", chains };
+    // A deposit funds paid calls, so a chain that serves free calls only is not
+    // offered — unless it is all there is, where picking it says why.
+    const paid = chains.filter((chain) => servesPaidCalls(chain.chainId));
+    return { kind: "unfiltered", chains: paid.length > 0 ? paid : chains };
   }
 
   const linked = findChain(chains, account.chainId);
@@ -100,6 +104,11 @@ export function offeredChains(result: DepositableChains): readonly Chain[] {
  *    browser fills nonce, gas and fees itself, so without an RPC there is no
  *    transaction to sign.
  *
+ * ## A chain with no paid rail
+ *
+ * Solana serves free calls only today (`libs/chains/paid-rails.ts`). Escrow
+ * money is spent on paid calls alone, so a deposit there is refused here too.
+ *
  * Said while the buyer is still reading, not at the click — the same fact,
  * delivered before it costs them anything.
  *
@@ -116,8 +125,17 @@ export function depositUnavailableOn(
     readonly rpcConfigured: boolean;
   },
 ): string | null {
-  if (chainId === null || !isEvmChain(chainId)) return null;
+  if (chainId === null) return null;
   const name = chainName ?? chainId;
+  /*
+    Escrow money is spent only on paid calls, and a chain with no paid rail
+    (Solana today) refuses every one with `409 CHAIN_RAIL_NOT_OFFERED`. A
+    deposit there would sit unspent, so it is not offered.
+  */
+  if (!servesPaidCalls(chainId)) {
+    return `${freeCallsOnlyText(name)} Deposits on it are not offered for now.`;
+  }
+  if (!isEvmChain(chainId)) return null;
   if (!wallet.rpcConfigured) {
     return (
       `Deposits on ${name} aren't available right now. Money already in your escrow is safe and ` +

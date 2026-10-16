@@ -6,6 +6,8 @@ import type {
   ProviderEarningsQuery,
   ProviderQuality,
   ProviderQualityQuery,
+  ProviderReconciliation,
+  ProviderReconciliationQuery,
   ProviderTraffic,
   ProviderTrafficQuery,
 } from "@/interfaces";
@@ -130,6 +132,21 @@ async function lookUpEarningAssets(now: Date): Promise<string[]> {
   );
   const earned = candidates.filter((_, index) => reports[index].totals.calls > 0);
   return earned.length > 1 ? earned : [];
+}
+
+/**
+ * `GET /providers/me/reconciliation` — the class breakdown and settlement for a
+ * window, aggregated over every call (unlike the per-call CSV, which is capped).
+ * Like the earnings report it refuses a window spanning two assets unless
+ * `asset` names one, so callers pass the display asset.
+ */
+export function getProviderReconciliation(
+  query: ProviderReconciliationQuery
+): Promise<ProviderReconciliation> {
+  return api.get<ProviderReconciliation>(
+    "/providers/me/reconciliation",
+    query as unknown as Record<string, unknown>
+  );
 }
 
 /**
