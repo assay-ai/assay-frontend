@@ -52,7 +52,8 @@ export function useBuyerDebtsQuery() {
   return useQuery<BuyerDebts, ApiError>({
     queryKey: BUYER_DEBTS_KEY,
     queryFn: getBuyerDebts,
-    enabled: hasBlockStatusSession({ ready, authenticated, hasStoredToken }),
+    // The demo answers from fixtures with no session, like its other data.
+    enabled: demoEnabled() || hasBlockStatusSession({ ready, authenticated, hasStoredToken }),
     staleTime: 30_000,
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,

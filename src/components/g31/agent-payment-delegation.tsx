@@ -60,6 +60,7 @@ import type { BuyerEscrow, DelegateIntent, EscrowDelegate } from "@/interfaces";
 import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import { ApiError } from "@/libs/ApiClient";
 import { demoEnabled } from "@/libs/demo/demo-api";
+import { rememberDemoDelegateCaps } from "@/libs/demo/demo-stage";
 import { chainDisplayName, settlementSymbol } from "@/services/chains.service";
 import {
   createDelegateIntent,
@@ -981,6 +982,12 @@ function AuthorizeSheet({
       setBusy(true);
       await new Promise((resolve) => setTimeout(resolve, 700));
       setBusy(false);
+      // Shown until reload, so the new limits can be seen on the card.
+      rememberDemoDelegateCaps(delegate, {
+        maxVoucherAmount: String(preview.body.maxVoucherAmount),
+        maxPerWindow: String(preview.body.maxPerWindow),
+        validUntil: new Date(Number(preview.body.validUntil) * 1000).toISOString(),
+      });
       toast.success("Demo: nothing was signed. On a live site these limits would now apply.");
       onFinished();
       return;

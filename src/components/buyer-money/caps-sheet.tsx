@@ -18,6 +18,8 @@ import { applyLimitsSubmitted } from "@/features/escrow/after-set-limits";
 import { ESCROW_SUBMITTERS, runEscrowAction } from "@/features/escrow/relayed-submission";
 import type { EscrowLimitsBody } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
+import { demoEnabled } from "@/libs/demo/demo-api";
+import { rememberDemoEscrowCaps } from "@/libs/demo/demo-stage";
 import { freeCallsOnlyText, servesPaidCalls } from "@/libs/chains/paid-rails";
 import { getEscrowUnsettled } from "@/services/delegation.service";
 import { createEscrowLimitsIntent, submitEscrowLimits } from "@/services/escrow.service";
@@ -158,6 +160,13 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
       disabledReason={disabledReason}
       describeError={describeMoneyError}
       acknowledge={atRisk ? (strandAcknowledgement(unsettled.data?.unsettled) ?? undefined) : undefined}
+      onSuccess={() => {
+        // DEMO ONLY: nothing was signed; show the new ceiling until reload.
+        if (demoEnabled() && body) {
+          rememberDemoEscrowCaps(body);
+          void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+        }
+      }}
       successTitle="Account ceiling set"
       successDescription={
         next
