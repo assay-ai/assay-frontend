@@ -140,3 +140,46 @@ export function formatRelative(value: string | number | Date | null | undefined,
   const text = formatLocalDateTime(date, options);
   return dayKey(date, options.timeZone) === dayKey(new Date(now), options.timeZone) ? `${dayWord("Today", options)} ${text}` : text;
 }
+
+/** The wall clock of an instant in a zone, read back as if it were UTC: its offset is the difference. */
+function wallClockAsUtc(ms: number, timeZone?: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(ms));
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return Date.UTC(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second"));
+}
+
+/** The instant of 00:00 on a calendar day (UTC-based y/m/d) in a zone, DST included. */
+function zoneMidnight(utcDay: number, timeZone?: string): number {
+  let guess = utcDay - (wallClockAsUtc(utcDay, timeZone) - utcDay);
+  // Once more at the guess itself, so a day that starts on the other side of a DST change lands right.
+  guess = utcDay - (wallClockAsUtc(guess, timeZone) - guess);
+  return guess;
+}
+
+/**
+ * The reader's calendar day around `anchor`, as the half-open interval
+ * `[00:00, next 00:00)` in their zone — the same day boundary the "Today" /
+ * "Yesterday" labels on rows use, so a figure for "today" counts exactly the
+ * rows labelled today (review 2026-10-17 P3). `offsetDays: -1` is yesterday.
+ */
+export function localDayBounds(
+  anchor: Date | number,
+  options: { timeZone?: string; offsetDays?: number } = {},
+): { from: string; to: string } {
+  const at = typeof anchor === "number" ? anchor : anchor.getTime();
+  const [y, m, d] = dayKey(new Date(at), options.timeZone).split("-").map(Number);
+  const day = Date.UTC(y, m - 1, d + (options.offsetDays ?? 0));
+  return {
+    from: new Date(zoneMidnight(day, options.timeZone)).toISOString(),
+    to: new Date(zoneMidnight(day + 86_400_000, options.timeZone)).toISOString(),
+  };
+}
