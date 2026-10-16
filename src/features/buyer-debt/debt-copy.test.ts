@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BuyerDebt } from "@/interfaces/buyer-debt";
 import { ApiError } from "@/libs/ApiClient";
+import { timelineStamp } from "@/features/g30/receipt-collection";
+import { formatLocalDateTime } from "@/libs/local-time";
 
 import {
   callPaymentNote,
@@ -174,6 +176,16 @@ describe("the debt banner", () => {
     expect(debtDeadline("2026-10-17T05:30:00.000Z")).toBe("today 05:30 UTC (in 5h 30m)");
     expect(debtDeadline("2026-10-01T00:00:00.000Z")).toBe("Oct 1, 00:00 UTC");
     expect(deadlineCountdown("2026-10-01T00:00:00.000Z")).toBeNull();
+  });
+
+  it("names the day the way the receipt timeline does (the banner leaves out the seconds)", () => {
+    for (const iso of ["2026-09-15T08:40:00.000Z", "2026-10-17T05:30:00.000Z"]) {
+      const banner = debtDeadline(iso);
+      const timeline = timelineStamp(iso).time;
+      // "Sep 15, 08:40" in both; "today 05:30" mid-sentence in the banner, "Today 05:30:00" on the timeline.
+      expect(timeline.toLowerCase().startsWith(banner.split(" UTC")[0]!.toLowerCase())).toBe(true);
+    }
+    expect(formatLocalDateTime("2026-10-17T05:30:00.000Z", { alwaysDay: true })).toBe("Today 05:30");
   });
 });
 
