@@ -24,6 +24,7 @@ import { capsToForm } from "@/features/buyer-money/caps";
 import { AGENT_CLI_SOURCE } from "@/features/buyer-money/get-started";
 import { permissionExpiry } from "@/features/buyer-money/permission-expiry";
 import { type DelegateBinding, supportsDelegation } from "@/features/delegation/delegation-form";
+import { hasTightenDelay, tightenDelayLabel } from "@/features/delegation/unsettled";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { shortAddress } from "@/libs/chains/format";
@@ -59,12 +60,30 @@ function paysThrough(key: KeyRow, readiness: AgentReadiness | undefined): boolea
   );
 }
 
-/** What revoking an API key does — to calls, and whether paying stops too. */
-export function revokeKeyText(agent: AgentRow, key: KeyRow, readiness: AgentReadiness | undefined): string {
+/**
+ * What revoking an API key does — to calls, and whether paying stops too.
+ * Revoking the API key stops every call through Assay at once (paid calls need
+ * it); it does not touch the on-chain pay permission, which only Stop it
+ * paying removes, and on an escrow with the tighten delay (D-21) payments the
+ * agent already signed stay collectable for that delay after it.
+ */
+export function revokeKeyText(
+  agent: AgentRow,
+  key: KeyRow,
+  readiness: AgentReadiness | undefined,
+  tightenDelaySeconds?: number | null,
+): string {
   const name = agent.label ?? "The agent";
   const base = `${name} can no longer call any tool with this key, free or paid, from now on. This cannot be undone; you can create a new key.`;
   if (paysThrough(key, readiness)) {
-    return `${base} Paying stops too, because its payment key was set up on this key. The on-chain permission itself stays until you choose Stop it paying; after this it is listed lower on this page, under “Other keys that can still pay”.`;
+    const delay = hasTightenDelay(tightenDelaySeconds)
+      ? ` If you then Stop it paying, payments it already signed can still be collected for ${tightenDelayLabel(tightenDelaySeconds!)}.`
+      : "";
+    return (
+      `${base} So it makes no more paid calls through Assay, because its payment key was set up on this key. ` +
+      "Its on-chain permission to pay is not removed by this: Stop it paying removes it. After this the payment key is listed " +
+      `lower on this page, under “Other keys that can still pay”.${delay}`
+    );
   }
   if (key.delegateAccount) {
     return `${base} Its payment key was set up on this key, so it cannot be used to pay any more either.`;
@@ -178,7 +197,12 @@ export function AgentsView() {
         onOpenChange={(open) => !open && setRevoking(null)}
         tone="danger"
         title={`Revoke the API key “${lastRevoke?.key.name ?? ""}”?`}
-        description={lastRevoke ? revokeKeyText(lastRevoke.agent, lastRevoke.key, data.readiness[lastRevoke.agent.agentId]) : ""}
+        description={lastRevoke ? revokeKeyText(
+                lastRevoke.agent,
+                lastRevoke.key,
+                data.readiness[lastRevoke.agent.agentId],
+                data.delegatesQuery.data?.tightenDelaySeconds,
+              ) : ""}
         changes={
           lastRevoke && paysThrough(lastRevoke.key, data.readiness[lastRevoke.agent.agentId])
             ? [
