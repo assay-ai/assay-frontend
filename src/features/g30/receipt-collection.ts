@@ -1,4 +1,5 @@
 import { debtCauseText } from "@/features/call-classes/labels";
+import { formatLocalDateTime, utcTitle, type LocalTimeOptions } from "@/libs/local-time";
 import { formatMoney } from "@/utils/money";
 
 import type { ReceiptState } from "./receipt-state";
@@ -84,4 +85,33 @@ export function collectionView(state: CollectionState, receipt: Pick<Receipt, "l
         timeline: { label: "Not charged: provider forfeited", meta: "not charged" },
       };
   }
+}
+
+/**
+ * A receipt timeline stamp: the reader's local day and clock with seconds
+ * ("Today 00:40:07", "Sep 15, 02:10:05"), the exact UTC instant on hover.
+ * Every row carries its day, so a write-off a month after the call reads as
+ * such instead of a bare "02:11" (verify-r12 P3).
+ */
+export function timelineStamp(
+  iso: string,
+  options: Pick<LocalTimeOptions, "timeZone" | "now"> = {},
+): { time: string; timeTitle: string | undefined } {
+  return {
+    time: formatLocalDateTime(iso, { ...options, seconds: true, alwaysDay: true }),
+    timeTitle: utcTitle(iso, { seconds: true }),
+  };
+}
+
+/**
+ * When the collection row happened: for a written-off debt, the write-off
+ * itself from the debts list (the time the banner and the settle sheet show),
+ * else the receipt's own settlement time.
+ */
+export function collectionAt(
+  state: CollectionState,
+  settledAt: string,
+  debt: { state: string; writeOffAt: string } | null | undefined,
+): string {
+  return state === "DEBT_WRITTEN_OFF" && debt?.state === "WRITTEN_OFF" && debt.writeOffAt ? debt.writeOffAt : settledAt;
 }

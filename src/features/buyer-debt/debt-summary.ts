@@ -186,6 +186,8 @@ export interface SettleBlock {
   kind: "funds" | "per-call" | "window";
   /** One plain sentence with the exact amounts. */
   text: string;
+  /** What is missing, in a few words, for the sheet's summary: "$1.50 in your escrow". */
+  missing: string;
   /** The way out: a button label and where it goes. */
   action: { label: string; href: string };
 }
@@ -203,6 +205,19 @@ export interface SettleEscrowReading {
 
 const FUNDING_DEPOSIT = "/funding?action=deposit";
 const FUNDING_CAPS = "/funding?action=caps";
+
+/**
+ * The ceiling sheet's deep link, prefilled with the amount the settlement
+ * needs (`perCall` / `perDay`, plain decimals), so the buyer does not have to
+ * work it out again (verify-r12 P3). The sheet keeps it editable.
+ */
+export function capsHref(need: { perCall?: Decimal; perDay?: Decimal }): string {
+  const params = new URLSearchParams();
+  if (need.perCall) params.set("perCall", need.perCall.toString());
+  if (need.perDay) params.set("perDay", need.perDay.toString());
+  const query = params.toString();
+  return query ? `${FUNDING_CAPS}&${query}` : FUNDING_CAPS;
+}
 
 /**
  * Whether the escrow can pay these debts once they are signed, checked before
@@ -244,6 +259,7 @@ export function settleReadiness(
       blocks.push({
         kind: "funds",
         text: `Your escrow can pay ${fmt(available)} of the ${fmt(toDecimal(total))} owed. Add ${fmt(short)} first, or collecting it fails and the debt stays open.`,
+        missing: `${fmt(short)} in your escrow`,
         action: { label: `Add ${fmt(short)}`, href: FUNDING_DEPOSIT },
       });
     }
@@ -256,7 +272,8 @@ export function settleReadiness(
       blocks.push({
         kind: "per-call",
         text: `A payment of ${fmt(largest)} is over your per-call ceiling of ${fmt(ceiling)}. Raise the per-call ceiling to at least ${fmt(largest)} first.`,
-        action: { label: `Raise the per-call ceiling to ${fmt(largest)}`, href: FUNDING_CAPS },
+        missing: `a per-call ceiling of ${fmt(largest)} (now ${fmt(ceiling)})`,
+        action: { label: `Raise the per-call ceiling to ${fmt(largest)}`, href: capsHref({ perCall: largest }) },
       });
     }
   }
@@ -271,7 +288,8 @@ export function settleReadiness(
       blocks.push({
         kind: "window",
         text: `Only ${fmt(left)} of your 24-hour ceiling is left, and ${fmt(toDecimal(total))} is owed. Raise the 24-hour ceiling to at least ${fmt(needed)} first, or wait until the window refills.`,
-        action: { label: `Raise the 24-hour ceiling to ${fmt(needed)}`, href: FUNDING_CAPS },
+        missing: `${fmt(toDecimal(total))} of room in your 24-hour ceiling (${fmt(left)} left)`,
+        action: { label: `Raise the 24-hour ceiling to ${fmt(needed)}`, href: capsHref({ perDay: needed }) },
       });
     }
   }
@@ -329,6 +347,29 @@ export function settleEscrowCheck(
     });
   }
   return { kind: "ok", rows };
+}
+
+/**
+ * The settle sheet's summary while signing is blocked: what is owed, what is
+ * missing and the next step — never the outcome ("$0.00", "Resume in about a
+ * minute"), since nothing can be signed yet (verify-r12 P3).
+ */
+export function settleBlockedSummary(
+  settling: readonly Pick<BuyerDebt, "amount">[],
+  blocks: readonly SettleBlock[],
+): { label: string; value: string }[] {
+  if (blocks.length === 0 || settling.length === 0) return [];
+  const steps = blocks.map((block, index) =>
+    index === 0 ? block.action.label : block.action.label.charAt(0).toLowerCase() + block.action.label.slice(1),
+  );
+  return [
+    { label: "You owe", value: `${totalText(settling)}, still owed: nothing is signed yet` },
+    { label: "Missing", value: blocks.map((block) => block.missing).join("; ") },
+    {
+      label: "Next step",
+      value: `${steps.join(", then ")}, then come back to sign. Paid calls stay paused until it is settled.`,
+    },
+  ];
 }
 
 /**

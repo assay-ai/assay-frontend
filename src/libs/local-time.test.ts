@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { formatClock, formatLocalDate, formatLocalDateTime, formatRelative, utcTitle, zoneLabel } from "./local-time";
+import {
+  formatClock,
+  formatLocalDate,
+  formatLocalDateTime,
+  formatRelative,
+  localDayBounds,
+  utcTitle,
+  zoneLabel,
+} from "./local-time";
 
 const NOW = Date.parse("2026-10-15T12:00:00Z");
 const UTC = { timeZone: "UTC", now: NOW };
@@ -60,5 +68,32 @@ describe("formatRelative", () => {
   it("names today and falls back to the dated form", () => {
     expect(formatRelative("2026-10-16T08:05:00Z", { now, timeZone: "UTC" })).toBe("Today 08:05");
     expect(formatRelative("2026-10-14T08:05:00Z", { now, timeZone: "UTC" })).toBe("Oct 14, 08:05");
+  });
+});
+
+describe("localDayBounds (review 2026-10-17 P3)", () => {
+  it("is the reader's own calendar day, not the UTC one", () => {
+    // 01:00 on Oct 17 in GMT+9 is still Oct 16 in UTC.
+    const anchor = Date.parse("2026-10-16T18:00:00.000Z");
+    expect(localDayBounds(anchor, { timeZone: "Asia/Tokyo" })).toEqual({
+      from: "2026-10-16T17:00:00.000Z",
+      to: "2026-10-17T17:00:00.000Z",
+    });
+    expect(localDayBounds(anchor, { timeZone: "Asia/Tokyo", offsetDays: -1 })).toEqual({
+      from: "2026-10-15T17:00:00.000Z",
+      to: "2026-10-16T17:00:00.000Z",
+    });
+    expect(localDayBounds(anchor, { timeZone: "UTC" })).toEqual({
+      from: "2026-10-16T00:00:00.000Z",
+      to: "2026-10-17T00:00:00.000Z",
+    });
+  });
+
+  it("matches the Today label's boundary, west of Greenwich and across a DST change", () => {
+    const ny = localDayBounds(Date.parse("2026-11-01T12:00:00.000Z"), { timeZone: "America/New_York" });
+    // Nov 1, 2026 is the fall-back day: 25 hours long.
+    expect(ny).toEqual({ from: "2026-11-01T04:00:00.000Z", to: "2026-11-02T05:00:00.000Z" });
+    const now = Date.parse("2026-11-01T12:00:00.000Z");
+    expect(formatLocalDateTime(ny.from, { timeZone: "America/New_York", now, alwaysDay: true })).toBe("Today 00:00");
   });
 });

@@ -8,6 +8,7 @@ import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
 import { Button } from "@/components/ui/button";
 import { debtCauseText } from "@/features/call-classes/labels";
 import { useEntityNames } from "@/hooks/useEntityNames";
+import { demoDebtNote } from "@/libs/demo/demo-debts";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
@@ -43,6 +44,8 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
   const { own, others } = splitDebts(query.data);
   const all = [...own, ...others];
   const collecting = summary.kind === "collecting";
+  // DEMO ONLY: a `?debt=` picture follows the tab across pages; say it is one.
+  const demoNote = demoDebtNote();
 
   return (
     <div className={wrapperClassName}>
@@ -64,6 +67,11 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <p className="text-label-sm text-01 [overflow-wrap:anywhere]">{summary.title}</p>
             <p className="text-body-13 text-02 [overflow-wrap:anywhere]">{summary.detail}</p>
+            {demoNote ? (
+              <p className="text-body-xs text-03 [overflow-wrap:anywhere]" data-testid="buyer-debt-demo-note">
+                {demoNote}
+              </p>
+            ) : null}
             <details className="group text-body-13 text-02">
               <summary className="hit-area cursor-pointer select-none text-label-xs text-02 underline-offset-2 hover:underline">
                 Details ({all.length === 1 ? "1 call" : `${all.length} calls`})

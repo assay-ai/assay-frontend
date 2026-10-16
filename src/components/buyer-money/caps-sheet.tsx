@@ -6,7 +6,7 @@ import * as React from "react";
 import { formatLimit } from "@/components/g31/format";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
-import { capsSuccessText, capsToForm, ceilingBelowSpentNote, parseCaps } from "@/features/buyer-money/caps";
+import { capsSuccessText, capsToForm, ceilingBelowSpentNote, parseCaps, seedCaps } from "@/features/buyer-money/caps";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { windowRefillAt } from "@/features/buyer-money/refill";
 import {
@@ -41,9 +41,14 @@ export interface CapsSheetProps {
   onOpenChange: (open: boolean) => void;
   /** The next step after success, e.g. "Next: let your agent pay". */
   next?: { label: string; onClick: () => void };
+  /**
+   * What the form should start at least at, as plain decimals, e.g. the
+   * amount a debt needs (`/funding?action=caps&perCall=2.5`). Editable.
+   */
+  need?: { perCall?: string | null; perDay?: string | null };
 }
 
-export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
+export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
   const queryClient = useQueryClient();
   const readOnly = useAccountReadOnly();
   const money = useBuyerMoney();
@@ -53,7 +58,7 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
   // Seed only once the escrow is read, so the form starts from the real caps.
   if (open && !seeded && !money.escrowQuery.isPending) {
     setSeeded(true);
-    setValue(current ?? { perCall: "1", perDay: "20" });
+    setValue(seedCaps(current, need));
   }
   if (!open && seeded) setSeeded(false);
 
