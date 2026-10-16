@@ -9,17 +9,19 @@ import { freeFirstHint } from "./free-first";
  * whole tool paid.
  */
 describe("freeFirstHint", () => {
-  it("tells a FREE or FREEMIUM binding its free tier is used first beside paid providers", () => {
+  it("tells a FREE or FREEMIUM binding its free tier is used before any paid provider", () => {
     for (const mode of ["FREE", "FREEMIUM"] as const) {
       const hint = freeFirstHint(mode);
-      expect(hint).toMatch(/used first/);
-      expect(hint).toMatch(/paid providers/);
+      expect(hint).toMatch(/first, before any paid provider/);
     }
   });
 
-  it("says a FREE binding never takes a paid call, and a FREEMIUM one does past the quota", () => {
-    expect(freeFirstHint("FREE")).toMatch(/never takes a paid call/);
-    expect(freeFirstHint("FREEMIUM")).toMatch(/then paid calls/);
+  it("says a FREEMIUM binding charges its price past the free calls", () => {
+    expect(freeFirstHint("FREEMIUM")).toMatch(/then your price applies/);
+  });
+
+  it("stays one short sentence", () => {
+    for (const mode of ["FREE", "FREEMIUM"] as const) expect(freeFirstHint(mode)!.length).toBeLessThan(90);
   });
 
   it("says nothing for a PAID binding", () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, Plus } from "lucide-react";
+import { ExternalLink, Info, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -23,7 +23,7 @@ import {
 } from "@/features/provider-home/use-listing-progress";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
-import { earningsSplit } from "@/features/provider-earnings/earned-tile";
+import { earningsSplit, homeUnpaidNotes } from "@/features/provider-earnings/earned-tile";
 import type { BindingStatus, Money, ProviderEarnings, ToolBindingSummary } from "@/interfaces";
 import { routes } from "@/libs/routes";
 import { getProviderEarnings } from "@/services/provider-reports.service";
@@ -228,6 +228,10 @@ function EarningsPanel({ earnings, loading }: { earnings: ProviderEarnings | und
   const totals = earnings?.totals;
   if (!totals) return null;
   const split = earningsSplit(totals);
+  const unpaidNotes = homeUnpaidNotes(totals, (money) => formatMoney(money, { decimals: 4 }), {
+    money: "/provider/money#passed-not-paid",
+    stake: routes.stake(),
+  });
   const value = (money: Money | null) => (money ? toDecimal(money).toNumber() : 0);
   const segments = [
     { label: "In your wallet", value: value(split.inWallet), amount: formatMoney(split.inWallet, { decimals: 2 }), tone: "success" as const },
@@ -263,12 +267,27 @@ function EarningsPanel({ earnings, loading }: { earnings: ProviderEarnings | und
           <span className="font-mono text-heading-md text-01">{formatMoney(split.inWallet, { decimals: 2 })}</span>
         </div>
         {segments.length > 1 ? <MoneySplit segments={segments} /> : null}
-        {split.waitingOnBuyers ? (
-          <p className="text-body-xs text-03">
-            {formatMoney(split.waitingOnBuyers, { decimals: 2 })} more for {split.waitingOnBuyersCalls.toLocaleString("en-US")} call
-            {split.waitingOnBuyersCalls === 1 ? "" : "s"} is waiting on buyers: paid from their escrow once they settle, never by the
-            platform.
-          </p>
+        {/* Passed but not in the wallet: open buyer debt (nothing to do) and forfeits (keep the stake up). */}
+        {unpaidNotes.length > 0 ? (
+          <ul className="flex flex-col gap-1.5" data-testid="provider-home-unpaid">
+            {unpaidNotes.map((note) => {
+              const Icon = note.tone === "warning" ? TriangleAlert : Info;
+              return (
+                <li
+                  key={note.key}
+                  className={`flex items-start gap-1.5 text-body-xs ${note.tone === "warning" ? "text-warning-700" : "text-03"}`}
+                >
+                  <Icon aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+                  <span>
+                    {note.text}{" "}
+                    <Link href={note.link.href} className="font-medium underline underline-offset-2">
+                      {note.link.label}
+                    </Link>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
         ) : null}
       </PanelBody>
     </Panel>

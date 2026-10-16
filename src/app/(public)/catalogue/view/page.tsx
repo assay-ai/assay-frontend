@@ -4,7 +4,7 @@ import { ArrowLeft, Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { FailsOftenChip, Fact, FreeTierBadge, ObservedFailuresLabel, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { BuyerCosts } from "@/components/explorer/buyer-costs";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
 import { StartFreeCta } from "@/components/explorer/start-free";
@@ -14,13 +14,12 @@ import {
   checkSentences,
   failRateLabel,
   failsOften,
-  heldPriceSentence,
   notTakingPaidCalls,
   priceRange,
   routingNotes,
   formatCallPrice,
-  freeTierLabel,
-  priceSentence,
+  offerLine,
+  costSentence,
   smallestFreeAllowance,
   stakeSummary,
 } from "@/features/explorer/explorer-text";
@@ -66,7 +65,9 @@ function ToolPage() {
       ?.tools.find((t) => t.toolId === tool?.id);
   // A static export cannot set per-tool metadata; name the tool in the tab.
   useDocumentTitle(tool ? `${tool.name}: price and record — Assay` : null);
-  const freeAllowance = smallestFreeAllowance(serving.map((p) => listingOf(p.providerId)?.freeCallsPerAgentPerDay));
+  // The backend's own figure when the public API sends it; otherwise the smallest per-listing allowance.
+  const freeAllowance =
+    tool?.freeCallsPerDay ?? smallestFreeAllowance(serving.map((p) => listingOf(p.providerId)?.freeCallsPerAgentPerDay));
 
   if (tools.isPending) {
     return <PageState kind="loading" rows={4} label="Loading the tool" />;
@@ -96,15 +97,17 @@ function ToolPage() {
   const settles = tool.settlementChains ?? [];
   // What the providers charge, against what a call is held for (the dearest
   // provider that can take it now). See `priceRange`.
-  const range = priceRange(tool.price, [tool.fromPrice, ...serving.map((p) => listingOf(p.providerId)?.price)]);
-  const rangeLine = range ? heldPriceSentence(range) : null;
+  // "from" only over more than one listing that can be charged (`paidBindings`, when the API sends it).
+  const range = priceRange(
+    tool.price,
+    (tool.paidBindings ?? 2) > 1 ? [tool.fromPrice, ...serving.map((p) => listingOf(p.providerId)?.price)] : [],
+  );
 
   return (
     <>
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="break-all font-mono text-heading-md text-01">{tool.name}</h1>
-          <FreeTierBadge label={freeTierLabel(tool.pricingMode, freeAllowance)} />
           {tool.routable ? null : <UnavailableTag />}
         </div>
         {tool.description ? <p className="max-w-[760px] text-body-md text-02">{tool.description}</p> : null}
@@ -113,13 +116,10 @@ function ToolPage() {
       <div className="grid grid-cols-1 gap-4 tablet:grid-cols-2">
         <section className="flex flex-col gap-3 rounded-xl border border-01 bg-01 p-4 tablet:p-5">
           <h2 className="text-label-md text-01">What a call costs</h2>
-          <p className="font-mono text-mono-xl font-semibold text-01">
-            {range?.differs ? <span className="mr-1.5 font-sans text-body-13 font-normal text-03">from</span> : null}
-            {range ? formatCallPrice(range.from) : tool.price ? formatCallPrice(tool.price) : "—"}
-            {tool.price ? <span className="ml-1.5 font-sans text-body-13 font-normal text-03">per call</span> : null}
-          </p>
+          {/* One price line, free first: the free tier and the price together. */}
+          <OfferPrice size="lg" offer={offerLine({ mode: tool.pricingMode, range, freeCallsPerDay: freeAllowance })} />
           <p className="text-body-13 text-02">
-            {rangeLine ?? priceSentence({ mode: tool.pricingMode, price: tool.price, freeCallsPerDay: freeAllowance })}
+            {costSentence({ mode: tool.pricingMode, price: tool.price, range, freeCallsPerDay: freeAllowance })}
           </p>
           {settles.length > 0 ? (
             <p className="text-body-xs text-03">
