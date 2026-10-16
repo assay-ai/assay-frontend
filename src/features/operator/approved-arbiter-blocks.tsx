@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
 import { shortId } from "@/components/patterns/copy-chip";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/libs/ApiClient";
@@ -122,7 +122,7 @@ function ApprovedBlockRow({
             {block.decidedAt ? (
               <>
                 {" "}
-                <LocalTime value={block.decidedAt} midSentence />
+                <UtcTime value={block.decidedAt} midSentence />
               </>
             ) : null}
           </p>

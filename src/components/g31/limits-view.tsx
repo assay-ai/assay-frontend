@@ -13,7 +13,7 @@ import {
   useLimitsContext,
 } from "@/components/buyer-money/agent-limits";
 import { PauseAllCard } from "@/components/buyer-money/pause-all";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { plainActor } from "@/features/buyer-money/budget-form";
 import { ApiError } from "@/libs/ApiClient";
@@ -190,7 +190,7 @@ function History() {
               <li key={entry.id} className="flex flex-col gap-0.5 py-2">
                 <span className="text-body-13 text-01">{entry.changeReason ?? "Limits changed"}</span>
                 <span className="text-body-xs text-03">
-                  {plainActor(entry.changedBy)} · <LocalTime value={entry.changedAt} /> ({relativeTime(entry.changedAt)})
+                  {plainActor(entry.changedBy)} · <UtcTime value={entry.changedAt} /> ({relativeTime(entry.changedAt)})
                 </span>
               </li>
             ))}

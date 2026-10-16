@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
 import { formatLimit } from "@/components/g31/format";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PresetChips } from "@/components/patterns/preset-chips";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { StatusTimeline } from "@/components/patterns/status-timeline";
@@ -156,7 +156,7 @@ export function WithdrawSheet({
           "Your agents can pay again."
         ) : availableAt ? (
           <>
-            Next: claim it on the Funding page from <LocalTime value={availableAt} />. Your agents are paused until then.
+            Next: claim it on the Funding page from <UtcTime value={availableAt} />. Your agents are paused until then.
           </>
         ) : (
           "Next: claim it on the Funding page in about an hour. Your agents are paused until then."

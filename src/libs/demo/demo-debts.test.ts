@@ -59,29 +59,24 @@ describe("demo totals agree with the demo debt", () => {
     }
   });
 
-  it("counts a reader's calendar day as one demo day, not the two UTC days it straddles", async () => {
+  it("counts Overview's UTC today and yesterday as one demo day each", async () => {
     const { demoResponse } = await import("./demo-api");
+    const { utcDayBounds } = await import("@/libs/utc-time");
     const prev = process.env.NEXT_PUBLIC_DEMO_CHAINS;
     process.env.NEXT_PUBLIC_DEMO_CHAINS = "robinhood";
     try {
-      const now = new Date();
-      const utcToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-      const totals = (from: number, to: number) =>
+      const totals = (window: { from: string; to: string }) =>
         (
-          demoResponse("GET", "/receipts/summary", {
-            from: new Date(from).toISOString(),
-            to: new Date(to).toISOString(),
-            groupBy: "tool",
-          }) as { totals: { calls: number; chargedTotal: { amount: string } } }
+          demoResponse("GET", "/receipts/summary", { ...window, groupBy: "tool" }) as {
+            totals: { calls: number; chargedTotal: { amount: string } };
+          }
         ).totals;
-      const day = 86_400_000;
-      const hour = 3_600_000;
-      // The reader's today and yesterday, in a zone east and one west of Greenwich.
-      for (const offset of [7, -5]) {
-        const zoneToday = Math.floor((now.getTime() + offset * hour) / day) * day - offset * hour;
-        expect(totals(zoneToday, zoneToday + day)).toEqual(totals(utcToday, utcToday + day));
-        expect(totals(zoneToday - day, zoneToday)).toEqual(totals(utcToday - day, utcToday));
-      }
+      const now = Date.now();
+      const today = utcDayBounds(now);
+      const yesterday = utcDayBounds(now, { offsetDays: -1 });
+      const both = totals({ from: yesterday.from, to: today.to });
+      expect(totals(today).calls + totals(yesterday).calls).toBe(both.calls);
+      expect(today.from).toBe(yesterday.to);
     } finally {
       process.env.NEXT_PUBLIC_DEMO_CHAINS = prev;
     }

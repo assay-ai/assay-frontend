@@ -71,7 +71,7 @@ import {
 } from "@/services/delegation.service";
 import { getEscrow } from "@/services/escrow.service";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
-import { formatLocalDate } from "@/libs/local-time";
+import { formatDate } from "@/libs/utc-time";
 import { type BudgetBootstrap, BudgetFields, useBudgetDraft } from "@/components/buyer-money/budget-fields";
 import type { SpendPolicy } from "@/services/limits.service";
 import { toast } from "@/utils/toast";
@@ -1058,7 +1058,7 @@ function AuthorizeSheet({
     asset: escrow?.maxVoucherAmount?.asset ?? "",
     decimals,
   });
-  const isoSeconds = (seconds: number) => formatLocalDate(seconds * 1000);
+  const isoSeconds = (seconds: number) => formatDate(seconds * 1000);
 
   return (
     <Sheet open={open} onOpenChange={(next) => !next && !busy && onClose()}>
@@ -1098,7 +1098,7 @@ function AuthorizeSheet({
               <span className="text-body-xs text-03" data-testid="edit-delegate-current">
                 Now: up to {exact(current.maxVoucherAmount, unit)} a call and{" "}
                 {exact(current.maxPerWindow, unit)} per 24 hours, until{" "}
-                {formatLocalDate(current.validUntil)}.
+                {formatDate(current.validUntil)}.
               </span>
             ) : null}
           </div>
@@ -1131,7 +1131,7 @@ function AuthorizeSheet({
                     data-testid="edit-delegate-keep-expiry"
                     checked={form.keepExpiry === true}
                     onChange={(e) => change("keepExpiry", e.target.checked)}
-                    label={`Keep the current expiry (${formatLocalDate(current.validUntil)})`}
+                    label={`Keep the current expiry (${formatDate(current.validUntil)})`}
                   />
                   {form.keepExpiry && errors.validDays ? (
                     <span className="text-body-xs text-danger-500">{errors.validDays}</span>

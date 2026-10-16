@@ -12,7 +12,7 @@ import {
   PanelTitles,
 } from "@/components/ui/panel";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatLocalDateTime } from "@/libs/local-time";
+import { formatDateTime } from "@/libs/utc-time";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
 import { formatMoney } from "@/utils/money";
 
@@ -87,7 +87,7 @@ function subtitleFor(data: SlashProposalCaseDetail): string {
     parts.push(`window ${data.proposal.windowLabel}`);
 
   const subject = data.priorWindows.find((window) => window.isSubject);
-  if (subject) parts.push(`closed ${formatLocalDateTime(subject.closedAt)}`);
+  if (subject) parts.push(`closed ${formatDateTime(subject.closedAt)}`);
 
   // The design also reads "binding v3 · policy v3". The binding version is real
   // only when a change overlay exists (that is the only place a version pair

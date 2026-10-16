@@ -9,12 +9,12 @@ import { checklistProgress, defaultExpandedStep } from "./setup-checklist";
 import { nextDatedStepIndex } from "./status-timeline";
 
 const usd = (amount: string) => ({ amount, asset: "x", decimals: 6 });
-const UTC = { timeZone: "UTC", now: Date.parse("2026-10-15T12:00:00Z") };
+const UTC = { now: Date.parse("2026-10-15T12:00:00Z") };
 
 describe("capReading", () => {
   it("says what is left and when it refills", () => {
     const r = capReading({ used: usd("1540000"), limit: usd("2000000"), refillsAt: "2026-10-15T14:20:00Z" }, UTC);
-    expect(r.sentence).toBe("$0.46 left of $2.00 · full again ~14:20");
+    expect(r.sentence).toBe("$0.46 left of $2.00 · full again ~14:20 UTC");
     expect(r.level).toBe("ok");
     expect(Math.round(r.percent)).toBe(77);
   });
@@ -29,7 +29,7 @@ describe("capReading", () => {
   it("explains a full cap", () => {
     const r = capReading({ used: usd("2000000"), limit: usd("2000000"), refillsAt: "2026-10-16T00:00:00Z" }, UTC);
     expect(r.level).toBe("full");
-    expect(r.sentence).toBe("All $2.00 used. Paid calls are refused until it refills tomorrow 00:00.");
+    expect(r.sentence).toBe("All $2.00 used. Paid calls are refused until it refills tomorrow 00:00 UTC.");
   });
 
   it("explains being over the limit", () => {

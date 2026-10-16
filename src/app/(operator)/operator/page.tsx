@@ -6,7 +6,7 @@ import Link from "next/link";
 import * as React from "react";
 
 import { shortId } from "@/components/patterns/copy-chip";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -424,7 +424,7 @@ export default function OperatorHome() {
                       </span>
                       <span className="text-body-xs text-03">
                         {hold.reasons.map((reason) => operatorHoldReasonText(reason).replace(/\s*\([A-Z_]+\)$/, "")).join("; ")} · since{" "}
-                        <LocalTime value={hold.heldSince} />
+                        <UtcTime value={hold.heldSince} />
                       </span>
                     </li>
                   ))}

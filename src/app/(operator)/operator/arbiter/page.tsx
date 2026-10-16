@@ -19,7 +19,7 @@ import * as React from "react";
 
 import { CopyChip, shortId } from "@/components/patterns/copy-chip";
 import { useHandoff } from "@/components/patterns/handoff-record";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { ReasonChips } from "@/components/patterns/reason-chips";
 import { SignOrExport } from "@/components/patterns/sign-or-export";
@@ -81,7 +81,7 @@ import { ROBINHOOD_TESTNET_STAKE, explorerTxLink, stakeDeploymentFor } from "@/l
 import { routes } from "@/libs/routes";
 import { createArbiterRulingIntent, getArbiterTerms, getPlatformHealth, listArbiterDisputes } from "@/services/operator.service";
 import { cn } from "@/utils";
-import { formatClock } from "@/libs/local-time";
+import { formatClock } from "@/libs/utc-time";
 import { formatMoney } from "@/utils/money";
 
 import { Deadline } from "@/features/operator/deadline";
@@ -420,7 +420,7 @@ function ArbiterStatus({
         </Fact>
         <Fact label="Contracts">{terms.paused ? "Paused" : "Running"}</Fact>
         {chainState ? (
-          <Fact label="Last reconciled">{chainState.reconciledAt ? <LocalTime value={chainState.reconciledAt} /> : "never"}</Fact>
+          <Fact label="Last reconciled">{chainState.reconciledAt ? <UtcTime value={chainState.reconciledAt} /> : "never"}</Fact>
         ) : null}
       </dl>
     </details>
@@ -558,8 +558,8 @@ function DisputeRow({
             {handed ? (
               <p role="status" className="text-body-xs text-02">
                 {handed.kind === "file"
-                  ? `Ruling file downloaded here at ${formatClock(handed.at)} · waiting for the arbiter's signature`
-                  : `Ruling sent at ${formatClock(handed.at)} · waiting for the chain watcher`}
+                  ? `Ruling file downloaded here at ${formatClock(handed.at)} UTC · waiting for the arbiter's signature`
+                  : `Ruling sent at ${formatClock(handed.at)} UTC · waiting for the chain watcher`}
               </p>
             ) : null}
           </div>

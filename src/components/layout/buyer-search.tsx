@@ -7,7 +7,7 @@ import * as React from "react";
 import { shortId } from "@/components/patterns/copy-chip";
 import { Search } from "@/components/ui/search";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { formatRelative } from "@/libs/local-time";
+import { formatRelative } from "@/libs/utc-time";
 import { routes } from "@/libs/routes";
 import { listToolCalls, type ToolCall } from "@/services/tool-calls.service";
 import { cn } from "@/utils";

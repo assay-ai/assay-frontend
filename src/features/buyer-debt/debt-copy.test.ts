@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BuyerDebt } from "@/interfaces/buyer-debt";
 import { ApiError } from "@/libs/ApiClient";
 import { timelineStamp } from "@/features/g30/receipt-collection";
-import { formatLocalDateTime } from "@/libs/local-time";
+import { formatDateTime } from "@/libs/utc-time";
 
 import {
   callPaymentNote,
@@ -12,7 +12,7 @@ import {
   deadlineCountdown,
   debtDeadline,
   closeAccountHeldText,
-  debtLocalTime,
+  debtTime,
   debtOutstandingContext,
   debtRefusalSentence,
   debtRowText,
@@ -182,7 +182,7 @@ describe("the debt banner", () => {
       // "Sep 15, 08:40" in both; "today 05:30" mid-sentence in the banner, "Today 05:30:00" on the timeline.
       expect(timeline.toLowerCase().startsWith(banner.split(" UTC")[0]!.toLowerCase())).toBe(true);
     }
-    expect(formatLocalDateTime("2026-10-17T05:30:00.000Z", { alwaysDay: true })).toBe("Today 05:30");
+    expect(formatDateTime("2026-10-17T05:30:00.000Z", { alwaysDay: true })).toBe("Today 05:30 UTC");
   });
 });
 
@@ -251,16 +251,16 @@ describe("when a debt can be settled", () => {
     ).toBe(Date.parse("2026-10-17T10:20:00.000Z"));
   });
 
-  it("says from when, in local time, and why", () => {
+  it("says from when, in UTC, and why", () => {
     const at = "2026-10-17T10:30:00.000Z";
     expect(notYetReplaceableSentence(at)).toBe(
-      `You can settle this from ${debtLocalTime(at)} (the original payment must expire on chain first, ` +
+      `You can settle this from ${debtTime(at)} (the original payment must expire on chain first, ` +
         "so you never pay twice).",
     );
     expect(notYetReplaceableSentence(at, "it")).toMatch(/^you can settle it from /);
     expect(notYetReplaceableSentence(null)).toMatch(/^You can settle this in a few minutes \(/);
-    expect(debtLocalTime(at)).toMatch(/\d{2}:\d{2}/);
-    expect(debtLocalTime("soon")).toBe("soon");
+    expect(debtTime(at)).toMatch(/\d{2}:\d{2} UTC$/);
+    expect(debtTime("soon")).toBe("soon");
   });
 });
 

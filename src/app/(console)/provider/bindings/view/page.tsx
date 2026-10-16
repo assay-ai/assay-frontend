@@ -8,7 +8,7 @@ import * as React from "react";
 
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { CopyChip } from "@/components/patterns/copy-chip";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusTimeline, type StatusTimelineStep } from "@/components/patterns/status-timeline";
 import { Banner } from "@/components/ui/banner";
@@ -384,7 +384,7 @@ function OverviewContent() {
                   <div className="flex flex-col gap-0.5">
                     <dt className="text-body-xs text-03">Last call window opened</dt>
                     <dd className="text-body-13 text-01">
-                      <LocalTime value={window.openedAt} />
+                      <UtcTime value={window.openedAt} />
                     </dd>
                   </div>
                 ) : null}

@@ -481,7 +481,7 @@ export function resumesAfterSettling(data: BuyerDebts | null | undefined, settli
 }
 
 /**
- * The deadline for one debt, in the reader's time: "Settle by …" for an open
+ * The deadline for one debt, in UTC: "Settle by …" for an open
  * one, the write-off for a written-off one, `null` while it is collected.
  */
 export function debtDeadlineLine(debt: Pick<BuyerDebt, "state" | "writeOffAt">): string | null {

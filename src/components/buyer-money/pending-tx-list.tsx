@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Loader2, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import { settleByHash } from "@/features/buyer-money/deposit-flow";
 import type { PendingTx } from "@/features/buyer-money/pending-tx";
@@ -95,7 +95,7 @@ function PendingRow({ tx, onDone }: { tx: PendingTx; onDone: () => void }) {
               ? "We could not confirm this yet. Check it on the explorer; if the money left your wallet, contact support with that link."
             : state === "finishing"
               ? "Confirmed on chain. Adding it to your balance…"
-              : <>Sent <LocalTime value={new Date(tx.submittedAt).toISOString()} />. Waiting for the chain to confirm it.</>}
+              : <>Sent <UtcTime value={new Date(tx.submittedAt).toISOString()} />. Waiting for the chain to confirm it.</>}
         </span>
       </span>
       {tx.explorerUrl ? (

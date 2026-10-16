@@ -8,7 +8,7 @@ import * as React from "react";
 
 import { formatLimit } from "@/components/g31/format";
 import { CapMeter } from "@/components/patterns/cap-meter";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { MoneyFlow, MoneySplit } from "@/components/patterns/money-flow";
 import { PageState, Skeleton, SkeletonRows } from "@/components/patterns/page-state";
 import { StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
@@ -415,7 +415,7 @@ function EscrowCard({
 
       {escrow.observedAt ? (
         <p className="text-body-xs text-03">
-          Read from the chain <LocalTime value={escrow.observedAt} />.
+          Read from the chain <UtcTime value={escrow.observedAt} />.
         </p>
       ) : null}
     </section>
@@ -481,7 +481,7 @@ function DepositsList() {
                   <span className="flex min-w-0 flex-col">
                     <span className="font-mono text-mono-13 text-01">{formatMoney(d.settledAmount ?? d.requestedAmount)}</span>
                     <span className="text-body-xs text-03">
-                      <LocalTime value={d.createdAt} />
+                      <UtcTime value={d.createdAt} />
                     </span>
                   </span>
                   <span className="flex items-center gap-3">

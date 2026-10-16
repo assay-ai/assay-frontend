@@ -320,7 +320,7 @@ function when(iso: string | null, format: (iso: string) => string): string {
 
 /**
  * What THIS operator does next. `format` renders an instant for the sentence
- * (local time on screen; a fixed formatter in tests).
+ * (UTC on screen, labelled; a fixed formatter in tests).
  */
 export function caseNextStep(
   facts: CaseFacts,

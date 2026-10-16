@@ -8,7 +8,7 @@ import * as React from "react";
 
 import { DisplayAssetSelect, displayAssetLabel, useDisplayAsset } from "@/components/display-asset-select";
 import { CopyChip } from "@/components/patterns/copy-chip";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { MoneySplit, type MoneySplitSegment } from "@/components/patterns/money-flow";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
@@ -396,10 +396,10 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
       <span className="flex min-w-0 flex-1 flex-col">
         {/* A payout carries no tool or call count; the day of the run is what it is for. */}
         <span className="text-body-13 text-01">
-          Payout for calls settled on <LocalTime value={payout.createdAt} dateOnly />
+          Payout for calls settled on <UtcTime value={payout.createdAt} dateOnly />
         </span>
         <span className="text-body-xs text-03">
-          Sent to your wallet · <LocalTime value={payout.createdAt} withZone />
+          Sent to your wallet · <UtcTime value={payout.createdAt} />
         </span>
       </span>
       <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(payout.amount, { decimals: 2 })}</span>
@@ -519,7 +519,7 @@ function UnpaidRow({
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-01">
                     <span className="font-medium">{toolName(call.toolId)}</span>
-                    <LocalTime value={call.createdAt} className="text-03" />
+                    <UtcTime value={call.createdAt} className="text-03" />
                     <CopyChip value={call.callId} label="call id" />
                   </span>
                   <span className="font-mono text-mono-12 text-01">

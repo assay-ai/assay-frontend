@@ -1,7 +1,7 @@
 import { CircleCheck, FileDiff, Scale } from "lucide-react";
 import Link from "next/link";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import { routes } from "@/libs/routes";
 import { formatMoney, symbolForAsset } from "@/utils/money";
@@ -118,7 +118,7 @@ export function InboxItem({ item }: { item: NotificationItem }) {
           {formatNotificationTitle(item.title)}
         </p>
         <p className="break-words text-body-13 leading-[1.55] text-02 [overflow-wrap:anywhere]">{formatNotificationBody(item.body)}</p>
-        <LocalTime value={item.createdAt} withZone className="text-body-xs text-03" />
+        <UtcTime value={item.createdAt} className="text-body-xs text-03" />
       </div>
       {target ? (
         <Button size="sm" variant="secondary" asChild className="self-start tablet:self-center">

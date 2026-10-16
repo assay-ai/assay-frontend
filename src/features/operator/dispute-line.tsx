@@ -3,7 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import type { ArbiterDispute } from "@/interfaces/operator";
 import { routes } from "@/libs/routes";
@@ -76,7 +76,7 @@ export function DisputeLine({
     <>
       {row.disputedAt ? (
         <span className="text-body-xs text-03">
-          disputed <LocalTime value={row.disputedAt} dateOnly />
+          disputed <UtcTime value={row.disputedAt} dateOnly />
         </span>
       ) : null}
       <Deadline kind="dispute" until={row.expiresAt} from={row.disputedAt} now={now} />

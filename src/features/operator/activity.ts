@@ -117,9 +117,8 @@ export function activityIcon(entry: Pick<OverrideLogEntry, "code">): ActivityIco
 }
 
 /**
- * Entries grouped by the reader's local day, newest first as given. `dayOf`
- * turns a timestamp into the group's key and label (the page passes the
- * browser's zone; tests pass a fixed one). Pure.
+ * Entries grouped by day, newest first as given. `dayOf` turns a timestamp
+ * into the group's key and label (the page passes `utcDay`, the UTC day). Pure.
  */
 export function groupByDay<T extends Pick<OverrideLogEntry, "createdAt">>(
   rows: readonly T[],

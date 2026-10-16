@@ -11,7 +11,7 @@ import { GetStarted, useGetStartedShown } from "@/components/buyer-money/get-sta
 import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
 import { Button } from "@/components/ui/button";
 import { EntityName } from "@/components/patterns/entity-name";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState, Skeleton, SkeletonRows } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -46,7 +46,6 @@ import { useOverview, type NotificationRow } from "@/features/buyer/use-overview
 import type { FullBalance } from "@/features/g30/balance";
 import { useChainName } from "@/hooks/useChainName";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { zoneLabel } from "@/libs/local-time";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { formatMoney, notCharged, toDecimal } from "@/utils/money";
@@ -299,9 +298,9 @@ export default function OverviewPage() {
           value={data ? formatMoney(data.todayCharged) : "—"}
           sub={
             data
-              ? // The reader's own day, the one the rows below call "Today": say which zone.
+              ? // The UTC day, the one the rows below call "Today": say so.
                 // The count is the charged calls, the same calls as the amount; an owed one is named apart.
-                `${formatCount(data.todayCalls)} ${data.todayCalls === 1 ? "call" : "calls"} since 00:00 ${zoneLabel(null)}${
+                `${formatCount(data.todayCalls)} ${data.todayCalls === 1 ? "call" : "calls"} since 00:00 UTC${
                   data.todayOwed
                     ? ` · ${data.todayOwedCalls > 0 ? `${formatCount(data.todayOwedCalls)} owed` : "owed"} (${formatMoney(data.todayOwed)}), not collected`
                     : ""
@@ -385,7 +384,7 @@ export default function OverviewPage() {
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <p className="text-body-sm text-01">{note.title}</p>
                       <p className="text-body-xs text-03">
-                        <LocalTime value={note.createdAt} />
+                        <UtcTime value={note.createdAt} />
                       </p>
                     </div>
                     {action ? (
@@ -468,7 +467,7 @@ export default function OverviewPage() {
                             <StatusChip status={outcome} />
                             <span>
                               {outcome === "checking" ? "started " : null}
-                              <LocalTime value={call.createdAt} relative />
+                              <UtcTime value={call.createdAt} relative />
                             </span>
                           </span>
                           {paymentNote && outcome !== "owed" ? (

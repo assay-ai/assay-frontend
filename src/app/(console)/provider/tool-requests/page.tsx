@@ -5,7 +5,7 @@ import { Send } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { replyBadge, TOOL_REQUEST_STATUS_LABEL } from "@/features/provider-tool-requests/due";
@@ -87,7 +87,7 @@ export default function ToolRequestsPage() {
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span className="truncate text-label-sm text-01">{request.title}</span>
                     <span className="text-body-xs text-03">
-                      Sent <LocalTime value={request.createdAt} />
+                      Sent <UtcTime value={request.createdAt} />
                     </span>
                   </span>
                   <span className="flex flex-wrap items-center gap-2">

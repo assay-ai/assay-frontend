@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Loader2, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import { createPendingStore } from "@/hooks/usePendingTransactions";
 import { readReceiptStatus } from "@/libs/chains/evm/deposit-transaction";
@@ -96,7 +96,7 @@ function PendingRow({ tx, onDone }: { tx: ProviderPendingTx; onDone: () => void 
             "We could not confirm this yet. Check it on the explorer before you send it again."
           ) : (
             <>
-              Sent <LocalTime value={new Date(tx.submittedAt).toISOString()} />. {WAITING[tx.kind]}
+              Sent <UtcTime value={new Date(tx.submittedAt).toISOString()} />. {WAITING[tx.kind]}
             </>
           )}
         </span>

@@ -8,7 +8,7 @@ import * as React from "react";
 import { approverNames } from "@/components/patterns/approval-footer";
 import { ChangeInline } from "@/components/patterns/change-rows";
 import { ConfirmSheet, type ConfirmOutcome } from "@/components/patterns/confirm-sheet";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -237,7 +237,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
           rejectedBy: approval.rejectedBy ? nameOf(approval.rejectedBy) : null,
           requestedBy: approval.rejectedBy && isWithdrawn(approval) ? nameOf(approval.rejectedBy) : approval.requestedBy,
         })}{" "}
-        · <LocalTime value={approval.decidedAt ?? approval.expiresAt} /> ·{" "}
+        · <UtcTime value={approval.decidedAt ?? approval.expiresAt} /> ·{" "}
         <Link href={approvalActivityHref(approval)} className="hit-area text-primary-700 hover:underline">
           {/* Not "History": that is the tab this row sits under. */}
           See in Activity
@@ -247,7 +247,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
       <>{waitingFor}</>
     ) : (
       <>
-        {nameOf(approval.requestedBy)} · asked <LocalTime value={approval.createdAt} midSentence />
+        {nameOf(approval.requestedBy)} · asked <UtcTime value={approval.createdAt} midSentence />
         {/* Who must approve, visible without a hover (operator review 2026-10-16b, P1-8). */}
         {mode === "other" ? ` · ${waitingFor}` : pending ? ` · ${needs.charAt(0).toLowerCase()}${needs.slice(1)}` : null}
       </>

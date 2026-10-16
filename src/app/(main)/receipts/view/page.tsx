@@ -7,7 +7,7 @@ import * as React from "react";
 
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { EntityName } from "@/components/patterns/entity-name";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { MoneyFlow } from "@/components/patterns/money-flow";
 import { PageState } from "@/components/patterns/page-state";
 import {
@@ -293,7 +293,7 @@ function ReceiptPageContent() {
         <h1 className="break-all font-mono text-heading-md text-01">{names.name("tool", receipt.toolId)}</h1>
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-13 text-03">
           {/* Day + HH:MM in UTC, labelled, as the debt banner ("Today 07:32 UTC", "Sep 15, 08:40 UTC"). */}
-          <LocalTime value={receipt.createdAt} alwaysDay utc />
+          <UtcTime value={receipt.createdAt} alwaysDay />
           <span aria-hidden="true">·</span>
           <span>{providerName}</span>
           <span aria-hidden="true">·</span>

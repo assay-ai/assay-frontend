@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { CursorPage, Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { localDayBounds } from "@/libs/local-time";
+import { utcDayBounds } from "@/libs/utc-time";
 import {
   getBalances,
   getHolds,
@@ -52,7 +52,7 @@ export interface OverviewData {
   holds: HoldRow[];
   withheld: WithheldForAsset | null;
   monthListed: Money | null;
-  /** Charged since 00:00 in the reader's zone (`localDayBounds`), the day the rows call "Today". */
+  /** Charged since 00:00 UTC (`utcDayBounds`), the day the rows call "Today". */
   todayCharged: Money | null;
   /** Owed today (buyer debt not collected), shown beside the charged figure. */
   todayOwed: Money | null;
@@ -121,12 +121,11 @@ export function useOverview(anchor: Date, assetKey: string | null = null): Overv
 
   const month = useMemo(() => monthPeriod(anchor), [anchor]);
   const days = useMemo(() => recentDays(anchor, 7), [anchor]);
-  // The reader's own day, the boundary the Recent calls rows' "Today" /
-  // "Yesterday" labels use: a UTC day put calls labelled "Yesterday" under
-  // "Spent today" east of Greenwich (review 2026-10-17 P3). The API filters
-  // `[from, to)` by instant, so any zone's day is one exact window.
-  const today = useMemo(() => localDayBounds(anchor), [anchor]);
-  const yesterday = useMemo(() => localDayBounds(anchor, { offsetDays: -1 }), [anchor]);
+  // The UTC day, the boundary the Recent calls rows' "Today" / "Yesterday"
+  // labels use and the backend groups by, so "Spent today" counts exactly the
+  // rows labelled today (review 2026-10-17 P3).
+  const today = useMemo(() => utcDayBounds(anchor), [anchor]);
+  const yesterday = useMemo(() => utcDayBounds(anchor, { offsetDays: -1 }), [anchor]);
 
   useEffect(() => {
     let cancelled = false;

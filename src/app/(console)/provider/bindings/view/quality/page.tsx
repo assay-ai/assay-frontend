@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
@@ -190,7 +190,7 @@ function QualityContent() {
               <span className="text-body-xs opacity-80">{windowRange(current)}</span>
             ) : current ? (
               <span className="text-body-xs opacity-80">
-                This window closes by <LocalTime value={current.deadlineAt} withZone />, or sooner once enough calls are checked.
+                This window closes by <UtcTime value={current.deadlineAt} />, or sooner once enough calls are checked.
               </span>
             ) : null}
           </section>
@@ -299,7 +299,7 @@ function QualityContent() {
                           className="flex flex-col gap-1 py-3 hover:bg-02 tablet:flex-row tablet:items-center tablet:gap-4"
                         >
                           <span className="w-36 shrink-0 text-body-xs text-03">
-                            <LocalTime value={item.createdAt} />
+                            <UtcTime value={item.createdAt} />
                           </span>
                           <span className={cn("w-fit shrink-0 rounded-full px-2 py-0.5 text-label-xs", chip.className)}>{chip.label}</span>
                           <span className="min-w-0 flex-1 truncate text-body-13 text-02">

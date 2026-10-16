@@ -1,5 +1,5 @@
 import { DASH } from "@/features/g34a/stats";
-import { formatLocalDateTime } from "@/libs/local-time";
+import { formatDateTime } from "@/libs/utc-time";
 import type { ToolRequest } from "@/interfaces/provider-tool-requests";
 
 /**
@@ -21,7 +21,7 @@ import type { ToolRequest } from "@/interfaces/provider-tool-requests";
 export function toolRequestStateLine(request: ToolRequest): string {
   switch (request.status) {
     case "OPEN":
-      return `first response due ${formatLocalDateTime(request.firstResponseDueAt)}`;
+      return `first response due ${formatDateTime(request.firstResponseDueAt)}`;
     case "ACKNOWLEDGED":
       return "acknowledged — not yet decided";
     case "ACCEPTED":

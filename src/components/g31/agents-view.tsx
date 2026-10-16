@@ -14,7 +14,7 @@ import { limitLines } from "@/features/buyer-money/spending-limits";
 import { CapMeter } from "@/components/patterns/cap-meter";
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { CopyChip } from "@/components/patterns/copy-chip";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
@@ -405,7 +405,7 @@ function AgentCard({
                 </div>
               ) : null}
               <p className="text-body-xs text-03">
-                Allowed to pay until <LocalTime value={grant.validUntil} dateOnly />. Stop it paying removes that permission; its API key
+                Allowed to pay until <UtcTime value={grant.validUntil} dateOnly />. Stop it paying removes that permission; its API key
                 keeps working for free calls.
               </p>
               <SpendingLimitsActions ctx={ctx} agent={agent} readiness={readiness} onChanged={onChanged} />

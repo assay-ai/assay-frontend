@@ -5,7 +5,7 @@ import * as React from "react";
 
 import { formatLimit } from "@/components/g31/format";
 import type { Money } from "@/interfaces";
-import { formatLocalDateTime, utcTitle, type LocalTimeOptions } from "@/libs/local-time";
+import { formatDateTime, utcTitle, type TimeOptions } from "@/libs/utc-time";
 import { cn } from "@/utils";
 import { toDecimal } from "@/utils/money";
 
@@ -58,16 +58,16 @@ export interface CapReading {
 }
 
 /** Pure: the sentence and level, so every screen says the same words. */
-export function capReading(input: CapSentenceInput, options: LocalTimeOptions = {}): CapReading {
+export function capReading(input: CapSentenceInput, options: TimeOptions = {}): CapReading {
   if (!input.limit) {
     return { level: "unset", percent: 0, sentence: "No limit set yet, so this cannot pay. Set one to start." };
   }
   const cap = input.limit;
   const used = toDecimal(shownUsed(input.used, cap));
   const limit = toDecimal(cap);
-  // "~14:20" for today; "Tomorrow 00:00" / "Oct 20, 14:20" read better without the tilde.
-  const at = input.refillsAt ? formatLocalDateTime(input.refillsAt, options) : null;
-  const when = at && !at.includes(" ") ? `~${at}` : at?.replace(/^(Yesterday|Tomorrow)/, (word) => word.toLowerCase()) ?? null;
+  // "~14:20 UTC" for today; "Tomorrow 00:00 UTC" / "Oct 20, 14:20 UTC" read better without the tilde.
+  const at = input.refillsAt ? formatDateTime(input.refillsAt, options) : null;
+  const when = at && /^\d{2}:\d{2} UTC$/.test(at) ? `~${at}` : at?.replace(/^(Yesterday|Tomorrow)/, (word) => word.toLowerCase()) ?? null;
   const consequence = input.consequence ?? "Paid calls are refused";
   const money = (value: Decimal): string =>
     formatLimit({ amount: value.mul(new Decimal(10).pow(cap.decimals)).toFixed(0), asset: cap.asset, decimals: cap.decimals });
@@ -122,10 +122,7 @@ export interface CapMeterProps extends CapSentenceInput {
 }
 
 export function CapMeter({ label, used, limit, refillsAt, consequence, refillHint, className }: CapMeterProps) {
-  // Local time only after mount: the static export has no time zone.
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
-  const reading = capReading({ used, limit, refillsAt, consequence, refillHint }, mounted ? {} : { timeZone: "UTC" });
+  const reading = capReading({ used, limit, refillsAt, consequence, refillHint });
   const alarm = reading.level === "full" || reading.level === "over" || reading.level === "none";
   const muted = reading.level === "unset";
 

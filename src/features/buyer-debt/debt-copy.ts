@@ -1,8 +1,9 @@
 import { shortToolId } from "@/components/g31/use-tool-names";
 import { debtCauseText } from "@/features/call-classes/labels";
 import { formatRemaining } from "@/hooks/useCountdown";
-import type { BuyerDebt, BuyerDebtState, CallDebt } from "@/interfaces/buyer-debt";
-import { formatUtcDateTime } from "@/libs/local-time";
+import { PAYMENT_DEBT_NOT_YET_REPLACEABLE, type BuyerDebt, type BuyerDebtState, type CallDebt } from "@/interfaces/buyer-debt";
+import { settleDebtErrorSentence as settleDebtErrorSentenceInZone } from "@/libs/buyer-debt";
+import { formatDateTime } from "@/libs/utc-time";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -36,8 +37,8 @@ export function deadlineCountdown(iso: string, options: DeadlineOptions = {}): s
 export function debtDeadline(iso: string, options: DeadlineOptions = {}): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  // Always UTC, labelled: the money screens' convention (`local-time.ts`).
-  const when = formatUtcDateTime(date, { ...options, alwaysDay: true, midSentence: true });
+  // Always UTC, labelled, like every time on screen (`utc-time.ts`).
+  const when = formatDateTime(date, { ...options, alwaysDay: true, midSentence: true });
   const countdown = deadlineCountdown(iso, options);
   return countdown ? `${when} (${countdown})` : when;
 }
@@ -207,13 +208,37 @@ export function settledToast(remaining: number): string {
     : `Signed. ${remaining} more call${remaining === 1 ? " is" : "s are"} still to settle before paid calls resume.`;
 }
 
-export {
-  debtLocalTime,
-  debtOutstandingContext,
-  debtRefusalSentence,
-  notYetReplaceableSentence,
-  settleDebtErrorSentence,
-} from "@/libs/buyer-debt";
+export { debtOutstandingContext, debtRefusalSentence } from "@/libs/buyer-debt";
+
+/** "Oct 17, 14:05 UTC" (day-relative near now); the text unchanged when it is not a time. */
+export function debtTime(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? iso : formatDateTime(date, { alwaysDay: true, midSentence: true });
+}
+
+/**
+ * Why a debt cannot be settled yet, with the time it can, in UTC. Replaces the
+ * one in `libs/buyer-debt.ts`, which formats in the reader's zone and stays as
+ * it is (a signing file, kept identical to main).
+ */
+export function notYetReplaceableSentence(
+  replaceableAt: string | null | undefined,
+  subject: "this" | "it" | "the first" = "this",
+): string {
+  const from = replaceableAt ? `from ${debtTime(replaceableAt)}` : "in a few minutes";
+  const you = subject === "this" ? "You" : "you";
+  return `${you} can settle ${subject} ${from} (the original payment must expire on chain first, so you never pay twice).`;
+}
+
+/** `libs/buyer-debt`'s `settleDebtErrorSentence`, with the not-yet-settleable time in UTC. */
+export function settleDebtErrorSentence(error: unknown): string | null {
+  const err = error as { code?: string; context?: Record<string, unknown> } | null | undefined;
+  if (err?.code === PAYMENT_DEBT_NOT_YET_REPLACEABLE) {
+    const at = err.context?.replaceableAt;
+    return `${notYetReplaceableSentence(typeof at === "string" ? at : null)} Nothing was signed.`;
+  }
+  return settleDebtErrorSentenceInZone(error);
+}
 
 /**
  * The debts this session can settle: the session account's own, oldest first.

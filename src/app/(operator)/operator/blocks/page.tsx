@@ -8,7 +8,7 @@ import * as React from "react";
 
 import { ApprovalFooter } from "@/components/patterns/approval-footer";
 import { EntityPicker } from "@/components/patterns/entity-picker";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { ReasonChips } from "@/components/patterns/reason-chips";
 import { Button } from "@/components/ui/button";
@@ -287,13 +287,13 @@ function BlocksScreen() {
                     <span className="min-w-0 text-body-13 text-02">
                       {block.active || !block.unblockedAt ? (
                         <>
-                          {directory.nameOf(block.blockedBy)} · <LocalTime value={block.blockedAt} dateOnly />
+                          {directory.nameOf(block.blockedBy)} · <UtcTime value={block.blockedAt} dateOnly />
                         </>
                       ) : (
                         <>
                           {directory.nameOf(block.unblockedBy)}
                           {block.unblockApprovedBy ? <span className="text-03">, approved by {directory.nameOf(block.unblockApprovedBy)}</span> : null} ·{" "}
-                          <LocalTime value={block.unblockedAt} dateOnly />
+                          <UtcTime value={block.unblockedAt} dateOnly />
                         </>
                       )}
                     </span>
@@ -974,7 +974,7 @@ function LiftSheet({
             <div role="status" className="flex w-full flex-col gap-1 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5 text-body-13 text-02">
               <p className="text-label-13 text-01">A request to lift this block is already waiting</p>
               <p>
-                {nameOf(waiting.requestedBy)} asked <LocalTime value={waiting.createdAt} />. A second request would wait for the same
+                {nameOf(waiting.requestedBy)} asked <UtcTime value={waiting.createdAt} />. A second request would wait for the same
                 approvers, so it is not sent.{" "}
                 <Link href={approvalHref(waiting.id)} className="hit-area text-primary-600 hover:underline">
                   Open the waiting request
