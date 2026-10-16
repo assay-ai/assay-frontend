@@ -88,6 +88,14 @@ interface DemoCall {
   /** Set only on a call that was not charged; `/guarantee` folds by this. */
   readonly reasonCode: string | null;
   readonly score: number | null;
+  /**
+   * Buyer debt: a served, passed call whose payment could not be collected.
+   * `OUTSTANDING` keeps its charge (it is charged once the buyer settles) and
+   * is the one debt `GET /escrow/debts` lists — see {@link demoDebt}.
+   */
+  readonly debt?: "OUTSTANDING" | "WRITTEN_OFF" | "VOIDED";
+  /** The lapse cause recorded with a debt. */
+  readonly debtCause?: string;
 }
 
 /**
@@ -173,6 +181,10 @@ const CALLS: readonly DemoCall[] = [
     classification: "DATA_RESULT",
     reasonCode: null,
     score: 0.96,
+    // The agent's delegate key was revoked before the voucher was collected:
+    // buyer debt, so the buyer screens show the "Sign to settle" banner.
+    debt: "OUTSTANDING",
+    debtCause: "DelegateIsRevoked",
   },
   {
     intentId: "8c47b0d2-9e36-4a15-b7f8-03d1e5c86a29",
@@ -535,6 +547,15 @@ function wireFigures(bucket: Bucket) {
     listedTotal: minorMoney(bucket.listed),
     chargedTotal: minorMoney(bucket.charged),
     withheldTotal: minorMoney(bucket.withheld),
+    // The day-by-day model has no debt, forfeit or in-flight call, so not
+    // charged is withheld and owed is 0. The OUTSTANDING debt the demo serves
+    // (banner and receipt) is a separate fixture, not part of these totals.
+    notChargedTotal: minorMoney(bucket.withheld),
+    notChargedCalls: bucket.refundedCalls,
+    owedTotal: minorMoney(0),
+    owedCalls: 0,
+    inProgressTotal: minorMoney(0),
+    inProgressCalls: 0,
     failRate: bucket.calls === 0 ? null : bucket.refundedCalls / bucket.calls,
   };
 }
@@ -548,6 +569,8 @@ function wireComparison(previous: Bucket | undefined, current: Bucket) {
     deltaListedTotal: minorMoney(current.listed - before.listed),
     deltaChargedTotal: minorMoney(current.charged - before.charged),
     deltaWithheldTotal: minorMoney(current.withheld - before.withheld),
+    deltaNotChargedTotal: minorMoney(current.withheld - before.withheld),
+    deltaOwedTotal: minorMoney(0),
   };
 }
 
@@ -660,9 +683,47 @@ function toolCallRow(call: DemoCall) {
     status: call.status,
     price: money(listedPrice(call)),
     charged: money(call.charged),
+    forfeited: false,
+    debt: call.debt ?? null,
     verdict: call.verdict,
     createdAt: minutesAgo(call.minutesAgo),
   };
+}
+
+/* ----------------------------------------------------------- buyer debt */
+
+const WRITE_OFF_DAYS = 30;
+
+/** The one open debt, as `GET /escrow/debts` lists it (`state: "OPEN"`). */
+function debtView(call: DemoCall) {
+  const lapsedMinutes = Math.max(call.minutesAgo - 10, 0);
+  return {
+    intentId: call.intentId,
+    payer: DEMO_BUYER_ACCOUNT,
+    amount: {
+      amount: money(listedPrice(call)).amount,
+      asset: DEMO_ASSET,
+      decimals: 6,
+    },
+    providerId: providerOf(call),
+    toolId: call.toolId,
+    cause: call.debtCause ?? null,
+    // Not signed yet: the banner offers "Sign to settle".
+    state: "OPEN" as const,
+    lapsedAt: minutesAgo(lapsedMinutes),
+    writeOffAt: minutesAgo(lapsedMinutes - WRITE_OFF_DAYS * 1440),
+    replacedAt: null,
+    createdAt: minutesAgo(call.minutesAgo),
+  };
+}
+
+/**
+ * Built on first use, not at module load: `fixtures.ts` imports this file and
+ * owns DEMO_BUYER_ACCOUNT, so reading it here at load time hits the import cycle
+ * before the constant exists (the static export failed with a TDZ error).
+ */
+export function demoDebt() {
+  return debtView(CALLS.find((call) => call.debt === "OUTSTANDING")!);
 }
 
 /* ----------------------------------------------------------------- receipt */
@@ -774,7 +835,10 @@ function receiptBody(call: DemoCall) {
     status: call.status,
     listedPrice: money(listedPrice(call)),
     chargedPrice: money(call.charged),
-    withheld: money(notChargedMajor(call)),
+    withheld: money(call.debt ? "0" : notChargedMajor(call)),
+    forfeited: false,
+    debt: call.debt ?? null,
+    chargeNote: call.debt ? (call.debtCause ?? null) : null,
     verdict: {
       status: call.verdict,
       reasonCode: call.reasonCode,
@@ -1051,6 +1115,13 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       ],
       pageInfo: { nextCursor: null, hasMore: false },
     }),
+  },
+
+  /* ----------------------------------------------------------- buyer debt */
+  {
+    method: "GET",
+    match: "/escrow/debts",
+    body: () => ({ account: DEMO_BUYER_ACCOUNT, debts: [demoDebt()] }),
   },
 
   /* --------------------------------------------------------------- escrow */

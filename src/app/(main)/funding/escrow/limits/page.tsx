@@ -21,7 +21,9 @@ import {
 import { percentOf, timestamp } from "@/components/g31/format";
 import { UnsettledPayments, useSettleWait } from "@/components/g31/unsettled-payments";
 import {
+  hasTightenDelay,
   isUnsettledRefusal,
+  loweredDelayNote,
   strandReasons,
   UNSETTLED_POLL_MS,
 } from "@/features/delegation/unsettled";
@@ -50,9 +52,10 @@ import type { EscrowIntent, EscrowLimitsBody, RelayedEscrowIntent } from "@/inte
 import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import { ApiError } from "@/libs/ApiClient";
 import { useChains } from "@/hooks/useChains";
-import { settlementSymbol } from "@/services/chains.service";
+import { chainDisplayName, settlementSymbol } from "@/services/chains.service";
 import { getEscrowUnsettled } from "@/services/delegation.service";
 import { createEscrowLimitsIntent, submitEscrowLimits } from "@/services/escrow.service";
+import { freeCallsOnlyText, servesPaidCalls } from "@/libs/chains/paid-rails";
 import { unsignedPayloadSummary } from "@/libs/chains/unsigned-summary";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { formatMoney, toDecimal } from "@/utils/money";
@@ -239,6 +242,12 @@ function EscrowLimitsPageContent() {
     queryFn: () => getEscrowUnsettled(Date.now()),
   });
   const unsettled = unsettledQuery.data?.unsettled;
+  /*
+    An escrow with the tighten delay (assay-evm D-21) applies lower limits to
+    payments already signed only after that delay, so nothing can be stranded:
+    no warning, no "continue anyway" — just say when they apply.
+  */
+  const tightenDelay = unsettledQuery.data?.tightenDelaySeconds;
   const { refetch: refetchUnsettled } = unsettledQuery;
   const refreshUnsettled = React.useCallback(() => {
     void refetchUnsettled({ cancelRefetch: false });
@@ -252,9 +261,21 @@ function EscrowLimitsPageContent() {
             maxPerWindow: escrow.maxPerWindow.amount,
           },
           preview.body,
+          tightenDelay,
         )
       : [];
   const strand = strandsWith(unsettled);
+  const loweredNote =
+    preview.ok && escrow?.maxVoucherAmount && escrow.maxPerWindow
+      ? loweredDelayNote(
+          tightenDelay,
+          {
+            maxVoucherAmount: escrow.maxVoucherAmount.amount,
+            maxPerWindow: escrow.maxPerWindow.amount,
+          },
+          preview.body,
+        )
+      : null;
   const settle = useSettleWait(
     { count: unsettled?.count, strands: strand.length > 0, readAt: unsettledQuery.dataUpdatedAt },
     refreshUnsettled,
@@ -307,7 +328,8 @@ function EscrowLimitsPageContent() {
     // since it loaded (BUG-D1-08). The backend still refuses at build time.
     if (escrow?.exists) {
       const fresh = await refetchUnsettled({ cancelRefetch: false });
-      if (strandsWith(fresh.data?.unsettled).length > 0) return;
+      const delayed = hasTightenDelay(fresh.data?.tightenDelaySeconds);
+      if (!delayed && strandsWith(fresh.data?.unsettled).length > 0) return;
     }
     await buildRequest(false);
   }
@@ -455,7 +477,18 @@ function EscrowLimitsPageContent() {
         "what", because a buyer whose calls are all failing needs the cause
         before the control.
       */}
-      {disarmed ? (
+      {/*
+        Solana serves free calls only: rails A and B are off there, so these
+        limits cap no call today, and "your calls start being paid" would be false.
+      */}
+      {escrowChainId !== null && !servesPaidCalls(escrowChainId) ? (
+        <NoteBox tone="warning" icon={<Lock width={15} height={15} strokeWidth={1.5} />}>
+          <span data-testid="escrow-free-calls-only">
+            {freeCallsOnlyText(chainDisplayName(chains, escrowChainId))} These limits only apply
+            to paid calls, so they have no effect on this chain for now.
+          </span>
+        </NoteBox>
+      ) : disarmed ? (
         <NoteBox tone="warning" icon={<Lock width={15} height={15} strokeWidth={1.5} />}>
           Your escrow is set to refuse every paid call, and this is the transaction that changes
           that. We opened the account and paid its rent, but the program does not let whoever
@@ -668,6 +701,12 @@ function EscrowLimitsPageContent() {
                       <p className="text-body-xs text-danger-700">{errors.confirmZero}</p>
                     ) : null}
                   </div>
+                ) : null}
+
+                {loweredNote ? (
+                  <p className="text-body-13 text-02" data-testid="limits-tighten-delay">
+                    {loweredNote}
+                  </p>
                 ) : null}
 
                 <UnsettledPayments

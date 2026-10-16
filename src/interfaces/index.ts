@@ -24,6 +24,9 @@ export * from "./operator";
 // envelope borrows; it is not a `StakeIntent`.
 export * from "./escrow";
 
+// Buyer debt: served calls whose payment could not be collected yet.
+export * from "./buyer-debt";
+
 // Which chains this deployment offers, as `GET /chains` serves
 // them. The enabled set lives here and NOWHERE in the bundle;
 // `libs/chains/registry.ts` deliberately holds no table of chains.

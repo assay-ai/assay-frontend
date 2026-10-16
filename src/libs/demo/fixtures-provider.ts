@@ -406,6 +406,13 @@ function earningsGroups() {
       platformFee: money("18.36"),
       withheld: money("1.62"),
       withheldCalls: 4,
+      // One passed call whose buyer has not settled its payment yet.
+      debtOutstanding: money("0.405"),
+      debtOutstandingCalls: 1,
+      forfeited: money("0"),
+      forfeitedCalls: 0,
+      uncollected: money("0"),
+      uncollectedCalls: 0,
     },
     {
       key: "fx-rates",
@@ -434,6 +441,12 @@ function earningsTotals() {
     platformFee: money("20.16"),
     withheld: money("1.62"),
     withheldCalls: 4,
+    debtOutstanding: money("0.405"),
+    debtOutstandingCalls: 1,
+    forfeited: money("0"),
+    forfeitedCalls: 0,
+    uncollected: money("0"),
+    uncollectedCalls: 0,
   };
 }
 

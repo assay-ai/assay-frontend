@@ -61,7 +61,13 @@ describe("depositableChains", () => {
     */
     const result = depositableChains(CHAINS, { status: "error", chainId: null });
     expect(result.kind).toBe("unfiltered");
-    expect(offeredChains(result)).toEqual(CHAINS);
+    // Solana serves free calls only, so a deposit for paid calls is not offered on it.
+    expect(offeredChains(result)).toEqual([EVM]);
+  });
+
+  it("keeps a free-calls-only chain in the fallback when it is all there is", () => {
+    const result = depositableChains([SOLANA], { status: "error", chainId: null });
+    expect(offeredChains(result)).toEqual([SOLANA]);
   });
 
   it("offers NOTHING ELSE when the buyer's chain is not on offer", () => {
@@ -80,14 +86,17 @@ describe("depositableChains", () => {
 describe("depositUnavailableOn", () => {
   const EMBEDDED = { kind: "embedded" as const, rpcConfigured: true };
 
-  it("stays silent on solana whatever the wallet", () => {
-    expect(depositUnavailableOn(SOLANA.chainId, "Solana devnet", EMBEDDED)).toBeNull();
+  // Paid rails A and B are off on Solana: only free calls are served there.
+  it("refuses a deposit on solana, which serves free calls only, whatever the wallet", () => {
+    const sentence = depositUnavailableOn(SOLANA.chainId, "Solana devnet", EMBEDDED);
+    expect(sentence).toContain("Solana devnet currently serves free calls only");
+    expect(sentence).toContain("Deposits on it are not offered");
     expect(
       depositUnavailableOn(SOLANA.chainId, "Solana devnet", {
         kind: "external",
         rpcConfigured: false,
       }),
-    ).toBeNull();
+    ).toBe(sentence);
   });
 
   it("takes an eip155 deposit from an embedded wallet when the build has an RPC", () => {

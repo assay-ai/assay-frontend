@@ -18,6 +18,7 @@ import { hasMultipleChains, zeroLike, type FullBalance } from "@/features/g30/ba
 import { KeyValueRow } from "@/features/g30/ui";
 import type { Chain } from "@/interfaces/chain";
 import { shortAddress } from "@/libs/chains/format";
+import { servesPaidCalls } from "@/libs/chains/paid-rails";
 import { assetName, chainDisplayName } from "@/services/chains.service";
 import { formatMoney } from "@/utils/money";
 
@@ -194,7 +195,9 @@ export function BalanceCards({
                   {sharedAccounts.has(balance.accountId)
                     ? `${assetName(chains, balance.asset)} · `
                     : null}
-                  held on this chain and spent on this chain
+                  {servesPaidCalls(balance.chainId)
+                    ? "held on this chain and spent on this chain"
+                    : "held on this chain · free calls only here, so it is not spent on calls"}
                 </PanelDescription>
               </PanelTitles>
             </PanelHeader>

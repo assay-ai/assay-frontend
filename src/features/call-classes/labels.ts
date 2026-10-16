@@ -9,7 +9,9 @@
 const CLASS_LABEL: Record<string, string> = {
   PAID_CREDITED: "Paid and credited",
   PAID_AWAITING_REDEMPTION: "Passed, credit on its way",
-  PLATFORM_ABSORBED: "Covered by the platform",
+  PAID_BUYER_DEBT: "Passed, waiting on the buyer",
+  PAID_UNCOLLECTED: "Passed, never collected",
+  PROVIDER_FORFEITED: "Forfeited by you",
   PAID_UNCREDITED: "Rejected by our checks",
   FREE: "Free call",
   EXPLORATION: "Trial traffic",
@@ -45,6 +47,10 @@ const RECEIPT_STATE_LABEL: Record<string, string> = {
   SYSTEM_ERROR: RESPONSE_CLASS_LABEL.SYSTEM_ERROR,
   REQUEST_ERROR: RESPONSE_CLASS_LABEL.REQUEST_ERROR,
   EXPIRED: "Expired",
+  DEBT_OUTSTANDING: "Payment not collected yet",
+  DEBT_WRITTEN_OFF: "Written off for the provider, still owed",
+  DEBT_VOIDED: "Voided, not charged",
+  FORFEITED: "Forfeited by the provider",
 };
 
 /** The card's title; the raw value is shown beside it as the small code. */
@@ -64,6 +70,97 @@ const REASON_LABEL: Record<string, string> = {
   "mcp: no provider outcome — the call never reached one": "The call never reached your endpoint",
 };
 
+/**
+ * What a PROVIDER_FORFEITED row carries in `reason`: `provider_forfeit:` and
+ * the cause, a program error or a block, as the redemption sweep wrote it.
+ */
+const FORFEIT_PREFIX = "provider_forfeit:";
+
+const FORFEIT_CAUSE_LABEL: Record<string, string> = {
+  ProviderBelowMinimumStake: "Forfeited — your stake was below the minimum",
+  ProviderBlocked: "Forfeited — your provider account was blocked",
+  PayeeBlocked: "Forfeited — your payout address was blocked",
+  PayeeBlockedOnChain: "Forfeited — your payout address was blocked on chain",
+};
+
+/**
+ * What a PAID_BUYER_DEBT row carries in `reason` (`buyer_debt:` and the lapse
+ * cause), a PAID_UNCOLLECTED row (`uncollected:` and the cause, or
+ * `uncollected:legacy_platform_absorbed:` and the old absorb reason), and a
+ * voided debt's PAID_UNCREDITED row (`voided:` and the late verdict).
+ */
+const BUYER_DEBT_PREFIX = "buyer_debt:";
+const VOIDED_PREFIX = "voided:";
+const UNCOLLECTED_PREFIX = "uncollected:";
+const LEGACY_ABSORBED_PREFIX = "legacy_platform_absorbed:";
+
 export function reasonLabel(reason: string): string {
+  if (reason.startsWith(BUYER_DEBT_PREFIX)) {
+    const cause = reason.slice(BUYER_DEBT_PREFIX.length).trim();
+    const why = debtCauseText(cause);
+    return `The buyer's payment could not be collected yet (${why}) — paid to you once the buyer settles it`;
+  }
+  if (reason.startsWith(UNCOLLECTED_PREFIX)) {
+    const rest = reason.slice(UNCOLLECTED_PREFIX.length).trim();
+    if (rest.startsWith(LEGACY_ABSORBED_PREFIX)) {
+      return "Never collected from the buyer (an older call) — not paid, and nobody owes it";
+    }
+    return `Never collected: the buyer did not settle it in time (${debtCauseText(rest)}) — not paid, and nobody owes it`;
+  }
+  if (reason.startsWith(VOIDED_PREFIX)) {
+    return "The buyer's payment had lapsed, and the call then did not pass our checks — voided: not paid, and nobody owes it";
+  }
+  if (reason.startsWith(FORFEIT_PREFIX)) {
+    const cause = reason.slice(FORFEIT_PREFIX.length).trim();
+    return FORFEIT_CAUSE_LABEL[cause] ?? (cause ? `Forfeited — ${cause}` : "Forfeited");
+  }
   return REASON_LABEL[reason] ?? reason;
+}
+
+/**
+ * Why a voucher lapsed, in plain words. The cause is the chain refusal the
+ * redemption came back with, or the backend's own lapse cause.
+ */
+const DEBT_CAUSE_TEXT: Record<string, string> = {
+  VoucherExpired: "the payment voucher expired before it could be collected",
+  VerdictPastRedemptionDeadline: "the check finished after the payment voucher expired",
+  DelegateIsRevoked: "the agent key that signed it was revoked",
+  DelegateIsExpired: "the agent key that signed it had expired",
+  DelegateNotActive: "the agent key that signed it was no longer active",
+  DelegateVoucherExceedsPerCallLimit: "it was over the agent key's per-payment cap",
+  DelegateWindowLimitExceeded: "it was over the agent key's spending cap for the period",
+  VoucherExceedsPerCallLimit: "it was over the per-payment limit set on the escrow",
+  EscrowWindowLimitExceeded: "it was over the escrow's spending limit for the period",
+  EscrowInsufficient: "the escrow did not hold enough funds",
+  VoucherSeqNotIncreasing: "a later payment was collected first",
+  VoucherSeqGapTooLarge: "too many later payments were collected first",
+  SignerIsNotPayer: "it was not signed by the paying wallet or its agent key",
+  InvalidSignature: "its signature could not be checked",
+};
+
+/**
+ * The prefixes a recorded cause may carry (`uncollected:VoucherExpired` on a
+ * written-off debt, `buyer_debt:…`, `provider_forfeit:…`, `voided:…`). The
+ * words are for the cause after it.
+ */
+const CAUSE_PREFIXES = [UNCOLLECTED_PREFIX, BUYER_DEBT_PREFIX, FORFEIT_PREFIX, VOIDED_PREFIX];
+
+function bareCause(cause: string): string {
+  let key = cause.trim();
+  for (let stripped = true; stripped; ) {
+    stripped = false;
+    for (const prefix of CAUSE_PREFIXES) {
+      if (key.startsWith(prefix)) {
+        key = key.slice(prefix.length).trim();
+        stripped = true;
+      }
+    }
+  }
+  return key;
+}
+
+export function debtCauseText(cause: string | null | undefined): string {
+  const key = bareCause(cause ?? "");
+  if (!key || key === "unknown") return "the reason was not recorded";
+  return DEBT_CAUSE_TEXT[key] ?? key;
 }

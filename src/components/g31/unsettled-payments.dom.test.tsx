@@ -2,6 +2,7 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { strandReasons } from "@/features/delegation/unsettled";
 import type { UnsettledVouchers } from "@/interfaces";
 
 import { UnsettledPayments } from "./unsettled-payments";
@@ -70,5 +71,30 @@ describe("UnsettledPayments", () => {
       "They have settled. You can sign now.",
     );
     expect(render({ unsettled: { ...IN_FLIGHT, count: 0 } })).toBe("");
+  });
+});
+
+// assay-evm D-21: with the tighten delay, lowering caps or revoking strands
+// nothing, so the warning and its "wait / go ahead anyway" choice are gone.
+describe("UnsettledPayments — escrow with the tighten delay (D-21)", () => {
+  const caps = { maxVoucherAmount: "500000", maxPerWindow: "5000000" };
+
+  it("shows no strand warning and no acknowledge choice for a lowering", () => {
+    const reasons = strandReasons(IN_FLIGHT, caps, { ...caps, maxPerWindow: "1" }, 3600);
+    const html = render({ atRisk: reasons.length > 0, reasons });
+    expect(html).toContain("1 payment (0.100000 USDG) still being settled");
+    expect(html).not.toContain("unsettled-strand-warning");
+    expect(html).not.toContain("unsettled-proceed");
+    expect(html).not.toContain("unsettled-wait");
+  });
+
+  it("shows no strand warning for a revoke", () => {
+    const reasons = strandReasons(IN_FLIGHT, caps, "revoke", 3600);
+    expect(render({ atRisk: reasons.length > 0, reasons })).not.toContain("unsettled-strand-warning");
+  });
+
+  it("keeps the warning where the delay is 0", () => {
+    const reasons = strandReasons(IN_FLIGHT, caps, "revoke", 0);
+    expect(render({ atRisk: reasons.length > 0, reasons })).toContain("unsettled-strand-warning");
   });
 });

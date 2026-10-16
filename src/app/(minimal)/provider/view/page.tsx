@@ -162,11 +162,16 @@ function axisTicks(max: number): { ticks: string[]; scaleMax: number } {
 const CLASS_NOTE: Record<string, string> = {
   PAID_CREDITED: "passed our checks and settled to you",
   PAID_AWAITING_REDEMPTION: "passed our checks — credited once the voucher is redeemed on chain",
-  PLATFORM_ABSORBED: "passed our checks — voucher not redeemable, the platform owes you this (no fee)",
+  PAID_BUYER_DEBT:
+    "passed our checks — the buyer's payment could not be collected yet; you are paid from their escrow once they settle it, never by the platform",
+  PAID_UNCOLLECTED:
+    "passed our checks — the buyer never settled the payment, so it was written off: not paid, no fee, and the platform does not owe it",
+  PROVIDER_FORFEITED:
+    "voucher not collected because your stake was below the minimum or you were blocked — forfeited, not credited, the buyer was not charged",
   PAID_UNCREDITED:
     "our checks rejected the response — not charged to the buyer, not credited to you",
   FREE: "free-tier call — nothing is charged and nothing is paid",
-  EXPLORATION: "trial traffic for a new binding, paid for by us",
+  EXPLORATION: "trial traffic for a new binding; the buyer paid, we paid only for checking it",
   EXCLUDED: "excluded from the SLA window by our team",
   TEST: "our own dry runs against your endpoint",
   SYSTEM_ERROR: "your endpoint timed out or returned 5xx",

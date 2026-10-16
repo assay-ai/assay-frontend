@@ -6,6 +6,7 @@ import * as React from "react";
 import { ApprovalCard } from "@/components/ui/approval-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { chainBalances } from "@/features/g30/balance";
+import { spentFromTotals } from "@/features/g30/spend-buckets";
 import type { Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { getBalances } from "@/services/balances.service";
@@ -33,7 +34,7 @@ import { useToolNames } from "./use-tool-names";
  *
  * What is real: the amount, the tool, the provider and the timestamp come
  * from `GET /tool-calls/{intentId}`; "Spent today" from
- * `GET /receipts/summary` over the UTC day; "Balance after" from
+ * `GET /receipts/summary` over the UTC day (charged plus owed); "Balance after" from
  * `GET /balances` minus the listed price; the scoped-approval ceiling from
  * `dailyCap` on `GET /spend-policy`.
  *
@@ -46,6 +47,7 @@ import { useToolNames } from "./use-tool-names";
 
 interface SummaryTotals {
   chargedTotal?: Money;
+  owedTotal?: Money;
 }
 
 export function ApprovalLinkView({ approvalId }: { approvalId: string }) {
@@ -128,8 +130,10 @@ export function ApprovalLinkView({ approvalId }: { approvalId: string }) {
   const available = rows.length === 1 ? rows[0].available : null;
   const balanceAfter = available ? subtractMoney(available, price) : null;
 
-  const chargedToday =
-    (todaySpend.data as { totals?: SummaryTotals } | undefined)?.totals?.chargedTotal ?? null;
+  // Charged plus owed: an open or written-off debt is spend the buyer owes.
+  const chargedToday = spentFromTotals(
+    (todaySpend.data as { totals?: SummaryTotals } | undefined)?.totals,
+  );
   const dailyCap = policy.data?.dailyCap ?? null;
 
   const spentToday = chargedToday

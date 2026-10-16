@@ -7,6 +7,7 @@ import type { FullBalance } from "@/features/g30/balance";
 import type { ToolCall } from "@/services/tool-calls.service";
 
 import { ApprovalLinkView } from "./approval-link-view";
+import { todayBounds } from "./format";
 
 /**
  * This suite exists because of a measured miss on a sibling file.
@@ -72,10 +73,13 @@ const EVM_ROW: FullBalance = {
  * fetched. `balances` left undefined leaves that cache empty — the state a
  * browser is in while the API is unreachable.
  */
-function markup(balances?: FullBalance[]): string {
+function markup(balances?: FullBalance[], todayTotals?: Record<string, unknown>): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(["tool-call", "approval-1"], CALL);
   if (balances) client.setQueryData(["balances"], { balances });
+  if (todayTotals) {
+    client.setQueryData(["receipts-summary", "day", todayBounds().from], { totals: todayTotals });
+  }
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <ApprovalLinkView approvalId="approval-1" />
@@ -126,5 +130,17 @@ describe("ApprovalLinkView — balance after is one chain's, or nothing", () => 
     expect(html).toContain("Decline");
     expect(html).toContain("Approving or declining a call is not available yet");
     expect(html.match(/disabled=""/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("ApprovalLinkView — spent today counts what the buyer owes (final review M1)", () => {
+  it("adds owed debt to charged", () => {
+    // 3.00 charged + 1.25 owed: an open or written-off debt is spend the buyer owes.
+    const html = markup([SOLANA_ROW], {
+      chargedTotal: money("3000000"),
+      owedTotal: money("1250000"),
+    });
+    expect(html).toContain("$4.25");
+    expect(html).not.toContain("$3.00");
   });
 });

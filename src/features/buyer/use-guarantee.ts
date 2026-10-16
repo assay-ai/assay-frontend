@@ -58,12 +58,20 @@ export interface FailureReason {
   mostlyProviderId: string | null;
 }
 
+/**
+ * One month, in `GET /receipts/summary`'s buckets, so the row adds up the way
+ * /spend does: listed = charged + not charged + owed + in progress.
+ */
 export interface MonthRow {
   period: Period;
   calls: number;
   listed: Money | null;
   charged: Money | null;
+  /** Everything not charged and not owed. The guarantee's withheld is a part of it. */
   notCharged: Money | null;
+  /** Buyer debt, open or written off: served, payment not collected yet. */
+  owed: Money | null;
+  inProgress: Money | null;
 }
 
 export interface FreeTier {
@@ -83,6 +91,8 @@ export interface GuaranteeData {
   withheldError: ApiError | null;
   listed: Money | null;
   charged: Money | null;
+  /** Buyer debt, open or written off: neither charged nor withheld. */
+  owed: Money | null;
   totalCalls: number;
   reasons: FailureReason[];
   /** False when the reason fold hit the page cap; the screen must say so. */
@@ -164,17 +174,18 @@ async function loadMonth(period: Period): Promise<MonthRow> {
     groupBy: "day",
   })) as SummaryWire;
 
-  const listed = summary.totals?.listedTotal ?? null;
-  const charged = summary.totals?.chargedTotal ?? null;
+  const totals = summary.totals;
 
+  // The API's own buckets, never listed − charged: that gap also holds owed
+  // and in-progress calls, which were neither charged nor let off.
   return {
     period,
-    calls: summary.totals?.calls ?? 0,
-    listed,
-    charged,
-    // `withheldTotal` is the API's own figure for the window; falling back to
-    // listed − charged would quietly disagree with `GET /withheld`.
-    notCharged: summary.totals?.withheldTotal ?? null,
+    calls: totals?.calls ?? 0,
+    listed: totals?.listedTotal ?? null,
+    charged: totals?.chargedTotal ?? null,
+    notCharged: totals?.notChargedTotal ?? null,
+    owed: totals?.owedTotal ?? null,
+    inProgress: totals?.inProgressTotal ?? null,
   };
 }
 
@@ -233,6 +244,7 @@ export function useGuarantee(anchor: Date, monthsBack = 3): GuaranteeState {
           withheldError: withheldR.status === "rejected" ? asApiError(withheldR.reason) : null,
           listed: summary?.totals?.listedTotal ?? null,
           charged: summary?.totals?.chargedTotal ?? null,
+          owed: summary?.totals?.owedTotal ?? null,
           totalCalls: summary?.totals?.calls ?? 0,
           reasons: foldReasons(verdicts.items, calls.items),
           reasonsComplete: verdicts.complete && calls.complete,

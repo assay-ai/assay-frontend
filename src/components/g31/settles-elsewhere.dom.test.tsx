@@ -39,7 +39,7 @@ function tool(settlementChains: string[] | undefined): ToolRow {
     providerCount: 2,
     fromPrice: null,
     price: null,
-    routableBindings: 2,
+    paidBindings: 2,
     pricingMode: "PAID",
     routable: true,
     unroutableReason: null,

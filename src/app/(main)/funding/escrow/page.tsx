@@ -34,6 +34,7 @@ import {
   createEscrowWithdrawIntent,
   getEscrow,
 } from "@/services/escrow.service";
+import { freeCallsOnlyText, servesPaidCalls } from "@/libs/chains/paid-rails";
 import { unsignedPayloadSummary } from "@/libs/chains/unsigned-summary";
 import { chainDisplayName, settlementSymbol } from "@/services/chains.service";
 import { useChains } from "@/hooks/useChains";
@@ -459,12 +460,15 @@ function EscrowPageContent() {
                 Limits
               </Link>
             </Button>
-            <Button asChild>
-              <Link href="/funding/deposit">
-                <Wallet aria-hidden="true" />
-                Add funds
-              </Link>
-            </Button>
+            {/* No deposit is offered on a chain that serves free calls only. */}
+            {chainId !== null && !servesPaidCalls(chainId) ? null : (
+              <Button asChild>
+                <Link href="/funding/deposit">
+                  <Wallet aria-hidden="true" />
+                  Add funds
+                </Link>
+              </Button>
+            )}
           </>
         }
       />
@@ -486,6 +490,16 @@ function EscrowPageContent() {
           chains are withdrawn separately.
         </p>
       )}
+
+      {/* Solana serves free calls only (rails A and B off): say so, and that withdrawing still works. */}
+      {chainId !== null && !servesPaidCalls(chainId) ? (
+        <NoteBox tone="warning" icon={<Info aria-hidden="true" />}>
+          <span data-testid="escrow-free-calls-only">
+            {freeCallsOnlyText(chainDisplayName(chains, chainId))} You can still withdraw what it
+            holds.
+          </span>
+        </NoteBox>
+      ) : null}
 
       {escrowQuery.isPending ? <PendingBlock label="Reading your escrow from the chain…" /> : null}
 

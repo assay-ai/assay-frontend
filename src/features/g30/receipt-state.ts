@@ -105,13 +105,25 @@ export type ReceiptState =
   | "MISAPPLIED"
   | "SYSTEM_ERROR"
   | "REQUEST_ERROR"
-  | "EXPIRED";
+  | "EXPIRED"
+  | "DEBT_OUTSTANDING"
+  | "DEBT_WRITTEN_OFF"
+  | "DEBT_VOIDED"
+  | "FORFEITED";
 
 /** PaymentIntentStatus values that mean the call has not finished. */
 const IN_FLIGHT = new Set(["CREATED", "FUNDS_SECURED", "PROVIDER_EXECUTING", "VERIFYING"]);
 
 export function deriveReceiptState(receipt: Receipt): ReceiptState {
   if (IN_FLIGHT.has(receipt.status)) return "CHECKING";
+  // Served and passed, but the payment is not the usual one: say so before
+  // the charged / not-charged headlines, which would each be half true.
+  if (receipt.status === "SETTLED") {
+    if (receipt.debt === "OUTSTANDING") return "DEBT_OUTSTANDING";
+    if (receipt.debt === "WRITTEN_OFF") return "DEBT_WRITTEN_OFF";
+    if (receipt.debt === "VOIDED") return "DEBT_VOIDED";
+    if (receipt.forfeited) return "FORFEITED";
+  }
   // An expired intent never completed, whatever classification a row carries.
   if (receipt.status === "EXPIRED") return "EXPIRED";
   if (receipt.classification === "SYSTEM_ERROR") return "SYSTEM_ERROR";
@@ -144,10 +156,7 @@ const price = (receipt: Receipt) => formatMoney(receipt.listedPrice, { decimals:
 const charged = (receipt: Receipt) => formatMoney(receipt.chargedPrice, { decimals: 4 });
 
 /** The five cards from `LmsKR`, in the order the design lays them out. */
-export const STATE_CARDS: Record<
-  "CHECKING" | "EMPTY_CONFIRMED" | "MISAPPLIED" | "SYSTEM_ERROR" | "REQUEST_ERROR" | "EXPIRED",
-  StateCard
-> = {
+export const STATE_CARDS: Record<Exclude<ReceiptState, "CHARGED" | "NOT_CHARGED">, StateCard> = {
   CHECKING: {
     code: "CHECKING",
     icon: "loader",
@@ -197,7 +206,51 @@ export const STATE_CARDS: Record<
     money: (r) => charged(r),
     moneyTeal: true,
   },
+  DEBT_OUTSTANDING: {
+    code: "DEBT_OUTSTANDING",
+    icon: "circle-alert",
+    tone: "warning",
+    sentence:
+      "This call was served and passed, but its payment could not be collected from your escrow. The price is still held there. Sign to settle it from the banner above (if you signed already, it is being collected): paid calls are paused until it is collected, and free calls still work.",
+    money: (r) => `${price(r)} owed`,
+    moneyTeal: false,
+  },
+  DEBT_WRITTEN_OFF: {
+    code: "DEBT_WRITTEN_OFF",
+    icon: "circle-alert",
+    tone: "warning",
+    sentence:
+      "This call was served, but its payment was never settled, so it was written off for the provider: the funds held for it were released and the provider was not paid. You still owe it to resume paid calls. Paid calls stay paused until you settle it from the banner above, and settling it pays the provider.",
+    money: (r) => `${price(r)} owed`,
+    moneyTeal: false,
+  },
+  DEBT_VOIDED: {
+    code: "DEBT_VOIDED",
+    icon: "circle-alert",
+    tone: "neutral",
+    sentence:
+      "This call's payment had lapsed, and its check then finished without a pass, so the debt was voided. You were not charged, the funds held for it were released, and the provider was not paid.",
+    money: (r) => charged(r),
+    moneyTeal: true,
+  },
+  FORFEITED: {
+    code: "FORFEITED",
+    icon: "circle-alert",
+    tone: "neutral",
+    sentence:
+      "Not charged: the provider forfeited this payment. The call passed, but the provider's account could not be paid (its stake was below the minimum, or it was blocked).",
+    money: (r) => charged(r),
+    moneyTeal: true,
+  },
 };
+
+/** The receipt states whose payment is not the usual charge or refund. */
+export const COLLECTION_STATES: ReadonlySet<ReceiptState> = new Set([
+  "DEBT_OUTSTANDING",
+  "DEBT_WRITTEN_OFF",
+  "DEBT_VOIDED",
+  "FORFEITED",
+]);
 
 export const STATE_CARD_ORDER = [
   "CHECKING",
