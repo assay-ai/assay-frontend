@@ -25,7 +25,7 @@ import { useSearchParam } from "@/hooks/useSearchParam";
 import type { Money } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { shortAddress } from "@/libs/chains/format";
-import { freeCallsOnlyText, servesPaidCalls } from "@/libs/chains/paid-rails";
+import { freeCallsOnlyText, freeOnlyCeilingText, servesPaidCalls } from "@/libs/chains/paid-rails";
 import { plainError } from "@/libs/plain-language";
 import { assetName, chainDisplayName, findChain } from "@/services/chains.service";
 import { listDeposits, type Deposit } from "@/services/funding.service";
@@ -240,6 +240,7 @@ export function FundingView() {
           money={money}
           matured={matured}
           withdrawalPending={withdrawalPending}
+          freeOnly={freeOnly}
           onAction={onAction}
         />
       ) : null}
@@ -257,11 +258,14 @@ function EscrowCard({
   money,
   matured,
   withdrawalPending,
+  freeOnly,
   onAction,
 }: {
   money: ReturnType<typeof useBuyerMoney>;
   matured: boolean;
   withdrawalPending: boolean;
+  /** A free-calls-only chain: no account ceiling or 24-hour meter, nothing is spent there. */
+  freeOnly: boolean;
   onAction: (next: MoneyAction) => void;
 }) {
   const escrow = money.escrow!;
@@ -269,9 +273,11 @@ function EscrowCard({
     ? matured
       ? "claimable"
       : "withdrawal-pending"
-    : money.capsSet
-      ? "paying"
-      : "caps-not-set";
+    : freeOnly
+      ? "ready"
+      : money.capsSet
+        ? "paying"
+        : "caps-not-set";
   const balance = escrow.balance;
   const held = escrow.openHolds;
   const requested = escrow.withdrawRequested;
@@ -311,38 +317,45 @@ function EscrowCard({
         />
       ) : null}
 
-      {/* Account ceiling. */}
-      <div className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-02 p-3.5">
-        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+      {/* Account ceiling: nothing to count on a free-calls-only chain (B4/B5). */}
+      {freeOnly ? (
+        <div className="flex w-full flex-col gap-1 rounded-lg border border-01 bg-02 p-3.5" data-testid="ceiling-free-only">
           <span className="text-label-13 text-01">Account ceiling (on chain)</span>
-          <Button size="sm" variant={money.capsSet ? "secondary" : "primary"} type="button" onClick={() => onAction("caps")}>
-            {money.capsSet ? "Change account ceiling" : "Set account ceiling"}
-          </Button>
+          <p className="text-body-xs text-03">{freeOnlyCeilingText(money.chainName ?? "this chain")}</p>
         </div>
-        {money.capsSet ? (
-          <>
-            <p className="text-body-xs text-03">
-              Up to {formatLimit(escrow.maxVoucherAmount)} a call, for all your agents together. Each agent&apos;s own
-              spending limits sit under it:{" "}
-              <Link href="/limits" className="font-semibold text-primary-600 hover:underline">
-                Spending limits
-              </Link>
-              .
+      ) : (
+        <div className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-02 p-3.5">
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
+            <span className="text-label-13 text-01">Account ceiling (on chain)</span>
+            <Button size="sm" variant={money.capsSet ? "secondary" : "primary"} type="button" onClick={() => onAction("caps")}>
+              {money.capsSet ? "Change account ceiling" : "Set account ceiling"}
+            </Button>
+          </div>
+          {money.capsSet ? (
+            <>
+              <p className="text-body-xs text-03">
+                Up to {formatLimit(escrow.maxVoucherAmount)} a call, for all your agents together. Each agent&apos;s own
+                spending limits sit under it:{" "}
+                <Link href="/limits" className="font-semibold text-primary-600 hover:underline">
+                  Spending limits
+                </Link>
+                .
+              </p>
+              <CapMeter
+                label="Spent from your escrow in the last 24 hours, all agents"
+                used={escrow.spentInWindow ?? { amount: "0", asset: "", decimals: money.decimals }}
+                limit={escrow.maxPerWindow}
+                refillsAt={refillsAt}
+                refillHint="your time; 24 h after the first payment in the window"
+              />
+            </>
+          ) : (
+            <p className="text-body-13 text-warning-700">
+              Paid calls are refused until you set it. It takes one free signature.
             </p>
-            <CapMeter
-              label="Spent from your escrow in the last 24 hours, all agents"
-              used={escrow.spentInWindow ?? { amount: "0", asset: "", decimals: money.decimals }}
-              limit={escrow.maxPerWindow}
-              refillsAt={refillsAt}
-              refillHint="your time; 24 h after the first payment in the window"
-            />
-          </>
-        ) : (
-          <p className="text-body-13 text-warning-700">
-            Paid calls are refused until you set it. It takes one free signature.
-          </p>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Withdrawal in progress. */}
       {withdrawalPending && requested ? (
