@@ -487,26 +487,30 @@ function earningsGroups() {
   return [
     {
       key: "market-quote",
-      calls: 412,
+      calls: 414,
       earned: money("165.24"),
       platformFee: money("18.36"),
       withheld: money("1.62"),
       withheldCalls: 4,
-      // One passed call whose buyer has not settled its payment yet.
+      // One passed call whose buyer has not settled its payment yet, and two
+      // whose buyers never did (written off after 30 days).
       debtOutstanding: money("0.405"),
       debtOutstandingCalls: 1,
       forfeited: money("0"),
       forfeitedCalls: 0,
-      uncollected: money("0"),
-      uncollectedCalls: 0,
+      uncollected: money("0.81"),
+      uncollectedCalls: 2,
     },
     {
       key: "fx-rates",
-      calls: 218,
+      calls: 219,
       earned: money("16.20"),
       platformFee: money("1.80"),
       withheld: money("0"),
       withheldCalls: 0,
+      // One call forfeited while the stake was below the minimum.
+      forfeited: money("0.072"),
+      forfeitedCalls: 1,
     },
     {
       key: "chain-activity",
@@ -519,20 +523,20 @@ function earningsGroups() {
   ];
 }
 
-/** Σ of the groups above: 412 + 218 + 218 calls, $165.24 + $16.20 earned. */
+/** Σ of the groups above: 414 + 219 + 218 calls, $165.24 + $16.20 earned. */
 function earningsTotals() {
   return {
-    calls: 848,
+    calls: 851,
     earned: money("181.44"),
     platformFee: money("20.16"),
     withheld: money("1.62"),
     withheldCalls: 4,
     debtOutstanding: money("0.405"),
     debtOutstandingCalls: 1,
-    forfeited: money("0"),
-    forfeitedCalls: 0,
-    uncollected: money("0"),
-    uncollectedCalls: 0,
+    forfeited: money("0.072"),
+    forfeitedCalls: 1,
+    uncollected: money("0.81"),
+    uncollectedCalls: 2,
   };
 }
 
@@ -1700,13 +1704,14 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         to: justNow(),
         asset: DEMO_ASSET,
         callCount: totals.calls,
-        // Adds up to `earningsTotals`: 836 credited, 1 waiting on the buyer, 4 not credited, 7 free.
+        // Adds up to `earningsTotals`: 836 credited, 1 waiting on the buyer, 2 never collected,
+        // 1 forfeited, 4 not credited, 7 free.
         classBreakdown: [
           row("PAID_CREDITED", 836, "181.44", "settled to you"),
           row("PAID_AWAITING_REDEMPTION", 0, "0", ""),
           row("PAID_BUYER_DEBT", 1, "0", "the buyer's payment could not be collected yet"),
-          row("PAID_UNCOLLECTED", 0, "0", ""),
-          row("PROVIDER_FORFEITED", 0, "0", ""),
+          row("PAID_UNCOLLECTED", 2, "0", "the buyer never settled it"),
+          row("PROVIDER_FORFEITED", 1, "0", "your stake was below the minimum"),
           row("PAID_UNCREDITED", 3, "0", "our checks rejected the response"),
           row("SYSTEM_ERROR", 1, "0", "your endpoint timed out or returned 5xx"),
           row("FREE", 7, "0", "free-tier call"),
