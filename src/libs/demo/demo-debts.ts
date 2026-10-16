@@ -10,6 +10,11 @@
  *   many         — two of your own debts to sign, plus one another wallet owes
  *   other-wallet — the debt is owed by another wallet of the organization
  *   collecting   — signed, being collected
+ *   short        — written off, and the escrow cannot pay it: its balance is
+ *                  below the debt and the debt is over the per-call ceiling,
+ *                  so the settle sheet shows "Add $Y" and "Raise the ceiling"
+ *   unread       — one open debt, and the escrow cannot be read from the
+ *                  chain, so the settle sheet says its checks were skipped
  *   none         — nothing owed
  *
  * Settling in the demo runs the simulated wallet steps (`sheetSigning`); on
@@ -17,9 +22,26 @@
  * reloaded. That is kept in memory only, like `advanceFreshStage`: it is a
  * stage direction, not a ledger.
  */
-export type DemoDebtVariant = "open" | "written-off" | "many" | "other-wallet" | "collecting" | "none";
+export type DemoDebtVariant =
+  | "open"
+  | "written-off"
+  | "many"
+  | "other-wallet"
+  | "collecting"
+  | "short"
+  | "unread"
+  | "none";
 
-const VARIANTS: readonly DemoDebtVariant[] = ["open", "written-off", "many", "other-wallet", "collecting", "none"];
+const VARIANTS: readonly DemoDebtVariant[] = [
+  "open",
+  "written-off",
+  "many",
+  "other-wallet",
+  "collecting",
+  "short",
+  "unread",
+  "none",
+];
 const KEY = "assay.demo.debt";
 
 export function parseDebtVariant(value: string | null | undefined): DemoDebtVariant | null {
@@ -39,6 +61,11 @@ export function demoDebtVariant(): DemoDebtVariant {
   } catch {
     return "open";
   }
+}
+
+/** Whether the variant shows the owed call as written off (`short` is a written-off debt too). */
+export function writtenOffVariant(variant: DemoDebtVariant): boolean {
+  return variant === "written-off" || variant === "short";
 }
 
 const signed = new Set<string>();

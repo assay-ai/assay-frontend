@@ -40,11 +40,16 @@ export const DEMO_ASSET = `${DEMO_CHAIN_ID}/erc20:0x915Ef7c9F9f80a69e3BE47A38EE0
 export const DEMO_BUYER_ADDRESS = "0x7a3f9C2b4E81aD5f0b9C6d2E8F1a4B7c3D5e9F20";
 export const DEMO_BUYER_ACCOUNT = `${DEMO_CHAIN_ID}:${DEMO_BUYER_ADDRESS}`;
 
-/** Money on the wire is minor units plus a scale — never a float. */
-export function money(major: string): { amount: string; decimals: number; currency: string } {
+/**
+ * Money on the wire is minor units plus a scale — never a float — and the
+ * asset it is in. The asset matters: the settle sheet compares the escrow's
+ * balance and ceilings with the debts by asset, and an escrow fixture with no
+ * `asset` matched no debt, so its pre-check never showed (review 2026-10-17).
+ */
+export function money(major: string): { amount: string; asset: string; decimals: number; currency: string } {
   const [whole, fraction = ""] = major.split(".");
   const minor = `${whole}${fraction.padEnd(6, "0").slice(0, 6)}`;
-  return { amount: String(BigInt(minor)), decimals: 6, currency: "USD" };
+  return { amount: String(BigInt(minor)), asset: DEMO_ASSET, decimals: 6, currency: "USD" };
 }
 
 /**
