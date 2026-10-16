@@ -77,7 +77,7 @@ export function OwedReceiptAction({ intentId }: { intentId: string }) {
  * says what it stops and gives the way out — settle now (when this wallet can
  * sign), and the owed calls themselves.
  */
-export function OwedSummaryAction({ owed, calls }: { owed: string; calls: number }) {
+export function OwedSummaryAction({ owed, calls }: { owed: string; calls: number | null }) {
   const debts = useBuyerDebtsQuery();
   const { openSettle } = useSettleDebt();
   const summary = debtBannerSummary(debts.data);
@@ -87,8 +87,9 @@ export function OwedSummaryAction({ owed, calls }: { owed: string; calls: number
       className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5"
     >
       <p className="min-w-0 flex-1 text-body-13 text-warning-700">
-        <span className="font-mono font-semibold">{owed}</span> owed for {calls === 1 ? "1 call" : `${calls} calls`}: its
-        payment was not collected, and paid calls are paused until it is settled.
+        <span className="font-mono font-semibold">{owed}</span> owed
+        {calls === null ? "" : ` for ${calls === 1 ? "1 call" : `${calls} calls`}`}: payment not collected, and paid calls
+        are paused until it is settled.
       </p>
       <div className="flex shrink-0 items-center gap-2">
         <Button size="sm" variant="ghost" asChild>

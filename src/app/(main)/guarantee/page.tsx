@@ -26,6 +26,7 @@ import {
   PanelTitles,
 } from "@/components/ui/panel";
 import { CardRow } from "@/components/ui/card-row";
+import { OwedSummaryAction } from "@/features/buyer-debt/owed-row-action";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { formatCount, isZeroMoney, sharePercent } from "@/features/buyer/period";
 import { MATCHES_SENTENCE, ReconcileNote } from "@/features/buyer/reconcile-note";
@@ -133,9 +134,14 @@ export default function GuaranteePage() {
     { key: "listed", header: "Listed", width: 100, mono: true, cell: (r) => formatMoney(r.listed) },
     { key: "charged", header: "Charged", width: 100, mono: true, cell: (r) => formatMoney(r.charged) },
     { key: "notCharged", header: "Not charged", width: 110, mono: true, cell: (r) => formatMoney(r.notCharged) },
-    // Buyer debt: served, payment not collected yet — neither charged nor not charged.
-    { key: "owed", header: "Owed", width: 100, mono: true, cell: (r) => formatMoney(r.owed) },
-    { key: "inProgress", header: "In progress", width: 100, mono: true, cell: (r) => formatMoney(r.inProgress) },
+    // Buyer debt (served, payment not collected) and calls still running: only
+    // when some month has any, so the table stays narrow otherwise.
+    ...(monthRows.some((r) => !isZeroMoney(r.owed))
+      ? [{ key: "owed", header: "Owed", width: 90, mono: true, cell: (r: MonthRow) => formatMoney(r.owed) }]
+      : []),
+    ...(monthRows.some((r) => !isZeroMoney(r.inProgress))
+      ? [{ key: "inProgress", header: "In progress", width: 100, mono: true, cell: (r: MonthRow) => formatMoney(r.inProgress) }]
+      : []),
     { key: "share", header: "Share", width: 70, mono: true, cell: (r) => sharePercent(r.notCharged, r.listed) ?? "—" },
   ];
 
@@ -216,6 +222,11 @@ export default function GuaranteePage() {
         </section>
       ) : null}
 
+      {/* Owed is not the guarantee's doing (a payment not collected): its own line, with the way out. */}
+      {!loading && !error && data?.owed && !isZeroMoney(data.owed) ? (
+        <OwedSummaryAction owed={formatMoney(data.owed)} calls={data.owedCalls || null} />
+      ) : null}
+
       {!loading && !error && !withheldUnavailable && !nothingWithheld ? (
         <section className="flex w-full flex-col items-stretch gap-6 rounded-xl border border-teal-20 bg-teal-10 p-5 tablet:p-6 desktop:flex-row desktop:items-start desktop:gap-10">
           <div className="flex min-w-0 flex-1 flex-col gap-4">
@@ -226,9 +237,6 @@ export default function GuaranteePage() {
               </p>
               <p className="text-body-md text-02">
                 You paid {formatMoney(charged)} for {formatMoney(listed)} worth of calls
-                {isZeroMoney(data?.owed ?? null)
-                  ? ""
-                  : `, and you still owe ${formatMoney(data?.owed ?? null)} not collected yet`}
                 {percent ? ` — ${percent} was not charged.` : "."}
               </p>
             </div>
@@ -243,7 +251,7 @@ export default function GuaranteePage() {
                     ? []
                     : [
                         {
-                          label: "Owed, not collected yet",
+                          label: "Owed",
                           value: toDecimal(data.owed).toNumber(),
                           amount: formatMoney(data.owed),
                           tone: "warning" as const,
@@ -364,7 +372,12 @@ export default function GuaranteePage() {
                   ))}
                 </div>
                 <div className="hidden w-full overflow-x-auto tablet:block">
-                  <Table caption="Not charged, by month" className="min-w-[760px]" columns={monthColumns} rows={monthRows} />
+                  <Table
+                    caption="Not charged, by month"
+                    className={monthColumns.length > 7 ? "min-w-[720px]" : "min-w-[560px]"}
+                    columns={monthColumns}
+                    rows={monthRows}
+                  />
                 </div>
               </PanelBody>
             </Panel>

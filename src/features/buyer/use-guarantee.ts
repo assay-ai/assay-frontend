@@ -96,6 +96,8 @@ export interface GuaranteeData {
   charged: Money | null;
   /** Buyer debt, open or written off: neither charged nor withheld. */
   owed: Money | null;
+  /** How many calls `owed` is for. */
+  owedCalls: number;
   totalCalls: number;
   reasons: FailureReason[];
   /** False when the reason fold hit the page cap; the screen must say so. */
@@ -285,6 +287,7 @@ export function useGuarantee(anchor: Date, monthsBack = 3, assetKey: string | nu
           listed: summary?.totals?.listedTotal ?? null,
           charged: summary?.totals?.chargedTotal ?? null,
           owed: summary?.totals?.owedTotal ?? null,
+          owedCalls: summary?.totals?.owedCalls ?? 0,
           totalCalls: summary?.totals?.calls ?? 0,
           reasons: foldReasons(verdicts.items, calls.items),
           reasonsComplete: verdicts.complete && calls.complete,
