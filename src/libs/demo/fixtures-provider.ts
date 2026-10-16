@@ -325,47 +325,55 @@ function bindingFor(id: string | null): DemoBinding {
   const binding = id?.startsWith(DRAFT_PREFIX)
     ? draftBinding(id.slice(DRAFT_PREFIX.length))
     : (BINDINGS.find((known) => known.id === id) ?? BINDINGS[0]);
-  return withSavedBudget(binding);
+  return withSavedLimits(binding);
 }
 
 /*
-  DEMO ONLY: a listing's "Free calls per day" saved in Settings, kept for the
-  browser tab (sessionStorage) like the demo's spend-policy change, so the box
-  shows what was saved instead of snapping back. Keyed by binding id.
+  DEMO ONLY: a listing's two free limits saved in Settings ("Free calls per
+  agent per day" and "Free calls per day, all agents"), kept for the browser
+  tab (sessionStorage) like the demo's spend-policy change, so the boxes show
+  what was saved instead of snapping back. Keyed by binding id; a limit not yet
+  saved in this tab keeps the stage value.
 */
-const BUDGET_KEY = "assay.demo.free-daily-budget";
-let savedBudgets: Record<string, number | null> | null = null;
+const FREE_LIMITS_KEY = "assay.demo.free-limits";
+type FreeLimits = Partial<Pick<DemoBinding, "freeDailyBudget" | "freeQuotaPerAgent">>;
+let savedLimits: Record<string, FreeLimits> | null = null;
 
-function keptBudgets(): Record<string, number | null> {
-  if (savedBudgets) return savedBudgets;
-  savedBudgets = {};
-  if (typeof window === "undefined") return savedBudgets;
+function keptLimits(): Record<string, FreeLimits> {
+  if (savedLimits) return savedLimits;
+  savedLimits = {};
+  if (typeof window === "undefined") return savedLimits;
   try {
-    const raw = window.sessionStorage.getItem(BUDGET_KEY);
+    const raw = window.sessionStorage.getItem(FREE_LIMITS_KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : null;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) savedBudgets = parsed as Record<string, number | null>;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) savedLimits = parsed as Record<string, FreeLimits>;
   } catch {
     // Storage blocked or a malformed value: start from the stage set.
   }
-  return savedBudgets;
+  return savedLimits;
 }
 
-function rememberBudget(id: string, value: number | null): void {
-  savedBudgets = { ...keptBudgets(), [id]: value };
+function rememberLimits(id: string, limits: FreeLimits): void {
+  const kept = keptLimits();
+  savedLimits = { ...kept, [id]: { ...kept[id], ...limits } };
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem(BUDGET_KEY, JSON.stringify(savedBudgets));
+    window.sessionStorage.setItem(FREE_LIMITS_KEY, JSON.stringify(savedLimits));
   } catch {
-    // Storage blocked: the saved value still shows until reload.
+    // Storage blocked: the saved values still show until reload.
   }
 }
 
-function withSavedBudget(binding: DemoBinding): DemoBinding {
-  const saved = keptBudgets();
-  return binding.id in saved ? { ...binding, freeDailyBudget: saved[binding.id] ?? null } : binding;
+function withSavedLimits(binding: DemoBinding): DemoBinding {
+  const saved = keptLimits()[binding.id];
+  if (!saved || typeof saved !== "object") return binding;
+  const next = { ...binding };
+  if ("freeDailyBudget" in saved) next.freeDailyBudget = saved.freeDailyBudget ?? null;
+  if ("freeQuotaPerAgent" in saved) next.freeQuotaPerAgent = saved.freeQuotaPerAgent ?? null;
+  return next;
 }
 
-/** A write's answer: the stored listing with what was sent laid over it. Echoed; only the free daily budget is kept (see `rememberBudget`). */
+/** A write's answer: the stored listing with what was sent laid over it. Echoed; only the two free limits are kept (see `rememberLimits`). */
 function withWrite(binding: DemoBinding, data: Record<string, unknown>): DemoBinding {
   const next = { ...binding };
   if (typeof data.endpoint === "string") next.endpoint = data.endpoint;
@@ -375,10 +383,13 @@ function withWrite(binding: DemoBinding, data: Record<string, unknown>): DemoBin
   }
   if (typeof data.slaFailureRate === "number") next.slaFailureRate = data.slaFailureRate;
   if (typeof data.timeoutMs === "number") next.timeoutMs = data.timeoutMs;
-  if (data.freeQuotaPerAgent === null || typeof data.freeQuotaPerAgent === "number") next.freeQuotaPerAgent = data.freeQuotaPerAgent;
+  if (data.freeQuotaPerAgent === null || typeof data.freeQuotaPerAgent === "number") {
+    next.freeQuotaPerAgent = data.freeQuotaPerAgent;
+    rememberLimits(next.id, { freeQuotaPerAgent: data.freeQuotaPerAgent });
+  }
   if (data.freeDailyBudget === null || typeof data.freeDailyBudget === "number") {
     next.freeDailyBudget = data.freeDailyBudget;
-    rememberBudget(next.id, data.freeDailyBudget);
+    rememberLimits(next.id, { freeDailyBudget: data.freeDailyBudget });
   }
   if (data.maxRps === null || typeof data.maxRps === "number") next.maxRps = data.maxRps;
   if (data.maxDailyCalls === null || typeof data.maxDailyCalls === "number") next.maxDailyCalls = data.maxDailyCalls;
