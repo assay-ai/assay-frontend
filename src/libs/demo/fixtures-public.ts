@@ -106,6 +106,13 @@ function notCharged(): PublicNotCharged {
       callsNotCharged: 312,
       callsFailedCheck: 241,
       amountNotCharged: asset ? [{ amount: "1874000", asset: asset.asset, decimals: asset.decimals }] : [],
+      // 312 − 241 = 71 split by reason; the remainder is grouped for privacy.
+      notChargedByReason: [
+        { reason: "PROVIDER_ERROR", calls: 38 },
+        { reason: "NO_USABLE_RESULT", calls: 14 },
+        { reason: "EXPIRED", calls: 9 },
+      ],
+      callsNotChargedOther: 10,
     },
     recent,
   };
