@@ -117,6 +117,47 @@ export function priceRange(
   return { from, held, differs: !toDecimal(from).eq(toDecimal(held)) };
 }
 
+/**
+ * The one price line a tool shows: the free tier and the price together, free
+ * first — "Free for 100 calls/day, then $0.002/call". "from" leads the price
+ * only when the paid listings charge different prices (see `priceRange`, which
+ * ignores free listings), so a free listing beside one paid listing never turns
+ * the paid price into a range.
+ *
+ * `lead` and `price` are apart so a screen can set the price larger; `text` is
+ * the whole line.
+ */
+export interface OfferLine {
+  /** "Free for 100 calls/day, then" / "Free tier, then"; null for a paid-only or free-only tool. */
+  lead: string | null;
+  /** "$0.002" / "from $0.002" / "Free" / "—". */
+  price: string;
+  /** "/call" after a paid price; empty for "Free" and "—". */
+  unit: string;
+  text: string;
+}
+
+export function offerLine(input: {
+  mode: string | null | undefined;
+  range: { from: Money; held: Money; differs: boolean } | null | undefined;
+  freeCallsPerDay?: number | null;
+}): OfferLine {
+  const m = normalisedMode(input.mode);
+  if (m === "FREE") return { lead: null, price: "Free", unit: "", text: "Free" };
+  const lead =
+    m === "FREEMIUM"
+      ? input.freeCallsPerDay && input.freeCallsPerDay > 0
+        ? `Free for ${input.freeCallsPerDay.toLocaleString("en-US")} calls/day, then`
+        : "Free tier, then"
+      : null;
+  if (!input.range) {
+    const text = lead ? "Free tier; paid calls not available right now" : "—";
+    return { lead: null, price: lead ? text : "—", unit: "", text };
+  }
+  const price = `${input.range.differs ? "from " : ""}${formatCallPrice(input.range.from)}`;
+  return { lead, price, unit: "/call", text: `${lead ? `${lead} ` : ""}${price}/call` };
+}
+
 /** The sentence under a "from $X" price. */
 export function heldPriceSentence(range: { from: Money; held: Money; differs: boolean }): string | null {
   if (!range.differs) return null;
