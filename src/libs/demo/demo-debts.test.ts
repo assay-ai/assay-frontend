@@ -8,6 +8,8 @@ describe("demo debt pictures", () => {
   it("reads only the known variants", () => {
     expect(parseDebtVariant("many")).toBe("many");
     expect(parseDebtVariant("written-off")).toBe("written-off");
+    expect(parseDebtVariant("waiting")).toBe("waiting");
+    expect(parseDebtVariant("waiting-mixed")).toBe("waiting-mixed");
     expect(parseDebtVariant("bogus")).toBeNull();
     expect(parseDebtVariant(null)).toBeNull();
   });
