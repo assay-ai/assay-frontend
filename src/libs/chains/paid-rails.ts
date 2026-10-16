@@ -33,6 +33,17 @@ export function freeCallsOnlyText(chainName: string): string {
   );
 }
 
+/**
+ * The line under the signed-in Explore header for a buyer whose chain serves
+ * free calls only: the prices on the page do not apply to their agents there.
+ */
+export function freeOnlyExploreText(chainName: string): string {
+  return (
+    `On ${chainName} your agents make free calls only: paid calls are not offered there, so the prices below ` +
+    `apply only on a chain that serves paid calls. Tools with a free tier work as usual.`
+  );
+}
+
 /** The backend's refusal of a paid call (or a paid rail) on a chain that does not offer it. */
 export const CHAIN_RAIL_NOT_OFFERED = "CHAIN_RAIL_NOT_OFFERED";
 
