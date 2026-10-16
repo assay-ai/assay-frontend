@@ -52,6 +52,8 @@ function publicTool(row: CatalogueTool): PublicTool {
     pricingMode: row.pricingMode,
     routable: row.routable,
     settlementChains: row.routable ? (row.settlementChains ?? null) : null,
+    freeCallsPerDay: row.freeCallsPerDay ?? null,
+    paidBindings: row.paidBindings ?? 0,
   };
 }
 
@@ -74,6 +76,7 @@ function notCharged(): PublicNotCharged {
     ["search_web", "FAILED_CHECK", "The result failed our check, so the buyer got the held amount back.", "FAILED_VERIFICATION", 3],
     ["get_weather", "EXPIRED", "The call did not finish in time, so the held amount was released.", "PROVIDER_OR_PLATFORM_ERROR", 4],
     ["get_weather", "FAILED_CHECK", "The result failed our check, so the buyer got the held amount back.", "FAILED_VERIFICATION", 6],
+    ["search_web", "NOT_COLLECTED", "The provider could not collect payment for this call, so the buyer was not charged.", "PROVIDER_OR_PLATFORM_ERROR", 7],
   ];
   const recent: PublicNotChargedCall[] = rows.flatMap(([name, reason, reasonText, bucket, ago]) => {
     const tool = byName.get(name) ?? tools.find((t) => t.routable);

@@ -7,7 +7,7 @@ import * as React from "react";
 import { MoneySplit } from "@/components/patterns/money-flow";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
-import { formatCallPrice, plural, shortDay } from "@/features/explorer/explorer-text";
+import { formatCallPrice, notChargedRowText, plural, shortDay } from "@/features/explorer/explorer-text";
 import { publicErrorText, usePublicNotCharged } from "@/features/explorer/use-public-explorer";
 import { useChainName } from "@/hooks/useChainName";
 import type { Money } from "@/interfaces";
@@ -34,8 +34,9 @@ export function amountsText(amounts: readonly Money[], chainName: (id: string) =
   return amounts.map((m) => `${formatMoney(m, { decimals: 2 })} on ${chainName(chainIdOfAsset(m.asset) ?? "")}`).join(" + ");
 }
 
-function BucketTag({ bucket }: { bucket: PublicNotChargedCall["bucket"] }) {
-  const failed = bucket === "FAILED_VERIFICATION";
+function BucketTag({ row }: { row: PublicNotChargedCall }) {
+  const { tag, tone } = notChargedRowText(row);
+  const failed = tone === "teal";
   return (
     <span
       className={cn(
@@ -44,7 +45,7 @@ function BucketTag({ bucket }: { bucket: PublicNotChargedCall["bucket"] }) {
       )}
     >
       <span aria-hidden="true" className={cn("size-1.5 rounded-full", failed ? "bg-teal-500" : "bg-text-03")} />
-      {failed ? "Failed our check" : "No usable result"}
+      {tag}
     </span>
   );
 }
@@ -157,7 +158,7 @@ export function NotChargedProof({ toolId, limit = 6, className }: { toolId?: str
                   tone: "teal",
                 },
                 {
-                  label: "No usable result (provider or platform error)",
+                  label: "No usable result, or not collected by the provider",
                   value: otherNotCharged,
                   amount: plural(otherNotCharged, "call"),
                   tone: "neutral",
@@ -179,7 +180,7 @@ export function NotChargedProof({ toolId, limit = 6, className }: { toolId?: str
             <li key={`${row.toolId}-${row.day}-${index}`} className="flex flex-col gap-1.5 px-3.5 py-3 tablet:flex-row tablet:items-center tablet:gap-4">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <BucketTag bucket={row.bucket} />
+                  <BucketTag row={row} />
                   {toolId ? null : (
                     <Link href={routes.publicTool(row.toolId)} className="font-mono text-mono-13 font-semibold text-01 hover:underline">
                       {row.toolName}
@@ -187,7 +188,7 @@ export function NotChargedProof({ toolId, limit = 6, className }: { toolId?: str
                   )}
                   <span className="text-body-xs text-03">by {row.providerName}</span>
                 </div>
-                <p className="text-body-13 text-02">{row.reasonText}</p>
+                <p className="text-body-13 text-02">{notChargedRowText(row).text}</p>
               </div>
               <div className="flex shrink-0 items-baseline gap-2 tablet:flex-col tablet:items-end tablet:gap-0.5">
                 <span className="font-mono text-mono-13 font-semibold text-teal-600">
