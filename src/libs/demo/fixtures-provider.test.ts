@@ -86,3 +86,18 @@ describe("demo listing Settings: free calls per agent", () => {
     expect(call(fixtures, "GET", FX).freeDailyBudget).toBe(600);
   });
 });
+
+describe("demo listing Settings: pricing mode and price", () => {
+  // final3 Chrome check: the mode went back to Paid after a save and a reload.
+  it("keeps a saved pricing mode and price for the tab", async () => {
+    vi.stubGlobal("window", { sessionStorage: memoryStorage(), localStorage: memoryStorage(), location: { search: "" } });
+    let fixtures = await load();
+    expect(call(fixtures, "GET", FX).pricingMode).toBe("FREEMIUM");
+
+    call(fixtures, "PATCH", FX, { pricingMode: "PAID", priceAmount: "150000" });
+    fixtures = await load();
+    const after = call(fixtures, "GET", FX);
+    expect(after.pricingMode).toBe("PAID");
+    expect((after.price as { amount: string }).amount).toBe("150000");
+  });
+});

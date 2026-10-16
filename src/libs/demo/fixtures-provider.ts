@@ -336,7 +336,7 @@ function bindingFor(id: string | null): DemoBinding {
   saved in this tab keeps the stage value.
 */
 const FREE_LIMITS_KEY = "assay.demo.free-limits";
-type FreeLimits = Partial<Pick<DemoBinding, "freeDailyBudget" | "freeQuotaPerAgent">>;
+type FreeLimits = Partial<Pick<DemoBinding, "freeDailyBudget" | "freeQuotaPerAgent" | "pricingMode" | "priceMajor">>;
 let savedLimits: Record<string, FreeLimits> | null = null;
 
 function keptLimits(): Record<string, FreeLimits> {
@@ -370,16 +370,24 @@ function withSavedLimits(binding: DemoBinding): DemoBinding {
   const next = { ...binding };
   if ("freeDailyBudget" in saved) next.freeDailyBudget = saved.freeDailyBudget ?? null;
   if ("freeQuotaPerAgent" in saved) next.freeQuotaPerAgent = saved.freeQuotaPerAgent ?? null;
+  if (saved.pricingMode === "FREE" || saved.pricingMode === "FREEMIUM" || saved.pricingMode === "PAID") {
+    next.pricingMode = saved.pricingMode;
+  }
+  if (typeof saved.priceMajor === "string") next.priceMajor = saved.priceMajor;
   return next;
 }
 
-/** A write's answer: the stored listing with what was sent laid over it. Echoed; only the two free limits are kept (see `rememberLimits`). */
+/** A write's answer: the stored listing with what was sent laid over it. Echoed; the free limits, pricing mode and price are kept for the tab (see `rememberLimits`). */
 function withWrite(binding: DemoBinding, data: Record<string, unknown>): DemoBinding {
   const next = { ...binding };
   if (typeof data.endpoint === "string") next.endpoint = data.endpoint;
-  if (data.pricingMode === "FREE" || data.pricingMode === "FREEMIUM" || data.pricingMode === "PAID") next.pricingMode = data.pricingMode;
+  if (data.pricingMode === "FREE" || data.pricingMode === "FREEMIUM" || data.pricingMode === "PAID") {
+    next.pricingMode = data.pricingMode;
+    rememberLimits(next.id, { pricingMode: data.pricingMode });
+  }
   if (typeof data.priceAmount === "string" && /^\d+$/.test(data.priceAmount)) {
     next.priceMajor = (Number(data.priceAmount) / 1e6).toFixed(6);
+    rememberLimits(next.id, { priceMajor: next.priceMajor });
   }
   if (typeof data.slaFailureRate === "number") next.slaFailureRate = data.slaFailureRate;
   if (typeof data.timeoutMs === "number") next.timeoutMs = data.timeoutMs;
