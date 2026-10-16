@@ -175,6 +175,9 @@ describe("LimitsView (Spending limits) — two layers, one effective limit per a
       expect(html).not.toContain("Checked by Assay:");
       // Nothing to let an agent pay for there (Chrome test 2026-10-17).
       expect(markup(POLICY, { granted: false })).not.toContain("Let it pay");
+      // Nor any limits to change: they count no call there (Chrome test 2026-10-17, final2).
+      expect(html).not.toContain("Change spending limits");
+      expect(markup(POLICY, { granted: false })).not.toContain("Change spending limits");
     } finally {
       demoRails.freeOnly = false;
     }

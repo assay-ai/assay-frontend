@@ -234,6 +234,22 @@ export function SpendingLimitsActions({
   const escrowReady = Boolean(ctx.escrowQuery.data?.exists);
   const editableName = ctx.agents.find((a) => a.agentId === ctx.editableFor)?.label ?? "your own agent";
 
+  // A free-calls-only chain: the agent pays for none there, so limits count nothing and there is
+  // nothing to let it pay for. Only stopping a permission it still holds is offered.
+  if (readiness.freeOnly) {
+    if (!(delegation && grant && grant.status === "ACTIVE" && showStop)) return null;
+    return (
+      <GrantActions
+        account={agent.agentAccount}
+        delegation={grant}
+        boundAt={(readiness.boundCredential as { delegateBoundAt?: string | null } | null)?.delegateBoundAt}
+        onChanged={onChanged}
+        agentName={name}
+        showChange={false}
+      />
+    );
+  }
+
   if (delegation && grant && grant.status === "ACTIVE") {
     return (
       <GrantActions
@@ -254,9 +270,6 @@ export function SpendingLimitsActions({
       />
     );
   }
-
-  // A free-calls-only chain: the agent pays for none there, so there is nothing to let it pay for.
-  if (delegation && readiness.freeOnly) return null;
 
   if (delegation) {
     return (
