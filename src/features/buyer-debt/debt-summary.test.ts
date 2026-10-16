@@ -67,7 +67,7 @@ describe("debtBannerSummary", () => {
     expect(summary.kind).toBe("settle");
     expect(summary.title).toBe("You owe $2.50 for 1 call. Paid calls are paused until you settle.");
     expect(summary.detail).toBe(
-      "Settle by Nov 15, 00:00 UTC (in 29 days), or the provider is not paid (paid calls stay paused either way). Free calls still work.",
+      "Settle by Nov 15, 00:00 UTC (in 29 days). After that it is written off: you still owe it, and the provider is paid only once you settle. Free calls still work.",
     );
     expect(summary.actionLabel).toBe("Settle $2.50");
     expect(summary.toSign.map((d) => d.intentId)).toEqual(["int_1"]);
@@ -78,7 +78,7 @@ describe("debtBannerSummary", () => {
       account: ACCOUNT,
       debts: [debt({ writeOffAt: "2026-11-20T00:00:00.000Z" }), debt({ intentId: "int_2", writeOffAt: "2026-11-10T00:00:00.000Z" })],
     })!;
-    expect(summary.detail).toContain("Settle by Nov 10, 00:00 UTC (in 24 days), or the providers are not paid");
+    expect(summary.detail).toContain("Settle by Nov 10, 00:00 UTC (in 24 days). After that it is written off: you still owe it, and the providers are paid only once you settle");
     expect(summary.title).toBe("You owe $5.00 for 2 calls. Paid calls are paused until you settle.");
   });
 
@@ -239,7 +239,7 @@ describe("deadlines on owed rows, receipts and summaries (P2-2, P2-4, P3-3)", ()
   const data = { account: ACCOUNT, debts: [debt(), debt({ intentId: "int_2", state: "WRITTEN_OFF" })] };
 
   it("says settle-by on an open debt and the write-off on a written-off one", () => {
-    expect(debtDeadlineLine(debt())).toBe("Settle by Nov 15, 00:00 UTC (in 29 days), or the provider goes unpaid.");
+    expect(debtDeadlineLine(debt())).toBe("Settle by Nov 15, 00:00 UTC (in 29 days); after that it is written off, but still owed.");
     expect(debtDeadlineLine(debt({ state: "WRITTEN_OFF", writeOffAt: "2026-10-01T00:00:00.000Z" }))).toBe(
       "Written off on Oct 1, 00:00 UTC, but still owed: settling still pays the provider.",
     );

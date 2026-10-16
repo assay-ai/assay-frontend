@@ -91,8 +91,8 @@ export function debtSentence(debt: Pick<BuyerDebt, "cause" | "writeOffAt" | "sta
   }
   return (
     `${why}. Paid calls are paused until you settle it. Free calls still work. ` +
-    `If not settled by ${debtDeadline(debt.writeOffAt)}, it is written off and the provider goes unpaid, ` +
-    "but paid calls stay paused until you settle it."
+    `If not settled by ${debtDeadline(debt.writeOffAt)}, it is written off: you still owe it, and the provider is paid only once you settle. ` +
+    "Paid calls stay paused until you do."
   );
 }
 
@@ -127,8 +127,8 @@ export function debtBannerDescription(debts: readonly BuyerDebt[]): string {
     const earliest = open.reduce((first, debt) => (debt.writeOffAt < first.writeOffAt ? debt : first));
     parts.push(
       open.length === 1
-        ? `If the open one is not settled by ${debtDeadline(earliest.writeOffAt)}, it is written off and its provider goes unpaid.`
-        : `If the earliest is not settled by ${debtDeadline(earliest.writeOffAt)}, the open ones are written off from then on and those providers go unpaid.`,
+        ? `If the open one is not settled by ${debtDeadline(earliest.writeOffAt)}, it is written off: still owed, and its provider is paid only once you settle.`
+        : `If the earliest is not settled by ${debtDeadline(earliest.writeOffAt)}, the open ones are written off from then on: still owed, and those providers are paid only once you settle.`,
     );
   }
   return parts.join(" ");

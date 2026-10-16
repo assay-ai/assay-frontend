@@ -416,7 +416,7 @@ export function DisputeSheet({
               <dd className="text-02">
                 You lose <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(loss)}</span> of your
                 stake ({formatMoney(split?.agent)} to the buyers whose calls failed, {formatMoney(split?.platform)} to
-                Assay). It can be taken from <LocalTime value={row.executableAt} withZone />, or as soon as it is upheld if
+                Assay); the other {formatMoney(split?.neverTaken)} of the penalty is never taken. It can be taken from <LocalTime value={row.executableAt} withZone />, or as soon as it is upheld if
                 that is later.
               </dd>
             </div>

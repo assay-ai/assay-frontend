@@ -69,7 +69,7 @@ describe("BuyerDebtBanner", () => {
   it("says in one line what is owed and what it stops, with the deadline, and offers to settle", () => {
     const html = render({ account: ACCOUNT, debts: [debt()] });
     expect(html).toContain("You owe $2.50 for 1 call. Paid calls are paused until you settle.");
-    expect(html).toContain("Settle by Nov 15, 00:00 UTC (in 29 days), or the provider is not paid");
+    expect(html).toContain("Settle by Nov 15, 00:00 UTC (in 29 days). After that it is written off: you still owe it, and the provider is paid only once you settle");
     expect(html).toContain("Free calls still work.");
     expect(html).toContain("the payment voucher expired before it could be collected");
     expect(html).toContain("Settle $2.50");
