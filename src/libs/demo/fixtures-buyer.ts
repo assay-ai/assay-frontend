@@ -466,10 +466,13 @@ interface Bucket {
   listed: number;
   charged: number;
   withheld: number;
+  /** Buyer debt: served, payment not collected — listed, but neither charged nor not charged. */
+  owed: number;
+  owedCalls: number;
 }
 
 function emptyBucket(): Bucket {
-  return { calls: 0, refundedCalls: 0, listed: 0, charged: 0, withheld: 0 };
+  return { calls: 0, refundedCalls: 0, listed: 0, charged: 0, withheld: 0, owed: 0, owedCalls: 0 };
 }
 
 function priceMinorOf(toolId: ToolId): number {
@@ -523,6 +526,8 @@ function collect(
 
   const groups = new Map<string, Bucket>();
   const totals = emptyBucket();
+  // Owed in the totals exactly while `/escrow/debts` lists the debt.
+  const debtCall = demoDebts().length > 0 ? CALLS.find((call) => call.debt === "OUTSTANDING") : undefined;
 
   const into = (key: string, calls: number, refundedCalls: number, amount: number) => {
     let bucket = groups.get(key);
@@ -543,6 +548,15 @@ function collect(
       const refunded = shape.refunds?.[toolId] ?? 0;
       const paid = count - refunded;
       if (paid > 0) into(groupKeyOf(groupBy, toolId, dayMs, false), paid, 0, paid * price);
+      // The demo's one debt is one of today's paid calls: owed, not charged, until settled.
+      if (paid > 0 && debtCall && dayMs === todayMs && toolId === debtCall.toolId) {
+        const key = groupKeyOf(groupBy, toolId, dayMs, false);
+        for (const bucket of [groups.get(key)!, totals]) {
+          bucket.charged -= price;
+          bucket.owed += price;
+          bucket.owedCalls += 1;
+        }
+      }
       if (refunded > 0) {
         into(groupKeyOf(groupBy, toolId, dayMs, true), refunded, refunded, refunded * price);
       }
@@ -564,13 +578,13 @@ function wireFigures(bucket: Bucket) {
     listedTotal: minorMoney(bucket.listed),
     chargedTotal: minorMoney(bucket.charged),
     withheldTotal: minorMoney(bucket.withheld),
-    // The day-by-day model has no debt, forfeit or in-flight call, so not
-    // charged is withheld and owed is 0. The OUTSTANDING debt the demo serves
-    // (banner and receipt) is a separate fixture, not part of these totals.
+    // The day-by-day model has no forfeit or in-flight call, so not charged
+    // is withheld. Owed is the one OUTSTANDING debt the banner, the Overview
+    // row and the receipt show (moved out of today's charged, see `collect`).
     notChargedTotal: minorMoney(bucket.withheld),
     notChargedCalls: bucket.refundedCalls,
-    owedTotal: minorMoney(0),
-    owedCalls: 0,
+    owedTotal: minorMoney(bucket.owed),
+    owedCalls: bucket.owedCalls,
     inProgressTotal: minorMoney(0),
     inProgressCalls: 0,
     failRate: bucket.calls === 0 ? null : bucket.refundedCalls / bucket.calls,
@@ -587,7 +601,7 @@ function wireComparison(previous: Bucket | undefined, current: Bucket) {
     deltaChargedTotal: minorMoney(current.charged - before.charged),
     deltaWithheldTotal: minorMoney(current.withheld - before.withheld),
     deltaNotChargedTotal: minorMoney(current.withheld - before.withheld),
-    deltaOwedTotal: minorMoney(0),
+    deltaOwedTotal: minorMoney(current.owed - before.owed),
   };
 }
 
