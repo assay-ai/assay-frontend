@@ -339,3 +339,27 @@ export function explorerHref(state: ExplorerListState): string {
 export function hasFreeCalls(mode: string | null | undefined): boolean {
   return freeTierLabel(mode) !== null;
 }
+
+/**
+ * A not-charged call on the public feed, as a buyer reads it: the tag and the
+ * sentence. The guarantee firing ("Failed our check") and a call with no usable
+ * result stay apart; a payment the provider did not collect (`NOT_COLLECTED`,
+ * in the error bucket) gets its own words rather than "No usable result",
+ * because the result was fine. Any other reason, known or not, shows the
+ * server's own `reasonText`.
+ */
+export function notChargedRowText(row: { reason: string; reasonText: string; bucket: string }): {
+  tag: string;
+  tone: "teal" | "neutral";
+  text: string;
+} {
+  if (row.bucket === "FAILED_VERIFICATION") return { tag: "Failed our check", tone: "teal", text: row.reasonText };
+  if (row.reason === "NOT_COLLECTED") {
+    return {
+      tag: "Not collected",
+      tone: "neutral",
+      text: "Not charged — the provider did not collect the payment, and the buyer does not owe it.",
+    };
+  }
+  return { tag: "No usable result", tone: "neutral", text: row.reasonText || "The call was not charged." };
+}

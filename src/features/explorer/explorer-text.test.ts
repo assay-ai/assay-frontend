@@ -16,6 +16,7 @@ import {
   costSentence,
   offerLine,
   offerSubLine,
+  notChargedRowText,
   plural,
   priceSentence,
   shortDay,
@@ -286,5 +287,31 @@ describe("costSentence and offerSubLine (public catalogue, free first)", () => {
     const paidBindings = 1;
     const range = priceRange(usd("30000"), paidBindings > 1 ? [usd("20000")] : []);
     expect(range?.differs).toBe(false);
+  });
+});
+
+describe("notChargedRowText (public not-charged feed)", () => {
+  it("names a payment the provider did not collect plainly, never as 'No usable result'", () => {
+    const row = notChargedRowText({
+      reason: "NOT_COLLECTED",
+      reasonText: "The provider could not collect payment for this call, so the buyer was not charged.",
+      bucket: "PROVIDER_OR_PLATFORM_ERROR",
+    });
+    expect(row.tag).toBe("Not collected");
+    expect(row.text).toMatch(/^Not charged — the provider did not collect/);
+    expect(row.tone).toBe("neutral");
+  });
+
+  it("keeps the guarantee firing apart, including a voided debt sent as FAILED_CHECK", () => {
+    const row = notChargedRowText({ reason: "FAILED_CHECK", reasonText: "The result failed our check.", bucket: "FAILED_VERIFICATION" });
+    expect(row).toEqual({ tag: "Failed our check", tone: "teal", text: "The result failed our check." });
+  });
+
+  it("falls back to the server's sentence for any other or unknown reason", () => {
+    expect(notChargedRowText({ reason: "SOMETHING_NEW", reasonText: "A new plain sentence.", bucket: "PROVIDER_OR_PLATFORM_ERROR" })).toEqual({
+      tag: "No usable result",
+      tone: "neutral",
+      text: "A new plain sentence.",
+    });
   });
 });

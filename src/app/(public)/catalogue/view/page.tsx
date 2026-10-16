@@ -97,7 +97,11 @@ function ToolPage() {
   const settles = tool.settlementChains ?? [];
   // What the providers charge, against what a call is held for (the dearest
   // provider that can take it now). See `priceRange`.
-  const range = priceRange(tool.price, [tool.fromPrice, ...serving.map((p) => listingOf(p.providerId)?.price)]);
+  // "from" only over more than one listing that can be charged (`paidBindings`, when the API sends it).
+  const range = priceRange(
+    tool.price,
+    (tool.paidBindings ?? 2) > 1 ? [tool.fromPrice, ...serving.map((p) => listingOf(p.providerId)?.price)] : [],
+  );
 
   return (
     <>
