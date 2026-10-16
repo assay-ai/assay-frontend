@@ -200,6 +200,24 @@ export function freeBudgetWarning(budget: number | null, perAgent: number | null
   );
 }
 
+/**
+ * The hint under "Free calls per day, all agents", by how agents pay. As the
+ * backend counts it (main, `FreeQuotaService`): only FREE and FREEMIUM
+ * listings serve free calls, so only they count this cap. When it runs out, a
+ * FREEMIUM listing offers the paid call at its price; a FREE listing has no
+ * paid path, so the call goes to another provider of the tool with room, or
+ * is refused until the reset. A PAID listing serves no free calls,
+ * so the cap does nothing until the listing gets a free tier.
+ */
+export function freeBudgetHint(mode: PricingMode | ""): string {
+  const base = "The most free calls this listing gives in a day, all agents together. Leave empty for the platform default. Resets at 00:00 UTC.";
+  if (mode === "FREE") {
+    return `${base} When they run out, this listing takes no more calls until the reset; agents' calls go to another provider of this tool, if one can take them.`;
+  }
+  if (mode === "PAID") return `${base} It applies only on Free or Free + paid; every call here is paid, so it is not used now.`;
+  return `${base} When they run out, agents are offered the paid option at your price.`;
+}
+
 const MODE_WORDS: Record<PricingMode, string> = { FREE: "Free", FREEMIUM: "Free + paid", PAID: "Paid" };
 
 /**
@@ -229,7 +247,15 @@ export function freeTermsChangeRows(
       after: calls(body.freeDailyBudget, "Platform default"),
     });
   }
-  return rows;
+  return onlyChanged(rows);
+}
+
+/**
+ * The confirm's before → after rows that really change: a row whose two sides
+ * read the same ("Stake needed $450 → $450") says nothing and is left out.
+ */
+export function onlyChanged<Row extends { before: string; after: string }>(rows: Row[]): Row[] {
+  return rows.filter((row) => row.before !== row.after);
 }
 
 /** Seconds as a provider thinks about a timeout → milliseconds. */

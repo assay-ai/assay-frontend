@@ -7,10 +7,12 @@ import {
   choiceOfMode,
   failureRateFromPercent,
   freeBudgetFromInput,
+  freeBudgetHint,
   freeBudgetWarning,
   freeCallsFromInput,
   freeTermsChangeRows,
   modeOfChoice,
+  onlyChanged,
   percentText,
   providerShare,
   stakeNeededFor,
@@ -156,6 +158,24 @@ describe("free-call boxes (provider Settings)", () => {
     expect(freeBudgetWarning(100, 100)).toBeNull();
     expect(freeBudgetWarning(null, 100)).toBeNull();
     expect(freeBudgetWarning(50, null)).toBeNull();
+  });
+
+  it("says what happens when the all-agents free calls run out, by how agents pay", () => {
+    expect(freeBudgetHint("FREEMIUM")).toMatch(/offered the paid option at your price\.$/);
+    expect(freeBudgetHint("FREE")).not.toMatch(/paid option/);
+    expect(freeBudgetHint("FREE")).toMatch(/takes no more calls until the reset; agents' calls go to another provider/);
+    expect(freeBudgetHint("PAID")).toMatch(/applies only on Free or Free \+ paid/);
+    expect(freeBudgetHint("PAID")).not.toMatch(/paid option at your price/);
+  });
+
+  it("leaves out confirm rows whose before and after read the same", () => {
+    const stake = { label: "Stake needed (you have $500.00)", before: "$450.00", after: "$450.00" };
+    const price = { label: "Price", before: "$0.001000 a call", after: "$0.002000 a call" };
+    expect(onlyChanged([price, stake])).toEqual([price]);
+    const binding = { pricingMode: "FREEMIUM" as const, freeQuotaPerAgent: 50, freeDailyBudget: 5000 };
+    expect(freeTermsChangeRows(binding, { freeQuotaPerAgent: 50, freeDailyBudget: 400 })).toEqual([
+      { label: "Free calls per day, all agents", before: "5,000 calls", after: "400 calls" },
+    ]);
   });
 
   it("lists the pricing mode and free-call changes for the save confirm", () => {

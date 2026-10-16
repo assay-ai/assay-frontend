@@ -20,10 +20,12 @@ import { BindingHeader, bindingQueryKey, useBinding } from "@/features/provider-
 import { integerFromInput } from "@/features/provider-binding/chrome";
 import {
   freeBudgetFromInput,
+  freeBudgetHint,
   freeBudgetWarning,
   freeCallsFromInput,
   freeTermsChangeRows,
   modeOfChoice,
+  onlyChanged,
   percentText,
   PRICE_CHOICES,
   stakeEffectOf,
@@ -228,7 +230,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
               placeholder="Platform default"
               onChange={(event) => setExtra((current) => ({ ...current, freeBudget: event.target.value }))}
               error={errors.freeBudget}
-              hint="The most free calls this listing gives in a day, all agents together. Leave empty for the platform default. Resets at 00:00 UTC. When they run out, agents are offered the paid option at your price."
+              hint={freeBudgetHint(mode)}
             />
           </div>
           {budgetWarning ? (
@@ -351,7 +353,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
               : null}
           </>
         }
-        changes={[
+        changes={onlyChanged([
           ...(body.priceAmount !== undefined
             ? [
                 {
@@ -381,7 +383,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
                 },
               ]
             : []),
-        ]}
+        ])}
         confirmLabel={
           shortAfterSave ? `Add ${formatMoney(shortAfterSave)} stake, then save` : pricingChanged ? "Save new price" : "Save new promise"
         }
