@@ -162,6 +162,13 @@ describe("agent readiness", () => {
     ).toBe("paying");
   });
 
+  it("does not say paying while a payment is owed (debt pauses paid calls)", () => {
+    const bound = { ...key({ delegateAccount: "eip155:46630:0xdel" }), lastUsedAt: "2026-10-16T09:58:00Z" };
+    const r = agentReadiness({ agentAccount: evm, credentials: [bound], delegates: [grant()], escrow, paused: false, debtOwed: true }, now);
+    expect(r.status).toBe("owed");
+    expect(r.sentence).toMatch(/^Paid calls are paused until you settle/);
+  });
+
   it("puts a stop ahead of everything else", () => {
     const bound = key({ delegateAccount: "eip155:46630:0xdel" });
     expect(agentReadiness({ agentAccount: evm, credentials: [bound], delegates: [grant()], escrow, paused: true }, now).status).toBe("paused");

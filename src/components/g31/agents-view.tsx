@@ -250,10 +250,12 @@ function AgentCard({
   const live = readiness.liveCredentials as KeyRow[];
   const bound = readiness.boundCredential as KeyRow | null;
   const grant = readiness.grant;
-  const delegation = supportsDelegation(agent.agentAccount);
+  // On a free-calls-only chain no paying step applies: no payment key, spend
+  // meter or renewal is shown (the readiness line says why).
+  const delegation = supportsDelegation(agent.agentAccount) && !readiness.freeOnly;
   const chainId = chainIdOfAccount(bound?.delegateAccount);
   const [now] = React.useState(() => Date.now());
-  const expiry = permissionExpiry(grant, now);
+  const expiry = readiness.freeOnly ? null : permissionExpiry(grant, now);
 
   return (
     <section
