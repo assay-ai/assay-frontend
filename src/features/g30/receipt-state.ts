@@ -253,7 +253,7 @@ export const STATE_CARDS: Record<Exclude<ReceiptState, "CHARGED" | "NOT_CHARGED"
     icon: "circle-alert",
     tone: "warning",
     sentence:
-      "This call was served and passed, but its payment could not be collected from your escrow. The price is still held there. Sign to settle it from the banner above (if you signed already, it is being collected): paid calls are paused until it is collected, and free calls still work.",
+      "This call was served and passed, but its payment could not be collected from your escrow. The price is still held there. Settle it with the Settle button in the banner above (if you signed already, it is being collected): paid calls are paused until it is collected, and free calls still work.",
     money: (r) => `${price(r)} owed`,
     moneyTeal: false,
   },

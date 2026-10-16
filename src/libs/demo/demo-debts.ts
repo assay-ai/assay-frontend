@@ -15,7 +15,18 @@
  *                  so the settle sheet shows "Add $Y" and "Raise the ceiling"
  *   unread       — one open debt, and the escrow cannot be read from the
  *                  chain, so the settle sheet says its checks were skipped
+ *   waiting      — one open debt whose original payment is still inside its
+ *                  on-chain window (`replaceableAt` about 20 minutes ahead):
+ *                  Settle is off, with the time and a countdown, and turns
+ *                  on by itself when the time passes
+ *   waiting-mixed — two open debts: one ready to sign, one waiting as above,
+ *                  so the banner settles the ready part and the sheet shows
+ *                  "You owe $X → $Y after this signature"
  *   none         — nothing owed
+ *
+ * The open own debts (not written off: a write-off releases its hold) also
+ * hold their price in the escrow, as a real debt does, so Funding, Withdraw
+ * and Close account show the "held until it is collected" wording.
  *
  * Settling in the demo runs the simulated wallet steps (`sheetSigning`); on
  * success the signed debts read as "being collected" until the page is
@@ -30,6 +41,8 @@ export type DemoDebtVariant =
   | "collecting"
   | "short"
   | "unread"
+  | "waiting"
+  | "waiting-mixed"
   | "none";
 
 const VARIANTS: readonly DemoDebtVariant[] = [
@@ -40,6 +53,8 @@ const VARIANTS: readonly DemoDebtVariant[] = [
   "collecting",
   "short",
   "unread",
+  "waiting",
+  "waiting-mixed",
   "none",
 ];
 const KEY = "assay.demo.debt";

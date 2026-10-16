@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { settleEscrowCheck } from "@/features/buyer-debt/debt-summary";
+import { heldSegmentLabel } from "@/features/buyer-debt/debt-copy";
+import { chargedCallsFromTotals } from "@/features/g30/spend-buckets";
+import { debtBannerSummary, owedChangeRow, settleEscrowCheck } from "@/features/buyer-debt/debt-summary";
 import type { BuyerDebt } from "@/interfaces/buyer-debt";
 
 import { demoResponse } from "./demo-api";
+import { DEMO_NOW_MS } from "./demo-clock";
+import { DEMO_BUYER_ACCOUNT } from "./fixtures";
 
 /*
   Review 2026-10-17: the settle sheet's escrow check never showed in the demo
@@ -73,7 +77,13 @@ describe("demo debt pictures and the settle sheet's escrow check", () => {
   });
 
   it("?debt=written-off counts the owed call on the day it was made, not in today's figures", () => {
-    type Totals = { calls: number; owedCalls: number; chargedTotal: { amount: string } };
+    type Totals = {
+      calls: number;
+      owedCalls: number;
+      notChargedCalls?: number;
+      inProgressCalls?: number;
+      chargedTotal: { amount: string };
+    };
     const summary = (from: number, to: number) =>
       (
         demoResponse("GET", "/receipts/summary", {
@@ -97,9 +107,70 @@ describe("demo debt pictures and the settle sheet's escrow check", () => {
     expect(writtenOffToday.owedCalls).toBe(0);
     expect(writtenOffToday.calls).toBe(openToday.calls - 1);
     expect(writtenOffToday.chargedTotal).toEqual(openToday.chargedTotal);
+    // "Spent today" counts the charged calls: the same count whether the owed call is today's or not.
+    expect(chargedCallsFromTotals(openToday)).toBe(chargedCallsFromTotals(writtenOffToday));
+    expect(chargedCallsFromTotals(openToday)).toBe(openToday.calls - 1 - (openToday.notChargedCalls ?? 0) - (openToday.inProgressCalls ?? 0));
     // Its own day still has it, owed.
     const madeAt = Date.parse(debts[0]!.createdAt);
     const madeDay = Date.UTC(new Date(madeAt).getUTCFullYear(), new Date(madeAt).getUTCMonth(), new Date(madeAt).getUTCDate());
     expect(summary(madeDay, madeDay + day).owedCalls).toBe(1);
+  });
+
+  it("?debt=waiting: one debt not ready for about 20 minutes, so Settle waits", () => {
+    vi.stubGlobal("window", tabAt("?debt=waiting"));
+    const { debts } = sheetCheck();
+    expect(debts).toHaveLength(1);
+    const at = Date.parse(debts[0]!.replaceableAt!);
+    expect(at).toBeGreaterThan(Date.now());
+    expect(at - Date.now()).toBeLessThanOrEqual(20 * 60_000);
+    // On the demo clock's 20-minute grid, like the other demo times.
+    expect((at - DEMO_NOW_MS) % (20 * 60_000)).toBe(0);
+    const summary = debtBannerSummary({ account: DEMO_BUYER_ACCOUNT, debts })!;
+    expect(summary.actionDisabled).toBe(true);
+    expect(summary.waitingNote).toMatch(/^You can settle this from .+ \(in \d+m\):/);
+  });
+
+  it("?debt=waiting-mixed: one ready, one waiting; the sheet's You owe row keeps the waiting part", () => {
+    vi.stubGlobal("window", tabAt("?debt=waiting-mixed"));
+    const { debts } = sheetCheck();
+    expect(debts).toHaveLength(2);
+    const summary = debtBannerSummary({ account: DEMO_BUYER_ACCOUNT, debts })!;
+    expect(summary.ready).toHaveLength(1);
+    expect(summary.actionDisabled).toBe(false);
+    expect(summary.actionLabel).toBe("Settle $2.50");
+    expect(summary.title).toMatch(/^You owe \$8\.50 for 2 calls\./);
+    expect(summary.waitingNote).toMatch(/^1 of them is not ready to sign yet: you can settle it from /);
+    expect(owedChangeRow(summary.toSign, summary.ready)).toEqual({
+      label: "You owe",
+      before: "$8.50",
+      after: "$6.00 after this signature",
+    });
+  });
+
+  it("holds an open debt's price in the escrow, so Funding and Withdraw say it is held until collected", () => {
+    type Holds = { items: { intentId: string; status: string }[] };
+    type Escrow = { openHolds: { amount: string }; spendable: { amount: string }; balance: { amount: string } };
+    for (const [search, held] of [
+      ["?debt=open", "20350000"],
+      ["?debt=waiting", "20350000"],
+      ["?debt=collecting", "20350000"],
+      ["?debt=waiting-mixed", "26350000"],
+      ["?debt=written-off", "17850000"],
+      ["?debt=other-wallet", "17850000"],
+      ["?debt=none", "17850000"],
+    ] as const) {
+      vi.stubGlobal("window", tabAt(search));
+      const escrow = demoResponse("GET", "/escrow") as Escrow;
+      expect(escrow.openHolds.amount, search).toBe(held);
+      expect(BigInt(escrow.spendable.amount) + BigInt(escrow.openHolds.amount)).toBe(BigInt(escrow.balance.amount));
+      const holds = (demoResponse("GET", "/holds") as Holds).items.map((hold) => hold.intentId);
+      const { debts } = demoResponse("GET", "/escrow/debts") as { debts: BuyerDebt[] };
+      const owedIds = new Set(debts.map((debt) => debt.intentId));
+      const label = heldSegmentLabel(holds, owedIds);
+      if (held === "17850000") expect(label, search).toBe("Held by calls being checked");
+      else expect(label, search).toBe("Held by calls being checked and unpaid calls");
+      const balances = demoResponse("GET", "/balances") as { balances: { held: { amount: string } }[] };
+      expect(balances.balances[0]!.held.amount, search).toBe(held);
+    }
   });
 });

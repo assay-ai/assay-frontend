@@ -10,7 +10,7 @@ import { formatMoney } from "@/utils/money";
 
 import type { CallDebt } from "@/interfaces/buyer-debt";
 
-import { debtDeadline, isReplaceable, notYetReplaceableSentence } from "./debt-copy";
+import { debtDeadline, isReplaceable, notYetSettleSentence } from "./debt-copy";
 import { debtBannerSummary, debtDeadlineLine, earliestWriteOff, owedCallState, owedRowText } from "./debt-summary";
 import { useBuyerDebtsQuery, useSettleDebt } from "./settle-debt-sheet";
 import { useReplaceableNow } from "./use-replaceable-now";
@@ -37,6 +37,7 @@ export function OwedRowAction({
   const now = useReplaceableNow(debts.data, debts.dataUpdatedAt);
   // Its original payment can still be collected on chain until `replaceableAt`.
   const notYet = state.kind === "settle" && !isReplaceable(state.debt, now);
+  const noteId = React.useId();
 
   return (
     <div
@@ -45,12 +46,19 @@ export function OwedRowAction({
         className,
       )}
     >
-      <span className="min-w-0 flex-1 text-body-xs text-warning-700">
+      <span id={noteId} className="min-w-0 flex-1 text-body-xs text-warning-700">
         {owedRowText(state, { pending: debts.isPending, callDebt: debt ?? null })}
-        {notYet ? ` ${notYetReplaceableSentence(state.debt.replaceableAt)}` : null}
+        {notYet ? ` ${notYetSettleSentence(state.debt.replaceableAt, { now })}` : null}
       </span>
       {state.kind === "settle" ? (
-        <Button size="sm" variant="secondary" type="button" disabled={notYet} onClick={() => openSettle(intentId)}>
+        <Button
+          size="sm"
+          variant="secondary"
+          type="button"
+          disabled={notYet}
+          aria-describedby={notYet ? noteId : undefined}
+          onClick={() => openSettle(intentId)}
+        >
           Settle {formatMoney(state.debt.amount, { decimals: 4 })}
         </Button>
       ) : null}
@@ -68,6 +76,7 @@ export function OwedReceiptAction({ intentId }: { intentId: string }) {
   const { openSettle } = useSettleDebt();
   const state = owedCallState(debts.data, intentId);
   const now = useReplaceableNow(debts.data, debts.dataUpdatedAt);
+  const noteId = React.useId();
   if (state.kind === "settle") {
     const deadline = debtDeadlineLine(state.debt);
     const notYet = !isReplaceable(state.debt, now);
@@ -79,8 +88,8 @@ export function OwedReceiptAction({ intentId }: { intentId: string }) {
           </p>
         ) : null}
         {notYet ? (
-          <p className="text-body-13 text-02" data-testid="receipt-not-yet">
-            {notYetReplaceableSentence(state.debt.replaceableAt)}
+          <p id={noteId} className="text-body-13 text-02" data-testid="receipt-not-yet">
+            {notYetSettleSentence(state.debt.replaceableAt, { now })}
           </p>
         ) : null}
         <Button
@@ -88,6 +97,7 @@ export function OwedReceiptAction({ intentId }: { intentId: string }) {
           type="button"
           className="mt-1 self-start"
           disabled={notYet}
+          aria-describedby={notYet ? noteId : undefined}
           onClick={() => openSettle(intentId)}
         >
           Settle {formatMoney(state.debt.amount, { decimals: 4 })}
@@ -117,12 +127,13 @@ export function OwedSummaryAction({ owed, calls }: { owed: string; calls: number
   const now = useReplaceableNow(debts.data, debts.dataUpdatedAt);
   const summary = debtBannerSummary(debts.data, { now });
   const settleBy = earliestWriteOff(debts.data);
+  const noteId = React.useId();
   return (
     <div
       data-testid="owed-summary-action"
       className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5"
     >
-      <p className="min-w-0 flex-1 text-body-13 text-warning-700">
+      <p id={noteId} className="min-w-0 flex-1 text-body-13 text-warning-700">
         <span className="font-mono font-semibold">{owed}</span> owed
         {calls === null ? "" : ` for ${calls === 1 ? "1 call" : `${calls} calls`}`}: payment not collected, and paid calls
         are paused until it is settled.
@@ -134,7 +145,13 @@ export function OwedSummaryAction({ owed, calls }: { owed: string; calls: number
           <Link href={routes.calls({ status: "owed" })}>See owed calls</Link>
         </Button>
         {summary?.actionLabel ? (
-          <Button size="sm" type="button" disabled={summary.actionDisabled} onClick={() => openSettle()}>
+          <Button
+            size="sm"
+            type="button"
+            disabled={summary.actionDisabled}
+            aria-describedby={summary.actionDisabled && summary.waitingNote ? noteId : undefined}
+            onClick={() => openSettle()}
+          >
             {summary.actionLabel}
           </Button>
         ) : null}

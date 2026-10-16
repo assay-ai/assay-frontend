@@ -8,7 +8,12 @@ import { LocalTime } from "@/components/patterns/local-time";
 import { PresetChips } from "@/components/patterns/preset-chips";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { StatusTimeline } from "@/components/patterns/status-timeline";
+import { Button } from "@/components/ui/button";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
+import { withdrawAllHeldReason, withdrawHeldText } from "@/features/buyer-debt/debt-copy";
+import { useSettleDebt } from "@/features/buyer-debt/settle-debt-sheet";
+import { useOpenHoldIntentIds } from "@/features/buyer-debt/use-open-hold-intent-ids";
+import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
 import { withdrawGasGrantNote } from "@/features/escrow/withdraw-gas-grant-note";
@@ -66,6 +71,20 @@ export function WithdrawSheet({
     : raw;
   const cancelling = mode === "cancel";
   const walletBlocker = useWalletBlocker(money.signerState, money.ownerShort);
+  // A buyer debt's price stays held until it is collected, not "a few minutes": say so, and offer to settle.
+  const openHoldIds = useOpenHoldIntentIds();
+  const owedIntentIds = useOwedIntentIds();
+  const { openSettle } = useSettleDebt();
+  const heldText = held ? withdrawHeldText(formatLimit(held), openHoldIds, owedIntentIds) : null;
+  const settleFirst = () => {
+    onOpenChange(false);
+    openSettle();
+  };
+  const settleButton = (
+    <Button size="sm" variant="secondary" type="button" className="self-start" onClick={settleFirst}>
+      Settle what is owed
+    </Button>
+  );
 
   const disabledReason = readOnly
     ? "Your account is blocked, so withdrawals are paused."
@@ -76,7 +95,7 @@ export function WithdrawSheet({
         : !balance || toDecimal(balance).lte(0)
           ? "Your escrow is empty."
           : !all
-            ? "Everything in your escrow is held by calls being checked. Try again in a few minutes."
+            ? withdrawAllHeldReason(openHoldIds, owedIntentIds)
           : !parsed.value
             ? amount.trim() === ""
               ? "Pick or enter an amount."
@@ -167,10 +186,13 @@ export function WithdrawSheet({
               hint={available ? `Available to withdraw now: ${formatLimit(available)}` : undefined}
             />
           </div>
-          {held ? (
-            <p className="text-body-13 text-02" data-testid="withdraw-held-note">
-              {formatLimit(held)} is held by calls being checked; it comes back or goes to providers within minutes.
-            </p>
+          {heldText ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-body-13 text-02" data-testid="withdraw-held-note">
+                {heldText.text}
+              </p>
+              {heldText.owed > 0 ? settleButton : null}
+            </div>
           ) : null}
           {standing ? (
             <p className="rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700">

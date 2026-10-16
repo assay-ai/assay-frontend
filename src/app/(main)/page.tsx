@@ -300,8 +300,11 @@ export default function OverviewPage() {
           sub={
             data
               ? // The reader's own day, the one the rows below call "Today": say which zone.
+                // The count is the charged calls, the same calls as the amount; an owed one is named apart.
                 `${formatCount(data.todayCalls)} ${data.todayCalls === 1 ? "call" : "calls"} since 00:00 ${zoneLabel(null)}${
-                  data.todayOwed ? ` · ${formatMoney(data.todayOwed)} owed on today's calls, not collected` : ""
+                  data.todayOwed
+                    ? ` · ${data.todayOwedCalls > 0 ? `${formatCount(data.todayOwedCalls)} owed` : "owed"} (${formatMoney(data.todayOwed)}), not collected`
+                    : ""
                 }`
               : "not available"
           }

@@ -26,7 +26,6 @@ vi.mock("@privy-io/react-auth", () => ({
 }));
 
 import { BUYER_DEBTS_KEY, BuyerDebtBanner } from "./debt-banner";
-import { notYetReplaceableSentence } from "./debt-copy";
 
 const ACCOUNT = "eip155:46630:0x7FD9A17dE9fd64b35081FbAbaa9f3bb85e59F8d1";
 const ASSET = "eip155:46630/erc20:0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
@@ -153,8 +152,13 @@ describe("BuyerDebtBanner", () => {
       const at = soon();
       const html = render({ account: ACCOUNT, debts: [debt({ replaceableAt: at })] });
       expect(signButton(html)).toMatch(/disabled=""/);
-      expect(html).toContain(notYetReplaceableSentence(at));
+      // The local time with its zone and a countdown (review P3-1).
+      expect(html).toMatch(/You can settle this from today \d{2}:\d{2} [^<]+ \(in (29|30)m\): the original payment/);
       expect(html).toContain("so you never pay twice");
+      // The disabled button names the note as its reason (P3-7).
+      const describedBy = signButton(html).match(/aria-describedby="([^"]+)"/)?.[1];
+      expect(describedBy).toBeTruthy();
+      expect(html).toContain(`id="${describedBy}" data-testid="buyer-debt-not-yet"`);
     });
 
     it("offers it once replaceableAt has passed, or when the backend sends none", () => {
@@ -177,6 +181,16 @@ describe("BuyerDebtBanner", () => {
       expect(html).toContain("You owe $5.00 for 2 calls.");
       expect(html).toContain("Settle $2.50");
       expect(html).toContain("1 of them is not ready to sign yet: you can settle it from");
+      expect(signButton(html)).not.toContain("aria-describedby");
+    });
+
+    it("says the first one's time when several wait", () => {
+      const at = soon();
+      const html = render({
+        account: ACCOUNT,
+        debts: [debt({ replaceableAt: at }), debt({ intentId: "int_2", replaceableAt: new Date(Date.now() + 90 * 60_000).toISOString() })],
+      });
+      expect(html).toContain("You can settle the first from today");
     });
   });
 });

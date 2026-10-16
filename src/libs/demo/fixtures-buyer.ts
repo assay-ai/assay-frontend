@@ -26,7 +26,9 @@ import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
  * the held total on `/overview` is the sum of the holds on `/funding`, which
  * is the sum of the five in-flight calls in `/tool-calls`, which is the `held`
  * on the `/balances` fixture in `fixtures.ts` (482.15 available, 17.85 held,
- * 500.00 total).
+ * 500.00 total) — plus, under a `?debt=` picture with an open debt of this
+ * wallet's, that debt's price, which stays held until it is collected
+ * (`demoDebtHolds`; $2.50 by default: 479.65 available, 20.35 held).
  *
  * ## The aggregates are computed, not typed in
  *
@@ -199,7 +201,7 @@ const CALLS: readonly DemoCall[] = [
     reasonCode: null,
     score: 0.96,
     // The agent's delegate key was revoked before the voucher was collected:
-    // buyer debt, so the buyer screens show the "Sign to settle" banner.
+    // buyer debt, so the buyer screens show the "Settle $2.50" banner.
     debt: "OUTSTANDING",
     debtCause: "DelegateIsRevoked",
   },
@@ -834,7 +836,7 @@ function debtView(call: DemoCall) {
     // sheet name the same tool as the call list.
     toolId: wireToolId(call.toolId),
     cause: call.debtCause ?? null,
-    // Not signed yet: the banner offers "Sign to settle".
+    // Not signed yet: the banner offers "Settle $X".
     state: "OPEN" as const,
     lapsedAt: minutesAgo(lapsedMinutes),
     writeOffAt: minutesAgo(lapsedMinutes - WRITE_OFF_DAYS * 1440),
@@ -861,6 +863,41 @@ export function demoDebt() {
  * import cycle (see `demoDebt`).
  */
 const demoOtherPayer = () => `${DEMO_CHAIN_ID}:0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF`;
+
+/** The second debt of `?debt=waiting-mixed`, the one still waiting. */
+const WAITING_DEBT_INTENT = "5a9e1c37-b2d4-4f60-8e13-c7a04d29f5b8";
+/** How far ahead of the demo's "now" a waiting debt's `replaceableAt` sits. */
+const WAITING_MINUTES = 20;
+let waitingAt: string | null = null;
+
+/**
+ * `replaceableAt` for the waiting pictures: 20 minutes after the demo's "now"
+ * (`DEMO_NOW_MS`, like every demo time). The demo clock can be hours old in a
+ * long session, so when that moment has already passed it moves on in
+ * 20-minute steps from the same base until it is ahead of the real clock. Read
+ * once per page load, so the Settle button can be seen turning on when it passes.
+ */
+function waitingReplaceableAt(real: number = Date.now()): string {
+  if (waitingAt) return waitingAt;
+  const step = WAITING_MINUTES * 60_000;
+  const steps = Math.max(1, Math.floor((real - DEMO_NOW_MS) / step) + 1);
+  waitingAt = new Date(DEMO_NOW_MS + steps * step).toISOString();
+  return waitingAt;
+}
+
+/**
+ * The demo debts whose price is still held in this escrow: this wallet's own,
+ * open or being collected. A written-off debt's hold was released; another
+ * wallet's debt is held in that wallet's escrow.
+ */
+export function demoDebtHolds() {
+  return demoDebts().filter((debt) => debt.payer === DEMO_BUYER_ACCOUNT && debt.state !== "WRITTEN_OFF");
+}
+
+/** The sum of the held debts, in major units (6 decimals). */
+export function demoDebtHeldMajor(): number {
+  return demoDebtHolds().reduce((sum, debt) => sum + Number(debt.amount.amount) / 1e6, 0);
+}
 
 /**
  * `GET /escrow/debts` for the picture `?debt=` asked for (see `demo-debts.ts`).
@@ -902,7 +939,21 @@ export function demoDebts() {
                   cause: "EscrowWindowLimitExceeded",
                 },
               ]
-            : [base];
+            : variant === "waiting"
+              ? [{ ...base, replaceableAt: waitingReplaceableAt() }]
+              : variant === "waiting-mixed"
+                ? [
+                    base,
+                    {
+                      ...base,
+                      intentId: WAITING_DEBT_INTENT,
+                      toolId: wireToolId("ocr_extract"),
+                      amount: { ...base.amount, amount: money("6.00").amount },
+                      cause: "EscrowWindowLimitExceeded",
+                      replaceableAt: waitingReplaceableAt(),
+                    },
+                  ]
+                : [base];
   return debts.map((debt) =>
     debt.state !== "REPLACING" && demoDebtSigned(debt.intentId)
       ? { ...debt, state: "REPLACING" as const, replacedAt: justNow() }
@@ -1240,15 +1291,27 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/holds",
     body: () => ({
-      items: (freshStage() ? [] : CALLS.filter(inFlight)).map((call) => ({
-        id: `hld_${call.intentId.slice(0, 8)}`,
-        intentId: call.intentId,
-        amount: money(listedPrice(call)),
-        status: "OPEN",
-        createdAt: minutesAgo(call.minutesAgo),
-        ageSeconds: call.minutesAgo * 60,
-        expiresAt: minutesAgo(call.minutesAgo - 1440),
-      })),
+      items: [
+        ...(freshStage() ? [] : CALLS.filter(inFlight)).map((call) => ({
+          id: `hld_${call.intentId.slice(0, 8)}`,
+          intentId: call.intentId,
+          amount: money(listedPrice(call)),
+          status: "OPEN",
+          createdAt: minutesAgo(call.minutesAgo),
+          ageSeconds: call.minutesAgo * 60,
+          expiresAt: minutesAgo(call.minutesAgo - 1440),
+        })),
+        // A buyer debt's price stays held until it is collected (see `demoDebtHolds`).
+        ...demoDebtHolds().map((debt) => ({
+          id: `hld_${debt.intentId.slice(0, 8)}`,
+          intentId: debt.intentId,
+          amount: { ...debt.amount },
+          status: "OPEN",
+          createdAt: debt.createdAt,
+          ageSeconds: Math.max(Math.round((DEMO_NOW_MS - Date.parse(debt.createdAt)) / 1000), 0),
+          expiresAt: debt.writeOffAt,
+        })),
+      ],
       pageInfo: { nextCursor: null, hasMore: false },
     }),
   },
@@ -1420,9 +1483,10 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       */
       escrowPda: null,
       escrowTokenAccount: null,
+      // The in-flight calls' 17.85, plus the price of each debt still held (see `demoDebtHolds`).
       balance: money("500.00"),
-      openHolds: money("17.85"),
-      spendable: money("482.15"),
+      openHolds: money((17.85 + demoDebtHeldMajor()).toFixed(2)),
+      spendable: money((482.15 - demoDebtHeldMajor()).toFixed(2)),
       withdrawRequested: money("0"),
       withdrawAvailableAt: null,
       serverTime: justNow(),

@@ -9,6 +9,7 @@ import {
   debtBannerTitle,
   deadlineCountdown,
   debtDeadline,
+  closeAccountHeldText,
   debtLocalTime,
   debtOutstandingContext,
   debtRefusalSentence,
@@ -21,8 +22,11 @@ import {
   isReplaceable,
   nextReplaceableAt,
   notYetReplaceableSentence,
+  notYetSettleSentence,
   settledToast,
   settleDebtErrorSentence,
+  withdrawAllHeldReason,
+  withdrawHeldText,
   splitDebts,
   uncollectedNotWithheld,
 } from "./debt-copy";
@@ -325,13 +329,27 @@ describe("heldCallsText", () => {
   });
 });
 
+describe("notYetSettleSentence (review P3-1)", () => {
+  const now = Date.parse("2026-10-17T07:00:00.000Z");
+  it("gives the local time with its zone and a countdown", () => {
+    expect(notYetSettleSentence("2026-10-17T07:12:00.000Z", { now, timeZone: "Asia/Tokyo" })).toBe(
+      "You can settle this from today 14:12 GMT+9 (in 12m): the original payment must expire on chain first, so you never pay twice.",
+    );
+    expect(
+      notYetSettleSentence("2026-10-17T07:12:00.000Z", { now, timeZone: "UTC", subject: "the first", midSentence: true }),
+    ).toMatch(/^you can settle the first from today 07:12 UTC \(in 12m\):/);
+    expect(notYetSettleSentence(null)).toMatch(/^You can settle this in a few minutes:/);
+    expect(notYetSettleSentence("soon")).toMatch(/in a few minutes/);
+  });
+});
+
 describe("Funding's held line (main d021840 / 49210cf in the redesign)", () => {
   const owed = new Set(["d1", "d2"]);
   it("keeps the calls-being-checked wording when nothing is owed", () => {
     expect(escrowHeldText("$1.00", ["a"], new Set())).toBe(
       "$1.00 more is held by calls being checked; it comes back or goes to providers within minutes",
     );
-    expect(heldSegmentLabel(["a"], new Set())).toBe("Held by calls in flight");
+    expect(heldSegmentLabel(["a"], new Set())).toBe("Held by calls being checked");
   });
   it("never calls a held debt a call in flight, and says it is held until collected", () => {
     expect(escrowHeldText("$2.50", ["d1"], owed)).toBe(
@@ -341,6 +359,36 @@ describe("Funding's held line (main d021840 / 49210cf in the redesign)", () => {
       "$5.00 more is held: 1 call being checked (it comes back or goes to providers within minutes) and 2 unpaid calls, held until they are collected",
     );
     expect(heldSegmentLabel(["d1"], owed)).toBe("Held for unpaid calls");
-    expect(heldSegmentLabel(["a", "d1"], owed)).toBe("Held by calls in flight and unpaid calls");
+    expect(heldSegmentLabel(["a", "d1"], owed)).toBe("Held by calls being checked and unpaid calls");
+  });
+  it("Withdraw: a debt hold is held until collected and says to settle it; checking holds keep their wording", () => {
+    expect(withdrawHeldText("$1.00", ["a"], new Set())).toEqual({
+      text: "$1.00 is held by calls being checked; it comes back or goes to providers within minutes.",
+      owed: 0,
+    });
+    expect(withdrawHeldText("$2.50", ["d1"], owed)).toEqual({
+      text: "$2.50 is held for 1 unpaid call, held until its payment is collected. Settle it to free that money.",
+      owed: 1,
+    });
+    expect(withdrawHeldText("$5.00", ["a", "d1", "d2"], owed).text).toBe(
+      "$5.00 is held: 1 call being checked (it comes back or goes to providers within minutes) and 2 unpaid calls, held until their payments are collected. Settle them to free that money.",
+    );
+    expect(withdrawAllHeldReason(["a"], new Set())).toBe(
+      "Everything in your escrow is held by calls being checked. Try again in a few minutes.",
+    );
+    expect(withdrawAllHeldReason(["d1"], owed)).toBe(
+      "Everything in your escrow is held for 1 unpaid call, held until its payment is collected. Settle it first, then withdraw what is left.",
+    );
+    expect(withdrawAllHeldReason(["a", "d1"], owed)).not.toMatch(/few minutes/);
+  });
+  it("Close account: calls being checked come back within 24 hours; unpaid calls wait to be settled", () => {
+    expect(closeAccountHeldText(["a", "b"], new Set())).toEqual({
+      checking: "2 calls are still being checked. Their held money is charged or comes back within 24 hours; then withdraw it too.",
+      unpaid: null,
+    });
+    expect(closeAccountHeldText(["d1"], owed)).toEqual({
+      checking: null,
+      unpaid: "1 unpaid call keeps its price held until it is collected: settle it, then withdraw what is left.",
+    });
   });
 });

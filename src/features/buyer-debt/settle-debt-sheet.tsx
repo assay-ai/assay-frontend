@@ -26,12 +26,21 @@ import { markDemoDebtsSigned } from "@/libs/demo/demo-debts";
 import { findChain } from "@/services/chains.service";
 import { createDebtVoucherIntent, getBuyerDebts, submitDebtVoucher } from "@/services/escrow.service";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
+import { formatClock } from "@/libs/local-time";
 import { formatMoney } from "@/utils/money";
 
-import { debtDeadline, debtStateOf, debtsToSign, isReplaceable, settledToast, splitDebts } from "./debt-copy";
+import {
+  debtDeadline,
+  debtStateOf,
+  debtsToSign,
+  isReplaceable,
+  settledToast,
+  splitDebts,
+} from "./debt-copy";
 import {
   balanceAfterSettling,
   debtTotal,
+  owedChangeRow,
   paidCallsAfterSettling,
   resumesAfterSettling,
   settleBlockedSummary,
@@ -40,7 +49,7 @@ import {
   waitingToSettleNote,
 } from "./debt-summary";
 import { settleDebt } from "./settle-debt";
-import { refreshesDebts, settleDebtFailure } from "./settle-debt-errors";
+import { notYetRefusal, refreshesDebts, settleDebtFailure, type NotYetRefusal } from "./settle-debt-errors";
 import { useReplaceableNow } from "./use-replaceable-now";
 
 export const BUYER_DEBTS_KEY = ["escrow", "debts"] as const;
@@ -148,24 +157,39 @@ function SettleDebtSheet({
   const chain = chainId ? findChain(chains, chainId) : null;
 
   /*
-    The debts to settle are fixed when the sheet opens: a refetch in the
-    middle of the signatures must not renumber the steps under the person.
+    Which calls this opening is about is fixed when the sheet opens (its own
+    debts, or the one call it was opened for). Which of them can be signed is
+    judged live: a debt is signed only past its `replaceableAt` (before it the
+    original voucher can still be collected on chain, so the backend refuses the
+    replacement with `PAYMENT_DEBT_NOT_YET_REPLACEABLE` and the buyer never pays
+    twice), and one that becomes ready while the sheet is open joins the list.
+    Once signing starts the list is frozen, so a refetch in the middle of the
+    signatures never renumbers the steps under the person.
   */
-  /*
-    Only debts past their `replaceableAt` are signed: before it the original
-    voucher can still be collected on chain, so the backend refuses the
-    replacement (`PAYMENT_DEBT_NOT_YET_REPLACEABLE`) — the buyer never pays
-    twice. The waiting ones are named, with the time they can be settled.
-  */
-  const [debts, setDebts] = React.useState<{ ready: BuyerDebt[]; waitingNote: string | null } | null>(null);
+  const [openingIds, setOpeningIds] = React.useState<ReadonlySet<string> | null>(null);
   const now = useReplaceableNow(query.data, query.dataUpdatedAt);
-  if (open && debts === null && query.data) {
+  if (open && openingIds === null && query.data) {
     const own = debtsToSign(splitDebts(query.data).own);
-    const toSign = intentId ? own.filter((debt) => debt.intentId === intentId) : own;
-    setDebts({ ready: toSign.filter((debt) => isReplaceable(debt, now)), waitingNote: waitingToSettleNote(toSign, now) });
+    setOpeningIds(new Set((intentId ? own.filter((debt) => debt.intentId === intentId) : own).map((debt) => debt.intentId)));
   }
-  const settling = debts?.ready ?? [];
-  const waitingNote = debts?.waitingNote ?? null;
+  const ownToSign = debtsToSign(splitDebts(query.data).own);
+  const toSign = openingIds ? ownToSign.filter((debt) => openingIds.has(debt.intentId)) : [];
+  const [frozen, setFrozen] = React.useState<BuyerDebt[] | null>(null);
+  const signedIds = React.useRef(new Set<string>());
+  /*
+    After a "not replaceable yet" refusal the button waits for the server's
+    `replaceableAt`, and at least `NOT_YET_BACKOFF_MS`: the browser's clock may
+    run ahead of Assay's (review P3, clock skew).
+  */
+  const [refusal, setRefusal] = React.useState<NotYetRefusal | null>(null);
+  const [holding, setHolding] = React.useState(false);
+  React.useEffect(() => {
+    if (!refusal) return;
+    const timer = setTimeout(() => setHolding(false), Math.max(refusal.retryAt - Date.now(), 0) + 250);
+    return () => clearTimeout(timer);
+  }, [refusal]);
+  const settling = frozen ?? toSign.filter((debt) => isReplaceable(debt, now));
+  const waitingNote = waitingToSettleNote(toSign, now);
   const total = debtTotal(settling);
   const totalText = total ? formatMoney(total, { decimals: 4 }) : `${settling.length} payments`;
   const balance = escrow.data?.balance ?? null;
@@ -206,9 +230,17 @@ function SettleDebtSheet({
           submit: submitDebtVoucher,
         });
         setLastResult(result);
+        signedIds.current.add(debt.intentId);
         return { data: result };
       } catch (error) {
         if (refreshesDebts(error)) void queryClient.invalidateQueries({ queryKey: BUYER_DEBTS_KEY });
+        const notYet = notYetRefusal(error, Date.now());
+        if (notYet) {
+          setRefusal(notYet);
+          setHolding(true);
+          // Nothing signed yet: let the refetched list decide again what is ready.
+          if (signedIds.current.size === 0) setFrozen(null);
+        }
         throw error;
       }
     },
@@ -219,9 +251,15 @@ function SettleDebtSheet({
     ? (waitingNote ??
       "Nothing left for this wallet to sign: it is settled, being collected, or owed by another wallet.")
     : null;
+  const holdReason =
+    holding && refusal
+      ? `Assay said this payment is not ready to sign yet. You can try again from ${formatClock(refusal.retryAt, { seconds: true })}.`
+      : null;
   const disabledReason = readOnly
     ? "Your account is blocked, so nothing can be signed now. Contact Assay support."
-    : nothingReason
+    : holdReason
+      ? holdReason
+      : nothingReason
       ? nothingReason
       : blocks.length > 0
         ? `Not yet: ${blocks.map((block) => block.text).join(" ")}`
@@ -233,7 +271,8 @@ function SettleDebtSheet({
   // ("$0.00", "Resume in about a minute"), so the sheet shows them only when it
   // can sign; the blocked section says what is owed, what is missing and the next step.
   const changes = [
-    { label: "You owe", before: totalText, after: formatMoney(null) },
+    // A debt that is not ready stays owed: "after" says how much (review P2-1).
+    owedChangeRow(ownToSign, settling),
     ...(balance && balanceAfter
       ? [
           {
@@ -261,7 +300,11 @@ function SettleDebtSheet({
       resetKey={settling.map((debt) => debt.intentId).join("|")}
       disabled={Boolean(disabledReason)}
       disabledReason={disabledReason}
-      describeError={settleDebtFailure}
+      describeError={(error) => settleDebtFailure(error, now)}
+      onPhaseChange={(phase) => {
+        // Signing started: keep these steps as they are until the sheet closes.
+        if (phase === "running") setFrozen((current) => current ?? settling);
+      }}
       successTitle={`Signed. Collecting ${totalText} from your escrow`}
       successDescription={
         <>

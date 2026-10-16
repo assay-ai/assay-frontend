@@ -151,15 +151,85 @@ export function percentText(rate: number): string {
   return String(Number((rate * 100).toFixed(4)));
 }
 
+/** The words both free-call boxes use when a value is refused, so the two read alike. */
+const FREE_CALLS_COPY = {
+  whole: "A whole number of calls, like 100.",
+  atLeast: "At least 1 call.",
+  atMost: (max: number) => `At most ${max.toLocaleString("en-US")} calls.`,
+} as const;
+
 /** Free calls per agent per day: a whole number from 1 to 1,000,000. */
 export function freeCallsFromInput(text: string): { value: number | null; error: string | null } {
   const trimmed = text.trim().replace(/,/g, "");
   if (trimmed === "") return { value: null, error: "Enter how many free calls each agent gets a day." };
-  if (!/^\d+$/.test(trimmed)) return { value: null, error: "A whole number, like 100." };
+  if (!/^\d+$/.test(trimmed)) return { value: null, error: FREE_CALLS_COPY.whole };
   const value = Number(trimmed);
-  if (value < 1) return { value: null, error: "At least 1." };
-  if (value > 1_000_000) return { value: null, error: "At most 1,000,000." };
+  if (value < 1) return { value: null, error: FREE_CALLS_COPY.atLeast };
+  if (value > 1_000_000) return { value: null, error: FREE_CALLS_COPY.atMost(1_000_000) };
   return { value, error: null };
+}
+
+/** Highest value the backend accepts for `freeDailyBudget` (an int4). */
+const MAX_FREE_CALLS_PER_DAY = 2_147_483_647;
+
+/**
+ * Free calls per day, all agents (`freeDailyBudget`): empty is the platform
+ * default (`null`), otherwise a whole number of calls, with the same words as
+ * the per-agent box.
+ */
+export function freeBudgetFromInput(text: string): { value: number | null; error: string | null } {
+  const trimmed = text.trim().replace(/,/g, "");
+  if (trimmed === "") return { value: null, error: null };
+  if (!/^\d+$/.test(trimmed)) return { value: null, error: FREE_CALLS_COPY.whole };
+  const value = Number(trimmed);
+  if (value < 1) return { value: null, error: `${FREE_CALLS_COPY.atLeast} Leave it empty for the platform default.` };
+  if (value > MAX_FREE_CALLS_PER_DAY) return { value: null, error: FREE_CALLS_COPY.atMost(MAX_FREE_CALLS_PER_DAY) };
+  return { value, error: null };
+}
+
+/**
+ * A warning when the listing's daily free calls (all agents) are fewer than
+ * one agent's: the per-agent number can then never be reached in full.
+ */
+export function freeBudgetWarning(budget: number | null, perAgent: number | null): string | null {
+  if (budget === null || perAgent === null || budget >= perAgent) return null;
+  const all = budget.toLocaleString("en-US");
+  return (
+    `Agents get at most ${all} free ${budget === 1 ? "call" : "calls"} a day in total, fewer than the ` +
+    `${perAgent.toLocaleString("en-US")} each agent is offered.`
+  );
+}
+
+const MODE_WORDS: Record<PricingMode, string> = { FREE: "Free", FREEMIUM: "Free + paid", PAID: "Paid" };
+
+/**
+ * The save confirm's rows for how agents pay and the free calls, before →
+ * after, for the fields the save sends.
+ */
+export function freeTermsChangeRows(
+  binding: { pricingMode: PricingMode; freeQuotaPerAgent: number | null; freeDailyBudget: number | null },
+  body: { pricingMode?: PricingMode; freeQuotaPerAgent?: number | null; freeDailyBudget?: number | null },
+): { label: string; before: string; after: string }[] {
+  const calls = (n: number | null, none: string) => (n === null ? none : `${n.toLocaleString("en-US")} ${n === 1 ? "call" : "calls"}`);
+  const rows: { label: string; before: string; after: string }[] = [];
+  if (body.pricingMode !== undefined && body.pricingMode !== binding.pricingMode) {
+    rows.push({ label: "How agents pay", before: MODE_WORDS[binding.pricingMode], after: MODE_WORDS[body.pricingMode] });
+  }
+  if (body.freeQuotaPerAgent !== undefined) {
+    rows.push({
+      label: "Free calls per agent per day",
+      before: calls(binding.freeQuotaPerAgent, "None"),
+      after: calls(body.freeQuotaPerAgent, "None"),
+    });
+  }
+  if (body.freeDailyBudget !== undefined) {
+    rows.push({
+      label: "Free calls per day, all agents",
+      before: calls(binding.freeDailyBudget, "Platform default"),
+      after: calls(body.freeDailyBudget, "Platform default"),
+    });
+  }
+  return rows;
 }
 
 /** Seconds as a provider thinks about a timeout → milliseconds. */
