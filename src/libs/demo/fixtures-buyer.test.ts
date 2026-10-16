@@ -56,3 +56,23 @@ describe("the demo buyer's prices", () => {
     }
   });
 });
+
+describe("the demo /withheld split", () => {
+  it("puts the voided search_web call under provider or platform error", () => {
+    const prev = process.env.NEXT_PUBLIC_DEMO_CHAINS;
+    process.env.NEXT_PUBLIC_DEMO_CHAINS = "robinhood";
+    try {
+      const body = demoResponse("GET", "/withheld", {}) as {
+        withheld: { withheld: { amount: { amount: string }; buckets: { bucket: string; calls: number; amount: { amount: string } }[] } }[];
+      };
+      const { amount, buckets } = body.withheld[0]!.withheld;
+      expect(amount.amount).toBe("1213200");
+      expect(buckets.map((b) => [b.bucket, b.calls, b.amount.amount])).toEqual([
+        ["FAILED_VERIFICATION", 2, "1201200"],
+        ["PROVIDER_OR_PLATFORM_ERROR", 1, "12000"],
+      ]);
+    } finally {
+      process.env.NEXT_PUBLIC_DEMO_CHAINS = prev;
+    }
+  });
+});
