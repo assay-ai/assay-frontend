@@ -103,6 +103,7 @@ describe("unsettledLine / strandWarning", () => {
       "leave it unredeemable (together they no longer fit the new 24-hour limit)",
     );
     expect(strandWarning(["maxPerWindow"], 1)).toContain("the provider is not paid");
+    expect(strandWarning(["revoked"], 2)).toContain("becomes a payment you owe: your paid calls pause");
   });
 });
 
@@ -314,8 +315,10 @@ describe("strandAcknowledgement", () => {
   it("names the count, the amount and the effect", () => {
     const text = strandAcknowledgement({ ...RETEST, count: 3, amount: usdg("600000") });
     expect(text).toMatch(/^3 payments \(\$0\.60\) still being settled would no longer fit\./);
-    expect(text).toContain("the provider is not paid for calls it already served");
-    expect(text).toContain("the $0.60 stays in my escrow");
+    expect(text).toContain("the $0.60 becomes a payment I owe");
+    expect(text).toContain("my paid calls pause until I sign them again");
+    expect(text).toContain("Free calls keep working");
+    expect(text).not.toContain("stays in my escrow");
     expect(text).not.toMatch(/owed/);
   });
 
