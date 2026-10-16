@@ -42,6 +42,15 @@ type ViemChain = NonNullable<PrivyConfig["supportedChains"]>[number];
  * login modal, and no `supportedChains`, which is the state the long comment
  * inside the config argues for. On, it configures the one EVM chain so that an
  * external EVM wallet can connect and Privy does not fall back to probing.
+ *
+ * Privy still mounts in a demo build. On an origin the Privy app does not
+ * allow (a local `out/` served on localhost), Privy logs "Origin not allowed"
+ * and "iframe failed to load" warnings; they are harmless, because every demo
+ * flow is simulated and never waits on a wallet. Not mounting Privy here is
+ * not a safe fix: about twenty screens and `useSigner` call Privy hooks, which
+ * throw outside a `PrivyProvider`, and the session bridge's sign-in and
+ * sign-out handling reads Privy's `ready`/`authenticated`. Allow the origin in
+ * the Privy dashboard to silence them instead.
  */
 const DEMO_ROBINHOOD = demoEnabled();
 
