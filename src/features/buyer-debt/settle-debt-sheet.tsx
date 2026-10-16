@@ -33,6 +33,7 @@ import {
   debtTotal,
   paidCallsAfterSettling,
   resumesAfterSettling,
+  settleBlockedSummary,
   settleEscrowCheck,
 } from "./debt-summary";
 import { settleDebt } from "./settle-debt";
@@ -162,6 +163,7 @@ function SettleDebtSheet({
     settling,
   );
   const blocks = check.kind === "blocked" ? check.blocks : [];
+  const blockedSummary = settleBlockedSummary(settling, blocks);
   const resumes = resumesAfterSettling(query.data, settling);
   const { paused: pausedByYou } = usePauseAll();
   const paidCalls = paidCallsAfterSettling({ resumes, pausedByYou, blocked: readOnly });
@@ -209,6 +211,9 @@ function SettleDebtSheet({
           ? "Checking your escrow balance and ceilings first…"
           : walletBlocker;
 
+  // While signing is blocked these before → after rows would promise the outcome
+  // ("$0.00", "Resume in about a minute"), so the sheet shows them only when it
+  // can sign; the blocked section says what is owed, what is missing and the next step.
   const changes = [
     { label: "You owe", before: totalText, after: formatMoney(null) },
     ...(balance && balanceAfter
@@ -232,7 +237,7 @@ function SettleDebtSheet({
       chain={chain}
       title={settling.length > 1 ? `Settle ${totalText} for ${settling.length} calls` : `Settle ${totalText} owed for a call`}
       description="Your agent already made and used this call, but its payment could not be collected. You sign the payment again; it is taken from your escrow within about a minute and paid to the provider."
-      changes={settling.length > 0 ? changes : undefined}
+      changes={settling.length > 0 && blocks.length === 0 ? changes : undefined}
       steps={steps}
       label={settling.length > 1 ? `Sign ${settling.length} payments · ${totalText} (free)` : `Sign to pay ${totalText} (free, no gas)`}
       resetKey={settling.map((debt) => debt.intentId).join("|")}
@@ -264,6 +269,14 @@ function SettleDebtSheet({
           <h3 id="settle-first" className="text-label-13 text-warning-700">
             Do this first, or the payment cannot be collected
           </h3>
+          <dl className="grid grid-cols-[88px_minmax(0,1fr)] gap-x-3 gap-y-1 text-body-13" data-testid="settle-blocked-summary">
+            {blockedSummary.map((row) => (
+              <React.Fragment key={row.label}>
+                <dt className="text-02">{row.label}</dt>
+                <dd className="text-warning-700 [overflow-wrap:anywhere]">{row.value}</dd>
+              </React.Fragment>
+            ))}
+          </dl>
           {blocks.map((block) => (
             <div key={block.kind} className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <p className="min-w-0 flex-1 text-body-13 text-warning-700">{block.text}</p>

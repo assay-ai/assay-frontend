@@ -66,9 +66,12 @@ function positive(money: Money | null | undefined): boolean {
 export function MoneyDrawers({
   action,
   onAction,
+  capsNeed,
 }: {
   action: MoneyAction | null;
   onAction: (next: MoneyAction | null) => void;
+  /** The ceiling a deep link asks for (`?perCall=` / `?perDay=`), prefilled in the caps drawer. */
+  capsNeed?: { perCall?: string | null; perDay?: string | null };
 }) {
   const close = (open: boolean) => {
     if (!open) onAction(null);
@@ -76,7 +79,7 @@ export function MoneyDrawers({
   return (
     <>
       <DepositSheet open={action === "deposit"} onOpenChange={close} onSetCaps={() => onAction("caps")} />
-      <CapsSheet open={action === "caps"} onOpenChange={close} />
+      <CapsSheet open={action === "caps"} onOpenChange={close} need={capsNeed} />
       <WithdrawSheet open={action === "withdraw"} onOpenChange={close} />
       <WithdrawSheet open={action === "cancel-withdraw"} onOpenChange={close} mode="cancel" />
       <ClaimSheet open={action === "claim"} onOpenChange={close} />
@@ -93,6 +96,9 @@ export function FundingView() {
   const router = useRouter();
   const pathname = usePathname();
   const requested = useSearchParam("action");
+  // The settle sheet's "Raise the ceiling to $2.50" link prefills the caps drawer.
+  const needPerCall = useSearchParam("perCall");
+  const needPerDay = useSearchParam("perDay");
   // Statements is its own page; an old `?tab=statements` link goes there.
   const tab = useSearchParam("tab");
   React.useEffect(() => {
@@ -254,7 +260,7 @@ export function FundingView() {
 
       <DepositsList />
 
-      <MoneyDrawers action={action} onAction={onAction} />
+      <MoneyDrawers action={action} onAction={onAction} capsNeed={{ perCall: needPerCall, perDay: needPerDay }} />
     </div>
   );
 }
