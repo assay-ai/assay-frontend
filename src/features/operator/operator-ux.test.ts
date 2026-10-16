@@ -531,7 +531,8 @@ describe("team forms", () => {
   it("derives the handle from the name", () => {
     expect(deriveSubject("Noor Hassan")).toBe("noor@");
     expect(deriveSubject("  Zo\u00eb \u00c5lund  ")).toBe("zoe@");
-    expect(deriveSubject("\u0110ani Ross")).toBe("dani@");
+    expect(deriveSubject("\u0141ukasz Ross")).toBe("lukasz@");
+    expect(deriveSubject("S\u00f8ren Berg")).toBe("soren@");
     expect(deriveSubject("")).toBe("");
   });
   it("reads the limit choice", () => {
