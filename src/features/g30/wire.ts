@@ -1,4 +1,4 @@
-import type { Money } from "@/interfaces";
+import type { CallDebt, Money } from "@/interfaces";
 
 /**
  * A local view of two wire shapes that `@/services` returns as `unknown`.
@@ -71,8 +71,30 @@ export interface Receipt {
   status: string;
   listedPrice: Money;
   chargedPrice: Money;
-  /** listedPrice − chargedPrice, computed server-side. */
+  /**
+   * What the refund guarantee kept back (REFUNDED / VOIDED / EXPIRED with a
+   * hold). NOT `listedPrice − chargedPrice`: a SETTLED call the provider
+   * forfeited, or whose debt was written off, has both charged and withheld
+   * zero.
+   */
   withheld: Money;
+  /**
+   * SETTLED, but the provider caused the payment to fail and forfeited it: not
+   * charged, nobody paid. Optional: older backends do not send it.
+   */
+  forfeited?: boolean;
+  /**
+   * Buyer debt. `OUTSTANDING`: the payment could not be collected; the price
+   * stays held and is charged once the payer signs a replacement voucher — paid
+   * calls are refused until then. `WRITTEN_OFF`: never settled; written off for
+   * the provider (not paid), but the buyer still owes it: paid calls stay
+   * refused until it is signed, and the summary counts it under owed.
+   * `VOIDED`: the call failed verification after it had become debt; not
+   * charged, provider not paid.
+   */
+  debt?: CallDebt | null;
+  /** The recorded cause behind `forfeited` or `debt`, e.g. `uncollected:DelegateIsRevoked`. */
+  chargeNote?: string | null;
   verdict: ReceiptVerdict;
   stages: ReceiptStage[];
   policy: ReceiptPolicy;
@@ -91,8 +113,27 @@ export interface SummaryFigures {
   calls: number;
   refundedCalls: number;
   listedTotal: Money;
+  /** Served and collected (or being collected). Open or written-off buyer debt is in `owedTotal`. */
   chargedTotal: Money;
+  /** The guarantee's withheld figure — part of `notChargedTotal`, not all of it. */
   withheldTotal: Money;
+  /**
+   * Not charged: refunded, voided and expired calls, and served calls never
+   * collected and not owed (forfeited, voided debt). A written-off debt is
+   * owed, not here.
+   * `listedTotal = chargedTotal + notChargedTotal + owedTotal + inProgressTotal`.
+   */
+  notChargedTotal: Money;
+  notChargedCalls: number;
+  /**
+   * Buyer debt, open or written off: served, payment not collected yet, still
+   * owed by the buyer — neither charged nor not charged.
+   */
+  owedTotal: Money;
+  owedCalls: number;
+  /** Calls not finished yet, at their listed price. */
+  inProgressTotal: Money;
+  inProgressCalls: number;
   failRate: number | null;
 }
 
@@ -102,6 +143,8 @@ export interface SummaryComparison extends SummaryFigures {
   deltaListedTotal: Money;
   deltaChargedTotal: Money;
   deltaWithheldTotal: Money;
+  deltaNotChargedTotal: Money;
+  deltaOwedTotal: Money;
 }
 
 export interface SummaryGroup extends SummaryFigures {

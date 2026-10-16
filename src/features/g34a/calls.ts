@@ -169,11 +169,20 @@ export function rowsOf(exported: ProviderCallsExport | undefined): ProviderCallR
  * figures (see `docs` rule 01: listed and charged, always both).
  */
 export function isCredited(row: ProviderCallRow): boolean {
-  // Settled, but the export says the credit is not written (yet).
+  // Settled, but the export says the credit is not written (yet), or the
+  // provider forfeited the voucher and nothing was collected or credited.
   return (
     row.status === "SETTLED" &&
     row.classification !== "PENDING" &&
-    row.classification !== "PAID_AWAITING_REDEMPTION"
+    row.classification !== "PAID_AWAITING_REDEMPTION" &&
+    row.classification !== "PROVIDER_FORFEITED" &&
+    // Buyer debt (not paid yet) and uncollected (never paid): nothing reached
+    // the provider, and the platform never pays in the buyer's place.
+    row.classification !== "PAID_BUYER_DEBT" &&
+    row.classification !== "PAID_UNCOLLECTED" &&
+    // A buyer debt voided by a late failing verdict stays SETTLED, but is
+    // PAID_UNCREDITED with zero amounts: nobody was credited.
+    row.classification !== "PAID_UNCREDITED"
   );
 }
 

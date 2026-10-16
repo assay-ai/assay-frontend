@@ -8,6 +8,7 @@ import {
   foldNotCredited,
   observedTakeRate,
   pendingNote,
+  PENDING_PAYMENT_NOTE,
   rowsInAsset,
 } from "./csv";
 
@@ -48,26 +49,119 @@ describe("foldClasses — rail B awaiting redemption", () => {
   });
 });
 
-describe("PLATFORM_ABSORBED", () => {
+// No platform debt: a call whose payment could not be collected is the
+// BUYER's debt. Open, it is not earned and not withheld; written off, it is
+// closed with nothing paid. The platform never credits it.
+describe("PAID_BUYER_DEBT", () => {
+  const rows = [
+    row({ callId: "a" }),
+    row({ callId: "b", classification: "PAID_BUYER_DEBT", reason: "buyer_debt:DelegateIsRevoked" }),
+  ];
+
+  it("gets its own bucket and is neither earned nor withheld", () => {
+    const table = foldClasses(rows);
+    const debt = table.buckets.find((b) => b.className === "PAID_BUYER_DEBT");
+    expect(debt?.calls).toBe(1);
+    expect(debt?.credited?.amount ?? "0").toBe("0");
+    expect(debt?.withheld?.amount ?? "0").toBe("0");
+    expect(table.totalCredited?.amount).toBe("900000");
+    expect(table.totalWithheld?.amount ?? "0").toBe("0");
+    expect(table.unexplained).toBe(0);
+    expect(foldNotCredited(rows).calls).toBe(0);
+  });
+
+  it("does not read as a 0% take rate", () => {
+    expect(observedTakeRate(rows).summary).toBe("observed 10%");
+  });
+});
+
+describe("PAID_UNCOLLECTED", () => {
   const rows = [
     row({ callId: "a" }),
     row({
       callId: "b",
-      classification: "PLATFORM_ABSORBED",
-      reason: "DelegateIsRevoked",
+      classification: "PAID_UNCOLLECTED",
+      reason: "uncollected:DelegateIsRevoked",
+      providerAmount: "0",
       platformFee: "0",
     }),
   ];
 
-  it("gets its own bucket: credited, no fee, not unexplained", () => {
+  it("gets its own bucket and is not earned", () => {
     const table = foldClasses(rows);
-    const absorbed = table.buckets.find((b) => b.className === "PLATFORM_ABSORBED");
-    expect(absorbed?.calls).toBe(1);
-    expect(absorbed?.credited?.amount).toBe("900000");
-    expect(absorbed?.fee?.amount).toBe("0");
-    expect(table.totalCredited?.amount).toBe("1800000");
-    expect(table.totalFee?.amount).toBe("100000");
+    const uncollected = table.buckets.find((b) => b.className === "PAID_UNCOLLECTED");
+    expect(uncollected?.calls).toBe(1);
+    expect(uncollected?.credited?.amount ?? "0").toBe("0");
+    expect(table.totalCredited?.amount).toBe("900000");
+    expect(table.totalGross?.amount).toBe("1000000");
     expect(table.unexplained).toBe(0);
+  });
+
+  it("does not read as a 0% take rate", () => {
+    expect(observedTakeRate(rows).summary).toBe("observed 10%");
+  });
+});
+
+// A buyer debt voided by a late FAIL / REFUND / VOID verdict: still SETTLED,
+// but PAID_UNCREDITED with zero amounts — not earned, nothing withheld, and
+// its listed price is not gross revenue.
+describe("a voided buyer debt", () => {
+  const rows = [
+    row({ callId: "a" }),
+    row({
+      callId: "b",
+      classification: "PAID_UNCREDITED",
+      reason: "voided:FAIL",
+      providerAmount: "0",
+      platformFee: "0",
+    }),
+  ];
+
+  it("is neither earned nor gross, and withholds nothing", () => {
+    const table = foldClasses(rows);
+    const uncredited = table.buckets.find((b) => b.className === "PAID_UNCREDITED");
+    expect(uncredited?.calls).toBe(1);
+    expect(uncredited?.credited?.amount ?? "0").toBe("0");
+    expect(uncredited?.withheld?.amount ?? "0").toBe("0");
+    expect(table.totalCredited?.amount).toBe("900000");
+    expect(table.totalGross?.amount).toBe("1000000");
+    expect(table.totalWithheld?.amount ?? "0").toBe("0");
+  });
+
+  it("does not read as a 0% take rate", () => {
+    expect(observedTakeRate(rows).summary).toBe("observed 10%");
+  });
+});
+
+// Review 2026-10-15, M2: a voucher the provider forfeited (stake below the
+// minimum, or a block) is SETTLED but nobody was charged, credited or paid a fee.
+describe("PROVIDER_FORFEITED", () => {
+  const rows = [
+    row({ callId: "a" }),
+    row({
+      callId: "b",
+      classification: "PROVIDER_FORFEITED",
+      reason: "provider_forfeit:ProviderBelowMinimumStake",
+      providerAmount: "0",
+      platformFee: "0",
+    }),
+  ];
+
+  it("gets its own bucket and is not counted as earned", () => {
+    const table = foldClasses(rows);
+    const forfeited = table.buckets.find((b) => b.className === "PROVIDER_FORFEITED");
+    expect(forfeited?.calls).toBe(1);
+    expect(forfeited?.credited?.amount ?? "0").toBe("0");
+    expect(forfeited?.gross?.amount ?? "0").toBe("0");
+    expect(table.totalCredited?.amount).toBe("900000");
+    expect(table.totalGross?.amount).toBe("1000000");
+    expect(table.unexplained).toBe(0);
+  });
+
+  it("is listed among the calls that were not credited", () => {
+    const failed = foldNotCredited(rows);
+    expect(failed.calls).toBe(1);
+    expect(failed.buckets[0]?.className).toBe("PROVIDER_FORFEITED");
   });
 
   it("does not read as a 0% take rate", () => {
@@ -127,16 +221,17 @@ describe("pendingNote — true to why the rows are pending", () => {
   const inFlight = row({ classification: "PENDING", status: "VERIFYING" });
 
   it("does not call a settled, uncredited call in flight", () => {
-    expect(pendingNote([settled, row({})])).toBe("settled, no credit recorded · not paid to you");
+    expect(pendingNote([settled, row({})])).toBe(PENDING_PAYMENT_NOTE);
+    expect(PENDING_PAYMENT_NOTE).toMatch(/still being checked/);
   });
 
   it("says in flight only when the calls are", () => {
-    expect(pendingNote([inFlight])).toBe("still in flight — no money has moved");
+    expect(pendingNote([inFlight])).toBe("the response is still being checked · no money has moved");
   });
 
   it("splits a mixed bucket by count", () => {
     expect(pendingNote([settled, settled, inFlight])).toBe(
-      "2 settled, no credit recorded · 1 still in flight"
+      "2 with the payment still being checked (no credit recorded yet) · 1 with the response still being checked · not paid to you yet"
     );
   });
 });

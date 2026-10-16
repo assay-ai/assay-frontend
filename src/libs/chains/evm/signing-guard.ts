@@ -75,6 +75,24 @@ const TYPED_DATA: Record<string, { readonly contract: "escrow" | "stake"; readon
       { name: "deadline", type: "uint64" },
     ],
   },
+  /*
+    The payment voucher. The console signs one only to settle a buyer debt —
+    a replacement for a served call whose own voucher lapsed (assay-backend
+    `chains/evm/eip712/voucher.ts`, `VOUCHER_TYPES`).
+  */
+  Voucher: {
+    contract: "escrow",
+    fields: [
+      { name: "payer", type: "address" },
+      { name: "provider", type: "address" },
+      { name: "amount", type: "uint64" },
+      { name: "resourceHash", type: "bytes32" },
+      { name: "requestHash", type: "bytes32" },
+      { name: "seq", type: "uint64" },
+      { name: "issuedAt", type: "uint64" },
+      { name: "expiresAt", type: "uint64" },
+    ],
+  },
   PayoutProof: {
     contract: "escrow",
     fields: [

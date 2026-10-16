@@ -30,6 +30,7 @@ import {
 } from "@/features/g30/receipt-parts";
 import {
   canContestRejection,
+  COLLECTION_STATES,
   STATE_CARDS,
   STATE_CARD_ORDER,
   chargedHeadline,
@@ -78,6 +79,10 @@ const OVERRIDABLE: ReceiptState[] = [
   "SYSTEM_ERROR",
   "REQUEST_ERROR",
   "EXPIRED",
+  "DEBT_OUTSTANDING",
+  "DEBT_WRITTEN_OFF",
+  "DEBT_VOIDED",
+  "FORFEITED",
 ];
 
 function short(id: string): string {
@@ -229,11 +234,19 @@ function ReceiptPageContent() {
       tone: "neutral",
     });
   }
-  if (receipt.settledAt) {
+  if (receipt.settledAt && state === "DEBT_OUTSTANDING") {
+    // Served and passed, but nothing has been collected yet: not "Settled".
+    events.push({
+      time: clock(receipt.settledAt),
+      label: "Payment not collected yet",
+      meta: `${listed} still held, to settle`,
+      tone: "primary",
+    });
+  } else if (receipt.settledAt) {
     const charged = receipt.chargedPrice.amount !== "0";
     events.push({
       time: clock(receipt.settledAt),
-      label: charged ? "Settled" : releasedLabel,
+      label: charged ? "Settled" : COLLECTION_STATES.has(state) ? "Closed, not collected" : releasedLabel,
       meta: charged ? `charged ${paid}` : "you were not charged",
       tone: charged ? "success" : "teal",
     });
@@ -342,18 +355,22 @@ function ReceiptPageContent() {
               className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
             />
             <Amount
-              label="You paid"
+              label={state === "DEBT_OUTSTANDING" ? "Owed" : "You paid"}
               value={paid}
               align="start"
               className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
             />
-            <Amount
-              label="Not charged"
-              value={withheld}
-              teal
-              align="start"
-              className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
-            />
+            {/* `withheld` is what the guarantee kept back. A debt or a forfeit
+                is not that (both are zero there), so the figure is not shown. */}
+            {COLLECTION_STATES.has(state) ? null : (
+              <Amount
+                label="Not charged"
+                value={withheld}
+                teal
+                align="start"
+                className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
+              />
+            )}
           </div>
         </section>
       ) : null}
@@ -452,8 +469,11 @@ function ReceiptPageContent() {
               <MoneyPair
                 className="border-transparent bg-transparent p-0 shadow-none"
                 listedValue={listed}
+                paidLabel={state === "DEBT_OUTSTANDING" ? "Owed" : "You paid"}
                 paidValue={paid}
-                notChargedValue={withheld}
+                // Same rule as the headline: a debt or a forfeit withholds
+                // nothing, so "Not charged" would be a misleading zero there.
+                notChargedValue={COLLECTION_STATES.has(state) ? undefined : withheld}
               />
             </PanelBody>
           </Panel>

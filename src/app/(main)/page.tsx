@@ -33,6 +33,7 @@ import {
   trendIsUp,
   trendLabel,
 } from "@/features/buyer/period";
+import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
 import { overviewBalance, singleBalanceSub } from "@/features/buyer/overview-balance";
 import { useOverview, type NotificationRow } from "@/features/buyer/use-overview";
@@ -375,7 +376,9 @@ export default function OverviewPage() {
                         tone: "teal",
                       },
                     ]}
-                    meta={presentVerdict(call.verdict).shownAs}
+                    meta={[presentVerdict(call.verdict).shownAs, callPaymentNote(call)]
+                      .filter(Boolean)
+                      .join(" · ")}
                   />
                 );
               })

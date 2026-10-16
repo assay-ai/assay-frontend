@@ -7,6 +7,7 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
+import type { ReceiptsSummary } from "@/features/g30/wire";
 import type { Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { getReceiptsSummary } from "@/services/receipts.service";
@@ -22,8 +23,11 @@ import { formatCount, monthBounds } from "./format";
  * ships at MVP on the Spend explorer — so this screen is honest about being a
  * partial statement rather than pretending to be a finance-grade one.
  *
- * What reconciles for real: gross tool spend, amount withheld and net charged
- * all come from one call to `GET /receipts/summary` over UTC month bounds,
+ * What reconciles for real: gross tool spend, not charged, owed, in progress
+ * and net charged all come from one call to `GET /receipts/summary` over UTC
+ * month bounds, and add up exactly like /spend's buckets:
+ * listed = charged + not charged + owed + in progress. The guarantee's
+ * withheld amount is a part of not charged, not all of it (final review M1),
  * and the per-tool table from the same endpoint with `groupBy=tool`. The
  * design's line about that is the point — the same endpoint serves the
  * dashboard, the export and the statement, so the three cannot disagree in
@@ -40,23 +44,10 @@ import { formatCount, monthBounds } from "./format";
  * not exist"), so only the by-tool grouping is offered.
  */
 
-interface SummaryFigures {
-  calls: number;
-  refundedCalls: number;
-  listedTotal: Money;
-  chargedTotal: Money;
-  withheldTotal: Money;
-  failRate: number;
-}
+type Summary = ReceiptsSummary;
 
-interface SummaryGroup extends SummaryFigures {
-  key: string;
-}
-
-interface Summary {
-  groups: SummaryGroup[];
-  totals: SummaryFigures;
-  asset: string;
+function hasMoney(money: Money): boolean {
+  return money.amount !== "0";
 }
 
 function monthLabel(from: string): string {
@@ -99,7 +90,7 @@ export function StatementsView() {
           <PanelTitles>
             <PanelTitle>{monthLabel(month.from)}</PanelTitle>
             <PanelDescription className="whitespace-normal">
-              opening balance → deposits → gross tool spend → amount withheld → net charged →
+              opening balance → deposits → gross tool spend → not charged → owed → net charged →
               withdrawals → closing balance
             </PanelDescription>
           </PanelTitles>
@@ -133,11 +124,29 @@ export function StatementsView() {
                 value={totals ? `−${formatMoney(totals.listedTotal, { decimals: 2 })}` : "—"}
               />
               <KeyValueRow
-                label="Amount withheld"
-                sub={`${formatCount(totals?.refundedCalls ?? 0)} calls · the guarantee`}
-                value={totals ? `+${formatMoney(totals.withheldTotal, { decimals: 2 })}` : "—"}
+                label="Not charged"
+                sub={
+                  totals
+                    ? `${formatCount(totals.notChargedCalls)} calls · includes ${formatMoney(totals.withheldTotal, { decimals: 2 })} withheld by the guarantee`
+                    : undefined
+                }
+                value={totals ? `+${formatMoney(totals.notChargedTotal, { decimals: 2 })}` : "—"}
                 valueClassName="text-teal-600"
               />
+              {totals && (totals.owedCalls > 0 || hasMoney(totals.owedTotal)) ? (
+                <KeyValueRow
+                  label="Owed"
+                  sub={`${formatCount(totals.owedCalls)} ${totals.owedCalls === 1 ? "call" : "calls"} · served, payment not collected yet`}
+                  value={`+${formatMoney(totals.owedTotal, { decimals: 2 })}`}
+                />
+              ) : null}
+              {totals && (totals.inProgressCalls > 0 || hasMoney(totals.inProgressTotal)) ? (
+                <KeyValueRow
+                  label="In progress"
+                  sub={`${formatCount(totals.inProgressCalls)} ${totals.inProgressCalls === 1 ? "call" : "calls"} · not finished yet`}
+                  value={`+${formatMoney(totals.inProgressTotal, { decimals: 2 })}`}
+                />
+              ) : null}
               <KeyValueRow
                 label="Net charged"
                 value={
@@ -186,7 +195,7 @@ export function StatementsView() {
             </p>
           ) : (
             <div className="w-full overflow-x-auto">
-              <div className="min-w-[720px]">
+              <div className="min-w-[900px]">
                 <div className="flex items-center gap-3 border-b border-02 px-3 pb-2.5">
                   <div className="min-w-0 flex-1">
                     <MicroLabel>Tool</MicroLabel>
@@ -197,8 +206,14 @@ export function StatementsView() {
                   <div className="w-[120px] text-right">
                     <MicroLabel>Listed</MicroLabel>
                   </div>
-                  <div className="w-[130px] text-right">
-                    <MicroLabel>Withheld</MicroLabel>
+                  <div className="w-[120px] text-right">
+                    <MicroLabel>Not charged</MicroLabel>
+                  </div>
+                  <div className="w-[110px] text-right">
+                    <MicroLabel>Owed</MicroLabel>
+                  </div>
+                  <div className="w-[110px] text-right">
+                    <MicroLabel>In progress</MicroLabel>
                   </div>
                   <div className="w-[130px] text-right">
                     <MicroLabel>Charged</MicroLabel>
@@ -218,8 +233,14 @@ export function StatementsView() {
                     <div className="w-[120px] text-right font-mono text-mono-12 text-02">
                       {formatMoney(group.listedTotal, { decimals: 2 })}
                     </div>
-                    <div className="w-[130px] text-right font-mono text-mono-12 text-teal-600">
-                      {formatMoney(group.withheldTotal, { decimals: 2 })}
+                    <div className="w-[120px] text-right font-mono text-mono-12 text-teal-600">
+                      {formatMoney(group.notChargedTotal, { decimals: 2 })}
+                    </div>
+                    <div className="w-[110px] text-right font-mono text-mono-12 text-02">
+                      {formatMoney(group.owedTotal, { decimals: 2 })}
+                    </div>
+                    <div className="w-[110px] text-right font-mono text-mono-12 text-02">
+                      {formatMoney(group.inProgressTotal, { decimals: 2 })}
                     </div>
                     <div className="w-[130px] text-right font-mono text-mono-12 text-02">
                       {formatMoney(group.chargedTotal, { decimals: 2 })}
@@ -235,8 +256,14 @@ export function StatementsView() {
                     <div className="w-[120px] text-right font-mono text-mono-13 font-semibold text-01">
                       {formatMoney(totals.listedTotal, { decimals: 2 })}
                     </div>
-                    <div className="w-[130px] text-right font-mono text-mono-13 font-semibold text-teal-600">
-                      {formatMoney(totals.withheldTotal, { decimals: 2 })}
+                    <div className="w-[120px] text-right font-mono text-mono-13 font-semibold text-teal-600">
+                      {formatMoney(totals.notChargedTotal, { decimals: 2 })}
+                    </div>
+                    <div className="w-[110px] text-right font-mono text-mono-13 font-semibold text-01">
+                      {formatMoney(totals.owedTotal, { decimals: 2 })}
+                    </div>
+                    <div className="w-[110px] text-right font-mono text-mono-13 font-semibold text-01">
+                      {formatMoney(totals.inProgressTotal, { decimals: 2 })}
                     </div>
                     <div className="w-[130px] text-right font-mono text-mono-13 font-semibold text-01">
                       {formatMoney(totals.chargedTotal, { decimals: 2 })}

@@ -72,8 +72,19 @@ the sign-in page waiting on "Checking your session".
 
 ### 5. Backend
 
-The API must accept requests from the app's origin. `assay-backend` enables
-CORS for every origin, so nothing needs changing there.
+The API must accept requests from every origin the app is served from. In
+production `assay-backend` requires `CORS_ALLOWED_ORIGINS`: the API and the
+websocket process refuse to start without it (the backend `Dockerfile`
+defaults to `NODE_ENV=production`). Set it to a comma-separated list of every
+exact frontend origin, the same list as the Privy allowed origins in step 4:
+
+- the production project's custom domain and its `https://<prod-project>.pages.dev`;
+- the develop project's custom domain and its `https://<develop-project>.pages.dev`.
+
+Each entry is `scheme://host[:port]`, with no path and no trailing slash.
+Wildcards (`*`, `https://*.pages.dev`) are not supported. An origin left off
+the list gets no CORS headers at all, so every call from it fails in the
+browser, public explorer reads included.
 
 ## Checking a build locally
 

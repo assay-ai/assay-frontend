@@ -6,6 +6,7 @@ import { Check, ClockFading, TriangleAlert, X } from "lucide-react";
 import * as React from "react";
 
 import { BindingNav } from "@/features/provider-binding/binding-nav";
+import { freeFirstHint } from "@/features/provider-binding/free-first";
 
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -425,6 +426,7 @@ export default function PricingAndTierPage() {
                 </option>
               ))}
             </Select>
+            {freeFirstHint(mode) ? <p className="text-body-xs text-03">{freeFirstHint(mode)}</p> : null}
 
             <Note tone="warning" icon={<TriangleAlert className="h-full w-full" />}>
               guaranteed is not offered. It is dominated on margin and on routing score, so this

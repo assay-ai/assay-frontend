@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { chainLabel } from "@/utils/chain";
 
-import { formatQuote, stakeLines, type ChainStake } from "./format";
+import { formatOffer, formatQuote, freeFirstLead, stakeLines, type ChainStake } from "./format";
 
 /**
  * Bonded stake is per chain, and the rules it must obey on screen.
@@ -107,11 +107,13 @@ describe("chainLabel", () => {
 describe("formatQuote", () => {
   const price = { amount: "250000", asset: "eip155:46630/erc20:0xabc", decimals: 6 };
 
-  it("says 'up to' when more than one binding could serve", () => {
+  it("says 'up to' when more than one binding that can be charged could serve", () => {
     expect(formatQuote(price, 2, "PAID")).toBe("up to $0.2500");
   });
 
-  it("is a plain price when exactly one binding could serve", () => {
+  // Review 2026-10-15, L2: counted over paid bindings, so one FREE binding
+  // beside one paid binding (paidBindings 1) is a single price, not a range.
+  it("is a plain price when exactly one paid binding could serve", () => {
     expect(formatQuote(price, 1, "PAID")).toBe("$0.2500");
     expect(formatQuote(price, undefined, "PAID")).toBe("$0.2500");
   });
@@ -119,5 +121,31 @@ describe("formatQuote", () => {
   it("never says 'up to' for a free tool, and dashes an unroutable one", () => {
     expect(formatQuote({ ...price, amount: "0" }, 3, "FREE")).not.toMatch(/up to/);
     expect(formatQuote(null, 2, "PAID")).toBe("—");
+  });
+});
+
+/**
+ * Free first, then paid: a FREEMIUM tool is served free while the agent's
+ * daily allowance lasts, then at the paid quote — even when some of its
+ * providers are PAID. Worded the way MCP `tools/list` words it.
+ */
+describe("free first, then paid", () => {
+  const price = { amount: "20000", asset: "eip155:46630/erc20:0xabc", decimals: 6 };
+
+  it("leads a FREEMIUM quote with the free calls per day", () => {
+    expect(freeFirstLead("FREEMIUM", 100)).toBe("100 free per day, then");
+    expect(formatOffer(price, 2, "FREEMIUM", 100)).toBe("100 free per day, then up to $0.0200");
+    expect(formatOffer(price, 1, "FREEMIUM", 25)).toBe("25 free per day, then $0.0200");
+  });
+
+  it("still says the tool has a free tier when the allowance is not known", () => {
+    expect(freeFirstLead("FREEMIUM", null)).toBe("free tier, then");
+    expect(formatOffer(price, 1, "FREEMIUM", undefined)).toBe("free tier, then $0.0200");
+  });
+
+  it("adds nothing to a PAID or FREE quote", () => {
+    expect(freeFirstLead("PAID", 100)).toBeNull();
+    expect(freeFirstLead("FREE", 100)).toBeNull();
+    expect(formatOffer(price, 2, "PAID", null)).toBe("up to $0.0200");
   });
 });

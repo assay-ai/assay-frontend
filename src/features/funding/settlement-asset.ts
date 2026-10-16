@@ -1,4 +1,5 @@
 import type { Chain } from "@/interfaces/chain";
+import { servesPaidCalls } from "@/libs/chains/paid-rails";
 import { settlementSymbol } from "@/services/chains.service";
 
 import { offeredChains, type DepositableChains } from "./depositable-chains";
@@ -89,9 +90,19 @@ export function addFundsTile(depositable: DepositableChains): AddFundsTile {
     };
   }
 
-  const chains = offeredChains(depositable);
-  if (chains.length === 0) {
+  const offered = offeredChains(depositable);
+  if (offered.length === 0) {
     return { title: "Add funds", sub: "reading which chains we accept deposits on…" };
+  }
+
+  // A deposit funds paid calls; a chain that serves free calls only takes none.
+  const chains = offered.filter((chain) => servesPaidCalls(chain.chainId));
+  if (chains.length === 0) {
+    const names = unique(offered.map((chain) => chain.displayName));
+    return {
+      title: "Add funds",
+      sub: `${joinOr(names)} currently serves free calls only · no deposits for now`,
+    };
   }
 
   const symbols = symbolsOf(chains);
@@ -120,7 +131,9 @@ export function addFundsTile(depositable: DepositableChains): AddFundsTile {
  */
 export function fundingAssetNote(depositable: DepositableChains): string {
   const head = "There is no card and no fiat on-ramp yet.";
-  const symbols = symbolsOf(offeredChains(depositable));
+  const symbols = symbolsOf(
+    offeredChains(depositable).filter((chain) => servesPaidCalls(chain.chainId)),
+  );
 
   if (symbols.length === 0 || symbols.length > 2) {
     return `${head} You fund the account with the settlement token of the chain you deposit on, and you can withdraw unspent balance at any time, on the chain it is held on.`;

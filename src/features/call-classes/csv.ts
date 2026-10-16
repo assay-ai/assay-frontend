@@ -127,19 +127,34 @@ function isCredited(row: CallRow): boolean {
   // A rail-B call the verdict settled is credited only once its voucher is
   // redeemed on chain; until then the export says PAID_AWAITING_REDEMPTION.
   // PENDING on a settled row is the export saying no credit was written for it.
+  // PROVIDER_FORFEITED is SETTLED too, but the provider forfeited the voucher:
+  // nothing was collected, credited or taken, so it is not earned. Nor is
+  // PAID_BUYER_DEBT (the buyer has not paid it yet) or PAID_UNCOLLECTED (the
+  // buyer never did): the platform never pays a provider in their place. A
+  // SETTLED PAID_UNCREDITED row is a buyer debt voided by a late failing
+  // verdict: nobody was credited (its amounts are zero).
   return (
     row.status === "SETTLED" &&
     row.classification !== "PAID_AWAITING_REDEMPTION" &&
-    row.classification !== "PENDING"
+    row.classification !== "PENDING" &&
+    row.classification !== "PROVIDER_FORFEITED" &&
+    row.classification !== "PAID_BUYER_DEBT" &&
+    row.classification !== "PAID_UNCOLLECTED" &&
+    row.classification !== "PAID_UNCREDITED"
   );
 }
 
-/** A call still in flight has neither earned nor withheld anything yet. */
+/**
+ * A call still in flight has neither earned nor withheld anything yet. An open
+ * buyer debt is the same: its price is still held in the buyer's escrow and is
+ * paid to the provider once the buyer settles it, so it is not withheld.
+ */
 function isPending(row: CallRow): boolean {
   return (
     row.status === "VERIFYING" ||
     row.classification === "PENDING" ||
-    row.classification === "PAID_AWAITING_REDEMPTION"
+    row.classification === "PAID_AWAITING_REDEMPTION" ||
+    row.classification === "PAID_BUYER_DEBT"
   );
 }
 
@@ -192,21 +207,32 @@ export function assetScopeNote(
 }
 
 /**
- * The note for the PENDING class, from why its rows are pending.
+ * The note for the PENDING class ("Still being checked"), from why its rows
+ * are pending.
  *
  * The export marks two different things PENDING: a call still being judged,
- * and a SETTLED call with no credit written for it (reason "settled, no credit
- * recorded"). Only the first is in flight.
+ * and a SETTLED call with no credit written for it yet (reason "settled, no
+ * credit recorded"). Both are still being checked — the second one's payment,
+ * not its response — so neither note may read as closed (BUG-R17 notes: the
+ * old "settled, no credit recorded · not paid to you" read as final).
  */
 export function pendingNote(rows: CallRow[]): string {
   const pending = rows.filter((row) => row.classification === "PENDING");
   const settled = pending.filter((row) => row.status === "SETTLED").length;
   const inFlight = pending.length - settled;
-  if (settled === 0) return "still in flight — no money has moved";
-  if (inFlight === 0) return "settled, no credit recorded · not paid to you";
+  if (settled === 0) return "the response is still being checked · no money has moved";
+  if (inFlight === 0) return PENDING_PAYMENT_NOTE;
   const count = (n: number) => n.toLocaleString("en-US");
-  return `${count(settled)} settled, no credit recorded · ${count(inFlight)} still in flight`;
+  return `${count(settled)} with the payment still being checked (no credit recorded yet) · ${count(inFlight)} with the response still being checked · not paid to you yet`;
 }
+
+/** PENDING rows that settled but have no credit recorded yet. */
+export const PENDING_PAYMENT_NOTE =
+  "the payment is still being checked: settled, no credit recorded for you yet · not paid to you yet";
+
+/** PENDING, when the rows are not at hand to say which kind it is. */
+export const PENDING_NOTE =
+  "not resolved yet: the response or its payment is still being checked · not paid to you yet";
 
 // ── Call classes ───────────────────────────────────────────────────────────
 
@@ -225,8 +251,15 @@ export function pendingNote(rows: CallRow[]): string {
  *
  * PAID_AWAITING_REDEMPTION is ours too: a rail-B call that passed and is
  * credited once its voucher is redeemed on chain. Listed beside PAID_CREDITED.
- * So is PLATFORM_ABSORBED: credited from platform funds because the voucher
- * could never be redeemed (the `reason` column names why), with no fee taken.
+ * PAID_BUYER_DEBT is a call that passed but whose payment could not be
+ * collected from the buyer yet (the `reason` column names why): the price is
+ * still held in the buyer's escrow, and it is paid once the buyer signs again.
+ * PAID_UNCOLLECTED is one the buyer never settled, written off after 30 days:
+ * not paid, no fee, and nobody owes it — the platform never pays providers.
+ * PROVIDER_FORFEITED sits beside them: a rail-B call whose voucher was not
+ * collected because the provider's stake was below the minimum or it was
+ * blocked. Nobody was charged or credited and no fee was taken; the `reason`
+ * column names the cause.
  *
  * PENDING is the mirror image: the wire emits it and **neither design draws it**.
  * It is listed last because the totals have to add up — a screen whose job is
@@ -235,7 +268,9 @@ export function pendingNote(rows: CallRow[]): string {
 export const CLASS_ORDER = [
   "PAID_CREDITED",
   "PAID_AWAITING_REDEMPTION",
-  "PLATFORM_ABSORBED",
+  "PAID_BUYER_DEBT",
+  "PAID_UNCOLLECTED",
+  "PROVIDER_FORFEITED",
   "PAID_UNCREDITED",
   "FREE",
   "EXPLORATION",
@@ -358,8 +393,7 @@ export interface ObservedTake {
 export function observedTakeRate(rows: CallRow[]): ObservedTake {
   const exact = new Map<string, Decimal>();
   for (const row of rows) {
-    // An absorbed call is credited but took no fee: it carries no rate.
-    if (!isCredited(row) || row.classification === "PLATFORM_ABSORBED") continue;
+    if (!isCredited(row)) continue;
     const price = new Decimal(row.priceAmount || "0");
     if (price.isZero()) continue;
     const rate = new Decimal(row.platformFee || "0").div(price).mul(100);

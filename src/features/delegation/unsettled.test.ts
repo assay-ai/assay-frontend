@@ -9,14 +9,21 @@ import type { EscrowDelegate } from "@/interfaces";
 import {
   editIsUnchanged,
   editedToast,
+  hasTightenDelay,
   HELD_DEADLINE_MARGIN_SECONDS,
   heldIsStale,
   isUnsettledRefusal,
   liveDelegation,
+  loweredDelayedText,
+  loweredDelayNote,
+  lowersCaps,
+  revokeDelayedText,
+  revokeDelayNote,
   SETTLE_WAIT_IDLE,
   settleWaitAfterRead,
   strandReasons,
   strandWarning,
+  tightenDelayLabel,
   UNSETTLED_WAIT_MAX_MS,
   unsettledLine,
 } from "./unsettled";
@@ -298,5 +305,66 @@ describe("editedToast", () => {
     expect(editedToast(null, current)).toBe(
       "Updated. The new caps apply from the agent’s next payment.",
     );
+  });
+});
+
+// assay-evm D-21: on an escrow with the tighten delay, a tightening binds
+// signed payments only after `tightenDelaySeconds`, so nothing is stranded.
+describe("tighten delay (D-21)", () => {
+  it("strands nothing when tightenDelaySeconds is above 0", () => {
+    expect(strandReasons(RETEST, GRANT, { ...GRANT, maxPerWindow: "2000000" }, 3600)).toEqual([]);
+    expect(strandReasons(RETEST, GRANT, "revoke", 3600)).toEqual([]);
+  });
+
+  it("keeps the strict reading at 0 or when the API leaves it out", () => {
+    expect(strandReasons(RETEST, GRANT, "revoke", 0)).toEqual(["revoked"]);
+    expect(strandReasons(RETEST, GRANT, "revoke", undefined)).toEqual(["revoked"]);
+    expect(hasTightenDelay(0)).toBe(false);
+    expect(hasTightenDelay(null)).toBe(false);
+    expect(hasTightenDelay(3600)).toBe(true);
+  });
+
+  it("says the delay in words", () => {
+    expect(tightenDelayLabel(3600)).toBe("1 hour");
+    expect(tightenDelayLabel(7200)).toBe("2 hours");
+    expect(tightenDelayLabel(1800)).toBe("30 minutes");
+    expect(revokeDelayedText(3600)).toBe(
+      "Vouchers your agent already signed stay collectable for 1 hour, so providers you already used get paid. New paid calls stop now.",
+    );
+    expect(loweredDelayedText(3600)).toBe(
+      "Lower limits apply to already-signed vouchers after 1 hour.",
+    );
+  });
+
+  it("tells a lowering from a raise", () => {
+    expect(lowersCaps(GRANT, { ...GRANT, maxVoucherAmount: "1" })).toBe(true);
+    expect(lowersCaps(GRANT, { ...GRANT, validUntil: "1792000000" })).toBe(true);
+    expect(lowersCaps(GRANT, { ...GRANT, maxPerWindow: "9000000" })).toBe(false);
+    expect(lowersCaps(GRANT, { maxVoucherAmount: "500000", maxPerWindow: "5000000" })).toBe(false);
+  });
+
+  it("drops the 30-second pause from the edit toast", () => {
+    const toast = editedToast(GRANT, { ...GRANT, maxVoucherAmount: "40000" }, 3600);
+    expect(toast).not.toMatch(/paused/);
+    expect(toast).toMatch(/after 1 hour/);
+    expect(editedToast(GRANT, { ...GRANT, maxPerWindow: "9000000" }, 3600)).toBe(
+      "Updated. The new caps apply from the agent’s next payment.",
+    );
+  });
+
+  it("picks the Revoke sheet's wording by the delay", () => {
+    expect(revokeDelayNote(3600)).toBe(revokeDelayedText(3600));
+    expect(revokeDelayNote(0)).toBeNull();
+    expect(revokeDelayNote(undefined)).toBeNull();
+  });
+
+  it("says when lower limits apply only for a lowering on a delayed escrow", () => {
+    const lower = { ...GRANT, maxPerWindow: "1" };
+    expect(loweredDelayNote(3600, GRANT, lower)).toBe(
+      "Lower limits apply to already-signed vouchers after 1 hour.",
+    );
+    expect(loweredDelayNote(3600, GRANT, { ...GRANT, maxPerWindow: "9000000" })).toBeNull();
+    expect(loweredDelayNote(0, GRANT, lower)).toBeNull();
+    expect(loweredDelayNote(3600, null, lower)).toBeNull();
   });
 });
