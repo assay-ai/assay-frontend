@@ -350,24 +350,52 @@ export function settleEscrowCheck(
 }
 
 /**
- * The settle sheet's summary while signing is blocked: what is owed, what is
- * missing and the next step — never the outcome ("$0.00", "Resume in about a
- * minute"), since nothing can be signed yet (verify-r12 P3).
+ * The settle sheet's summary while signing is blocked: what is owed and what
+ * is missing — never the outcome ("$0.00", "Resume in about a minute"), since
+ * nothing can be signed yet (verify-r12 P3). The next step is a numbered list
+ * of its own, `settleNextSteps`.
  */
 export function settleBlockedSummary(
   settling: readonly Pick<BuyerDebt, "amount">[],
   blocks: readonly SettleBlock[],
 ): { label: string; value: string }[] {
   if (blocks.length === 0 || settling.length === 0) return [];
-  const steps = blocks.map((block, index) =>
-    index === 0 ? block.action.label : block.action.label.charAt(0).toLowerCase() + block.action.label.slice(1),
-  );
   return [
     { label: "You owe", value: `${totalText(settling)}, still owed: nothing is signed yet` },
     { label: "Missing", value: blocks.map((block) => block.missing).join("; ") },
+  ];
+}
+
+export interface SettleNextStep {
+  id: string;
+  /** The step in a few words: "Add funds". The amount is on its link. */
+  title: string;
+  /** Why, with the exact amounts. */
+  text: string;
+  /** Where the step is done; `null` for the last one, signing, done right here. */
+  action: { label: string; href: string } | null;
+}
+
+/**
+ * While signing is blocked, the way to it in order (verify-r13 P3): each fix
+ * as `settleReadiness` lists it (funds first, then the ceilings), each with its
+ * own link, then signing here. Empty when nothing blocks.
+ */
+const NEXT_STEP_TITLE: Record<SettleBlock["kind"], string> = {
+  funds: "Add funds",
+  "per-call": "Raise the per-call ceiling",
+  window: "Raise the 24-hour ceiling",
+};
+
+export function settleNextSteps(blocks: readonly SettleBlock[]): SettleNextStep[] {
+  if (blocks.length === 0) return [];
+  return [
+    ...blocks.map((block) => ({ id: block.kind, title: NEXT_STEP_TITLE[block.kind], text: block.text, action: block.action })),
     {
-      label: "Next step",
-      value: `${steps.join(", then ")}, then come back to sign. Paid calls stay paused until it is settled.`,
+      id: "sign",
+      title: "Come back here and sign",
+      text: "Paid calls stay paused until it is settled.",
+      action: null,
     },
   ];
 }

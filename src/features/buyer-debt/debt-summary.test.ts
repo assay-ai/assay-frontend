@@ -17,6 +17,7 @@ import {
   paidCallsAfterSettling,
   resumesAfterSettling,
   settleBlockedSummary,
+  settleNextSteps,
   settleEscrowCheck,
   settleReadiness,
   type SettleEscrowReading,
@@ -281,7 +282,7 @@ describe("settleEscrowCheck (review 2026-10-17 P2-a)", () => {
 });
 
 describe("settleBlockedSummary (verify-r12 P3)", () => {
-  it("says what is owed, what is missing and the next step, never the outcome", () => {
+  it("says what is owed and what is missing, never the outcome", () => {
     const blocks = settleReadiness(escrow({ balance: usd("1"), spendable: usd("1"), maxVoucherAmount: usd("2") }), [
       debt({ state: "WRITTEN_OFF" }),
     ]);
@@ -289,11 +290,6 @@ describe("settleBlockedSummary (verify-r12 P3)", () => {
     expect(rows).toEqual([
       { label: "You owe", value: "$2.50, still owed: nothing is signed yet" },
       { label: "Missing", value: "$1.50 in your escrow; a per-call ceiling of $2.50 (now $2.00)" },
-      {
-        label: "Next step",
-        value:
-          "Add $1.50, then raise the per-call ceiling to $2.50, then come back to sign. Paid calls stay paused until it is settled.",
-      },
     ]);
     const text = rows.map((row) => row.value).join(" ");
     expect(text).not.toContain("$0.00");
@@ -302,6 +298,29 @@ describe("settleBlockedSummary (verify-r12 P3)", () => {
 
   it("is empty when nothing blocks signing", () => {
     expect(settleBlockedSummary([debt()], [])).toEqual([]);
+  });
+});
+
+describe("settleNextSteps (verify-r13 P3)", () => {
+  it("numbers the way to signing: add funds, raise the ceiling, then sign, each fix with its link", () => {
+    const blocks = settleReadiness(escrow({ balance: usd("1"), spendable: usd("1"), maxVoucherAmount: usd("2") }), [
+      debt({ state: "WRITTEN_OFF" }),
+    ]);
+    const steps = settleNextSteps(blocks);
+    expect(steps.map((step) => step.title)).toEqual([
+      "Add funds",
+      "Raise the per-call ceiling",
+      "Come back here and sign",
+    ]);
+    expect(steps[0]!.action).toEqual(blocks[0]!.action);
+    expect(steps[0]!.action!.label).toBe("Add $1.50");
+    expect(steps[1]!.action).toEqual(blocks[1]!.action);
+    expect(steps[2]!.action).toBeNull();
+    expect(steps[2]!.text).toBe("Paid calls stay paused until it is settled.");
+  });
+
+  it("is empty when nothing blocks signing", () => {
+    expect(settleNextSteps([])).toEqual([]);
   });
 });
 
