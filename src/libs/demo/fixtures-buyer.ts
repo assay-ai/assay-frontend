@@ -1483,10 +1483,10 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     }),
   },
   {
-    // Allow / Block on Explore and the Budgets screen. The demo keeps no state:
-    // this answers the saved policy as the change would leave it, which the
-    // screens put in their cache, so the success state can be seen; a reload
-    // shows the stage set's own policy again.
+    // Allow / Block on Explore, the Budgets screen and Pause all: this answers
+    // the saved policy as the change would leave it, which the screens put in
+    // their cache, and `demo-stage.ts` keeps the change for the tab, so the
+    // next fetch and a reload show it too.
     method: "PATCH",
     match: "/spend-policy",
     body: (path, query, data) => {
@@ -1494,7 +1494,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
         {}) as Record<string, unknown>;
       const change = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
       const { changeReason: _reason, ...fields } = change;
-      // Kept until reload, so Pause all stays paused on the next fetch.
+      // Kept for the tab, so Pause all stays paused on the next fetch and after a reload.
       rememberDemoPolicy(fields);
       return { ...current, ...fields, version: Number(current.version ?? 1) + 1, updatedAt: new Date().toISOString() };
     },

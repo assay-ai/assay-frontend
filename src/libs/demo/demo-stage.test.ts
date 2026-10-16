@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { demoResponse } from "./demo-api";
-import { rememberDemoDelegateCaps, resetDemoStage } from "./demo-stage";
+import { rememberDemoDelegateCaps, rememberDemoPolicy, resetDemoStage, withDemoPolicy } from "./demo-stage";
 
 const prevFlag = process.env.NEXT_PUBLIC_DEMO_CHAINS;
 const tab = { location: { search: "" }, sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } };
@@ -22,6 +22,36 @@ describe("demo stage: actions show until reload", () => {
     expect((demoResponse("GET", "/spend-policy") as { paused: boolean }).paused).toBe(false);
     demoResponse("PATCH", "/spend-policy", {}, { paused: true, changeReason: "Paused all paid calls" });
     expect((demoResponse("GET", "/spend-policy") as { paused: boolean }).paused).toBe(true);
+  });
+
+  it("keeps Pause all paused after a reload, for the tab (final regression P3-d)", () => {
+    const store = new Map<string, string>();
+    const session = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+      removeItem: (key: string) => void store.delete(key),
+    };
+    vi.stubGlobal("window", { location: { search: "" }, sessionStorage: session });
+    demoResponse("PATCH", "/spend-policy", {}, { paused: true, changeReason: "Paused all paid calls" });
+    resetDemoStage(); // a reload: the module's memory is gone, the tab's storage is not
+    expect((demoResponse("GET", "/spend-policy") as { paused: boolean }).paused).toBe(true);
+    demoResponse("PATCH", "/spend-policy", {}, { paused: false });
+    resetDemoStage();
+    expect((demoResponse("GET", "/spend-policy") as { paused: boolean }).paused).toBe(false);
+  });
+
+  it("still pauses until reload when storage is blocked or holds junk", () => {
+    const blocked = {
+      getItem: () => "{not json",
+      setItem: () => {
+        throw new Error("blocked");
+      },
+      removeItem: () => {},
+    };
+    vi.stubGlobal("window", { location: { search: "" }, sessionStorage: blocked });
+    expect(withDemoPolicy({ paused: false }).paused).toBe(false);
+    rememberDemoPolicy({ paused: true });
+    expect(withDemoPolicy({ paused: false }).paused).toBe(true);
   });
 
   it("shows a saved agent spending limit", () => {
