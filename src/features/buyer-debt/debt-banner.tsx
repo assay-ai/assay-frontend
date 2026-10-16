@@ -42,7 +42,8 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
   return (
     <div className={wrapperClassName}>
       <div
-        role="alert"
+        role="region"
+        aria-label={collecting ? "Payment being collected" : "Payment owed"}
         data-testid="buyer-debt-banner"
         data-kind={summary.kind}
         className={cn(
