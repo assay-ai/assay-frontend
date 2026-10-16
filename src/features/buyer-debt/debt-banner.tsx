@@ -3,6 +3,7 @@
 import { TriangleAlert } from "lucide-react";
 import * as React from "react";
 
+import { usePauseAll } from "@/components/buyer-money/pause-all";
 import { Button } from "@/components/ui/button";
 import { debtCauseText } from "@/features/call-classes/labels";
 import { useEntityNames } from "@/hooks/useEntityNames";
@@ -33,7 +34,9 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
   const { openSettle } = useSettleDebt();
   const names = useEntityNames({ kinds: ["tool"] });
 
-  const summary = debtBannerSummary(query.data);
+  const { paused } = usePauseAll();
+
+  const summary = debtBannerSummary(query.data, { pausedByYou: paused });
   if (!summary) return null;
   const { own, others } = splitDebts(query.data);
   const all = [...own, ...others];

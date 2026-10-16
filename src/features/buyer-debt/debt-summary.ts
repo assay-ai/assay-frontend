@@ -54,7 +54,10 @@ export interface DebtBannerSummary {
  * nothing is owed. Every listed debt pauses paid calls (the wire's rule), so
  * every title says so; free calls keep working and every detail says that too.
  */
-export function debtBannerSummary(data: BuyerDebts | null | undefined): DebtBannerSummary | null {
+export function debtBannerSummary(
+  data: BuyerDebts | null | undefined,
+  { pausedByYou = false }: { pausedByYou?: boolean } = {},
+): DebtBannerSummary | null {
   const { own, others } = splitDebts(data);
   const all = [...own, ...others];
   if (all.length === 0) return null;
@@ -114,8 +117,13 @@ export function debtBannerSummary(data: BuyerDebts | null | undefined): DebtBann
 
   return {
     kind: "collecting",
-    title: `Collecting ${totalText(collecting)} you signed. Paid calls resume in about a minute.`,
-    detail: "Nothing to do: it is collected from your escrow, then paid calls resume. Free calls still work.",
+    // The person's own Pause all still holds once this is collected: never promise a restart over it.
+    title: pausedByYou
+      ? `Collecting ${totalText(collecting)} you signed. Paid calls stay paused by you.`
+      : `Collecting ${totalText(collecting)} you signed. Paid calls resume in about a minute.`,
+    detail: pausedByYou
+      ? "Nothing to do: it is collected from your escrow within about a minute. Resume in the banner below to restart paid calls. Free calls still work."
+      : "Nothing to do: it is collected from your escrow, then paid calls resume. Free calls still work.",
     toSign: [],
     actionLabel: null,
   };
