@@ -429,3 +429,33 @@ export function owedCallsFromDebts(data: BuyerDebts | null | undefined, toolId?:
     .filter((debt) => !toolId || debt.toolId === toolId)
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
 }
+
+/**
+ * Whether a debt still stops paid calls: one that needs a signature, this
+ * wallet's or another wallet's of the organization. One being collected
+ * clears on its own within about a minute.
+ */
+export function debtBlocksPaidCalls(data: BuyerDebts | null | undefined): boolean {
+  const kind = debtBannerSummary(data)?.kind;
+  return kind === "settle" || kind === "other-wallet";
+}
+
+/**
+ * The Resume sheet's words. Resuming lifts only the person's own pause: while
+ * a debt is owed, paid calls stay refused until it is settled, so the sheet
+ * must not promise "your agents can pay again" (buyer retest 2026-10-17).
+ */
+export function resumeSheetCopy(debtOwed: boolean): { description: string; after: string; toast: string } {
+  return debtOwed
+    ? {
+        description:
+          "This lifts your pause. Paid calls stay blocked until the payment owed is settled (see the banner); free calls keep working.",
+        after: "Blocked until the debt is settled",
+        toast: "Your pause is lifted. Paid calls restart once the payment owed is settled.",
+      }
+    : {
+        description: "Your agents can pay for calls again, within your account ceiling and their spending limits.",
+        after: "Running",
+        toast: "Paid calls are running again.",
+      };
+}

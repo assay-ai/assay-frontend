@@ -1,14 +1,17 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CirclePause, CirclePlay } from "lucide-react";
 import * as React from "react";
 
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { debtBlocksPaidCalls, resumeSheetCopy } from "@/features/buyer-debt/debt-summary";
+import type { BuyerDebts } from "@/interfaces/buyer-debt";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
+import { getBuyerDebts } from "@/services/escrow.service";
 import { updateSpendPolicy, type SpendPolicy } from "@/services/limits.service";
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
@@ -23,8 +26,19 @@ import { useSpendPolicyQuery } from "./use-agents";
  * Needs a budget to exist (the pause is a field of it). Without one, the
  * control does not render rather than offering a switch that cannot work.
  */
+/**
+ * Whether a debt still blocks paid calls, read from the debts list the buyer
+ * shell already keeps (`BUYER_DEBTS_KEY` in the settle sheet). It only
+ * subscribes: the banner's query does the fetching.
+ */
+function useDebtBlocksPaidCalls(): boolean {
+  const debts = useQuery<BuyerDebts>({ queryKey: ["escrow", "debts"], queryFn: getBuyerDebts, enabled: false });
+  return debtBlocksPaidCalls(debts.data);
+}
+
 export function usePauseAll() {
   const queryClient = useQueryClient();
+  const debtOwed = useDebtBlocksPaidCalls();
   const policyQuery = useSpendPolicyQuery();
   const policy = policyQuery.data ?? null;
   const mutation = useMutation({
@@ -36,7 +50,7 @@ export function usePauseAll() {
       );
       void queryClient.invalidateQueries({ queryKey: ["spend-policy"] });
       void queryClient.invalidateQueries({ queryKey: ["spend-policy-history"] });
-      toast.success(next.paused ? "All paid calls are paused. Free calls still work." : "Paid calls are running again.");
+      toast.success(next.paused ? "All paid calls are paused. Free calls still work." : resumeSheetCopy(debtOwed).toast);
     },
   });
   return { policy, paused: policy?.paused === true, available: policy !== null, mutation };
@@ -53,6 +67,7 @@ export function PauseAllConfirm({
   pausing: boolean;
   onConfirm: () => Promise<unknown>;
 }) {
+  const resume = resumeSheetCopy(useDebtBlocksPaidCalls());
   return (
     <ConfirmSheet
       open={open}
@@ -62,9 +77,9 @@ export function PauseAllConfirm({
       description={
         pausing
           ? "Every agent's paid calls are refused from now until you resume. Free calls keep working, and nothing already charged changes."
-          : "Your agents can pay for calls again, within your account ceiling and their spending limits."
+          : resume.description
       }
-      changes={[{ label: "Paid calls", before: pausing ? "Running" : "Paused", after: pausing ? "Paused" : "Running" }]}
+      changes={[{ label: "Paid calls", before: pausing ? "Running" : "Paused", after: pausing ? "Paused" : resume.after }]}
       confirmLabel={pausing ? "Pause all paid calls" : "Resume paid calls"}
       onConfirm={onConfirm}
       describeError={(error) => (error instanceof ApiError ? plainError(error.code) : "That did not go through. Try again.")}
