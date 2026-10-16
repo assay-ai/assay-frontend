@@ -77,8 +77,8 @@ describe("failRateLabel", () => {
     expect(failRateLabel({ measuredCalls: 0, failedCalls: 0 })).toBe("Not measured yet");
   });
   it("shows the share that failed and the sample size", () => {
-    expect(failRateLabel({ measuredCalls: 400, failedCalls: 8 })).toBe("2.0% failed · 400 calls checked");
-    expect(failRateLabel({ measuredCalls: 1, failedCalls: 0 })).toBe("0% failed · 1 call checked");
+    expect(failRateLabel({ measuredCalls: 400, failedCalls: 8 })).toBe("2.0% failed · 400 calls checked, all time");
+    expect(failRateLabel({ measuredCalls: 1, failedCalls: 0 })).toBe("0% failed · 1 call checked, all time");
   });
 });
 

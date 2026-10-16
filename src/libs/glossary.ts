@@ -120,7 +120,7 @@ export const GLOSSARY = {
   "observed-failures": {
     term: "Observed failures",
     definition:
-      "The share of a provider's checked calls whose result failed, measured by Assay on real calls rather than reported by the provider; \"Not measured yet\" until their first paid calls have been checked.",
+      "The share of a provider's checked calls whose result failed, measured by Assay on real calls rather than reported by the provider: all time and across all their tools, counting finished check windows only (each lasts up to 7 days), so the latest days join once their window closes. \"Not measured yet\" until their first paid calls have been checked.",
   },
   mcp: {
     term: "MCP",

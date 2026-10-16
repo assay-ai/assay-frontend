@@ -4,7 +4,7 @@ import type { SlaWindow, SlaWindowOutcome } from "@/interfaces";
 /**
  * A window's numbers as sentences a provider can act on:
  *
- *   "1.6% of calls failed this window (you promised at most 2%)"
+ *   "In this check window (last 4 days), 1.6% of calls failed (you promised at most 2%)"
  *   "Not enough calls yet (6 of 400)"                 below the sample gate
  *   "Oct 13, 15:00 – 17:00"                           a window by its dates, never "w_48"
  */
@@ -25,7 +25,7 @@ function pct(rate: number): string {
 }
 
 export interface SlaReading {
-  /** "1.6% of calls failed this window (you promised at most 2%)", or null before any checked call. */
+  /** "In this check window (last 4 days), 1.6% of calls failed (you promised at most 2%)", or null before any checked call. */
   headline: string | null;
   tone: SlaTone;
   /** "Not enough calls yet (6 of 400)" while a penalty cannot happen at all. */
@@ -36,7 +36,42 @@ export interface SlaReading {
   used: number | null;
 }
 
-export function slaReading(window: Pick<SlaWindow, "status" | "verifiedCalls" | "failedCalls" | "minVerifiedCalls" | "observedFailureRate" | "declaredFailureRate"> | null, declared: number | null): SlaReading {
+/** "4 days" / "6 h": a window's length, whole days from a day up. */
+function spanText(ms: number): string {
+  const hours = Math.max(1, Math.round(ms / 3_600_000));
+  if (hours < 24) return `${hours} h`;
+  const days = Math.round(hours / 24);
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
+/**
+ * The window a provider-console failure rate covers, so it is never read bare
+ * next to the public all-time figure (final2 P3): "this check window (last 4
+ * days)" while open — counted from `openedAt` — and "the last check window
+ * (7 days)" once closed. Without the dates, just the window.
+ */
+export function checkWindowScope(
+  window: Pick<SlaWindow, "status"> & Partial<Pick<SlaWindow, "openedAt" | "closedAt">>,
+  now: number = Date.now(),
+): string {
+  const opened = window.openedAt ? Date.parse(window.openedAt) : Number.NaN;
+  if (window.status === "OPEN") {
+    return Number.isNaN(opened) || opened > now ? "this check window" : `this check window (last ${spanText(now - opened)})`;
+  }
+  const closed = window.closedAt ? Date.parse(window.closedAt) : Number.NaN;
+  return Number.isNaN(opened) || Number.isNaN(closed) || closed < opened
+    ? "the last check window"
+    : `the last check window (${spanText(closed - opened)})`;
+}
+
+export function slaReading(
+  window:
+    | (Pick<SlaWindow, "status" | "verifiedCalls" | "failedCalls" | "minVerifiedCalls" | "observedFailureRate" | "declaredFailureRate"> &
+        Partial<Pick<SlaWindow, "openedAt" | "closedAt">>)
+    | null,
+  declared: number | null,
+  options: { now?: number } = {},
+): SlaReading {
   if (!window) {
     return {
       headline: null,
@@ -57,8 +92,8 @@ export function slaReading(window: Pick<SlaWindow, "status" | "verifiedCalls" | 
     return { headline: null, tone: "neutral", sample, advice: "No checked calls in this window yet.", used: null };
   }
   const used = rate / promise;
-  const scope = window.status === "OPEN" ? "this window" : "last window";
-  const headline = `${pct(rate)} of calls failed ${scope} (you promised at most ${pct(promise)})`;
+  const scope = checkWindowScope(window, options.now);
+  const headline = `In ${scope}, ${pct(rate)} of calls failed (you promised at most ${pct(promise)})`;
   let tone: SlaTone = used > 1 ? "danger" : used >= 0.75 ? "warning" : "ok";
   let advice: string;
   if (sampleShort) {

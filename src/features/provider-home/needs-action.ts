@@ -1,5 +1,6 @@
 import type { BindingStatus, Money, SlaWindow } from "@/interfaces";
 import type { PenaltyNotice } from "@/features/provider-penalties/use-penalty-summary";
+import { checkWindowScope } from "@/features/provider-sla/reading";
 import { routes } from "@/libs/routes";
 import { formatMoney } from "@/utils/money";
 
@@ -90,13 +91,14 @@ export function needsActionItems(input: NeedsActionInput): NeedsActionItem[] {
     const binding = input.bindings.find((b) => b.id === window.bindingId);
     const name = input.label(binding ?? { toolId: window.toolId });
     const over = share >= 1;
+    const span = ` in ${checkWindowScope(window, now)}`;
     items.push({
       id: `sla:${window.windowId}`,
       kind: "sla",
       tone: over || window.warningLevel === "CRITICAL" ? "danger" : "warning",
       title: over
-        ? `${name}: ${percent(window.observedFailureRate)} of calls failed, over your ${percent(window.declaredFailureRate)} promise`
-        : `${name}: ${percent(window.observedFailureRate)} of calls failed, near your ${percent(window.declaredFailureRate)} promise`,
+        ? `${name}: ${percent(window.observedFailureRate)} of calls failed${span}, over your ${percent(window.declaredFailureRate)} promise`
+        : `${name}: ${percent(window.observedFailureRate)} of calls failed${span}, near your ${percent(window.declaredFailureRate)} promise`,
       detail: over
         ? "If it is still over when this window closes, a penalty is proposed. Fix your API now to bring it back down."
         : "Failures are building up in this window. Check your API before it closes.",
