@@ -495,9 +495,9 @@ describe("waiting for replaceableAt (main b6ca73a)", () => {
       replaceableAt: later,
     });
     const text = settleDebtFailure(error, now);
-    expect(text).toMatch(/^Assay can accept this payment only from today \d{2}:\d{2} .+\(in 30m\): the original payment/);
+    expect(text).toMatch(/^Assay can accept this payment only from today \d{2}:\d{2} UTC \(in 30m\): the original payment/);
     expect(text).toContain("Nothing was signed.");
-    expect(text).toMatch(/You can try again from \d{2}:\d{2}:\d{2}\.$/);
+    expect(text).toMatch(/You can try again from \d{2}:\d{2}:\d{2} UTC\.$/);
     expect(text).not.toContain("clock");
   });
 

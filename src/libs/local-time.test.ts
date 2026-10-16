@@ -5,6 +5,7 @@ import {
   formatLocalDate,
   formatLocalDateTime,
   formatRelative,
+  formatUtcDateTime,
   localDayBounds,
   utcTitle,
   zoneLabel,
@@ -38,7 +39,7 @@ describe("local time", () => {
   });
 
   it("renders in the given zone, not UTC", () => {
-    expect(formatClock("2026-10-15T07:20:00Z", { timeZone: "Asia/Tokyo" })).toBe("14:20");
+    expect(formatClock("2026-10-15T07:20:00Z", { timeZone: "Asia/Tokyo" })).toBe("16:20");
   });
 
   it("gives the exact UTC instant for a tooltip", () => {
@@ -49,6 +50,16 @@ describe("local time", () => {
   it("never throws on junk", () => {
     expect(formatLocalDateTime("not a date", UTC)).toBe("—");
     expect(formatLocalDateTime(undefined, UTC)).toBe("—");
+  });
+});
+
+describe("formatUtcDateTime (money-screen convention)", () => {
+  const now = Date.parse("2026-10-17T10:00:00Z");
+  it("is UTC, day + HH:MM, always labelled", () => {
+    expect(formatUtcDateTime("2026-10-17T07:32:00Z", { now, alwaysDay: true })).toBe("Today 07:32 UTC");
+    expect(formatUtcDateTime("2026-09-15T08:40:00Z", { now })).toBe("Sep 15, 08:40 UTC");
+    expect(formatUtcDateTime("2026-09-15T08:40:05Z", { now, seconds: true })).toBe("Sep 15, 08:40:05 UTC");
+    expect(formatUtcDateTime(null)).toBe("—");
   });
 });
 
@@ -73,15 +84,15 @@ describe("formatRelative", () => {
 
 describe("localDayBounds (review 2026-10-17 P3)", () => {
   it("is the reader's own calendar day, not the UTC one", () => {
-    // 01:00 on Oct 17 in GMT+9 is still Oct 16 in UTC.
+    // 03:00 on Oct 17 in Tokyo is still Oct 16 in UTC.
     const anchor = Date.parse("2026-10-16T18:00:00.000Z");
     expect(localDayBounds(anchor, { timeZone: "Asia/Tokyo" })).toEqual({
-      from: "2026-10-16T17:00:00.000Z",
-      to: "2026-10-17T17:00:00.000Z",
+      from: "2026-10-16T15:00:00.000Z",
+      to: "2026-10-17T15:00:00.000Z",
     });
     expect(localDayBounds(anchor, { timeZone: "Asia/Tokyo", offsetDays: -1 })).toEqual({
-      from: "2026-10-15T17:00:00.000Z",
-      to: "2026-10-16T17:00:00.000Z",
+      from: "2026-10-15T15:00:00.000Z",
+      to: "2026-10-16T15:00:00.000Z",
     });
     expect(localDayBounds(anchor, { timeZone: "UTC" })).toEqual({
       from: "2026-10-16T00:00:00.000Z",

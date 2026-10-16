@@ -1,17 +1,19 @@
 /**
- * Times for people: in their own time zone, at the coarsest precision that
- * still answers the question, with the exact UTC instant one hover away.
+ * Times for people, at the coarsest precision that still answers the question,
+ * with the exact UTC instant one hover away.
  *
  * Use `formatLocalDateTime` for a moment ("14:20", "Yesterday 09:05",
  * "Oct 16, 14:20"), `formatLocalDate` for a day, and `utcTitle` as the `title`
  * of the element that shows either — `<LocalTime>` in
  * components/patterns/local-time.tsx does all three.
  *
- * The convention on money screens (receipt header, debt banner, settle sheet):
- * day + HH:MM with the zone label next to it ("Today 07:32 GMT+9",
- * "Nov 16, 07:42 GMT+9"). Only the receipt timeline shows seconds — the steps
- * of one call are often seconds apart — and it says so once, above the rows
- * ("Times in GMT+9, to the second": `timelineZoneNote`).
+ * The convention on money screens (receipt header and timeline, debt banner,
+ * deadlines and their countdowns, settle sheet): UTC, day + HH:MM, always
+ * labelled "UTC" ("Today 07:32 UTC", "Nov 16, 07:42 UTC") — `formatUtcDateTime`,
+ * or `<LocalTime utc>`. Only the receipt timeline shows seconds, because the
+ * steps of one call are often seconds apart, and it says so once above the rows
+ * (`timelineZoneNote`). Other screens still format in the reader's zone with
+ * `formatLocalDateTime` until they are moved over.
  *
  * Every function takes an optional `timeZone` and `now`, so tests are not at
  * the mercy of the machine's clock or zone. Screens leave both out.
@@ -104,6 +106,18 @@ export function formatLocalDateTime(
   if (day === dayKey(new Date(now - 86_400_000), options.timeZone)) return `${dayWord("Yesterday", options)} ${clock}`;
   if (day === dayKey(new Date(now + 86_400_000), options.timeZone)) return `${dayWord("Tomorrow", options)} ${clock}`;
   return `${formatLocalDate(date, options)}, ${clock}`;
+}
+
+/**
+ * A moment in UTC with the label: "Today 07:32 UTC", "Sep 15, 08:40 UTC"
+ * ("Sep 15, 08:40:05 UTC" with `seconds`). Day words follow the UTC day.
+ */
+export function formatUtcDateTime(
+  value: string | number | Date | null | undefined,
+  options: Omit<LocalTimeOptions, "timeZone"> = {},
+): string {
+  const text = formatLocalDateTime(value, { ...options, timeZone: "UTC" });
+  return text === "—" ? text : `${text} UTC`;
 }
 
 /**

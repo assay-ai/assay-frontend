@@ -76,7 +76,7 @@ export function notYetRefusalSentence(refusal: NotYetRefusal, now: number): stri
   const when = serverAt ? ` from ${debtDeadline(serverAt, { now })}` : "";
   const skew =
     serverAt && Date.parse(serverAt) <= now ? " Your device's clock looks ahead of Assay's, so the button turned on early." : "";
-  const again = retryAt > now ? `You can try again from ${formatClock(retryAt, { seconds: true })}.` : "You can try again now.";
+  const again = retryAt > now ? `You can try again from ${formatClock(retryAt, { seconds: true, timeZone: "UTC" })} UTC.` : "You can try again now.";
   return (
     `Assay can accept this payment only${when || " a little later"}: the original payment must expire on chain first, ` +
     `so you never pay twice. Nothing was signed.${skew} ${again}`

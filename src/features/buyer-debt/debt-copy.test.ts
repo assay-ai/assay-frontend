@@ -168,10 +168,7 @@ describe("the debt banner", () => {
     expect(debtBannerTitle([debt()])).toMatch(/^Settle .*\$2\.50 your agent owes for a call$/);
   });
 
-  it("prints the deadline in the reader's zone, with the time, the zone and a countdown", () => {
-    expect(debtDeadline("2026-11-16T02:00:00.000Z", { timeZone: "America/Los_Angeles" })).toBe(
-      "Nov 15, 18:00 PST (in 30 days)",
-    );
+  it("prints the deadline in UTC, with the time, the UTC label and a countdown", () => {
     expect(debtDeadline("2026-11-16T02:00:00.000Z")).toBe("Nov 16, 02:00 UTC (in 30 days)");
     expect(debtDeadline("2026-10-17T05:30:00.000Z")).toBe("today 05:30 UTC (in 5h 30m)");
     expect(debtDeadline("2026-10-01T00:00:00.000Z")).toBe("Oct 1, 00:00 UTC");
@@ -343,12 +340,12 @@ describe("heldCallsText", () => {
 
 describe("notYetSettleSentence (review P3-1)", () => {
   const now = Date.parse("2026-10-17T07:00:00.000Z");
-  it("gives the local time with its zone and a countdown", () => {
-    expect(notYetSettleSentence("2026-10-17T07:12:00.000Z", { now, timeZone: "Asia/Tokyo" })).toBe(
-      "You can settle this from today 14:12 GMT+9 (in 12m): the original payment must expire on chain first, so you never pay twice.",
+  it("gives the time in UTC with its label and a countdown", () => {
+    expect(notYetSettleSentence("2026-10-17T07:12:00.000Z", { now })).toBe(
+      "You can settle this from today 07:12 UTC (in 12m): the original payment must expire on chain first, so you never pay twice.",
     );
     expect(
-      notYetSettleSentence("2026-10-17T07:12:00.000Z", { now, timeZone: "UTC", subject: "the first", midSentence: true }),
+      notYetSettleSentence("2026-10-17T07:12:00.000Z", { now, subject: "the first", midSentence: true }),
     ).toMatch(/^you can settle the first from today 07:12 UTC \(in 12m\):/);
     expect(notYetSettleSentence(null)).toMatch(/^You can settle this in a few minutes:/);
     expect(notYetSettleSentence("soon")).toMatch(/in a few minutes/);
