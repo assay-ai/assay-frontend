@@ -22,3 +22,23 @@ describe("demo debt pictures", () => {
     expect(after.replacedAt).not.toBeNull();
   });
 });
+
+describe("demo totals agree with the demo debt", () => {
+  it("reports the open debt as owed in the summary, not as charged", async () => {
+    const { demoResponse } = await import("./demo-api");
+    const prev = process.env.NEXT_PUBLIC_DEMO_CHAINS;
+    process.env.NEXT_PUBLIC_DEMO_CHAINS = "robinhood";
+    try {
+      const now = Date.now();
+      const body = demoResponse("GET", "/receipts/summary", {
+        from: new Date(now - 24 * 3600 * 1000).toISOString(),
+        to: new Date(now).toISOString(),
+        groupBy: "day",
+      }) as { totals: { owedTotal: { amount: string }; owedCalls: number } };
+      expect(body.totals.owedCalls).toBe(1);
+      expect(body.totals.owedTotal.amount).toBe("2500000");
+    } finally {
+      process.env.NEXT_PUBLIC_DEMO_CHAINS = prev;
+    }
+  });
+});
