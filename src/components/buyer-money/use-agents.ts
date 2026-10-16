@@ -3,6 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
+import { splitDebts } from "@/features/buyer-debt/debt-copy";
+import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
+
 import { agentReadiness, type AgentReadiness } from "@/features/buyer-money/agent-readiness";
 import { supportsDelegation } from "@/features/delegation/delegation-form";
 import { useChains } from "@/hooks/useChains";
@@ -102,6 +105,8 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
   });
   const escrowQuery = useEscrowQuery();
   const policyQuery = useSpendPolicyQuery();
+  const debtsQuery = useBuyerDebtsQuery();
+  const debtOwed = splitDebts(debtsQuery.data).own.length > 0;
 
   const delegates: EscrowDelegate[] | undefined = delegatesQuery.data?.delegates;
   const { chains } = useChains();
@@ -123,10 +128,11 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
         escrowUnreadable: escrowQuery.isError,
         paused: policyQuery.data?.paused === true,
         freeOnlyChain: freeOnlyChainName(escrowQuery.data?.account ?? agent.agentAccount),
+        debtOwed,
       });
     }
     return map;
-  }, [agents, keysQuery.data, delegates, escrowQuery.data, escrowQuery.isError, policyQuery.data, freeOnlyChainName]);
+  }, [agents, keysQuery.data, delegates, escrowQuery.data, escrowQuery.isError, policyQuery.data, freeOnlyChainName, debtOwed]);
 
   return {
     agentsQuery,

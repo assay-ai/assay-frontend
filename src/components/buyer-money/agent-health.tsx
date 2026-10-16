@@ -46,7 +46,7 @@ export function AgentHealthList({ className }: { className?: string }) {
           const readiness = data.readiness[agent.agentId];
           if (!readiness) return null;
           // Its permission to pay ends within a week: say so here, with the way to renew it.
-          const expiry = permissionExpiry(readiness.grant, now);
+          const expiry = readiness.freeOnly ? null : permissionExpiry(readiness.grant, now);
           return (
             <li key={agent.agentId} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 tablet:px-5">
               <span className="min-w-0 flex-1">

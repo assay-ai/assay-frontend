@@ -42,6 +42,12 @@ export interface ReadinessInput {
    * no paying step applies. Said up front on every agent, not after a click.
    */
   freeOnlyChain?: string | null;
+  /**
+   * The escrow owes a payment (buyer debt): the backend refuses every paid
+   * call until it is settled, so the agent is not "paying" whatever its
+   * permission says.
+   */
+  debtOwed?: boolean;
 }
 
 export type ReadinessStep = "key" | "funds" | "caps" | "bind" | "authorise" | null;
@@ -58,6 +64,8 @@ export interface AgentReadiness {
   /** The live key bound to a payment key, if any. */
   boundCredential: ReadinessCredential | null;
   grant: EscrowDelegate | null;
+  /** The chain serves free calls only: no pay permission, spend or renewal applies. */
+  freeOnly: boolean;
 }
 
 const RECENT_MS = 24 * 3600 * 1000;
@@ -77,7 +85,7 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
       .at(-1) ?? null;
   const bound = live.find((c) => c.delegateAccount) ?? null;
   const grant = bound?.delegateAccount ? findDelegation(input.delegates, bound.delegateAccount) : null;
-  const base = { lastCallAt, liveCredentials: live, boundCredential: bound, grant };
+  const base = { lastCallAt, liveCredentials: live, boundCredential: bound, grant, freeOnly: Boolean(input.freeOnlyChain) };
 
   if (live.length === 0) {
     return all.length > 0
@@ -94,6 +102,14 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
   }
   if (input.paused) {
     return { ...base, status: "paused", sentence: "All paid calls are paused. Free calls still work.", next: null };
+  }
+  if (input.debtOwed) {
+    return {
+      ...base,
+      status: "owed",
+      sentence: "Paid calls are paused until you settle the payment owed (see the banner). Free calls still work.",
+      next: null,
+    };
   }
   if (positive(input.escrow?.withdrawRequested)) {
     return {
