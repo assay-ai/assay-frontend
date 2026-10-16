@@ -6,10 +6,9 @@ import * as React from "react";
 import { formatLimit } from "@/components/g31/format";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
-import { capsToForm, parseCaps } from "@/features/buyer-money/caps";
+import { capsSuccessText, capsToForm, parseCaps } from "@/features/buyer-money/caps";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import {
-  hasTightenDelay,
   loweredDelayNote,
   strandAcknowledgement,
   strandReasons,
@@ -149,9 +148,7 @@ export function CapsSheet({ open, onOpenChange, next }: CapsSheetProps) {
       successDescription={
         next
           ? "It applies from the next payment. Next: let your agent pay under it."
-          : loweredNote && hasTightenDelay(tightenDelay)
-            ? `It applies from the next payment. ${loweredNote}`
-            : "It applies from the next payment. Payments may pause for about 30 seconds while the change settles."
+          : capsSuccessText(currentCaps, body, tightenDelay)
       }
       doneAction={next ?? { label: "Done", onClick: () => onOpenChange(false) }}
     >
