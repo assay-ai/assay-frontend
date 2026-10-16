@@ -78,6 +78,29 @@ export function nextReplaceableAt(debts: readonly Pick<BuyerDebt, "replaceableAt
   return next;
 }
 
+/**
+ * Why a debt cannot be settled yet, with the moment in the reader's own time
+ * zone and a countdown: "You can settle this from today 14:05 GMT+9 (in 12m):
+ * the original payment must expire on chain first, so you never pay twice."
+ * `subject: "the first"` is for several waiting debts (the time is the
+ * earliest); `midSentence` starts it in lowercase, after a colon.
+ */
+export function notYetSettleSentence(
+  replaceableAt: string | null | undefined,
+  {
+    subject = "this",
+    midSentence = false,
+    ...options
+  }: DeadlineOptions & { subject?: "this" | "it" | "the first"; midSentence?: boolean } = {},
+): string {
+  const valid = replaceableAt && !Number.isNaN(Date.parse(replaceableAt));
+  const from = valid ? `from ${debtDeadline(replaceableAt, options)}` : "in a few minutes";
+  return (
+    `${midSentence ? "you" : "You"} can settle ${subject} ${from}: the original payment must expire on chain first, ` +
+    "so you never pay twice."
+  );
+}
+
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 export function debtBannerTitle(debts: readonly Pick<BuyerDebt, "amount" | "state">[]): string {
@@ -286,9 +309,75 @@ export function escrowHeldText(
   return `${amount} more is held: ${inFlight} ${inFlight === 1 ? "call" : "calls"} being checked (${checking}) and ${unpaid}, ${until}`;
 }
 
-/** The held segment's label in the escrow split. */
+/**
+ * The held segment's label in the escrow split. One name for the held figure
+ * on every Funding line: "calls being checked", or the debt's own words.
+ */
 export function heldSegmentLabel(openHoldIntentIds: readonly string[], owedIntentIds: ReadonlySet<string>): string {
   const { owed, inFlight } = heldSplit(openHoldIntentIds, owedIntentIds);
-  if (owed === 0) return "Held by calls in flight";
-  return inFlight === 0 ? "Held for unpaid calls" : "Held by calls in flight and unpaid calls";
+  if (owed === 0) return "Held by calls being checked";
+  return inFlight === 0 ? "Held for unpaid calls" : "Held by calls being checked and unpaid calls";
+}
+
+/**
+ * The Withdraw sheet's line about the held amount, and whether any of it is
+ * buyer debt (the sheet then offers to settle). A debt's price does not come
+ * back in minutes: it stays held until the payment is collected, so the line
+ * says so and points to settling it.
+ */
+export function withdrawHeldText(
+  amount: string,
+  openHoldIntentIds: readonly string[],
+  owedIntentIds: ReadonlySet<string>,
+): { text: string; owed: number } {
+  const { owed, inFlight } = heldSplit(openHoldIntentIds, owedIntentIds);
+  const checking = "it comes back or goes to providers within minutes";
+  if (owed === 0) return { text: `${amount} is held by calls being checked; ${checking}.`, owed };
+  const unpaid = `${owed} unpaid ${owed === 1 ? "call" : "calls"}`;
+  const until = `held until ${owed === 1 ? "its payment is" : "their payments are"} collected`;
+  const settle = `Settle ${owed === 1 ? "it" : "them"} to free that money.`;
+  if (inFlight === 0) return { text: `${amount} is held for ${unpaid}, ${until}. ${settle}`, owed };
+  return {
+    text:
+      `${amount} is held: ${inFlight} ${inFlight === 1 ? "call" : "calls"} being checked (${checking}) and ${unpaid}, ` +
+      `${until}. ${settle}`,
+    owed,
+  };
+}
+
+/** Why nothing can be withdrawn while everything in the escrow is held. */
+export function withdrawAllHeldReason(openHoldIntentIds: readonly string[], owedIntentIds: ReadonlySet<string>): string {
+  const { owed, inFlight } = heldSplit(openHoldIntentIds, owedIntentIds);
+  if (owed === 0) return "Everything in your escrow is held by calls being checked. Try again in a few minutes.";
+  const unpaid = `${owed} unpaid ${owed === 1 ? "call" : "calls"}`;
+  const until = `held until ${owed === 1 ? "its payment is" : "their payments are"} collected`;
+  if (inFlight === 0) {
+    return `Everything in your escrow is held for ${unpaid}, ${until}. Settle ${owed === 1 ? "it" : "them"} first, then withdraw what is left.`;
+  }
+  return (
+    `Everything in your escrow is held: by calls being checked (back within minutes) and by ${unpaid}, ${until}. ` +
+    `Settle ${owed === 1 ? "it" : "them"}, then withdraw what is left.`
+  );
+}
+
+/**
+ * Close account's line about open holds: calls being checked are charged or
+ * come back within 24 hours; an unpaid call's price stays held until it is
+ * collected, so that part says to settle it.
+ */
+export function closeAccountHeldText(
+  openHoldIntentIds: readonly string[],
+  owedIntentIds: ReadonlySet<string>,
+): { checking: string | null; unpaid: string | null } {
+  const { owed, inFlight } = heldSplit(openHoldIntentIds, owedIntentIds);
+  return {
+    checking:
+      inFlight > 0
+        ? `${inFlight} ${inFlight === 1 ? "call is" : "calls are"} still being checked. Their held money is charged or comes back within 24 hours; then withdraw it too.`
+        : null,
+    unpaid:
+      owed > 0
+        ? `${owed} unpaid ${owed === 1 ? "call keeps its" : "calls keep their"} price held until ${owed === 1 ? "it is" : "they are"} collected: settle ${owed === 1 ? "it" : "them"}, then withdraw what is left.`
+        : null,
+  };
 }
