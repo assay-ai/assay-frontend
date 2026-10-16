@@ -286,7 +286,7 @@ function EscrowCard({
   withdrawalPending: boolean;
   /** A free-calls-only chain: no account ceiling or 24-hour meter, nothing is spent there. */
   freeOnly: boolean;
-  /** The held segment's label: calls in flight, unpaid calls (held until collected), or both. */
+  /** The held segment's label: calls being checked, unpaid calls (held until collected), or both. */
   heldLabel: string;
   onAction: (next: MoneyAction) => void;
 }) {

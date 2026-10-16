@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ToolCall } from "@/services/tool-calls.service";
 
 import {
+  chargedCallsFromTotals,
   callBuckets,
   chargedFromTotals,
   owedFromTotals,
@@ -141,5 +142,14 @@ describe("one meaning of spent (P2-3)", () => {
     expect(owedFromTotals({ owedTotal: m("250000") })).toEqual(m("250000"));
     expect(owedFromTotals({ owedTotal: m("0") })).toBeNull();
     expect(chargedFromTotals(undefined)).toBeNull();
+  });
+});
+
+describe("chargedCallsFromTotals (Spent today's count matches its amount)", () => {
+  it("leaves out owed, not-charged and in-progress calls", () => {
+    expect(chargedCallsFromTotals({ calls: 6, owedCalls: 1, notChargedCalls: 0, inProgressCalls: 0 })).toBe(5);
+    expect(chargedCallsFromTotals({ calls: 10, owedCalls: 1, notChargedCalls: 2, inProgressCalls: 3 })).toBe(4);
+    expect(chargedCallsFromTotals({ calls: 1, owedCalls: 2 })).toBe(0);
+    expect(chargedCallsFromTotals(null)).toBe(0);
   });
 });

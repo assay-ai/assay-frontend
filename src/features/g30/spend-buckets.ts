@@ -73,6 +73,22 @@ export function chargedFromTotals(
   return totals?.chargedTotal ?? null;
 }
 
+/**
+ * The calls behind the charged figure: every call in the window minus the
+ * ones not charged, owed (buyer debt) or still in progress, so "N calls"
+ * beside "Spent" counts the same calls as the amount.
+ */
+export function chargedCallsFromTotals(
+  totals:
+    | { calls?: number | null; notChargedCalls?: number | null; owedCalls?: number | null; inProgressCalls?: number | null }
+    | null
+    | undefined,
+): number {
+  if (!totals) return 0;
+  const left = (totals.calls ?? 0) - (totals.notChargedCalls ?? 0) - (totals.owedCalls ?? 0) - (totals.inProgressCalls ?? 0);
+  return Math.max(left, 0);
+}
+
 /** The owed figure beside "spent", or `null` when nothing is owed. */
 export function owedFromTotals(
   totals: { owedTotal?: Money | null; owedCalls?: number | null } | null | undefined,
