@@ -294,6 +294,9 @@ export function SignAction({
   }
 
   const rawError = state.phase === "failed" ? errorText(state.error) : null;
+  // A disabled button names its reason for a screen reader too (the message under it).
+  const messageId = React.useId();
+  const describedBy = disabled && !running && message ? messageId : undefined;
   const single = steps.length === 1 ? steps[0] : undefined;
 
   return (
@@ -336,6 +339,7 @@ export function SignAction({
             type="button"
             className={cn(block && "w-full")}
             disabled={disabled || running}
+            aria-describedby={describedBy}
             loading={running}
             onClick={() => void start()}
           >
@@ -379,7 +383,7 @@ export function SignAction({
             <CircleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
           ) : null}
           <span className="flex min-w-0 flex-1 flex-col gap-1">
-            <span>{message}</span>
+            <span id={messageId}>{message}</span>
             {liveUrl ? <ExplorerLink href={liveUrl} label={explorerLabel} className="self-start text-02" /> : null}
             {rawError ? (
               <details className="text-03">

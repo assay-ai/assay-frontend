@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BuyerDebt } from "@/interfaces/buyer-debt";
 import { ApiError } from "@/libs/ApiClient";
+import { formatMoney } from "@/utils/money";
 
 import {
   balanceAfterSettling,
@@ -10,6 +11,7 @@ import {
   debtBannerSummary,
   debtDeadlineLine,
   debtTotal,
+  owedChangeRow,
   earliestWriteOff,
   owedCallState,
   owedCallsFromDebts,
@@ -23,8 +25,14 @@ import {
   type SettleEscrowReading,
   waitingToSettleNote,
 } from "./debt-summary";
-import { notYetReplaceableSentence } from "./debt-copy";
-import { refreshesDebts, settleDebtFailure } from "./settle-debt-errors";
+import { notYetSettleSentence } from "./debt-copy";
+import {
+  NOT_YET_BACKOFF_MS,
+  notYetRefusal,
+  notYetRefusalSentence,
+  refreshesDebts,
+  settleDebtFailure,
+} from "./settle-debt-errors";
 
 const ACCOUNT = "eip155:46630:0x7FD9A17dE9fd64b35081FbAbaa9f3bb85e59F8d1";
 const OTHER = "eip155:46630:0x2222222222222222222222222222222222222222";
@@ -410,6 +418,23 @@ describe("the Resume sheet while a debt is owed (buyer retest 2026-10-17)", () =
   });
 });
 
+describe("owedChangeRow (review P2-1)", () => {
+  it("shows the full amount owed and what stays owed while another debt waits", () => {
+    const ready = debt({ intentId: "int_2" });
+    const waiting = debt({ replaceableAt: "2026-10-17T00:30:00.000Z" });
+    expect(owedChangeRow([waiting, ready], [ready])).toEqual({
+      label: "You owe",
+      before: "$5.00",
+      after: "$2.50 after this signature",
+    });
+  });
+  it("ends at $0.00 when every debt is signed", () => {
+    const one = debt();
+    expect(owedChangeRow([one], [one]).after).toBe(formatMoney(null));
+    expect(owedChangeRow([], [one]).before).toBe("$2.50");
+  });
+});
+
 describe("waiting for replaceableAt (main b6ca73a)", () => {
   const now = Date.parse("2026-10-17T00:00:00.000Z");
   const later = "2026-10-17T00:30:00.000Z";
@@ -419,7 +444,8 @@ describe("waiting for replaceableAt (main b6ca73a)", () => {
     expect(one.ready).toEqual([]);
     expect(one.actionDisabled).toBe(true);
     expect(one.actionLabel).toBe("Settle $2.50");
-    expect(one.waitingNote).toBe(notYetReplaceableSentence(later));
+    expect(one.waitingNote).toBe(notYetSettleSentence(later, { now }));
+    expect(one.waitingNote).toMatch(/\(in 30m\): the original payment/);
 
     const mixed = debtBannerSummary(
       { account: ACCOUNT, debts: [debt({ replaceableAt: later }), debt({ intentId: "int_2" })] },
@@ -428,7 +454,25 @@ describe("waiting for replaceableAt (main b6ca73a)", () => {
     expect(mixed.ready.map((d) => d.intentId)).toEqual(["int_2"]);
     expect(mixed.actionDisabled).toBe(false);
     expect(mixed.actionLabel).toBe("Settle $2.50");
-    expect(mixed.waitingNote).toBe(`1 of them is not ready to sign yet: ${notYetReplaceableSentence(later, "it")}`);
+    expect(mixed.waitingNote).toBe(
+      `1 of them is not ready to sign yet: ${notYetSettleSentence(later, { subject: "it", midSentence: true, now })}`,
+    );
+
+    // Several waiting: the earliest time, named as the first one's.
+    const evenLater = "2026-10-17T01:00:00.000Z";
+    const all = debtBannerSummary(
+      { account: ACCOUNT, debts: [debt({ replaceableAt: evenLater }), debt({ intentId: "int_2", replaceableAt: later })] },
+      { now },
+    )!;
+    expect(all.waitingNote).toBe(notYetSettleSentence(later, { subject: "the first", now }));
+    const someMany = debtBannerSummary(
+      {
+        account: ACCOUNT,
+        debts: [debt({ replaceableAt: evenLater }), debt({ intentId: "int_2", replaceableAt: later }), debt({ intentId: "int_3" })],
+      },
+      { now },
+    )!;
+    expect(someMany.waitingNote).toMatch(/^2 of them are not ready to sign yet: you can settle the first from /);
   });
 
   it("waits for nothing once replaceableAt has passed or when the backend sends none", () => {
@@ -446,10 +490,29 @@ describe("waiting for replaceableAt (main b6ca73a)", () => {
     }
   });
 
-  it("says from when in the sheet's failure line, and that nothing was signed", () => {
+  it("says from when in the sheet's failure line, that nothing was signed, and when to try again", () => {
     const error = new ApiError("PAYMENT_DEBT_NOT_YET_REPLACEABLE", "raw", 409, "/escrow/debts/int_1/voucher", {
       replaceableAt: later,
     });
-    expect(settleDebtFailure(error)).toBe(`${notYetReplaceableSentence(later)} Nothing was signed.`);
+    const text = settleDebtFailure(error, now);
+    expect(text).toMatch(/^Assay can accept this payment only from today \d{2}:\d{2} .+\(in 30m\): the original payment/);
+    expect(text).toContain("Nothing was signed.");
+    expect(text).toMatch(/You can try again from \d{2}:\d{2}:\d{2}\.$/);
+    expect(text).not.toContain("clock");
+  });
+
+  it("backs off at least 30 s after the refusal, and uses the server's time when later (clock skew, P3-3)", () => {
+    const refusal = (context?: Record<string, unknown>) =>
+      new ApiError("PAYMENT_DEBT_NOT_YET_REPLACEABLE", "raw", 409, "/escrow/debts/int_1/voucher", context);
+    expect(notYetRefusal(refusal({ replaceableAt: later }), now)).toEqual({ serverAt: later, retryAt: Date.parse(later) });
+    // The browser runs ahead: the server's time has already passed here, so the back-off decides.
+    const past = "2026-10-16T23:59:50.000Z";
+    expect(notYetRefusal(refusal({ replaceableAt: past }), now)).toEqual({ serverAt: past, retryAt: now + NOT_YET_BACKOFF_MS });
+    expect(notYetRefusal(refusal(), now)).toEqual({ serverAt: null, retryAt: now + NOT_YET_BACKOFF_MS });
+    expect(notYetRefusal(new ApiError("OTHER", "raw", 409), now)).toBeNull();
+    const skewed = settleDebtFailure(refusal({ replaceableAt: past }), now);
+    expect(skewed).toContain("Your device's clock looks ahead of Assay's");
+    expect(settleDebtFailure(refusal(), now)).toMatch(/^Assay can accept this payment only a little later:/);
+    expect(notYetRefusalSentence({ serverAt: null, retryAt: now - 1 }, now)).toMatch(/You can try again now\.$/);
   });
 });
