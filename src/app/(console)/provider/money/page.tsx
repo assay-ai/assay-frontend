@@ -1,27 +1,28 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Download, ExternalLink, HelpCircle } from "lucide-react";
+import { ChevronRight, Download, ExternalLink, HelpCircle, Info, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { DisplayAssetSelect, displayAssetLabel, useDisplayAsset } from "@/components/display-asset-select";
+import { CopyChip } from "@/components/patterns/copy-chip";
 import { LocalTime } from "@/components/patterns/local-time";
 import { MoneySplit, type MoneySplitSegment } from "@/components/patterns/money-flow";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { assetScopeNote, foldClasses, foldNotCredited, observedTakeRate, rowsInAsset } from "@/features/call-classes/csv";
-import { classLabel } from "@/features/call-classes/labels";
-import { fromExport, fromLedger, takeCopy, type ReconSummary } from "@/features/call-classes/reconciliation";
+import { assetScopeNote, foldClasses, foldNotCredited, observedTakeRate, rowsInAsset, type CallRow } from "@/features/call-classes/csv";
+import { classLabel, reasonLabel } from "@/features/call-classes/labels";
+import { classNote, fromExport, fromLedger, takeCopy, type ReconSummary } from "@/features/call-classes/reconciliation";
 import { downloadCallsCsv, useCallsExport } from "@/features/call-classes/use-calls-export";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { lossOf } from "@/features/provider-penalties/model";
 import { usePenalties } from "@/features/provider-penalties/use-penalties";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
-import { earningsSplit, unpaidLines, type EarningsSplit, type UnpaidLine } from "@/features/provider-earnings/earned-tile";
+import { callsOfClass, earningsSplit, unpaidLines, type EarningsSplit, type UnpaidLine } from "@/features/provider-earnings/earned-tile";
 import { callCount, notCreditedReason, partsThatAddUp } from "@/features/provider-earnings/not-credited";
 import { useChains } from "@/hooks/useChains";
 import type { Money, ProviderPayout } from "@/interfaces";
@@ -30,6 +31,7 @@ import { routes } from "@/libs/routes";
 import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts.service";
 import { getProviderEarnings, getProviderReconciliation } from "@/services/provider-reports.service";
 import { chainIdOfAsset } from "@/utils/chain";
+import { cn } from "@/utils";
 import { formatMoney, toDecimal } from "@/utils/money";
 import { toast } from "@/utils/toast";
 
@@ -58,6 +60,9 @@ function monthWindow(now: Date) {
 function amountOf(money: Money | null | undefined): number {
   return money ? toDecimal(money).toNumber() : 0;
 }
+
+/** Not-credited classes that passed the check; shown under "Passed, but not paid", not as a failure reason. */
+const PASSED_UNPAID: ReadonlySet<string> = new Set(["PAID_UNCOLLECTED", "PROVIDER_FORFEITED"]);
 
 const MONTH = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" });
 
@@ -91,7 +96,13 @@ export default function ProviderMoneyPage() {
   const { current: displayAsset, isPending: assetPending } = useDisplayAsset("provider");
 
   const rows = React.useMemo(() => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)), [calls.rows, assetPending, displayAsset]);
-  const notCredited = React.useMemo(() => foldNotCredited(rows), [rows]);
+  /*
+    Written-off and forfeited calls passed the check: they are explained under
+    "Passed, but not paid" (with their calls), so the reasons below keep to the
+    calls that earned nothing because of the answer or the request.
+  */
+  const passedUnpaidCalls = React.useMemo(() => rows.filter((row) => PASSED_UNPAID.has(row.classification)).length, [rows]);
+  const notCredited = React.useMemo(() => foldNotCredited(rows.filter((row) => !PASSED_UNPAID.has(row.classification))), [rows]);
   /* The reasons count one asset of the export; say so when the file holds calls in another. */
   const scopeNote =
     calls.isLoading || assetPending || !displayAsset || !calls.data
@@ -107,6 +118,13 @@ export default function ProviderMoneyPage() {
   const split = earningsSplit(earnings.data?.totals);
   const unpaid = unpaidLines(earnings.data?.totals, (value) => formatMoney(value, { decimals: 4 }));
   const monthName = MONTH.format(now);
+  // The home's "Details" link lands on the block, which renders only once the month has loaded.
+  const hasUnpaid = unpaid.length > 0;
+  React.useEffect(() => {
+    if (hasUnpaid && window.location.hash === "#passed-not-paid") {
+      document.getElementById("passed-not-paid")?.scrollIntoView({ block: "start" });
+    }
+  }, [hasUnpaid]);
 
   /*
     The month's class breakdown and settlement from the ledger
@@ -221,32 +239,11 @@ export default function ProviderMoneyPage() {
             </dl>
             {/* Passed but not paid (yet): buyer debt, written off, forfeited. Never paid by the platform. */}
             {unpaid.length > 0 ? (
-              <section
-                aria-label="Passed, but not paid"
-                data-testid="provider-unpaid"
-                className="flex flex-col gap-2.5 rounded-lg border border-01 px-3.5 py-3"
-              >
-                <div className="flex flex-col gap-0.5">
-                  <h2 className="text-label-13 text-01">Passed, but not paid</h2>
-                  <p className="text-body-xs text-03">
-                    Not in your wallet figure above. You are only ever paid from the buyer&apos;s escrow, never by the platform.
-                  </p>
-                </div>
-                <ul className="flex flex-col gap-2.5">
-                  {unpaid.map((line) => (
-                    <li key={line.key} className="flex flex-col gap-0.5">
-                      <p className="flex flex-wrap items-baseline justify-between gap-x-3 text-body-13">
-                        <span className="font-semibold text-01">{line.label}</span>
-                        <span className="font-mono text-mono-13 font-semibold text-01">
-                          {formatMoney(line.amount, { decimals: 4 })}
-                          <span className="ml-2 font-sans text-body-xs font-normal text-03">{callCount(line.calls)}</span>
-                        </span>
-                      </p>
-                      <p className="text-body-xs text-02">{line.explanation}</p>
-                    </li>
-                  ))}
-                </ul>
-              </section>
+              <UnpaidBlock
+                lines={unpaid}
+                rows={calls.data ? rows : null}
+                toolName={(id) => names.toolName(id) ?? "A tool"}
+              />
             ) : null}
           </PanelBody>
         </Panel>
@@ -316,7 +313,11 @@ export default function ProviderMoneyPage() {
           ) : calls.data || !split.notCredited ? (
             <p className="px-1 py-3 text-body-13 text-02">
               {/* No calls is not "every call credited" (BUG-R17-P-02). */}
-              {(earnings.data?.totals.calls ?? 0) === 0 ? "No calls this month yet." : "Every call this month was credited."}
+              {(earnings.data?.totals.calls ?? 0) === 0
+                ? "No calls this month yet."
+                : passedUnpaidCalls > 0
+                  ? "No call failed this month."
+                  : "Every call this month was credited."}
             </p>
           ) : (
             // The per-call file is unavailable: the earnings totals still say how much, per tool.
@@ -331,6 +332,16 @@ export default function ProviderMoneyPage() {
                 </div>
               ))
           )}
+          {calls.data && passedUnpaidCalls > 0 ? (
+            <p className="px-1 pt-1 text-body-xs text-03">
+              Not listed here: {callCount(passedUnpaidCalls)} that passed but {passedUnpaidCalls === 1 ? "was" : "were"} never paid
+              (written off, or forfeited). See{" "}
+              <a href="#passed-not-paid" className="underline underline-offset-2">
+                Passed, but not paid
+              </a>{" "}
+              above.
+            </p>
+          ) : null}
         </PanelBody>
       </Panel>
 
@@ -405,6 +416,116 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
   );
 }
 
+/** Unpaid amounts are small and often under a cent: four places, trailing zeros dropped. */
+const unpaidMoney = (value: Money | null | undefined) => formatMoney(value, { decimals: 4 });
+
+/**
+ * "Passed, but not paid": one row per way a passed call can pay the provider
+ * nothing (yet), each with its amount and calls, why in one sentence, and what
+ * the provider can do. The calls behind a row open from the per-call file.
+ */
+function UnpaidBlock({
+  lines,
+  rows,
+  toolName,
+}: {
+  lines: readonly UnpaidLine[];
+  /** The month's per-call rows in the shown asset, or null when the file is not available. */
+  rows: readonly CallRow[] | null;
+  toolName: (toolId: string) => string;
+}) {
+  return (
+    <section
+      id="passed-not-paid"
+      aria-labelledby="passed-not-paid-title"
+      data-testid="provider-unpaid"
+      className="flex scroll-mt-20 flex-col rounded-lg border border-01"
+    >
+      <div className="flex flex-col gap-0.5 border-b border-01 px-3.5 py-3">
+        <h2 id="passed-not-paid-title" className="text-label-13 text-01">
+          Passed, but not paid
+        </h2>
+        <p className="text-body-xs text-03">Not in your wallet figure. You are paid only from the buyer&apos;s escrow, never by Assay.</p>
+      </div>
+      <ul className="flex flex-col divide-y divide-01">
+        {lines.map((line) => (
+          <UnpaidRow key={line.key} line={line} rows={rows} toolName={toolName} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function UnpaidRow({
+  line,
+  rows,
+  toolName,
+}: {
+  line: UnpaidLine;
+  rows: readonly CallRow[] | null;
+  toolName: (toolId: string) => string;
+}) {
+  const drill = rows ? callsOfClass(rows, line.className) : null;
+  const ActionIcon = line.actionable ? TriangleAlert : Info;
+  return (
+    <li className="flex flex-col gap-1.5 px-3.5 py-3" data-testid={`provider-unpaid-${line.key}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <span className="text-label-13 text-01">{line.label}</span>
+        <span className="flex items-baseline gap-2">
+          <span className="font-mono text-mono-13 font-semibold text-01">{unpaidMoney(line.amount)}</span>
+          <span className="text-body-xs text-03">{callCount(line.calls)}</span>
+        </span>
+      </div>
+      <p className="text-body-xs text-02">{line.reason}</p>
+      <p className={cn("flex items-start gap-1.5 text-body-xs", line.actionable ? "text-warning-700" : "text-03")}>
+        <ActionIcon aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+        <span>
+          {line.action}
+          {line.key === "forfeited" ? (
+            <>
+              {" "}
+              <Link href={routes.stake()} className="font-medium underline underline-offset-2">
+                Check your stake
+              </Link>
+            </>
+          ) : null}
+        </span>
+      </p>
+      {drill && drill.total > 0 ? (
+        <details className="group">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded text-label-xs text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 [&::-webkit-details-marker]:hidden">
+            <ChevronRight aria-hidden="true" className="size-3.5 transition-transform group-open:rotate-90" />
+            {drill.total === 1 ? "Show the call" : `Show the ${drill.total.toLocaleString("en-US")} calls`}
+          </summary>
+          <ul className="mt-2 flex flex-col divide-y divide-01 rounded-md border border-01 bg-02">
+            {drill.items.map((call) => (
+              <li key={call.callId} className="flex flex-col gap-0.5 px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-01">
+                    <span className="font-medium">{toolName(call.toolId)}</span>
+                    <LocalTime value={call.createdAt} className="text-03" />
+                    <CopyChip value={call.callId} label="call id" />
+                  </span>
+                  <span className="font-mono text-mono-12 text-01">
+                    {unpaidMoney({ amount: call.providerAmount, asset: call.asset, decimals: call.decimals })}
+                  </span>
+                </div>
+                {call.reason ? <span className="text-body-xs text-03">{reasonLabel(call.reason)}</span> : null}
+              </li>
+            ))}
+          </ul>
+          {drill.more > 0 ? (
+            <p className="mt-1.5 text-body-xs text-03">
+              And {callCount(drill.more)} more in this month&apos;s CSV (the <code className="font-mono">classification</code> column
+              reads <code className="font-mono">{line.className}</code>).
+            </p>
+          ) : null}
+        </details>
+      ) : null}
+    </li>
+  );
+}
+
 function ExplainSheet({
   open,
   onOpenChange,
@@ -442,7 +563,7 @@ function ExplainSheet({
     ...unpaid.map((line) => ({
       label: line.label,
       detail: `${callCount(line.calls)} · not in your wallet`,
-      amount: formatMoney(line.amount, { decimals: 2 }),
+      amount: unpaidMoney(line.amount),
     })),
   ];
   return (
@@ -514,10 +635,19 @@ function ExplainSheet({
 
 /**
  * Every call this month by outcome, with the settlement that adds up:
- * Gross − Platform take = Net = the Credited (net) total. From the ledger,
- * which counts every call; from the per-call file only when the ledger cannot
- * be read, and then said when the file is capped.
+ * Gross − Assay fee = Net = the total of the amounts per outcome. From the
+ * ledger, which counts every call; from the per-call file only when the ledger
+ * cannot be read, and then said when the file is capped. Only outcomes with
+ * calls get a row; the ways a passed call can go unpaid are named once when
+ * none happened, so a provider still learns they exist.
  */
+/** How an empty always-explained class reads in "No calls this month were …". */
+const EMPTY_CLASS_WORDS: Record<string, string> = {
+  PAID_BUYER_DEBT: "waiting on the buyer",
+  PAID_UNCOLLECTED: "never collected",
+  PROVIDER_FORFEITED: "forfeited",
+};
+
 function ReconSection({ recon, loading, capped }: { recon: ReconSummary | null; loading: boolean; capped: boolean }) {
   if (loading) return <PageState kind="loading" rows={3} bare label="Loading every call this month" />;
   if (!recon) return null;
@@ -531,28 +661,49 @@ function ReconSection({ recon, loading, capped }: { recon: ReconSummary | null; 
           only the calls in the file, not the whole month.
         </p>
       ) : null}
-      <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01">
-        {recon.rows.map((row) => (
-          <li key={row.className} className="flex items-center justify-between gap-3 px-3 py-2.5">
-            <span className="min-w-0 flex-1 text-01">{classLabel(row.className)}</span>
-            <span className="text-body-xs text-03">
-              {callCount(row.calls)} · {(row.share * 100).toFixed(1)}%
-            </span>
-            <span className="w-20 text-right font-mono text-mono-12 text-01">{formatMoney(row.credited, { decimals: 2 })}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="text-body-xs text-03">The amounts are what reached you, net of the platform&apos;s take.</p>
+      {recon.rows.length > 0 ? (
+        <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01">
+          {recon.rows.map((row) => {
+            const note = classNote(row.className, row.note);
+            return (
+              <li key={row.className} className="flex flex-col gap-0.5 px-3 py-2.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 flex-1 text-01">{classLabel(row.className)}</span>
+                  <span className="shrink-0 text-body-xs text-03">
+                    {callCount(row.calls)} · {(row.share * 100).toFixed(1)}%
+                  </span>
+                  <span className="w-20 shrink-0 text-right font-mono text-mono-12 text-01">{formatMoney(row.credited, { decimals: 2 })}</span>
+                </div>
+                {note ? <span className="text-body-xs text-03">{note}</span> : null}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+      {recon.emptyClasses.length > 0 ? (
+        <p className="text-body-xs text-03" data-testid="provider-reconciliation-none">
+          No calls this month were {recon.emptyClasses.map((name) => EMPTY_CLASS_WORDS[name] ?? classLabel(name)).join(", or ")}.
+        </p>
+      ) : null}
+      <p className="text-body-xs text-03">The amounts are what reached you, after Assay&apos;s fee.</p>
       <dl className="flex flex-col divide-y divide-01 rounded-lg border border-01">
         {[
-          { label: "Gross", note: "price of the credited calls, before the platform's take", amount: formatMoney(recon.gross, { decimals: 2 }) },
-          { label: take.label, note: take.note, amount: recon.take ? `−${formatMoney(recon.take, { decimals: 2 })}` : "—" },
-          { label: "Net", note: "gross − take · what reached your wallet", amount: formatMoney(recon.net, { decimals: 2 }) },
+          { label: "Gross", note: "Price of the paid calls, before Assay's fee.", amount: formatMoney(recon.gross, { decimals: 2 }), tone: "neutral" },
+          { label: take.label, note: take.note, amount: recon.take ? `−${formatMoney(recon.take, { decimals: 2 })}` : "—", tone: take.tone },
+          { label: "Net", note: "Gross minus the fee: what reached your wallet.", amount: formatMoney(recon.net, { decimals: 2 }), tone: "neutral" },
         ].map((line) => (
           <div key={line.label} className="flex items-start justify-between gap-3 px-3 py-2.5">
             <div className="flex min-w-0 flex-1 flex-col">
               <dt className="text-01">{line.label}</dt>
-              <span className="text-body-xs text-03">{line.note}</span>
+              <span
+                className={cn(
+                  "flex items-start gap-1 text-body-xs",
+                  line.tone === "warning" ? "text-warning-700" : line.tone === "success" ? "text-success-700" : "text-03",
+                )}
+              >
+                {line.tone === "warning" ? <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" /> : null}
+                {line.note}
+              </span>
             </div>
             <dd className="w-20 text-right font-mono text-mono-12 text-01">{line.amount}</dd>
           </div>
