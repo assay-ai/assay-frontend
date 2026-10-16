@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { minorUnitsFromMajorInput, priceModeError } from "./chrome";
+import { dailyCallsFromInput, minorUnitsFromMajorInput, priceModeError } from "./chrome";
 
 describe("minorUnitsFromMajorInput", () => {
   it.each([".", "1.2.3", "abc", "-1", "1e3"])("rejects %j without throwing", (text) => {
@@ -40,5 +40,23 @@ describe("priceModeError", () => {
   it("allows zero on FREE", () => {
     expect(priceModeError("FREE", "0", "0")).toBeNull();
     expect(priceModeError("FREE", "", null)).toBeNull();
+  });
+});
+
+describe("dailyCallsFromInput", () => {
+  it("reads a whole number of calls, with no money conversion", () => {
+    expect(dailyCallsFromInput("80")).toEqual({ value: 80, error: null });
+    expect(dailyCallsFromInput(" 5000 ")).toEqual({ value: 5000, error: null });
+  });
+
+  it("treats an empty box as the platform default", () => {
+    expect(dailyCallsFromInput("")).toEqual({ value: null, error: null });
+  });
+
+  it("refuses decimals, zero and values above the backend's maximum", () => {
+    expect(dailyCallsFromInput("0.5").error).toBe("Whole numbers only.");
+    expect(dailyCallsFromInput("0").error).toMatch(/At least 1/);
+    expect(dailyCallsFromInput("2147483648").error).toBe("Too large.");
+    expect(dailyCallsFromInput("2147483647")).toEqual({ value: 2147483647, error: null });
   });
 });
