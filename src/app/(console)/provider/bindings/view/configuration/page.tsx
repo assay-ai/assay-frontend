@@ -81,12 +81,9 @@ import { routes } from "@/libs/routes";
  *
  * ## `freeDailyBudget` is never touched here
  *
- * It reads back as `number | null` and writes as a digits-only **string** in
- * minor units — the same field, two types. This screen shows no free-tier
- * control (that is the free-tier controls design), so the key is simply **absent** from every
- * PATCH body: the read number is never laundered into the write string. A
- * save that round-tripped the whole detail object would send
- * `freeDailyBudget: 0` and 400.
+ * It is the binding-wide free-call count (free calls per day, all agents), set
+ * on the free-tier controls screen. This screen shows no free-tier control, so
+ * the key is simply **absent** from every PATCH body.
  *
  * ## The mappings are sent only when they moved
  *

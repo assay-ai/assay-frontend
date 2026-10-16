@@ -25,40 +25,27 @@ import {
   getToolBinding,
   updateToolBinding,
 } from "@/services/provider-tool-bindings.service";
-import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
 
-import {
-  integerFromInput,
-  majorInputFromMoney,
-  minorUnitsFromMajorInput,
-  moneyFromMinorNumber,
-  Note,
-  PageHeader,
-} from "@/features/provider-binding/chrome";
+import { dailyCallsFromInput, integerFromInput, Note, PageHeader } from "@/features/provider-binding/chrome";
 import { useSearchParam } from "@/hooks/useSearchParam";
 
 /**
  * Free-tier controls.
  * Route `/provider/bindings/[bindingId]/configuration/free-tier`.
  *
- * ## `freeDailyBudget` has two types, and this file does not hide it
+ * ## Two limits, both call counts
  *
- * The same field **reads as `number | null` and writes as a digits-only
- * string**, both in minor units. That is the backend's asymmetry, and the read
- * side breaks the project's money rule (money crosses the wire as a string).
- * It is handled in exactly two places and never laundered into one type:
+ *  - `freeQuotaPerAgent`: the free calls **one agent** gets from this binding
+ *    per day.
+ *  - `freeDailyBudget`: the most free calls **this binding** serves per day,
+ *    across all agents together. A call count, not money (BUG-R17g-01): the
+ *    backend enforces it by counting free calls, and the PATCH body takes a
+ *    whole number.
  *
- *  - read  → `moneyFromMinorNumber()` turns the number into a `Money` at the
- *            boundary, so every render still goes through `formatMoney` and no
- *            amount is ever a JS number downstream;
- *  - write → `minorUnitsFromMajorInput()` turns the box's major-unit text into
- *            the digits-only string the PATCH body validates. Sending the
- *            number back verbatim is rejected: `freeDailyBudget must be an
- *            integer in minor units`.
- *
- * Clearing the box sends `null` (the API's "no budget"); leaving it untouched
- * omits the key. The two are distinguishable on purpose and are not collapsed.
+ * Both read and write as `number | null`. Clearing a box sends `null` (the
+ * platform default); leaving it untouched omits the key. The two are
+ * distinguishable on purpose and are not collapsed.
  *
  * ## Two things the design draws that the API cannot back
  *
@@ -98,12 +85,6 @@ export default function FreeTierPage() {
   });
   const binding = bindingQuery.data;
 
-  const decimals = binding?.price.decimals ?? 6;
-  const asset = binding?.price.asset ?? "";
-
-  /** The read side, converted at the boundary and nowhere else. */
-  const savedBudget = moneyFromMinorNumber(binding?.freeDailyBudget, asset, decimals);
-
   const [mode, setMode] = React.useState<PricingMode | "">("");
   const [quotaInput, setQuotaInput] = React.useState("");
   const [budgetInput, setBudgetInput] = React.useState("");
@@ -116,20 +97,15 @@ export default function FreeTierPage() {
     seededFor.current = stamp;
     setMode(binding.pricingMode);
     setQuotaInput(binding.freeQuotaPerAgent == null ? "" : String(binding.freeQuotaPerAgent));
-    setBudgetInput(
-      majorInputFromMoney(moneyFromMinorNumber(binding.freeDailyBudget, binding.price.asset, binding.price.decimals))
-    );
+    setBudgetInput(binding.freeDailyBudget == null ? "" : String(binding.freeDailyBudget));
   }, [binding]);
 
   const quota = integerFromInput(quotaInput);
-  const budget = minorUnitsFromMajorInput(budgetInput, decimals);
+  const budget = dailyCallsFromInput(budgetInput);
 
   const modeChanged = Boolean(binding) && mode !== "" && mode !== binding!.pricingMode;
   const quotaChanged = Boolean(binding) && quota.error === null && quota.value !== binding!.freeQuotaPerAgent;
-  const budgetChanged =
-    Boolean(binding) &&
-    budget.error === null &&
-    budget.amount !== (savedBudget ? savedBudget.amount : null);
+  const budgetChanged = Boolean(binding) && budget.error === null && budget.value !== binding!.freeDailyBudget;
 
   const hasChanges = modeChanged || quotaChanged || budgetChanged;
   const hasError = Boolean(quota.error || budget.error);
@@ -141,7 +117,7 @@ export default function FreeTierPage() {
       // `null` clears the ceiling; omitting the key leaves it alone. Both
       // fields below send `null` only when the box was actually emptied.
       if (quotaChanged) body.freeQuotaPerAgent = quota.value;
-      if (budgetChanged) body.freeDailyBudget = budget.amount;
+      if (budgetChanged) body.freeDailyBudget = budget.value;
       return updateToolBinding(bindingId, body);
     },
     onSuccess: () => {
@@ -211,32 +187,28 @@ export default function FreeTierPage() {
               onChange={(event) => setQuotaInput(event.target.value)}
               suffix="calls"
               error={quota.error ?? undefined}
-              hint="resets at 00:00 UTC · the platform-wide free budget applies on top"
+              hint="what one agent can use from this binding · resets at 00:00 UTC · the platform's own per-agent limit applies on top"
               disabled={!binding}
             />
 
             {/*
               Not in the design. `freeDailyBudget` is a writable field on this
-              binding and the only control for the budget the quota hint above
-              points at, so a screen called "Free-tier controls" that omits it
-              leaves the provider no way to set it anywhere in the console. Its
-              label and hint are the design's own strings for this quantity,
-              taken from the Consumption panel's second meter.
+              binding and the only control for the binding-wide cap, so a
+              screen called "Free-tier controls" that omits it leaves the
+              provider no way to set it anywhere in the console.
             */}
             <Field
               id="free-daily-budget"
-              label="Daily free budget"
-              inputMode="decimal"
+              label="Free calls per day (all agents)"
+              inputMode="numeric"
               value={budgetInput}
               onChange={(event) => setBudgetInput(event.target.value)}
-              suffix="USD"
+              suffix="calls"
               error={budget.error ?? undefined}
               hint={
                 budget.error
                   ? undefined
-                  : savedBudget
-                    ? `saved as ${formatMoney(savedBudget, { decimals: 4 })} per day, across all agents · When it runs out, agents are told the free budget is used up and are offered the tool's paid option with its price.`
-                    : "Per day, across all agents. When it runs out, agents are told the free budget is used up and are offered the tool's paid option with its price."
+                  : "The most free calls this binding serves in a day, all agents together. Leave empty for the platform default. Resets at 00:00 UTC. When it runs out, agents are told the free calls are used up and are offered the tool's paid option with its price."
               }
               disabled={!binding}
             />
@@ -255,7 +227,7 @@ export default function FreeTierPage() {
               className="max-w-none"
               icon={null}
               title="Free-tier usage is not available yet"
-              description="Free calls served today and free budget used are not shown yet. The limits you set still apply: when one runs out, agents are told so and are offered the tool's paid option with its price."
+              description="Free calls served today are not shown yet. The limits you set still apply: when one runs out, agents are told so and are offered the tool's paid option with its price."
             />
           </PanelBody>
         </Panel>
