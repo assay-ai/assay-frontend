@@ -757,8 +757,13 @@ export function demoDebt() {
   return debtView(CALLS.find((call) => call.debt === "OUTSTANDING")!);
 }
 
-/** Another wallet of the demo organization, for the `other-wallet` and `many` pictures. */
-const DEMO_OTHER_PAYER = `${DEMO_CHAIN_ID}:0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF`;
+/**
+ * Another wallet of the demo organization, for the `other-wallet` and `many`
+ * pictures. A function, not a constant: `DEMO_CHAIN_ID` comes from
+ * `fixtures.ts`, which imports this file, so reading it at load time hits the
+ * import cycle (see `demoDebt`).
+ */
+const demoOtherPayer = () => `${DEMO_CHAIN_ID}:0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF`;
 
 /**
  * `GET /escrow/debts` for the picture `?debt=` asked for (see `demo-debts.ts`).
@@ -773,7 +778,7 @@ export function demoDebts() {
     variant === "written-off"
       ? [{ ...base, state: "WRITTEN_OFF" as const, cause: `uncollected:${base.cause ?? "unknown"}`, writeOffAt: minutesAgo(60 * 24 * 2) }]
       : variant === "other-wallet"
-        ? [{ ...base, payer: DEMO_OTHER_PAYER }]
+        ? [{ ...base, payer: demoOtherPayer() }]
         : variant === "collecting"
           ? [{ ...base, state: "REPLACING" as const, replacedAt: minutesAgo(1) }]
           : variant === "many"
@@ -793,7 +798,7 @@ export function demoDebts() {
                 {
                   ...base,
                   intentId: "7f20c9d3-e815-4a6b-9c47-1d3b8e05a2c6",
-                  payer: DEMO_OTHER_PAYER,
+                  payer: demoOtherPayer(),
                   toolId: "ocr_extract",
                   amount: { ...base.amount, amount: money("6.00").amount },
                   cause: "EscrowWindowLimitExceeded",
