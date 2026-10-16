@@ -26,15 +26,26 @@ export interface LocalTimeProps extends React.TimeHTMLAttributes<HTMLTimeElement
   relative?: boolean;
   /** The time sits inside a sentence: "asked yesterday 14:20", not "asked Yesterday 14:20". */
   midSentence?: boolean;
+  /** Name the day even when it is today ("Today 14:20"), as the receipt timeline and debt banner do. */
+  alwaysDay?: boolean;
 }
 
-export function LocalTime({ value, dateOnly = false, withZone = false, relative = false, midSentence = false, className, ...props }: LocalTimeProps) {
+export function LocalTime({
+  value,
+  dateOnly = false,
+  withZone = false,
+  relative = false,
+  midSentence = false,
+  alwaysDay = false,
+  className,
+  ...props
+}: LocalTimeProps) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
 
   const date = value === null || value === undefined || value === "" ? null : new Date(value);
   const iso = date && !Number.isNaN(date.getTime()) ? date.toISOString() : undefined;
-  const options = { midSentence };
+  const options = { midSentence, alwaysDay };
   const text = !mounted
     ? (utcTitle(value) ?? "—")
     : dateOnly
@@ -42,7 +53,7 @@ export function LocalTime({ value, dateOnly = false, withZone = false, relative 
       : withZone
         ? `${formatLocalDateTime(value, options)} ${zoneLabel(value)}`.trim()
         : relative
-          ? formatRelative(value, options)
+          ? formatRelative(value, { midSentence })
           : formatLocalDateTime(value, options);
 
   return (

@@ -292,7 +292,8 @@ function ReceiptPageContent() {
       <div className="flex min-w-0 flex-col gap-1">
         <h1 className="break-all font-mono text-heading-md text-01">{names.name("tool", receipt.toolId)}</h1>
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-13 text-03">
-          <LocalTime value={receipt.createdAt} />
+          {/* The day always named, as on the timeline below and the debt banner ("Today 07:32", "Sep 15, 08:40"). */}
+          <LocalTime value={receipt.createdAt} alwaysDay />
           <span aria-hidden="true">·</span>
           <span>{providerName}</span>
           <span aria-hidden="true">·</span>
