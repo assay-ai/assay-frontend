@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ApprovalItem, ApprovedChainBlockAction, RowSection, type ApprovalResult } from "@/features/operator/approval-item";
 import { approvalErrorMessage } from "@/features/operator/approvals";
-import { disputeAmount, possessive } from "@/features/operator/arbiter";
+import { disputeAmount, mayBlockOnChain, possessive } from "@/features/operator/arbiter";
 import { chainDisplayName } from "@/features/operator/call-summary";
 import { Deadline } from "@/features/operator/deadline";
 import { DisputeLine } from "@/features/operator/dispute-line";
@@ -157,7 +157,9 @@ export default function OperatorHome() {
   const groups = React.useMemo(() => groupApprovals(pending.data?.items ?? [], me, now), [pending.data, me, now]);
   const { context, approversFor, nameOf } = useApprovalContext([...groups.needsYou, ...groups.yours], me);
   const disputeRows = React.useMemo(() => sortDisputesByDaysLeft(disputes.data ?? []), [disputes.data]);
-  const toSign = useToSign(caps.rule);
+  // Support may download approved on-chain blocks for the arbiter's wallet: its Home lists them too (P3-a).
+  const exportsBlocks = !caps.rule && mayBlockOnChain(me.roles);
+  const toSign = useToSign(caps.rule || exportsBlocks, { blocksOnly: !caps.rule });
   const directory = useOperatorDirectory();
   const holds = sortHoldsOldestFirst(health.data?.slashHolds ?? []);
   const blockCount = activeBlocks.data?.items.length ?? null;
@@ -321,6 +323,28 @@ export default function OperatorHome() {
                     <span className="block text-body-xs font-normal text-03">
                       {chainDisplayName(block.chainId)}
                       {block.approvedBy ? ` · approved by ${directory.nameOf(block.approvedBy)}` : ""} · nothing is blocked on chain until the arbiter signs
+                    </span>
+                  </span>
+                </Link>
+              ))}
+            </RowSection>
+          ) : null}
+
+          {exportsBlocks && toSign.blocks.length > 0 ? (
+            <RowSection
+              id="for-the-arbiter"
+              title="For the arbiter to sign"
+              count={toSign.blocks.length}
+              hint="Approved on-chain blocks. Download each file on Arbiter for the arbiter's wallet; nothing is blocked on chain until it signs."
+              action={<ViewAll href="/operator/arbiter#approved-blocks">Open Arbiter</ViewAll>}
+            >
+              {toSign.blocks.map((block) => (
+                <Link key={block.approvalId} href="/operator/arbiter#approved-blocks" className="flex w-full min-w-0 flex-col gap-1 px-4 py-3 hover:bg-02 tablet:flex-row tablet:items-center tablet:gap-4">
+                  <span className="min-w-0 flex-1 text-label-sm text-01">
+                    Block wallet {shortId(block.account)} on chain
+                    <span className="block text-body-xs font-normal text-03">
+                      {chainDisplayName(block.chainId)}
+                      {block.approvedBy ? ` · approved by ${directory.nameOf(block.approvedBy)}` : ""} · download it for the arbiter
                     </span>
                   </span>
                 </Link>
