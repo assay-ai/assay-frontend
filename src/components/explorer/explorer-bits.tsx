@@ -19,7 +19,7 @@ export function OfferPrice({
   size = "sm",
   className,
 }: {
-  offer: { lead: string | null; price: string; unit: string };
+  offer: { lead: string | null; price: string; unit: string; cap?: string };
   size?: "sm" | "lg";
   className?: string;
 }) {
@@ -54,6 +54,7 @@ export function OfferPrice({
           </span>
         ) : null}
       </span>
+      {offer.cap ? <span className="text-02">{offer.cap}</span> : null}
     </p>
   );
 }
