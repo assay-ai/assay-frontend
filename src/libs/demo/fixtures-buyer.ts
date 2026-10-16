@@ -726,7 +726,8 @@ function withheldBody(query: Record<string, unknown>) {
   const verification = emptyBucket();
   for (const [toolId, bucket] of groups) {
     if (bucket.withheld === 0) continue;
-    const into = toolId === "kyc_lookup" ? platform : verification;
+    // Groups are keyed by the wire (catalogue) id, not this file's short name.
+    const into = toolId === wireToolId("kyc_lookup") ? platform : verification;
     into.refundedCalls += bucket.refundedCalls;
     into.withheld += bucket.withheld;
   }
