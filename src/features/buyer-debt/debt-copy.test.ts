@@ -237,7 +237,7 @@ describe("call payment notes", () => {
   it("names a debt or a forfeit on a call row, and nothing for an ordinary call", () => {
     expect(callPaymentNote({ debt: "OUTSTANDING" })).toBe("Payment not collected · settle to resume paid calls");
     expect(callPaymentNote({ debt: "WRITTEN_OFF" })).toBe("Written off · still owed to resume paid calls");
-    expect(callPaymentNote({ debt: "VOIDED" })).toBe("Failed checks later · not charged");
+    expect(callPaymentNote({ debt: "VOIDED" })).toBe("Debt cancelled by a late verdict · not charged");
     expect(callPaymentNote({ forfeited: true })).toBe("Not charged · provider forfeited");
     expect(callPaymentNote({ forfeited: false, debt: null })).toBeNull();
   });

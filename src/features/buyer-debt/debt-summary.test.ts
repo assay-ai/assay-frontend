@@ -6,9 +6,15 @@ import { ApiError } from "@/libs/ApiClient";
 import {
   balanceAfterSettling,
   debtBannerSummary,
+  debtDeadlineLine,
   debtTotal,
+  earliestWriteOff,
   owedCallState,
+  owedRowText,
+  paidCallsAfterSettling,
   resumesAfterSettling,
+  settleReadiness,
+  type SettleEscrowReading,
 } from "./debt-summary";
 import { refreshesDebts, settleDebtFailure } from "./settle-debt-errors";
 
@@ -121,9 +127,8 @@ describe("owedCallState", () => {
 describe("after settling", () => {
   it("takes the settled amount off the escrow balance", () => {
     expect(balanceAfterSettling({ amount: "10000000", asset: ASSET, decimals: 6 }, [debt()])).toEqual({
-      amount: "7500000",
-      asset: ASSET,
-      decimals: 6,
+      after: { amount: "7500000", asset: ASSET, decimals: 6 },
+      shortBy: null,
     });
     expect(balanceAfterSettling(null, [debt()])).toBeNull();
     expect(balanceAfterSettling({ amount: "1", asset: "other", decimals: 6 }, [debt()])).toBeNull();
@@ -149,5 +154,109 @@ describe("settle failures", () => {
     expect(refreshesDebts(new ApiError("PAYMENT_DEBT_NOT_FOUND", "x", 404))).toBe(true);
     expect(refreshesDebts(new ApiError("PAYMENT_DEBT_REPLACEMENT_PENDING", "x", 409))).toBe(true);
     expect(refreshesDebts(new ApiError("OTHER", "x", 400))).toBe(false);
+  });
+});
+
+const usd = (dollars: string) => ({ amount: String(Math.round(Number(dollars) * 1_000_000)), asset: ASSET, decimals: 6 });
+
+const escrow = (overrides: Partial<SettleEscrowReading> = {}): SettleEscrowReading => ({
+  chainReadable: true,
+  balance: usd("10"),
+  spendable: usd("7.5"),
+  maxVoucherAmount: usd("5"),
+  maxPerWindow: usd("20"),
+  spentInWindow: usd("1"),
+  windowStartedAt: "2026-10-16T12:00:00.000Z",
+  windowSeconds: 86_400,
+  ...overrides,
+});
+
+describe("settleReadiness (P1-3)", () => {
+  it("never floors the balance after to zero: a short escrow is a shortfall", () => {
+    expect(balanceAfterSettling(usd("1"), [debt()])).toEqual({ after: null, shortBy: usd("1.5") });
+  });
+
+  it("lets an open debt draw on its own hold, so a fully held debt is fine", () => {
+    expect(settleReadiness(escrow({ spendable: usd("0") }), [debt()])).toEqual([]);
+  });
+
+  it("asks for exactly the missing amount when a written-off debt's funds are gone", () => {
+    const [block] = settleReadiness(escrow({ spendable: usd("1") }), [debt({ state: "WRITTEN_OFF" })]);
+    expect(block.kind).toBe("funds");
+    expect(block.text).toContain("Your escrow can pay $1.00 of the $2.50 owed. Add $1.50 first");
+    expect(block.action).toEqual({ label: "Add $1.50", href: "/funding?action=deposit" });
+  });
+
+  it("asks to raise the per-call ceiling to the largest payment", () => {
+    const [block] = settleReadiness(escrow({ maxVoucherAmount: usd("1") }), [debt()]);
+    expect(block.kind).toBe("per-call");
+    expect(block.action.label).toBe("Raise the per-call ceiling to $2.50");
+    expect(block.action.href).toBe("/funding?action=caps");
+  });
+
+  it("asks to raise the 24-hour ceiling when the window has no room left", () => {
+    const [block] = settleReadiness(escrow({ maxPerWindow: usd("2"), spentInWindow: usd("1") }), [debt()]);
+    expect(block.kind).toBe("window");
+    expect(block.text).toContain("Only $1.00 of your 24-hour ceiling is left");
+    expect(block.action.label).toBe("Raise the 24-hour ceiling to $3.50");
+  });
+
+  it("counts an ended window as unspent", () => {
+    const old = escrow({ maxPerWindow: usd("3"), spentInWindow: usd("2"), windowStartedAt: "2026-10-10T00:00:00.000Z" });
+    expect(settleReadiness(old, [debt()])).toEqual([]);
+  });
+
+  it("checks nothing when the escrow could not be read", () => {
+    expect(settleReadiness(escrow({ chainReadable: false, spendable: usd("0") }), [debt({ state: "WRITTEN_OFF" })])).toEqual([]);
+    expect(settleReadiness(null, [debt()])).toEqual([]);
+  });
+});
+
+describe("paidCallsAfterSettling (P2-5)", () => {
+  it("promises a resume only when nothing else stops paid calls", () => {
+    expect(paidCallsAfterSettling({ resumes: true, pausedByYou: false, blocked: false }).short).toBe("Resume in about a minute");
+    expect(paidCallsAfterSettling({ resumes: true, pausedByYou: true, blocked: false }).sentence).toContain(
+      "you paused all paid calls: Resume in the banner",
+    );
+    expect(paidCallsAfterSettling({ resumes: true, pausedByYou: false, blocked: true }).short).toBe(
+      "Still refused (account blocked)",
+    );
+    expect(paidCallsAfterSettling({ resumes: false, pausedByYou: false, blocked: false }).short).toBe(
+      "Still paused (more is owed)",
+    );
+  });
+});
+
+describe("deadlines on owed rows, receipts and summaries (P2-2, P2-4, P3-3)", () => {
+  const data = { account: ACCOUNT, debts: [debt(), debt({ intentId: "int_2", state: "WRITTEN_OFF" })] };
+
+  it("says settle-by on an open debt and the write-off on a written-off one", () => {
+    expect(debtDeadlineLine(debt())).toBe("Settle by Nov 15, 00:00 UTC (in 29 days), or the provider goes unpaid.");
+    expect(debtDeadlineLine(debt({ state: "WRITTEN_OFF", writeOffAt: "2026-10-01T00:00:00.000Z" }))).toBe(
+      "Written off on Oct 1, 00:00 UTC, but still owed: settling still pays the provider.",
+    );
+    expect(debtDeadlineLine(debt({ state: "REPLACING" }))).toBeNull();
+  });
+
+  it("finds the earliest open write-off", () => {
+    expect(earliestWriteOff({ account: ACCOUNT, debts: [debt(), debt({ intentId: "x", writeOffAt: "2026-11-01T00:00:00.000Z" })] })).toBe(
+      "2026-11-01T00:00:00.000Z",
+    );
+    expect(earliestWriteOff(undefined)).toBeNull();
+  });
+
+  it("puts the deadline on an owed row, and says written off when it is", () => {
+    expect(owedRowText(owedCallState(data, "int_1"))).toBe(
+      "Payment not collected · paid calls paused · settle by Nov 15, 00:00 UTC (in 29 days).",
+    );
+    expect(owedRowText(owedCallState(data, "int_2"))).toMatch(/^Written off, still owed · paid calls paused/);
+  });
+
+  it("does not claim paid calls are paused when the debts list cannot say", () => {
+    const unknown = owedCallState(undefined, "int_1");
+    expect(owedRowText(unknown, { pending: true })).toBe("Payment not collected · checking what is owed…");
+    expect(owedRowText(unknown)).toBe("Payment not collected · open the receipt for details.");
+    expect(owedRowText(unknown, { callDebt: "WRITTEN_OFF" })).toBe("Written off · open the receipt for details.");
+    expect(owedRowText(unknown)).not.toMatch(/paused/);
   });
 });

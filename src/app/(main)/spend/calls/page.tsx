@@ -228,7 +228,7 @@ function CallsList() {
                     <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
                   </Link>
                   {/* Owed: what it stops and the way out, beside the row's link. */}
-                  {outcome === "owed" ? <OwedRowAction intentId={call.intentId} /> : null}
+                  {outcome === "owed" ? <OwedRowAction intentId={call.intentId} debt={call.debt} /> : null}
                 </li>
               );
             })}
