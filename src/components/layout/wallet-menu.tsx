@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { PauseAllConfirm, usePauseAll } from "@/components/buyer-money/pause-all";
+import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
 import { ACCOUNT_MENU_LINKS } from "@/components/layout/nav-config";
 import { BalanceRows, WalletChainRows } from "@/components/layout/wallet-menu-rows";
 import { Avatar } from "@/components/ui/avatar";
@@ -113,6 +114,8 @@ export function WalletMenu({ className }: { className?: string }) {
     retry: 0,
     networkMode: "always" as const,
   });
+  // A chain that serves free calls only takes no deposit: no "Add funds" there.
+  const freeOnly = useFreeOnlyChain({ enabled: open && (demoEnabled() || (ready && authenticated)) });
 
 
   /*
@@ -241,11 +244,17 @@ export function WalletMenu({ className }: { className?: string }) {
 
           <div className="-mx-1 my-1 h-px bg-03" role="separator" />
 
-          <DropdownMenuPrimitive.Item asChild className={ITEM_CLASS}>
-            <Link href="/funding?action=deposit">
-              <span className="flex-1">Add funds</span>
-            </Link>
-          </DropdownMenuPrimitive.Item>
+          {freeOnly.freeOnly ? (
+            <p className="px-2.5 py-1.5 text-body-xs text-03" data-testid="wallet-menu-free-only">
+              Free calls only on {freeOnly.chainName ?? "this chain"}: no funds needed.
+            </p>
+          ) : (
+            <DropdownMenuPrimitive.Item asChild className={ITEM_CLASS}>
+              <Link href="/funding?action=deposit">
+                <span className="flex-1">Add funds</span>
+              </Link>
+            </DropdownMenuPrimitive.Item>
+          )}
           {pause.available ? (
             <DropdownMenuPrimitive.Item
               onSelect={() => setConfirmPause(true)}

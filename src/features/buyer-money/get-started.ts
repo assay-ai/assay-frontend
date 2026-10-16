@@ -22,6 +22,12 @@ export interface GetStartedFacts {
   grantActive: boolean;
   /** False for accounts whose agents pay from a non-EVM account: step 4 is then just caps. */
   needsDelegation: boolean;
+  /**
+   * The account's chain serves free calls only (Solana today, `paid-rails.ts`):
+   * no deposit and no paying are possible there, so steps 3 and 4 do not apply
+   * and count as done — the checklist can finish after the first call.
+   */
+  freeOnly?: boolean;
 }
 
 export type GetStartedStepId = "key" | "call" | "funds" | "pay";
@@ -30,8 +36,8 @@ export function getStartedStates(facts: GetStartedFacts): Record<GetStartedStepI
   const done = {
     key: facts.hasLiveKey,
     call: facts.firstCallSeen,
-    funds: facts.hasFunds,
-    pay: facts.capsSet && (!facts.needsDelegation || (facts.keyBound && facts.grantActive)),
+    funds: facts.freeOnly === true || facts.hasFunds,
+    pay: facts.freeOnly === true || (facts.capsSet && (!facts.needsDelegation || (facts.keyBound && facts.grantActive))),
   };
   const order: GetStartedStepId[] = ["key", "call", "funds", "pay"];
   const blocked: Record<GetStartedStepId, boolean> = {

@@ -219,6 +219,21 @@ describe("get started", () => {
       }),
     ).toEqual({ key: "done", call: "done", funds: "done", pay: "done" });
   });
+  it("finishes after the first call on a free-calls-only chain (Solana): no deposit or paying possible there", () => {
+    const solana = { ...none, freeOnly: true };
+    expect(getStartedStates({ ...solana, hasLiveKey: true })).toEqual({
+      key: "done",
+      call: "current",
+      funds: "done",
+      pay: "done",
+    });
+    expect(getStartedStates({ ...solana, hasLiveKey: true, firstCallSeen: true })).toEqual({
+      key: "done",
+      call: "done",
+      funds: "done",
+      pay: "done",
+    });
+  });
   it("orders the parts of step 4", () => {
     expect(payStage({ capsSet: false, keyBound: true, grantActive: false, needsDelegation: true })).toBe("caps");
     expect(payStage({ capsSet: true, keyBound: false, grantActive: false, needsDelegation: true })).toBe("bind");
