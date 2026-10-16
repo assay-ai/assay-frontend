@@ -547,7 +547,9 @@ function wireFigures(bucket: Bucket) {
     listedTotal: minorMoney(bucket.listed),
     chargedTotal: minorMoney(bucket.charged),
     withheldTotal: minorMoney(bucket.withheld),
-    // The demo has no debt, forfeit or in-flight call: not charged is withheld.
+    // The day-by-day model has no debt, forfeit or in-flight call, so not
+    // charged is withheld and owed is 0. The OUTSTANDING debt the demo serves
+    // (banner and receipt) is a separate fixture, not part of these totals.
     notChargedTotal: minorMoney(bucket.withheld),
     notChargedCalls: bucket.refundedCalls,
     owedTotal: minorMoney(0),
