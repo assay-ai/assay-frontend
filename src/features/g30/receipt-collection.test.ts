@@ -17,12 +17,14 @@ describe("collectionView", () => {
     expect(view.headline).toBe("You owe $2.50 for this call");
     expect(view.explain).toMatch(/Paid calls are paused until you settle; free calls still work\./);
     expect(view.cause).not.toBeNull();
-    expect(view.timeline).toEqual({ label: "Payment not taken yet: you owe it", meta: "$2.50 still held in your escrow" });
+    expect(view.timeline).toEqual({ label: "Payment not collected yet: you owe it", meta: "$2.50 held in your escrow until you settle" });
+    expect(view.explain).not.toMatch(/could not be taken/);
   });
 
   it("says a written-off debt is still owed and unpaid to the provider, without jargon", () => {
     const view = collectionView("DEBT_WRITTEN_OFF", { listedPrice, chargeNote: null });
-    expect(view.headline).toBe("You still owe $2.50 for this call");
+    expect(view.headline).toBe("Written off, but you still owe $2.50 for this call");
+    expect(view.explain).toMatch(/paid calls stay paused until you settle, and settling still pays the provider/);
     expect(view.explain).toMatch(/provider was not paid/);
     expect(view.timeline.meta).toBe("$2.50 still owed by you");
     expect(view.cause).toBeNull();
@@ -36,5 +38,13 @@ describe("collectionView", () => {
       expect(view.timeline.label).not.toMatch(/Closed, not collected/);
       expect(view.timeline.meta).toBe("not charged");
     }
+  });
+
+  it("tells a REFUND void (failed checks) from a VOID void (no usable result)", () => {
+    expect(collectionView("DEBT_VOIDED", { listedPrice, chargeNote: "voided:REFUND" }).explain).toMatch(/failed its checks/);
+    const view = collectionView("DEBT_VOIDED", { listedPrice, chargeNote: "voided:VOID" });
+    expect(view.explain).toMatch(/had no usable result/);
+    expect(view.explain).not.toMatch(/failed its checks/);
+    expect(view.timeline.label).toBe("Debt cancelled: no usable result");
   });
 });

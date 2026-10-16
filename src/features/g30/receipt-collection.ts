@@ -29,6 +29,13 @@ export interface CollectionView {
   timeline: { label: string; meta: string };
 }
 
+/** The late verdict that voided a debt, from its `voided:<OUTCOME>` note; `null` when not recorded. */
+export function voidedOutcome(chargeNote: string | null | undefined): "REFUND" | "VOID" | null {
+  if (!chargeNote?.startsWith("voided:")) return null;
+  const outcome = chargeNote.slice("voided:".length).trim().toUpperCase();
+  return outcome === "VOID" ? "VOID" : outcome === "REFUND" ? "REFUND" : null;
+}
+
 export function collectionView(state: CollectionState, receipt: Pick<Receipt, "listedPrice" | "chargeNote">): CollectionView {
   const listed = formatMoney(receipt.listedPrice, { decimals: 4 });
   const cause = receipt.chargeNote ? debtCauseText(receipt.chargeNote) : null;
@@ -38,28 +45,35 @@ export function collectionView(state: CollectionState, receipt: Pick<Receipt, "l
         owed: true,
         headline: `You owe ${listed} for this call`,
         explain:
-          "It was served and passed, but the payment could not be taken from your escrow. Paid calls are paused until you settle; free calls still work.",
+          `It was served and passed, but its payment has not been collected yet: the ${listed} stays held in your escrow until you settle. ` +
+          "Paid calls are paused until you settle; free calls still work.",
         cause,
-        timeline: { label: "Payment not taken yet: you owe it", meta: `${listed} still held in your escrow` },
+        timeline: { label: "Payment not collected yet: you owe it", meta: `${listed} held in your escrow until you settle` },
       };
     case "DEBT_WRITTEN_OFF":
       return {
         owed: true,
-        headline: `You still owe ${listed} for this call`,
+        headline: `Written off, but you still owe ${listed} for this call`,
         explain:
-          "It was never settled, so the hold went back to your escrow and the provider was not paid. Paid calls stay paused until you settle; settling pays the provider.",
+          "It was not settled within 30 days, so it was written off: the hold went back to your escrow and the provider was not paid. " +
+          "You still owe it: paid calls stay paused until you settle, and settling still pays the provider. Free calls still work.",
         cause,
-        timeline: { label: "Hold released, provider not paid", meta: `${listed} still owed by you` },
+        timeline: { label: "Written off: hold released, provider not paid", meta: `${listed} still owed by you` },
       };
-    case "DEBT_VOIDED":
+    case "DEBT_VOIDED": {
+      // `voided:REFUND` is a failed check; `voided:VOID` is no usable result
+      // (assay-backend `voidLateRejectedDebt`, `not-charged-reason.ts`).
+      const noResult = voidedOutcome(receipt.chargeNote) === "VOID";
+      const why = noResult ? "had no usable result" : "failed its checks";
       return {
         owed: false,
         headline: "Not charged: nothing is owed",
         explain:
-          "The payment had lapsed, and the call then failed its checks, so the debt was cancelled. The hold went back to you and the provider was not paid.",
+          `The payment had lapsed, and the call then ${why}, so the debt was cancelled. The hold went back to you and the provider was not paid.`,
         cause: null,
-        timeline: { label: "Debt cancelled: failed its checks", meta: "not charged" },
+        timeline: { label: `Debt cancelled: ${noResult ? "no usable result" : "failed its checks"}`, meta: "not charged" },
       };
+    }
     case "FORFEITED":
       return {
         owed: false,
