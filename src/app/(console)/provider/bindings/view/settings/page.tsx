@@ -172,9 +172,10 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
               </SegmentedItem>
             ))}
           </Segmented>
-          <p className="text-body-xs text-03">{PRICE_CHOICES.find((c) => c.value === form.choice)?.hint}</p>
-          {/* Free first, then paid: say how a free tier is used beside a paid one. */}
-          {freeFirstHint(mode) ? <p className="text-body-xs text-03">{freeFirstHint(mode)}</p> : null}
+          {/* What the choice means, then (free tiers) that free calls come before any paid provider. */}
+          <p className="text-body-xs text-03">
+            {[PRICE_CHOICES.find((c) => c.value === form.choice)?.hint, freeFirstHint(mode)].filter(Boolean).join(" ")}
+          </p>
           {mode !== "FREE" ? (
             <Field
               label="Price per call"

@@ -10,17 +10,7 @@ import type { PricingMode } from "@/interfaces";
  * for no mode yet), which has no free tier to explain.
  */
 export function freeFirstHint(mode: PricingMode | ""): string | null {
-  if (mode === "FREE") {
-    return (
-      "Your free tier is used first, even when this tool has paid providers: an agent's calls " +
-      "come here while its free calls for the day last. This binding never takes a paid call."
-    );
-  }
-  if (mode === "FREEMIUM") {
-    return (
-      "Your free tier is used first, even when this tool has paid providers: an agent's calls " +
-      "are free while its free calls for the day last, then paid calls at your price."
-    );
-  }
+  if (mode === "FREE") return "Free calls come to you first, before any paid provider.";
+  if (mode === "FREEMIUM") return "Your free calls are used first, before any paid provider; then your price applies.";
   return null;
 }
