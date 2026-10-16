@@ -10,6 +10,7 @@ import { usePauseAll } from "@/components/buyer-money/pause-all";
 import { requireSigner, useEscrowQuery, useWalletBlocker } from "@/components/buyer-money/use-buyer-money";
 import { Button } from "@/components/ui/button";
 import { LocalTime } from "@/components/patterns/local-time";
+import { StepMark } from "@/components/patterns/setup-checklist";
 import { WalletActionSheet, type WalletStep, type WalletStepResult } from "@/components/patterns/sign-action";
 import { hasBlockStatusSession } from "@/features/account-block/state";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
@@ -34,6 +35,7 @@ import {
   paidCallsAfterSettling,
   resumesAfterSettling,
   settleBlockedSummary,
+  settleNextSteps,
   settleEscrowCheck,
 } from "./debt-summary";
 import { settleDebt } from "./settle-debt";
@@ -164,6 +166,7 @@ function SettleDebtSheet({
   );
   const blocks = check.kind === "blocked" ? check.blocks : [];
   const blockedSummary = settleBlockedSummary(settling, blocks);
+  const nextSteps = settleNextSteps(blocks);
   const resumes = resumesAfterSettling(query.data, settling);
   const { paused: pausedByYou } = usePauseAll();
   const paidCalls = paidCallsAfterSettling({ resumes, pausedByYou, blocked: readOnly });
@@ -277,16 +280,27 @@ function SettleDebtSheet({
               </React.Fragment>
             ))}
           </dl>
-          {blocks.map((block) => (
-            <div key={block.kind} className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <p className="min-w-0 flex-1 text-body-13 text-warning-700">{block.text}</p>
-              <Button size="sm" variant="secondary" asChild>
-                <Link href={block.action.href} onClick={() => onOpenChange(false)}>
-                  {block.action.label}
-                </Link>
-              </Button>
-            </div>
-          ))}
+          <h4 id="settle-next" className="pt-1 text-label-13 text-02">
+            Next steps
+          </h4>
+          <ol aria-labelledby="settle-next" className="flex flex-col gap-2.5" data-testid="settle-next-steps">
+            {nextSteps.map((step, index) => (
+              <li key={step.id} className="flex items-start gap-2.5" aria-current={index === 0 ? "step" : undefined}>
+                <StepMark state={index === 0 ? "current" : "todo"} index={index} />
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <span className="text-label-sm text-01 [overflow-wrap:anywhere]">{step.title}</span>
+                  <p className="text-body-13 text-warning-700 [overflow-wrap:anywhere]">{step.text}</p>
+                  {step.action ? (
+                    <Button size="sm" variant="secondary" className="self-start" asChild>
+                      <Link href={step.action.href} onClick={() => onOpenChange(false)}>
+                        {step.action.label}
+                      </Link>
+                    </Button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ol>
         </section>
       ) : check.kind === "unread" && settling.length > 0 ? (
         <p className="text-body-13 text-warning-700" data-testid="settle-escrow-unread">
