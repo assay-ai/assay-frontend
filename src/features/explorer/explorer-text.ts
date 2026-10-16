@@ -501,3 +501,17 @@ export function notChargedEmptyText(scope: boolean | "all" | "tool" | "provider"
   if (of === "provider") return "No call to their tools went uncharged recently.";
   return "No call went uncharged in this period.";
 }
+
+/**
+ * The privacy note under the not-charged rows. With rows withheld it opens
+ * with that, as its own sentence; otherwise it opens "For privacy, ...".
+ */
+export function notChargedPrivacyNote(withheldForPrivacy: boolean, minBuyers: number): string {
+  const rule =
+    `calls are listed only once at least ${minBuyers} different buyers stand behind them. Figures appear only once ` +
+    `at least ${minBuyers} buyers have paid in that token; reasons are named only when each has at least ${minBuyers} ` +
+    "buyers, and their counts are rounded down to tens.";
+  return withheldForPrivacy
+    ? `Some activity is hidden or grouped for privacy. A tool's ${rule}`
+    : `For privacy, a tool's ${rule}`;
+}

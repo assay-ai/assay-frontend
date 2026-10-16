@@ -17,6 +17,7 @@ import {
   offerLine,
   offerSubLine,
   notChargedEmptyText,
+  notChargedPrivacyNote,
   notChargedRowText,
   notChargedReasonTones,
   notChargedSplit,
@@ -437,5 +438,16 @@ describe("notChargedSplit (public not-charged totals)", () => {
 
   it("is only the failed-check line when nothing else went uncharged", () => {
     expect(notChargedSplit({ callsNotCharged: 4, callsFailedCheck: 4, notChargedByReason: [], callsNotChargedOther: 0 })).toHaveLength(1);
+  });
+});
+
+describe("notChargedPrivacyNote", () => {
+  it("starts each sentence with a capital letter", () => {
+    const withheld = notChargedPrivacyNote(true, 5);
+    expect(withheld.startsWith("Some activity is hidden or grouped for privacy. A tool's calls are listed only once at least 5")).toBe(true);
+    expect(notChargedPrivacyNote(false, 5).startsWith("For privacy, a tool's calls are listed")).toBe(true);
+    for (const note of [withheld, notChargedPrivacyNote(false, 5)]) {
+      expect(note).not.toMatch(/\. [a-z]/);
+    }
   });
 });
