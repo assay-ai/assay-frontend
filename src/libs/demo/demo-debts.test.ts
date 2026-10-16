@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { demoDebtSigned, markDemoDebtsSigned, parseDebtVariant } from "./demo-debts";
+import { demoDebtNote, demoDebtSigned, markDemoDebtsSigned, parseDebtVariant } from "./demo-debts";
 import "./fixtures";
 import { demoDebts } from "./fixtures-buyer";
 
@@ -10,6 +10,21 @@ describe("demo debt pictures", () => {
     expect(parseDebtVariant("written-off")).toBe("written-off");
     expect(parseDebtVariant("bogus")).toBeNull();
     expect(parseDebtVariant(null)).toBeNull();
+  });
+
+  it("says a kept picture is a demo one, only in a demo build and only off the default", () => {
+    const prev = process.env.NEXT_PUBLIC_DEMO_CHAINS;
+    try {
+      process.env.NEXT_PUBLIC_DEMO_CHAINS = "robinhood";
+      expect(demoDebtNote("many")).toBe(
+        'Demo: the "many" debt picture (?debt=many) is kept for this tab. Add ?debt=open to any page to go back.',
+      );
+      expect(demoDebtNote("open")).toBeNull();
+      process.env.NEXT_PUBLIC_DEMO_CHAINS = "";
+      expect(demoDebtNote("many")).toBeNull();
+    } finally {
+      process.env.NEXT_PUBLIC_DEMO_CHAINS = prev;
+    }
   });
 
   it("serves one open debt by default, and shows a debt signed in the demo as being collected", () => {
