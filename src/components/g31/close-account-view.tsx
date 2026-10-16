@@ -7,6 +7,9 @@ import * as React from "react";
 
 import { SetupChecklist, type SetupStep } from "@/components/patterns/setup-checklist";
 import { Button } from "@/components/ui/button";
+import { closeAccountHeldText } from "@/features/buyer-debt/debt-copy";
+import { useSettleDebt } from "@/features/buyer-debt/settle-debt-sheet";
+import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { nothingToWithdraw, withdrawableByAsset } from "@/features/buyer/close-account";
 import { chainBalances, type FullBalance } from "@/features/g30/balance";
 import { useChainName } from "@/hooks/useChainName";
@@ -31,6 +34,7 @@ import { PageHeader } from "./chrome";
 interface Hold {
   amount?: Money;
   status?: string;
+  intentId?: string;
 }
 
 export function CloseAccountView() {
@@ -51,6 +55,14 @@ export function CloseAccountView() {
     const items = !data ? [] : Array.isArray(data) ? data : (data.items ?? []);
     return items.filter((h) => !h.status || h.status === "OPEN");
   }, [holds.data]);
+
+  // An unpaid call's price stays held until it is collected: it does not come back within 24 hours.
+  const owedIntentIds = useOwedIntentIds();
+  const { openSettle } = useSettleDebt();
+  const heldText = closeAccountHeldText(
+    openHolds.map((hold) => hold.intentId ?? ""),
+    owedIntentIds,
+  );
 
   const rows = chainBalances(balances.data?.balances);
   const lines = withdrawableByAsset(rows);
@@ -94,11 +106,20 @@ export function CloseAccountView() {
               </li>
             ))}
           </ul>
-          {openHolds.length > 0 ? (
-            <p className="text-body-xs text-03">
-              {openHolds.length} {openHolds.length === 1 ? "call is" : "calls are"} still being checked. Their held
-              money is charged or comes back within 24 hours; then withdraw it too.
+          {heldText.checking ? (
+            <p className="text-body-xs text-03" data-testid="close-held-checking">
+              {heldText.checking}
             </p>
+          ) : null}
+          {heldText.unpaid ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="min-w-0 flex-1 text-body-xs text-warning-700" data-testid="close-held-unpaid">
+                {heldText.unpaid}
+              </p>
+              <Button size="sm" variant="secondary" type="button" onClick={() => openSettle()}>
+                Settle what is owed
+              </Button>
+            </div>
           ) : null}
         </div>
       ) : balances.isError ? (
