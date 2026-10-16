@@ -245,7 +245,7 @@ describe("receiptFlow — collection states", () => {
     const debt = settledReceipt({ debt: "OUTSTANDING" });
     expect(receiptFlow(debt, "DEBT_OUTSTANDING").map((n) => [n.label, n.amount ?? null])).toEqual([
       ["Held", "$2.50"],
-      ["Check passed, payment not collected", null],
+      ["Passed, payment not taken", null],
       ["Still owed by you", "$2.50"],
     ]);
     const off = settledReceipt({ debt: "WRITTEN_OFF", chargedPrice: usd("0") });

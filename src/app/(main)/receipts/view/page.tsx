@@ -47,6 +47,8 @@ import {
   type ReceiptState,
 } from "@/features/g30/receipt-state";
 import { ErrorBlock } from "@/features/g30/ui";
+import { collectionView, isCollectionState } from "@/features/g30/receipt-collection";
+import { OwedReceiptAction } from "@/features/buyer-debt/owed-row-action";
 import type { Receipt } from "@/features/g30/wire";
 import { ApiError } from "@/libs/ApiClient";
 import { getReceipt } from "@/services";
@@ -219,17 +221,18 @@ function ReceiptPageContent() {
   const paid = formatMoney(receipt.chargedPrice, { decimals: 4 });
   const withheld = formatMoney(receipt.withheld, { decimals: 4 });
 
-  // Buyer debt, open or written off: served, not collected, still owed (the listed price).
-  const owedState = state === "DEBT_OUTSTANDING" || state === "DEBT_WRITTEN_OFF";
-  const owed = listed;
   // A debt or a forfeit is not one of the "ended without a charge" outcomes.
   const finalNotCharged = isFinalNotCharged(state, receipt) && !COLLECTION_STATES.has(state);
   // Every finished call that was not charged tells ONE story — the banner, the
   // money strip, the check rows and the details all read from it — so a voided
   // call can never say "No result recorded" beside "Check failed".
   const story = state !== "CHECKING" && isFinalNotChargedReceipt(receipt) ? notChargedStory(receipt) : null;
+  // A debt, a voided debt or a forfeit: a short headline of its own (`receipt-collection.ts`).
+  const collection = isCollectionState(state) ? collectionView(state, receipt) : null;
   const stateCard =
-    state === "CHARGED" || state === "NOT_CHARGED" || story ? null : STATE_CARDS[state as keyof typeof STATE_CARDS];
+    state === "CHARGED" || state === "NOT_CHARGED" || story || collection
+      ? null
+      : STATE_CARDS[state as keyof typeof STATE_CARDS];
 
   /* ------------------------------------------------------------- timeline */
 
@@ -241,26 +244,20 @@ function ReceiptPageContent() {
   if (receipt.evaluatedAt) {
     events.push({ ...stamp(receipt.evaluatedAt), label: "Result checked", tone: "neutral" });
   }
-  if (receipt.settledAt && state === "DEBT_OUTSTANDING") {
-    // Served and passed, but nothing has been collected yet: not "Settled".
+  if (receipt.settledAt && collection) {
+    // A debt, a voided debt or a forfeit, in what it means for the buyer.
     events.push({
       ...stamp(receipt.settledAt),
-      label: "Payment not collected yet",
-      meta: `${listed} still held, to settle`,
-      tone: "primary",
+      label: collection.timeline.label,
+      meta: collection.timeline.meta,
+      tone: collection.owed ? "primary" : "teal",
     });
   } else if (receipt.settledAt) {
     const charged = receipt.chargedPrice.amount !== "0";
     events.push({
       ...stamp(receipt.settledAt),
-      label: charged
-        ? "Charged"
-        : state === "DEBT_WRITTEN_OFF"
-          ? "Written off for the provider"
-          : COLLECTION_STATES.has(state)
-            ? "Closed, not collected"
-            : releasedLabel,
-      meta: charged ? paid : state === "DEBT_WRITTEN_OFF" ? `${listed} still owed` : "not charged",
+      label: charged ? "Charged" : releasedLabel,
+      meta: charged ? paid : "not charged",
       tone: charged ? "success" : "teal",
     });
   } else if (receipt.holdReleasedAt) {
@@ -311,7 +308,16 @@ function ReceiptPageContent() {
         />
       ) : null}
 
-      {story ? (
+      {collection ? (
+        <CollectionHeadline
+          view={collection}
+          intentId={receipt.intentId}
+          listed={listed}
+          notCharged={collection.owed ? null : listed}
+        />
+      ) : null}
+
+      {story && !collection ? (
         <NotChargedHeadline
           headline={story.headline}
           explain={story.explain}
@@ -332,17 +338,9 @@ function ReceiptPageContent() {
           </div>
           <div className="flex w-full items-end gap-3 tablet:w-auto tablet:shrink-0 tablet:gap-8">
             <Amount label="Listed price" value={listed} align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
-            <Amount
-              label={owedState ? "Owed" : "You paid"}
-              value={owedState ? owed : paid}
-              align="start"
-              className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
-            />
-            {/* `withheld` is what the guarantee kept back. A debt or a forfeit
-                is not that (both are zero there), so the figure is not shown. */}
-            {COLLECTION_STATES.has(state) ? null : (
-              <Amount label="Not charged" value={withheld} teal align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
-            )}
+            <Amount label="You paid" value={paid} align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
+            {/* A debt or a forfeit has its own headline (`CollectionHeadline`), so `withheld` here is the guarantee's. */}
+            <Amount label="Not charged" value={withheld} teal align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
           </div>
         </section>
       ) : null}
@@ -456,6 +454,49 @@ function ReceiptPageContent() {
         </pre>
       </details>
     </div>
+  );
+}
+
+/**
+ * The headline for a debt, a voided debt or a forfeit: what it means in one
+ * line, the amounts (owed is never hidden), and, on an owed call, the way to
+ * settle it right here.
+ */
+function CollectionHeadline({
+  view,
+  intentId,
+  listed,
+  notCharged,
+}: {
+  view: ReturnType<typeof collectionView>;
+  intentId: string;
+  listed: string;
+  notCharged: string | null;
+}) {
+  return (
+    <section
+      data-testid="receipt-headline-collection"
+      className={
+        view.owed
+          ? "flex w-full flex-col gap-4 rounded-xl border border-warning-20 bg-warning-10 px-[22px] py-[18px] tablet:flex-row tablet:items-center"
+          : "flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 px-[22px] py-[18px] tablet:flex-row tablet:items-center"
+      }
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <h2 className="text-heading-sm text-01">{view.headline}</h2>
+        <p className="text-body-13 text-02">{view.explain}</p>
+        {view.cause ? <p className="text-body-xs text-03">Why: {view.cause}.</p> : null}
+        {view.owed ? <OwedReceiptAction intentId={intentId} /> : null}
+      </div>
+      <div className="flex w-full items-end gap-3 tablet:w-auto tablet:shrink-0 tablet:gap-8">
+        <Amount label="Listed price" value={listed} align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
+        {view.owed ? (
+          <Amount label="Owed" value={listed} align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
+        ) : (
+          <Amount label="Not charged" value={notCharged ?? listed} teal align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
+        )}
+      </div>
+    </section>
   );
 }
 
