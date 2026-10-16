@@ -91,7 +91,7 @@ export function LimitsView() {
           <AccountCeilingCard ctx={ctx} />
           <OldRuleLine policy={ctx.policy} freeOnly={Boolean(ctx.freeOnlyChainName)} />
 
-          <HowLimitsStop />
+          <HowLimitsStop freeOnlyChainName={ctx.freeOnlyChainName} />
 
           {ctx.policy ? <History /> : null}
         </>
@@ -105,7 +105,24 @@ export function LimitsView() {
  * which limits are software and which are on chain, the duplicate-call
  * rule, what the agent gets back, and that alerts never refuse anything.
  */
-function HowLimitsStop() {
+function HowLimitsStop({ freeOnlyChainName }: { freeOnlyChainName?: string | null }) {
+  if (freeOnlyChainName) {
+    return (
+      <section
+        aria-labelledby="how-limits-stop"
+        className="flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 px-4 py-3.5 tablet:px-5"
+        data-testid="how-limits-stop"
+      >
+        <h2 id="how-limits-stop" className="text-label-13 text-01">
+          How a limit stops a call
+        </h2>
+        <p className="text-body-13 text-02">
+          Your agents make free calls only on {freeOnlyChainName}. Spending limits and Pause all stop paid calls, so they do
+          not apply there. Free calls are counted against each tool&apos;s free calls per day instead.
+        </p>
+      </section>
+    );
+  }
   return (
     <section
       aria-labelledby="how-limits-stop"

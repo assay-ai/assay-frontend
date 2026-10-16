@@ -170,6 +170,9 @@ describe("LimitsView (Spending limits) — two layers, one effective limit per a
       expect(html).not.toContain("old-rule-line");
       expect(html).not.toContain("Older rules still checked");
       expect(html).not.toContain("$25.00");
+      // The explanation says limits and Pause all do not apply, not how they stop a paid call.
+      expect(html).toContain("Spending limits and Pause all stop paid calls, so they do");
+      expect(html).not.toContain("Checked by Assay:");
     } finally {
       demoRails.freeOnly = false;
     }
