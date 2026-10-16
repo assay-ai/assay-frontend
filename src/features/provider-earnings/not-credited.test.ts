@@ -46,12 +46,13 @@ describe("notCreditedRows", () => {
     expect(folded.notCredited?.amount).toBe("1620000");
     expect(folded.buckets.map((b) => b.className)).not.toContain("PAID_UNCOLLECTED");
     expect(folded.buckets.map((b) => b.className)).not.toContain("PROVIDER_FORFEITED");
-    expect(passedUnpaid).toBe(3);
+    // One never collected, one forfeited (the demo seed, kept apart from the $0.81 of failed checks).
+    expect(passedUnpaid).toBe(2);
   });
 
   it("lists the forfeited and written-off calls when nothing removes them", () => {
     const all = foldNotCredited(rows);
-    expect(all.calls).toBe(7);
+    expect(all.calls).toBe(6);
   });
 
   it("has no reason card for the passed-but-unpaid classes any more", () => {

@@ -137,7 +137,7 @@ function daysAgo(days: number): string {
 }
 
 /* -------------------------------------------------------------------------- */
-/* The market: eight providers                                                */
+/* The market: nine providers                                                 */
 /* -------------------------------------------------------------------------- */
 
 interface DemoProvider {
@@ -160,6 +160,9 @@ interface DemoProvider {
   readonly payoutAddress: string;
   readonly domain: string;
 }
+
+/** The signed-in demo provider's id — `PROVIDER_ID` in `fixtures-provider.ts`. */
+export const HARBORLIGHT_ID = "7c1e4f6a-2b93-4d17-9f0c-5a8e31d6b204";
 
 const PROVIDERS: readonly DemoProvider[] = [
   {
@@ -254,12 +257,27 @@ const PROVIDERS: readonly DemoProvider[] = [
     payoutAddress: "0x9A7c08E3b14D62f50Ce81a97D4306bB25f0e7C43",
     domain: "latticeretrieval.example",
   },
+  {
+    /* The provider the demo console is signed in as (`fixtures-provider.ts`):
+       same id, name, stake and payout address, so "How buyers see you" and
+       "How buyers see it" open its real public rows instead of a not-found.
+       Quality is its console figure: 1,502 failed of 25,449 (94.1% passed). */
+    providerId: HARBORLIGHT_ID,
+    legalName: "Harborlight Data Ltd",
+    verified: true,
+    verifiedDaysAgo: 40,
+    tier: "ESTABLISHED",
+    stake: ["600.00"],
+    quality: measured(25_449, 1_502),
+    payoutAddress: "0x4E9a7C1d3B8f5026aD41e7C9b2F08A5d6E3c1B47",
+    domain: "harborlight.example",
+  },
 ];
 
 const PROVIDER_BY_ID = new Map(PROVIDERS.map((provider) => [provider.providerId, provider]));
 
 /* -------------------------------------------------------------------------- */
-/* The market: eleven tools, and who offers each at what price                */
+/* The market: fourteen tools, and who offers each at what price                */
 /* -------------------------------------------------------------------------- */
 
 interface DemoOffer {
@@ -278,6 +296,8 @@ interface DemoTool {
   readonly offers: readonly DemoOffer[];
   /** Set only where `offers` is empty — the router's own words for why. */
   readonly unroutableReason?: string;
+  /** Free calls per agent per day on a free-tier tool; the platform default (100) when unset. */
+  readonly freePerAgent?: number;
 }
 
 /**
@@ -426,6 +446,36 @@ const TOOLS: readonly DemoTool[] = [
     offers: [],
     unroutableReason: "no provider has published an active binding for this tool",
   },
+  /*
+    The demo provider's three LIVE listings, with the ids, names and prices its
+    console shows (`fixtures-provider.ts` BINDINGS). Its draft (vessel
+    positions) is not here: a draft is not public, and the console says so.
+  */
+  {
+    id: "market-quote",
+    name: "Market quote",
+    description: "The last traded price for one symbol, with the timestamp it was observed.",
+    tier: "VERIFIED",
+    pricingMode: "PAID",
+    offers: [{ providerId: HARBORLIGHT_ID, price: "0.45" }],
+  },
+  {
+    id: "fx-rates",
+    name: "FX reference rates",
+    description: "A reference rate for one currency pair, with the observation time.",
+    tier: "VERIFIED",
+    pricingMode: "FREEMIUM",
+    offers: [{ providerId: HARBORLIGHT_ID, price: "0.12" }],
+    freePerAgent: 50,
+  },
+  {
+    id: "chain-activity",
+    name: "Chain activity summary",
+    description: "Transfer and active-address counts for one chain over a named window.",
+    tier: "UNVERIFIED",
+    pricingMode: "FREE",
+    offers: [{ providerId: HARBORLIGHT_ID, price: "0" }],
+  },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -460,7 +510,7 @@ function toolRow(tool: DemoTool): CatalogueTool {
     price: dearest(prices),
     pricingMode: tool.pricingMode,
     /* The demo's daily free allowance — the platform default — on a free-tier tool. */
-    freeCallsPerDay: tool.pricingMode === "FREE" || tool.pricingMode === "FREEMIUM" ? 100 : null,
+    freeCallsPerDay: tool.pricingMode === "FREE" || tool.pricingMode === "FREEMIUM" ? (tool.freePerAgent ?? 100) : null,
     routable: tool.offers.length > 0,
     routableBindings: tool.offers.length,
     /* Every demo offer carries a price, so each one can be charged — except on a FREE tool. */
@@ -493,7 +543,7 @@ function providerTools(provider: DemoProvider): CatalogueProviderTool[] {
     name: tool.name,
     pricingMode: tool.pricingMode ?? "PAID",
     price,
-    freeCallsPerAgentPerDay: tool.pricingMode === "FREEMIUM" || tool.pricingMode === "FREE" ? 100 : null,
+    freeCallsPerAgentPerDay: tool.pricingMode === "FREEMIUM" || tool.pricingMode === "FREE" ? (tool.freePerAgent ?? 100) : null,
   }));
 }
 
@@ -639,7 +689,7 @@ export const EXPLORE_FIXTURES: readonly DemoFixture[] = [
   /*
     `GET /tools` is the buyer-side name index: `toolId` → the name a person
     recognises, used by every screen that would otherwise print a bare uuid.
-    Same eleven tools, minus the market figures, so a name never disagrees with
+    Same tools, minus the market figures, so a name never disagrees with
     the catalogue row it came from.
   */
   {

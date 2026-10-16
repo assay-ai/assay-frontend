@@ -26,7 +26,7 @@ import { cn } from "@/utils";
  * for the bar's widths — pass `toDecimal(m).toNumber()` or a count.
  */
 
-export type MoneyTone = "neutral" | "primary" | "success" | "danger" | "warning" | "teal" | "info" | "indigo";
+export type MoneyTone = "neutral" | "primary" | "success" | "danger" | "warning" | "teal" | "info" | "indigo" | "pink";
 
 const NODE_TONE: Record<MoneyTone, string> = {
   neutral: "border-01 bg-02 text-01",
@@ -37,6 +37,7 @@ const NODE_TONE: Record<MoneyTone, string> = {
   teal: "border-teal-20 bg-teal-10 text-teal-600",
   info: "border-info-20 bg-info-10 text-info-600",
   indigo: "border-indigo-20 bg-indigo-10 text-indigo-500",
+  pink: "border-01 bg-pink-10 text-pink-500",
 };
 
 const FILL_TONE: Record<MoneyTone, string> = {
@@ -48,6 +49,7 @@ const FILL_TONE: Record<MoneyTone, string> = {
   teal: "bg-teal-500",
   info: "bg-info-500",
   indigo: "bg-indigo-500",
+  pink: "bg-pink-500",
 };
 
 export interface MoneyFlowNode {
