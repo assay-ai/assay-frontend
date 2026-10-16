@@ -46,7 +46,7 @@ const ACCOUNT = `${EVM}:0x1810aa`;
 const DELEGATE = `${EVM}:0xd31e9a7e00000000000000000000000000000001`;
 const usd = (major: string) => ({ amount: String(Math.round(Number(major) * 1_000_000)), asset: `${EVM}/erc20:0xDbbC`, decimals: 6 });
 
-function markup(policy: Record<string, unknown> | null): string {
+function markup(policy: Record<string, unknown> | null, { granted = true }: { granted?: boolean } = {}): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(["spend-policy"], policy);
   client.setQueryData(["spend-policy-history"], { items: [], pageInfo: { nextCursor: null, hasMore: false } });
@@ -92,7 +92,7 @@ function markup(policy: Record<string, unknown> | null): string {
   });
   client.setQueryData(["escrow-delegates", "live"], {
     account: ACCOUNT,
-    delegates: [
+    delegates: !granted ? [] : [
       {
         delegate: DELEGATE,
         maxVoucherAmount: usd("2"),
@@ -173,9 +173,15 @@ describe("LimitsView (Spending limits) — two layers, one effective limit per a
       // The explanation says limits and Pause all do not apply, not how they stop a paid call.
       expect(html).toContain("Spending limits and Pause all stop paid calls, so they do");
       expect(html).not.toContain("Checked by Assay:");
+      // Nothing to let an agent pay for there (Chrome test 2026-10-17).
+      expect(markup(POLICY, { granted: false })).not.toContain("Let it pay");
     } finally {
       demoRails.freeOnly = false;
     }
+  });
+
+  it("offers Let it pay to an agent with no grant on a chain that serves paid calls", () => {
+    expect(markup(POLICY, { granted: false })).toContain("Let it pay");
   });
 
   // BUG-J-BUY-01: a first policy must be creatable from the UI.
