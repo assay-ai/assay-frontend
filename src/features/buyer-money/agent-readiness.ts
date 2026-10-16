@@ -36,6 +36,12 @@ export interface ReadinessInput {
   escrow: ReadinessEscrow | null | undefined;
   escrowUnreadable?: boolean;
   paused: boolean;
+  /**
+   * The chain's name when it serves free calls only (Solana today,
+   * `paid-rails.ts`): the agent makes free calls there and pays for none, so
+   * no paying step applies. Said up front on every agent, not after a click.
+   */
+  freeOnlyChain?: string | null;
 }
 
 export type ReadinessStep = "key" | "funds" | "caps" | "bind" | "authorise" | null;
@@ -77,6 +83,14 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
     return all.length > 0
       ? { ...base, status: "revoked", sentence: "Every key of this agent is revoked, so it cannot call tools. Create a new key to use it again.", next: "key" }
       : { ...base, status: "no-key", sentence: "This agent has no key yet, so it cannot call tools. Create one to connect it.", next: "key" };
+  }
+  if (input.freeOnlyChain) {
+    return {
+      ...base,
+      status: "ready",
+      sentence: `Free calls only: ${input.freeOnlyChain} serves free calls only, so this agent makes free calls there and pays for none.`,
+      next: null,
+    };
   }
   if (input.paused) {
     return { ...base, status: "paused", sentence: "All paid calls are paused. Free calls still work.", next: null };

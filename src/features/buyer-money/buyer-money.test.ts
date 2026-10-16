@@ -128,6 +128,17 @@ describe("agent readiness", () => {
     ...over,
   });
 
+  it("says up front that a free-calls-only chain needs no paying step (Solana)", () => {
+    const r = agentReadiness(
+      { agentAccount: "solana:devnet:abc", credentials: [key()], delegates: [], escrow: { ...escrow, exists: false }, paused: false, freeOnlyChain: "Solana Devnet" },
+      now,
+    );
+    expect(r.next).toBeNull();
+    expect(r.sentence).toBe("Free calls only: Solana Devnet serves free calls only, so this agent makes free calls there and pays for none.");
+    // A key is still needed first.
+    expect(agentReadiness({ agentAccount: evm, credentials: [], delegates: [], escrow, paused: false, freeOnlyChain: "Solana" }, now).next).toBe("key");
+  });
+
   it("walks the setup states in order", () => {
     expect(agentReadiness({ agentAccount: evm, credentials: [], delegates: [], escrow, paused: false }, now).status).toBe("no-key");
     expect(
