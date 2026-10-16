@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { NotChargedProof } from "@/components/explorer/not-charged-proof";
 import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
 import { ToolAccessControl, useSpendPolicy } from "@/components/explorer/tool-access-control";
@@ -205,6 +206,9 @@ function ToolDetail({
           </p>
         ))}
       </div>
+
+      {/* The same platform-wide record the public tool page shows, so a signed-in buyer sees the same facts. */}
+      <NotChargedProof toolId={tool.toolId} limit={5} />
 
       <div className="flex flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
         <p className="text-body-13 text-02">

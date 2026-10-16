@@ -18,6 +18,7 @@ import {
   offerSubLine,
   notChargedEmptyText,
   notChargedRowText,
+  notChargedSplit,
   plural,
   priceSentence,
   shortDay,
@@ -310,6 +311,9 @@ describe("notChargedEmptyText", () => {
     expect(notChargedEmptyText(true, true)).toBe("No uncharged call to this tool can be listed right now.");
     expect(notChargedEmptyText(false, true)).toBe("No uncharged call can be listed right now.");
     expect(notChargedEmptyText(false, false)).toBe("No call went uncharged in this period.");
+    expect(notChargedEmptyText("provider", false)).toBe("No call to their tools went uncharged recently.");
+    expect(notChargedEmptyText("provider", true)).toBe("No uncharged call to their tools can be listed right now.");
+    expect(notChargedEmptyText("tool", true)).toBe(notChargedEmptyText(true, true));
   });
 });
 
@@ -336,5 +340,65 @@ describe("notChargedRowText (public not-charged feed)", () => {
       tone: "neutral",
       text: "A new plain sentence.",
     });
+  });
+});
+
+describe("notChargedSplit (public not-charged totals)", () => {
+  it("lists each reason the server named, with its own count, then an honest grouped line", () => {
+    const lines = notChargedSplit({
+      callsNotCharged: 312,
+      callsFailedCheck: 241,
+      notChargedByReason: [
+        { reason: "PROVIDER_ERROR", calls: 38 },
+        { reason: "NO_USABLE_RESULT", calls: 14 },
+        { reason: "NOT_COLLECTED", calls: 9 },
+      ],
+      callsNotChargedOther: 10,
+    });
+    expect(lines.map((l) => [l.label, l.calls])).toEqual([
+      ["Result failed our check", 241],
+      ["Provider returned an error", 38],
+      ["No usable result", 14],
+      ["Payment not collected (provider forfeited)", 9],
+      ["Other reasons, grouped for privacy", 10],
+    ]);
+    expect(lines[0]!.tone).toBe("teal");
+    expect(new Set(lines.map((l) => l.tone)).size).toBe(lines.length);
+  });
+
+  it("leaves out the grouped line when nothing is in it", () => {
+    const lines = notChargedSplit({
+      callsNotCharged: 20,
+      callsFailedCheck: 5,
+      notChargedByReason: [{ reason: "PROVIDER_ERROR", calls: 15 }],
+      callsNotChargedOther: 0,
+    });
+    expect(lines.map((l) => l.key)).toEqual(["FAILED_CHECK", "PROVIDER_ERROR"]);
+  });
+
+  it("names an unknown reason neutrally instead of dropping it", () => {
+    const lines = notChargedSplit({
+      callsNotCharged: 7,
+      callsFailedCheck: 0,
+      notChargedByReason: [{ reason: "SOMETHING_NEW", calls: 7 }],
+      callsNotChargedOther: 0,
+    });
+    expect(lines[1]).toMatchObject({ label: "Another reason", calls: 7 });
+  });
+
+  it("shows one merged line, worded as a group, when the server sends no split or named nothing", () => {
+    for (const totals of [
+      { callsNotCharged: 312, callsFailedCheck: 241 },
+      { callsNotCharged: 312, callsFailedCheck: 241, notChargedByReason: [], callsNotChargedOther: 71 },
+    ]) {
+      const lines = notChargedSplit(totals);
+      expect(lines).toHaveLength(2);
+      expect(lines[1]).toMatchObject({ key: "OTHER", calls: 71 });
+      expect(lines[1]!.label).toMatch(/^Not charged for another reason/);
+    }
+  });
+
+  it("is only the failed-check line when nothing else went uncharged", () => {
+    expect(notChargedSplit({ callsNotCharged: 4, callsFailedCheck: 4, notChargedByReason: [], callsNotChargedOther: 0 })).toHaveLength(1);
   });
 });
