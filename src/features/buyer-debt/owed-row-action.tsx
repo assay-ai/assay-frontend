@@ -107,7 +107,7 @@ export function OwedSummaryAction({ owed, calls }: { owed: string; calls: number
         <span className="font-mono font-semibold">{owed}</span> owed
         {calls === null ? "" : ` for ${calls === 1 ? "1 call" : `${calls} calls`}`}: payment not collected, and paid calls
         are paused until it is settled.
-        {settleBy ? ` Settle by ${debtDeadline(settleBy)}, or the provider goes unpaid.` : ""}
+        {settleBy ? ` Settle by ${debtDeadline(settleBy)}; after that it is written off, but still owed.` : ""}
       </p>
       <div className="flex shrink-0 items-center gap-2">
         <Button size="sm" variant="ghost" asChild>

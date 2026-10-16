@@ -51,8 +51,8 @@ describe("the debt banner", () => {
     expect(debtBannerDescription([debt()])).toBe(
       "A call your agent made could not be collected from your escrow (the agent key that signed it was revoked). " +
         "Paid calls are paused until you settle it. Free calls still work. " +
-        "If not settled by Nov 15, 00:00 UTC (in 29 days), it is written off and the provider goes unpaid, " +
-        "but paid calls stay paused until you settle it.",
+        "If not settled by Nov 15, 00:00 UTC (in 29 days), it is written off: you still owe it, and the provider is paid only once you settle. " +
+        "Paid calls stay paused until you do.",
     );
   });
 

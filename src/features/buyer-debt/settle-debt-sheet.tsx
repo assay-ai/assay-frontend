@@ -303,7 +303,7 @@ function SettleDebtSheet({
                     {debtCauseText(debt.cause)}
                     {debtStateOf(debt) === "WRITTEN_OFF"
                       ? `. Written off on ${debtDeadline(debt.writeOffAt)}: the provider was not paid; this pays them.`
-                      : `. Settle by ${debtDeadline(debt.writeOffAt)}, or the provider goes unpaid.`}
+                      : `. Settle by ${debtDeadline(debt.writeOffAt)}; after that it is written off, but still owed.`}
                   </dd>
                 </dl>
               </li>

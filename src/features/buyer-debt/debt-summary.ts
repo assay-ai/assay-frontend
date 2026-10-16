@@ -82,7 +82,7 @@ export function debtBannerSummary(
     if (open.length > 0) {
       const earliest = open.reduce((first, debt) => (debt.writeOffAt < first.writeOffAt ? debt : first));
       when.push(
-        `Settle by ${debtDeadline(earliest.writeOffAt)}, or the provider${open.length === 1 ? " is" : "s are"} not paid (paid calls stay paused either way).`,
+        `Settle by ${debtDeadline(earliest.writeOffAt)}. After that it is written off: you still owe it, and the provider${open.length === 1 ? " is" : "s are"} paid only once you settle.`,
       );
     }
     if (writtenOff.length > 0) {
@@ -284,7 +284,7 @@ export function resumesAfterSettling(data: BuyerDebts | null | undefined, settli
  */
 export function debtDeadlineLine(debt: Pick<BuyerDebt, "state" | "writeOffAt">): string | null {
   const state = debtStateOf(debt);
-  if (state === "OPEN") return `Settle by ${debtDeadline(debt.writeOffAt)}, or the provider goes unpaid.`;
+  if (state === "OPEN") return `Settle by ${debtDeadline(debt.writeOffAt)}; after that it is written off, but still owed.`;
   if (state === "WRITTEN_OFF") {
     return `Written off on ${debtDeadline(debt.writeOffAt)}, but still owed: settling still pays the provider.`;
   }
