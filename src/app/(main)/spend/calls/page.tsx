@@ -9,7 +9,10 @@ import * as React from "react";
 import { PageHeader } from "@/components/g31/chrome";
 import { EntityName } from "@/components/patterns/entity-name";
 import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
+import { owedCallsFromDebts } from "@/features/buyer-debt/debt-summary";
 import { OwedRowAction } from "@/features/buyer-debt/owed-row-action";
+import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
+import type { BuyerDebt } from "@/interfaces/buyer-debt";
 import { EntityPicker } from "@/components/patterns/entity-picker";
 import { LocalTime } from "@/components/patterns/local-time";
 import { PageState } from "@/components/patterns/page-state";
@@ -89,6 +92,11 @@ function CallsList() {
   );
 
   const filtered = filter !== "all" || Boolean(toolId);
+  // Owed: every owed call, from the debts list (the banner's source), not
+  // only the pages loaded so far (P2-6). The paged scan is the fallback when
+  // the list cannot be read.
+  const debtsQuery = useBuyerDebtsQuery();
+  const owedDebts = filter === "owed" ? owedCallsFromDebts(debtsQuery.data, toolId) : null;
 
   return (
     <>
@@ -122,7 +130,9 @@ function CallsList() {
         </div>
       </div>
 
-      {query.isPending ? (
+      {owedDebts ? (
+        <OwedDebtsList debts={owedDebts} onShowAll={() => router.replace(routes.calls(), { scroll: false })} />
+      ) : query.isPending ? (
         <PageState kind="loading" rows={6} label="Loading your calls" />
       ) : query.isError ? (
         <PageState
@@ -246,6 +256,57 @@ function CallsList() {
         </>
       )}
     </>
+  );
+}
+
+/** The Owed chip's list: one row per debt in `GET /escrow/debts`. */
+function OwedDebtsList({ debts, onShowAll }: { debts: BuyerDebt[]; onShowAll: () => void }) {
+  const names = useEntityNames({ kinds: ["tool", "provider"] });
+  if (debts.length === 0) {
+    return (
+      <PageState
+        kind="empty"
+        title="Nothing owed"
+        description="Every paid call's payment was collected. An owed call shows here until you settle it."
+        action={{ label: "Show all calls", onClick: onShowAll }}
+      />
+    );
+  }
+  return (
+    <ul
+      className="flex w-full flex-col overflow-hidden rounded-xl border border-01 bg-01 shadow-soft"
+      data-testid="owed-debts-list"
+    >
+      {debts.map((debt) => (
+        <li key={debt.intentId} className="border-b border-01 last:border-b-0">
+          <Link
+            href={routes.receipt(debt.intentId)}
+            className="flex w-full items-center gap-3 px-4 py-3.5 transition-colors hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 tablet:px-5"
+          >
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="truncate font-mono text-mono-13 font-semibold text-01">
+                <EntityName kind="tool" id={debt.toolId} copyable={false} />
+              </span>
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-03">
+                <StatusChip status="owed" />
+                <LocalTime value={debt.createdAt} relative />
+                {debt.providerId && names.lookup("provider", debt.providerId) ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="truncate">{names.lookup("provider", debt.providerId)}</span>
+                  </>
+                ) : null}
+              </span>
+            </div>
+            <span className="shrink-0 font-mono text-mono-13 font-semibold text-01">
+              {formatMoney(debt.amount, { decimals: 4 })} owed
+            </span>
+            <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
+          </Link>
+          <OwedRowAction intentId={debt.intentId} debt={debt.state === "WRITTEN_OFF" ? "WRITTEN_OFF" : "OUTSTANDING"} />
+        </li>
+      ))}
+    </ul>
   );
 }
 

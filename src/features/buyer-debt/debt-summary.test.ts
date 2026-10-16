@@ -10,6 +10,7 @@ import {
   debtTotal,
   earliestWriteOff,
   owedCallState,
+  owedCallsFromDebts,
   owedRowText,
   paidCallsAfterSettling,
   resumesAfterSettling,
@@ -258,5 +259,21 @@ describe("deadlines on owed rows, receipts and summaries (P2-2, P2-4, P3-3)", ()
     expect(owedRowText(unknown)).toBe("Payment not collected · open the receipt for details.");
     expect(owedRowText(unknown, { callDebt: "WRITTEN_OFF" })).toBe("Written off · open the receipt for details.");
     expect(owedRowText(unknown)).not.toMatch(/paused/);
+  });
+});
+
+describe("owedCallsFromDebts (P2-6)", () => {
+  it("lists every owed call from the debts list, newest first, any wallet, by tool", () => {
+    const data = {
+      account: ACCOUNT,
+      debts: [
+        debt({ intentId: "a", createdAt: "2026-10-01T00:00:00.000Z" }),
+        debt({ intentId: "b", createdAt: "2026-10-10T00:00:00.000Z", payer: OTHER, toolId: "other_tool" }),
+        debt({ intentId: "c", createdAt: "2026-10-05T00:00:00.000Z", state: "REPLACING" }),
+      ],
+    };
+    expect(owedCallsFromDebts(data)?.map((d) => d.intentId)).toEqual(["b", "c", "a"]);
+    expect(owedCallsFromDebts(data, "price_quote")?.map((d) => d.intentId)).toEqual(["c", "a"]);
+    expect(owedCallsFromDebts(undefined)).toBeNull();
   });
 });
