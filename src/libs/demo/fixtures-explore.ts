@@ -482,6 +482,16 @@ const TOOLS: readonly DemoTool[] = [
 /* Derived rows — one source of truth above, every figure computed from it    */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The price one provider lists one tool at, in minor units, or `null` when it
+ * does not offer it. The buyer demo's calls are priced from the same offers
+ * (`fixtures-buyer.test.ts` holds the two together).
+ */
+export function demoOfferPriceMinor(toolId: string, providerId: string): string | null {
+  const offer = TOOLS.find((tool) => tool.id === toolId)?.offers.find((o) => o.providerId === providerId);
+  return offer ? usd(offer.price).amount : null;
+}
+
 /** Every offer a provider has listed, as `(tool, price)` pairs. */
 function offersOf(providerId: string): { tool: DemoTool; price: CatalogueMoney }[] {
   return TOOLS.flatMap((tool) =>

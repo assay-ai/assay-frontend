@@ -1,5 +1,5 @@
 import { demoMinutesAgo } from "./demo-clock";
-import { BUYER_FIXTURES, demoDebtHeldMajor } from "./fixtures-buyer";
+import { BUYER_FIXTURES, demoBuyerLedger, demoMoneyMinor } from "./fixtures-buyer";
 import { freshAtLeast, freshStage } from "./fresh-account";
 import { EXPLORE_FIXTURES } from "./fixtures-explore";
 import { OPERATOR_FIXTURES } from "./fixtures-operator";
@@ -115,9 +115,10 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
       // (stage "bind" opens a $20 escrow), matching the escrow fixture.
       const stage = freshStage();
       const fresh = stage ? (freshAtLeast(stage, "bind") ? "20.00" : "0") : null;
-      // A buyer debt's price stays held too, as on `/escrow` and `/holds` (see `demoDebtHolds`).
-      const debtHeld = fresh ? 0 : demoDebtHeldMajor();
-      const available = fresh ?? (482.15 - debtHeld).toFixed(2);
+      // A buyer debt's price stays held too, as on `/escrow` and `/holds` (see `demoBuyerLedger`).
+      const ledger = demoBuyerLedger();
+      const available = fresh ? money(fresh) : demoMoneyMinor(ledger.available);
+      const total = fresh ? money(fresh) : demoMoneyMinor(ledger.balance);
       return {
         balances: [
           {
@@ -125,12 +126,12 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
             accountId: DEMO_BUYER_ACCOUNT,
             asset: DEMO_ASSET,
             decimals: 6,
-            available: money(available),
-            held: money(fresh ? "0" : (17.85 + debtHeld).toFixed(2)),
-            total: money(fresh ?? "500.00"),
-            chainBalance: money(fresh ?? "500.00"),
-            spendable: money(available),
-            withdrawable: money(available),
+            available,
+            held: fresh ? money("0") : demoMoneyMinor(ledger.held),
+            total,
+            chainBalance: total,
+            spendable: available,
+            withdrawable: available,
             chainReadable: true,
           },
         ],

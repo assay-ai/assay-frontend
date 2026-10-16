@@ -57,7 +57,7 @@ describe("demo debt pictures and the settle sheet's escrow check", () => {
     expect(check.kind).toBe("blocked");
     if (check.kind !== "blocked") return;
     expect(check.blocks.map((block) => block.kind)).toEqual(["funds", "per-call"]);
-    expect(check.blocks[0]!.action.label).toBe("Add $1.50");
+    expect(check.blocks[0]!.action.label).toBe("Add $0.20");
   });
 
   it("?debt=unread makes the sheet say the escrow could not be read", () => {
@@ -137,13 +137,13 @@ describe("demo debt pictures and the settle sheet's escrow check", () => {
     const summary = debtBannerSummary({ account: DEMO_BUYER_ACCOUNT, debts })!;
     expect(summary.ready).toHaveLength(1);
     expect(summary.actionDisabled).toBe(false);
-    expect(summary.actionLabel).toBe("Settle $2.50");
-    expect(summary.title).toMatch(/^You owe \$8\.50 for 2 calls\./);
+    expect(summary.actionLabel).toBe("Settle $1.20");
+    expect(summary.title).toMatch(/^You owe \$2\.40 for 2 calls\./);
     expect(summary.waitingNote).toMatch(/^1 of them is not ready to sign yet: you can settle it from /);
     expect(owedChangeRow(summary.toSign, summary.ready)).toEqual({
       label: "You owe",
-      before: "$8.50",
-      after: "$6.00 after this signature",
+      before: "$2.40",
+      after: "$1.20 after this signature",
     });
   });
 
@@ -151,13 +151,13 @@ describe("demo debt pictures and the settle sheet's escrow check", () => {
     type Holds = { items: { intentId: string; status: string }[] };
     type Escrow = { openHolds: { amount: string }; spendable: { amount: string }; balance: { amount: string } };
     for (const [search, held] of [
-      ["?debt=open", "20350000"],
-      ["?debt=waiting", "20350000"],
-      ["?debt=collecting", "20350000"],
-      ["?debt=waiting-mixed", "26350000"],
-      ["?debt=written-off", "17850000"],
-      ["?debt=other-wallet", "17850000"],
-      ["?debt=none", "17850000"],
+      ["?debt=open", "2417700"],
+      ["?debt=waiting", "2417700"],
+      ["?debt=collecting", "2417700"],
+      ["?debt=waiting-mixed", "3617700"],
+      ["?debt=written-off", "1217700"],
+      ["?debt=other-wallet", "1217700"],
+      ["?debt=none", "1217700"],
     ] as const) {
       vi.stubGlobal("window", tabAt(search));
       const escrow = demoResponse("GET", "/escrow") as Escrow;
@@ -167,7 +167,7 @@ describe("demo debt pictures and the settle sheet's escrow check", () => {
       const { debts } = demoResponse("GET", "/escrow/debts") as { debts: BuyerDebt[] };
       const owedIds = new Set(debts.map((debt) => debt.intentId));
       const label = heldSegmentLabel(holds, owedIds);
-      if (held === "17850000") expect(label, search).toBe("Held by calls being checked");
+      if (held === "1217700") expect(label, search).toBe("Held by calls being checked");
       else expect(label, search).toBe("Held by calls being checked and unpaid calls");
       const balances = demoResponse("GET", "/balances") as { balances: { held: { amount: string } }[] };
       expect(balances.balances[0]!.held.amount, search).toBe(held);
