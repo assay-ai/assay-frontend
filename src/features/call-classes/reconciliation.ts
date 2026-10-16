@@ -88,7 +88,7 @@ const CLASS_NOTE: Record<string, string> = {
   PAID_BUYER_DEBT: "Passed, but the buyer's payment did not go through yet. Paid to you when they settle.",
   PAID_UNCOLLECTED: "Passed; the buyer did not settle in 30 days. Written off, but still owed: you are paid if they settle.",
   PROVIDER_FORFEITED: "Not collected because your stake was below the minimum, or you were blocked.",
-  PAID_UNCREDITED: "Your answer failed our checks, so the buyer was not charged.",
+  PAID_UNCREDITED: "The result did not pass our checks, so the buyer was not charged.",
   FREE: "Free-tier calls: nothing charged, nothing paid.",
   EXPLORATION: "Trial calls to a new listing. The buyer pays as usual; Assay pays only for the checks.",
   EXCLUDED: "Taken out of the count by our team, for example during an incident on our side.",

@@ -9,7 +9,7 @@ describe("call class labels (BUG-R5-03)", () => {
       expect(classLabel(name)).not.toBe(name);
       expect(classLabel(name)).not.toMatch(/[A-Z]_[A-Z]/);
     }
-    expect(classLabel("PAID_UNCREDITED")).toBe("Rejected by our checks");
+    expect(classLabel("PAID_UNCREDITED")).toBe("Failed our checks");
   });
 
   it("shows a class it does not know as it is, rather than hiding it", () => {

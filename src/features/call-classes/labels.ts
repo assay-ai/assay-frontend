@@ -12,13 +12,13 @@ const CLASS_LABEL: Record<string, string> = {
   PAID_BUYER_DEBT: "Passed, waiting on the buyer",
   PAID_UNCOLLECTED: "Passed, never collected",
   PROVIDER_FORFEITED: "Forfeited by you",
-  PAID_UNCREDITED: "Rejected by our checks",
+  PAID_UNCREDITED: "Failed our checks",
   FREE: "Free call",
   EXPLORATION: "Trial traffic",
   EXCLUDED: "Excluded from the SLA",
   TEST: "Test call",
-  SYSTEM_ERROR: "Endpoint error",
-  REQUEST_ERROR: "Bad request",
+  SYSTEM_ERROR: "Endpoint error (5xx or timeout)",
+  REQUEST_ERROR: "Request refused (4xx)",
   PENDING: "Still being checked",
 };
 
