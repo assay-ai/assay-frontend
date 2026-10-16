@@ -14,13 +14,12 @@ import {
   checkSentences,
   failRateLabel,
   failsOften,
-  heldPriceSentence,
   notTakingPaidCalls,
   priceRange,
   routingNotes,
   formatCallPrice,
   offerLine,
-  priceSentence,
+  costSentence,
   smallestFreeAllowance,
   stakeSummary,
 } from "@/features/explorer/explorer-text";
@@ -66,7 +65,9 @@ function ToolPage() {
       ?.tools.find((t) => t.toolId === tool?.id);
   // A static export cannot set per-tool metadata; name the tool in the tab.
   useDocumentTitle(tool ? `${tool.name}: price and record — Assay` : null);
-  const freeAllowance = smallestFreeAllowance(serving.map((p) => listingOf(p.providerId)?.freeCallsPerAgentPerDay));
+  // The backend's own figure when the public API sends it; otherwise the smallest per-listing allowance.
+  const freeAllowance =
+    tool?.freeCallsPerDay ?? smallestFreeAllowance(serving.map((p) => listingOf(p.providerId)?.freeCallsPerAgentPerDay));
 
   if (tools.isPending) {
     return <PageState kind="loading" rows={4} label="Loading the tool" />;
@@ -97,7 +98,6 @@ function ToolPage() {
   // What the providers charge, against what a call is held for (the dearest
   // provider that can take it now). See `priceRange`.
   const range = priceRange(tool.price, [tool.fromPrice, ...serving.map((p) => listingOf(p.providerId)?.price)]);
-  const rangeLine = range ? heldPriceSentence(range) : null;
 
   return (
     <>
@@ -115,7 +115,7 @@ function ToolPage() {
           {/* One price line, free first: the free tier and the price together. */}
           <OfferPrice size="lg" offer={offerLine({ mode: tool.pricingMode, range, freeCallsPerDay: freeAllowance })} />
           <p className="text-body-13 text-02">
-            {rangeLine ?? priceSentence({ mode: tool.pricingMode, price: tool.price, freeCallsPerDay: freeAllowance })}
+            {costSentence({ mode: tool.pricingMode, price: tool.price, range, freeCallsPerDay: freeAllowance })}
           </p>
           {settles.length > 0 ? (
             <p className="text-body-xs text-03">

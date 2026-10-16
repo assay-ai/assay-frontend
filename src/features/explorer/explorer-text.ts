@@ -158,6 +158,32 @@ export function offerLine(input: {
   return { lead, price, unit: "/call", text: `${lead ? `${lead} ` : ""}${price}/call` };
 }
 
+/** The small line under a list row's price: when you pay, and the most a call is held for. */
+export function offerSubLine(
+  mode: string | null | undefined,
+  range: { from: Money; held: Money; differs: boolean } | null | undefined,
+): string {
+  if (!range || normalisedMode(mode) === "FREE") return "";
+  if (range.differs) return `held at most ${formatCallPrice(range.held)}, paid only if it passes`;
+  return normalisedMode(mode) === "FREEMIUM" ? "after the free calls, only if it passes" : "paid only if it passes";
+}
+
+/**
+ * The sentence under a tool page's price. Free first: a FREEMIUM tool says its
+ * free calls before the range, so a range never drops the free-first sentence.
+ */
+export function costSentence(input: {
+  mode: string | null | undefined;
+  price: Money | null | undefined;
+  range: { from: Money; held: Money; differs: boolean } | null | undefined;
+  freeCallsPerDay?: number | null;
+}): string {
+  const rangeLine = input.range ? heldPriceSentence(input.range) : null;
+  const base = priceSentence({ mode: input.mode, price: input.price, freeCallsPerDay: input.freeCallsPerDay });
+  if (normalisedMode(input.mode) === "FREEMIUM") return [base, rangeLine].filter(Boolean).join(" ");
+  return rangeLine ?? base;
+}
+
 /** The sentence under a "from $X" price. */
 export function heldPriceSentence(range: { from: Money; held: Money; differs: boolean }): string | null {
   if (!range.differs) return null;

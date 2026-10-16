@@ -13,7 +13,9 @@ import {
   formatCallPrice,
   freeTierLabel,
   moneyByAsset,
+  costSentence,
   offerLine,
+  offerSubLine,
   plural,
   priceSentence,
   shortDay,
@@ -252,5 +254,37 @@ describe("offerLine", () => {
     expect(offerLine({ mode: "FREEMIUM", range: null, freeCallsPerDay: 100 }).text).toBe(
       "Free tier; paid calls not available right now",
     );
+  });
+});
+
+describe("costSentence and offerSubLine (public catalogue, free first)", () => {
+  const two = priceRange(usd("30000"), [usd("20000"), usd("30000")]);
+  const one = priceRange(usd("20000"), [usd("0"), usd("20000")]);
+
+  it("keeps the free-first sentence before the range for a FREEMIUM tool", () => {
+    const text = costSentence({ mode: "FREEMIUM", price: usd("30000"), range: two, freeCallsPerDay: 100 });
+    expect(text).toMatch(/^The first 100 calls each day are free/);
+    expect(text).toMatch(/Providers charge from \$0\.02 to \$0\.03/);
+  });
+
+  it("uses the range alone for a PAID tool, and the price sentence without one", () => {
+    expect(costSentence({ mode: "PAID", price: usd("30000"), range: two })).toMatch(/^Providers charge from/);
+    expect(costSentence({ mode: "PAID", price: usd("20000"), range: one })).toBe(
+      "$0.02 per call. You pay only if the result passes the check.",
+    );
+  });
+
+  it("says 'after the free calls' under a FREEMIUM price, and the hold over a range", () => {
+    expect(offerSubLine("FREEMIUM", one)).toBe("after the free calls, only if it passes");
+    expect(offerSubLine("PAID", one)).toBe("paid only if it passes");
+    expect(offerSubLine("FREEMIUM", two)).toBe("held at most $0.03, paid only if it passes");
+    expect(offerSubLine("FREE", one)).toBe("");
+    expect(offerSubLine("PAID", null)).toBe("");
+  });
+
+  it("prints no range over a single paid listing when paidBindings says one", () => {
+    const paidBindings = 1;
+    const range = priceRange(usd("30000"), paidBindings > 1 ? [usd("20000")] : []);
+    expect(range?.differs).toBe(false);
   });
 });
