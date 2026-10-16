@@ -11,6 +11,7 @@ import {
   debtOutstandingContext,
   debtRefusalSentence,
   debtRowText,
+  debtSentence,
   debtsToSign,
   settledToast,
   settleDebtErrorSentence,
@@ -87,6 +88,33 @@ describe("the debt banner", () => {
     expect(debtRowText(debt())).not.toMatch(/written off|being collected/);
     expect(debtRowText(debt({ state: "WRITTEN_OFF" }))).toMatch(/ · written off$/);
     expect(debtRowText(debt({ state: "REPLACING" }))).toMatch(/ · signed, being collected$/);
+  });
+
+  it("words a written-off row's prefixed cause like the open row's, and names the tool (R17b-B-02)", () => {
+    const toolId = "06399979-f8b8-4c9e-a9b1-bd2a5924d442";
+    const writtenOff = debt({
+      toolId,
+      state: "WRITTEN_OFF",
+      cause: "uncollected:VerdictPastRedemptionDeadline",
+    });
+    const open = debt({ toolId, cause: "VerdictPastRedemptionDeadline" });
+    const nameOf = (id: string) => (id === toolId ? "price_quote" : id);
+    expect(debtRowText(writtenOff, nameOf)).toMatch(
+      / · price_quote · the check finished after the payment voucher expired · written off$/,
+    );
+    expect(debtRowText(writtenOff, nameOf)).not.toContain("uncollected:");
+    expect(debtRowText(open, nameOf).split(" · ")[2]).toBe(debtRowText(writtenOff, nameOf).split(" · ")[2]);
+    // No catalogue name: a short id, never the full uuid.
+    expect(debtRowText(writtenOff)).toContain(" · 06399979… · ");
+    expect(debtRowText(writtenOff)).not.toContain(toolId);
+  });
+
+  it("strips every recorded-cause prefix before wording the cause", () => {
+    for (const prefix of ["uncollected:", "buyer_debt:", "provider_forfeit:", "voided:"]) {
+      expect(debtSentence({ ...debt(), cause: `${prefix}DelegateIsRevoked` })).toContain(
+        "(the agent key that signed it was revoked)",
+      );
+    }
   });
 
   it("leaves a signed debt out of the ones to sign, and reads a missing state as open", () => {

@@ -547,6 +547,13 @@ function wireFigures(bucket: Bucket) {
     listedTotal: minorMoney(bucket.listed),
     chargedTotal: minorMoney(bucket.charged),
     withheldTotal: minorMoney(bucket.withheld),
+    // The demo has no debt, forfeit or in-flight call: not charged is withheld.
+    notChargedTotal: minorMoney(bucket.withheld),
+    notChargedCalls: bucket.refundedCalls,
+    owedTotal: minorMoney(0),
+    owedCalls: 0,
+    inProgressTotal: minorMoney(0),
+    inProgressCalls: 0,
     failRate: bucket.calls === 0 ? null : bucket.refundedCalls / bucket.calls,
   };
 }
@@ -560,6 +567,8 @@ function wireComparison(previous: Bucket | undefined, current: Bucket) {
     deltaListedTotal: minorMoney(current.listed - before.listed),
     deltaChargedTotal: minorMoney(current.charged - before.charged),
     deltaWithheldTotal: minorMoney(current.withheld - before.withheld),
+    deltaNotChargedTotal: minorMoney(current.withheld - before.withheld),
+    deltaOwedTotal: minorMoney(0),
   };
 }
 

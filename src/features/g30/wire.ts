@@ -112,8 +112,23 @@ export interface SummaryFigures {
   calls: number;
   refundedCalls: number;
   listedTotal: Money;
+  /** Served and collected (or being collected). An open buyer debt is in `owedTotal`. */
   chargedTotal: Money;
+  /** The guarantee's withheld figure — part of `notChargedTotal`, not all of it. */
   withheldTotal: Money;
+  /**
+   * Not charged: refunded, voided and expired calls, and served calls never
+   * collected (forfeited, written-off or voided debt).
+   * `listedTotal = chargedTotal + notChargedTotal + owedTotal + inProgressTotal`.
+   */
+  notChargedTotal: Money;
+  notChargedCalls: number;
+  /** Open buyer debt: served, payment not collected yet — neither charged nor not charged. */
+  owedTotal: Money;
+  owedCalls: number;
+  /** Calls not finished yet, at their listed price. */
+  inProgressTotal: Money;
+  inProgressCalls: number;
   failRate: number | null;
 }
 
@@ -123,6 +138,8 @@ export interface SummaryComparison extends SummaryFigures {
   deltaListedTotal: Money;
   deltaChargedTotal: Money;
   deltaWithheldTotal: Money;
+  deltaNotChargedTotal: Money;
+  deltaOwedTotal: Money;
 }
 
 export interface SummaryGroup extends SummaryFigures {
