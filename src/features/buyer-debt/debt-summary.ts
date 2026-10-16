@@ -4,7 +4,7 @@ import type { Money } from "@/interfaces/api";
 import type { BuyerDebt, BuyerDebts } from "@/interfaces/buyer-debt";
 import { formatMoney, toDecimal } from "@/utils/money";
 
-import { debtDate, debtStateOf, debtsToSign, splitDebts } from "./debt-copy";
+import { debtDeadline, debtStateOf, debtsToSign, splitDebts } from "./debt-copy";
 
 /**
  * The short form of buyer debt, for the banner, the settle sheet and the
@@ -79,13 +79,13 @@ export function debtBannerSummary(data: BuyerDebts | null | undefined): DebtBann
     if (open.length > 0) {
       const earliest = open.reduce((first, debt) => (debt.writeOffAt < first.writeOffAt ? debt : first));
       when.push(
-        `Settle by ${debtDate(earliest.writeOffAt)}, or the provider${open.length === 1 ? " is" : "s are"} not paid (paid calls stay paused either way).`,
+        `Settle by ${debtDeadline(earliest.writeOffAt)}, or the provider${open.length === 1 ? " is" : "s are"} not paid (paid calls stay paused either way).`,
       );
     }
     if (writtenOff.length > 0) {
       when.push(
         writtenOff.length === toSign.length && writtenOff.length === 1
-          ? `Written off on ${debtDate(writtenOff[0].writeOffAt)}: the provider was not paid, and settling pays them.`
+          ? `Written off on ${debtDeadline(writtenOff[0].writeOffAt)}: the provider was not paid, and settling pays them.`
           : `${writtenOff.length} ${writtenOff.length === 1 ? "was" : "were"} written off: settling pays ${writtenOff.length === 1 ? "that provider" : "those providers"}.`,
       );
     }

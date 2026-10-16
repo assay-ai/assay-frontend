@@ -10,6 +10,12 @@ import { defineConfig } from "vitest/config";
  * that later needs the DOM can opt in with `// @vitest-environment jsdom` at
  * the top of its file.
  */
+/*
+  Dates in copy are printed in the reader's zone; tests read them in UTC so
+  they do not depend on the machine they run on.
+*/
+process.env.TZ = "UTC";
+
 export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
