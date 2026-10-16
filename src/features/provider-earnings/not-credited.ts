@@ -21,16 +21,6 @@ const REASONS: Record<string, NotCreditedReason> = {
     title: "Your API refused the request",
     detail: "It answered with a 4xx error. Usually the agent sent input your API does not accept; check your request mapping.",
   },
-  PAID_UNCOLLECTED: {
-    title: "The buyer never paid",
-    detail:
-      "These passed the check, but the buyer never settled the payment, so it was written off after 30 days. You were not paid, no fee was taken, and the platform does not pay it in their place.",
-  },
-  PROVIDER_FORFEITED: {
-    title: "Forfeited by you",
-    detail:
-      "The payment could not be collected because of your account: your stake was below the minimum, or you were blocked. The buyer was not charged and nobody was paid.",
-  },
   EXCLUDED: {
     title: "Excluded by Assay",
     detail: "Assay's team took these calls out of the count, for example during an incident on our side.",
@@ -86,4 +76,30 @@ export function partsThatAddUp(parts: readonly string[], decimals: number, place
 /** "1 call", "848 calls". */
 export function callCount(count: number): string {
   return `${count.toLocaleString("en-US")} call${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * The classes that passed the check but were not paid: written off
+ * (`PAID_UNCOLLECTED`) or forfeited (`PROVIDER_FORFEITED`). The export puts
+ * them outside "credited", but they are not "not credited by our checks":
+ * Money shows them under "Passed, but not paid". Kept out of the not-credited
+ * fold, the reasons add up to `withheld` / `withheldCalls`.
+ */
+export const PASSED_UNPAID_CLASSES: ReadonlySet<string> = new Set(["PAID_UNCOLLECTED", "PROVIDER_FORFEITED"]);
+
+/** The rows the "Not credited" reasons count, and how many passed-but-unpaid rows were left out. */
+export function notCreditedRows<T extends { classification: string }>(rows: readonly T[]): { rows: T[]; passedUnpaid: number } {
+  const kept = rows.filter((row) => !PASSED_UNPAID_CLASSES.has(row.classification));
+  return { rows: kept, passedUnpaid: rows.length - kept.length };
+}
+
+/** What one passed-but-unpaid call is worth to the provider in a drill-down. */
+export function unpaidCallAmount(row: { providerAmount: string; priceAmount: string; asset: string; decimals: number }): {
+  amount: { amount: string; asset: string; decimals: number };
+  /** "listed price" when the export carries no provider share (written off, forfeited: it sends 0). */
+  note: string | null;
+} {
+  const share = BigInt(row.providerAmount || "0");
+  if (share > 0n) return { amount: { amount: row.providerAmount, asset: row.asset, decimals: row.decimals }, note: null };
+  return { amount: { amount: row.priceAmount || "0", asset: row.asset, decimals: row.decimals }, note: "listed price" };
 }

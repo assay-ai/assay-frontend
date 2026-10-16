@@ -23,7 +23,7 @@ import { lossOf } from "@/features/provider-penalties/model";
 import { usePenalties } from "@/features/provider-penalties/use-penalties";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import { callsOfClass, earningsSplit, unpaidLines, type EarningsSplit, type UnpaidLine } from "@/features/provider-earnings/earned-tile";
-import { callCount, notCreditedReason, partsThatAddUp } from "@/features/provider-earnings/not-credited";
+import { callCount, notCreditedReason, notCreditedRows, partsThatAddUp, unpaidCallAmount } from "@/features/provider-earnings/not-credited";
 import { useChains } from "@/hooks/useChains";
 import type { Money, ProviderPayout } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
@@ -60,9 +60,6 @@ function monthWindow(now: Date) {
 function amountOf(money: Money | null | undefined): number {
   return money ? toDecimal(money).toNumber() : 0;
 }
-
-/** Not-credited classes that passed the check; shown under "Passed, but not paid", not as a failure reason. */
-const PASSED_UNPAID: ReadonlySet<string> = new Set(["PAID_UNCOLLECTED", "PROVIDER_FORFEITED"]);
 
 const MONTH = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" });
 
@@ -101,8 +98,9 @@ export default function ProviderMoneyPage() {
     "Passed, but not paid" (with their calls), so the reasons below keep to the
     calls that earned nothing because of the answer or the request.
   */
-  const passedUnpaidCalls = React.useMemo(() => rows.filter((row) => PASSED_UNPAID.has(row.classification)).length, [rows]);
-  const notCredited = React.useMemo(() => foldNotCredited(rows.filter((row) => !PASSED_UNPAID.has(row.classification))), [rows]);
+  const creditable = React.useMemo(() => notCreditedRows(rows), [rows]);
+  const passedUnpaidCalls = creditable.passedUnpaid;
+  const notCredited = React.useMemo(() => foldNotCredited(creditable.rows), [creditable]);
   /* The reasons count one asset of the export; say so when the file holds calls in another. */
   const scopeNote =
     calls.isLoading || assetPending || !displayAsset || !calls.data
@@ -507,7 +505,10 @@ function UnpaidRow({
                     <CopyChip value={call.callId} label="call id" />
                   </span>
                   <span className="font-mono text-mono-12 text-01">
-                    {unpaidMoney({ amount: call.providerAmount, asset: call.asset, decimals: call.decimals })}
+                    {unpaidMoney(unpaidCallAmount(call).amount)}
+                    {unpaidCallAmount(call).note ? (
+                      <span className="ml-1 font-sans text-body-xs text-03">{unpaidCallAmount(call).note}</span>
+                    ) : null}
                   </span>
                 </div>
                 {call.reason ? <span className="text-body-xs text-03">{reasonLabel(call.reason)}</span> : null}
