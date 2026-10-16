@@ -311,12 +311,20 @@ describe("costSentence and offerSubLine (public catalogue, free first)", () => {
 describe("notChargedEmptyText", () => {
   it("always says something when no row is listed, without claiming nothing happened behind the privacy rule", () => {
     expect(notChargedEmptyText(true, false)).toBe("No call to this tool went uncharged recently.");
-    expect(notChargedEmptyText(true, true)).toBe("No uncharged call to this tool can be listed right now.");
+    expect(notChargedEmptyText(true, true)).toMatch(/^No uncharged call to this tool can be listed right now\. /);
     expect(notChargedEmptyText(false, true)).toBe("No uncharged call can be listed right now.");
     expect(notChargedEmptyText(false, false)).toBe("No call went uncharged in this period.");
     expect(notChargedEmptyText("provider", false)).toBe("No call to their tools went uncharged recently.");
-    expect(notChargedEmptyText("provider", true)).toBe("No uncharged call to their tools can be listed right now.");
+    expect(notChargedEmptyText("provider", true)).toMatch(/^No uncharged call to their tools can be listed right now\. /);
     expect(notChargedEmptyText("tool", true)).toBe(notChargedEmptyText(true, true));
+  });
+
+  it("says why a tool may have no public rows, in the backend's rules (final2 P3)", () => {
+    const text = notChargedEmptyText("tool", true, 5);
+    expect(text).toContain("a day after it ends");
+    expect(text).toContain("at least 5 different buyers");
+    expect(text).toContain("over a week old that have paid for a call");
+    expect(notChargedEmptyText("provider", true, 7)).toContain("at least 7 different buyers");
   });
 });
 

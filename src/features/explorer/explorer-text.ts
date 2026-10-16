@@ -525,11 +525,22 @@ export function notChargedSplit(totals: {
  * not claim nothing happened: it says none can be listed, and the privacy note
  * below says why.
  */
-export function notChargedEmptyText(scope: boolean | "all" | "tool" | "provider", withheldForPrivacy: boolean): string {
+export function notChargedEmptyText(
+  scope: boolean | "all" | "tool" | "provider",
+  withheldForPrivacy: boolean,
+  minBuyers = 5,
+): string {
   const of = scope === true || scope === "tool" ? "tool" : scope === "provider" ? "provider" : "all";
   if (withheldForPrivacy) {
-    if (of === "tool") return "No uncharged call to this tool can be listed right now.";
-    if (of === "provider") return "No uncharged call to their tools can be listed right now.";
+    // Why a tool can have no public rows at all, in the backend's own rules (`PublicNotChargedService`):
+    // a row is listed a day after the call and its outcome, only the platform's most recent rows are kept,
+    // and a tool's rows only when at least k eligible buyers (accounts a week old with a collected paid
+    // call) stand behind them (final2 P3).
+    const why =
+      ` A call is listed only a day after it ends, and only when the tool's listed calls come from at least ${minBuyers} ` +
+      "different buyers (accounts over a week old that have paid for a call); only the most recent calls across Assay are shown.";
+    if (of === "tool") return `No uncharged call to this tool can be listed right now.${why}`;
+    if (of === "provider") return `No uncharged call to their tools can be listed right now.${why}`;
     return "No uncharged call can be listed right now.";
   }
   if (of === "tool") return "No call to this tool went uncharged recently.";
