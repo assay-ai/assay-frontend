@@ -33,7 +33,8 @@ import {
   trendIsUp,
   trendLabel,
 } from "@/features/buyer/period";
-import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
+import { callPaymentNote, heldCallsText } from "@/features/buyer-debt/debt-copy";
+import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
 import { overviewBalance, singleBalanceSub } from "@/features/buyer/overview-balance";
 import { useOverview, type NotificationRow } from "@/features/buyer/use-overview";
@@ -104,6 +105,7 @@ export default function OverviewPage() {
   );
   const balance = balanceState.kind === "single" ? balanceState.balance : null;
   const openHolds = (data?.holds ?? []).filter((h) => h.status === "OPEN");
+  const owedIntentIds = useOwedIntentIds();
   const oldestHold = openHolds.reduce((max, h) => Math.max(max, h.ageSeconds), 0);
 
   const withheldAmount = data?.withheld?.withheld.amount ?? null;
@@ -213,7 +215,11 @@ export default function OverviewPage() {
           }
           meta={
             balance
-              ? `${formatMoney(balance.held)} held · ${formatCount(openHolds.length)} calls in flight`
+              ? `${formatMoney(balance.held)} held · ${heldCallsText(
+                  openHolds.map((h) => h.intentId),
+                  owedIntentIds,
+                  { short: true },
+                )}`
               : undefined
           }
         />
@@ -330,7 +336,9 @@ export default function OverviewPage() {
             <PanelTitles>
               <PanelTitle>Open holds</PanelTitle>
               <PanelDescription>
-                Reserved, not spent — released or charged within 24h
+                {openHolds.some((h) => owedIntentIds.has(h.intentId))
+                  ? "Reserved, not spent — unpaid calls stay held until you settle them"
+                  : "Reserved, not spent — released or charged within 24h"}
               </PanelDescription>
             </PanelTitles>
           </PanelHeader>

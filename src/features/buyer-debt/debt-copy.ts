@@ -213,3 +213,26 @@ export function uncollectedNotWithheld(call: {
 }): boolean {
   return call.forfeited === true || call.debt === "WRITTEN_OFF" || call.debt === "VOIDED";
 }
+
+/**
+ * The "Held" subtitle. A debt's price stays held in the escrow until the
+ * buyer settles it, so those holds are not calls in flight and do not return
+ * on their own within 24h; they are counted apart.
+ */
+export function heldCallsText(
+  openHoldIntentIds: readonly string[],
+  owedIntentIds: ReadonlySet<string>,
+  { short = false }: { short?: boolean } = {},
+): string {
+  const owed = openHoldIntentIds.filter((id) => owedIntentIds.has(id)).length;
+  const inFlight = openHoldIntentIds.length - owed;
+  const calls = (n: number) => `${n} ${n === 1 ? "call" : "calls"}`;
+  const parts: string[] = [];
+  if (inFlight > 0 || owed === 0) {
+    parts.push(short ? `${calls(inFlight)} in flight` : `${calls(inFlight)} in flight — returns within 24h`);
+  }
+  if (owed > 0) {
+    parts.push(short ? `${owed} unpaid` : `${owed} unpaid ${owed === 1 ? "call" : "calls"} — held until you settle`);
+  }
+  return parts.join(" · ");
+}
