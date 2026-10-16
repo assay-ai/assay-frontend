@@ -53,7 +53,7 @@ describe("demo totals agree with the demo debt", () => {
         groupBy: "day",
       }) as { totals: { owedTotal: { amount: string }; owedCalls: number } };
       expect(body.totals.owedCalls).toBe(1);
-      expect(body.totals.owedTotal.amount).toBe("2500000");
+      expect(body.totals.owedTotal.amount).toBe("1200000");
     } finally {
       process.env.NEXT_PUBLIC_DEMO_CHAINS = prev;
     }

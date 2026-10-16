@@ -20,15 +20,18 @@ import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
  *
  * One account's September on Robinhood Chain testnet: a pilot that restarted
  * seven days ago and has run 53 calls across five tools since, three of which
- * were not charged, five of which are still in flight, against a $250 deposit
- * two days ago. Every screen from `/overview` to `/funding/escrow` draws from
- * the tables below, so a figure a viewer reads twice reads the same twice —
- * the held total on `/overview` is the sum of the holds on `/funding`, which
- * is the sum of the five in-flight calls in `/tool-calls`, which is the `held`
- * on the `/balances` fixture in `fixtures.ts` (482.15 available, 17.85 held,
- * 500.00 total) — plus, under a `?debt=` picture with an open debt of this
- * wallet's, that debt's price, which stays held until it is collected
- * (`demoDebtHolds`; $2.50 by default: 479.65 available, 20.35 held).
+ * were not charged, five of which are still in flight, against a $25 deposit
+ * two days ago. The prices are the catalogue's (see {@link TOOLS}), so most
+ * calls cost a fraction of a cent and one `deep_research` costs $1.20. Every
+ * screen from `/overview` to `/funding/escrow` draws from the tables below, so
+ * a figure a viewer reads twice reads the same twice — the held total on
+ * `/overview` is the sum of the holds on `/funding`, which is the sum of the
+ * five in-flight calls in `/tool-calls`, which is the `held` on the
+ * `/balances` fixture in `fixtures.ts` (58.7823 available, 1.2177 held, 60.00
+ * total; see {@link demoBuyerLedger}) — plus, under a `?debt=` picture with an
+ * open debt of this wallet's, that debt's price, which stays held until it is
+ * collected (`demoDebtHolds`; $1.20 by default: 57.5823 available, 2.4177
+ * held).
  *
  * ## The aggregates are computed, not typed in
  *
@@ -48,9 +51,9 @@ import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
  *
  * The model has no activity in the current month before the pilot week, which
  * is deliberate and is what pins the two figures other fixtures state as
- * constants: month-to-date charged is exactly the week's 127.15 (the Limits
- * screen's usage block) and month-to-date withheld is exactly 10.85 (the
- * guarantee's hero).
+ * constants: month-to-date charged is exactly the week's 2.5094 (the Limits
+ * screen's usage block, and the spend notice) and month-to-date withheld is
+ * exactly 1.2132 (the guarantee's hero).
  *
  * ## Every list is one complete page
  *
@@ -67,6 +70,11 @@ import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
 /**
  * The five tools this account calls, with the price each one lists.
  *
+ * Each price is the catalogue's price for that tool AT that provider
+ * (fixtures-explore's `offers`), so a tool's page on Explore and this
+ * account's calls of it name the same price: `get_usd_eur_rate` lists
+ * $0.0008–$0.0010 there, and this account's provider charges $0.0010.
+ *
  * The ids are the ids: no buyer endpoint resolves a tool id to a name, so
  * every screen prints whatever is here, and `groupKeyLabel` truncates anything
  * over twelve characters. Provider ids are the catalogue's (fixtures-explore),
@@ -76,11 +84,11 @@ const TOOLS = {
   // The keys are this file's short names; `id` is the catalogue's tool id
   // (fixtures-explore), which is what goes on the wire, so every call, filter,
   // search result and link resolves to the same named tool on Explore.
-  deep_search: { id: "84c1e70b-5a29-4f36-9e8d-2b40c6f7a915", provider: "9c1d4f60-3a77-4c18-9b02-6e5a1f2d8b41", price: "6.00" }, // deep_research
-  ocr_extract: { id: "abae704e-0a56-5674-9074-6c7bfc25fad1", provider: "e41b7d93-2a58-4f60-b7c9-3d80f5a1e6c4", price: "4.50" }, // extract_page_text
-  kyc_lookup: { id: "2b7f9c41-0e63-4d8a-9f52-7a1c4e6b03d9", provider: "c9f35a82-6014-4d7b-8e93-2a1c7f06b5d8", price: "3.60" }, // search_web
-  price_quote: { id: "a4b9882a-9bc1-4d64-807a-27c0b93daf0a", provider: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", price: "2.50" }, // get_usd_eur_rate
-  geocode: { id: "ad39dccc-aff2-54c1-b383-62e0ff392570", provider: "b7e04c25-9d13-4a6f-bc80-1e5f3a7d9c62", price: "1.25" }, // geocode_place
+  deep_search: { id: "84c1e70b-5a29-4f36-9e8d-2b40c6f7a915", provider: "9c1d4f60-3a77-4c18-9b02-6e5a1f2d8b41", price: "1.20" }, // deep_research
+  ocr_extract: { id: "abae704e-0a56-5674-9074-6c7bfc25fad1", provider: "e41b7d93-2a58-4f60-b7c9-3d80f5a1e6c4", price: "0.0035" }, // extract_page_text
+  kyc_lookup: { id: "2b7f9c41-0e63-4d8a-9f52-7a1c4e6b03d9", provider: "c9f35a82-6014-4d7b-8e93-2a1c7f06b5d8", price: "0.012" }, // search_web
+  price_quote: { id: "a4b9882a-9bc1-4d64-807a-27c0b93daf0a", provider: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", price: "0.001" }, // get_usd_eur_rate
+  geocode: { id: "ad39dccc-aff2-54c1-b383-62e0ff392570", provider: "b7e04c25-9d13-4a6f-bc80-1e5f3a7d9c62", price: "0.0012" }, // geocode_place
 } as const;
 
 /** The catalogue tool id a short name stands for. */
@@ -121,16 +129,17 @@ interface DemoCall {
  * The recent calls, newest first.
  *
  * The first five are in flight and are the five open holds — one call of each
- * tool, 6.00 + 4.50 + 3.60 + 2.50 + 1.25 = 17.85, which is the `held` figure on
- * `/balances`.
+ * tool, 1.20 + 0.0035 + 0.012 + 0.001 + 0.0012 = 1.2177, which is the `held`
+ * figure on `/balances`.
  *
  * The next six are today's finished calls and are **the same six calls as
- * today's row in the day model**: one `ocr_extract`, four `price_quote`, one
- * `geocode`, 15.75 charged. Counting the rows on `/overview` and reading the
+ * today's row in the day model**: one `deep_search` (the owed one, $1.20), one
+ * `geocode`, one `ocr_extract`, three `price_quote` — 1.2077 listed, 0.0077
+ * charged and 1.20 owed. Counting the rows on `/overview` and reading the
  * "Today" tile above them has to give the same answer.
  *
- * The last three are the three that were not charged — 6.00 + 1.25 + 3.60 =
- * 10.85, the `/withheld` total for the month. They sit 26 to 40 hours back so
+ * The last three are the three that were not charged — 1.20 + 0.0012 + 0.012 =
+ * 1.2132, the `/withheld` total for the month. They sit 26 to 40 hours back so
  * that they land on the two days the model marks as having refunds, whatever
  * hour of the day the demo is given at.
  */
@@ -192,16 +201,16 @@ const CALLS: readonly DemoCall[] = [
   },
   {
     intentId: "f3a9c15e-24b8-4f70-8de1-6c05b39a72f4",
-    toolId: "price_quote",
+    toolId: "deep_search",
     minutesAgo: 78,
-    charged: "2.50",
+    charged: "1.20",
     status: "SETTLED",
     verdict: "PASS",
     classification: "DATA_RESULT",
     reasonCode: null,
     score: 0.96,
     // The agent's delegate key was revoked before the voucher was collected:
-    // buyer debt, so the buyer screens show the "Settle $2.50" banner.
+    // buyer debt, so the buyer screens show the "Settle $1.20" banner.
     debt: "OUTSTANDING",
     debtCause: "DelegateIsRevoked",
   },
@@ -209,7 +218,7 @@ const CALLS: readonly DemoCall[] = [
     intentId: "8c47b0d2-9e36-4a15-b7f8-03d1e5c86a29",
     toolId: "geocode",
     minutesAgo: 96,
-    charged: "1.25",
+    charged: "0.0012",
     status: "SETTLED",
     verdict: "PASS",
     classification: "DATA_RESULT",
@@ -220,7 +229,7 @@ const CALLS: readonly DemoCall[] = [
     intentId: "5a1e93f7-6d20-4bc8-91a4-e78c0b25d36f",
     toolId: "ocr_extract",
     minutesAgo: 120,
-    charged: "4.50",
+    charged: "0.0035",
     status: "SETTLED",
     verdict: "SKIPPED",
     classification: "DATA_RESULT",
@@ -231,7 +240,7 @@ const CALLS: readonly DemoCall[] = [
     intentId: "71c6d85b-0f92-4a3e-b46c-9d8e13f5a204",
     toolId: "price_quote",
     minutesAgo: 155,
-    charged: "2.50",
+    charged: "0.001",
     status: "SETTLED",
     verdict: "PASS",
     classification: "DATA_RESULT",
@@ -242,7 +251,7 @@ const CALLS: readonly DemoCall[] = [
     intentId: "3f75e2a8-1b4c-49d7-a05e-8c6b91d37f20",
     toolId: "price_quote",
     minutesAgo: 190,
-    charged: "2.50",
+    charged: "0.001",
     status: "SETTLED",
     verdict: "PASS",
     classification: "DATA_RESULT",
@@ -253,7 +262,7 @@ const CALLS: readonly DemoCall[] = [
     intentId: "a62b9d04-5e18-4c73-9f2a-7d03e8b15c96",
     toolId: "price_quote",
     minutesAgo: 230,
-    charged: "2.50",
+    charged: "0.001",
     status: "SETTLED",
     verdict: "DEGRADED",
     classification: "DATA_RESULT",
@@ -318,7 +327,7 @@ function providerOf(call: DemoCall): string {
 /** listed − charged, in major units, as a string — never a float on the wire. */
 function notChargedMajor(call: DemoCall): string {
   const minor = Math.round(Number(listedPrice(call)) * 1e6) - Math.round(Number(call.charged) * 1e6);
-  return (minor / 1e6).toFixed(2);
+  return (minor / 1e6).toFixed(6);
 }
 
 /** The verdict id derived from the intent — the receipt screen resolves one from the other. */
@@ -381,17 +390,18 @@ const NO_ACTIVITY: DayShape = { counts: {} };
  * The pilot week, index 0 = today.
  *
  * These seven rows ARE the 7-day window every screen leads with: 53 calls,
- * 138.00 listed, 127.15 charged, 10.85 withheld over three refunded calls.
- * Today is 6 calls and 15.75 — the same six calls that head the finished half
- * of {@link CALLS}, and the figure `/spend-policy`'s usage block reports as
- * spent today.
+ * 4.9226 listed, 1.2132 withheld over three refunded calls, and of the 3.7094
+ * served, 1.20 owed (today's open debt, see `collect`) and 2.5094 charged.
+ * Today is 6 calls, 1.2077 listed and 0.0077 charged — the same six calls that
+ * head the finished half of {@link CALLS}, and the figure `/spend-policy`'s
+ * usage block reports as spent today.
  *
  * Changing a number here moves `/overview`, `/spend`, `/guarantee`,
  * `/statements` and `/limits` together, which is the point of there being one
  * table rather than five.
  */
 const WEEK: readonly DayShape[] = [
-  { counts: { ocr_extract: 1, price_quote: 4, geocode: 1 } },
+  { counts: { deep_search: 1, ocr_extract: 1, price_quote: 3, geocode: 1 } },
   {
     counts: { deep_search: 1, ocr_extract: 1, kyc_lookup: 1, price_quote: 3, geocode: 3 },
     refunds: { deep_search: 1, geocode: 1 },
@@ -561,7 +571,7 @@ function collect(
   /*
     The day the owed call was made. Under a written-off picture that is weeks
     back (`callAge`), so the call leaves today's figures altogether — Overview's
-    "Spent today" said "6 calls · $2.50 owed" of a call made on Sep 15
+    "Spent today" said "6 calls · $… owed" of a call made on Sep 15
     (verify-r13 P3) — and is counted, owed, on its own day.
   */
   const debtDayMs = debtCall ? utcDayStart(DEMO_NOW_MS - callAge(debtCall) * 60_000) : null;
@@ -894,9 +904,28 @@ export function demoDebtHolds() {
   return demoDebts().filter((debt) => debt.payer === DEMO_BUYER_ACCOUNT && debt.state !== "WRITTEN_OFF");
 }
 
-/** The sum of the held debts, in major units (6 decimals). */
-export function demoDebtHeldMajor(): number {
-  return demoDebtHolds().reduce((sum, debt) => sum + Number(debt.amount.amount) / 1e6, 0);
+/** The sum of the held debts, in minor units. */
+function demoDebtHeldMinor(): number {
+  return demoDebtHolds().reduce((sum, debt) => sum + Number(debt.amount.amount), 0);
+}
+
+/** The escrow's balance: 68.70 funded (`/deposits`) less the 8.69 charged since August. */
+const BALANCE_MINOR = 60_000_000;
+
+/**
+ * The account's balance, held and available, in minor units, as `/escrow` and
+ * `/balances` both print them: held is the five in-flight calls' prices
+ * (1.2177) plus each debt still held (`demoDebtHolds`).
+ */
+export function demoBuyerLedger(): { balance: number; held: number; available: number } {
+  const inFlightMinor = CALLS.filter(inFlight).reduce((sum, call) => sum + Math.round(Number(listedPrice(call)) * 1e6), 0);
+  const held = inFlightMinor + demoDebtHeldMinor();
+  return { balance: BALANCE_MINOR, held, available: BALANCE_MINOR - held };
+}
+
+/** Minor units as a wire amount in the demo asset (`money()` takes major ones). */
+export function demoMoneyMinor(minor: number) {
+  return money((minor / 1e6).toFixed(6));
 }
 
 /**
@@ -922,7 +951,8 @@ export function demoDebts() {
                   ...base,
                   intentId: "d1e4b7a0-3c62-4f95-8b18-6a0e2d97c5f3",
                   toolId: wireToolId("geocode"),
-                  amount: { ...base.amount, amount: money("1.25").amount },
+                  providerId: TOOLS.geocode.provider,
+                  amount: { ...base.amount, amount: money(TOOLS.geocode.price).amount },
                   state: "WRITTEN_OFF" as const,
                   cause: "uncollected:VoucherExpired",
                   lapsedAt: minutesAgo(60 * 24 * 33),
@@ -934,8 +964,8 @@ export function demoDebts() {
                   ...base,
                   intentId: "7f20c9d3-e815-4a6b-9c47-1d3b8e05a2c6",
                   payer: demoOtherPayer(),
-                  toolId: wireToolId("ocr_extract"),
-                  amount: { ...base.amount, amount: money("6.00").amount },
+                  toolId: wireToolId("deep_search"),
+                  amount: { ...base.amount, amount: money(TOOLS.deep_search.price).amount },
                   cause: "EscrowWindowLimitExceeded",
                 },
               ]
@@ -947,8 +977,8 @@ export function demoDebts() {
                     {
                       ...base,
                       intentId: WAITING_DEBT_INTENT,
-                      toolId: wireToolId("ocr_extract"),
-                      amount: { ...base.amount, amount: money("6.00").amount },
+                      toolId: wireToolId("deep_search"),
+                      amount: { ...base.amount, amount: money(TOOLS.deep_search.price).amount },
                       cause: "EscrowWindowLimitExceeded",
                       replaceableAt: waitingReplaceableAt(),
                     },
@@ -1145,8 +1175,20 @@ const EVIDENCE_BODIES: Record<ToolId, { request: unknown; response: unknown }> =
   },
 };
 
+/** A `deep_search` that passed (the owed call) found what it was asked for. */
+const DEEP_SEARCH_PASSED_RESPONSE = {
+  results: [
+    { title: "Lumen Pay closes a $42m series B", url: "https://news.example/lumen-pay-series-b", date: "2026-09-03" },
+    { title: "Kestrel Ledger raises $30m to expand in the Nordics", url: "https://news.example/kestrel-ledger", date: "2026-08-28" },
+  ],
+  truncated: false,
+};
+
 function evidenceBody(call: DemoCall) {
-  const bodies = EVIDENCE_BODIES[call.toolId];
+  const bodies =
+    call.toolId === "deep_search" && call.verdict === "PASS"
+      ? { ...EVIDENCE_BODIES.deep_search, response: DEEP_SEARCH_PASSED_RESPONSE }
+      : EVIDENCE_BODIES[call.toolId];
   return {
     id: verdictIdOf(call),
     intentId: call.intentId,
@@ -1234,23 +1276,30 @@ function debtEscrow() {
     account: DEMO_BUYER_ACCOUNT,
     escrowPda: null,
     escrowTokenAccount: null,
-    // $1.00 against a $2.50 written-off debt, whose hold was released.
+    // $1.00 against a $1.20 written-off debt, whose hold was released.
     balance: amount("1.00"),
     openHolds: amount("0"),
     spendable: amount("1.00"),
     withdrawRequested: amount("0"),
     withdrawAvailableAt: null,
     serverTime: justNow(),
-    // A $2.00 per-call ceiling: the $2.50 payment is over it.
-    maxVoucherAmount: amount("2.00"),
-    maxPerWindow: amount("120.00"),
-    spentInWindow: amount("15.75"),
+    // A $1.00 per-call ceiling: the $1.20 payment is over it.
+    maxVoucherAmount: amount("1.00"),
+    maxPerWindow: amount("10.00"),
+    spentInWindow: amount(SPENT_IN_WINDOW),
     windowStartedAt: readable ? minutesAgo(540) : null,
     windowSeconds: 86400,
     observedAt: readable ? minutesAgo(1) : null,
     ...(readable ? savedEscrowCaps() : {}),
   };
 }
+
+/**
+ * Charged in the escrow's current 24-hour window (it opened 9 hours ago):
+ * today's five charged calls, 0.0012 + 0.0035 + 3 × 0.001 — the owed
+ * $1.20 call was never collected, so it is not spent.
+ */
+const SPENT_IN_WINDOW = "0.0077";
 
 function freshCredentials(agentId: string) {
   const stage = freshStage();
@@ -1386,8 +1435,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           statusReason: null,
           agentId: PROD_AGENT,
           agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("250.00"),
-          settledAmount: money("250.00"),
+          requestedAmount: money("25.00"),
+          settledAmount: money("25.00"),
           chainId: DEMO_CHAIN_ID,
           chainTxRef:
             "0xf20b628bc89d1a3aff88340b307546e0d336e46de2371d76c8220f3c3cfcdd9c",
@@ -1400,7 +1449,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           statusReason: "no transfer observed before the intent expired",
           agentId: PROD_AGENT,
           agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("50.00"),
+          requestedAmount: money("5.00"),
           settledAmount: null,
           chainId: DEMO_CHAIN_ID,
           chainTxRef: null,
@@ -1413,8 +1462,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           statusReason: null,
           agentId: PROD_AGENT,
           agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("150.00"),
-          settledAmount: money("150.00"),
+          requestedAmount: money("15.00"),
+          settledAmount: money("15.00"),
           chainId: DEMO_CHAIN_ID,
           chainTxRef:
             "0xeb5d904fe5ffc1f642f0dff25a94a2e865b86cfd18c55190be121e376e4691e0",
@@ -1424,16 +1473,17 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
         {
           /*
             The two older deposits are what the earlier months were spent out of
-            — 890.00 funded against roughly 390.00 charged since July leaves the
-            500.00 the ledger reports today.
+            — 68.70 funded against the 8.69 charged since August (mostly the
+            odd $1.20 deep_research call) leaves the 60.00 the ledger reports
+            today, give or take a cent.
           */
           id: "dep_a3d97f61",
           status: "SETTLED",
           statusReason: null,
           agentId: PROD_AGENT,
           agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("200.00"),
-          settledAmount: money("200.00"),
+          requestedAmount: money("12.00"),
+          settledAmount: money("12.00"),
           chainId: DEMO_CHAIN_ID,
           chainTxRef:
             "0x4c1db62bcbe5d1408fdb6596b0cbe8fc94011c60341e6f14a1cc8514d468a40d",
@@ -1446,8 +1496,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           statusReason: null,
           agentId: PROD_AGENT,
           agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("290.00"),
-          settledAmount: money("290.00"),
+          requestedAmount: money("16.70"),
+          settledAmount: money("16.70"),
           chainId: DEMO_CHAIN_ID,
           chainTxRef:
             "0x5c38c68d25f54d688ef3980cdc1a944b475793cb15cd470bab412c0efa7c9c0e",
@@ -1483,16 +1533,17 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       */
       escrowPda: null,
       escrowTokenAccount: null,
-      // The in-flight calls' 17.85, plus the price of each debt still held (see `demoDebtHolds`).
-      balance: money("500.00"),
-      openHolds: money((17.85 + demoDebtHeldMajor()).toFixed(2)),
-      spendable: money((482.15 - demoDebtHeldMajor()).toFixed(2)),
+      // The in-flight calls' 1.2177, plus the price of each debt still held (see `demoBuyerLedger`).
+      balance: demoMoneyMinor(demoBuyerLedger().balance),
+      openHolds: demoMoneyMinor(demoBuyerLedger().held),
+      spendable: demoMoneyMinor(demoBuyerLedger().available),
       withdrawRequested: money("0"),
       withdrawAvailableAt: null,
       serverTime: justNow(),
-      maxVoucherAmount: money("10.00"),
-      maxPerWindow: money("120.00"),
-      spentInWindow: money("15.75"),
+      // Above the dearest call ($1.20 deep_research) and the agent key's own $1.50.
+      maxVoucherAmount: money("2.00"),
+      maxPerWindow: money("10.00"),
+      spentInWindow: money(SPENT_IN_WINDOW),
       windowStartedAt: minutesAgo(540),
       windowSeconds: 86400,
       observedAt: minutesAgo(1),
@@ -1512,14 +1563,14 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           scope: "ORGANIZATION",
           agentId: null,
           policyVersion: 4,
-          perCallMax: money("10.00"),
-          dailyCap: money("75.00"),
-          monthlyCap: money("900.00"),
+          perCallMax: money("2.00"),
+          dailyCap: money("5.00"),
+          monthlyCap: money("25.00"),
           maxCallsPerHour: 400,
           maxCallsPerMinute: 30,
-          maxSpendPerHour: money("25.00"),
+          maxSpendPerHour: money("2.00"),
           allowedTools: null,
-          requireApprovalAbove: money("25.00"),
+          requireApprovalAbove: money("1.50"),
           paused: false,
           changedBy: "ops@northwind-labs.example",
           changeReason: "Raised the daily cap for the September pilot",
@@ -1531,14 +1582,14 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           scope: "ORGANIZATION",
           agentId: null,
           policyVersion: 3,
-          perCallMax: money("10.00"),
-          dailyCap: money("40.00"),
-          monthlyCap: money("900.00"),
+          perCallMax: money("2.00"),
+          dailyCap: money("2.00"),
+          monthlyCap: money("25.00"),
           maxCallsPerHour: 400,
           maxCallsPerMinute: 30,
-          maxSpendPerHour: money("25.00"),
+          maxSpendPerHour: money("2.00"),
           allowedTools: null,
-          requireApprovalAbove: money("25.00"),
+          requireApprovalAbove: money("1.50"),
           paused: false,
           changedBy: "ops@northwind-labs.example",
           changeReason: "Velocity ceiling added after the August retry loop",
@@ -1550,14 +1601,14 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           scope: "ORGANIZATION",
           agentId: null,
           policyVersion: 2,
-          perCallMax: money("10.00"),
-          dailyCap: money("40.00"),
-          monthlyCap: money("600.00"),
+          perCallMax: money("2.00"),
+          dailyCap: money("2.00"),
+          monthlyCap: money("15.00"),
           maxCallsPerHour: null,
           maxCallsPerMinute: null,
           maxSpendPerHour: null,
           allowedTools: null,
-          requireApprovalAbove: money("25.00"),
+          requireApprovalAbove: money("1.50"),
           paused: false,
           changedBy: "ops@northwind-labs.example",
           changeReason: "Approval threshold set before the first paid run",
@@ -1569,9 +1620,9 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           scope: "ORGANIZATION",
           agentId: null,
           policyVersion: 1,
-          perCallMax: money("5.00"),
-          dailyCap: money("20.00"),
-          monthlyCap: money("300.00"),
+          perCallMax: money("1.00"),
+          dailyCap: money("1.00"),
+          monthlyCap: money("10.00"),
           maxCallsPerHour: null,
           maxCallsPerMinute: null,
           maxSpendPerHour: null,
@@ -1612,7 +1663,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
         The enforcement side's own counters, which the Limits screen prefers
         over `/receipts/summary`. Both are folded out of the SAME day model the
         summary is, so "spent today" here and today's bar on `/overview` cannot
-        drift apart: 15.75 today, 127.15 this month.
+        drift apart: 0.0077 today, 2.5094 this month.
       */
       const todayStart = utcDayStart(Date.now());
       const monthStart = Date.UTC(
@@ -1630,14 +1681,14 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
         policyVersion: 4,
         asset: DEMO_ASSET,
         decimals: 6,
-        perCallMax: money("10.00"),
-        dailyCap: money("75.00"),
-        monthlyCap: money("900.00"),
+        perCallMax: money("2.00"),
+        dailyCap: money("5.00"),
+        monthlyCap: money("25.00"),
         maxCallsPerHour: 400,
         maxCallsPerMinute: 30,
-        maxSpendPerHour: money("25.00"),
+        maxSpendPerHour: money("2.00"),
         allowedTools: null,
-        requireApprovalAbove: money("25.00"),
+        requireApprovalAbove: money("1.50"),
         paused: false,
         changedBy: "ops@northwind-labs.example",
         changeReason: "Raised the daily cap for the September pilot",
@@ -1645,7 +1696,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
         usage: {
           spendToday: minorMoney(today.charged),
           spendThisMonth: minorMoney(month.charged),
-          spendThisHour: money("4.50"),
+          // Nothing charged in the last hour: its calls are still in flight.
+          spendThisHour: money("0"),
           callsThisMinute: 2,
           callsThisHour: 11,
           usageReadable: true,
@@ -1739,7 +1791,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
 
   /* ------------------------------------------------- pay permissions */
   {
-    // The prod agent's key may pay up to $2 a call and $40 in 24 h; staging has
+    // The prod agent's key may pay up to $1.50 a call and $5 in 24 h; staging has
     // no payment key yet, so it shows the bind step.
     method: "GET",
     match: "/escrow/delegates",
@@ -1751,9 +1803,9 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       delegates: [
         {
           delegate: prodDelegate(),
-          maxVoucherAmount: money("2.00"),
-          maxPerWindow: money("40.00"),
-          spentInWindow: money("15.75"),
+          maxVoucherAmount: money("1.50"),
+          maxPerWindow: money("5.00"),
+          spentInWindow: money(SPENT_IN_WINDOW),
           // Five days left, so the demo shows the "permission ends soon" chip and Renew.
           validUntil: new Date(DEMO_NOW_MS + 5 * 86_400_000 + 3_600_000).toISOString(),
           status: "ACTIVE",
@@ -1815,7 +1867,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           action: "payment_intent.refunded",
           resourceType: "payment_intent",
           resourceId: "b90f2c48-3a71-4e69-85d0-2f4a6c19e7b5",
-          before: { charged: "6.00" },
+          before: { charged: "1.20" },
           after: { charged: "0.00" },
           createdAt: minutesAgo(1558),
         },
@@ -1826,7 +1878,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           action: "payment_intent.voided",
           resourceType: "payment_intent",
           resourceId: "e48a3b19-7c65-4d02-8f1b-5a97c2e04d63",
-          before: { charged: "3.60" },
+          before: { charged: "0.012" },
           after: { charged: "0.00" },
           createdAt: minutesAgo(2398),
         },
@@ -1838,7 +1890,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           resourceType: "deposit",
           resourceId: "dep_7f2a91c4",
           before: null,
-          after: { amount: "250.00", chain: "eip155:46630" },
+          after: { amount: "25.00", chain: "eip155:46630" },
           createdAt: minutesAgo(2878),
         },
         {
@@ -1848,8 +1900,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           action: "spend_policy.updated",
           resourceType: "spend_policy",
           resourceId: "sp_northwind",
-          before: { dailyCap: "40.00" },
-          after: { dailyCap: "75.00" },
+          before: { dailyCap: "2.00" },
+          after: { dailyCap: "5.00" },
           createdAt: minutesAgo(10080),
         },
         {
@@ -1918,7 +1970,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           event: "spend.threshold_crossed",
           severity: "INFO",
           title: "This month's spend passed 10% of the monthly spending limit",
-          body: "$127.15 charged of a $900.00 cap. This is a notice, not a refusal — a limit is what refuses.",
+          body: "$2.5094 charged of a $25.00 cap. This is a notice, not a refusal — a limit is what refuses.",
           subjectType: "spend_policy",
           subjectId: "sp_northwind",
           readAt: minutesAgo(1300),
@@ -1928,7 +1980,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           id: "ntf_8b30",
           event: "payment_intent.refunded",
           severity: "INFO",
-          title: "A deep_research call failed our checks — $6.00 was not charged",
+          title: "A deep_research call failed our checks — $1.20 was not charged",
           body: "The result set was empty where the rules require at least two rows. The hold was released; your balance never moved.",
           subjectType: "payment_intent",
           subjectId: "b90f2c48-3a71-4e69-85d0-2f4a6c19e7b5",
@@ -1939,7 +1991,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           id: "ntf_7d65",
           event: "deposit.credited",
           severity: "INFO",
-          title: "$250.00 credited",
+          title: "$25.00 credited",
           body: "Observed on Robinhood Chain testnet and credited in full. The credited amount is what we observed on chain.",
           subjectType: "deposit",
           subjectId: "dep_7f2a91c4",
