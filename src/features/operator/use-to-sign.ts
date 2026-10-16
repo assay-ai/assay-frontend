@@ -18,7 +18,19 @@ import { APPROVED_BLOCKS_QUERY, approvedArbiterBlocks, type ApprovedArbiterBlock
  * [backend] Penalties waiting for a cancel signature (CANCEL_REQUESTED) are
  * not here: no endpoint lists them yet; each shows on its penalty page.
  */
-export function useToSign(enabled: boolean): {
+export function useToSign(
+  enabled: boolean,
+  {
+    blocksOnly = false,
+  }: {
+    /**
+     * Only the approved on-chain blocks: for an operator who may download them
+     * for the arbiter's wallet (Support) but does not rule, so has no
+     * superseded records to cancel (final regression 2026-10-17, P3-a).
+     */
+    blocksOnly?: boolean;
+  } = {},
+): {
   blocks: readonly ApprovedArbiterBlock[];
   superseded: readonly ArbiterSupersededRecord[];
   count: number;
@@ -34,18 +46,18 @@ export function useToSign(enabled: boolean): {
   const superseded = useQuery({
     queryKey: ["operator", "arbiter", "superseded"],
     queryFn: listSupersededRecords,
-    enabled,
+    enabled: enabled && !blocksOnly,
     refetchInterval: 60_000,
     retry: 0,
   });
   return React.useMemo(() => {
     const blocks = enabled ? approvedArbiterBlocks(approved.data?.items ?? []) : [];
-    const records = enabled ? (superseded.data ?? []) : [];
+    const records = enabled && !blocksOnly ? (superseded.data ?? []) : [];
     return {
       blocks,
       superseded: records,
       count: blocks.length + records.length,
-      isLoading: enabled && (approved.isLoading || superseded.isLoading),
+      isLoading: enabled && (approved.isLoading || (!blocksOnly && superseded.isLoading)),
     };
-  }, [enabled, approved.data, approved.isLoading, superseded.data, superseded.isLoading]);
+  }, [enabled, blocksOnly, approved.data, approved.isLoading, superseded.data, superseded.isLoading]);
 }

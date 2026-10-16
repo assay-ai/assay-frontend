@@ -19,7 +19,8 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { approvalTargetId } from "@/features/operator/approvals";
-import { arbiterErrorMessage, mayBlockOnChain } from "@/features/operator/arbiter";
+import { ApprovedArbiterBlocks } from "@/features/operator/approved-arbiter-blocks";
+import { arbiterErrorMessage, mayBlockOnChain, mayRule } from "@/features/operator/arbiter";
 import {
   blockSubjectLabel,
   evmAddressOf,
@@ -205,6 +206,9 @@ function BlocksScreen() {
       ) : null}
 
       {result ? <div className="w-full">{result}</div> : null}
+
+      {/* Approved on-chain blocks wait for the arbiter's signature: listed here too, not only on Arbiter (P3-a). */}
+      {canChain ? <ApprovedArbiterBlocks canRule={mayRule(me.roles)} onSent={() => void list.refetch()} /> : null}
 
       <div className="flex w-full flex-col gap-2.5 tablet:flex-row tablet:items-center tablet:justify-between">
         <Segmented value={filter} onValueChange={(value) => setFilter(value as Filter)} aria-label="Which blocks" className="self-start">
