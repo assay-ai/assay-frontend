@@ -41,4 +41,32 @@ describe("demo totals agree with the demo debt", () => {
       process.env.NEXT_PUBLIC_DEMO_CHAINS = prev;
     }
   });
+
+  it("counts a reader's calendar day as one demo day, not the two UTC days it straddles", async () => {
+    const { demoResponse } = await import("./demo-api");
+    const prev = process.env.NEXT_PUBLIC_DEMO_CHAINS;
+    process.env.NEXT_PUBLIC_DEMO_CHAINS = "robinhood";
+    try {
+      const now = new Date();
+      const utcToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      const totals = (from: number, to: number) =>
+        (
+          demoResponse("GET", "/receipts/summary", {
+            from: new Date(from).toISOString(),
+            to: new Date(to).toISOString(),
+            groupBy: "tool",
+          }) as { totals: { calls: number; chargedTotal: { amount: string } } }
+        ).totals;
+      const day = 86_400_000;
+      const hour = 3_600_000;
+      // The reader's today and yesterday, in a zone east and one west of Greenwich.
+      for (const offset of [7, -5]) {
+        const zoneToday = Math.floor((now.getTime() + offset * hour) / day) * day - offset * hour;
+        expect(totals(zoneToday, zoneToday + day)).toEqual(totals(utcToday, utcToday + day));
+        expect(totals(zoneToday - day, zoneToday)).toEqual(totals(utcToday - day, utcToday));
+      }
+    } finally {
+      process.env.NEXT_PUBLIC_DEMO_CHAINS = prev;
+    }
+  });
 });

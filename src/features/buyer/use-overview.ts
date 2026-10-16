@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { CursorPage, Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
+import { localDayBounds } from "@/libs/local-time";
 import {
   getBalances,
   getHolds,
@@ -17,7 +18,7 @@ import {
 } from "@/services";
 import { toDecimal } from "@/utils/money";
 
-import { dayPeriod, monthPeriod, recentDays, type Period } from "./period";
+import { monthPeriod, recentDays, type Period } from "./period";
 import { readWithheld, type HoldRow, type SummaryWire, type WithheldForAsset } from "./wire";
 
 /** `GET /notifications` — `NotificationDto`, read off the running API. */
@@ -51,6 +52,7 @@ export interface OverviewData {
   holds: HoldRow[];
   withheld: WithheldForAsset | null;
   monthListed: Money | null;
+  /** Charged since 00:00 in the reader's zone (`localDayBounds`), the day the rows call "Today". */
   todayCharged: Money | null;
   /** Owed today (buyer debt not collected), shown beside the charged figure. */
   todayOwed: Money | null;
@@ -116,11 +118,12 @@ export function useOverview(anchor: Date, assetKey: string | null = null): Overv
 
   const month = useMemo(() => monthPeriod(anchor), [anchor]);
   const days = useMemo(() => recentDays(anchor, 7), [anchor]);
-  const today = useMemo(() => dayPeriod(anchor), [anchor]);
-  const yesterday = useMemo(
-    () => dayPeriod(new Date(anchor.getTime() - 86_400_000)),
-    [anchor],
-  );
+  // The reader's own day, the boundary the Recent calls rows' "Today" /
+  // "Yesterday" labels use: a UTC day put calls labelled "Yesterday" under
+  // "Spent today" east of Greenwich (review 2026-10-17 P3). The API filters
+  // `[from, to)` by instant, so any zone's day is one exact window.
+  const today = useMemo(() => localDayBounds(anchor), [anchor]);
+  const yesterday = useMemo(() => localDayBounds(anchor, { offsetDays: -1 }), [anchor]);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,22 +139,17 @@ export function useOverview(anchor: Date, assetKey: string | null = null): Overv
         to: month.to,
         groupBy: "day",
       }) as Promise<SummaryWire>,
-      // Spans a month boundary on the 1st, which is exactly why this is its own
-      // window rather than two rows picked out of the month's day groups.
-      getReceiptsSummary({
-        from: yesterday.from,
-        to: today.to,
-        groupBy: "day",
-      }) as Promise<SummaryWire>,
+      // Two windows of their own, not rows of the month's (UTC) day groups.
+      getReceiptsSummary({ from: today.from, to: today.to, groupBy: "tool" }) as Promise<SummaryWire>,
+      getReceiptsSummary({ from: yesterday.from, to: yesterday.to, groupBy: "tool" }) as Promise<SummaryWire>,
       loadChart(days),
       listToolCalls({ limit: 6, sort: "createdAt", order: "desc" }),
       listNotifications({ limit: 5 }) as Promise<CursorPage<NotificationRow>>,
     ])
-      .then(([balances, holds, withheldRaw, monthSummary, recentSummary, chart, calls, notes]) => {
+      .then(([balances, holds, withheldRaw, monthSummary, todaySummary, yesterdaySummary, chart, calls, notes]) => {
         if (cancelled) return;
 
-        const byDay = new Map((recentSummary.groups ?? []).map((g) => [g.key, g]));
-        const todayGroup = byDay.get(today.key);
+        const todayGroup = todaySummary.totals;
 
         setData({
           month,
@@ -163,7 +161,7 @@ export function useOverview(anchor: Date, assetKey: string | null = null): Overv
           todayCharged: chargedFromTotals(todayGroup),
           todayOwed: owedFromTotals(todayGroup),
           todayCalls: todayGroup?.calls ?? 0,
-          yesterdayCharged: chargedFromTotals(byDay.get(yesterday.key)),
+          yesterdayCharged: chargedFromTotals(yesterdaySummary.totals),
           chart: chart.chart,
           chartTools: chart.tools,
           recentCalls: calls.items ?? [],

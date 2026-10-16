@@ -536,9 +536,21 @@ function collect(
   // A fresh demo account (?fresh=) has spent nothing and been refunded nothing.
   if (freshStage()) return { groups: new Map(), totals: emptyBucket() };
   const todayMs = utcDayStart(Date.now());
-  const first = utcDayStart(fromMs);
+  /*
+    The model has no time of day, so a reader's calendar day (Overview's
+    "Spent today": `[00:00, next 00:00)` in their zone, which straddles two
+    UTC days) stands for one model day, not both: their today is the model's
+    today, their yesterday its yesterday — else "today" would add up
+    yesterday too. Such a window starts and ends on a quarter hour, which a
+    rolling "last 24 hours" from now never does.
+  */
+  const quarter = 15 * 60_000;
+  const zoneDay = fromMs % quarter === 0 && toMs % quarter === 0 && Math.abs(toMs - fromMs - DAY_MS) <= 3_600_000;
+  const first = zoneDay
+    ? todayMs - Math.floor((Date.now() - fromMs) / DAY_MS) * DAY_MS
+    : utcDayStart(fromMs);
   // Bounded so a malformed window cannot walk for ever; no screen asks for more.
-  const last = Math.min(utcDayStart(toMs - 1), first + 400 * DAY_MS);
+  const last = zoneDay ? first : Math.min(utcDayStart(toMs - 1), first + 400 * DAY_MS);
 
   const groups = new Map<string, Bucket>();
   const totals = emptyBucket();

@@ -45,6 +45,7 @@ import { useOverview, type NotificationRow } from "@/features/buyer/use-overview
 import type { FullBalance } from "@/features/g30/balance";
 import { useChainName } from "@/hooks/useChainName";
 import { useEntityNames } from "@/hooks/useEntityNames";
+import { zoneLabel } from "@/libs/local-time";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { formatMoney, notCharged, toDecimal } from "@/utils/money";
@@ -292,7 +293,8 @@ export default function OverviewPage() {
           value={data ? formatMoney(data.todayCharged) : "—"}
           sub={
             data
-              ? `${formatCount(data.todayCalls)} ${data.todayCalls === 1 ? "call" : "calls"}${
+              ? // The reader's own day, the one the rows below call "Today": say which zone.
+                `${formatCount(data.todayCalls)} ${data.todayCalls === 1 ? "call" : "calls"} since 00:00 ${zoneLabel(null)}${
                   data.todayOwed ? ` · ${formatMoney(data.todayOwed)} owed, not collected` : ""
                 }`
               : "not available"
