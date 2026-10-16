@@ -1,4 +1,10 @@
 import { WalletNotReady } from "@/features/buyer-money/money-errors";
+import {
+  PAYMENT_DEBT_NOT_FOUND,
+  PAYMENT_DEBT_NOT_YET_REPLACEABLE,
+  PAYMENT_DEBT_REPLACEMENT_PENDING,
+  PAYMENT_DEBT_REPLACEMENT_REFUSED,
+} from "@/interfaces/buyer-debt";
 import { ApiError } from "@/libs/ApiClient";
 
 import { settleDebtErrorSentence } from "./debt-copy";
@@ -18,10 +24,18 @@ export function settleDebtFailure(error: unknown): string {
   return "That did not go through. Nothing was signed. You can try again.";
 }
 
-/** Refusals after which the debts list is out of date: settled already, or signed and being collected. */
+/**
+ * Refusals after which the debts list is out of date: settled already, signed
+ * and being collected, not replaceable yet (the list carries `replaceableAt`),
+ * or changed while signing.
+ */
+const REFRESHING_CODES: ReadonlySet<string> = new Set([
+  PAYMENT_DEBT_NOT_FOUND,
+  PAYMENT_DEBT_REPLACEMENT_PENDING,
+  PAYMENT_DEBT_NOT_YET_REPLACEABLE,
+  PAYMENT_DEBT_REPLACEMENT_REFUSED,
+]);
+
 export function refreshesDebts(error: unknown): boolean {
-  return (
-    error instanceof ApiError &&
-    (error.code === "PAYMENT_DEBT_NOT_FOUND" || error.code === "PAYMENT_DEBT_REPLACEMENT_PENDING")
-  );
+  return error instanceof ApiError && REFRESHING_CODES.has(error.code);
 }

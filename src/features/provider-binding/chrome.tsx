@@ -109,27 +109,6 @@ export function majorInputFromMoney(money: Money | null | undefined): string {
   return new Decimal(money.amount || "0").div(new Decimal(10).pow(money.decimals)).toFixed();
 }
 
-/**
- * `freeDailyBudget` is read back as a **`number`** and written as a digits-only
- * string, both in minor units. That asymmetry is the backend's; this is the one
- * place the read side is converted, and it is converted to a `Money` rather
- * than laundered into the write type — so every render still goes through
- * `formatMoney` and no amount is ever a JS number downstream.
- *
- * A value outside the safe-integer range is returned as `null`: `String(1e21)`
- * is `"1e+21"`, which is not a minor-unit amount, and silently shipping it
- * would be worse than showing "unknown".
- */
-export function moneyFromMinorNumber(
-  value: number | null | undefined,
-  asset: string,
-  decimals: number
-): Money | null {
-  if (value == null) return null;
-  if (!Number.isSafeInteger(value)) return null;
-  return { amount: String(value), asset, decimals };
-}
-
 export interface MinorUnitsResult {
   /** Digits only, minor units — exactly what the write DTO validates. */
   amount: string | null;
@@ -181,4 +160,16 @@ export function integerFromInput(text: string): { value: number | null; error: s
   const parsed = Number(trimmed);
   if (!Number.isSafeInteger(parsed)) return { value: null, error: "Too large." };
   return { value: parsed, error: null };
+}
+
+/** Highest value the backend accepts for `freeDailyBudget` (an int4). */
+const MAX_FREE_CALLS_PER_DAY = 2_147_483_647;
+
+/** The binding-wide daily free-call box: empty is "platform default", otherwise a whole number of calls >= 1. */
+export function dailyCallsFromInput(text: string): { value: number | null; error: string | null } {
+  const parsed = integerFromInput(text);
+  if (parsed.error !== null || parsed.value === null) return parsed;
+  if (parsed.value < 1) return { value: null, error: "At least 1 call, or leave empty for the default." };
+  if (parsed.value > MAX_FREE_CALLS_PER_DAY) return { value: null, error: "Too large." };
+  return parsed;
 }

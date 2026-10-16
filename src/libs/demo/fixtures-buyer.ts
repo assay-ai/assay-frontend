@@ -812,6 +812,8 @@ function debtView(call: DemoCall) {
     lapsedAt: minutesAgo(lapsedMinutes),
     writeOffAt: minutesAgo(lapsedMinutes - WRITE_OFF_DAYS * 1440),
     replacedAt: null,
+    // Past: its original voucher's on-chain window is over, so it can be signed now.
+    replaceableAt: minutesAgo(lapsedMinutes),
     createdAt: minutesAgo(callAge(call)),
   };
 }

@@ -17,7 +17,7 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { noteSaved } from "@/features/provider-binding/after-publish";
 import { BindingHeader, bindingQueryKey, useBinding } from "@/features/provider-binding/binding-header";
-import { integerFromInput, majorInputFromMoney, minorUnitsFromMajorInput } from "@/features/provider-binding/chrome";
+import { dailyCallsFromInput, integerFromInput } from "@/features/provider-binding/chrome";
 import { modeOfChoice, percentText, PRICE_CHOICES, stakeEffectOf, type PriceChoice } from "@/features/provider-binding/go-live";
 import { useProviderCatalogue } from "@/features/provider-binding/tool-name";
 import { liveFormOf, parseLiveForm, type LiveForm } from "@/features/provider-binding/wizard/live-stage";
@@ -42,8 +42,12 @@ import { toast } from "@/utils/toast";
  * Changing the price or how agents pay on a live tool, or making the promise
  * stricter, asks first: buyers see the price at once, a higher price can need
  * more stake (the confirm shows needed before → after and offers to add the
- * missing stake), and a stricter promise raises the penalty risk. `freeDailyBudget` reads as a number and writes as a
- * digits string (minor units): it is sent only when the box changed.
+ * missing stake), and a stricter promise raises the penalty risk.
+ *
+ * Two free limits, both call counts: `freeQuotaPerAgent` is what one agent
+ * gets per day; `freeDailyBudget` is the most free calls this listing serves
+ * per day across all agents (a whole number, not money — BUG-R17g-01). It is
+ * sent only when the box changed; emptying it sends `null` (platform default).
  */
 
 interface ExtraForm {
@@ -52,12 +56,9 @@ interface ExtraForm {
   maxDailyCalls: string;
 }
 
-function extraOf(binding: ToolBindingDetail, decimals: number): ExtraForm {
+function extraOf(binding: ToolBindingDetail): ExtraForm {
   return {
-    freeBudget:
-      binding.freeDailyBudget == null
-        ? ""
-        : majorInputFromMoney({ amount: String(binding.freeDailyBudget), asset: "", decimals }),
+    freeBudget: binding.freeDailyBudget == null ? "" : String(binding.freeDailyBudget),
     maxRps: binding.maxRps == null ? "" : String(binding.maxRps),
     maxDailyCalls: binding.maxDailyCalls == null ? "" : String(binding.maxDailyCalls),
   };
@@ -68,11 +69,10 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
   const readOnly = useAccountReadOnly();
   const catalogue = useProviderCatalogue();
   const asset = catalogue.data?.settlementAsset ?? null;
-  const decimals = asset?.decimals ?? binding.price.decimals;
   const params = useSearchParams();
 
   const [form, setForm] = React.useState<LiveForm>(() => liveFormOf(binding, null));
-  const [extra, setExtra] = React.useState<ExtraForm>(() => extraOf(binding, decimals));
+  const [extra, setExtra] = React.useState<ExtraForm>(() => extraOf(binding));
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -91,14 +91,11 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
   const errors: Partial<Record<keyof ExtraForm, string>> = {};
   const body: UpdateToolBindingBody = { ...(parsed.body ?? {}) };
 
-  const initialExtra = extraOf(binding, decimals);
+  const initialExtra = extraOf(binding);
   if (extra.freeBudget !== initialExtra.freeBudget && mode === "FREEMIUM") {
-    if (extra.freeBudget.trim() === "") body.freeDailyBudget = null;
-    else {
-      const minor = minorUnitsFromMajorInput(extra.freeBudget, decimals);
-      if (minor.error) errors.freeBudget = minor.error;
-      else body.freeDailyBudget = minor.amount;
-    }
+    const calls = dailyCallsFromInput(extra.freeBudget);
+    if (calls.error) errors.freeBudget = calls.error;
+    else body.freeDailyBudget = calls.value;
   }
   for (const key of ["maxRps", "maxDailyCalls"] as const) {
     if (extra[key] === initialExtra[key]) continue;
@@ -129,7 +126,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
       void queryClient.invalidateQueries({ queryKey: ["provider", "tool-bindings"] });
       void queryClient.invalidateQueries({ queryKey: ["provider", "stake"] });
       setForm(liveFormOf(saved, null));
-      setExtra(extraOf(saved, decimals));
+      setExtra(extraOf(saved));
       toast.success(saved.hasUnpublishedChanges ? "Saved. Publish the changes to make them live." : "Saved");
     } catch (caught) {
       setError(caught instanceof ApiError ? plainError(caught.code) : "Your changes could not be saved. Try again.");
@@ -197,21 +194,23 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
               <Field
                 label="Free calls per agent per day"
                 inputMode="numeric"
+                suffix="calls"
+                hint="What one agent can use from this listing. Resets at 00:00 UTC."
                 value={form.freeCalls}
                 disabled={readOnly}
                 onChange={(event) => set({ freeCalls: event.target.value })}
                 error={parsed.errors.freeCalls}
               />
               <Field
-                label="Most you give away free per day (optional)"
-                inputMode="decimal"
-                suffix={asset.symbol}
+                label="Free calls per day, all agents (optional)"
+                inputMode="numeric"
+                suffix="calls"
                 value={extra.freeBudget}
                 disabled={readOnly}
-                placeholder="No limit"
+                placeholder="Platform default"
                 onChange={(event) => setExtra((current) => ({ ...current, freeBudget: event.target.value }))}
                 error={errors.freeBudget}
-                hint="Counted at your price. When it runs out, agents are told the free budget is used up and are offered the tool's paid option with its price."
+                hint="The most free calls this listing gives in a day, all agents together. Leave empty for the platform default. When they run out, agents are offered the paid option at your price."
               />
             </div>
           ) : null}

@@ -27,7 +27,7 @@ import { createDebtVoucherIntent, getBuyerDebts, submitDebtVoucher } from "@/ser
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { formatMoney } from "@/utils/money";
 
-import { debtDeadline, debtStateOf, debtsToSign, settledToast, splitDebts } from "./debt-copy";
+import { debtDeadline, debtStateOf, debtsToSign, isReplaceable, settledToast, splitDebts } from "./debt-copy";
 import {
   balanceAfterSettling,
   debtTotal,
@@ -35,9 +35,11 @@ import {
   resumesAfterSettling,
   settleBlockedSummary,
   settleEscrowCheck,
+  waitingToSettleNote,
 } from "./debt-summary";
 import { settleDebt } from "./settle-debt";
 import { refreshesDebts, settleDebtFailure } from "./settle-debt-errors";
+import { useReplaceableNow } from "./use-replaceable-now";
 
 export const BUYER_DEBTS_KEY = ["escrow", "debts"] as const;
 
@@ -147,12 +149,21 @@ function SettleDebtSheet({
     The debts to settle are fixed when the sheet opens: a refetch in the
     middle of the signatures must not renumber the steps under the person.
   */
-  const [debts, setDebts] = React.useState<BuyerDebt[] | null>(null);
+  /*
+    Only debts past their `replaceableAt` are signed: before it the original
+    voucher can still be collected on chain, so the backend refuses the
+    replacement (`PAYMENT_DEBT_NOT_YET_REPLACEABLE`) — the buyer never pays
+    twice. The waiting ones are named, with the time they can be settled.
+  */
+  const [debts, setDebts] = React.useState<{ ready: BuyerDebt[]; waitingNote: string | null } | null>(null);
+  const now = useReplaceableNow(query.data, query.dataUpdatedAt);
   if (open && debts === null && query.data) {
-    const toSign = debtsToSign(splitDebts(query.data).own);
-    setDebts(intentId ? toSign.filter((debt) => debt.intentId === intentId) : toSign);
+    const own = debtsToSign(splitDebts(query.data).own);
+    const toSign = intentId ? own.filter((debt) => debt.intentId === intentId) : own;
+    setDebts({ ready: toSign.filter((debt) => isReplaceable(debt, now)), waitingNote: waitingToSettleNote(toSign, now) });
   }
-  const settling = debts ?? [];
+  const settling = debts?.ready ?? [];
+  const waitingNote = debts?.waitingNote ?? null;
   const total = debtTotal(settling);
   const totalText = total ? formatMoney(total, { decimals: 4 }) : `${settling.length} payments`;
   const balance = escrow.data?.balance ?? null;
@@ -201,10 +212,14 @@ function SettleDebtSheet({
   }));
 
   const nothingToSign = query.data !== undefined && settling.length === 0;
+  const nothingReason = nothingToSign
+    ? (waitingNote ??
+      "Nothing left for this wallet to sign: it is settled, being collected, or owed by another wallet.")
+    : null;
   const disabledReason = readOnly
     ? "Your account is blocked, so nothing can be signed now. Contact Assay support."
-    : nothingToSign
-      ? "Nothing left for this wallet to sign: it is settled, being collected, or owed by another wallet."
+    : nothingReason
+      ? nothingReason
       : blocks.length > 0
         ? `Not yet: ${blocks.map((block) => block.text).join(" ")}`
         : check.kind === "pending" && settling.length > 0
@@ -260,6 +275,11 @@ function SettleDebtSheet({
       doneAction={{ label: "Close", onClick: () => onOpenChange(false) }}
     >
       {query.isPending ? <p className="text-body-13 text-03">Reading what is owed…</p> : null}
+      {waitingNote && settling.length > 0 ? (
+        <p className="text-body-13 text-02 [overflow-wrap:anywhere]" data-testid="settle-not-yet">
+          {waitingNote}
+        </p>
+      ) : null}
       {blocks.length > 0 ? (
         <section
           aria-labelledby="settle-first"

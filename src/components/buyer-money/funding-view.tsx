@@ -18,9 +18,11 @@ import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
 import { windowRefillAt } from "@/features/buyer-money/refill";
 import { isLowBalance, runwayDays, runwayLine } from "@/features/buyer-money/runway";
+import { escrowHeldText, heldSegmentLabel } from "@/features/buyer-debt/debt-copy";
 import { debtBlocksPaidCalls } from "@/features/buyer-debt/debt-summary";
+import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
-import { chainBalances } from "@/features/g30/balance";
+import { chainBalances, type Hold } from "@/features/g30/balance";
 import { chargedFromTotals } from "@/features/g30/spend-buckets";
 import { useCountdown } from "@/hooks/useCountdown";
 import { useSearchParam } from "@/hooks/useSearchParam";
@@ -29,6 +31,7 @@ import { explorerTxUrl } from "@/libs/chains/explorer";
 import { shortAddress } from "@/libs/chains/format";
 import { freeCallsOnlyText, freeOnlyCeilingText, servesPaidCalls } from "@/libs/chains/paid-rails";
 import { plainError } from "@/libs/plain-language";
+import { getHolds } from "@/services/balances.service";
 import { assetName, chainDisplayName, findChain } from "@/services/chains.service";
 import { listDeposits, type Deposit } from "@/services/funding.service";
 import { getReceiptsSummary } from "@/services/receipts.service";
@@ -144,6 +147,9 @@ export function FundingView() {
   const freeOnly = money.chainId !== null && !servesPaidCalls(money.chainId);
   // Settling a debt still takes from the escrow on a free-calls-only chain: say so beside "not spent on calls".
   const debtOwed = debtBlocksPaidCalls(useBuyerDebtsQuery().data);
+  const openHoldIds = useOpenHoldIntentIds();
+  // A buyer debt's price stays held until it is collected: never "in flight" (main d021840 / 49210cf).
+  const owedIntentIds = useOwedIntentIds();
 
   return (
     <div className="flex w-full flex-col gap-4 bg-02 px-4 py-5 tablet:gap-5 tablet:px-7 tablet:py-[22px]">
@@ -190,7 +196,7 @@ export function FundingView() {
             <span className="text-body-xs text-03">
               {money.symbol} on {money.chainName ?? "your chain"}
               {escrow?.openHolds && positive(escrow.openHolds)
-                ? ` · ${formatLimit(escrow.openHolds)} more is held by calls being checked; it comes back or goes to providers within minutes`
+                ? ` · ${escrowHeldText(formatLimit(escrow.openHolds), openHoldIds, owedIntentIds)}`
                 : ""}
             </span>
           )}
@@ -252,6 +258,7 @@ export function FundingView() {
           matured={matured}
           withdrawalPending={withdrawalPending}
           freeOnly={freeOnly}
+          heldLabel={heldSegmentLabel(openHoldIds, owedIntentIds)}
           onAction={onAction}
         />
       ) : null}
@@ -270,6 +277,7 @@ function EscrowCard({
   matured,
   withdrawalPending,
   freeOnly,
+  heldLabel,
   onAction,
 }: {
   money: ReturnType<typeof useBuyerMoney>;
@@ -277,6 +285,8 @@ function EscrowCard({
   withdrawalPending: boolean;
   /** A free-calls-only chain: no account ceiling or 24-hour meter, nothing is spent there. */
   freeOnly: boolean;
+  /** The held segment's label: calls in flight, unpaid calls (held until collected), or both. */
+  heldLabel: string;
   onAction: (next: MoneyAction) => void;
 }) {
   const escrow = money.escrow!;
@@ -319,7 +329,7 @@ function EscrowCard({
         <MoneySplit
           segments={[
             { label: "Available", value: free ? toDecimal(free).toNumber() : 0, amount: formatLimit(free), tone: "primary" },
-            { label: "Held by calls in flight", value: held ? toDecimal(held).toNumber() : 0, amount: formatLimit(held), tone: "warning" },
+            { label: heldLabel, value: held ? toDecimal(held).toNumber() : 0, amount: formatLimit(held), tone: "warning" },
             ...(withdrawalPending && requested
               ? [{ label: "Asked to withdraw", value: toDecimal(requested).toNumber(), amount: formatLimit(requested), tone: "neutral" as const }]
               : []),
@@ -505,4 +515,18 @@ function DepositsList() {
       )}
     </section>
   );
+}
+
+/** The open holds' intents (`GET /holds`), to tell buyer debt apart from calls in flight. Empty until read. */
+function useOpenHoldIntentIds(): string[] {
+  const holds = useQuery({
+    queryKey: ["holds"],
+    retry: 0,
+    queryFn: () => getHolds() as Promise<{ items?: Hold[] } | Hold[]>,
+  });
+  return React.useMemo(() => {
+    const data = holds.data;
+    const items = Array.isArray(data) ? data : (data?.items ?? []);
+    return items.filter((hold) => hold.status === "OPEN").map((hold) => hold.intentId);
+  }, [holds.data]);
 }

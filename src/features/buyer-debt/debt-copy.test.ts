@@ -9,11 +9,18 @@ import {
   debtBannerTitle,
   deadlineCountdown,
   debtDeadline,
+  debtLocalTime,
   debtOutstandingContext,
   debtRefusalSentence,
   debtRowText,
   debtSentence,
   debtsToSign,
+  escrowHeldText,
+  heldCallsText,
+  heldSegmentLabel,
+  isReplaceable,
+  nextReplaceableAt,
+  notYetReplaceableSentence,
   settledToast,
   settleDebtErrorSentence,
   splitDebts,
@@ -205,9 +212,61 @@ describe("the debt refusals", () => {
   });
 });
 
+describe("when a debt can be settled", () => {
+  const now = Date.parse("2026-10-17T10:00:00.000Z");
+
+  it("waits for replaceableAt, and settles at once without one", () => {
+    expect(isReplaceable(debt({ replaceableAt: "2026-10-17T10:30:00.000Z" }), now)).toBe(false);
+    expect(isReplaceable(debt({ replaceableAt: "2026-10-17T10:00:00.000Z" }), now)).toBe(true);
+    expect(isReplaceable(debt({ replaceableAt: "2026-10-17T09:00:00.000Z" }), now)).toBe(true);
+    expect(isReplaceable(debt({ replaceableAt: null }), now)).toBe(true);
+    expect(isReplaceable(debt(), now)).toBe(true);
+    expect(isReplaceable(debt({ replaceableAt: "not a time" }), now)).toBe(true);
+  });
+
+  it("finds the earliest time still ahead", () => {
+    expect(nextReplaceableAt([debt()], now)).toBeNull();
+    expect(
+      nextReplaceableAt(
+        [
+          debt({ replaceableAt: "2026-10-17T09:00:00.000Z" }),
+          debt({ replaceableAt: "2026-10-17T11:00:00.000Z" }),
+          debt({ replaceableAt: "2026-10-17T10:20:00.000Z" }),
+        ],
+        now,
+      ),
+    ).toBe(Date.parse("2026-10-17T10:20:00.000Z"));
+  });
+
+  it("says from when, in local time, and why", () => {
+    const at = "2026-10-17T10:30:00.000Z";
+    expect(notYetReplaceableSentence(at)).toBe(
+      `You can settle this from ${debtLocalTime(at)} (the original payment must expire on chain first, ` +
+        "so you never pay twice).",
+    );
+    expect(notYetReplaceableSentence(at, "it")).toMatch(/^you can settle it from /);
+    expect(notYetReplaceableSentence(null)).toMatch(/^You can settle this in a few minutes \(/);
+    expect(debtLocalTime(at)).toMatch(/\d{2}:\d{2}/);
+    expect(debtLocalTime("soon")).toBe("soon");
+  });
+});
+
 describe("the settle refusals", () => {
   const err = (code: string, status: number, context?: Record<string, unknown>) =>
     new ApiError(code, "raw", status, "/escrow/debts/int_1/voucher", context);
+
+  it("says from when a debt can be settled, and that nothing was signed", () => {
+    const at = "2026-10-17T10:30:00.000Z";
+    expect(settleDebtErrorSentence(err("PAYMENT_DEBT_NOT_YET_REPLACEABLE", 409, { replaceableAt: at }))).toBe(
+      `${notYetReplaceableSentence(at)} Nothing was signed.`,
+    );
+    expect(settleDebtErrorSentence(err("PAYMENT_DEBT_NOT_YET_REPLACEABLE", 409))).toMatch(/in a few minutes/);
+    expect(settleDebtErrorSentence(err("PAYMENT_DEBT_REPLACEMENT_REFUSED", 409))).toBe(
+      "This call changed while you were signing, so the payment was not accepted and nothing was charged. Try again.",
+    );
+    // Only the settle routes reword them: not the client-wide debt sentence.
+    expect(debtRefusalSentence(err("PAYMENT_DEBT_NOT_YET_REPLACEABLE", 409))).toBeNull();
+  });
 
   it("words each refusal the settle routes answer", () => {
     expect(settleDebtErrorSentence(err("PAYMENT_DEBT_REPLACEMENT_PENDING", 409))).toMatch(/being collected/);
@@ -248,5 +307,40 @@ describe("call payment notes", () => {
     expect(uncollectedNotWithheld({ debt: "VOIDED" })).toBe(true);
     expect(uncollectedNotWithheld({ debt: "OUTSTANDING" })).toBe(false);
     expect(uncollectedNotWithheld({})).toBe(false);
+  });
+});
+
+describe("heldCallsText", () => {
+  const owed = new Set(["d1"]);
+  it("keeps the in-flight wording when nothing is owed", () => {
+    expect(heldCallsText(["a", "b"], new Set())).toBe("2 calls in flight — returns within 24h");
+    expect(heldCallsText([], new Set())).toBe("0 calls in flight — returns within 24h");
+  });
+  it("does not call a held debt a call in flight", () => {
+    expect(heldCallsText(["d1"], owed)).toBe("1 unpaid call — held until it is collected");
+    expect(heldCallsText(["a", "d1"], owed)).toBe(
+      "1 call in flight — returns within 24h · 1 unpaid call — held until it is collected",
+    );
+    expect(heldCallsText(["a", "d1"], owed, { short: true })).toBe("1 call in flight · 1 unpaid");
+  });
+});
+
+describe("Funding's held line (main d021840 / 49210cf in the redesign)", () => {
+  const owed = new Set(["d1", "d2"]);
+  it("keeps the calls-being-checked wording when nothing is owed", () => {
+    expect(escrowHeldText("$1.00", ["a"], new Set())).toBe(
+      "$1.00 more is held by calls being checked; it comes back or goes to providers within minutes",
+    );
+    expect(heldSegmentLabel(["a"], new Set())).toBe("Held by calls in flight");
+  });
+  it("never calls a held debt a call in flight, and says it is held until collected", () => {
+    expect(escrowHeldText("$2.50", ["d1"], owed)).toBe(
+      "$2.50 more is held for 1 unpaid call, held until it is collected (see the banner)",
+    );
+    expect(escrowHeldText("$5.00", ["a", "d1", "d2"], owed)).toBe(
+      "$5.00 more is held: 1 call being checked (it comes back or goes to providers within minutes) and 2 unpaid calls, held until they are collected",
+    );
+    expect(heldSegmentLabel(["d1"], owed)).toBe("Held for unpaid calls");
+    expect(heldSegmentLabel(["a", "d1"], owed)).toBe("Held by calls in flight and unpaid calls");
   });
 });

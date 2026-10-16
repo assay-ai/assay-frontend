@@ -35,8 +35,9 @@ import {
   trendIsUp,
   trendLabel,
 } from "@/features/buyer/period";
-import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
+import { callPaymentNote, heldCallsText } from "@/features/buyer-debt/debt-copy";
 import { OwedRowAction } from "@/features/buyer-debt/owed-row-action";
+import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
 import { attentionAction } from "@/features/buyer/attention-action";
 import { callOutcome } from "@/features/buyer/call-outcome";
@@ -121,6 +122,7 @@ export default function OverviewPage() {
   );
   const balance = balanceState.kind === "single" ? balanceState.balance : null;
   const openHolds = (data?.holds ?? []).filter((h) => h.status === "OPEN");
+  const owedIntentIds = useOwedIntentIds();
   const oldestHold = openHolds.reduce((max, h) => Math.max(max, h.ageSeconds), 0);
 
   // The same alert raised twice in the same minute (two workers, one event)
@@ -260,7 +262,11 @@ export default function OverviewPage() {
           }
           meta={
             balance
-              ? `${formatMoney(balance.held)} held · ${formatCount(openHolds.length)} ${openHolds.length === 1 ? "call" : "calls"} in flight`
+              ? `${formatMoney(balance.held)} held · ${heldCallsText(
+                  openHolds.map((h) => h.intentId),
+                  owedIntentIds,
+                  { short: true },
+                )}`
               : undefined
           }
         />
@@ -402,7 +408,9 @@ export default function OverviewPage() {
             <PanelTitles>
               <PanelTitle>Open holds</PanelTitle>
               <PanelDescription>
-                Reserved, not spent — released or charged within 24h
+                {openHolds.some((h) => owedIntentIds.has(h.intentId))
+                  ? "Reserved, not spent — unpaid calls stay held until they are collected"
+                  : "Reserved, not spent — released or charged within 24h"}
               </PanelDescription>
             </PanelTitles>
           </PanelHeader>

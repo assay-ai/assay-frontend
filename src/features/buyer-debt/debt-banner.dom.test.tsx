@@ -26,6 +26,7 @@ vi.mock("@privy-io/react-auth", () => ({
 }));
 
 import { BUYER_DEBTS_KEY, BuyerDebtBanner } from "./debt-banner";
+import { notYetReplaceableSentence } from "./debt-copy";
 
 const ACCOUNT = "eip155:46630:0x7FD9A17dE9fd64b35081FbAbaa9f3bb85e59F8d1";
 const ASSET = "eip155:46630/erc20:0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
@@ -126,5 +127,41 @@ describe("BuyerDebtBanner", () => {
     expect(mixed).toContain("Settle $5.00");
     expect(mixed).toContain("1 more payment you signed is being collected.");
     expect(mixed).toContain("being collected");
+  });
+
+  describe("before the original payment expires on chain", () => {
+    const soon = () => new Date(Date.now() + 30 * 60_000).toISOString();
+    // The redesign's banner button is "Settle $X" (it opens the settle sheet); main's was "Sign to settle".
+    const signButton = (html: string) => html.match(/<button[^>]*>(?:(?!<\/button>).)*Settle \$/)?.[0] ?? "";
+
+    it("disables Settle and says from when, in plain words", () => {
+      const at = soon();
+      const html = render({ account: ACCOUNT, debts: [debt({ replaceableAt: at })] });
+      expect(signButton(html)).toMatch(/disabled=""/);
+      expect(html).toContain(notYetReplaceableSentence(at));
+      expect(html).toContain("so you never pay twice");
+    });
+
+    it("offers it once replaceableAt has passed, or when the backend sends none", () => {
+      for (const replaceableAt of [new Date(Date.now() - 60_000).toISOString(), null, undefined]) {
+        const html = render({ account: ACCOUNT, debts: [debt({ replaceableAt })] });
+        expect(signButton(html)).not.toBe("");
+        expect(signButton(html)).not.toMatch(/disabled=""/);
+        expect(html).not.toContain("never pay twice");
+      }
+    });
+
+    it("settles one that is ready first, and says when the waiting one can be", () => {
+      const at = soon();
+      const html = render({
+        account: ACCOUNT,
+        debts: [debt({ replaceableAt: at }), debt({ intentId: "int_2" })],
+      });
+      expect(signButton(html)).not.toMatch(/disabled=""/);
+      // Main: "Sign to settle (1 of 2)". Here the button names what the sheet signs now: the ready one only.
+      expect(html).toContain("You owe $5.00 for 2 calls.");
+      expect(html).toContain("Settle $2.50");
+      expect(html).toContain("1 of them is not ready to sign yet: you can settle it from");
+    });
   });
 });

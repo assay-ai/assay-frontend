@@ -10,9 +10,10 @@ import { formatMoney } from "@/utils/money";
 
 import type { CallDebt } from "@/interfaces/buyer-debt";
 
-import { debtDeadline } from "./debt-copy";
+import { debtDeadline, isReplaceable, notYetReplaceableSentence } from "./debt-copy";
 import { debtBannerSummary, debtDeadlineLine, earliestWriteOff, owedCallState, owedRowText } from "./debt-summary";
 import { useBuyerDebtsQuery, useSettleDebt } from "./settle-debt-sheet";
+import { useReplaceableNow } from "./use-replaceable-now";
 
 /**
  * Under an Owed call row (Overview, Calls): what is owed and the way out,
@@ -33,6 +34,9 @@ export function OwedRowAction({
   const debts = useBuyerDebtsQuery();
   const { openSettle } = useSettleDebt();
   const state = owedCallState(debts.data, intentId);
+  const now = useReplaceableNow(debts.data, debts.dataUpdatedAt);
+  // Its original payment can still be collected on chain until `replaceableAt`.
+  const notYet = state.kind === "settle" && !isReplaceable(state.debt, now);
 
   return (
     <div
@@ -43,9 +47,10 @@ export function OwedRowAction({
     >
       <span className="min-w-0 flex-1 text-body-xs text-warning-700">
         {owedRowText(state, { pending: debts.isPending, callDebt: debt ?? null })}
+        {notYet ? ` ${notYetReplaceableSentence(state.debt.replaceableAt)}` : null}
       </span>
       {state.kind === "settle" ? (
-        <Button size="sm" variant="secondary" type="button" onClick={() => openSettle(intentId)}>
+        <Button size="sm" variant="secondary" type="button" disabled={notYet} onClick={() => openSettle(intentId)}>
           Settle {formatMoney(state.debt.amount, { decimals: 4 })}
         </Button>
       ) : null}
@@ -62,8 +67,10 @@ export function OwedReceiptAction({ intentId }: { intentId: string }) {
   const debts = useBuyerDebtsQuery();
   const { openSettle } = useSettleDebt();
   const state = owedCallState(debts.data, intentId);
+  const now = useReplaceableNow(debts.data, debts.dataUpdatedAt);
   if (state.kind === "settle") {
     const deadline = debtDeadlineLine(state.debt);
+    const notYet = !isReplaceable(state.debt, now);
     return (
       <>
         {deadline ? (
@@ -71,7 +78,18 @@ export function OwedReceiptAction({ intentId }: { intentId: string }) {
             {deadline}
           </p>
         ) : null}
-        <Button size="sm" type="button" className="mt-1 self-start" onClick={() => openSettle(intentId)}>
+        {notYet ? (
+          <p className="text-body-13 text-02" data-testid="receipt-not-yet">
+            {notYetReplaceableSentence(state.debt.replaceableAt)}
+          </p>
+        ) : null}
+        <Button
+          size="sm"
+          type="button"
+          className="mt-1 self-start"
+          disabled={notYet}
+          onClick={() => openSettle(intentId)}
+        >
           Settle {formatMoney(state.debt.amount, { decimals: 4 })}
         </Button>
       </>
@@ -96,7 +114,8 @@ export function OwedReceiptAction({ intentId }: { intentId: string }) {
 export function OwedSummaryAction({ owed, calls }: { owed: string; calls: number | null }) {
   const debts = useBuyerDebtsQuery();
   const { openSettle } = useSettleDebt();
-  const summary = debtBannerSummary(debts.data);
+  const now = useReplaceableNow(debts.data, debts.dataUpdatedAt);
+  const summary = debtBannerSummary(debts.data, { now });
   const settleBy = earliestWriteOff(debts.data);
   return (
     <div
@@ -108,13 +127,14 @@ export function OwedSummaryAction({ owed, calls }: { owed: string; calls: number
         {calls === null ? "" : ` for ${calls === 1 ? "1 call" : `${calls} calls`}`}: payment not collected, and paid calls
         are paused until it is settled.
         {settleBy ? ` Settle by ${debtDeadline(settleBy)}; after that it is written off, but still owed.` : ""}
+        {summary?.waitingNote ? ` ${summary.waitingNote}` : ""}
       </p>
       <div className="flex shrink-0 items-center gap-2">
         <Button size="sm" variant="ghost" asChild>
           <Link href={routes.calls({ status: "owed" })}>See owed calls</Link>
         </Button>
         {summary?.actionLabel ? (
-          <Button size="sm" type="button" onClick={() => openSettle()}>
+          <Button size="sm" type="button" disabled={summary.actionDisabled} onClick={() => openSettle()}>
             {summary.actionLabel}
           </Button>
         ) : null}

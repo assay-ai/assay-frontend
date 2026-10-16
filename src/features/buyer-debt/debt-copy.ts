@@ -57,6 +57,27 @@ export function debtsToSign<T extends Pick<BuyerDebt, "state">>(debts: readonly 
   return debts.filter((debt) => debtStateOf(debt) !== "REPLACING");
 }
 
+/**
+ * Whether a debt can be settled at `nowMs`: its original voucher is past its
+ * on-chain deadline (`replaceableAt`). One without the field (an older
+ * backend) or with an unreadable one can be settled at once.
+ */
+export function isReplaceable(debt: Pick<BuyerDebt, "replaceableAt">, nowMs: number): boolean {
+  const at = debt.replaceableAt ? Date.parse(debt.replaceableAt) : Number.NaN;
+  return Number.isNaN(at) || at <= nowMs;
+}
+
+/** The earliest `replaceableAt` still ahead of `nowMs`, in ms, or `null`. */
+export function nextReplaceableAt(debts: readonly Pick<BuyerDebt, "replaceableAt">[], nowMs: number): number | null {
+  let next: number | null = null;
+  for (const debt of debts) {
+    if (isReplaceable(debt, nowMs)) continue;
+    const at = Date.parse(debt.replaceableAt!);
+    if (next === null || at < next) next = at;
+  }
+  return next;
+}
+
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 export function debtBannerTitle(debts: readonly Pick<BuyerDebt, "amount" | "state">[]): string {
@@ -165,7 +186,13 @@ export function settledToast(remaining: number): string {
     : `Signed. ${remaining} more call${remaining === 1 ? " is" : "s are"} still to settle before paid calls resume.`;
 }
 
-export { debtOutstandingContext, debtRefusalSentence, settleDebtErrorSentence } from "@/libs/buyer-debt";
+export {
+  debtLocalTime,
+  debtOutstandingContext,
+  debtRefusalSentence,
+  notYetReplaceableSentence,
+  settleDebtErrorSentence,
+} from "@/libs/buyer-debt";
 
 /**
  * The debts this session can settle: the session account's own, oldest first.
@@ -209,4 +236,59 @@ export function uncollectedNotWithheld(call: {
   debt?: CallDebt | null;
 }): boolean {
   return call.forfeited === true || call.debt === "WRITTEN_OFF" || call.debt === "VOIDED";
+}
+
+/**
+ * The "Held" subtitle. A debt's price stays held in the escrow until the
+ * buyer settles it, so those holds are not calls in flight and do not return
+ * on their own within 24h; they are counted apart.
+ */
+export function heldCallsText(
+  openHoldIntentIds: readonly string[],
+  owedIntentIds: ReadonlySet<string>,
+  { short = false }: { short?: boolean } = {},
+): string {
+  const owed = openHoldIntentIds.filter((id) => owedIntentIds.has(id)).length;
+  const inFlight = openHoldIntentIds.length - owed;
+  const calls = (n: number) => `${n} ${n === 1 ? "call" : "calls"}`;
+  const parts: string[] = [];
+  if (inFlight > 0 || owed === 0) {
+    parts.push(short ? `${calls(inFlight)} in flight` : `${calls(inFlight)} in flight — returns within 24h`);
+  }
+  if (owed > 0) {
+    parts.push(short ? `${owed} unpaid` : `${owed} unpaid ${owed === 1 ? "call" : "calls"} — held until it is collected`);
+  }
+  return parts.join(" · ");
+}
+
+/** How many open holds are buyer debt (held until collected) and how many are calls being checked. */
+function heldSplit(openHoldIntentIds: readonly string[], owedIntentIds: ReadonlySet<string>) {
+  const owed = openHoldIntentIds.filter((id) => owedIntentIds.has(id)).length;
+  return { owed, inFlight: openHoldIntentIds.length - owed };
+}
+
+/**
+ * Funding's line about the escrow's held amount. Calls being checked come back
+ * or go to providers within minutes; an unpaid call's price stays held until
+ * its payment is collected, signed or not, so it is never called in flight.
+ */
+export function escrowHeldText(
+  amount: string,
+  openHoldIntentIds: readonly string[],
+  owedIntentIds: ReadonlySet<string>,
+): string {
+  const { owed, inFlight } = heldSplit(openHoldIntentIds, owedIntentIds);
+  const checking = "it comes back or goes to providers within minutes";
+  if (owed === 0) return `${amount} more is held by calls being checked; ${checking}`;
+  const unpaid = `${owed} unpaid ${owed === 1 ? "call" : "calls"}`;
+  const until = `held until ${owed === 1 ? "it is" : "they are"} collected`;
+  if (inFlight === 0) return `${amount} more is held for ${unpaid}, ${until} (see the banner)`;
+  return `${amount} more is held: ${inFlight} ${inFlight === 1 ? "call" : "calls"} being checked (${checking}) and ${unpaid}, ${until}`;
+}
+
+/** The held segment's label in the escrow split. */
+export function heldSegmentLabel(openHoldIntentIds: readonly string[], owedIntentIds: ReadonlySet<string>): string {
+  const { owed, inFlight } = heldSplit(openHoldIntentIds, owedIntentIds);
+  if (owed === 0) return "Held by calls in flight";
+  return inFlight === 0 ? "Held for unpaid calls" : "Held by calls in flight and unpaid calls";
 }

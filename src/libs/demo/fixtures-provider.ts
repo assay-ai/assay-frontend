@@ -157,7 +157,7 @@ interface DemoBinding {
   version: number;
   publishedVersion: number | null;
   freeQuotaPerAgent: number | null;
-  /** Minor units, read back as a number — the read DTO's own asymmetry. */
+  /** Free calls per day across all agents (a count, not money). */
   freeDailyBudget: number | null;
   slaFailureRate: number;
   timeoutMs: number;
@@ -208,7 +208,7 @@ const BINDINGS: DemoBinding[] = [
     version: 4,
     publishedVersion: 4,
     freeQuotaPerAgent: 50,
-    freeDailyBudget: 12000000,
+    freeDailyBudget: 5000,
     slaFailureRate: 0.05,
     timeoutMs: 6000,
     maxRps: 25,
