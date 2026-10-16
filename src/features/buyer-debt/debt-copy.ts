@@ -232,7 +232,7 @@ export function heldCallsText(
     parts.push(short ? `${calls(inFlight)} in flight` : `${calls(inFlight)} in flight — returns within 24h`);
   }
   if (owed > 0) {
-    parts.push(short ? `${owed} unpaid` : `${owed} unpaid ${owed === 1 ? "call" : "calls"} — held until you settle`);
+    parts.push(short ? `${owed} unpaid` : `${owed} unpaid ${owed === 1 ? "call" : "calls"} — held until it is collected`);
   }
   return parts.join(" · ");
 }
