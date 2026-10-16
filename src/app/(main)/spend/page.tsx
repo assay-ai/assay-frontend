@@ -20,6 +20,7 @@ import {
   dimensionById,
   summaryGroupBy,
   windowById,
+  windowIdFromQuery,
   windowRange,
 } from "@/features/g30/period";
 import { reconcileSentence, spendBreakdown } from "@/features/g30/spend-buckets";
@@ -28,6 +29,7 @@ import { changePercent, previousTotal, rankRows, spendCsv, spendCsvFilename, typ
 import type { ReceiptsSummary } from "@/features/g30/wire";
 import { useChains } from "@/hooks/useChains";
 import { useEntityNames } from "@/hooks/useEntityNames";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
@@ -106,7 +108,14 @@ function BarRow({ row, href }: { row: RankedRow; href: string | null }) {
 }
 
 export default function SpendPage() {
-  const [windowId, setWindowId] = React.useState(DEFAULT_WINDOW_ID);
+  // A link can open a window: `/spend?range=24h` (or `?window=`), review 2026-10-17.
+  const rangeParam = useSearchParam("range");
+  const windowParam = useSearchParam("window");
+  const askedWindow = windowIdFromQuery(rangeParam, windowParam);
+  const [windowId, setWindowId] = React.useState(askedWindow ?? DEFAULT_WINDOW_ID);
+  React.useEffect(() => {
+    if (askedWindow) setWindowId(askedWindow);
+  }, [askedWindow]);
   const [dimensionId, setDimensionId] = React.useState("tool");
   const assetPick = useDisplayAssetPick();
   const names = useEntityNames();

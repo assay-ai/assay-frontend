@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { credentialGroupLabels, dimensionById, groupKeyLabel, summaryGroupBy } from "./period";
+import { credentialGroupLabels, dimensionById, groupKeyLabel, summaryGroupBy, windowIdFromQuery } from "./period";
 
 describe("Group-by dimensions", () => {
   it("offers agent, which the wire groups by payment_intents.agent_id", () => {
@@ -50,5 +50,17 @@ describe("Group by agent — one row per agent credential", () => {
   it("names a row from before calls recorded a credential by its agent", () => {
     expect(groupKeyLabel(`agent:${AGENT}`, "agent", labels)).toBe("buyer@example.com");
     expect(groupKeyLabel(`agent:${AGENT}`, "agent")).toBe("f64b7b6e…");
+  });
+});
+
+describe("windowIdFromQuery (/spend?range=24h, review 2026-10-17)", () => {
+  it("opens the window a link asks for", () => {
+    expect(windowIdFromQuery("24h")).toBe("24h");
+    expect(windowIdFromQuery("", "30D")).toBe("30d");
+  });
+
+  it("ignores a window the page does not offer", () => {
+    expect(windowIdFromQuery("1y")).toBeNull();
+    expect(windowIdFromQuery(null, undefined, "")).toBeNull();
   });
 });

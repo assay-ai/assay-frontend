@@ -31,6 +31,18 @@ export function windowById(id: string): SpendWindow {
   return SPEND_WINDOWS.find((w) => w.id === id) ?? SPEND_WINDOWS[1];
 }
 
+/**
+ * The window a link asked for (`/spend?range=24h`, or `?window=7d`), or
+ * `null` when it names none this page offers.
+ */
+export function windowIdFromQuery(...values: readonly (string | null | undefined)[]): string | null {
+  for (const value of values) {
+    const id = value?.trim().toLowerCase();
+    if (id && SPEND_WINDOWS.some((w) => w.id === id)) return id;
+  }
+  return null;
+}
+
 /** `from` is inclusive, `to` exclusive — the API's own words. */
 export function windowRange(win: SpendWindow, now = Date.now()): { from: string; to: string } {
   return {
