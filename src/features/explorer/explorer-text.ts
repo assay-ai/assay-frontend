@@ -84,12 +84,17 @@ export function priceSentence(input: {
   return `${price} per call. You pay only if the result passes the check.`;
 }
 
-/** Observed failures, from the platform's own measurement. */
+/**
+ * Observed failures, from the platform's own measurement, with its window:
+ * the public quality figure sums every CLOSED check window of every tool the
+ * provider serves (`SlaWindowRepository.qualityByProvider`, no date filter),
+ * so it is an all-time figure — not the open window a provider sees on Home.
+ */
 export function failRateLabel(quality: { measuredCalls: number; failedCalls: number } | null | undefined): string {
   if (!quality || quality.measuredCalls <= 0) return "Not measured yet";
   const pct = (quality.failedCalls / quality.measuredCalls) * 100;
   const shown = pct === 0 ? "0%" : pct < 0.1 ? "<0.1%" : `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`;
-  return `${shown} failed · ${quality.measuredCalls.toLocaleString("en-US")} ${quality.measuredCalls === 1 ? "call" : "calls"} checked`;
+  return `${shown} failed · ${quality.measuredCalls.toLocaleString("en-US")} ${quality.measuredCalls === 1 ? "call" : "calls"} checked, all time`;
 }
 
 /** A failure rate at or above this, over enough calls, earns a warning chip. */

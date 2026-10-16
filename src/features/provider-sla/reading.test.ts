@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { recentWindows, slaReading, windowRange, windowRate } from "./reading";
+import { checkWindowScope, recentWindows, slaReading, windowRange, windowRate } from "./reading";
 
 const base = { status: "OPEN" as const, verifiedCalls: 500, failedCalls: 8, minVerifiedCalls: 400, observedFailureRate: 0.016, declaredFailureRate: 0.02 };
 
 describe("slaReading", () => {
   it("warns early in plain words", () => {
     const reading = slaReading(base, 0.02);
-    expect(reading.headline).toBe("1.6% of calls failed this window (you promised at most 2%)");
+    expect(reading.headline).toBe("In this check window, 1.6% of calls failed (you promised at most 2%)");
     expect(reading.tone).toBe("warning");
     expect(reading.sample).toBeNull();
   });
@@ -57,5 +57,23 @@ describe("recentWindows", () => {
   it("states a window's rate", () => {
     expect(windowRate({ observedFailureRate: 0.0139, verifiedCalls: 431 })).toBe("1.4%");
     expect(windowRate({ observedFailureRate: null, verifiedCalls: 0 })).toBeNull();
+  });
+});
+
+describe("checkWindowScope (final2 P3: label every failure rate with its window)", () => {
+  const now = Date.parse("2026-10-17T10:00:00Z");
+  it("counts an open window from when it opened", () => {
+    expect(checkWindowScope({ status: "OPEN", openedAt: "2026-10-13T10:00:00Z" }, now)).toBe("this check window (last 4 days)");
+    expect(checkWindowScope({ status: "OPEN", openedAt: "2026-10-17T04:00:00Z" }, now)).toBe("this check window (last 6 h)");
+    expect(checkWindowScope({ status: "OPEN" }, now)).toBe("this check window");
+  });
+  it("gives a closed window its length", () => {
+    expect(checkWindowScope({ status: "CLOSED", openedAt: "2026-10-01T10:00:00Z", closedAt: "2026-10-08T10:00:00Z" }, now)).toBe(
+      "the last check window (7 days)",
+    );
+  });
+  it("puts the window in the headline", () => {
+    const reading = slaReading({ ...base, openedAt: "2026-10-16T10:00:00Z" }, 0.02, { now });
+    expect(reading.headline).toBe("In this check window (last 1 day), 1.6% of calls failed (you promised at most 2%)");
   });
 });

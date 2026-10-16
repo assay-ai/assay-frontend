@@ -2530,7 +2530,7 @@ export function providerNotifications() {
       event: "provider.sla_window_warning",
       severity: "WARNING",
       title: `${fx.toolName} is past half of its promised failure rate`,
-      body: `${fxOpen.failedCalls} of ${fxOpen.verifiedCalls} checked calls failed this window (${pct(fxOpen.failedCalls / fxOpen.verifiedCalls)}) against your promised ${pct(fx.slaFailureRate)}. Nothing is taken unless the window closes over the promise.`,
+      body: `${fxOpen.failedCalls} of ${fxOpen.verifiedCalls} checked calls failed in this check window (${pct(fxOpen.failedCalls / fxOpen.verifiedCalls)}) against your promised ${pct(fx.slaFailureRate)}. Nothing is taken unless the window closes over the promise.`,
       subjectType: "binding",
       subjectId: fx.id,
       readAt: null,

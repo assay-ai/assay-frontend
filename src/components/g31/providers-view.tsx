@@ -160,7 +160,7 @@ export function ProviderCard({ provider, callsWindow }: { provider: ProviderRow;
           ) : (
             <span
               className="font-mono text-mono-13 font-semibold text-teal-600"
-              title={`${provider.measuredCalls.toLocaleString()} calls measured across the platform`}
+              title={`${provider.measuredCalls.toLocaleString()} calls measured across the platform, all time`}
             >
               {(provider.quality * 100).toFixed(1)}%
             </span>

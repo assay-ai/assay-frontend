@@ -48,7 +48,7 @@ describe("needsActionItems", () => {
 
   it("warns early, in plain percentages, before the promise is broken", () => {
     const [item] = needsActionItems({ ...base, openWindows: [window({})] });
-    expect(item.title).toBe("Market quote: 1.6% of calls failed, near your 2% promise");
+    expect(item.title).toBe("Market quote: 1.6% of calls failed in this check window (last 1 h), near your 2% promise");
     expect(item.tone).toBe("warning");
     expect(item.deadline).toBe("2026-10-16T12:00:00Z");
   });
