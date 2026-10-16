@@ -169,8 +169,19 @@ describe("homeUnpaidNotes", () => {
     );
     expect(notes.map((n) => n.key)).toEqual(["forfeited"]);
     expect(notes[0].tone).toBe("warning");
-    expect(notes[0].text).toMatch(/^\$0\.07 for 2 calls was forfeited/);
+    expect(notes[0].text).toMatch(/^\$0\.07 for 2 calls was forfeited this month/);
     expect(notes[0].link).toEqual({ label: "Check your stake", href: hrefs.stake });
+  });
+
+  it("warns while the stake is short or unknown, and is calm once it covers the minimum again", () => {
+    const forfeit = totals({ forfeited: usdg("72000"), forfeitedCalls: 1 });
+    expect(homeUnpaidNotes(forfeit, format, hrefs, false)[0].tone).toBe("warning");
+    expect(homeUnpaidNotes(forfeit, format, hrefs, null)[0].tone).toBe("warning");
+    const [calm] = homeUnpaidNotes(forfeit, format, hrefs, true);
+    expect(calm.tone).toBe("neutral");
+    expect(calm.text).toMatch(/earlier this month/);
+    expect(calm.text).toMatch(/covers the minimum now/);
+    expect(calm.link.href).toBe(hrefs.money);
   });
 });
 
