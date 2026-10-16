@@ -7,7 +7,15 @@ import * as React from "react";
 import { MoneySplit } from "@/components/patterns/money-flow";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
-import { formatCallPrice, notChargedEmptyText, notChargedRowText, notChargedSplit, plural, shortDay } from "@/features/explorer/explorer-text";
+import {
+  formatCallPrice,
+  notChargedEmptyText,
+  notChargedPrivacyNote,
+  notChargedRowText,
+  notChargedSplit,
+  plural,
+  shortDay,
+} from "@/features/explorer/explorer-text";
 import { publicErrorText, usePublicNotCharged } from "@/features/explorer/use-public-explorer";
 import { useChainName } from "@/hooks/useChainName";
 import type { Money } from "@/interfaces";
@@ -245,12 +253,7 @@ export function NotChargedProof({
       {data.withheldForPrivacy || (scope === "all" && !quiet) ? (
         <p className="flex items-start gap-2 text-body-xs text-03">
           <EyeOff aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-          <span>
-            {data.withheldForPrivacy ? "Some activity is hidden or grouped for privacy. " : "For privacy, "}
-            a tool&apos;s calls are listed only once at least {data.minBuyers} different buyers stand behind them. Figures
-            appear only once at least {data.minBuyers} buyers have paid in that token; reasons are named only when each
-            has at least {data.minBuyers} buyers, and their counts are rounded down to tens.
-          </span>
+          <span>{notChargedPrivacyNote(data.withheldForPrivacy, data.minBuyers)}</span>
         </p>
       ) : null}
       <p className="text-body-xs text-03">
