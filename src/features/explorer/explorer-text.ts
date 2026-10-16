@@ -376,16 +376,26 @@ const NOT_CHARGED_REASON_LABEL: Record<string, string> = {
   NOT_COLLECTED: "Payment not collected",
 };
 
-/** A fixed tone per reason key, so a reason keeps its colour whatever else is listed. */
+/**
+ * A fixed tone per reason key, so a reason keeps its colour whatever else is
+ * listed. Every tone is a different hue: success green sits next to the
+ * guarantee's teal and read as the same dot (review 2026-10-17 P3-3), so it is
+ * not used here.
+ */
 const NOT_CHARGED_REASON_TONE = {
   FAILED_CHECK: "teal",
   PROVIDER_ERROR: "info",
   REQUEST_REJECTED: "indigo",
   NO_USABLE_RESULT: "primary",
-  OUT_OF_SCOPE: "warning",
+  OUT_OF_SCOPE: "pink",
   EXPIRED: "danger",
-  NOT_COLLECTED: "success",
+  NOT_COLLECTED: "warning",
 } as const;
+
+/** The tone of each reason key (for tests and legends). */
+export function notChargedReasonTones(): Readonly<Record<string, string>> {
+  return NOT_CHARGED_REASON_TONE;
+}
 
 type ReasonTone = (typeof NOT_CHARGED_REASON_TONE)[keyof typeof NOT_CHARGED_REASON_TONE] | "neutral";
 
@@ -470,7 +480,7 @@ export function notChargedSplit(totals: {
   ];
   const other = totals.callsNotChargedOther ?? Math.max(0, rest - named.reduce((sum, r) => sum + r.calls, 0));
   if (other > 0) {
-    lines.push({ key: "OTHER", label: "The rest, grouped for privacy (counts are rounded down to tens)", calls: other, tone: "neutral" });
+    lines.push({ key: "OTHER", label: "The rest, incl. rounding remainders, grouped for privacy", calls: other, tone: "neutral" });
   }
   return lines;
 }
