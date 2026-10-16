@@ -56,7 +56,7 @@ export interface DebtBannerSummary {
  */
 export function debtBannerSummary(
   data: BuyerDebts | null | undefined,
-  { pausedByYou = false }: { pausedByYou?: boolean } = {},
+  { pausedByYou = false, freeOnly = false }: { pausedByYou?: boolean; freeOnly?: boolean } = {},
 ): DebtBannerSummary | null {
   const { own, others } = splitDebts(data);
   const all = [...own, ...others];
@@ -69,11 +69,18 @@ export function debtBannerSummary(
   if (collecting.length > 0 && collecting.length < all.length) {
     extra.push(`${plural(collecting.length, "more payment")} you signed ${collecting.length === 1 ? "is" : "are"} being collected.`);
   }
-  if (othersToSign.length > 0 && toSign.length > 0) {
-    extra.push(
-      `${plural(othersToSign.length, "more call")} (${totalText(othersToSign)}) ${othersToSign.length === 1 ? "is" : "are"} owed by another wallet of your organization: sign in with it to settle.`,
-    );
+  // The headline names the other wallet's part, so it counts every call the Details list shows.
+  const othersPart =
+    othersToSign.length > 0 && toSign.length > 0
+      ? `, plus ${totalText(othersToSign)} owed by another wallet of your organization`
+      : "";
+  if (othersPart) {
+    extra.push(`Sign in with that wallet to settle its ${plural(othersToSign.length, "call")}.`);
   }
+  // A free-calls-only chain still collects a payment owed from before (review 2026-10-17).
+  const freeOnlyNote = freeOnly
+    ? "This chain serves free calls only now, but settling pays for an earlier paid call: it is taken from your escrow."
+    : null;
 
   if (toSign.length > 0) {
     const writtenOff = toSign.filter((debt) => debtStateOf(debt) === "WRITTEN_OFF");
@@ -94,8 +101,10 @@ export function debtBannerSummary(
     }
     return {
       kind: "settle",
-      title: `You owe ${totalText(toSign)} for ${plural(toSign.length, "call")}. Paid calls are paused until you settle.`,
-      detail: [...when, ...extra, "Free calls still work."].join(" "),
+      title: othersPart
+        ? `You owe ${totalText(toSign)} for ${plural(toSign.length, "call")}${othersPart}. Paid calls are paused until all of it is settled.`
+        : `You owe ${totalText(toSign)} for ${plural(toSign.length, "call")}. Paid calls are paused until you settle.`,
+      detail: [...when, ...extra, ...(freeOnlyNote ? [freeOnlyNote] : []), "Free calls still work."].join(" "),
       toSign,
       actionLabel: `Settle ${totalText(toSign)}`,
     };
@@ -107,7 +116,8 @@ export function debtBannerSummary(
       title: `Your organization owes ${totalText(othersToSign)} for ${plural(othersToSign.length, "call")}. Paid calls are paused until it is settled.`,
       detail: [
         `Another wallet of your organization owes ${othersToSign.length === 1 ? "it" : "them"}: sign in with that wallet to settle.`,
-        ...extra.filter((line) => !line.includes("another wallet")),
+        ...extra,
+        ...(freeOnlyNote ? [freeOnlyNote] : []),
         "Free calls still work.",
       ].join(" "),
       toSign: [],

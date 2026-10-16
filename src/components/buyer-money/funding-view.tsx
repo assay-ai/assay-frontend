@@ -18,6 +18,8 @@ import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
 import { windowRefillAt } from "@/features/buyer-money/refill";
 import { isLowBalance, runwayDays, runwayLine } from "@/features/buyer-money/runway";
+import { debtBlocksPaidCalls } from "@/features/buyer-debt/debt-summary";
+import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 import { chainBalances } from "@/features/g30/balance";
 import { chargedFromTotals } from "@/features/g30/spend-buckets";
 import { useCountdown } from "@/hooks/useCountdown";
@@ -134,6 +136,8 @@ export function FundingView() {
   const unreadable = escrowQuery.isError || (escrow !== null && !escrow.chainReadable);
   // Solana serves free calls only (paid rails off): no deposit is offered there; withdrawing still works.
   const freeOnly = money.chainId !== null && !servesPaidCalls(money.chainId);
+  // Settling a debt still takes from the escrow on a free-calls-only chain: say so beside "not spent on calls".
+  const debtOwed = debtBlocksPaidCalls(useBuyerDebtsQuery().data);
 
   return (
     <div className="flex w-full flex-col gap-4 bg-02 px-4 py-5 tablet:gap-5 tablet:px-7 tablet:py-[22px]">
@@ -208,7 +212,8 @@ export function FundingView() {
         >
           <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
           <p className="min-w-0 flex-1 text-body-13 text-warning-700">
-            {freeCallsOnlyText(money.chainName ?? "This chain")} You can still withdraw what it holds.
+            {freeCallsOnlyText(money.chainName ?? "This chain")} You can still withdraw what it holds
+            {debtOwed ? ", and a payment you still owe for an earlier paid call is settled from it (see the banner)." : "."}
           </p>
         </div>
       ) : null}

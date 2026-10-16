@@ -4,6 +4,7 @@ import { TriangleAlert } from "lucide-react";
 import * as React from "react";
 
 import { usePauseAll } from "@/components/buyer-money/pause-all";
+import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
 import { Button } from "@/components/ui/button";
 import { debtCauseText } from "@/features/call-classes/labels";
 import { useEntityNames } from "@/hooks/useEntityNames";
@@ -35,8 +36,9 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
   const names = useEntityNames({ kinds: ["tool"] });
 
   const { paused } = usePauseAll();
+  const { freeOnly } = useFreeOnlyChain();
 
-  const summary = debtBannerSummary(query.data, { pausedByYou: paused });
+  const summary = debtBannerSummary(query.data, { pausedByYou: paused, freeOnly });
   if (!summary) return null;
   const { own, others } = splitDebts(query.data);
   const all = [...own, ...others];
