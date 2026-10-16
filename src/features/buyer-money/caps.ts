@@ -113,6 +113,29 @@ export function capsToForm(caps: { maxVoucherAmount: Money | null; maxPerWindow:
   };
 }
 
+/**
+ * The ceiling form's first values: the caps in force (or the defaults), each
+ * raised to what a deep link asks for (`?perCall=` / `?perDay=`, e.g. the
+ * settle sheet's "Raise the per-call ceiling to $2.50"). A request is only
+ * ever a raise, never lowers a cap, and keeps one call within a day; the
+ * fields stay editable (verify-r12 P3).
+ */
+export function seedCaps(
+  current: { perCall: string; perDay: string } | null,
+  need: { perCall?: string | null; perDay?: string | null } = {},
+): { perCall: string; perDay: string } {
+  const base = current ?? { perCall: "1", perDay: "20" };
+  const raise = (now: string, wanted: string | null | undefined): string => {
+    const want = wanted ? safeDecimal(wanted) : null;
+    const have = safeDecimal(now);
+    if (!want || want.lte(0)) return now;
+    return have && have.gte(want) ? now : want.toString();
+  };
+  const perCall = raise(base.perCall, need.perCall);
+  const perDay = raise(raise(base.perDay, need.perDay), perCall);
+  return { perCall, perDay };
+}
+
 function short(value: string): string {
   const d = safeDecimal(value);
   if (!d) return value;
