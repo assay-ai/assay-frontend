@@ -51,7 +51,7 @@ describe("StatementFigures — the statement adds up like /spend", () => {
   });
 
   it("says 1 call, not 1 calls, on the owed line", () => {
-    expect(markup()).toContain("1 call · not collected yet");
+    expect(markup()).toContain("1 call · still owed by you, not collected yet, so not in You paid");
   });
 
   it("leaves out owed and in progress when there are none", () => {

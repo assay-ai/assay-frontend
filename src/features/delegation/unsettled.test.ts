@@ -28,6 +28,7 @@ import {
   UNSETTLED_WAIT_MAX_MS,
   unsettledLine,
   strandAcknowledgement,
+  loweringBeforeSignNote,
 } from "./unsettled";
 
 const ASSET = "eip155:46630/erc20:0xDbbC";
@@ -103,6 +104,7 @@ describe("unsettledLine / strandWarning", () => {
       "leave it unredeemable (together they no longer fit the new 24-hour limit)",
     );
     expect(strandWarning(["maxPerWindow"], 1)).toContain("the provider is not paid");
+    expect(strandWarning(["revoked"], 2)).toContain("becomes a payment you owe: your paid calls pause");
   });
 });
 
@@ -314,8 +316,10 @@ describe("strandAcknowledgement", () => {
   it("names the count, the amount and the effect", () => {
     const text = strandAcknowledgement({ ...RETEST, count: 3, amount: usdg("600000") });
     expect(text).toMatch(/^3 payments \(\$0\.60\) still being settled would no longer fit\./);
-    expect(text).toContain("the provider is not paid for calls it already served");
-    expect(text).toContain("the $0.60 stays in my escrow");
+    expect(text).toContain("the $0.60 becomes a payment I owe");
+    expect(text).toContain("my paid calls pause until I sign them again");
+    expect(text).toContain("Free calls keep working");
+    expect(text).not.toContain("stays in my escrow");
     expect(text).not.toMatch(/owed/);
   });
 
@@ -386,5 +390,23 @@ describe("tighten delay (D-21)", () => {
     expect(loweredFullyAt(Date.parse("2026-10-17T10:00:00Z"), 3600)).toBe("2026-10-17T11:00:00.000Z");
     expect(loweredFullyAt(Date.parse("2026-10-17T10:00:00Z"), 0)).toBeNull();
     expect(loweredDelayNote(3600, null, lower)).toBeNull();
+  });
+});
+
+describe("loweringBeforeSignNote (P2-11)", () => {
+  const cur = { maxVoucherAmount: "2000000", maxPerWindow: "20000000" };
+  const lower = { maxVoucherAmount: "1000000", maxPerWindow: "20000000" };
+  it("mentions the 30-second pause before signing when the escrow has no delay", () => {
+    expect(loweringBeforeSignNote(null, cur, lower)).toBe(
+      "Lower than now: your agents' payments pause for about 30 seconds while it lands.",
+    );
+    expect(loweringBeforeSignNote(0, cur, lower)).toMatch(/about 30 seconds/);
+  });
+  it("says 'may pause briefly' when the delay could not be read", () => {
+    expect(loweringBeforeSignNote(undefined, cur, lower)).toMatch(/may pause briefly/);
+  });
+  it("uses the delayed-apply text with D-21, and says nothing for a raise", () => {
+    expect(loweringBeforeSignNote(3600, cur, lower)).toMatch(/keep the old ones for 1 hour/);
+    expect(loweringBeforeSignNote(null, lower, cur)).toBeNull();
   });
 });

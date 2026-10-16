@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BuyerDebt, BuyerDebts } from "@/interfaces/buyer-debt";
 
@@ -55,6 +55,12 @@ function render(data: BuyerDebts): string {
   );
 }
 
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-17T00:00:00.000Z"));
+});
+afterEach(() => vi.useRealTimers());
+
 describe("BuyerDebtBanner", () => {
   it("draws nothing without an open debt", () => {
     expect(render({ account: ACCOUNT, debts: [] })).toBe("");
@@ -63,7 +69,7 @@ describe("BuyerDebtBanner", () => {
   it("says in one line what is owed and what it stops, with the deadline, and offers to settle", () => {
     const html = render({ account: ACCOUNT, debts: [debt()] });
     expect(html).toContain("You owe $2.50 for 1 call. Paid calls are paused until you settle.");
-    expect(html).toContain("Settle by 15 Nov 2026, or the provider is not paid");
+    expect(html).toContain("Settle by Nov 15, 00:00 UTC (in 29 days), or the provider is not paid");
     expect(html).toContain("Free calls still work.");
     expect(html).toContain("the payment voucher expired before it could be collected");
     expect(html).toContain("Settle $2.50");
@@ -74,7 +80,7 @@ describe("BuyerDebtBanner", () => {
       account: ACCOUNT,
       debts: [debt({ state: "WRITTEN_OFF", writeOffAt: "2026-10-01T00:00:00.000Z" })],
     });
-    expect(html).toContain("Written off on 1 Oct 2026: the provider was not paid, and settling pays them.");
+    expect(html).toContain("Written off on Oct 1, 00:00 UTC: the provider was not paid, and settling pays them.");
     expect(html).toContain("Paid calls are paused until you settle.");
     expect(html).toContain("Settle $2.50");
   });

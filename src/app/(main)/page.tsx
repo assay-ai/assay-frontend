@@ -288,9 +288,15 @@ export default function OverviewPage() {
 
         <MetricTile
           className="order-3 desktop:order-2"
-          label="Today"
+          label="Spent today"
           value={data ? formatMoney(data.todayCharged) : "—"}
-          sub={data ? `${formatCount(data.todayCalls)} ${data.todayCalls === 1 ? "call" : "calls"}` : "not available"}
+          sub={
+            data
+              ? `${formatCount(data.todayCalls)} ${data.todayCalls === 1 ? "call" : "calls"}${
+                  data.todayOwed ? ` · ${formatMoney(data.todayOwed)} owed, not collected` : ""
+                }`
+              : "not available"
+          }
           meta={trend ?? undefined}
           metaTone={trendUp ? "warning" : "default"}
         />
@@ -475,7 +481,7 @@ export default function OverviewPage() {
                         <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
                       </Link>
                       {/* Owed: what it stops and the way out, beside the row's link. */}
-                      {outcome === "owed" ? <OwedRowAction intentId={call.intentId} /> : null}
+                      {outcome === "owed" ? <OwedRowAction intentId={call.intentId} debt={call.debt} /> : null}
                     </li>
                   );
                 })}

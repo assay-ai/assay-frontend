@@ -52,6 +52,16 @@ export const GLOSSARY = {
     term: "Not charged",
     definition: "The amount you would have paid at the listed price but did not, because the result failed our checks.",
   },
+  spent: {
+    term: "Spent",
+    definition:
+      "Money actually charged from your escrow for calls that passed; a payment still owed is shown beside it as owed, never inside it.",
+  },
+  owed: {
+    term: "Owed",
+    definition:
+      "A call your agent made and used whose payment could not be collected yet; paid calls pause until you settle it.",
+  },
   hold: {
     term: "Hold",
     definition:

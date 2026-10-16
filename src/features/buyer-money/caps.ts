@@ -165,3 +165,23 @@ export function capsSuccessText(
   return "It applies after a short pause: payments may stop for about 30 seconds while the lower ceiling settles.";
 }
 
+
+/**
+ * A 24-hour ceiling below what the agents already spent in the running
+ * window: paid calls stop at once until it refills. Said before signing, with
+ * the amounts (buyer Chrome review P3). `null` when it still fits or the
+ * spend is unknown.
+ */
+export function ceilingBelowSpentNote(
+  spentInWindow: { amount: string; decimals: number } | null | undefined,
+  nextMaxPerWindow: string | null | undefined,
+  refillAt: string | null,
+  format: (atomic: string) => string,
+): string | null {
+  if (!spentInWindow || !nextMaxPerWindow || refillAt === null) return null;
+  if (BigInt(nextMaxPerWindow) >= BigInt(spentInWindow.amount)) return null;
+  return (
+    `Your agents already spent ${format(spentInWindow.amount)} in this 24-hour window, more than the new ` +
+    `${format(nextMaxPerWindow)}: paid calls stop until the window refills.`
+  );
+}

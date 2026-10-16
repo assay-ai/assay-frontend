@@ -11,6 +11,7 @@ import { ApiError } from "@/libs/ApiClient";
 
 import { DEMO_NOW_MS } from "./demo-clock";
 import { demoDebtSigned, demoDebtVariant } from "./demo-debts";
+import { demoDelegateCaps, demoEscrowCaps, rememberDemoPolicy, withDemoPolicy } from "./demo-stage";
 import { demoTightenDelaySeconds } from "./demo-switches";
 import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
 
@@ -707,6 +708,19 @@ function withheldBody(query: Record<string, unknown>) {
 
 /* -------------------------------------------------------------- tool calls */
 
+/**
+ * The call's debt flag for the `?debt=` picture: the owed call reads as
+ * written off under `?debt=written-off`, on the row and the receipt alike,
+ * as it does in the debts list.
+ */
+function demoCallDebt(call: DemoCall): { debt: DemoCall["debt"] | null; chargeNote: string | null } {
+  if (!call.debt) return { debt: null, chargeNote: null };
+  if (call.debt === "OUTSTANDING" && demoDebtVariant() === "written-off") {
+    return { debt: "WRITTEN_OFF", chargeNote: `uncollected:${call.debtCause ?? "unknown"}` };
+  }
+  return { debt: call.debt, chargeNote: call.debtCause ?? null };
+}
+
 function toolCallRow(call: DemoCall) {
   return {
     intentId: call.intentId,
@@ -716,9 +730,30 @@ function toolCallRow(call: DemoCall) {
     price: money(listedPrice(call)),
     charged: money(call.charged),
     forfeited: false,
-    debt: call.debt ?? null,
+    debt: demoCallDebt(call).debt,
     verdict: call.verdict,
     createdAt: minutesAgo(call.minutesAgo),
+  };
+}
+
+/** The account ceiling as a demo change left it, as wire fields. */
+function savedEscrowCaps() {
+  const saved = demoEscrowCaps();
+  if (!saved) return {};
+  return {
+    maxVoucherAmount: { amount: saved.maxVoucherAmount, asset: DEMO_ASSET, decimals: 6 },
+    maxPerWindow: { amount: saved.maxPerWindow, asset: DEMO_ASSET, decimals: 6 },
+  };
+}
+
+/** A delegate's caps as a demo "Sign and save" left them, as wire fields. */
+function savedDelegateCaps(delegate: string) {
+  const saved = demoDelegateCaps(delegate);
+  if (!saved) return {};
+  return {
+    maxVoucherAmount: { amount: saved.maxVoucherAmount, asset: DEMO_ASSET, decimals: 6 },
+    maxPerWindow: { amount: saved.maxPerWindow, asset: DEMO_ASSET, decimals: 6 },
+    ...(saved.validUntil ? { validUntil: saved.validUntil } : {}),
   };
 }
 
@@ -738,7 +773,9 @@ function debtView(call: DemoCall) {
       decimals: 6,
     },
     providerId: providerOf(call),
-    toolId: call.toolId,
+    // The catalogue id, as on every other demo row: the banner and the settle
+    // sheet name the same tool as the call list.
+    toolId: wireToolId(call.toolId),
     cause: call.debtCause ?? null,
     // Not signed yet: the banner offers "Sign to settle".
     state: "OPEN" as const,
@@ -787,7 +824,7 @@ export function demoDebts() {
                 {
                   ...base,
                   intentId: "d1e4b7a0-3c62-4f95-8b18-6a0e2d97c5f3",
-                  toolId: "geocode",
+                  toolId: wireToolId("geocode"),
                   amount: { ...base.amount, amount: money("1.25").amount },
                   state: "WRITTEN_OFF" as const,
                   cause: "uncollected:VoucherExpired",
@@ -800,7 +837,7 @@ export function demoDebts() {
                   ...base,
                   intentId: "7f20c9d3-e815-4a6b-9c47-1d3b8e05a2c6",
                   payer: demoOtherPayer(),
-                  toolId: "ocr_extract",
+                  toolId: wireToolId("ocr_extract"),
                   amount: { ...base.amount, amount: money("6.00").amount },
                   cause: "EscrowWindowLimitExceeded",
                 },
@@ -914,8 +951,8 @@ function receiptBody(call: DemoCall) {
     chargedPrice: money(call.charged),
     withheld: money(call.debt ? "0" : notChargedMajor(call)),
     forfeited: false,
-    debt: call.debt ?? null,
-    chargeNote: call.debt ? (call.debtCause ?? null) : null,
+    debt: demoCallDebt(call).debt,
+    chargeNote: demoCallDebt(call).chargeNote,
     verdict: {
       status: call.verdict,
       reasonCode: call.reasonCode,
@@ -1302,6 +1339,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       windowStartedAt: minutesAgo(540),
       windowSeconds: 86400,
       observedAt: minutesAgo(1),
+      // A demo account ceiling change shows until reload.
+      ...savedEscrowCaps(),
     }),
   },
 
@@ -1403,6 +1442,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
         {}) as Record<string, unknown>;
       const change = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
       const { changeReason: _reason, ...fields } = change;
+      // Kept until reload, so Pause all stays paused on the next fetch.
+      rememberDemoPolicy(fields);
       return { ...current, ...fields, version: Number(current.version ?? 1) + 1, updatedAt: new Date().toISOString() };
     },
   },
@@ -1425,7 +1466,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       const today = collect(todayStart, todayStart + DAY_MS, "tool").totals;
       const month = collect(monthStart, todayStart + DAY_MS, "tool").totals;
 
-      return {
+      return withDemoPolicy({
         id: "sp_northwind",
         scope: "ORGANIZATION",
         agentId: null,
@@ -1452,7 +1493,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           callsThisHour: 11,
           usageReadable: true,
         },
-      };
+      });
     },
   },
 
@@ -1559,6 +1600,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           // Five days left, so the demo shows the "permission ends soon" chip and Renew.
           validUntil: new Date(DEMO_NOW_MS + 5 * 86_400_000 + 3_600_000).toISOString(),
           status: "ACTIVE",
+          // A demo "Sign and save" shows its new limits until reload.
+          ...savedDelegateCaps(prodDelegate()),
         },
       ],
     })),

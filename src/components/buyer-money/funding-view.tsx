@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { windowRefillAt } from "@/features/buyer-money/refill";
 import { isLowBalance, runwayDays, runwayLine } from "@/features/buyer-money/runway";
 import { chainBalances } from "@/features/g30/balance";
-import { spentFromTotals } from "@/features/g30/spend-buckets";
+import { chargedFromTotals } from "@/features/g30/spend-buckets";
 import { useCountdown } from "@/hooks/useCountdown";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import type { Money } from "@/interfaces";
@@ -117,8 +117,8 @@ export function FundingView() {
     queryFn: () => getReceiptsSummary({ from: week.from, to: week.to, groupBy: "tool" }),
     retry: 0,
   });
-  // Charged plus owed (buyer debt is spend still owed), as the summary counts it.
-  const charged7d = spentFromTotals(
+  // "Spent" is charged only, the same figure as Spend's headline (P2-3).
+  const charged7d = chargedFromTotals(
     (weekSpend.data as { totals?: { chargedTotal?: Money; owedTotal?: Money } } | undefined)?.totals,
   );
 
@@ -158,7 +158,11 @@ export function FundingView() {
       <section aria-label="Spendable balance" className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 p-5 shadow-soft tablet:flex-row tablet:items-end tablet:justify-between tablet:p-6">
         <div className="flex min-w-0 flex-col gap-1">
           <span className="flex flex-wrap items-center gap-2 text-body-13 text-02">
-            {noEscrow ? "No money added yet" : "Available now: your agents can spend it, or you can withdraw it"}
+            {noEscrow
+              ? "No money added yet"
+              : freeOnly
+                ? "In your escrow: not spent on calls on this chain; you can withdraw it"
+                : "Available now: your agents can spend it, or you can withdraw it"}
             <TestnetChip chain={money.chain} />
           </span>
           {escrowQuery.isPending ? (
@@ -180,7 +184,8 @@ export function FundingView() {
                 : ""}
             </span>
           )}
-          {runway ? <span className="text-body-13 text-02">{runway}</span> : null}
+          {/* No runway on a free-only chain: nothing is spent from the escrow there. */}
+          {runway && !freeOnly ? <span className="text-body-13 text-02">{runway}</span> : null}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2.5">
           {escrow?.exists ? (

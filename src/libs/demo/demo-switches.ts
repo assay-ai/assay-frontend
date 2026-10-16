@@ -5,7 +5,7 @@
  *
  *   ?rails=free-only — the demo account's chain serves free calls only (as
  *                      Solana does today): `servesPaidCalls` is false for it.
- *                      `?rails=paid` goes back.
+ *                      `?rails=paid` (or `?rails=all`) goes back.
  *                      (Not `?chain=`: that already picks the escrow's chain
  *                      on `/funding/escrow`.)
  *   ?tighten=1h      — the demo escrow delays a tightening (assay-evm D-21):
@@ -30,8 +30,10 @@ function demoBuild(): boolean {
 
 export type DemoRails = "free-only" | "paid";
 
+/** `free-only`, or `paid` (also spelt `all`) to go back. */
 export function parseRailsSwitch(value: string | null | undefined): DemoRails | null {
-  return value === "free-only" || value === "paid" ? value : null;
+  if (value === "free-only") return "free-only";
+  return value === "paid" || value === "all" ? "paid" : null;
 }
 
 /** Seconds, or 0 for "binds at once"; null when the value is not a duration. */
