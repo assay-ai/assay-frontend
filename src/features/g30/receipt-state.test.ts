@@ -139,6 +139,8 @@ describe("deriveReceiptState — collection", () => {
     expect(STATE_CARDS.DEBT_OUTSTANDING.sentence).toMatch(/paid calls are paused/);
     expect(STATE_CARDS.DEBT_WRITTEN_OFF.sentence).toMatch(/provider was not paid/);
     expect(STATE_CARDS.DEBT_WRITTEN_OFF.sentence).toMatch(/Paid calls stay paused until you settle it/);
+    expect(STATE_CARDS.DEBT_WRITTEN_OFF.sentence).toMatch(/You still owe it to resume paid calls/);
+    expect(STATE_CARDS.DEBT_WRITTEN_OFF.sentence).not.toMatch(/not charged/);
     expect(STATE_CARDS.DEBT_VOIDED.sentence).toMatch(/You were not charged.*provider was not paid/);
     expect(COLLECTION_STATES.has("DEBT_VOIDED")).toBe(true);
   });
