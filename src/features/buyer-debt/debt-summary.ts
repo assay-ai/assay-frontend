@@ -269,6 +269,59 @@ export function settleReadiness(
 }
 
 /**
+ * What the settle sheet says about the escrow before the wallet opens, one of:
+ *
+ * - `pending` — still reading it;
+ * - `unread` — it could not be read (the query failed, the chain did not
+ *   answer, or its balance is in another asset than the debts), so nothing is
+ *   checked and the sheet says so rather than staying silent;
+ * - `blocked` — `settleReadiness` found what stops the collection;
+ * - `ok` — it can pay, with one line per check that passed (balance, per-call
+ *   ceiling, what is left of the 24-hour ceiling), so the buyer sees the check
+ *   ran (review 2026-10-17: the sheet showed neither the check nor a note).
+ */
+export type SettleEscrowCheck =
+  | { kind: "pending" }
+  | { kind: "unread" }
+  | { kind: "blocked"; blocks: SettleBlock[] }
+  | { kind: "ok"; rows: { label: string; value: string }[] };
+
+export function settleEscrowCheck(
+  read: { data: SettleEscrowReading | null | undefined; isError: boolean; isPending: boolean },
+  settling: readonly Pick<BuyerDebt, "amount" | "state">[],
+  now: number = Date.now(),
+): SettleEscrowCheck {
+  const escrow = read.data;
+  if (read.isError) return { kind: "unread" };
+  if (!escrow) return read.isPending ? { kind: "pending" } : { kind: "unread" };
+  const total = debtTotal(settling);
+  if (escrow.chainReadable === false || !total || !balanceAfterSettling(escrow.balance, settling)) return { kind: "unread" };
+  const blocks = settleReadiness(escrow, settling, now);
+  if (blocks.length > 0) return { kind: "blocked", blocks };
+
+  const fmt = (money: Money) => formatMoney(money, { decimals: 4 });
+  const same = (money: Money | null): money is Money =>
+    money !== null && money.asset === total.asset && money.decimals === total.decimals;
+  const rows: { label: string; value: string }[] = [
+    { label: "Escrow balance", value: `${fmt(escrow.balance!)}: enough for ${fmt(total)}` },
+  ];
+  if (same(escrow.maxVoucherAmount)) {
+    rows.push({ label: "Per-call ceiling", value: `${fmt(escrow.maxVoucherAmount)}: each payment fits` });
+  }
+  if (same(escrow.maxPerWindow)) {
+    const started = escrow.windowStartedAt ? new Date(escrow.windowStartedAt).getTime() : NaN;
+    const current = !Number.isNaN(started) && started + escrow.windowSeconds * 1000 > now;
+    const spent = current && same(escrow.spentInWindow) ? toDecimal(escrow.spentInWindow) : new Decimal(0);
+    const left = Decimal.max(toDecimal(escrow.maxPerWindow).minus(spent), 0);
+    rows.push({
+      label: "24-hour ceiling",
+      value: `${formatMoney(moneyOf(left, total), { decimals: 4 })} of ${fmt(escrow.maxPerWindow)} left: enough`,
+    });
+  }
+  return { kind: "ok", rows };
+}
+
+/**
  * Whether paid calls resume once these debts are collected: only when no
  * other debt is left, the organization's other wallets' included.
  */

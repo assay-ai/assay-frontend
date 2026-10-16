@@ -14,6 +14,7 @@ import {
   owedRowText,
   paidCallsAfterSettling,
   resumesAfterSettling,
+  settleEscrowCheck,
   settleReadiness,
   type SettleEscrowReading,
 } from "./debt-summary";
@@ -217,6 +218,50 @@ describe("settleReadiness (P1-3)", () => {
   it("checks nothing when the escrow could not be read", () => {
     expect(settleReadiness(escrow({ chainReadable: false, spendable: usd("0") }), [debt({ state: "WRITTEN_OFF" })])).toEqual([]);
     expect(settleReadiness(null, [debt()])).toEqual([]);
+  });
+});
+
+describe("settleEscrowCheck (review 2026-10-17 P2-a)", () => {
+  const now = Date.parse("2026-10-16T18:00:00.000Z");
+  const read = (data: SettleEscrowReading | null, more: { isError?: boolean; isPending?: boolean } = {}) => ({
+    data,
+    isError: more.isError ?? false,
+    isPending: more.isPending ?? false,
+  });
+
+  it("shows each check that passed, with the amounts", () => {
+    const check = settleEscrowCheck(read(escrow()), [debt()], now);
+    expect(check).toEqual({
+      kind: "ok",
+      rows: [
+        { label: "Escrow balance", value: "$10.00: enough for $2.50" },
+        { label: "Per-call ceiling", value: "$5.00: each payment fits" },
+        { label: "24-hour ceiling", value: "$19.00 of $20.00 left: enough" },
+      ],
+    });
+  });
+
+  it("blocks with the way out when the escrow cannot pay", () => {
+    const check = settleEscrowCheck(
+      read(escrow({ balance: usd("1"), spendable: usd("1"), maxVoucherAmount: usd("2") })),
+      [debt({ state: "WRITTEN_OFF" })],
+      now,
+    );
+    expect(check.kind).toBe("blocked");
+    if (check.kind !== "blocked") return;
+    expect(check.blocks.map((block) => block.action.label)).toEqual(["Add $1.50", "Raise the per-call ceiling to $2.50"]);
+  });
+
+  it("says it could not read the escrow when the query failed, the chain did not answer, or the asset differs", () => {
+    expect(settleEscrowCheck(read(null, { isError: true }), [debt()], now)).toEqual({ kind: "unread" });
+    expect(settleEscrowCheck(read(escrow({ chainReadable: false })), [debt()], now)).toEqual({ kind: "unread" });
+    const otherAsset = { ...usd("10"), asset: "eip155:1/erc20:0x0" };
+    expect(settleEscrowCheck(read(escrow({ balance: otherAsset })), [debt()], now)).toEqual({ kind: "unread" });
+    expect(settleEscrowCheck(read(escrow({ balance: null })), [debt()], now)).toEqual({ kind: "unread" });
+  });
+
+  it("is pending only while the first read is on its way", () => {
+    expect(settleEscrowCheck(read(null, { isPending: true }), [debt()], now)).toEqual({ kind: "pending" });
   });
 });
 

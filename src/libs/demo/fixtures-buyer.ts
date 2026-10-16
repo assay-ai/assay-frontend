@@ -10,7 +10,7 @@ import {
 import { ApiError } from "@/libs/ApiClient";
 
 import { DEMO_NOW_MS } from "./demo-clock";
-import { demoDebtSigned, demoDebtVariant } from "./demo-debts";
+import { demoDebtSigned, demoDebtVariant, writtenOffVariant } from "./demo-debts";
 import { demoDelegateCaps, demoEscrowCaps, rememberDemoPolicy, withDemoPolicy } from "./demo-stage";
 import { demoTightenDelaySeconds } from "./demo-switches";
 import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
@@ -333,6 +333,20 @@ function findCallByVerdict(verdictId: string): DemoCall {
 }
 
 /**
+ * How long ago a call was made, in minutes. The owed call is made more than 30
+ * days back under a written-off picture (`?debt=written-off`, `?debt=short`):
+ * a debt is written off 30 days after its payment lapsed, so a write-off two
+ * days ago is a call 32 days ago. Read as "Today 00:40" it put the write-off
+ * before the call (review 2026-10-17).
+ */
+function callAge(call: Pick<DemoCall, "minutesAgo" | "debt">): number {
+  if (call.debt === "OUTSTANDING" && writtenOffVariant(demoDebtVariant())) {
+    return (WRITE_OFF_DAYS + WRITTEN_OFF_DAYS_AGO) * 1440 + DEBT_LAPSE_MINUTES;
+  }
+  return call.minutesAgo;
+}
+
+/**
  * Whether a call falls inside `[fromMs, toMs)`.
  *
  * The call list and the verdict feed are windowed like the aggregates are, so
@@ -341,7 +355,7 @@ function findCallByVerdict(verdictId: string): DemoCall {
  * does not reach, which is the truth: these fourteen rows are the recent ones.
  */
 function withinWindow(call: DemoCall, fromMs: number, toMs: number): boolean {
-  const at = DEMO_NOW_MS - call.minutesAgo * 60_000;
+  const at = DEMO_NOW_MS - callAge(call) * 60_000;
   return at >= fromMs && at < toMs;
 }
 
@@ -715,7 +729,7 @@ function withheldBody(query: Record<string, unknown>) {
  */
 function demoCallDebt(call: DemoCall): { debt: DemoCall["debt"] | null; chargeNote: string | null } {
   if (!call.debt) return { debt: null, chargeNote: null };
-  if (call.debt === "OUTSTANDING" && demoDebtVariant() === "written-off") {
+  if (call.debt === "OUTSTANDING" && writtenOffVariant(demoDebtVariant())) {
     return { debt: "WRITTEN_OFF", chargeNote: `uncollected:${call.debtCause ?? "unknown"}` };
   }
   return { debt: call.debt, chargeNote: call.debtCause ?? null };
@@ -732,7 +746,7 @@ function toolCallRow(call: DemoCall) {
     forfeited: false,
     debt: demoCallDebt(call).debt,
     verdict: call.verdict,
-    createdAt: minutesAgo(call.minutesAgo),
+    createdAt: minutesAgo(callAge(call)),
   };
 }
 
@@ -760,10 +774,14 @@ function savedDelegateCaps(delegate: string) {
 /* ----------------------------------------------------------- buyer debt */
 
 const WRITE_OFF_DAYS = 30;
+/** Under a written-off picture, the write-off was this many days ago. */
+const WRITTEN_OFF_DAYS_AGO = 2;
+/** A demo debt's payment lapses this many minutes after its call. */
+const DEBT_LAPSE_MINUTES = 10;
 
 /** The one open debt, as `GET /escrow/debts` lists it (`state: "OPEN"`). */
 function debtView(call: DemoCall) {
-  const lapsedMinutes = Math.max(call.minutesAgo - 10, 0);
+  const lapsedMinutes = Math.max(callAge(call) - DEBT_LAPSE_MINUTES, 0);
   return {
     intentId: call.intentId,
     payer: DEMO_BUYER_ACCOUNT,
@@ -782,7 +800,7 @@ function debtView(call: DemoCall) {
     lapsedAt: minutesAgo(lapsedMinutes),
     writeOffAt: minutesAgo(lapsedMinutes - WRITE_OFF_DAYS * 1440),
     replacedAt: null,
-    createdAt: minutesAgo(call.minutesAgo),
+    createdAt: minutesAgo(callAge(call)),
   };
 }
 
@@ -813,8 +831,9 @@ export function demoDebts() {
   if (freshStage() !== null || variant === "none") return [];
   const base = demoDebt();
   const debts =
-    variant === "written-off"
-      ? [{ ...base, state: "WRITTEN_OFF" as const, cause: `uncollected:${base.cause ?? "unknown"}`, writeOffAt: minutesAgo(60 * 24 * 2) }]
+    writtenOffVariant(variant)
+      ? // `writeOffAt` comes from the call's own (older) time: see `callAge`.
+        [{ ...base, state: "WRITTEN_OFF" as const, cause: `uncollected:${base.cause ?? "unknown"}` }]
       : variant === "other-wallet"
         ? [{ ...base, payer: demoOtherPayer() }]
         : variant === "collecting"
@@ -937,8 +956,8 @@ function stagesFor(call: DemoCall): WireStage[] {
 }
 
 function receiptBody(call: DemoCall) {
-  const created = minutesAgo(call.minutesAgo);
-  const settled = inFlight(call) ? null : minutesAgo(Math.max(call.minutesAgo - 1, 0));
+  const created = minutesAgo(callAge(call));
+  const settled = inFlight(call) ? null : minutesAgo(Math.max(callAge(call) - 1, 0));
   const charged = call.charged !== "0";
 
   return {
@@ -973,7 +992,7 @@ function receiptBody(call: DemoCall) {
       display: "1 call in 40 at this price",
     },
     createdAt: created,
-    expiresAt: minutesAgo(call.minutesAgo - 1440),
+    expiresAt: minutesAgo(callAge(call) - 1440),
     updatedAt: settled ?? created,
     evaluatedAt: call.verdict ? settled : null,
     settledAt: charged ? settled : null,
@@ -1001,7 +1020,7 @@ function verdictRow(call: DemoCall) {
     decisionPolicyId: "dp_tool_default",
     decisionPolicyVersion: 3,
     state: "SEALED",
-    createdAt: minutesAgo(call.minutesAgo),
+    createdAt: minutesAgo(callAge(call)),
   };
 }
 
@@ -1052,8 +1071,8 @@ function evidenceBody(call: DemoCall) {
     stageResults: stagesFor(call),
     sampling: { rate: 0.025, sampled: false, display: "1 call in 40 at this price" },
     pinnedPolicy: { decisionPolicyId: "dp_tool_default", decisionPolicyVersion: 3 },
-    evaluatedAt: minutesAgo(Math.max(call.minutesAgo - 1, 0)),
-    createdAt: minutesAgo(call.minutesAgo),
+    evaluatedAt: minutesAgo(Math.max(callAge(call) - 1, 0)),
+    createdAt: minutesAgo(callAge(call)),
   };
 }
 
@@ -1105,6 +1124,39 @@ function freshEscrow() {
     windowStartedAt: null,
     windowSeconds: 86400,
     observedAt: minutesAgo(1),
+  };
+}
+
+/**
+ * The escrow under the `?debt=short` and `?debt=unread` pictures, so the
+ * settle sheet's checks can be seen blocking and skipped. `null` otherwise.
+ */
+function debtEscrow() {
+  const variant = demoDebtVariant();
+  if (variant !== "short" && variant !== "unread") return null;
+  const readable = variant === "short";
+  const amount = (major: string) => (readable ? money(major) : null);
+  return {
+    exists: true,
+    chainReadable: readable,
+    account: DEMO_BUYER_ACCOUNT,
+    escrowPda: null,
+    escrowTokenAccount: null,
+    // $1.00 against a $2.50 written-off debt, whose hold was released.
+    balance: amount("1.00"),
+    openHolds: amount("0"),
+    spendable: amount("1.00"),
+    withdrawRequested: amount("0"),
+    withdrawAvailableAt: null,
+    serverTime: justNow(),
+    // A $2.00 per-call ceiling: the $2.50 payment is over it.
+    maxVoucherAmount: amount("2.00"),
+    maxPerWindow: amount("120.00"),
+    spentInWindow: amount("15.75"),
+    windowStartedAt: readable ? minutesAgo(540) : null,
+    windowSeconds: 86400,
+    observedAt: readable ? minutesAgo(1) : null,
+    ...(readable ? savedEscrowCaps() : {}),
   };
 }
 
@@ -1315,7 +1367,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/escrow",
     override: "always",
-    body: () => freshEscrow() ?? ({
+    body: () => freshEscrow() ?? debtEscrow() ?? ({
       exists: true,
       chainReadable: true,
       account: DEMO_BUYER_ACCOUNT,

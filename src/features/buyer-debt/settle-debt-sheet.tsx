@@ -33,7 +33,7 @@ import {
   debtTotal,
   paidCallsAfterSettling,
   resumesAfterSettling,
-  settleReadiness,
+  settleEscrowCheck,
 } from "./debt-summary";
 import { settleDebt } from "./settle-debt";
 import { refreshesDebts, settleDebtFailure } from "./settle-debt-errors";
@@ -157,8 +157,11 @@ function SettleDebtSheet({
   const balance = escrow.data?.balance ?? null;
   const balanceAfter = balanceAfterSettling(balance, settling);
   const after = balanceAfter?.after ?? null;
-  const blocks = settleReadiness(escrow.data ?? null, settling);
-  const escrowUnread = escrow.isError || escrow.data?.chainReadable === false;
+  const check = settleEscrowCheck(
+    { data: escrow.data ?? null, isError: escrow.isError, isPending: escrow.isPending },
+    settling,
+  );
+  const blocks = check.kind === "blocked" ? check.blocks : [];
   const resumes = resumesAfterSettling(query.data, settling);
   const { paused: pausedByYou } = usePauseAll();
   const paidCalls = paidCallsAfterSettling({ resumes, pausedByYou, blocked: readOnly });
@@ -202,7 +205,7 @@ function SettleDebtSheet({
       ? "Nothing left for this wallet to sign: it is settled, being collected, or owed by another wallet."
       : blocks.length > 0
         ? `Not yet: ${blocks.map((block) => block.text).join(" ")}`
-        : escrow.isPending && settling.length > 0
+        : check.kind === "pending" && settling.length > 0
           ? "Checking your escrow balance and ceilings first…"
           : walletBlocker;
 
@@ -272,11 +275,25 @@ function SettleDebtSheet({
             </div>
           ))}
         </section>
-      ) : escrowUnread && settling.length > 0 ? (
+      ) : check.kind === "unread" && settling.length > 0 ? (
         <p className="text-body-13 text-warning-700" data-testid="settle-escrow-unread">
           Your escrow could not be read, so its balance and ceilings are not checked here. If it cannot pay this, the
           collection fails and the debt stays open.
         </p>
+      ) : check.kind === "ok" && settling.length > 0 ? (
+        <section aria-labelledby="settle-checked" className="flex flex-col gap-1.5" data-testid="settle-checked">
+          <h3 id="settle-checked" className="text-label-13 text-01">
+            Checked: your escrow can pay it
+          </h3>
+          <dl className="grid grid-cols-[120px_minmax(0,1fr)] gap-x-3 gap-y-1 text-body-13">
+            {check.rows.map((row) => (
+              <React.Fragment key={row.label}>
+                <dt className="text-03">{row.label}</dt>
+                <dd className="text-01 [overflow-wrap:anywhere]">{row.value}</dd>
+              </React.Fragment>
+            ))}
+          </dl>
+        </section>
       ) : null}
       {settling.length > 0 ? (
         <section aria-labelledby="settle-what-you-sign" className="flex flex-col gap-2">
