@@ -5,6 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Chain } from "@/interfaces/chain";
 
+// The demo's `?rails=free-only` switch, flipped per test.
+const demoRails = vi.hoisted(() => ({ freeOnly: false }));
+vi.mock("@/libs/demo/demo-switches", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/libs/demo/demo-switches")>()),
+  demoFreeOnlyChain: () => demoRails.freeOnly,
+}));
+
 vi.mock("@/hooks/useSigner", () => ({
   useSigner: () => ({ status: "hydrating" }),
   isUserRejection: () => false,
@@ -152,6 +159,20 @@ describe("LimitsView (Spending limits) — two layers, one effective limit per a
     expect(html).toContain("Older rules still checked");
     expect(html).toContain("For every agent: any single call above $25.00 is refused.");
     expect(html).toContain("Remove it");
+  });
+
+  // review 2026-10-17: free-only /limits still listed "Older rules" with $ per-call caps.
+  it("hides the older paid-call rules on a free-calls-only chain, like the ceiling and the agent's limits", () => {
+    demoRails.freeOnly = true;
+    try {
+      const html = markup({ ...POLICY, requireApprovalAbove: usd("25"), perCallMax: usd("10"), dailyCap: usd("75") });
+      expect(html).toContain('data-testid="ceiling-free-only"');
+      expect(html).not.toContain("old-rule-line");
+      expect(html).not.toContain("Older rules still checked");
+      expect(html).not.toContain("$25.00");
+    } finally {
+      demoRails.freeOnly = false;
+    }
   });
 
   // BUG-J-BUY-01: a first policy must be creatable from the UI.
