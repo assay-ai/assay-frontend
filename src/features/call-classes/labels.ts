@@ -48,7 +48,7 @@ const RECEIPT_STATE_LABEL: Record<string, string> = {
   REQUEST_ERROR: RESPONSE_CLASS_LABEL.REQUEST_ERROR,
   EXPIRED: "Expired",
   DEBT_OUTSTANDING: "Payment not collected yet",
-  DEBT_WRITTEN_OFF: "Written off, not charged",
+  DEBT_WRITTEN_OFF: "Written off for the provider, still owed",
   DEBT_VOIDED: "Voided, not charged",
   FORFEITED: "Forfeited by the provider",
 };

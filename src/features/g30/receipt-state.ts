@@ -220,9 +220,9 @@ export const STATE_CARDS: Record<Exclude<ReceiptState, "CHARGED" | "NOT_CHARGED"
     icon: "circle-alert",
     tone: "warning",
     sentence:
-      "This call was served, but its payment was never settled, so it was written off. You were not charged, the funds held for it were released, and the provider was not paid. Paid calls stay paused until you settle it from the banner above, and settling it pays the provider.",
-    money: (r) => charged(r),
-    moneyTeal: true,
+      "This call was served, but its payment was never settled, so it was written off for the provider: the funds held for it were released and the provider was not paid. You still owe it to resume paid calls. Paid calls stay paused until you settle it from the banner above, and settling it pays the provider.",
+    money: (r) => `${price(r)} owed`,
+    moneyTeal: false,
   },
   DEBT_VOIDED: {
     code: "DEBT_VOIDED",

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ToolCall } from "@/services/tool-calls.service";
 
-import { callBuckets, reconcileSentence } from "./spend-buckets";
+import { callBuckets, reconcileSentence, spentFromTotals } from "./spend-buckets";
 import type { SummaryFigures } from "./wire";
 
 const ASSET = "eip155:46630/erc20:0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
@@ -36,10 +36,13 @@ describe("callBuckets — one call in the summary's buckets (R17b-B-01)", () => 
     expect(amounts(call({ debt: "OUTSTANDING" }))).toEqual(["0", "0", "250000", "0"]);
   });
 
-  it("counts forfeited, written-off, voided and refunded calls as not charged", () => {
+  it("counts a written-off debt as owed: the buyer still owes it (final review M2)", () => {
+    expect(amounts(call({ debt: "WRITTEN_OFF", charged: m("0") }))).toEqual(["0", "0", "250000", "0"]);
+  });
+
+  it("counts forfeited, voided and refunded calls as not charged", () => {
     for (const c of [
       call({ forfeited: true, charged: m("0") }),
-      call({ debt: "WRITTEN_OFF", charged: m("0") }),
       call({ debt: "VOIDED", charged: m("0") }),
       call({ status: "VOIDED", charged: m("0") }),
       call({ status: "REFUNDED", charged: m("0"), verdict: "FAIL" }),
@@ -80,5 +83,21 @@ describe("reconcileSentence", () => {
     expect(reconcileSentence(totals({ inProgressCalls: 1, inProgressTotal: m("100000") }))).toContain(
       "in progress",
     );
+  });
+});
+
+describe("spentFromTotals — charged plus owed (final review M1)", () => {
+  it("adds owed to charged", () => {
+    expect(spentFromTotals({ chargedTotal: m("1500000"), owedTotal: m("250000") })).toEqual(m("1750000"));
+  });
+
+  it("is charged alone when nothing is owed or the backend sends no owed figure", () => {
+    expect(spentFromTotals({ chargedTotal: m("1500000") })).toEqual(m("1500000"));
+    expect(spentFromTotals({ chargedTotal: m("1500000"), owedTotal: m("0") })).toEqual(m("1500000"));
+  });
+
+  it("is null without a charged figure", () => {
+    expect(spentFromTotals(undefined)).toBeNull();
+    expect(spentFromTotals({ owedTotal: m("250000") })).toBeNull();
   });
 });

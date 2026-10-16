@@ -86,8 +86,9 @@ export interface Receipt {
   /**
    * Buyer debt. `OUTSTANDING`: the payment could not be collected; the price
    * stays held and is charged once the payer signs a replacement voucher — paid
-   * calls are refused until then. `WRITTEN_OFF`: never settled; not charged,
-   * provider not paid, and paid calls stay refused until it is signed.
+   * calls are refused until then. `WRITTEN_OFF`: never settled; written off for
+   * the provider (not paid), but the buyer still owes it: paid calls stay
+   * refused until it is signed, and the summary counts it under owed.
    * `VOIDED`: the call failed verification after it had become debt; not
    * charged, provider not paid.
    */
@@ -112,18 +113,22 @@ export interface SummaryFigures {
   calls: number;
   refundedCalls: number;
   listedTotal: Money;
-  /** Served and collected (or being collected). An open buyer debt is in `owedTotal`. */
+  /** Served and collected (or being collected). Open or written-off buyer debt is in `owedTotal`. */
   chargedTotal: Money;
   /** The guarantee's withheld figure — part of `notChargedTotal`, not all of it. */
   withheldTotal: Money;
   /**
    * Not charged: refunded, voided and expired calls, and served calls never
-   * collected (forfeited, written-off or voided debt).
+   * collected and not owed (forfeited, voided debt). A written-off debt is
+   * owed, not here.
    * `listedTotal = chargedTotal + notChargedTotal + owedTotal + inProgressTotal`.
    */
   notChargedTotal: Money;
   notChargedCalls: number;
-  /** Open buyer debt: served, payment not collected yet — neither charged nor not charged. */
+  /**
+   * Buyer debt, open or written off: served, payment not collected yet, still
+   * owed by the buyer — neither charged nor not charged.
+   */
   owedTotal: Money;
   owedCalls: number;
   /** Calls not finished yet, at their listed price. */
