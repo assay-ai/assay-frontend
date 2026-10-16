@@ -27,6 +27,7 @@ import { policyBootstrapAsset } from "@/features/limits/policy-bootstrap";
 import { useChains } from "@/hooks/useChains";
 import type { Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
+import { freeOnlyCeilingText, freeOnlyLimitsText } from "@/libs/chains/paid-rails";
 import { plainError } from "@/libs/plain-language";
 import { updateSpendPolicy, type SpendPolicy } from "@/services/limits.service";
 import { getReceiptsSummary } from "@/services/receipts.service";
@@ -330,7 +331,11 @@ export function AgentLimitsCard({ ctx, agent, onChanged }: { ctx: LimitsContext;
         </p>
       ) : (
         <>
-          {canPay ? (
+          {readiness.freeOnly ? (
+            <p className="text-body-13 text-02" data-testid="limits-free-only">
+              {freeOnlyLimitsText(ctx.freeOnlyChainName ?? "This chain")}
+            </p>
+          ) : canPay ? (
             <>
               <EffectiveLimitLines lines={lines} />
               {paused ? <p className="text-body-13 text-danger-600">All paid calls are paused, so it spends nothing until you resume.</p> : null}
@@ -369,6 +374,19 @@ export function AccountCeilingCard({ ctx }: { ctx: LimitsContext }) {
   const escrow = ctx.escrowQuery.data;
   if (!escrow?.exists) return null;
   const set = capsAreSet(escrow);
+  // A free-calls-only chain: nothing is paid, so no "a call" or "left now" figures (B5).
+  if (ctx.freeOnlyChainName) {
+    return (
+      <section
+        aria-label="Account ceiling"
+        data-testid="ceiling-free-only"
+        className="flex w-full flex-col gap-1 rounded-xl border border-01 bg-01 p-4 shadow-hair tablet:p-5"
+      >
+        <h2 className="text-label-md text-01">Account ceiling</h2>
+        <p className="text-body-13 text-02">{freeOnlyCeilingText(ctx.freeOnlyChainName)}</p>
+      </section>
+    );
+  }
   return (
     <section aria-label="Account ceiling" className="flex w-full flex-col gap-2.5 rounded-xl border border-01 bg-01 p-4 shadow-hair tablet:p-5">
       <div className="flex w-full flex-wrap items-center justify-between gap-2">

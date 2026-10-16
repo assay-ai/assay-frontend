@@ -34,6 +34,19 @@ export function freeCallsOnlyText(chainName: string): string {
 }
 
 /**
+ * In place of a paid-spend ceiling or meter on a free-calls-only chain: there
+ * is nothing for it to count, so no "left now" or "of $120.00" is shown.
+ */
+export function freeOnlyCeilingText(chainName: string): string {
+  return `Not used on ${chainName}: paid calls are not offered there, so nothing is counted against it.`;
+}
+
+/** In place of an agent's spending limits and meters on a free-calls-only chain. */
+export function freeOnlyLimitsText(chainName: string): string {
+  return `${chainName} serves free calls only, so this agent spends nothing there and its spending limits count nothing.`;
+}
+
+/**
  * The line under the signed-in Explore header for a buyer whose chain serves
  * free calls only: the prices on the page do not apply to their agents there.
  */

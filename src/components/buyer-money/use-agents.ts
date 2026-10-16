@@ -144,6 +144,8 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
     keys: keysQuery.data ?? {},
     delegates,
     readiness,
+    /** The escrow's chain name when it serves free calls only, else `null`. */
+    freeOnlyChainName: freeOnlyChainName(escrowQuery.data?.account),
     refetchKeys: () => void keysQuery.refetch(),
     refetchDelegates: () => void delegatesQuery.refetch(),
   };
