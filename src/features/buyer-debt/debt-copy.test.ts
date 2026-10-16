@@ -8,11 +8,15 @@ import {
   debtBannerDescription,
   debtBannerTitle,
   debtDate,
+  debtLocalTime,
   debtOutstandingContext,
   debtRefusalSentence,
   debtRowText,
   debtSentence,
   debtsToSign,
+  isReplaceable,
+  nextReplaceableAt,
+  notYetReplaceableSentence,
   settledToast,
   settleDebtErrorSentence,
   splitDebts,
@@ -192,9 +196,61 @@ describe("the debt refusals", () => {
   });
 });
 
+describe("when a debt can be settled", () => {
+  const now = Date.parse("2026-10-17T10:00:00.000Z");
+
+  it("waits for replaceableAt, and settles at once without one", () => {
+    expect(isReplaceable(debt({ replaceableAt: "2026-10-17T10:30:00.000Z" }), now)).toBe(false);
+    expect(isReplaceable(debt({ replaceableAt: "2026-10-17T10:00:00.000Z" }), now)).toBe(true);
+    expect(isReplaceable(debt({ replaceableAt: "2026-10-17T09:00:00.000Z" }), now)).toBe(true);
+    expect(isReplaceable(debt({ replaceableAt: null }), now)).toBe(true);
+    expect(isReplaceable(debt(), now)).toBe(true);
+    expect(isReplaceable(debt({ replaceableAt: "not a time" }), now)).toBe(true);
+  });
+
+  it("finds the earliest time still ahead", () => {
+    expect(nextReplaceableAt([debt()], now)).toBeNull();
+    expect(
+      nextReplaceableAt(
+        [
+          debt({ replaceableAt: "2026-10-17T09:00:00.000Z" }),
+          debt({ replaceableAt: "2026-10-17T11:00:00.000Z" }),
+          debt({ replaceableAt: "2026-10-17T10:20:00.000Z" }),
+        ],
+        now,
+      ),
+    ).toBe(Date.parse("2026-10-17T10:20:00.000Z"));
+  });
+
+  it("says from when, in local time, and why", () => {
+    const at = "2026-10-17T10:30:00.000Z";
+    expect(notYetReplaceableSentence(at)).toBe(
+      `You can settle this from ${debtLocalTime(at)} (the original payment must expire on chain first, ` +
+        "so you never pay twice).",
+    );
+    expect(notYetReplaceableSentence(at, "it")).toMatch(/^you can settle it from /);
+    expect(notYetReplaceableSentence(null)).toMatch(/^You can settle this in a few minutes \(/);
+    expect(debtLocalTime(at)).toMatch(/\d{2}:\d{2}/);
+    expect(debtLocalTime("soon")).toBe("soon");
+  });
+});
+
 describe("the settle refusals", () => {
   const err = (code: string, status: number, context?: Record<string, unknown>) =>
     new ApiError(code, "raw", status, "/escrow/debts/int_1/voucher", context);
+
+  it("says from when a debt can be settled, and that nothing was signed", () => {
+    const at = "2026-10-17T10:30:00.000Z";
+    expect(settleDebtErrorSentence(err("PAYMENT_DEBT_NOT_YET_REPLACEABLE", 409, { replaceableAt: at }))).toBe(
+      `${notYetReplaceableSentence(at)} Nothing was signed.`,
+    );
+    expect(settleDebtErrorSentence(err("PAYMENT_DEBT_NOT_YET_REPLACEABLE", 409))).toMatch(/in a few minutes/);
+    expect(settleDebtErrorSentence(err("PAYMENT_DEBT_REPLACEMENT_REFUSED", 409))).toBe(
+      "This call changed while you were signing, so the payment was not accepted and nothing was charged. Try again.",
+    );
+    // Only the settle routes reword them: not the client-wide debt sentence.
+    expect(debtRefusalSentence(err("PAYMENT_DEBT_NOT_YET_REPLACEABLE", 409))).toBeNull();
+  });
 
   it("words each refusal the settle routes answer", () => {
     expect(settleDebtErrorSentence(err("PAYMENT_DEBT_REPLACEMENT_PENDING", 409))).toMatch(/being collected/);
