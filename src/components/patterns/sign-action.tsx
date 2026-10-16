@@ -478,15 +478,32 @@ export function WalletActionSheet({
   ...signProps
 }: WalletActionSheetProps) {
   const [busy, setBusy] = React.useState(false);
+  const [done, setDone] = React.useState(false);
+  const contentRef = React.useRef<HTMLDivElement>(null);
   const [acknowledged, setAcknowledged] = React.useState(false);
   // However the sheet closed (its X, or a Done button calling the parent), the
   // next opening asks again.
   const [wasOpen, setWasOpen] = React.useState(open);
   if (wasOpen !== open) {
     setWasOpen(open);
-    if (!open) setAcknowledged(false);
+    if (!open) {
+      setAcknowledged(false);
+      setDone(false);
+    }
   }
   const needsAck = Boolean(acknowledge) && !acknowledged;
+  /*
+    Once it went through, the footer grows (the result and Done) while the
+    scroll position stays: as a sticky footer it then covered the end of the
+    content, a timeline's last steps included (final regression 2026-10-17,
+    withdraw stake). After success it stops being sticky and the sheet scrolls
+    to its end, so the content and the result both show in full.
+  */
+  React.useEffect(() => {
+    if (!done) return;
+    const node = contentRef.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, [done]);
   // DEMO ONLY: the screens read fixtures, so a signature would move real
   // test money against figures that are not real. The steps are simulated
   // instead, so the whole flow, success state included, can be walked.
@@ -502,7 +519,11 @@ export function WalletActionSheet({
         onOpenChange(next);
       }}
     >
-      <SheetContent showCloseButton={!busy} {...(description ? {} : { "aria-describedby": undefined })}>
+      <SheetContent
+        ref={contentRef}
+        showCloseButton={!busy}
+        {...(description ? {} : { "aria-describedby": undefined })}
+      >
         <SheetHeader className="tablet:pt-5">
           <TestnetChip chain={chain} className="self-start" />
           <SheetTitle className="pr-8">{title}</SheetTitle>
@@ -532,7 +553,7 @@ export function WalletActionSheet({
           Sticky, so the button stays on screen when a long form scrolls on a phone. Above the
           content: a timeline's step circles are positioned (z-[1]) and would paint over it.
         */}
-        <SheetFooter className="sticky bottom-0 z-10 bg-01">
+        <SheetFooter className={cn("bottom-0 z-10 bg-01", !done && "sticky")}>
           <SignAction
             {...signProps}
             steps={signing.steps}
@@ -540,6 +561,7 @@ export function WalletActionSheet({
             disabledReason={signing.disabledReason}
             onPhaseChange={(phase) => {
               setBusy(phase === "running");
+              setDone(phase === "success");
               onPhaseChange?.(phase);
             }}
           />
