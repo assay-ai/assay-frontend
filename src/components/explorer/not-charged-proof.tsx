@@ -7,7 +7,7 @@ import * as React from "react";
 import { MoneySplit } from "@/components/patterns/money-flow";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
-import { formatCallPrice, notChargedRowText, plural, shortDay } from "@/features/explorer/explorer-text";
+import { formatCallPrice, notChargedEmptyText, notChargedRowText, plural, shortDay } from "@/features/explorer/explorer-text";
 import { publicErrorText, usePublicNotCharged } from "@/features/explorer/use-public-explorer";
 import { useChainName } from "@/hooks/useChainName";
 import type { Money } from "@/interfaces";
@@ -158,7 +158,7 @@ export function NotChargedProof({ toolId, limit = 6, className }: { toolId?: str
                   tone: "teal",
                 },
                 {
-                  label: "No usable result, or not collected by the provider",
+                  label: "Provider error, no usable result, or provider forfeited",
                   value: otherNotCharged,
                   amount: plural(otherNotCharged, "call"),
                   tone: "neutral",
@@ -199,9 +199,9 @@ export function NotChargedProof({ toolId, limit = 6, className }: { toolId?: str
             </li>
           ))}
         </ul>
-      ) : data.withheldForPrivacy ? null : (
-        <p className="text-body-13 text-02">
-          {toolId ? "No call to this tool went uncharged recently." : "No call went uncharged in this period."}
+      ) : (
+        <p className="text-body-13 text-02" data-testid="not-charged-empty">
+          {notChargedEmptyText(Boolean(toolId), data.withheldForPrivacy)}
         </p>
       )}
 

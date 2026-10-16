@@ -116,6 +116,12 @@ describe("classNote", () => {
     }
   });
 
+  it("says a written-off call is still owed by the buyer, never owed by nobody", () => {
+    expect(classNote("PAID_UNCOLLECTED")).toMatch(/still owed/);
+    expect(classNote("PAID_UNCOLLECTED")).toMatch(/paid if they settle/);
+    expect(classNote("PAID_UNCOLLECTED")).not.toMatch(/nobody owes/i);
+  });
+
   it("says the buyer pays for trial traffic, not the platform", () => {
     expect(classNote("EXPLORATION")).toMatch(/buyer pays as usual/);
     expect(classNote("EXPLORATION")).toMatch(/Assay pays only for the checks/);

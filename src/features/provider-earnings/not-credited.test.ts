@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { foldNotCredited, parseCallsCsv } from "@/features/call-classes/csv";
+import { classLabel } from "@/features/call-classes/labels";
+import { classNote } from "@/features/call-classes/reconciliation";
 import { demoCallsCsv } from "@/libs/demo/fixtures-provider-calls";
 
 import { callCount, notCreditedReason, notCreditedRows, partsThatAddUp, unpaidCallAmount } from "./not-credited";
@@ -58,6 +60,19 @@ describe("notCreditedRows", () => {
   });
 });
 
+describe("notCreditedReason and the outcome list", () => {
+  it("names each class the same way in the reasons and in the Explain drawer's outcome list", () => {
+    for (const name of ["PAID_UNCREDITED", "SYSTEM_ERROR", "REQUEST_ERROR"]) {
+      expect(notCreditedReason(name).title).toBe(classLabel(name));
+    }
+  });
+  it("never blames the answer for a refused request", () => {
+    expect(notCreditedReason("REQUEST_ERROR").title).toMatch(/4xx/);
+    expect(classNote("REQUEST_ERROR")).toMatch(/4xx/);
+    expect(`${classLabel("REQUEST_ERROR")} ${classNote("REQUEST_ERROR")}`).not.toMatch(/checks|answer/);
+  });
+});
+
 describe("unpaidCallAmount", () => {
   const base = { asset: "a", decimals: 6, priceAmount: "450000" };
   it("shows the provider's share when the export carries one (buyer debt)", () => {
@@ -66,10 +81,20 @@ describe("unpaidCallAmount", () => {
       note: null,
     });
   });
-  it("falls back to the listed price, said as such, when the export sends 0 (written off, forfeited)", () => {
-    expect(unpaidCallAmount({ ...base, providerAmount: "0" })).toEqual({
-      amount: { amount: "450000", asset: "a", decimals: 6 },
-      note: "listed price",
+  it("works out the share at the fee rate when the export sends 0 (written off, forfeited)", () => {
+    // Two $0.45 calls at a 10% fee are $0.405 each: the line's $0.81.
+    expect(unpaidCallAmount({ ...base, providerAmount: "0" }, 10)).toEqual({
+      amount: { amount: "405000", asset: "a", decimals: 6 },
+      note: "of $0.45 listed, after Assay's 10% fee",
     });
+    expect(unpaidCallAmount({ ...base, providerAmount: "0" }, 0).amount.amount).toBe("450000");
+  });
+  it("falls back to the listed price, said to be before the fee, when no single rate is known", () => {
+    for (const rate of [undefined, null, Number.NaN, 100]) {
+      expect(unpaidCallAmount({ ...base, providerAmount: "0" }, rate)).toEqual({
+        amount: { amount: "450000", asset: "a", decimals: 6 },
+        note: "listed price, before Assay's fee",
+      });
+    }
   });
 });

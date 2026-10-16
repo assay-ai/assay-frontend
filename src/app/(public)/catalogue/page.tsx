@@ -77,6 +77,8 @@ function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: num
           {tool.description ? <p className="line-clamp-2 text-body-13 text-02">{tool.description}</p> : null}
           {/* Phones: the price line sits under the name, full width. */}
           <OfferPrice offer={offer} className="tablet:hidden" />
+          {/* Phones too: when providers charge different prices, the most a call is held for is money, not decoration. */}
+          {range?.differs && sub ? <p className="text-body-xs text-03 tablet:hidden">{sub}</p> : null}
           <p className="text-body-xs text-03">
             {tool.providerCount > 0 ? `Served by ${plural(tool.providerCount, "provider")}` : "Nobody serves it yet"}
           </p>

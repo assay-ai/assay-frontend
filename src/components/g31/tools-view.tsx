@@ -1,12 +1,13 @@
 "use client";
 
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronRight, TriangleAlert } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Gift, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
 import { ToolAccessControl, useSpendPolicy } from "@/components/explorer/tool-access-control";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
@@ -33,6 +34,7 @@ import { useChainName } from "@/hooks/useChainName";
 import { useChains } from "@/hooks/useChains";
 import type { Chain } from "@/interfaces/chain";
 import { ApiError } from "@/libs/ApiClient";
+import { freeOnlyExploreText } from "@/libs/chains/paid-rails";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { getBalances } from "@/services";
@@ -366,6 +368,8 @@ function ToolsList() {
                     </span>
                     {/* Phones: the price line sits under the name, full width. */}
                     <OfferPrice offer={offer} className="tablet:hidden" />
+                    {/* Phones too: the most a call is held for, when providers charge different prices. */}
+                    {range?.differs && sub ? <span className="text-body-xs text-03 tablet:hidden">{sub}</span> : null}
                   </div>
                   <div className="hidden w-[220px] shrink-0 flex-col items-end gap-0.5 text-right tablet:flex">
                     <OfferPrice offer={offer} />
@@ -398,6 +402,21 @@ function ToolsList() {
   );
 }
 
+/** A free-calls-only chain (Solana today; the demo's `?rails=free-only`): the prices here are not for these agents. */
+function FreeOnlyNote() {
+  const { freeOnly, chainName } = useFreeOnlyChain();
+  if (!freeOnly) return null;
+  return (
+    <p
+      data-testid="explore-free-only"
+      className="flex items-start gap-2 rounded-lg border border-teal-20 bg-teal-10 px-3.5 py-2.5 text-body-13 text-teal-700"
+    >
+      <Gift aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+      <span>{freeOnlyExploreText(chainName ?? "this chain")}</span>
+    </p>
+  );
+}
+
 export function ToolsView() {
   return (
     <div className="flex w-full flex-col gap-4 px-4 py-4 tablet:px-7 tablet:py-5">
@@ -408,6 +427,7 @@ export function ToolsView() {
         each one for your agents. <Term k="free-tier">Free tier</Term> calls need no funds, and come first: a tool with a
         free tier serves your agent&apos;s free calls each day before any call is charged.
       </p>
+      <FreeOnlyNote />
       <React.Suspense fallback={<PageState kind="loading" rows={6} label="Loading tools" />}>
         <ToolsList />
       </React.Suspense>

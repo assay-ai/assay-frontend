@@ -10,7 +10,7 @@ import { cn } from "@/utils";
  */
 
 /**
- * One price line, free first: "Free for 100 calls/day, then $0.002/call". The
+ * One price line, free first: "Free for 100 calls/day per agent, then $0.002/call". The
  * free part is in the free-tier colour, the price in mono; `size="lg"` sets the
  * price large for a tool page. Built by `offerLine`.
  */
@@ -25,6 +25,14 @@ export function OfferPrice({
 }) {
   // Nothing to price (no provider serves it): the row's "Nobody serves it yet" says so.
   if (offer.price === "—") return null;
+  // A free tier with no paid route: the lead is the whole line, in plain text rather than as a price.
+  if (!offer.price) {
+    return (
+      <p className={cn(size === "lg" ? "text-body-13" : "text-body-xs", "text-teal-600", className)} data-testid="offer-line">
+        {offer.lead}
+      </p>
+    );
+  }
   const free = offer.price === "Free";
   const from = offer.price.startsWith("from ");
   const amount = from ? offer.price.slice("from ".length) : offer.price;
@@ -50,7 +58,7 @@ export function OfferPrice({
   );
 }
 
-/** "Free · 100 calls/day" — a free tier is the way in for a newcomer. */
+/** "Free · 100 calls/day per agent" — a free tier is the way in for a newcomer. */
 export function FreeTierBadge({ label, className }: { label: string | null; className?: string }) {
   if (!label) return null;
   return (

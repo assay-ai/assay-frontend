@@ -155,9 +155,10 @@ export interface ProviderEarningsFigures {
    *   minimum, or blocked); the buyer was not charged.
    * - `debtOutstanding` — buyer debt: the payment could not be collected yet,
    *   the price is still held in the buyer's escrow, and it is paid once the
-   *   buyer signs a replacement voucher (or never, if written off).
-   * - `uncollected` — a buyer debt written off after 30 days (or an older call
-   *   absorbed before buyer debt existed). Nobody owes it.
+   *   buyer signs a replacement voucher.
+   * - `uncollected` — a buyer debt written off after 30 days: not paid, but the
+   *   buyer still owes it and the provider is paid if it settles later (or an
+   *   older call absorbed before buyer debt existed, which nobody owes).
    */
   forfeited?: Money | null;
   forfeitedCalls?: number;

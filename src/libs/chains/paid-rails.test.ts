@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ApiError } from "@/libs/ApiClient";
 
-import { isRailNotOffered, railNotOfferedText, servesPaidCalls } from "./paid-rails";
+import { freeOnlyExploreText, isRailNotOffered, railNotOfferedText, servesPaidCalls } from "./paid-rails";
 
 describe("servesPaidCalls", () => {
   it("is false on every Solana chain: paid rails A and B are off there", () => {
@@ -33,5 +33,14 @@ describe("the 409 CHAIN_RAIL_NOT_OFFERED", () => {
     expect(text).toContain("Solana devnet currently serves free calls only");
     expect(text).not.toContain("solana:");
     expect(railNotOfferedText(null)).toMatch(/^This chain currently serves free calls only/);
+  });
+});
+
+describe("freeOnlyExploreText", () => {
+  it("names the chain, says paid prices do not apply there, and that free tiers still work", () => {
+    const text = freeOnlyExploreText("Solana");
+    expect(text).toMatch(/^On Solana your agents make free calls only/);
+    expect(text).toMatch(/prices below apply only on a chain that serves paid calls/);
+    expect(text).toMatch(/free tier work as usual/);
   });
 });

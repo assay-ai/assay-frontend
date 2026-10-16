@@ -16,6 +16,7 @@ import {
   costSentence,
   offerLine,
   offerSubLine,
+  notChargedEmptyText,
   notChargedRowText,
   plural,
   priceSentence,
@@ -44,7 +45,7 @@ describe("formatCallPrice", () => {
 
 describe("free tier", () => {
   it("labels the badge with the allowance when known", () => {
-    expect(freeTierLabel("FREEMIUM", 100)).toBe("Free · 100 calls/day");
+    expect(freeTierLabel("FREEMIUM", 100)).toBe("Free · 100 calls/day per agent");
     expect(freeTierLabel("FREEMIUM", null)).toBe("Free tier");
     expect(freeTierLabel("FREE")).toBe("Free");
     expect(freeTierLabel("PAID", 100)).toBeNull();
@@ -81,7 +82,7 @@ describe("failRateLabel", () => {
 describe("stakeSummary", () => {
   it("lists each chain, never a sum, and says when it is unknown", () => {
     const name = (id: string) => (id === "eip155:1" ? "Ethereum" : id);
-    expect(stakeSummary([], name)).toBe("Could not be read just now");
+    expect(stakeSummary([], name)).toBe("Not available yet");
     expect(
       stakeSummary(
         [
@@ -211,7 +212,7 @@ describe("free first, then paid", () => {
   });
 
   it("leads a FREEMIUM tool with its free calls per day, then the price", () => {
-    expect(freeTierLabel("FREEMIUM", 100)).toBe("Free · 100 calls/day");
+    expect(freeTierLabel("FREEMIUM", 100)).toBe("Free · 100 calls/day per agent");
     const sentence = priceSentence({ mode: "FREEMIUM", price: usd("20000"), freeCallsPerDay: 150 });
     expect(sentence).toMatch(/^The first 150 calls each day are free/);
     expect(sentence).toMatch(/even when other providers charge/);
@@ -231,15 +232,15 @@ describe("offerLine", () => {
 
   it("merges the free tier and the price into one line, free first", () => {
     const line = offerLine({ mode: "FREEMIUM", range: one, freeCallsPerDay: 100 });
-    expect(line.text).toBe("Free for 100 calls/day, then $0.002/call");
-    expect(line.lead).toBe("Free for 100 calls/day, then");
+    expect(line.text).toBe("Free for 100 calls/day per agent, then $0.002/call");
+    expect(line.lead).toBe("Free for 100 calls/day per agent, then");
     expect(line.price).toBe("$0.002");
     expect(line.unit).toBe("/call");
   });
 
   it("says 'from' only over paid listings that differ", () => {
     expect(offerLine({ mode: "FREEMIUM", range: two, freeCallsPerDay: 1500 }).text).toBe(
-      "Free for 1,500 calls/day, then from $0.002/call",
+      "Free for 1,500 calls/day per agent, then from $0.002/call",
     );
     expect(offerLine({ mode: "PAID", range: freeBeside }).text).toBe("$0.002/call");
     expect(offerLine({ mode: "PAID", range: two }).text).toBe("from $0.002/call");
@@ -252,9 +253,13 @@ describe("offerLine", () => {
   it("reads Free for a free tool, and a dash when nothing can be priced", () => {
     expect(offerLine({ mode: "FREE", range: one })).toEqual({ lead: null, price: "Free", unit: "", text: "Free" });
     expect(offerLine({ mode: "PAID", range: null }).text).toBe("—");
-    expect(offerLine({ mode: "FREEMIUM", range: null, freeCallsPerDay: 100 }).text).toBe(
-      "Free tier; paid calls not available right now",
-    );
+    // The sentence is the lead, never set in the price slot.
+    expect(offerLine({ mode: "FREEMIUM", range: null, freeCallsPerDay: 100 })).toEqual({
+      lead: "Free tier; paid calls not available right now",
+      price: "",
+      unit: "",
+      text: "Free tier; paid calls not available right now",
+    });
   });
 });
 
@@ -265,7 +270,16 @@ describe("costSentence and offerSubLine (public catalogue, free first)", () => {
   it("keeps the free-first sentence before the range for a FREEMIUM tool", () => {
     const text = costSentence({ mode: "FREEMIUM", price: usd("30000"), range: two, freeCallsPerDay: 100 });
     expect(text).toMatch(/^The first 100 calls each day are free/);
-    expect(text).toMatch(/Providers charge from \$0\.02 to \$0\.03/);
+    // The price after the free calls depends on who serves it: the range, never the dearest alone.
+    expect(text).toMatch(/the price of the provider that serves it, from \$0\.02 to \$0\.03/);
+    expect(text).not.toMatch(/after that \$0\.03 per call/);
+    expect(text).toMatch(/held at most \$0\.03 a call/);
+  });
+
+  it("keeps one price after the free calls when the paid listings agree", () => {
+    const text = costSentence({ mode: "FREEMIUM", price: usd("20000"), range: one, freeCallsPerDay: 100 });
+    expect(text).toMatch(/after that \$0\.02 per call/);
+    expect(text).not.toMatch(/held at most/);
   });
 
   it("uses the range alone for a PAID tool, and the price sentence without one", () => {
@@ -290,6 +304,15 @@ describe("costSentence and offerSubLine (public catalogue, free first)", () => {
   });
 });
 
+describe("notChargedEmptyText", () => {
+  it("always says something when no row is listed, without claiming nothing happened behind the privacy rule", () => {
+    expect(notChargedEmptyText(true, false)).toBe("No call to this tool went uncharged recently.");
+    expect(notChargedEmptyText(true, true)).toBe("No uncharged call to this tool can be listed right now.");
+    expect(notChargedEmptyText(false, true)).toBe("No uncharged call can be listed right now.");
+    expect(notChargedEmptyText(false, false)).toBe("No call went uncharged in this period.");
+  });
+});
+
 describe("notChargedRowText (public not-charged feed)", () => {
   it("names a payment the provider did not collect plainly, never as 'No usable result'", () => {
     const row = notChargedRowText({
@@ -297,7 +320,7 @@ describe("notChargedRowText (public not-charged feed)", () => {
       reasonText: "The provider could not collect payment for this call, so the buyer was not charged.",
       bucket: "PROVIDER_OR_PLATFORM_ERROR",
     });
-    expect(row.tag).toBe("Not collected");
+    expect(row.tag).toBe("Provider forfeited");
     expect(row.text).toMatch(/^Not charged — the provider did not collect/);
     expect(row.tone).toBe("neutral");
   });
