@@ -71,7 +71,7 @@ export function StatementFigures({ totals, withheldSub }: { totals: SummaryFigur
         sub={[
           plural(notChargedCalls, "call"),
           hasMoney(totals.withheldTotal)
-            ? `includes ${formatMoney(totals.withheldTotal, { decimals: 2 })} withheld by the guarantee${withheldSub ? ` (${withheldSub})` : ""}`
+            ? `${formatMoney(totals.withheldTotal, { decimals: 2 })} by the guarantee${withheldSub ? ` (${withheldSub})` : ""}`
             : null,
         ]
           .filter(Boolean)
@@ -82,7 +82,7 @@ export function StatementFigures({ totals, withheldSub }: { totals: SummaryFigur
       {owedCalls > 0 || hasMoney(totals.owedTotal) ? (
         <KeyValueRow
           label="Owed"
-          sub={`${plural(owedCalls, "call")} · served, payment not collected yet · settle it from the banner at the top`}
+          sub={`${plural(owedCalls, "call")} · not collected yet`}
           value={`−${formatMoney(totals.owedTotal, { decimals: 2 })}`}
           valueClassName="text-warning-700"
         />
@@ -141,7 +141,7 @@ function StatementsContent() {
   // Why calls were withheld, from `GET /withheld`: a part of Not charged, never all of it.
   const withheldSub =
     notChargedCalls !== null && failedChecks !== null && noResult !== null
-      ? `${formatCount(failedChecks)} failed our checks, ${formatCount(noResult)} had no usable result`
+      ? `${formatCount(failedChecks)} failed checks, ${formatCount(noResult)} no result`
       : null;
   const groups = summary.data?.groups ?? [];
 
