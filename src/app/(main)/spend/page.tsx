@@ -33,6 +33,7 @@ import {
   windowRange,
 } from "@/features/g30/period";
 import { uncollectedNotWithheld } from "@/features/buyer-debt/debt-copy";
+import { callBuckets, reconcileSentence } from "@/features/g30/spend-buckets";
 import { Chip, ErrorBlock, PageHeader, PendingBlock } from "@/features/g30/ui";
 import type { ReceiptsSummary, SummaryGroup } from "@/features/g30/wire";
 import { ApiError } from "@/libs/ApiClient";
@@ -131,6 +132,12 @@ function placeholderRow(key: string, label: string, money: SummaryGroup["charged
     listedTotal: zero,
     chargedTotal: zero,
     withheldTotal: zero,
+    notChargedTotal: zero,
+    notChargedCalls: 0,
+    owedTotal: zero,
+    owedCalls: 0,
+    inProgressTotal: zero,
+    inProgressCalls: 0,
     failRate: null,
     comparison: null,
   };
@@ -148,21 +155,29 @@ function callToRow(call: ToolCall): Row {
   // the provider forfeited, or whose debt was written off, was not charged but
   // nothing was withheld for it (the summary's `withheldTotal` leaves it out).
   const notWithheld = uncollectedNotWithheld(call);
+  const buckets = callBuckets(call);
   const withheld = {
-    amount: notWithheld ? "0" : new Decimal(call.price.amount).minus(call.charged.amount).toFixed(0),
+    amount: notWithheld || call.debt === "OUTSTANDING" ? "0" : buckets.notCharged.amount,
     asset: call.price.asset,
     decimals: call.price.decimals,
   };
+  const isZero = (m: ToolCall["price"]) => m.amount === "0";
   return {
     id: call.intentId,
     intentId: call.intentId,
     key: call.intentId,
     label: `${call.intentId.slice(0, 8)}…`,
     calls: 1,
-    refundedCalls: call.charged.amount === "0" && !notWithheld ? 1 : 0,
+    refundedCalls: call.status === "REFUNDED" ? 1 : 0,
     listedTotal: call.price,
-    chargedTotal: call.charged,
+    chargedTotal: buckets.charged,
     withheldTotal: withheld,
+    notChargedTotal: buckets.notCharged,
+    notChargedCalls: isZero(buckets.notCharged) ? 0 : 1,
+    owedTotal: buckets.owed,
+    owedCalls: isZero(buckets.owed) ? 0 : 1,
+    inProgressTotal: buckets.inProgress,
+    inProgressCalls: isZero(buckets.inProgress) ? 0 : 1,
     failRate: null,
     comparison: null,
   };
@@ -480,7 +495,16 @@ export default function SpendPage() {
       align: "end",
       mono: true,
       notCharged: true,
-      cell: (r) => formatMoney(r.withheldTotal),
+      cell: (r) => formatMoney(r.notChargedTotal),
+    },
+    {
+      // Served, payment not collected yet: neither charged nor let off.
+      key: "owed",
+      header: "Owed",
+      width: 100,
+      align: "end",
+      mono: true,
+      cell: (r) => formatMoney(r.owedTotal),
     },
     {
       key: "fail",
@@ -502,7 +526,8 @@ export default function SpendPage() {
           calls: summary.totals.calls.toLocaleString("en-US"),
           listed: formatMoney(summary.totals.listedTotal),
           charged: formatMoney(summary.totals.chargedTotal),
-          notCharged: formatMoney(summary.totals.withheldTotal),
+          notCharged: formatMoney(summary.totals.notChargedTotal),
+          owed: formatMoney(summary.totals.owedTotal),
           fail: percent(summary.totals.failRate),
           p95: "—",
         },
@@ -514,13 +539,14 @@ export default function SpendPage() {
   const exportCsv = React.useCallback(() => {
     const csv = toCsv(
       rows,
-      [dimension.header, "Calls", "Listed", "Charged", "Not charged", "Fail rate", "Per call"],
+      [dimension.header, "Calls", "Listed", "Charged", "Not charged", "Owed", "Fail rate", "Per call"],
       (r) => [
         r.key,
         String(r.calls),
         formatMoney(r.listedTotal, { grouped: false }),
         formatMoney(r.chargedTotal, { grouped: false }),
-        formatMoney(r.withheldTotal, { grouped: false }),
+        formatMoney(r.notChargedTotal, { grouped: false }),
+        formatMoney(r.owedTotal, { grouped: false }),
         percent(r.failRate),
         perCall(r),
       ],
@@ -536,6 +562,8 @@ export default function SpendPage() {
   /* --------------------------------------------------------------- render */
 
   const isEmpty = Boolean(summary) && rows.length === 0;
+  const hasOwed = Boolean(summary && summary.totals.owedCalls > 0);
+  const reconcileLine = summary ? reconcileSentence(summary.totals) : "";
 
   return (
     <div className="flex w-full flex-col gap-[18px] bg-02 px-4 py-5 tablet:px-7 tablet:py-[22px]">
@@ -616,13 +644,25 @@ export default function SpendPage() {
               <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
                 <span className="text-body-13 text-03">Not charged</span>
                 <span className="font-mono text-mono-xl text-teal-600">
-                  {formatMoney(summary.totals.withheldTotal)}
+                  {formatMoney(summary.totals.notChargedTotal)}
                 </span>
                 <span className="font-mono text-mono-xs text-03">
-                  {summary.totals.refundedCalls.toLocaleString("en-US")} calls
+                  {summary.totals.notChargedCalls.toLocaleString("en-US")} calls
                 </span>
               </div>
+              {hasOwed ? (
+                <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+                  <span className="text-body-13 text-03">Owed</span>
+                  <span className="font-mono text-mono-xl text-warning-600">
+                    {formatMoney(summary.totals.owedTotal)}
+                  </span>
+                  <span className="font-mono text-mono-xs text-03">
+                    {summary.totals.owedCalls.toLocaleString("en-US")} calls
+                  </span>
+                </div>
+              ) : null}
             </div>
+            <p className="w-full text-body-13 text-03">{reconcileLine}</p>
             <p className="w-full text-body-13 text-02">
               {totalDelta ? deltaMoney(totalDelta.toFixed(0), decimals, asset, 2) : "—"} vs the{" "}
               {win.compareLabel}
@@ -644,12 +684,23 @@ export default function SpendPage() {
             <div className="flex flex-1 flex-col gap-[3px]">
               <span className="text-body-13 text-03">Not charged</span>
               <span className="font-mono text-mono-xl text-teal-600">
-                {formatMoney(summary.totals.withheldTotal)}
+                {formatMoney(summary.totals.notChargedTotal)}
               </span>
               <span className="font-mono text-mono-12 text-03">
-                {summary.totals.refundedCalls.toLocaleString("en-US")} calls
+                {summary.totals.notChargedCalls.toLocaleString("en-US")} calls
               </span>
             </div>
+            {hasOwed ? (
+              <div className="flex flex-1 flex-col gap-[3px]">
+                <span className="text-body-13 text-03">Owed</span>
+                <span className="font-mono text-mono-xl text-warning-600">
+                  {formatMoney(summary.totals.owedTotal)}
+                </span>
+                <span className="font-mono text-mono-12 text-03">
+                  {summary.totals.owedCalls.toLocaleString("en-US")} calls · not collected yet
+                </span>
+              </div>
+            ) : null}
             <div className="flex flex-1 flex-col gap-[3px]">
               <span className="text-body-13 text-03">Change</span>
               <span
@@ -665,6 +716,8 @@ export default function SpendPage() {
               <span className="font-mono text-mono-12 text-03">vs {win.compareLabel}</span>
             </div>
           </div>
+
+          <p className="hidden w-full text-body-13 text-03 tablet:block">{reconcileLine}</p>
 
           {/* THE main panel. Comparison first, never a flat list. */}
           <Panel className="hidden tablet:flex">
@@ -709,7 +762,7 @@ export default function SpendPage() {
             </PanelHeader>
             <PanelBody className="px-2.5 pb-2.5 pt-1.5">
               <div className="w-full overflow-x-auto">
-                <div className="min-w-[880px]">
+                <div className="min-w-[960px]">
                   <Table
                     columns={groupColumns}
                     rows={rows}
@@ -743,7 +796,8 @@ export default function SpendPage() {
                   figures={[
                     { label: "Listed", value: formatMoney(r.listedTotal) },
                     { label: "Charged", value: formatMoney(r.chargedTotal) },
-                    { label: "Not charged", value: formatMoney(r.withheldTotal), tone: "teal" },
+                    { label: "Not charged", value: formatMoney(r.notChargedTotal), tone: "teal" },
+                    ...(r.owedCalls > 0 ? [{ label: "Owed", value: formatMoney(r.owedTotal) }] : []),
                   ]}
                   meta={`fail ${percent(r.failRate)} · ${perCall(r)} each`}
                   onClick={

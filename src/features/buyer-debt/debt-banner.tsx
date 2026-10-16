@@ -4,6 +4,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
+import { useToolNames } from "@/components/g31/use-tool-names";
 import { bannerVariants } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { hasBlockStatusSession } from "@/features/account-block/state";
@@ -64,6 +65,7 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
     address: addressOfAccount(account) || undefined,
   });
   const readOnly = useAccountReadOnly();
+  const { nameOf } = useToolNames();
   const queryClient = useQueryClient();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -130,7 +132,7 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
             <ul className="mt-1 flex flex-col gap-0.5 font-mono text-mono-12 text-02">
               {all.map((debt) => (
                 <li key={debt.intentId} className="[overflow-wrap:anywhere]">
-                  {debtRowText(debt)}
+                  {debtRowText(debt, nameOf)}
                 </li>
               ))}
             </ul>

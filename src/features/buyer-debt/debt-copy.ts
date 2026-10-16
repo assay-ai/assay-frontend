@@ -1,3 +1,4 @@
+import { shortToolId } from "@/components/g31/use-tool-names";
 import { debtCauseText } from "@/features/call-classes/labels";
 import type { BuyerDebt, BuyerDebtState, CallDebt } from "@/interfaces/buyer-debt";
 import { formatMoney } from "@/utils/money";
@@ -115,11 +116,17 @@ const ROW_STATE: Record<BuyerDebtState, string | null> = {
   WRITTEN_OFF: "written off",
 };
 
-/** One debt row: `$2.5000 · price_quote · the agent key that signed it was revoked · written off`. */
-export function debtRowText(debt: BuyerDebt): string {
+/**
+ * One debt row: `$2.5000 · price_quote · the agent key that signed it was revoked · written off`.
+ * `toolName` resolves the tool id (the catalogue's `nameOf`); without it, or
+ * for a tool the catalogue does not know, the row shows a short id.
+ */
+export function debtRowText(debt: BuyerDebt, toolName?: (toolId: string) => string): string {
   const state = ROW_STATE[debtStateOf(debt)];
+  const named = toolName?.(debt.toolId);
+  const tool = named && named !== debt.toolId ? named : shortToolId(debt.toolId);
   return (
-    `${formatMoney(debt.amount, { decimals: 4 })} · ${debt.toolId} · ${debtCauseText(debt.cause)}` +
+    `${formatMoney(debt.amount, { decimals: 4 })} · ${tool} · ${debtCauseText(debt.cause)}` +
     (state ? ` · ${state}` : "")
   );
 }

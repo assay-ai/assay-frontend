@@ -138,8 +138,29 @@ const DEBT_CAUSE_TEXT: Record<string, string> = {
   InvalidSignature: "its signature could not be checked",
 };
 
+/**
+ * The prefixes a recorded cause may carry (`uncollected:VoucherExpired` on a
+ * written-off debt, `buyer_debt:…`, `provider_forfeit:…`, `voided:…`). The
+ * words are for the cause after it.
+ */
+const CAUSE_PREFIXES = [UNCOLLECTED_PREFIX, BUYER_DEBT_PREFIX, FORFEIT_PREFIX, VOIDED_PREFIX];
+
+function bareCause(cause: string): string {
+  let key = cause.trim();
+  for (let stripped = true; stripped; ) {
+    stripped = false;
+    for (const prefix of CAUSE_PREFIXES) {
+      if (key.startsWith(prefix)) {
+        key = key.slice(prefix.length).trim();
+        stripped = true;
+      }
+    }
+  }
+  return key;
+}
+
 export function debtCauseText(cause: string | null | undefined): string {
-  const key = (cause ?? "").trim();
+  const key = bareCause(cause ?? "");
   if (!key || key === "unknown") return "the reason was not recorded";
   return DEBT_CAUSE_TEXT[key] ?? key;
 }
