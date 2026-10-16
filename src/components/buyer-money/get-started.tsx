@@ -5,6 +5,7 @@ import * as React from "react";
 
 import { formatLimit, relativeTime } from "@/components/g31/format";
 import { useChains } from "@/hooks/useChains";
+import { freeCallsOnlyText, servesPaidCalls } from "@/libs/chains/paid-rails";
 import { isEvmChain } from "@/libs/chains/registry";
 import { findChain } from "@/services/chains.service";
 import { chainIdOfAccount } from "@/utils/chain";
@@ -67,6 +68,11 @@ function Listening({ children }: { children: React.ReactNode }) {
 
 type AgentsAndKeys = ReturnType<typeof useAgentsAndKeys>;
 
+/** A chain that serves free calls only: nothing to fund or pay with there. */
+function freeOnlyChain(chainId: string | null): boolean {
+  return chainId !== null && !servesPaidCalls(chainId);
+}
+
 /** The facts Get started ticks from, read off the agents, keys and escrow. */
 function getStartedFactsFrom(data: AgentsAndKeys) {
   const agent = data.agents[0] ?? null;
@@ -86,6 +92,7 @@ function getStartedFactsFrom(data: AgentsAndKeys) {
     keyBound: Boolean(bound?.delegateAccount),
     grantActive: readiness?.grant?.status === "ACTIVE",
     needsDelegation: supportsDelegation(agent?.agentAccount),
+    freeOnly: freeOnlyChain(chainIdOfAccount(escrow?.account ?? agent?.agentAccount)),
   };
   return { agent, liveKeys, escrow, readiness, bound, facts };
 }
@@ -154,6 +161,12 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   if (placement === "overview" && (loading || complete || dismissed)) return null;
 
   const agentName = agent?.label ?? "your agent";
+  // Free calls only on this chain: steps 3 and 4 do not apply, said up front.
+  const freeOnlyNote = facts.freeOnly ? (
+    <p className="text-body-13 text-02" data-testid="step-free-only">
+      Not needed: {freeCallsOnlyText(chain?.displayName ?? "This chain")}
+    </p>
+  ) : null;
 
   const steps: SetupStep[] = [
     {
@@ -212,11 +225,14 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
     },
     {
       id: "funds",
-      title: "Add funds",
-      description: "Only for paid calls. Free calls already work. Minimum $5.00.",
+      title: facts.freeOnly ? "Add funds (not needed on this chain)" : "Add funds",
+      description: facts.freeOnly
+        ? "This chain serves free calls only, so there is nothing to fund."
+        : "Only for paid calls. Free calls already work. Minimum $5.00.",
       state: states.funds,
-      content:
-        states.funds === "done" ? (
+      content: freeOnlyNote ? (
+        freeOnlyNote
+      ) : states.funds === "done" ? (
           <p className="text-body-13 text-02" data-testid="step-funds-done">
             Your escrow is open{escrow?.spendable ? ` with ${formatLimit(escrow.spendable)} available` : ""}. Add more any time
             on{" "}
@@ -239,12 +255,15 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
     },
     {
       id: "pay",
-      title: "Let your agent pay",
-      description: "Allow your agent to pay, within spending limits you choose. Free signatures, no gas.",
+      title: facts.freeOnly ? "Let your agent pay (not needed on this chain)" : "Let your agent pay",
+      description: facts.freeOnly
+        ? "This chain serves free calls only, so your agent never pays here."
+        : "Allow your agent to pay, within spending limits you choose. Free signatures, no gas.",
       state: states.pay,
       blockedReason: "Add funds first: your first deposit opens your escrow.",
-      content:
-        states.pay === "done" ? (
+      content: freeOnlyNote ? (
+        freeOnlyNote
+      ) : states.pay === "done" ? (
           <div className="flex flex-col gap-1.5" data-testid="step-pay-done">
             <p className="text-body-13 text-02">{agentName} can pay for calls{payLine ? `: ${payLine}` : "."}</p>
             <Link href="/limits" className="self-start text-label-13 text-primary-600 hover:underline">
@@ -288,12 +307,16 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
     <>
       <SetupChecklist
         title="Get started"
-        description="Four steps to your agent's first paid call. Free calls work after step 2."
+        description={
+          facts.freeOnly
+            ? "Two steps to your agent's first call. This chain serves free calls only, so steps 3 and 4 are not needed."
+            : "Four steps to your agent's first paid call. Free calls work after step 2."
+        }
         steps={steps}
         loading={loading}
         expandedId={revealing ? "key" : expanded}
         onExpandedChange={setExpanded}
-        doneTitle="All set: your agent can call tools and pay for them"
+        doneTitle={facts.freeOnly ? "All set: your agent can make free calls" : "All set: your agent can call tools and pay for them"}
         doneDescription="Watch its calls under Activity. Change its spending limits under Controls."
         onDismiss={
           placement === "overview"
