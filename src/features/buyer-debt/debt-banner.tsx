@@ -1,6 +1,7 @@
 "use client";
 
 import { TriangleAlert } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { usePauseAll } from "@/components/buyer-money/pause-all";
@@ -8,7 +9,9 @@ import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
 import { Button } from "@/components/ui/button";
 import { debtCauseText } from "@/features/call-classes/labels";
 import { useEntityNames } from "@/hooks/useEntityNames";
+import type { BuyerDebt } from "@/interfaces/buyer-debt";
 import { demoDebtNote } from "@/libs/demo/demo-debts";
+import { routes } from "@/libs/routes";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
@@ -18,6 +21,28 @@ import { BUYER_DEBTS_KEY, useBuyerDebtsQuery, useSettleDebt } from "./settle-deb
 import { useReplaceableNow } from "./use-replaceable-now";
 
 export { BUYER_DEBTS_KEY };
+
+/** One Details row: amount · tool · cause, then its state and whose wallet. */
+function DebtRowText({
+  debt,
+  toolName,
+  state,
+  elsewhere = false,
+}: {
+  debt: BuyerDebt;
+  toolName: string;
+  state: string | null;
+  elsewhere?: boolean;
+}) {
+  return (
+    <>
+      <span className="font-mono text-mono-12 font-semibold text-01">{formatMoney(debt.amount, { decimals: 4 })}</span> ·{" "}
+      <span className="font-mono text-mono-12">{toolName}</span> · {debtCauseText(debt.cause)}
+      {state ? ` · ${state}` : ""}
+      {elsewhere ? " · another wallet" : ""}
+    </>
+  );
+}
 
 const ROW_STATE = { OPEN: null, REPLACING: "being collected", WRITTEN_OFF: "written off" } as const;
 
@@ -90,13 +115,19 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
                   const elsewhere = others.includes(debt);
                   return (
                     <li key={debt.intentId} className="[overflow-wrap:anywhere]">
-                      <span className="font-mono text-mono-12 font-semibold text-01">
-                        {formatMoney(debt.amount, { decimals: 4 })}
-                      </span>{" "}
-                      · <span className="font-mono text-mono-12">{names.name("tool", debt.toolId)}</span> ·{" "}
-                      {debtCauseText(debt.cause)}
-                      {state ? ` · ${state}` : ""}
-                      {elsewhere ? " · another wallet" : ""}
+                      {elsewhere ? (
+                        // Another wallet's call: only that wallet's session reads its receipt.
+                        <DebtRowText debt={debt} toolName={names.name("tool", debt.toolId)} state={state} elsewhere />
+                      ) : (
+                        <Link
+                          href={routes.receipt(debt.intentId)}
+                          data-testid="buyer-debt-row-link"
+                          className="underline-offset-2 hover:underline focus-visible:underline"
+                          aria-label={`Receipt for the ${formatMoney(debt.amount, { decimals: 4 })} call to ${names.name("tool", debt.toolId)}`}
+                        >
+                          <DebtRowText debt={debt} toolName={names.name("tool", debt.toolId)} state={state} />
+                        </Link>
+                      )}
                     </li>
                   );
                 })}

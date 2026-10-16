@@ -556,6 +556,19 @@ function collect(
   const totals = emptyBucket();
   // Owed in the totals exactly while `/escrow/debts` lists the debt.
   const debtCall = demoDebts().length > 0 ? CALLS.find((call) => call.debt === "OUTSTANDING") : undefined;
+  /*
+    The day the owed call was made. Under a written-off picture that is weeks
+    back (`callAge`), so the call leaves today's figures altogether — Overview's
+    "Spent today" said "6 calls · $2.50 owed" of a call made on Sep 15
+    (verify-r13 P3) — and is counted, owed, on its own day.
+  */
+  const debtDayMs = debtCall ? utcDayStart(DEMO_NOW_MS - callAge(debtCall) * 60_000) : null;
+  const debtToday = debtDayMs === null || debtDayMs >= todayMs;
+  const owe = (bucket: Bucket, price: number) => {
+    bucket.charged -= price;
+    bucket.owed += price;
+    bucket.owedCalls += 1;
+  };
 
   const into = (key: string, calls: number, refundedCalls: number, amount: number) => {
     let bucket = groups.get(key);
@@ -580,15 +593,29 @@ function collect(
       if (paid > 0 && debtCall && dayMs === todayMs && toolId === debtCall.toolId) {
         const key = groupKeyOf(groupBy, toolId, dayMs, false);
         for (const bucket of [groups.get(key)!, totals]) {
-          bucket.charged -= price;
-          bucket.owed += price;
-          bucket.owedCalls += 1;
+          if (debtToday) {
+            owe(bucket, price);
+          } else {
+            // Made on another day: not one of today's calls at all.
+            bucket.calls -= 1;
+            bucket.listed -= price;
+            bucket.charged -= price;
+          }
         }
       }
       if (refunded > 0) {
         into(groupKeyOf(groupBy, toolId, dayMs, true), refunded, refunded, refunded * price);
       }
     }
+  }
+
+  // A debt made on an earlier day, counted owed on that day when the window reaches it.
+  if (debtCall && debtDayMs !== null && !debtToday && debtDayMs >= first && debtDayMs <= last) {
+    const price = priceMinorOf(debtCall.toolId);
+    const key = groupKeyOf(groupBy, debtCall.toolId, debtDayMs, false);
+    into(key, 1, 0, price);
+    owe(groups.get(key)!, price);
+    owe(totals, price);
   }
 
   return { groups, totals };

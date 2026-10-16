@@ -71,4 +71,35 @@ describe("demo debt pictures and the settle sheet's escrow check", () => {
     const receipt = demoResponse("GET", `/tool-calls/${debt.intentId}`) as { createdAt: string };
     expect(receipt.createdAt).toBe(debt.createdAt);
   });
+
+  it("?debt=written-off counts the owed call on the day it was made, not in today's figures", () => {
+    type Totals = { calls: number; owedCalls: number; chargedTotal: { amount: string } };
+    const summary = (from: number, to: number) =>
+      (
+        demoResponse("GET", "/receipts/summary", {
+          from: new Date(from).toISOString(),
+          to: new Date(to).toISOString(),
+          groupBy: "tool",
+        }) as { totals: Totals }
+      ).totals;
+    const day = 86_400_000;
+    const now = new Date();
+    const utcToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+
+    vi.stubGlobal("window", tabAt("?debt=open"));
+    const openToday = summary(utcToday, utcToday + day);
+    expect(openToday.owedCalls).toBe(1);
+
+    vi.stubGlobal("window", tabAt("?debt=written-off"));
+    const { debts } = sheetCheck();
+    const writtenOffToday = summary(utcToday, utcToday + day);
+    // The same charged calls today, minus the owed one, which is not today's.
+    expect(writtenOffToday.owedCalls).toBe(0);
+    expect(writtenOffToday.calls).toBe(openToday.calls - 1);
+    expect(writtenOffToday.chargedTotal).toEqual(openToday.chargedTotal);
+    // Its own day still has it, owed.
+    const madeAt = Date.parse(debts[0]!.createdAt);
+    const madeDay = Date.UTC(new Date(madeAt).getUTCFullYear(), new Date(madeAt).getUTCMonth(), new Date(madeAt).getUTCDate());
+    expect(summary(madeDay, madeDay + day).owedCalls).toBe(1);
+  });
 });
