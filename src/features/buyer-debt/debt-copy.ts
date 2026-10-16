@@ -167,10 +167,10 @@ export function callPaymentNote(call: {
   forfeited?: boolean;
   debt?: CallDebt | null;
 }): string | null {
-  if (call.debt === "OUTSTANDING") return "payment not collected yet · settle it to resume paid calls";
-  if (call.debt === "WRITTEN_OFF") return "written off for the provider · you still owe it to resume paid calls";
-  if (call.debt === "VOIDED") return "voided · failed its checks later: not charged, provider not paid";
-  if (call.forfeited) return "not charged: the provider forfeited";
+  if (call.debt === "OUTSTANDING") return "Payment not collected · settle to resume paid calls";
+  if (call.debt === "WRITTEN_OFF") return "Written off · still owed to resume paid calls";
+  if (call.debt === "VOIDED") return "Failed checks later · not charged";
+  if (call.forfeited) return "Not charged · provider forfeited";
   return null;
 }
 

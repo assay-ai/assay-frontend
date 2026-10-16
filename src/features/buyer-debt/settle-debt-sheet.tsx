@@ -68,7 +68,7 @@ export function useSettleDebt(): SettleDebtContextValue {
  * call row, the receipt and Spend all open the same flow.
  */
 export function SettleDebtProvider({ children }: { children: React.ReactNode }) {
-  const [request, setRequest] = React.useState<{ intentId?: string; at: number } | null>(null);
+  const [request, setRequest] = React.useState<{ intentId?: string; at: number; open: boolean } | null>(null);
   // Mounted from the first opening on (not before, so pages that never settle
   // do not read the escrow for it), and kept so closing still animates.
   const [used, setUsed] = React.useState(false);
@@ -76,7 +76,7 @@ export function SettleDebtProvider({ children }: { children: React.ReactNode }) 
     () => ({
       openSettle: (intentId) => {
         setUsed(true);
-        setRequest({ intentId, at: Date.now() });
+        setRequest({ intentId, at: Date.now(), open: true });
       },
     }),
     [],
@@ -85,14 +85,14 @@ export function SettleDebtProvider({ children }: { children: React.ReactNode }) 
     <SettleDebtContext.Provider value={value}>
       {children}
       {used ? (
-      <SettleDebtSheet
-        key={request?.at ?? 0}
-        open={request !== null}
-        intentId={request?.intentId}
-        onOpenChange={(open) => {
-          if (!open) setRequest(null);
-        }}
-      />
+        <SettleDebtSheet
+          key={request?.at ?? 0}
+          open={request?.open === true}
+          intentId={request?.intentId}
+          onOpenChange={(open) => {
+            if (!open) setRequest((current) => (current ? { ...current, open: false } : current));
+          }}
+        />
       ) : null}
     </SettleDebtContext.Provider>
   );

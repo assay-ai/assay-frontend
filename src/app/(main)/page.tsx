@@ -35,6 +35,7 @@ import {
   trendLabel,
 } from "@/features/buyer/period";
 import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
+import { OwedRowAction } from "@/features/buyer-debt/owed-row-action";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
 import { attentionAction } from "@/features/buyer/attention-action";
 import { callOutcome } from "@/features/buyer/call-outcome";
@@ -439,16 +440,8 @@ export default function OverviewPage() {
                               <LocalTime value={call.createdAt} relative />
                             </span>
                           </span>
-                          {paymentNote ? (
-                            <span
-                              className={
-                                outcome === "owed"
-                                  ? "text-body-xs text-warning-700"
-                                  : "text-body-xs text-03"
-                              }
-                            >
-                              {paymentNote}
-                            </span>
+                          {paymentNote && outcome !== "owed" ? (
+                            <span className="text-body-xs text-03">{paymentNote}</span>
                           ) : null}
                         </div>
                         <div className="flex shrink-0 flex-col items-end gap-0.5">
@@ -469,6 +462,8 @@ export default function OverviewPage() {
                         </div>
                         <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
                       </Link>
+                      {/* Owed: what it stops and the way out, beside the row's link. */}
+                      {outcome === "owed" ? <OwedRowAction intentId={call.intentId} /> : null}
                     </li>
                   );
                 })}
