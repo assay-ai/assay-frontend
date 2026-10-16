@@ -73,10 +73,8 @@ export interface ToolBindingDetail extends ToolBindingSummary {
   responseMapping: ToolMapping;
   freeQuotaPerAgent: number | null;
   /**
-   * Minor units. **Read back as a `number`, written as an integer string** —
-   * the read DTO types it `number | null` while the write body validates a
-   * digits-only string. That asymmetry is the backend's, not a translation
-   * choice here; see the report.
+   * The most free calls this binding serves per day, across all agents. A call
+   * count, not money; `null` is the platform default.
    */
   freeDailyBudget: number | null;
   /** The declared failure rate, e.g. 0.05 for 5%. */
@@ -133,9 +131,9 @@ export interface PublishedToolBinding extends SavedToolBinding {
 /**
  * `POST /providers/me/tool-bindings`.
  *
- * `priceAmount` and `freeDailyBudget` are integer strings in minor units, not
- * numbers: a price is money, and money crosses this boundary as a string
- * everywhere in this API.
+ * `priceAmount` is an integer string in minor units, not a number: a price is
+ * money, and money crosses this boundary as a string everywhere in this API.
+ * `freeDailyBudget` is a call count (a whole number), not money.
  *
  * The two mappings are only shape-checked here. Their real validation runs the
  * same functions the router runs and answers `TOOL_MAPPING_INVALID` with a
@@ -163,8 +161,8 @@ export interface SaveToolBindingBody {
   settlementChains: string[];
   /** FREEMIUM only. */
   freeQuotaPerAgent?: number | null;
-  /** Minor units, digits only. */
-  freeDailyBudget?: string | null;
+  /** Free calls per day across all agents, a whole number >= 1; `null` = platform default. */
+  freeDailyBudget?: number | null;
   /** 0..1. */
   slaFailureRate: number;
   /** 1..120000. The router may shorten it, never lengthen it. */
@@ -194,7 +192,8 @@ export interface UpdateToolBindingBody {
   priceAmount?: string;
   assetId?: string;
   freeQuotaPerAgent?: number | null;
-  freeDailyBudget?: string | null;
+  /** Free calls per day across all agents; `null` = platform default. */
+  freeDailyBudget?: number | null;
   slaFailureRate?: number;
   timeoutMs?: number;
   maxRps?: number | null;
