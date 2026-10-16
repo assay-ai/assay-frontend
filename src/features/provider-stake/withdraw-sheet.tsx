@@ -6,7 +6,7 @@ import { CircleAlert, Wallet } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PresetChips } from "@/components/patterns/preset-chips";
 import { WalletActionSheet } from "@/components/patterns/sign-action";
 import { StatusTimeline } from "@/components/patterns/status-timeline";
@@ -279,7 +279,7 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
           {parsed.value ? (
             <p className="text-body-13 text-02">
               Withdraw {amountLabel}: unlocks {periodKnown ? "on" : "on or after"}{" "}
-              <LocalTime value={maturesAt} dateOnly className="font-semibold text-01" />.
+              <UtcTime value={maturesAt} dateOnly className="font-semibold text-01" />.
             </p>
           ) : null}
           {state.phase === "none" ? plannedTimeline : null}

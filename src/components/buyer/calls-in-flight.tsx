@@ -5,7 +5,7 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 
 import { EntityName } from "@/components/patterns/entity-name";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
@@ -66,7 +66,7 @@ export function CallsInFlight() {
                     </span>
                     <span className="flex flex-wrap items-center gap-2 text-body-xs text-03">
                       <StatusChip status="checking" />
-                      <LocalTime value={call.createdAt} />
+                      <UtcTime value={call.createdAt} />
                     </span>
                   </div>
                   <span className="shrink-0 font-mono text-mono-13 text-01">{formatMoney(call.price, { decimals: 4 })} held</span>

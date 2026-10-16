@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { StatusChip } from "@/components/patterns/status-chip";
 import { penaltyChip, penaltyNext, type PenaltyRow, type PenaltyWaiting } from "@/features/operator/penalty-list";
 import { routes } from "@/libs/routes";
@@ -74,7 +74,7 @@ export function PenaltyTable({
                   <Next row={row} waiting={waitingBy.get(row.id) ?? null} now={now} />
                 </td>
                 <td className="px-4 py-2.5 align-middle text-body-13 text-02">
-                  {row.proposedAt ? <LocalTime value={row.proposedAt} dateOnly /> : <span className="text-03">—</span>}
+                  {row.proposedAt ? <UtcTime value={row.proposedAt} dateOnly /> : <span className="text-03">—</span>}
                 </td>
               </tr>
             ))}

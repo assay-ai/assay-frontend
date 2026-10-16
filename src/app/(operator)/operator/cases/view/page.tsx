@@ -6,7 +6,7 @@ import Link from "next/link";
 import * as React from "react";
 
 import { CopyChip } from "@/components/patterns/copy-chip";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { NextStepCard, type NextStepAction } from "@/components/patterns/next-step-card";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
@@ -41,7 +41,7 @@ import { CaseContext } from "@/features/provider-slash-case/context";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
 import { explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
-import { formatLocalDateTime } from "@/libs/local-time";
+import { formatDateTime } from "@/libs/utc-time";
 import type { OperatorCaseBrief } from "@/interfaces/operator";
 import { getArbiterTerms, getOperatorCase, listApprovals } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
@@ -94,7 +94,7 @@ const WAITING_WHAT: Record<string, string> = {
 };
 
 /** Instants in sentences always carry their day, in running-text case ("before today 18:41"). */
-const when = (iso: string) => formatLocalDateTime(iso, { alwaysDay: true, midSentence: true });
+const when = (iso: string) => formatDateTime(iso, { alwaysDay: true, midSentence: true });
 
 /** "If cancelled" only says something while the penalty can still be cancelled. */
 const RESTORATION_STAGES: readonly CaseStage[] = ["not-on-chain", "window-open", "executable", "disputed", "upheld", "cancel-requested"];
@@ -302,7 +302,7 @@ export default function OperatorCasePage() {
             <span>{proposal.toolName}</span>
             <span aria-hidden="true" className="text-03">·</span>
             <span>
-              proposed <LocalTime value={proposal.clocks.proposedAt} midSentence />
+              proposed <UtcTime value={proposal.clocks.proposedAt} midSentence />
             </span>
             <span aria-hidden="true" className="text-03">·</span>
             <CopyChip value={proposalId} label="penalty id" />
@@ -339,7 +339,7 @@ export default function OperatorCasePage() {
       {waitingAny && !pendingInCard && !result?.approvalId ? (
         <p role="status" className="w-full rounded-lg border border-01 bg-02 px-3.5 py-2.5 text-body-13 text-01">
           {WAITING_WHAT[waitingAny.action] ?? "A request on this penalty"} is waiting for approval: {directory.nameOf(waitingAny.requestedBy)} asked{" "}
-          <LocalTime value={waitingAny.createdAt} midSentence />.{" "}
+          <UtcTime value={waitingAny.createdAt} midSentence />.{" "}
           <Link href={approvalHref(waitingAny.id)} className="hit-area text-primary-700 underline-offset-2 hover:underline">
             Open the request
           </Link>
@@ -403,7 +403,7 @@ export default function OperatorCasePage() {
               </Fact>
             ) : null}
             <Fact label="Proposed">
-              <LocalTime value={proposal.clocks.proposedAt} />
+              <UtcTime value={proposal.clocks.proposedAt} />
             </Fact>
             {brief.upheldViolations30d ? (
               <Fact label="Other penalties upheld" hint="Against this provider in the last 30 days.">
@@ -441,7 +441,7 @@ export default function OperatorCasePage() {
                   .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))
                   .map((event) => (
                     <li key={event.id} className="flex w-full flex-col gap-0.5 border-b border-01 px-4 py-3 last:border-b-0 tablet:flex-row tablet:gap-4">
-                      <LocalTime value={event.occurredAt} className="w-[150px] shrink-0 text-body-xs text-03" />
+                      <UtcTime value={event.occurredAt} className="w-[150px] shrink-0 text-body-xs text-03" />
                       <span className="min-w-0 flex-1 text-body-13 text-01">{event.summary}</span>
                       <span className="shrink-0 text-body-xs text-03">
                         {event.actorType === "system" ? "Assay" : event.actorType === "provider" ? "Provider" : directory.nameOf(event.actorId)}

@@ -21,6 +21,7 @@ import type {
   VerificationStage,
   VerificationStageResult,
 } from "@/interfaces";
+import { formatClock } from "@/libs/utc-time";
 
 /** Pretty JSON for a value whose shape is open. Never asserts a type onto it. */
 export function pretty(value: unknown): string {
@@ -290,12 +291,9 @@ export function byteSize(raw: string | null): string | null {
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
-/** `2026-08-21T02:41:04.130Z` → `02:41:04`, in the reader's own zone. */
+/** `2026-08-21T02:41:04.130Z` → `02:41:04 UTC`. */
 export function clockOf(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime())
-    ? iso
-    : date.toLocaleTimeString(undefined, { hour12: false });
+  return Number.isNaN(new Date(iso).getTime()) ? iso : `${formatClock(iso, { seconds: true })} UTC`;
 }
 
 /**

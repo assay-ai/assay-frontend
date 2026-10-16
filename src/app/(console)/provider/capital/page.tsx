@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
 import { StakeGauge } from "@/components/provider/stake-gauge";
@@ -160,7 +160,7 @@ export default function ProviderStakePage() {
         Short by {formatMoney(status.shortfall)}. Add stake{" "}
         {grace ? (
           <>
-            before <LocalTime value={grace.earliestExpiresAt} className="font-semibold" />
+            before <UtcTime value={grace.earliestExpiresAt} className="font-semibold" />
           </>
         ) : null}{" "}
         or paid tools above your stake stop taking paid calls.
@@ -231,7 +231,7 @@ export default function ProviderStakePage() {
                 ) : (
                   <>
                     is unbonding; withdrawable from{" "}
-                    {withdraw.completesAt ? <LocalTime value={withdraw.completesAt} className="font-semibold text-01" /> : "the end of the waiting period"}.
+                    {withdraw.completesAt ? <UtcTime value={withdraw.completesAt} className="font-semibold text-01" /> : "the end of the waiting period"}.
                   </>
                 )}
               </span>
@@ -294,7 +294,7 @@ export default function ProviderStakePage() {
                   </span>
                   {row.grace ? (
                     <span className="text-body-xs text-danger-600">
-                      Pauses <LocalTime value={row.grace} /> unless stake is added
+                      Pauses <UtcTime value={row.grace} /> unless stake is added
                     </span>
                   ) : null}
                 </li>
@@ -324,7 +324,7 @@ export default function ProviderStakePage() {
               {withdraw.completesAt ? (
                 <>
                   {" "}Your current withdrawal unlocks{" "}
-                  <LocalTime value={withdraw.completesAt} className="font-semibold text-01" />.
+                  <UtcTime value={withdraw.completesAt} className="font-semibold text-01" />.
                 </>
               ) : null}
             </li>

@@ -242,13 +242,10 @@ describe("round 5: the Context tab reads time like the rest of the console", () 
     expect(priorWindowsLabel(6, true)).toBe("last 6 closed windows");
   });
 
-  it("is local with its zone for operators, UTC for the provider page", async () => {
+  it("is UTC, labelled, for operators and the provider page alike", async () => {
     const { contextStamp } = await import("@/features/provider-slash-case/context");
-    const { zoneLabel } = await import("@/libs/local-time");
     const iso = "2026-09-20T03:06:00Z";
     expect(contextStamp("provider")(iso)).toBe("2026-09-20 03:06 UTC");
-    const local = contextStamp("operator")(iso);
-    expect(local).not.toMatch(/2026-09-20/);
-    expect(local.endsWith(zoneLabel(iso))).toBe(true);
+    expect(contextStamp("operator")(iso)).toMatch(/03:06 UTC$/);
   });
 });

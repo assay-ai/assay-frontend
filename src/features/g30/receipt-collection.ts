@@ -1,5 +1,5 @@
 import { debtCauseText } from "@/features/call-classes/labels";
-import { formatUtcDateTime, utcTitle, type LocalTimeOptions } from "@/libs/local-time";
+import { formatDateTime, utcTitle, type TimeOptions } from "@/libs/utc-time";
 import { formatMoney } from "@/utils/money";
 
 import type { ReceiptState } from "./receipt-state";
@@ -95,10 +95,10 @@ export function collectionView(state: CollectionState, receipt: Pick<Receipt, "l
  */
 export function timelineStamp(
   iso: string,
-  options: Pick<LocalTimeOptions, "now"> = {},
+  options: Pick<TimeOptions, "now"> = {},
 ): { time: string; timeTitle: string | undefined } {
   return {
-    time: formatUtcDateTime(iso, { ...options, seconds: true, alwaysDay: true }),
+    time: formatDateTime(iso, { ...options, seconds: true, alwaysDay: true }),
     timeTitle: utcTitle(iso, { seconds: true }),
   };
 }

@@ -9,7 +9,7 @@ import Link from "next/link";
 import { usePauseAll } from "@/components/buyer-money/pause-all";
 import { requireSigner, useEscrowQuery, useWalletBlocker } from "@/components/buyer-money/use-buyer-money";
 import { Button } from "@/components/ui/button";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { StepMark } from "@/components/patterns/setup-checklist";
 import { WalletActionSheet, type WalletStep, type WalletStepResult } from "@/components/patterns/sign-action";
 import { hasBlockStatusSession } from "@/features/account-block/state";
@@ -26,7 +26,7 @@ import { markDemoDebtsSigned } from "@/libs/demo/demo-debts";
 import { findChain } from "@/services/chains.service";
 import { createDebtVoucherIntent, getBuyerDebts, submitDebtVoucher } from "@/services/escrow.service";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
-import { formatClock } from "@/libs/local-time";
+import { formatClock } from "@/libs/utc-time";
 import { formatMoney } from "@/utils/money";
 
 import {
@@ -253,7 +253,7 @@ function SettleDebtSheet({
     : null;
   const holdReason =
     holding && refusal
-      ? `Assay said this payment is not ready to sign yet. You can try again from ${formatClock(refusal.retryAt, { seconds: true, timeZone: "UTC" })} UTC.`
+      ? `Assay said this payment is not ready to sign yet. You can try again from ${formatClock(refusal.retryAt, { seconds: true })} UTC.`
       : null;
   const disabledReason = readOnly
     ? "Your account is blocked, so nothing can be signed now. Contact Assay support."
@@ -401,7 +401,7 @@ function SettleDebtSheet({
                   <dt className="text-03">For</dt>
                   <dd className="text-01 [overflow-wrap:anywhere]">
                     a <span className="font-mono text-mono-13">{toolName(debt.toolId)}</span> call,{" "}
-                    <LocalTime value={debt.createdAt} midSentence alwaysDay utc />
+                    <UtcTime value={debt.createdAt} midSentence alwaysDay />
                   </dd>
                   <dt className="text-03">From</dt>
                   <dd className="text-01 [overflow-wrap:anywhere]">your escrow{ownerShort ? ` (${ownerShort})` : ""}</dd>

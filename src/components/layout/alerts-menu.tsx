@@ -5,7 +5,7 @@ import { Bell, Gauge, Info, Settings, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { AlertBadge } from "@/components/ui/alert-badge";
 import {
   DropdownMenu,
@@ -111,7 +111,7 @@ export function AlertsMenu({ count, variant = "desktop" }: { count: number; vari
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span className={cn("text-body-13", row.readAt ? "text-02" : "font-medium text-01")}>{row.title}</span>
                     <span className="text-body-xs text-03">
-                      <LocalTime value={row.createdAt} relative />
+                      <UtcTime value={row.createdAt} relative />
                       {action ? ` · ${action.label}` : ""}
                     </span>
                   </span>

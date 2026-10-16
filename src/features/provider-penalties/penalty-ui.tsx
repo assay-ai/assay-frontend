@@ -5,7 +5,7 @@ import { Clock, HelpCircle, Scale, Wallet } from "lucide-react";
 import * as React from "react";
 
 import { CopyChip } from "@/components/patterns/copy-chip";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { MoneySplit } from "@/components/patterns/money-flow";
 import { WalletActionSheet } from "@/components/patterns/sign-action";
 import { StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
@@ -55,7 +55,7 @@ export function WindowRange({ windowId, className }: { windowId: string | null |
   if (!window.data) return <span className={cn("text-03", className)}>Measurement window</span>;
   return (
     <span className={className}>
-      Window <LocalTime value={window.data.openedAt} /> – <LocalTime value={window.data.closedAt ?? window.data.deadlineAt} />
+      Window <UtcTime value={window.data.openedAt} /> – <UtcTime value={window.data.closedAt ?? window.data.deadlineAt} />
     </span>
   );
 }
@@ -73,7 +73,7 @@ export function DeadlineChip({ row }: { row: PenaltyRow }) {
         Dispute within {msLeft === null ? "…" : formatRemaining(msLeft)}
         {row.executableAt ? (
           <>
-            {" "}· by <LocalTime value={row.executableAt} withZone />
+            {" "}· by <UtcTime value={row.executableAt} />
           </>
         ) : null}
       </span>
@@ -82,14 +82,14 @@ export function DeadlineChip({ row }: { row: PenaltyRow }) {
   if (row.tab === "disputed") {
     return (
       <span className={cn(base, "bg-primary-10 text-primary-700")}>
-        Arbiter aims to rule by {row.arbiterTargetAt ? <LocalTime value={row.arbiterTargetAt} dateOnly /> : `${ARBITER_TARGET_DAYS} days after the dispute`}
+        Arbiter aims to rule by {row.arbiterTargetAt ? <UtcTime value={row.arbiterTargetAt} dateOnly /> : `${ARBITER_TARGET_DAYS} days after the dispute`}
       </span>
     );
   }
   if (row.tab === "needs-action") {
     return (
       <span className={cn(base, "bg-danger-10 text-danger-700")}>
-        Can be executed from <LocalTime value={row.executableAt} withZone />
+        Can be executed from <UtcTime value={row.executableAt} />
       </span>
     );
   }
@@ -256,7 +256,7 @@ export function PenaltyDrawer({
               <SheetDescription>
                 {lossOf(row) ? `${row.closedAs === "executed" ? "You lost" : "You would lose"} ${formatMoney(lossOf(row))} · ` : null}
                 {detail?.proposal.windowId ? <WindowRange windowId={detail.proposal.windowId} /> : "proposed "}
-                {detail?.proposal.windowId ? null : <LocalTime value={row.proposedAt} />}
+                {detail?.proposal.windowId ? null : <UtcTime value={row.proposedAt} />}
               </SheetDescription>
             </SheetHeader>
             <div className="flex w-full flex-col gap-5 px-[18px] pb-8 pt-4">
@@ -273,26 +273,26 @@ export function PenaltyDrawer({
                   reviews it. The arbiter aims to rule within {ARBITER_TARGET_DAYS} days
                   {row.arbiterTargetAt ? (
                     <>
-                      {" "}(by <LocalTime value={row.arbiterTargetAt} dateOnly />)
+                      {" "}(by <UtcTime value={row.arbiterTargetAt} dateOnly />)
                     </>
                   ) : null}
                   {row.disputeExpiresAt ? (
                     <>
-                      ; if nobody rules by <LocalTime value={row.disputeExpiresAt} dateOnly />, it expires and nothing is taken
+                      ; if nobody rules by <UtcTime value={row.disputeExpiresAt} dateOnly />, it expires and nothing is taken
                     </>
                   ) : null}
                   .
                 </p>
               ) : row.canDispute ? (
                 <p className="text-body-13 text-02">
-                  Nothing is taken before <LocalTime value={row.executableAt} withZone className="font-semibold text-01" />. If you
+                  Nothing is taken before <UtcTime value={row.executableAt} className="font-semibold text-01" />. If you
                   think it is wrong, dispute it before then: one signature from your stake wallet, and Assay&apos;s{" "}
                   <Term k="arbiter">arbiter</Term>, a person, rules on it on chain.
                 </p>
               ) : row.tab === "needs-action" ? (
                 <p className="text-body-13 text-02">
                   {row.upheld ? "Assay's arbiter upheld it. " : "The dispute window has closed. "}It can be executed from{" "}
-                  <LocalTime value={row.executableAt} withZone className="font-semibold text-01" />.
+                  <UtcTime value={row.executableAt} className="font-semibold text-01" />.
                 </p>
               ) : null}
 
@@ -416,7 +416,7 @@ export function DisputeSheet({
               <dd className="text-02">
                 You lose <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(loss)}</span> of your
                 stake ({formatMoney(split?.agent)} to the buyers whose calls failed, {formatMoney(split?.platform)} to
-                Assay); the other {formatMoney(split?.neverTaken)} of the penalty is never taken. It can be taken from <LocalTime value={row.executableAt} withZone />, or as soon as it is upheld if
+                Assay); the other {formatMoney(split?.neverTaken)} of the penalty is never taken. It can be taken from <UtcTime value={row.executableAt} />, or as soon as it is upheld if
                 that is later.
               </dd>
             </div>

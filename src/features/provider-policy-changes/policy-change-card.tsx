@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 
 import {
   Panel,
@@ -149,7 +149,7 @@ export function PolicyChangeCard({ change, toolLabel }: PolicyChangeCardProps) {
           <PanelDescription className="whitespace-normal">
             {change.effectiveDate ? (
               <>
-                Takes effect <LocalTime value={change.effectiveDate} />
+                Takes effect <UtcTime value={change.effectiveDate} />
               </>
             ) : (
               "No date set yet. It runs in test mode now and changes nothing until Assay switches it on."

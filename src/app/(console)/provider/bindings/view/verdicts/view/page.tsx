@@ -5,7 +5,7 @@ import { ArrowLeft, CircleCheck, CircleX, FileSearch, FlaskConical, TriangleAler
 import Link from "next/link";
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
@@ -126,7 +126,7 @@ export default function ProviderVerdictDetailPage() {
           {detail.reason ?? (detail.reasonCode ? plain(detail.reasonCode) : presented.shownAs)}
         </p>
         <p className="text-body-xs text-03">
-          <LocalTime value={detail.createdAt} />
+          <UtcTime value={detail.createdAt} />
           {detail.sampleDisplay ? ` · picked for a deeper check (${detail.sampleDisplay})` : ""}
         </p>
       </header>

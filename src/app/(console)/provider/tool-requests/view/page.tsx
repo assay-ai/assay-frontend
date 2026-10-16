@@ -14,7 +14,7 @@ import {
   PanelTitle,
   PanelTitles,
 } from "@/components/ui/panel";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { DASH, count } from "@/features/g34a/stats";
 import { replyBadge, TOOL_REQUEST_STATUS_LABEL } from "@/features/provider-tool-requests/due";
@@ -143,20 +143,20 @@ export default function ToolRequestDetailPage() {
               <Row label="Handled by" value={request.ownerOperatorId ? "The Assay team" : "Not assigned yet"} />
               <Row
                 label="First response due"
-                value={<LocalTime value={request.firstResponseDueAt} />}
+                value={<UtcTime value={request.firstResponseDueAt} />}
               />
               <Row
                 label="First responded"
-                value={request.firstRespondedAt ? <LocalTime value={request.firstRespondedAt} /> : DASH}
+                value={request.firstRespondedAt ? <UtcTime value={request.firstRespondedAt} /> : DASH}
               />
               <Row
                 label="Expected monthly calls"
                 value={count(request.expectedMonthlyCalls)}
               />
-              <Row label="Filed" value={<LocalTime value={request.createdAt} />} />
+              <Row label="Filed" value={<UtcTime value={request.createdAt} />} />
               <Row
                 label="Closed"
-                value={request.closedAt ? <LocalTime value={request.closedAt} /> : DASH}
+                value={request.closedAt ? <UtcTime value={request.closedAt} /> : DASH}
               />
             </PanelBody>
           </Panel>

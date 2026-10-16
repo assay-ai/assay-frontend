@@ -8,7 +8,7 @@ import * as React from "react";
 
 import { ApprovalFooter } from "@/components/patterns/approval-footer";
 import { CopyChip } from "@/components/patterns/copy-chip";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { PresetChips } from "@/components/patterns/preset-chips";
 import { ReasonChips, type ReasonOption } from "@/components/patterns/reason-chips";
@@ -246,12 +246,12 @@ function TeamScreen() {
                   <span className="hidden text-right text-body-13 tabular-nums text-02 tablet:block">{limitCell(row)}</span>
                   <span className="flex min-w-0 items-center gap-2 text-body-xs text-03">
                     {row.walletAddress ? <CopyChip value={toChecksumAddress(row.walletAddress)} label="wallet address" /> : <span>No wallet</span>}
-                    <span className="tablet:hidden">· {row.lastSeenAt ? <>last seen <LocalTime value={row.lastSeenAt} /></> : "never signed in"}</span>
+                    <span className="tablet:hidden">· {row.lastSeenAt ? <>last seen <UtcTime value={row.lastSeenAt} /></> : "never signed in"}</span>
                   </span>
                   <span className="hidden text-body-13 text-02 tablet:block">
                     {/* The column header is aria-hidden: the label is read here. */}
                     <span className="sr-only">Last seen </span>
-                    {row.lastSeenAt ? <LocalTime value={row.lastSeenAt} /> : <span className="text-03">Never</span>}
+                    {row.lastSeenAt ? <UtcTime value={row.lastSeenAt} /> : <span className="text-03">Never</span>}
                   </span>
                   <span className="absolute right-3 top-2 tablet:static tablet:flex tablet:justify-end">
                     {mayEditRow(me, row) ? (

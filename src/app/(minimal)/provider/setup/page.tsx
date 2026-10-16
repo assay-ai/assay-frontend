@@ -244,7 +244,7 @@ function YouStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
           label="Time zone"
           className={sans}
           placeholder="Europe/London"
-          hint="Emails about deadlines use this zone. The console shows times in this device's zone, labelled."
+          hint="Emails about deadlines use this zone. The console shows every time in UTC, labelled."
           value={account.timezone}
           error={accountErrors.timezone}
           onChange={(e) => setAccountField("timezone", e.target.value)}
@@ -253,7 +253,7 @@ function YouStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
       ) : (
         <p className="text-body-13 text-02">
           Emails about deadlines use <span className="font-semibold text-01">{account.timezone}</span>; the console
-          shows times in this device&apos;s zone, labelled.{" "}
+          shows every time in UTC, labelled.{" "}
           <button type="button" className="text-primary-600 underline-offset-2 hover:underline" onClick={() => setEditZone(true)}>
             Change
           </button>

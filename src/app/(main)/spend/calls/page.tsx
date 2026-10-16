@@ -14,7 +14,7 @@ import { OwedRowAction } from "@/features/buyer-debt/owed-row-action";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 import type { BuyerDebt } from "@/interfaces/buyer-debt";
 import { EntityPicker } from "@/components/patterns/entity-picker";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
@@ -206,7 +206,7 @@ function CallsList() {
                         <StatusChip status={outcome} />
                         <span>
                           {outcome === "checking" ? "started " : null}
-                          <LocalTime value={call.createdAt} relative />
+                          <UtcTime value={call.createdAt} relative />
                         </span>
                         {names.lookup("provider", call.providerId) ? (
                           <>
@@ -289,7 +289,7 @@ function OwedDebtsList({ debts, onShowAll }: { debts: BuyerDebt[]; onShowAll: ()
               </span>
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-03">
                 <StatusChip status="owed" />
-                <LocalTime value={debt.createdAt} relative />
+                <UtcTime value={debt.createdAt} relative />
                 {debt.providerId && names.lookup("provider", debt.providerId) ? (
                   <>
                     <span aria-hidden="true">·</span>

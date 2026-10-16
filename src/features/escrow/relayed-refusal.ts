@@ -1,4 +1,5 @@
 import { ApiError } from "@/libs/ApiClient";
+import { formatClock } from "@/libs/utc-time";
 
 /**
  * @fileoverview
@@ -196,12 +197,11 @@ export function relayRetryAt(message: string): Date | null {
   return Number.isNaN(at.getTime()) ? null : at;
 }
 
-/** "You can try again at 13:17 (in 12 minutes)." — in the person's own time zone. */
+/** "You can try again at 13:17 UTC (in 12 minutes)." */
 function retryWhen(at: Date | null, nowMs: number): string {
   if (!at) return "Wait a few minutes and try again.";
   const minutes = Math.max(1, Math.ceil((at.getTime() - nowMs) / 60_000));
-  const clock = at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  return `You can try again at ${clock} (in ${minutes} minute${minutes === 1 ? "" : "s"}).`;
+  return `You can try again at ${formatClock(at)} UTC (in ${minutes} minute${minutes === 1 ? "" : "s"}).`;
 }
 
 /** The 409 branch: the chain refused, and it said why. */

@@ -19,13 +19,13 @@ describe("timeLeftLabel", () => {
 
 describe("deadlineReading: approval", () => {
   it("is neutral while most of the 24 h is left", () => {
-    const reading = deadlineReading("approval", iso(NOW + 17 * HOUR), iso(NOW - 7 * HOUR), NOW, { timeZone: "UTC" });
-    expect(reading).toMatchObject({ label: "17h left · until tomorrow 05:00", urgent: false, expired: false });
+    const reading = deadlineReading("approval", iso(NOW + 17 * HOUR), iso(NOW - 7 * HOUR), NOW);
+    expect(reading).toMatchObject({ label: "17h left · until tomorrow 05:00 UTC", urgent: false, expired: false });
   });
 
   it("is urgent under a quarter of the window", () => {
-    const reading = deadlineReading("approval", iso(NOW + 3 * HOUR), iso(NOW - 21 * HOUR), NOW, { timeZone: "UTC" });
-    expect(reading).toMatchObject({ label: "3h left · until 15:00", urgent: true });
+    const reading = deadlineReading("approval", iso(NOW + 3 * HOUR), iso(NOW - 21 * HOUR), NOW);
+    expect(reading).toMatchObject({ label: "3h left · until 15:00 UTC", urgent: true });
   });
 
   it("assumes a 24 h window when the start is unknown", () => {
@@ -41,12 +41,12 @@ describe("deadlineReading: approval", () => {
 
 describe("deadlineReading: execute (a superseded record)", () => {
   it("names the time to cancel before, and turns urgent under a day", () => {
-    expect(deadlineReading("execute", iso(NOW + 30 * HOUR), null, NOW, { timeZone: "UTC" })).toMatchObject({
-      label: "30h left · cancel before tomorrow 18:00",
+    expect(deadlineReading("execute", iso(NOW + 30 * HOUR), null, NOW)).toMatchObject({
+      label: "30h left · cancel before tomorrow 18:00 UTC",
       urgent: false,
     });
-    expect(deadlineReading("execute", iso(NOW + 5 * HOUR), null, NOW, { timeZone: "UTC" })).toMatchObject({
-      label: "5h left · cancel before 17:00",
+    expect(deadlineReading("execute", iso(NOW + 5 * HOUR), null, NOW)).toMatchObject({
+      label: "5h left · cancel before 17:00 UTC",
       urgent: true,
     });
   });
@@ -58,17 +58,17 @@ describe("deadlineReading: execute (a superseded record)", () => {
 
 describe("deadlineReading: dispute", () => {
   it("is neutral early in the 30 days, and still names the date to rule by", () => {
-    const reading = deadlineReading("dispute", iso(NOW + 26 * DAY), iso(NOW - 4 * DAY), NOW, { timeZone: "UTC" });
+    const reading = deadlineReading("dispute", iso(NOW + 26 * DAY), iso(NOW - 4 * DAY), NOW);
     expect(reading).toMatchObject({ label: "26 days left · rule by Nov 11", urgent: false });
   });
 
   it("from day 20 is urgent and names the date to rule by", () => {
-    const reading = deadlineReading("dispute", iso(NOW + 7 * DAY), iso(NOW - 23 * DAY), NOW, { timeZone: "UTC" });
+    const reading = deadlineReading("dispute", iso(NOW + 7 * DAY), iso(NOW - 23 * DAY), NOW);
     expect(reading).toMatchObject({ label: "7 days left · rule by Oct 23", urgent: true });
   });
 
   it("ends 30 days after the dispute when the expiry is missing", () => {
-    const reading = deadlineReading("dispute", null, iso(NOW - 2 * DAY), NOW, { timeZone: "UTC" });
+    const reading = deadlineReading("dispute", null, iso(NOW - 2 * DAY), NOW);
     expect(reading.label).toBe("28 days left · rule by Nov 13");
     expect(reading.end).toBe(NOW + 28 * DAY);
   });

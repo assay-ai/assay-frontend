@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { auditSentence, groupByDay } from "@/features/buyer/audit-sentence";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
-import { formatClock } from "@/libs/local-time";
+import { formatClock } from "@/libs/utc-time";
 import { listAuditLog } from "@/services/account.service";
 import { cn } from "@/utils";
 
@@ -174,7 +174,7 @@ export function AuditLogView() {
                           </span>
                         ) : null}
                       </div>
-                      <span className="shrink-0 text-body-xs text-03">{formatClock(entry.createdAt)}</span>
+                      <span className="shrink-0 text-body-xs text-03">{formatClock(entry.createdAt)} UTC</span>
                     </li>
                   );
                 })}

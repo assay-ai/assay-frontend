@@ -27,7 +27,7 @@ import { useScrollFade } from "@/features/operator/scroll-fade";
 import { useOperatorDirectory, usePenaltyNames, useProviderNames } from "@/features/operator/use-operator-lookups";
 import type { OverrideLogEntry } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
-import { formatClock, formatLocalDate, utcTitle } from "@/libs/local-time";
+import { formatClock, utcDay, utcTitle } from "@/libs/utc-time";
 import { listAccountBlocks, listOverrideLog } from "@/services/operator.service";
 import { cn } from "@/utils";
 
@@ -36,7 +36,7 @@ import { cn } from "@/utils";
  * first, as sentences — "Jordan blocked Wallet 0x9f3C…F36c (Leaked key),
  * approved by Dan" — with a link to what it was about.
  *
- * Grouped by the reader's day, one line per action: an icon for the kind, the
+ * Grouped by UTC day, one line per action: an icon for the kind, the
  * sentence, the ticket, and the time in its own column. A row with a note
  * opens it in place: a click anywhere on the row, or Enter on its chevron. Kind chips, "By me" and one search box.
  * `?targetId=` shows one record's history (the "History" links on penalties,
@@ -55,15 +55,6 @@ const ICONS: Readonly<Record<ActivityIcon, LucideIcon>> = {
   other: CircleDot,
 };
 
-const DAY_KEY = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" });
-
-/** "Today", "Yesterday", "Oct 14" — in the reader's zone. */
-function localDay(iso: string, now: number): { key: string; label: string } {
-  const key = DAY_KEY.format(new Date(iso));
-  if (key === DAY_KEY.format(new Date(now))) return { key, label: "Today" };
-  if (key === DAY_KEY.format(new Date(now - 86_400_000))) return { key, label: "Yesterday" };
-  return { key, label: formatLocalDate(iso, { now }) };
-}
 
 const LIST_LIMIT = 25;
 const CHIP =
@@ -134,7 +125,7 @@ function ActivityScreen() {
   }, [log.data, kind, mine, me.subject]);
   const days = React.useMemo(() => {
     const now = Date.now();
-    return groupByDay(rows, (iso) => localDay(iso, now));
+    return groupByDay(rows, (iso) => utcDay(iso, { now }));
   }, [rows]);
 
   // "Northwind Geo's $28.47 penalty", read from each penalty the page shows.
@@ -299,8 +290,8 @@ function ActivityScreen() {
                         {row.ticketRef ? (
                           <span className="hidden max-w-[10rem] shrink-0 truncate rounded bg-03 px-1.5 py-px font-mono text-mono-12 text-02 min-[480px]:inline" title={row.ticketRef}>{row.ticketRef}</span>
                         ) : null}
-                        <time dateTime={row.createdAt} title={utcTitle(row.createdAt)} className="w-11 shrink-0 text-right text-body-13 tabular-nums text-03">
-                          {formatClock(row.createdAt)}
+                        <time dateTime={row.createdAt} title={utcTitle(row.createdAt)} className="w-[4.5rem] shrink-0 text-right text-body-13 tabular-nums text-03">
+                          {formatClock(row.createdAt)} UTC
                         </time>
                         {hasNote ? (
                           <button

@@ -20,7 +20,7 @@
  * | Naming an id                           | `EntityName`, `useEntityNames` (hooks)        | printing the uuid; `shortToolId`           |
  * | Showing an id                          | `CopyChip` (`shortId`)                        | ids as labels                              |
  * | A term of art                          | `Term` (`libs/glossary.ts`)                   | inline explanations                        |
- * | A timestamp                            | `LocalTime`, `libs/local-time.ts`             | `g31/format` `timestamp` (UTC) in new UI   |
+ * | A timestamp                            | `UtcTime`, `libs/utc-time.ts`                | a reader-zone time; an unlabelled one      |
  * | A raw key / error code                 | `libs/plain-language.ts`                      | `${code} · ${message}`                     |
  * | A chain                                | `useChainName()` / `chainName` (utils/chain)  | CAIP-2 ids as labels                       |
  *

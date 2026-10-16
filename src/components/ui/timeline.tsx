@@ -26,7 +26,7 @@ export type TimelineEventTone = NonNullable<VariantProps<typeof dotVariants>["to
 
 export interface TimelineEvent {
   id?: string;
-  /** Timestamp as shown, e.g. "10:00:04" in the reader's own time zone. */
+  /** Timestamp as shown, e.g. "Today 10:00:04 UTC". */
   time: string;
   /** Tooltip for the timestamp — the exact UTC instant. */
   timeTitle?: string;

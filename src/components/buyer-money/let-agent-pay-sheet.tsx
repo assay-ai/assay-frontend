@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { CAP_PRESETS, capsToForm, keyGroups, parseCaps } from "@/features/buyer-money/caps";
@@ -262,16 +262,16 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
       successDescription={
         lowering && delayNote ? (
           <>
-            Within these limits until <LocalTime value={until} dateOnly />. {delayNote}
+            Within these limits until <UtcTime value={until} dateOnly />. {delayNote}
           </>
         ) : lowering && !hasTightenDelay(tightenDelay) ? (
           <>
-            Within these limits until <LocalTime value={until} dateOnly />. Its payments pause for about 30 seconds while
+            Within these limits until <UtcTime value={until} dateOnly />. Its payments pause for about 30 seconds while
             the lower limits settle, then go on.
           </>
         ) : (
           <>
-            Within these limits until <LocalTime value={until} dateOnly />. Next: its next paid call goes through; you
+            Within these limits until <UtcTime value={until} dateOnly />. Next: its next paid call goes through; you
             can watch it under Activity.
           </>
         )
@@ -289,7 +289,7 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
         who="this agent"
       />
       <p className="text-body-xs text-03">
-        Valid for {DEFAULT_DELEGATION_DAYS} days, until <LocalTime value={until} dateOnly />.{" "}
+        Valid for {DEFAULT_DELEGATION_DAYS} days, until <UtcTime value={until} dateOnly />.{" "}
         {capsCover
           ? "One signature."
           : "Two signatures: your account ceiling is raised to fit, then the agent's spending limits."}
@@ -298,7 +298,7 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
         <p className="rounded-lg bg-02 px-3 py-2 text-body-13 text-02" data-testid="agent-pay-lower-delay">
           {delayNote && fullyAt ? (
             <>
-              Lower than now. {delayNote} Fully in effect at <LocalTime value={fullyAt} midSentence />.
+              Lower than now. {delayNote} Fully in effect at <UtcTime value={fullyAt} midSentence />.
             </>
           ) : (
             "Lower than now. Its payments pause for about 30 seconds while the lower limits settle."

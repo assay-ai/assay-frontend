@@ -23,7 +23,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import {
   ALERT_PRESETS,
@@ -477,7 +477,7 @@ export function AlertsView() {
                       <StatusPill label={URGENCY[item.severity] ?? item.severity} tone={SEVERITY_TONE[item.severity] ?? "neutral"} />
                       <span className="min-w-0 flex-1 truncate text-label-sm text-01">{item.title}</span>
                       <span className="text-body-xs text-03">
-                        <LocalTime value={item.createdAt} />
+                        <UtcTime value={item.createdAt} />
                       </span>
                       {expanded ? (
                         <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-03" />

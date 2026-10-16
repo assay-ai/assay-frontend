@@ -26,8 +26,8 @@ import { NOTIFICATION_EVENT_LABEL } from "@/components/g31/notification-catalogu
  *   `components/g31/format.ts`. Never `Number(amount) / 1e6`.
  * - Chains: `chainName(chainId, chains)` in `utils/chain.ts`, or the
  *   `useChainName()` hook, which wires in `GET /chains`.
- * - Times: `formatLocalDateTime` / `utcTitle` in `libs/local-time.ts`, or the
- *   `<LocalTime>` component.
+ * - Times: `formatDateTime` / `utcTitle` in `libs/utc-time.ts`, or the
+ *   `<UtcTime>` component.
  */
 
 /* ------------------------------------------------------------------------

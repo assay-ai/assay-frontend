@@ -28,7 +28,7 @@ describe("slaReading", () => {
 
 describe("windowRange", () => {
   it("names a window by its dates", () => {
-    const options = { timeZone: "UTC", now: Date.parse("2026-10-16T00:00:00Z") };
+    const options = { now: Date.parse("2026-10-16T00:00:00Z") };
     expect(
       windowRange({ status: "CLOSED", openedAt: "2026-10-13T15:00:00Z", closedAt: "2026-10-13T17:00:00Z", deadlineAt: "" }, options),
     ).toBe("Oct 13, 15:00 – 17:00");

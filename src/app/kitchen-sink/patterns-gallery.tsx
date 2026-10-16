@@ -10,7 +10,7 @@ import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { EntityPicker } from "@/components/patterns/entity-picker";
 import { STATUS_CHIPS, StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { MoneyFlow, MoneySplit } from "@/components/patterns/money-flow";
 import { PageState, Skeleton } from "@/components/patterns/page-state";
 import { PresetChips } from "@/components/patterns/preset-chips";
@@ -465,11 +465,11 @@ export function PatternsGallery() {
         </div>
       </Spec>
 
-      <Spec name="copy-chip · local-time">
+      <Spec name="copy-chip · utc-time">
         <CopyChip value="06399979-f8b8-4c9e-a9b1-bd2a5924d442" label="call id" />
         <CopyChip value="0x83ab1234567890abcdef1234567890abcdef2913" label="wallet address" />
         <span className="text-body-13 text-02">
-          Created <LocalTime value={iso(-0.5)} /> · expires <LocalTime value={iso(50)} />
+          Created <UtcTime value={iso(-0.5)} /> · expires <UtcTime value={iso(50)} />
         </span>
       </Spec>
 

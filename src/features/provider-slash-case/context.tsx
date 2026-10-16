@@ -11,7 +11,7 @@ import {
   PanelTitles,
 } from "@/components/ui/panel";
 import { count, percent, stampUtc } from "@/features/g34a/stats";
-import { formatLocalDateTime, utcTitle, zoneLabel } from "@/libs/local-time";
+import { formatDateTime, utcTitle } from "@/libs/utc-time";
 import { cn } from "@/utils";
 import type { SlashAttributionRow } from "@/interfaces/provider-disputes";
 import type { SlashProposalCaseDetail, SlashPriorWindow } from "@/interfaces/provider-slash-cases";
@@ -106,13 +106,13 @@ const COPY: Record<
 
 /**
  * An instant as each audience reads times elsewhere: the provider page in UTC
- * throughout; the operator console in the reader's local time with its zone
- * (the exact UTC instant goes in a tooltip), like every other operator screen.
+ * throughout; the operator console day-relative ("yesterday 14:20 UTC"), like
+ * every other operator screen. Both are UTC.
  */
 export function contextStamp(audience: ContextAudience): (iso: string) => string {
   return audience === "provider"
     ? (iso) => `${stampUtc(iso)} UTC`
-    : (iso) => `${formatLocalDateTime(iso, { midSentence: true })} ${zoneLabel(iso)}`.trim();
+    : (iso) => formatDateTime(iso, { midSentence: true });
 }
 
 /**

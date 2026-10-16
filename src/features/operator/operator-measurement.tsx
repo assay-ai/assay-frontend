@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { arithmeticLabel, presentArithmeticRow } from "@/features/provider-slash-case/labels";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
-import { formatLocalDateTime } from "@/libs/local-time";
+import { formatDateTime } from "@/libs/utc-time";
 import { cn } from "@/utils";
 
 /**
@@ -89,9 +89,9 @@ export function OperatorMeasurement({ data }: { data: SlashProposalCaseDetail })
   const verdict = breachVerdict(data.arithmetic);
   const subject = data.priorWindows.find((window) => window.isSubject);
   const meta = data.proposal.windowLabel
-    ? `Measured over window ${data.proposal.windowLabel}${subject ? `, closed ${formatLocalDateTime(subject.closedAt)}` : ""}`
+    ? `Measured over window ${data.proposal.windowLabel}${subject ? `, closed ${formatDateTime(subject.closedAt)}` : ""}`
     : subject
-      ? `Window closed ${formatLocalDateTime(subject.closedAt)}`
+      ? `Window closed ${formatDateTime(subject.closedAt)}`
       : null;
 
   return (

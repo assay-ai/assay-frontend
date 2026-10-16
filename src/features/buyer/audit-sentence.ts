@@ -171,22 +171,23 @@ export function auditSentence(
   };
 }
 
-/** "Today", "Yesterday", or "Mon 13 Oct", in the reader's time zone. */
+/** "Today", "Yesterday", or "Mon 13 Oct" — the UTC day, the one the backend groups by. */
 export function dayHeading(iso: string, now = new Date()): string {
   const date = new Date(iso);
-  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((startOf(now) - startOf(date)) / 86_400_000);
+  const startOf = (d: Date) => Math.floor(d.getTime() / 86_400_000);
+  const days = startOf(now) - startOf(date);
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
   return date.toLocaleDateString("en-GB", {
+    timeZone: "UTC",
     weekday: "short",
     day: "numeric",
     month: "short",
-    ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
+    ...(date.getUTCFullYear() !== now.getUTCFullYear() ? { year: "numeric" } : {}),
   });
 }
 
-/** Entries (newest first) grouped by local day, keeping order. */
+/** Entries (newest first) grouped by UTC day, keeping order. */
 export function groupByDay<T extends { createdAt: string }>(entries: readonly T[], now = new Date()): { day: string; entries: T[] }[] {
   const groups: { day: string; entries: T[] }[] = [];
   for (const entry of entries) {

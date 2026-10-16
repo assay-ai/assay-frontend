@@ -6,7 +6,7 @@ import * as React from "react";
 import { formatRemaining } from "@/hooks/useCountdown";
 import { cn } from "@/utils";
 
-import { LocalTime } from "./local-time";
+import { UtcTime } from "./utc-time";
 
 /**
  * The end of every two-person form and request: who has to approve it, a link
@@ -159,7 +159,7 @@ export function ApprovalFooter({
             {expiresAt && !expiry.expired ? (
               <>
                 {" · "}
-                <LocalTime value={expiresAt} />
+                <UtcTime value={expiresAt} />
               </>
             ) : null}
           </span>

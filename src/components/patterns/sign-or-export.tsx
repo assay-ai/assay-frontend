@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
-import { formatClock } from "@/libs/local-time";
+import { formatClock } from "@/libs/utc-time";
 import { cn } from "@/utils";
 
 import { CopyChip } from "./copy-chip";
@@ -247,7 +247,7 @@ export function SignOrExport({
   ) : null;
   const againText =
     fileAt !== null
-      ? `You already downloaded this file at ${formatClock(fileAt)}. If it is in the Safe already, a second copy asks the signers twice. Press again to download it anyway.`
+      ? `You already downloaded this file at ${formatClock(fileAt)} UTC. If it is in the Safe already, a second copy asks the signers twice. Press again to download it anyway.`
       : "You already downloaded this file. If it is in the Safe already, a second copy asks the signers twice. Press again to download it anyway.";
   const exportStatus =
     prepareError ?? (confirmAgain ? againText : downloaded ? afterExport : disabled ? (disabledReason ?? "") : "");
@@ -308,12 +308,12 @@ export function SignOrExport({
         <p role="status" className="w-full rounded-md border border-01 bg-01 px-3 py-2 text-body-13 text-02">
           {handed.kind === "file" ? (
             <>
-              <span className="text-label-13 text-01">File downloaded at {formatClock(handed.at)}, waiting for the signature.</span> Nothing
+              <span className="text-label-13 text-01">File downloaded at {formatClock(handed.at)} UTC, waiting for the signature.</span> Nothing
               changes until it is signed in {signerWallet} and lands on chain.
             </>
           ) : (
             <>
-              <span className="text-label-13 text-01">Sent at {formatClock(handed.at)}, waiting for the chain.</span> It moves once the
+              <span className="text-label-13 text-01">Sent at {formatClock(handed.at)} UTC, waiting for the chain.</span> It moves once the
               chain watcher sees it.{" "}
               {handed.explorerUrl ? (
                 <a href={handed.explorerUrl} target="_blank" rel="noreferrer" className="text-primary-700 hover:underline">

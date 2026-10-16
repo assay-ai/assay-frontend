@@ -8,7 +8,7 @@ import * as React from "react";
 import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { ToolAccessControl } from "@/components/explorer/tool-access-control";
 import { EntityName } from "@/components/patterns/entity-name";
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
 import { Term } from "@/components/patterns/term";
@@ -169,7 +169,7 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
                       </span>
                       <span className="flex flex-wrap items-center gap-2 text-body-xs text-03">
                         <StatusChip status={callOutcome(call)} />
-                        <LocalTime value={call.createdAt} />
+                        <UtcTime value={call.createdAt} />
                       </span>
                     </div>
                     <span className="shrink-0 font-mono text-mono-13 text-01">{callOutcome(call) === "checking"

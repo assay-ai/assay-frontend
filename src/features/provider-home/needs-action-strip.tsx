@@ -4,10 +4,10 @@ import { CircleAlert, CircleCheck, Clock } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { LocalTime } from "@/components/patterns/local-time";
+import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import { formatRemaining, useCountdown } from "@/hooks/useCountdown";
-import { formatLocalDateTime } from "@/libs/local-time";
+import { formatDateTime } from "@/libs/utc-time";
 import { cn } from "@/utils";
 
 import type { NeedsActionItem } from "./needs-action";
@@ -15,7 +15,7 @@ import type { NeedsActionItem } from "./needs-action";
 function Deadline({ at }: { at: string }) {
   const { msLeft, hasPassed } = useCountdown(at);
   const [title, setTitle] = React.useState<string | undefined>(undefined);
-  React.useEffect(() => setTitle(formatLocalDateTime(at)), [at]);
+  React.useEffect(() => setTitle(formatDateTime(at)), [at]);
   if (msLeft === null) return null;
   const urgent = msLeft < 24 * 3_600_000;
   return (
@@ -30,7 +30,7 @@ function Deadline({ at }: { at: string }) {
       {hasPassed ? "Time is up" : `${formatRemaining(msLeft)} left`}
       {hasPassed ? null : (
         <>
-          {" "}· by <LocalTime value={at} withZone />
+          {" "}· by <UtcTime value={at} />
         </>
       )}
     </span>

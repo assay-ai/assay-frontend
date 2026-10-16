@@ -215,6 +215,6 @@ export function blockSummary(entry: AccountBlockStatusEntry, locale?: string): s
   const when = new Date(entry.blockedAt);
   const date = Number.isNaN(when.getTime())
     ? entry.blockedAt
-    : when.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
+    : when.toLocaleDateString(locale, { timeZone: "UTC", year: "numeric", month: "short", day: "numeric" });
   return `${what[0].toUpperCase()}${what.slice(1)} is blocked since ${date} (reason: ${reasonLabel(entry.reasonCode)}).`;
 }

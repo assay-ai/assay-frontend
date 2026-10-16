@@ -19,7 +19,7 @@ import type { OperatorIdentity } from "@/interfaces/operator";
 import { toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
 import { STAKE_DEPLOYMENTS } from "@/libs/chains/evm/stake-slashes/deployments";
 import type { DemoOperatorPreset } from "@/libs/demo/fixtures-operator";
-import { formatClock } from "@/libs/local-time";
+import { formatClock } from "@/libs/utc-time";
 import { useTheme } from "@/providers/ThemeProvider";
 import { cn } from "@/utils";
 
@@ -110,7 +110,7 @@ export function SessionChip({ expiresAt, within, className }: { expiresAt: strin
       )}
     >
       <Timer aria-hidden="true" className="size-3" />
-      Session ends {formatClock(expiresAt)}
+      Session ends {formatClock(expiresAt)} UTC
     </span>
   );
 }

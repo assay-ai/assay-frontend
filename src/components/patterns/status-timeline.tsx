@@ -4,7 +4,7 @@ import { Check, Minus, X } from "lucide-react";
 import * as React from "react";
 
 import { formatRemaining, useCountdown } from "@/hooks/useCountdown";
-import { formatLocalDateTime, utcTitle } from "@/libs/local-time";
+import { formatDateTime, utcTitle } from "@/libs/utc-time";
 import { cn } from "@/utils";
 
 /**
@@ -21,7 +21,7 @@ import { cn } from "@/utils";
  * Horizontal from `tablet` up, stacked below it. The **next date** — the
  * first not-yet-finished step with a date — is highlighted, because "when
  * does something happen next" is the question every lifecycle screen is
- * asked. Dates render in local time with the UTC instant in the tooltip.
+ * asked. Dates render in UTC, labelled, with the exact instant in the tooltip.
  */
 
 export type TimelineStepState = "done" | "current" | "upcoming" | "skipped" | "failed";
@@ -30,7 +30,7 @@ export interface StatusTimelineStep {
   id: string;
   label: React.ReactNode;
   state: TimelineStepState;
-  /** ISO instant. Rendered in local time. */
+  /** ISO instant. Rendered in UTC. */
   date?: string | null;
   /** Free text instead of (or with no) date, e.g. "after the window closes". */
   dateLabel?: React.ReactNode;
@@ -149,7 +149,7 @@ function StepDate({
       {step.date ? (
         <time dateTime={step.date} title={utcTitle(step.date)} className="whitespace-nowrap">
           {/* After a lead-in ("sign before today 19:06") the day word is mid-sentence; alone it starts the line ("Today 10:06"). */}
-          {mounted ? formatLocalDateTime(step.date, { alwaysDay, midSentence: Boolean(step.dateLabel) }) : utcTitle(step.date)}
+          {mounted ? formatDateTime(step.date, { alwaysDay, midSentence: Boolean(step.dateLabel) }) : utcTitle(step.date)}
         </time>
       ) : null}
       {step.countdown && msLeft !== null ? (

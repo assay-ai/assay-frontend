@@ -1,7 +1,7 @@
 import Decimal from "decimal.js";
 
 import type { Money } from "@/interfaces";
-import { formatLocalDate } from "@/libs/local-time";
+import { formatDate } from "@/libs/utc-time";
 import { chainLabel } from "@/utils/chain";
 import { formatMoney, toDecimal } from "@/utils/money";
 
@@ -99,9 +99,9 @@ export function relativeTime(iso: string | null | undefined, now = Date.now()): 
   return `${Math.floor(elapsed / 86_400_000)}d ago`;
 }
 
-/** "Jun 2" (or "Jun 2, 2025") — a date with no time, in the reader's own zone. */
+/** "Jun 2" (or "Jun 2, 2025") — a date with no time, the UTC day. */
 export function dateOnly(iso: string | null | undefined): string {
-  return formatLocalDate(iso);
+  return formatDate(iso);
 }
 
 /** Thousands-separated counts, as in the design's "512,900 calls measured". */
