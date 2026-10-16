@@ -114,7 +114,8 @@ export default function ProviderMoneyPage() {
     return parts.map((part, index) => (part ? { ...part, amount: shown[index] } : null));
   }, [notCredited.buckets]);
   const split = earningsSplit(earnings.data?.totals);
-  const unpaid = unpaidLines(earnings.data?.totals, (value) => formatMoney(value, { decimals: 4 }));
+  // Normal money format; a sub-cent amount still shows its own digits (see `formatMoney`).
+  const unpaid = unpaidLines(earnings.data?.totals, (value) => formatMoney(value, { decimals: 2 }));
   const monthName = MONTH.format(now);
   // The home's "Details" link lands on the block, which renders only once the month has loaded.
   const hasUnpaid = unpaid.length > 0;
@@ -140,6 +141,9 @@ export default function ProviderMoneyPage() {
     () => (ledger.data ? fromLedger(ledger.data) : ledger.isError && calls.data ? fromExport(classes, observedTake) : null),
     [ledger.data, ledger.isError, calls.data, classes, observedTake],
   );
+  /* The fee rate a passed-but-unpaid call's share is worked out at: the terms when read, else the one rate the paid calls realised. */
+  const feeRatePercent =
+    recon?.configuredRatePercent ?? (observedTake.rates.length === 1 ? Number(observedTake.rates[0]) : null);
 
   const payoutItems = (assetPending ? [] : payoutsInAsset(payouts.data?.items ?? [], displayAsset)).slice(0, 8);
 
@@ -240,6 +244,7 @@ export default function ProviderMoneyPage() {
               <UnpaidBlock
                 lines={unpaid}
                 rows={calls.data ? rows : null}
+                feeRatePercent={feeRatePercent}
                 toolName={(id) => names.toolName(id) ?? "A tool"}
               />
             ) : null}
@@ -414,8 +419,10 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
   );
 }
 
-/** Unpaid amounts are small and often under a cent: four places, trailing zeros dropped. */
-const unpaidMoney = (value: Money | null | undefined) => formatMoney(value, { decimals: 4 });
+/** A line's total: normal money format, a sub-cent amount still shows its own digits. */
+const unpaidMoney = (value: Money | null | undefined) => formatMoney(value, { decimals: 2 });
+/** One call in a drill-down: a per-call price, so up to four places ("$0.405"), trailing zeros dropped. */
+const unpaidCallMoney = (value: Money | null | undefined) => formatMoney(value, { decimals: 4 });
 
 /**
  * "Passed, but not paid": one row per way a passed call can pay the provider
@@ -425,11 +432,14 @@ const unpaidMoney = (value: Money | null | undefined) => formatMoney(value, { de
 function UnpaidBlock({
   lines,
   rows,
+  feeRatePercent,
   toolName,
 }: {
   lines: readonly UnpaidLine[];
   /** The month's per-call rows in the shown asset, or null when the file is not available. */
   rows: readonly CallRow[] | null;
+  /** Assay's fee in percent, when one rate is known: a call's share is worked out at it. */
+  feeRatePercent: number | null;
   toolName: (toolId: string) => string;
 }) {
   return (
@@ -444,10 +454,14 @@ function UnpaidBlock({
           Passed, but not paid
         </h2>
         <p className="text-body-xs text-03">Not in your wallet figure. You are paid only from the buyer&apos;s escrow, never by Assay.</p>
+        <p className="text-body-xs text-03" data-testid="provider-unpaid-basis">
+          Amounts are your share: the listed price less Assay&apos;s {feeRatePercent != null ? `${feeRatePercent}% ` : ""}fee,
+          which would come off if the payment were collected. No fee has been taken on them.
+        </p>
       </div>
       <ul className="flex flex-col divide-y divide-01">
         {lines.map((line) => (
-          <UnpaidRow key={line.key} line={line} rows={rows} toolName={toolName} />
+          <UnpaidRow key={line.key} line={line} rows={rows} feeRatePercent={feeRatePercent} toolName={toolName} />
         ))}
       </ul>
     </section>
@@ -457,10 +471,12 @@ function UnpaidBlock({
 function UnpaidRow({
   line,
   rows,
+  feeRatePercent,
   toolName,
 }: {
   line: UnpaidLine;
   rows: readonly CallRow[] | null;
+  feeRatePercent: number | null;
   toolName: (toolId: string) => string;
 }) {
   const drill = rows ? callsOfClass(rows, line.className) : null;
@@ -496,7 +512,9 @@ function UnpaidRow({
             {drill.total === 1 ? "Show the call" : `Show the ${drill.total.toLocaleString("en-US")} calls`}
           </summary>
           <ul className="mt-2 flex flex-col divide-y divide-01 rounded-md border border-01 bg-02">
-            {drill.items.map((call) => (
+            {drill.items.map((call) => {
+              const worth = unpaidCallAmount(call, feeRatePercent);
+              return (
               <li key={call.callId} className="flex flex-col gap-0.5 px-3 py-2">
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-01">
@@ -505,15 +523,14 @@ function UnpaidRow({
                     <CopyChip value={call.callId} label="call id" />
                   </span>
                   <span className="font-mono text-mono-12 text-01">
-                    {unpaidMoney(unpaidCallAmount(call).amount)}
-                    {unpaidCallAmount(call).note ? (
-                      <span className="ml-1 font-sans text-body-xs text-03">{unpaidCallAmount(call).note}</span>
-                    ) : null}
+                    {unpaidCallMoney(worth.amount)}
+                    {worth.note ? <span className="ml-1 font-sans text-body-xs text-03">{worth.note}</span> : null}
                   </span>
                 </div>
                 {call.reason ? <span className="text-body-xs text-03">{reasonLabel(call.reason)}</span> : null}
               </li>
-            ))}
+              );
+            })}
           </ul>
           {drill.more > 0 ? (
             <p className="mt-1.5 text-body-xs text-03">
@@ -563,7 +580,7 @@ function ExplainSheet({
     // Passed, but not paid (yet): never part of the wallet figure, never paid by the platform.
     ...unpaid.map((line) => ({
       label: line.label,
-      detail: `${callCount(line.calls)} · not in your wallet`,
+      detail: `${callCount(line.calls)} · your share, not in your wallet`,
       amount: unpaidMoney(line.amount),
     })),
   ];
@@ -649,6 +666,9 @@ const EMPTY_CLASS_WORDS: Record<string, string> = {
   PROVIDER_FORFEITED: "forfeited",
 };
 
+/** The classes that passed but paid the provider nothing (yet): no amount reached the wallet. */
+const UNPAID_CLASSES: ReadonlySet<string> = new Set(["PAID_BUYER_DEBT", "PAID_UNCOLLECTED", "PROVIDER_FORFEITED"]);
+
 function ReconSection({ recon, loading, capped }: { recon: ReconSummary | null; loading: boolean; capped: boolean }) {
   if (loading) return <PageState kind="loading" rows={3} bare label="Loading every call this month" />;
   if (!recon) return null;
@@ -673,7 +693,12 @@ function ReconSection({ recon, loading, capped }: { recon: ReconSummary | null; 
                   <span className="shrink-0 text-body-xs text-03">
                     {callCount(row.calls)} · {(row.share * 100).toFixed(1)}%
                   </span>
-                  <span className="w-20 shrink-0 text-right font-mono text-mono-12 text-01">{formatMoney(row.credited, { decimals: 2 })}</span>
+                  {UNPAID_CLASSES.has(row.className) ? (
+                    // Nothing reached the provider yet: "$0.00" here would read as money lost. The amount is under Passed, but not paid.
+                    <span className="w-20 shrink-0 text-right text-body-xs text-03">not paid</span>
+                  ) : (
+                    <span className="w-20 shrink-0 text-right font-mono text-mono-12 text-01">{formatMoney(row.credited, { decimals: 2 })}</span>
+                  )}
                 </div>
                 {note ? <span className="text-body-xs text-03">{note}</span> : null}
               </li>
@@ -686,7 +711,10 @@ function ReconSection({ recon, loading, capped }: { recon: ReconSummary | null; 
           No calls this month were {recon.emptyClasses.map((name) => EMPTY_CLASS_WORDS[name] ?? classLabel(name)).join(", or ")}.
         </p>
       ) : null}
-      <p className="text-body-xs text-03">The amounts are what reached you, after Assay&apos;s fee.</p>
+      <p className="text-body-xs text-03">
+        The amounts are what reached you, after Assay&apos;s fee. Calls that passed but were not paid are not in Gross: nothing
+        was collected on them (their amounts are in the table above).
+      </p>
       <dl className="flex flex-col divide-y divide-01 rounded-lg border border-01">
         {[
           { label: "Gross", note: "Price of the paid calls, before Assay's fee.", amount: formatMoney(recon.gross, { decimals: 2 }), tone: "neutral" },

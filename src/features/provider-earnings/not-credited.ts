@@ -1,3 +1,7 @@
+import Decimal from "decimal.js";
+
+import { formatMoney } from "@/utils/money";
+
 /**
  * Why a call earned nothing, in the provider's words. Keyed on the call class
  * of the per-call export; the buyer's "Not charged" uses the same classes, so
@@ -10,15 +14,15 @@ export interface NotCreditedReason {
 
 const REASONS: Record<string, NotCreditedReason> = {
   PAID_UNCREDITED: {
-    title: "The answer failed Assay's check",
+    title: "Failed our checks",
     detail: "Your API answered, but the result did not pass the tool's checks (a value out of range, a missing field, stale data). The buyer was not charged.",
   },
   SYSTEM_ERROR: {
-    title: "Your API errored or timed out",
+    title: "Endpoint error (5xx or timeout)",
     detail: "It answered with a server error (5xx) or did not answer within your timeout.",
   },
   REQUEST_ERROR: {
-    title: "Your API refused the request",
+    title: "Request refused (4xx)",
     detail: "It answered with a 4xx error. Usually the agent sent input your API does not accept; check your request mapping.",
   },
   EXCLUDED: {
@@ -93,13 +97,36 @@ export function notCreditedRows<T extends { classification: string }>(rows: read
   return { rows: kept, passedUnpaid: rows.length - kept.length };
 }
 
-/** What one passed-but-unpaid call is worth to the provider in a drill-down. */
-export function unpaidCallAmount(row: { providerAmount: string; priceAmount: string; asset: string; decimals: number }): {
+/**
+ * What one passed-but-unpaid call is worth to the provider in a drill-down:
+ * its share of the listed price, after Assay's fee — the same basis as the
+ * line's total (the earnings report sums the provider share), so two $0.45
+ * calls at a 10% fee read $0.405 each under a $0.81 total.
+ *
+ * The export sends 0 as the share of a written-off or forfeited call (nothing
+ * was collected), so the share is worked out from the listed price at the fee
+ * rate when one rate is known. Without one, the listed price is shown and said
+ * to be before the fee.
+ */
+export function unpaidCallAmount(
+  row: { providerAmount: string; priceAmount: string; asset: string; decimals: number },
+  /** The fee rate in percent the month's paid calls realised, when it is a single rate. */
+  feeRatePercent?: number | null,
+): {
   amount: { amount: string; asset: string; decimals: number };
-  /** "listed price" when the export carries no provider share (written off, forfeited: it sends 0). */
+  /** Where the amount comes from, in words; null when it is the export's own share. */
   note: string | null;
 } {
+  const money = (amount: string) => ({ amount, asset: row.asset, decimals: row.decimals });
   const share = BigInt(row.providerAmount || "0");
-  if (share > 0n) return { amount: { amount: row.providerAmount, asset: row.asset, decimals: row.decimals }, note: null };
-  return { amount: { amount: row.priceAmount || "0", asset: row.asset, decimals: row.decimals }, note: "listed price" };
+  if (share > 0n) return { amount: money(row.providerAmount), note: null };
+  const listed = money(row.priceAmount || "0");
+  if (feeRatePercent != null && Number.isFinite(feeRatePercent) && feeRatePercent >= 0 && feeRatePercent < 100) {
+    const net = new Decimal(listed.amount).mul(new Decimal(100).minus(feeRatePercent)).div(100).toFixed(0, Decimal.ROUND_DOWN);
+    return {
+      amount: money(net),
+      note: `of ${formatMoney(listed, { decimals: 4 })} listed, after Assay's ${feeRatePercent}% fee`,
+    };
+  }
+  return { amount: listed, note: "listed price, before Assay's fee" };
 }
