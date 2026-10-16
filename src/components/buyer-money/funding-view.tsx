@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { windowRefillAt } from "@/features/buyer-money/refill";
 import { isLowBalance, runwayDays, runwayLine } from "@/features/buyer-money/runway";
 import { chainBalances } from "@/features/g30/balance";
-import { spentFromTotals } from "@/features/g30/spend-buckets";
+import { chargedFromTotals } from "@/features/g30/spend-buckets";
 import { useCountdown } from "@/hooks/useCountdown";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import type { Money } from "@/interfaces";
@@ -117,8 +117,8 @@ export function FundingView() {
     queryFn: () => getReceiptsSummary({ from: week.from, to: week.to, groupBy: "tool" }),
     retry: 0,
   });
-  // Charged plus owed (buyer debt is spend still owed), as the summary counts it.
-  const charged7d = spentFromTotals(
+  // "Spent" is charged only, the same figure as Spend's headline (P2-3).
+  const charged7d = chargedFromTotals(
     (weekSpend.data as { totals?: { chargedTotal?: Money; owedTotal?: Money } } | undefined)?.totals,
   );
 
