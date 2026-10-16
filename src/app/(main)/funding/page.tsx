@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/panel";
 import { Switch } from "@/components/ui/switch";
 import { Table, type TableColumn } from "@/components/ui/table";
+import { heldCallsText } from "@/features/buyer-debt/debt-copy";
+import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { depositableChains } from "@/features/funding/depositable-chains";
 import { ledgerEmptyNote } from "@/features/funding/ledger-empty";
 import {
@@ -152,6 +154,7 @@ export default function FundingPage() {
   const balances = chainBalances(balancesQuery.data?.balances);
   const { chains } = useChains();
   const openHolds = holdsQuery.data?.items.filter((h) => h.status === "OPEN") ?? [];
+  const owedIntentIds = useOwedIntentIds();
 
   /*
     The same narrowing the deposit picker uses, from the same two sources, so
@@ -280,7 +283,10 @@ export default function FundingPage() {
                 },
                 chains,
               )}
-              openHoldCount={openHolds.length}
+              heldSub={heldCallsText(
+                openHolds.map((h) => h.intentId),
+                owedIntentIds,
+              )}
               depositsConfirming={
                 depositsQuery.data?.items.some((d) => d.status === "SETTLING") ?? false
               }
