@@ -23,10 +23,15 @@ export function OfferPrice({
   size?: "sm" | "lg";
   className?: string;
 }) {
+  // Nothing to price (no provider serves it): the row's "Nobody serves it yet" says so.
+  if (offer.price === "—") return null;
   const free = offer.price === "Free";
+  const from = offer.price.startsWith("from ");
+  const amount = from ? offer.price.slice("from ".length) : offer.price;
   return (
     <p className={cn(size === "lg" ? "text-body-13" : "text-body-xs", "text-01", className)} data-testid="offer-line">
       {offer.lead ? <span className="text-teal-600">{offer.lead} </span> : null}
+      {from ? <span className="text-02">from </span> : null}
       <span
         className={cn(
           "whitespace-nowrap font-mono font-semibold",
@@ -34,10 +39,10 @@ export function OfferPrice({
           free ? "text-teal-600" : null,
         )}
       >
-        {offer.price}
+        {amount}
         {offer.unit ? (
-          <span className={cn("font-sans font-normal text-03", size === "lg" ? "ml-1 text-body-13" : "text-body-xs")}>
-            {size === "lg" ? "per call" : offer.unit}
+          <span className={cn("whitespace-pre font-sans font-normal text-03", size === "lg" ? "text-body-13" : "text-body-xs")}>
+            {size === "lg" ? " per call" : offer.unit}
           </span>
         ) : null}
       </span>
