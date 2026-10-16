@@ -86,6 +86,21 @@ describe("BuyerDebtBanner", () => {
     expect(html).toContain("Settle $2.50");
   });
 
+  it("links each Details row of this wallet to that call's receipt, a written-off one included", () => {
+    const html = render({
+      account: ACCOUNT,
+      debts: [
+        debt({ intentId: "int_wo", state: "WRITTEN_OFF", writeOffAt: "2026-10-01T00:00:00.000Z" }),
+        debt({ intentId: "int_other", payer: "eip155:46630:0x2222222222222222222222222222222222222222" }),
+      ],
+    });
+    expect(html).toContain('href="/receipts/view?id=int_wo"');
+    expect(html).toMatch(/href="\/receipts\/view\?id=int_wo"[^>]*>.*written off<\/a>/);
+    // Another wallet's receipt is that wallet's to read: no link.
+    expect(html).not.toContain("id=int_other");
+    expect(html).toContain("another wallet");
+  });
+
   it("offers no button while the only debt is being collected", () => {
     const html = render({
       account: ACCOUNT,

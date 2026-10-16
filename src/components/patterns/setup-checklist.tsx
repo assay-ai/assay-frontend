@@ -88,7 +88,8 @@ export function defaultExpandedStep(steps: readonly SetupStep[]): string | null 
   return next ? next.id : null;
 }
 
-function StepMark({ state, index }: { state: SetupStepState; index: number }) {
+/** The numbered (or ticked / locked) circle of a step, for other ordered step lists too. */
+export function StepMark({ state, index }: { state: SetupStepState; index: number }) {
   if (state === "done") {
     return (
       <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-success-500 text-on-color">

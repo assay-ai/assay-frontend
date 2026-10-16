@@ -47,8 +47,11 @@ export const Timeline = React.forwardRef<HTMLOListElement, TimelineProps>(
       {events.map((event, index) => (
         <li
           key={event.id ?? `${event.label}-${index}`}
-          // On a phone the meta wraps under the label: a stamp carries its day ("Sep 15, 02:11:30").
-          className="flex w-full flex-wrap items-center gap-x-3.5 gap-y-1 py-2.5 tablet:flex-nowrap"
+          // The row wraps rather than overflowing: the label takes the free room (never below ~9rem),
+          // and the meta sits at the right end of the line when it fits — else on its own line,
+          // still right-aligned. A stamp carries its day ("Sep 15, 02:11:30"), so in a 400px card
+          // a fixed label column left no room for "$2.50" and the row ran past the edge.
+          className="flex w-full min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1 py-2.5"
         >
           <span className="sr-only">
             {event.time} — {event.label}
@@ -58,11 +61,15 @@ export const Timeline = React.forwardRef<HTMLOListElement, TimelineProps>(
             {event.time}
           </span>
           <span aria-hidden="true" className={dotVariants({ tone: event.tone })} />
-          <span aria-hidden="true" className="min-w-0 flex-1 text-label-sm text-01 tablet:w-[180px] tablet:flex-none tablet:shrink-0">
+          <span aria-hidden="true" className="min-w-[9rem] flex-1 break-words text-label-sm text-01">
             {event.label}
           </span>
           {event.meta ? (
-            <span aria-hidden="true" className="min-w-0 basis-full text-mono-12 font-mono text-02 tablet:basis-auto tablet:flex-1">
+            <span
+              aria-hidden="true"
+              data-slot="timeline-meta"
+              className="ml-auto min-w-0 max-w-full shrink-0 break-words text-right text-mono-12 font-mono text-02"
+            >
               {event.meta}
             </span>
           ) : null}
