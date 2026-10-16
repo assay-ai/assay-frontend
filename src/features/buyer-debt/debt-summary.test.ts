@@ -109,6 +109,13 @@ describe("debtBannerSummary", () => {
     expect(summary.title).toBe("Collecting $2.50 you signed. Paid calls resume in about a minute.");
     expect(summary.actionLabel).toBeNull();
   });
+
+  it("never promises a restart over the person's own Pause all while collecting", () => {
+    const summary = debtBannerSummary({ account: ACCOUNT, debts: [debt({ state: "REPLACING" })] }, { pausedByYou: true })!;
+    expect(summary.kind).toBe("collecting");
+    expect(summary.title).toContain("stay paused by you");
+    expect(summary.title).not.toContain("resume");
+  });
 });
 
 describe("owedCallState", () => {
