@@ -14,6 +14,7 @@ import {
   debtRowText,
   debtSentence,
   debtsToSign,
+  heldCallsText,
   isReplaceable,
   nextReplaceableAt,
   notYetReplaceableSentence,
@@ -291,5 +292,20 @@ describe("call payment notes", () => {
     expect(uncollectedNotWithheld({ debt: "VOIDED" })).toBe(true);
     expect(uncollectedNotWithheld({ debt: "OUTSTANDING" })).toBe(false);
     expect(uncollectedNotWithheld({})).toBe(false);
+  });
+});
+
+describe("heldCallsText", () => {
+  const owed = new Set(["d1"]);
+  it("keeps the in-flight wording when nothing is owed", () => {
+    expect(heldCallsText(["a", "b"], new Set())).toBe("2 calls in flight — returns within 24h");
+    expect(heldCallsText([], new Set())).toBe("0 calls in flight — returns within 24h");
+  });
+  it("does not call a held debt a call in flight", () => {
+    expect(heldCallsText(["d1"], owed)).toBe("1 unpaid call — held until you settle");
+    expect(heldCallsText(["a", "d1"], owed)).toBe(
+      "1 call in flight — returns within 24h · 1 unpaid call — held until you settle",
+    );
+    expect(heldCallsText(["a", "d1"], owed, { short: true })).toBe("1 call in flight · 1 unpaid");
   });
 });
