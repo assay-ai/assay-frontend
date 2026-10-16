@@ -9,6 +9,47 @@ import { cn } from "@/utils";
  * row reads the same signed in or out.
  */
 
+/**
+ * One price line, free first: "Free for 100 calls/day, then $0.002/call". The
+ * free part is in the free-tier colour, the price in mono; `size="lg"` sets the
+ * price large for a tool page. Built by `offerLine`.
+ */
+export function OfferPrice({
+  offer,
+  size = "sm",
+  className,
+}: {
+  offer: { lead: string | null; price: string; unit: string };
+  size?: "sm" | "lg";
+  className?: string;
+}) {
+  // Nothing to price (no provider serves it): the row's "Nobody serves it yet" says so.
+  if (offer.price === "—") return null;
+  const free = offer.price === "Free";
+  const from = offer.price.startsWith("from ");
+  const amount = from ? offer.price.slice("from ".length) : offer.price;
+  return (
+    <p className={cn(size === "lg" ? "text-body-13" : "text-body-xs", "text-01", className)} data-testid="offer-line">
+      {offer.lead ? <span className="text-teal-600">{offer.lead} </span> : null}
+      {from ? <span className="text-02">from </span> : null}
+      <span
+        className={cn(
+          "whitespace-nowrap font-mono font-semibold",
+          size === "lg" ? "text-mono-xl" : "text-mono-13",
+          free ? "text-teal-600" : null,
+        )}
+      >
+        {amount}
+        {offer.unit ? (
+          <span className={cn("whitespace-pre font-sans font-normal text-03", size === "lg" ? "text-body-13" : "text-body-xs")}>
+            {size === "lg" ? " per call" : offer.unit}
+          </span>
+        ) : null}
+      </span>
+    </p>
+  );
+}
+
 /** "Free · 100 calls/day" — a free tier is the way in for a newcomer. */
 export function FreeTierBadge({ label, className }: { label: string | null; className?: string }) {
   if (!label) return null;

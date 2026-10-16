@@ -42,6 +42,18 @@ export interface PublicTool {
   routable: boolean;
   /** CAIP-2 chains a call would settle on; null when nothing is routable. */
   settlementChains: string[] | null;
+  /**
+   * Routable listings that can be charged (PAID or FREEMIUM). "from" is printed
+   * only over more than one. Optional: a backend before 716a7c0 does not send
+   * it, and then `priceRange` still ignores free listings.
+   */
+  paidBindings?: number;
+  /**
+   * The backend's free calls per agent per day for a FREEMIUM tool (its total
+   * over every free-capable listing, capped). Optional for the same reason;
+   * the screens then fall back to the smallest per-listing figure.
+   */
+  freeCallsPerDay?: number | null;
 }
 
 export interface PublicProvider {
@@ -72,12 +84,30 @@ export interface PublicProviderDetail extends PublicProvider {
 
 export type NotChargedBucket = "FAILED_VERIFICATION" | "PROVIDER_OR_PLATFORM_ERROR";
 
+/**
+ * Why a paid call ended without a charge (`GET /public/not-charged`).
+ * `NOT_COLLECTED`: the provider forfeited the payment (or an old call the
+ * platform absorbed); the buyer was not charged and does not owe it. It rides
+ * in the PROVIDER_OR_PLATFORM_ERROR bucket. Owed (buyer debt) calls never
+ * appear in the feed.
+ */
+export type NotChargedReason =
+  | "FAILED_CHECK"
+  | "OUT_OF_SCOPE"
+  | "PROVIDER_ERROR"
+  | "REQUEST_REJECTED"
+  | "NO_USABLE_RESULT"
+  | "EXPIRED"
+  | "NOT_COLLECTED";
+
 export interface PublicNotChargedCall {
   toolId: string;
   toolName: string;
   providerName: string;
   price: Money;
-  reason: string;
+  /** A `NotChargedReason` key; a key this build does not know is shown by its `reasonText`. */
+  reason: NotChargedReason | (string & {});
+  /** The server's one plain sentence, fixed per reason. */
   reasonText: string;
   bucket: NotChargedBucket;
   /** UTC day, `YYYY-MM-DD`. */

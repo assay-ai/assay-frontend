@@ -13,6 +13,10 @@ import {
   formatCallPrice,
   freeTierLabel,
   moneyByAsset,
+  costSentence,
+  offerLine,
+  offerSubLine,
+  notChargedRowText,
   plural,
   priceSentence,
   shortDay,
@@ -217,5 +221,97 @@ describe("free first, then paid", () => {
   it("says nothing free for a PAID tool", () => {
     expect(freeTierLabel("PAID", 100)).toBeNull();
     expect(priceSentence({ mode: "PAID", price: usd("20000") })).not.toMatch(/free/);
+  });
+});
+
+describe("offerLine", () => {
+  const one = priceRange(usd("2000"), [usd("2000")]);
+  const two = priceRange(usd("3000"), [usd("2000"), usd("3000")]);
+  const freeBeside = priceRange(usd("2000"), [usd("0"), usd("2000")]);
+
+  it("merges the free tier and the price into one line, free first", () => {
+    const line = offerLine({ mode: "FREEMIUM", range: one, freeCallsPerDay: 100 });
+    expect(line.text).toBe("Free for 100 calls/day, then $0.002/call");
+    expect(line.lead).toBe("Free for 100 calls/day, then");
+    expect(line.price).toBe("$0.002");
+    expect(line.unit).toBe("/call");
+  });
+
+  it("says 'from' only over paid listings that differ", () => {
+    expect(offerLine({ mode: "FREEMIUM", range: two, freeCallsPerDay: 1500 }).text).toBe(
+      "Free for 1,500 calls/day, then from $0.002/call",
+    );
+    expect(offerLine({ mode: "PAID", range: freeBeside }).text).toBe("$0.002/call");
+    expect(offerLine({ mode: "PAID", range: two }).text).toBe("from $0.002/call");
+  });
+
+  it("does not invent an allowance it does not know", () => {
+    expect(offerLine({ mode: "FREEMIUM", range: one, freeCallsPerDay: null }).text).toBe("Free tier, then $0.002/call");
+  });
+
+  it("reads Free for a free tool, and a dash when nothing can be priced", () => {
+    expect(offerLine({ mode: "FREE", range: one })).toEqual({ lead: null, price: "Free", unit: "", text: "Free" });
+    expect(offerLine({ mode: "PAID", range: null }).text).toBe("—");
+    expect(offerLine({ mode: "FREEMIUM", range: null, freeCallsPerDay: 100 }).text).toBe(
+      "Free tier; paid calls not available right now",
+    );
+  });
+});
+
+describe("costSentence and offerSubLine (public catalogue, free first)", () => {
+  const two = priceRange(usd("30000"), [usd("20000"), usd("30000")]);
+  const one = priceRange(usd("20000"), [usd("0"), usd("20000")]);
+
+  it("keeps the free-first sentence before the range for a FREEMIUM tool", () => {
+    const text = costSentence({ mode: "FREEMIUM", price: usd("30000"), range: two, freeCallsPerDay: 100 });
+    expect(text).toMatch(/^The first 100 calls each day are free/);
+    expect(text).toMatch(/Providers charge from \$0\.02 to \$0\.03/);
+  });
+
+  it("uses the range alone for a PAID tool, and the price sentence without one", () => {
+    expect(costSentence({ mode: "PAID", price: usd("30000"), range: two })).toMatch(/^Providers charge from/);
+    expect(costSentence({ mode: "PAID", price: usd("20000"), range: one })).toBe(
+      "$0.02 per call. You pay only if the result passes the check.",
+    );
+  });
+
+  it("says 'after the free calls' under a FREEMIUM price, and the hold over a range", () => {
+    expect(offerSubLine("FREEMIUM", one)).toBe("after the free calls, only if it passes");
+    expect(offerSubLine("PAID", one)).toBe("paid only if it passes");
+    expect(offerSubLine("FREEMIUM", two)).toBe("held at most $0.03, paid only if it passes");
+    expect(offerSubLine("FREE", one)).toBe("");
+    expect(offerSubLine("PAID", null)).toBe("");
+  });
+
+  it("prints no range over a single paid listing when paidBindings says one", () => {
+    const paidBindings = 1;
+    const range = priceRange(usd("30000"), paidBindings > 1 ? [usd("20000")] : []);
+    expect(range?.differs).toBe(false);
+  });
+});
+
+describe("notChargedRowText (public not-charged feed)", () => {
+  it("names a payment the provider did not collect plainly, never as 'No usable result'", () => {
+    const row = notChargedRowText({
+      reason: "NOT_COLLECTED",
+      reasonText: "The provider could not collect payment for this call, so the buyer was not charged.",
+      bucket: "PROVIDER_OR_PLATFORM_ERROR",
+    });
+    expect(row.tag).toBe("Not collected");
+    expect(row.text).toMatch(/^Not charged — the provider did not collect/);
+    expect(row.tone).toBe("neutral");
+  });
+
+  it("keeps the guarantee firing apart, including a voided debt sent as FAILED_CHECK", () => {
+    const row = notChargedRowText({ reason: "FAILED_CHECK", reasonText: "The result failed our check.", bucket: "FAILED_VERIFICATION" });
+    expect(row).toEqual({ tag: "Failed our check", tone: "teal", text: "The result failed our check." });
+  });
+
+  it("falls back to the server's sentence for any other or unknown reason", () => {
+    expect(notChargedRowText({ reason: "SOMETHING_NEW", reasonText: "A new plain sentence.", bucket: "PROVIDER_OR_PLATFORM_ERROR" })).toEqual({
+      tag: "No usable result",
+      tone: "neutral",
+      text: "A new plain sentence.",
+    });
   });
 });

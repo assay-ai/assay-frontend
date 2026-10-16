@@ -4,10 +4,10 @@ import { ArrowLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { FailsOftenChip, Fact, FreeTierBadge, ObservedFailuresLabel, VerifiedMark } from "@/components/explorer/explorer-bits";
+import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
-import { failRateLabel, failsOften, formatCallPrice, freeTierLabel, plural, stakeSummary } from "@/features/explorer/explorer-text";
+import { failRateLabel, failsOften, offerLine, plural, stakeSummary } from "@/features/explorer/explorer-text";
 import { publicErrorText, usePublicProvider } from "@/features/explorer/use-public-explorer";
 import { useChainName } from "@/hooks/useChainName";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -83,11 +83,18 @@ function ProviderPage() {
                   href={routes.publicTool(tool.toolId)}
                   className="group flex w-full items-center gap-3 px-4 py-3.5 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 tablet:px-5"
                 >
-                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                  {/* This provider's own listing: one price, its free calls first. */}
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 tablet:flex-row tablet:items-center tablet:justify-between tablet:gap-3">
                     <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
-                    <FreeTierBadge label={freeTierLabel(tool.pricingMode, tool.freeCallsPerAgentPerDay)} />
+                    <OfferPrice
+                      className="tablet:text-right"
+                      offer={offerLine({
+                        mode: tool.pricingMode,
+                        range: tool.price ? { from: tool.price, held: tool.price, differs: false } : null,
+                        freeCallsPerDay: tool.freeCallsPerAgentPerDay,
+                      })}
+                    />
                   </div>
-                  <span className="shrink-0 font-mono text-mono-13 text-01">{formatCallPrice(tool.price)}</span>
                   <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03 group-hover:text-02" />
                 </Link>
               </li>

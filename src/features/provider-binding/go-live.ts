@@ -18,7 +18,7 @@ import { formatMoney } from "@/utils/money";
 export type PriceChoice = "free" | "free-paid" | "paid";
 
 export const PRICE_CHOICES: { value: PriceChoice; mode: PricingMode; label: string; hint: string }[] = [
-  { value: "free", mode: "FREE", label: "Free", hint: "No revenue, no stake needed. It only serves free calls; paid calls go to staked paid bindings." },
+  { value: "free", mode: "FREE", label: "Free", hint: "No revenue, no stake needed. It serves free calls only." },
   { value: "free-paid", mode: "FREEMIUM", label: "Free + paid", hint: "Each agent gets free calls a day, then pays." },
   { value: "paid", mode: "PAID", label: "Paid", hint: "Every call is paid." },
 ];

@@ -117,6 +117,73 @@ export function priceRange(
   return { from, held, differs: !toDecimal(from).eq(toDecimal(held)) };
 }
 
+/**
+ * The one price line a tool shows: the free tier and the price together, free
+ * first — "Free for 100 calls/day, then $0.002/call". "from" leads the price
+ * only when the paid listings charge different prices (see `priceRange`, which
+ * ignores free listings), so a free listing beside one paid listing never turns
+ * the paid price into a range.
+ *
+ * `lead` and `price` are apart so a screen can set the price larger; `text` is
+ * the whole line.
+ */
+export interface OfferLine {
+  /** "Free for 100 calls/day, then" / "Free tier, then"; null for a paid-only or free-only tool. */
+  lead: string | null;
+  /** "$0.002" / "from $0.002" / "Free" / "—". */
+  price: string;
+  /** "/call" after a paid price; empty for "Free" and "—". */
+  unit: string;
+  text: string;
+}
+
+export function offerLine(input: {
+  mode: string | null | undefined;
+  range: { from: Money; held: Money; differs: boolean } | null | undefined;
+  freeCallsPerDay?: number | null;
+}): OfferLine {
+  const m = normalisedMode(input.mode);
+  if (m === "FREE") return { lead: null, price: "Free", unit: "", text: "Free" };
+  const lead =
+    m === "FREEMIUM"
+      ? input.freeCallsPerDay && input.freeCallsPerDay > 0
+        ? `Free for ${input.freeCallsPerDay.toLocaleString("en-US")} calls/day, then`
+        : "Free tier, then"
+      : null;
+  if (!input.range) {
+    const text = lead ? "Free tier; paid calls not available right now" : "—";
+    return { lead: null, price: lead ? text : "—", unit: "", text };
+  }
+  const price = `${input.range.differs ? "from " : ""}${formatCallPrice(input.range.from)}`;
+  return { lead, price, unit: "/call", text: `${lead ? `${lead} ` : ""}${price}/call` };
+}
+
+/** The small line under a list row's price: when you pay, and the most a call is held for. */
+export function offerSubLine(
+  mode: string | null | undefined,
+  range: { from: Money; held: Money; differs: boolean } | null | undefined,
+): string {
+  if (!range || normalisedMode(mode) === "FREE") return "";
+  if (range.differs) return `held at most ${formatCallPrice(range.held)}, paid only if it passes`;
+  return normalisedMode(mode) === "FREEMIUM" ? "after the free calls, only if it passes" : "paid only if it passes";
+}
+
+/**
+ * The sentence under a tool page's price. Free first: a FREEMIUM tool says its
+ * free calls before the range, so a range never drops the free-first sentence.
+ */
+export function costSentence(input: {
+  mode: string | null | undefined;
+  price: Money | null | undefined;
+  range: { from: Money; held: Money; differs: boolean } | null | undefined;
+  freeCallsPerDay?: number | null;
+}): string {
+  const rangeLine = input.range ? heldPriceSentence(input.range) : null;
+  const base = priceSentence({ mode: input.mode, price: input.price, freeCallsPerDay: input.freeCallsPerDay });
+  if (normalisedMode(input.mode) === "FREEMIUM") return [base, rangeLine].filter(Boolean).join(" ");
+  return rangeLine ?? base;
+}
+
 /** The sentence under a "from $X" price. */
 export function heldPriceSentence(range: { from: Money; held: Money; differs: boolean }): string | null {
   if (!range.differs) return null;
@@ -271,4 +338,28 @@ export function explorerHref(state: ExplorerListState): string {
 /** Whether a tool has free calls: free outright, or a free tier on some listing. */
 export function hasFreeCalls(mode: string | null | undefined): boolean {
   return freeTierLabel(mode) !== null;
+}
+
+/**
+ * A not-charged call on the public feed, as a buyer reads it: the tag and the
+ * sentence. The guarantee firing ("Failed our check") and a call with no usable
+ * result stay apart; a payment the provider did not collect (`NOT_COLLECTED`,
+ * in the error bucket) gets its own words rather than "No usable result",
+ * because the result was fine. Any other reason, known or not, shows the
+ * server's own `reasonText`.
+ */
+export function notChargedRowText(row: { reason: string; reasonText: string; bucket: string }): {
+  tag: string;
+  tone: "teal" | "neutral";
+  text: string;
+} {
+  if (row.bucket === "FAILED_VERIFICATION") return { tag: "Failed our check", tone: "teal", text: row.reasonText };
+  if (row.reason === "NOT_COLLECTED") {
+    return {
+      tag: "Not collected",
+      tone: "neutral",
+      text: "Not charged — the provider did not collect the payment, and the buyer does not owe it.",
+    };
+  }
+  return { tag: "No usable result", tone: "neutral", text: row.reasonText || "The call was not charged." };
 }
