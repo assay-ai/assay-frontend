@@ -5,6 +5,8 @@ import { ApiError } from "@/libs/ApiClient";
 
 import {
   balanceAfterSettling,
+  debtBlocksPaidCalls,
+  resumeSheetCopy,
   debtBannerSummary,
   debtDeadlineLine,
   debtTotal,
@@ -327,5 +329,24 @@ describe("owedCallsFromDebts (P2-6)", () => {
     expect(owedCallsFromDebts(data)?.map((d) => d.intentId)).toEqual(["b", "c", "a"]);
     expect(owedCallsFromDebts(data, "price_quote")?.map((d) => d.intentId)).toEqual(["c", "a"]);
     expect(owedCallsFromDebts(undefined)).toBeNull();
+  });
+});
+
+describe("the Resume sheet while a debt is owed (buyer retest 2026-10-17)", () => {
+  it("does not promise paid calls while a debt still needs a signature", () => {
+    const owed = { account: ACCOUNT, debts: [debt()] };
+    expect(debtBlocksPaidCalls(owed)).toBe(true);
+    expect(debtBlocksPaidCalls({ account: ACCOUNT, debts: [debt({ payer: OTHER })] })).toBe(true);
+    const copy = resumeSheetCopy(true);
+    expect(copy.description).toContain("Paid calls stay blocked until the payment owed is settled");
+    expect(copy.after).toBe("Blocked until the debt is settled");
+    expect(copy.description).not.toContain("can pay for calls again");
+  });
+
+  it("says Running when nothing is owed or the payment is only being collected", () => {
+    expect(debtBlocksPaidCalls({ account: ACCOUNT, debts: [] })).toBe(false);
+    expect(debtBlocksPaidCalls({ account: ACCOUNT, debts: [debt({ state: "REPLACING" })] })).toBe(false);
+    expect(debtBlocksPaidCalls(undefined)).toBe(false);
+    expect(resumeSheetCopy(false).after).toBe("Running");
   });
 });
