@@ -106,6 +106,36 @@ export function loweredDelayNote(
   return lowersCaps(current, next) ? loweredDelayedText(tightenDelaySeconds!) : null;
 }
 
+/**
+ * What a lowering does, said BEFORE signing (review 2026-10-17 P2-11): with
+ * the tighten delay (D-21) the delayed-apply note; without it, the ~30-second
+ * pause the backend puts on the agents' payments while it lands; and when the
+ * delay could not be read (`tightenDelaySeconds === undefined`), the honest
+ * "may pause briefly". `null` when nothing goes down.
+ */
+export function loweringBeforeSignNote(
+  tightenDelaySeconds: number | null | undefined,
+  current: AtomicCaps | null | undefined,
+  next: AtomicCaps | null | undefined,
+): string | null {
+  if (!current || !next || !lowersCaps(current, next)) return null;
+  if (hasTightenDelay(tightenDelaySeconds)) return loweredDelayedText(tightenDelaySeconds!);
+  if (tightenDelaySeconds === undefined) {
+    return "Lower than now: your agents' payments may pause briefly while it lands.";
+  }
+  return "Lower than now: your agents' payments pause for about 30 seconds while it lands.";
+}
+
+/**
+ * A lowering when the payments still being settled could not be read: the
+ * screen cannot tell whether it strands any, so it says that it may, and what
+ * that costs (P2-11).
+ */
+export const LOWERING_UNREAD_NOTE =
+  "Lower than now. Its payments may pause briefly while the lower limits land. Payments still being settled " +
+  "could not be checked: if any no longer fit, each becomes a payment you owe, and paid calls pause until you " +
+  "sign it again. Waiting about a minute after its last call avoids this.";
+
 /** True when `next` lowers either cap, or (when both carry one) the expiry. */
 export function lowersCaps(current: AtomicCaps, next: AtomicCaps): boolean {
   return (

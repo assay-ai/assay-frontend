@@ -28,6 +28,7 @@ import {
   UNSETTLED_WAIT_MAX_MS,
   unsettledLine,
   strandAcknowledgement,
+  loweringBeforeSignNote,
 } from "./unsettled";
 
 const ASSET = "eip155:46630/erc20:0xDbbC";
@@ -389,5 +390,23 @@ describe("tighten delay (D-21)", () => {
     expect(loweredFullyAt(Date.parse("2026-10-17T10:00:00Z"), 3600)).toBe("2026-10-17T11:00:00.000Z");
     expect(loweredFullyAt(Date.parse("2026-10-17T10:00:00Z"), 0)).toBeNull();
     expect(loweredDelayNote(3600, null, lower)).toBeNull();
+  });
+});
+
+describe("loweringBeforeSignNote (P2-11)", () => {
+  const cur = { maxVoucherAmount: "2000000", maxPerWindow: "20000000" };
+  const lower = { maxVoucherAmount: "1000000", maxPerWindow: "20000000" };
+  it("mentions the 30-second pause before signing when the escrow has no delay", () => {
+    expect(loweringBeforeSignNote(null, cur, lower)).toBe(
+      "Lower than now: your agents' payments pause for about 30 seconds while it lands.",
+    );
+    expect(loweringBeforeSignNote(0, cur, lower)).toMatch(/about 30 seconds/);
+  });
+  it("says 'may pause briefly' when the delay could not be read", () => {
+    expect(loweringBeforeSignNote(undefined, cur, lower)).toMatch(/may pause briefly/);
+  });
+  it("uses the delayed-apply text with D-21, and says nothing for a raise", () => {
+    expect(loweringBeforeSignNote(3600, cur, lower)).toMatch(/keep the old ones for 1 hour/);
+    expect(loweringBeforeSignNote(null, lower, cur)).toBeNull();
   });
 });

@@ -10,7 +10,13 @@ import { CAP_PRESETS, capsToForm, keyGroups, parseCaps } from "@/features/buyer-
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { DEFAULT_DELEGATION_DAYS, parseDelegationForm, serverNowSeconds } from "@/features/delegation/delegation-form";
 import { submitRelayedDelegation } from "@/features/delegation/relayed-delegation";
-import { hasTightenDelay, loweredDelayNote, loweredFullyAt, lowersCaps } from "@/features/delegation/unsettled";
+import {
+  hasTightenDelay,
+  loweredDelayNote,
+  loweredFullyAt,
+  LOWERING_UNREAD_NOTE,
+  lowersCaps,
+} from "@/features/delegation/unsettled";
 import { applyLimitsSubmitted } from "@/features/escrow/after-set-limits";
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
 import { explorerTxUrl } from "@/libs/chains/explorer";
@@ -151,6 +157,8 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
       : null;
   // Only once the delay is known: an unread delay must not promise a pause or a time.
   const lowering = unsettled.isSuccess && Boolean(currentGrant && chosen && lowersCaps(currentGrant, chosen));
+  // The read failed: still say what a lowering can do, honestly (P2-11).
+  const loweringUnread = unsettled.isError && Boolean(currentGrant && chosen && lowersCaps(currentGrant, chosen));
   const delayNote = loweredDelayNote(tightenDelay, currentGrant, chosen);
   const fullyAt = lowering ? loweredFullyAt(nowSeconds * 1000, tightenDelay) : null;
 
@@ -295,6 +303,10 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
           ) : (
             "Lower than now. Its payments pause for about 30 seconds while the lower limits settle."
           )}
+        </p>
+      ) : loweringUnread ? (
+        <p className="rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700" data-testid="agent-pay-lower-unread">
+          {LOWERING_UNREAD_NOTE}
         </p>
       ) : null}
     </WalletActionSheet>
