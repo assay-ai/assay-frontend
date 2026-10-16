@@ -428,8 +428,13 @@ export function AccountCeilingCard({ ctx }: { ctx: LimitsContext }) {
   );
 }
 
-/** The older refuse-above rule: one line with a remove action, only while it is set. */
-export function OldRuleLine({ policy }: { policy: SpendPolicy | null }) {
+/**
+ * The older refuse-above rule: one line with a remove action, only while it is
+ * set. Not on a free-calls-only chain: like the ceiling and the agents' limits
+ * there, a paid-call rule has nothing to count, and "$25.00 a call" next to
+ * "Free calls only" reads as if it applied (review 2026-10-17).
+ */
+export function OldRuleLine({ policy, freeOnly = false }: { policy: SpendPolicy | null; freeOnly?: boolean }) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = React.useState(false);
   const remove = useMutation({
@@ -447,7 +452,7 @@ export function OldRuleLine({ policy }: { policy: SpendPolicy | null }) {
     policy?.perCallMax ? `${formatLimit(policy.perCallMax)} a call` : null,
     policy?.dailyCap ? `${formatLimit(policy.dailyCap)} a day` : null,
   ].filter(Boolean);
-  if (!policy?.requireApprovalAbove && oldBudget.length === 0) return null;
+  if (freeOnly || (!policy?.requireApprovalAbove && oldBudget.length === 0)) return null;
   const amount = policy?.requireApprovalAbove ? formatLimit(policy.requireApprovalAbove) : "";
   // Both leftovers in one place, each with its own way out, so nobody meets
   // one here and a different set of numbers in an agent's sheet.
