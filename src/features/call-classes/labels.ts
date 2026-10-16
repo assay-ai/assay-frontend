@@ -110,7 +110,7 @@ export function reasonLabel(reason: string): string {
     if (rest.startsWith(LEGACY_ABSORBED_PREFIX)) {
       return "Never collected from the buyer (an older call) — not paid, and nobody owes it";
     }
-    return `Never collected: the buyer did not settle it in time (${debtCauseText(rest)}) — not paid, and nobody owes it`;
+    return `Never collected: the buyer did not settle it in time (${debtCauseText(rest)}) — written off, but the buyer still owes it; you are paid if they settle`;
   }
   if (reason.startsWith(VOIDED_PREFIX)) {
     return "The buyer's payment had lapsed, and the call then did not pass our checks — voided: not paid, and nobody owes it";
