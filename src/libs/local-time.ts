@@ -7,6 +7,12 @@
  * of the element that shows either — `<LocalTime>` in
  * components/patterns/local-time.tsx does all three.
  *
+ * The convention on money screens (receipt header, debt banner, settle sheet):
+ * day + HH:MM with the zone label next to it ("Today 07:32 GMT+9",
+ * "Nov 16, 07:42 GMT+9"). Only the receipt timeline shows seconds — the steps
+ * of one call are often seconds apart — and it says so once, above the rows
+ * ("Times in GMT+9, to the second": `timelineZoneNote`).
+ *
  * Every function takes an optional `timeZone` and `now`, so tests are not at
  * the mercy of the machine's clock or zone. Screens leave both out.
  */
