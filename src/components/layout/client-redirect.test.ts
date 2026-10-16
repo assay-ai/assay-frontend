@@ -13,6 +13,10 @@ describe("redirectTarget", () => {
     );
   });
 
+  it("sends /calls on to the calls list with its filters (verify-r13 P3)", () => {
+    expect(redirectTarget("/spend/calls", "?status=owed&debt=written-off")).toBe("/spend/calls?status=owed&debt=written-off");
+  });
+
   it("can drop the old query", () => {
     expect(redirectTarget("/provider", "?x=1", { keep: false })).toBe("/provider");
   });
