@@ -295,7 +295,7 @@ export default function OverviewPage() {
             data
               ? // The reader's own day, the one the rows below call "Today": say which zone.
                 `${formatCount(data.todayCalls)} ${data.todayCalls === 1 ? "call" : "calls"} since 00:00 ${zoneLabel(null)}${
-                  data.todayOwed ? ` · ${formatMoney(data.todayOwed)} owed, not collected` : ""
+                  data.todayOwed ? ` · ${formatMoney(data.todayOwed)} owed on today's calls, not collected` : ""
                 }`
               : "not available"
           }
