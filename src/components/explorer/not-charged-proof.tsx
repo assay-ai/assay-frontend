@@ -22,9 +22,9 @@ import { formatMoney } from "@/utils/money";
  * refused to charge across every buyer in the last 30 days, and the most recent
  * such calls. Aggregated data only (k-anonymous, dated by day, a day late).
  *
- * The two outcomes are never merged: "failed our check" is the guarantee
- * firing; "no usable result" is a provider or platform error that was also not
- * charged. When the server withholds rows for privacy we say exactly that —
+ * The guarantee firing ("Result failed our check") is never merged with the
+ * other reasons; each row carries the same label and colour as its reason's
+ * count line. When the server withholds rows for privacy we say exactly that —
  * never "nothing happened".
  */
 
@@ -33,6 +33,18 @@ export function amountsText(amounts: readonly Money[], chainName: (id: string) =
   if (amounts.length === 1) return formatMoney(amounts[0], { decimals: 2 });
   return amounts.map((m) => `${formatMoney(m, { decimals: 2 })} on ${chainName(chainIdOfAsset(m.asset) ?? "")}`).join(" + ");
 }
+
+/** The dot beside a row's tag: the same colour as its reason's count line. */
+const DOT_TONE: Record<ReturnType<typeof notChargedRowText>["tone"], string> = {
+  teal: "bg-teal-500",
+  info: "bg-info-500",
+  indigo: "bg-indigo-500",
+  primary: "bg-primary-500",
+  warning: "bg-warning-500",
+  danger: "bg-danger-500",
+  success: "bg-success-500",
+  neutral: "bg-chart-6",
+};
 
 function BucketTag({ row }: { row: PublicNotChargedCall }) {
   const { tag, tone } = notChargedRowText(row);
@@ -44,7 +56,7 @@ function BucketTag({ row }: { row: PublicNotChargedCall }) {
         failed ? "bg-teal-10 text-teal-600" : "bg-03 text-02",
       )}
     >
-      <span aria-hidden="true" className={cn("size-1.5 rounded-full", failed ? "bg-teal-500" : "bg-text-03")} />
+      <span aria-hidden="true" className={cn("size-1.5 rounded-full", DOT_TONE[tone])} />
       {tag}
     </span>
   );
@@ -155,7 +167,7 @@ export function NotChargedProof({
             {scope === "tool"
               ? "Calls to this tool that ended without a charge, across every buyer."
               : scope === "provider"
-                ? `Calls they served that ended without a charge, across every buyer, in the last ${data.windowDays} days.`
+                ? `Their calls among the most recent public not-charged calls, across every buyer — not a complete record of the last ${data.windowDays} days.`
                 : `What our checks refused to charge, across every buyer, in the last ${data.windowDays} days.`}
           </p>
         </div>
@@ -210,7 +222,8 @@ export function NotChargedProof({
                       {row.toolName}
                     </Link>
                   )}
-                  <span className="text-body-xs text-03">by {row.providerName}</span>
+                  {/* On the provider's own page every row is theirs: no need to say so on each. */}
+                  {scope === "provider" ? null : <span className="text-body-xs text-03">by {row.providerName}</span>}
                 </div>
                 <p className="text-body-13 text-02">{notChargedRowText(row).text}</p>
               </div>
@@ -229,16 +242,21 @@ export function NotChargedProof({
         </p>
       )}
 
-      {data.withheldForPrivacy ? (
+      {data.withheldForPrivacy || (scope === "all" && !quiet) ? (
         <p className="flex items-start gap-2 text-body-xs text-03">
           <EyeOff aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
           <span>
-            Some activity is hidden or grouped for privacy: a tool&apos;s calls are listed, and totals and reasons counted, only once at least{" "}
-            {data.minBuyers} different buyers stand behind them.
+            {data.withheldForPrivacy ? "Some activity is hidden or grouped for privacy. " : "For privacy, "}
+            a tool&apos;s calls are listed only once at least {data.minBuyers} different buyers stand behind them. Figures
+            appear only once at least {data.minBuyers} buyers have paid in that token; reasons are named only when each
+            has at least {data.minBuyers} buyers, and their counts are rounded down to tens.
           </span>
         </p>
       ) : null}
-      <p className="text-body-xs text-03">Calls appear here a day after they happen, dated by day (UTC).</p>
+      <p className="text-body-xs text-03">
+        Calls appear here a day after they happen, dated by day (UTC). A call&apos;s amount is what it would have
+        cost: the price of the provider that served it, or, when none did, the most that was held for it.
+      </p>
     </section>
   );
 }

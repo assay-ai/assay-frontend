@@ -75,7 +75,7 @@ function notCharged(): PublicNotCharged {
     ["get_weather", "PROVIDER_ERROR", "The provider returned an error instead of a result, so the call was not charged.", "PROVIDER_OR_PLATFORM_ERROR", 2],
     ["search_web", "FAILED_CHECK", "The result failed our check, so the buyer got the held amount back.", "FAILED_VERIFICATION", 3],
     ["get_weather", "EXPIRED", "The call did not finish in time, so the held amount was released.", "PROVIDER_OR_PLATFORM_ERROR", 4],
-    ["search_web", "NOT_COLLECTED", "The provider could not collect payment for this call, so the buyer was not charged.", "PROVIDER_OR_PLATFORM_ERROR", 5],
+    ["search_web", "NOT_COLLECTED", "Payment for this call was not collected, so the buyer was not charged.", "PROVIDER_OR_PLATFORM_ERROR", 5],
     ["get_weather", "FAILED_CHECK", "The result failed our check, so the buyer got the held amount back.", "FAILED_VERIFICATION", 6],
   ];
   const recent: PublicNotChargedCall[] = rows.flatMap(([name, reason, reasonText, bucket, ago]) => {
@@ -106,13 +106,14 @@ function notCharged(): PublicNotCharged {
       callsNotCharged: 312,
       callsFailedCheck: 241,
       amountNotCharged: asset ? [{ amount: "1874000", asset: asset.asset, decimals: asset.decimals }] : [],
-      // 312 − 241 = 71 split by reason; the remainder is grouped for privacy.
+      // 312 − 241 = 71 split by reason, each rounded down to tens as the
+      // server does; the remainders are grouped for privacy.
       notChargedByReason: [
-        { reason: "PROVIDER_ERROR", calls: 38 },
-        { reason: "NO_USABLE_RESULT", calls: 14 },
-        { reason: "EXPIRED", calls: 9 },
+        { reason: "PROVIDER_ERROR", calls: 30 },
+        { reason: "EXPIRED", calls: 20 },
+        { reason: "NOT_COLLECTED", calls: 10 },
       ],
-      callsNotChargedOther: 10,
+      callsNotChargedOther: 11,
     },
     recent,
   };

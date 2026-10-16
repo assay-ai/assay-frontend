@@ -129,7 +129,7 @@ export function priceRange(
 
 /**
  * The one price line a tool shows: the free tier and the price together, free
- * first — "Free for 100 calls/day per agent, then $0.002/call". "from" leads the price
+ * first — "Free for 100 calls/day per agent, then $0.002 per call". "from" leads the price
  * only when the paid listings charge different prices (see `priceRange`, which
  * ignores free listings), so a free listing beside one paid listing never turns
  * the paid price into a range.
@@ -142,7 +142,7 @@ export interface OfferLine {
   lead: string | null;
   /** "$0.002" / "from $0.002" / "Free" / "—"; empty when the lead says it all. */
   price: string;
-  /** "/call" after a paid price; empty for "Free" and "—". */
+  /** " per call" after a paid price; empty for "Free" and "—". */
   unit: string;
   text: string;
 }
@@ -169,7 +169,7 @@ export function offerLine(input: {
     return { lead: null, price: "—", unit: "", text: "—" };
   }
   const price = `${input.range.differs ? "from " : ""}${formatCallPrice(input.range.from)}`;
-  return { lead, price, unit: "/call", text: `${lead ? `${lead} ` : ""}${price}/call` };
+  return { lead, price, unit: " per call", text: `${lead ? `${lead} ` : ""}${price} per call` };
 }
 
 /** The small line under a list row's price: when you pay, and the most a call is held for. */
@@ -197,7 +197,7 @@ export function costSentence(input: {
     // The range is said inside the free-first sentence; only the hold is added.
     const from = input.range?.differs ? input.range.from : null;
     const base = priceSentence({ mode: input.mode, price: input.price, freeCallsPerDay: input.freeCallsPerDay, from });
-    const held = input.range?.differs ? `You are held at most ${formatCallPrice(input.range.held)} a call.` : null;
+    const held = input.range?.differs ? `You are held at most ${formatCallPrice(input.range.held)} per call.` : null;
     return [base, held].filter(Boolean).join(" ");
   }
   const base = priceSentence({ mode: input.mode, price: input.price, freeCallsPerDay: input.freeCallsPerDay });
@@ -306,7 +306,7 @@ export function routingNotes(
     const chainOf = (asset: string) => chainName(asset.split("/")[0]);
     notes.push(
       `The price above is for ${chainOf(held.asset)}. ${elsewhere
-        .map((p) => `${p.name} charges ${formatCallPrice(p.price)} a call on ${chainOf(p.price!.asset)}`)
+        .map((p) => `${p.name} charges ${formatCallPrice(p.price)} per call on ${chainOf(p.price!.asset)}`)
         .join("; ")}.`,
     );
   }
@@ -314,7 +314,7 @@ export function routingNotes(
   const idle = sameChain.filter((p) => notTakingPaidCalls(held, p.price));
   const taking = sameChain.filter((p) => !notTakingPaidCalls(held, p.price));
   if (idle.length > 0 && taking.length > 0) {
-    const named = idle.map((p) => `${p.name} (${formatCallPrice(p.price)} a call)`).join(", ");
+    const named = idle.map((p) => `${p.name} (${formatCallPrice(p.price)} per call)`).join(", ");
     notes.push(
       `${named} ${idle.length === 1 ? "is" : "are"} not taking paid calls right now: paid calls go only to providers whose stake covers them. The price above counts only the providers taking calls.`,
     );
@@ -362,54 +362,75 @@ export function hasFreeCalls(mode: string | null | undefined): boolean {
 }
 
 /**
- * A not-charged call on the public feed, as a buyer reads it: the tag and the
- * sentence. The guarantee firing ("Failed our check") and a call with no usable
- * result stay apart; a payment the provider did not collect (`NOT_COLLECTED`,
- * in the error bucket) gets its own words rather than "No usable result",
- * because the result was fine. Any other reason, known or not, shows the
- * server's own `reasonText`.
+ * The one label per not-charged reason, shared by the feed rows and the count
+ * lines, so a reader can tie a row to its count. Keyed by the server's
+ * `NotChargedReason`.
  */
-export function notChargedRowText(row: { reason: string; reasonText: string; bucket: string }): {
-  tag: string;
-  tone: "teal" | "neutral";
-  text: string;
-} {
-  if (row.bucket === "FAILED_VERIFICATION") return { tag: "Failed our check", tone: "teal", text: row.reasonText };
-  if (row.reason === "NOT_COLLECTED") {
-    return {
-      tag: "Provider forfeited",
-      tone: "neutral",
-      text: "Not charged — the provider did not collect the payment, and the buyer does not owe it.",
-    };
-  }
-  return { tag: "No usable result", tone: "neutral", text: row.reasonText || "The call was not charged." };
-}
-
 const NOT_CHARGED_REASON_LABEL: Record<string, string> = {
+  FAILED_CHECK: "Result failed our check",
   PROVIDER_ERROR: "Provider returned an error",
   REQUEST_REJECTED: "Provider rejected the request",
   NO_USABLE_RESULT: "No usable result",
   OUT_OF_SCOPE: "Request outside what the tool covers",
   EXPIRED: "Did not finish in time",
-  NOT_COLLECTED: "Payment not collected (provider forfeited)",
+  NOT_COLLECTED: "Payment not collected",
 };
 
-const REASON_TONES = ["info", "indigo", "primary", "warning", "success", "danger"] as const;
+/** A fixed tone per reason key, so a reason keeps its colour whatever else is listed. */
+const NOT_CHARGED_REASON_TONE = {
+  FAILED_CHECK: "teal",
+  PROVIDER_ERROR: "info",
+  REQUEST_REJECTED: "indigo",
+  NO_USABLE_RESULT: "primary",
+  OUT_OF_SCOPE: "warning",
+  EXPIRED: "danger",
+  NOT_COLLECTED: "success",
+} as const;
+
+type ReasonTone = (typeof NOT_CHARGED_REASON_TONE)[keyof typeof NOT_CHARGED_REASON_TONE] | "neutral";
+
+/** The label of a reason key; "Another reason" for one this screen does not know yet. */
+export function notChargedReasonLabel(reason: string): string {
+  return NOT_CHARGED_REASON_LABEL[reason] ?? "Another reason";
+}
+
+function reasonTone(reason: string): ReasonTone {
+  return (NOT_CHARGED_REASON_TONE as Record<string, ReasonTone>)[reason] ?? "neutral";
+}
+
+/**
+ * A not-charged call on the public feed, as a buyer reads it: the tag (the
+ * same label as its count line) and the server's own sentence. A voided debt
+ * the server sends as FAILED_CHECK, or any row in the failed-verification
+ * bucket, reads as the guarantee firing.
+ */
+export function notChargedRowText(row: { reason: string; reasonText: string; bucket: string }): {
+  tag: string;
+  tone: ReasonTone;
+  text: string;
+} {
+  const reason = row.bucket === "FAILED_VERIFICATION" ? "FAILED_CHECK" : row.reason;
+  return {
+    tag: notChargedReasonLabel(reason),
+    tone: reasonTone(reason),
+    text: row.reasonText || "The call was not charged.",
+  };
+}
 
 export interface NotChargedSplitLine {
   key: string;
   label: string;
   calls: number;
-  tone: "teal" | "neutral" | (typeof REASON_TONES)[number];
+  tone: ReasonTone;
 }
 
 /**
  * The lines of the "not charged" split on the public proof: the guarantee
- * firing first, then each reason the server could name under the k rule, then
- * one honest "other" line for what it could not. A backend without the split
- * (or one that named nothing) gets a single merged line, worded so it does not
- * read as one reason. Lines with no calls are left out, except the failed-check
- * line, which is the claim itself.
+ * firing first, then each reason the server named (only when every reason
+ * clears the k rule, rounded down to tens), then one line for the rest. A
+ * backend without the split (or one that named nothing) gets a single merged
+ * line, worded so it does not read as one reason. Lines with no calls are left
+ * out, except the failed-check line, which is the claim itself.
  */
 export function notChargedSplit(totals: {
   callsNotCharged: number;
@@ -419,9 +440,9 @@ export function notChargedSplit(totals: {
 }): NotChargedSplitLine[] {
   const failed: NotChargedSplitLine = {
     key: "FAILED_CHECK",
-    label: "Result failed our check",
+    label: notChargedReasonLabel("FAILED_CHECK"),
     calls: totals.callsFailedCheck,
-    tone: "teal",
+    tone: reasonTone("FAILED_CHECK"),
   };
   const rest = Math.max(0, totals.callsNotCharged - totals.callsFailedCheck);
   const named = (totals.notChargedByReason ?? []).filter((r) => r.calls > 0);
@@ -429,21 +450,27 @@ export function notChargedSplit(totals: {
     if (rest === 0) return [failed];
     return [
       failed,
-      { key: "OTHER", label: "Not charged for another reason (provider error, no usable result, or not collected)", calls: rest, tone: "neutral" },
+      {
+        key: "OTHER",
+        label:
+          "Not charged for another reason (provider error, rejected or out-of-scope request, expired, no usable result, or not collected)",
+        calls: rest,
+        tone: "neutral",
+      },
     ];
   }
   const lines: NotChargedSplitLine[] = [
     failed,
-    ...named.map((r, i) => ({
+    ...named.map((r) => ({
       key: r.reason,
-      label: NOT_CHARGED_REASON_LABEL[r.reason] ?? "Another reason",
+      label: notChargedReasonLabel(r.reason),
       calls: r.calls,
-      tone: REASON_TONES[i % REASON_TONES.length]!,
+      tone: reasonTone(r.reason),
     })),
   ];
   const other = totals.callsNotChargedOther ?? Math.max(0, rest - named.reduce((sum, r) => sum + r.calls, 0));
   if (other > 0) {
-    lines.push({ key: "OTHER", label: "Other reasons, grouped for privacy", calls: other, tone: "neutral" });
+    lines.push({ key: "OTHER", label: "The rest, grouped for privacy (counts are rounded down to tens)", calls: other, tone: "neutral" });
   }
   return lines;
 }
