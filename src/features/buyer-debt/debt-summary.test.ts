@@ -95,8 +95,17 @@ describe("debtBannerSummary", () => {
 
   it("says what another wallet owes beside the session's own", () => {
     const summary = debtBannerSummary({ account: ACCOUNT, debts: [debt(), debt({ intentId: "int_2", payer: OTHER })] })!;
-    expect(summary.title).toContain("You owe $2.50 for 1 call");
-    expect(summary.detail).toContain("1 more call ($2.50) is owed by another wallet of your organization");
+    // The headline names the other wallet's part, so it agrees with "Details (2 calls)" (?debt=many).
+    expect(summary.title).toBe(
+      "You owe $2.50 for 1 call, plus $2.50 owed by another wallet of your organization. Paid calls are paused until all of it is settled.",
+    );
+    expect(summary.detail).toContain("Sign in with that wallet to settle its 1 call.");
+  });
+
+  it("on a free-calls-only chain, says settling pays for an earlier paid call from the escrow", () => {
+    const summary = debtBannerSummary({ account: ACCOUNT, debts: [debt()] }, { freeOnly: true })!;
+    expect(summary.detail).toContain("settling pays for an earlier paid call: it is taken from your escrow");
+    expect(debtBannerSummary({ account: ACCOUNT, debts: [debt()] })!.detail).not.toContain("free calls only");
   });
 
   it("asks nothing when every debt is another wallet's", () => {
