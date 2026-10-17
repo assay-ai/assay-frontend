@@ -162,6 +162,7 @@ function WizardContent() {
         created = await createToolBinding({
           toolId: tool.id,
           endpoint: draft.endpoint,
+          authMode: draft.authMode,
           requestMapping: draft.requestMapping,
           responseMapping: draft.responseMapping,
           pricingMode: "FREE",
@@ -184,6 +185,7 @@ function WizardContent() {
     }
     const body: UpdateToolBindingBody = {};
     if (draft.endpoint !== binding.endpoint) body.endpoint = draft.endpoint;
+    if (draft.authMode !== binding.authMode) body.authMode = draft.authMode;
     // Sent only when they moved: a mapping save starts a new version, which needs a new test.
     if (!documentsEqual(draft.requestMapping, binding.requestMapping)) body.requestMapping = draft.requestMapping;
     if (!documentsEqual(draft.responseMapping, binding.responseMapping)) body.responseMapping = draft.responseMapping;

@@ -1,5 +1,6 @@
 "use client";
 
+import { AuthenticationPanel, missingCredentials, useBindingCredentials } from "../authentication/authentication-panel";
 import { QUERY_KEY_ERROR, credentialQueryKeys } from "../authentication/rules";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronDown, Play } from "lucide-react";
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
-import type { BindingTestReport, CatalogueTool, ToolBindingDetail, ToolMapping } from "@/interfaces";
+import type { BindingAuthMode, BindingTestReport, CatalogueTool, ToolBindingDetail, ToolMapping } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { testToolBinding } from "@/services/provider-tool-bindings.service";
@@ -39,6 +40,7 @@ import { argumentsFromText, seedArguments, seedRequestMapping, seedResponseMappi
 
 export interface ConnectDraft {
   endpoint: string;
+  authMode: BindingAuthMode;
   requestMapping: ToolMapping;
   responseMapping: ToolMapping;
   /**
@@ -95,6 +97,10 @@ export function ConnectStage({
 }) {
   const queryClient = useQueryClient();
   const [endpoint, setEndpoint] = React.useState(binding?.endpoint ?? initialEndpoint);
+  const [authMode, setAuthMode] = React.useState<BindingAuthMode>(binding?.authMode ?? "SIGNATURE");
+  const credentialSets = useBindingCredentials(binding?.id ?? null, authMode);
+  // Before the first save there is nowhere to store a key, so Run (which saves) stays open.
+  const credentialsMissing = binding !== null && (credentialSets.isPending || missingCredentials(authMode, credentialSets.data, endpoint));
   const [endpointTouched, setEndpointTouched] = React.useState(false);
   const [mappings, setMappings] = React.useState<{ request: ToolMapping; response: ToolMapping }>(() => ({
     request: binding?.requestMapping ?? seedRequestMapping(tool),
@@ -174,6 +180,7 @@ export function ConnectStage({
       setPhase("saving");
       const saved = await onSave({
         endpoint: parsedEndpoint.value!,
+        authMode,
         requestMapping: mappings.request,
         responseMapping: mappings.response,
         terms: versioned ? terms : null,
@@ -214,6 +221,7 @@ export function ConnectStage({
   const dirty =
     !binding ||
     binding.endpoint !== endpoint.trim() ||
+    binding.authMode !== authMode ||
     !documentsEqual(binding.requestMapping, mappings.request) ||
     !documentsEqual(binding.responseMapping, mappings.response) ||
     termsDirty;
@@ -250,6 +258,18 @@ export function ConnectStage({
         error={urlKeys.length > 0 || endpointTouched ? (endpointError ?? undefined) : undefined}
         hint={initialEndpoint && !binding ? "Filled in from your account setup." : undefined}
       />
+
+      <div className="flex w-full flex-col gap-3 rounded-lg border border-01 bg-01 p-4">
+        <h3 className="text-label-sm text-01">Authentication</h3>
+        <AuthenticationPanel
+          bindingId={binding?.id ?? null}
+          endpoint={endpoint}
+          publishedEndpoint={binding?.endpoint ?? null}
+          mode={authMode}
+          onModeChange={setAuthMode}
+          readOnly={readOnly}
+        />
+      </div>
 
       <div className="flex w-full flex-col gap-3 rounded-lg border border-01 bg-01 p-4">
         <div className="flex min-w-0 flex-col gap-1">
@@ -352,7 +372,7 @@ export function ConnectStage({
           <Button
             icon={<Play aria-hidden="true" />}
             onClick={() => void run()}
-            disabled={!hydrated || readOnly || phase !== "idle" || urlKeys.length > 0}
+            disabled={!hydrated || readOnly || phase !== "idle" || urlKeys.length > 0 || credentialsMissing}
             loading={phase !== "idle"}
           >
             {phase === "saving"
@@ -370,6 +390,7 @@ export function ConnectStage({
           <span aria-live="polite" className="text-body-xs text-03">
             {phase === "saving" && !binding ? "Creating your draft listing takes a few seconds." : null}
             {readOnly ? "Your account is blocked, so changes are paused." : null}
+            {credentialsMissing && !readOnly ? "Add the API key headers for this address under Authentication first." : null}
           </span>
         </div>
         {error ? (
