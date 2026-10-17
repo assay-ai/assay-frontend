@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { McpClient } from "@/features/buyer-money/mcp-config";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import {
@@ -10,6 +11,7 @@ import {
   listAgentServers,
   listToolsets,
   previewMcpUrl,
+  recordConnectUrl,
   updateAgentAccess,
   type AgentAccess,
   type UpdateAgentAccessBody,
@@ -90,6 +92,19 @@ export function useUpdateAccess(agentId: string | null | undefined) {
       void queryClient.invalidateQueries({ queryKey: ["spend-policy-history"] });
     },
     onError: (error) => toast.error(error instanceof ApiError ? plainError(error.code) : "The change could not be saved"),
+  });
+}
+
+/**
+ * Remembers a URL handed out on copy (`POST /agents/:id/connect-urls`), so
+ * Servers in use shows "Waiting for the first call" and the client tab is
+ * remembered. Bookkeeping: a failure is silent, the copy already happened.
+ */
+export function useRecordConnect(agentId: string | null | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { url: string; serverName?: string; client?: McpClient }) => recordConnectUrl(agentId!, input),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: toolsetKeys.servers(agentId ?? "") }),
   });
 }
 
