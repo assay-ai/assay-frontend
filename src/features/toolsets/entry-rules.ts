@@ -23,6 +23,9 @@ export function entryInput(entry: ToolsetEntry | ToolsetEntryInput): ToolsetEntr
     maxPrice: entry.maxPrice ? { amount: entry.maxPrice.amount, asset: entry.maxPrice.asset } : null,
     minQuality: entry.minQuality,
     onEmpty: entry.onEmpty,
+    // T3: sent only when set, so an older Draft keeps the server's default (the current major).
+    ...(entry.toolVersionRange ? { toolVersionRange: entry.toolVersionRange } : {}),
+    ...(entry.requireOutputFields ? { requireOutputFields: [...entry.requireOutputFields] } : {}),
   };
 }
 

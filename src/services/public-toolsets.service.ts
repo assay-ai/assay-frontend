@@ -59,6 +59,10 @@ export interface PublicToolsetEntry {
   removed: boolean;
   /** One maker's own tool, not reviewed for the catalogue: "Not reviewed". */
   notReviewed: boolean;
+  /** T3: the contract majors this entry routes to, e.g. "^1"; null follows the current major. */
+  toolVersionRange?: string | null;
+  /** T3: "Must return" — output fields every serving provider must return. */
+  requireOutputFields?: string[];
 }
 
 /** What changed between two versions; settings use internal names (shown through `settingLabel`). */
