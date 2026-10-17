@@ -36,6 +36,8 @@ interface AlertRow {
   readAt?: string | null;
   subjectType?: string | null;
   subjectId?: string | null;
+  /** The event payload; a tool-set update carries the versions and the diff. */
+  payload?: unknown;
   createdAt: string;
 }
 
