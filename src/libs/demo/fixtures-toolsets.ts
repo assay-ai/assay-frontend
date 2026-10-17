@@ -859,7 +859,7 @@ function refusedCalls(): RefusedCall[] {
     providers: { helios: HELIOS, northwind: NORTHWIND, quanta: QUANTA },
     name: (id) => demoProvider(id)?.legalName ?? null,
   });
-  return [
+  return ([
     ...contract,
     {
       callId: "rc-2b8e40c7-search-web",
@@ -910,7 +910,7 @@ function refusedCalls(): RefusedCall[] {
       viewFilter: null,
       createdAt: demoMinutesAgo(150),
     },
-  ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  ] satisfies RefusedCall[]).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
 /* ------------------------------------------------------- the writes */

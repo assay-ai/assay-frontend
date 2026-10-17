@@ -487,6 +487,22 @@ function plainOperatorTool(ref: DemoCatalogueToolRef): DemoOperatorTool {
   };
 }
 
+/*
+  The catalogue's tools, registered by fixtures-explore when it loads, so the
+  operator list shows every tool without this file (or the operator fixtures)
+  importing the explore fixtures — which import the fixture table, which
+  imports the operator fixtures: a cycle at module load.
+*/
+let catalogueRefs: readonly DemoCatalogueToolRef[] = [];
+
+export function registerDemoCatalogueTools(refs: readonly DemoCatalogueToolRef[]): void {
+  catalogueRefs = refs;
+}
+
+export function demoCatalogueRefs(): readonly DemoCatalogueToolRef[] {
+  return catalogueRefs;
+}
+
 export function demoOperatorToolList(others: readonly DemoCatalogueToolRef[] = []): { tools: OperatorToolSummary[] } {
   const known = new Set(OPERATOR_TOOLS.map((t) => t.id));
   const all = [...OPERATOR_TOOLS, ...others.filter((t) => !known.has(t.id)).map(plainOperatorTool)];
@@ -511,27 +527,82 @@ export function demoOperatorTool(
     draft?: (ContractShape & { version: number; changelog: string | null; updatedAt: string }) | null;
     baseVersion?: number;
     deprecated?: { version: number; sunsetAt: string; replacementToolId: string | null };
+    /** An approved publish: the draft is now a published version. */
+    published?: boolean;
+    /** An approved "Make current": this version (sequence number) is current. */
+    current?: number;
+    /** A tool created in this demo session (not one of the stories). */
+    created?: { name: string; category: string };
   } = {},
 ): OperatorTool | undefined {
   const ref = options.others?.find((o) => o.id === toolId);
-  const tool = OPERATOR_TOOLS.find((t) => t.id === toolId) ?? (ref ? plainOperatorTool(ref) : undefined);
+  const tool =
+    OPERATOR_TOOLS.find((t) => t.id === toolId) ??
+    (ref ? plainOperatorTool(ref) : undefined) ??
+    (options.created
+      ? { id: toolId, name: options.created.name, category: options.created.category, tags: [], status: "DRAFT" as const, replacementToolId: null, majors: [], suggested: null }
+      : undefined);
   if (!tool) return undefined;
-  let versions = demoContractVersions(tool.id, tool.name, ref?.description);
+  let versions = options.created ? [] : demoContractVersions(tool.id, tool.name, ref?.description);
+  const storedDraft = options.draft === undefined ? demoDraftShape(tool.id) : options.draft;
+  if (options.published && storedDraft) {
+    const draft = demoDraftOf(storedDraft, versions, options.baseVersion);
+    const major = Number(draft.nextSemver.split(".")[0]);
+    const currentMajor = versions.find((v) => v.isCurrent)?.major ?? null;
+    const becomesCurrent = currentMajor === null || currentMajor === major;
+    versions = [
+      {
+        version: draft.version,
+        semver: draft.nextSemver,
+        major,
+        status: "ACTIVE",
+        summary: draft.summary,
+        description: draft.description,
+        inputSchema: draft.inputSchema,
+        outputSchema: draft.outputSchema,
+        optionalInputFields: draft.optionalInputFields,
+        optionalOutputFields: draft.optionalOutputFields,
+        examples: draft.examples,
+        tier: draft.tier ?? "VERIFIED",
+        sunsetAt: null,
+        changelog: draft.changelog,
+        publishedAt: new Date().toISOString(),
+        isCurrent: becomesCurrent,
+      },
+      ...versions.map((v) => (becomesCurrent ? { ...v, isCurrent: false } : v)),
+    ];
+  }
+  if (options.current !== undefined && versions.some((v) => v.version === options.current)) {
+    versions = versions.map((v) => ({ ...v, isCurrent: v.version === options.current }));
+  }
   let replacementToolId = tool.replacementToolId;
   if (options.deprecated) {
     const major = versions.find((v) => v.version === options.deprecated!.version)?.major;
     versions = versions.map((v) => (v.major === major && v.status === "ACTIVE" ? { ...v, status: "DEPRECATED", sunsetAt: options.deprecated!.sunsetAt } : v));
     replacementToolId = options.deprecated.replacementToolId ?? replacementToolId;
   }
-  const draftShape = options.draft === undefined ? demoDraftShape(tool.id) : options.draft;
+  const draftShape = options.published ? null : storedDraft;
   const draft = draftShape ? demoDraftOf(draftShape, versions, options.baseVersion) : null;
+  const published = versions.length > 0;
   return {
-    ...summaryOf(tool, versions, draft !== null),
+    ...summaryOf({ ...tool, status: tool.status === "DRAFT" && published ? "ACTIVE" : tool.status }, versions, draft !== null),
     replacementToolId,
     versions,
     draft,
-    majors: majorsOf(tool, versions),
-    suggestedCurrentVersion: tool.suggested,
+    // A major published here (or a first version) has no bindings yet.
+    majors: majorsOf(
+      {
+        ...tool,
+        majors: [
+          ...tool.majors,
+          ...[...new Set(versions.map((v) => v.major))]
+            .filter((major) => !tool.majors.some((m) => m.major === major))
+            .map((major) => ({ major, eligibleBindings: 0, activeBindings: 0 })),
+        ].sort((a, b) => b.major - a.major),
+      },
+      versions,
+    ),
+    suggestedCurrentVersion: options.current !== undefined && options.current === tool.suggested ? null : tool.suggested,
   };
 }
 

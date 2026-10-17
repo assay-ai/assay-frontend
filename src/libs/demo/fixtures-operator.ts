@@ -18,6 +18,7 @@ import { readOperatorSession } from "@/libs/operator-session";
 
 import { DEMO_NOW_MS } from "./demo-clock";
 import type { DemoFixture } from "./fixtures";
+import { contractApproved, operatorContractFixtures } from "./fixtures-operator-contracts";
 
 /**
  * The operator console's stage set — DEMO ONLY (see `demo-api.ts`).
@@ -371,7 +372,7 @@ function queue(action: string, code: string, target: string, payload: Record<str
 function remember(entry: Omit<OverrideLogEntry, "createdAt" | "family" | "organizationId" | "before" | "after" | "breakGlass" | "approvalMode"> & { approvalMode?: string }) {
   memory.log.unshift({
     createdAt: nowIso(),
-    family: entry.code.startsWith("S") ? "SLASH" : "ACCESS",
+    family: entry.code.startsWith("S") ? "SLASH" : entry.code.startsWith("P") ? "POLICY" : "ACCESS",
     organizationId: null,
     before: {},
     after: {},
@@ -423,6 +424,13 @@ function approve(id: string) {
     const caseId = String(approval.payload.proposalId ?? "");
     memory.compensated.set(caseId, { by: approval.requestedBy, at: nowIso() });
     remember({ id: nextId("log"), code: "S-5", label: "Compensate executed slash", action: "slash.compensated", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "slash_proposal", targetId: caseId, reasonCode, reason: note, ticketRef: null });
+  }
+  const contract = contractApproved(approval);
+  if (contract !== undefined) {
+    result = contract;
+    const code = approval.action === "tool_version.publish" ? "P-10" : "P-11";
+    const label = code === "P-10" ? "Publish a standard tool contract version" : "Move the contract version unpinned URLs serve";
+    remember({ id: nextId("log"), code, label, action: approval.action === "tool_version.publish" ? "tool_version.published" : "tool.current_version_moved", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "tool", targetId: String(approval.payload.toolId ?? ""), reasonCode, reason: note, ticketRef: null });
   }
   saveMemory();
   return { approval: decided, result };
@@ -1481,4 +1489,11 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
       return page(status ? rows.filter((op) => op.status === status) : rows);
     },
   },
+  // T3: the standard contract editor and the tool request queue.
+  ...operatorContractFixtures({
+    queue,
+    nextId,
+    log: (code, label, action, targetId, data) =>
+      remember({ id: nextId("log"), code, label, action, actorSubject: me().subject, approverSubject: null, targetType: "tool", targetId, reasonCode: bodyText(data, "reasonCode"), reason: bodyText(data, "note"), ticketRef: null }),
+  }),
 ];
