@@ -77,7 +77,7 @@ describe("versions agents can use", () => {
   it("lists majors newest first; the default can't be deprecated, the old one can", () => {
     const [v2, v1] = majorRows(weather);
     expect(v2).toMatchObject({ label: "v2", isCurrent: true, makeCurrentVersion: null, deprecateVersion: null, readyText: "2 providers can serve it now" });
-    expect(v2!.deprecateBlocked).toMatch(/Make another version current first/);
+    expect(v2!.deprecateBlocked).toMatch(/Make another version the default first/);
     expect(v1).toMatchObject({ label: "v1", status: "DEPRECATED", statusText: "Deprecated", deprecateVersion: null });
     expect(v1!.sunsetText).toMatch(/^Stops on .* \(UTC\)$/);
   });

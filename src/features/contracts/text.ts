@@ -54,7 +54,7 @@ export function bumpEffect(bump: VersionBump | null, nextSemver: string | null, 
       const old = n > 1 ? `v${n - 1}` : "the old version";
       return (
         `Every provider must re-map and pass a new test for v${n} before it serves v${n}. ` +
-        `Agents keep using ${old} until you make v${n} current, and ${old} keeps running until you deprecate it (at least 90 days' notice).`
+        `Agents keep using ${old} until you make v${n} the default, and ${old} keeps running until you deprecate it (at least 90 days' notice).`
       );
     }
     default:

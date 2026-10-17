@@ -128,7 +128,7 @@ describe("bumps in words", () => {
 
   it("says who must do what after each bump", () => {
     expect(bumpEffect("PATCH", "1.0.1")).toMatch(/don't need to do anything/);
-    expect(bumpEffect("MAJOR", "3.0.0")).toMatch(/re-map and pass a new test for v3.*keep using v2 until you make v3 current/);
+    expect(bumpEffect("MAJOR", "3.0.0")).toMatch(/re-map and pass a new test for v3.*keep using v2 until you make v3 the default/);
   });
 });
 

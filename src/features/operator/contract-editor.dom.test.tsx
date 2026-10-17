@@ -59,7 +59,7 @@ describe("the contract editor", () => {
     expect(html).toContain("Agents get v2.0.0 by default");
     expect(html).toContain("Default for agents");
     expect(html).toMatch(/Deprecated .*Stops on .* \(UTC\)/);
-    expect(html).toContain("v2 is the version agents get by default. Make another version current first.");
+    expect(html).toContain("v2 is the version agents get by default. Make another version the default first.");
   });
 
   it("suggests moving the default when a newer major is ready", () => {
@@ -67,7 +67,7 @@ describe("the contract editor", () => {
     expect(html).toContain("v2.0.0 is ready: 2 providers can serve it.");
     expect(html).toContain("Make v2.0.0 the default");
     // v1 is still the default, so it can't be deprecated yet; the newer v2 is made the default, not deprecated.
-    expect(html).toContain("v1 is the version agents get by default. Make another version current first.");
+    expect(html).toContain("v1 is the version agents get by default. Make another version the default first.");
     expect(html).not.toContain("Deprecate v");
     expect(html).toContain("Publish…");
   });
