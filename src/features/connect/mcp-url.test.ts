@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { KEY_PLACEHOLDER, keyMode, mcpConfig, MCP_CLIENTS } from "@/features/buyer-money/mcp-config";
 
-import { buildMcpUrl, canonicalTools, parseMcpUrl, sameChoice, suggestServerName } from "./mcp-url";
+import { buildMcpUrl, canonicalTools, parseMcpUrl, sameChoice, suggestServerName, type ConnectChoice } from "./mcp-url";
 
 const HOST = "https://mcp.example.com";
 
@@ -51,7 +51,8 @@ describe("parseMcpUrl — a URL back into the question (Change, browser redirect
   });
 
   it("round-trips what it builds", () => {
-    for (const choice of [{ kind: "everything" } as const, { kind: "toolset", slug: "weather" } as const, { kind: "tools", tools: ["a_x", "b_y"] } as const]) {
+    const choices: ConnectChoice[] = [{ kind: "everything" }, { kind: "toolset", slug: "weather" }, { kind: "tools", tools: ["a_x", "b_y"] }];
+    for (const choice of choices) {
       for (const free of [false, true]) {
         const parsed = parseMcpUrl(buildMcpUrl(choice, { free }, HOST), HOST);
         expect(parsed && sameChoice(parsed.choice, choice)).toBe(true);
