@@ -35,7 +35,7 @@ export function limitPhrases(rules: AgentRules): string[] {
  */
 export function toolResultLine(tool: AgentToolEffect, rules: AgentRules): string {
   if (tool.access === "BLOCKED") return `${tool.name}: not allowed`;
-  const via = tool.access === "VIA_TOOLSET_URL" ? " (only through its tool set's URL)" : "";
+  const via = tool.access === "VIA_TOOLSET_URL" ? " · only through its tool set's URL" : "";
   if (tool.providersTotal === 0) return `${tool.name}: no provider serves it yet${via}`;
   const limits = limitPhrases(rules);
   const limitNote = limits.length > 0 ? ` (your limit${limits.length > 1 ? "s" : ""}: ${limits.join(", ")})` : "";
@@ -43,7 +43,7 @@ export function toolResultLine(tool: AgentToolEffect, rules: AgentRules): string
   if (tool.providersLeft === tool.providersTotal) {
     return tool.providersTotal === 1
       ? `${tool.name}: 1 provider, no backup${via}`
-      : `${tool.name}: all ${tool.providersTotal} providers${via}`;
+      : `${tool.name}: ${tool.providersTotal === 2 ? "both" : `all ${tool.providersTotal}`} providers${via}`;
   }
   return `${tool.name}: ${tool.providersLeft} of ${tool.providersTotal} providers left${limitNote}${via}`;
 }

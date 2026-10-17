@@ -181,6 +181,7 @@ export default function CataloguePage() {
   return (
     <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-4 py-6 tablet:px-7 tablet:py-8">
       <ConnectPanel
+        publicPage
         url={serverUrl}
         title={serverUrl.includes("/c/") ? "This is an MCP server URL for one topic. Add it to your client." : "This is an MCP server URL: every tool below, as one server. Add it to your client."}
       />

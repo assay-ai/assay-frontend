@@ -61,7 +61,7 @@ export function SharedServerPage({ page }: { page: "view" | "handle" }) {
         />
       ) : (
         <>
-          <ConnectPanel url={url} />
+          <ConnectPanel url={url} publicPage />
           <section className="flex flex-col gap-2 rounded-xl border border-01 bg-01 p-5 tablet:p-6">
             <h1 className="break-all text-heading-md text-01">{label}</h1>
             <p className="text-body-13 text-02">

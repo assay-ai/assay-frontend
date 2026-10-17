@@ -52,12 +52,13 @@ describe("What this agent can use — the combined result per tool", () => {
   it("names the plain states: all, one with no backup, none fits, nobody serves it, not allowed", () => {
     const rules = { excludeProviderIds: [], maxPrice: null, minTier: null, minQuality: null };
     expect(toolResultLine(tool({ providersLeft: 4 }), rules)).toBe("get_weather: all 4 providers");
+    expect(toolResultLine(tool({ providersTotal: 2, providersLeft: 2 }), rules)).toBe("get_weather: both providers");
     expect(toolResultLine(tool({ providersTotal: 1, providersLeft: 1 }), rules)).toBe("get_weather: 1 provider, no backup");
     expect(toolResultLine(tool({ providersLeft: 0 }), access().rules)).toBe("get_weather: no provider fits (your limit: max $0.01)");
     expect(toolResultLine(tool({ providersTotal: 0, providersLeft: 0 }), rules)).toBe("get_weather: no provider serves it yet");
     expect(toolResultLine(tool({ access: "BLOCKED" }), rules)).toBe("get_weather: not allowed");
     expect(toolResultLine(tool({ access: "VIA_TOOLSET_URL", providersLeft: 4 }), rules)).toBe(
-      "get_weather: all 4 providers (only through its tool set's URL)",
+      "get_weather: all 4 providers · only through its tool set's URL",
     );
   });
 
@@ -270,6 +271,18 @@ describe("a refused call, as sketch B draws it", () => {
     expect(view.layer).toBe("Refused by the tool set's rules");
     expect(view.providers.map((p) => p.fix?.kind)).toEqual(["edit-toolset", "clear-max-price", "allow-any-tier"]);
     expect(view.singleProviderNote).toBeNull();
+  });
+
+  it("shows each fix once, however many providers it would bring back", () => {
+    const view = refusedCallView(
+      refused({
+        providers: [
+          { providerId: "p1", reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "" },
+          { providerId: "p2", reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "" },
+        ],
+      }),
+    );
+    expect(view.providers.map((p) => p.fix?.kind ?? null)).toEqual(["clear-max-price", null]);
   });
 
   it("not allowed: Allow this tool; not on this server: add it to the tool set", () => {

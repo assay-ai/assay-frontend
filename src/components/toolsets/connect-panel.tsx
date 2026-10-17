@@ -6,6 +6,7 @@ import * as React from "react";
 
 import { useSignedIn } from "@/components/explorer/start-free";
 import { Button } from "@/components/ui/button";
+import { demoEnabled } from "@/libs/demo/demo-api";
 import { loginHref } from "@/libs/login-redirect";
 import { cn } from "@/utils";
 
@@ -22,6 +23,7 @@ export function ConnectPanel({
   title = "This is an MCP server URL. Add it to your client.",
   detail,
   agentId,
+  publicPage = false,
   className,
 }: {
   /** The MCP URL the page stands for; null while it is not known yet. */
@@ -29,9 +31,12 @@ export function ConnectPanel({
   title?: string;
   detail?: React.ReactNode;
   agentId?: string | null;
+  /** On a public page a signed-out visitor gets "Start free"; signed-in pages always open the sheet. */
+  publicPage?: boolean;
   className?: string;
 }) {
-  const signedIn = useSignedIn();
+  const privySignedIn = useSignedIn();
+  const signedIn = !publicPage || privySignedIn || demoEnabled();
   const [open, setOpen] = React.useState(false);
   const [here, setHere] = React.useState("/");
   React.useEffect(() => setHere(`${window.location.pathname}${window.location.search}${window.location.hash}`), []);
