@@ -101,3 +101,63 @@ describe("demo listing Settings: pricing mode and price", () => {
     expect((after.price as { amount: string }).amount).toBe("150000");
   });
 });
+
+describe("demo contract versions (T3)", () => {
+  const WEATHER = "/providers/me/tool-bindings/f2c84d19-3b6e-4a07-9d51-8e2f0a7c4b63";
+  const stub = () => vi.stubGlobal("window", { sessionStorage: memoryStorage(), localStorage: memoryStorage(), location: { search: "" } });
+
+  it("gives every catalogue tool its versions, and the weather tool 1.x deprecated with 2.0.0 current", async () => {
+    stub();
+    const fixtures = await load();
+    const { tools } = call(fixtures, "GET", "/providers/me/tool-bindings/catalogue") as {
+      tools: { id: string; currentVersion: string | null; versions: { semver: string; status: string; major: number }[] }[];
+    };
+    for (const tool of tools) expect(tool.versions.length).toBeGreaterThan(0);
+    const weather = tools.find((t) => t.id === "weather-now")!;
+    expect(weather.currentVersion).toBe("2.0.0");
+    expect(weather.versions.filter((v) => v.major === 1).every((v) => v.status === "DEPRECATED")).toBe(true);
+  });
+
+  it("serves the weather draft on ^1 only, with its extra fields", async () => {
+    stub();
+    const fixtures = await load();
+    expect(call(fixtures, "GET", WEATHER)).toMatchObject({
+      toolVersionRange: "^1",
+      providesOutputFields: ["uv_index"],
+      supportsInputFields: ["units"],
+    });
+    expect(call(fixtures, "GET", `${WEATHER}/publish-check`).publishable).toBe(true);
+  });
+
+  it("asks for a test of v2 once it is added, and passes after one", async () => {
+    stub();
+    const fixtures = await load();
+    expect(call(fixtures, "PATCH", WEATHER, { toolVersionRange: "^1 || ^2" }).toolVersionRange).toBe("^1 || ^2");
+    let check = call(fixtures, "GET", `${WEATHER}/publish-check`) as { publishable: boolean; requirements: { met: boolean; detail: string }[] };
+    expect(check.publishable).toBe(false);
+    expect(check.requirements.filter((r) => !r.met).map((r) => r.detail.slice(0, 13))).toEqual(["Contract v1: ", "Contract v2: ", "Contract v1: ", "Contract v2: "]);
+
+    expect(call(fixtures, "POST", `${WEATHER}/test`, { input: {}, toolVersion: 3 })).toMatchObject({ toolVersion: 3, toolVersionSemver: "2.0.0" });
+    expect(call(fixtures, "POST", `${WEATHER}/test`, { input: {}, toolVersion: 2 })).toMatchObject({ toolVersionSemver: "1.1.0" });
+    check = call(fixtures, "GET", `${WEATHER}/publish-check`) as typeof check;
+    expect(check.publishable).toBe(true);
+  });
+
+  it("refuses a range or a field the contract does not have, as the backend does", async () => {
+    stub();
+    const fixtures = await load();
+    const thrown = (data: Record<string, unknown>) => {
+      try {
+        call(fixtures, "PATCH", WEATHER, data);
+      } catch (error) {
+        return error as { code: string; context: unknown };
+      }
+      return null;
+    };
+    expect(thrown({ toolVersionRange: "^3" })).toMatchObject({
+      code: "PROVIDER_BINDING_CONTRACT_MISMATCH",
+      context: { problems: expect.arrayContaining(["contract v3 has no published version to serve"]) },
+    });
+    expect(thrown({ providesOutputFields: ["pm10"] })?.context).toEqual({ problems: ['"pm10" is not an optional output of the contract in ^1'] });
+  });
+});
