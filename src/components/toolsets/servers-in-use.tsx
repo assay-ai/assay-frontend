@@ -6,11 +6,14 @@ import * as React from "react";
 import { SkeletonRows } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
+import { isToolsetChoice, parseMcpUrl } from "@/features/connect/mcp-url";
 import { SHOW_ALL_TOOL_BUDGET, tokensText } from "@/features/toolsets/preview";
-import { biggestServer, serverLabel, toolsShown } from "@/features/toolsets/servers";
+import { biggestServer, lockedVersionOf, serverLabel, showsEveryTool, toolsShown } from "@/features/toolsets/servers";
 import type { ServerInUse } from "@/services/toolsets.service";
 
 import { ConnectSheet } from "./connect-sheet";
+import { Chip } from "./toolset-bits";
+import { UpdateSheet, type UpdateTarget } from "./update-sheet";
 import { errorText, useAgentServers } from "./use-toolsets";
 
 /**
@@ -20,13 +23,30 @@ import { errorText, useAgentServers } from "./use-toolsets";
  * the first call". Connect opens the Connect sheet; Change reopens it from the
  * row's URL (the result is a new URL to paste in place of the old one).
  *
+ * Over budget counts only the servers that show every tool (one where the
+ * agent searches costs about four tools, whatever it reaches), and the fix is
+ * one click: "Switch {name} to search" opens the sheet on that server's
+ * search URL, ready to copy. A server locked to an older version of a tool set
+ * shows "Update available": the diff, then "Copy v4 URL".
+ *
  * A table from tablet up; stacked cards on a phone, so nothing scrolls sideways.
  */
+
+/** The update a server row offers, or null. */
+function updateTargetOf(server: ServerInUse): UpdateTarget | null {
+  if (!server.updateAvailable) return null;
+  const origin = server.canonicalUrl.replace(/^([a-z][a-z0-9+.-]*:\/\/[^/?#]+).*$/i, "$1");
+  const choice = parseMcpUrl(server.canonicalUrl, origin)?.choice;
+  const from = lockedVersionOf(server);
+  if (!choice || !isToolsetChoice(choice) || !from) return null;
+  return { choice, name: server.name, from, url: server.canonicalUrl };
+}
 const POLL_MS = 10_000;
 
 export function ServersInUse({ agentId, agentName }: { agentId: string; agentName: string }) {
   const [sheet, setSheet] = React.useState<{ url: string | null; changing: boolean } | null>(null);
   const [poll, setPoll] = React.useState<number | false>(false);
+  const [updating, setUpdating] = React.useState<UpdateTarget | null>(null);
   const query = useAgentServers(agentId, { pollMs: poll });
   const servers = query.data?.servers ?? [];
   const waiting = servers.some((s) => s.waitingForFirstCall);
@@ -36,6 +56,7 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
   const over = shown > SHOW_ALL_TOOL_BUDGET;
   const biggest = over ? biggestServer(servers) : null;
   const change = (server: ServerInUse) => setSheet({ url: server.canonicalUrl, changing: true });
+  const update = (server: ServerInUse) => setUpdating(updateTargetOf(server));
   const clashes = (server: ServerInUse) =>
     Boolean(server.serverName) && servers.some((s) => s.canonicalUrl !== server.canonicalUrl && s.serverName === server.serverName);
 
@@ -62,12 +83,18 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
               <span className="flex min-w-0 flex-1 items-start gap-2">
                 <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
                 <span>
-                  These servers show {shown} tools between them, more than {SHOW_ALL_TOOL_BUDGET}. Agents pick tools less accurately past that.
+                  The servers that show every tool show {shown} between them, more than {SHOW_ALL_TOOL_BUDGET}. Agents pick tools less accurately past that.
                 </span>
               </span>
               {biggest ? (
-                <Button size="sm" variant="secondary" className="self-start tablet:self-center" onClick={() => change(biggest)}>
-                  Narrow “{serverLabel(biggest).title}”
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="min-h-10 self-start tablet:min-h-0 tablet:self-center"
+                  data-testid="switch-to-search"
+                  onClick={() => (biggest.searchUrl ? setSheet({ url: biggest.searchUrl, changing: true }) : change(biggest))}
+                >
+                  {biggest.searchUrl ? `Switch “${serverLabel(biggest).title}” to search` : `Narrow “${serverLabel(biggest).title}”`}
                 </Button>
               ) : null}
             </div>
@@ -76,7 +103,7 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
           <p className="text-body-xs text-03 tablet:hidden">Change makes a new URL for a server; replace the old one in your app.</p>
           <ul className="flex flex-col gap-2 tablet:hidden" data-testid="server-cards">
             {servers.map((server) => (
-              <ServerCard key={server.canonicalUrl} server={server} clash={clashes(server)} onChange={() => change(server)} />
+              <ServerCard key={server.canonicalUrl} server={server} clash={clashes(server)} onChange={() => change(server)} onUpdate={() => update(server)} />
             ))}
           </ul>
 
@@ -93,7 +120,7 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
               </thead>
               <tbody className="divide-y divide-01">
                 {servers.map((server) => (
-                  <ServerRow key={server.canonicalUrl} server={server} clash={clashes(server)} onChange={() => change(server)} />
+                  <ServerRow key={server.canonicalUrl} server={server} clash={clashes(server)} onChange={() => change(server)} onUpdate={() => update(server)} />
                 ))}
               </tbody>
             </table>
@@ -110,17 +137,24 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
         initialUrl={sheet?.url ?? null}
         changing={sheet?.changing ?? false}
       />
+      <UpdateSheet target={updating} onOpenChange={(open) => !open && setUpdating(null)} />
     </div>
   );
 }
 
-function NameCell({ server, clash }: { server: ServerInUse; clash: boolean }) {
+function NameCell({ server, clash, onUpdate }: { server: ServerInUse; clash: boolean; onUpdate: () => void }) {
   const label = serverLabel(server);
+  const target = updateTargetOf(server);
   return (
     <span className="flex min-w-0 flex-col gap-0.5">
-      <span className="flex items-center gap-1.5 text-label-13 text-01">
+      <span className="flex flex-wrap items-center gap-1.5 text-label-13 text-01">
         <Server aria-hidden="true" className="size-3.5 shrink-0 text-03" />
         <span className="[overflow-wrap:anywhere]">{label.title}</span>
+        {target ? (
+          <button type="button" onClick={onUpdate} className="min-h-10 tablet:min-h-0" data-testid="server-update">
+            <Chip tone="primary">Update available</Chip>
+          </button>
+        ) : null}
       </span>
       {label.detail ? <span className="text-body-xs text-03 [overflow-wrap:anywhere]">{label.detail}</span> : null}
       {server.serverName ? (
@@ -151,14 +185,20 @@ function Tools({ server }: { server: ServerInUse }) {
 }
 
 function Tokens({ server }: { server: ServerInUse }) {
-  return <>{server.available && server.estimatedTokens !== null ? tokensText(server.estimatedTokens) : "—"}</>;
+  if (!server.available || server.estimatedTokens === null) return <>—</>;
+  return (
+    <>
+      {tokensText(server.estimatedTokens)}
+      {showsEveryTool(server) ? null : <span className="text-03"> · search</span>}
+    </>
+  );
 }
 
-function ServerRow({ server, clash, onChange }: { server: ServerInUse; clash: boolean; onChange: () => void }) {
+function ServerRow({ server, clash, onChange, onUpdate }: { server: ServerInUse; clash: boolean; onChange: () => void; onUpdate: () => void }) {
   return (
     <tr data-testid="server-row" className="align-top">
       <td className="max-w-[320px] px-3 py-2.5">
-        <NameCell server={server} clash={clash} />
+        <NameCell server={server} clash={clash} onUpdate={onUpdate} />
       </td>
       <td className="px-3 py-2.5 tabular-nums text-01">
         <Tools server={server} />
@@ -178,10 +218,10 @@ function ServerRow({ server, clash, onChange }: { server: ServerInUse; clash: bo
   );
 }
 
-function ServerCard({ server, clash, onChange }: { server: ServerInUse; clash: boolean; onChange: () => void }) {
+function ServerCard({ server, clash, onChange, onUpdate }: { server: ServerInUse; clash: boolean; onChange: () => void; onUpdate: () => void }) {
   return (
     <li data-testid="server-card" className="flex min-w-0 flex-col gap-2 rounded-lg border border-01 p-3">
-      <NameCell server={server} clash={clash} />
+      <NameCell server={server} clash={clash} onUpdate={onUpdate} />
       <dl className="grid grid-cols-3 gap-2 text-body-xs">
         <div>
           <dt className="text-03">Tools</dt>

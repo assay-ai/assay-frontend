@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, CircleCheck, Copy, TriangleAlert, X } from "lucide-react";
+import { Check, CircleCheck, Copy, Info, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -15,30 +15,61 @@ import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { isMcpClient, keyMode, mcpConfig, type McpClient } from "@/features/buyer-money/mcp-config";
-import { buildMcpUrl, mcpToolName, parseMcpUrl, suggestServerName, toolDisplay, uniqueServerName, type ConnectChoice } from "@/features/connect/mcp-url";
+import {
+  buildMcpUrl,
+  defaultDiscovery,
+  isToolsetChoice,
+  mcpToolName,
+  parseMcpUrl,
+  suggestServerName,
+  toolDisplay,
+  uniqueServerName,
+  type ConnectChoice,
+  type DiscoveryChoice,
+} from "@/features/connect/mcp-url";
 import { allowToolsBody } from "@/features/toolsets/access-result";
 import { defaultEntry } from "@/features/toolsets/entry-rules";
+import { ALWAYS_LATEST_LABEL, DISCOVERY_DETAILS, DISCOVERY_LABELS, DRAFT_NOTICE, HOW_AGENT_SEES_LABEL, lockLabel } from "@/features/toolsets/labels";
+import { badgeLabel } from "@/features/toolsets/public";
 import { copyBlocked, offersFreeOnly, overBudgetWith, previewSummary, previewWarnings, type PreviewWarning } from "@/features/toolsets/preview";
 import { createCredential } from "@/services/account.service";
+import type { PublicToolsetCard } from "@/services/public-toolsets.service";
 import { createToolset, recordConnectUrl, type McpUrlPreview } from "@/services/toolsets.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
 
-import { errorText, toolsetKeys, useAgentAccess, useAgentServers, useMcpPreview, useToolsets, useUpdateAccess } from "./use-toolsets";
+import { AlwaysLoaded } from "./always-loaded";
+import {
+  errorText,
+  toolsetKeys,
+  useAgentAccess,
+  useAgentServers,
+  useMcpPreview,
+  usePublicCategories,
+  usePublicToolset,
+  usePublicToolsets,
+  useToolsetByToken,
+  useToolsets,
+  useUpdateAccess,
+} from "./use-toolsets";
 
 /**
- * The Connect sheet (design spec §7.11, the T1 part): one question — "What
- * should it use?" — and the result updates live under it.
+ * The Connect sheet (design spec §7.11): one question — "What should it
+ * use?" — and the result updates live under it.
  *
- *   Everything            /
- *   One of my tool sets   /my/{slug}
+ *   Everything            /                     (the agent searches)
+ *   One topic             /c/{category}
+ *   One of my tool sets   /my/{slug}[@N]
+ *   A shared tool set     /@{handle}/{slug}@N   or /u/{token}@N
  *   Only these tools      /?tools=…
  *
  * Under the question: the summary line from `POST /mcp-urls/preview` ("Your
- * agent will see 4 tools (~0.9k tokens)"; a skeleton while it loads, never
+ * agent will see 4 tools (~0.9k tokens)", or in search mode "4 tools (search)
+ * — about 0.9k tokens; 37 tools reachable"; a skeleton while it loads, never
  * 0), the warnings with their fixes, the client tabs (remembered per agent)
- * and More options with "Only free tools". Copy or Done records the URL
+ * and More options: the version lock, "How the agent sees tools", "Always
+ * loaded" and "Only free tools". Copy or Done records the URL
  * (`POST /agents/:id/connect-urls`) and the sheet waits for the first call.
  *
  * On a phone the result comes first and Copy sticks to the bottom; URLs
@@ -86,7 +117,27 @@ export function ConnectSheet({ open, onOpenChange, agentId: agentProp, initialUr
   );
 }
 
-type ChoiceKind = ConnectChoice["kind"];
+type ChoiceKind = "everything" | "topic" | "toolset" | "shared" | "tools" | "url";
+
+/** A shared tool set picked in the sheet: from the catalogue, or the link-only one the sheet was opened with. */
+type SharedPick = { kind: "shared"; handle: string; slug: string } | { kind: "link"; token: string };
+
+function kindOfInitial(choice: ConnectChoice | undefined): ChoiceKind {
+  switch (choice?.kind) {
+    case "topic":
+    case "toolset":
+    case "tools":
+    case "everything":
+      return choice.kind;
+    case "shared":
+    case "link":
+      return "shared";
+    case undefined:
+      return "everything";
+    default:
+      return "url";
+  }
+}
 
 function ConnectBody({
   agentProp,
@@ -107,12 +158,22 @@ function ConnectBody({
   const effectiveAgentId = agent?.agentId ?? null;
 
   const parsedInitial = React.useMemo(() => (initialUrl ? parseMcpUrl(initialUrl) : null), [initialUrl]);
+  const initial = parsedInitial?.choice;
   const unreadable = Boolean(initialUrl) && !parsedInitial;
-  const [kind, setKind] = React.useState<ChoiceKind>(parsedInitial?.choice.kind ?? "everything");
-  const [slug, setSlug] = React.useState<string | null>(parsedInitial?.choice.kind === "toolset" ? parsedInitial.choice.slug : null);
-  const [tools, setTools] = React.useState<string[]>(parsedInitial?.choice.kind === "tools" ? parsedInitial.choice.tools : []);
+  const [kind, setKind] = React.useState<ChoiceKind>(kindOfInitial(initial));
+  const [slug, setSlug] = React.useState<string | null>(initial?.kind === "toolset" ? initial.slug : null);
+  const [lockMine, setLockMine] = React.useState(Boolean(initial?.kind === "toolset" && initial.version));
+  const [category, setCategory] = React.useState<string | null>(initial?.kind === "topic" ? initial.category : null);
+  const [shared, setShared] = React.useState<SharedPick | null>(
+    initial?.kind === "shared" ? { kind: "shared", handle: initial.handle, slug: initial.slug } : initial?.kind === "link" ? { kind: "link", token: initial.token } : null,
+  );
+  // A shared set's lock: the version the URL named, else the latest once known; on by default except for Official sets.
+  const initialVersion = initial && isToolsetChoice(initial) && initial.kind !== "toolset" ? (initial.version ?? null) : null;
+  const [lockShared, setLockShared] = React.useState<boolean | null>(initial && (initial.kind === "shared" || initial.kind === "link") ? Boolean(initial.version) : null);
+  const [tools, setTools] = React.useState<string[]>(initial?.kind === "tools" ? initial.tools : []);
   const [free, setFree] = React.useState(parsedInitial?.options.free ?? false);
-  const fixedUrl = parsedInitial?.choice.kind === "url" ? parsedInitial.choice.url : null;
+  const [discovery, setDiscovery] = React.useState<DiscoveryChoice | null>(parsedInitial?.options.discovery ?? null);
+  const fixedUrl = initial && kindOfInitial(initial) === "url" ? buildMcpUrl(initial, { free: false }) : null;
 
   const toolsets = useToolsets();
   const sets = React.useMemo(() => toolsets.data?.items ?? [], [toolsets.data]);
@@ -120,27 +181,51 @@ function ConnectBody({
   const access = useAgentAccess(effectiveAgentId);
   const servers = useAgentServers(effectiveAgentId, { pollMs: waitPoll });
   const update = useUpdateAccess(effectiveAgentId);
+  const categories = usePublicCategories();
+  const publicSets = usePublicToolsets({ limit: 100 }, kind === "shared");
+  const sharedPage = usePublicToolset(shared?.kind === "shared" ? shared.handle : null, shared?.kind === "shared" ? shared.slug : null);
+  const linkPage = useToolsetByToken(shared?.kind === "link" ? shared.token : null, null);
+  const sharedInfo = shared?.kind === "link" ? linkPage.data : sharedPage.data;
 
   // A tool set picked by default when there is one, so the choice needs no second click.
   React.useEffect(() => {
     if (kind === "toolset" && !slug && sets[0]) setSlug(sets[0].slug);
   }, [kind, slug, sets]);
+  React.useEffect(() => {
+    const first = categories.data?.categories.find((c) => c.tools > 0)?.category;
+    if (kind === "topic" && !category && first) setCategory(first);
+  }, [kind, category, categories.data]);
+  // Community and Provider sets are locked by default, so a publisher cannot change them under the agent.
+  React.useEffect(() => {
+    if (sharedInfo && lockShared === null) setLockShared(sharedInfo.badge !== "OFFICIAL");
+  }, [sharedInfo, lockShared]);
 
+  const mine = sets.find((set) => set.slug === slug) ?? null;
+  const mineLatest = mine?.latestVersion ?? (initial?.kind === "toolset" ? (initial.version ?? null) : null);
+  const sharedVersion = initialVersion ?? sharedInfo?.version ?? null;
   const choice: ConnectChoice | null =
     kind === "everything"
       ? { kind: "everything" }
-      : kind === "toolset"
-        ? slug
-          ? { kind: "toolset", slug }
+      : kind === "topic"
+        ? category
+          ? { kind: "topic", category }
           : null
-        : kind === "tools"
-          ? tools.length > 0
-            ? { kind: "tools", tools }
+        : kind === "toolset"
+          ? slug
+            ? { kind: "toolset", slug, version: lockMine && mineLatest ? mineLatest : null }
             : null
-          : fixedUrl
-            ? { kind: "url", url: fixedUrl }
-            : null;
-  const url = choice ? buildMcpUrl(choice, { free }) : null;
+          : kind === "shared"
+            ? shared
+              ? { ...shared, version: lockShared !== false && sharedVersion ? sharedVersion : null }
+              : null
+            : kind === "tools"
+              ? tools.length > 0
+                ? { kind: "tools", tools }
+                : null
+              : fixedUrl
+                ? { kind: "url", url: fixedUrl }
+                : null;
+  const url = choice ? buildMcpUrl(choice, { free, discovery }) : null;
   const preview = useMcpPreview(url, effectiveAgentId);
   // Unique among the agent's other servers, so two servers never share a name in one client.
   const serverName = uniqueServerName(
@@ -234,6 +319,18 @@ function ConnectBody({
       return { id: mcp, label: mcp, disabled: t.providerCount === 0, detail: title ? `${title} · ${price}` : price };
     });
   const others = servers.data && preview.data ? overBudgetWith(preview.data, servers.data.servers) : null;
+  const searching = preview.data?.discovery === "SEARCH";
+  const defaultMode = choice ? (defaultDiscovery(choice) ?? "auto") : "auto";
+  const modes: DiscoveryChoice[] = choice?.kind === "everything" ? ["search", "full"] : ["auto", "full", "search"];
+  const mode = discovery ?? defaultMode;
+  const lockable = choice && isToolsetChoice(choice);
+  const lockVersion = kind === "toolset" ? mineLatest : sharedVersion;
+  const locked = kind === "toolset" ? lockMine : lockShared !== false;
+  const moreSummary = [
+    lockable && lockVersion ? (locked ? `locked to v${lockVersion}` : kind === "toolset" ? "live Draft" : "always latest") : null,
+    discovery ? DISCOVERY_LABELS[discovery].toLowerCase() : null,
+    free ? "free tools only" : null,
+  ].filter(Boolean);
 
   return (
     <>
@@ -247,7 +344,7 @@ function ConnectBody({
           <label className="flex w-full flex-col gap-1.5">
             <span className="text-label-13 text-01">Agent</span>
             <select
-              className="w-full rounded-md border border-02 bg-01 px-3 py-2 text-body-sm text-01"
+              className="min-h-10 w-full rounded-md border border-02 bg-01 px-3 py-2 text-body-sm text-01"
               value={effectiveAgentId ?? ""}
               onChange={(e) => setAgentId(e.target.value)}
             >
@@ -268,17 +365,35 @@ function ConnectBody({
 
         <fieldset className="flex flex-col gap-2" data-testid="connect-question">
           <legend className="pb-1 text-label-sm text-01">What should it use?</legend>
-          <ChoiceRow id="everything" current={kind} onPick={setKind} title="Everything" detail="Every tool on Assay, through one server." />
-          <ChoiceRow
-            id="toolset"
-            current={kind}
-            onPick={setKind}
-            title="One of my tool sets"
-            detail="Only the tools in that set, with its provider rules."
-          >
+          <ChoiceRow id="everything" current={kind} onPick={setKind} title="Everything" detail="Every tool on Assay, through one server. The agent searches for what it needs." />
+          <ChoiceRow id="topic" current={kind} onPick={setKind} title="One topic" detail="Every tool about one thing, such as weather.">
+            {kind === "topic" ? (
+              categories.isPending ? (
+                <Skeleton className="h-10 w-full" />
+              ) : categories.isError || !categories.data?.categories.length ? (
+                <p className="text-body-13 text-02">Topics could not be loaded. Pick another answer, or try again later.</p>
+              ) : (
+                <select
+                  aria-label="Topic"
+                  className="min-h-10 w-full rounded-md border border-02 bg-01 px-3 py-2 text-body-sm text-01"
+                  value={category ?? ""}
+                  onChange={(e) => setCategory(e.target.value)}
+                >
+                  {categories.data.categories
+                    .filter((c) => c.tools > 0)
+                    .map((c) => (
+                      <option key={c.category} value={c.category}>
+                        {topicLabel(c.category)} · {c.tools} tool{c.tools === 1 ? "" : "s"}
+                      </option>
+                    ))}
+                </select>
+              )
+            ) : null}
+          </ChoiceRow>
+          <ChoiceRow id="toolset" current={kind} onPick={setKind} title="One of my tool sets" detail="Only the tools in that set, with its provider rules.">
             {kind === "toolset" ? (
               toolsets.isPending ? (
-                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-10 w-full" />
               ) : sets.length === 0 ? (
                 <p className="text-body-13 text-02">
                   You have no tool sets yet.{" "}
@@ -289,7 +404,7 @@ function ConnectBody({
               ) : (
                 <select
                   aria-label="Tool set"
-                  className="w-full rounded-md border border-02 bg-01 px-3 py-2 text-body-sm text-01"
+                  className="min-h-10 w-full rounded-md border border-02 bg-01 px-3 py-2 text-body-sm text-01"
                   value={slug ?? ""}
                   onChange={(e) => setSlug(e.target.value)}
                 >
@@ -300,6 +415,21 @@ function ConnectBody({
                   ))}
                 </select>
               )
+            ) : null}
+          </ChoiceRow>
+          <ChoiceRow id="shared" current={kind} onPick={setKind} title="A shared tool set" detail="One someone published, from the catalogue or a link.">
+            {kind === "shared" ? (
+              <SharedPicker
+                value={shared}
+                info={sharedInfo ?? null}
+                loading={(shared?.kind === "link" ? linkPage.isPending : sharedPage.isPending) && Boolean(shared)}
+                cards={publicSets.data?.toolsets ?? []}
+                cardsLoading={publicSets.isPending}
+                onPick={(next) => {
+                  setShared(next);
+                  setLockShared(null);
+                }}
+              />
             ) : null}
           </ChoiceRow>
           <ChoiceRow id="tools" current={kind} onPick={setKind} title="Only these tools" detail="Pick the tools; nothing else is listed.">
@@ -330,7 +460,16 @@ function ConnectBody({
                   onChange={(id) => id && setTools([...tools, id])}
                   inline
                 />
-                {tools.length >= 2 ? <SaveAsToolset tools={tools} onSaved={(newSlug) => { setSlug(newSlug); setKind("toolset"); }} suggest={tools.length > 10} /> : null}
+                {tools.length >= 2 ? (
+                  <SaveAsToolset
+                    tools={tools}
+                    onSaved={(newSlug) => {
+                      setSlug(newSlug);
+                      setKind("toolset");
+                    }}
+                    suggest={tools.length > 10}
+                  />
+                ) : null}
               </div>
             ) : null}
           </ChoiceRow>
@@ -358,16 +497,28 @@ function ConnectBody({
                     Allow them
                   </Button>
                 ) : warning.fix && effectiveAgentId ? (
-                  <Link href={`/agents?agent=${encodeURIComponent(effectiveAgentId)}#access`} className="text-label-13 font-semibold underline">
+                  <Link href={`/agents?agent=${encodeURIComponent(effectiveAgentId)}#access`} className="min-h-10 content-center text-label-13 font-semibold underline tablet:min-h-0">
                     What this agent can use
                   </Link>
                 ) : null}
               </li>
             ))}
             {others !== null ? (
-              <li className="flex items-center gap-2 rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700" data-testid="connect-over-budget">
+              <li className="flex flex-wrap items-center gap-2 rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700" data-testid="connect-over-budget">
                 <TriangleAlert aria-hidden="true" className="size-3.5 shrink-0" />
-                With its other servers, {agentName} would see {others} tools. Agents pick less accurately past 25: connect a tool set or only the tools it needs.
+                <span className="min-w-0 flex-1">
+                  With its other servers that show every tool, {agentName} would see {others} tools. Agents pick less accurately past 25.
+                </span>
+                <Button size="sm" variant="secondary" onClick={() => setDiscovery(choice?.kind === "everything" ? null : "search")}>
+                  Let the agent search here
+                </Button>
+              </li>
+            ) : null}
+            {searching ? (
+              <li className="flex items-start gap-2 rounded-lg bg-02 px-3 py-2 text-body-xs text-02" data-testid="connect-search-note">
+                <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+                The agent finds tools here with search_tools and runs them with call_tool. “Always allow” on call_tool in your app allows every tool this server
+                can reach; this agent&apos;s limits still apply to each call.
               </li>
             ) : null}
           </ul>
@@ -393,21 +544,67 @@ function ConnectBody({
           </div>
         ) : null}
 
-        <details className="rounded-lg border border-01 bg-02 px-3 py-2.5" open={free || undefined}>
-          <summary className="cursor-pointer select-none text-label-13 text-01">More options</summary>
-          <div className="mt-3 flex flex-col gap-1">
-            <Switch
-              className="min-h-10 tablet:min-h-0"
-              checked={free}
-              disabled={!free && !offersFreeOnly(preview.data)}
-              onChange={(e) => setFree(e.target.checked)}
-              label="Only free tools"
-            />
-            <p className="text-body-xs text-03">
-              {free || offersFreeOnly(preview.data)
-                ? "Lists only tools with free calls. Calls through this URL are never charged; past the free calls they are refused."
-                : "Not available here: none of these tools has free calls."}
-            </p>
+        <details className="rounded-lg border border-01 bg-02 px-3 py-2.5" open={free || Boolean(discovery) || undefined} data-testid="connect-more">
+          <summary className="min-h-10 cursor-pointer select-none content-center text-label-13 text-01 tablet:min-h-0">
+            More options{moreSummary.length > 0 ? <span className="font-normal text-03"> · {moreSummary.join(" · ")}</span> : null}
+          </summary>
+          <div className="mt-3 flex flex-col gap-4">
+            {lockable ? (
+              <fieldset className="flex flex-col gap-1.5" data-testid="connect-lock">
+                <legend className="pb-1 text-label-13 text-01">Version</legend>
+                {lockVersion ? (
+                  <>
+                    <OptionRadio name="lock" checked={locked} onChange={() => (kind === "toolset" ? setLockMine(true) : setLockShared(true))} title={lockLabel(lockVersion)} />
+                    <OptionRadio
+                      name="lock"
+                      checked={!locked}
+                      onChange={() => (kind === "toolset" ? setLockMine(false) : setLockShared(false))}
+                      title={kind === "toolset" ? "Live Draft" : ALWAYS_LATEST_LABEL}
+                      detail={kind === "toolset" ? DRAFT_NOTICE : "New versions reach the agent without you checking them first."}
+                    />
+                  </>
+                ) : (
+                  <p className="text-body-xs text-03">
+                    {kind === "toolset" ? "No version saved yet: the URL serves the live Draft. Share or save a version on the tool set's page to lock to it." : "Loading the versions…"}
+                  </p>
+                )}
+              </fieldset>
+            ) : null}
+
+            <fieldset className="flex flex-col gap-1.5" data-testid="connect-discovery">
+              <legend className="pb-1 text-label-13 text-01">{HOW_AGENT_SEES_LABEL}</legend>
+              {modes.map((m) => (
+                <OptionRadio
+                  key={m}
+                  name="discovery"
+                  checked={mode === m}
+                  onChange={() => setDiscovery(m === defaultMode ? null : m)}
+                  title={`${DISCOVERY_LABELS[m]}${m === defaultMode ? " (default)" : ""}`}
+                  detail={DISCOVERY_DETAILS[m]}
+                />
+              ))}
+            </fieldset>
+
+            {access.data ? (
+              <AlwaysLoaded access={access.data} agentName={agentName} />
+            ) : access.isPending && effectiveAgentId ? (
+              <Skeleton className="h-10 w-full" />
+            ) : null}
+
+            <div className="flex flex-col gap-1">
+              <Switch
+                className="min-h-10 tablet:min-h-0"
+                checked={free}
+                disabled={!free && !offersFreeOnly(preview.data)}
+                onChange={(e) => setFree(e.target.checked)}
+                label="Only free tools"
+              />
+              <p className="text-body-xs text-03">
+                {free || offersFreeOnly(preview.data)
+                  ? "Lists only tools with free calls. Calls through this URL are never charged; past the free calls they are refused."
+                  : "Not available here: none of these tools has free calls."}
+              </p>
+            </div>
           </div>
         </details>
 
@@ -443,6 +640,77 @@ function ConnectBody({
         {blocked ? <span className="text-body-xs text-danger-700">Nothing to copy: this agent can use none of these tools.</span> : null}
       </div>
     </>
+  );
+}
+
+/** "weather" → "Weather". */
+function topicLabel(category: string): string {
+  return category.charAt(0).toUpperCase() + category.slice(1).replace(/-/g, " ");
+}
+
+function OptionRadio({ name, checked, onChange, title, detail }: { name: string; checked: boolean; onChange: () => void; title: string; detail?: string }) {
+  return (
+    <label className="flex min-h-10 cursor-pointer items-start gap-2.5 rounded-md px-1 py-1 tablet:min-h-0">
+      <input type="radio" name={name} className="mt-1 accent-primary-500" checked={checked} onChange={onChange} />
+      <span className="flex min-w-0 flex-col">
+        <span className="text-body-13 text-01">{title}</span>
+        {detail ? <span className="text-body-xs text-03">{detail}</span> : null}
+      </span>
+    </label>
+  );
+}
+
+/** "A shared tool set": the one the sheet was opened with, or one picked from the catalogue (searchable). */
+function SharedPicker({
+  value,
+  info,
+  loading,
+  cards,
+  cardsLoading,
+  onPick,
+}: {
+  value: SharedPick | null;
+  info: { name: string; handle: string; slug: string; badge: string; version: number } | null;
+  loading: boolean;
+  cards: PublicToolsetCard[];
+  cardsLoading: boolean;
+  onPick: (next: SharedPick) => void;
+}) {
+  const options = cards.map((card) => ({
+    id: `${card.handle}/${card.slug}`,
+    label: `@${card.handle}/${card.slug}`,
+    detail: `${card.name} · ${badgeLabel(card.badge)} · ${card.toolCount} tool${card.toolCount === 1 ? "" : "s"}`,
+  }));
+  return (
+    <div className="flex flex-col gap-2">
+      {value ? (
+        loading ? (
+          <Skeleton className="h-10 w-full" />
+        ) : info ? (
+          <p className="text-body-13 text-01">
+            {info.name} <span className="text-03">· @{info.handle}/{info.slug} · {badgeLabel(info.badge)} · newest v{info.version}</span>
+          </p>
+        ) : (
+          <p className="text-body-13 text-warning-700">This tool set could not be found. It may have stopped being shared.</p>
+        )
+      ) : null}
+      {cardsLoading ? (
+        <Skeleton className="h-10 w-full" />
+      ) : (
+        <EntityPicker
+          label={value ? "Pick another" : "Find a tool set"}
+          value={null}
+          placeholder="Search the catalogue's tool sets"
+          options={options}
+          onChange={(id) => {
+            if (!id) return;
+            const [handle = "", slug = ""] = id.split("/");
+            onPick({ kind: "shared", handle, slug });
+          }}
+          inline
+        />
+      )}
+    </div>
   );
 }
 

@@ -240,7 +240,8 @@ describe("Servers in use", () => {
     expect(out).toContain("22");
     expect(out).toContain("~5.1k");
     expect(out).toContain("Waiting for the first call");
-    expect(out).toContain("These servers show 28 tools between them, more than 25.");
+    // T2: only servers that show every tool count; without a search URL the fix is "Narrow".
+    expect(out).toContain("The servers that show every tool show 28 between them, more than 25.");
     expect(out).toContain("Narrow “Research kit”");
     expect(out).toContain("2 chosen tools");
     expect(out).toContain("In your app: “weather”");

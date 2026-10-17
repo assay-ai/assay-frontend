@@ -1,12 +1,25 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { McpClient } from "@/features/buyer-money/mcp-config";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import {
+  getPublicHandle,
+  getPublicToolset,
+  getToolsetByToken,
+  listPublicCategories,
+  listPublicToolsets,
+  listPublicToolsetVersions,
+  type ListPublicToolsetsQuery,
+} from "@/services/public-toolsets.service";
+import {
   getAgentAccess,
+  getOrgHandle,
+  getToolsetStats,
+  getToolsetVersion,
+  listToolsetVersions,
   getToolset,
   listAgentServers,
   listToolsets,
@@ -31,7 +44,81 @@ export const toolsetKeys = {
   servers: (agentId: string) => ["agent-servers", agentId] as const,
   preview: (url: string, agentId: string) => ["mcp-preview", agentId, url] as const,
   refused: (agentId?: string | null) => ["refused-calls", agentId ?? "all"] as const,
+  versions: (id: string) => ["toolsets", id, "versions"] as const,
+  version: (id: string, v: number) => ["toolsets", id, "versions", v] as const,
+  stats: (id: string) => ["toolsets", id, "stats"] as const,
+  handle: ["org-handle"] as const,
+  publicList: (query: ListPublicToolsetsQuery) => ["public-toolsets", query] as const,
+  publicPage: (handle: string, slug: string) => ["public-toolset", handle, slug] as const,
+  publicVersions: (handle: string, slug: string) => ["public-toolset", handle, slug, "versions"] as const,
+  byToken: (token: string, v: number | null) => ["public-toolset-token", token, v ?? "latest"] as const,
+  publicHandle: (handle: string) => ["public-handle", handle] as const,
+  categories: ["public-categories"] as const,
 };
+
+export function useOrgHandle(enabled = true) {
+  return useQuery({ queryKey: toolsetKeys.handle, enabled, retry: false, queryFn: getOrgHandle });
+}
+
+export function useToolsetVersions(id: string | null | undefined, enabled = true) {
+  return useQuery({ queryKey: toolsetKeys.versions(id ?? ""), enabled: Boolean(id) && enabled, retry: false, queryFn: () => listToolsetVersions(id!) });
+}
+
+export function useToolsetVersion(id: string | null | undefined, version: number | null | undefined) {
+  return useQuery({
+    queryKey: toolsetKeys.version(id ?? "", version ?? 0),
+    enabled: Boolean(id && version),
+    retry: false,
+    staleTime: Infinity,
+    queryFn: () => getToolsetVersion(id!, version!),
+  });
+}
+
+export function useToolsetStats(id: string | null | undefined, enabled = true) {
+  return useQuery({ queryKey: toolsetKeys.stats(id ?? ""), enabled: Boolean(id) && enabled, retry: false, queryFn: () => getToolsetStats(id!) });
+}
+
+export function usePublicToolsets(query: ListPublicToolsetsQuery, enabled = true) {
+  return useQuery({
+    queryKey: toolsetKeys.publicList(query),
+    enabled,
+    retry: false,
+    staleTime: 30_000,
+    // A new filter keeps the cards on screen until the answer lands, so the list never flashes empty.
+    placeholderData: keepPreviousData,
+    queryFn: () => listPublicToolsets(query),
+  });
+}
+
+export function usePublicToolset(handle: string | null, slug: string | null) {
+  return useQuery({
+    queryKey: toolsetKeys.publicPage(handle ?? "", slug ?? ""),
+    enabled: Boolean(handle && slug),
+    retry: false,
+    queryFn: () => getPublicToolset(handle!, slug!),
+  });
+}
+
+export function usePublicToolsetVersions(handle: string | null, slug: string | null) {
+  return useQuery({
+    queryKey: toolsetKeys.publicVersions(handle ?? "", slug ?? ""),
+    enabled: Boolean(handle && slug),
+    retry: false,
+    queryFn: () => listPublicToolsetVersions(handle!, slug!),
+  });
+}
+
+export function useToolsetByToken(token: string | null, v: number | null) {
+  return useQuery({ queryKey: toolsetKeys.byToken(token ?? "", v), enabled: Boolean(token), retry: false, queryFn: () => getToolsetByToken(token!, v) });
+}
+
+export function usePublicHandle(handle: string | null) {
+  return useQuery({ queryKey: toolsetKeys.publicHandle(handle ?? ""), enabled: Boolean(handle), retry: false, queryFn: () => getPublicHandle(handle!) });
+}
+
+export function usePublicCategories() {
+  return useQuery({ queryKey: toolsetKeys.categories, retry: false, staleTime: 300_000, queryFn: listPublicCategories });
+}
 
 export function useToolsets() {
   return useQuery({ queryKey: toolsetKeys.all, retry: false, queryFn: () => listToolsets() });

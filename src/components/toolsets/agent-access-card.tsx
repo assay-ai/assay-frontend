@@ -15,6 +15,7 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
 import { parseMcpUrl, toolDisplay } from "@/features/connect/mcp-url";
 import {
+  updateAvailableFor,
   accessSummary,
   draftBody,
   draftChanges,
@@ -26,11 +27,14 @@ import {
   type AccessDraft,
 } from "@/features/toolsets/access-result";
 import { ACCESS_LABEL, PROVIDER_LIMITS_LABEL, VERIFIED_ONLY_LABEL } from "@/features/toolsets/labels";
-import { restrictToConnected, type AgentAccess, type AgentToolEffect, type ServerInUse } from "@/services/toolsets.service";
+import { restrictToConnected, type AgentAccess, type AgentToolEffect, type AllowedToolset, type ServerInUse } from "@/services/toolsets.service";
 import { cn } from "@/utils";
 import { parseAmountInput, toDecimal } from "@/utils/money";
 import { toast } from "@/utils/toast";
 
+import { AlwaysLoaded } from "./always-loaded";
+import { Chip } from "./toolset-bits";
+import { UpdateSheet, type UpdateTarget } from "./update-sheet";
 import { errorText, toolsetKeys, useAgentAccess, useAgentServers, useToolsets, useUpdateAccess } from "./use-toolsets";
 
 /**
@@ -161,7 +165,10 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
   const toggle = (list: string[], id: string, on: boolean) => (on ? [...new Set([...list, id])] : list.filter((x) => x !== id));
   const routable = access.tools.filter((t) => t.providersTotal > 0);
   const mySets = toolsets.data?.items ?? [];
-  const deletedSets = access.allowedToolsets.filter((t) => t.deleted);
+  const deletedSets = access.allowedToolsets.filter((t) => t.deleted && t.own !== false);
+  // Other organizations' tool sets: each locked to a version, with "Update available" when a newer one is out.
+  const sharedSets = access.allowedToolsets.filter((t) => t.own === false);
+  const [updating, setUpdating] = React.useState<UpdateTarget | null>(null);
   const restricted = draft.mode === "RESTRICTED";
   const excludeChanged = Boolean(body?.rules?.excludeProviderIds);
   const providers = catalogue.providers;
@@ -216,7 +223,7 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
         <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-01 bg-02 p-3" data-testid="access-choices">
           <fieldset className="flex flex-col gap-1.5">
             <legend className="pb-1 text-label-13 text-01">Tool sets</legend>
-            {mySets.length === 0 && deletedSets.length === 0 ? (
+            {mySets.length === 0 && deletedSets.length === 0 && sharedSets.length === 0 ? (
               <p className="text-body-xs text-03">
                 No tool sets yet.{" "}
                 <Link href="/toolsets/mine" className="text-primary-600 hover:underline">
@@ -255,6 +262,31 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
               <p key={set.toolsetId} className="text-body-xs text-warning-700">
                 A tool set it was allowed was deleted by its owner; its tools are no longer allowed through it.
               </p>
+            ))}
+            {sharedSets.map((set) => (
+              <SharedSetRow
+                key={set.toolsetId}
+                set={set}
+                checked={draft.toolsets.some((t) => t.toolsetId === set.toolsetId)}
+                onToggle={(on) =>
+                  patch({
+                    toolsets: on
+                      ? [...draft.toolsets, { toolsetId: set.toolsetId, viaUrlOnly: set.viaUrlOnly, version: set.version }]
+                      : draft.toolsets.filter((t) => t.toolsetId !== set.toolsetId),
+                  })
+                }
+                onUpdate={() => {
+                  const to = updateAvailableFor(set);
+                  if (!to || !set.version) return;
+                  setUpdating({
+                    choice: set.handle && set.slug ? { kind: "shared", handle: set.handle, slug: set.slug, version: set.version } : { kind: "toolset", slug: set.slug ?? "", version: set.version },
+                    name: set.name ?? "This tool set",
+                    from: set.version,
+                    to,
+                    access: { access, toolsetId: set.toolsetId },
+                  });
+                }}
+              />
             ))}
             {draft.toolsets.some((t) => t.viaUrlOnly) ? (
               <p className="text-body-xs text-03">
@@ -360,6 +392,12 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
         />
       </div>
 
+      <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-01 p-3">
+        <AlwaysLoaded access={access} agentName={agentName} />
+      </div>
+
+      <UpdateSheet target={updating} onOpenChange={(open) => !open && setUpdating(null)} />
+
       {!restricted ? (
         <details className="rounded-lg border border-01 px-3 py-2.5">
           <summary className="min-h-10 cursor-pointer select-none content-center text-label-13 text-01 tablet:min-h-0">Result per tool</summary>
@@ -393,6 +431,44 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
           </Button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+const STATUS_NOTICE: Record<string, string> = {
+  DELETED: "Tool set deleted by its owner. This agent keeps the tools of the version it is locked to.",
+  NOT_SHARED: "Its owner stopped sharing it. If it is allowed only through its own URL, its tools stop when that URL stops.",
+  REMOVED: "This tool set was removed by Assay. It allows nothing now.",
+};
+
+/** Another organization's tool set this agent may use: its lock, its update, its state. */
+function SharedSetRow({ set, checked, onToggle, onUpdate }: { set: AllowedToolset; checked: boolean; onToggle: (on: boolean) => void; onUpdate: () => void }) {
+  const next = updateAvailableFor(set);
+  const notice = set.status ? STATUS_NOTICE[set.status] : undefined;
+  return (
+    <div className="flex flex-col gap-1 rounded-md bg-01 px-2.5 py-1.5" data-testid="shared-set-row">
+      <div className="flex flex-col gap-1 tablet:flex-row tablet:items-center tablet:gap-3">
+        <Checkbox
+          className="min-h-10 min-w-0 flex-1 tablet:min-h-0"
+          checked={checked}
+          onChange={(e) => onToggle(e.target.checked)}
+          label={
+            <span className="[overflow-wrap:anywhere]">
+              {set.name ?? "A shared tool set"}{" "}
+              <span className="text-body-xs text-03">
+                · {set.handle && set.slug ? `@${set.handle}/${set.slug} · ` : ""}
+                {set.version ? `locked to v${set.version}` : "always latest"}
+              </span>
+            </span>
+          }
+        />
+        {next ? (
+          <button type="button" className="min-h-10 self-start pl-7 tablet:min-h-0 tablet:pl-0" onClick={onUpdate} data-testid="access-update">
+            <Chip tone="primary">Update available: v{next}</Chip>
+          </button>
+        ) : null}
+      </div>
+      {notice ? <p className="pl-7 text-body-xs text-warning-700">{notice}</p> : null}
     </div>
   );
 }
