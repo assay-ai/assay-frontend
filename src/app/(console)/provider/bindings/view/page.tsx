@@ -265,6 +265,7 @@ function OverviewContent() {
   const choices = tool ? majorChoices(tool) : [];
   const served = binding && choices.length > 0 ? termsOf(binding) : null;
   const move = served ? moveNotice(served, choices) : null;
+  const addMajor = choices.find((c) => c.status === "ACTIVE" && c.current)?.major ?? choices.find((c) => c.status === "ACTIVE")?.major ?? null;
 
   let primary: React.ReactNode = null;
   if (binding?.status === "DRAFT") {
@@ -328,11 +329,14 @@ function OverviewContent() {
           {move ? (
             <Banner
               tone="warning"
-              title="Move this listing to the newer version"
+              title={addMajor ? `Add v${addMajor} to keep this listing serving` : "Move this listing to the newer version"}
               description={move}
               action={
-                <Link href={routes.bindingWizard(bindingId, "connect")} className="text-label-13 text-primary-600 underline">
-                  Update and test
+                <Link
+                  href={routes.bindingWizard(bindingId, "connect")}
+                  className="touch-target inline-flex shrink-0 items-center rounded-md border border-02 bg-01 px-3 text-label-13 text-01 hover:bg-02"
+                >
+                  {addMajor ? `Add v${addMajor} and test` : "Update and test"}
                 </Link>
               }
             />
