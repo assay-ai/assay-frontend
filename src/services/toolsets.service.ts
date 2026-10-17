@@ -34,6 +34,14 @@ export interface ToolsetEntryInput {
   maxPrice: { amount: string; asset: string } | null;
   minQuality: number | null;
   onEmpty: OnEmpty;
+  /**
+   * T3: the contract majors this entry routes to, `^1` or `^1 || ^2`. Omitted:
+   * an entry already in the Draft keeps its range, a new one gets the tool's
+   * current major. null (read): follows the current major.
+   */
+  toolVersionRange?: string | null;
+  /** T3: "Must return" — output fields every serving provider must return (at most 20). */
+  requireOutputFields?: string[];
 }
 
 export interface ToolsetEntry extends Omit<ToolsetEntryInput, "maxPrice"> {
@@ -156,6 +164,10 @@ export interface ToolsetVersionEntry {
   maxPrice: Money | null;
   minQuality: number | null;
   onEmpty: OnEmpty;
+  /** T3. */
+  toolVersionRange?: string | null;
+  /** T3: "Must return". */
+  requireOutputFields?: string[];
 }
 
 export interface ToolsetVersion extends ToolsetVersionSummary {
@@ -472,8 +484,12 @@ export interface RefusedProvider {
   providerId: string;
   /** The provider's name, also after it was delisted; null when unknown. */
   providerName: string | null;
+  /** …, T3: MISSING_OUTPUT_FIELD | UNSUPPORTED_INPUT_FIELD | CONTRACT_VERSION_MISMATCH. */
   reason: string;
-  source: "AGENT" | "TOOLSET" | string;
+  /** Whose rule dropped it; T3 adds REQUEST (the call's own arguments) and MIGRATION (a contract version the binding does not serve). */
+  source: "AGENT" | "TOOLSET" | "REQUEST" | "MIGRATION" | string;
+  /** T3: on MISSING_OUTPUT_FIELD and UNSUPPORTED_INPUT_FIELD, the fields. */
+  fields?: string[];
   detail: string;
   rule?: string;
 }
