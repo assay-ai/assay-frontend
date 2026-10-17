@@ -1,3 +1,4 @@
+import { readUpdateNotice, updateNoticeHref } from "@/features/toolsets/sharing";
 import { routes } from "@/libs/routes";
 
 /**
@@ -14,8 +15,13 @@ export function attentionAction(note: {
   event: string;
   subjectType?: string | null;
   subjectId?: string | null;
+  payload?: unknown;
 }): AttentionAction | null {
   switch (note.event) {
+    case "toolset.update_available": {
+      const notice = readUpdateNotice(note.payload);
+      return notice ? { label: "See what changed", href: updateNoticeHref(notice) } : { label: "Review agents", href: "/agents" };
+    }
     case "balance.low":
     case "balance.zero":
     case "deposit.failed":

@@ -30,7 +30,7 @@ export function availableChannels(raw: string | undefined = process.env.NEXT_PUB
 }
 
 export interface AlertPreset {
-  id: "money-security" | "spend" | "summary";
+  id: "money-security" | "spend" | "toolsets" | "summary";
   title: string;
   description: string;
   events: readonly NotificationEvent[];
@@ -63,6 +63,13 @@ export const ALERT_PRESETS: readonly AlertPreset[] = [
     title: "Spend warnings",
     description: "A spend limit nearly reached, unusual spending speed, free calls used up, a call not charged.",
     events: ["spend.threshold_crossed", "velocity.anomaly", "free_quota.exhausted", "payment_intent.refunded", "slash.compensation_received"],
+    alwaysOn: false,
+  },
+  {
+    id: "toolsets",
+    title: "Tool set updates",
+    description: "A tool set your agents use has a new version, with what changed. Nothing moves until you choose.",
+    events: ["toolset.update_available"],
     alwaysOn: false,
   },
   {

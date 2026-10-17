@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Inbox, List, Mail, MessageSquare, Pencil, Smartphone, Webhook } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,8 @@ import {
   type AlertPreset,
   type ExternalChannel,
 } from "@/features/buyer/alert-presets";
+import { attentionAction } from "@/features/buyer/attention-action";
+import { readUpdateNotice, updateNoticeText } from "@/features/toolsets/sharing";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { plainError } from "@/libs/plain-language";
 import { ApiError } from "@/libs/ApiClient";
@@ -71,11 +74,23 @@ import { PageHeader, StatusPill } from "./chrome";
 interface Notification {
   id: string;
   event: string;
+  payload?: unknown;
+  subjectType?: string | null;
+  subjectId?: string | null;
   severity: "INFO" | "WARNING" | "CRITICAL";
   title: string;
   body: string;
   readAt: string | null;
   createdAt: string;
+}
+
+/** The body as a person reads it; a tool-set update is told from its payload, in plain words. */
+function alertBody(item: Notification): string {
+  if (item.event === "toolset.update_available") {
+    const notice = readUpdateNotice(item.payload);
+    if (notice) return updateNoticeText(notice);
+  }
+  return item.body;
 }
 
 const SEVERITY_TONE = {
@@ -485,7 +500,12 @@ export function AlertsView() {
                         <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-03" />
                       )}
                     </button>
-                    <p className="text-body-13 text-02">{item.body}</p>
+                    <p className="text-body-13 text-02">{alertBody(item)}</p>
+                    {item.event === "toolset.update_available" && attentionAction(item) ? (
+                      <Link href={attentionAction(item)!.href} className="min-h-10 self-start content-center text-label-13 font-semibold text-primary-600 hover:underline tablet:min-h-0">
+                        {attentionAction(item)!.label}
+                      </Link>
+                    ) : null}
                     {expanded ? (
                       <div className="flex flex-col gap-1.5 border-t border-01 pt-2">
                         {deliveriesQuery.isPending ? (
