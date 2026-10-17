@@ -8,6 +8,7 @@ import { plainError } from "@/libs/plain-language";
 import {
   getPublicHandle,
   getPublicToolset,
+  getPublicToolsetVersion,
   getToolsetByToken,
   listPublicCategories,
   listPublicToolsets,
@@ -51,7 +52,8 @@ export const toolsetKeys = {
   publicList: (query: ListPublicToolsetsQuery) => ["public-toolsets", query] as const,
   publicPage: (handle: string, slug: string) => ["public-toolset", handle, slug] as const,
   publicVersions: (handle: string, slug: string) => ["public-toolset", handle, slug, "versions"] as const,
-  byToken: (token: string, v: number | null) => ["public-toolset-token", token, v ?? "latest"] as const,
+  byToken: (token: string, v: number | null, diffFrom: number | null = null) => ["public-toolset-token", token, v ?? "latest", diffFrom ?? "none"] as const,
+  publicVersion: (handle: string, slug: string, v: number, diffFrom: number | null) => ["public-toolset", handle, slug, "versions", v, diffFrom ?? "none"] as const,
   publicHandle: (handle: string) => ["public-handle", handle] as const,
   categories: ["public-categories"] as const,
 };
@@ -108,8 +110,24 @@ export function usePublicToolsetVersions(handle: string | null, slug: string | n
   });
 }
 
-export function useToolsetByToken(token: string | null, v: number | null) {
-  return useQuery({ queryKey: toolsetKeys.byToken(token ?? "", v), enabled: Boolean(token), retry: false, queryFn: () => getToolsetByToken(token!, v) });
+export function useToolsetByToken(token: string | null, v: number | null, diffFrom: number | null = null) {
+  return useQuery({
+    queryKey: toolsetKeys.byToken(token ?? "", v, diffFrom),
+    enabled: Boolean(token),
+    retry: false,
+    queryFn: () => getToolsetByToken(token!, v, diffFrom),
+  });
+}
+
+/** One published version of a listed set, with the diff from `diffFrom` ("Update available"). */
+export function usePublicToolsetVersion(handle: string | null, slug: string | null, v: number | null, diffFrom: number | null) {
+  return useQuery({
+    queryKey: toolsetKeys.publicVersion(handle ?? "", slug ?? "", v ?? 0, diffFrom),
+    enabled: Boolean(handle && slug && v),
+    retry: false,
+    staleTime: 300_000,
+    queryFn: () => getPublicToolsetVersion(handle!, slug!, v!, diffFrom),
+  });
 }
 
 export function usePublicHandle(handle: string | null) {

@@ -16,6 +16,7 @@ import {
   diffSnapshots,
   handleErrorView,
   handleProblem,
+  isReservedHandle,
   normaliseHandle,
   shareDialogModel,
   sharedLink,
@@ -40,7 +41,7 @@ import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
 
 import { CopyLine, DiffView } from "./toolset-bits";
-import { errorText, toolsetKeys, useOrgHandle, useToolsetVersion } from "./use-toolsets";
+import { errorText, toolsetKeys, useOrgHandle, useToolset, useToolsetVersion } from "./use-toolsets";
 
 /**
  * The Share dialog (design spec §7.7, §7.10): one dialog, four decisions —
@@ -58,6 +59,28 @@ export function ShareDialog({ set, open, onOpenChange }: { set: Toolset; open: b
   );
 }
 
+/** Share from a list row: loads the tool set (its Draft is needed for the diff), then the same dialog. */
+export function ShareById({ id, onOpenChange }: { id: string | null; onOpenChange: (open: boolean) => void }) {
+  const query = useToolset(id);
+  return (
+    <Sheet open={id !== null} onOpenChange={onOpenChange}>
+      <SheetContent className="tablet:max-w-[600px]">
+        {id === null ? null : query.data ? (
+          <ShareBody set={query.data} onDone={() => onOpenChange(false)} />
+        ) : (
+          <>
+            <SheetHeader>
+              <SheetTitle>Share</SheetTitle>
+              <SheetDescription>{query.isError ? errorText(query.error) : "Loading the tool set…"}</SheetDescription>
+            </SheetHeader>
+            <div className="px-[18px] pb-4">{query.isError ? null : <Skeleton className="h-32 w-full" />}</div>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 const VISIBILITIES: ToolsetVisibility[] = ["PRIVATE", "UNLISTED", "PUBLIC"];
 
 export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void }) {
@@ -65,7 +88,9 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
   const handle = useOrgHandle();
   const latest = useToolsetVersion(set.id, set.latestVersion ?? null);
   const current = visibilityOf(set);
-  const [visibility, setVisibility] = React.useState<ToolsetVisibility>(current === "PRIVATE" ? "UNLISTED" : current);
+  // Starts at where it stands now; nothing is published until the person picks.
+  const [visibility, setVisibility] = React.useState<ToolsetVisibility>(current);
+  const [touched, setTouched] = React.useState(false);
   const [name, setName] = React.useState("");
   const [handleError, setHandleError] = React.useState<HandleErrorView | null>(null);
   const [changelog, setChangelog] = React.useState<string | null>(null);
@@ -91,6 +116,7 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
   const share = useMutation({
     mutationFn: async () => {
       if (model.needsHandle) {
+        if (isReservedHandle(name)) throw new HandleRefused(handleErrorView("TOOLSET_HANDLE_INVALID", { reason: "RESERVED" }, name));
         const problem = handleProblem(name);
         if (problem) throw new HandleProblem(problem);
         try {
@@ -120,7 +146,13 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
     },
   });
   const rotate = useMutation({ mutationFn: () => rotateUnlistedToken(set.id), onSuccess: (r) => refresh(r.toolset) });
-  const stop = useMutation({ mutationFn: () => unpublishToolset(set.id), onSuccess: (r) => refresh(r.toolset) });
+  const stop = useMutation({
+    mutationFn: () => unpublishToolset(set.id),
+    onSuccess: (r) => {
+      refresh(r.toolset);
+      onDone();
+    },
+  });
 
   const link = sharedLink(set);
   const page = sharedPage(set);
@@ -182,7 +214,17 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
                 visibility === v ? "border-primary-500 bg-primary-10" : "border-02 bg-01",
               )}
             >
-              <input type="radio" name="share-visibility" className="mt-1 accent-primary-500" checked={visibility === v} onChange={() => setVisibility(v)} />
+              <input
+                type="radio"
+                name="share-visibility"
+                className="mt-1 accent-primary-500"
+                checked={visibility === v}
+                onChange={() => {
+                  setVisibility(v);
+                  setTouched(true);
+                }}
+                onClick={() => setTouched(true)}
+              />
               <span className="flex min-w-0 flex-col">
                 <span className="text-label-13 text-01">
                   {VISIBILITY_LABELS[v]}
@@ -194,7 +236,25 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
           ))}
         </fieldset>
 
-        {model.needsHandle ? (
+        {model.needsHandle && handleError?.action ? (
+          <section className="flex flex-col gap-2 rounded-lg border border-warning-20 bg-warning-10 p-3" data-testid="share-claim-refused" role="alert">
+            <span className="text-label-13 text-01">One step before a public name</span>
+            <p className="text-body-13 text-warning-700">{handleError.text}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button asChild size="sm">
+                <a href={handleError.action.href} target="_blank" rel="noopener noreferrer">
+                  {handleError.action.label} (new tab)
+                </a>
+              </Button>
+              <Button size="sm" variant="secondary" loading={share.isPending} onClick={() => share.mutate()}>
+                I&apos;ve done it: try again
+              </Button>
+            </div>
+            <p className="text-body-xs text-03">
+              Everything here stays as it is{name ? `, including @${normaliseHandle(name)}` : ""}. Or share it with your team only for now.
+            </p>
+          </section>
+        ) : model.needsHandle ? (
           handle.isPending ? (
             <Skeleton className="h-16 w-full" />
           ) : (
@@ -203,11 +263,11 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
                 Your {PUBLIC_NAME_LABEL.toLowerCase()}
               </label>
               <p className="text-body-xs text-03">Shown as @name on everything you share. Choose it once; it can change until the first share.</p>
-              <div className={cn("flex min-h-10 items-center gap-1 rounded-xl border bg-shades-L5 px-3", handleError ? "border-danger-500" : "border-transparent")}>
+              <div className={cn("flex min-h-11 items-center gap-1 rounded-xl border bg-shades-L5 px-3", handleError ? "border-danger-500" : "border-transparent")}>
                 <AtSign aria-hidden="true" className="size-4 shrink-0 text-03" />
                 <input
                   id="share-handle-input"
-                  className="min-w-0 flex-1 bg-transparent py-2 text-body-sm text-01 outline-none"
+                  className="min-h-10 min-w-0 flex-1 bg-transparent py-2 text-body-sm text-01 outline-none"
                   placeholder="your-team"
                   autoComplete="off"
                   autoCapitalize="none"
@@ -230,7 +290,7 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
                         <button
                           key={s}
                           type="button"
-                          className="min-h-10 rounded-full border border-02 bg-01 px-3 font-mono text-mono-12 text-01 hover:border-primary-500 tablet:min-h-0 tablet:py-1"
+                          className="min-h-10 rounded-full border border-02 bg-01 px-3 font-mono text-mono-12 text-01 hover:border-primary-500"
                           onClick={() => {
                             setName(s);
                             setHandleError(null);
@@ -284,13 +344,25 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
           </span>
         </p>
 
-        <p className="text-body-13 text-02">{model.nothingToDo ? `Nothing changed since v${set.latestVersion}: no need to publish again.` : model.outcome}</p>
+        <p className="text-body-13 text-02" data-testid="share-outcome">
+          {current === "PRIVATE" && !touched
+            ? "Choose who can use it above. Nothing is shared until you do."
+            : model.nothingToDo
+              ? `Nothing changed since v${set.latestVersion}: no need to publish again.`
+              : model.outcome}
+        </p>
       </div>
 
       <div className="sticky bottom-0 z-10 flex w-full flex-wrap items-center gap-2 border-t border-01 bg-01 px-[18px] py-3">
         <Button
           loading={share.isPending}
-          disabled={model.nothingToDo || set.removed || loadingDiff || (model.needsHandle && !name.trim())}
+          disabled={
+            model.nothingToDo ||
+            set.removed ||
+            loadingDiff ||
+            (current === "PRIVATE" && !touched) ||
+            (model.needsHandle && (!name.trim() || Boolean(handleError?.action)))
+          }
           onClick={() => share.mutate()}
           data-testid="share-primary"
         >

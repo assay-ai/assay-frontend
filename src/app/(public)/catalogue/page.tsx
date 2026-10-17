@@ -203,7 +203,13 @@ export default function CataloguePage() {
           </button>
         </p>
       ) : null}
-      <header className="flex flex-col gap-3">
+      {view === "toolsets" ? (
+        <header className="flex flex-col gap-1">
+          <h1 className="text-heading-md text-01">Tool sets</h1>
+          <p className="text-body-13 text-02">Ready-made groups of tools, each with its own server URL. Connect one in three clicks, or make your own version.</p>
+        </header>
+      ) : (
+        <header className="flex flex-col gap-3">
         <h1 className="text-heading-lg text-01 tablet:text-display-md">Tools your agent can pay for — only when they work</h1>
         <p className="max-w-[720px] text-body-md text-02">
           Every tool here is served by providers who put up a <Term k="stake">stake</Term>. Each result is checked
@@ -218,7 +224,8 @@ export default function CataloguePage() {
           ) : null}
         </div>
         <NotChargedSummary />
-      </header>
+        </header>
+      )}
 
       <section aria-labelledby="list-title" className="flex flex-col gap-3">
         <div className="flex flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
@@ -317,7 +324,7 @@ export default function CataloguePage() {
         )}
       </section>
 
-      <NotChargedProof />
+      {view === "toolsets" ? null : <NotChargedProof />}
 
       <section className="flex flex-col gap-3 rounded-xl border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:justify-between tablet:p-6">
         <div className="flex flex-col gap-1">

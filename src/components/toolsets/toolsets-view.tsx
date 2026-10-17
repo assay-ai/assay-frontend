@@ -19,6 +19,7 @@ import { createToolset, type ToolsetSummary } from "@/services/toolsets.service"
 import { toast } from "@/utils/toast";
 
 import { ConnectSheet } from "./connect-sheet";
+import { ShareById } from "./share-dialog";
 import { Chip, statusChipTone } from "./toolset-bits";
 import { errorText, toolsetKeys, useToolsets } from "./use-toolsets";
 
@@ -40,6 +41,7 @@ export function ToolsetsView() {
   const [creating, setCreating] = React.useState(false);
   const [name, setName] = React.useState("");
   const [connect, setConnect] = React.useState<string | null>(null);
+  const [sharing, setSharing] = React.useState<string | null>(null);
   const [slugHint, setSlugHint] = React.useState<string | null>(null);
 
   // "Start from tools you've used": the agents' recent calls, most used first.
@@ -156,17 +158,18 @@ export function ToolsetsView() {
       ) : (
         <ul className="flex w-full flex-col overflow-hidden rounded-xl border border-01 bg-01 shadow-hair" data-testid="toolsets-list">
           {sets.map((set) => (
-            <ToolsetRow key={set.id} set={set} onConnect={() => setConnect(set.mcpUrl)} />
+            <ToolsetRow key={set.id} set={set} onConnect={() => setConnect(set.mcpUrl)} onShare={() => setSharing(set.id)} />
           ))}
         </ul>
       )}
 
       <ConnectSheet open={connect !== null} onOpenChange={(open) => !open && setConnect(null)} initialUrl={connect} />
+      <ShareById id={sharing} onOpenChange={(open) => !open && setSharing(null)} />
     </div>
   );
 }
 
-function ToolsetRow({ set, onConnect }: { set: ToolsetSummary; onConnect: () => void }) {
+function ToolsetRow({ set, onConnect, onShare }: { set: ToolsetSummary; onConnect: () => void; onShare: () => void }) {
   return (
     <li className="flex w-full flex-col gap-2 border-b border-01 px-4 py-3.5 last:border-b-0 tablet:flex-row tablet:items-center tablet:px-5" data-testid="toolset-row">
       <Link href={toolsetHref(set.id)} className="flex min-w-0 flex-1 items-center gap-3 hover:underline">
@@ -185,6 +188,9 @@ function ToolsetRow({ set, onConnect }: { set: ToolsetSummary; onConnect: () => 
       <div className="flex shrink-0 gap-2">
         <Button size="sm" variant="secondary" onClick={onConnect}>
           Connect
+        </Button>
+        <Button size="sm" variant="secondary" onClick={onShare} disabled={set.removed} data-testid="row-share">
+          Share
         </Button>
         <Button size="sm" variant="ghost" asChild className="hidden tablet:inline-flex">
           <Link href={toolsetHref(set.id)}>Edit</Link>
