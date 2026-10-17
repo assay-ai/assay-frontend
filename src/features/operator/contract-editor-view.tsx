@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Clock, Lightbulb } from "lucide-react";
+import { ArrowLeft, ChevronDown, Clock, Lightbulb } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -27,7 +27,7 @@ import {
 } from "@/features/contracts/text";
 import type { ContractSchema, OperatorTool, VersionBump } from "@/interfaces/contracts";
 import { ApiError } from "@/libs/ApiClient";
-import { discardContractDraft, getOperatorTool, listOperatorTools, saveContractDraft } from "@/services/operator-contracts.service";
+import { discardContractDraft, getOperatorTool, getOperatorToolRequest, listOperatorTools, saveContractDraft } from "@/services/operator-contracts.service";
 import { listApprovals } from "@/services/operator.service";
 import { cn } from "@/utils";
 
@@ -87,7 +87,7 @@ function statusChipClass(status: string): string {
   return "bg-03 text-02";
 }
 
-export function ContractEditorScreen({ toolId }: { toolId: string }) {
+export function ContractEditorScreen({ toolId, fromRequest = "" }: { toolId: string; fromRequest?: string }) {
   const me = useOperatorSession();
   const canEdit = mayEditContracts(me.roles);
   const directory = useOperatorDirectory();
@@ -102,6 +102,17 @@ export function ContractEditorScreen({ toolId }: { toolId: string }) {
     retry: 0,
   });
 
+  // A tool created from a tool request starts its first version with the request's words.
+  const requestQuery = useQuery({
+    queryKey: ["operator", "tool-requests", fromRequest],
+    queryFn: () => getOperatorToolRequest(fromRequest),
+    enabled: fromRequest !== "",
+    retry: 0,
+  });
+  const seed = React.useMemo(
+    () => (requestQuery.data ? { summary: requestQuery.data.title, description: requestQuery.data.description } : null),
+    [requestQuery.data],
+  );
   const [result, setResult] = React.useState<React.ReactNode>(null);
   const [publishPlan, setPublishPlan] = React.useState<PublishPlan | null>(null);
   const [makeCurrent, setMakeCurrent] = React.useState<MajorRow | null>(null);
@@ -234,6 +245,8 @@ export function ContractEditorScreen({ toolId }: { toolId: string }) {
         tool={tool}
         canEdit={canEdit}
         frozen={pending.publish !== null}
+        frozenHref={pending.publish ? approvalHref(pending.publish.id) : null}
+        seed={tool.versions.length === 0 && !tool.draft ? seed : null}
         onPublish={setPublishPlan}
       />
 
@@ -273,7 +286,7 @@ function WaitingLine({ text, by, at, href }: { text: string; by: string; at: str
       </p>
       <p>
         {by} asked <UtcTime value={at} midSentence />.{" "}
-        <Link href={href} className="hit-area text-primary-600 hover:underline">
+        <Link href={href} className="touch-target inline-flex items-center text-primary-600 hover:underline">
           Open the request
         </Link>
       </p>
@@ -310,7 +323,7 @@ function MajorLine({
           {row.active !== row.eligible && row.status !== "RETIRED" ? ` · ${row.active} live provider${row.active === 1 ? "" : "s"} list it` : ""}
           {row.sunsetText ? ` · ${row.sunsetText}` : ""}
         </p>
-        {row.deprecateBlocked && multipleMajors && canEdit ? <p className="text-body-xs text-03">{row.deprecateBlocked}</p> : null}
+        {row.deprecateBlocked && canEdit ? <p className="text-body-xs text-03">{row.deprecateBlocked}</p> : null}
       </div>
       {canEdit ? (
         <div className="flex flex-wrap gap-2">
@@ -333,8 +346,15 @@ function MajorLine({
 function PublishedVersions({ tool }: { tool: OperatorTool }) {
   return (
     <details className="w-full rounded-xl border border-01 bg-01 [&_summary::-webkit-details-marker]:hidden">
-      <summary className="flex cursor-pointer items-center justify-between gap-2 px-4 py-3 text-label-md text-01">
-        Published versions <span className="text-body-13 tabular-nums text-03">{tool.versions.length}</span>
+      <summary className="group flex cursor-pointer items-center justify-between gap-2 px-4 py-3 text-label-md text-01">
+        <span>
+          Published versions <span className="text-body-13 tabular-nums text-03">({tool.versions.length})</span>
+        </span>
+        <span className="inline-flex items-center gap-1 text-label-13 text-primary-600">
+          <span className="group-open:hidden">Show</span>
+          <span className="hidden group-open:inline">Hide</span>
+          <ChevronDown aria-hidden="true" className="size-4 transition-transform group-open:rotate-180" />
+        </span>
       </summary>
       <ol className="flex flex-col divide-y divide-01 border-t border-01">
         {tool.versions.map((v) => (
@@ -364,17 +384,32 @@ function draftKey(tool: OperatorTool): string {
   return `${tool.id}:${tool.draft ? `${tool.draft.version}@${tool.draft.updatedAt}` : "none"}:${tool.versions.map((v) => v.version).join(",")}`;
 }
 
-function DraftEditor({ tool, canEdit, frozen, onPublish }: { tool: OperatorTool; canEdit: boolean; frozen: boolean; onPublish: (plan: PublishPlan) => void }) {
+function DraftEditor({
+  tool,
+  canEdit,
+  frozen,
+  frozenHref,
+  seed,
+  onPublish,
+}: {
+  tool: OperatorTool;
+  canEdit: boolean;
+  frozen: boolean;
+  frozenHref: string | null;
+  /** A first version's summary and description, from the tool request it came from. */
+  seed: { summary: string; description: string } | null;
+  onPublish: (plan: PublishPlan) => void;
+}) {
   const queryClient = useQueryClient();
-  const [form, setForm] = React.useState<ContractForm>(() => formFor(tool));
+  const [form, setForm] = React.useState<ContractForm>(() => formFor(tool, seed));
   const [confirmDiscard, setConfirmDiscard] = React.useState(false);
   const key = draftKey(tool);
   // A saved, discarded or published draft resets the form to what the server holds.
   React.useEffect(() => {
-    setForm(formFor(tool));
+    setForm(formFor(tool, seed));
     setConfirmDiscard(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, seed?.summary]);
 
   const dirty = isDirty(form, tool);
   const preview = React.useMemo(() => livePreview(form, tool.versions), [form, tool.versions]);
@@ -404,7 +439,7 @@ function DraftEditor({ tool, canEdit, frozen, onPublish }: { tool: OperatorTool;
   const publishBlock = frozen
     ? "A publish is already waiting for approval."
     : preview.problems.length > 0
-      ? "Fix the problems below first."
+      ? `Fix first: ${preview.problems[0]}${preview.problems.length > 1 ? ` (and ${preview.problems.length - 1} more below)` : ""}`
       : !tool.draft && !dirty
         ? "Change something first."
         : null;
@@ -442,6 +477,15 @@ function DraftEditor({ tool, canEdit, frozen, onPublish }: { tool: OperatorTool;
           )}
           {dirty ? <span className="text-warning-700"> Unsaved changes.</span> : null}
         </p>
+        {preview.changes.length > 0 && preview.baseSemver ? (
+          <p className="rounded-lg bg-02 px-3 py-2 text-body-13 text-01 [overflow-wrap:anywhere]">
+            <span className="text-label-13">
+              v{preview.baseSemver} → v{preview.nextSemver}:
+            </span>{" "}
+            {changeText(preview.changes[0]!)}
+            {preview.changes.length > 1 ? ` and ${preview.changes.length - 1} more (see below)` : ""}
+          </p>
+        ) : null}
         {frozen ? <p className="text-body-13 text-warning-700">The draft is locked while its publish waits for approval. Reject that request in Approvals to edit it.</p> : null}
         {!canEdit ? <p className="text-body-13 text-03">Read only: editing needs the Policy author or Policy approver role.</p> : null}
       </header>
@@ -547,10 +591,19 @@ function DraftEditor({ tool, canEdit, frozen, onPublish }: { tool: OperatorTool;
               ) : null}
             </div>
             <div className="flex flex-col gap-1 tablet:items-end">
-              <Button disabled={publishBlock !== null || locked} onClick={startPublish}>
+              <Button disabled={publishBlock !== null || locked} onClick={startPublish} aria-describedby="publish-why">
                 {preview.firstVersion ? "Publish first version…" : preview.bump ? `Publish v${preview.nextSemver}…` : "Publish…"}
               </Button>
-              {publishBlock && !locked ? <span className="text-body-xs text-03">{publishBlock}</span> : null}
+              {frozen && canEdit ? (
+                <span id="publish-why" className="max-w-[360px] text-body-xs text-warning-700 tablet:text-right">
+                  Locked: a publish of this draft is waiting for a second person.{" "}
+                  <Link href={frozenHref ?? "/operator/approvals"} className="touch-target inline-flex items-center text-primary-600 hover:underline">
+                    Open it in Approvals
+                  </Link>
+                </span>
+              ) : publishBlock && !locked ? (
+                <span id="publish-why" className="max-w-[360px] text-body-xs text-03 tablet:text-right">{publishBlock}</span>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -610,7 +663,12 @@ function TextBlock({
         wrap={mono ? "off" : undefined}
         aria-invalid={error ? true : undefined}
         aria-describedby={`${id}-hint`}
-        className={cn("rounded-md border border-02 bg-01", mono && "overflow-x-auto font-mono text-mono-12", error && "border-danger-500")}
+        className={cn(
+          "rounded-md border border-02 bg-01",
+          // Grows with its content (up to most of the screen), so scrolling the page is not trapped inside it.
+          mono && "max-h-[70vh] overflow-x-auto font-mono text-mono-12 [field-sizing:content]",
+          error && "border-danger-500",
+        )}
       />
       <p id={`${id}-hint`} role={error ? "alert" : undefined} className={cn("text-body-xs", error ? "text-danger-600" : "text-03")}>
         {error ?? hint}
@@ -674,10 +732,35 @@ function SchemaBlock({
               ),
             )}
           </div>
+          {side === "output"
+            ? fields
+                .filter((name) => !required.has(name) && !optional.includes(name))
+                .map((name) => (
+                  <div key={name} role="status" className="flex w-full flex-col gap-2 rounded-lg border border-warning-20 bg-warning-10 px-3 py-2.5 tablet:flex-row tablet:items-center tablet:justify-between">
+                    <p className="text-body-13 text-02">
+                      You unticked <span className="font-mono text-mono-12 text-01">{name}</span>, so it is now neither an extra field nor returned by every provider. Pick one:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="secondary" size="sm" disabled={disabled} onClick={() => onToggle(name, true)}>
+                        Keep as extra field
+                      </Button>
+                      <Button variant="secondary" size="sm" disabled={disabled} onClick={() => schema && onText(withRequired(schema, name))}>
+                        Make it required
+                      </Button>
+                    </div>
+                  </div>
+                ))
+            : null}
         </fieldset>
       ) : null}
     </div>
   );
+}
+
+/** The schema text with `name` added to "required": what "Make it required" writes. */
+function withRequired(schema: ContractSchema, name: string): string {
+  const required = Array.isArray(schema.required) ? schema.required : [];
+  return JSON.stringify({ ...schema, required: [...new Set([...required, name])] }, null, 2);
 }
 
 function PreviewPanel({ preview }: { preview: LivePreview }) {

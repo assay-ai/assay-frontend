@@ -98,7 +98,7 @@ describe("contract problems", () => {
     const shape = { ...base, outputSchema: { type: "object", properties: { temperature: { type: "number" }, note: { type: "string" } }, required: ["temperature"] } };
     const problems = contractProblems(shape);
     expect(problems).toHaveLength(1);
-    expect(problemText(problems[0]!)).toBe('Output "note" must be either required (every provider returns it) or optional (tick it under optional outputs).');
+    expect(problemText(problems[0]!)).toBe('Output "note" is neither required nor an extra field. Keep it as an extra field, or make it required.');
   });
 
   it("caps the summary at 200 characters on one line", () => {
