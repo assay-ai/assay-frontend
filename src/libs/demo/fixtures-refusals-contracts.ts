@@ -105,10 +105,23 @@ export function contractRefusedCalls(ids: ContractRefusalIds): RefusedCall[] {
 }
 
 /** `tool_version.deprecated` / `.retired`, for the buyer's alerts or the provider's Inbox. */
-export function contractNotices(role: "BUYER" | "PROVIDER"): unknown[] {
+export function contractNotices(role: "BUYER" | "PROVIDER", toolset?: { id: string; name: string }): unknown[] {
+  // One date for every screen: the version's own sunset (fixtures-contracts).
   const sunsetAt = weatherSunsetAt();
   const day = sunsetAt.slice(0, 10);
-  const payload = { toolId: WEATHER_TOOL_ID, toolName: "get_weather", major: 1, sunsetAt, replacement: "get_weather@2 (v2.0.0)", role };
+  const retired = demoRetiredMajor();
+  const payload = {
+    toolId: WEATHER_TOOL_ID,
+    toolName: "get_weather",
+    major: 1,
+    sunsetAt,
+    replacement: "get_weather@2 (v2.0.0)",
+    role,
+    // The buyer's tool set that routes get_weather to v1, so the notice opens it and offers "Allow v2".
+    ...(role === "BUYER" && toolset ? { toolsetId: toolset.id, toolsetName: toolset.name } : {}),
+  };
+  // A deprecation is told at least 90 days before its sunset; once retired, that notice is old and read.
+  const deprecatedAt = retired ? new Date(Date.parse(sunsetAt) - 100 * 86_400_000).toISOString() : demoMinutesAgo(3 * 24 * 60);
   const tag = role === "BUYER" ? "b" : "p";
   const notices: unknown[] = [
     {
@@ -120,8 +133,8 @@ export function contractNotices(role: "BUYER" | "PROVIDER"): unknown[] {
       subjectType: "tool",
       subjectId: WEATHER_TOOL_ID,
       payload,
-      readAt: null,
-      createdAt: demoMinutesAgo(3 * 24 * 60),
+      readAt: retired ? deprecatedAt : null,
+      createdAt: deprecatedAt,
     },
   ];
   if (demoRetiredMajor()) {

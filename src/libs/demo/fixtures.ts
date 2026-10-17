@@ -6,7 +6,7 @@ import { OPERATOR_FIXTURES } from "./fixtures-operator";
 import { PROVIDER_FIXTURES, providerNotifications } from "./fixtures-provider";
 import { PUBLIC_FIXTURES } from "./fixtures-public";
 import { contractNotices } from "./fixtures-refusals-contracts";
-import { demoToolsetNotifications, TOOLSET_FIXTURES } from "./fixtures-toolsets";
+import { DEMO_WEATHER_TOOLSET, demoToolsetNotifications, TOOLSET_FIXTURES } from "./fixtures-toolsets";
 
 /**
  * The stage set — DEMO ONLY. See `demo-api.ts` for the rules these obey.
@@ -93,7 +93,7 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
       const buyer = BUYER_FIXTURES.find((fixture) => fixture.method === "GET" && fixture.match === "/notifications");
       const feed = (buyer ? buyer.body(path, query) : { items: [], pageInfo: { nextCursor: null, hasMore: false } }) as { items: unknown[]; pageInfo: unknown };
       // `?connect=update-available`: a tool set "prod" uses has a new version (FR-17).
-      return { ...feed, items: [...demoToolsetNotifications(), ...contractNotices("BUYER"), ...feed.items] };
+      return { ...feed, items: [...demoToolsetNotifications(), ...contractNotices("BUYER", DEMO_WEATHER_TOOLSET), ...feed.items] };
     },
   },
   ...TOOLSET_FIXTURES,
