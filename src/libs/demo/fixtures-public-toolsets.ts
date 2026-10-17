@@ -1,4 +1,12 @@
-import type { PublicToolsetCard, PublicToolsetPage, PublicToolsetStats, PublicToolsetVersion } from "@/services/public-toolsets.service";
+import type {
+  PublicToolsetCard,
+  PublicToolsetDiff,
+  PublicToolsetEntry,
+  PublicToolsetPage,
+  PublicToolsetStats,
+  PublicToolsetVersion,
+  PublicToolsetVersionDetail,
+} from "@/services/public-toolsets.service";
 import type { Figure } from "@/services/toolsets.service";
 
 import { demoMinutesAgo } from "./demo-clock";
@@ -30,7 +38,8 @@ export interface DemoPublicSet {
   badge: "OFFICIAL" | "PROVIDER" | "COMMUNITY";
   /** Tool names, as `demoToolOffers()` spells them; unknown names are provider tools outside the catalogue. */
   tools: { name: string; providerMode?: "BEST" | "ONLY" | "EXCLUDE"; providerCount?: number; removed?: boolean }[];
-  versions: { version: number; ageDays: number; changelog: string; toolCount: number }[];
+  /** Newest first. `tools` lists the tool names that version held (default: the set's current tools). */
+  versions: { version: number; ageDays: number; changelog: string; toolCount: number; tools?: string[]; rulesChanged?: string[] }[];
   stats: Omit<PublicToolsetStats, "weekStart">;
   /** Days since first shared, for "New". */
   ageDays: number;
@@ -73,7 +82,7 @@ export const DEMO_PUBLIC_SETS: readonly DemoPublicSet[] = [
     badge: "OFFICIAL",
     tools: [{ name: "geocode_place" }, { name: "get_weather" }],
     versions: [
-      { version: 2, ageDays: 9, changelog: "Changed provider rules for get_weather.", toolCount: 2 },
+      { version: 2, ageDays: 9, changelog: "Changed provider rules for get_weather.", toolCount: 2, rulesChanged: ["get_weather"] },
       { version: 1, ageDays: 40, changelog: "First version: 2 tools.", toolCount: 2 },
     ],
     stats: { activeUsers: fig(140), agents: fig(310), calls30d: calls("48k", 48_000), copies: fig(20), trend: "UP", onLatestVersionPercent: 80 },
@@ -109,9 +118,9 @@ export const DEMO_PUBLIC_SETS: readonly DemoPublicSet[] = [
     tools: [{ name: "search_web" }, { name: "extract_page_text" }, { name: "search_wikipedia" }, { name: "summarize_document" }],
     versions: [
       { version: 4, ageDays: 3, changelog: "Added summarize_document.", toolCount: 4 },
-      { version: 3, ageDays: 15, changelog: "Changed provider rules for search_web.", toolCount: 3 },
-      { version: 2, ageDays: 28, changelog: "Added search_wikipedia.", toolCount: 3 },
-      { version: 1, ageDays: 40, changelog: "First version: 2 tools.", toolCount: 2 },
+      { version: 3, ageDays: 15, changelog: "Changed provider rules for search_web.", toolCount: 3, tools: ["search_web", "extract_page_text", "search_wikipedia"], rulesChanged: ["search_web"] },
+      { version: 2, ageDays: 28, changelog: "Added search_wikipedia.", toolCount: 3, tools: ["search_web", "extract_page_text", "search_wikipedia"] },
+      { version: 1, ageDays: 40, changelog: "First version: 2 tools.", toolCount: 2, tools: ["search_web", "extract_page_text"] },
     ],
     stats: { activeUsers: fig(210), agents: fig(480), calls30d: calls("96k", 96_000), copies: fig(35), trend: "UP", onLatestVersionPercent: 60 },
     ageDays: 40,
@@ -129,9 +138,9 @@ export const DEMO_PUBLIC_SETS: readonly DemoPublicSet[] = [
     badge: "COMMUNITY",
     tools: [{ name: "get_token_market" }, { name: "get_usd_eur_rate" }, { name: "Chain activity summary" }],
     versions: [
-      { version: 3, ageDays: 2, changelog: "Added get_usd_eur_rate. Changed provider rules for get_token_market.", toolCount: 3 },
-      { version: 2, ageDays: 20, changelog: "Added Chain activity summary.", toolCount: 2 },
-      { version: 1, ageDays: 34, changelog: "First version: 1 tool.", toolCount: 1 },
+      { version: 3, ageDays: 2, changelog: "Added get_usd_eur_rate. Changed provider rules for get_token_market.", toolCount: 3, rulesChanged: ["get_token_market"] },
+      { version: 2, ageDays: 20, changelog: "Added Chain activity summary.", toolCount: 2, tools: ["get_token_market", "Chain activity summary"] },
+      { version: 1, ageDays: 34, changelog: "First version: 1 tool.", toolCount: 1, tools: ["get_token_market"] },
     ],
     stats: { activeUsers: fig(35), agents: fig(60), calls30d: calls("12k", 12_000), copies: fig(10), trend: "UP", onLatestVersionPercent: 70 },
     ageDays: 34,
@@ -167,7 +176,7 @@ export const DEMO_PUBLIC_SETS: readonly DemoPublicSet[] = [
     tools: [{ name: "search_web" }, { name: "scrape_url" }, { name: "summarize_document" }, { name: "transcribe_audio", removed: true }],
     versions: [
       { version: 2, ageDays: 12, changelog: "Removed deep_research. Added scrape_url.", toolCount: 4 },
-      { version: 1, ageDays: 60, changelog: "First version: 3 tools.", toolCount: 3 },
+      { version: 1, ageDays: 60, changelog: "First version: 3 tools.", toolCount: 3, tools: ["search_web", "deep_research", "summarize_document"] },
     ],
     stats: { activeUsers: fig(120), agents: fig(200), calls30d: calls("35k", 35_000), copies: fig(15), trend: "DOWN", onLatestVersionPercent: 50 },
     ageDays: 60,
@@ -204,7 +213,7 @@ export const DEMO_PUBLIC_SETS: readonly DemoPublicSet[] = [
     tools: [{ name: "get_token_market" }, { name: "FX reference rates" }, { name: "cobalt__news_search" }],
     versions: [
       { version: 2, ageDays: 6, changelog: "Added cobalt__news_search.", toolCount: 3 },
-      { version: 1, ageDays: 25, changelog: "First version: 2 tools.", toolCount: 2 },
+      { version: 1, ageDays: 25, changelog: "First version: 2 tools.", toolCount: 2, tools: ["get_token_market", "FX reference rates"] },
     ],
     stats: FEW,
     ageDays: 25,
@@ -246,11 +255,67 @@ export function demoPublicCard(set: DemoPublicSet, host: string): PublicToolsetC
     toolIds: set.tools.map((t) => demoToolIdOf(set, t.name)),
     activeUsers: set.stats.activeUsers,
     mcpUrls: { latest, pinned, recommended: set.badge === "OFFICIAL" ? latest : pinned },
-    ...(set.routesToPublisher ? { routesToPublisher: true } : {}),
+    routesToPublisher: Boolean(set.routesToPublisher),
   };
 }
 
-export function demoPublicPage(set: DemoPublicSet, host: string, v?: number | null): PublicToolsetPage {
+function entriesOf(set: DemoPublicSet, names: readonly string[]): PublicToolsetEntry[] {
+  return names.map((name) => {
+    const t = set.tools.find((x) => x.name === name) ?? { name };
+    return {
+      toolId: demoToolIdOf(set, t.name),
+      toolName: t.name,
+      providerMode: ("providerMode" in t && t.providerMode) || "BEST",
+      providerCount: "providerMode" in t && t.providerMode && t.providerMode !== "BEST" ? (("providerCount" in t && t.providerCount) || 1) : 0,
+      minTier: null,
+      onEmpty: "FAIL",
+      removed: Boolean("removed" in t && t.removed),
+      // A tool outside the public catalogue is one maker's own: "Not reviewed".
+      notReviewed: !demoToolOffers().some((o) => o.name === t.name),
+    };
+  });
+}
+
+function toolsAt(set: DemoPublicSet, version: number): string[] {
+  return set.versions.find((x) => x.version === version)?.tools ?? set.tools.map((t) => t.name);
+}
+
+/** The diff between two published versions, as the backend computes it. */
+export function demoPublicDiff(set: DemoPublicSet, from: number, to: number): PublicToolsetDiff {
+  const before = toolsAt(set, from);
+  const after = toolsAt(set, to);
+  const rules = set.versions.filter((x) => x.version > from && x.version <= to).flatMap((x) => x.rulesChanged ?? []);
+  return {
+    from,
+    to,
+    added: after.filter((n) => !before.includes(n)),
+    removed: before.filter((n) => !after.includes(n)),
+    rulesChanged: [...new Set(rules)].filter((n) => before.includes(n) && after.includes(n)),
+    settingsChanged: [],
+  };
+}
+
+export function demoPublicVersionDetail(set: DemoPublicSet, v: number, diffFrom?: number | null): PublicToolsetVersionDetail | null {
+  const version = set.versions.find((x) => x.version === v);
+  if (!version || (diffFrom && !set.versions.some((x) => x.version === diffFrom))) return null;
+  const entries = entriesOf(set, toolsAt(set, v));
+  return {
+    version: v,
+    publishedAt: demoMinutesAgo(version.ageDays * DAY),
+    changelog: version.changelog,
+    toolCount: entries.length,
+    name: set.name,
+    description: set.description,
+    icon: null,
+    toolIds: entries.map((e) => e.toolId),
+    entries,
+    notReviewed: entries.some((e) => e.notReviewed),
+    routesToPublisher: Boolean(set.routesToPublisher),
+    diff: diffFrom ? demoPublicDiff(set, diffFrom, v) : null,
+  };
+}
+
+export function demoPublicPage(set: DemoPublicSet, host: string, v?: number | null, diffFrom?: number | null): PublicToolsetPage {
   const card = demoPublicCard(set, host);
   const shown = set.versions.find((x) => x.version === (v ?? card.version)) ?? set.versions[0]!;
   return {
@@ -258,15 +323,11 @@ export function demoPublicPage(set: DemoPublicSet, host: string, v?: number | nu
     version: shown.version,
     changelog: shown.changelog,
     publishedAt: demoMinutesAgo(shown.ageDays * DAY),
-    entries: set.tools.map((t) => ({
-      toolId: demoToolIdOf(set, t.name),
-      toolName: t.name,
-      providerMode: t.providerMode ?? "BEST",
-      providerCount: t.providerMode && t.providerMode !== "BEST" ? (t.providerCount ?? 1) : 0,
-      minTier: null,
-      onEmpty: "FAIL",
-      removed: Boolean(t.removed),
-    })),
+    toolIds: toolsAt(set, shown.version).map((n) => demoToolIdOf(set, n)),
+    toolCount: toolsAt(set, shown.version).length,
+    entries: entriesOf(set, toolsAt(set, shown.version)),
+    notReviewed: entriesOf(set, toolsAt(set, shown.version)).some((e) => e.notReviewed),
+    diff: diffFrom ? demoPublicDiff(set, diffFrom, shown.version) : null,
     stats: { weekStart: set.stats.activeUsers ? demoWeekStart() : null, ...set.stats },
     forkedFrom: null,
     sharingEndsAt: null,

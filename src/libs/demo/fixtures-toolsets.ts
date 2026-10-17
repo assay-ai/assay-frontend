@@ -25,6 +25,7 @@ import { demoConnectVariant, type DemoConnectVariant } from "./demo-connect";
 import { demoCategoryOf, demoProvider, demoToolOffers } from "./fixtures-explore";
 import {
   DEMO_PUBLIC_SETS,
+  demoPublicVersionDetail,
   demoPublicCard,
   demoPublicPage,
   demoPublicVersions,
@@ -78,6 +79,12 @@ const WEATHER_TOKEN = "k7q2m9x4p1w8z3n6r5t0vb";
 const MARKETKIT_SET = DEMO_PUBLIC_SETS.find((x) => x.ownerHandle === "marketkit" && x.slug === "crypto-research")!;
 const DAY = 1_440;
 const SHARED_VARIANTS: readonly DemoConnectVariant[] = ["shared", "unlisted", "update-available", "delisted", "stopped", "removed"];
+/** `delisted`, `stopped`, `removed`: "prod" is also locked to another team's set in that state. */
+const FOREIGN_STATE: Partial<Record<DemoConnectVariant, { set: DemoPublicSet; status: "DELETED" | "NOT_SHARED" | "REMOVED" }>> = {
+  delisted: { set: DEMO_PUBLIC_SETS.find((x) => x.slug === "travel-planner")!, status: "DELETED" },
+  stopped: { set: DEMO_PUBLIC_SETS.find((x) => x.slug === "news-digest")!, status: "NOT_SHARED" },
+  removed: { set: DEMO_PUBLIC_SETS.find((x) => x.slug === "fast-search")!, status: "REMOVED" },
+};
 /** Handles other organizations hold in the demo. */
 const TAKEN_HANDLES = new Set(DEMO_PUBLIC_SETS.map((x) => x.ownerHandle));
 
@@ -107,7 +114,8 @@ function toolById(id: string) {
 interface AccessState {
   accessMode: "ALL" | "RESTRICTED";
   /** `version` null follows the latest (own and Official only). */
-  allowedToolsets: { toolsetId: string; viaUrlOnly: boolean; version: number | null }[];
+  /** `status`: how another organization's tool set stands now (demo pictures delisted, stopped, removed). */
+  allowedToolsets: { toolsetId: string; viaUrlOnly: boolean; version: number | null; status?: "ACTIVE" | "DELETED" | "NOT_SHARED" | "REMOVED" }[];
   pinnedTools: string[];
   allowedToolIds: string[];
   excludeProviderIds: string[];
@@ -309,6 +317,8 @@ function seed(variant: DemoConnectVariant): Stage {
         : [
             { toolsetId: RESEARCH_ID, viaUrlOnly: true, version: null },
             ...(variant === "update-available" ? [{ toolsetId: MARKETKIT_SET.id, viaUrlOnly: true, version: 2 }] : []),
+            // Another team's tool set this agent is locked to, in the state the picture is about.
+            ...(FOREIGN_STATE[variant] ? [{ toolsetId: FOREIGN_STATE[variant]!.set.id, viaUrlOnly: true, version: 1, status: FOREIGN_STATE[variant]!.status }] : []),
           ],
     pinnedTools: [],
     allowedToolIds:
@@ -368,7 +378,7 @@ function seed(variant: DemoConnectVariant): Stage {
             ? [
                 {
                   canonicalUrl: `${host}/@marketkit/crypto-research@2`,
-                  serverName: "crypto-re",
+                  serverName: "crypto",
                   client: "claude-code",
                   handedOutAt: demoMinutesAgo(30 * DAY),
                   firstCallAt: demoMinutesAgo(30 * DAY - 10),
@@ -513,6 +523,7 @@ function toolIdsOfSet(toolsetId: string, s: Stage): string[] {
 function standing(toolId: string, access: AccessState, s: Stage): "ALLOWED" | "VIA_TOOLSET_URL" | "BLOCKED" {
   if (access.accessMode === "ALL" || access.allowedToolIds.includes(toolId)) return "ALLOWED";
   const sets = access.allowedToolsets
+    .filter((ref) => ref.status !== "REMOVED")
     .map((ref) => ({ ref, ids: toolIdsOfSet(ref.toolsetId, s) }))
     .filter(({ ids }) => ids.includes(toolId));
   if (sets.some(({ ref }) => !ref.viaUrlOnly)) return "ALLOWED";
@@ -532,11 +543,11 @@ function accessDto(agentId: string): AgentAccess {
         viaUrlOnly: ref.viaUrlOnly,
         name: pub.name,
         slug: pub.slug,
-        deleted: false,
+        deleted: ref.status === "DELETED",
         handle: pub.ownerHandle,
         own: false,
-        status: "ACTIVE",
-        latestVersion: pub.versions[0]!.version,
+        status: ref.status ?? "ACTIVE",
+        latestVersion: ref.status && ref.status !== "ACTIVE" ? null : pub.versions[0]!.version,
       };
     }
     return {
@@ -765,6 +776,11 @@ function serversOf(agentId: string): { servers: ServerInUse[]; overBudget: boole
       waitingForFirstCall: row.handedOutAt !== null && !row.firstCallAt && !row.lastCallAt,
       available: s.variant === "preview-error" ? true : preview !== null,
       updateAvailable: lockedTo !== null && latest !== null && latest > lockedTo,
+      latestVersion: lockedTo !== null && latest !== null && latest > lockedTo ? latest : null,
+      latestUrl:
+        lockedTo !== null && latest !== null && latest > lockedTo && parsed && choice && (choice.kind === "shared" || choice.kind === "link" || choice.kind === "toolset")
+          ? buildMcpUrl({ ...choice, version: latest }, parsed.options, mcpHost())
+          : null,
     };
   });
   // The same rule as the backend: the tools shown in full by the servers that show every tool, over 25.
@@ -1011,7 +1027,11 @@ function ownPublicPage(set: Toolset, v: number | null, via: "PUBLIC" | "UNLISTED
       minTier: e.minTier,
       onEmpty: e.onEmpty,
       removed: false,
+      notReviewed: false,
     })),
+    notReviewed: false,
+    diff: null,
+    routesToPublisher: false,
     stats: { weekStart: stats.weekStart, ...(stats.figures ?? { activeUsers: null, agents: null, calls30d: null, copies: null, trend: null, onLatestVersionPercent: null }) },
     forkedFrom: null,
     sharingEndsAt: set.sharingEndsAt ?? null,
@@ -1253,7 +1273,12 @@ export const TOOLSET_FIXTURES: readonly DemoFixture[] = [
             toolsetIds: [unpinned.toolsetId],
           });
         }
-        next.allowedToolsets = refs.map((r) => ({ toolsetId: r.toolsetId, viaUrlOnly: r.viaUrlOnly !== false, version: r.version ?? null }));
+        next.allowedToolsets = refs.map((r) => ({
+          toolsetId: r.toolsetId,
+          viaUrlOnly: r.viaUrlOnly !== false,
+          version: r.version ?? null,
+          status: access.allowedToolsets.find((x) => x.toolsetId === r.toolsetId)?.status,
+        }));
       }
       if (Array.isArray(body.pinnedTools)) {
         if ((body.pinnedTools as unknown[]).length > 5) {
@@ -1445,14 +1470,29 @@ export const TOOLSET_FIXTURES: readonly DemoFixture[] = [
       const s = current();
       const token = String(data?.token ?? "");
       const v = typeof data?.v === "number" ? data.v : null;
+      const diffFrom = typeof data?.diffFrom === "number" ? data.diffFrom : null;
       const pub = DEMO_PUBLIC_SETS.find((x) => x.unlistedToken === token);
       if (pub) {
         if (v && !pub.versions.some((x) => x.version === v)) refuse("TOOLSET_VERSION_NOT_FOUND", "Tool set version not found", 404, path);
-        return demoPublicPage(pub, mcpHost(), v);
+        if (diffFrom && !pub.versions.some((x) => x.version === diffFrom)) refuse("TOOLSET_VERSION_NOT_FOUND", "Tool set version not found", 404, path);
+        return demoPublicPage(pub, mcpHost(), v, diffFrom);
       }
       const own = s.toolsets.find((t) => t.unlistedToken === token && !t.removed && (isShared(t) || t.sharingEndsAt));
       if (!own) refuse("TOOLSET_NOT_FOUND", "Tool set not found", 404, path);
       return ownPublicPage(own, v, "UNLISTED");
+    },
+  },
+  {
+    method: "GET",
+    match: /^\/public\/toolsets\/@[^/]+\/[^/]+\/versions\/\d+$/,
+    body: (path, query) => {
+      const [, , , at = "", slug = "", , v = ""] = path.split("/");
+      const handle = decodeURIComponent(at).replace(/^@/, "");
+      const pub = DEMO_PUBLIC_SETS.find((x) => !x.unlistedToken && x.ownerHandle === handle && x.slug === slug);
+      const diffFrom = Number(query.diffFrom) || null;
+      const detail = pub ? demoPublicVersionDetail(pub, Number(v), diffFrom) : null;
+      if (!detail) refuse("TOOLSET_NOT_FOUND", "Tool set not found", 404, path);
+      return detail;
     },
   },
   {

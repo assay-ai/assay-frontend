@@ -442,6 +442,10 @@ export interface ServerInUse {
   waitingForFirstCall: boolean;
   available: boolean;
   updateAvailable: boolean;
+  /** Set only when `updateAvailable`: the newest version this URL's path serves. */
+  latestVersion?: number | null;
+  /** This URL at `latestVersion`, for "Copy v4 URL"; set only when `updateAvailable`. */
+  latestUrl?: string | null;
 }
 
 export interface ServersInUse {

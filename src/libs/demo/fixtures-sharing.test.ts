@@ -88,7 +88,7 @@ describe("demo fixtures: sharing a tool set", () => {
     expect(call<OrgHandle>("GET", "/org/handle")).toMatchObject({ handle: null, canChange: true });
     expect(refusal(() => call("POST", `/toolsets/${RESEARCH}/publish`, { visibility: "UNLISTED" })).code).toBe("TOOLSET_HANDLE_REQUIRED");
     const saved = call<PublishResult>("POST", `/toolsets/${RESEARCH}/publish`, { visibility: "PRIVATE" });
-    expect(saved.version).toMatchObject({ version: 1, changelog: "First version: 4 tools." });
+    expect(saved.version).toMatchObject({ version: 1, changelog: "First version: 4 tools: search_web, extract_page_text, search_wikipedia and summarize_document." });
     expect(saved.toolset.urls?.myPinned).toBe(`${HOST}/my/research@1`);
   });
 
@@ -219,5 +219,39 @@ describe("demo fixtures: copies, reports, discovery and updates", () => {
     expect(notice).toMatchObject({ event: "toolset.update_available", payload: { fromVersion: 2, toVersion: 3 } });
     const feed = DEMO_FIXTURES.find((f) => f.method === "GET" && f.match === "/notifications")!.body("/notifications", {}) as { items: { event: string }[] };
     expect(feed.items[0]!.event).toBe("toolset.update_available");
+  });
+});
+
+describe("demo fixtures: the review-fix contracts", () => {
+  it("serves one version with its diff, and a link-only page with its diff", () => {
+    const detail = call<{ diff: { added: string[]; rulesChanged: string[] }; entries: { notReviewed: boolean }[] }>(
+      "GET",
+      "/public/toolsets/@marketkit/crypto-research/versions/3",
+      undefined,
+      { diffFrom: 2 },
+    );
+    expect(detail.diff).toMatchObject({ added: ["get_usd_eur_rate"], rulesChanged: ["get_token_market"] });
+    expect(refusal(() => call("GET", "/public/toolsets/@marketkit/crypto-research/versions/9")).status).toBe(404);
+    const link = call<PublicToolsetPage>("POST", "/public/toolsets/by-token", { token: "h3j8d2k9s6a1f4g7l0q5wz", v: 2, diffFrom: 1 });
+    expect(link.diff?.added).toEqual(["cobalt__news_search"]);
+    expect(link.entries.find((e) => e.toolName === "cobalt__news_search")?.notReviewed).toBe(true);
+    expect(link).toMatchObject({ notReviewed: true, routesToPublisher: false });
+    expect(call<PublicToolsetPage>("GET", "/public/toolsets/@cobalt/fast-search").routesToPublisher).toBe(true);
+  });
+
+  it("a server locked to an older version carries the newest version and its URL", () => {
+    asVariant("update-available");
+    const row = call<ServersInUse>("GET", `/agents/${PROD}/servers`).servers.find((s) => s.updateAvailable)!;
+    expect(row).toMatchObject({ latestVersion: 3, latestUrl: `${HOST}/@marketkit/crypto-research@3` });
+    expect(call<ServersInUse>("GET", `/agents/${PROD}/servers`).servers.filter((s) => !s.updateAvailable).every((s) => !s.latestUrl)).toBe(true);
+  });
+
+  it("delisted, stopped and removed each show another team's locked set in that state", () => {
+    for (const [variant, status] of [["delisted", "DELETED"], ["stopped", "NOT_SHARED"], ["removed", "REMOVED"]] as const) {
+      resetDemoToolsets();
+      asVariant(variant);
+      const entry = call<AgentAccess>("GET", `/agents/${PROD}/access`).allowedToolsets.find((t) => t.own === false);
+      expect(entry).toMatchObject({ status, version: 1, latestVersion: null });
+    }
   });
 });
