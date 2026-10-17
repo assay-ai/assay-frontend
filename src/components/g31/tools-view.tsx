@@ -9,7 +9,7 @@ import * as React from "react";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
 import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
-import { ToolAccessControl, useSpendPolicy } from "@/components/explorer/tool-access-control";
+import { ToolAccessControl, useExploreAgent } from "@/components/explorer/tool-access-control";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
@@ -236,7 +236,7 @@ function ToolsList() {
   const router = useRouter();
   const openId = params.get("tool");
   const [query, setQuery] = React.useState("");
-  const policy = useSpendPolicy();
+  const explore = useExploreAgent();
   const { chains } = useChains();
   const openRef = React.useRef<HTMLLIElement | null>(null);
 
@@ -304,11 +304,14 @@ function ToolsList() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        {policy.data ? (
+        {explore.agent && explore.access.data ? (
           <p className="text-body-13 text-03">
-            {accessSummary(policy.data.allowedTools, tools.length)}{" "}
-            <Link href="/limits" className="text-primary-600 hover:underline">
-              Spending limits
+            {accessSummary(explore.access.data, explore.name)}{" "}
+            <Link
+              href={`/agents?agent=${encodeURIComponent(explore.agent.agentId)}#access`}
+              className="text-primary-600 hover:underline"
+            >
+              What this agent can use
             </Link>
           </p>
         ) : null}
@@ -341,7 +344,7 @@ function ToolsList() {
         <ul className="flex w-full flex-col overflow-hidden rounded-xl border border-01 bg-01">
           {visible.map((tool) => {
             const open = openId === tool.toolId;
-            const blocked = policy.data ? toolAccess(policy.data.allowedTools, tool.toolId) === "blocked" : false;
+            const blocked = explore.access.data ? toolAccess(explore.access.data, tool.toolId) === "blocked" : false;
             const serving = providers.filter((p) => p.toolIds.includes(tool.toolId));
             // The backend's own figure first (its total over every free-capable listing, capped).
             const freeAllowance = tool.freeCallsPerDay ?? freeAllowanceOf(tool.toolId);

@@ -317,7 +317,10 @@ const ERRORS: Record<string, string> = {
   VELOCITY_LIMIT_EXCEEDED: "Spending too fast: this call was refused. Calls are allowed again in a moment.",
   POLICY_AGENT_PAUSED: "This agent is paused by its budget.",
   APPROVAL_REQUIRED: "This call needs a person's approval.",
-  TOOL_NOT_ALLOWED: "Your budget does not allow this tool.",
+  TOOL_NOT_ALLOWED: "This agent isn't allowed to use this tool.",
+  TOOL_NOT_IN_TOOLSET: "This tool is not part of this server.",
+  NO_PROVIDER_MATCHES_RULES: "No provider fits your limits.",
+  TOOL_REMOVED: "This tool was removed by its maker.",
   QUOTA_EXCEEDED: "The free calls are used up.",
   CREDENTIAL_INVALID: "This agent key is not valid.",
   CREDENTIAL_REVOKED: "This agent key was revoked.",
@@ -404,6 +407,14 @@ const ERRORS: Record<string, string> = {
   TOO_MANY_REQUESTS: "Too many requests. Wait a moment and try again.",
   SERVICE_UNAVAILABLE: "Assay is briefly unavailable. Try again shortly.",
   ERR_NETWORK: "We could not reach Assay. Check your connection.",
+  TOOLSET_NOT_FOUND: "This tool set was not found. It may have been deleted.",
+  TOOLSET_SLUG_TAKEN: "Another of your tool sets already uses this address.",
+  TOOLSET_INVALID: "This tool set is not valid: check its tools and provider rules.",
+  TOOLSET_LIMIT_EXCEEDED: "You reached a limit: 200 tools per set, 5 always loaded, 100 sets per account.",
+  TOOLSET_ACCESS_INVALID: "This change to what the agent can use is not valid.",
+  TOOLSET_REFUSED_CALL_NOT_FOUND: "This refused call was not found.",
+  URL_NOT_RECOGNISED: "We couldn't read this URL. Start a new one.",
+  MCP_URL_NOT_FOUND: "This server URL does not serve anything (yet).",
 };
 
 const ERROR_PREFIXES = ["MCP_", "PAYMENT_", "SETTLEMENT_", "PROVIDER_", "TOOL_"];

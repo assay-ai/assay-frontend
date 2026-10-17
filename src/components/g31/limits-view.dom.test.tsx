@@ -124,7 +124,6 @@ const POLICY = {
   maxCallsPerHour: null,
   maxCallsPerMinute: null,
   maxSpendPerHour: null,
-  allowedTools: null,
   requireApprovalAbove: null,
   paused: false,
   changedBy: null,

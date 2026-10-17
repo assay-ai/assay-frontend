@@ -14,14 +14,12 @@ export interface BudgetForm {
   callsPerMinute: string;
   callsPerHour: string;
   spendPerHour: string;
-  toolsMode: "all" | "only" | "none";
-  tools: string[];
   /** The older "refuse calls above" rule (approval threshold); `true` clears it. */
   clearRefuseAbove: boolean;
   reason: string;
 }
 
-export type BudgetField = "perCall" | "perDay" | "perMonth" | "callsPerMinute" | "callsPerHour" | "spendPerHour" | "tools";
+export type BudgetField = "perCall" | "perDay" | "perMonth" | "callsPerMinute" | "callsPerHour" | "spendPerHour";
 
 export interface BudgetPreset {
   id: string;
@@ -38,7 +36,7 @@ export const BUDGET_PRESETS: readonly BudgetPreset[] = [
 
 type PolicyFields = Pick<
   SpendPolicy,
-  "perCallMax" | "dailyCap" | "monthlyCap" | "maxCallsPerMinute" | "maxCallsPerHour" | "maxSpendPerHour" | "allowedTools" | "requireApprovalAbove"
+  "perCallMax" | "dailyCap" | "monthlyCap" | "maxCallsPerMinute" | "maxCallsPerHour" | "maxSpendPerHour" | "requireApprovalAbove"
 >;
 
 const NONE: PolicyFields = {
@@ -48,7 +46,6 @@ const NONE: PolicyFields = {
   maxCallsPerMinute: null,
   maxCallsPerHour: null,
   maxSpendPerHour: null,
-  allowedTools: null,
   requireApprovalAbove: null,
 };
 
@@ -63,8 +60,6 @@ export function budgetFormFrom(policy: PolicyFields | null): BudgetForm {
     callsPerMinute: p.maxCallsPerMinute == null ? "" : String(p.maxCallsPerMinute),
     callsPerHour: p.maxCallsPerHour == null ? "" : String(p.maxCallsPerHour),
     spendPerHour: major(p.maxSpendPerHour),
-    toolsMode: p.allowedTools === null ? "all" : p.allowedTools.length === 0 ? "none" : "only",
-    tools: p.allowedTools ?? [],
     clearRefuseAbove: false,
     reason: "",
   };
@@ -108,7 +103,6 @@ export function budgetPatch(form: BudgetForm, policy: PolicyFields | null, decim
   if (!errors.perDay && !errors.perMonth && perDay.atomic && perMonth.atomic && BigInt(perDay.atomic) > BigInt(perMonth.atomic)) {
     errors.perDay = "A day cannot allow more than the whole month.";
   }
-  if (form.toolsMode === "only" && form.tools.length === 0) errors.tools = "Pick at least one tool, or allow every tool.";
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
   const body: UpdateSpendPolicyBody = {};
@@ -122,8 +116,6 @@ export function budgetPatch(form: BudgetForm, policy: PolicyFields | null, decim
   set("maxSpendPerHour", diffMoney(spendPerHour.atomic, base.maxSpendPerHour));
   set("maxCallsPerMinute", perMinute.value === base.maxCallsPerMinute ? undefined : perMinute.value);
   set("maxCallsPerHour", perHour.value === base.maxCallsPerHour ? undefined : perHour.value);
-  const tools = form.toolsMode === "all" ? null : form.toolsMode === "none" ? [] : [...new Set(form.tools)];
-  set("allowedTools", JSON.stringify(tools) === JSON.stringify(base.allowedTools) ? undefined : tools);
   if (form.clearRefuseAbove && base.requireApprovalAbove) body.requireApprovalAbove = null;
 
   const changed = Object.keys(body).length > 0;
