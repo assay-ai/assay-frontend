@@ -14,6 +14,18 @@ import { plainError } from "@/libs/plain-language";
 import { testToolBinding } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
 
+import {
+  contractMismatchProblems,
+  defaultTerms,
+  majorChoices,
+  runLabel,
+  sameTerms,
+  termsOf,
+  termsProblem,
+  testTargets,
+  type ContractTerms,
+} from "../contract-terms";
+import { ContractTermsPanel } from "../contract-terms-panel";
 import { documentsEqual, MappingEditor, schemaFields } from "../mapping-editor";
 import { requestMappingSummary, responseMappingSummary } from "../mapping-summary";
 import { argumentsProblem } from "../tester-arguments";
@@ -28,6 +40,18 @@ export interface ConnectDraft {
   endpoint: string;
   requestMapping: ToolMapping;
   responseMapping: ToolMapping;
+  /**
+   * T3: the contract versions served and the optional fields. null when the
+   * catalogue has no versions (a backend before T3): nothing is sent.
+   */
+  terms: ContractTerms | null;
+}
+
+/** One test run, for one contract major. */
+interface MajorRun {
+  major: number;
+  semver: string | null;
+  report: BindingTestReport;
 }
 
 export function parseEndpoint(text: string): { value: string | null; error: string | null } {
@@ -84,6 +108,13 @@ export function ConnectStage({
     setAdvancedState(open);
   };
 
+  const choices = React.useMemo(() => majorChoices(tool), [tool]);
+  const versioned = choices.length > 0;
+  const storedTerms = React.useMemo(() => (binding ? termsOf(binding) : null), [binding]);
+  const [terms, setTerms] = React.useState<ContractTerms>(() => storedTerms ?? defaultTerms(tool));
+  const termsDirty = versioned && (storedTerms ? !sameTerms(storedTerms, terms) : false);
+  const termsBlocked = versioned ? termsProblem(terms, choices) : null;
+
   const fields = React.useMemo(() => schemaFields(tool.inputSchema), [tool.inputSchema]);
   const [args, setArgs] = React.useState<Record<string, string>>(() => seedArguments(tool.inputSchema));
 
@@ -93,7 +124,10 @@ export function ConnectStage({
 
   const [phase, setPhase] = React.useState<"idle" | "saving" | "testing">("idle");
   const [error, setError] = React.useState<string | null>(null);
-  const [report, setReport] = React.useState<BindingTestReport | null>(null);
+  const [problems, setProblems] = React.useState<string[] | null>(null);
+  const [runs, setRuns] = React.useState<MajorRun[] | null>(null);
+  const [testingMajor, setTestingMajor] = React.useState<number | null>(null);
+  const report = runs?.[runs.length - 1]?.report ?? null;
   // An empty result proves nothing: Continue needs the provider to say they know. Asked again per run.
   const [emptyAck, setEmptyAck] = React.useState(false);
   const [ackFor, setAckFor] = React.useState<BindingTestReport | null>(null);
@@ -108,6 +142,11 @@ export function ConnectStage({
 
   const run = async () => {
     setError(null);
+    setProblems(null);
+    if (termsBlocked) {
+      setError(termsBlocked);
+      return;
+    }
     if (parsedEndpoint.error) {
       setEndpointTouched(true);
       return;
@@ -134,12 +173,27 @@ export function ConnectStage({
         endpoint: parsedEndpoint.value!,
         requestMapping: mappings.request,
         responseMapping: mappings.response,
+        terms: versioned ? terms : null,
       });
       setPhase("testing");
-      const result = await testToolBinding(saved.id, { input: built.input });
-      setReport(result);
+      // One run per contract version served: each must pass before publishing.
+      const done: MajorRun[] = [];
+      for (const target of testTargets(terms, choices)) {
+        setTestingMajor(versioned ? target.major : null);
+        const result = await testToolBinding(saved.id, {
+          input: built.input,
+          ...(versioned && target.version !== undefined ? { toolVersion: target.version } : {}),
+        });
+        done.push({ major: target.major, semver: target.semver, report: result });
+        setRuns([...done]);
+      }
       void queryClient.invalidateQueries({ queryKey: ["provider", "tool-binding", saved.id, "publish-check"] });
     } catch (caught) {
+      const mismatch = contractMismatchProblems(caught);
+      if (mismatch) {
+        setProblems(mismatch);
+        return;
+      }
       setError(
         caught instanceof ApiError
           ? plainError(caught.code)
@@ -149,6 +203,7 @@ export function ConnectStage({
       );
     } finally {
       setPhase("idle");
+      setTestingMajor(null);
       runGuard.leave();
     }
   };
@@ -157,10 +212,17 @@ export function ConnectStage({
     !binding ||
     binding.endpoint !== endpoint.trim() ||
     !documentsEqual(binding.requestMapping, mappings.request) ||
-    !documentsEqual(binding.responseMapping, mappings.response);
-  const stale = report && binding ? isStaleRun(report, binding.version) || dirty : false;
-  const gate = report ? testGate(testPipeline(report), { stale: Boolean(stale), emptyAcknowledged: emptyAck }) : null;
+    !documentsEqual(binding.responseMapping, mappings.response) ||
+    termsDirty;
+  const stale = runs && binding ? runs.some((r) => isStaleRun(r.report, binding.version)) || dirty : false;
+  const gates = runs?.map((r) => testGate(testPipeline(r.report), { stale: Boolean(stale), emptyAcknowledged: emptyAck })) ?? null;
+  // Every version served needs its own passing run.
+  const complete = runs ? runs.length === testTargets(terms, choices).length : false;
+  const gate = gates
+    ? { passed: complete && gates.every((g) => g.passed), needsEmptyAck: gates.some((g) => g.needsEmptyAck) }
+    : null;
   const passed = gate ? gate.passed : testPassedBefore && !dirty;
+  const multi = versioned && (runs?.length ?? terms.majors.length) > 1;
 
   return (
     <section aria-labelledby="connect-stage-title" className="flex w-full flex-col gap-5">
@@ -241,6 +303,19 @@ export function ConnectStage({
         ) : null}
       </div>
 
+      {versioned ? (
+        <ContractTermsPanel
+          choices={choices}
+          terms={terms}
+          changed={termsDirty}
+          disabled={readOnly}
+          onChange={(next) => {
+            setTerms(next);
+            setProblems(null);
+          }}
+        />
+      ) : null}
+
       <div className="flex w-full flex-col gap-3 rounded-lg border border-01 bg-01 p-4">
         <div className="flex flex-col gap-0.5">
           <h3 className="text-label-sm text-01">Test it</h3>
@@ -282,7 +357,9 @@ export function ConnectStage({
                 ? "Saving your changes…"
                 : "Saving your draft…"
               : phase === "testing"
-                ? "Calling your API…"
+                ? testingMajor !== null && multi
+                  ? `Testing v${testingMajor}…`
+                  : "Calling your API…"
                 : report
                   ? "Run the test again"
                   : "Save and run test"}
@@ -297,9 +374,33 @@ export function ConnectStage({
             {error}
           </p>
         ) : null}
+        {problems ? (
+          <div role="alert" className="flex flex-col gap-1 rounded-md border border-danger-20 bg-danger-10 px-3 py-2">
+            <p className="text-label-13 text-danger-600">This doesn&apos;t fit the tool&apos;s contract yet:</p>
+            <ul className="flex list-disc flex-col gap-0.5 pl-5 text-body-13 text-danger-600">
+              {problems.map((problem) => (
+                <li key={problem}>{problem}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
-        {report ? (
-          <TestPipelineView report={report} stale={Boolean(stale)} paid={binding ? binding.pricingMode !== "FREE" : false} />
+        {runs && runs.length > 0 ? (
+          <div className="flex flex-col gap-4">
+            {runs.map((r) => (
+              <div key={r.major} className="flex flex-col gap-2">
+                {versioned ? (
+                  <h4 className="flex flex-wrap items-baseline gap-x-2 text-label-13 text-01">
+                    {runLabel(r.major, r.report, r.semver)}
+                    <span className={r.report.outcome === "PASSED" ? "text-body-xs text-success-700" : "text-body-xs text-danger-600"}>
+                      {r.report.outcome === "PASSED" ? "Passed" : "Failed"}
+                    </span>
+                  </h4>
+                ) : null}
+                <TestPipelineView report={r.report} stale={Boolean(stale)} paid={binding ? binding.pricingMode !== "FREE" : false} />
+              </div>
+            ))}
+          </div>
         ) : testPassedBefore && !dirty ? (
           <p className="text-body-13 text-success-700">Your last test passed. Run it again any time.</p>
         ) : null}
@@ -330,7 +431,9 @@ export function ConnectStage({
             {gate?.needsEmptyAck
               ? "Tick the box above, or run a test that returns data."
               : report && !stale
-              ? "Get a passing test to continue."
+              ? multi
+                ? "Every version you serve needs a passing test to continue."
+                : "Get a passing test to continue."
               : "Run a test to continue. Your draft is saved when you do."}
           </span>
         ) : null}
