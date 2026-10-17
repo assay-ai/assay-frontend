@@ -11,6 +11,7 @@ import { StartFreeCta } from "@/components/explorer/start-free";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 import { ConnectPanel } from "@/components/toolsets/connect-panel";
+import { ToolsetCatalogue } from "@/components/toolsets/public-toolsets";
 import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
@@ -36,6 +37,7 @@ import {
   usePublicTools,
 } from "@/features/explorer/use-public-explorer";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
+import { buildMcpUrl } from "@/features/connect/mcp-url";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
@@ -134,14 +136,14 @@ export default function CataloguePage() {
   const searchParams = useSearchParams();
   const initial = React.useMemo(() => readExplorerState(searchParams), [searchParams]);
   // The MCP URL this page stands for: a browser opening `/` (or `/c/{category}`) on the MCP host lands here.
-  // `/c/{category}` lands here as `?category=`: the list shows that topic. Topic
-  // servers are served from a later phase, so the panel offers Everything meanwhile.
+  // `/c/{category}` lands here as `?category=`: the list shows that topic, and the panel offers that topic's server.
   const [topic, setTopic] = React.useState<string | null>(() => {
     const category = searchParams.get("category");
     return category && /^[a-z][a-z0-9-]{1,63}$/.test(category) ? category : null;
   });
-  const [serverUrl] = React.useState(() => `${mcpHost()}/${searchParams.get("free") === "1" ? "?free=1" : ""}`);
-  const [view, setView] = React.useState<"tools" | "providers">(initial.view);
+  const free = searchParams.get("free") === "1";
+  const serverUrl = topic ? buildMcpUrl({ kind: "topic", category: topic }, { free }, mcpHost()) : `${mcpHost()}/${free ? "?free=1" : ""}`;
+  const [view, setView] = React.useState<"tools" | "providers" | "toolsets">(initial.view);
   const [query, setQuery] = React.useState(initial.q);
   const [freeOnly, setFreeOnly] = React.useState(initial.free);
   React.useEffect(() => {
@@ -177,7 +179,7 @@ export default function CataloguePage() {
       details.map((d) => d.data?.tools.find((t) => t.toolId === toolId)?.freeCallsPerAgentPerDay),
     );
 
-  const active = view === "tools" ? tools : providers;
+  const active = view === "providers" ? providers : tools;
   const total = view === "tools" ? (tools.data?.tools.length ?? 0) : (providers.data?.providers.length ?? 0);
   const visible = view === "tools" ? toolRows.length : providerRows.length;
 
@@ -188,7 +190,7 @@ export default function CataloguePage() {
         url={serverUrl}
         title={
           topic
-            ? "Servers for one topic are coming soon. Meanwhile, connect Everything: every tool on Assay, as one server."
+            ? `This is an MCP server URL: every ${topic} tool, as one server. Add it to your client.`
             : "This is an MCP server URL: every tool below, as one server. Add it to your client."
         }
       />
@@ -222,15 +224,16 @@ export default function CataloguePage() {
         <div className="flex flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
           <div className="flex items-center gap-3">
             <h2 id="list-title" className="sr-only">
-              {view === "tools" ? "Tools" : "Providers"}
+              {view === "tools" ? "Tools" : view === "toolsets" ? "Tool sets" : "Providers"}
             </h2>
             <Segmented
               value={view}
-              onValueChange={(value) => setView(value as "tools" | "providers")}
+              onValueChange={(value) => setView(value as "tools" | "providers" | "toolsets")}
               aria-label="Show"
               className="inline-flex rounded-md bg-03 p-0.5"
             >
               <SegmentedItem value="tools">Tools</SegmentedItem>
+              <SegmentedItem value="toolsets">Tool sets</SegmentedItem>
               <SegmentedItem value="providers">Providers</SegmentedItem>
             </Segmented>
             {view === "tools" ? (
@@ -247,7 +250,7 @@ export default function CataloguePage() {
                 Free calls
               </button>
             ) : null}
-            {active.isSuccess ? (
+            {active.isSuccess && view !== "toolsets" ? (
               <span className="text-body-xs text-03">
                 {needle || (view === "tools" && (freeOnly || (topic && topicKnown))) ? `${visible} of ${total}` : total}
               </span>
@@ -256,14 +259,16 @@ export default function CataloguePage() {
           <Search
             wrapperClassName="w-full tablet:w-[300px]"
             shortcut={null}
-            placeholder={view === "tools" ? "Search tools by name or what they do" : "Search providers"}
-            aria-label={view === "tools" ? "Search tools" : "Search providers"}
+            placeholder={view === "tools" ? "Search tools by name or what they do" : view === "toolsets" ? "Search tool sets" : "Search providers"}
+            aria-label={view === "tools" ? "Search tools" : view === "toolsets" ? "Search tool sets" : "Search providers"}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
 
-        {active.isPending ? (
+        {view === "toolsets" ? (
+          <ToolsetCatalogue query={query} onClearQuery={() => setQuery("")} />
+        ) : active.isPending ? (
           <div className="rounded-xl border border-01 bg-01 px-4">
             <PageState kind="loading" rows={5} label={`Loading ${view}`} />
           </div>
