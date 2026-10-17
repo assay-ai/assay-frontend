@@ -52,9 +52,9 @@ export function McpConfigTabs({
   };
   return (
     <Tabs value={client} onValueChange={(v) => setClient(v as McpClient)} className="flex w-full min-w-0 flex-col gap-3">
-      <TabsList className="gap-4 overflow-x-auto">
+      <TabsList className="flex-wrap gap-x-4 gap-y-1">
         {MCP_CLIENTS.map((c) => (
-          <TabsTrigger key={c.id} value={c.id} className="whitespace-nowrap">
+          <TabsTrigger key={c.id} value={c.id} className="min-h-10 whitespace-nowrap tablet:min-h-0">
             {c.label}
           </TabsTrigger>
         ))}
@@ -73,8 +73,9 @@ export function McpConfigTabs({
             <dl className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-01 bg-02 px-3 py-2.5 text-body-xs">
               <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                 <dt className="text-03">URL</dt>
-                <dd className="min-w-0 flex-1 break-all font-mono text-mono-12 text-01">{url}</dd>
-                <CopyChip value={url} label="Copy" />
+                <dd className="min-w-0 flex-1">
+                  <CopyChip value={url} display={url} label="the URL" className="max-w-full break-all text-left" />
+                </dd>
               </div>
               <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                 <dt className="text-03">Header</dt>

@@ -9,7 +9,7 @@ import * as React from "react";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
 import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
-import { ToolAccessControl, useExploreAgent } from "@/components/explorer/tool-access-control";
+import { ExploreAgentPicker, ToolAccessControl, useExploreAgent } from "@/components/explorer/tool-access-control";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
@@ -128,6 +128,8 @@ function ToolDetail({
 
   return (
     <div className="flex flex-col gap-4 border-t border-01 bg-02 px-4 py-4 tablet:px-5">
+      {/* Allow / Block first, naming the agent it is for (Explore's agent picker sets which). */}
+      <ToolAccessControl toolId={tool.toolId} toolName={tool.name} allToolIds={allToolIds} className="self-start" />
       {tool.description ? <p className="text-body-13 text-02">{tool.description}</p> : null}
 
       <SettlesElsewhere tool={tool} buyerChains={buyerChains} chains={chains} />
@@ -224,7 +226,6 @@ function ToolDetail({
             `Your agents have not called it ${callsWindow}.`
           )}
         </p>
-        <ToolAccessControl toolId={tool.toolId} toolName={tool.name} allToolIds={allToolIds} />
       </div>
     </div>
   );
@@ -304,6 +305,7 @@ function ToolsList() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
+        <ExploreAgentPicker />
         {explore.agent && explore.access.data ? (
           <p className="text-body-13 text-03">
             {accessSummary(explore.access.data, explore.name)}{" "}

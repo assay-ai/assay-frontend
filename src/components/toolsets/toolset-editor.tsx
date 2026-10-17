@@ -88,6 +88,7 @@ export function ToolsetPage({ id, slug, free }: { id: string | null; slug: strin
   return frame(
     <>
       <ConnectPanel
+        compact
         url={buildMcpUrl({ kind: "toolset", slug: set.slug }, { free: Boolean(free) })}
         title={`Connect ${set.name}`}
         detail="Its own MCP server: only these tools, with these provider rules."
@@ -124,7 +125,16 @@ function ToolsetHeader({ set }: { set: Toolset }) {
             else setRenaming(false);
           }}
         >
-          <Field id="rename-toolset" label="Name" value={name} onChange={(e) => setName(e.target.value)} error={rename.isError ? errorText(rename.error) : undefined} wrapperClassName="tablet:w-[360px]" autoFocus />
+          <Field
+            id="rename-toolset"
+            label="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            hint={`Its address does not change: /my/${set.slug}`}
+            error={rename.isError ? errorText(rename.error) : undefined}
+            wrapperClassName="tablet:w-[360px]"
+            autoFocus
+          />
           <div className="flex gap-2">
             <Button type="submit" size="sm" loading={rename.isPending}>
               Save
@@ -137,10 +147,10 @@ function ToolsetHeader({ set }: { set: Toolset }) {
       ) : (
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-heading-md text-01">{set.name}</h1>
-          <button type="button" className="text-label-13 text-primary-600 hover:underline" onClick={() => setRenaming(true)}>
+          <button type="button" className="min-h-10 px-1 text-label-13 text-primary-600 hover:underline tablet:min-h-0" onClick={() => setRenaming(true)}>
             Rename
           </button>
-          <button type="button" className="inline-flex items-center gap-1 text-label-13 text-danger-600 hover:underline" onClick={() => setDeleting(true)}>
+          <button type="button" className="inline-flex min-h-10 items-center gap-1 px-1 text-label-13 text-danger-600 hover:underline tablet:min-h-0" onClick={() => setDeleting(true)}>
             <Trash2 aria-hidden="true" className="size-3.5" />
             Delete
           </button>
@@ -238,7 +248,13 @@ function EntriesEditor({ set }: { set: Toolset }) {
         placeholder="Search tools by name"
         options={catalogue.tools
           .filter((t) => !rows.some((r) => r.toolId === t.toolId))
-          .map((t) => ({ id: t.toolId, label: t.name, detail: `${t.providerCount} provider${t.providerCount === 1 ? "" : "s"}` }))}
+          .sort((a, b) => Number(a.providerCount === 0) - Number(b.providerCount === 0) || a.name.localeCompare(b.name))
+          .map((t) => ({
+            id: t.toolId,
+            label: t.name,
+            disabled: t.providerCount === 0,
+            detail: t.providerCount === 0 ? "No provider yet" : `${t.providerCount} provider${t.providerCount === 1 ? "" : "s"}`,
+          }))}
         onChange={(id, option) => id && save.mutate([...rows, { ...defaultEntry(id), toolName: option?.label ?? id }])}
         className="tablet:w-[360px]"
       />
@@ -268,33 +284,54 @@ function EntryRow({
   saving: boolean;
 }) {
   const left = providersLeft(row, providers.map((p) => p.providerId));
-  const chip = entryChipLabel({ ...row, maxPrice: row.maxPrice ? { ...row.maxPrice, decimals } : null }, decimals);
+  const chip = `${entryChipLabel({ ...row, maxPrice: row.maxPrice ? { ...row.maxPrice, decimals } : null }, decimals)}${
+    row.onEmpty === "FALLBACK_BEST" && row.providerMode !== "BEST" ? " · if none fits, Assay picks" : ""
+  }`;
   return (
     <li className="flex flex-col gap-2 px-3 py-2.5" data-testid="entry-row">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="min-w-0 flex-1 break-all font-mono text-mono-13 text-01">{row.toolName}</span>
-        {providers.length === 0 ? (
-          <span className="rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">No provider yet</span>
-        ) : left === 1 ? (
-          <span className="rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">No backup provider</span>
-        ) : left === 0 ? (
-          <span className="rounded-full bg-danger-10 px-2 py-0.5 text-label-xs text-danger-700">No provider fits</span>
-        ) : null}
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={onToggle}
-          className={cn(
-            "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-label-xs transition-colors",
-            open ? "border-primary-500 bg-primary-10 text-primary-700" : "border-02 bg-01 text-02 hover:text-01",
-          )}
-        >
-          {chip}
-          <ChevronDown aria-hidden="true" className="size-3" />
-        </button>
-        <button type="button" aria-label={`Remove ${row.toolName}`} className="rounded-full p-1 text-03 hover:bg-02 hover:text-01" onClick={onRemove} disabled={saving}>
-          <X aria-hidden="true" className="size-3.5" />
-        </button>
+      <div className="flex flex-col gap-1.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-x-3">
+        <div className="flex min-w-0 items-start gap-2 tablet:flex-1">
+          <span className="min-w-[8rem] flex-1 font-mono text-mono-13 text-01 [overflow-wrap:anywhere]">{row.toolName}</span>
+          <button
+            type="button"
+            aria-label={`Remove ${row.toolName}`}
+            className="-my-1.5 flex size-10 shrink-0 items-center justify-center rounded-full text-03 hover:bg-02 hover:text-01 tablet:hidden"
+            onClick={onRemove}
+            disabled={saving}
+          >
+            <X aria-hidden="true" className="size-4" />
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {providers.length === 0 ? (
+            <span className="rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">No provider yet</span>
+          ) : left === 1 ? (
+            <span className="rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">No backup provider</span>
+          ) : left === 0 ? (
+            <span className="rounded-full bg-danger-10 px-2 py-0.5 text-label-xs text-danger-700">No provider fits</span>
+          ) : null}
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={onToggle}
+            className={cn(
+              "inline-flex min-h-10 items-center gap-1 rounded-full border px-3 py-1 text-left text-label-xs transition-colors tablet:min-h-0",
+              open ? "border-primary-500 bg-primary-10 text-primary-700" : "border-02 bg-01 text-02 hover:text-01",
+            )}
+          >
+            {chip}
+            <ChevronDown aria-hidden="true" className="size-3 shrink-0" />
+          </button>
+          <button
+            type="button"
+            aria-label={`Remove ${row.toolName}`}
+            className="hidden size-8 items-center justify-center rounded-full text-03 hover:bg-02 hover:text-01 tablet:flex"
+            onClick={onRemove}
+            disabled={saving}
+          >
+            <X aria-hidden="true" className="size-3.5" />
+          </button>
+        </div>
       </div>
       {open ? <RuleEditor row={row} decimals={decimals} asset={asset} providers={providers} onApply={onApply} onCancel={onToggle} saving={saving} /> : null}
     </li>
@@ -323,6 +360,7 @@ function RuleEditor({
   const [verified, setVerified] = React.useState(row.minTier !== null);
   const [max, setMax] = React.useState(row.maxPrice ? toDecimal({ ...row.maxPrice, decimals }).toString() : "");
   const [onEmpty, setOnEmpty] = React.useState<OnEmpty>(row.onEmpty);
+  const [tried, setTried] = React.useState(false);
   const parsed = parseAmountInput(max, { decimals, required: false });
   const problem = entryProblem({ providerMode: mode, providerIds: ids });
   const left = providersLeft({ providerMode: mode, providerIds: ids }, providers.map((p) => p.providerId));
@@ -331,7 +369,16 @@ function RuleEditor({
     <div className="flex flex-col gap-3 rounded-lg bg-02 p-3" data-testid="rule-editor">
       <div className="flex flex-col gap-1.5">
         <span className="text-label-xs text-02">Providers</span>
-        <Segmented value={mode} onValueChange={(v) => setMode(v as ProviderMode)} aria-label="Which providers">
+        <Segmented
+          value={mode}
+          onValueChange={(v) => {
+            // Only these and All except mean opposite things: the ticks start again.
+            if (v !== mode) setIds([]);
+            setMode(v as ProviderMode);
+            setTried(false);
+          }}
+          aria-label="Which providers"
+        >
           {(Object.keys(PROVIDER_MODE_LABELS) as ProviderMode[]).map((m) => (
             <SegmentedItem key={m} value={m}>
               {PROVIDER_MODE_LABELS[m]}
@@ -347,6 +394,7 @@ function RuleEditor({
             {providers.map((p) => (
               <li key={p.providerId}>
                 <Checkbox
+                  className="min-h-10 tablet:min-h-8"
                   checked={ids.includes(p.providerId)}
                   onChange={(e) => setIds(e.target.checked ? [...ids, p.providerId] : ids.filter((x) => x !== p.providerId))}
                   label={`${p.name}${p.tier === "NEW" ? " · not verified yet" : ""}`}
@@ -391,13 +439,17 @@ function RuleEditor({
           {left === 0 ? "No provider is left: every call will be refused." : "One provider left: no backup if it is down."}
         </p>
       ) : null}
-      {problem ? <p className="text-body-xs text-danger-700">{problem}</p> : null}
+      {problem && tried ? <p className="text-body-xs text-danger-700">{problem}</p> : null}
       <div className="flex gap-2">
         <Button
           size="sm"
           loading={saving}
-          disabled={Boolean(problem) || Boolean(parsed.error)}
-          onClick={() =>
+          disabled={Boolean(parsed.error)}
+          onClick={() => {
+            if (problem) {
+              setTried(true);
+              return;
+            }
             onApply({
               toolId: row.toolId,
               providerMode: mode,
@@ -406,8 +458,8 @@ function RuleEditor({
               maxPrice: parsed.atomic && asset ? { amount: parsed.atomic, asset } : null,
               minQuality: row.minQuality,
               onEmpty,
-            })
-          }
+            });
+          }}
         >
           Apply
         </Button>

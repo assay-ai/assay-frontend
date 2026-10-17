@@ -14,10 +14,28 @@ import { listAgents } from "@/services/account.service";
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
 
+/* The agent Explore's Allow / Block speaks for: picked once on the page, shared by every row. */
+let pickedAgent: string | null = null;
+const listeners = new Set<() => void>();
+function pickAgent(agentId: string) {
+  pickedAgent = agentId;
+  listeners.forEach((l) => l());
+}
+function usePickedAgent(): string | null {
+  return React.useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+    () => pickedAgent,
+    () => null,
+  );
+}
+
 /**
- * The agent Explore's Allow / Block speaks for: the account's first agent,
- * named on the control. What an agent can use is per agent now; with several
- * agents, the others are changed on the Agents page.
+ * The agent Explore's Allow / Block speaks for: the one picked with
+ * `ExploreAgentPicker`, else the account's first agent. What an agent can use
+ * is per agent, so every control names it.
  */
 export function useExploreAgent() {
   const agents = useQuery({
@@ -25,9 +43,33 @@ export function useExploreAgent() {
     retry: false,
     queryFn: () => listAgents({ limit: 50 }) as unknown as Promise<{ items: { agentId: string; label?: string }[] }>,
   });
-  const agent = agents.data?.items[0] ?? null;
+  const picked = usePickedAgent();
+  const items = agents.data?.items ?? [];
+  const agent = items.find((a) => a.agentId === picked) ?? items[0] ?? null;
   const access = useAgentAccess(agent?.agentId);
-  return { agent, name: agent?.label ?? "Your agent", access, many: (agents.data?.items.length ?? 0) > 1 };
+  return { agent, agents: items, name: agent?.label ?? "Your agent", access, many: items.length > 1 };
+}
+
+/** "Allow or block tools for: [prod ▾]" — only when there is more than one agent. */
+export function ExploreAgentPicker({ className }: { className?: string }) {
+  const { agent, agents, many } = useExploreAgent();
+  if (!many || !agent) return null;
+  return (
+    <label className={cn("inline-flex items-center gap-2 text-body-13 text-02", className)}>
+      Allow or block tools for
+      <select
+        className="min-h-10 rounded-md border border-02 bg-01 px-2 py-1 text-body-13 text-01 tablet:min-h-0"
+        value={agent.agentId}
+        onChange={(e) => pickAgent(e.target.value)}
+      >
+        {agents.map((a) => (
+          <option key={a.agentId} value={a.agentId}>
+            {a.label ?? "Agent"}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 /**
@@ -89,7 +131,7 @@ export function ToolAccessControl({ toolId, toolName, className }: { toolId: str
               )}
             >
               {allow ? <Check aria-hidden="true" className="size-3.5" /> : <Ban aria-hidden="true" className="size-3.5" />}
-              {allow ? "Allowed" : "Blocked"}
+              {allow ? `Allowed for ${name}` : "Blocked"}
             </button>
           );
         })}

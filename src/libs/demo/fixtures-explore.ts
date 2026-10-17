@@ -492,6 +492,15 @@ export function demoOfferPriceMinor(toolId: string, providerId: string): string 
   return offer ? usd(offer.price).amount : null;
 }
 
+/** The topic a demo tool sits in (the backend's `tools.category`), from its name. */
+export function demoCategoryOf(name: string): string {
+  const n = name.toLowerCase();
+  if (/weather|geocode/.test(n)) return "weather";
+  if (/usd|token|market|fx|chain/.test(n)) return "finance";
+  if (/wikipedia|research|summar/.test(n)) return "knowledge";
+  return "web";
+}
+
 /** The catalogue as the tool-set fixtures read it: each tool with its name, pricing and offers. */
 export function demoToolOffers(): readonly {
   readonly id: string;

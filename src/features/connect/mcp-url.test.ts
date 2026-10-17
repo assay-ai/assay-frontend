@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { KEY_PLACEHOLDER, keyMode, mcpConfig, MCP_CLIENTS } from "@/features/buyer-money/mcp-config";
 
-import { buildMcpUrl, canonicalTools, parseMcpUrl, sameChoice, suggestServerName, type ConnectChoice } from "./mcp-url";
+import { buildMcpUrl, canonicalTools, mcpToolName, parseMcpUrl, sameChoice, suggestServerName, type ConnectChoice } from "./mcp-url";
 
 const HOST = "https://mcp.example.com";
 
@@ -136,5 +136,13 @@ describe("the snippet for each of the four clients", () => {
     expect(keyMode("assay_live_ab12")).toBe("live");
     expect(keyMode("assay_test_ab12")).toBe("test");
     expect(keyMode(null)).toBeNull();
+  });
+});
+
+describe("mcpToolName — what goes in ?tools=", () => {
+  it("is the tool's MCP name, else its id, never a display name", () => {
+    expect(mcpToolName({ name: "get_weather", toolId: "06399979" })).toBe("get_weather");
+    expect(mcpToolName({ name: "Market quote", toolId: "market-quote" })).toBe("market-quote");
+    expect(mcpToolName({ name: "Market quote", id: "06399979-f8b8-4c9e-a9b1-bd2a5924d442" })).toBeNull();
   });
 });

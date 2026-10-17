@@ -15,7 +15,7 @@ import type {
 
 import { demoMinutesAgo } from "./demo-clock";
 import { demoConnectVariant, type DemoConnectVariant } from "./demo-connect";
-import { demoProvider, demoToolOffers } from "./fixtures-explore";
+import { demoCategoryOf, demoProvider, demoToolOffers } from "./fixtures-explore";
 import type { DemoFixture } from "./fixtures";
 
 /**
@@ -59,20 +59,15 @@ function minor(major: string): string {
   return String(BigInt(`${whole}${fraction.padEnd(6, "0").slice(0, 6)}`));
 }
 
-/** The topic a demo tool sits in (the backend's `tools.category`). */
-function categoryOf(name: string): string {
-  if (/weather|geocode/.test(name)) return "weather";
-  if (/usd|token|market|fx|chain/.test(name)) return "finance";
-  if (/wikipedia|research|summar/.test(name)) return "knowledge";
-  return "web";
-}
+const categoryOf = demoCategoryOf;
 
 function catalogue() {
   return demoToolOffers().filter((tool) => tool.offers.length > 0 || tool.pricingMode === null);
 }
 
+/** A tool by its name, or by its id — the name a `?tools=` URL uses when the display name is not an MCP name. */
 function toolByName(name: string) {
-  return catalogue().find((tool) => tool.name === name) ?? null;
+  return catalogue().find((tool) => tool.name === name || tool.id === name) ?? null;
 }
 
 function toolById(id: string) {
@@ -221,8 +216,9 @@ function seed(variant: DemoConnectVariant): Stage {
           ...(variant === "waiting"
             ? [
                 {
-                  canonicalUrl: buildMcpUrl({ kind: "toolset", slug: "weather" }, { free: false }, host),
-                  serverName: "weather",
+                  // Handed out by the first run (/connect), no call yet.
+                  canonicalUrl: buildMcpUrl({ kind: "everything" }, { free: false }, host),
+                  serverName: "assay",
                   client: "cursor",
                   handedOutAt: demoMinutesAgo(3),
                   firstCallAt: null,
@@ -232,6 +228,8 @@ function seed(variant: DemoConnectVariant): Stage {
             : []),
           ...(variant === "over-budget"
             ? [
+                // Everything (13 tools) + the weather tool set (2) + six chosen tools, on top of
+                // the 4 + 2 above: 27 tools shown in full, over the 25 budget.
                 {
                   canonicalUrl: buildMcpUrl({ kind: "everything" }, { free: false }, host),
                   serverName: "assay",
@@ -239,6 +237,26 @@ function seed(variant: DemoConnectVariant): Stage {
                   handedOutAt: demoMinutesAgo(600),
                   firstCallAt: demoMinutesAgo(590),
                   lastCallAt: demoMinutesAgo(40),
+                },
+                {
+                  canonicalUrl: buildMcpUrl({ kind: "toolset", slug: "weather" }, { free: false }, host),
+                  serverName: "weather",
+                  client: "cursor",
+                  handedOutAt: demoMinutesAgo(500),
+                  firstCallAt: demoMinutesAgo(490),
+                  lastCallAt: demoMinutesAgo(55),
+                },
+                {
+                  canonicalUrl: buildMcpUrl(
+                    { kind: "tools", tools: ["get_weather", "geocode_place", "search_web", "extract_page_text", "get_usd_eur_rate", "get_token_market"] },
+                    { free: false },
+                    host,
+                  ),
+                  serverName: "tools",
+                  client: "cursor",
+                  handedOutAt: demoMinutesAgo(400),
+                  firstCallAt: demoMinutesAgo(390),
+                  lastCallAt: demoMinutesAgo(70),
                 },
               ]
             : []),
@@ -412,7 +430,7 @@ export function demoPreview(url: string, agentId: string): McpUrlPreview {
   } else if (parsed.choice.kind === "tools") {
     const names = canonicalTools(parsed.choice.tools);
     for (const name of names) if (!toolByName(name)) ignored.push(name);
-    inView = inView.filter((tool) => names.includes(tool.name));
+    inView = inView.filter((tool) => names.includes(tool.name) || names.includes(tool.id));
   } else if (parsed.choice.kind === "url") {
     notFound();
   }
@@ -440,14 +458,15 @@ export function demoPreview(url: string, agentId: string): McpUrlPreview {
   });
   const listed = tools.filter((t) => t.listed);
   const warnings: McpUrlPreview["warnings"] = [];
-  const add = (code: string, list: string[]) => {
+  const ref = (t: PreviewTool) => ({ toolId: t.toolId, name: t.name });
+  const add = (code: string, list: { toolId: string | null; name: string }[]) => {
     if (list.length > 0) warnings.push({ code, tools: list });
   };
-  add("NO_BACKUP_PROVIDER", listed.filter((t) => t.providerCount === 1).map((t) => t.name));
-  add("BLOCKED_BY_ACCESS", tools.filter((t) => !t.allowed).map((t) => t.name));
-  add("NO_PROVIDER_FITS", tools.filter((t) => t.allowed && t.noProviderFits).map((t) => t.name));
+  add("NO_BACKUP_PROVIDER", listed.filter((t) => t.providerCount === 1).map(ref));
+  add("BLOCKED_BY_ACCESS", tools.filter((t) => !t.allowed).map(ref));
+  add("NO_PROVIDER_FITS", tools.filter((t) => t.allowed && t.noProviderFits).map(ref));
   if (tools.length > 0 && !tools.some((t) => t.allowed)) warnings.push({ code: "NOTHING_ALLOWED", tools: [] });
-  add("IGNORED_TOOLS", ignored);
+  add("IGNORED_TOOLS", ignored.map((name) => ({ toolId: null, name })));
   const canonicalUrl = buildMcpUrl(parsed.choice, parsed.options, mcpHost());
   return {
     canonicalUrl,
@@ -502,9 +521,9 @@ function serversOf(agentId: string): { servers: ServerInUse[]; overBudget: boole
       updateAvailable: false,
     };
   });
-  // The over-budget picture's `/` lists the whole catalogue for an agent that can use everything.
+  // The same rule as the backend: the tools shown in full across the agent's servers, over 25.
   const total = servers.reduce((sum, server) => sum + (server.toolCount ?? 0), 0);
-  return { servers, overBudget: total > 25 || s.variant === "over-budget" };
+  return { servers, overBudget: total > 25 };
 }
 
 /* ----------------------------------------------------- refused calls */
@@ -517,7 +536,7 @@ function refusedCalls(): RefusedCall[] {
   const reasons = (toolName: string, rule: ToolsetEntry | null) =>
     fits(toolByName(toolName)!.id, access, rule)
       .filter((f) => f.reason !== null)
-      .map((f) => ({ providerId: f.providerId, ...f.reason! }));
+      .map((f) => ({ providerId: f.providerId, providerName: demoProvider(f.providerId)?.legalName ?? null, ...f.reason! }));
   const marketQuote: RefusedCall = {
     callId: "rc-7f3a91d2-market-quote",
     agentId: PROD_AGENT,
@@ -527,7 +546,7 @@ function refusedCalls(): RefusedCall[] {
     refusalLayer: "AGENT_LIMITS",
     charged: false,
     // One provider, above the agent's max: "This tool has one provider".
-    providers: [{ providerId: HARBORLIGHT, reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "Quote 0.45 above the agent's max" }],
+    providers: [{ providerId: HARBORLIGHT, providerName: demoProvider(HARBORLIGHT)?.legalName ?? null, reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "Quote 0.45 above the agent's max" }],
     endpointKind: "ROOT",
     toolsetId: null,
     toolsetVersion: null,
@@ -549,7 +568,7 @@ function refusedCalls(): RefusedCall[] {
       providers:
         searchReasons.length > 0
           ? searchReasons
-          : [{ providerId: COBALT, reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "Quote 0.0080 above the agent's max" }],
+          : [{ providerId: COBALT, providerName: demoProvider(COBALT)?.legalName ?? null, reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "Quote 0.0080 above the agent's max" }],
       endpointKind: "TOOLSET",
       toolsetId: RESEARCH_ID,
       toolsetVersion: null,

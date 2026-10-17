@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CircleCheck, Copy, TriangleAlert, X } from "lucide-react";
+import { Check, CircleCheck, Copy, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -15,7 +15,7 @@ import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { isMcpClient, keyMode, mcpConfig, type McpClient } from "@/features/buyer-money/mcp-config";
-import { buildMcpUrl, parseMcpUrl, suggestServerName, type ConnectChoice } from "@/features/connect/mcp-url";
+import { buildMcpUrl, mcpToolName, parseMcpUrl, suggestServerName, type ConnectChoice } from "@/features/connect/mcp-url";
 import { allowToolsBody } from "@/features/toolsets/access-result";
 import { defaultEntry } from "@/features/toolsets/entry-rules";
 import { copyBlocked, offersFreeOnly, overBudgetWith, previewSummary, previewWarnings, type PreviewWarning } from "@/features/toolsets/preview";
@@ -165,6 +165,12 @@ function ConnectBody({
   }, [effectiveAgentId, servers.data]);
 
   const [recorded, setRecorded] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState(false);
+  React.useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(t);
+  }, [copied]);
   const record = useMutation({
     mutationFn: () => recordConnectUrl(effectiveAgentId!, { url: url!, serverName, client }),
     onSuccess: (row) => {
@@ -189,7 +195,7 @@ function ConnectBody({
     if (!url || blocked) return;
     try {
       await navigator.clipboard.writeText(snippet);
-      toast.success("Copied. Paste it into your client.");
+      setCopied(true);
     } catch {
       toast.error("Copy did not work here: select the text and copy it.");
     }
@@ -210,11 +216,16 @@ function ConnectBody({
   };
 
   const agentName = agent?.label ?? "your agent";
+  // `?tools=` takes each tool's MCP name (never its display name); tools no provider serves are shown, disabled.
+  const nameOf = (mcpName: string) => catalogue.tools.find((t) => mcpToolName(t) === mcpName)?.name ?? mcpName;
   const toolOptions = catalogue.tools
-    .filter((t) => !tools.includes(t.name))
-    .map((t) => ({
-      id: t.name,
+    .map((t) => ({ tool: t, mcp: mcpToolName(t) }))
+    .filter((x): x is { tool: (typeof catalogue.tools)[number]; mcp: string } => x.mcp !== null && !tools.includes(x.mcp))
+    .sort((a, b) => Number(a.tool.providerCount === 0) - Number(b.tool.providerCount === 0) || a.tool.name.localeCompare(b.tool.name))
+    .map(({ tool: t, mcp }) => ({
+      id: mcp,
       label: t.name,
+      disabled: t.providerCount === 0,
       detail:
         t.providerCount === 0
           ? "No provider yet"
@@ -295,12 +306,12 @@ function ConnectBody({
                 {tools.length > 0 ? (
                   <ul className="flex flex-wrap gap-1.5" aria-label="Chosen tools">
                     {tools.map((name) => (
-                      <li key={name} className="inline-flex items-center gap-1 rounded-full bg-03 py-0.5 pl-2.5 pr-1 font-mono text-mono-12 text-01">
-                        {name}
+                      <li key={name} className="inline-flex min-h-10 items-center gap-1 rounded-full bg-03 py-0.5 pl-2.5 pr-1 text-label-xs text-01 tablet:min-h-0">
+                        <span className="[overflow-wrap:anywhere]">{nameOf(name)}</span>
                         <button
                           type="button"
-                          aria-label={`Remove ${name}`}
-                          className="rounded-full p-0.5 text-03 hover:bg-02 hover:text-01"
+                          aria-label={`Remove ${nameOf(name)}`}
+                          className="flex size-8 items-center justify-center rounded-full text-03 hover:bg-02 hover:text-01 tablet:size-6"
                           onClick={() => setTools(tools.filter((t) => t !== name))}
                         >
                           <X aria-hidden="true" className="size-3" />
@@ -315,8 +326,9 @@ function ConnectBody({
                   placeholder="Search tools by name"
                   options={toolOptions}
                   onChange={(id) => id && setTools([...tools, id])}
+                  inline
                 />
-                {tools.length >= 2 ? <SaveAsToolset tools={tools} onSaved={(newSlug) => { setSlug(newSlug); setKind("toolset"); }} suggest={tools.length > 10} /> : null}
+                {tools.length >= 2 ? <SaveAsToolset tools={tools} nameOf={nameOf} onSaved={(newSlug) => { setSlug(newSlug); setKind("toolset"); }} suggest={tools.length > 10} /> : null}
               </div>
             ) : null}
           </ChoiceRow>
@@ -359,7 +371,7 @@ function ConnectBody({
           </ul>
         ) : null}
 
-        {url ? (
+        {url && !blocked ? (
           <div className="flex min-w-0 flex-col gap-2">
             <KeyLine
               prefix={keyPrefix}
@@ -382,14 +394,18 @@ function ConnectBody({
         <details className="rounded-lg border border-01 bg-02 px-3 py-2.5" open={free || undefined}>
           <summary className="cursor-pointer select-none text-label-13 text-01">More options</summary>
           <div className="mt-3 flex flex-col gap-1">
-            {offersFreeOnly(preview.data) || free ? (
-              <>
-                <Switch checked={free} onChange={(e) => setFree(e.target.checked)} label="Only free tools" />
-                <p className="text-body-xs text-03">Lists only tools with free calls. Calls through this URL are never charged; past the free calls they are refused.</p>
-              </>
-            ) : (
-              <p className="text-body-xs text-03">Only free tools: none of these tools has free calls.</p>
-            )}
+            <Switch
+              className="min-h-10 tablet:min-h-0"
+              checked={free}
+              disabled={!free && !offersFreeOnly(preview.data)}
+              onChange={(e) => setFree(e.target.checked)}
+              label="Only free tools"
+            />
+            <p className="text-body-xs text-03">
+              {free || offersFreeOnly(preview.data)
+                ? "Lists only tools with free calls. Calls through this URL are never charged; past the free calls they are refused."
+                : "Not available here: none of these tools has free calls."}
+            </p>
           </div>
         </details>
 
@@ -409,8 +425,8 @@ function ConnectBody({
       </div>
 
       <div className="sticky bottom-0 z-10 flex w-full flex-wrap items-center gap-2 border-t border-01 bg-01 px-[18px] py-3">
-        <Button type="button" icon={<Copy />} onClick={() => void copy()} disabled={!url || blocked} data-testid="connect-copy">
-          Copy
+        <Button type="button" icon={copied ? <Check /> : <Copy />} onClick={() => void copy()} disabled={!url || blocked} data-testid="connect-copy" aria-live="polite">
+          {copied ? "Copied" : "Copy"}
         </Button>
         <Button
           type="button"
@@ -484,7 +500,7 @@ export function ResultLine({
         </p>
       ) : error ? (
         <p className="flex flex-wrap items-center gap-2 text-body-13 text-02" role="alert">
-          Couldn&apos;t load the tool list ({errorText(error, "try again")}).
+          Couldn&apos;t load the tool list: {errorText(error, "try again").replace(/\.$/, "")}.
           <button type="button" className="font-semibold text-primary-600 hover:underline" onClick={onRetry}>
             Retry
           </button>
@@ -493,6 +509,7 @@ export function ResultLine({
       ) : preview ? (
         <details>
           <summary className="cursor-pointer select-none text-label-13 text-01">{previewSummary(preview)}</summary>
+          <p className="mt-1 text-body-xs text-03">Tokens: what this tool list costs your agent&apos;s model on each request, estimated.</p>
           <ul className="mt-2 flex flex-col divide-y divide-01">
             {preview.tools
               .filter((t) => t.listed)
@@ -545,17 +562,27 @@ function KeyLine({ prefix, full, creating, onCreate }: { prefix: string | null; 
 }
 
 /** "Only these tools" → a tool set, name only (the slug is generated). */
-function SaveAsToolset({ tools, onSaved, suggest }: { tools: string[]; onSaved: (slug: string) => void; suggest: boolean }) {
+function SaveAsToolset({
+  tools,
+  nameOf,
+  onSaved,
+  suggest,
+}: {
+  tools: string[];
+  nameOf: (mcpName: string) => string;
+  onSaved: (slug: string) => void;
+  suggest: boolean;
+}) {
   const queryClient = useQueryClient();
   const catalogue = useCatalogue();
   const [open, setOpen] = React.useState(false);
-  const [name, setName] = React.useState("");
+  const [name, setName] = React.useState(`My ${tools.length} tools`);
   const save = useMutation({
     mutationFn: () =>
       createToolset({
         name: name.trim(),
         entries: tools
-          .map((toolName) => catalogue.tools.find((t) => t.name === toolName)?.toolId)
+          .map((mcpName) => catalogue.tools.find((t) => mcpToolName(t) === mcpName)?.toolId)
           .filter((id): id is string => Boolean(id))
           .map(defaultEntry),
       }),
@@ -567,9 +594,9 @@ function SaveAsToolset({ tools, onSaved, suggest }: { tools: string[]; onSaved: 
   });
   if (!open) {
     return (
-      <button type="button" className="self-start text-label-13 text-primary-600 hover:underline" onClick={() => setOpen(true)}>
-        {suggest ? "That is a lot of tools: save them as a tool set" : "Save as tool set"}
-      </button>
+      <Button type="button" size="sm" variant="secondary" className="self-start" onClick={() => setOpen(true)}>
+        {suggest ? `Save these ${tools.length} tools as a tool set` : "Save as tool set"}
+      </Button>
     );
   }
   return (

@@ -57,7 +57,12 @@ const ROW_STATE = { OPEN: null, REPLACING: "being collected", WRITTEN_OFF: "writ
  * tool and why sit under Details. Nothing shows while nothing is owed or the
  * list cannot be read (an older backend has no such route).
  */
-export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: string }) {
+/**
+ * `compact`: one line (the title) and the action, for pages whose own content
+ * must come first (Connect, tool sets, Agents): the detail stays one click
+ * away under Details.
+ */
+export function BuyerDebtBanner({ wrapperClassName, compact = false }: { wrapperClassName?: string; compact?: boolean }) {
   const query = useBuyerDebtsQuery();
   const { openSettle } = useSettleDebt();
   const names = useEntityNames({ kinds: ["tool"] });
@@ -84,7 +89,8 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
         data-testid="buyer-debt-banner"
         data-kind={summary.kind}
         className={cn(
-          "flex w-full flex-col gap-3 rounded-lg border px-4 py-3.5 tablet:flex-row tablet:items-start",
+          "flex w-full rounded-lg border",
+          compact ? "flex-row items-center gap-3 px-3 py-2" : "flex-col gap-3 px-4 py-3.5 tablet:flex-row tablet:items-start",
           collecting ? "border-primary-20 bg-primary-10" : "border-warning-20 bg-warning-10",
         )}
       >
@@ -95,13 +101,13 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
           />
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <p className="text-label-sm text-01 [overflow-wrap:anywhere]">{summary.title}</p>
-            <p className="text-body-13 text-02 [overflow-wrap:anywhere]">{summary.detail}</p>
-            {summary.waitingNote ? (
+            {compact ? null : <p className="text-body-13 text-02 [overflow-wrap:anywhere]">{summary.detail}</p>}
+            {summary.waitingNote && !compact ? (
               <p id={noteId} data-testid="buyer-debt-not-yet" className="text-body-13 text-02 [overflow-wrap:anywhere]">
                 {summary.waitingNote}
               </p>
             ) : null}
-            {demoNote ? (
+            {demoNote && !compact ? (
               <p className="text-body-xs text-03 [overflow-wrap:anywhere]" data-testid="buyer-debt-demo-note">
                 {demoNote}
               </p>
@@ -110,6 +116,7 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
               <summary className="hit-area cursor-pointer select-none text-label-xs text-02 underline-offset-2 hover:underline">
                 Details ({all.length === 1 ? "1 call" : `${all.length} calls`})
               </summary>
+              {compact ? <p className="mt-1.5 [overflow-wrap:anywhere]">{summary.detail}</p> : null}
               <ul className="mt-1.5 flex flex-col gap-1">
                 {all.map((debt) => {
                   const state = ROW_STATE[debtStateOf(debt)];

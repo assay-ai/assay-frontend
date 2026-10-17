@@ -21,8 +21,8 @@ export const ON_EMPTY_LABELS: Record<OnEmpty, string> = {
 };
 
 export const REFUSAL_LAYER_LABELS: Record<RefusalLayer, string> = {
-  SERVER: "Refused by the server it called (the connection)",
-  AGENT_LIMITS: "Refused by this agent's limits",
+  SERVER: "Refused by the server it called",
+  AGENT_LIMITS: "Refused by this agent's settings",
   TOOLSET_RULES: "Refused by the tool set's rules",
 };
 

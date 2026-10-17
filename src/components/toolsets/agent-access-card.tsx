@@ -1,59 +1,64 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ban, CircleCheck, TriangleAlert, X } from "lucide-react";
+import { Ban, CircleCheck, Info, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
 import { useSpendPolicyQuery } from "@/components/buyer-money/use-agents";
 import { useCatalogue } from "@/components/g31/use-catalogue";
-import { EntityPicker } from "@/components/patterns/entity-picker";
 import { SkeletonRows } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
+import { parseMcpUrl } from "@/features/connect/mcp-url";
 import {
   accessSummary,
-  addToolsetBody,
-  excludeProviderBody,
-  includeProviderBody,
-  maxPriceBody,
-  modeBody,
+  draftBody,
+  draftChanges,
+  draftFrom,
   priceText,
-  removeToolBody,
-  removeToolsetBody,
+  restoreBody,
   toolResultLine,
   toolResultTone,
-  verifiedOnlyBody,
-  viaUrlOnlyBody,
+  type AccessDraft,
 } from "@/features/toolsets/access-result";
 import { ACCESS_LABEL, PROVIDER_LIMITS_LABEL, VERIFIED_ONLY_LABEL } from "@/features/toolsets/labels";
-import { restrictToConnected, type AgentAccess, type UpdateAgentAccessBody } from "@/services/toolsets.service";
+import { restrictToConnected, type AgentAccess, type AgentToolEffect, type ServerInUse } from "@/services/toolsets.service";
 import { cn } from "@/utils";
 import { parseAmountInput, toDecimal } from "@/utils/money";
 import { toast } from "@/utils/toast";
 
-import { errorText, toolsetKeys, useAgentAccess, useToolsets, useUpdateAccess } from "./use-toolsets";
+import { errorText, toolsetKeys, useAgentAccess, useAgentServers, useToolsets, useUpdateAccess } from "./use-toolsets";
 
 /**
  * Agent › What this agent can use (design spec §7.10), next to Spending
- * limits. One section, two or three clicks for any change, each saved as it
- * is made:
+ * limits. One form with one Save and one Cancel: nothing changes until it is
+ * saved, and Save says what changed with an Undo.
  *
- *   - Everything, or Only these tool sets and tools — and "Only what's
- *     connected" in one click;
- *   - Provider limits: excluded providers, max price, "Only verified
- *     providers" (minimum quality stays hidden until it is measured);
- *   - the combined result per tool: "get_weather: 2 of 4 providers left".
+ *   - Everything, or Only these tool sets and tools — ticked from a list with
+ *     Select all / Clear all / What it's connected to, each tool showing its
+ *     combined result ("2 of 4 providers left");
+ *   - Provider limits: providers to never use (one tick each), a max price,
+ *     "Only verified providers";
+ *   - the shortcut "Only what's connected", disabled with the reason when one
+ *     of its servers is Everything.
  *
  * Per-key narrowing exists in the API only and is not shown here.
  */
 export function AgentAccessCard({ agentId, agentName, highlight = false }: { agentId: string; agentName: string; highlight?: boolean }) {
   const query = useAgentAccess(agentId);
   const ref = React.useRef<HTMLElement | null>(null);
+  // The deep link `/agents?agent={id}#access`: scroll once the section has its
+  // content, and again after the page around it has settled.
   React.useEffect(() => {
-    if (highlight && ref.current && query.data) ref.current.scrollIntoView({ block: "start" });
+    if (!highlight || !query.data || !ref.current) return;
+    const el = ref.current;
+    el.scrollIntoView({ block: "start" });
+    const later = window.setTimeout(() => el.scrollIntoView({ block: "start" }), 400);
+    return () => window.clearTimeout(later);
   }, [highlight, query.data]);
 
   return (
@@ -62,22 +67,46 @@ export function AgentAccessCard({ agentId, agentName, highlight = false }: { age
       id={highlight ? "access" : undefined}
       aria-label={ACCESS_LABEL}
       data-testid="agent-access"
-      className={cn("flex min-w-0 flex-col gap-3", highlight && "scroll-mt-24 rounded-md outline outline-2 outline-offset-4 outline-primary-500")}
+      data-highlight={highlight || undefined}
+      className={cn("flex min-w-0 scroll-mt-24 flex-col gap-3", highlight && "rounded-md outline outline-2 outline-offset-4 outline-primary-500")}
     >
       {query.isPending ? (
         <SkeletonRows rows={3} />
       ) : query.isError || !query.data ? (
         <p className="flex flex-wrap items-center gap-2 text-body-13 text-02">
           What {agentName} can use could not be loaded ({errorText(query.error)}). Its limits still apply.
-          <button type="button" className="font-semibold text-primary-600 hover:underline" onClick={() => void query.refetch()}>
+          <button type="button" className="min-h-10 font-semibold text-primary-600 hover:underline tablet:min-h-0" onClick={() => void query.refetch()}>
             Retry
           </button>
         </p>
       ) : (
-        <AccessEditor access={query.data} agentName={agentName} />
+        <AccessEditor key={`${query.data.agentId}:${query.data.policyVersion}`} access={query.data} agentName={agentName} />
       )}
     </section>
   );
+}
+
+/** Whether one of the agent's servers is Everything (`/` with no filter). */
+export function connectedToEverything(servers: readonly ServerInUse[] | undefined): boolean {
+  return (servers ?? []).some((s) => parseMcpUrl(s.canonicalUrl, s.canonicalUrl.replace(/^([a-z]+:\/\/[^/?#]+).*$/i, "$1"))?.choice.kind === "everything");
+}
+
+/** The tool sets and tools the agent's servers serve: the draft "What it's connected to" starts from. */
+export function connectedSelection(servers: readonly ServerInUse[] | undefined, tools: readonly AgentToolEffect[]) {
+  const toolsets: { toolsetId: string; viaUrlOnly: boolean }[] = [];
+  const toolIds = new Set<string>();
+  for (const server of servers ?? []) {
+    if (server.toolsetId && !toolsets.some((t) => t.toolsetId === server.toolsetId)) toolsets.push({ toolsetId: server.toolsetId, viaUrlOnly: true });
+    const origin = server.canonicalUrl.replace(/^([a-z]+:\/\/[^/?#]+).*$/i, "$1");
+    const parsed = parseMcpUrl(server.canonicalUrl, origin);
+    if (parsed?.choice.kind === "tools") {
+      for (const name of parsed.choice.tools) {
+        const tool = tools.find((t) => t.name === name || t.toolId === name);
+        if (tool) toolIds.add(tool.toolId);
+      }
+    }
+  }
+  return { toolsets, toolIds: [...toolIds] };
 }
 
 export function AccessEditor({ access, agentName }: { access: AgentAccess; agentName: string }) {
@@ -86,27 +115,55 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
   const toolsets = useToolsets();
   const catalogue = useCatalogue();
   const policy = useSpendPolicyQuery();
-  const save = (body: UpdateAgentAccessBody, done?: string) => update.mutate(body, { onSuccess: () => done && toast.success(done) });
+  const servers = useAgentServers(access.agentId);
+  const [draft, setDraft] = React.useState<AccessDraft>(() => draftFrom(access));
+  const decimals = access.rules.maxPrice?.decimals ?? policy.data?.decimals ?? 6;
+  const savedMax = access.rules.maxPrice ? toDecimal(access.rules.maxPrice).toString() : "";
+  const [maxText, setMaxText] = React.useState(savedMax);
+  const parsedMax = parseAmountInput(maxText, { decimals, required: false });
+  const effective: AccessDraft = { ...draft, maxPrice: parsedMax.error ? draft.maxPrice : parsedMax.atomic };
+  const body = draftBody(access, effective);
+  const changes = draftChanges(access, effective);
+  const everything = connectedToEverything(servers.data?.servers);
+
+  const save = () => {
+    if (!body || parsedMax.error) return;
+    const undo = restoreBody(access);
+    update.mutate(body, {
+      onSuccess: () =>
+        toast.success(`Saved: ${changes.join(", ")}`, {
+          description: `${agentName}'s next call uses it.`,
+          duration: 8000,
+          action: { label: "Undo", onClick: () => update.mutate(undo, { onSuccess: () => toast.success("Undone") }) },
+        }),
+    });
+  };
+  const cancel = () => {
+    setDraft(draftFrom(access));
+    setMaxText(savedMax);
+  };
 
   const onlyConnected = useMutation({
     mutationFn: () => restrictToConnected(access.agentId),
     onSuccess: (next) => {
+      const undo = restoreBody(access);
       queryClient.setQueryData(toolsetKeys.access(access.agentId), next);
       void queryClient.invalidateQueries({ queryKey: ["mcp-preview", access.agentId] });
-      toast.success(
-        next.everything
-          ? `One of ${agentName}'s servers is Everything, so only what's connected means every tool.`
-          : `${agentName} can now use only what its servers serve.`,
-      );
+      toast.success(`${agentName} can now use only what its servers serve.`, {
+        duration: 8000,
+        action: { label: "Undo", onClick: () => update.mutate(undo, { onSuccess: () => toast.success("Undone") }) },
+      });
     },
     onError: (error) => toast.error(errorText(error, "The change could not be saved")),
   });
 
-  const restricted = access.accessMode === "RESTRICTED";
-  const toolName = (id: string) => access.tools.find((t) => t.toolId === id)?.name ?? catalogue.tools.find((t) => t.toolId === id)?.name ?? "A tool no longer listed";
-  const providerName = (id: string) => catalogue.providers.find((p) => p.providerId === id)?.name ?? "A provider no longer listed";
-  const freeSets = (toolsets.data?.items ?? []).filter((set) => !access.allowedToolsets.some((t) => t.toolsetId === set.id));
-  const decimals = access.rules.maxPrice?.decimals ?? policy.data?.decimals ?? 6;
+  const patch = (change: Partial<AccessDraft>) => setDraft((d) => ({ ...d, ...change }));
+  const toggle = (list: string[], id: string, on: boolean) => (on ? [...new Set([...list, id])] : list.filter((x) => x !== id));
+  const routable = access.tools.filter((t) => t.providersTotal > 0);
+  const mySets = toolsets.data?.items ?? [];
+  const deletedSets = access.allowedToolsets.filter((t) => t.deleted);
+  const restricted = draft.mode === "RESTRICTED";
+  const providers = catalogue.providers;
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -114,70 +171,51 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
         {accessSummary(access)}
       </p>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-2">
         <Segmented
-          value={access.accessMode}
-          onValueChange={(v) => v !== access.accessMode && save(modeBody(access, v as "ALL" | "RESTRICTED"))}
+          value={draft.mode}
+          onValueChange={(v) =>
+            patch(
+              v === "RESTRICTED" && access.accessMode === "ALL"
+                ? // From Everything, Only these starts empty: tick what it may use.
+                  { mode: "RESTRICTED", toolIds: [], toolsets: [] }
+                : { mode: v as AccessDraft["mode"] },
+            )
+          }
           aria-label={`What ${agentName} can use`}
+          className="self-start"
         >
           <SegmentedItem value="ALL">Everything</SegmentedItem>
           <SegmentedItem value="RESTRICTED">Only these tool sets and tools</SegmentedItem>
         </Segmented>
-        <Button size="sm" variant="secondary" loading={onlyConnected.isPending} onClick={() => onlyConnected.mutate()}>
-          Only what&apos;s connected
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="min-h-10 tablet:min-h-0"
+            loading={onlyConnected.isPending}
+            disabled={everything || Boolean(body)}
+            onClick={() => onlyConnected.mutate()}
+          >
+            Shortcut: only what&apos;s connected
+          </Button>
+          {everything ? (
+            <p className="flex items-start gap-1.5 text-body-xs text-02" data-testid="connected-everything-note">
+              <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+              One of {agentName}&apos;s servers is Everything, so &ldquo;only what&apos;s connected&rdquo; would still mean every tool. Change that server under
+              Servers in use first.
+            </p>
+          ) : body ? (
+            <p className="text-body-xs text-03">Save or cancel your changes first.</p>
+          ) : null}
+        </div>
       </div>
 
       {restricted ? (
-        <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-01 bg-02 p-3">
-          <div className="flex flex-col gap-2">
-            <span className="text-label-13 text-01">Tool sets</span>
-            {access.allowedToolsets.length === 0 ? (
-              <p className="text-body-xs text-03">None.</p>
-            ) : (
-              <ul className="flex flex-col gap-1.5">
-                {access.allowedToolsets.map((set) => (
-                  <li key={set.toolsetId} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-01 px-2.5 py-2">
-                    <span className="min-w-0 flex-1 text-label-13 text-01">
-                      {set.deleted ? <span className="text-warning-700">Tool set deleted by its owner</span> : set.name ?? "A tool set"}
-                    </span>
-                    {!set.deleted ? (
-                      <Switch
-                        checked={set.viaUrlOnly}
-                        onChange={(e) => save(viaUrlOnlyBody(access, set.toolsetId, e.target.checked))}
-                        label="Only through its own URL"
-                      />
-                    ) : null}
-                    <button
-                      type="button"
-                      aria-label={`Stop allowing ${set.name ?? "this tool set"}`}
-                      className="rounded-full p-1 text-03 hover:bg-02 hover:text-01"
-                      onClick={() => save(removeToolsetBody(access, set.toolsetId, set.name ?? "a tool set"))}
-                    >
-                      <X aria-hidden="true" className="size-3.5" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {freeSets.length > 0 ? (
-              <select
-                aria-label="Allow a tool set"
-                className="w-full rounded-md border border-02 bg-01 px-3 py-2 text-body-sm text-01 tablet:w-[320px]"
-                value=""
-                onChange={(e) => {
-                  const set = freeSets.find((s) => s.id === e.target.value);
-                  if (set) save(addToolsetBody(access, set.id, set.name), `${set.name} allowed for ${agentName}`);
-                }}
-              >
-                <option value="">Allow a tool set…</option>
-                {freeSets.map((set) => (
-                  <option key={set.id} value={set.id}>
-                    {set.name}
-                  </option>
-                ))}
-              </select>
-            ) : toolsets.data && toolsets.data.items.length === 0 ? (
+        <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-01 bg-02 p-3" data-testid="access-choices">
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="pb-1 text-label-13 text-01">Tool sets</legend>
+            {mySets.length === 0 && deletedSets.length === 0 ? (
               <p className="text-body-xs text-03">
                 No tool sets yet.{" "}
                 <Link href="/toolsets/mine" className="text-primary-600 hover:underline">
@@ -185,169 +223,180 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
                 </Link>
               </p>
             ) : null}
-            {access.allowedToolsets.some((s) => s.viaUrlOnly) ? (
+            {mySets.map((set) => {
+              const chosen = draft.toolsets.find((t) => t.toolsetId === set.id);
+              return (
+                <div key={set.id} className="flex flex-col gap-1 rounded-md bg-01 px-2.5 py-1.5 tablet:flex-row tablet:items-center tablet:gap-3">
+                  <Checkbox
+                    className="min-h-10 min-w-0 flex-1 tablet:min-h-0"
+                    checked={Boolean(chosen)}
+                    onChange={(e) =>
+                      patch({ toolsets: e.target.checked ? [...draft.toolsets, { toolsetId: set.id, viaUrlOnly: true }] : draft.toolsets.filter((t) => t.toolsetId !== set.id) })
+                    }
+                    label={
+                      <span className="[overflow-wrap:anywhere]">
+                        {set.name} <span className="text-body-xs text-03">· {set.toolCount} tools</span>
+                      </span>
+                    }
+                  />
+                  {chosen ? (
+                    <Switch
+                      className="min-h-10 pl-7 tablet:min-h-0 tablet:pl-0"
+                      checked={chosen.viaUrlOnly}
+                      onChange={(e) => patch({ toolsets: draft.toolsets.map((t) => (t.toolsetId === set.id ? { ...t, viaUrlOnly: e.target.checked } : t)) })}
+                      label="Only through its own URL"
+                    />
+                  ) : null}
+                </div>
+              );
+            })}
+            {deletedSets.map((set) => (
+              <p key={set.toolsetId} className="text-body-xs text-warning-700">
+                A tool set it was allowed was deleted by its owner; its tools are no longer allowed through it.
+              </p>
+            ))}
+            {draft.toolsets.some((t) => t.viaUrlOnly) ? (
               <p className="text-body-xs text-03">
                 &ldquo;Only through its own URL&rdquo; keeps the tool set&apos;s provider rules on every call: its tools work only through that tool set&apos;s server.
               </p>
             ) : null}
-          </div>
+          </fieldset>
 
-          <div className="flex flex-col gap-2">
-            <span className="text-label-13 text-01">Tools</span>
-            {access.allowedToolIds.length > 0 ? (
-              <ul className="flex flex-wrap gap-1.5">
-                {access.allowedToolIds.map((id) => (
-                  <li key={id} className="inline-flex items-center gap-1 rounded-full bg-01 py-0.5 pl-2.5 pr-1 font-mono text-mono-12 text-01">
-                    {toolName(id)}
-                    <button
-                      type="button"
-                      aria-label={`Stop allowing ${toolName(id)}`}
-                      className="rounded-full p-0.5 text-03 hover:bg-02 hover:text-01"
-                      onClick={() => save(removeToolBody(access, id, toolName(id)))}
-                    >
-                      <X aria-hidden="true" className="size-3" />
-                    </button>
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="pb-1 text-label-13 text-01">Tools</legend>
+            <div className="flex flex-wrap gap-x-3 text-label-13">
+              <button type="button" className="min-h-10 text-primary-600 hover:underline tablet:min-h-0" onClick={() => patch({ toolIds: routable.map((t) => t.toolId) })}>
+                Select all
+              </button>
+              <button type="button" className="min-h-10 text-primary-600 hover:underline tablet:min-h-0" onClick={() => patch({ toolIds: [], toolsets: [] })}>
+                Clear all
+              </button>
+              {servers.data && servers.data.servers.length > 0 ? (
+                <button
+                  type="button"
+                  className="min-h-10 text-primary-600 hover:underline tablet:min-h-0"
+                  onClick={() => patch(connectedSelection(servers.data?.servers, access.tools))}
+                >
+                  What it&apos;s connected to
+                </button>
+              ) : null}
+            </div>
+            <ul className="flex flex-col divide-y divide-01 rounded-md bg-01" data-testid="access-tool-list">
+              {access.tools.map((tool) => {
+                const none = tool.providersTotal === 0;
+                return (
+                  <li key={tool.toolId} className="flex min-w-0 flex-col gap-0.5 px-2.5 py-1.5 tablet:flex-row tablet:items-center tablet:gap-3">
+                    <Checkbox
+                      className="min-h-10 min-w-[8rem] tablet:min-h-0 tablet:w-[220px] tablet:shrink-0"
+                      disabled={none}
+                      checked={draft.toolIds.includes(tool.toolId)}
+                      onChange={(e) => patch({ toolIds: toggle(draft.toolIds, tool.toolId, e.target.checked) })}
+                      label={<span className="font-mono text-mono-12 [overflow-wrap:anywhere]">{tool.name}</span>}
+                    />
+                    <ResultText tool={tool} access={access} />
                   </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-body-xs text-03">None.</p>
-            )}
-            <EntityPicker
-              label="Allow a tool"
-              value={null}
-              placeholder="Search tools by name"
-              options={access.tools
-                .filter((t) => !access.allowedToolIds.includes(t.toolId))
-                .map((t) => ({ id: t.toolId, label: t.name, detail: `${t.providersTotal} provider${t.providersTotal === 1 ? "" : "s"}` }))}
-              onChange={(id) => id && save({ allowedToolIds: [...access.allowedToolIds, id], changeReason: `Allowed ${toolName(id)}` }, `${toolName(id)} allowed`)}
-              className="tablet:w-[320px]"
-            />
-          </div>
+                );
+              })}
+            </ul>
+          </fieldset>
         </div>
       ) : null}
 
-      <ProviderLimits
-        access={access}
-        decimals={decimals}
-        providerName={providerName}
-        providers={catalogue.providers.map((p) => ({ id: p.providerId, label: p.name, detail: p.tier === "NEW" ? "Not verified yet" : "Verified" }))}
-        onSave={save}
-        pending={update.isPending}
-      />
-
-      <details className="rounded-lg border border-01 px-3 py-2.5" open>
-        <summary className="cursor-pointer select-none text-label-13 text-01">Result per tool</summary>
-        <ul className="mt-2 flex flex-col gap-1" data-testid="access-results">
-          {access.tools.length === 0 ? <li className="text-body-xs text-03">No tools listed yet.</li> : null}
-          {access.tools.map((tool) => {
-            const tone = toolResultTone(tool);
-            return (
-              <li key={tool.toolId} className={cn("flex items-start gap-2 text-body-13", tone === "blocked" ? "text-03" : tone === "warn" ? "text-warning-700" : "text-02")}>
-                {tone === "blocked" ? (
-                  <Ban aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-                ) : tone === "warn" ? (
-                  <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-                ) : (
-                  <CircleCheck aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-success-500" />
-                )}
-                <span className="min-w-0 break-words">{toolResultLine(tool, access.rules)}</span>
-              </li>
-            );
-          })}
-        </ul>
-      </details>
-    </div>
-  );
-}
-
-function ProviderLimits({
-  access,
-  decimals,
-  providers,
-  providerName,
-  onSave,
-  pending,
-}: {
-  access: AgentAccess;
-  decimals: number;
-  providers: { id: string; label: string; detail: string }[];
-  providerName: (id: string) => string;
-  onSave: (body: UpdateAgentAccessBody, done?: string) => void;
-  pending: boolean;
-}) {
-  const { rules } = access;
-  const current = rules.maxPrice ? toDecimal(rules.maxPrice).toString() : "";
-  const [max, setMax] = React.useState(current);
-  React.useEffect(() => setMax(current), [current]);
-  const parsed = parseAmountInput(max, { decimals, required: false });
-  const changed = max.trim() !== current;
-
-  return (
-    <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-01 p-3" data-testid="provider-limits">
-      <div className="flex flex-col gap-0.5">
-        <span className="text-label-13 text-01">{PROVIDER_LIMITS_LABEL}</span>
-        <span className="text-body-xs text-03">Apply to every call this agent makes, through any server.</span>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <span className="text-label-xs text-02">Never use these providers</span>
-        {rules.excludeProviderIds.length > 0 ? (
-          <ul className="flex flex-wrap gap-1.5">
-            {rules.excludeProviderIds.map((id) => (
-              <li key={id} className="inline-flex items-center gap-1 rounded-full bg-03 py-0.5 pl-2.5 pr-1 text-label-xs text-01">
-                {providerName(id)}
-                <button
-                  type="button"
-                  aria-label={`Remove ${providerName(id)} from limits`}
-                  className="rounded-full p-0.5 text-03 hover:bg-02 hover:text-01"
-                  onClick={() => onSave(includeProviderBody(rules, id, providerName(id)))}
-                >
-                  <X aria-hidden="true" className="size-3" />
-                </button>
-              </li>
+      <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-01 p-3" data-testid="provider-limits">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-label-13 text-01">{PROVIDER_LIMITS_LABEL}</span>
+          <span className="text-body-xs text-03">Apply to every call this agent makes, through any server.</span>
+        </div>
+        <fieldset className="flex flex-col gap-1">
+          <legend className="pb-1 text-label-xs text-02">Never use these providers</legend>
+          <div className="grid grid-cols-1 gap-x-4 tablet:grid-cols-2">
+            {providers.map((p) => (
+              <Checkbox
+                key={p.providerId}
+                className="min-h-10 tablet:min-h-8"
+                checked={draft.exclude.includes(p.providerId)}
+                onChange={(e) => patch({ exclude: toggle(draft.exclude, p.providerId, e.target.checked) })}
+                label={
+                  <span className="[overflow-wrap:anywhere]">
+                    {p.name}
+                    {p.tier === "NEW" ? <span className="text-body-xs text-03"> · not verified yet</span> : null}
+                  </span>
+                }
+              />
             ))}
-          </ul>
-        ) : null}
-        <EntityPicker
-          label="Exclude a provider"
-          value={null}
-          placeholder="Search providers"
-          options={providers.filter((p) => !rules.excludeProviderIds.includes(p.id))}
-          onChange={(id) => id && onSave(excludeProviderBody(rules, id, providerName(id)), `${providerName(id)} excluded`)}
-          className="tablet:w-[320px]"
-        />
-      </div>
-
-      <form
-        className="flex flex-col gap-2 tablet:flex-row tablet:items-end"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!parsed.error && changed) onSave(maxPriceBody(parsed.atomic), parsed.atomic ? "Max price saved" : "Max price removed");
-        }}
-      >
+          </div>
+        </fieldset>
         <Field
           id={`max-price-${access.agentId}`}
           label="Max price per call"
           inputMode="decimal"
           suffix="USD"
           placeholder="No limit"
-          value={max}
-          onChange={(e) => setMax(e.target.value)}
-          error={parsed.error ?? undefined}
-          hint={rules.maxPrice ? `Now: ${priceText(rules.maxPrice)} a call` : "Providers that charge more are not used."}
-          wrapperClassName="tablet:w-[240px]"
+          value={maxText}
+          onChange={(e) => setMaxText(e.target.value)}
+          error={parsedMax.error ?? undefined}
+          hint={access.rules.maxPrice ? `Saved: ${priceText(access.rules.maxPrice)} a call. Empty it to remove the limit.` : "Providers that charge more are not used."}
+          wrapperClassName="tablet:w-[280px]"
         />
-        <Button type="submit" size="sm" variant="secondary" disabled={!changed || Boolean(parsed.error)} loading={pending && changed}>
-          {max.trim() === "" && rules.maxPrice ? "Remove" : "Save"}
-        </Button>
-      </form>
+        <Switch
+          className="min-h-10 tablet:min-h-0"
+          checked={draft.verified}
+          onChange={(e) => patch({ verified: e.target.checked })}
+          label={access.rules.minTier === "TRUSTED" && draft.verified ? "Only trusted providers (set through the API)" : VERIFIED_ONLY_LABEL}
+        />
+      </div>
 
-      <Switch
-        checked={rules.minTier !== null}
-        onChange={(e) => onSave(verifiedOnlyBody(e.target.checked))}
-        label={rules.minTier === "TRUSTED" ? "Only trusted providers (set through the API)" : VERIFIED_ONLY_LABEL}
-      />
+      {!restricted ? (
+        <details className="rounded-lg border border-01 px-3 py-2.5">
+          <summary className="min-h-10 cursor-pointer select-none content-center text-label-13 text-01 tablet:min-h-0">Result per tool</summary>
+          <ul className="mt-2 flex flex-col gap-1" data-testid="access-results">
+            {access.tools.length === 0 ? <li className="text-body-xs text-03">No tools listed yet.</li> : null}
+            {access.tools.map((tool) => (
+              <li key={tool.toolId} className="flex items-start gap-2">
+                <ResultText tool={tool} access={access} withName />
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
+      {body || parsedMax.error ? (
+        <div
+          className="sticky bottom-[72px] z-10 flex flex-wrap items-center gap-2 rounded-lg border border-primary-20 bg-01 px-3 py-2.5 shadow-soft md:bottom-3"
+          data-testid="access-save-bar"
+          role="region"
+          aria-label="Unsaved changes"
+        >
+          <span className="min-w-0 flex-1 text-body-13 text-01">
+            {parsedMax.error ? "Fix the max price to save." : `Not saved yet: ${changes.join(", ")}.`}
+            {body ? <span className="block text-body-xs text-03">The results above update after you save.</span> : null}
+          </span>
+          <Button size="sm" loading={update.isPending} disabled={!body || Boolean(parsedMax.error)} onClick={save}>
+            Save changes
+          </Button>
+          <Button size="sm" variant="secondary" onClick={cancel}>
+            Cancel
+          </Button>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function ResultText({ tool, access, withName = false }: { tool: AgentToolEffect; access: AgentAccess; withName?: boolean }) {
+  const tone = toolResultTone(tool);
+  const line = toolResultLine(tool, access.rules);
+  const text = withName ? line : line.slice(tool.name.length + 2);
+  return (
+    <span className={cn("flex min-w-0 items-start gap-1.5 text-body-13", tone === "blocked" ? "text-03" : tone === "warn" ? "text-warning-700" : "text-02")}>
+      {tone === "blocked" ? (
+        <Ban aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+      ) : tone === "warn" ? (
+        <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+      ) : (
+        <CircleCheck aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-success-500" />
+      )}
+      <span className="min-w-0 [overflow-wrap:anywhere]">{tool.providersTotal === 0 ? `${withName ? `${tool.name}: ` : ""}no provider yet` : text}</span>
+    </span>
   );
 }
