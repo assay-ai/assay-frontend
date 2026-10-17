@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { ToolContractSection } from "@/components/contracts/tool-contract";
+import { ToolVersionBadges } from "@/components/contracts/version-badges";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
 import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
@@ -153,6 +155,8 @@ function ToolDetail({
           </ul>
         </div>
       </div>
+
+      <ToolContractSection toolId={tool.toolId} compact />
 
       <div className="flex flex-col gap-2">
         <h3 className="text-label-13 text-01">Who serves it</h3>
@@ -367,6 +371,7 @@ function ToolsList() {
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
                       {tool.routable ? null : <UnavailableTag />}
+                      <ToolVersionBadges version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} />
                       {blocked ? (
                         <span className="rounded-full bg-danger-10 px-2 py-0.5 text-label-xs text-danger-700">Blocked</span>
                       ) : null}

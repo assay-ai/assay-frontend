@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { ToolVersionBadges } from "@/components/contracts/version-badges";
 import { FailsOftenChip, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { NotChargedProof, NotChargedSummary } from "@/components/explorer/not-charged-proof";
 import { StartFreeCta } from "@/components/explorer/start-free";
@@ -77,8 +78,9 @@ function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: num
           <div className="flex flex-wrap items-center gap-2">
             <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
             {tool.routable ? null : <UnavailableTag />}
+            <ToolVersionBadges version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} />
           </div>
-          {tool.description ? <p className="line-clamp-2 text-body-13 text-02">{tool.description}</p> : null}
+          {tool.summary || tool.description ? <p className="line-clamp-2 text-body-13 text-02">{tool.summary || tool.description}</p> : null}
           {/* Phones: the price line sits under the name, full width. */}
           <OfferPrice offer={offer} className="tablet:hidden" />
           {/* Phones too: when providers charge different prices, the most a call is held for is money, not decoration. */}
