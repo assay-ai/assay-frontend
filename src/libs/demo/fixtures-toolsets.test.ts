@@ -40,7 +40,7 @@ afterEach(() => {
 describe("demo fixtures: tool sets, access, Connect preview, servers, refused calls", () => {
   it("are registered with the demo data layer, every new endpoint", () => {
     const routes = TOOLSET_FIXTURES.map((f) => `${f.method} ${String(f.match)}`);
-    expect(routes).toHaveLength(14);
+    expect(routes).toHaveLength(30);
     for (const fixture of TOOLSET_FIXTURES) expect(DEMO_FIXTURES).toContain(fixture);
   });
 
@@ -171,7 +171,7 @@ describe("the demo account's agents", () => {
 
 describe("the ?connect= demo switch", () => {
   it("parses the documented pictures only", () => {
-    for (const v of ["default", "all", "nothing", "waiting", "over-budget", "single", "preview-error", "empty"]) {
+    for (const v of ["default", "all", "nothing", "waiting", "over-budget", "single", "preview-error", "empty", "shared", "unlisted", "update-available", "delisted", "stopped", "removed", "handle-taken", "claim-refused"]) {
       expect(parseConnectVariant(v)).toBe(v);
     }
     expect(parseConnectVariant("bogus")).toBeNull();
