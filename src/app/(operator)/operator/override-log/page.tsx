@@ -58,7 +58,7 @@ const ICONS: Readonly<Record<ActivityIcon, LucideIcon>> = {
 
 const LIST_LIMIT = 25;
 const CHIP =
-  "inline-flex min-h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 text-label-13 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 tablet:min-h-8";
+  "inline-flex min-h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 text-label-13 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500";
 const CHIP_ON = "border-primary-500 bg-primary-10 text-01";
 const CHIP_OFF = "border-02 bg-01 text-02 hover:text-01";
 const KINDS = new Set(ACTIVITY_KINDS.map((kind) => kind.id));

@@ -198,7 +198,7 @@ export default function CataloguePage() {
         <p className="flex flex-wrap items-center gap-2 text-body-13 text-02" data-testid="catalogue-topic">
           <span className="rounded-full bg-primary-10 px-2.5 py-1 text-label-13 text-primary-700">Topic: {topic}</span>
           {topicKnown ? null : <span>Topics are not listed yet, so every tool is shown.</span>}
-          <button type="button" className="min-h-10 text-label-13 text-primary-600 hover:underline tablet:min-h-0" onClick={() => setTopic(null)}>
+          <button type="button" className="min-h-10 text-label-13 text-primary-600 hover:underline" onClick={() => setTopic(null)}>
             Show all tools
           </button>
         </p>

@@ -58,7 +58,7 @@ export function ExploreAgentPicker({ className }: { className?: string }) {
     <label className={cn("inline-flex items-center gap-2 text-body-13 text-02", className)}>
       Allow or block tools for
       <select
-        className="min-h-10 rounded-md border border-02 bg-01 px-2 py-1 text-body-13 text-01 tablet:min-h-0"
+        className="min-h-10 rounded-md border border-02 bg-01 px-2 py-1 text-body-13 text-01"
         value={agent.agentId}
         onChange={(e) => pickAgent(e.target.value)}
       >
