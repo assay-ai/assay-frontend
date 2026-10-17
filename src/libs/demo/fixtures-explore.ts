@@ -17,7 +17,7 @@ import type { CatalogueTool as ToolCatalogueEntry, ToolTier } from "@/services/t
 
 import { DEMO_ASSET, DEMO_BUYER_ACCOUNT, DEMO_CHAIN_ID, minutesAgo, money } from "./fixtures";
 import type { DemoFixture } from "./fixtures";
-import { demoVersionFields, demoVersionList, type DemoCatalogueToolRef } from "./fixtures-contracts";
+import { demoVersionFields, demoVersionList, registerDemoCatalogueTools, type DemoCatalogueToolRef } from "./fixtures-contracts";
 
 /**
  * DEMO ONLY — see `demo-api.ts` for the rules. **The marketplace surface.**
@@ -783,7 +783,5 @@ export const EXPLORE_FIXTURES: readonly DemoFixture[] = [
   },
 ];
 
-/** The catalogue's tools as the contract fixtures name them (the operator list shows every one). */
-export function demoCatalogueToolRefs(): DemoCatalogueToolRef[] {
-  return TOOLS.map((tool) => ({ id: tool.id, name: tool.name, description: tool.description }));
-}
+/** The catalogue's tools, for the operator contract list (see `registerDemoCatalogueTools`). */
+registerDemoCatalogueTools(TOOLS.map((tool): DemoCatalogueToolRef => ({ id: tool.id, name: tool.name, description: tool.description })));
