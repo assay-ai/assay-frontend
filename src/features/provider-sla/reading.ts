@@ -1,4 +1,4 @@
-import { formatClock, formatDate, type TimeOptions } from "@/libs/utc-time";
+import { formatClock, formatDate, type TimeOptions, ZONE_LABEL } from "@/libs/utc-time";
 import type { SlaWindow, SlaWindowOutcome } from "@/interfaces";
 
 /**
@@ -112,17 +112,17 @@ export function slaReading(
   return { headline, tone, sample, advice, used };
 }
 
-/** "Oct 13, 15:00 – 17:00" (same day) or "Oct 13, 15:00 – Oct 14, 09:00"; "since Oct 13, 15:00" while open. */
+/** "Oct 13, 15:00 – 17:00 UTC" (same day) or "Oct 13, 15:00 – Oct 14, 09:00 UTC"; "Since Oct 13, 15:00 UTC" while open. */
 export function windowRange(window: Pick<SlaWindow, "openedAt" | "closedAt" | "status" | "deadlineAt">, options: TimeOptions = {}): string {
   const start = `${formatDate(window.openedAt, options)}, ${formatClock(window.openedAt, options)}`;
   if (window.status === "OPEN" || !window.closedAt) {
-    return `Since ${start}`;
+    return `Since ${start} ${ZONE_LABEL}`;
   }
   const sameDay = formatDate(window.openedAt, options) === formatDate(window.closedAt, options);
   const end = sameDay
     ? formatClock(window.closedAt, options)
     : `${formatDate(window.closedAt, options)}, ${formatClock(window.closedAt, options)}`;
-  return `${start} – ${end}`;
+  return `${start} – ${end} ${ZONE_LABEL}`;
 }
 
 export const WINDOW_OUTCOME: Record<SlaWindowOutcome, string> = {
