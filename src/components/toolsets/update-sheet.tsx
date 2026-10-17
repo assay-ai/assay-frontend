@@ -10,7 +10,7 @@ import { usePublicTools } from "@/features/explorer/use-public-explorer";
 import { buildMcpUrl, parseMcpUrl, type ToolsetChoice } from "@/features/connect/mcp-url";
 import { moveLockBody } from "@/features/toolsets/access-result";
 import { priceOfTool } from "@/features/toolsets/public";
-import { diffSnapshots, snapshotOfVersion } from "@/features/toolsets/sharing";
+import { diffSnapshots, ruleDetails, ruleOfSnapshot, snapshotOfVersion } from "@/features/toolsets/sharing";
 import { recordConnectUrl, type AgentAccess, type ToolsetDiff } from "@/services/toolsets.service";
 import { toast } from "@/utils/toast";
 
@@ -79,11 +79,22 @@ export function UpdateBody({ target, onDone }: { target: UpdateTarget; onDone: (
     latest,
     target.from,
   );
+  // The version in use, for what changed in each tool's rule.
+  const fromShared = usePublicToolsetVersion(choice.kind === "shared" ? choice.handle : null, choice.kind === "shared" ? choice.slug : null, target.from, null);
+  const fromLink = useToolsetByToken(choice.kind === "link" ? choice.token : null, target.from);
   const before = useToolsetVersion(own?.id ?? null, own ? target.from : null);
   const after = useToolsetVersion(own?.id ?? null, own ? latest : null);
   const update = useUpdateAccess(target.access?.access.agentId ?? null);
   const tools = usePublicTools();
   const priceOf = (name: string) => priceOfTool(tools.data?.tools ?? [], name);
+  const ruleOf =
+    before.data && after.data
+      ? ruleDetails(before.data.entries, after.data.entries, ruleOfSnapshot)
+      : choice.kind === "shared" && fromShared.data && version.data
+        ? ruleDetails(fromShared.data.entries, version.data.entries, (e) => e)
+        : choice.kind === "link" && fromLink.data && link.data
+          ? ruleDetails(fromLink.data.entries, link.data.entries, (e) => e)
+          : undefined;
   const [copied, setCopied] = React.useState(false);
 
   const diff =
@@ -117,7 +128,7 @@ export function UpdateBody({ target, onDone }: { target: UpdateTarget; onDone: (
       <div className="flex flex-col gap-4 px-[18px] pb-5 pt-3" data-testid="update-sheet">
         <section className="flex flex-col gap-2">
           <h3 className="text-label-13 text-01">What changed since v{target.from}</h3>
-          {loading ? <Skeleton className="h-16 w-full" /> : diff ? <DiffView diff={diff} priceOf={priceOf} /> : <p className="text-body-13 text-02">What changed could not be loaded.</p>}
+          {loading ? <Skeleton className="h-16 w-full" /> : diff ? <DiffView diff={diff} priceOf={priceOf} ruleOf={ruleOf} /> : <p className="text-body-13 text-02">What changed could not be loaded.</p>}
         </section>
 
         {nextUrl ? (
@@ -138,7 +149,7 @@ export function UpdateBody({ target, onDone }: { target: UpdateTarget; onDone: (
           <section className="flex flex-col gap-2 rounded-lg border border-01 p-3">
             <h3 className="text-label-13 text-01">What this agent may use</h3>
             <p className="text-body-xs text-03">
-              Changes what the agent is allowed to call, on every server. Today it may use what v{allowedAt ?? target.from} holds; your app&apos;s URL does not change.
+              {`Changes what the agent is allowed to call, on every server. Today it may use the tools of v${allowedAt ?? target.from}; your app's URL does not change.`}
             </p>
             <Button
               className="self-start"

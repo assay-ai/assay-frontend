@@ -156,13 +156,13 @@ function ToolsetHeader({ set }: { set: Toolset }) {
       ) : (
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-heading-md text-01">{set.name}</h1>
-          <Button size="sm" icon={<Share2 />} className="min-h-10 tablet:min-h-0" onClick={() => setSharing(true)} disabled={set.removed} data-testid="open-share">
+          <Button size="sm" icon={<Share2 />} className="min-h-10" onClick={() => setSharing(true)} disabled={set.removed} data-testid="open-share">
             Share
           </Button>
-          <button type="button" className="min-h-10 px-1 text-label-13 text-primary-600 hover:underline tablet:min-h-0" onClick={() => setRenaming(true)}>
+          <button type="button" className="min-h-10 px-1 text-label-13 text-primary-600 hover:underline" onClick={() => setRenaming(true)}>
             Rename
           </button>
-          <button type="button" className="inline-flex min-h-10 items-center gap-1 px-1 text-label-13 text-danger-600 hover:underline tablet:min-h-0" onClick={() => setDeleting(true)}>
+          <button type="button" className="inline-flex min-h-10 items-center gap-1 px-1 text-label-13 text-danger-600 hover:underline" onClick={() => setDeleting(true)}>
             <Trash2 aria-hidden="true" className="size-3.5" />
             Delete
           </button>
@@ -175,7 +175,7 @@ function ToolsetHeader({ set }: { set: Toolset }) {
           · {set.toolCount} tool{set.toolCount === 1 ? "" : "s"}
         </span>
         {page ? (
-          <Link href={page} className="min-h-10 content-center text-primary-600 hover:underline tablet:min-h-0">
+          <Link href={page} className="min-h-10 content-center text-primary-600 hover:underline">
             Its public page
           </Link>
         ) : null}
@@ -349,7 +349,7 @@ function EntryRow({
             aria-expanded={open}
             onClick={onToggle}
             className={cn(
-              "inline-flex min-h-10 items-center gap-1 rounded-full border px-3 py-1 text-left text-label-xs transition-colors tablet:min-h-0",
+              "inline-flex min-h-10 items-center gap-1 rounded-full border px-3 py-1 text-left text-label-xs transition-colors",
               open ? "border-primary-500 bg-primary-10 text-primary-700" : "border-02 bg-01 text-02 hover:text-01",
             )}
           >
@@ -428,7 +428,7 @@ function RuleEditor({
             {providers.map((p) => (
               <li key={p.providerId}>
                 <Checkbox
-                  className="min-h-10 tablet:min-h-8"
+                  className="min-h-10"
                   checked={ids.includes(p.providerId)}
                   onChange={(e) => setIds(e.target.checked ? [...ids, p.providerId] : ids.filter((x) => x !== p.providerId))}
                   label={`${p.name}${p.tier === "NEW" ? " · not verified yet" : ""}`}

@@ -79,7 +79,7 @@ export function AgentAccessCard({ agentId, agentName, highlight = false }: { age
       ) : query.isError || !query.data ? (
         <p className="flex flex-wrap items-center gap-2 text-body-13 text-02">
           What {agentName} can use could not be loaded ({errorText(query.error)}). Its limits still apply.
-          <button type="button" className="min-h-10 font-semibold text-primary-600 hover:underline tablet:min-h-0" onClick={() => void query.refetch()}>
+          <button type="button" className="min-h-10 font-semibold text-primary-600 hover:underline" onClick={() => void query.refetch()}>
             Retry
           </button>
         </p>
@@ -200,7 +200,7 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
           <Button
             size="sm"
             variant="ghost"
-            className="min-h-10 tablet:min-h-0"
+            className="min-h-10"
             loading={onlyConnected.isPending}
             disabled={everything || Boolean(body)}
             onClick={() => onlyConnected.mutate()}
@@ -236,7 +236,7 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
               return (
                 <div key={set.id} className="flex flex-col gap-1 rounded-md bg-01 px-2.5 py-1.5 tablet:flex-row tablet:items-center tablet:gap-3">
                   <Checkbox
-                    className="min-h-10 min-w-0 flex-1 tablet:min-h-0"
+                    className="min-h-10 min-w-0 flex-1"
                     checked={Boolean(chosen)}
                     onChange={(e) =>
                       patch({ toolsets: e.target.checked ? [...draft.toolsets, { toolsetId: set.id, viaUrlOnly: true }] : draft.toolsets.filter((t) => t.toolsetId !== set.id) })
@@ -249,7 +249,7 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
                   />
                   {chosen ? (
                     <Switch
-                      className="min-h-10 pl-7 tablet:min-h-0 tablet:pl-0"
+                      className="min-h-10 pl-7 tablet:pl-0"
                       checked={chosen.viaUrlOnly}
                       onChange={(e) => patch({ toolsets: draft.toolsets.map((t) => (t.toolsetId === set.id ? { ...t, viaUrlOnly: e.target.checked } : t)) })}
                       label="Only through its own URL"
@@ -300,16 +300,16 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
           <fieldset className="flex flex-col gap-1.5">
             <legend className="pb-1 text-label-13 text-01">Tools</legend>
             <div className="flex flex-wrap gap-x-3 text-label-13">
-              <button type="button" className="min-h-10 text-primary-600 hover:underline tablet:min-h-0" onClick={() => patch({ toolIds: routable.map((t) => t.toolId) })}>
+              <button type="button" className="min-h-10 text-primary-600 hover:underline" onClick={() => patch({ toolIds: routable.map((t) => t.toolId) })}>
                 Select all
               </button>
-              <button type="button" className="min-h-10 text-primary-600 hover:underline tablet:min-h-0" onClick={() => patch({ toolIds: [], toolsets: [] })}>
+              <button type="button" className="min-h-10 text-primary-600 hover:underline" onClick={() => patch({ toolIds: [], toolsets: [] })}>
                 Clear all
               </button>
               {servers.data && servers.data.servers.length > 0 ? (
                 <button
                   type="button"
-                  className="min-h-10 text-primary-600 hover:underline tablet:min-h-0"
+                  className="min-h-10 text-primary-600 hover:underline"
                   onClick={() => patch(connectedSelection(servers.data?.servers, access.tools))}
                 >
                   What it&apos;s connected to
@@ -322,7 +322,7 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
                 return (
                   <li key={tool.toolId} className="flex min-w-0 flex-col gap-0.5 px-2.5 py-1.5 tablet:flex-row tablet:items-center tablet:gap-3">
                     <Checkbox
-                      className="min-h-10 min-w-[8rem] tablet:min-h-0 tablet:w-[220px] tablet:shrink-0"
+                      className="min-h-10 min-w-[8rem] tablet:w-[220px] tablet:shrink-0"
                       disabled={none}
                       checked={draft.toolIds.includes(tool.toolId)}
                       onChange={(e) => patch({ toolIds: toggle(draft.toolIds, tool.toolId, e.target.checked) })}
@@ -353,7 +353,7 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
             {providers.map((p) => (
               <Checkbox
                 key={p.providerId}
-                className="min-h-10 tablet:min-h-8"
+                className="min-h-10"
                 checked={draft.exclude.includes(p.providerId)}
                 onChange={(e) => patch({ exclude: toggle(draft.exclude, p.providerId, e.target.checked) })}
                 label={
@@ -387,7 +387,7 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
           wrapperClassName="tablet:w-[280px]"
         />
         <Switch
-          className="min-h-10 tablet:min-h-0"
+          className="min-h-10"
           checked={draft.verified}
           onChange={(e) => patch({ verified: e.target.checked })}
           label={access.rules.minTier === "TRUSTED" && draft.verified ? "Only trusted providers (set through the API)" : VERIFIED_ONLY_LABEL}
@@ -402,7 +402,7 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
 
       {!restricted ? (
         <details className="rounded-lg border border-01 px-3 py-2.5">
-          <summary className="min-h-10 cursor-pointer select-none content-center text-label-13 text-01 tablet:min-h-0">Result per tool</summary>
+          <summary className="min-h-10 cursor-pointer select-none content-center text-label-13 text-01">Result per tool</summary>
           <ul className="mt-2 flex flex-col gap-1" data-testid="access-results">
             {access.tools.length === 0 ? <li className="text-body-xs text-03">No tools listed yet.</li> : null}
             {access.tools.map((tool) => (
@@ -473,7 +473,7 @@ function SharedSetRow({
     <div className="flex flex-col gap-1 rounded-md bg-01 px-2.5 py-1.5" data-testid="shared-set-row">
       <div className="flex flex-col gap-1 tablet:flex-row tablet:items-center tablet:gap-3">
         <Checkbox
-          className="min-h-10 min-w-0 flex-1 tablet:min-h-0"
+          className="min-h-10 min-w-0 flex-1"
           checked={checked}
           onChange={(e) => onToggle(e.target.checked)}
           label={
@@ -487,7 +487,7 @@ function SharedSetRow({
           }
         />
         {next ? (
-          <button type="button" className="min-h-10 self-start pl-7 tablet:min-h-0 tablet:pl-0" onClick={onUpdate} data-testid="access-update">
+          <button type="button" className="min-h-10 self-start pl-7 tablet:pl-0" onClick={onUpdate} data-testid="access-update">
             <Chip tone="primary">Update available: v{next}</Chip>
           </button>
         ) : null}
@@ -502,18 +502,18 @@ function SharedSetRow({
           <p className="text-body-xs text-warning-700">{notice}</p>
           <div className="flex flex-wrap gap-x-3">
             {checked ? (
-              <button type="button" className="min-h-10 text-label-13 text-primary-600 hover:underline tablet:min-h-0" onClick={() => onToggle(false)}>
+              <button type="button" className="min-h-10 text-label-13 text-primary-600 hover:underline" onClick={() => onToggle(false)}>
                 Stop allowing it
               </button>
             ) : (
               <span className="text-body-xs text-03">Not allowed once you save.</span>
             )}
             {set.status === "NOT_SHARED" && set.handle && set.slug ? (
-              <Link href={`/toolsets/view?handle=${set.handle}&slug=${set.slug}`} className="min-h-10 content-center text-label-13 text-primary-600 hover:underline tablet:min-h-0">
+              <Link href={`/toolsets/view?handle=${set.handle}&slug=${set.slug}`} className="min-h-10 content-center text-label-13 text-primary-600 hover:underline">
                 Make your own version
               </Link>
             ) : (
-              <Link href="/catalogue?view=toolsets" className="min-h-10 content-center text-label-13 text-primary-600 hover:underline tablet:min-h-0">
+              <Link href="/catalogue?view=toolsets" className="min-h-10 content-center text-label-13 text-primary-600 hover:underline">
                 Find another tool set
               </Link>
             )}

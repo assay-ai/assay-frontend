@@ -61,7 +61,7 @@ export function CopyLine({ value, label = "Copy", onCopied, testId }: { value: s
         type="button"
         size="sm"
         variant="secondary"
-        className="min-h-10 shrink-0 tablet:min-h-0"
+        className="min-h-10 shrink-0"
         icon={copied ? <Check /> : <Copy />}
         onClick={async () => {
           try {
@@ -93,7 +93,7 @@ export function CopyButton({ value, label, className }: { value: string; label: 
       size="sm"
       variant="secondary"
       title={value}
-      className={cn("min-h-10 tablet:min-h-9", className)}
+      className={cn("min-h-10", className)}
       icon={copied ? <Check /> : <Copy />}
       onClick={async () => {
         try {
@@ -114,15 +114,18 @@ export function DiffView({
   diff,
   empty = "Nothing changed in the tools or their rules.",
   priceOf,
+  ruleOf,
 }: {
   diff: ToolsetDiff;
   empty?: string;
   priceOf?: (toolName: string) => string | null;
+  /** What changed in a tool's provider rule, in words ("Any provider → Only these providers (2)"). */
+  ruleOf?: (toolName: string) => string | null;
 }) {
   const rows: { key: string; kind: "added" | "removed" | "rules" | "settings"; name?: string; text: string }[] = [
     ...diff.added.map((name) => ({ key: `a-${name}`, kind: "added" as const, name, text: priceOf?.(name) ? `added · ${priceOf(name)}` : "added" })),
     ...diff.removed.map((name) => ({ key: `r-${name}`, kind: "removed" as const, name, text: "removed" })),
-    ...diff.rulesChanged.map((name) => ({ key: `p-${name}`, kind: "rules" as const, name, text: "provider rules changed" })),
+    ...diff.rulesChanged.map((name) => ({ key: `p-${name}`, kind: "rules" as const, name, text: ruleOf?.(name) ? `provider rules: ${ruleOf(name)}` : "provider rules changed" })),
     ...diffLines({ added: [], removed: [], rulesChanged: [], settingsChanged: diff.settingsChanged }).map((l) => ({ key: "settings", kind: "settings" as const, text: l.text })),
   ];
   if (rows.length === 0) return <p className="text-body-13 text-02">{empty}</p>;
@@ -262,7 +265,7 @@ export function CopyToolsetSheet({
               <Field id="copy-name" label="Name" value={name} onChange={(e) => setName(e.target.value)} error={copy.isError ? errorText(copy.error) : undefined} />
               <div className="flex flex-wrap gap-2">
                 <Button loading={copy.isPending} disabled={!source.id || !name.trim()} onClick={() => copy.mutate()}>
-                  Make my own version
+                  Make the copy
                 </Button>
                 <Button variant="ghost" onClick={() => onOpenChange(false)}>
                   Cancel
@@ -382,7 +385,7 @@ export function ReportSheet({
               <fieldset className="flex flex-col gap-1.5">
                 <legend className="pb-1 text-label-13 text-01">What is wrong?</legend>
                 {REPORT_REASONS.map((r) => (
-                  <label key={r} className="flex min-h-10 cursor-pointer items-center gap-2.5 rounded-md border border-02 px-3 text-body-13 text-01 tablet:min-h-9">
+                  <label key={r} className="flex min-h-10 cursor-pointer items-center gap-2.5 rounded-md border border-02 px-3 text-body-13 text-01">
                     <input type="radio" name="report-reason" className="accent-primary-500" checked={reason === r} onChange={() => setReason(r)} />
                     {r}
                   </label>

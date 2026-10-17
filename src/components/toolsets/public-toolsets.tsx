@@ -12,6 +12,7 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { usePublicTools } from "@/features/explorer/use-public-explorer";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
 import { buildMcpUrl, toolDisplay } from "@/features/connect/mcp-url";
+import { humanToolName, ruleDetails } from "@/features/toolsets/sharing";
 import { lockLabel, MAKE_MY_OWN_HINT, MAKE_MY_OWN_LABEL, PROVIDER_MODE_LABELS } from "@/features/toolsets/labels";
 import { activeUsersText, badgeLabel, priceOfTool, priceRangeText, statRows, trustFacts, type CatalogueToolsetFilters } from "@/features/toolsets/public";
 import { ApiError } from "@/libs/ApiClient";
@@ -125,7 +126,7 @@ export function ToolsetCatalogue({ query, onClearQuery }: { query: string; onCle
               aria-pressed={publisher === p.id}
               onClick={() => setPublisher(p.id)}
               className={cn(
-                "min-h-10 rounded-full border px-3 text-label-xs tablet:min-h-0 tablet:py-1",
+                "min-h-10 rounded-full border px-3 text-label-xs tablet:py-1",
                 publisher === p.id ? "border-primary-500 bg-primary-10 text-primary-700" : "border-02 bg-01 text-02 hover:text-01",
               )}
             >
@@ -135,7 +136,7 @@ export function ToolsetCatalogue({ query, onClearQuery }: { query: string; onCle
         </div>
         <select
           aria-label="Topic"
-          className="min-h-10 rounded-md border border-02 bg-01 px-3 text-body-13 text-01 tablet:min-h-9"
+          className="min-h-10 rounded-md border border-02 bg-01 px-3 text-body-13 text-01"
           value={category ?? ""}
           onChange={(e) => setCategory(e.target.value || null)}
         >
@@ -319,7 +320,7 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
         </div>
         <p className="text-body-13 text-02">
           by{" "}
-          <Link href={`/toolsets/handle?handle=${encodeURIComponent(page.handle)}`} className="inline-flex min-h-10 items-center font-mono text-primary-600 hover:underline tablet:min-h-0">
+          <Link href={`/toolsets/handle?handle=${encodeURIComponent(page.handle)}`} className="inline-flex min-h-10 items-center font-mono text-primary-600 hover:underline">
             @{page.handle}
           </Link>{" "}
           · v{shownVersion}
@@ -403,7 +404,7 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
               <li key={e.toolId} className="flex flex-col gap-0.5 py-2 tablet:flex-row tablet:items-center tablet:gap-3">
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="font-mono text-mono-13 text-01 [overflow-wrap:anywhere]">{shown.name}</span>
-                  {shown.title ? <span className="text-body-xs text-03">{shown.title}</span> : null}
+                  <span className="text-body-xs text-03">{shown.title ?? humanToolName(shown.name)}</span>
                 </span>
                 <span className="flex flex-wrap items-center gap-1.5 text-body-xs text-02">
                   {e.removed ? <Chip tone="danger">Removed</Chip> : null}
@@ -490,6 +491,11 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
 /** Opened from the update alert: what changed since the version in use, and the new URL. */
 function UpdateBanner({ page, from, token }: { page: PublicToolsetPage; from: number; token: string | null }) {
   const detail = usePublicToolsetVersion(token ? null : page.handle, token ? null : page.slug, page.version, from);
+  // The version in use, for what changed in each tool's rule.
+  const before = usePublicToolsetVersion(token ? null : page.handle, token ? null : page.slug, from, null);
+  const beforeLink = useToolsetByToken(token, from);
+  const fromEntries = (token ? beforeLink.data?.entries : before.data?.entries) ?? null;
+  const ruleOf = fromEntries ? ruleDetails(fromEntries, page.entries, (e) => e) : undefined;
   const tools = usePublicTools();
   const diff = page.diff ?? detail.data?.diff ?? null;
   return (
@@ -498,7 +504,7 @@ function UpdateBanner({ page, from, token }: { page: PublicToolsetPage; from: nu
         v{page.version} is out. You use v{from}.
       </h2>
       {diff ? (
-        <DiffView diff={diff} priceOf={(name) => priceOfTool(tools.data?.tools ?? [], name)} />
+        <DiffView diff={diff} priceOf={(name) => priceOfTool(tools.data?.tools ?? [], name)} ruleOf={ruleOf} />
       ) : detail.isPending && !token ? (
         <Skeleton className="h-12 w-full" />
       ) : page.changelog ? (

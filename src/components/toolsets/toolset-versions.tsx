@@ -8,7 +8,7 @@ import { UtcTime } from "@/components/patterns/utc-time";
 import { buildMcpUrl } from "@/features/connect/mcp-url";
 import { lockLabel } from "@/features/toolsets/labels";
 import { statRows } from "@/features/toolsets/public";
-import { diffSnapshots, snapshotOfVersion } from "@/features/toolsets/sharing";
+import { diffSnapshots, ruleDetails, ruleOfSnapshot, snapshotOfVersion } from "@/features/toolsets/sharing";
 import type { Toolset, ToolsetVersionSummary } from "@/services/toolsets.service";
 import { cn } from "@/utils";
 
@@ -39,7 +39,7 @@ export function VersionHistory({ set }: { set: Toolset }) {
       ) : query.isError ? (
         <p className="flex flex-wrap items-center gap-2 text-body-13 text-02">
           The versions could not be loaded: {errorText(query.error).replace(/\.$/, "")}.
-          <button type="button" className="min-h-10 font-semibold text-primary-600 hover:underline tablet:min-h-0" onClick={() => void query.refetch()}>
+          <button type="button" className="min-h-10 font-semibold text-primary-600 hover:underline" onClick={() => void query.refetch()}>
             Retry
           </button>
         </p>
@@ -81,7 +81,7 @@ function VersionRow({
 }) {
   return (
     <li className="flex flex-col gap-2 px-3 py-2.5" data-testid="version-row">
-      <button type="button" aria-expanded={open} onClick={onToggle} className="flex min-h-10 w-full items-start gap-2 text-left tablet:min-h-0">
+      <button type="button" aria-expanded={open} onClick={onToggle} className="flex min-h-10 w-full items-start gap-2 text-left">
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex flex-wrap items-center gap-2 text-label-13 text-01">
             v{version.version}
@@ -110,7 +110,7 @@ function VersionDetail({ set, version, previous }: { set: Toolset; version: numb
         {now.isPending || (previous && before.isPending) ? (
           <SkeletonRows rows={1} />
         ) : diff ? (
-          <DiffView diff={diff} />
+          <DiffView diff={diff} ruleOf={before.data && now.data ? ruleDetails(before.data.entries, now.data.entries, ruleOfSnapshot) : undefined} />
         ) : (
           <p className="text-body-13 text-02">This version could not be loaded.</p>
         )}

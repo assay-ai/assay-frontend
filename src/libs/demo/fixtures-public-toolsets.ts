@@ -136,7 +136,7 @@ export const DEMO_PUBLIC_SETS: readonly DemoPublicSet[] = [
     category: "finance",
     tags: ["crypto", "markets"],
     badge: "COMMUNITY",
-    tools: [{ name: "get_token_market" }, { name: "get_usd_eur_rate" }, { name: "Chain activity summary" }],
+    tools: [{ name: "get_token_market", providerMode: "ONLY", providerCount: 2 }, { name: "get_usd_eur_rate" }, { name: "Chain activity summary" }],
     versions: [
       { version: 3, ageDays: 2, changelog: "Added get_usd_eur_rate. Changed provider rules for get_token_market.", toolCount: 3, rulesChanged: ["get_token_market"] },
       { version: 2, ageDays: 20, changelog: "Added Chain activity summary.", toolCount: 2, tools: ["get_token_market", "Chain activity summary"] },
@@ -259,9 +259,11 @@ export function demoPublicCard(set: DemoPublicSet, host: string): PublicToolsetC
   };
 }
 
-function entriesOf(set: DemoPublicSet, names: readonly string[]): PublicToolsetEntry[] {
+function entriesOf(set: DemoPublicSet, names: readonly string[], version?: number): PublicToolsetEntry[] {
   return names.map((name) => {
-    const t = set.tools.find((x) => x.name === name) ?? { name };
+    // A rule a later version changed was "Any provider" before it.
+    const changedLater = version !== undefined && set.versions.some((x) => x.version > version && x.rulesChanged?.includes(name));
+    const t = changedLater ? { name } : (set.tools.find((x) => x.name === name) ?? { name });
     return {
       toolId: demoToolIdOf(set, t.name),
       toolName: t.name,
@@ -298,7 +300,7 @@ export function demoPublicDiff(set: DemoPublicSet, from: number, to: number): Pu
 export function demoPublicVersionDetail(set: DemoPublicSet, v: number, diffFrom?: number | null): PublicToolsetVersionDetail | null {
   const version = set.versions.find((x) => x.version === v);
   if (!version || (diffFrom && !set.versions.some((x) => x.version === diffFrom))) return null;
-  const entries = entriesOf(set, toolsAt(set, v));
+  const entries = entriesOf(set, toolsAt(set, v), v);
   return {
     version: v,
     publishedAt: demoMinutesAgo(version.ageDays * DAY),
@@ -325,8 +327,8 @@ export function demoPublicPage(set: DemoPublicSet, host: string, v?: number | nu
     publishedAt: demoMinutesAgo(shown.ageDays * DAY),
     toolIds: toolsAt(set, shown.version).map((n) => demoToolIdOf(set, n)),
     toolCount: toolsAt(set, shown.version).length,
-    entries: entriesOf(set, toolsAt(set, shown.version)),
-    notReviewed: entriesOf(set, toolsAt(set, shown.version)).some((e) => e.notReviewed),
+    entries: entriesOf(set, toolsAt(set, shown.version), shown.version),
+    notReviewed: entriesOf(set, toolsAt(set, shown.version), shown.version).some((e) => e.notReviewed),
     diff: diffFrom ? demoPublicDiff(set, diffFrom, shown.version) : null,
     stats: { weekStart: set.stats.activeUsers ? demoWeekStart() : null, ...set.stats },
     forkedFrom: null,

@@ -255,3 +255,21 @@ describe("demo fixtures: the review-fix contracts", () => {
     }
   });
 });
+
+describe("demo fixtures: retest cases", () => {
+  it("the bell has a tool set update in the default picture, and staging uses a working link-only set", () => {
+    expect((demoToolsetNotifications() as { event: string }[])[0]?.event).toBe("toolset.update_available");
+    const staging = call<ServersInUse>("GET", "/agents/b71e05a3-2c48-4d90-9f61-38ca7d0b2e54/servers").servers;
+    const desk = staging.find((s) => s.serverName === "desk")!;
+    expect(desk).toMatchObject({ updateAvailable: true, latestVersion: 2, name: "Desk tools" });
+    const page = call<PublicToolsetPage>("POST", "/public/toolsets/by-token", { token: "h3j8d2k9s6a1f4g7l0q5wz" });
+    expect(page.entries.find((e) => e.notReviewed)?.toolName).toBe("cobalt__news_search");
+  });
+
+  it("a rule change between versions shows in the entries", () => {
+    const v2 = call<{ entries: { toolName: string; providerMode: string }[] }>("GET", "/public/toolsets/@marketkit/crypto-research/versions/2");
+    const v3 = call<{ entries: { toolName: string; providerMode: string }[] }>("GET", "/public/toolsets/@marketkit/crypto-research/versions/3");
+    expect(v2.entries.find((e) => e.toolName === "get_token_market")?.providerMode).toBe("BEST");
+    expect(v3.entries.find((e) => e.toolName === "get_token_market")?.providerMode).toBe("ONLY");
+  });
+});

@@ -196,3 +196,26 @@ describe("the update notice (toolset.update_available)", () => {
     expect(updateNoticeHref({ ...readUpdateNotice(payload)!, mcpUrl: null })).toBe("/agents");
   });
 });
+
+import { humanToolName, ruleChangeText, ruleDetails } from "./sharing";
+
+describe("what changed in a tool's provider rule, in words", () => {
+  const any = { providerMode: "BEST", providerCount: 0, minTier: null, onEmpty: "FAIL" };
+  it("names the before and the after", () => {
+    expect(ruleChangeText(any, { ...any, providerMode: "ONLY", providerCount: 2 })).toBe("Any provider (Assay picks) → Only these providers (2)");
+    expect(ruleChangeText({ ...any, maxPrice: { amount: "10000", decimals: 6 } }, { ...any, maxPrice: { amount: "20000", decimals: 6 } })).toBe("Max price $0.01 → $0.02");
+    expect(ruleChangeText(any, { ...any, minTier: "ESTABLISHED", onEmpty: "FALLBACK_BEST" })).toBe(
+      "Only verified providers: off → on; If no provider fits: Stop the call → Let Assay pick the best one",
+    );
+    expect(ruleChangeText(any, any)).toBeNull();
+    const of = ruleDetails([{ toolName: "a", ...any }], [{ toolName: "a", ...any, providerMode: "EXCLUDE", providerCount: 1 }], (e) => e);
+    expect(of("a")).toBe("Any provider (Assay picks) → All except 1 provider");
+    expect(of("missing")).toBeNull();
+  });
+
+  it("gives a tool with no title a readable one", () => {
+    expect(humanToolName("get_token_market")).toBe("Token market");
+    expect(humanToolName("cobalt__news_search")).toBe("News search");
+    expect(humanToolName("summarize_document")).toBe("Summarize document");
+  });
+});
