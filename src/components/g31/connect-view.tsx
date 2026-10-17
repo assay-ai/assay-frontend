@@ -7,14 +7,18 @@ import * as React from "react";
 import { CreateKeySheet } from "@/components/buyer-money/create-key";
 import { McpConfigTabs } from "@/components/buyer-money/mcp-config-tabs";
 import { useAgentsAndKeys } from "@/components/buyer-money/use-agents";
+import { ConnectSheet } from "@/components/toolsets/connect-sheet";
+import { useRecordConnect } from "@/components/toolsets/use-toolsets";
+import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
 import { Button } from "@/components/ui/button";
 
 import { relativeTime } from "./format";
 
 /**
  * Controls › Connect: the MCP config to paste, per client, and a live check
- * that the agent's calls arrive. One URL and one key; tools and prices come
- * from tools/list, nothing is configured here.
+ * that the agent's calls arrive. The first run is one decision and three
+ * clicks: a key, a client tab, Copy — always for Everything (`/`). Anything
+ * narrower (a tool set, only some tools) is the Connect sheet, one click away.
  */
 const POLL_MS = 5_000;
 
@@ -22,6 +26,7 @@ export function ConnectView() {
   const [poll, setPoll] = React.useState<number | false>(POLL_MS);
   const data = useAgentsAndKeys({ pollMs: poll });
   const [creating, setCreating] = React.useState(false);
+  const [narrowing, setNarrowing] = React.useState(false);
   const agent = data.agents[0] ?? null;
   const live = data.agents
     .flatMap((a) => data.keys[a.agentId] ?? [])
@@ -31,6 +36,7 @@ export function ConnectView() {
   // Listen until the first call is seen, then stop polling.
   React.useEffect(() => setPoll(used ? false : POLL_MS), [used]);
   const failed = data.agentsQuery.isError || data.keysQuery.isError;
+  const recordConnect = useRecordConnect(agent?.agentId);
 
   return (
     <div className="flex w-full justify-center px-4 py-6 tablet:px-7 tablet:py-[34px]">
@@ -42,7 +48,20 @@ export function ConnectView() {
           </p>
         </header>
 
-        <McpConfigTabs token={null} keyPrefix={live[0]?.prefix ?? null} />
+        <McpConfigTabs
+          token={null}
+          keyPrefix={live[0]?.prefix ?? null}
+          onCopy={(client) => agent && recordConnect.mutate({ url: mcpEndpointUrl(), serverName: "assay", client })}
+        />
+
+        <p className="text-body-13 text-02">
+          This connects Everything: every tool on Assay, through one server.{" "}
+          {agent ? (
+            <button type="button" className="font-semibold text-primary-600 hover:underline" onClick={() => setNarrowing(true)}>
+              Connect a tool set or only some tools
+            </button>
+          ) : null}
+        </p>
 
         <p className="text-body-13 text-02">
           {live.length === 0 ? "You need a key to paste in. " : "Your key was shown once when you created it. "}
@@ -80,10 +99,14 @@ export function ConnectView() {
             <Button variant="secondary" size="sm" asChild>
               <Link href="/agents">Manage keys</Link>
             </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/agents">Servers in use</Link>
+            </Button>
           </div>
         </section>
       </div>
       <CreateKeySheet agentId={agent?.agentId ?? null} agentName={agent?.label} open={creating} onOpenChange={setCreating} />
+      <ConnectSheet open={narrowing} onOpenChange={setNarrowing} agentId={agent?.agentId ?? null} />
     </div>
   );
 }
