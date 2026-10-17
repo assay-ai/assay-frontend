@@ -429,6 +429,9 @@ function withSavedLimits(binding: DemoBinding): DemoBinding {
   return next;
 }
 
+/** The auth mode a tab chose per listing. Only the mode: the demo never keeps a credential value. */
+const demoAuthModes = new Map<string, "NONE" | "API_KEY" | "SIGNATURE" | "BOTH">();
+
 /** A write's answer: the stored listing with what was sent laid over it. Echoed; the free limits, pricing mode and price are kept for the tab (see `rememberLimits`). */
 function withWrite(binding: DemoBinding, data: Record<string, unknown>): DemoBinding {
   const next = { ...binding };
@@ -450,6 +453,9 @@ function withWrite(binding: DemoBinding, data: Record<string, unknown>): DemoBin
   if (data.freeDailyBudget === null || typeof data.freeDailyBudget === "number") {
     next.freeDailyBudget = data.freeDailyBudget;
     rememberLimits(next.id, { freeDailyBudget: data.freeDailyBudget });
+  }
+  if (data.authMode === "NONE" || data.authMode === "API_KEY" || data.authMode === "SIGNATURE" || data.authMode === "BOTH") {
+    demoAuthModes.set(next.id, data.authMode);
   }
   if (data.maxRps === null || typeof data.maxRps === "number") next.maxRps = data.maxRps;
   if (data.maxDailyCalls === null || typeof data.maxDailyCalls === "number") next.maxDailyCalls = data.maxDailyCalls;
@@ -522,7 +528,7 @@ function bindingDetail(binding: DemoBinding, id: string) {
     toolVersionRange: termsFor(binding).range,
     providesOutputFields: [...termsFor(binding).provides],
     supportsInputFields: [...termsFor(binding).supports],
-    authMode: "SIGNATURE" as const,
+    authMode: demoAuthModes.get(binding.id) ?? ("SIGNATURE" as const),
   };
 }
 
@@ -1925,6 +1931,24 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: /^\/providers\/me\/tool-bindings\/[^/]+\/credentials$/,
     body: () => [],
+  },
+  {
+    // Write-only: the demo answers with names and a hint, and keeps no value.
+    method: "PUT",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+\/credentials$/,
+    body: (_path, _query, data = {}) => ({
+      origin: typeof data.origin === "string" ? data.origin : "",
+      headers: (Array.isArray(data.headers) ? data.headers : []).map((header: { name?: unknown; value?: unknown }) => {
+        const value = typeof header.value === "string" ? header.value : "";
+        return { name: String(header.name ?? ""), hint: value.length >= 16 ? value.slice(-4) : null };
+      }),
+      updatedAt: justNow(),
+    }),
+  },
+  {
+    method: "DELETE",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+\/credentials$/,
+    body: () => null,
   },
   {
     method: "PATCH",
