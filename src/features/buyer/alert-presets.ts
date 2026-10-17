@@ -67,9 +67,9 @@ export const ALERT_PRESETS: readonly AlertPreset[] = [
   },
   {
     id: "toolsets",
-    title: "Tool set updates",
-    description: "A tool set your agents use has a new version, with what changed. Nothing moves until you choose.",
-    events: ["toolset.update_available"],
+    title: "Tool set and tool updates",
+    description: "A tool set your agents use has a new version, or a version of a tool they use is going away, with what to do.",
+    events: ["toolset.update_available", "tool_version.deprecated", "tool_version.retired"],
     alwaysOn: false,
   },
   {

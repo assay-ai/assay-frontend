@@ -119,7 +119,9 @@ describe("demo fixtures: tool sets, access, Connect preview, servers, refused ca
 
   it("refused calls carry every shape the view draws, and open by id", () => {
     const page = call<{ items: RefusedCall[] }>("GET", "/refused-calls", undefined, { agentId: PROD });
-    expect(page.items.map((c) => c.refusalCode)).toEqual(["NO_PROVIDER_MATCHES_RULES", "NO_PROVIDER_MATCHES_RULES", "TOOL_NOT_ALLOWED", "TOOL_NOT_IN_TOOLSET"]);
+    // Newest first; the get_weather rows are the T3 contract refusals (fixtures-refusals-contracts).
+    expect(page.items.filter((c) => c.toolName !== "get_weather").map((c) => c.refusalCode)).toEqual(["NO_PROVIDER_MATCHES_RULES", "NO_PROVIDER_MATCHES_RULES", "TOOL_NOT_ALLOWED", "TOOL_NOT_IN_TOOLSET"]);
+    expect(page.items.map((c) => Date.parse(c.createdAt))).toEqual(page.items.map((c) => Date.parse(c.createdAt)).sort((a, b) => b - a));
     expect(page.items.every((c) => c.charged === false)).toBe(true);
     const single = page.items.find((c) => c.toolName === "Market quote")!;
     expect(single.providers).toHaveLength(1);

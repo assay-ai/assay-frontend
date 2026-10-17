@@ -38,6 +38,7 @@ import {
   type ExternalChannel,
 } from "@/features/buyer/alert-presets";
 import { attentionAction } from "@/features/buyer/attention-action";
+import { contractNoticeText, contractNoticeTitle, isContractNoticeEvent, readContractNotice } from "@/features/toolsets/contract-notices";
 import { readUpdateNotice, updateNoticeText } from "@/features/toolsets/sharing";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { plainError } from "@/libs/plain-language";
@@ -90,8 +91,24 @@ function alertBody(item: Notification): string {
     const notice = readUpdateNotice(item.payload);
     if (notice) return updateNoticeText(notice);
   }
+  if (isContractNoticeEvent(item.event)) {
+    const notice = readContractNotice(item.payload);
+    if (notice) return contractNoticeText(item.event, notice);
+  }
   return item.body;
 }
+
+/** The title as a person reads it; a contract notice names the day it stops (UTC). */
+function alertTitle(item: Notification): string {
+  if (isContractNoticeEvent(item.event)) {
+    const notice = readContractNotice(item.payload);
+    if (notice) return contractNoticeTitle(item.event, notice);
+  }
+  return item.title;
+}
+
+/** Events whose row carries its next step as a link. */
+const LINKED_EVENTS = new Set(["toolset.update_available", "tool_version.deprecated", "tool_version.retired"]);
 
 const SEVERITY_TONE = {
   INFO: "neutral",
@@ -490,7 +507,7 @@ export function AlertsView() {
                       onClick={() => setExpandedId(expanded ? null : item.id)}
                     >
                       <StatusPill label={URGENCY[item.severity] ?? item.severity} tone={SEVERITY_TONE[item.severity] ?? "neutral"} />
-                      <span className="min-w-0 flex-1 truncate text-label-sm text-01">{item.title}</span>
+                      <span className="min-w-0 flex-1 truncate text-label-sm text-01">{alertTitle(item)}</span>
                       <span className="text-body-xs text-03">
                         <UtcTime value={item.createdAt} />
                       </span>
@@ -501,7 +518,7 @@ export function AlertsView() {
                       )}
                     </button>
                     <p className="text-body-13 text-02">{alertBody(item)}</p>
-                    {item.event === "toolset.update_available" && attentionAction(item) ? (
+                    {LINKED_EVENTS.has(item.event) && attentionAction(item) ? (
                       <Link href={attentionAction(item)!.href} className="min-h-10 self-start content-center text-label-13 font-semibold text-primary-600 hover:underline">
                         {attentionAction(item)!.label}
                       </Link>

@@ -21,10 +21,22 @@ export const PROVIDER_NOTIFICATION_EVENTS = [
   "provider.slash_executed",
   "provider.slash_reversed",
   "provider.payout_sent",
+  // T3: a contract major a binding serves is going away. Filed per organization for buyers too; the payload's role says whose.
+  "tool_version.deprecated",
+  "tool_version.retired",
 ] as const;
 
-export function isProviderEvent(event: string | null | undefined): boolean {
-  return typeof event === "string" && event.startsWith("provider.");
+/**
+ * Whether a notice is the provider's. A `tool_version.*` notice is sent to
+ * buyers and providers alike, so it counts only when its payload says
+ * `role: "PROVIDER"`.
+ */
+export function isProviderEvent(event: string | null | undefined, payload?: unknown): boolean {
+  if (typeof event !== "string") return false;
+  if (event === "tool_version.deprecated" || event === "tool_version.retired") {
+    return Boolean(payload && typeof payload === "object" && (payload as { role?: unknown }).role === "PROVIDER");
+  }
+  return event.startsWith("provider.");
 }
 
 /**
@@ -42,11 +54,11 @@ export interface InboxBreakdown {
 
 export function inboxBreakdown(input: {
   urgent: readonly (readonly string[])[];
-  notifications: readonly { event: string; readAt?: string | null; subjectId?: string | null }[];
+  notifications: readonly { event: string; readAt?: string | null; subjectId?: string | null; payload?: unknown }[];
 }): InboxBreakdown {
   const urgentIds = new Set(input.urgent.flat().map((id) => id.toLowerCase()));
   const unread = input.notifications.filter(
-    (item) => isProviderEvent(item.event) && !item.readAt && !(item.subjectId && urgentIds.has(item.subjectId.toLowerCase())),
+    (item) => isProviderEvent(item.event, item.payload) && !item.readAt && !(item.subjectId && urgentIds.has(item.subjectId.toLowerCase())),
   );
   return { penalties: input.urgent.length, notices: unread.length };
 }
