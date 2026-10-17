@@ -48,7 +48,7 @@ In the repository settings, create two environments, `develop` and
 | Variable | `NEXT_PUBLIC_BASE_URL`     | the app's public URL, e.g. `https://app.example.com` |
 | Variable | `NEXT_PUBLIC_API_BASE_URL` | the backend API, e.g. `https://api.example.com/api/v1` |
 | Variable | `NEXT_PUBLIC_PRIVY_APP_ID` | the Privy app id (25 characters)                |
-| Variable | `NEXT_PUBLIC_MCP_URL`      | optional: the MCP endpoint shown on `/connect`  |
+| Variable | `NEXT_PUBLIC_MCP_URL`      | optional: the MCP host root, e.g. `https://mcp.assay.ai/` |
 | Variable | `CLOUDFLARE_PAGES_PROJECT` | this environment's Pages project name           |
 | Secret   | `CLOUDFLARE_API_TOKEN`     | the token from step 2                           |
 | Secret   | `CLOUDFLARE_ACCOUNT_ID`    | the Cloudflare account id                       |
