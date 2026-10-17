@@ -12,7 +12,8 @@
  */
 
 /** Who must sign a built call. */
-export type SlashCallSignerRole = "PROVIDER" | "ARBITER";
+/** `ADMIN` only for the config calls Contracts builds in the browser; the backend names the other two. */
+export type SlashCallSignerRole = "PROVIDER" | "ARBITER" | "ADMIN";
 
 export interface SlashContractCall {
   /** CAIP-2, e.g. `eip155:46630`. */

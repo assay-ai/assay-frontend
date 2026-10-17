@@ -66,10 +66,10 @@ describe("connectedSpelling", () => {
 });
 
 describe("signerRoleLabel", () => {
-  it("names the two roles a built call can have; the admin signs none of them", () => {
+  it("names the roles a built call can have: the admin's only for the calls Contracts builds", () => {
     expect(signerRoleLabel("PROVIDER")).toMatch(/stake wallet/);
     expect(signerRoleLabel("ARBITER")).toBe("The arbiter");
-    expect(signerRoleLabel("ADMIN")).toMatch(/Unknown/);
+    expect(signerRoleLabel("ADMIN")).toBe("The contracts' admin");
     expect(signerRoleLabel("OTHER")).toMatch(/Unknown/);
   });
 });

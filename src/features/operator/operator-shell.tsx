@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Check, CircleHelp, Gavel, House, Keyboard, LogOut, Moon, Scale, ShieldBan, Sun, Timer, Users } from "lucide-react";
+import { Activity, Check, CircleHelp, FileCog, Gavel, House, Keyboard, LogOut, Moon, Scale, ShieldBan, Sun, Timer, Users } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -50,6 +50,7 @@ const ICONS: Record<OperatorNavId, React.ComponentType<React.SVGProps<SVGSVGElem
   blocks: ShieldBan,
   arbiter: Scale,
   team: Users,
+  contracts: FileCog,
   activity: Activity,
 };
 
@@ -296,7 +297,7 @@ export function OperatorBottomTabs({ identity, pathname, needsYou }: Pick<Operat
               ) : null}
             </span>
             <span className={cn("max-w-full truncate text-label-xs", isActive ? "text-primary-500" : "text-03")}>
-              {item.label}
+              {item.short ?? item.label}
               {item.id === "home" && needsYou > 0 ? <span className="sr-only">, {needsYouBadgeText(needsYou)}</span> : null}
             </span>
           </Link>

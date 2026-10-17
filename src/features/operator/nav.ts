@@ -12,13 +12,16 @@ import { capabilitiesFor } from "./roles";
  *   Blocks     /operator/blocks
  *   Arbiter    /operator/arbiter         only for roles that can rule or block on chain
  *   Team       /operator/operators
+ *   Contracts  /operator/contracts       the contracts' admin settings, only for Admin
  *   Activity   /operator/override-log    the override register, as sentences
  */
-export type OperatorNavId = "home" | "penalties" | "blocks" | "arbiter" | "team" | "activity";
+export type OperatorNavId = "home" | "penalties" | "blocks" | "arbiter" | "team" | "contracts" | "activity";
 
 export interface OperatorNavItem {
   id: OperatorNavId;
   label: string;
+  /** The phone tab bar's label, when `label` does not fit seven tabs. */
+  short?: string;
   href: string;
   /** Path prefixes that belong to this item. "/operator" matches itself and the approvals inbox. */
   match: readonly string[];
@@ -30,13 +33,21 @@ export const OPERATOR_NAV_ITEMS: readonly OperatorNavItem[] = Object.freeze([
   { id: "blocks", label: "Blocks", href: "/operator/blocks", match: ["/operator/blocks"] },
   { id: "arbiter", label: "Arbiter", href: "/operator/arbiter", match: ["/operator/arbiter"] },
   { id: "team", label: "Team", href: "/operator/operators", match: ["/operator/operators"] },
+  { id: "contracts", label: "Contracts", short: "Config", href: "/operator/contracts", match: ["/operator/contracts"] },
   { id: "activity", label: "Activity", href: "/operator/override-log", match: ["/operator/override-log"] },
 ]);
 
-/** The items this operator sees. Arbiter is the one screen with nothing to do for a read-only role. */
+/**
+ * The items this operator sees. Arbiter is left out for a role with nothing to
+ * do there; Contracts is for Admin only (it is the admin key's page).
+ */
 export function operatorNavFor(roles: readonly OperatorRole[]): OperatorNavItem[] {
   const caps = capabilitiesFor(roles);
-  return OPERATOR_NAV_ITEMS.filter((item) => item.id !== "arbiter" || caps.rule || caps.blockOnChain);
+  return OPERATOR_NAV_ITEMS.filter((item) => {
+    if (item.id === "arbiter") return caps.rule || caps.blockOnChain;
+    if (item.id === "contracts") return caps.manageOperators;
+    return true;
+  });
 }
 
 function matches(pathname: string, prefix: string): boolean {
