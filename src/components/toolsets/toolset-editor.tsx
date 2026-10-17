@@ -28,8 +28,7 @@ import {
   majorsChipText,
   mustReturnEffect,
   optionalOutputsFor,
-  unknownRequiredFields,
-} from "@/features/contracts/entry-contract";
+  unknownRequiredFields, MANY_VERSIONS_HINT } from "@/features/contracts/entry-contract";
 import { formatVersionRange } from "@/features/contracts/semver";
 import { fieldList } from "@/features/contracts/text";
 import type { ToolVersionBrief } from "@/interfaces/contracts";
@@ -49,6 +48,7 @@ import {
 } from "@/services/toolsets.service";
 import { cn } from "@/utils";
 import { parseAmountInput, toDecimal } from "@/utils/money";
+import { rangeText } from "@/features/contracts/semver";
 import { toast } from "@/utils/toast";
 
 import { ConnectPanel } from "./connect-panel";
@@ -248,6 +248,23 @@ function EntriesEditor({ set }: { set: Toolset }) {
     onError: (error) => toast.error(errorText(error, "The change could not be saved")),
   });
 
+  // The rows before the last saved change, so it can be undone from the header (and the toast).
+  const [undoRows, setUndoRows] = React.useState<Row[] | null>(null);
+  const change = (next: Row[], what: string, onDone?: () => void) => {
+    const before = rows;
+    save.mutate(next, {
+      onSuccess: () => {
+        setUndoRows(before);
+        onDone?.();
+        toast.success(what, { duration: 6000, action: { label: "Undo", onClick: () => undoLast(before) } });
+      },
+    });
+  };
+  const undoLast = (before: Row[] | null = undoRows) => {
+    if (!before) return;
+    save.mutate(before, { onSuccess: () => setUndoRows(null) });
+  };
+
   const asset = policy.data?.asset ?? catalogue.tools.find((t) => t.price)?.price?.asset ?? "";
   const decimals = policy.data?.decimals ?? 6;
   const serving = (toolId: string) => catalogue.providers.filter((p) => p.toolIds.includes(toolId));
@@ -258,6 +275,11 @@ function EntriesEditor({ set }: { set: Toolset }) {
         <h2 className="text-label-md text-01">Tools</h2>
         <span className="text-body-xs text-03" aria-live="polite">
           {save.isPending ? "Saving…" : save.isSuccess ? "Saved" : null}
+          {!save.isPending && undoRows ? (
+            <Button size="sm" variant="ghost" className="ml-1" onClick={() => undoLast()}>
+              Undo
+            </Button>
+          ) : null}
         </span>
       </div>
       <p className="flex items-start gap-2 rounded-lg bg-primary-10 px-3 py-2 text-body-13 text-primary-700" data-testid="draft-notice">
@@ -280,9 +302,11 @@ function EntriesEditor({ set }: { set: Toolset }) {
               open={open === row.toolId}
               onToggle={() => setOpen(open === row.toolId ? null : row.toolId)}
               onApply={(next) => {
-                save.mutate(rows.map((r, i) => (i === index ? { ...next, toolName: r.toolName } : r)), { onSuccess: () => setOpen(null) });
+                change(rows.map((r, i) => (i === index ? { ...next, toolName: r.toolName } : r)), `${row.toolName}: rules saved`, () => setOpen(null));
               }}
-              onRange={(range) => save.mutate(rows.map((r, i) => (i === index ? { ...r, toolVersionRange: range } : r)))}
+              onRange={(range) =>
+                change(rows.map((r, i) => (i === index ? { ...r, toolVersionRange: range } : r)), `${row.toolName} now also uses ${rangeText(range)}`)
+              }
               onRemove={() => save.mutate(rows.filter((_, i) => i !== index))}
               saving={save.isPending}
             />
@@ -532,7 +556,7 @@ export function RuleEditor({
         <p className="text-body-xs text-03">
           {onEmpty === "FAIL"
             ? "The call is refused and not charged; the agent is told why."
-            : "Assay ignores this row's provider choice and picks the best one. The agent's own limits still apply."}
+            : "Assay ignores this row's provider choice and picks the best one. Must return, the tool version and the agent's own limits still apply."}
         </p>
       </div>
       <MustReturnPicker
@@ -554,6 +578,7 @@ export function RuleEditor({
               Which version of this tool&apos;s inputs and outputs your agents get. A new first number (v1 → v2) means fields were renamed
               or removed, so an agent built for one may break on the other. Keep the current one unless your agent needs an older one.
             </p>
+            {majors.length > 1 ? <p className="text-body-xs text-02">{MANY_VERSIONS_HINT}</p> : null}
             <ul className="flex flex-col gap-1" aria-label="Contract versions this tool set uses">
               {choices.map((c) => {
                 const on = majors.includes(c.major);
