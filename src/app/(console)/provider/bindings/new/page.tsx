@@ -9,6 +9,7 @@ import { Stepper } from "@/components/patterns/stepper";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { applyPublished, isAlreadyLive, isPublishedState } from "@/features/provider-binding/after-publish";
 import { bindingQueryKey, useBinding } from "@/features/provider-binding/binding-header";
+import { contractMismatchProblems, sameTerms, termsBody, termsOf } from "@/features/provider-binding/contract-terms";
 import { documentsEqual } from "@/features/provider-binding/mapping-editor";
 import { useProviderCatalogue } from "@/features/provider-binding/tool-name";
 import { ConnectStage, type ConnectDraft } from "@/features/provider-binding/wizard/connect-stage";
@@ -169,8 +170,11 @@ function WizardContent() {
           settlementChains: [chain],
           slaFailureRate: DEFAULT_FAILURE_RATE,
           timeoutMs: DEFAULT_TIMEOUT_MS,
+          ...(draft.terms ? termsBody(draft.terms) : {}),
         });
       } catch (error) {
+        // The contract problems are shown as a list by the stage itself.
+        if (contractMismatchProblems(error)) throw error;
         throw createErrorMessage(error, boundByTool.get(tool.id));
       }
       store(created);
@@ -183,6 +187,8 @@ function WizardContent() {
     // Sent only when they moved: a mapping save starts a new version, which needs a new test.
     if (!documentsEqual(draft.requestMapping, binding.requestMapping)) body.requestMapping = draft.requestMapping;
     if (!documentsEqual(draft.responseMapping, binding.responseMapping)) body.responseMapping = draft.responseMapping;
+    // T3: a changed range or field list is a new revision too, so it needs a new test.
+    if (draft.terms && !sameTerms(draft.terms, termsOf(binding))) Object.assign(body, termsBody(draft.terms));
     if (Object.keys(body).length === 0) return binding;
     const saved = await updateToolBinding(binding.id, body);
     store(saved);

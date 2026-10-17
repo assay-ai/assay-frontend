@@ -8,6 +8,7 @@
  */
 
 import type { ListQuery, Money } from "./api";
+import type { ToolContractVersion } from "./contracts";
 
 /**
  * A request or response mapping.
@@ -69,6 +70,16 @@ export interface ToolBindingSummary {
 }
 
 export interface ToolBindingDetail extends ToolBindingSummary {
+  /**
+   * T3: the contract majors this revision serves, `^1` or `^1 || ^2`. Each
+   * needs a green tester run before publishing. Optional for a backend that
+   * predates contract versions (reads as `^1`).
+   */
+  toolVersionRange?: string;
+  /** T3: optional outputs this revision promises to return. */
+  providesOutputFields?: string[];
+  /** T3: optional inputs this revision passes on to its endpoint. */
+  supportsInputFields?: string[];
   requestMapping: ToolMapping;
   responseMapping: ToolMapping;
   freeQuotaPerAgent: number | null;
@@ -171,6 +182,15 @@ export interface SaveToolBindingBody {
   maxRps?: number | null;
   /** >= 1, or `null` for no ceiling. Not a "quota" — that word is the agent's free allowance. */
   maxDailyCalls?: number | null;
+  /**
+   * T3: the contract majors this binding serves, `^1` or `^1 || ^2`. Defaults
+   * to the tool's current major. Each major needs a green tester run.
+   */
+  toolVersionRange?: string;
+  /** T3: the contract's optional output fields this binding returns. */
+  providesOutputFields?: string[];
+  /** T3: the contract's optional input fields this binding passes to its endpoint. */
+  supportsInputFields?: string[];
 }
 
 /**
@@ -198,6 +218,15 @@ export interface UpdateToolBindingBody {
   timeoutMs?: number;
   maxRps?: number | null;
   maxDailyCalls?: number | null;
+  /**
+   * T3: the contract majors this binding serves, `^1` or `^1 || ^2`. Defaults
+   * to the tool's current major. Each major needs a green tester run.
+   */
+  toolVersionRange?: string;
+  /** T3: the contract's optional output fields this binding returns. */
+  providesOutputFields?: string[];
+  /** T3: the contract's optional input fields this binding passes to its endpoint. */
+  supportsInputFields?: string[];
 }
 
 /**
@@ -227,6 +256,10 @@ export interface CatalogueTool {
   tier: "UNVERIFIED" | "VERIFIED" | "GUARANTEED";
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
+  /** T3: the contract version unpinned URLs serve, e.g. "2.0.0"; a new binding defaults to its major. */
+  currentVersion?: string | null;
+  /** T3: every published version, newest first, with its optional fields. */
+  versions?: ToolContractVersion[];
 }
 
 /** The asset every binding settles in — not a choice, just what `assetId` must be. */
@@ -554,6 +587,11 @@ export interface BindingTestClassification {
 /** What the console posts to run a test: the tool arguments, and nothing else. */
 export interface RunBindingTestBody {
   input: Record<string, unknown>;
+  /**
+   * T3: the contract version (`tool_versions.version`) to test against, inside
+   * the binding's range. Defaults to the newest version of the highest major.
+   */
+  toolVersion?: number;
 }
 
 /**
@@ -570,6 +608,10 @@ export interface BindingTestReport {
   failedLayer: BindingTestLayer | null;
   /** Which revision of the mappings this run exercised — the publish gate keys on it. */
   mappingVersion: number;
+  /** T3: the contract version this run was checked against (sequence number). */
+  toolVersion?: number;
+  /** T3: e.g. "1.1.0". */
+  toolVersionSemver?: string;
   layers: BindingTestLayerResult[];
   /** Header **names** only, never values. */
   request: {
