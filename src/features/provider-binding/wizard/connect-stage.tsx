@@ -1,5 +1,6 @@
 "use client";
 
+import { QUERY_KEY_ERROR, credentialQueryKeys } from "../authentication/rules";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronDown, Play } from "lucide-react";
 import * as React from "react";
@@ -138,6 +139,8 @@ export function ConnectStage({
   const [runGuard] = React.useState(createRunGuard);
 
   const parsedEndpoint = parseEndpoint(endpoint);
+  const urlKeys = credentialQueryKeys(endpoint);
+  const endpointError = urlKeys.length > 0 ? QUERY_KEY_ERROR : parsedEndpoint.error;
   const mappingProblem = blocked.request ?? blocked.response;
 
   const run = async () => {
@@ -147,7 +150,7 @@ export function ConnectStage({
       setError(termsBlocked);
       return;
     }
-    if (parsedEndpoint.error) {
+    if (endpointError) {
       setEndpointTouched(true);
       return;
     }
@@ -244,7 +247,7 @@ export function ConnectStage({
         disabled={readOnly}
         onChange={(event) => setEndpoint(event.target.value)}
         onBlur={() => setEndpointTouched(true)}
-        error={endpointTouched ? (parsedEndpoint.error ?? undefined) : undefined}
+        error={urlKeys.length > 0 || endpointTouched ? (endpointError ?? undefined) : undefined}
         hint={initialEndpoint && !binding ? "Filled in from your account setup." : undefined}
       />
 
@@ -349,7 +352,7 @@ export function ConnectStage({
           <Button
             icon={<Play aria-hidden="true" />}
             onClick={() => void run()}
-            disabled={!hydrated || readOnly || phase !== "idle"}
+            disabled={!hydrated || readOnly || phase !== "idle" || urlKeys.length > 0}
             loading={phase !== "idle"}
           >
             {phase === "saving"

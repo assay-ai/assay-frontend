@@ -1,5 +1,6 @@
 "use client";
 
+import { QUERY_KEY_ERROR, SECRET_HEADER_ERROR, isCredentialQueryKey, isSecretConstantHeader } from "./authentication/rules";
 import { Plus, SlidersHorizontal } from "lucide-react";
 import * as React from "react";
 
@@ -344,11 +345,15 @@ function isPresent(row: EditorRow): boolean {
  * contract asked for, and leaving an optional output field unmapped is a
  * legitimate mapping, not a half-typed one.
  */
-function rowProblem(row: EditorRow): string | null {
+export function rowProblem(row: EditorRow): string | null {
   const target = row.target.trim();
   if (target === "") return "a row has no name, so it would not be written";
   if (row.kind === "selector" && row.text.trim() === "" && !row.fromSchema) {
     return `${target} has no selector, so it would be dropped rather than saved`;
+  }
+  if (row.kind === "constant") {
+    if (row.section === "query" && isCredentialQueryKey(target)) return QUERY_KEY_ERROR;
+    if (row.section === "headers" && isSecretConstantHeader(target)) return SECRET_HEADER_ERROR;
   }
   return null;
 }
