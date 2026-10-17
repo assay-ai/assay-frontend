@@ -33,6 +33,7 @@ import { toast } from "@/utils/toast";
 
 import { AgentAccessCard } from "@/components/toolsets/agent-access-card";
 import { ServersInUse } from "@/components/toolsets/servers-in-use";
+import { UpdateFromAlert } from "@/components/toolsets/update-sheet";
 
 import { PayerDelegationsPanel } from "./agent-payment-delegation";
 import { relativeTime } from "./format";
@@ -183,6 +184,7 @@ export function AgentsView() {
         <h1 className="text-heading-md text-01">Agents & keys</h1>
         <p className="text-body-13 text-02">Each agent&apos;s keys, whether it can pay, and how to stop it.</p>
       </header>
+      <UpdateFromAlert />
 
       {data.agentsQuery.isPending ? (
         <PageState kind="loading" rows={3} label="Loading your agents" />

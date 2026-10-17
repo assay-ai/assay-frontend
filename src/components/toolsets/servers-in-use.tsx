@@ -12,6 +12,7 @@ import { biggestServer, lockedVersionOf, serverLabel, showsEveryTool, toolsShown
 import type { ServerInUse } from "@/services/toolsets.service";
 
 import { ConnectSheet } from "./connect-sheet";
+import { SwitchToSearchSheet } from "./switch-to-search";
 import { Chip } from "./toolset-bits";
 import { UpdateSheet, type UpdateTarget } from "./update-sheet";
 import { errorText, useAgentServers } from "./use-toolsets";
@@ -39,7 +40,15 @@ function updateTargetOf(server: ServerInUse): UpdateTarget | null {
   const choice = parseMcpUrl(server.canonicalUrl, origin)?.choice;
   const from = lockedVersionOf(server);
   if (!choice || !isToolsetChoice(choice) || !from) return null;
-  return { choice, name: server.name, from, url: server.canonicalUrl };
+  return {
+    choice,
+    name: server.name,
+    from,
+    to: server.latestVersion ?? null,
+    toUrl: server.latestUrl ?? null,
+    url: server.canonicalUrl,
+    serverName: server.serverName,
+  };
 }
 const POLL_MS = 10_000;
 
@@ -55,8 +64,14 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
   const shown = toolsShown(servers);
   const over = shown > SHOW_ALL_TOOL_BUDGET;
   const biggest = over ? biggestServer(servers) : null;
+  const [switching, setSwitching] = React.useState<ServerInUse | null>(null);
+  // Its search URL was copied and handed out: the app has not used it yet.
+  const switched = Boolean(biggest?.searchUrl && servers.some((s) => s.canonicalUrl === biggest.searchUrl && s.waitingForFirstCall));
   const change = (server: ServerInUse) => setSheet({ url: server.canonicalUrl, changing: true });
-  const update = (server: ServerInUse) => setUpdating(updateTargetOf(server));
+  const update = (server: ServerInUse) => {
+    const target = updateTargetOf(server);
+    setUpdating(target ? { ...target, agentId } : null);
+  };
   const clashes = (server: ServerInUse) =>
     Boolean(server.serverName) && servers.some((s) => s.canonicalUrl !== server.canonicalUrl && s.serverName === server.serverName);
 
@@ -84,17 +99,24 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
                 <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
                 <span>
                   The servers that show every tool show {shown} between them, more than {SHOW_ALL_TOOL_BUDGET}. Agents pick tools less accurately past that.
+                  {biggest ? (
+                    <>
+                      {" "}
+                      The biggest is “{serverLabel(biggest).title}”{biggest.serverName ? ` (in your app: ${biggest.serverName})` : ""}, with {biggest.toolCount ?? "~"} tools.
+                    </>
+                  ) : null}
+                  {switched ? <span className="block pt-1 text-02">New URL copied: replace it in your app. This goes away once the app uses it.</span> : null}
                 </span>
               </span>
-              {biggest ? (
+              {biggest && !switched ? (
                 <Button
                   size="sm"
                   variant="secondary"
                   className="min-h-10 self-start tablet:min-h-0 tablet:self-center"
                   data-testid="switch-to-search"
-                  onClick={() => (biggest.searchUrl ? setSheet({ url: biggest.searchUrl, changing: true }) : change(biggest))}
+                  onClick={() => (biggest.searchUrl ? setSwitching(biggest) : change(biggest))}
                 >
-                  {biggest.searchUrl ? `Switch “${serverLabel(biggest).title}” to search` : `Narrow “${serverLabel(biggest).title}”`}
+                  {biggest.searchUrl ? "Switch it to search" : "Narrow it"}
                 </Button>
               ) : null}
             </div>
@@ -138,6 +160,7 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
         changing={sheet?.changing ?? false}
       />
       <UpdateSheet target={updating} onOpenChange={(open) => !open && setUpdating(null)} />
+      <SwitchToSearchSheet agentId={agentId} server={switching} onOpenChange={(open) => !open && setSwitching(null)} />
     </div>
   );
 }
@@ -152,7 +175,9 @@ function NameCell({ server, clash, onUpdate }: { server: ServerInUse; clash: boo
         <span className="[overflow-wrap:anywhere]">{label.title}</span>
         {target ? (
           <button type="button" onClick={onUpdate} className="min-h-10 tablet:min-h-0" data-testid="server-update">
-            <Chip tone="primary">Update available</Chip>
+            <Chip tone="primary">
+              Update available{target.to ? `: v${target.to}` : ""} · your app uses v{target.from}
+            </Chip>
           </button>
         ) : null}
       </span>
