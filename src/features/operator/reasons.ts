@@ -52,10 +52,27 @@ export const OPERATOR_REMOVE_REASONS: readonly ReasonOption[] = Object.freeze([
   OTHER,
 ]);
 
+/** Publishing a contract version or making one current (P-10, P-11). */
+export const CONTRACT_REASONS: readonly ReasonOption[] = Object.freeze([
+  { value: "PLANNED_CHANGE", label: "Planned change", hint: "Part of the tool's roadmap." },
+  { value: "PROVIDER_REQUEST", label: "Providers asked", hint: "Providers asked for this field or change." },
+  { value: "BUYER_REQUEST", label: "Buyers asked", hint: "Agents need this field or change." },
+  { value: "FIX_CONTRACT", label: "Fix a mistake", hint: "The published contract was wrong." },
+  OTHER,
+]);
+
+/** Deprecating a contract major (P-12). */
+export const DEPRECATE_REASONS: readonly ReasonOption[] = Object.freeze([
+  { value: "REPLACED_BY_NEWER", label: "Newer version ready", hint: "Enough providers serve the newer version." },
+  { value: "REPLACED_BY_TOOL", label: "Another tool replaces it" },
+  { value: "UNSAFE_CONTRACT", label: "Unsafe to keep", hint: "The old version gives agents wrong or risky answers." },
+  OTHER,
+]);
+
 /** A reason code in words, from any vocabulary above; unknown codes are humanised. */
 export function reasonLabel(code: string | null | undefined): string {
   if (!code) return "";
-  for (const list of [BLOCK_REASONS, UNBLOCK_REASONS, SUSPEND_REASONS, OPERATOR_ADD_REASONS, OPERATOR_CHANGE_REASONS, OPERATOR_REMOVE_REASONS]) {
+  for (const list of [BLOCK_REASONS, UNBLOCK_REASONS, SUSPEND_REASONS, OPERATOR_ADD_REASONS, OPERATOR_CHANGE_REASONS, OPERATOR_REMOVE_REASONS, CONTRACT_REASONS, DEPRECATE_REASONS]) {
     const found = list.find((option) => option.value === code);
     if (found && found.value !== "OTHER") return found.label;
   }
