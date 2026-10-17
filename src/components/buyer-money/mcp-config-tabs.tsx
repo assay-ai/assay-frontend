@@ -54,7 +54,7 @@ export function McpConfigTabs({
     <Tabs value={client} onValueChange={(v) => setClient(v as McpClient)} className="flex w-full min-w-0 flex-col gap-3">
       <TabsList className="flex-wrap gap-x-4 gap-y-1">
         {MCP_CLIENTS.map((c) => (
-          <TabsTrigger key={c.id} value={c.id} className="min-h-10 whitespace-nowrap tablet:min-h-0">
+          <TabsTrigger key={c.id} value={c.id} className="min-h-10 whitespace-nowrap">
             {c.label}
           </TabsTrigger>
         ))}

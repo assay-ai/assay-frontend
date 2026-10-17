@@ -48,9 +48,7 @@
   }
 
   /*
-   * Touch sizes for the operator console (and any dense screen that opts in):
-   * below the tablet breakpoint, or on any coarse pointer, a control is at
-   * least 40x40. Desktop with a mouse keeps its compact size.
+   * Touch sizes: every control is at least 40x40, on every width.
    *
    *   .touch-target  grows the control itself (buttons, chips, text links;
    *                  give a text link inline-flex items-center).
@@ -58,43 +56,41 @@
    *                  with an invisible ::after (a 16px checkbox, a 28px icon
    *                  button). The element must not use ::after for itself.
    */
-  @media (max-width: 833.98px), (pointer: coarse) {
-    /*
-     * The app-wide rule (T1 review): on a phone or a touch screen every
-     * control is at least 40px tall and wide — buttons, links laid out as
-     * blocks (a flex child, a nav item), tabs, radios, selects, disclosure
-     * summaries and the labels that wrap a checkbox, radio or switch. A link
-     * inline in a sentence stays text-sized: min-height does not apply to an
-     * inline box. `.touch-target` below is the same rule, for one element.
-     */
-    :where(button, a[href], select, summary, [role="tab"], [role="button"], [role="radio"], [role="switch"]),
-    :where(label:has(> input[type="checkbox"]), label:has(> input[type="radio"])) {
-      min-height: 40px;
-      min-width: 40px;
-    }
+  /*
+   * The app-wide rule (T1 review, extended to every width in the T2 retest):
+   * every control is at least 40px tall and wide — buttons, links laid out as
+   * blocks (a flex child, a nav item), tabs, radios, selects, disclosure
+   * summaries and the labels that wrap a checkbox, radio or switch. A link
+   * inline in a sentence stays text-sized: min-height does not apply to an
+   * inline box. `.touch-target` below is the same rule, for one element.
+   */
+  :where(button, a[href], select, summary, [role="tab"], [role="button"], [role="radio"], [role="switch"]),
+  :where(label:has(> input[type="checkbox"]), label:has(> input[type="radio"])) {
+    min-height: 40px;
+    min-width: 40px;
+  }
 
-    :where(a[href]) {
-      align-content: center;
-    }
+  :where(a[href]) {
+    align-content: center;
+  }
 
-    .touch-target {
-      min-height: 40px;
-      min-width: 40px;
-    }
+  .touch-target {
+    min-height: 40px;
+    min-width: 40px;
+  }
 
-    .hit-area {
-      position: relative;
-    }
+  .hit-area {
+    position: relative;
+  }
 
-    .hit-area::after {
-      content: "";
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: max(100%, 40px);
-      height: max(100%, 40px);
-      transform: translate(-50%, -50%);
-    }
+  .hit-area::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 40px);
+    height: max(100%, 40px);
+    transform: translate(-50%, -50%);
   }
 
   /*

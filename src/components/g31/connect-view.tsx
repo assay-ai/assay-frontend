@@ -119,7 +119,7 @@ export function ConnectView() {
             <p className="min-w-0 flex-1 text-body-13 text-02">
               A key is shown in full only once, when it is made. To paste a ready config, make a new key for it.
             </p>
-            <Button size="sm" variant="secondary" className="min-h-10 tablet:min-h-0" loading={create.isPending} disabled={!agent} onClick={() => create.mutate()}>
+            <Button size="sm" variant="secondary" className="min-h-10" loading={create.isPending} disabled={!agent} onClick={() => create.mutate()}>
               Create a key and fill it in
             </Button>
           </div>
@@ -128,7 +128,7 @@ export function ConnectView() {
         <p className="text-body-13 text-02">
           This connects Everything: every tool on Assay, through one server.{" "}
           {agent ? (
-            <button type="button" className="min-h-10 font-semibold text-primary-600 hover:underline tablet:min-h-0" onClick={() => setNarrowing(true)}>
+            <button type="button" className="min-h-10 font-semibold text-primary-600 hover:underline" onClick={() => setNarrowing(true)}>
               Connect a tool set or only some tools
             </button>
           ) : null}
@@ -154,7 +154,7 @@ export function ConnectView() {
             </p>
           )}
           <div className="flex flex-wrap gap-2 pt-1">
-            <Button variant="secondary" size="sm" className="min-h-10 tablet:min-h-0" asChild>
+            <Button variant="secondary" size="sm" className="min-h-10" asChild>
               <Link href="/agents">Keys and servers in use</Link>
             </Button>
           </div>

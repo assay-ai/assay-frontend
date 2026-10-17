@@ -502,7 +502,7 @@ export function AlertsView() {
                     </button>
                     <p className="text-body-13 text-02">{alertBody(item)}</p>
                     {item.event === "toolset.update_available" && attentionAction(item) ? (
-                      <Link href={attentionAction(item)!.href} className="min-h-10 self-start content-center text-label-13 font-semibold text-primary-600 hover:underline tablet:min-h-0">
+                      <Link href={attentionAction(item)!.href} className="min-h-10 self-start content-center text-label-13 font-semibold text-primary-600 hover:underline">
                         {attentionAction(item)!.label}
                       </Link>
                     ) : null}
