@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Info, Trash2, TriangleAlert, X } from "lucide-react";
+import { ChevronDown, Info, Share2, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { buildMcpUrl, toolDisplay } from "@/features/connect/mcp-url";
 import { defaultEntry, entryChipLabel, entryInput, entryProblem, providersLeft } from "@/features/toolsets/entry-rules";
 import { DRAFT_NOTICE, ON_EMPTY_LABELS, PROVIDER_MODE_LABELS, VERIFIED_ONLY_LABEL } from "@/features/toolsets/labels";
+import { shareStatus, sharedPage } from "@/features/toolsets/sharing";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import {
@@ -35,6 +36,9 @@ import { parseAmountInput, toDecimal } from "@/utils/money";
 import { toast } from "@/utils/toast";
 
 import { ConnectPanel } from "./connect-panel";
+import { ShareDialog } from "./share-dialog";
+import { Chip, statusChipTone } from "./toolset-bits";
+import { PublisherStats, VersionHistory } from "./toolset-versions";
 import { errorText, toolsetKeys, useToolset, useToolsets } from "./use-toolsets";
 
 /**
@@ -47,7 +51,7 @@ import { errorText, toolsetKeys, useToolset, useToolsets } from "./use-toolsets"
  * Any (Assay picks) ▾" — with Only these / All except, Only verified
  * providers, a max price, and what happens when no provider fits.
  */
-export function ToolsetPage({ id, slug, free }: { id: string | null; slug: string | null; free?: boolean }) {
+export function ToolsetPage({ id, slug, free, version }: { id: string | null; slug: string | null; free?: boolean; version?: number | null }) {
   const list = useToolsets();
   const resolvedId = id ?? (slug ? list.data?.items.find((t) => t.slug === slug)?.id ?? null : null);
   const query = useToolset(resolvedId);
@@ -89,12 +93,14 @@ export function ToolsetPage({ id, slug, free }: { id: string | null; slug: strin
     <>
       <ConnectPanel
         compact
-        url={buildMcpUrl({ kind: "toolset", slug: set.slug }, { free: Boolean(free) })}
+        url={buildMcpUrl({ kind: "toolset", slug: set.slug, version: version ?? null }, { free: Boolean(free) })}
         title={`Connect ${set.name}`}
-        detail="Its own MCP server: only these tools, with these provider rules."
+        detail={version ? `Locked to v${version}: only these tools, with these provider rules.` : "Its own MCP server: only these tools, with these provider rules."}
       />
       <ToolsetHeader set={set} />
       <EntriesEditor set={set} />
+      <VersionHistory set={set} />
+      <PublisherStats set={set} />
     </>,
   );
 }
@@ -105,6 +111,9 @@ function ToolsetHeader({ set }: { set: Toolset }) {
   const [renaming, setRenaming] = React.useState(false);
   const [name, setName] = React.useState(set.name);
   const [deleting, setDeleting] = React.useState(false);
+  const [sharing, setSharing] = React.useState(false);
+  const status = shareStatus(set);
+  const page = sharedPage(set);
   const rename = useMutation({
     mutationFn: () => updateToolset(set.id, { name: name.trim() }),
     onSuccess: (next) => {
@@ -147,6 +156,9 @@ function ToolsetHeader({ set }: { set: Toolset }) {
       ) : (
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-heading-md text-01">{set.name}</h1>
+          <Button size="sm" icon={<Share2 />} className="min-h-10 tablet:min-h-0" onClick={() => setSharing(true)} disabled={set.removed} data-testid="open-share">
+            Share
+          </Button>
           <button type="button" className="min-h-10 px-1 text-label-13 text-primary-600 hover:underline tablet:min-h-0" onClick={() => setRenaming(true)}>
             Rename
           </button>
@@ -156,9 +168,27 @@ function ToolsetHeader({ set }: { set: Toolset }) {
           </button>
         </div>
       )}
-      <p className="text-body-xs text-03">
-        Only my team · <span className="break-all font-mono">/my/{set.slug}</span> · {set.toolCount} tool{set.toolCount === 1 ? "" : "s"}
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-03" data-testid="share-status">
+        <Chip tone={statusChipTone(status.tone)}>{status.label}</Chip>
+        <span className="break-all font-mono">/my/{set.slug}</span>
+        <span>
+          · {set.toolCount} tool{set.toolCount === 1 ? "" : "s"}
+        </span>
+        {page ? (
+          <Link href={page} className="min-h-10 content-center text-primary-600 hover:underline tablet:min-h-0">
+            Its public page
+          </Link>
+        ) : null}
       </p>
+      {status.notice ? (
+        <p role="status" className={cn("rounded-lg px-3 py-2 text-body-13", status.tone === "danger" ? "bg-danger-10 text-danger-700" : "bg-warning-10 text-warning-700")} data-testid="share-notice">
+          {status.notice}
+        </p>
+      ) : null}
+      {set.forkedFrom ? (
+        <p className="text-body-xs text-03">Your own version of another tool set{set.forkedFrom.version ? ` (from its v${set.forkedFrom.version})` : ""}. It gets no updates from the original.</p>
+      ) : null}
+      <ShareDialog set={set} open={sharing} onOpenChange={setSharing} />
       <ConfirmSheet
         open={deleting}
         onOpenChange={setDeleting}
