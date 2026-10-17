@@ -222,6 +222,14 @@ function sideProblems(side: "input" | "output", schema: ContractSchema, optional
     if (!Object.prototype.hasOwnProperty.call(properties, name)) problems.push(`optional ${side} field "${name}" is not in the ${side} schema`);
     else if (required.has(name)) problems.push(`optional ${side} field "${name}" cannot also be required`);
   }
+  // Core means required: an output is either one every provider must return, or optional and opt-in.
+  if (side === "output") {
+    for (const name of Object.keys(properties)) {
+      if (!required.has(name) && !optional.includes(name)) {
+        problems.push(`output field "${name}" is neither required nor optional: make it required, or list it in optionalOutputFields`);
+      }
+    }
+  }
   return problems;
 }
 
