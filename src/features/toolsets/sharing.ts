@@ -1,3 +1,4 @@
+import { rangeText } from "@/features/contracts/semver";
 import { formatDate } from "@/libs/utc-time";
 import type { Money } from "@/interfaces";
 import type {
@@ -109,6 +110,10 @@ export interface Snapshot {
     maxPrice: Pick<Money, "amount" | "asset"> | null;
     minQuality: number | null;
     onEmpty: string;
+    /** T3: contract majors, e.g. "^1". */
+    toolVersionRange?: string | null;
+    /** T3: "Must return". */
+    requireOutputFields?: string[];
   }[];
 }
 
@@ -135,6 +140,8 @@ function ruleKey(entry: Snapshot["entries"][number]): string {
     entry.maxPrice ? [entry.maxPrice.amount, entry.maxPrice.asset] : null,
     entry.minQuality,
     entry.onEmpty,
+    entry.toolVersionRange ?? null,
+    [...(entry.requireOutputFields ?? [])].sort(),
   ]);
 }
 
@@ -367,6 +374,10 @@ export interface RuleView {
   onEmpty: string;
   /** Atomic units; only owners' snapshots carry it. */
   maxPrice?: { amount: string; decimals: number } | null;
+  /** T3: contract majors, e.g. "^1 || ^2". */
+  toolVersionRange?: string | null;
+  /** T3: "Must return" fields. */
+  requireOutputFields?: string[];
 }
 
 function modeText(r: RuleView): string {
@@ -397,6 +408,12 @@ export function ruleChangeText(before: RuleView, after: RuleView): string | null
   if (before.maxPrice !== undefined && after.maxPrice !== undefined && priceWords(before.maxPrice) !== priceWords(after.maxPrice)) {
     parts.push(`Max price ${priceWords(before.maxPrice)} → ${priceWords(after.maxPrice)}`);
   }
+  const must = (r: RuleView) => (r.requireOutputFields && r.requireOutputFields.length > 0 ? [...r.requireOutputFields].sort().join(", ") : "nothing extra");
+  if (must(before) !== must(after)) parts.push(`Must return: ${must(before)} → ${must(after)}`);
+  const range = (r: RuleView) => (r.toolVersionRange ? rangeText(r.toolVersionRange) : "current version");
+  if ((before.toolVersionRange ?? null) !== (after.toolVersionRange ?? null) && range(before) !== range(after)) {
+    parts.push(`Contract version: ${range(before)} → ${range(after)}`);
+  }
   return parts.length > 0 ? parts.join("; ") : null;
 }
 
@@ -408,6 +425,8 @@ export function ruleOfSnapshot(e: Snapshot["entries"][number] & { maxPrice: { am
     minTier: e.minTier,
     onEmpty: e.onEmpty,
     maxPrice: e.maxPrice ? { amount: e.maxPrice.amount, decimals: e.maxPrice.decimals ?? 6 } : null,
+    toolVersionRange: e.toolVersionRange ?? null,
+    requireOutputFields: e.requireOutputFields ?? [],
   };
 }
 

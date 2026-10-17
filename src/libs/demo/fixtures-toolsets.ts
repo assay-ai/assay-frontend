@@ -35,6 +35,7 @@ import {
   type DemoPublicSet,
 } from "./fixtures-public-toolsets";
 import type { DemoFixture } from "./fixtures";
+import { demoContractVersions } from "./fixtures-contracts";
 import { contractRefusedCalls } from "./fixtures-refusals-contracts";
 
 /**
@@ -165,7 +166,16 @@ function entry(position: number, toolName: string, rule: Partial<ToolsetEntryInp
     maxPrice: rule.maxPrice ? { ...rule.maxPrice, decimals: 6 } : null,
     minQuality: null,
     onEmpty: rule.onEmpty ?? "FAIL",
+    // T3: a new entry routes to the tool's current major, as the server stores it.
+    toolVersionRange: rule.toolVersionRange ?? currentRangeOf(tool.id),
+    requireOutputFields: rule.requireOutputFields ?? [],
   };
+}
+
+/** "^2" — the range a new entry gets: the tool's current major. */
+function currentRangeOf(toolId: string): string | null {
+  const current = demoContractVersions(toolId).find((v) => v.isCurrent);
+  return current ? `^${current.major}` : null;
 }
 
 function toolsetRow(id: string, slug: string, name: string, description: string, entries: ToolsetEntry[], ageMinutes: number): Toolset {
@@ -220,6 +230,8 @@ function versionOf(set: Toolset, version: number, entries: ToolsetEntry[], ageMi
       maxPrice: e.maxPrice,
       minQuality: e.minQuality,
       onEmpty: e.onEmpty,
+      toolVersionRange: e.toolVersionRange ?? null,
+      requireOutputFields: [...(e.requireOutputFields ?? [])],
     })),
   };
 }
@@ -273,7 +285,15 @@ function seed(variant: DemoConnectVariant): Stage {
             "Weather at a place by name: geocode first, then the forecast model.",
             [
               entry(0, "geocode_place"),
-              entry(1, "get_weather", { providerMode: "EXCLUDE", providerIds: [QUANTA], minTier: "ESTABLISHED", onEmpty: "FALLBACK_BEST" }),
+              entry(1, "get_weather", {
+                providerMode: "EXCLUDE",
+                providerIds: [QUANTA],
+                minTier: "ESTABLISHED",
+                onEmpty: "FALLBACK_BEST",
+                // T3: built for v1 and its uv_index; v1 is deprecated, so the row says so and offers "Allow v2".
+                toolVersionRange: "^1",
+                requireOutputFields: ["uv_index"],
+              }),
             ],
             1_440,
           ),
@@ -903,7 +923,7 @@ function newId(): string {
 function entriesFrom(input: unknown): ToolsetEntry[] {
   const list = Array.isArray(input) ? (input as ToolsetEntryInput[]) : [];
   return list
-    .map((e, position) => {
+    .map((e, position): ToolsetEntry | null => {
       const tool = toolById(e.toolId);
       if (!tool) return null;
       return {
@@ -917,6 +937,8 @@ function entriesFrom(input: unknown): ToolsetEntry[] {
         maxPrice: e.maxPrice ? { amount: e.maxPrice.amount, asset: e.maxPrice.asset, decimals: 6 } : null,
         minQuality: e.minQuality ?? null,
         onEmpty: e.onEmpty ?? "FAIL",
+        toolVersionRange: e.toolVersionRange ?? currentRangeOf(tool.id),
+        requireOutputFields: Array.isArray(e.requireOutputFields) ? e.requireOutputFields.filter((f): f is string => typeof f === "string") : [],
       } satisfies ToolsetEntry;
     })
     .filter((e): e is ToolsetEntry => e !== null);
@@ -1050,6 +1072,8 @@ function ownPublicPage(set: Toolset, v: number | null, via: "PUBLIC" | "UNLISTED
       onEmpty: e.onEmpty,
       removed: false,
       notReviewed: false,
+      toolVersionRange: e.toolVersionRange ?? null,
+      requireOutputFields: [...(e.requireOutputFields ?? [])],
     })),
     notReviewed: false,
     diff: null,

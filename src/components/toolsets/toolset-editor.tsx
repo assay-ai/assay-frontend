@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { useSpendPolicyQuery } from "@/components/buyer-money/use-agents";
+import { useToolVersions } from "@/components/contracts/use-tool-versions";
 import { useCatalogue, type ProviderRow } from "@/components/g31/use-catalogue";
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { EntityPicker } from "@/components/patterns/entity-picker";
@@ -17,6 +18,21 @@ import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
 import { buildMcpUrl, toolDisplay } from "@/features/connect/mcp-url";
+import {
+  contractChipParts,
+  currentMajorOf,
+  entryContractWarning,
+  entryMajors,
+  majorChoiceLabel,
+  majorChoices,
+  majorsChipText,
+  mustReturnEffect,
+  optionalOutputsFor,
+  unknownRequiredFields,
+} from "@/features/contracts/entry-contract";
+import { formatVersionRange } from "@/features/contracts/semver";
+import { fieldList } from "@/features/contracts/text";
+import type { ToolVersionBrief } from "@/interfaces/contracts";
 import { defaultEntry, entryChipLabel, entryInput, entryProblem, providersLeft } from "@/features/toolsets/entry-rules";
 import { DRAFT_NOTICE, ON_EMPTY_LABELS, PROVIDER_MODE_LABELS, VERIFIED_ONLY_LABEL } from "@/features/toolsets/labels";
 import { shareStatus, sharedPage } from "@/features/toolsets/sharing";
@@ -260,11 +276,13 @@ function EntriesEditor({ set }: { set: Toolset }) {
               decimals={row.decimals ?? decimals}
               asset={asset}
               providers={serving(row.toolId)}
+              versions={catalogue.tools.find((t) => t.toolId === row.toolId)?.versions ?? []}
               open={open === row.toolId}
               onToggle={() => setOpen(open === row.toolId ? null : row.toolId)}
               onApply={(next) => {
                 save.mutate(rows.map((r, i) => (i === index ? { ...next, toolName: r.toolName } : r)), { onSuccess: () => setOpen(null) });
               }}
+              onRange={(range) => save.mutate(rows.map((r, i) => (i === index ? { ...r, toolVersionRange: range } : r)))}
               onRemove={() => save.mutate(rows.filter((_, i) => i !== index))}
               saving={save.isPending}
             />
@@ -291,14 +309,16 @@ function EntriesEditor({ set }: { set: Toolset }) {
   );
 }
 
-function EntryRow({
+export function EntryRow({
   row,
   decimals,
   asset,
   providers,
+  versions,
   open,
   onToggle,
   onApply,
+  onRange,
   onRemove,
   saving,
 }: {
@@ -306,16 +326,22 @@ function EntryRow({
   decimals: number;
   asset: string;
   providers: ProviderRow[];
+  /** The tool's published versions, from the catalogue card (T3); empty on an older backend. */
+  versions: readonly ToolVersionBrief[];
   open: boolean;
   onToggle: () => void;
   onApply: (next: ToolsetEntryInput) => void;
+  /** One-click "Allow v2" from the row's warning. */
+  onRange: (range: string) => void;
   onRemove: () => void;
   saving: boolean;
 }) {
   const left = providersLeft(row, providers.map((p) => p.providerId));
+  const contract = contractChipParts(row, currentMajorOf(versions));
   const chip = `${entryChipLabel({ ...row, maxPrice: row.maxPrice ? { ...row.maxPrice, decimals } : null }, decimals)}${
     row.onEmpty === "FALLBACK_BEST" && row.providerMode !== "BEST" ? " · if none fits, Assay picks" : ""
-  }`;
+  }${contract.length > 0 ? ` · ${contract.join(" · ")}` : ""}`;
+  const warning = entryContractWarning(row.toolVersionRange, versions);
   return (
     <li className="flex flex-col gap-2 px-3 py-2.5" data-testid="entry-row">
       <div className="flex flex-col gap-1.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-x-3">
@@ -367,16 +393,39 @@ function EntryRow({
           </button>
         </div>
       </div>
-      {open ? <RuleEditor row={row} decimals={decimals} asset={asset} providers={providers} onApply={onApply} onCancel={onToggle} saving={saving} /> : null}
+      {warning ? (
+        <p
+          role="status"
+          className={cn(
+            "flex flex-col gap-1.5 rounded-lg px-3 py-2 text-body-13 tablet:flex-row tablet:items-center tablet:justify-between",
+            warning.tone === "danger" ? "bg-danger-10 text-danger-700" : "bg-warning-10 text-warning-700",
+          )}
+          data-testid="entry-contract-warning"
+        >
+          <span className="flex items-start gap-1.5">
+            <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+            {warning.text}
+          </span>
+          {warning.fix ? (
+            <Button size="sm" variant="secondary" className="min-h-10 self-start" loading={saving} onClick={() => onRange(warning.fix!.range)}>
+              {warning.fix.label}
+            </Button>
+          ) : null}
+        </p>
+      ) : null}
+      {open ? (
+        <RuleEditor row={row} decimals={decimals} asset={asset} providers={providers} versions={versions} onApply={onApply} onCancel={onToggle} saving={saving} />
+      ) : null}
     </li>
   );
 }
 
-function RuleEditor({
+export function RuleEditor({
   row,
   decimals,
   asset,
   providers,
+  versions,
   onApply,
   onCancel,
   saving,
@@ -385,10 +434,29 @@ function RuleEditor({
   decimals: number;
   asset: string;
   providers: ProviderRow[];
+  versions: readonly ToolVersionBrief[];
   onApply: (next: ToolsetEntryInput) => void;
   onCancel: () => void;
   saving: boolean;
 }) {
+  const contract = useToolVersions(row.toolId);
+  const full = React.useMemo(() => contract.data?.versions ?? [], [contract.data]);
+  const known = full.length > 0 ? full : versions;
+  const [majors, setMajors] = React.useState<number[]>(() => entryMajors(row.toolVersionRange, versions));
+  const [required, setRequired] = React.useState<string[]>(row.requireOutputFields ?? []);
+  // The catalogue card may be missing (an older backend): take the range from the full list once it lands.
+  React.useEffect(() => {
+    if (majors.length === 0 && full.length > 0) setMajors(entryMajors(row.toolVersionRange, full));
+  }, [full, majors.length, row.toolVersionRange]);
+  const choices = majorChoices(known);
+  const offered = optionalOutputsFor(full, majors);
+  const missing = contract.isSuccess ? unknownRequiredFields(required, offered) : [];
+  const contractProblem =
+    choices.length > 0 && majors.length === 0
+      ? "Pick at least one version."
+      : missing.length > 0
+        ? `${majorsChipText(majors).replace(/ only$/, "")} doesn't return ${fieldList(missing)}, so no provider could serve these calls. Untick it, or allow a version that has it.`
+        : null;
   const [mode, setMode] = React.useState<ProviderMode>(row.providerMode);
   const [ids, setIds] = React.useState<string[]>(row.providerIds);
   const [verified, setVerified] = React.useState(row.minTier !== null);
@@ -396,7 +464,7 @@ function RuleEditor({
   const [onEmpty, setOnEmpty] = React.useState<OnEmpty>(row.onEmpty);
   const [tried, setTried] = React.useState(false);
   const parsed = parseAmountInput(max, { decimals, required: false });
-  const problem = entryProblem({ providerMode: mode, providerIds: ids });
+  const problem = entryProblem({ providerMode: mode, providerIds: ids }) ?? contractProblem;
   const left = providersLeft({ providerMode: mode, providerIds: ids }, providers.map((p) => p.providerId));
 
   return (
@@ -467,6 +535,47 @@ function RuleEditor({
             : "Assay ignores this row's provider choice and picks the best one. The agent's own limits still apply."}
         </p>
       </div>
+      <MustReturnPicker
+        loading={contract.isPending}
+        failed={contract.isError}
+        onRetry={() => void contract.refetch()}
+        offered={offered}
+        required={required}
+        onChange={(next) => {
+          setRequired(next);
+          setTried(false);
+        }}
+      />
+      {choices.length > 0 ? (
+        <details className="rounded-lg border border-01 bg-01 px-3" data-testid="contract-version" open={majors.some((m) => choices.find((c) => c.major === m)?.status !== "ACTIVE")}>
+          <summary className="cursor-pointer text-label-xs text-02">Advanced · Contract version: {majorsChipText(majors) || "not set"}</summary>
+          <div className="flex flex-col gap-2 pb-3">
+            <p className="text-body-xs text-03">
+              Which version of this tool&apos;s inputs and outputs your agents get. A new first number (v1 → v2) means fields were renamed
+              or removed, so an agent built for one may break on the other. Keep the current one unless your agent needs an older one.
+            </p>
+            <ul className="flex flex-col gap-1" aria-label="Contract versions this tool set uses">
+              {choices.map((c) => {
+                const on = majors.includes(c.major);
+                return (
+                  <li key={c.major}>
+                    <Checkbox
+                      className="min-h-10"
+                      checked={on}
+                      disabled={c.status === "RETIRED" && !on}
+                      onChange={(e) => {
+                        setMajors(e.target.checked ? [...majors, c.major].sort((a, b) => a - b) : majors.filter((m) => m !== c.major));
+                        setTried(false);
+                      }}
+                      label={majorChoiceLabel(c)}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </details>
+      ) : null}
       {mode !== "BEST" && providers.length > 0 && left <= 1 && !problem ? (
         <p className="flex items-center gap-1.5 text-body-xs text-warning-700">
           <TriangleAlert aria-hidden="true" className="size-3.5" />
@@ -492,6 +601,8 @@ function RuleEditor({
               maxPrice: parsed.atomic && asset ? { amount: parsed.atomic, asset } : null,
               minQuality: row.minQuality,
               onEmpty,
+              ...(majors.length > 0 ? { toolVersionRange: formatVersionRange(majors) } : row.toolVersionRange ? { toolVersionRange: row.toolVersionRange } : {}),
+              requireOutputFields: required,
             });
           }}
         >
@@ -501,6 +612,59 @@ function RuleEditor({
           Cancel
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * "Must return" (design spec §6.3): the extra fields this tool's versions
+ * offer, ticked to send calls only to providers that return them. Hidden
+ * when the tool has none (and nothing is required).
+ */
+function MustReturnPicker({
+  loading,
+  failed,
+  onRetry,
+  offered,
+  required,
+  onChange,
+}: {
+  loading: boolean;
+  failed: boolean;
+  onRetry: () => void;
+  offered: readonly string[];
+  required: readonly string[];
+  onChange: (next: string[]) => void;
+}) {
+  if (loading) return <p className="text-body-xs text-03" role="status">Loading this tool&apos;s extra fields…</p>;
+  if (failed) {
+    return (
+      <p className="flex flex-wrap items-center gap-2 text-body-xs text-danger-700">
+        Couldn&apos;t load this tool&apos;s extra fields.
+        <button type="button" className="min-h-10 text-label-13 text-primary-600 hover:underline" onClick={onRetry}>
+          Retry
+        </button>
+      </p>
+    );
+  }
+  const fields = [...new Set([...offered, ...required])];
+  if (fields.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="must-return">
+      <span className="text-label-xs text-02">Must return</span>
+      <ul className="flex flex-wrap gap-x-4" aria-label="Must return">
+        {fields.map((field) => (
+          <li key={field}>
+            <Checkbox
+              className="min-h-10"
+              checked={required.includes(field)}
+              onChange={(e) => onChange(e.target.checked ? [...required, field] : required.filter((f) => f !== field))}
+              label={<span className="font-mono text-mono-13">{field}</span>}
+            />
+          </li>
+        ))}
+      </ul>
+      <p className="text-body-xs text-03">Extra fields not every provider returns. {mustReturnEffect(required)}</p>
     </div>
   );
 }

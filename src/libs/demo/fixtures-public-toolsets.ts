@@ -10,6 +10,7 @@ import type {
 import type { Figure } from "@/services/toolsets.service";
 
 import { demoMinutesAgo } from "./demo-clock";
+import { demoContractVersions } from "./fixtures-contracts";
 import { demoToolOffers } from "./fixtures-explore";
 
 /**
@@ -37,7 +38,16 @@ export interface DemoPublicSet {
   tags: string[];
   badge: "OFFICIAL" | "PROVIDER" | "COMMUNITY";
   /** Tool names, as `demoToolOffers()` spells them; unknown names are provider tools outside the catalogue. */
-  tools: { name: string; providerMode?: "BEST" | "ONLY" | "EXCLUDE"; providerCount?: number; removed?: boolean }[];
+  tools: {
+    name: string;
+    providerMode?: "BEST" | "ONLY" | "EXCLUDE";
+    providerCount?: number;
+    removed?: boolean;
+    /** T3: contract majors; default the tool's current major. */
+    toolVersionRange?: string;
+    /** T3: "Must return". */
+    requireOutputFields?: string[];
+  }[];
   /** Newest first. `tools` lists the tool names that version held (default: the set's current tools). */
   versions: { version: number; ageDays: number; changelog: string; toolCount: number; tools?: string[]; rulesChanged?: string[] }[];
   stats: Omit<PublicToolsetStats, "weekStart">;
@@ -80,9 +90,9 @@ export const DEMO_PUBLIC_SETS: readonly DemoPublicSet[] = [
     category: "weather",
     tags: ["weather", "maps"],
     badge: "OFFICIAL",
-    tools: [{ name: "geocode_place" }, { name: "get_weather" }],
+    tools: [{ name: "geocode_place" }, { name: "get_weather", requireOutputFields: ["uv_index"] }],
     versions: [
-      { version: 2, ageDays: 9, changelog: "Changed provider rules for get_weather.", toolCount: 2, rulesChanged: ["get_weather"] },
+      { version: 2, ageDays: 9, changelog: "get_weather must now return uv_index.", toolCount: 2, rulesChanged: ["get_weather"] },
       { version: 1, ageDays: 40, changelog: "First version: 2 tools.", toolCount: 2 },
     ],
     stats: { activeUsers: fig(140), agents: fig(310), calls30d: calls("48k", 48_000), copies: fig(20), trend: "UP", onLatestVersionPercent: 80 },
@@ -272,6 +282,8 @@ function entriesOf(set: DemoPublicSet, names: readonly string[], version?: numbe
       minTier: null,
       onEmpty: "FAIL",
       removed: Boolean("removed" in t && t.removed),
+      toolVersionRange: ("toolVersionRange" in t && t.toolVersionRange) || currentRangeOf(demoToolIdOf(set, t.name)),
+      requireOutputFields: ("requireOutputFields" in t && t.requireOutputFields) || [],
       // A tool outside the public catalogue is one maker's own: "Not reviewed".
       notReviewed: !demoToolOffers().some((o) => o.name === t.name),
     };
@@ -342,4 +354,11 @@ export function demoPublicVersions(set: DemoPublicSet): PublicToolsetVersion[] {
 
 export function demoSetAgeMinutes(set: DemoPublicSet): number {
   return set.ageDays * DAY;
+}
+
+/** "^2": the current major of a catalogue tool; null for a provider tool outside it. */
+function currentRangeOf(toolId: string): string | null {
+  if (!demoToolOffers().some((o) => o.id === toolId)) return null;
+  const current = demoContractVersions(toolId).find((v) => v.isCurrent);
+  return current ? `^${current.major}` : null;
 }
