@@ -1,5 +1,5 @@
 import type { Money } from "@/interfaces";
-import type { AgentAccess, AgentRules, AgentToolEffect, UpdateAgentAccessBody } from "@/services/toolsets.service";
+import type { AgentAccess, AgentRules, AgentToolEffect, AllowedToolset, UpdateAgentAccessBody } from "@/services/toolsets.service";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -71,7 +71,7 @@ export function accessSummary(access: AgentAccess): string {
 
 /** The allowed tool sets as the PATCH body spells them (the names stay server-side). */
 function toolsetRefs(access: AgentAccess): NonNullable<UpdateAgentAccessBody["allowedToolsets"]> {
-  return access.allowedToolsets.map((t) => ({ toolsetId: t.toolsetId, version: null, viaUrlOnly: t.viaUrlOnly }));
+  return access.allowedToolsets.map((t) => ({ toolsetId: t.toolsetId, version: t.version ?? null, viaUrlOnly: t.viaUrlOnly }));
 }
 
 /** "[Allow them]": these tools join the allowed list. Nothing to send when access is Everything. */
@@ -87,12 +87,54 @@ export function removeToolBody(access: AgentAccess, toolId: string, toolName: st
   return { allowedToolIds: access.allowedToolIds.filter((id) => id !== toolId), changeReason: `Stopped allowing ${toolName}` };
 }
 
-export function addToolsetBody(access: AgentAccess, toolsetId: string, name: string): UpdateAgentAccessBody {
+/**
+ * Allows a tool set. Another organization's must be locked to a version
+ * (`version`); "always latest" (null) only for your own and Official ones.
+ */
+export function addToolsetBody(access: AgentAccess, toolsetId: string, name: string, version: number | null = null, unlistedToken?: string): UpdateAgentAccessBody {
   if (access.allowedToolsets.some((t) => t.toolsetId === toolsetId)) return { changeReason: `Allowed ${name}` };
   return {
-    allowedToolsets: [...toolsetRefs(access), { toolsetId, version: null, viaUrlOnly: true }],
-    changeReason: `Allowed the tool set ${name}`,
+    allowedToolsets: [...toolsetRefs(access), { toolsetId, version, viaUrlOnly: true, ...(unlistedToken ? { unlistedToken } : {}) }],
+    changeReason: version ? `Allowed the tool set ${name}, locked to v${version}` : `Allowed the tool set ${name}`,
   };
+}
+
+/** "Move the lock to v4": the agent may use what v4 holds. Shown after the diff. */
+export function moveLockBody(access: AgentAccess, toolsetId: string, version: number, name: string): UpdateAgentAccessBody {
+  return {
+    allowedToolsets: toolsetRefs(access).map((t) => (t.toolsetId === toolsetId ? { ...t, version } : t)),
+    changeReason: `Moved ${name} to v${version}`,
+  };
+}
+
+/** "Always loaded": at most 5 tool names, pinned on every search URL of this agent. */
+export const MAX_ALWAYS_LOADED = 5;
+
+export function pinnedToolsBody(names: readonly string[]): UpdateAgentAccessBody {
+  const pinned = [...new Set(names)].slice(0, MAX_ALWAYS_LOADED);
+  return { pinnedTools: pinned, changeReason: pinned.length ? `Always loaded: ${pinned.join(", ")}` : "No tools always loaded" };
+}
+
+/**
+ * The tools to suggest for "Always loaded": the agent's most-called ones
+ * first, then nothing else — a suggestion is only worth a click when it is
+ * what the agent actually uses.
+ */
+export function suggestAlwaysLoaded(calls: readonly { toolName: string }[], current: readonly string[], allowed?: ReadonlySet<string>): string[] {
+  const counts = new Map<string, number>();
+  for (const call of calls) counts.set(call.toolName, (counts.get(call.toolName) ?? 0) + 1);
+  return [...counts.entries()]
+    .filter(([name]) => !current.includes(name) && (!allowed || allowed.has(name)))
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name]) => name)
+    .slice(0, MAX_ALWAYS_LOADED);
+}
+
+/** An allowed tool set with a newer version than the one it is locked to. */
+export function updateAvailableFor(t: Pick<AllowedToolset, "version" | "latestVersion" | "status">): number | null {
+  if (t.version === null || t.latestVersion === null || t.latestVersion === undefined) return null;
+  if (t.status === "REMOVED" || t.status === "DELETED") return null;
+  return t.latestVersion > t.version ? t.latestVersion : null;
 }
 
 export function removeToolsetBody(access: AgentAccess, toolsetId: string, name: string): UpdateAgentAccessBody {
@@ -157,7 +199,8 @@ export function maxPriceBody(atomic: string | null): UpdateAgentAccessBody {
  */
 export interface AccessDraft {
   mode: "ALL" | "RESTRICTED";
-  toolsets: { toolsetId: string; viaUrlOnly: boolean }[];
+  /** `version`: the lock, kept as it was (another organization's tool set must stay locked). */
+  toolsets: { toolsetId: string; viaUrlOnly: boolean; version?: number | null }[];
   toolIds: string[];
   exclude: string[];
   /** Atomic units in the policy's asset; null = no max price. */
@@ -168,7 +211,7 @@ export interface AccessDraft {
 export function draftFrom(access: AgentAccess): AccessDraft {
   return {
     mode: access.accessMode,
-    toolsets: access.allowedToolsets.map((t) => ({ toolsetId: t.toolsetId, viaUrlOnly: t.viaUrlOnly })),
+    toolsets: access.allowedToolsets.map((t) => ({ toolsetId: t.toolsetId, viaUrlOnly: t.viaUrlOnly, version: t.version ?? null })),
     toolIds: [...access.allowedToolIds],
     exclude: [...access.rules.excludeProviderIds],
     maxPrice: access.rules.maxPrice?.amount ?? null,
@@ -177,7 +220,7 @@ export function draftFrom(access: AgentAccess): AccessDraft {
 }
 
 const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x) => b.includes(x));
-const toolsetKey = (t: { toolsetId: string; viaUrlOnly: boolean }) => `${t.toolsetId}:${t.viaUrlOnly}`;
+const toolsetKey = (t: { toolsetId: string; viaUrlOnly: boolean; version?: number | null }) => `${t.toolsetId}:${t.viaUrlOnly}:${t.version ?? "latest"}`;
 
 /** The PATCH body for the fields the draft changed, or null when nothing changed. */
 export function draftBody(access: AgentAccess, draft: AccessDraft): UpdateAgentAccessBody | null {
@@ -185,7 +228,7 @@ export function draftBody(access: AgentAccess, draft: AccessDraft): UpdateAgentA
   const body: UpdateAgentAccessBody = {};
   if (draft.mode !== before.mode) body.accessMode = draft.mode;
   if (!sameSet(draft.toolsets.map(toolsetKey), before.toolsets.map(toolsetKey))) {
-    body.allowedToolsets = draft.toolsets.map((t) => ({ toolsetId: t.toolsetId, version: null, viaUrlOnly: t.viaUrlOnly }));
+    body.allowedToolsets = draft.toolsets.map((t) => ({ toolsetId: t.toolsetId, version: t.version ?? null, viaUrlOnly: t.viaUrlOnly }));
   }
   if (!sameSet(draft.toolIds, before.toolIds)) body.allowedToolIds = [...draft.toolIds];
   const rules: NonNullable<UpdateAgentAccessBody["rules"]> = {};
@@ -201,7 +244,10 @@ export function draftBody(access: AgentAccess, draft: AccessDraft): UpdateAgentA
 export function restoreBody(access: AgentAccess): UpdateAgentAccessBody {
   return {
     accessMode: access.accessMode,
-    allowedToolsets: access.allowedToolsets.filter((t) => !t.deleted).map((t) => ({ toolsetId: t.toolsetId, version: null, viaUrlOnly: t.viaUrlOnly })),
+    // Another organization's deleted tool set still allows its pinned version, so it is kept.
+    allowedToolsets: access.allowedToolsets
+      .filter((t) => !t.deleted || t.own === false)
+      .map((t) => ({ toolsetId: t.toolsetId, version: t.version ?? null, viaUrlOnly: t.viaUrlOnly })),
     allowedToolIds: [...access.allowedToolIds],
     rules: {
       excludeProviderIds: [...access.rules.excludeProviderIds],

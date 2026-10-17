@@ -18,6 +18,12 @@ export function tokensText(tokens: number): string {
   return `~${Math.max(10, Math.round(tokens / 10) * 10)}`;
 }
 
+/** "0.9k", "1.2k", "320": the search line's estimate, in thousands from 500 up. */
+function aboutTokens(tokens: number): string {
+  if (tokens >= 500 && tokens < 10_000) return `${(tokens / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return tokensText(tokens).slice(1);
+}
+
 function tools(n: number): string {
   return `${n} tool${n === 1 ? "" : "s"}`;
 }
@@ -38,11 +44,18 @@ export function previewCounts(preview: Pick<McpUrlPreview, "tools" | "listedCoun
 
 /**
  * "Your agent will see 4 tools, 3 usable now (~960 tokens). 11 more are
- * blocked for this agent." While the preview loads the caller shows a
+ * blocked for this agent." In search mode: "4 tools (search) — about 0.9k
+ * tokens; 37 tools reachable". While the preview loads the caller shows a
  * skeleton or "~"; this is never asked for a number it does not have, so it
  * never says 0 for "not known yet".
  */
-export function previewSummary(preview: Pick<McpUrlPreview, "tools" | "listedCount" | "estimatedTokens">): string {
+export function previewSummary(
+  preview: Pick<McpUrlPreview, "tools" | "listedCount" | "estimatedTokens"> & Partial<Pick<McpUrlPreview, "discovery" | "reachableCount">>,
+): string {
+  if (preview.discovery === "SEARCH") {
+    const reachable = preview.reachableCount ?? preview.tools.filter((t) => t.allowed && !t.noProviderFits).length;
+    return `${tools(preview.listedCount)} (search) — about ${aboutTokens(preview.estimatedTokens)} tokens; ${tools(reachable)} reachable`;
+  }
   const c = previewCounts(preview);
   const blocked = c.blocked > 0 ? ` ${c.blocked} ${c.listed === 0 ? "" : "more "}${c.blocked === 1 ? "is" : "are"} blocked for this agent.` : "";
   if (c.listed === 0) return `Your agent will see no tools here.${blocked}`;
@@ -134,14 +147,16 @@ export function copyBlocked(preview: McpUrlPreview | null | undefined): boolean 
 }
 
 /**
- * Over budget with this server added: the tools it shows plus those of the
- * agent's OTHER servers (the same URL is not counted twice). Null when it
- * fits, else the total.
+ * Over budget with this server added: the tools shown in full by this server
+ * and by the agent's OTHER servers that show every tool (the same URL is not
+ * counted twice; a server that lets the agent search costs ~4 tools whatever
+ * it reaches, so it never counts). Null when it fits, else the total.
  */
 export function overBudgetWith(preview: McpUrlPreview, servers: readonly ServerInUse[]): number | null {
   const others = servers
-    .filter((s) => s.canonicalUrl !== preview.canonicalUrl && s.available)
+    .filter((s) => s.canonicalUrl !== preview.canonicalUrl && s.available && s.discovery !== "SEARCH")
     .reduce((sum, s) => sum + (s.toolCount ?? 0), 0);
+  if (preview.discovery === "SEARCH") return null;
   const total = others + preview.listedCount;
   return total > SHOW_ALL_TOOL_BUDGET ? total : null;
 }
