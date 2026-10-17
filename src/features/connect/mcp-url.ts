@@ -43,6 +43,20 @@ export const MAX_TOOLS_IN_URL = 50;
 const SLUG_RE = /^[a-z0-9-]{2,64}$/;
 const TOOL_NAME_RE = /^[a-z][a-z0-9_-]{1,47}(@[1-9][0-9]{0,5})?$/;
 
+const MCP_NAME_RE = /^[a-z][a-z0-9_-]{1,47}$/;
+
+/**
+ * The name a tool goes by in `?tools=`: its catalogue name when that is an MCP
+ * tool name (`get_weather`), else its id when that is one (a display name
+ * such as "Market quote" is not), else null — such a tool cannot be put in a
+ * URL. Never the display name lowercased: "market quote" is not a tool.
+ */
+export function mcpToolName(tool: { name: string; toolId?: string; id?: string }): string | null {
+  if (MCP_NAME_RE.test(tool.name)) return tool.name;
+  const id = (tool.toolId ?? tool.id ?? "").toLowerCase();
+  return MCP_NAME_RE.test(id) ? id : null;
+}
+
 /** Lowercased, trimmed, deduplicated and sorted — the canonical `tools=` list. */
 export function canonicalTools(names: readonly string[]): string[] {
   const set = new Set(names.map((name) => name.trim().toLowerCase()).filter((name) => name !== ""));

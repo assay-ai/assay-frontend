@@ -77,7 +77,7 @@ describe("demo fixtures: tool sets, access, Connect preview, servers, refused ca
     expect(preview.toolsetName).toBe("Research kit");
     const search = preview.tools.find((t) => t.name === "search_web")!;
     expect(search).toMatchObject({ allowed: true, noProviderFits: true, price: null });
-    expect(preview.warnings.find((w) => w.code === "NO_PROVIDER_FITS")?.tools).toContain("search_web");
+    expect(preview.warnings.find((w) => w.code === "NO_PROVIDER_FITS")?.tools).toContainEqual({ toolId: search.toolId, name: "search_web" });
   });
 
   it("preview only these tools, free only, and an unknown name", () => {
@@ -123,6 +123,7 @@ describe("demo fixtures: tool sets, access, Connect preview, servers, refused ca
     expect(page.items.every((c) => c.charged === false)).toBe(true);
     const single = page.items.find((c) => c.toolName === "Market quote")!;
     expect(single.providers).toHaveLength(1);
+    expect(single.providers[0]!.providerName).toBe("Harborlight Data Ltd");
     expect(call<RefusedCall>("GET", `/refused-calls/${single.callId}`).callId).toBe(single.callId);
     expect(() => call("GET", "/refused-calls/nope")).toThrow(ApiError);
   });
@@ -170,11 +171,25 @@ describe("the ?connect= demo switch", () => {
     expect(demoPreview(`${HOST}/`, PROD).warnings.map((w) => w.code)).toContain("NOTHING_ALLOWED");
   });
 
-  it("waiting and over budget: the servers in use show it", () => {
+  it("waiting: the root URL handed out by the first run waits for its first call", () => {
     asVariant("waiting");
-    expect(call<ServersInUse>("GET", `/agents/${PROD}/servers`).servers.some((s) => s.waitingForFirstCall)).toBe(true);
+    const waiting = call<ServersInUse>("GET", `/agents/${PROD}/servers`).servers.find((s) => s.waitingForFirstCall);
+    expect(waiting?.canonicalUrl).toBe(`${HOST}/`);
+  });
+
+  it("over budget: the rows really add up to more than 25, and the flag agrees", () => {
     asVariant("over-budget");
-    expect(call<ServersInUse>("GET", `/agents/${PROD}/servers`).overBudget).toBe(true);
+    const servers = call<ServersInUse>("GET", `/agents/${PROD}/servers`);
+    const sum = servers.servers.reduce((n, s) => n + (s.toolCount ?? 0), 0);
+    expect(sum).toBeGreaterThan(25);
+    expect(servers.overBudget).toBe(true);
+    expect(call<ServersInUse>("GET", `/agents/${STAGING}/servers`).overBudget).toBe(false);
+  });
+
+  it("a provider tool goes in ?tools= by its id, never by its display name", () => {
+    const preview = demoPreview(`${HOST}/?tools=market-quote`, STAGING);
+    expect(preview.tools.map((t) => t.name)).toEqual(["Market quote"]);
+    expect(preview.ignoredTools).toEqual([]);
   });
 
   it("single, preview-error and empty", () => {

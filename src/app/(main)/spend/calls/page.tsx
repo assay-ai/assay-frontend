@@ -156,7 +156,7 @@ function CallsList() {
           {callId ? (
             <RefusedCallPanel callId={callId} onClose={() => router.replace("/spend/calls?status=refused", { scroll: false })} />
           ) : null}
-          <RefusedCallsList />
+          <RefusedCallsList openCallId={callId} />
         </div>
       ) : owedDebts ? (
         <OwedDebtsList debts={owedDebts} onShowAll={() => router.replace(routes.calls(), { scroll: false })} />

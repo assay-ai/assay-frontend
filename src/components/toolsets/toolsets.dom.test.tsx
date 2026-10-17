@@ -43,7 +43,7 @@ const REFUSED: RefusedCall = {
   refusalCode: "NO_PROVIDER_MATCHES_RULES",
   refusalLayer: "AGENT_LIMITS",
   charged: false,
-  providers: [{ providerId: "p-acme", reason: "EXCLUDED_BY_AGENT", source: "AGENT", detail: "Excluded by the agent's rules" }],
+  providers: [{ providerId: "p-acme", providerName: "Acme Data", reason: "EXCLUDED_BY_AGENT", source: "AGENT", detail: "Excluded by the agent's rules" }],
   endpointKind: "TOOLSET",
   toolsetId: null,
   toolsetVersion: null,
@@ -57,7 +57,7 @@ describe("the refused-call view (sketch B)", () => {
     expect(out).toContain("Call refused · not charged");
     expect(out).toContain("acme__search_tweets");
     expect(out).toContain("No provider fits your limits.");
-    expect(out).toContain("Refused by this agent's limits. Nothing was charged.");
+    expect(out).toContain("Refused by this agent's provider limits. Nothing was charged.");
     expect(out).toContain("Acme Data");
     expect(out).toContain("Blocked by this agent's provider limits");
     expect(out).toContain("Remove from limits");
@@ -70,6 +70,8 @@ describe("the refused-call view (sketch B)", () => {
   it("not allowed: the fix is Allow this tool, with no provider list", () => {
     const out = text(render(<RefusedCallCard call={{ ...REFUSED, refusalCode: "TOOL_NOT_ALLOWED", providers: [] }} />));
     expect(out).toContain("This agent isn't allowed to use it.");
+    expect(out).toContain("Refused by this agent's tool list");
+    expect(out).not.toMatch(/agent's limits/);
     expect(out).toContain("Allow this tool");
     expect(out).not.toContain("one provider");
   });
@@ -91,38 +93,58 @@ const ACCESS: AgentAccess = {
 };
 
 describe("What this agent can use", () => {
-  it("shows the choice, the allowed sets and tools, the provider limits and the result per tool", () => {
-    const out = text(render(<AccessEditor access={ACCESS} agentName="research-bot" />));
+  it("shows the choice, the tool sets and tools to tick with each result, and the provider limits", () => {
+    const out = text(
+      render(<AccessEditor access={ACCESS} agentName="research-bot" />, (c) =>
+        c.setQueryData(toolsetKeys.all, {
+          items: [{ id: "s1", slug: "research", name: "Research kit", toolCount: 4 }],
+          pageInfo: { nextCursor: null, hasMore: false },
+        }),
+      ),
+    );
     expect(out).toContain("Can use 1 of 2 tools.");
     expect(out).toContain("Everything");
     expect(out).toContain("Only these tool sets and tools");
-    expect(out).toContain("Only what's connected");
+    expect(out).toContain("Shortcut: only what's connected");
     expect(out).toContain("Research kit");
     expect(out).toContain("Only through its own URL");
+    expect(out).toContain("Select all");
+    expect(out).toContain("Clear all");
+    expect(out).toContain("2 of 4 providers left (your limits: max $0.01, only verified, 1 provider excluded)");
+    expect(out).toContain("not in this agent's list");
     expect(out).toContain("Provider limits");
+    expect(out).toContain("Never use these providers");
     expect(out).toContain("Acme Data");
     expect(out).toContain("Only verified providers");
-    expect(out).toContain("get_weather: 2 of 4 providers left (your limits: max $0.01, only verified, 1 provider excluded)");
-    expect(out).toContain("acme__search_tweets: not allowed");
+    // Nothing is unsaved yet: no save bar.
+    expect(out).not.toContain("Save changes");
   });
 
   it("never shows the internal words, nor per-key narrowing", () => {
-    const html = render(<AccessEditor access={ACCESS} agentName="research-bot" />);
-    const out = text(html);
+    const out = text(render(<AccessEditor access={ACCESS} agentName="research-bot" />));
     expect(out).not.toMatch(/RESTRICTED|ESTABLISHED|access policy|FALLBACK|discovery/i);
     expect(out).not.toMatch(/per key|this key only/i);
   });
 
   it("a deleted tool set says so", () => {
     const out = text(
-      render(
-        <AccessEditor
-          access={{ ...ACCESS, allowedToolsets: [{ ...ACCESS.allowedToolsets[0]!, deleted: true, name: null }] }}
-          agentName="research-bot"
-        />,
-      ),
+      render(<AccessEditor access={{ ...ACCESS, allowedToolsets: [{ ...ACCESS.allowedToolsets[0]!, deleted: true, name: null }] }} agentName="research-bot" />),
     );
-    expect(out).toContain("Tool set deleted by its owner");
+    expect(out).toContain("deleted by its owner");
+  });
+
+  it("explains inline when a server is Everything, and turns the shortcut off", () => {
+    const html = render(<AccessEditor access={ACCESS} agentName="research-bot" />, (c) =>
+      c.setQueryData(toolsetKeys.servers("a1"), { overBudget: false, servers: [{ ...SERVERS.servers[0]!, canonicalUrl: "https://mcp.example.com/", toolsetId: null }] }),
+    );
+    expect(text(html)).toContain("One of research-bot's servers is Everything");
+  });
+
+  it("phone: rows stack and long names break anywhere instead of one letter per line", () => {
+    const html = render(<AccessEditor access={ACCESS} agentName="research-bot" />);
+    expect(html).toContain("[overflow-wrap:anywhere]");
+    expect(html).toContain("min-w-[8rem]");
+    expect(html).toContain("min-h-10");
   });
 });
 
@@ -133,7 +155,7 @@ const PREVIEW: McpUrlPreview = {
   toolsetName: "Research kit",
   viewFilter: null,
   discovery: "FULL",
-  listedCount: 4,
+  listedCount: 1,
   estimatedTokens: 920,
   freeOnly: false,
   tools: [{ toolId: "t-w", name: "get_weather", category: "weather", listed: true, allowed: true, pricingMode: "PAID", price: "up to $0.002", providerCount: 3, noProviderFits: false }],
@@ -152,7 +174,7 @@ describe("the Connect sheet's live result line", () => {
 
   it("loaded: the count and the token estimate, with the tools behind it", () => {
     const out = text(render(<ResultLine url={url} preview={PREVIEW} pending={false} error={null} onRetry={() => undefined} />));
-    expect(out).toContain("Your agent will see 4 tools (~920 tokens)");
+    expect(out).toContain("Your agent will see 1 tool (~920 tokens).");
     expect(out).toContain("get_weather");
     expect(out).toContain("up to $0.002 · 3 providers");
   });
@@ -212,20 +234,38 @@ const SERVERS: ServersInUseData = {
 describe("Servers in use", () => {
   it("one row per URL — name, tools, tokens, last call — a waiting row, and the over-budget warning", () => {
     const out = text(render(<ServersInUse agentId="a1" agentName="research-bot" />, (c) => c.setQueryData(toolsetKeys.servers("a1"), SERVERS)));
-    expect(out).toContain("Name Tools Tokens Last call");
+    expect(out).toContain("Name Tools Tokens (est.) Last call Change");
+    expect(out).toContain("Read-only: to change one, make a new URL");
     expect(out).toContain("Research kit");
     expect(out).toContain("22");
     expect(out).toContain("~5.1k");
     expect(out).toContain("Waiting for the first call");
     expect(out).toContain("These servers show 28 tools between them, more than 25.");
-    expect(out).toContain("Change");
-    expect(out).toContain("Connect");
+    expect(out).toContain("Narrow “Research kit”");
+    expect(out).toContain("2 chosen tools");
+    expect(out).toContain("In your app: “weather”");
+    expect(out).toContain("Connect research-bot");
+  });
+
+  it("the warning's count is the rows' own sum: no warning at 25 or fewer", () => {
+    const fits = { overBudget: true, servers: [{ ...SERVERS.servers[0]!, toolCount: 13 }, SERVERS.servers[1]!] };
+    const out = text(render(<ServersInUse agentId="a1" agentName="research-bot" />, (c) => c.setQueryData(toolsetKeys.servers("a1"), fits)));
+    expect(out).not.toContain("more than 25");
+  });
+
+  it("phone: stacked cards with a full-width Change, the table only from tablet up", () => {
+    const html = render(<ServersInUse agentId="a1" agentName="research-bot" />, (c) => c.setQueryData(toolsetKeys.servers("a1"), SERVERS));
+    expect(html).toContain('data-testid="server-cards"');
+    expect(html).toMatch(/class="[^"]*tablet:hidden[^"]*" data-testid="server-cards"/);
+    expect(html).toMatch(/class="hidden w-full rounded-lg border border-01 tablet:block"/);
+    expect(html).not.toContain("min-w-[520px]");
+    expect(text(html)).toContain("Change: make a new URL");
   });
 
   it("empty: says so and offers Connect", () => {
     const out = text(render(<ServersInUse agentId="a1" agentName="research-bot" />, (c) => c.setQueryData(toolsetKeys.servers("a1"), { servers: [], overBudget: false })));
     expect(out).toContain("No server yet: connect research-bot to choose what it uses.");
-    expect(out).toContain("Connect");
+    expect(out).toContain("Connect research-bot");
   });
 
   it("a server that no longer serves says so instead of a count", () => {
@@ -237,8 +277,11 @@ describe("Servers in use", () => {
 
 describe("the client tabs", () => {
   it("has the four clients, Claude Code first with its one-liner and the full key at creation", () => {
-    const out = text(render(<McpConfigTabs token="assay_live_full_key" url="https://mcp.example.com/" />));
+    const html = render(<McpConfigTabs token="assay_live_full_key" url="https://mcp.example.com/" />);
+    const out = text(html);
     expect(out).toContain("Claude Code Claude Desktop Cursor Other");
+    // Phone: the tab row wraps rather than clipping "Other".
+    expect(html).toContain("flex-wrap");
     expect(out).toContain('claude mcp add --transport http assay https://mcp.example.com/ --header "Authorization: Bearer assay_live_full_key"');
   });
 

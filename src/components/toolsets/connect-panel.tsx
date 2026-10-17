@@ -24,6 +24,7 @@ export function ConnectPanel({
   detail,
   agentId,
   publicPage = false,
+  compact = false,
   className,
 }: {
   /** The MCP URL the page stands for; null while it is not known yet. */
@@ -33,6 +34,8 @@ export function ConnectPanel({
   agentId?: string | null;
   /** On a public page a signed-out visitor gets "Start free"; signed-in pages always open the sheet. */
   publicPage?: boolean;
+  /** On a phone: the title and the button only, so the page's own content starts higher. */
+  compact?: boolean;
   className?: string;
 }) {
   const privySignedIn = useSignedIn();
@@ -45,13 +48,17 @@ export function ConnectPanel({
     <section
       aria-label="Connect"
       data-testid="connect-panel"
-      className={cn("flex w-full min-w-0 flex-col gap-3 rounded-xl border border-primary-20 bg-primary-10 p-4 tablet:flex-row tablet:items-center tablet:p-5", className)}
+      className={cn(
+        "flex w-full min-w-0 gap-3 rounded-xl border border-primary-20 bg-primary-10 tablet:flex-row tablet:items-center tablet:p-5",
+        compact ? "flex-row items-center p-3" : "flex-col p-4",
+        className,
+      )}
     >
       <Plug aria-hidden="true" className="hidden size-5 shrink-0 text-primary-600 tablet:block" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className="text-label-sm text-01">{title}</p>
-        {url ? <p className="break-all font-mono text-mono-12 text-02">{url}</p> : null}
-        {detail ? <p className="text-body-13 text-02">{detail}</p> : null}
+        {url ? <p className={cn("break-all font-mono text-mono-12 text-02", compact && "hidden tablet:block")}>{url}</p> : null}
+        {detail ? <p className={cn("text-body-13 text-02", compact && "hidden tablet:block")}>{detail}</p> : null}
       </div>
       {signedIn ? (
         <Button type="button" className="self-start tablet:self-center" onClick={() => setOpen(true)} disabled={!url}>

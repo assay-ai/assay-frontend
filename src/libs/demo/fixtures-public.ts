@@ -8,7 +8,7 @@ import type {
 } from "@/services/public-explorer.service";
 
 import { DEMO_NOW_MS } from "./demo-clock";
-import { EXPLORE_FIXTURES } from "./fixtures-explore";
+import { demoCategoryOf, EXPLORE_FIXTURES } from "./fixtures-explore";
 import type { DemoFixture } from "./fixtures";
 
 /**
@@ -54,6 +54,7 @@ function publicTool(row: CatalogueTool): PublicTool {
     settlementChains: row.routable ? (row.settlementChains ?? null) : null,
     freeCallsPerDay: row.freeCallsPerDay ?? null,
     paidBindings: row.paidBindings ?? 0,
+    category: demoCategoryOf(row.name),
   };
 }
 

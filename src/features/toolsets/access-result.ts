@@ -34,7 +34,7 @@ export function limitPhrases(rules: AgentRules): string[] {
  * providers; a tool nobody serves says that instead of "0 of 0".
  */
 export function toolResultLine(tool: AgentToolEffect, rules: AgentRules): string {
-  if (tool.access === "BLOCKED") return `${tool.name}: not allowed`;
+  if (tool.access === "BLOCKED") return `${tool.name}: not in this agent's list`;
   const via = tool.access === "VIA_TOOLSET_URL" ? " · only through its tool set's URL" : "";
   if (tool.providersTotal === 0) return `${tool.name}: no provider serves it yet${via}`;
   const limits = limitPhrases(rules);
@@ -145,4 +145,90 @@ export function verifiedOnlyBody(on: boolean): UpdateAgentAccessBody {
 
 export function maxPriceBody(atomic: string | null): UpdateAgentAccessBody {
   return { rules: { maxPrice: atomic }, changeReason: atomic === null ? "Removed the max price" : "Set a max price per call" };
+}
+
+/* ------------------------------------------------------------------ the draft */
+
+/**
+ * What this agent can use, as the editor holds it before Save: one form, one
+ * Save and one Cancel, so a mis-click changes nothing until it is saved, and
+ * "limit to 2 tools and exclude 1 provider" is five clicks (Only these, two
+ * ticks, one provider tick, Save).
+ */
+export interface AccessDraft {
+  mode: "ALL" | "RESTRICTED";
+  toolsets: { toolsetId: string; viaUrlOnly: boolean }[];
+  toolIds: string[];
+  exclude: string[];
+  /** Atomic units in the policy's asset; null = no max price. */
+  maxPrice: string | null;
+  verified: boolean;
+}
+
+export function draftFrom(access: AgentAccess): AccessDraft {
+  return {
+    mode: access.accessMode,
+    toolsets: access.allowedToolsets.map((t) => ({ toolsetId: t.toolsetId, viaUrlOnly: t.viaUrlOnly })),
+    toolIds: [...access.allowedToolIds],
+    exclude: [...access.rules.excludeProviderIds],
+    maxPrice: access.rules.maxPrice?.amount ?? null,
+    verified: access.rules.minTier !== null,
+  };
+}
+
+const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x) => b.includes(x));
+const toolsetKey = (t: { toolsetId: string; viaUrlOnly: boolean }) => `${t.toolsetId}:${t.viaUrlOnly}`;
+
+/** The PATCH body for the fields the draft changed, or null when nothing changed. */
+export function draftBody(access: AgentAccess, draft: AccessDraft): UpdateAgentAccessBody | null {
+  const before = draftFrom(access);
+  const body: UpdateAgentAccessBody = {};
+  if (draft.mode !== before.mode) body.accessMode = draft.mode;
+  if (!sameSet(draft.toolsets.map(toolsetKey), before.toolsets.map(toolsetKey))) {
+    body.allowedToolsets = draft.toolsets.map((t) => ({ toolsetId: t.toolsetId, version: null, viaUrlOnly: t.viaUrlOnly }));
+  }
+  if (!sameSet(draft.toolIds, before.toolIds)) body.allowedToolIds = [...draft.toolIds];
+  const rules: NonNullable<UpdateAgentAccessBody["rules"]> = {};
+  if (!sameSet(draft.exclude, before.exclude)) rules.excludeProviderIds = [...draft.exclude];
+  if (draft.maxPrice !== before.maxPrice) rules.maxPrice = draft.maxPrice;
+  if (draft.verified !== before.verified) rules.minTier = draft.verified ? (access.rules.minTier ?? "ESTABLISHED") : null;
+  if (Object.keys(rules).length > 0) body.rules = rules;
+  if (Object.keys(body).length === 0) return null;
+  return { ...body, changeReason: "Changed what this agent can use" };
+}
+
+/** Everything as it was — what Undo sends after a save. */
+export function restoreBody(access: AgentAccess): UpdateAgentAccessBody {
+  return {
+    accessMode: access.accessMode,
+    allowedToolsets: access.allowedToolsets.filter((t) => !t.deleted).map((t) => ({ toolsetId: t.toolsetId, version: null, viaUrlOnly: t.viaUrlOnly })),
+    allowedToolIds: [...access.allowedToolIds],
+    rules: {
+      excludeProviderIds: [...access.rules.excludeProviderIds],
+      maxPrice: access.rules.maxPrice?.amount ?? null,
+      minTier: access.rules.minTier,
+    },
+    changeReason: "Undid a change to what this agent can use",
+  };
+}
+
+/** The draft's changes in words, for the save bar: ["Only these: 2 tools", "1 provider excluded"]. */
+export function draftChanges(access: AgentAccess, draft: AccessDraft): string[] {
+  const body = draftBody(access, draft);
+  if (!body) return [];
+  const out: string[] = [];
+  if (body.accessMode === "ALL") out.push("Everything");
+  if (body.accessMode === "RESTRICTED" || (draft.mode === "RESTRICTED" && (body.allowedToolIds || body.allowedToolsets))) {
+    const sets = draft.toolsets.length;
+    const tools = draft.toolIds.length;
+    out.push(
+      sets + tools === 0
+        ? "Only these: nothing yet"
+        : `Only these: ${[sets ? `${sets} tool set${sets === 1 ? "" : "s"}` : null, tools ? `${tools} tool${tools === 1 ? "" : "s"}` : null].filter(Boolean).join(" and ")}`,
+    );
+  }
+  if (body.rules?.excludeProviderIds) out.push(`${draft.exclude.length} provider${draft.exclude.length === 1 ? "" : "s"} excluded`);
+  if (body.rules && "maxPrice" in body.rules) out.push(draft.maxPrice === null ? "no max price" : "new max price");
+  if (body.rules && "minTier" in body.rules) out.push(draft.verified ? "only verified providers" : "any provider tier");
+  return out;
 }

@@ -7,7 +7,6 @@ import * as React from "react";
 import { AgentHealthLine } from "@/components/buyer-money/agent-health";
 import { CreateKeySheet } from "@/components/buyer-money/create-key";
 import { LetAgentPaySheet } from "@/components/buyer-money/let-agent-pay-sheet";
-import { McpConfigTabs } from "@/components/buyer-money/mcp-config-tabs";
 import { EffectiveLimitLines, type LimitsContext, rowsFor, SpendingLimitsActions, useLimitsContext } from "@/components/buyer-money/agent-limits";
 import { type AgentRow, type KeyRow } from "@/components/buyer-money/use-agents";
 import { limitLines } from "@/features/buyer-money/spending-limits";
@@ -96,6 +95,18 @@ export function revokeKeyText(
   }
   if (key.delegateAccount) return { text, detail: "Its payment key was set up on this key, so it cannot pay any more either." };
   return { text, detail: "Nothing about paying changes: this key has no payment key." };
+}
+
+/**
+ * Whether `?agent=` names this agent: its id, a unique-looking id prefix (at
+ * least 6 characters, as people copy the short id), or its label. No
+ * `?agent=` names the first agent.
+ */
+export function agentMatches(asked: string | null, agent: AgentRow, index: number): boolean {
+  if (!asked) return index === 0;
+  const a = asked.trim().toLowerCase();
+  const id = agent.agentId.toLowerCase();
+  return id === a || (a.length >= 6 && id.startsWith(a)) || (agent.label ?? "").toLowerCase() === a;
 }
 
 export function AgentsView() {
@@ -194,7 +205,7 @@ export function AgentsView() {
         data.agents.map((agent, i) => (
           <AgentCard
             key={agent.agentId}
-            focusAccess={focus.access && (focus.agentId ? focus.agentId === agent.agentId : i === 0)}
+            focusAccess={focus.access && agentMatches(focus.agentId, agent, i)}
             ctx={data}
             agent={agent}
             keys={data.keys[agent.agentId]}
@@ -295,7 +306,6 @@ function AgentCard({
   onChanged: () => void;
 }) {
   const [showRevoked, setShowRevoked] = React.useState(false);
-  const [configFor, setConfigFor] = React.useState<string | null>(null);
   const name = agent.label ?? "Agent";
   const revoked = (keys ?? []).filter((k) => k.revokedAt);
   const live = readiness.liveCredentials as KeyRow[];
@@ -340,18 +350,10 @@ function AgentCard({
                       {key.lastUsedAt ? `last used ${relativeTime(key.lastUsedAt)}` : "never used"}
                     </span>
                   </span>
-                  <Button size="sm" variant="secondary" type="button" onClick={() => setConfigFor(configFor === key.id ? null : key.id)} aria-expanded={configFor === key.id}>
-                    {configFor === key.id ? "Hide config" : "MCP config"}
-                  </Button>
                   <Button size="sm" variant="secondary" type="button" className="text-danger-600" data-testid="revoke-credential" onClick={() => onRevokeKey(key)}>
                     Revoke key
                   </Button>
                 </div>
-                {configFor === key.id ? (
-                  <div className="min-w-0">
-                    <McpConfigTabs token={null} keyPrefix={key.prefix} />
-                  </div>
-                ) : null}
               </li>
             ))}
           </ul>
@@ -468,7 +470,7 @@ function AgentCard({
       <details className="text-body-xs text-03">
         <summary className="cursor-pointer select-none text-label-xs">Details</summary>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          Agent id <CopyChip value={agent.agentId} />
+          Agent id <code className="break-all font-mono text-mono-xs text-01">{agent.agentId}</code> <CopyChip value={agent.agentId} display="Copy" label="agent id" />
           {agent.agentAccount ? (
             <>
               · pays from <CopyChip value={addressOfAccount(agent.agentAccount)} />

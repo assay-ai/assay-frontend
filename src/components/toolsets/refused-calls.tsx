@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, ShieldX } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
@@ -9,12 +9,13 @@ import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import { includeProviderBody, maxPriceBody, verifiedOnlyBody } from "@/features/toolsets/access-result";
+import { defaultEntry, entryInput } from "@/features/toolsets/entry-rules";
 import { refusalText } from "@/features/toolsets/labels";
 import { refusedCallView, viaText, type RefusalFix } from "@/features/toolsets/refused";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
-import { getRefusedCall, listRefusedCalls, type RefusedCall, type UpdateAgentAccessBody } from "@/services/toolsets.service";
+import { getRefusedCall, getToolset, listRefusedCalls, replaceToolsetEntries, type RefusedCall, type UpdateAgentAccessBody } from "@/services/toolsets.service";
 import { toast } from "@/utils/toast";
 
 import { toolsetKeys, useAgentAccess, useToolsets, useUpdateAccess } from "./use-toolsets";
@@ -33,7 +34,7 @@ export function refusedCallHref(callId: string): string {
 
 const PAGE = 50;
 
-export function RefusedCallsList({ agentId }: { agentId?: string | null }) {
+export function RefusedCallsList({ agentId, openCallId }: { agentId?: string | null; openCallId?: string | null }) {
   const names = useEntityNames({ kinds: ["agent"] });
   const toolsets = useToolsets();
   const query = useInfiniteQuery({
@@ -43,7 +44,9 @@ export function RefusedCallsList({ agentId }: { agentId?: string | null }) {
     getNextPageParam: (last) => (last.pageInfo?.hasMore ? (last.pageInfo.nextCursor ?? null) : null),
     retry: 0,
   });
-  const calls = (query.data?.pages ?? []).flatMap((page) => page.items ?? []);
+  // The open call is shown above, in full; it is not repeated in the list.
+  const all = (query.data?.pages ?? []).flatMap((page) => page.items ?? []);
+  const calls = all.filter((c) => c.callId !== openCallId);
   const setName = (id: string | null) => (id ? toolsets.data?.items.find((t) => t.id === id)?.name ?? null : null);
 
   if (query.isPending) return <PageState kind="loading" rows={4} label="Loading refused calls" />;
@@ -59,6 +62,7 @@ export function RefusedCallsList({ agentId }: { agentId?: string | null }) {
     );
   }
   if (calls.length === 0) {
+    if (all.length > 0) return null;
     return (
       <PageState
         kind="empty"
@@ -134,8 +138,40 @@ export function RefusedCallPanel({ callId, onClose }: { callId: string; onClose?
 
 export function RefusedCallCard({ call, onClose }: { call: RefusedCall; onClose?: () => void }) {
   const view = refusedCallView(call);
-  const names = useEntityNames({ kinds: ["provider", "agent"] });
+  const names = useEntityNames({ kinds: ["agent"] });
   const toolsets = useToolsets();
+  const queryClient = useQueryClient();
+  const addToSet = useMutation({
+    mutationFn: async (fix: { toolsetId: string; toolId: string }) => {
+      const set = await getToolset(fix.toolsetId);
+      if (set.entries.some((e) => e.toolId === fix.toolId)) return { set, before: null };
+      const before = set.entries.map(entryInput);
+      const next = await replaceToolsetEntries(set.id, [...before, defaultEntry(fix.toolId)]);
+      return { set: next, before };
+    },
+    onSuccess: ({ set, before }) => {
+      queryClient.setQueryData(toolsetKeys.one(set.id), set);
+      void queryClient.invalidateQueries({ queryKey: toolsetKeys.all });
+      setDone((d) => new Set(d).add("call"));
+      toast.success(`${call.toolName ?? "The tool"} added to ${set.name}`, {
+        description: "Agents connected to it can call it now.",
+        duration: 8000,
+        ...(before
+          ? {
+              action: {
+                label: "Undo",
+                onClick: () =>
+                  void replaceToolsetEntries(set.id, before).then((back) => {
+                    queryClient.setQueryData(toolsetKeys.one(set.id), back);
+                    toast.success("Undone");
+                  }),
+              },
+            }
+          : {}),
+      });
+    },
+    onError: () => toast.error("The tool could not be added. Try again."),
+  });
   const access = useAgentAccess(call.agentId);
   const update = useUpdateAccess(call.agentId);
   const setName = call.toolsetId ? toolsets.data?.items.find((t) => t.id === call.toolsetId)?.name ?? null : null;
@@ -171,6 +207,14 @@ export function RefusedCallCard({ call, onClose }: { call: RefusedCall; onClose?
       return (
         <Button size="sm" variant="secondary" asChild>
           <Link href={fix.href}>{fix.label}</Link>
+        </Button>
+      );
+    }
+    if (fix.kind === "add-to-toolset") {
+      if (done.has(key)) return <span className="text-label-13 text-success-700">Added</span>;
+      return (
+        <Button size="sm" variant="secondary" loading={addToSet.isPending} onClick={() => addToSet.mutate({ toolsetId: fix.toolsetId, toolId: fix.toolId })}>
+          {fix.label}
         </Button>
       );
     }
@@ -218,7 +262,7 @@ export function RefusedCallCard({ call, onClose }: { call: RefusedCall; onClose?
       {view.providers.length > 0 ? (
         <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01" data-testid="refused-providers">
           {view.providers.map((p) => {
-            const providerName = names.name("provider", p.providerId);
+            const providerName = p.name ?? p.providerId;
             return (
               <li key={p.providerId} className="flex flex-col gap-2 px-3 py-2.5 tablet:flex-row tablet:items-center">
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -226,7 +270,10 @@ export function RefusedCallCard({ call, onClose }: { call: RefusedCall; onClose?
                   <span className="text-body-13 text-02">{p.reason}</span>
                   <span className="text-body-xs text-03">{p.source}</span>
                 </div>
-                <div className="shrink-0">{fixButton(`p:${p.providerId}`, p.fix, providerName)}</div>
+                <div className="flex shrink-0 flex-col items-start gap-0.5 tablet:items-end">
+                  {fixButton(`p:${p.providerId}`, p.fix, providerName)}
+                  {p.fix && p.fixCovers > 1 ? <span className="text-body-xs text-03">for these {p.fixCovers} providers</span> : null}
+                </div>
               </li>
             );
           })}

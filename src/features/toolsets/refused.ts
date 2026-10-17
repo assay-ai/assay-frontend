@@ -14,14 +14,19 @@ export type RefusalFix =
   | { kind: "allow-any-tier"; label: string }
   | { kind: "allow-tool"; toolId: string; label: string }
   | { kind: "edit-toolset"; toolsetId: string; label: string }
+  | { kind: "add-to-toolset"; toolsetId: string; toolId: string; label: string }
   | { kind: "link"; href: string; label: string };
 
 export interface RefusedProviderView {
   providerId: string;
+  /** The provider's name from the call itself; null when unknown (the screen falls back to the id). */
+  name: string | null;
   reason: string;
   /** "This agent's provider limits" or "The tool set's rules". */
   source: string;
   fix: RefusalFix | null;
+  /** How many of the listed providers this row's fix brings back (one button per fix). */
+  fixCovers: number;
 }
 
 export interface RefusedCallView {
@@ -87,8 +92,8 @@ function callFix(call: RefusedCall): RefusalFix | null {
     case "TOOL_NOT_ALLOWED":
       return call.toolId ? { kind: "allow-tool", toolId: call.toolId, label: "Allow this tool" } : null;
     case "TOOL_NOT_IN_TOOLSET":
-      return call.toolsetId
-        ? { kind: "edit-toolset", toolsetId: call.toolsetId, label: "Add it to the tool set" }
+      return call.toolsetId && call.toolId
+        ? { kind: "add-to-toolset", toolsetId: call.toolsetId, toolId: call.toolId, label: "Add it to the tool set" }
         : { kind: "link", href: "/connect", label: "Connect a server that has it" };
     case "MCP_SPEND_LIMIT_EXCEEDED":
     case "MCP_VELOCITY_LIMIT_EXCEEDED":
@@ -99,25 +104,66 @@ function callFix(call: RefusedCall): RefusalFix | null {
   }
 }
 
+/**
+ * Who refused it, in words that are not confused with spending limits: the
+ * agent's tool list (which tools it may call), its provider limits, the tool
+ * set's rules — or both of the last two, when each dropped a provider.
+ */
+export function refusalLayerText(call: Pick<RefusedCall, "refusalCode" | "refusalLayer" | "providers" | "toolsetId">): string {
+  switch (call.refusalCode) {
+    case "TOOL_NOT_ALLOWED":
+      return "Refused by this agent's tool list: it is not one of the tools this agent may use";
+    case "TOOL_NOT_IN_TOOLSET":
+      return call.toolsetId
+        ? "Refused by the server it called: that server serves only what its tool set lists"
+        : "Refused by the server it called: the tool is not on that server";
+    case "NO_PROVIDER_MATCHES_RULES": {
+      const agent = call.providers.some(fromAgent);
+      const toolset = call.providers.some((p) => !fromAgent(p));
+      if (agent && toolset) return "Refused by both this agent's provider limits and the tool set's rules";
+      if (toolset) return "Refused by the tool set's rules";
+      return "Refused by this agent's provider limits";
+    }
+    case "MCP_SPEND_LIMIT_EXCEEDED":
+    case "MCP_VELOCITY_LIMIT_EXCEEDED":
+    case "MCP_POLICY_AGENT_PAUSED":
+      return "Refused by this agent's spending limits";
+    default:
+      return REFUSAL_LAYER_LABELS[call.refusalLayer] ?? "Refused before anything was charged";
+  }
+}
+
+function fixKey(fix: RefusalFix): string {
+  if (fix.kind === "include-provider") return `${fix.kind}:${fix.providerId}`;
+  if (fix.kind === "link") return fix.href;
+  return fix.kind;
+}
+
 export function refusedCallView(call: RefusedCall): RefusedCallView {
-  // One button per fix: a max price that cut three providers is removed once.
+  // One button per fix: a max price that cut three providers is removed once,
+  // on the first of them, saying how many it brings back.
+  const fixes = call.providers.map((p) => providerFix(call, p));
+  const counts = new Map<string, number>();
+  for (const fix of fixes) if (fix) counts.set(fixKey(fix), (counts.get(fixKey(fix)) ?? 0) + 1);
   const seen = new Set<string>();
-  const providers = call.providers.map((p) => {
-    const fix = providerFix(call, p);
-    const key = fix ? (fix.kind === "include-provider" ? `${fix.kind}:${fix.providerId}` : fix.kind === "link" ? fix.href : fix.kind) : "";
+  const providers = call.providers.map((p, i) => {
+    const fix = fixes[i] ?? null;
+    const key = fix ? fixKey(fix) : "";
     const first = Boolean(fix) && !seen.has(key);
     seen.add(key);
     return {
       providerId: p.providerId,
+      name: p.providerName ?? null,
       reason: providerReason(p),
       source: fromAgent(p) ? "This agent's provider limits" : "The tool set's rules",
       fix: first ? fix : null,
+      fixCovers: first ? (counts.get(key) ?? 1) : 0,
     };
   });
   return {
     title: "Call refused · not charged",
     reason: refusalText(call.refusalCode),
-    layer: REFUSAL_LAYER_LABELS[call.refusalLayer] ?? "Refused before anything was charged",
+    layer: refusalLayerText(call),
     providers,
     singleProviderNote:
       call.refusalCode === "NO_PROVIDER_MATCHES_RULES" && call.providers.length === 1

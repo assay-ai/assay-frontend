@@ -6,6 +6,8 @@ import * as React from "react";
 import { PageState } from "@/components/patterns/page-state";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
 
+import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
+
 import { ConnectPanel } from "./connect-panel";
 
 /**
@@ -52,32 +54,23 @@ export function SharedServerPage({ page }: { page: "view" | "handle" }) {
     <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-4 py-6 tablet:px-7 tablet:py-8">
       {url === undefined ? (
         <PageState kind="loading" rows={2} label="Loading" />
-      ) : url === null ? (
-        <PageState
-          kind="empty"
-          title="Not found"
-          description="This link does not name a tool set or a public name."
-          action={{ label: "See all tools", href: "/catalogue" }}
-        />
       ) : (
         <>
-          <ConnectPanel url={url} publicPage />
-          <section className="flex flex-col gap-2 rounded-xl border border-01 bg-01 p-5 tablet:p-6">
-            <h1 className="break-all text-heading-md text-01">{label}</h1>
+          <section className="flex flex-col gap-2 rounded-xl border border-01 bg-01 p-5 tablet:p-6" data-testid="shared-server">
+            <h1 className="break-all text-heading-md text-01">{url === null ? "Not found" : label}</h1>
             <p className="text-body-13 text-02">
-              {page === "handle"
-                ? "Pages for a maker's own tools are coming soon. Until then this server lists nothing."
-                : "Shared tool sets are coming soon. Until then this server lists nothing; your own tool sets work today."}
+              {url === null
+                ? "This link does not name a tool set or a public name. Check it with whoever sent it."
+                : page === "handle"
+                  ? "Pages for a maker's own tools are coming soon. Until then this server lists nothing, so there is nothing to connect yet."
+                  : "Shared tool sets are coming soon. Until then this server lists nothing, so there is nothing to connect yet."}
             </p>
-            <div className="flex flex-wrap gap-3 text-label-13">
-              <Link href="/catalogue" className="text-primary-600 hover:underline">
-                See all tools
-              </Link>
-              <Link href="/toolsets/mine" className="text-primary-600 hover:underline">
-                Your tool sets
-              </Link>
-            </div>
+            {url ? <p className="break-all font-mono text-mono-12 text-03">{url}</p> : null}
+            <Link href="/catalogue" className="min-h-10 self-start content-center text-label-13 text-primary-600 hover:underline tablet:min-h-0">
+              See all tools
+            </Link>
           </section>
+          <ConnectPanel publicPage url={mcpEndpointUrl()} title="Meanwhile, connect Everything: every tool on Assay, through one server." />
         </>
       )}
     </div>

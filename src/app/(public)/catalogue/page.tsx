@@ -134,12 +134,13 @@ export default function CataloguePage() {
   const searchParams = useSearchParams();
   const initial = React.useMemo(() => readExplorerState(searchParams), [searchParams]);
   // The MCP URL this page stands for: a browser opening `/` (or `/c/{category}`) on the MCP host lands here.
-  const [serverUrl] = React.useState(() => {
+  // `/c/{category}` lands here as `?category=`: the list shows that topic. Topic
+  // servers are served from a later phase, so the panel offers Everything meanwhile.
+  const [topic, setTopic] = React.useState<string | null>(() => {
     const category = searchParams.get("category");
-    const host = mcpHost();
-    const base = category && /^[a-z][a-z0-9-]{1,63}$/.test(category) ? `${host}/c/${category}` : `${host}/`;
-    return searchParams.get("free") === "1" ? `${base}?free=1` : base;
+    return category && /^[a-z][a-z0-9-]{1,63}$/.test(category) ? category : null;
   });
+  const [serverUrl] = React.useState(() => `${mcpHost()}/${searchParams.get("free") === "1" ? "?free=1" : ""}`);
   const [view, setView] = React.useState<"tools" | "providers">(initial.view);
   const [query, setQuery] = React.useState(initial.q);
   const [freeOnly, setFreeOnly] = React.useState(initial.free);
@@ -158,9 +159,11 @@ export default function CataloguePage() {
     const rows = [...(tools.data?.tools ?? [])].sort(
       (a, b) => Number(b.routable) - Number(a.routable) || b.providerCount - a.providerCount || a.name.localeCompare(b.name),
     );
-    const free = freeOnly ? rows.filter((t) => hasFreeCalls(t.pricingMode)) : rows;
+    const inTopic = topic && rows.some((t) => t.category) ? rows.filter((t) => t.category === topic) : rows;
+    const free = freeOnly ? inTopic.filter((t) => hasFreeCalls(t.pricingMode)) : inTopic;
     return needle ? free.filter((t) => matches(needle, t.name, t.description, t.id)) : free;
-  }, [tools.data, needle, freeOnly]);
+  }, [tools.data, needle, freeOnly, topic]);
+  const topicKnown = Boolean(tools.data?.tools.some((t) => t.category));
 
   const providerRows = React.useMemo(() => {
     const rows = [...(providers.data?.providers ?? [])].sort((a, b) => b.toolIds.length - a.toolIds.length);
@@ -183,8 +186,21 @@ export default function CataloguePage() {
       <ConnectPanel
         publicPage
         url={serverUrl}
-        title={serverUrl.includes("/c/") ? "This is an MCP server URL for one topic. Add it to your client." : "This is an MCP server URL: every tool below, as one server. Add it to your client."}
+        title={
+          topic
+            ? "Servers for one topic are coming soon. Meanwhile, connect Everything: every tool on Assay, as one server."
+            : "This is an MCP server URL: every tool below, as one server. Add it to your client."
+        }
       />
+      {topic ? (
+        <p className="flex flex-wrap items-center gap-2 text-body-13 text-02" data-testid="catalogue-topic">
+          <span className="rounded-full bg-primary-10 px-2.5 py-1 text-label-13 text-primary-700">Topic: {topic}</span>
+          {topicKnown ? null : <span>Topics are not listed yet, so every tool is shown.</span>}
+          <button type="button" className="min-h-10 text-label-13 text-primary-600 hover:underline tablet:min-h-0" onClick={() => setTopic(null)}>
+            Show all tools
+          </button>
+        </p>
+      ) : null}
       <header className="flex flex-col gap-3">
         <h1 className="text-heading-lg text-01 tablet:text-display-md">Tools your agent can pay for — only when they work</h1>
         <p className="max-w-[720px] text-body-md text-02">

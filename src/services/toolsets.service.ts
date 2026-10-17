@@ -193,6 +193,12 @@ export interface PreviewTool {
   noProviderFits: boolean;
 }
 
+/** A tool a preview warning is about; `toolId` is null for an ignored `?tools=` name. */
+export interface PreviewWarningTool {
+  toolId: string | null;
+  name: string;
+}
+
 export interface McpUrlPreview {
   canonicalUrl: string;
   endpointKind: EndpointKind;
@@ -205,7 +211,7 @@ export interface McpUrlPreview {
   freeOnly: boolean;
   tools: PreviewTool[];
   ignoredTools: string[];
-  warnings: { code: PreviewWarningCode | string; tools: string[] }[];
+  warnings: { code: PreviewWarningCode | string; tools: PreviewWarningTool[] }[];
 }
 
 /** Errors: 400 `URL_NOT_RECOGNISED`, 404 `MCP_URL_NOT_FOUND`. */
@@ -254,6 +260,8 @@ export function recordConnectUrl(
 
 export interface RefusedProvider {
   providerId: string;
+  /** The provider's name, also after it was delisted; null when unknown. */
+  providerName: string | null;
   reason: string;
   source: "AGENT" | "TOOLSET" | string;
   detail: string;

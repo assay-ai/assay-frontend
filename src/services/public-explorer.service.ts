@@ -31,6 +31,11 @@ export interface PublicQuality {
 export interface PublicTool {
   id: string;
   name: string;
+  /**
+   * The tool's topic (`tools.category`), for `/catalogue?category=`. Not sent by
+   * `GET /public/catalogue/tools` yet; without it the page cannot filter by topic.
+   */
+  category?: string | null;
   description: string;
   tier: string;
   providerCount: number;

@@ -13,10 +13,14 @@ import {
   toolResultLine,
   toolResultTone,
   verifiedOnlyBody,
+  draftBody,
+  draftChanges,
+  draftFrom,
+  restoreBody,
 } from "./access-result";
 import { defaultEntry, entryChipLabel, entryProblem, providersLeft, slugFrom } from "./entry-rules";
 import { ON_EMPTY_LABELS, PROVIDER_MODE_LABELS, REFUSAL_LAYER_LABELS } from "./labels";
-import { copyBlocked, offersFreeOnly, overBudgetWith, previewSummary, previewWarnings, tokensText } from "./preview";
+import { copyBlocked, offersFreeOnly, overBudgetWith, previewCounts, previewSummary, previewWarnings, tokensText } from "./preview";
 import { providerReason, refusedCallView, viaText } from "./refused";
 
 const ASSET = "eip155:1/erc20:0xabc";
@@ -56,7 +60,7 @@ describe("What this agent can use — the combined result per tool", () => {
     expect(toolResultLine(tool({ providersTotal: 1, providersLeft: 1 }), rules)).toBe("get_weather: 1 provider, no backup");
     expect(toolResultLine(tool({ providersLeft: 0 }), access().rules)).toBe("get_weather: no provider fits (your limit: max $0.01)");
     expect(toolResultLine(tool({ providersTotal: 0, providersLeft: 0 }), rules)).toBe("get_weather: no provider serves it yet");
-    expect(toolResultLine(tool({ access: "BLOCKED" }), rules)).toBe("get_weather: not allowed");
+    expect(toolResultLine(tool({ access: "BLOCKED" }), rules)).toBe("get_weather: not in this agent's list");
     expect(toolResultLine(tool({ access: "VIA_TOOLSET_URL", providersLeft: 4 }), rules)).toBe(
       "get_weather: all 4 providers · only through its tool set's URL",
     );
@@ -127,57 +131,65 @@ function preview(over: Partial<McpUrlPreview> = {}): McpUrlPreview {
 }
 
 describe("the Connect sheet's preview states", () => {
-  it("says what the agent will see, with an estimate that always carries a tilde", () => {
-    expect(previewSummary(preview())).toBe("Your agent will see 12 tools (~2.8k tokens)");
-    expect(previewSummary(preview({ listedCount: 1, estimatedTokens: 236 }))).toBe("Your agent will see 1 tool (~240 tokens)");
-    expect(previewSummary(preview({ listedCount: 0 }))).toBe("Your agent will see no tools here.");
+  it("says what the agent will see, from one set of counts, with an estimate that always carries a tilde", () => {
+    const allListed = preview({ tools: [preview().tools[0]!], listedCount: 1, estimatedTokens: 236 });
+    expect(previewSummary(allListed)).toBe("Your agent will see 1 tool (~240 tokens).");
+    // Everything for a restricted agent: what it sees, and how many more are blocked.
+    expect(previewSummary(preview({ listedCount: 1 }))).toBe("Your agent will see 1 tool (~2.8k tokens). 1 more is blocked for this agent.");
+    // A listed tool no provider can run is counted as listed, not as usable.
+    const noFit = preview({ tools: [preview().tools[0]!, { ...preview().tools[0]!, toolId: "t3", name: "x_y", noProviderFits: true }], listedCount: 2 });
+    expect(previewSummary(noFit)).toBe("Your agent will see 2 tools, 1 usable now (~2.8k tokens).");
+    expect(previewCounts(noFit)).toEqual({ inView: 2, listed: 2, usable: 1, blocked: 0 });
+    expect(previewSummary(preview({ listedCount: 0, tools: [preview().tools[1]!] }))).toBe("Your agent will see no tools here. 1 is blocked for this agent.");
     expect(tokensText(12_400)).toBe("~12k");
     expect(tokensText(3)).toBe("~10");
   });
 
-  it("blocked by access: a warning with [Allow them] carrying the blocked tools", () => {
-    const warnings = previewWarnings(preview({ warnings: [{ code: "BLOCKED_BY_ACCESS", tools: ["search_web"] }] }));
+  it("blocked by access: a warning with [Allow them] carrying the blocked tools' ids", () => {
+    const p = preview({ warnings: [{ code: "BLOCKED_BY_ACCESS", tools: [{ toolId: "t2", name: "search_web" }] }] });
+    const warnings = previewWarnings(p);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatchObject({ code: "BLOCKED_BY_ACCESS", text: "search_web is blocked for this agent." });
     expect(warnings[0]!.fix).toEqual({ kind: "allow-tools", toolIds: ["t2"], toolNames: ["search_web"] });
-    expect(copyBlocked(preview({ warnings: [{ code: "BLOCKED_BY_ACCESS", tools: ["search_web"] }] }))).toBe(false);
+    expect(copyBlocked(p)).toBe(false);
   });
 
   it("nothing allowed: one danger line instead of the blocked one, and Copy is off", () => {
     const p = preview({
       listedCount: 0,
       warnings: [
-        { code: "BLOCKED_BY_ACCESS", tools: ["get_weather", "search_web"] },
+        { code: "BLOCKED_BY_ACCESS", tools: [{ toolId: "t1", name: "get_weather" }, { toolId: "t2", name: "search_web" }] },
         { code: "NOTHING_ALLOWED", tools: [] },
       ],
     });
     const warnings = previewWarnings(p);
     expect(warnings.map((w) => w.code)).toEqual(["NOTHING_ALLOWED"]);
     expect(warnings[0]!.tone).toBe("danger");
+    expect(warnings[0]!.fix).toMatchObject({ kind: "allow-tools", toolIds: ["t1", "t2"] });
     expect(copyBlocked(p)).toBe(true);
   });
 
-  it("no backup provider, no provider fits and unknown tools are said plainly", () => {
+  it("orders the lines by what to act on, one line per tool, and leaves unknown names out", () => {
     const warnings = previewWarnings(
       preview({
         warnings: [
-          { code: "NO_BACKUP_PROVIDER", tools: ["a", "b", "c", "d"] },
-          { code: "NO_PROVIDER_FITS", tools: ["get_weather"] },
-          { code: "IGNORED_TOOLS", tools: ["nope"] },
+          { code: "NO_BACKUP_PROVIDER", tools: ["a", "b", "c", "d", "get_weather"].map((name) => ({ toolId: `t-${name}`, name })) },
+          { code: "NO_PROVIDER_FITS", tools: [{ toolId: "t1", name: "get_weather" }] },
+          { code: "IGNORED_TOOLS", tools: [{ toolId: null, name: "nope" }] },
         ],
       }),
     );
     expect(warnings.map((w) => w.text)).toEqual([
-      "4 tools have no backup provider: a, b, c and 1 more.",
-      "No provider fits this agent's provider limits for get_weather.",
+      "No provider fits this agent's provider limits for get_weather, so it can't run now.",
+      "Only one provider offers each of a, b, c and 1 more: if one is down, that call fails.",
       "Not found, so left out: nope.",
     ]);
-    expect(warnings[1]!.fix).toEqual({ kind: "open-access" });
+    expect(warnings[0]!.fix).toEqual({ kind: "open-access" });
   });
 
-  it("a single provider is a no-backup line naming the tool", () => {
-    expect(previewWarnings(preview({ warnings: [{ code: "NO_BACKUP_PROVIDER", tools: ["get_weather"] }] }))[0]!.text).toMatch(
-      /^get_weather has no backup provider/,
+  it("a single provider is said in plain words", () => {
+    expect(previewWarnings(preview({ warnings: [{ code: "NO_BACKUP_PROVIDER", tools: [{ toolId: "t1", name: "get_weather" }] }] }))[0]!.text).toBe(
+      "Only one provider offers get_weather: if it is down, the call fails.",
     );
   });
 
@@ -221,7 +233,7 @@ function refused(over: Partial<RefusedCall> = {}): RefusedCall {
     refusalCode: "NO_PROVIDER_MATCHES_RULES",
     refusalLayer: "AGENT_LIMITS",
     charged: false,
-    providers: [{ providerId: "p-acme", reason: "EXCLUDED_BY_AGENT", source: "AGENT", detail: "Excluded by the agent's rules" }],
+    providers: [{ providerId: "p-acme", providerName: null, reason: "EXCLUDED_BY_AGENT", source: "AGENT", detail: "Excluded by the agent's rules" }],
     endpointKind: "TOOLSET",
     toolsetId: "s1",
     toolsetVersion: null,
@@ -236,20 +248,22 @@ describe("a refused call, as sketch B draws it", () => {
     const view = refusedCallView(refused());
     expect(view.title).toBe("Call refused · not charged");
     expect(view.reason).toBe("No provider fits your limits.");
-    expect(view.layer).toBe("Refused by this agent's limits");
+    expect(view.layer).toBe("Refused by this agent's provider limits");
     expect(view.providers).toEqual([
       {
         providerId: "p-acme",
+        name: null,
         reason: "Blocked by this agent's provider limits",
         source: "This agent's provider limits",
         fix: { kind: "include-provider", providerId: "p-acme", label: "Remove from limits" },
+        fixCovers: 1,
       },
     ]);
     expect(view.singleProviderNote).toBe("This tool has one provider, so nothing else can run it.");
   });
 
   it("each reason in words, with whose rule it was", () => {
-    const p = (reason: string, source = "AGENT", detail = "") => providerReason({ providerId: "p", reason, source, detail });
+    const p = (reason: string, source = "AGENT", detail = "") => providerReason({ providerId: "p", providerName: null, reason, source, detail });
     expect(p("ABOVE_MAX_PRICE")).toBe("Costs more than this agent's max price");
     expect(p("ABOVE_MAX_PRICE", "TOOLSET", "different asset")).toMatch(/different currency than the tool set's max price/);
     expect(p("BELOW_MIN_TIER", "TOOLSET")).toBe("Not verified, and the tool set's limits allow only verified providers");
@@ -262,13 +276,13 @@ describe("a refused call, as sketch B draws it", () => {
       refused({
         refusalLayer: "TOOLSET_RULES",
         providers: [
-          { providerId: "p1", reason: "NOT_IN_ALLOWED_PROVIDERS", source: "TOOLSET", detail: "" },
-          { providerId: "p2", reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "" },
-          { providerId: "p3", reason: "BELOW_MIN_TIER", source: "AGENT", detail: "" },
+          { providerId: "p1", providerName: null, reason: "NOT_IN_ALLOWED_PROVIDERS", source: "TOOLSET", detail: "" },
+          { providerId: "p2", providerName: null, reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "" },
+          { providerId: "p3", providerName: null, reason: "BELOW_MIN_TIER", source: "AGENT", detail: "" },
         ],
       }),
     );
-    expect(view.layer).toBe("Refused by the tool set's rules");
+    expect(view.layer).toBe("Refused by both this agent's provider limits and the tool set's rules");
     expect(view.providers.map((p) => p.fix?.kind)).toEqual(["edit-toolset", "clear-max-price", "allow-any-tier"]);
     expect(view.singleProviderNote).toBeNull();
   });
@@ -277,8 +291,8 @@ describe("a refused call, as sketch B draws it", () => {
     const view = refusedCallView(
       refused({
         providers: [
-          { providerId: "p1", reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "" },
-          { providerId: "p2", reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "" },
+          { providerId: "p1", providerName: null, reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "" },
+          { providerId: "p2", providerName: null, reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "" },
         ],
       }),
     );
@@ -292,15 +306,37 @@ describe("a refused call, as sketch B draws it", () => {
       label: "Allow this tool",
     });
     const server = refusedCallView(refused({ refusalCode: "TOOL_NOT_IN_TOOLSET", refusalLayer: "SERVER", providers: [] }));
-    expect(server.layer).toBe("Refused by the server it called (the connection)");
-    expect(server.fix).toEqual({ kind: "edit-toolset", toolsetId: "s1", label: "Add it to the tool set" });
+    expect(server.layer).toBe("Refused by the server it called: that server serves only what its tool set lists");
+    expect(server.fix).toEqual({ kind: "add-to-toolset", toolsetId: "s1", toolId: "t-tweets", label: "Add it to the tool set" });
     expect(refusedCallView(refused({ refusalCode: "MCP_SPEND_LIMIT_EXCEEDED", providers: [] })).fix).toMatchObject({ href: "/limits" });
   });
 
   it("says where the call came in", () => {
     expect(viaText(refused(), "twitter")).toBe("via twitter");
     expect(viaText(refused({ endpointKind: "ROOT" }))).toBe("via Everything");
-    expect(viaText(refused({ endpointKind: "ROOT", viewFilter: { tools: ["get_weather"] } }))).toBe("via Only these tools");
+    expect(viaText(refused({ endpointKind: "ROOT", viewFilter: { tools: [{ toolId: "t-get_weather", name: "get_weather" }] } }))).toBe("via Only these tools");
+  });
+});
+
+describe("refusal wording is never confused with spending limits", () => {
+  it("names the tool list for a tool the agent may not use", () => {
+    expect(refusedCallView(refused({ refusalCode: "TOOL_NOT_ALLOWED", providers: [] })).layer).toBe(
+      "Refused by this agent's tool list: it is not one of the tools this agent may use",
+    );
+  });
+  it("shows a fix once with how many providers it brings back", () => {
+    const view = refusedCallView(
+      refused({
+        providers: [
+          { providerId: "p1", providerName: "Acme", reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "" },
+          { providerId: "p2", providerName: "Beta", reason: "ABOVE_MAX_PRICE", source: "AGENT", detail: "" },
+        ],
+      }),
+    );
+    expect(view.providers.map((p) => [p.name, p.fixCovers])).toEqual([
+      ["Acme", 2],
+      ["Beta", 0],
+    ]);
   });
 });
 
@@ -338,5 +374,41 @@ describe("plain labels — no internal word reaches a screen", () => {
     expect(all).not.toMatch(/BEST|ONLY|EXCLUDE|FALLBACK|FAIL|RESTRICTED|discovery|access policy|UNLISTED/);
     expect(PROVIDER_MODE_LABELS.BEST).toBe("Any (Assay picks)");
     expect(ON_EMPTY_LABELS.FALLBACK_BEST).toBe("Let Assay pick the best one");
+  });
+});
+
+describe("the access draft: one Save, one Cancel, an Undo", () => {
+  const everything = access({ accessMode: "ALL", allowedToolsets: [], allowedToolIds: [], rules: { excludeProviderIds: [], maxPrice: null, minTier: null, minQuality: null } });
+
+  it("nothing changed: nothing to save", () => {
+    expect(draftBody(everything, draftFrom(everything))).toBeNull();
+    expect(draftChanges(everything, draftFrom(everything))).toEqual([]);
+  });
+
+  it("limit to 2 tools and exclude 1 provider is one body (Only these, two ticks, one tick, Save)", () => {
+    const draft = { ...draftFrom(everything), mode: "RESTRICTED" as const, toolIds: ["t-weather", "t-geo"], exclude: ["p1"] };
+    expect(draftBody(everything, draft)).toEqual({
+      accessMode: "RESTRICTED",
+      allowedToolIds: ["t-weather", "t-geo"],
+      rules: { excludeProviderIds: ["p1"] },
+      changeReason: "Changed what this agent can use",
+    });
+    expect(draftChanges(everything, draft)).toEqual(["Only these: 2 tools", "1 provider excluded"]);
+  });
+
+  it("only sends what changed, and keeps a TRUSTED tier set through the API", () => {
+    const trusted = access({ rules: { ...access().rules, minTier: "TRUSTED" } });
+    expect(draftBody(trusted, { ...draftFrom(trusted), maxPrice: null })).toEqual({ rules: { maxPrice: null }, changeReason: "Changed what this agent can use" });
+    expect(draftBody(trusted, { ...draftFrom(trusted), verified: false })?.rules).toEqual({ minTier: null });
+  });
+
+  it("Undo puts everything back as it was", () => {
+    expect(restoreBody(access())).toEqual({
+      accessMode: "RESTRICTED",
+      allowedToolsets: [{ toolsetId: "s1", version: null, viaUrlOnly: true }],
+      allowedToolIds: ["t-weather"],
+      rules: { excludeProviderIds: [], maxPrice: "10000", minTier: null },
+      changeReason: "Undid a change to what this agent can use",
+    });
   });
 });

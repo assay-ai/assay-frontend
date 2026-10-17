@@ -23,13 +23,31 @@ function tools(n: number): string {
 }
 
 /**
- * "Your agent will see 12 tools (~2.8k tokens)". While the preview loads the
- * caller shows a skeleton or "~"; this is never asked for a number it does not
- * have, so it never says 0 for "not known yet".
+ * Every count the sheet shows, from one place: the tools this URL serves
+ * (`inView`), those `tools/list` returns this agent (`listed`), those of them
+ * a provider can run now (`usable`), and those access blocks (`blocked`).
  */
-export function previewSummary(preview: Pick<McpUrlPreview, "listedCount" | "estimatedTokens">): string {
-  if (preview.listedCount === 0) return "Your agent will see no tools here.";
-  return `Your agent will see ${tools(preview.listedCount)} (${tokensText(preview.estimatedTokens)} tokens)`;
+export function previewCounts(preview: Pick<McpUrlPreview, "tools" | "listedCount">) {
+  return {
+    inView: preview.tools.length,
+    listed: preview.listedCount,
+    usable: preview.tools.filter((t) => t.listed && !t.noProviderFits).length,
+    blocked: preview.tools.filter((t) => !t.allowed).length,
+  };
+}
+
+/**
+ * "Your agent will see 4 tools, 3 usable now (~960 tokens). 11 more are
+ * blocked for this agent." While the preview loads the caller shows a
+ * skeleton or "~"; this is never asked for a number it does not have, so it
+ * never says 0 for "not known yet".
+ */
+export function previewSummary(preview: Pick<McpUrlPreview, "tools" | "listedCount" | "estimatedTokens">): string {
+  const c = previewCounts(preview);
+  const blocked = c.blocked > 0 ? ` ${c.blocked} ${c.listed === 0 ? "" : "more "}${c.blocked === 1 ? "is" : "are"} blocked for this agent.` : "";
+  if (c.listed === 0) return `Your agent will see no tools here.${blocked}`;
+  const usable = c.usable < c.listed ? `, ${c.usable} usable now` : "";
+  return `Your agent will see ${tools(c.listed)}${usable} (${tokensText(preview.estimatedTokens)} tokens).${blocked}`;
 }
 
 export type PreviewFix =
@@ -48,10 +66,20 @@ function names(list: readonly string[], max = 3): string {
   return `${list.slice(0, max).join(", ")} and ${list.length - max} more`;
 }
 
-/** The warnings in the order a person should read them, each with its fix when there is one. */
+/**
+ * The warnings in the order a person should act on them — blocked tools
+ * first, then tools no provider can run, then the softer notes — and one line
+ * per tool: a tool no provider fits is not also listed as having no backup.
+ */
 export function previewWarnings(preview: McpUrlPreview): PreviewWarning[] {
-  const blocked = preview.tools.filter((t) => !t.allowed);
-  const allowFix: PreviewFix = { kind: "allow-tools", toolIds: blocked.map((t) => t.toolId), toolNames: blocked.map((t) => t.name) };
+  const of = (code: string) => preview.warnings.find((w) => w.code === code)?.tools ?? [];
+  const blockedTools = of("BLOCKED_BY_ACCESS");
+  const blockedIds = blockedTools.map((t) => t.toolId).filter((id): id is string => Boolean(id));
+  const fallbackBlocked = preview.tools.filter((t) => !t.allowed);
+  const allowFix: PreviewFix =
+    blockedIds.length > 0
+      ? { kind: "allow-tools", toolIds: blockedIds, toolNames: blockedTools.map((t) => t.name) }
+      : { kind: "allow-tools", toolIds: fallbackBlocked.map((t) => t.toolId), toolNames: fallbackBlocked.map((t) => t.name) };
   const out: PreviewWarning[] = [];
   const nothing = preview.warnings.some((w) => w.code === "NOTHING_ALLOWED");
   if (nothing) {
@@ -59,50 +87,44 @@ export function previewWarnings(preview: McpUrlPreview): PreviewWarning[] {
       code: "NOTHING_ALLOWED",
       tone: "danger",
       text: "This agent can't use any tool on this server, so there is nothing to copy yet.",
-      fix: blocked.length > 0 ? allowFix : { kind: "open-access" },
+      fix: allowFix.toolIds.length > 0 ? allowFix : { kind: "open-access" },
+    });
+  } else if (blockedTools.length > 0) {
+    const n = blockedTools.length;
+    out.push({
+      code: "BLOCKED_BY_ACCESS",
+      tone: "warning",
+      text:
+        n === 1
+          ? `${blockedTools[0]!.name} is blocked for this agent.`
+          : `${n} of these tools are blocked for this agent: ${names(blockedTools.map((t) => t.name))}.`,
+      fix: allowFix,
     });
   }
-  for (const warning of preview.warnings) {
-    const n = warning.tools.length;
-    switch (warning.code) {
-      case "BLOCKED_BY_ACCESS":
-        if (!nothing) {
-          out.push({
-            code: warning.code,
-            tone: "warning",
-            text:
-              n === 1
-                ? `${warning.tools[0]} is blocked for this agent.`
-                : `${n} of these tools are blocked for this agent: ${names(warning.tools)}.`,
-            fix: allowFix,
-          });
-        }
-        break;
-      case "NO_BACKUP_PROVIDER":
-        out.push({
-          code: warning.code,
-          tone: "info",
-          text:
-            n === 1
-              ? `${warning.tools[0]} has no backup provider: if its one provider is down, the call fails.`
-              : `${n} tools have no backup provider: ${names(warning.tools)}.`,
-        });
-        break;
-      case "NO_PROVIDER_FITS":
-        out.push({
-          code: warning.code,
-          tone: "warning",
-          text: `No provider fits this agent's provider limits for ${names(warning.tools)}.`,
-          fix: { kind: "open-access" },
-        });
-        break;
-      case "IGNORED_TOOLS":
-        out.push({ code: warning.code, tone: "info", text: `Not found, so left out: ${names(warning.tools)}.` });
-        break;
-      default:
-        break;
-    }
+  const noFit = of("NO_PROVIDER_FITS").map((t) => t.name);
+  if (noFit.length > 0) {
+    out.push({
+      code: "NO_PROVIDER_FITS",
+      tone: "warning",
+      text: `No provider fits this agent's provider limits for ${names(noFit)}, so ${noFit.length === 1 ? "it" : "they"} can't run now.`,
+      fix: { kind: "open-access" },
+    });
   }
+  const single = of("NO_BACKUP_PROVIDER")
+    .map((t) => t.name)
+    .filter((name) => !noFit.includes(name));
+  if (single.length > 0) {
+    out.push({
+      code: "NO_BACKUP_PROVIDER",
+      tone: "info",
+      text:
+        single.length === 1
+          ? `Only one provider offers ${single[0]}: if it is down, the call fails.`
+          : `Only one provider offers each of ${names(single)}: if one is down, that call fails.`,
+    });
+  }
+  const ignored = of("IGNORED_TOOLS").map((t) => t.name);
+  if (ignored.length > 0) out.push({ code: "IGNORED_TOOLS", tone: "info", text: `Not found, so left out: ${names(ignored)}.` });
   return out;
 }
 
