@@ -11,10 +11,11 @@ import { capabilitiesFor } from "./roles";
  *   Penalties  /operator/cases           open penalties; a case at /operator/cases/view?id=
  *   Blocks     /operator/blocks
  *   Arbiter    /operator/arbiter         only for roles that can rule or block on chain
+ *   Tools      /operator/tools           standard tool contracts; a tool at /operator/tools/view?id= (Policy roles only)
  *   Team       /operator/operators
  *   Activity   /operator/override-log    the override register, as sentences
  */
-export type OperatorNavId = "home" | "penalties" | "blocks" | "arbiter" | "team" | "activity";
+export type OperatorNavId = "home" | "penalties" | "blocks" | "arbiter" | "tools" | "team" | "activity";
 
 export interface OperatorNavItem {
   id: OperatorNavId;
@@ -29,6 +30,7 @@ export const OPERATOR_NAV_ITEMS: readonly OperatorNavItem[] = Object.freeze([
   { id: "penalties", label: "Penalties", href: "/operator/cases", match: ["/operator/cases"] },
   { id: "blocks", label: "Blocks", href: "/operator/blocks", match: ["/operator/blocks"] },
   { id: "arbiter", label: "Arbiter", href: "/operator/arbiter", match: ["/operator/arbiter"] },
+  { id: "tools", label: "Tools", href: "/operator/tools", match: ["/operator/tools"] },
   { id: "team", label: "Team", href: "/operator/operators", match: ["/operator/operators"] },
   { id: "activity", label: "Activity", href: "/operator/override-log", match: ["/operator/override-log"] },
 ]);
@@ -36,7 +38,12 @@ export const OPERATOR_NAV_ITEMS: readonly OperatorNavItem[] = Object.freeze([
 /** The items this operator sees. Arbiter is the one screen with nothing to do for a read-only role. */
 export function operatorNavFor(roles: readonly OperatorRole[]): OperatorNavItem[] {
   const caps = capabilitiesFor(roles);
-  return OPERATOR_NAV_ITEMS.filter((item) => item.id !== "arbiter" || caps.rule || caps.blockOnChain);
+  return OPERATOR_NAV_ITEMS.filter((item) => {
+    if (item.id === "arbiter") return caps.rule || caps.blockOnChain;
+    // The contract editor is the Policy roles' screen; nobody else has anything to do there.
+    if (item.id === "tools") return roles.some((role) => role === "POL" || role === "POLA");
+    return true;
+  });
 }
 
 function matches(pathname: string, prefix: string): boolean {
@@ -59,6 +66,7 @@ export function activeOperatorNav(pathname: string): OperatorNavId | null {
 export function operatorTitleFor(pathname: string): string {
   if (pathname.startsWith("/operator/approvals")) return "Approvals";
   if (pathname.startsWith("/operator/cases/view")) return "Penalty";
+  if (pathname.startsWith("/operator/tools/view")) return "Tool";
   const id = activeOperatorNav(pathname);
   return OPERATOR_NAV_ITEMS.find((item) => item.id === id)?.label ?? "Operator";
 }

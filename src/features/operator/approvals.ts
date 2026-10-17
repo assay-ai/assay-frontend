@@ -33,6 +33,8 @@ const ACTION_LABEL: Readonly<Record<string, string>> = {
   "operator.change": "Raise someone's roles or limit, or take their Admin role away",
   "operator.remove": "Remove an operator who is an Admin",
   "arbiter.block": "Block a wallet on chain (the arbiter signs it)",
+  "tool_version.publish": "Publish a new version of a standard tool",
+  "tool.current_version": "Change the version of a tool agents get by default",
 };
 
 export function actionLabel(action: string): string {
@@ -49,6 +51,8 @@ export const APPROVER_ROLES: Readonly<Record<string, readonly OperatorRole[]>> =
   "A-13": ["OPS_ADMIN"],
   "A-14": ["OPS_ADMIN"],
   "A-11": ["ADJL"],
+  "P-10": ["POLA"],
+  "P-11": ["POLA"],
 };
 
 export function approverRolesFor(code: string): readonly OperatorRole[] | null {
@@ -119,6 +123,25 @@ export interface ApprovalContext {
   readonly penalties?: ReadonlyMap<string, string>;
   /** Penalty id → its provider and amount apart, for the money line of a confirm. */
   readonly penaltyParts?: ReadonlyMap<string, { readonly provider: string; readonly amount: string }>;
+  /** Tool id → its name and versions, for contract requests (`tool:<id>`). */
+  readonly tools?: ReadonlyMap<string, ApprovalToolInfo>;
+}
+
+/** What a contract request names: the tool, its versions by sequence number, and the draft's next number. */
+export interface ApprovalToolInfo {
+  readonly name: string;
+  /** Sequence number → semver, published versions and the draft (as its next semver). */
+  readonly semvers: ReadonlyMap<number, string>;
+  /** The draft's sequence number and computed bump, when there is one. */
+  readonly draft?: { readonly version: number; readonly bump: "PATCH" | "MINOR" | "MAJOR" | null } | null;
+}
+
+/** "get_weather v2.1.0", "get_weather" when the version is not known. */
+function toolVersionName(context: ApprovalContext, toolId: string, version: unknown): string {
+  const tool = context.tools?.get(toolId);
+  const name = tool?.name ?? `tool ${shortId(toolId)}`;
+  const semver = typeof version === "number" ? tool?.semvers.get(version) : undefined;
+  return semver ? `${name} v${semver}` : name;
 }
 
 export const EMPTY_APPROVAL_CONTEXT: ApprovalContext = {
@@ -385,6 +408,10 @@ export function approvalTitle(
       const who = personName(operator, operatorId);
       return operator ? `Remove ${who} (${rolesText(operator.roles)})` : `Remove ${who}`;
     }
+    case "tool_version.publish":
+      return `Publish ${toolVersionName(context, text(payload.toolId) ?? targetId, payload.version)}`;
+    case "tool.current_version":
+      return `Make ${toolVersionName(context, text(payload.toolId) ?? targetId, body.version)} the default for agents`;
     default:
       return actionLabel(approval.action);
   }
@@ -449,6 +476,24 @@ export function approvalOutcome(
     }
     case "slash.sweep":
       lines.push({ kind: "record", text: "Every matching penalty is decided like this one, in the background" });
+      break;
+    case "tool_version.publish": {
+      const toolId = text(payload.toolId) ?? targetId;
+      const draft = context.tools?.get(toolId)?.draft;
+      const bump = draft && draft.version === payload.version ? draft.bump : null;
+      lines.push({
+        kind: "runs",
+        text:
+          bump === "MAJOR"
+            ? "Providers can serve the new version once they re-map and pass a test for it. Agents keep the current version until it is made the default"
+            : "Agents and providers get the new version at once. Nothing they rely on breaks",
+      });
+      lines.push({ kind: "record", text: "A published version can't be unpublished" });
+      break;
+    }
+    case "tool.current_version":
+      lines.push({ kind: "runs", text: "Agents that don't lock a version move to it at once. Locked URLs keep their version" });
+      lines.push({ kind: "record", text: "It can be moved back with another request" });
       break;
     case "account.unblock": {
       const block = context.blocks.get(text(payload.blockId) ?? targetId);
@@ -716,6 +761,10 @@ export function approvedResultSentence(action: string, result: unknown, target?:
       return `Operator changed${typeof r.subject === "string" ? `: ${r.subject}` : ""}.`;
     case "operator.remove":
       return `Operator removed${typeof r.subject === "string" ? `: ${r.subject}` : ""}. Every session they held has ended.`;
+    case "tool_version.publish":
+      return "Published. Providers and the catalogue see the new version now.";
+    case "tool.current_version":
+      return "Done. Agents that don't lock a version now get the new one.";
     case "arbiter.block":
       // "Below" only when the answer carried the call, which the screen then draws under this line.
       return typeof r.to === "string" && typeof r.data === "string"

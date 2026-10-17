@@ -76,6 +76,8 @@ export const APPROVAL_WHAT: Readonly<Record<string, string>> = Object.freeze({
   "A-12": "new operators",
   "A-13": "raised roles and limits",
   "A-14": "admin removals",
+  "P-10": "new standard tool versions",
+  "P-11": "which tool version agents get by default",
 });
 
 const APPROVES = Object.entries(APPROVER_ROLES).map(([code, roles]) => ({
