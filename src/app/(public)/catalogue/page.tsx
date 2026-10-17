@@ -10,6 +10,7 @@ import { NotChargedProof, NotChargedSummary } from "@/components/explorer/not-ch
 import { StartFreeCta } from "@/components/explorer/start-free";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
+import { ConnectPanel } from "@/components/toolsets/connect-panel";
 import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
@@ -34,6 +35,7 @@ import {
   usePublicProviders,
   usePublicTools,
 } from "@/features/explorer/use-public-explorer";
+import { mcpHost } from "@/features/connect/mcp-endpoint";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
@@ -131,6 +133,13 @@ export default function CataloguePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initial = React.useMemo(() => readExplorerState(searchParams), [searchParams]);
+  // The MCP URL this page stands for: a browser opening `/` (or `/c/{category}`) on the MCP host lands here.
+  const [serverUrl] = React.useState(() => {
+    const category = searchParams.get("category");
+    const host = mcpHost();
+    const base = category && /^[a-z][a-z0-9-]{1,63}$/.test(category) ? `${host}/c/${category}` : `${host}/`;
+    return searchParams.get("free") === "1" ? `${base}?free=1` : base;
+  });
   const [view, setView] = React.useState<"tools" | "providers">(initial.view);
   const [query, setQuery] = React.useState(initial.q);
   const [freeOnly, setFreeOnly] = React.useState(initial.free);
@@ -171,6 +180,10 @@ export default function CataloguePage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-4 py-6 tablet:px-7 tablet:py-8">
+      <ConnectPanel
+        url={serverUrl}
+        title={serverUrl.includes("/c/") ? "This is an MCP server URL for one topic. Add it to your client." : "This is an MCP server URL: every tool below, as one server. Add it to your client."}
+      />
       <header className="flex flex-col gap-3">
         <h1 className="text-heading-lg text-01 tablet:text-display-md">Tools your agent can pay for — only when they work</h1>
         <p className="max-w-[720px] text-body-md text-02">
