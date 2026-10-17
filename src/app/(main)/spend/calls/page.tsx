@@ -14,6 +14,7 @@ import { OwedRowAction } from "@/features/buyer-debt/owed-row-action";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 import type { BuyerDebt } from "@/interfaces/buyer-debt";
 import { EntityPicker } from "@/components/patterns/entity-picker";
+import { RefusedCallPanel, RefusedCallsList } from "@/components/toolsets/refused-calls";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
@@ -36,12 +37,16 @@ import { formatMoney, notCharged, toDecimal } from "@/utils/money";
 
 /**
  * Activity › Calls — every call, newest first, by tool name. Status chips
- * (All · Charged · Not charged · Owed · Free) and a tool filter live in the URL
+ * (All · Charged · Not charged · Owed · Free · Refused) and a tool filter live in the URL
  * (`?status=not-charged&tool=<id>`), so Not charged and Overview can link
  * straight to a filtered list. A row opens the receipt.
  *
  * No agent column or filter: `GET /tool-calls` neither returns nor filters by
  * agent. The provider that served the call is shown when it is known.
+ *
+ * Refused (`?status=refused`) lists the calls refused before anything was
+ * charged (`GET /refused-calls`), and `?call={id}` opens one with its fix —
+ * the `/calls?call={id}` link an agent's error carries lands here.
  */
 
 const PAGE = 50;
@@ -49,6 +54,9 @@ const PAGE = 50;
 function CallsList() {
   const params = useSearchParams();
   const router = useRouter();
+  // `?status=refused` and `?call={id}` (the link a refused call's error carries) are the refused calls.
+  const refused = params.get("status") === "refused" || Boolean(params.get("call"));
+  const callId = params.get("call");
   const filter = parseCallsFilter(params.get("status"));
   const toolId = params.get("tool") || null;
   const names = useEntityNames({ kinds: ["tool", "provider"] });
@@ -76,6 +84,7 @@ function CallsList() {
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.pageInfo?.hasMore ? (last.pageInfo.nextCursor ?? null) : null),
     retry: 0,
+    enabled: !refused,
   });
 
   const calls = React.useMemo(
@@ -107,18 +116,30 @@ function CallsList() {
               key={option.value}
               type="button"
               role="radio"
-              aria-checked={filter === option.value}
+              aria-checked={!refused && filter === option.value}
               onClick={() => setParams({ status: option.value })}
               className={cn(
                 "rounded-full border px-3 py-1.5 text-label-13 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
-                filter === option.value ? "border-primary-500 bg-primary-10 text-primary-700" : "border-02 bg-01 text-02 hover:text-01",
+                !refused && filter === option.value ? "border-primary-500 bg-primary-10 text-primary-700" : "border-02 bg-01 text-02 hover:text-01",
               )}
             >
               {option.label}
             </button>
           ))}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={refused}
+            onClick={() => router.replace("/spend/calls?status=refused", { scroll: false })}
+            className={cn(
+              "rounded-full border px-3 py-1.5 text-label-13 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
+              refused ? "border-primary-500 bg-primary-10 text-primary-700" : "border-02 bg-01 text-02 hover:text-01",
+            )}
+          >
+            Refused
+          </button>
         </div>
-        <div className="w-full tablet:w-[280px]">
+        <div className={cn("w-full tablet:w-[280px]", refused && "hidden")}>
           <EntityPicker
             label="Tool"
             value={toolId}
@@ -130,7 +151,14 @@ function CallsList() {
         </div>
       </div>
 
-      {owedDebts ? (
+      {refused ? (
+        <div className="flex w-full flex-col gap-4">
+          {callId ? (
+            <RefusedCallPanel callId={callId} onClose={() => router.replace("/spend/calls?status=refused", { scroll: false })} />
+          ) : null}
+          <RefusedCallsList />
+        </div>
+      ) : owedDebts ? (
         <OwedDebtsList debts={owedDebts} onShowAll={() => router.replace(routes.calls(), { scroll: false })} />
       ) : query.isPending ? (
         <PageState kind="loading" rows={6} label="Loading your calls" />
