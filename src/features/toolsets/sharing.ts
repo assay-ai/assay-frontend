@@ -355,3 +355,76 @@ export function updateNoticeHref(notice: UpdateNotice): string {
   if (!notice.mcpUrl) return "/agents";
   return `/agents?update=1&from=${notice.fromVersion}&to=${notice.toVersion}#url=${encodeURIComponent(notice.mcpUrl)}`;
 }
+
+/* ------------------------------------------------- rule changes in words */
+
+/** One entry's provider rule, as both a version snapshot and a public entry can give it. */
+export interface RuleView {
+  providerMode: string;
+  /** Providers named by an "Only these" / "All except" rule. */
+  providerCount: number;
+  minTier: string | null;
+  onEmpty: string;
+  /** Atomic units; only owners' snapshots carry it. */
+  maxPrice?: { amount: string; decimals: number } | null;
+}
+
+function modeText(r: RuleView): string {
+  if (r.providerMode === "ONLY") return `Only these providers (${r.providerCount})`;
+  if (r.providerMode === "EXCLUDE") return `All except ${r.providerCount} provider${r.providerCount === 1 ? "" : "s"}`;
+  return "Any provider (Assay picks)";
+}
+
+function priceWords(p: RuleView["maxPrice"]): string {
+  if (!p) return "no limit";
+  const value = Number(p.amount) / 10 ** p.decimals;
+  return `$${value.toFixed(4).replace(/(\.\d\d\d*?)0+$/, "$1")}`;
+}
+
+/**
+ * What changed in one tool's provider rule, e.g. "Any provider (Assay picks)
+ * → Only these providers (2)" or "Max price $0.01 → $0.02". Null when the
+ * views carry no visible difference (the change is in a field not published).
+ */
+export function ruleChangeText(before: RuleView, after: RuleView): string | null {
+  const parts: string[] = [];
+  if (before.providerMode !== after.providerMode || before.providerCount !== after.providerCount) parts.push(`${modeText(before)} → ${modeText(after)}`);
+  if (Boolean(before.minTier) !== Boolean(after.minTier)) parts.push(`Only verified providers: ${before.minTier ? "on" : "off"} → ${after.minTier ? "on" : "off"}`);
+  if (before.onEmpty !== after.onEmpty) {
+    const words = (o: string) => (o === "FALLBACK_BEST" ? "Let Assay pick the best one" : "Stop the call");
+    parts.push(`If no provider fits: ${words(before.onEmpty)} → ${words(after.onEmpty)}`);
+  }
+  if (before.maxPrice !== undefined && after.maxPrice !== undefined && priceWords(before.maxPrice) !== priceWords(after.maxPrice)) {
+    parts.push(`Max price ${priceWords(before.maxPrice)} → ${priceWords(after.maxPrice)}`);
+  }
+  return parts.length > 0 ? parts.join("; ") : null;
+}
+
+/** A snapshot entry as a rule view (owners see the price limit too). */
+export function ruleOfSnapshot(e: Snapshot["entries"][number] & { maxPrice: { amount: string; decimals?: number } | null }): RuleView {
+  return {
+    providerMode: e.providerMode,
+    providerCount: e.providerIds.length,
+    minTier: e.minTier,
+    onEmpty: e.onEmpty,
+    maxPrice: e.maxPrice ? { amount: e.maxPrice.amount, decimals: e.maxPrice.decimals ?? 6 } : null,
+  };
+}
+
+/** For each tool whose rule changed, the words for it, from two lists of entries keyed by tool name. */
+export function ruleDetails<T extends { toolName: string }>(before: readonly T[], after: readonly T[], view: (e: T) => RuleView): (toolName: string) => string | null {
+  return (toolName) => {
+    const a = before.find((e) => e.toolName === toolName);
+    const b = after.find((e) => e.toolName === toolName);
+    return a && b ? ruleChangeText(view(a), view(b)) : null;
+  };
+}
+
+/** "get_token_market" → "Token market": a readable title for a tool that has none. */
+export function humanToolName(name: string): string {
+  const words = name.replace(/^[a-z0-9-]+__/, "").split(/[_-]+/).filter(Boolean);
+  const verbs = new Set(["get", "search", "list", "find", "fetch", "lookup", "read", "run", "call"]);
+  const rest = words.length > 1 && verbs.has(words[0]!) ? words.slice(1) : words;
+  const text = rest.join(" ");
+  return text ? `${text.charAt(0).toUpperCase()}${text.slice(1)}` : name;
+}

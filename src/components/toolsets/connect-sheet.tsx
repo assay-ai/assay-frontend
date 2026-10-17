@@ -450,7 +450,7 @@ function ConnectBody({
                 {tools.length > 0 ? (
                   <ul className="flex flex-wrap gap-1.5" aria-label="Chosen tools">
                     {tools.map((name) => (
-                      <li key={name} className="inline-flex min-h-10 items-center gap-1 rounded-full bg-03 py-0.5 pl-2.5 pr-1 text-label-xs text-01 tablet:min-h-0">
+                      <li key={name} className="inline-flex min-h-10 items-center gap-1 rounded-full bg-03 py-0.5 pl-2.5 pr-1 text-label-xs text-01">
                         <span className="font-mono [overflow-wrap:anywhere]">{name}</span>
                         <button
                           type="button"
@@ -512,7 +512,7 @@ function ConnectBody({
                     Allow them
                   </Button>
                 ) : warning.fix && effectiveAgentId ? (
-                  <Link href={`/agents?agent=${encodeURIComponent(effectiveAgentId)}#access`} className="min-h-10 content-center text-label-13 font-semibold underline tablet:min-h-0">
+                  <Link href={`/agents?agent=${encodeURIComponent(effectiveAgentId)}#access`} className="min-h-10 content-center text-label-13 font-semibold underline">
                     What this agent can use
                   </Link>
                 ) : null}
@@ -560,7 +560,7 @@ function ConnectBody({
         ) : null}
 
         <details className="rounded-lg border border-01 bg-02 px-3 py-2.5" open={free || Boolean(discovery) || undefined} data-testid="connect-more">
-          <summary className="min-h-10 cursor-pointer select-none content-center text-label-13 text-01 tablet:min-h-0">
+          <summary className="min-h-10 cursor-pointer select-none content-center text-label-13 text-01">
             More options{moreSummary.length > 0 ? <span className="font-normal text-03"> · {moreSummary.join(" · ")}</span> : null}
           </summary>
           <div className="mt-3 flex flex-col gap-4">
@@ -608,7 +608,7 @@ function ConnectBody({
 
             <div className="flex flex-col gap-1">
               <Switch
-                className="min-h-10 tablet:min-h-0"
+                className="min-h-10"
                 checked={free}
                 disabled={!free && !offersFreeOnly(preview.data)}
                 onChange={(e) => setFree(e.target.checked)}
@@ -663,7 +663,7 @@ function topicLabel(category: string): string {
 
 function OptionRadio({ name, checked, onChange, title, detail }: { name: string; checked: boolean; onChange: () => void; title: string; detail?: string }) {
   return (
-    <label className="flex min-h-10 cursor-pointer items-start gap-2.5 rounded-md px-1 py-1 tablet:min-h-0">
+    <label className="flex min-h-10 cursor-pointer items-start gap-2.5 rounded-md px-1 py-1">
       <input type="radio" name={name} className="mt-1 accent-primary-500" checked={checked} onChange={onChange} />
       <span className="flex min-w-0 flex-col">
         <span className="text-body-13 text-01">{title}</span>

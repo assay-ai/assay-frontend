@@ -75,6 +75,8 @@ const TIER_RANK = { NEW: 0, ESTABLISHED: 1, TRUSTED: 2 } as const;
 export const DEMO_OWN_HANDLE = "brightpath";
 const RESEARCH_TOKEN = "r8m2x5k9q1w4z7n3p6t0ab";
 const WEATHER_TOKEN = "k7q2m9x4p1w8z3n6r5t0vb";
+/** @marketkit/desk-tools, shared by link only. */
+const DESK_TOKEN = DEMO_PUBLIC_SETS.find((x) => x.slug === "desk-tools")!.unlistedToken!;
 /** @marketkit/crypto-research: "prod" is locked to v2 in `update-available`. */
 const MARKETKIT_SET = DEMO_PUBLIC_SETS.find((x) => x.ownerHandle === "marketkit" && x.slug === "crypto-research")!;
 const DAY = 1_440;
@@ -432,6 +434,16 @@ function seed(variant: DemoConnectVariant): Stage {
             handedOutAt: demoMinutesAgo(25),
             firstCallAt: null,
             lastCallAt: null,
+          },
+          {
+            // A link-only set from another team, holding a third maker's link-only tool (cobalt__news_search):
+            // its page (#token=) shows "Not reviewed" and what "Make my own version" leaves behind.
+            canonicalUrl: buildMcpUrl({ kind: "link", token: DESK_TOKEN, version: 1 }, { free: false }, host),
+            serverName: "desk",
+            client: "claude-desktop",
+            handedOutAt: demoMinutesAgo(9 * DAY),
+            firstCallAt: demoMinutesAgo(9 * DAY - 20),
+            lastCallAt: demoMinutesAgo(300),
           },
         ];
   return {
@@ -1133,7 +1145,8 @@ function categories(): PublicCategory[] {
 
 /** The alert "prod"'s team gets in `update-available` (FR-17). */
 export function demoToolsetNotifications(): unknown[] {
-  if (demoConnectVariant() !== "update-available") return [];
+  // Every picture but `empty` has the alert, so "See what changed" can be tried from the bell.
+  if (demoConnectVariant() === "empty") return [];
   return [
     {
       id: "ntf_ts31",

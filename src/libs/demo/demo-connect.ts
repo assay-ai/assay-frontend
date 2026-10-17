@@ -22,7 +22,11 @@
  *   preview-error — every Connect preview fails: "Couldn't load the tool list".
  *   empty       — no tool sets, no servers in use, no refused calls.
  *
- * Sharing (T2). In `default` the account has no public name yet, so the
+ * Sharing (T2). Every picture but `empty` has a `toolset.update_available`
+ * alert in the bell, and "staging" uses a link-only set from another team
+ * (`/toolsets/view#token=h3j8d2k9s6a1f4g7l0q5wz`) that holds a third maker's
+ * link-only tool, for checking what "Make my own version" leaves behind.
+ * In `default` the account has no public name yet, so the
  * Share dialog asks for one inline; "Weather and places" has a v1 saved for
  * the team.
  *

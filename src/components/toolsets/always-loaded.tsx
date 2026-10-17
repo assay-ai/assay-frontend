@@ -68,7 +68,7 @@ export function AlwaysLoaded({
       {pinned.length > 0 ? (
         <ul className="flex flex-wrap gap-1.5" aria-label={ALWAYS_LOADED_LABEL}>
           {pinned.map((name) => (
-            <li key={name} className="inline-flex min-h-10 items-center gap-1 rounded-full bg-primary-10 py-0.5 pl-2.5 pr-1 text-label-xs text-primary-700 tablet:min-h-0">
+            <li key={name} className="inline-flex min-h-10 items-center gap-1 rounded-full bg-primary-10 py-0.5 pl-2.5 pr-1 text-label-xs text-primary-700">
               <Pin aria-hidden="true" className="size-3" />
               <span className="font-mono [overflow-wrap:anywhere]">{name}</span>
               <button
@@ -118,7 +118,7 @@ export function AlwaysLoaded({
             .filter((o) => o.label.includes(filter.trim().toLowerCase()))
             .map((o) => (
               <li key={o.id}>
-                <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded px-1.5 text-body-13 text-01 hover:bg-02 tablet:min-h-9">
+                <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded px-1.5 text-body-13 text-01 hover:bg-02">
                   <input
                     type="checkbox"
                     className="accent-primary-500"

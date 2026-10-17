@@ -15,6 +15,8 @@ import {
   changelogFrom,
   diffSnapshots,
   handleErrorView,
+  ruleDetails,
+  ruleOfSnapshot,
   handleProblem,
   isReservedHandle,
   normaliseHandle,
@@ -302,7 +304,7 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
                     </span>
                   ) : null}
                   {handleError.action ? (
-                    <Link href={handleError.action.href} className="min-h-10 content-center font-semibold text-primary-600 hover:underline tablet:min-h-0">
+                    <Link href={handleError.action.href} className="min-h-10 content-center font-semibold text-primary-600 hover:underline">
                       {handleError.action.label}
                     </Link>
                   ) : null}
@@ -327,7 +329,11 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
           {loadingDiff ? (
             <Skeleton className="h-10 w-full" />
           ) : diff && set.latestVersion ? (
-            <DiffView diff={diff} empty={`No changes since v${set.latestVersion}.`} />
+            <DiffView
+              diff={diff}
+              empty={`No changes since v${set.latestVersion}.`}
+              ruleOf={latest.data ? ruleDetails(latest.data.entries, set.entries, ruleOfSnapshot) : undefined}
+            />
           ) : null}
           <label htmlFor="share-changelog" className="text-body-xs text-03">
             Notes for people who use it (filled in from the changes; edit as you like)

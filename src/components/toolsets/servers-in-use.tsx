@@ -1,12 +1,13 @@
 "use client";
 
 import { Server, TriangleAlert } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { SkeletonRows } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
-import { isToolsetChoice, parseMcpUrl } from "@/features/connect/mcp-url";
+import { isToolsetChoice, parseMcpUrl, webPageOf } from "@/features/connect/mcp-url";
 import { SHOW_ALL_TOOL_BUDGET, tokensText } from "@/features/toolsets/preview";
 import { biggestServer, lockedVersionOf, serverLabel, showsEveryTool, toolsShown } from "@/features/toolsets/servers";
 import type { ServerInUse } from "@/services/toolsets.service";
@@ -32,6 +33,13 @@ import { errorText, useAgentServers } from "./use-toolsets";
  *
  * A table from tablet up; stacked cards on a phone, so nothing scrolls sideways.
  */
+
+/** The web page of a shared or link-only tool set a row serves (the token stays in the fragment). */
+function pageOf(server: ServerInUse): string | null {
+  const origin = server.canonicalUrl.replace(/^([a-z][a-z0-9+.-]*:\/\/[^/?#]+).*$/i, "$1");
+  const choice = parseMcpUrl(server.canonicalUrl, origin)?.choice;
+  return choice && (choice.kind === "shared" || choice.kind === "link") ? webPageOf(choice) : null;
+}
 
 /** The update a server row offers, or null. */
 function updateTargetOf(server: ServerInUse): UpdateTarget | null {
@@ -85,7 +93,7 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
       ) : query.isError ? (
         <p className="flex flex-wrap items-center gap-2 text-body-13 text-02">
           Servers in use could not be loaded: {errorText(query.error).replace(/\.$/, "")}.
-          <button type="button" className="min-h-10 font-semibold text-primary-600 hover:underline tablet:min-h-0" onClick={() => void query.refetch()}>
+          <button type="button" className="min-h-10 font-semibold text-primary-600 hover:underline" onClick={() => void query.refetch()}>
             Retry
           </button>
         </p>
@@ -112,7 +120,7 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="min-h-10 self-start tablet:min-h-0 tablet:self-center"
+                  className="min-h-10 self-start tablet:self-center"
                   data-testid="switch-to-search"
                   onClick={() => (biggest.searchUrl ? setSwitching(biggest) : change(biggest))}
                 >
@@ -149,7 +157,7 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
           </div>
         </>
       )}
-      <Button size="sm" variant={servers.length === 0 ? "primary" : "secondary"} className="min-h-10 self-start tablet:min-h-0" onClick={() => setSheet({ url: null, changing: false })}>
+      <Button size="sm" variant={servers.length === 0 ? "primary" : "secondary"} className="min-h-10 self-start" onClick={() => setSheet({ url: null, changing: false })}>
         Connect {agentName}
       </Button>
       <ConnectSheet
@@ -174,7 +182,7 @@ function NameCell({ server, clash, onUpdate }: { server: ServerInUse; clash: boo
         <Server aria-hidden="true" className="size-3.5 shrink-0 text-03" />
         <span className="[overflow-wrap:anywhere]">{label.title}</span>
         {target ? (
-          <button type="button" onClick={onUpdate} className="min-h-10 tablet:min-h-0" data-testid="server-update">
+          <button type="button" onClick={onUpdate} className="min-h-10" data-testid="server-update">
             <Chip tone="primary">
               Update available{target.to ? `: v${target.to}` : ""} · your app uses v{target.from}
             </Chip>
@@ -189,6 +197,11 @@ function NameCell({ server, clash, onUpdate }: { server: ServerInUse; clash: boo
         </span>
       ) : null}
       <span className="break-all font-mono text-mono-xs text-03">{server.canonicalUrl}</span>
+      {pageOf(server) ? (
+        <Link href={pageOf(server)!} className="self-start text-label-13 text-primary-600 hover:underline">
+          Its page
+        </Link>
+      ) : null}
     </span>
   );
 }
