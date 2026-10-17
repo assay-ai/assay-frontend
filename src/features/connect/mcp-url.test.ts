@@ -2,7 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import { KEY_PLACEHOLDER, keyMode, mcpConfig, MCP_CLIENTS } from "@/features/buyer-money/mcp-config";
 
-import { buildMcpUrl, canonicalTools, mcpToolName, toolDisplay, uniqueServerName, parseMcpUrl, sameChoice, suggestServerName, type ConnectChoice } from "./mcp-url";
+import {
+  buildMcpUrl,
+  canonicalTools,
+  defaultDiscovery,
+  mcpToolName,
+  toolDisplay,
+  uniqueServerName,
+  parseMcpUrl,
+  sameChoice,
+  suggestServerName,
+  webPageOf,
+  type ConnectChoice,
+} from "./mcp-url";
 
 const HOST = "https://mcp.example.com";
 
@@ -63,7 +75,7 @@ describe("parseMcpUrl — a URL back into the question (Change, browser redirect
 
   it("reads an encoded @ and a trailing slash on a tool set", () => {
     expect(parseMcpUrl("https://mcp.example.com/my/research/", HOST)?.choice).toEqual({ kind: "toolset", slug: "research" });
-    expect(parseMcpUrl("https://mcp.example.com/%40acme/kit", HOST)?.choice).toEqual({ kind: "url", url: "https://mcp.example.com/@acme/kit" });
+    expect(parseMcpUrl("https://mcp.example.com/%40acme/kit", HOST)?.choice).toEqual({ kind: "shared", handle: "acme", slug: "kit" });
   });
 
   it("refuses another host, path tricks and bad tool names: 'We couldn't read this URL'", () => {
@@ -157,5 +169,76 @@ describe("one naming convention for tools, unique server names", () => {
     expect(uniqueServerName("weather", ["research"])).toBe("weather");
     expect(uniqueServerName("weather", ["weather", null])).toBe("weather2");
     expect(uniqueServerName("crypto-re", ["crypto-re", "crypto-r2"])).toBe("crypto-r3");
+  });
+});
+
+describe("T2 forms: topics, shared sets, links, version locks", () => {
+  it("builds each answer in the form §7.4 lists", () => {
+    expect(buildMcpUrl({ kind: "topic", category: "weather" }, { free: false }, HOST)).toBe("https://mcp.example.com/c/weather");
+    expect(buildMcpUrl({ kind: "maker", handle: "acme" }, { free: false }, HOST)).toBe("https://mcp.example.com/@acme");
+    expect(buildMcpUrl({ kind: "shared", handle: "acme", slug: "twitter-kit", version: 3 }, { free: false }, HOST)).toBe("https://mcp.example.com/@acme/twitter-kit@3");
+    expect(buildMcpUrl({ kind: "shared", handle: "acme", slug: "twitter-kit", version: null }, { free: false }, HOST)).toBe("https://mcp.example.com/@acme/twitter-kit");
+    expect(buildMcpUrl({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz", version: 2 }, { free: true }, HOST)).toBe("https://mcp.example.com/u/h3j8d2k9s6a1f4g7l0q5wz@2?free=1");
+    expect(buildMcpUrl({ kind: "toolset", slug: "research", version: 4 }, { free: false }, HOST)).toBe("https://mcp.example.com/my/research@4");
+  });
+
+  it("adds discovery= only when it differs from the URL's default", () => {
+    // The root searches by default.
+    expect(buildMcpUrl({ kind: "everything" }, { free: false, discovery: "search" }, HOST)).toBe("https://mcp.example.com/");
+    expect(buildMcpUrl({ kind: "everything" }, { free: false, discovery: "full" }, HOST)).toBe("https://mcp.example.com/?discovery=full");
+    // `?tools=` on the root is automatic, so search is not the default there.
+    expect(buildMcpUrl({ kind: "tools", tools: ["a_b"] }, { free: false, discovery: "search" }, HOST)).toBe("https://mcp.example.com/?tools=a_b&discovery=search");
+    expect(buildMcpUrl({ kind: "tools", tools: ["a_b"] }, { free: true, discovery: "auto" }, HOST)).toBe("https://mcp.example.com/?tools=a_b&free=1");
+    expect(buildMcpUrl({ kind: "topic", category: "web" }, { free: false, discovery: "auto" }, HOST)).toBe("https://mcp.example.com/c/web");
+    // A tool set's own default is not in its URL, so any choice is written out.
+    expect(buildMcpUrl({ kind: "shared", handle: "acme", slug: "kit", version: 2 }, { free: false, discovery: "search" }, HOST)).toBe(
+      "https://mcp.example.com/@acme/kit@2?discovery=search",
+    );
+    expect(defaultDiscovery({ kind: "toolset", slug: "kit" })).toBeNull();
+  });
+
+  it("reads them back, with the version and a discovery that is not the default", () => {
+    expect(parseMcpUrl("https://mcp.example.com/c/weather", HOST)?.choice).toEqual({ kind: "topic", category: "weather" });
+    expect(parseMcpUrl("https://mcp.example.com/@acme", HOST)?.choice).toEqual({ kind: "maker", handle: "acme" });
+    expect(parseMcpUrl("https://mcp.example.com/@acme/kit@3?discovery=full", HOST)).toEqual({
+      choice: { kind: "shared", handle: "acme", slug: "kit", version: 3 },
+      options: { free: false, discovery: "full" },
+    });
+    expect(parseMcpUrl("https://mcp.example.com/u/h3j8d2k9s6a1f4g7l0q5wz@2", HOST)?.choice).toEqual({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz", version: 2 });
+    expect(parseMcpUrl("https://mcp.example.com/my/research@4", HOST)?.choice).toEqual({ kind: "toolset", slug: "research", version: 4 });
+    // A default discovery is dropped, as the server drops it.
+    expect(parseMcpUrl("https://mcp.example.com/?discovery=search", HOST)?.options).toEqual({ free: false });
+    expect(parseMcpUrl("https://mcp.example.com/?discovery=sideways", HOST)).toBeNull();
+    expect(parseMcpUrl("https://mcp.example.com/@acme/kit@x", HOST)?.choice.kind).toBe("url");
+  });
+
+  it("round-trips every form with every option", () => {
+    const choices: ConnectChoice[] = [
+      { kind: "everything" },
+      { kind: "topic", category: "weather" },
+      { kind: "shared", handle: "acme", slug: "kit", version: 3 },
+      { kind: "shared", handle: "acme", slug: "kit" },
+      { kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz", version: 1 },
+      { kind: "toolset", slug: "research", version: 2 },
+      { kind: "tools", tools: ["a_x", "b_y"] },
+    ];
+    for (const choice of choices) {
+      for (const discovery of [undefined, "auto", "full", "search"] as const) {
+        const url = buildMcpUrl(choice, { free: true, discovery }, HOST);
+        const parsed = parseMcpUrl(url, HOST)!;
+        expect(sameChoice(parsed.choice, choice)).toBe(true);
+        expect(buildMcpUrl(parsed.choice, parsed.options, HOST)).toBe(url);
+      }
+    }
+  });
+
+  it("names their servers and their web pages; the link token stays in the fragment", () => {
+    expect(suggestServerName({ kind: "topic", category: "weather" })).toBe("weather");
+    expect(suggestServerName({ kind: "shared", handle: "marketkit", slug: "crypto-research", version: 2 })).toBe("crypto-re");
+    expect(suggestServerName({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz" })).toBe("shared");
+    expect(webPageOf({ kind: "shared", handle: "acme", slug: "kit", version: 3 })).toBe("/toolsets/view?handle=acme&slug=kit&v=3");
+    expect(webPageOf({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz", version: 2 })).toBe("/toolsets/view#token=h3j8d2k9s6a1f4g7l0q5wz&v=2");
+    expect(webPageOf({ kind: "maker", handle: "acme" })).toBe("/toolsets/handle?handle=acme");
+    expect(webPageOf({ kind: "topic", category: "web" })).toBe("/catalogue?category=web");
   });
 });
