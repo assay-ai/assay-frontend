@@ -246,11 +246,13 @@ function ReceiptPageContent() {
   if (receipt.evaluatedAt) {
     events.push({ ...stamp(receipt.evaluatedAt), label: "Result checked", tone: "neutral" });
   }
-  if (receipt.settledAt && collection && isCollectionState(state)) {
-    // A debt, a voided debt or a forfeit, in what it means for the buyer.
+  const closedAt = receipt.settledAt ?? receipt.holdReleasedAt;
+  if (closedAt && collection && isCollectionState(state)) {
+    // A debt, a voided debt or a forfeit, in what it means for the buyer. A written-off debt's hold
+    // is released without a settlement, so it closes at `holdReleasedAt`; it is still owed.
     const listedDebt = owedCallState(debtsQuery.data, receipt.intentId);
     events.push({
-      ...stamp(collectionAt(state, receipt.settledAt, listedDebt.kind === "unknown" ? null : listedDebt.debt)),
+      ...stamp(collectionAt(state, closedAt, listedDebt.kind === "unknown" ? null : listedDebt.debt)),
       label: collection.timeline.label,
       meta: collection.timeline.meta,
       tone: collection.owed ? "primary" : "teal",

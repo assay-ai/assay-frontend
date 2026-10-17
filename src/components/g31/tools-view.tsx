@@ -428,8 +428,8 @@ export function ToolsView() {
       <PageHeader title="Tools" />
       <p className="-mt-2 text-body-13 text-03">
         Every tool your agents can call through Assay. You pay only for results that pass the check; allow or block
-        each one for your agents. <Term k="free-tier">Free tier</Term> calls need no funds, and come first: a tool with a
-        free tier serves your agent&apos;s free calls each day before any call is charged.
+        each one for your agents. <Term k="free-tier">Free tier</Term>
+        {" "}calls need no funds, and come first: a tool with a free tier serves your agent&apos;s free calls each day before any call is charged.
       </p>
       <FreeOnlyNote />
       <React.Suspense fallback={<PageState kind="loading" rows={6} label="Loading tools" />}>

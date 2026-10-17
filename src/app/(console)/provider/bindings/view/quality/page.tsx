@@ -47,13 +47,19 @@ const TONE_BOX = {
   neutral: "border-01 bg-01 text-02",
 } as const;
 
-function WindowStrip({ windows, declared }: { windows: SlaWindow[]; declared: number }) {
+function WindowStrip({ windows }: { windows: SlaWindow[] }) {
   const ordered = [...windows].reverse();
   return (
     <ol className="flex w-full items-end gap-1" aria-label="Failure rate in recent windows, oldest first">
       {ordered.map((window) => {
         const rate = window.observedFailureRate ?? 0;
-        const over = window.outcome === "BREACH_PROPOSED" || (window.verifiedCalls >= window.minVerifiedCalls && rate > declared);
+        // Each window is judged against the promise frozen when it opened, and a closed one by its
+        // recorded outcome, so the strip agrees with the window list below it.
+        const declared = window.declaredFailureRate;
+        const over =
+          window.outcome !== null
+            ? window.outcome === "BREACH_PROPOSED"
+            : window.verifiedCalls >= window.minVerifiedCalls && rate > declared;
         const height = Math.max(8, Math.min(48, declared > 0 ? (rate / declared) * 24 : 8));
         return (
           <li key={window.windowId} className="flex flex-1 flex-col items-center" title={`${windowRange(window)}: ${(rate * 100).toFixed(1)}%`}>
@@ -158,7 +164,6 @@ function QualityContent() {
     );
   }
 
-  const declared = binding?.slaFailureRate ?? current?.declaredFailureRate ?? 0;
   const reading = slaReading(current, binding?.slaFailureRate ?? null);
   const tool = binding ? names.tool(binding.toolId) : null;
 
@@ -208,7 +213,7 @@ function QualityContent() {
                   <p className="text-body-13 text-03">The first window opens with the first call.</p>
                 ) : (
                   <>
-                    <WindowStrip windows={windows} declared={declared} />
+                    <WindowStrip windows={windows} />
                     <ul className="flex w-full flex-col">
                       {windows.slice(0, 5).map((window) => (
                         <li key={window.windowId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 border-t border-01 py-2.5 first:border-t-0">
