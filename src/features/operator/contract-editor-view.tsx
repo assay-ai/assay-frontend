@@ -118,9 +118,14 @@ export function ContractEditorScreen({ toolId, fromRequest = "" }: { toolId: str
   const [makeCurrent, setMakeCurrent] = React.useState<MajorRow | null>(null);
   const [deprecating, setDeprecating] = React.useState<MajorRow | null>(null);
 
+  // Whoever last saved the draft can't approve its publish (two-person rule), so they are not offered.
+  const editedBy = toolQuery.data?.draft?.editedBy ?? null;
   const approvers = React.useMemo(
-    () => (directory.isPending || directory.isError ? undefined : eligibleApprovers("P-10", directory.operators, me.id)),
-    [directory.isPending, directory.isError, directory.operators, me.id],
+    () =>
+      directory.isPending || directory.isError
+        ? undefined
+        : eligibleApprovers("P-10", directory.operators.filter((op) => op.id !== editedBy), me.id),
+    [directory.isPending, directory.isError, directory.operators, me.id, editedBy],
   );
 
   if (toolQuery.isLoading) return <PageState kind="loading" rows={6} label="Loading the tool" />;
@@ -246,6 +251,7 @@ export function ContractEditorScreen({ toolId, fromRequest = "" }: { toolId: str
         canEdit={canEdit}
         frozen={pending.publish !== null}
         frozenHref={pending.publish ? approvalHref(pending.publish.id) : null}
+        editorName={editedBy ? (editedBy === me.id ? "you" : directory.nameOf(editedBy)) : null}
         seed={tool.versions.length === 0 && !tool.draft ? seed : null}
         onPublish={setPublishPlan}
       />
@@ -389,6 +395,7 @@ function DraftEditor({
   canEdit,
   frozen,
   frozenHref,
+  editorName,
   seed,
   onPublish,
 }: {
@@ -396,6 +403,8 @@ function DraftEditor({
   canEdit: boolean;
   frozen: boolean;
   frozenHref: string | null;
+  /** Who last saved the draft ("you" for the signed-in operator); they can't approve its publish. */
+  editorName: string | null;
   /** A first version's summary and description, from the tool request it came from. */
   seed: { summary: string; description: string } | null;
   onPublish: (plan: PublishPlan) => void;
@@ -468,7 +477,9 @@ function DraftEditor({
         <p className="text-body-13 text-02">
           {tool.draft ? (
             <>
-              Saved <UtcTime value={tool.draft.updatedAt} midSentence />. Nobody sees a draft until it is published.
+              Saved <UtcTime value={tool.draft.updatedAt} midSentence />
+              {editorName ? ` by ${editorName}` : ""}. Nobody sees a draft until it is published
+              {editorName ? `, and ${editorName === "you" ? "you" : editorName} can't be the one who approves it` : ""}.
             </>
           ) : tool.versions.length > 0 ? (
             "Edit below to start a draft. Nobody sees it until it is published."

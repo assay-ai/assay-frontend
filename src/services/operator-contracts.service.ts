@@ -112,9 +112,11 @@ export interface AnswerToolRequestBody {
   toolCategory?: string;
 }
 
-/** The unanswered requests, oldest due first. */
-export function listOperatorToolRequests(): Promise<CursorPage<OperatorToolRequestRow>> {
-  return operatorApi.get<CursorPage<OperatorToolRequestRow>>("/operator/tool-requests", { limit: 50 });
+/** The requests still to decide (unanswered, or looked at and not yet accepted or declined), oldest due first. */
+export function listOperatorToolRequests(
+  statuses: readonly OperatorToolRequestStatus[] = ["OPEN", "ACKNOWLEDGED"],
+): Promise<CursorPage<OperatorToolRequestRow>> {
+  return operatorApi.get<CursorPage<OperatorToolRequestRow>>("/operator/tool-requests", { limit: 50, status: statuses.join(",") });
 }
 
 export function getOperatorToolRequest(id: string): Promise<OperatorToolRequest> {

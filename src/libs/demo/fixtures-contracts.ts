@@ -533,6 +533,8 @@ export function demoDraftOf(
     tier: (shape.tier as ContractDraft["tier"]) ?? null,
     changelog: shape.changelog,
     updatedAt: shape.updatedAt,
+    // The demo's own operator (Jordan) wrote every draft, so another Policy approver must approve it.
+    editedBy: "op-jordan",
   };
 }
 
