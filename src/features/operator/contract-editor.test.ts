@@ -15,6 +15,7 @@ import {
   parseForm,
   pendingFor,
   suggestion,
+  suggestToolName,
   toolNameFrom,
   toolNameProblem,
 } from "./contract-editor";
@@ -77,7 +78,7 @@ describe("versions agents can use", () => {
   it("lists majors newest first; the default can't be deprecated, the old one can", () => {
     const [v2, v1] = majorRows(weather);
     expect(v2).toMatchObject({ label: "v2", isCurrent: true, makeCurrentVersion: null, deprecateVersion: null, readyText: "2 providers can serve it now" });
-    expect(v2!.deprecateBlocked).toMatch(/Make another version the default first/);
+    expect(v2!.deprecateBlocked).toMatch(/Publish a newer version and make it the default first/);
     expect(v1).toMatchObject({ label: "v1", status: "DEPRECATED", statusText: "Deprecated", deprecateVersion: null });
     expect(v1!.sunsetText).toMatch(/^Stops on .* \(UTC\)$/);
   });
@@ -147,6 +148,8 @@ describe("names and errors", () => {
   it("suggests a tool name from a request title", () => {
     expect(toolNameFrom("Air quality index for a city")).toBe("air_quality_index_for_a_city");
     expect(toolNameFrom("3D models!")).toBe("tool_3d_models");
+    expect(suggestToolName("Air quality index for a city")).toBe("air_quality_index");
+    expect(suggestToolName("Patent search")).toBe("patent_search");
     expect(toolNameProblem("Get-Weather")).toMatch(/lower-case/);
     expect(toolNameProblem("get_weather")).toBeNull();
   });

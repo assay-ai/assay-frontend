@@ -39,6 +39,8 @@ import { demoRetiredMajor } from "./demo-switches";
 
 export const WEATHER_TOOL_ID = "06399979-f8b8-4c9e-a9b1-bd2a5924d442";
 export const GEOCODE_TOOL_ID = "ad39dccc-aff2-54c1-b383-62e0ff392570";
+/** get_usd_eur_rate: 2.0.0 is the default and 1.0.0 still runs, so the editor offers "Deprecate v1". */
+export const FX_TOOL_ID = "a4b9882a-9bc1-4d64-807a-27c0b93daf0a";
 export const TIDES_TOOL_ID = "7c1e2f90-5b3a-4d18-9e6c-2a40b8d1f357";
 /** The accepted tool request that created get_tide_times. */
 export const TIDES_REQUEST_ID = "e2b7c4d1-0f3a-4a6e-8b95-71c2d0a9f4e3";
@@ -229,6 +231,49 @@ function geocodeVersions(): ToolContractVersion[] {
   ];
 }
 
+/* -------------------------------------------------------- get_usd_eur_rate */
+
+const FX_DESCRIPTION =
+  "The latest USD to EUR reference exchange rate published by the European Central Bank, with the date it was published for. Not a tradeable quote, and not intraday.";
+
+function fxVersions(): ToolContractVersion[] {
+  const input: ContractSchema = { type: "object", properties: {}, required: [] };
+  const common = {
+    summary: "The latest USD to EUR reference rate.",
+    description: FX_DESCRIPTION,
+    inputSchema: input,
+    optionalInputFields: [],
+    optionalOutputFields: [],
+    examples: [{ title: "Today's rate", arguments: {} }],
+    tier: "VERIFIED" as const,
+    sunsetAt: null,
+  };
+  return [
+    {
+      ...common,
+      version: 2,
+      semver: "2.0.0",
+      major: 2,
+      status: "ACTIVE",
+      outputSchema: { type: "object", properties: { rate: { type: "number" }, published_for: { type: "string", format: "date" } }, required: ["rate", "published_for"] },
+      changelog: "date is now published_for, the day the rate is for.",
+      publishedAt: daysAgo(40),
+      isCurrent: true,
+    },
+    {
+      ...common,
+      version: 1,
+      semver: "1.0.0",
+      major: 1,
+      status: "ACTIVE",
+      outputSchema: { type: "object", properties: { rate: { type: "number" }, date: { type: "string" } }, required: ["rate", "date"] },
+      changelog: "First version.",
+      publishedAt: daysAgo(200),
+      isCurrent: false,
+    },
+  ];
+}
+
 /* --------------------------------------------------------- everything else */
 
 /** A one-version contract for a catalogue tool with no story of its own. */
@@ -259,6 +304,7 @@ function plainVersions(name: string, description: string): ToolContractVersion[]
 export function demoContractVersions(toolId: string, name = "", description = ""): ToolContractVersion[] {
   if (toolId === WEATHER_TOOL_ID) return weatherVersions();
   if (toolId === GEOCODE_TOOL_ID) return geocodeVersions();
+  if (toolId === FX_TOOL_ID) return fxVersions();
   if (toolId === TIDES_TOOL_ID) return [];
   return plainVersions(name || "tool", description || name || "A tool.");
 }
@@ -332,6 +378,19 @@ const OPERATOR_TOOLS: readonly DemoOperatorTool[] = [
       { major: 1, eligibleBindings: 2, activeBindings: 2 },
     ],
     suggested: 2,
+  },
+  {
+    id: FX_TOOL_ID,
+    name: "get_usd_eur_rate",
+    category: "finance",
+    tags: ["fx"],
+    status: "ACTIVE",
+    replacementToolId: null,
+    majors: [
+      { major: 2, eligibleBindings: 2, activeBindings: 2 },
+      { major: 1, eligibleBindings: 1, activeBindings: 2 },
+    ],
+    suggested: null,
   },
   {
     id: TIDES_TOOL_ID,

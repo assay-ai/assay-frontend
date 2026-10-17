@@ -32,7 +32,8 @@ export const routes = {
     return Object.keys(params).length > 0 ? withQuery("/spend/calls", params) : "/spend/calls";
   },
   operatorCase: (proposalId: string) => withQuery("/operator/cases/view", { id: proposalId }),
-  operatorTool: (toolId: string) => withQuery("/operator/tools/view", { id: toolId }),
+  operatorTool: (toolId: string, fromRequest?: string) =>
+    withQuery("/operator/tools/view", fromRequest ? { id: toolId, from: fromRequest } : { id: toolId }),
   /** A provider's penalty case: the Penalties page with its "Why?" drawer open. */
   providerCase: (proposalId: string) => withQuery("/provider/penalties", { case: proposalId }),
   toolRequest: (requestId: string) => withQuery("/provider/tool-requests/view", { id: requestId }),

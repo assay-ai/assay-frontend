@@ -61,7 +61,17 @@ function json(value: unknown): string {
   return JSON.stringify(value ?? {}, null, 2);
 }
 
-const EMPTY_SCHEMA: ContractSchema = { type: "object", properties: {}, required: [] };
+/** A first version's starting point: one input and one output to rename, so the shape is never a blank page. */
+export const STARTER_INPUT: ContractSchema = {
+  type: "object",
+  properties: { query: { type: "string", description: "What to look up. Rename or replace this field." } },
+  required: ["query"],
+};
+export const STARTER_OUTPUT: ContractSchema = {
+  type: "object",
+  properties: { result: { type: "string", description: "The answer. Rename or replace this field." } },
+  required: ["result"],
+};
 
 /** The newest published version, by semver. */
 export function newestVersion(versions: readonly ToolContractVersion[]): ToolContractVersion | null {
@@ -72,7 +82,11 @@ export function newestVersion(versions: readonly ToolContractVersion[]): ToolCon
  * The form a tool opens with: its draft; else a new draft that starts from
  * the newest published version; else an empty first version.
  */
-export function formFor(tool: Pick<OperatorTool, "draft" | "versions">): ContractForm {
+export function formFor(
+  tool: Pick<OperatorTool, "draft" | "versions">,
+  /** A first version's text, from the tool request it came from. */
+  seed: { summary: string; description: string } | null = null,
+): ContractForm {
   const draft = tool.draft;
   if (draft) {
     return {
@@ -102,10 +116,10 @@ export function formFor(tool: Pick<OperatorTool, "draft" | "versions">): Contrac
     };
   }
   return {
-    summary: "",
-    description: "",
-    inputSchema: json(EMPTY_SCHEMA),
-    outputSchema: json(EMPTY_SCHEMA),
+    summary: seed?.summary.slice(0, 200) ?? "",
+    description: seed?.description ?? "",
+    inputSchema: json(STARTER_INPUT),
+    outputSchema: json(STARTER_OUTPUT),
     optionalInputFields: [],
     optionalOutputFields: [],
     examples: "[]",
@@ -322,14 +336,14 @@ export function majorRows(tool: Pick<OperatorTool, "majors" | "versions" | "curr
         active: m.activeBindings,
         readyText,
         makeCurrentVersion: !isCurrent && newestActive && newestActive.version !== tool.currentVersion ? newestActive : null,
-        // Only a major older than the default is deprecated: a newer one nobody gets by default is simply not made current.
-        deprecateVersion: !isCurrent && newestActive && current !== null && m.major < current.major ? newestActive : null,
+        // Any major agents don't get by default can be deprecated; the default moves first.
+        deprecateVersion: !isCurrent && newestActive ? newestActive : null,
         deprecateBlocked:
-          m.status !== "ACTIVE"
+          m.status !== "ACTIVE" || !isCurrent
             ? null
-            : isCurrent
-              ? `v${m.major} is the version agents get by default. Make another version the default first.`
-              : null,
+            : tool.versions.some((v) => v.major !== m.major && v.status === "ACTIVE")
+              ? `v${m.major} is the version agents get by default, so it can't be deprecated. Make another version the default first.`
+              : `v${m.major} is the version agents get by default, so it can't be deprecated. Publish a newer version and make it the default first.`,
         sunsetText: m.sunsetAt ? `${m.status === "RETIRED" ? "Stopped" : "Stops"} on ${sunsetDay(m.sunsetAt)} (UTC)` : null,
       };
     });
@@ -402,6 +416,14 @@ export function toolNameFrom(title: string): string {
     .replace(/_+$/g, "");
   const lettered = /^[a-z]/.test(name) ? name : `tool_${name}`.slice(0, 48);
   return lettered.length >= 2 ? lettered : "new_tool";
+}
+
+const STOP_WORDS = new Set(["a", "an", "the", "for", "of", "to", "in", "on", "by", "with", "and", "or", "from", "at"]);
+
+/** A short name to suggest: the first three words that carry meaning, "Air quality index for a city" → "air_quality_index". */
+export function suggestToolName(title: string): string {
+  const words = toolNameFrom(title).split("_").filter((w) => w && !STOP_WORDS.has(w));
+  return toolNameFrom(words.slice(0, 3).join(" ") || title);
 }
 
 export function toolNameProblem(name: string): string | null {

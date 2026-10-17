@@ -150,10 +150,11 @@ function ToolsScreen() {
         request={accepting}
         onClose={() => setAccepting(null)}
         onAccepted={(toolId) => {
+          const requestId = accepting?.id;
           setAccepting(null);
           void requests.refetch();
           void tools.refetch();
-          if (toolId) router.push(routes.operatorTool(toolId));
+          if (toolId) router.push(routes.operatorTool(toolId, requestId));
         }}
       />
     </>
