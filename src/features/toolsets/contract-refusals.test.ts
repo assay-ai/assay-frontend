@@ -4,7 +4,7 @@ import { attentionAction } from "@/features/buyer/attention-action";
 import { isProviderEvent } from "@/features/provider-home/inbox";
 import type { RefusedCall, RefusedProvider, ToolsetEntry } from "@/services/toolsets.service";
 
-import { contractNoticeAction, contractNoticeText, contractNoticeTitle, readContractNotice, replacementText } from "./contract-notices";
+import { allowMajorOf, contractNoticeAction, contractNoticeText, contractNoticeTitle, notificationTitle, readContractNotice, replacementText } from "./contract-notices";
 import { entryAfterFix, entryAlreadyFixed, mismatchOf, providerReason, refusedCallView, replacementOf, sourceText, type EntryFix } from "./refused";
 
 function call(over: Partial<RefusedCall> = {}): RefusedCall {
@@ -160,7 +160,14 @@ describe("tool_version notices", () => {
       "Version 1 of get_weather stops working on Feb 15, 2027 (UTC). Use get_weather v2.0.0 instead. Tool sets and URLs locked to v1 need to move before then; everything else moves by itself.",
     );
     expect(contractNoticeText("tool_version.retired", notice)).not.toMatch(/CONTRACT_VERSION_RETIRED/);
-    expect(attentionAction({ event: "tool_version.deprecated", payload })).toEqual({ label: "See the versions", href: "/explore?tool=t-weather" });
+    expect(attentionAction({ event: "tool_version.deprecated", payload })).toEqual({ label: "Check your tool sets", href: "/toolsets/mine" });
+    // A notice that names the tool set opens it, and offers "Allow v2".
+    const named = readContractNotice({ ...payload, toolsetId: "s-weather", toolsetName: "Weather and places" })!;
+    expect(contractNoticeAction(named)).toEqual({ label: "Open Weather and places", href: "/toolsets/mine?id=s-weather" });
+    expect(allowMajorOf(named)).toBe(2);
+    // An old deprecation read after its day says it in the past, never "stops" on a day gone by.
+    expect(contractNoticeTitle("tool_version.deprecated", notice, Date.parse("2027-06-01T00:00:00Z"))).toMatch(/stopped on/);
+    expect(notificationTitle({ event: "tool_version.deprecated", title: "server title", payload })).toBe(contractNoticeTitle("tool_version.deprecated", notice));
   });
 
   it("a provider is told to serve v2, and only provider notices reach the Inbox", () => {

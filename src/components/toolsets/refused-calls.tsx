@@ -9,13 +9,14 @@ import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import { includeProviderBody, maxPriceBody, verifiedOnlyBody } from "@/features/toolsets/access-result";
-import { defaultEntry, entryInput } from "@/features/toolsets/entry-rules";
+import { contractChipParts } from "@/features/contracts/entry-contract";
+import { defaultEntry, entryChipLabel, entryInput } from "@/features/toolsets/entry-rules";
 import { refusalText } from "@/features/toolsets/labels";
 import { entryAfterFix, entryAlreadyFixed, isEntryFix, refusedCallView, viaText, type EntryFix, type RefusalFix } from "@/features/toolsets/refused";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
-import { getRefusedCall, getToolset, listRefusedCalls, replaceToolsetEntries, type RefusedCall, type UpdateAgentAccessBody } from "@/services/toolsets.service";
+import { getRefusedCall, getToolset, listRefusedCalls, replaceToolsetEntries, type RefusedCall, type ToolsetEntry, type ToolsetEntryInput, type UpdateAgentAccessBody } from "@/services/toolsets.service";
 import { toast } from "@/utils/toast";
 
 import { toolsetKeys, useAgentAccess, useToolsets, useUpdateAccess } from "./use-toolsets";
@@ -92,7 +93,7 @@ export function RefusedCallsList({ agentId, openCallId }: { agentId?: string | n
                   <span aria-hidden="true">·</span>
                   <span>{viaText(call, setName(call.toolsetId))}</span>
                 </span>
-                <span className="text-body-13 text-02">{refusalText(call.refusalCode)}</span>
+                <span className="text-body-13 text-02">{refusedCallView(call).reason}</span>
               </div>
               <span className="shrink-0 font-mono text-mono-13 text-03">$0.00</span>
               <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
@@ -137,15 +138,29 @@ export function RefusedCallPanel({ callId, onClose }: { callId: string; onClose?
 }
 
 /** What a T3 fix did, said after it saved. */
-function entryFixDone(fix: EntryFix, toolName: string, setName: string): { title: string; description: string } {
+function entryFixDone(fix: EntryFix, toolName: string, setName: string, entry?: ToolsetEntry): { title: string; description: string } {
   switch (fix.kind) {
     case "drop-required-field":
-      return { title: `${setName} no longer requires ${fix.fields.join(", ")}`, description: `Any provider of ${toolName} can serve the next call.` };
+      return { title: `${setName} no longer requires ${fix.fields.join(", ")}`, description: remainingRules(toolName, entry) };
     case "allow-major":
       return { title: `${setName} now also uses ${fix.label.replace(/^Allow /, "")} of ${toolName}`, description: "The next call can go to providers that serve it." };
     case "move-major":
       return { title: `${setName} now uses ${fix.label.replace(/^Use /, "")} of ${toolName}`, description: "Check that your agent reads the new version's fields." };
   }
+}
+
+/**
+ * Who can serve the next call after a rule was removed: the rules the entry
+ * still has, and the agent's own limits, which a tool set fix never changes.
+ */
+export function remainingRules(toolName: string, entry: ToolsetEntry | undefined): string {
+  if (!entry) return `Providers of ${toolName} that pass this agent's limits can serve the next call.`;
+  const rules: string[] = [];
+  if (entry.providerMode !== "BEST" || entry.minTier || entry.maxPrice) rules.push(entryChipLabel(entry).replace(/^Providers: /, ""));
+  rules.push(...contractChipParts(entry, null));
+  return rules.length > 0
+    ? `Providers of ${toolName} that pass its other rules (${rules.join(" · ")}) and this agent's limits can serve the next call.`
+    : `Providers of ${toolName} that pass this agent's limits can serve the next call.`;
 }
 
 /** The tool is no longer in the tool set; `message` is the set's name. */
@@ -225,28 +240,9 @@ export function RefusedCallCard({ call, onClose }: { call: RefusedCall; onClose?
         toast.success("Already changed", { description: `${set.name} already reads that way. The next call uses it.` });
         return;
       }
-      const said = entryFixDone(fix, call.toolName ?? "the tool", set.name);
-      toast.success(said.title, {
-        description: said.description,
-        duration: 8000,
-        action: {
-          label: "Undo",
-          onClick: () =>
-            void replaceToolsetEntries(set.id, before).then(
-              (back) => {
-                queryClient.setQueryData(toolsetKeys.one(set.id), back);
-                void queryClient.invalidateQueries({ queryKey: toolsetKeys.all });
-                setDone((d) => {
-                  const next = new Set(d);
-                  next.delete(key);
-                  return next;
-                });
-                toast.success("Undone");
-              },
-              () => toast.error("The change could not be undone. Open the tool set to change it back."),
-            ),
-        },
-      });
+      const said = entryFixDone(fix, call.toolName ?? "the tool", set.name, set.entries.find((e) => e.toolId === fix.toolId));
+      setUndos((u) => ({ ...u, [key]: { setId: set.id, before } }));
+      toast.success(said.title, { description: said.description, duration: 8000, action: { label: "Undo", onClick: () => undo(key) } });
     },
     onError: (error) => {
       if (error instanceof EntryGone) {
@@ -262,6 +258,29 @@ export function RefusedCallCard({ call, onClose }: { call: RefusedCall; onClose?
   const update = useUpdateAccess(call.agentId);
   const setName = call.toolsetId ? toolsets.data?.items.find((t) => t.id === call.toolsetId)?.name ?? null : null;
   const [done, setDone] = React.useState<Set<string>>(new Set());
+  // What each tool set fix replaced, so "Undo" stays next to "Done", not only in the toast.
+  const [undos, setUndos] = React.useState<Record<string, { setId: string; before: ToolsetEntryInput[] }>>({});
+  const undo = (key: string) => {
+    const saved = undos[key];
+    if (!saved) return;
+    void replaceToolsetEntries(saved.setId, saved.before).then(
+      (back) => {
+        queryClient.setQueryData(toolsetKeys.one(saved.setId), back);
+        void queryClient.invalidateQueries({ queryKey: toolsetKeys.all });
+        setDone((d) => {
+          const next = new Set(d);
+          next.delete(key);
+          return next;
+        });
+        setUndos((u) => {
+          const { [key]: _gone, ...rest } = u;
+          return rest;
+        });
+        toast.success("Undone");
+      },
+      () => toast.error("The change could not be undone. Open the tool set to change it back."),
+    );
+  };
 
   const apply = (key: string, fix: RefusalFix, providerName?: string) => {
     if (!access.data) return;
@@ -305,7 +324,18 @@ export function RefusedCallCard({ call, onClose }: { call: RefusedCall; onClose?
       );
     }
     if (isEntryFix(fix)) {
-      if (done.has(key)) return <span className="text-label-13 text-success-700">Done</span>;
+      if (done.has(key)) {
+        return (
+          <span className="inline-flex items-center gap-2">
+            <span className="text-label-13 text-success-700">Done</span>
+            {undos[key] ? (
+              <Button size="sm" variant="ghost" onClick={() => undo(key)}>
+                Undo
+              </Button>
+            ) : null}
+          </span>
+        );
+      }
       return (
         <Button
           size="sm"
