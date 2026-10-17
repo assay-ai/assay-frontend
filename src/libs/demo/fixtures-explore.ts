@@ -492,6 +492,22 @@ export function demoOfferPriceMinor(toolId: string, providerId: string): string 
   return offer ? usd(offer.price).amount : null;
 }
 
+/** The catalogue as the tool-set fixtures read it: each tool with its name, pricing and offers. */
+export function demoToolOffers(): readonly {
+  readonly id: string;
+  readonly name: string;
+  readonly pricingMode: string | null;
+  readonly offers: readonly { readonly providerId: string; readonly price: string }[];
+}[] {
+  return TOOLS;
+}
+
+/** A provider's legal name and tier, for the tool-set fixtures; null for an id the market does not hold. */
+export function demoProvider(providerId: string): { legalName: string; tier: "NEW" | "ESTABLISHED" | "TRUSTED" } | null {
+  const provider = PROVIDERS.find((p) => p.providerId === providerId);
+  return provider ? { legalName: provider.legalName, tier: provider.tier } : null;
+}
+
 /** Every offer a provider has listed, as `(tool, price)` pairs. */
 function offersOf(providerId: string): { tool: DemoTool; price: CatalogueMoney }[] {
   return TOOLS.flatMap((tool) =>
