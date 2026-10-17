@@ -10,6 +10,7 @@ import type {
   ToolContractVersion,
   ToolVersionBrief,
   ToolVersionList,
+  ToolVersionProvider,
 } from "@/interfaces/contracts";
 
 import { DEMO_NOW_MS } from "./demo-clock";
@@ -331,12 +332,50 @@ export function demoVersionFields(toolId: string, name: string, description: str
     version: current?.semver ?? null,
     versions: versions.map(briefOf),
     deprecatedMajors: [...new Set(versions.filter((v) => v.status === "DEPRECATED").map((v) => v.major))].sort((a, b) => a - b),
+    // What replaces an old major (as the API names it): this tool at its current major.
+    ...replacementOf(versions, toolId, name),
   };
 }
 
-export function demoVersionList(toolId: string, name: string, description = ""): ToolVersionList {
+function replacementOf(versions: readonly ToolContractVersion[], toolId: string, name: string) {
+  const current = versions.find((v) => v.isCurrent) ?? null;
+  const old = versions.some((v) => (v.status === "DEPRECATED" || v.status === "RETIRED") && current && v.major < current.major);
+  return old && current
+    ? { replacementToolId: toolId as string | null, replacementName: name as string | null, replacementMajor: current.major, replacementVersion: current.semver }
+    : { replacementToolId: null, replacementName: null, replacementMajor: null, replacementVersion: null };
+}
+
+/**
+ * What each listed provider of get_weather declares — the same story the
+ * operator counts (v1: 3 providers, v2: 2) and the refused calls tell:
+ * Helios accepts units but has no uv_index, Northwind has neither and serves
+ * only v1, Quanta returns uv_index.
+ */
+const WEATHER_PROVIDERS: Readonly<Record<string, Omit<ToolVersionProvider, "providerId" | "legalName">>> = {
+  "9c1d4f60-3a77-4c18-9b02-6e5a1f2d8b41": { servedMajors: [1, 2], providesOutputFields: [], supportsInputFields: ["units"] },
+  "b7e04c25-9d13-4a6f-bc80-1e5f3a7d9c62": { servedMajors: [1], providesOutputFields: [], supportsInputFields: [] },
+  "17d6c0a4-8b39-4e52-a1f7-59c2b8e3d07f": { servedMajors: [1, 2], providesOutputFields: ["uv_index"], supportsInputFields: [] },
+};
+
+export function demoVersionList(
+  toolId: string,
+  name: string,
+  description = "",
+  /** The tool's listed providers, from the catalogue. */
+  offers: readonly { providerId: string; legalName: string }[] = [],
+): ToolVersionList {
   const versions = demoContractVersions(toolId, name, description);
-  return { toolId, name, currentVersion: versions.find((v) => v.isCurrent)?.semver ?? null, versions };
+  const current = versions.find((v) => v.isCurrent) ?? null;
+  const providers = offers
+    .map((o): ToolVersionProvider => ({
+      providerId: o.providerId,
+      legalName: o.legalName,
+      ...(toolId === WEATHER_TOOL_ID && WEATHER_PROVIDERS[o.providerId]
+        ? WEATHER_PROVIDERS[o.providerId]!
+        : { servedMajors: current ? [current.major] : [1], providesOutputFields: [], supportsInputFields: [] }),
+    }))
+    .sort((a, b) => a.legalName.localeCompare(b.legalName));
+  return { toolId, name, currentVersion: current?.semver ?? null, versions, providers };
 }
 
 /* ------------------------------------------------------- operator editor */

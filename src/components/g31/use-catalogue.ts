@@ -125,6 +125,8 @@ export interface ToolRow {
   versions?: ToolVersionBrief[];
   /** T3: majors still serving until their sunset. */
   deprecatedMajors?: number[];
+  replacementName?: string | null;
+  replacementVersion?: string | null;
   listed: Money | null;
   charged: Money | null;
 }
@@ -234,6 +236,8 @@ export function useCatalogue() {
         version: row.version,
         versions: row.versions,
         deprecatedMajors: row.deprecatedMajors,
+        replacementName: row.replacementName ?? null,
+        replacementVersion: row.replacementVersion ?? null,
         listed,
         charged,
       };
