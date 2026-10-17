@@ -328,7 +328,7 @@ export function majorRows(tool: Pick<OperatorTool, "majors" | "versions" | "curr
           m.status !== "ACTIVE"
             ? null
             : isCurrent
-              ? `v${m.major} is the version agents get by default. Make another version current first.`
+              ? `v${m.major} is the version agents get by default. Make another version the default first.`
               : null,
         sunsetText: m.sunsetAt ? `${m.status === "RETIRED" ? "Stopped" : "Stops"} on ${sunsetDay(m.sunsetAt)} (UTC)` : null,
       };
