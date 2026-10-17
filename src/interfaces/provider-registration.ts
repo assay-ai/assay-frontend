@@ -152,8 +152,6 @@ export interface ConnectivityCheckResult {
   /** An `EGRESS_*` code, when there was one. */
   failureCode: string | null;
   detail: string | null;
-  /** The addresses to allowlist, as published at the time of this check. */
-  egressIps: string[];
   checkedAt: string;
 }
 
@@ -176,8 +174,6 @@ export interface ProviderRegistrationState {
   currentStep: number;
   totalSteps: number;
   terms: ProviderTermsSummary;
-  /** Empty is a real state: this deployment is not behind fixed egress addresses. */
-  egressIps: string[];
   /** The latest probe of any endpoint this provider has declared. */
   lastConnectivityCheck: ConnectivityCheckResult | null;
 }

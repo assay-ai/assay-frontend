@@ -1,5 +1,7 @@
 import type {
   BindingTestReport,
+  CredentialHeaderInput,
+  CredentialSetSummary,
   CursorPage,
   ListToolBindingsQuery,
   PausedToolBinding,
@@ -170,4 +172,28 @@ export function pauseToolBinding(
  */
 export function resumeToolBinding(id: string): Promise<PausedToolBinding> {
   return api.post<PausedToolBinding>(`/providers/me/tool-bindings/${id}/resume`);
+}
+
+/** `GET /providers/me/tool-bindings/{id}/credentials` — which headers are stored per origin. Values are never returned. */
+export function listBindingCredentials(id: string): Promise<CredentialSetSummary[]> {
+  return api.get<CredentialSetSummary[]>(`/providers/me/tool-bindings/${id}/credentials`);
+}
+
+/** `PUT .../credentials` — replaces every stored header for `origin`. */
+export function putBindingCredentials(
+  id: string,
+  origin: string,
+  headers: CredentialHeaderInput[]
+): Promise<CredentialSetSummary> {
+  return api.put<CredentialSetSummary>(`/providers/me/tool-bindings/${id}/credentials`, {
+    origin,
+    headers,
+  });
+}
+
+/** `DELETE .../credentials?origin=` — forget the stored headers for one origin. */
+export function deleteBindingCredentials(id: string, origin: string): Promise<void> {
+  return api.delete<void>(
+    `/providers/me/tool-bindings/${id}/credentials?origin=${encodeURIComponent(origin)}`
+  );
 }

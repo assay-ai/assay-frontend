@@ -496,13 +496,6 @@ function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
         ) : checkedThis ? (
           <Outcome tone="warning" icon={<TriangleAlert />}>
             We could not reach it.
-            {setup.egressIps.length > 0 ? (
-              <>
-                {" "}
-                If you use an allowlist, add our addresses:{" "}
-                <span className="font-mono text-mono-12">{setup.egressIps.join(", ")}</span>.
-              </>
-            ) : null}
           </Outcome>
         ) : null}
         {setup.checkError ? (
