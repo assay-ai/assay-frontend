@@ -46,6 +46,21 @@ export function ToolContractSection({
   className?: string;
 }) {
   const query = useToolVersions(toolId, { public: publicPage });
+  return <ToolContractView query={query} publicPage={publicPage} compact={compact} className={className} />;
+}
+
+/** The section for a given state of the versions read (exported for tests: every state renders). */
+export function ToolContractView({
+  query,
+  publicPage = false,
+  compact = false,
+  className,
+}: {
+  query: Pick<ReturnType<typeof useToolVersions>, "isPending" | "isError" | "error" | "data" | "refetch">;
+  publicPage?: boolean;
+  compact?: boolean;
+  className?: string;
+}) {
   const [all, setAll] = React.useState(false);
   const Heading = compact ? "h3" : "h2";
   const frame = (children: React.ReactNode) => (
@@ -71,7 +86,7 @@ export function ToolContractSection({
       />,
     );
   }
-  const versions = query.data.versions ?? [];
+  const versions = query.data?.versions ?? [];
   if (versions.length === 0) return frame(<p className="text-body-13 text-02">No version is published yet.</p>);
 
   const current = versions.find((v) => v.isCurrent) ?? versions[0]!;

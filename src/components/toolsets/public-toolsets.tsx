@@ -12,6 +12,8 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { usePublicTools } from "@/features/explorer/use-public-explorer";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
 import { buildMcpUrl, toolDisplay } from "@/features/connect/mcp-url";
+import { contractChipParts, currentMajorOf, entryContractWarning } from "@/features/contracts/entry-contract";
+import type { ToolVersionBrief } from "@/interfaces/contracts";
 import { humanToolName, ruleDetails } from "@/features/toolsets/sharing";
 import { lockLabel, MAKE_MY_OWN_HINT, MAKE_MY_OWN_LABEL, PROVIDER_MODE_LABELS } from "@/features/toolsets/labels";
 import { activeUsersText, badgeLabel, priceOfTool, priceRangeText, statRows, trustFacts, type CatalogueToolsetFilters } from "@/features/toolsets/public";
@@ -413,6 +415,8 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
                   {e.providerMode === "BEST" ? PROVIDER_MODE_LABELS.BEST : `${PROVIDER_MODE_LABELS[e.providerMode as "ONLY" | "EXCLUDE"] ?? "Chosen providers"}: ${e.providerCount}`}
                   {tool ? ` · ${tool.providerCount} provider${tool.providerCount === 1 ? "" : "s"}` : ""}
                   {e.minTier ? " · only verified providers" : ""}
+                  {contractChipParts(e, tool?.versions ? currentMajorOf(tool.versions) : null).map((part) => ` · ${part}`)}
+                  {tool?.versions ? <EntryVersionWarning range={e.toolVersionRange} versions={tool.versions} /> : null}
                 </span>
               </li>
             );
@@ -588,5 +592,16 @@ export function PublicHandleView() {
       )}
       <ReportSheet open={reporting} onOpenChange={setReporting} label={`@${data.handle}`} target={{ handle: data.handle }} />
     </>,
+  );
+}
+
+/** On a public entry: its versions are all on their way out (a deprecated or retired major). */
+function EntryVersionWarning({ range, versions }: { range: string | null | undefined; versions: readonly ToolVersionBrief[] }) {
+  const warning = entryContractWarning(range, versions);
+  if (!warning) return null;
+  return (
+    <Chip tone={warning.tone} className="whitespace-normal">
+      {warning.text}
+    </Chip>
   );
 }
