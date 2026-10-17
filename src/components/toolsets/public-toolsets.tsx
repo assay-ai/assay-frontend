@@ -5,15 +5,15 @@ import Link from "next/link";
 import * as React from "react";
 
 import { useSignedIn } from "@/components/explorer/start-free";
-import { PageState } from "@/components/patterns/page-state";
+import { PageState, Skeleton } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { usePublicTools } from "@/features/explorer/use-public-explorer";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
-import { buildMcpUrl } from "@/features/connect/mcp-url";
+import { buildMcpUrl, toolDisplay } from "@/features/connect/mcp-url";
 import { lockLabel, MAKE_MY_OWN_HINT, MAKE_MY_OWN_LABEL, PROVIDER_MODE_LABELS } from "@/features/toolsets/labels";
-import { activeUsersText, badgeLabel, statRows, trustFacts, type CatalogueToolsetFilters } from "@/features/toolsets/public";
+import { activeUsersText, badgeLabel, priceOfTool, priceRangeText, statRows, trustFacts, type CatalogueToolsetFilters } from "@/features/toolsets/public";
 import { ApiError } from "@/libs/ApiClient";
 import { demoEnabled } from "@/libs/demo/demo-api";
 import { loginHref } from "@/libs/login-redirect";
@@ -24,8 +24,16 @@ import type { PublicTool } from "@/services/public-explorer.service";
 import { cn } from "@/utils";
 
 import { ConnectPanel } from "./connect-panel";
-import { Chip, CopyLine, CopyToolsetSheet, FigureGrid, ReportSheet } from "./toolset-bits";
-import { usePublicCategories, usePublicHandle, usePublicToolset, usePublicToolsets, usePublicToolsetVersions, useToolsetByToken } from "./use-toolsets";
+import { Chip, CopyButton, CopyLine, CopyToolsetSheet, DiffView, FigureGrid, ReportSheet } from "./toolset-bits";
+import {
+  usePublicCategories,
+  usePublicHandle,
+  usePublicToolset,
+  usePublicToolsets,
+  usePublicToolsetVersion,
+  usePublicToolsetVersions,
+  useToolsetByToken,
+} from "./use-toolsets";
 
 /**
  * Public tool sets (design spec §7.10 "Catalogue"): the catalogue's Tool sets
@@ -61,6 +69,7 @@ export function ToolsetCard({ card, catalogue }: { card: PublicToolsetCard; cata
     <li>
       <Link
         href={toolsetPageHref(card)}
+        aria-label={`${card.name}, @${card.handle}/${card.slug}, ${badgeLabel(card.badge)}, ${card.toolCount} tool${card.toolCount === 1 ? "" : "s"}, ${activeUsersText(card.activeUsers)}`}
         className="group flex h-full min-w-0 flex-col gap-2 rounded-xl border border-01 bg-01 p-4 hover:border-02 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
         data-testid="toolset-card"
       >
@@ -241,7 +250,7 @@ export function PublicToolsetView() {
     return () => window.removeEventListener("hashchange", read);
   }, []);
   const byName = usePublicToolset(params?.token ? null : params?.handle ?? null, params?.token ? null : params?.slug ?? null);
-  const byToken = useToolsetByToken(params?.token ?? null, params?.v ?? null);
+  const byToken = useToolsetByToken(params?.token ?? null, params?.v ?? null, params?.from ?? null);
   const query = params?.token ? byToken : byName;
 
   const frame = (children: React.ReactNode) => <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-4 py-6 tablet:px-7 tablet:py-8">{children}</div>;
@@ -310,7 +319,7 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
         </div>
         <p className="text-body-13 text-02">
           by{" "}
-          <Link href={`/toolsets/handle?handle=${encodeURIComponent(page.handle)}`} className="font-mono text-primary-600 hover:underline">
+          <Link href={`/toolsets/handle?handle=${encodeURIComponent(page.handle)}`} className="inline-flex min-h-10 items-center font-mono text-primary-600 hover:underline tablet:min-h-0">
             @{page.handle}
           </Link>{" "}
           · v{shownVersion}
@@ -339,7 +348,7 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
         </p>
       ) : null}
 
-      {from && from < page.version ? <UpdateBanner page={page} from={from} versions={versions.data?.versions ?? []} /> : null}
+      {from && from < page.version ? <UpdateBanner page={page} from={from} token={token} /> : null}
 
       <section aria-label="Before you connect" className="flex flex-col gap-2 rounded-xl border border-01 bg-01 p-4" data-testid="trust-facts">
         <h2 className="text-label-13 text-01">Before you connect</h2>
@@ -356,7 +365,7 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
           {facts.notReviewed.length > 0 ? (
             <li className="flex items-start gap-1.5 text-warning-700">
               <ShieldAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-              Not reviewed: {facts.notReviewed.join(", ")} {facts.notReviewed.length === 1 ? "is" : "are"} one maker&apos;s own API, not checked by Assay.
+              {`Not reviewed: ${facts.notReviewed.join(", ")} ${facts.notReviewed.length === 1 ? "is" : "are"} one maker's own API, not checked by Assay.`}
             </li>
           ) : null}
           {facts.routesToPublisher ? (
@@ -388,11 +397,18 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
         <ul className="flex flex-col divide-y divide-01">
           {page.entries.map((e) => {
             const tool = byId.get(e.toolId);
+            const shown = toolDisplay({ name: e.toolName, toolId: e.toolId });
+            const price = tool ? priceRangeText([tool]) : null;
             return (
               <li key={e.toolId} className="flex flex-col gap-0.5 py-2 tablet:flex-row tablet:items-center tablet:gap-3">
-                <span className="min-w-0 flex-1 font-mono text-mono-13 text-01 [overflow-wrap:anywhere]">{e.toolName}</span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="font-mono text-mono-13 text-01 [overflow-wrap:anywhere]">{shown.name}</span>
+                  {shown.title ? <span className="text-body-xs text-03">{shown.title}</span> : null}
+                </span>
                 <span className="flex flex-wrap items-center gap-1.5 text-body-xs text-02">
                   {e.removed ? <Chip tone="danger">Removed</Chip> : null}
+                  {e.notReviewed ? <Chip tone="warning">Not reviewed</Chip> : null}
+                  {price ? <span className="text-01">{price} · </span> : null}
                   {e.providerMode === "BEST" ? PROVIDER_MODE_LABELS.BEST : `${PROVIDER_MODE_LABELS[e.providerMode as "ONLY" | "EXCLUDE"] ?? "Chosen providers"}: ${e.providerCount}`}
                   {tool ? ` · ${tool.providerCount} provider${tool.providerCount === 1 ? "" : "s"}` : ""}
                   {e.minTier ? " · only verified providers" : ""}
@@ -427,12 +443,10 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
                     {x.version === page.version ? <Chip tone="primary">Newest</Chip> : null}
                   </span>
                   <span className="text-body-13 text-02">{x.changelog ?? "No notes."}</span>
-                  <details>
-                    <summary className="min-h-10 cursor-pointer content-center text-label-13 text-primary-600 tablet:min-h-0">{lockLabel(x.version)}</summary>
-                    <div className="pt-2">
-                      <CopyLine value={`${latestUrl}@${x.version}`} label={`Copy v${x.version} URL`} />
-                    </div>
-                  </details>
+                  <span className="flex flex-wrap items-center gap-2">
+                    <CopyButton value={`${latestUrl}@${x.version}`} label={`Copy v${x.version} URL`} />
+                    <span className="text-body-xs text-03">{lockLabel(x.version)}</span>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -441,13 +455,10 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
       )}
 
       <section className="flex flex-col gap-2 rounded-xl border border-01 bg-01 p-4 tablet:flex-row tablet:items-center" data-testid="public-actions">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-label-13 text-01">{MAKE_MY_OWN_LABEL}</span>
-          <span className="text-body-xs text-03">{MAKE_MY_OWN_HINT}</span>
-        </div>
+        <p className="min-w-0 flex-1 text-body-13 text-02">Want different provider rules? {MAKE_MY_OWN_HINT}</p>
         <div className="flex flex-wrap gap-2">
           {signedIn ? (
-            <Button variant="secondary" icon={<CopyIcon />} onClick={() => setCopying(true)} disabled={!page.id}>
+            <Button variant="secondary" icon={<CopyIcon />} onClick={() => setCopying(true)}>
               {MAKE_MY_OWN_LABEL}
             </Button>
           ) : (
@@ -464,34 +475,32 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
       <CopyToolsetSheet
         open={copying}
         onOpenChange={setCopying}
-        source={{ id: page.id ?? null, name: page.name, handle: page.handle, slug: page.slug, version: shownVersion, unlistedToken: token }}
+        source={{ id: page.id, name: page.name, handle: page.handle, slug: page.slug, version: shownVersion, unlistedToken: token, entries: page.entries }}
       />
       <ReportSheet
         open={reporting}
         onOpenChange={setReporting}
         label={`@${page.handle}/${page.slug}`}
-        target={page.id ? { toolsetId: page.id, ...(token ? { unlistedToken: token } : {}) } : { handle: page.handle }}
+        target={{ toolsetId: page.id, ...(token ? { unlistedToken: token } : {}) }}
       />
     </>
   );
 }
 
 /** Opened from the update alert: what changed since the version in use, and the new URL. */
-function UpdateBanner({ page, from, versions }: { page: PublicToolsetPage; from: number; versions: { version: number; changelog: string | null }[] }) {
-  const newer = versions.filter((x) => x.version > from && x.version <= page.version);
+function UpdateBanner({ page, from, token }: { page: PublicToolsetPage; from: number; token: string | null }) {
+  const detail = usePublicToolsetVersion(token ? null : page.handle, token ? null : page.slug, page.version, from);
+  const tools = usePublicTools();
+  const diff = page.diff ?? detail.data?.diff ?? null;
   return (
     <section className="flex flex-col gap-2 rounded-xl border border-primary-20 bg-primary-10 p-4" data-testid="update-banner">
       <h2 className="text-label-md text-01">
         v{page.version} is out. You use v{from}.
       </h2>
-      {newer.length > 0 ? (
-        <ul className="flex flex-col gap-1 text-body-13 text-02">
-          {newer.map((x) => (
-            <li key={x.version}>
-              <span className="text-label-13 text-01">v{x.version}:</span> {x.changelog ?? "No notes."}
-            </li>
-          ))}
-        </ul>
+      {diff ? (
+        <DiffView diff={diff} priceOf={(name) => priceOfTool(tools.data?.tools ?? [], name)} />
+      ) : detail.isPending && !token ? (
+        <Skeleton className="h-12 w-full" />
       ) : page.changelog ? (
         <p className="text-body-13 text-02">{page.changelog}</p>
       ) : null}

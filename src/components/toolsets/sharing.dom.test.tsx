@@ -84,7 +84,7 @@ function inSheet(node: React.ReactNode) {
 }
 
 describe("the Share dialog", () => {
-  it("first time: asks for the public name inline, publishes v1 with a filled-in changelog, explains Draft and versions", () => {
+  it("first time: starts at Only my team and publishes nothing until a choice; changelog filled in; Draft and versions explained", () => {
     const out = text(
       render(inSheet(<ShareBody set={toolset()} onDone={() => undefined} />), (c) => c.setQueryData(toolsetKeys.handle, { handle: null, status: null, lockedAt: null, canChange: true })),
     );
@@ -92,9 +92,11 @@ describe("the Share dialog", () => {
     expect(out).toContain("Only my team");
     expect(out).toContain("Anyone with the link");
     expect(out).toContain("Listed in the catalogue");
-    expect(out).toContain("Your public name");
-    expect(out).toContain("Claim the name and share v1");
-    expect(out).toContain("First version: 2 tools.");
+    expect(out).toContain("Only my team · now");
+    expect(out).not.toContain("Your public name");
+    expect(out).toContain("Choose who can use it above. Nothing is shared until you do.");
+    expect(out).toContain("Save as v1");
+    expect(out).toContain("First version: 2 tools: search_web and summarize_document.");
     expect(out).toContain("Changes reach your agents immediately.");
     expect(out).toContain("Versions are frozen copies");
     expect(out).not.toMatch(/UNLISTED|PUBLIC|PRIVATE|handle|toolset/);
@@ -169,6 +171,7 @@ const CARD = {
   toolIds: ["t1", "t2"],
   activeUsers: { value: null, display: "Fewer than 5" },
   mcpUrls: { latest: `${HOST}/@geodesk/travel-planner`, pinned: `${HOST}/@geodesk/travel-planner@1`, recommended: `${HOST}/@geodesk/travel-planner@1` },
+  routesToPublisher: false,
 };
 
 describe("public tool sets", () => {
@@ -187,12 +190,13 @@ describe("public tool sets", () => {
       changelog: "First version: 2 tools.",
       publishedAt: "2026-10-13T00:00:00.000Z",
       entries: [
-        { toolId: "t1", toolName: "get_token_market", providerMode: "BEST", providerCount: 0, minTier: null, onEmpty: "FAIL", removed: false },
-        { toolId: "t2", toolName: "Market quote", providerMode: "BEST", providerCount: 0, minTier: null, onEmpty: "FAIL", removed: false },
+        { toolId: "t1", toolName: "get_token_market", providerMode: "BEST", providerCount: 0, minTier: null, onEmpty: "FAIL", removed: false, notReviewed: false },
+        { toolId: "t2", toolName: "Market quote", providerMode: "BEST", providerCount: 0, minTier: null, onEmpty: "FAIL", removed: false, notReviewed: false },
       ],
       stats: { weekStart: "2026-10-12", activeUsers: { value: null, display: "Fewer than 5" }, agents: null, calls30d: null, copies: { value: null, display: "Fewer than 5" }, trend: null, onLatestVersionPercent: null },
       forkedFrom: null,
       sharingEndsAt: null,
+      notReviewed: false,
       routesToPublisher: true,
     };
     const html = render(<ToolsetPublicBody page={page} token={null} v={null} from={null} />, (c) => {
@@ -200,7 +204,7 @@ describe("public tool sets", () => {
       c.setQueryData(toolsetKeys.publicVersions("geodesk", "travel-planner"), { versions: [{ version: 1, publishedAt: page.publishedAt, changelog: page.changelog, toolCount: 2 }] });
     });
     const out = text(html);
-    const order = ["Before you connect", "Connect Travel planner", "Tools", "Who uses it", "Versions", "Make my own version", "Report"].map((s) => out.indexOf(s));
+    const order = ["Before you connect", "Connect Travel planner", "Tools", "Who uses it", "Versions", "Change rules. Doesn't get updates.", "Report"].map((s) => out.indexOf(s));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(out).toContain("No backup provider for Market quote");
@@ -223,19 +227,25 @@ describe("public tool sets", () => {
       stats: { weekStart: null, activeUsers: null, agents: null, calls30d: null, copies: null, trend: null, onLatestVersionPercent: null },
       forkedFrom: null,
       sharingEndsAt: null,
+      notReviewed: false,
     };
     const out = text(
-      render(<ToolsetPublicBody page={page} token={null} v={3} from={2} />, (c) =>
+      render(<ToolsetPublicBody page={page} token={null} v={3} from={2} />, (c) => {
         c.setQueryData(toolsetKeys.publicVersions("geodesk", "travel-planner"), {
           versions: [
             { version: 3, publishedAt: page.publishedAt, changelog: "Added get_usd_eur_rate.", toolCount: 3 },
             { version: 2, publishedAt: page.publishedAt, changelog: "Earlier.", toolCount: 2 },
           ],
-        }),
-      ),
+        });
+        c.setQueryData(toolsetKeys.publicVersion("geodesk", "travel-planner", 3, 2), {
+          diff: { from: 2, to: 3, added: ["get_usd_eur_rate"], removed: [], rulesChanged: ["get_token_market"], settingsChanged: [] },
+        });
+        c.setQueryData(["public", "tools"], { tools: [{ ...CATALOGUE[0]!, id: "fx", name: "get_usd_eur_rate", fromPrice: usd("800"), price: usd("1000") }] });
+      }),
     );
     expect(out).toContain("v3 is out. You use v2.");
-    expect(out).toContain("v3: Added get_usd_eur_rate.");
+    expect(out).toContain("get_usd_eur_rate added · $0.0008–$0.001 a call");
+    expect(out).toContain("get_token_market provider rules changed");
     expect(out).toContain("Copy v3 URL");
     expect(out).toContain("Your app still uses v2 until you replace it.");
     expect(out).toContain("No figures yet.");
@@ -251,15 +261,17 @@ describe("public tool sets", () => {
     };
     const out = text(render(<CopyExclusions result={result} source={{ handle: "marketkit" }} />));
     expect(out).toContain("Desk tools is yours now, with 2 tools. 2 tools were left out:");
-    expect(out).toContain("cobalt__news_search one maker's link-only tool");
-    expect(out).toContain("transcribe_audio removed by its maker");
-    expect(out).toContain("1 tool is link-only from @marketkit. Keep @marketkit's link connected to use it.");
+    // The maker is the tool's own (cobalt), not the tool set's publisher.
+    expect(out).toContain("cobalt__news_search is @cobalt's link-only tool");
+    expect(out).toContain("transcribe_audio was removed by its maker");
+    expect(out).toContain("Keep @cobalt's link connected to use it.");
+    expect(out).not.toContain("@marketkit");
   });
 
   it("the diff view and k-hidden figures", () => {
     const diff = text(render(<DiffView diff={{ added: ["a_b"], removed: ["c_d"], rulesChanged: [], settingsChanged: ["pinnedTools"] }} />));
-    expect(diff).toContain("Added a_b");
-    expect(diff).toContain("Removed c_d");
+    expect(diff).toContain("a_b added");
+    expect(diff).toContain("c_d removed");
     expect(diff).toContain("Changed always-loaded tools");
     const grid = text(render(<FigureGrid rows={statRows({ activeUsers: { value: null, display: "Fewer than 5" }, agents: null, calls30d: null, copies: { value: null, display: "Fewer than 5" }, trend: null, onLatestVersionPercent: null })} weekStart="2026-10-12" />));
     expect(grid).toContain("Active users (30 days) Fewer than 5");
@@ -296,7 +308,7 @@ describe("Servers in use: over budget and Update available", () => {
           endpointKind: "TOOLSET",
           toolsetId: "ts9",
           name: "Crypto research desk",
-          serverName: "crypto-re",
+          serverName: "crypto",
           client: "cursor",
           toolCount: 6,
           estimatedTokens: 1400,
@@ -331,8 +343,9 @@ describe("Servers in use: over budget and Update available", () => {
     };
     const out = text(render(<ServersInUse agentId="a1" agentName="research-bot" />, (c) => c.setQueryData(toolsetKeys.servers("a1"), data)));
     expect(out).toContain("The servers that show every tool show 27 between them, more than 25.");
-    expect(out).toContain("Switch “Everything” to search");
-    expect(out).toContain("Update available");
+    expect(out).toContain("The biggest is “Everything, all tools listed” (in your app: assay), with 21 tools.");
+    expect(out).toContain("Switch it to search");
+    expect(out).toContain("Update available · your app uses v2");
     expect(out).toContain("@marketkit/crypto-research · locked to v2");
     expect(out).toContain("· search");
   });

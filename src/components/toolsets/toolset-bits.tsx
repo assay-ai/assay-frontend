@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MAKE_MY_OWN_HINT, MAKE_MY_OWN_LABEL } from "@/features/toolsets/labels";
 import { type StatRow } from "@/features/toolsets/public";
 import { diffLines } from "@/features/toolsets/sharing";
+import type { PublicToolsetEntry } from "@/services/public-toolsets.service";
 import { copyToolset, createReport, type CopyResult, type ToolsetDiff } from "@/services/toolsets.service";
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
@@ -78,22 +79,73 @@ export function CopyLine({ value, label = "Copy", onCopied, testId }: { value: s
   );
 }
 
-/** What changed between two versions, one line per kind, in plain words. */
-export function DiffView({ diff, empty = "Nothing changed in the tools or their rules." }: { diff: ToolsetDiff; empty?: string }) {
-  const lines = diffLines(diff);
-  if (lines.length === 0) return <p className="text-body-13 text-02">{empty}</p>;
+/** One button that copies a value and says so; the value is in its title for selecting by hand. */
+export function CopyButton({ value, label, className }: { value: string; label: string; className?: string }) {
+  const [copied, setCopied] = React.useState(false);
+  React.useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(t);
+  }, [copied]);
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="secondary"
+      title={value}
+      className={cn("min-h-10 tablet:min-h-9", className)}
+      icon={copied ? <Check /> : <Copy />}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+        } catch {
+          toast.error("Copy did not work here: select the text and copy it.");
+        }
+      }}
+    >
+      {copied ? "Copied" : label}
+    </Button>
+  );
+}
+
+/** What changed between two versions, one line per tool, in plain words; `priceOf` adds a new tool's price. */
+export function DiffView({
+  diff,
+  empty = "Nothing changed in the tools or their rules.",
+  priceOf,
+}: {
+  diff: ToolsetDiff;
+  empty?: string;
+  priceOf?: (toolName: string) => string | null;
+}) {
+  const rows: { key: string; kind: "added" | "removed" | "rules" | "settings"; name?: string; text: string }[] = [
+    ...diff.added.map((name) => ({ key: `a-${name}`, kind: "added" as const, name, text: priceOf?.(name) ? `added · ${priceOf(name)}` : "added" })),
+    ...diff.removed.map((name) => ({ key: `r-${name}`, kind: "removed" as const, name, text: "removed" })),
+    ...diff.rulesChanged.map((name) => ({ key: `p-${name}`, kind: "rules" as const, name, text: "provider rules changed" })),
+    ...diffLines({ added: [], removed: [], rulesChanged: [], settingsChanged: diff.settingsChanged }).map((l) => ({ key: "settings", kind: "settings" as const, text: l.text })),
+  ];
+  if (rows.length === 0) return <p className="text-body-13 text-02">{empty}</p>;
   return (
     <ul className="flex flex-col gap-1.5" data-testid="diff-view">
-      {lines.map((line) => (
-        <li key={line.kind} className="flex items-start gap-2 text-body-13 text-01">
-          {line.kind === "added" ? (
-            <Plus aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-success-600" />
-          ) : line.kind === "removed" ? (
-            <Minus aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-danger-600" />
+      {rows.map((row) => (
+        <li key={row.key} className="flex items-start gap-2 text-body-13 text-01">
+          {row.kind === "added" ? (
+            <Plus aria-label="Added" className="mt-0.5 size-3.5 shrink-0 text-success-600" />
+          ) : row.kind === "removed" ? (
+            <Minus aria-label="Removed" className="mt-0.5 size-3.5 shrink-0 text-danger-600" />
           ) : (
             <SlidersHorizontal aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-03" />
           )}
-          <span className="min-w-0 [overflow-wrap:anywhere]">{line.text}</span>
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            {row.name ? (
+              <>
+                <span className="font-mono text-mono-12">{row.name}</span> <span className="text-02">{row.text}</span>
+              </>
+            ) : (
+              row.text
+            )}
+          </span>
         </li>
       ))}
     </ul>
@@ -150,8 +202,9 @@ export function CopyToolsetSheet({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  source: { id: string | null; name: string; handle: string; slug: string; version: number; unlistedToken?: string | null };
+  source: { id: string | null; name: string; handle: string; slug: string; version: number; unlistedToken?: string | null; entries?: PublicToolsetEntry[] };
 }) {
+  const willLeave = expectedExclusions(source.entries ?? []);
   const router = useRouter();
   const queryClient = useQueryClient();
   const [name, setName] = React.useState(source.name);
@@ -192,6 +245,20 @@ export function CopyToolsetSheet({
                 A copy of @{source.handle}/{source.slug} v{source.version} in your tool sets, for your team only. Change its tools and provider rules as you like;
                 changes to the original never reach it.
               </p>
+              {willLeave.length > 0 ? (
+                <div className="flex flex-col gap-1.5 rounded-lg bg-warning-10 p-3" data-testid="copy-will-leave">
+                  <span className="text-label-13 text-warning-700">
+                    {willLeave.length === 1 ? "1 tool can't be copied:" : `${willLeave.length} tools can't be copied:`}
+                  </span>
+                  <ul className="flex flex-col gap-1">
+                    {willLeave.map((e) => (
+                      <li key={e.toolId} className="text-body-13 text-02">
+                        <span className="font-mono text-mono-12 text-01">{e.toolName}</span> {exclusionReason(e)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <Field id="copy-name" label="Name" value={name} onChange={(e) => setName(e.target.value)} error={copy.isError ? errorText(copy.error) : undefined} />
               <div className="flex flex-wrap gap-2">
                 <Button loading={copy.isPending} disabled={!source.id || !name.trim()} onClick={() => copy.mutate()}>
@@ -210,14 +277,34 @@ export function CopyToolsetSheet({
   );
 }
 
-const EXCLUDED_REASON: Record<string, string> = {
-  LINK_ONLY: "one maker's link-only tool: it works only through its maker's own link",
-  REMOVED: "removed by its maker",
-};
+/** The public name a provider tool belongs to: `cobalt__news_search` → "cobalt". */
+export function makerOf(toolName: string): string | null {
+  const i = toolName.indexOf("__");
+  return i > 0 ? toolName.slice(0, i) : null;
+}
+
+/** Why a tool stays behind, naming its own maker (not the tool set's publisher). */
+export function exclusionReason(e: { toolName: string; reason: string }): string {
+  if (e.reason === "REMOVED") return "was removed by its maker";
+  const maker = makerOf(e.toolName);
+  return maker ? `is @${maker}'s link-only tool: it works only through @${maker}'s own link` : "is one maker's link-only tool: it works only through its maker's own link";
+}
+
+/**
+ * The tools a copy will leave out, known before it is made: removed ones, and
+ * provider tools that are not reviewed for the catalogue (link-only, reachable
+ * only through their maker's own tool sets).
+ */
+export function expectedExclusions(entries: readonly PublicToolsetEntry[]): { toolId: string; toolName: string; reason: string }[] {
+  return entries
+    .filter((e) => e.removed || (e.notReviewed && makerOf(e.toolName)))
+    .map((e) => ({ toolId: e.toolId, toolName: e.toolName, reason: e.removed ? "REMOVED" : "LINK_ONLY" }));
+}
 
 /** The copy was made, but some tools stayed behind: each with its reason and what to do. */
-export function CopyExclusions({ result, source }: { result: CopyResult; source: { handle: string } }) {
+export function CopyExclusions({ result }: { result: CopyResult; source?: { handle: string } }) {
   const linkOnly = result.excluded.filter((e) => e.reason === "LINK_ONLY");
+  const makers = [...new Set(linkOnly.map((e) => makerOf(e.toolName)).filter((m): m is string => Boolean(m)))];
   return (
     <div className="flex flex-col gap-3" data-testid="copy-excluded">
       <p className="text-body-13 text-01">
@@ -228,14 +315,15 @@ export function CopyExclusions({ result, source }: { result: CopyResult; source:
         {result.excluded.map((e) => (
           <li key={e.toolId} className="flex flex-col text-body-13 tablet:flex-row tablet:gap-2">
             <span className="font-mono text-mono-12 text-01 [overflow-wrap:anywhere]">{e.toolName}</span>
-            <span className="text-02">{EXCLUDED_REASON[e.reason] ?? "it can't be copied"}</span>
+            <span className="text-02">{exclusionReason(e)}</span>
           </li>
         ))}
       </ul>
       {linkOnly.length > 0 ? (
         <p className="text-body-13 text-02">
-          {linkOnly.length === 1 ? "1 tool is" : `${linkOnly.length} tools are`} link-only from @{source.handle}. Keep @{source.handle}&apos;s link connected to use{" "}
-          {linkOnly.length === 1 ? "it" : "them"}.
+          {makers.length > 0
+            ? `Keep ${makers.map((m) => `@${m}`).join(" and ")}'s link connected to use ${linkOnly.length === 1 ? "it" : "them"}.`
+            : `Keep the original link connected to use ${linkOnly.length === 1 ? "it" : "them"}.`}
         </p>
       ) : null}
       <Button asChild className="self-start">
