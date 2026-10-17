@@ -32,6 +32,16 @@ export function normaliseHandle(input: string): string {
   return input.trim().replace(/^@+/, "").toLowerCase();
 }
 
+export function isReservedHandle(input: string): boolean {
+  return RESERVED.has(normaliseHandle(input));
+}
+
+/** Free-looking names next to one that can't be had: "acme" → acme-hq, acme-team, acme-labs. */
+export function handleSuggestions(input: string): string[] {
+  const base = normaliseHandle(input).replace(/[^a-z0-9-]/g, "").slice(0, 18) || "team";
+  return [`${base}-hq`, `${base}-team`, `${base}-labs`].filter((h) => HANDLE_RE.test(h) && !RESERVED.has(h));
+}
+
 /** Checked before the request, in the same words the server's refusal gets. Null when it looks fine. */
 export function handleProblem(input: string): string | null {
   const handle = normaliseHandle(input);
@@ -56,7 +66,7 @@ export function handleErrorView(code: string | null, context: Readonly<Record<st
   switch (code) {
     case "TOOLSET_HANDLE_INVALID":
       return context?.reason === "RESERVED"
-        ? { text: `@${handle} is reserved. Try another name.`, ...none }
+        ? { text: `@${handle} is reserved. These are free to try:`, suggestions: handleSuggestions(handle), action: null }
         : { text: "Use 3–24 lowercase letters, digits or “-”, starting with a letter.", ...none };
     case "TOOLSET_HANDLE_TAKEN": {
       const suggestions = Array.isArray(context?.suggestions)
@@ -169,7 +179,10 @@ export function diffLines(diff: ToolsetDiff): { kind: "added" | "removed" | "rul
 
 /** The changelog the Share dialog fills in, from the diff (editable; at most 500 characters). */
 export function changelogFrom(diff: ToolsetDiff, first: boolean, toolCount: number): string {
-  if (first) return `First version: ${toolCount} tool${toolCount === 1 ? "" : "s"}.`;
+  if (first) {
+    const names = diff.added.length === toolCount && toolCount > 0 && toolCount <= 8 ? `: ${list(diff.added)}` : "";
+    return `First version: ${toolCount} tool${toolCount === 1 ? "" : "s"}${names}.`;
+  }
   const lines = diffLines(diff);
   const text = lines.length > 0 ? lines.map((l) => `${l.text}.`).join(" ") : "No changes to the tools or their rules.";
   return text.length <= 500 ? text : `${text.slice(0, 499)}…`;
@@ -333,10 +346,12 @@ export function updateNoticeText(notice: UpdateNotice): string {
   return `${name} v${notice.toVersion} is out (you use v${notice.fromVersion}).${lines.length ? ` ${lines.join(" ")}` : ""} Your app keeps v${notice.fromVersion} until you replace its URL.`;
 }
 
-/** Where the notice's action goes: the tool set's page, opened on the update. */
+/**
+ * Where the notice's action goes: the update opened in place in the app
+ * (`/agents`), with the new URL in the fragment so a link-only token never
+ * reaches a server log.
+ */
 export function updateNoticeHref(notice: UpdateNotice): string {
-  const token = notice.mcpUrl ? /\/u\/([a-z0-9_-]{22,64})/i.exec(notice.mcpUrl)?.[1] : null;
-  if (token) return `/toolsets/view?from=${notice.fromVersion}#token=${token}&v=${notice.toVersion}`;
-  if (notice.handle && notice.slug) return `/toolsets/view?handle=${notice.handle}&slug=${notice.slug}&v=${notice.toVersion}&from=${notice.fromVersion}`;
-  return "/agents";
+  if (!notice.mcpUrl) return "/agents";
+  return `/agents?update=1&from=${notice.fromVersion}&to=${notice.toVersion}#url=${encodeURIComponent(notice.mcpUrl)}`;
 }

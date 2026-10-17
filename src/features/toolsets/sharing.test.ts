@@ -58,7 +58,9 @@ describe("the public name, claimed inline", () => {
   });
 
   it("turns every refusal into what to do next, never a code", () => {
-    expect(handleErrorView("TOOLSET_HANDLE_INVALID", { reason: "RESERVED" }, "assay").text).toBe("@assay is reserved. Try another name.");
+    const reserved = handleErrorView("TOOLSET_HANDLE_INVALID", { reason: "RESERVED" }, "assay");
+    expect(reserved.text).toBe("@assay is reserved. These are free to try:");
+    expect(reserved.suggestions).toEqual(["assay-hq", "assay-team", "assay-labs"]);
     expect(handleErrorView("TOOLSET_HANDLE_INVALID", { reason: "FORMAT" }, "A!").text).toMatch(/3–24 lowercase/);
     const taken = handleErrorView("TOOLSET_HANDLE_TAKEN", { suggestions: ["acme-hq", "acme-labs", "Bad Name", "acme2"] }, "acme");
     expect(taken.text).toBe("@acme is taken. These are free:");
@@ -98,7 +100,7 @@ describe("the version diff", () => {
 
   it("fills in the changelog: v1 counts the tools, later versions list the changes", () => {
     const first = diffSnapshots(null, snap([{}, { toolId: "t2", toolName: "scrape_url" }]));
-    expect(changelogFrom(first, true, 2)).toBe("First version: 2 tools.");
+    expect(changelogFrom(first, true, 2)).toBe("First version: 2 tools: search_web and scrape_url.");
     const next = diffSnapshots(snap([{}]), snap([{}, { toolId: "t2", toolName: "scrape_url" }]));
     expect(changelogFrom(next, false, 2)).toBe("Added scrape_url.");
     expect(changelogFrom(diffSnapshots(snap([{}]), snap([{}])), false, 1)).toBe("No changes to the tools or their rules.");
@@ -187,9 +189,10 @@ describe("the update notice (toolset.update_available)", () => {
     );
   });
 
-  it("links to the tool set's page opened on the update; a link-only one keeps its token in the fragment", () => {
-    expect(updateNoticeHref(readUpdateNotice(payload)!)).toBe("/toolsets/view?handle=marketkit&slug=crypto-research&v=3&from=2");
-    const link = readUpdateNotice({ ...payload, mcpUrl: "https://mcp.example.com/u/h3j8d2k9s6a1f4g7l0q5wz@3" })!;
-    expect(updateNoticeHref(link)).toBe("/toolsets/view?from=2#token=h3j8d2k9s6a1f4g7l0q5wz&v=3");
+  it("opens the update in the app; the new URL (and any link token) stays in the fragment", () => {
+    expect(updateNoticeHref(readUpdateNotice(payload)!)).toBe(
+      `/agents?update=1&from=2&to=3#url=${encodeURIComponent("https://mcp.example.com/@marketkit/crypto-research@3")}`,
+    );
+    expect(updateNoticeHref({ ...readUpdateNotice(payload)!, mcpUrl: null })).toBe("/agents");
   });
 });

@@ -15,6 +15,7 @@ import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { isMcpClient, keyMode, mcpConfig, type McpClient } from "@/features/buyer-money/mcp-config";
+import { mcpHost } from "@/features/connect/mcp-endpoint";
 import {
   buildMcpUrl,
   defaultDiscovery,
@@ -27,7 +28,7 @@ import {
   type ConnectChoice,
   type DiscoveryChoice,
 } from "@/features/connect/mcp-url";
-import { allowToolsBody } from "@/features/toolsets/access-result";
+import { allowToolsBody, restoreBody } from "@/features/toolsets/access-result";
 import { defaultEntry } from "@/features/toolsets/entry-rules";
 import { ALWAYS_LATEST_LABEL, DISCOVERY_DETAILS, DISCOVERY_LABELS, DRAFT_NOTICE, HOW_AGENT_SEES_LABEL, lockLabel } from "@/features/toolsets/labels";
 import { badgeLabel } from "@/features/toolsets/public";
@@ -168,7 +169,9 @@ function ConnectBody({
     initial?.kind === "shared" ? { kind: "shared", handle: initial.handle, slug: initial.slug } : initial?.kind === "link" ? { kind: "link", token: initial.token } : null,
   );
   // A shared set's lock: the version the URL named, else the latest once known; on by default except for Official sets.
-  const initialVersion = initial && isToolsetChoice(initial) && initial.kind !== "toolset" ? (initial.version ?? null) : null;
+  const [explicitVersion, setExplicitVersion] = React.useState<number | null>(
+    initial && isToolsetChoice(initial) && initial.kind !== "toolset" ? (initial.version ?? null) : null,
+  );
   const [lockShared, setLockShared] = React.useState<boolean | null>(initial && (initial.kind === "shared" || initial.kind === "link") ? Boolean(initial.version) : null);
   const [tools, setTools] = React.useState<string[]>(initial?.kind === "tools" ? initial.tools : []);
   const [free, setFree] = React.useState(parsedInitial?.options.free ?? false);
@@ -191,10 +194,6 @@ function ConnectBody({
   React.useEffect(() => {
     if (kind === "toolset" && !slug && sets[0]) setSlug(sets[0].slug);
   }, [kind, slug, sets]);
-  React.useEffect(() => {
-    const first = categories.data?.categories.find((c) => c.tools > 0)?.category;
-    if (kind === "topic" && !category && first) setCategory(first);
-  }, [kind, category, categories.data]);
   // Community and Provider sets are locked by default, so a publisher cannot change them under the agent.
   React.useEffect(() => {
     if (sharedInfo && lockShared === null) setLockShared(sharedInfo.badge !== "OFFICIAL");
@@ -202,7 +201,7 @@ function ConnectBody({
 
   const mine = sets.find((set) => set.slug === slug) ?? null;
   const mineLatest = mine?.latestVersion ?? (initial?.kind === "toolset" ? (initial.version ?? null) : null);
-  const sharedVersion = initialVersion ?? sharedInfo?.version ?? null;
+  const sharedVersion = explicitVersion ?? sharedInfo?.version ?? null;
   const choice: ConnectChoice | null =
     kind === "everything"
       ? { kind: "everything" }
@@ -300,7 +299,18 @@ function ConnectBody({
     if (!warning.fix || !access.data || !effectiveAgentId) return;
     if (warning.fix.kind === "allow-tools") {
       const body = allowToolsBody(access.data, warning.fix.toolIds, warning.fix.toolNames);
-      if (body) update.mutate(body, { onSuccess: () => toast.success("Allowed. The tool list is updated.") });
+      const undo = restoreBody(access.data);
+      const n = warning.fix.toolIds.length;
+      if (body) {
+        update.mutate(body, {
+          onSuccess: () =>
+            toast.success(`Allowed ${n} tool${n === 1 ? "" : "s"} for ${agent?.label ?? "this agent"}`, {
+              description: "The tool list is updated.",
+              duration: 8000,
+              action: { label: "Undo", onClick: () => update.mutate(undo, { onSuccess: () => toast.success("Undone") }) },
+            }),
+        });
+      }
     }
   };
 
@@ -377,8 +387,9 @@ function ConnectBody({
                   aria-label="Topic"
                   className="min-h-10 w-full rounded-md border border-02 bg-01 px-3 py-2 text-body-sm text-01"
                   value={category ?? ""}
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={(e) => setCategory(e.target.value || null)}
                 >
+                  <option value="">Pick a topic…</option>
                   {categories.data.categories
                     .filter((c) => c.tools > 0)
                     .map((c) => (
@@ -417,7 +428,7 @@ function ConnectBody({
               )
             ) : null}
           </ChoiceRow>
-          <ChoiceRow id="shared" current={kind} onPick={setKind} title="A shared tool set" detail="One someone published, from the catalogue or a link.">
+          <ChoiceRow id="shared" current={kind} onPick={setKind} title="A shared tool set" detail="One someone published: find it in the catalogue, or paste its link.">
             {kind === "shared" ? (
               <SharedPicker
                 value={shared}
@@ -425,9 +436,10 @@ function ConnectBody({
                 loading={(shared?.kind === "link" ? linkPage.isPending : sharedPage.isPending) && Boolean(shared)}
                 cards={publicSets.data?.toolsets ?? []}
                 cardsLoading={publicSets.isPending}
-                onPick={(next) => {
+                onPick={(next, version) => {
                   setShared(next);
-                  setLockShared(null);
+                  setExplicitVersion(version ?? null);
+                  setLockShared(version ? true : null);
                 }}
               />
             ) : null}
@@ -478,7 +490,10 @@ function ConnectBody({
           ) : null}
         </fieldset>
 
-        <ResultLine url={url} preview={preview.data} pending={preview.isPending && Boolean(url)} error={preview.isError ? preview.error : null} onRetry={() => void preview.refetch()} />
+        {/* On a phone the result comes first (spec §7.12); from tablet up it sits under the question. */}
+        <div className="order-first min-w-0 tablet:order-none" data-testid="connect-result-slot">
+          <ResultLine url={url} preview={preview.data} pending={preview.isPending && Boolean(url)} error={preview.isError ? preview.error : null} onRetry={() => void preview.refetch()} />
+        </div>
 
         {preview.data ? (
           <ul className="flex flex-col gap-1.5" data-testid="connect-warnings">
@@ -586,7 +601,7 @@ function ConnectBody({
             </fieldset>
 
             {access.data ? (
-              <AlwaysLoaded access={access.data} agentName={agentName} />
+              <AlwaysLoaded access={access.data} agentName={agentName} searching={preview.data ? preview.data.discovery === "SEARCH" : undefined} />
             ) : access.isPending && effectiveAgentId ? (
               <Skeleton className="h-10 w-full" />
             ) : null}
@@ -630,10 +645,8 @@ function ConnectBody({
         <Button
           type="button"
           variant="secondary"
-          onClick={() => {
-            handOut();
-            onDone();
-          }}
+          // Done records nothing: a URL is handed out only when it is copied.
+          onClick={onDone}
         >
           Done
         </Button>
@@ -674,8 +687,20 @@ function SharedPicker({
   loading: boolean;
   cards: PublicToolsetCard[];
   cardsLoading: boolean;
-  onPick: (next: SharedPick) => void;
+  onPick: (next: SharedPick, version?: number | null) => void;
 }) {
+  const [pasted, setPasted] = React.useState("");
+  const [pasteError, setPasteError] = React.useState<string | null>(null);
+  const applyPasted = () => {
+    const read = readSharedLink(pasted);
+    if (!read) {
+      setPasteError("We couldn't read this link. Check it, or search by name above.");
+      return;
+    }
+    setPasteError(null);
+    setPasted("");
+    onPick(read.pick, read.version);
+  };
   const options = cards.map((card) => ({
     id: `${card.handle}/${card.slug}`,
     label: `@${card.handle}/${card.slug}`,
@@ -710,8 +735,66 @@ function SharedPicker({
           inline
         />
       )}
+      <form
+        className="flex flex-col gap-1.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          applyPasted();
+        }}
+      >
+        <label htmlFor="connect-paste-link" className="text-label-xs text-02">
+          Or paste its link
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="connect-paste-link"
+            className="min-h-10 min-w-0 flex-1 rounded-md border border-02 bg-01 px-3 font-mono text-mono-12 text-01"
+            placeholder="https://…/@name/set or /u/…"
+            value={pasted}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(e) => {
+              setPasted(e.target.value);
+              setPasteError(null);
+            }}
+          />
+          <Button type="submit" size="sm" variant="secondary" className="min-h-10" disabled={!pasted.trim()}>
+            Use
+          </Button>
+        </div>
+        {pasteError ? (
+          <p role="alert" className="text-body-xs text-danger-700">
+            {pasteError}
+          </p>
+        ) : null}
+      </form>
     </div>
   );
+}
+
+/**
+ * A pasted tool-set link, as a full MCP URL or just its path (`/@name/set@3`,
+ * `@name/set`, `/u/…`), or the web page a browser opened for it.
+ */
+export function readSharedLink(input: string, host: string = mcpHost()): { pick: SharedPick; version: number | null } | null {
+  const raw = input.trim();
+  if (!raw) return null;
+  // The web page form: /toolsets/view?handle=&slug=[&v=] or #token=
+  const page = /\/toolsets\/view\b(\?[^#]*)?(#.*)?$/.exec(raw);
+  if (page) {
+    const q = new URLSearchParams(page[1] ?? "");
+    const f = new URLSearchParams((page[2] ?? "").replace(/^#/, ""));
+    const v = Number(f.get("v") ?? q.get("v")) || null;
+    if (f.get("token")) return readSharedLink(`/u/${f.get("token")}${v ? `@${v}` : ""}`, host);
+    if (q.get("handle") && q.get("slug")) return readSharedLink(`/@${q.get("handle")}/${q.get("slug")}${v ? `@${v}` : ""}`, host);
+    return null;
+  }
+  const path = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]+/i, "") : raw.startsWith("@") ? `/${raw}` : raw;
+  const parsed = parseMcpUrl(`${host}${path.startsWith("/") ? path : `/${path}`}`, host);
+  const choice = parsed?.choice;
+  if (choice?.kind === "shared") return { pick: { kind: "shared", handle: choice.handle, slug: choice.slug }, version: choice.version ?? null };
+  if (choice?.kind === "link") return { pick: { kind: "link", token: choice.token }, version: choice.version ?? null };
+  return null;
 }
 
 function ChoiceRow({

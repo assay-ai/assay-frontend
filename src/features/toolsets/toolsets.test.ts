@@ -135,12 +135,12 @@ describe("the Connect sheet's preview states", () => {
     const allListed = preview({ tools: [preview().tools[0]!], listedCount: 1, estimatedTokens: 236 });
     expect(previewSummary(allListed)).toBe("Your agent will see 1 tool (~240 tokens).");
     // Everything for a restricted agent: what it sees, and how many more are blocked.
-    expect(previewSummary(preview({ listedCount: 1 }))).toBe("Your agent will see 1 tool (~2.8k tokens). 1 more is blocked for this agent.");
+    expect(previewSummary(preview({ listedCount: 1 }))).toBe("2 tools here: 1 ready to use, 1 blocked for this agent (~2.8k tokens).");
     // A listed tool no provider can run is counted as listed, not as usable.
     const noFit = preview({ tools: [preview().tools[0]!, { ...preview().tools[0]!, toolId: "t3", name: "x_y", noProviderFits: true }], listedCount: 2 });
-    expect(previewSummary(noFit)).toBe("Your agent will see 2 tools, 1 usable now (~2.8k tokens).");
+    expect(previewSummary(noFit)).toBe("2 tools here: 1 ready to use, 1 with no provider that fits its limits (~2.8k tokens).");
     expect(previewCounts(noFit)).toEqual({ inView: 2, listed: 2, usable: 1, blocked: 0 });
-    expect(previewSummary(preview({ listedCount: 0, tools: [preview().tools[1]!] }))).toBe("Your agent will see no tools here. 1 is blocked for this agent.");
+    expect(previewSummary(preview({ listedCount: 0, tools: [preview().tools[1]!] }))).toBe("1 tool here: none ready to use, 1 blocked for this agent.");
     expect(tokensText(12_400)).toBe("~12k");
     expect(tokensText(3)).toBe("~10");
   });
@@ -445,10 +445,12 @@ function server(over: Partial<ServerInUse> = {}): ServerInUse {
 describe("search mode in the Connect sheet (T2)", () => {
   it("reads like '4 tools (search) — about 0.9k tokens; 37 tools reachable'", () => {
     expect(previewSummary(preview({ discovery: "SEARCH", listedCount: 4, estimatedTokens: 900, reachableCount: 37 }))).toBe(
-      "4 tools (search) — about 0.9k tokens; 37 tools reachable",
+      "4 tools (search) — about 0.9k tokens; 37 tools reachable, 1 blocked for this agent",
     );
+    const all = preview({ tools: [preview().tools[0]!] });
+    expect(previewSummary({ ...all, discovery: "SEARCH", listedCount: 4, estimatedTokens: 900, reachableCount: 37 })).toBe("4 tools (search) — about 0.9k tokens; 37 tools reachable");
     expect(previewSummary(preview({ discovery: "SEARCH", listedCount: 3, estimatedTokens: 570, reachableCount: 1 }))).toBe(
-      "3 tools (search) — about 0.6k tokens; 1 tool reachable",
+      "3 tools (search) — about 0.6k tokens; 1 of 2 tools reachable, 1 blocked for this agent",
     );
   });
 });

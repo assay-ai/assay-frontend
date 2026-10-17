@@ -95,10 +95,12 @@ describe("suggestServerName — at most 9 characters", () => {
   it("names each answer", () => {
     expect(suggestServerName({ kind: "everything" })).toBe("assay");
     expect(suggestServerName({ kind: "toolset", slug: "research" })).toBe("research");
-    expect(suggestServerName({ kind: "toolset", slug: "crypto-research-kit" })).toBe("crypto-re");
+    expect(suggestServerName({ kind: "toolset", slug: "crypto-research-kit" })).toBe("crypto");
+    expect(suggestServerName({ kind: "toolset", slug: "web-research" })).toBe("research");
+    expect(suggestServerName({ kind: "toolset", slug: "supercalifragilistic" })).toBe("supercali");
     expect(suggestServerName({ kind: "tools", tools: ["get_weather"] })).toBe("weather");
     expect(suggestServerName({ kind: "tools", tools: ["a_b", "c_d"] })).toBe("tools");
-    expect(suggestServerName({ kind: "url", url: "https://mcp.example.com/@acme/twitter-kit@3" })).toBe("twitter-k");
+    expect(suggestServerName({ kind: "url", url: "https://mcp.example.com/@acme/twitter-kit@3" })).toBe("twitter");
   });
 
   it("never goes over 9 characters or ends on a dash", () => {
@@ -234,7 +236,7 @@ describe("T2 forms: topics, shared sets, links, version locks", () => {
 
   it("names their servers and their web pages; the link token stays in the fragment", () => {
     expect(suggestServerName({ kind: "topic", category: "weather" })).toBe("weather");
-    expect(suggestServerName({ kind: "shared", handle: "marketkit", slug: "crypto-research", version: 2 })).toBe("crypto-re");
+    expect(suggestServerName({ kind: "shared", handle: "marketkit", slug: "crypto-research", version: 2 })).toBe("crypto");
     expect(suggestServerName({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz" })).toBe("shared");
     expect(webPageOf({ kind: "shared", handle: "acme", slug: "kit", version: 3 })).toBe("/toolsets/view?handle=acme&slug=kit&v=3");
     expect(webPageOf({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz", version: 2 })).toBe("/toolsets/view#token=h3j8d2k9s6a1f4g7l0q5wz&v=2");
