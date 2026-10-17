@@ -116,7 +116,10 @@ export function ConnectStage({
   const termsBlocked = versioned ? termsProblem(terms, choices) : null;
 
   const fields = React.useMemo(() => schemaFields(tool.inputSchema), [tool.inputSchema]);
-  const [args, setArgs] = React.useState<Record<string, string>>(() => seedArguments(tool.inputSchema));
+  // Prefilled from the contract's own example (the current version's), so the first test can run at once.
+  const [args, setArgs] = React.useState<Record<string, string>>(() =>
+    seedArguments(tool.inputSchema, (tool.versions?.find((v) => v.isCurrent) ?? tool.versions?.[0])?.examples ?? []),
+  );
 
   // Run stays off until the page has hydrated, so the first click is never lost.
   const [hydrated, setHydrated] = React.useState(false);
@@ -392,9 +395,13 @@ export function ConnectStage({
                 {versioned ? (
                   <h4 className="flex flex-wrap items-baseline gap-x-2 text-label-13 text-01">
                     {runLabel(r.major, r.report, r.semver)}
-                    <span className={r.report.outcome === "PASSED" ? "text-body-xs text-success-700" : "text-body-xs text-danger-600"}>
-                      {r.report.outcome === "PASSED" ? "Passed" : "Failed"}
-                    </span>
+                    {stale ? (
+                      <span className="text-body-xs text-warning-700">Out of date: run the test again</span>
+                    ) : (
+                      <span className={r.report.outcome === "PASSED" ? "text-body-xs text-success-700" : "text-body-xs text-danger-600"}>
+                        {r.report.outcome === "PASSED" ? "Passed" : "Failed"}
+                      </span>
+                    )}
                   </h4>
                 ) : null}
                 <TestPipelineView report={r.report} stale={Boolean(stale)} paid={binding ? binding.pricingMode !== "FREE" : false} />
