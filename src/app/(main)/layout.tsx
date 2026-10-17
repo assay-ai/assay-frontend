@@ -53,6 +53,8 @@ const TITLES: Record<string, string> = {
   "/settings": "Settings",
   "/settings/close": "Close account",
   "/connect": "Connect",
+  "/connect/preview": "MCP server",
+  "/toolsets/mine": "Tool sets",
   "/onboarding": "Get started",
 };
 
