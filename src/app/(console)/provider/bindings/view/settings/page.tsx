@@ -335,7 +335,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
           <AuthenticationPanel
             bindingId={binding.id}
             endpoint={binding.endpoint}
-            publishedEndpoint={binding.endpoint}
+            publishedEndpoint={null}
             mode={authMode}
             onModeChange={setAuthMode}
             readOnly={readOnly}

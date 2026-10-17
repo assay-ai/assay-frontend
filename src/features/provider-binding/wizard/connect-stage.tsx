@@ -1,6 +1,6 @@
 "use client";
 
-import { AuthenticationPanel, missingCredentials, useBindingCredentials } from "../authentication/authentication-panel";
+import { AuthenticationPanel, runBlockedByCredentials, useBindingCredentials } from "../authentication/authentication-panel";
 import { QUERY_KEY_ERROR, credentialQueryKeys } from "../authentication/rules";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronDown, Play } from "lucide-react";
@@ -100,7 +100,13 @@ export function ConnectStage({
   const [authMode, setAuthMode] = React.useState<BindingAuthMode>(binding?.authMode ?? "SIGNATURE");
   const credentialSets = useBindingCredentials(binding?.id ?? null, authMode);
   // Before the first save there is nowhere to store a key, so Run (which saves) stays open.
-  const credentialsMissing = binding !== null && (credentialSets.isPending || missingCredentials(authMode, credentialSets.data, endpoint));
+  const credentialsMissing = runBlockedByCredentials({
+    hasBinding: binding !== null,
+    mode: authMode,
+    loading: credentialSets.isLoading,
+    sets: credentialSets.data,
+    endpoint,
+  });
   const [endpointTouched, setEndpointTouched] = React.useState(false);
   const [mappings, setMappings] = React.useState<{ request: ToolMapping; response: ToolMapping }>(() => ({
     request: binding?.requestMapping ?? seedRequestMapping(tool),

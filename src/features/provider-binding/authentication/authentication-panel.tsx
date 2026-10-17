@@ -56,6 +56,18 @@ export function missingCredentials(mode: BindingAuthMode, sets: CredentialSetSum
   return !(sets ?? []).some((set) => set.origin === origin);
 }
 
+/** Run stays off while the mode sends an API key and nothing is stored (or known yet) for this origin. */
+export function runBlockedByCredentials(args: {
+  hasBinding: boolean;
+  mode: BindingAuthMode;
+  loading: boolean;
+  sets: CredentialSetSummary[] | undefined;
+  endpoint: string;
+}): boolean {
+  if (!args.hasBinding || !usesApiKey(args.mode)) return false;
+  return args.loading || missingCredentials(args.mode, args.sets, args.endpoint);
+}
+
 function dayOf(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
