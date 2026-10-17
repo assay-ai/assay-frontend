@@ -62,8 +62,8 @@ describe("a tool set entry's contract terms", () => {
 
   it("the chip: Must return, and the version only when it is not just the current one", () => {
     expect(contractChipParts({ toolVersionRange: "^2", requireOutputFields: [] }, 2)).toEqual([]);
-    expect(contractChipParts({ toolVersionRange: "^1", requireOutputFields: ["uv_index"] }, 2)).toEqual(["Must return: uv_index", "v1 only"]);
-    expect(contractChipParts({ toolVersionRange: "^1 || ^2" }, 2)).toEqual(["v1 or v2"]);
+    expect(contractChipParts({ toolVersionRange: "^1", requireOutputFields: ["uv_index"] }, 2)).toEqual(["Must return: uv_index", "tool v1 only"]);
+    expect(contractChipParts({ toolVersionRange: "^1 || ^2" }, 2)).toEqual(["tool v1 or v2"]);
     expect(majorsChipText([3, 1, 2])).toBe("v1, v2 or v3");
   });
 
@@ -79,7 +79,7 @@ describe("a tool set entry's contract terms", () => {
     expect(entryContractWarning("^1 || ^2", WEATHER)).toBeNull();
     expect(entryContractWarning("^1", WEATHER)).toEqual({
       tone: "warning",
-      text: "Uses v1, which stops working on Feb 1, 2027 (UTC).",
+      text: expect.stringMatching(/^Uses v1, which stops working on Feb 1, 2027 \(UTC\)\. Allow v2 too: calls can then use either\./),
       fix: { label: "Allow v2", range: "^1 || ^2" },
     });
   });
@@ -88,7 +88,7 @@ describe("a tool set entry's contract terms", () => {
     const retired = WEATHER.map((v) => (v.major === 1 ? { ...v, status: "RETIRED" as const } : v));
     expect(entryContractWarning("^1", retired)).toEqual({
       tone: "danger",
-      text: "Uses v1, which was retired: calls to this tool are refused.",
+      text: expect.stringMatching(/^Uses v1, which was retired: calls to this tool are refused\. Allow v2 too/),
       fix: { label: "Allow v2", range: "^1 || ^2" },
     });
   });
