@@ -38,11 +38,11 @@ import { BudgetFields, type BudgetBootstrap, useBudgetDraft } from "./budget-fie
 import { LetAgentPaySheet } from "./let-agent-pay-sheet";
 import { type AgentRow, useAgentsAndKeys } from "./use-agents";
 
-/** "your time; …" hints, so a refill time says which clock it runs on. */
+/** Refill hints, so a refill time says what its window is. */
 export const REFILL_HINT = {
-  rolling: "your time; 24 h after the first payment in the window",
-  day: "your time; the day starts 00:00 UTC",
-  month: "your time; the month starts 00:00 UTC",
+  rolling: "24 h after the first payment in the window",
+  day: "the day starts 00:00 UTC",
+  month: "the month starts 00:00 UTC",
 } as const;
 
 /** The window's spend: charged plus owed (open or written-off buyer debt is still spend). */
