@@ -1,3 +1,4 @@
+import type { CatalogueToolVersionFields, ToolVersionList } from "@/interfaces/contracts";
 import { api } from "./api";
 import type { ToolTier } from "./tools.service";
 
@@ -109,7 +110,7 @@ export interface CatalogueProviderDetail extends CatalogueProvider {
   tools: CatalogueProviderTool[];
 }
 
-export interface CatalogueTool {
+export interface CatalogueTool extends CatalogueToolVersionFields {
   id: string;
   name: string;
   description: string;
@@ -175,4 +176,9 @@ export function listCatalogueTools(): Promise<{ tools: CatalogueTool[] }> {
 
 export function getCatalogueProvider(providerId: string): Promise<CatalogueProviderDetail> {
   return api.get<CatalogueProviderDetail>(`/catalogue/providers/${providerId}`);
+}
+
+/** T3: a tool's published contract versions, newest first, with schemas, optional fields, examples and changelog. */
+export function getCatalogueToolVersions(toolId: string): Promise<ToolVersionList> {
+  return api.get<ToolVersionList>(`/catalogue/tools/${encodeURIComponent(toolId)}/versions`);
 }

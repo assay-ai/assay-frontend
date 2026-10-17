@@ -17,6 +17,7 @@ import type { CatalogueTool as ToolCatalogueEntry, ToolTier } from "@/services/t
 
 import { DEMO_ASSET, DEMO_BUYER_ACCOUNT, DEMO_CHAIN_ID, minutesAgo, money } from "./fixtures";
 import type { DemoFixture } from "./fixtures";
+import { demoVersionFields, demoVersionList, type DemoCatalogueToolRef } from "./fixtures-contracts";
 
 /**
  * DEMO ONLY — see `demo-api.ts` for the rules. **The marketplace surface.**
@@ -539,6 +540,7 @@ function toolRow(tool: DemoTool): CatalogueTool {
     id: tool.id,
     name: tool.name,
     description: tool.description,
+    ...demoVersionFields(tool.id, tool.name, tool.description),
     tier: tool.tier,
     providerCount: tool.offers.length,
     fromPrice: cheapest(prices),
@@ -682,6 +684,15 @@ export const EXPLORE_FIXTURES: readonly DemoFixture[] = [
     match: "/catalogue/tools",
     body: () => ({ tools: TOOLS.map(toolRow) }),
   },
+  /* T3: a tool's published contract versions, schemas and changelog. */
+  {
+    method: "GET",
+    match: /^\/catalogue\/tools\/[^/]+\/versions$/,
+    body: (path) => {
+      const tool = TOOLS.find((t) => t.id === idFromPath(path, 3));
+      return tool === undefined ? undefined : demoVersionList(tool.id, tool.name, tool.description);
+    },
+  },
   /*
     Listed after the exact path above, though the anchored pattern could not
     match it: `/catalogue/providers/{id}` requires a segment after the slash.
@@ -771,3 +782,8 @@ export const EXPLORE_FIXTURES: readonly DemoFixture[] = [
       ]),
   },
 ];
+
+/** The catalogue's tools as the contract fixtures name them (the operator list shows every one). */
+export function demoCatalogueToolRefs(): DemoCatalogueToolRef[] {
+  return TOOLS.map((tool) => ({ id: tool.id, name: tool.name, description: tool.description }));
+}
