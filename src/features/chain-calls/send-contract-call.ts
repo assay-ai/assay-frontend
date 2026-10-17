@@ -49,6 +49,8 @@ export function signerRoleLabel(role: SlashCallSignerRole | string | undefined):
       return "The provider's stake wallet";
     case "ARBITER":
       return "The arbiter";
+    case "ADMIN":
+      return "The contracts' admin";
     default:
       return role ? `Unknown signer role (${role})` : "Not stated";
   }

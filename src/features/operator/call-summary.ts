@@ -84,9 +84,30 @@ export function callAction(functionName: string, args: readonly unknown[]): stri
     }
     case "cancelSlash":
       return `Cancel the penalty record ${shortId(String(first))} on chain`;
+    case "setPaused":
+      return first === true || first === "true" ? "Pause the contracts: every payment, deposit, withdrawal, stake and penalty stops" : "Resume the contracts";
+    case "updateConfig":
+      return "Replace the fee and stake settings (every field is written; the changed ones are listed above)";
+    case "registerVerifier":
+      return `Add verifier key ${shortId(String(first))}`;
+    case "revokeVerifier":
+      return `Revoke verifier key ${shortId(String(first))} for good`;
+    case "setArbiter":
+      return `Make ${shortId(String(first))} the arbiter`;
+    case "setSlashDelay":
+      return `Set the penalty dispute window to ${durationWords(Number(first))}`;
     default:
       return `${functionName}(${args.map((arg) => (Array.isArray(arg) ? `[${arg.length}]` : shortId(String(arg)))).join(", ")})`;
   }
+}
+
+/** 259200 → "3 days", 5400 → "90 min": the dispute window in a sentence. */
+export function durationWords(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return `${seconds} s`;
+  if (seconds % 86_400 === 0) return `${seconds / 86_400} day${seconds === 86_400 ? "" : "s"}`;
+  if (seconds % 3600 === 0) return `${seconds / 3600} h`;
+  if (seconds % 60 === 0) return `${seconds / 60} min`;
+  return `${seconds} s`;
 }
 
 export function callSummary(input: CallSummaryInput): CallSummaryLine[] {

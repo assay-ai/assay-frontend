@@ -19,9 +19,9 @@ export function ChangeRows({ changes }: { changes: ConfirmChange[] }) {
         >
           <dt className="text-body-13 text-03">{change.label}</dt>
           <dd className="col-span-2 flex flex-wrap items-center gap-2 text-body-13 tablet:col-span-1">
-            <span className="text-02 line-through decoration-03">{change.before}</span>
+            <span className="min-w-0 text-02 line-through decoration-03 [overflow-wrap:anywhere]">{change.before}</span>
             <ArrowRight aria-label="becomes" className="size-3.5 shrink-0 text-03" />
-            <span className="font-semibold text-01">{change.after}</span>
+            <span className="min-w-0 font-semibold text-01 [overflow-wrap:anywhere]">{change.after}</span>
           </dd>
         </div>
       ))}

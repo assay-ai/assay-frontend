@@ -130,7 +130,17 @@ const CONTRACT_ABIS: Record<PinnedContract, Abi> = {
     "function cancelSlashBatch(bytes32[] requestIds)",
     "function cancelSlash(bytes32 requestId)",
   ]),
-  config: parseAbi(["function setBlocked(address account, bool value)"]),
+  config: parseAbi([
+    "function setBlocked(address account, bool value)",
+    // The admin's doors, sent from Contracts (`contract-config.ts`).
+    "struct ParamSet { address treasury; address redeemer; uint64 unbondingPeriodSeconds; uint64 minimumStake; uint64 penaltyAmount; uint64 verifierDailyCap; uint16 takeRateBps; uint16 slashAgentBps; uint16 slashPlatformBps; uint16 slashCapBps; }",
+    "function setPaused(bool value)",
+    "function updateConfig(ParamSet p, address newAdmin)",
+    "function registerVerifier(address verifier, bytes32 label, uint64 expiresAt)",
+    "function revokeVerifier(address verifier)",
+    "function setArbiter(address newArbiter)",
+    "function setSlashDelay(uint64 newDelay)",
+  ]),
   token: parseAbi(["function approve(address spender, uint256 amount)"]),
 };
 
@@ -158,12 +168,24 @@ export function pinnedAddress(deployment: StakeDeployment, contract: PinnedContr
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Equal as the chain reads them: addresses and hex case-insensitive, numbers
  * by value. An array argument is only ever a batch of request ids, an atomic
- * set, so it compares in any order (but with the same count of each).
+ * set, so it compares in any order (but with the same count of each). A
+ * struct (`updateConfig`'s `ParamSet`, decoded as an object) compares field
+ * by field, with the same fields on both sides.
  */
 function sameValue(left: unknown, right: unknown): boolean {
+  if (isRecord(left) || isRecord(right)) {
+    if (!isRecord(left) || !isRecord(right)) return false;
+    const keys = Object.keys(left);
+    if (keys.length !== Object.keys(right).length) return false;
+    return keys.every((key) => key in right && sameValue(left[key], right[key]));
+  }
   if (Array.isArray(left) || Array.isArray(right)) {
     if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
     const sorted = (values: unknown[]) => values.map((value) => String(value).toLowerCase()).sort();
@@ -315,5 +337,6 @@ export function assertContractCall(
 /** One decoded argument as text, for a confirm screen. */
 export function formatCallArg(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(formatCallArg).join(", ")}]`;
+  if (isRecord(value)) return `{ ${Object.entries(value).map(([key, field]) => `${key}: ${formatCallArg(field)}`).join(", ")} }`;
   return String(value);
 }

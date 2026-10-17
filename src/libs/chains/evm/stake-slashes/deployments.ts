@@ -51,6 +51,8 @@ export interface StakeDeployment {
   readonly settlementToken: `0x${string}`;
   /** The proxy's deployment block — no slash can be older than this. */
   readonly deployBlock: bigint;
+  /** The X402Config proxy's deployment block — no verifier key event is older than this. */
+  readonly configDeployBlock: bigint;
   /** Only if `ASSET().decimals()` cannot be read. */
   readonly fallbackAssetDecimals: number;
   /** Only if `ASSET().symbol()` cannot be read. */
@@ -67,6 +69,7 @@ export const ROBINHOOD_TESTNET_STAKE: StakeDeployment = {
   configContract: "0xCf6592A3a053d9714D16d176A86fA039Fe7B6a43",
   settlementToken: "0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3",
   deployBlock: BigInt(132_423_327),
+  configDeployBlock: BigInt(132_423_273),
   fallbackAssetDecimals: 6,
   fallbackAssetSymbol: "USDG",
 };

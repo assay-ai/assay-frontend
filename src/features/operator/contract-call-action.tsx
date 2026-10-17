@@ -52,6 +52,18 @@ const CALL_WHAT: Readonly<Record<string, string>> = {
   cancelSlash: "the cancel of a penalty",
   cancelSlashBatch: "the cancel of disputed penalties",
   upholdSlashBatch: "the ruling upholding disputed penalties",
+  setPaused: "a pause or resume of the contracts",
+  updateConfig: "a change to the fee and stake settings",
+  registerVerifier: "a new verifier key",
+  revokeVerifier: "the revocation of a verifier key",
+  setArbiter: "a new arbiter",
+  setSlashDelay: "a new penalty dispute window",
+};
+
+/** Where a downloaded file is signed, by who signs it. */
+const SIGNER_WALLET: Partial<Record<SlashContractCall["signerRole"], string>> = {
+  ARBITER: "the arbiter's multi-signer wallet",
+  ADMIN: "the wallet that holds the admin key",
 };
 
 export function ContractCallAction({
@@ -66,6 +78,10 @@ export function ContractCallAction({
   handoff,
   trackIds,
   onRetry,
+  actionsContainer,
+  exportVariant,
+  disabled,
+  disabledReason,
 }: {
   call: SlashContractCall;
   /** The call the operator chose here; anything else is refused. */
@@ -84,6 +100,13 @@ export function ContractCallAction({
   trackIds?: readonly string[];
   /** Build the call again, offered when this one was refused. */
   onRetry?: () => void;
+  /** A sheet's sticky footer, to hold the buttons (see `SignOrExport`). */
+  actionsContainer?: HTMLElement | null;
+  /** "danger" for a call that stops or removes something. */
+  exportVariant?: "primary" | "danger";
+  /** Hold both paths back (e.g. a confirmation is not ticked yet), with the reason. */
+  disabled?: boolean;
+  disabledReason?: React.ReactNode;
 }) {
   const connected = useConnectedAddresses();
   const signerState = useSigner({ chainId: call.chainId, address: connectedSpelling(connected, call.signer) });
@@ -106,7 +129,7 @@ export function ContractCallAction({
         label: signLabel,
         cost: "gas",
         run: async ({ report }) => {
-          if (signerState.status !== "ready") throw new Error("Connect the arbiter's wallet to sign here.");
+          if (signerState.status !== "ready") throw new Error(`Connect ${call.signerRole === "ADMIN" ? "the admin's" : "the arbiter's"} wallet to sign here.`);
           report({ stage: "wallet" });
           const hash = await sendSlashContractCall(call, signerState.signer, expected);
           report({
@@ -174,7 +197,11 @@ export function ContractCallAction({
       })}
       summaryNote="Read from the transaction itself, and checked against what you chose here."
       trackIds={trackIds}
-      signerWallet={call.signerRole === "ARBITER" ? "the arbiter's multi-signer wallet" : undefined}
+      signerWallet={SIGNER_WALLET[call.signerRole]}
+      actionsContainer={actionsContainer}
+      exportVariant={exportVariant}
+      disabled={disabled}
+      disabledReason={disabledReason}
       handoff={handoff ?? { link: here, message: `Please sign ${what} with the ${signerRoleLabel(call.signerRole).toLowerCase()} key. The file is attached; the record is here:` }}
       details={[
         { label: "Function (decoded from the calldata)", value: decoded.functionName },
