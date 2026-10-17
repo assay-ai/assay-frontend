@@ -21,6 +21,26 @@
  *                 one provider, so nothing else can run it.").
  *   preview-error — every Connect preview fails: "Couldn't load the tool list".
  *   empty       — no tool sets, no servers in use, no refused calls.
+ *
+ * Sharing (T2). In `default` the account has no public name yet, so the
+ * Share dialog asks for one inline; "Weather and places" has a v1 saved for
+ * the team.
+ *
+ *   shared          — public name @brightpath; "Research kit" is listed in
+ *                     the catalogue at v3 (the Draft has one change since),
+ *                     with weekly figures above 5 teams; "Weather and places"
+ *                     is shared by link.
+ *   unlisted        — "Research kit" is shared by link at v2, figures below 5.
+ *   update-available — "prod" uses @marketkit/crypto-research locked to v2
+ *                     while v3 is out: the chip in Servers in use and in What
+ *                     this agent can use, and the alert.
+ *   delisted        — Assay took "Research kit" out of the catalogue.
+ *   stopped         — the owner stopped sharing "Research kit"; old links
+ *                     work for 90 more days.
+ *   removed         — "Research kit" was taken down.
+ *   handle-taken    — claiming any public name answers "taken", with free
+ *                     suggestions (picking one works).
+ *   claim-refused   — claiming a public name is refused until funds are added.
  */
 export type DemoConnectVariant =
   | "default"
@@ -30,7 +50,15 @@ export type DemoConnectVariant =
   | "over-budget"
   | "single"
   | "preview-error"
-  | "empty";
+  | "empty"
+  | "shared"
+  | "unlisted"
+  | "update-available"
+  | "delisted"
+  | "stopped"
+  | "removed"
+  | "handle-taken"
+  | "claim-refused";
 
 export const DEMO_CONNECT_VARIANTS: readonly DemoConnectVariant[] = [
   "default",
@@ -41,6 +69,14 @@ export const DEMO_CONNECT_VARIANTS: readonly DemoConnectVariant[] = [
   "single",
   "preview-error",
   "empty",
+  "shared",
+  "unlisted",
+  "update-available",
+  "delisted",
+  "stopped",
+  "removed",
+  "handle-taken",
+  "claim-refused",
 ];
 
 const KEY = "assay.demo.connect";
