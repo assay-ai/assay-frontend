@@ -14,11 +14,11 @@ import { api } from "./api";
  * written one — it does not answer an empty object. That is the state a fresh
  * account is in, so it is the state the Limits screen renders first.
  *
- * The policy carries three velocity/scope ceilings
- * (`maxCallsPerMinute`, `maxSpendPerHour`, `allowedTools`) and a `usage`
+ * The policy carries two velocity ceilings
+ * (`maxCallsPerMinute`, `maxSpendPerHour`) and a `usage`
  * block (live consumption against every ceiling, read from the same
  * counters `SpendPolicyEnforcementService` checks a call against before
- * charging it). All four are on `SpendPolicyDto` / `SpendPolicyHistoryEntryDto`
+ * charging it). All three are on `SpendPolicyDto` / `SpendPolicyHistoryEntryDto`
  * / `UpdateSpendPolicyDto` in the running backend; see
  * `spend-policy/dto/get-spend-policy.dto.ts` and
  * `spend-policy/dto/update-spend-policy.dto.ts`.
@@ -59,12 +59,6 @@ export interface SpendPolicy {
   maxCallsPerMinute: number | null;
   /** Money per hour, the other half of velocity. `null` = unlimited. */
   maxSpendPerHour: Money | null;
-  /**
-   * `null` = every tool is allowed. `[]` = **no** tool is
-   * allowed — a stop distinct from `paused` (that stops every call; this
-   * stops calls by tool).
-   */
-  allowedTools: string[] | null;
   requireApprovalAbove: Money | null;
   /** The kill switch, distinct from a zeroed cap. */
   paused: boolean;
@@ -89,8 +83,6 @@ export interface SpendPolicyHistoryEntry {
   maxCallsPerMinute: number | null;
   
   maxSpendPerHour: Money | null;
-  
-  allowedTools: string[] | null;
   requireApprovalAbove: Money | null;
   paused: boolean;
   changedBy: string | null;
@@ -120,12 +112,6 @@ export interface UpdateSpendPolicyBody {
   maxCallsPerMinute?: number | null;
   /** Atomic units. `null` removes the spend-per-hour velocity limit. */
   maxSpendPerHour?: string | null;
-  /**
-   * `null` allows every tool; `[]` allows none. An
-   * explicit `null` on a later PATCH clears a narrower list back to "every
-   * tool".
-   */
-  allowedTools?: string[] | null;
   requireApprovalAbove?: string | null;
   paused?: boolean;
   changeReason?: string;
