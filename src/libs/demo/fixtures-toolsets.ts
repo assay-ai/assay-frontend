@@ -240,7 +240,7 @@ function seed(variant: DemoConnectVariant): Stage {
                 },
                 {
                   canonicalUrl: buildMcpUrl({ kind: "toolset", slug: "weather" }, { free: false }, host),
-                  serverName: "weather",
+                  serverName: "weather2",
                   client: "cursor",
                   handedOutAt: demoMinutesAgo(500),
                   firstCallAt: demoMinutesAgo(490),

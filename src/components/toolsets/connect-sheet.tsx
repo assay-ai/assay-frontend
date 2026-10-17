@@ -15,7 +15,7 @@ import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { isMcpClient, keyMode, mcpConfig, type McpClient } from "@/features/buyer-money/mcp-config";
-import { buildMcpUrl, mcpToolName, parseMcpUrl, suggestServerName, type ConnectChoice } from "@/features/connect/mcp-url";
+import { buildMcpUrl, mcpToolName, parseMcpUrl, suggestServerName, toolDisplay, uniqueServerName, type ConnectChoice } from "@/features/connect/mcp-url";
 import { allowToolsBody } from "@/features/toolsets/access-result";
 import { defaultEntry } from "@/features/toolsets/entry-rules";
 import { copyBlocked, offersFreeOnly, overBudgetWith, previewSummary, previewWarnings, type PreviewWarning } from "@/features/toolsets/preview";
@@ -142,7 +142,11 @@ function ConnectBody({
             : null;
   const url = choice ? buildMcpUrl(choice, { free }) : null;
   const preview = useMcpPreview(url, effectiveAgentId);
-  const serverName = choice ? suggestServerName(choice) : "assay";
+  // Unique among the agent's other servers, so two servers never share a name in one client.
+  const serverName = uniqueServerName(
+    choice ? suggestServerName(choice) : "assay",
+    (servers.data?.servers ?? []).filter((s) => s.canonicalUrl !== preview.data?.canonicalUrl && s.canonicalUrl !== url).map((s) => s.serverName),
+  );
 
   // The key: the full one only when it was created here; otherwise its prefix.
   const liveKeys: KeyRow[] = (effectiveAgentId ? data.keys[effectiveAgentId] ?? [] : []).filter((k) => !k.revokedAt);
@@ -217,20 +221,18 @@ function ConnectBody({
 
   const agentName = agent?.label ?? "your agent";
   // `?tools=` takes each tool's MCP name (never its display name); tools no provider serves are shown, disabled.
-  const nameOf = (mcpName: string) => catalogue.tools.find((t) => mcpToolName(t) === mcpName)?.name ?? mcpName;
   const toolOptions = catalogue.tools
     .map((t) => ({ tool: t, mcp: mcpToolName(t) }))
     .filter((x): x is { tool: (typeof catalogue.tools)[number]; mcp: string } => x.mcp !== null && !tools.includes(x.mcp))
     .sort((a, b) => Number(a.tool.providerCount === 0) - Number(b.tool.providerCount === 0) || a.tool.name.localeCompare(b.tool.name))
-    .map(({ tool: t, mcp }) => ({
-      id: mcp,
-      label: t.name,
-      disabled: t.providerCount === 0,
-      detail:
+    .map(({ tool: t, mcp }) => {
+      const title = toolDisplay(t).title;
+      const price =
         t.providerCount === 0
           ? "No provider yet"
-          : `${t.pricingMode === "FREE" ? "Free" : `from ${formatMoney(t.fromPrice, { decimals: 4 })}`} · ${t.providerCount} provider${t.providerCount === 1 ? "" : "s"}`,
-    }));
+          : `${t.pricingMode === "FREE" ? "Free" : `from ${formatMoney(t.fromPrice, { decimals: 4 })}`} · ${t.providerCount} provider${t.providerCount === 1 ? "" : "s"}`;
+      return { id: mcp, label: mcp, disabled: t.providerCount === 0, detail: title ? `${title} · ${price}` : price };
+    });
   const others = servers.data && preview.data ? overBudgetWith(preview.data, servers.data.servers) : null;
 
   return (
@@ -307,10 +309,10 @@ function ConnectBody({
                   <ul className="flex flex-wrap gap-1.5" aria-label="Chosen tools">
                     {tools.map((name) => (
                       <li key={name} className="inline-flex min-h-10 items-center gap-1 rounded-full bg-03 py-0.5 pl-2.5 pr-1 text-label-xs text-01 tablet:min-h-0">
-                        <span className="[overflow-wrap:anywhere]">{nameOf(name)}</span>
+                        <span className="font-mono [overflow-wrap:anywhere]">{name}</span>
                         <button
                           type="button"
-                          aria-label={`Remove ${nameOf(name)}`}
+                          aria-label={`Remove ${name}`}
                           className="flex size-8 items-center justify-center rounded-full text-03 hover:bg-02 hover:text-01 tablet:size-6"
                           onClick={() => setTools(tools.filter((t) => t !== name))}
                         >
@@ -328,7 +330,7 @@ function ConnectBody({
                   onChange={(id) => id && setTools([...tools, id])}
                   inline
                 />
-                {tools.length >= 2 ? <SaveAsToolset tools={tools} nameOf={nameOf} onSaved={(newSlug) => { setSlug(newSlug); setKind("toolset"); }} suggest={tools.length > 10} /> : null}
+                {tools.length >= 2 ? <SaveAsToolset tools={tools} onSaved={(newSlug) => { setSlug(newSlug); setKind("toolset"); }} suggest={tools.length > 10} /> : null}
               </div>
             ) : null}
           </ChoiceRow>
@@ -564,12 +566,10 @@ function KeyLine({ prefix, full, creating, onCreate }: { prefix: string | null; 
 /** "Only these tools" → a tool set, name only (the slug is generated). */
 function SaveAsToolset({
   tools,
-  nameOf,
   onSaved,
   suggest,
 }: {
   tools: string[];
-  nameOf: (mcpName: string) => string;
   onSaved: (slug: string) => void;
   suggest: boolean;
 }) {

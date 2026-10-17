@@ -163,6 +163,13 @@ export function RefusedCallCard({ call, onClose }: { call: RefusedCall; onClose?
                 onClick: () =>
                   void replaceToolsetEntries(set.id, before).then((back) => {
                     queryClient.setQueryData(toolsetKeys.one(set.id), back);
+                    void queryClient.invalidateQueries({ queryKey: toolsetKeys.all });
+                    // The fix applies again: its button comes back.
+                    setDone((d) => {
+                      const next = new Set(d);
+                      next.delete("call");
+                      return next;
+                    });
                     toast.success("Undone");
                   }),
               },

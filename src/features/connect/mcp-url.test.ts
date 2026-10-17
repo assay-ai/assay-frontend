@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { KEY_PLACEHOLDER, keyMode, mcpConfig, MCP_CLIENTS } from "@/features/buyer-money/mcp-config";
 
-import { buildMcpUrl, canonicalTools, mcpToolName, parseMcpUrl, sameChoice, suggestServerName, type ConnectChoice } from "./mcp-url";
+import { buildMcpUrl, canonicalTools, mcpToolName, toolDisplay, uniqueServerName, parseMcpUrl, sameChoice, suggestServerName, type ConnectChoice } from "./mcp-url";
 
 const HOST = "https://mcp.example.com";
 
@@ -144,5 +144,18 @@ describe("mcpToolName — what goes in ?tools=", () => {
     expect(mcpToolName({ name: "get_weather", toolId: "06399979" })).toBe("get_weather");
     expect(mcpToolName({ name: "Market quote", toolId: "market-quote" })).toBe("market-quote");
     expect(mcpToolName({ name: "Market quote", id: "06399979-f8b8-4c9e-a9b1-bd2a5924d442" })).toBeNull();
+  });
+});
+
+describe("one naming convention for tools, unique server names", () => {
+  it("names a tool as the agent calls it, with its title only when it differs", () => {
+    expect(toolDisplay({ name: "get_weather", toolId: "x" })).toEqual({ name: "get_weather", title: null });
+    expect(toolDisplay({ name: "Market quote", toolId: "market-quote" })).toEqual({ name: "market-quote", title: "Market quote" });
+  });
+
+  it("never suggests a server name another server of the agent uses", () => {
+    expect(uniqueServerName("weather", ["research"])).toBe("weather");
+    expect(uniqueServerName("weather", ["weather", null])).toBe("weather2");
+    expect(uniqueServerName("crypto-re", ["crypto-re", "crypto-r2"])).toBe("crypto-r3");
   });
 });

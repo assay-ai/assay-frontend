@@ -259,7 +259,14 @@ describe("Servers in use", () => {
     expect(html).toMatch(/class="[^"]*tablet:hidden[^"]*" data-testid="server-cards"/);
     expect(html).toMatch(/class="hidden w-full rounded-lg border border-01 tablet:block"/);
     expect(html).not.toContain("min-w-[520px]");
-    expect(text(html)).toContain("Change: make a new URL");
+    expect(text(html)).toContain("Change makes a new URL for a server");
+    expect(text(html)).toContain("Change…");
+  });
+
+  it("two servers with one name in the app: says they clash", () => {
+    const dup = { overBudget: false, servers: [SERVERS.servers[0]!, { ...SERVERS.servers[1]!, serverName: "research" }] };
+    const out = text(render(<ServersInUse agentId="a1" agentName="research-bot" />, (c) => c.setQueryData(toolsetKeys.servers("a1"), dup)));
+    expect(out).toContain("another server here has this name too");
   });
 
   it("empty: says so and offers Connect", () => {

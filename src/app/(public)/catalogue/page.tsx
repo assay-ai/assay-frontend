@@ -249,7 +249,7 @@ export default function CataloguePage() {
             ) : null}
             {active.isSuccess ? (
               <span className="text-body-xs text-03">
-                {needle || (freeOnly && view === "tools") ? `${visible} of ${total}` : total}
+                {needle || (view === "tools" && (freeOnly || (topic && topicKnown))) ? `${visible} of ${total}` : total}
               </span>
             ) : null}
           </div>

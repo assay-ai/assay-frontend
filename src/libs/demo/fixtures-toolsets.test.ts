@@ -158,6 +158,17 @@ describe("demo fixtures: tool sets, access, Connect preview, servers, refused ca
   });
 });
 
+describe("the demo account's agents", () => {
+  it("has two agents (Explore's agent picker) and a live key on prod (the Connect key row)", () => {
+    const get = (path: string) => {
+      const f = DEMO_FIXTURES.find((x) => x.method === "GET" && (x.match instanceof RegExp ? x.match.test(path) : x.match === path))!;
+      return f.body(path, {}) as { items: { agentId?: string; label?: string; revokedAt?: string | null }[] };
+    };
+    expect(get("/agents").items.map((a) => a.label)).toEqual(["prod", "staging"]);
+    expect(get(`/agents/${PROD}/credentials`).items.some((k) => !k.revokedAt)).toBe(true);
+  });
+});
+
 describe("the ?connect= demo switch", () => {
   it("parses the documented pictures only", () => {
     for (const v of ["default", "all", "nothing", "waiting", "over-budget", "single", "preview-error", "empty"]) {

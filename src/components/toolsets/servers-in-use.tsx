@@ -36,6 +36,8 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
   const over = shown > SHOW_ALL_TOOL_BUDGET;
   const biggest = over ? biggestServer(servers) : null;
   const change = (server: ServerInUse) => setSheet({ url: server.canonicalUrl, changing: true });
+  const clashes = (server: ServerInUse) =>
+    Boolean(server.serverName) && servers.some((s) => s.canonicalUrl !== server.canonicalUrl && s.serverName === server.serverName);
 
   return (
     <div className="flex min-w-0 flex-col gap-2" data-testid="servers-in-use">
@@ -71,9 +73,10 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
             </div>
           ) : null}
 
+          <p className="text-body-xs text-03 tablet:hidden">Change makes a new URL for a server; replace the old one in your app.</p>
           <ul className="flex flex-col gap-2 tablet:hidden" data-testid="server-cards">
             {servers.map((server) => (
-              <ServerCard key={server.canonicalUrl} server={server} onChange={() => change(server)} />
+              <ServerCard key={server.canonicalUrl} server={server} clash={clashes(server)} onChange={() => change(server)} />
             ))}
           </ul>
 
@@ -90,7 +93,7 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
               </thead>
               <tbody className="divide-y divide-01">
                 {servers.map((server) => (
-                  <ServerRow key={server.canonicalUrl} server={server} onChange={() => change(server)} />
+                  <ServerRow key={server.canonicalUrl} server={server} clash={clashes(server)} onChange={() => change(server)} />
                 ))}
               </tbody>
             </table>
@@ -111,7 +114,7 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
   );
 }
 
-function NameCell({ server }: { server: ServerInUse }) {
+function NameCell({ server, clash }: { server: ServerInUse; clash: boolean }) {
   const label = serverLabel(server);
   return (
     <span className="flex min-w-0 flex-col gap-0.5">
@@ -120,7 +123,12 @@ function NameCell({ server }: { server: ServerInUse }) {
         <span className="[overflow-wrap:anywhere]">{label.title}</span>
       </span>
       {label.detail ? <span className="text-body-xs text-03 [overflow-wrap:anywhere]">{label.detail}</span> : null}
-      {server.serverName ? <span className="text-body-xs text-03">In your app: “{server.serverName}”</span> : null}
+      {server.serverName ? (
+        <span className="text-body-xs text-03">
+          In your app: “{server.serverName}”
+          {clash ? <span className="text-warning-700"> · another server here has this name too: rename one in your app so their tools do not clash</span> : null}
+        </span>
+      ) : null}
       <span className="break-all font-mono text-mono-xs text-03">{server.canonicalUrl}</span>
     </span>
   );
@@ -146,11 +154,11 @@ function Tokens({ server }: { server: ServerInUse }) {
   return <>{server.available && server.estimatedTokens !== null ? tokensText(server.estimatedTokens) : "—"}</>;
 }
 
-function ServerRow({ server, onChange }: { server: ServerInUse; onChange: () => void }) {
+function ServerRow({ server, clash, onChange }: { server: ServerInUse; clash: boolean; onChange: () => void }) {
   return (
     <tr data-testid="server-row" className="align-top">
       <td className="max-w-[320px] px-3 py-2.5">
-        <NameCell server={server} />
+        <NameCell server={server} clash={clash} />
       </td>
       <td className="px-3 py-2.5 tabular-nums text-01">
         <Tools server={server} />
@@ -170,10 +178,10 @@ function ServerRow({ server, onChange }: { server: ServerInUse; onChange: () => 
   );
 }
 
-function ServerCard({ server, onChange }: { server: ServerInUse; onChange: () => void }) {
+function ServerCard({ server, clash, onChange }: { server: ServerInUse; clash: boolean; onChange: () => void }) {
   return (
     <li data-testid="server-card" className="flex min-w-0 flex-col gap-2 rounded-lg border border-01 p-3">
-      <NameCell server={server} />
+      <NameCell server={server} clash={clash} />
       <dl className="grid grid-cols-3 gap-2 text-body-xs">
         <div>
           <dt className="text-03">Tools</dt>
@@ -195,7 +203,7 @@ function ServerCard({ server, onChange }: { server: ServerInUse; onChange: () =>
         </div>
       </dl>
       <Button size="sm" variant="secondary" className="min-h-10 w-full" onClick={onChange}>
-        Change: make a new URL
+        Change…
       </Button>
     </li>
   );

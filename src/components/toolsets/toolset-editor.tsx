@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
-import { buildMcpUrl } from "@/features/connect/mcp-url";
+import { buildMcpUrl, toolDisplay } from "@/features/connect/mcp-url";
 import { defaultEntry, entryChipLabel, entryInput, entryProblem, providersLeft } from "@/features/toolsets/entry-rules";
 import { DRAFT_NOTICE, ON_EMPTY_LABELS, PROVIDER_MODE_LABELS, VERIFIED_ONLY_LABEL } from "@/features/toolsets/labels";
 import { ApiError } from "@/libs/ApiClient";
@@ -248,13 +248,12 @@ function EntriesEditor({ set }: { set: Toolset }) {
         placeholder="Search tools by name"
         options={catalogue.tools
           .filter((t) => !rows.some((r) => r.toolId === t.toolId))
-          .sort((a, b) => Number(a.providerCount === 0) - Number(b.providerCount === 0) || a.name.localeCompare(b.name))
-          .map((t) => ({
-            id: t.toolId,
-            label: t.name,
-            disabled: t.providerCount === 0,
-            detail: t.providerCount === 0 ? "No provider yet" : `${t.providerCount} provider${t.providerCount === 1 ? "" : "s"}`,
-          }))}
+          .sort((a, b) => Number(a.providerCount === 0) - Number(b.providerCount === 0) || toolDisplay(a).name.localeCompare(toolDisplay(b).name))
+          .map((t) => {
+            const shown = toolDisplay(t);
+            const providers = t.providerCount === 0 ? "No provider yet" : `${t.providerCount} provider${t.providerCount === 1 ? "" : "s"}`;
+            return { id: t.toolId, label: shown.name, disabled: t.providerCount === 0, detail: shown.title ? `${shown.title} · ${providers}` : providers };
+          })}
         onChange={(id, option) => id && save.mutate([...rows, { ...defaultEntry(id), toolName: option?.label ?? id }])}
         className="tablet:w-[360px]"
       />
@@ -291,7 +290,12 @@ function EntryRow({
     <li className="flex flex-col gap-2 px-3 py-2.5" data-testid="entry-row">
       <div className="flex flex-col gap-1.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-x-3">
         <div className="flex min-w-0 items-start gap-2 tablet:flex-1">
-          <span className="min-w-[8rem] flex-1 font-mono text-mono-13 text-01 [overflow-wrap:anywhere]">{row.toolName}</span>
+          <span className="flex min-w-[8rem] flex-1 flex-col">
+            <span className="font-mono text-mono-13 text-01 [overflow-wrap:anywhere]">{toolDisplay({ name: row.toolName, toolId: row.toolId }).name}</span>
+            {toolDisplay({ name: row.toolName, toolId: row.toolId }).title ? (
+              <span className="text-body-xs text-03">{toolDisplay({ name: row.toolName, toolId: row.toolId }).title}</span>
+            ) : null}
+          </span>
           <button
             type="button"
             aria-label={`Remove ${row.toolName}`}
