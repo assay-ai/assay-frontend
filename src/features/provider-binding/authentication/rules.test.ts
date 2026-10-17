@@ -52,8 +52,14 @@ describe("credentialHeaderProblems", () => {
   });
   it("flags long names and values by bytes", () => {
     expect(credentialHeaderProblems([h("a".repeat(65))]).has(0)).toBe(true);
-    expect(credentialHeaderProblems([h("X-A", "é".repeat(2049))]).has(0)).toBe(true);
-    expect(credentialHeaderProblems([h("X-A", "é".repeat(2048))]).has(0)).toBe(false);
+    expect(credentialHeaderProblems([h("X-A", "a".repeat(4097))]).has(0)).toBe(true);
+    expect(credentialHeaderProblems([h("X-A", "a".repeat(4096))]).has(0)).toBe(false);
+  });
+  it("allows printable ASCII with space and tab, and rejects the rest", () => {
+    expect(credentialHeaderProblems([h("X-A", "Bearer a b\tc~")]).size).toBe(0);
+    expect(credentialHeaderProblems([h("X-A", "caf\u00e9")]).get(0)).toBe("Use plain ASCII characters only.");
+    expect(credentialHeaderProblems([h("X-A", "a\u0000b")]).get(0)).toBe("Use plain ASCII characters only.");
+    expect(credentialHeaderProblems([h("X-A", "a\u007fb")]).get(0)).toBe("Use plain ASCII characters only.");
   });
 });
 
@@ -61,6 +67,10 @@ describe("splitHeaderLine", () => {
   it("splits on the first colon", () => {
     expect(splitHeaderLine("Authorization: Bearer sk-1")).toEqual({ name: "Authorization", value: "Bearer sk-1" });
     expect(splitHeaderLine("nocolon")).toBeNull();
+  });
+  it("does not split a pasted URL or a non-token name", () => {
+    expect(splitHeaderLine("https://api.example.com/v1")).toBeNull();
+    expect(splitHeaderLine("see this: value")).toBeNull();
   });
 });
 

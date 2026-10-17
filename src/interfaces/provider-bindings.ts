@@ -95,6 +95,12 @@ export interface CredentialSetSummary {
 export interface ToolBindingDetail extends ToolBindingSummary {
   authMode: BindingAuthMode;
   /**
+   * The endpoint the live (published) revision calls, or `null` before the
+   * first publish. It can differ from the draft `endpoint`; the live
+   * revision's stored credentials must stay until the new address is published.
+   */
+  publishedEndpoint: string | null;
+  /**
    * T3: the contract majors this revision serves, `^1` or `^1 || ^2`. Each
    * needs a green tester run before publishing. Optional for a backend that
    * predates contract versions (reads as `^1`).

@@ -430,6 +430,9 @@ function withSavedLimits(binding: DemoBinding): DemoBinding {
 }
 
 /** The auth mode a tab chose per listing. Only the mode: the demo never keeps a credential value. */
+/** Stored credential summaries per binding, then per origin: names and hints only, never a value. */
+const demoCredentialSets = new Map<string, Map<string, { origin: string; headers: { name: string; hint: string | null }[]; updatedAt: string }>>();
+
 const demoAuthModes = new Map<string, "NONE" | "API_KEY" | "SIGNATURE" | "BOTH">();
 
 /** A write's answer: the stored listing with what was sent laid over it. Echoed; the free limits, pricing mode and price are kept for the tab (see `rememberLimits`). */
@@ -529,6 +532,7 @@ function bindingDetail(binding: DemoBinding, id: string) {
     providesOutputFields: [...termsFor(binding).provides],
     supportsInputFields: [...termsFor(binding).supports],
     authMode: demoAuthModes.get(binding.id) ?? ("SIGNATURE" as const),
+    publishedEndpoint: binding.publishedVersion !== null ? binding.endpoint : null,
   };
 }
 
@@ -1930,25 +1934,35 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: /^\/providers\/me\/tool-bindings\/[^/]+\/credentials$/,
-    body: () => [],
+    body: (path) => [...(demoCredentialSets.get(idIn(path, 3) ?? "")?.values() ?? [])],
   },
   {
     // Write-only: the demo answers with names and a hint, and keeps no value.
     method: "PUT",
     match: /^\/providers\/me\/tool-bindings\/[^/]+\/credentials$/,
-    body: (_path, _query, data = {}) => ({
-      origin: typeof data.origin === "string" ? data.origin : "",
-      headers: (Array.isArray(data.headers) ? data.headers : []).map((header: { name?: unknown; value?: unknown }) => {
-        const value = typeof header.value === "string" ? header.value : "";
-        return { name: String(header.name ?? ""), hint: value.length >= 16 ? value.slice(-4) : null };
-      }),
-      updatedAt: justNow(),
-    }),
+    body: (path, _query, data = {}) => {
+      const summary = {
+        origin: typeof data.origin === "string" ? data.origin : "",
+        headers: (Array.isArray(data.headers) ? data.headers : []).map((header: { name?: unknown; value?: unknown }) => {
+          const value = typeof header.value === "string" ? header.value : "";
+          return { name: String(header.name ?? ""), hint: value.length >= 16 ? value.slice(-4) : null };
+        }),
+        updatedAt: justNow(),
+      };
+      const id = idIn(path, 3) ?? "";
+      const sets = demoCredentialSets.get(id) ?? new Map();
+      sets.set(summary.origin, summary);
+      demoCredentialSets.set(id, sets);
+      return summary;
+    },
   },
   {
     method: "DELETE",
     match: /^\/providers\/me\/tool-bindings\/[^/]+\/credentials$/,
-    body: () => null,
+    body: (path, query) => {
+      demoCredentialSets.get(idIn(path, 3) ?? "")?.delete(String(query.origin ?? ""));
+      return null;
+    },
   },
   {
     method: "PATCH",
