@@ -109,8 +109,6 @@ const STAKE_ADDRESS = "0x9F2c8A1e5D7b30C4f6A8e2B915D3c7E04A6b1F82";
 /** The console credential this provider's own actions are stamped with. */
 const CONSOLE_CREDENTIAL = "cred_8f3a1d0c";
 
-const EGRESS_IPS = ["203.0.113.21", "203.0.113.22", "198.51.100.9"];
-
 /** CAIP-10 for the payout address. Built lazily — see the module docstring. */
 function payoutAccount(): string {
   return `${DEMO_CHAIN_ID}:${PAYOUT_ADDRESS}`;
@@ -524,6 +522,7 @@ function bindingDetail(binding: DemoBinding, id: string) {
     toolVersionRange: termsFor(binding).range,
     providesOutputFields: [...termsFor(binding).provides],
     supportsInputFields: [...termsFor(binding).supports],
+    authMode: "SIGNATURE" as const,
   };
 }
 
@@ -1526,7 +1525,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         {
           key: "endpoint",
           title: "Endpoint",
-          caption: "Reachable from our egress addresses",
+          caption: "Reachable from Assay",
           status: "DONE",
         },
         { key: "terms", title: "Terms", caption: "Three documents, versioned", status: "DONE" },
@@ -1560,7 +1559,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
           },
         ],
       },
-      egressIps: EGRESS_IPS,
       lastConnectivityCheck: {
         outcome: "REACHABLE",
         endpoint: API_HOST,
@@ -1569,15 +1567,9 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         failureKind: null,
         failureCode: null,
         detail: null,
-        egressIps: EGRESS_IPS,
         checkedAt: minutesAgo(180),
       },
     }),
-  },
-  {
-    method: "GET",
-    match: "/providers/egress-ips",
-    body: () => ({ egressIps: EGRESS_IPS }),
   },
 
   // ── Capital ──────────────────────────────────────────────────────────────
@@ -1841,6 +1833,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         callId: "call_7f21c93a4b08",
         outcome: "PASSED",
         failedLayer: null,
+        warnings: [],
         mappingVersion: binding.version,
         toolVersion: tested?.version ?? 1,
         toolVersionSemver: tested?.semver ?? "1.0.0",
@@ -1927,6 +1920,11 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         ...(isMapping(data.responseMapping) ? { responseMapping: data.responseMapping } : {}),
       };
     },
+  },
+  {
+    method: "GET",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+\/credentials$/,
+    body: () => [],
   },
   {
     method: "PATCH",

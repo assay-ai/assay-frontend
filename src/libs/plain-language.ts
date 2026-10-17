@@ -427,6 +427,15 @@ const ERRORS: Record<string, string> = {
   TOOLSET_SLUG_LOCKED: "A tool set that has been shared keeps its address.",
   TOOLSET_REPORT_DUPLICATE: "Your team already reported this. Assay is looking at it.",
   TOOLSET_REPORT_TARGET_NOT_FOUND: "There is nothing here to report.",
+  CREDENTIAL_IN_QUERY:
+    "Don't put keys in the URL. URLs are logged by proxies, CDNs and servers and leak through browser history. Add it under Authentication → API key instead.",
+  SECRET_IN_MAPPING:
+    "This looks like a secret. Mappings are stored in plain text — add it under Authentication → API key instead.",
+  INVALID_CREDENTIAL_HEADERS: "Some header names or values aren't allowed. Check the highlighted rows.",
+  CREDENTIAL_ORIGIN_MISMATCH: "These headers belong to an old address. Enter them again for the current endpoint.",
+  CREDENTIAL_VAULT_UNAVAILABLE: "We can't reach the key store right now. Your API wasn't called. Try again in a minute.",
+  ENDPOINT_PORT_NOT_SUPPORTED:
+    "Your API uses a port Assay can't reach. Use port 443 or one of 8443, 2053, 2083, 2087, 2096.",
   URL_NOT_RECOGNISED: "We couldn't read this URL. Start a new one.",
   MCP_URL_NOT_FOUND: "This server URL does not serve anything (yet).",
 };

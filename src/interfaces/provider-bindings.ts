@@ -69,7 +69,31 @@ export interface ToolBindingSummary {
   version: number;
 }
 
+/**
+ * How the provider's API knows a request is from Assay. `API_KEY` sends the
+ * provider's own static headers, `SIGNATURE` signs each call, `BOTH` does both
+ * and `NONE` does neither.
+ */
+export type BindingAuthMode = "NONE" | "API_KEY" | "SIGNATURE" | "BOTH";
+
+/** One static header the platform sends to the provider's endpoint. */
+export interface CredentialHeaderInput {
+  name: string;
+  value: string;
+}
+
+/**
+ * The stored credential set for one endpoint origin. Values are never
+ * returned: `hint` is a short masked tail, or `null` when there is none.
+ */
+export interface CredentialSetSummary {
+  origin: string;
+  headers: { name: string; hint: string | null }[];
+  updatedAt: string;
+}
+
 export interface ToolBindingDetail extends ToolBindingSummary {
+  authMode: BindingAuthMode;
   /**
    * T3: the contract majors this revision serves, `^1` or `^1 || ^2`. Each
    * needs a green tester run before publishing. Optional for a backend that
@@ -159,6 +183,7 @@ export interface SaveToolBindingBody {
   requestMapping: ToolMapping;
   responseMapping: ToolMapping;
   pricingMode: PricingMode;
+  authMode?: BindingAuthMode;
   /** Minor units, digits only. */
   priceAmount: string;
   /** CAIP-19 asset id. */
@@ -209,6 +234,7 @@ export interface UpdateToolBindingBody {
   requestMapping?: ToolMapping;
   responseMapping?: ToolMapping;
   pricingMode?: PricingMode;
+  authMode?: BindingAuthMode;
   priceAmount?: string;
   assetId?: string;
   freeQuotaPerAgent?: number | null;
@@ -613,6 +639,11 @@ export interface BindingTestReport {
   /** T3: e.g. "1.1.0". */
   toolVersionSemver?: string;
   layers: BindingTestLayerResult[];
+  /** Non-blocking findings, e.g. the endpoint answered without credentials. */
+  warnings: {
+    code: "ACCEPTS_UNSIGNED" | "ACCEPTS_WITHOUT_CREDENTIALS" | "NO_AUTHENTICATION";
+    message: string;
+  }[];
   /** Header **names** only, never values. */
   request: {
     method: string;
