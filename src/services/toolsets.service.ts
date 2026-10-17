@@ -20,6 +20,8 @@ export type ToolAccessStanding = "ALLOWED" | "VIA_TOOLSET_URL" | "BLOCKED";
 export type RefusalLayer = "SERVER" | "AGENT_LIMITS" | "TOOLSET_RULES";
 export type EndpointKind = "ROOT" | "HANDLE" | "CATEGORY" | "TOOLSET";
 export type ConnectClient = "claude-code" | "claude-desktop" | "cursor" | "other";
+export type ToolsetVisibility = "PRIVATE" | "UNLISTED" | "PUBLIC";
+export type ToolsetDiscovery = "AUTO" | "FULL" | "SEARCH";
 
 /* ------------------------------------------------------------- tool sets */
 
@@ -41,6 +43,18 @@ export interface ToolsetEntry extends Omit<ToolsetEntryInput, "maxPrice"> {
   maxPrice: Money | null;
 }
 
+/** The MCP URLs of one tool set (`ToolsetUrlsDto`); a shared one only while it is shared. */
+export interface ToolsetUrls {
+  /** The live Draft, `/my/{slug}`. */
+  draft: string;
+  /** "Lock to vN": `/my/{slug}@{latest}`. */
+  myPinned: string | null;
+  public: string | null;
+  publicPinned: string | null;
+  unlisted: string | null;
+  unlistedPinned: string | null;
+}
+
 export interface ToolsetSummary {
   id: string;
   slug: string;
@@ -58,6 +72,22 @@ export interface ToolsetSummary {
   toolCount: number;
   createdAt: string;
   updatedAt: string;
+  /** T2 — sharing. Optional: a T1 backend does not send them. */
+  publisherKind?: "USER" | "PLATFORM" | "PROVIDER";
+  /** Your public name, when it is claimed. */
+  handle?: string | null;
+  listingStatus?: "LISTED" | "DELISTED" | null;
+  /** The newest published version; null before v1. */
+  latestVersion?: number | null;
+  /** Old shared URLs keep serving until then ("This tool set stops working on …"). */
+  sharingEndsAt?: string | null;
+  delisted?: boolean;
+  /** Taken down for abuse: only `/my/` serves. */
+  removed?: boolean;
+  urls?: ToolsetUrls;
+  /** The link-only token while shared; owners only. */
+  unlistedToken?: string | null;
+  forkedFrom?: { toolsetId: string; version: number | null } | null;
 }
 
 export interface Toolset extends ToolsetSummary {
@@ -75,6 +105,9 @@ export interface UpdateToolsetBody {
   name?: string;
   slug?: string;
   description?: string | null;
+  discovery?: ToolsetDiscovery;
+  /** "Always loaded" tool names, at most 5. */
+  pinnedTools?: string[];
 }
 
 export function listToolsets(query: ListQuery = {}): Promise<CursorPage<ToolsetSummary>> {
@@ -103,6 +136,161 @@ export function deleteToolset(id: string): Promise<void> {
   return api.delete<void>(`/toolsets/${encodeURIComponent(id)}`);
 }
 
+/* ------------------------------------------- sharing, versions, copies */
+
+export interface ToolsetVersionSummary {
+  version: number;
+  publishedAt: string;
+  changelog: string | null;
+  name: string;
+  toolCount: number;
+}
+
+export interface ToolsetVersionEntry {
+  toolId: string;
+  /** The name at publish time. */
+  toolName: string;
+  providerMode: ProviderMode;
+  providerIds: string[];
+  minTier: ProviderTier | null;
+  maxPrice: Money | null;
+  minQuality: number | null;
+  onEmpty: OnEmpty;
+}
+
+export interface ToolsetVersion extends ToolsetVersionSummary {
+  description: string | null;
+  icon: string | null;
+  discovery: ToolsetDiscovery;
+  searchThreshold: number;
+  pinnedTools: string[];
+  entries: ToolsetVersionEntry[];
+}
+
+/** What changed between two versions (`ToolsetDiffDto`); tool names, and internal setting names. */
+export interface ToolsetDiff {
+  added: string[];
+  removed: string[];
+  rulesChanged: string[];
+  settingsChanged: string[];
+}
+
+export interface PublishResult {
+  toolset: Toolset;
+  version: ToolsetVersionSummary | null;
+  diff: ToolsetDiff | null;
+}
+
+export interface CopyResult {
+  toolset: Toolset;
+  excluded: { toolId: string; toolName: string; reason: "LINK_ONLY" | "REMOVED" | string }[];
+}
+
+/** A figure that may be withheld: `value` null below k = 5, `display` what a page prints ("Fewer than 5"). */
+export interface Figure {
+  value: number | null;
+  display: string;
+}
+
+export interface PublicFigures {
+  activeUsers: Figure;
+  agents: Figure | null;
+  calls30d: Figure | null;
+  copies: Figure;
+  trend: "UP" | "DOWN" | "FLAT" | null;
+  onLatestVersionPercent: number | null;
+}
+
+export interface DashboardFigures {
+  tools: {
+    toolId: string;
+    toolName: string;
+    calls: Figure | null;
+    errorRatePercent: number | null;
+    notChargedRatePercent: number | null;
+    /** 1 to 4 orgs contribute: every number in the row is withheld. */
+    withheld: boolean;
+  }[];
+  versions: { version: number; orgs: Figure; stoppedAfterUpdate: Figure }[];
+}
+
+export interface ToolsetOwnStats {
+  /** The Monday these were published; null before the first week. */
+  weekStart: string | null;
+  figures: PublicFigures | null;
+  dashboard: DashboardFigures | null;
+}
+
+/**
+ * The Share dialog in one step. Errors: `TOOLSET_HANDLE_REQUIRED` 409,
+ * `TOOLSET_NOT_PUBLISHABLE` 400 (`toolIds`), `TOOLSET_SHARING_REFUSED` 409,
+ * `TOOLSET_LIMIT_EXCEEDED` 429.
+ */
+export function publishToolset(id: string, body: { visibility: ToolsetVisibility; changelog?: string }): Promise<PublishResult> {
+  return api.post<PublishResult>(`/toolsets/${encodeURIComponent(id)}/publish`, body);
+}
+
+/** Stop sharing: old shared URLs serve the last version for 90 days. */
+export function unpublishToolset(id: string): Promise<PublishResult> {
+  return api.post<PublishResult>(`/toolsets/${encodeURIComponent(id)}/unpublish`, {});
+}
+
+/** A new link; the old one stops working at once. */
+export function rotateUnlistedToken(id: string): Promise<PublishResult> {
+  return api.post<PublishResult>(`/toolsets/${encodeURIComponent(id)}/unlisted-token/rotate`, {});
+}
+
+/** Newest first. Own tool sets only. */
+export function listToolsetVersions(id: string): Promise<ToolsetVersionSummary[]> {
+  return api.get<ToolsetVersionSummary[]>(`/toolsets/${encodeURIComponent(id)}/versions`);
+}
+
+export function getToolsetVersion(id: string, version: number): Promise<ToolsetVersion> {
+  return api.get<ToolsetVersion>(`/toolsets/${encodeURIComponent(id)}/versions/${version}`);
+}
+
+/** Make my own version. 404 also when the caller cannot see the source. */
+export function copyToolset(id: string, body: { version?: number; unlistedToken?: string; name?: string }): Promise<CopyResult> {
+  return api.post<CopyResult>(`/toolsets/${encodeURIComponent(id)}/copy`, body);
+}
+
+/** The publisher dashboard: weekly, k = 5 on every cell. Own tool sets only. */
+export function getToolsetStats(id: string): Promise<ToolsetOwnStats> {
+  return api.get<ToolsetOwnStats>(`/toolsets/${encodeURIComponent(id)}/stats`);
+}
+
+/* ------------------------------------------------------- public name */
+
+export interface OrgHandle {
+  handle: string | null;
+  status: "ACTIVE" | "FROZEN" | null;
+  /** Set by the first shared tool set. */
+  lockedAt: string | null;
+  /** It can be claimed or changed here (not locked or frozen). */
+  canChange: boolean;
+}
+
+export function getOrgHandle(): Promise<OrgHandle> {
+  return api.get<OrgHandle>("/org/handle");
+}
+
+/**
+ * Claim or change the public name. Errors: `TOOLSET_HANDLE_INVALID` 400
+ * (`reason` FORMAT | RESERVED), `TOOLSET_HANDLE_TAKEN` 409 (`suggestions`),
+ * `TOOLSET_HANDLE_LOCKED` 409, `TOOLSET_HANDLE_CLAIM_REFUSED` 403 (`reason`
+ * NOT_VERIFIED | CLAIM_LIMIT).
+ */
+export function claimOrgHandle(handle: string): Promise<OrgHandle> {
+  return api.put<OrgHandle>("/org/handle", { handle });
+}
+
+/* ----------------------------------------------------------- reports */
+
+/** Exactly one of `toolsetId`, `toolId`, `handle`. Errors: `TOOLSET_REPORT_DUPLICATE` 409. */
+export function createReport(body: { toolsetId?: string; toolId?: string; handle?: string; unlistedToken?: string; reason: string }): Promise<{ id: string; createdAt: string }> {
+  return api.post<{ id: string; createdAt: string }>("/reports", body);
+}
+
 /* ---------------------------------------------- what this agent can use */
 
 export interface AllowedToolset {
@@ -112,6 +300,14 @@ export interface AllowedToolset {
   name: string | null;
   slug: string | null;
   deleted: boolean;
+  /** T2. The owner's public name; `assay` for Official. */
+  handle?: string | null;
+  /** T2. Owned by your organization. */
+  own?: boolean;
+  /** T2. NOT_SHARED: its owner stopped sharing it; REMOVED: taken down. */
+  status?: "ACTIVE" | "DELETED" | "NOT_SHARED" | "REMOVED";
+  /** T2. The newest version the pin could move to — the "Update available" chip. */
+  latestVersion?: number | null;
 }
 
 export interface AgentRules {
@@ -150,7 +346,11 @@ export interface OnlyConnectedResult extends AgentAccess {
 /** `PATCH /agents/:agentId/access`. Omitted fields keep their value. */
 export interface UpdateAgentAccessBody {
   accessMode?: AccessMode;
-  allowedToolsets?: { toolsetId: string; version: null; viaUrlOnly: boolean }[];
+  /**
+   * Another organization's tool set must be pinned to a version; `null`
+   * (always latest) is allowed only for your own and Official ones.
+   */
+  allowedToolsets?: { toolsetId: string; version: number | null; viaUrlOnly: boolean; unlistedToken?: string }[];
   allowedToolIds?: string[];
   rules?: {
     excludeProviderIds?: string[];
@@ -207,6 +407,10 @@ export interface McpUrlPreview {
   viewFilter: Record<string, unknown> | null;
   discovery: "FULL" | "SEARCH";
   listedCount: number;
+  /** T2. Tools this agent can reach here: listed, or through search. */
+  reachableCount?: number;
+  /** T2. The names `tools/list` returns, in order (search mode: pinned + the 3 search tools). */
+  listedTools?: string[];
   estimatedTokens: number;
   freeOnly: boolean;
   tools: PreviewTool[];
@@ -230,6 +434,8 @@ export interface ServerInUse {
   toolCount: number | null;
   estimatedTokens: number | null;
   discovery: "FULL" | "SEARCH";
+  /** T2. For a server that shows every tool: the same URL in search mode ("Switch to search"). */
+  searchUrl?: string | null;
   lastCallAt: string | null;
   handedOutAt: string | null;
   firstCallAt: string | null;

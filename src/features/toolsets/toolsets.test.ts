@@ -412,3 +412,116 @@ describe("the access draft: one Save, one Cancel, an Undo", () => {
     });
   });
 });
+
+/* ------------------------------------------------------------------ T2 */
+
+import { moveLockBody, pinnedToolsBody, suggestAlwaysLoaded, updateAvailableFor, addToolsetBody } from "./access-result";
+import { DISCOVERY_LABELS, lockLabel, settingLabel, VISIBILITY_LABELS } from "./labels";
+import { biggestServer, lockedVersionOf, serverLabel, toolsShown } from "./servers";
+import type { ServerInUse } from "@/services/toolsets.service";
+
+function server(over: Partial<ServerInUse> = {}): ServerInUse {
+  return {
+    canonicalUrl: "https://mcp.example.com/",
+    endpointKind: "ROOT",
+    toolsetId: null,
+    name: "assay",
+    serverName: "assay",
+    client: null,
+    toolCount: 4,
+    estimatedTokens: 700,
+    discovery: "SEARCH",
+    searchUrl: null,
+    lastCallAt: null,
+    handedOutAt: null,
+    firstCallAt: null,
+    waitingForFirstCall: false,
+    available: true,
+    updateAvailable: false,
+    ...over,
+  };
+}
+
+describe("search mode in the Connect sheet (T2)", () => {
+  it("reads like '4 tools (search) — about 0.9k tokens; 37 tools reachable'", () => {
+    expect(previewSummary(preview({ discovery: "SEARCH", listedCount: 4, estimatedTokens: 900, reachableCount: 37 }))).toBe(
+      "4 tools (search) — about 0.9k tokens; 37 tools reachable",
+    );
+    expect(previewSummary(preview({ discovery: "SEARCH", listedCount: 3, estimatedTokens: 570, reachableCount: 1 }))).toBe(
+      "3 tools (search) — about 0.6k tokens; 1 tool reachable",
+    );
+  });
+});
+
+describe("over budget counts only the servers that show every tool, and offers 'Switch to search'", () => {
+  const full = server({ canonicalUrl: "https://mcp.example.com/?discovery=full", name: "assay", toolCount: 13, discovery: "FULL", searchUrl: "https://mcp.example.com/" });
+  const kit = server({ canonicalUrl: "https://mcp.example.com/my/kit", name: "Kit", toolCount: 6, discovery: "FULL", searchUrl: "https://mcp.example.com/my/kit?discovery=search" });
+  const searching = server({ canonicalUrl: "https://mcp.example.com/c/web", name: "web", toolCount: 4, discovery: "SEARCH" });
+
+  it("adds up only FULL servers", () => {
+    expect(toolsShown([full, kit, searching])).toBe(19);
+    expect(toolsShown([searching, server({ toolCount: 40, discovery: "SEARCH" })])).toBe(0);
+  });
+
+  it("picks the biggest FULL server that has a search URL to switch", () => {
+    expect(biggestServer([kit, full, searching])?.name).toBe("assay");
+    expect(biggestServer([searching])).toBeNull();
+  });
+
+  it("a search preview never pushes the sheet over budget; a FULL one adds to the other FULL servers", () => {
+    expect(overBudgetWith(preview({ canonicalUrl: "https://mcp.example.com/x", discovery: "SEARCH", listedCount: 4 }), [full, kit])).toBeNull();
+    expect(overBudgetWith(preview({ canonicalUrl: "https://mcp.example.com/x", discovery: "FULL", listedCount: 7 }), [full, kit, searching])).toBe(26);
+    expect(overBudgetWith(preview({ canonicalUrl: "https://mcp.example.com/x", discovery: "FULL", listedCount: 6 }), [full, kit, searching])).toBeNull();
+  });
+
+  it("labels shared, link-only, topic and locked rows, and reads their lock", () => {
+    const shared = server({ canonicalUrl: "https://mcp.example.com/@acme/kit@2", name: "Kit" });
+    expect(serverLabel(shared)).toEqual({ title: "Kit", detail: "@acme/kit · locked to v2" });
+    expect(serverLabel(server({ canonicalUrl: "https://mcp.example.com/c/weather" })).title).toBe("Topic: weather");
+    expect(serverLabel(server({ canonicalUrl: "https://mcp.example.com/my/kit@3", name: "Kit" })).detail).toBe("Your tool set · locked to v3");
+    expect(lockedVersionOf(shared)).toBe(2);
+    expect(lockedVersionOf(server({ canonicalUrl: "https://mcp.example.com/@acme/kit" }))).toBeNull();
+  });
+});
+
+describe("version locks and Always loaded in What this agent can use", () => {
+  const foreign = { toolsetId: "s9", version: 2, viaUrlOnly: true, name: "Crypto desk", slug: "crypto", deleted: false, handle: "marketkit", own: false, status: "ACTIVE" as const, latestVersion: 3 };
+
+  it("keeps another org's lock through every edit; the draft never turns it into 'latest'", () => {
+    const a = access({ allowedToolsets: [...access().allowedToolsets, foreign] });
+    const body = draftBody(a, { ...draftFrom(a), toolIds: [] });
+    expect(body?.allowedToolsets).toBeUndefined();
+    const withNew = draftBody(a, { ...draftFrom(a), toolsets: [...draftFrom(a).toolsets, { toolsetId: "s10", viaUrlOnly: true, version: 1 }] });
+    expect(withNew?.allowedToolsets).toContainEqual({ toolsetId: "s9", version: 2, viaUrlOnly: true });
+    expect(restoreBody(a).allowedToolsets).toContainEqual({ toolsetId: "s9", version: 2, viaUrlOnly: true });
+  });
+
+  it("moves a lock only on purpose, and adds another org's set locked to a version", () => {
+    const a = access({ allowedToolsets: [foreign] });
+    expect(moveLockBody(a, "s9", 3, "Crypto desk")).toEqual({ allowedToolsets: [{ toolsetId: "s9", version: 3, viaUrlOnly: true }], changeReason: "Moved Crypto desk to v3" });
+    expect(addToolsetBody(access({ allowedToolsets: [] }), "s9", "Crypto desk", 3).allowedToolsets).toEqual([{ toolsetId: "s9", version: 3, viaUrlOnly: true }]);
+  });
+
+  it("offers 'Update available' only for a lock behind the newest version that still serves", () => {
+    expect(updateAvailableFor(foreign)).toBe(3);
+    expect(updateAvailableFor({ ...foreign, latestVersion: 2 })).toBeNull();
+    expect(updateAvailableFor({ ...foreign, version: null })).toBeNull();
+    expect(updateAvailableFor({ ...foreign, status: "REMOVED" })).toBeNull();
+  });
+
+  it("pins at most 5 tools, suggesting the most-called first", () => {
+    expect(pinnedToolsBody(["a", "b", "a", "c", "d", "e", "f"]).pinnedTools).toEqual(["a", "b", "c", "d", "e"]);
+    const calls = ["get_weather", "search_web", "get_weather", "geocode_place", "get_weather", "search_web"].map((toolName) => ({ toolName }));
+    expect(suggestAlwaysLoaded(calls, [])).toEqual(["get_weather", "search_web", "geocode_place"]);
+    expect(suggestAlwaysLoaded(calls, ["get_weather"], new Set(["get_weather", "geocode_place"]))).toEqual(["geocode_place"]);
+  });
+});
+
+describe("T2 plain labels", () => {
+  it("never print an internal word", () => {
+    const words = [...Object.values(VISIBILITY_LABELS), ...Object.values(DISCOVERY_LABELS), lockLabel(3), settingLabel("discovery"), settingLabel("pinnedTools")];
+    for (const word of words) expect(word).not.toMatch(/PRIVATE|UNLISTED|PUBLIC|FULL|SEARCH|discovery|toolset|handle|pinned/);
+    expect(VISIBILITY_LABELS).toEqual({ PRIVATE: "Only my team", UNLISTED: "Anyone with the link", PUBLIC: "Listed in the catalogue" });
+    expect(lockLabel(3)).toBe("Lock to v3 (no surprise changes)");
+  });
+});

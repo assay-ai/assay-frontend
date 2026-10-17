@@ -367,7 +367,7 @@ export function routingNotes(
 
 /** The Explorer's list state, as it rides in the URL so Back from a tool restores it. */
 export interface ExplorerListState {
-  view: "tools" | "providers";
+  view: "tools" | "providers" | "toolsets";
   q: string;
   /** Tools with free calls only. */
   free: boolean;
@@ -375,7 +375,7 @@ export interface ExplorerListState {
 
 export function readExplorerState(params: { get(name: string): string | null }): ExplorerListState {
   return {
-    view: params.get("view") === "providers" ? "providers" : "tools",
+    view: params.get("view") === "providers" ? "providers" : params.get("view") === "toolsets" ? "toolsets" : "tools",
     q: params.get("q") ?? "",
     free: params.get("free") === "1",
   };
@@ -384,7 +384,7 @@ export function readExplorerState(params: { get(name: string): string | null }):
 /** `/catalogue` with only the non-default parts of the state in its query. */
 export function explorerHref(state: ExplorerListState): string {
   const params = new URLSearchParams();
-  if (state.view === "providers") params.set("view", "providers");
+  if (state.view !== "tools") params.set("view", state.view);
   if (state.q.trim()) params.set("q", state.q);
   if (state.free && state.view === "tools") params.set("free", "1");
   const query = params.toString();
