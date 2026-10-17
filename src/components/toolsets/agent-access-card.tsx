@@ -267,6 +267,7 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
               <SharedSetRow
                 key={set.toolsetId}
                 set={set}
+                appVersion={appVersionOf(set, servers.data?.servers)}
                 checked={draft.toolsets.some((t) => t.toolsetId === set.toolsetId)}
                 onToggle={(on) =>
                   patch({
@@ -284,6 +285,7 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
                     from: set.version,
                     to,
                     access: { access, toolsetId: set.toolsetId },
+                    agentId: access.agentId,
                   });
                 }}
               />
@@ -436,13 +438,35 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
 }
 
 const STATUS_NOTICE: Record<string, string> = {
-  DELETED: "Tool set deleted by its owner. This agent keeps the tools of the version it is locked to.",
-  NOT_SHARED: "Its owner stopped sharing it. If it is allowed only through its own URL, its tools stop when that URL stops.",
-  REMOVED: "This tool set was removed by Assay. It allows nothing now.",
+  DELETED: "Deleted by its owner. This agent keeps the tools of the version it is locked to, but nothing will change or be fixed.",
+  NOT_SHARED: "Its owner stopped sharing it. Its URL stops working soon, and its tools stop with it when allowed only through that URL.",
+  REMOVED: "Removed by Assay after a report. It allows nothing now.",
 };
 
-/** Another organization's tool set this agent may use: its lock, its update, its state. */
-function SharedSetRow({ set, checked, onToggle, onUpdate }: { set: AllowedToolset; checked: boolean; onToggle: (on: boolean) => void; onUpdate: () => void }) {
+/** The version this agent's app connects to for a shared set, from Servers in use. */
+function appVersionOf(set: AllowedToolset, servers: readonly ServerInUse[] | undefined): number | null {
+  for (const server of servers ?? []) {
+    const origin = server.canonicalUrl.replace(/^([a-z]+:\/\/[^/?#]+).*$/i, "$1");
+    const choice = parseMcpUrl(server.canonicalUrl, origin)?.choice;
+    if (choice?.kind === "shared" && choice.handle === set.handle && choice.slug === set.slug && choice.version) return choice.version;
+  }
+  return null;
+}
+
+/** Another organization's tool set this agent may use: its lock, its update, its state and the next step. */
+function SharedSetRow({
+  set,
+  checked,
+  appVersion,
+  onToggle,
+  onUpdate,
+}: {
+  set: AllowedToolset;
+  checked: boolean;
+  appVersion: number | null;
+  onToggle: (on: boolean) => void;
+  onUpdate: () => void;
+}) {
   const next = updateAvailableFor(set);
   const notice = set.status ? STATUS_NOTICE[set.status] : undefined;
   return (
@@ -457,7 +481,7 @@ function SharedSetRow({ set, checked, onToggle, onUpdate }: { set: AllowedToolse
               {set.name ?? "A shared tool set"}{" "}
               <span className="text-body-xs text-03">
                 · {set.handle && set.slug ? `@${set.handle}/${set.slug} · ` : ""}
-                {set.version ? `locked to v${set.version}` : "always latest"}
+                {set.version ? `may use v${set.version}` : "always latest"}
               </span>
             </span>
           }
@@ -468,7 +492,34 @@ function SharedSetRow({ set, checked, onToggle, onUpdate }: { set: AllowedToolse
           </button>
         ) : null}
       </div>
-      {notice ? <p className="pl-7 text-body-xs text-warning-700">{notice}</p> : null}
+      {appVersion && set.version && appVersion !== set.version && set.status !== "REMOVED" ? (
+        <p className="pl-7 text-body-xs text-02" data-testid="app-version-note">
+          Your app still connects to v{appVersion}; this agent may use v{set.version}. Update the URL under Servers in use so both match.
+        </p>
+      ) : null}
+      {notice ? (
+        <div className="flex flex-col gap-1 pl-7" data-testid="shared-set-notice">
+          <p className="text-body-xs text-warning-700">{notice}</p>
+          <div className="flex flex-wrap gap-x-3">
+            {checked ? (
+              <button type="button" className="min-h-10 text-label-13 text-primary-600 hover:underline tablet:min-h-0" onClick={() => onToggle(false)}>
+                Stop allowing it
+              </button>
+            ) : (
+              <span className="text-body-xs text-03">Not allowed once you save.</span>
+            )}
+            {set.status === "NOT_SHARED" && set.handle && set.slug ? (
+              <Link href={`/toolsets/view?handle=${set.handle}&slug=${set.slug}`} className="min-h-10 content-center text-label-13 text-primary-600 hover:underline tablet:min-h-0">
+                Make your own version
+              </Link>
+            ) : (
+              <Link href="/catalogue?view=toolsets" className="min-h-10 content-center text-label-13 text-primary-600 hover:underline tablet:min-h-0">
+                Find another tool set
+              </Link>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
