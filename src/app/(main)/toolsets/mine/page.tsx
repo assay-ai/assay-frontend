@@ -17,7 +17,8 @@ function MyToolsets() {
   const params = useSearchParams();
   const id = params.get("id");
   const slug = params.get("slug");
-  if (id || slug) return <ToolsetPage id={id} slug={slug} free={params.get("free") === "1"} />;
+  const v = Number(params.get("v"));
+  if (id || slug) return <ToolsetPage id={id} slug={slug} free={params.get("free") === "1"} version={Number.isInteger(v) && v > 0 ? v : null} />;
   return <ToolsetsView />;
 }
 

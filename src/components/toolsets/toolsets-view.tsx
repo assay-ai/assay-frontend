@@ -12,12 +12,14 @@ import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { defaultEntry } from "@/features/toolsets/entry-rules";
+import { shareStatus } from "@/features/toolsets/sharing";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { createToolset, type ToolsetSummary } from "@/services/toolsets.service";
 import { toast } from "@/utils/toast";
 
 import { ConnectSheet } from "./connect-sheet";
+import { Chip, statusChipTone } from "./toolset-bits";
 import { errorText, toolsetKeys, useToolsets } from "./use-toolsets";
 
 /**
@@ -169,7 +171,10 @@ function ToolsetRow({ set, onConnect }: { set: ToolsetSummary; onConnect: () => 
     <li className="flex w-full flex-col gap-2 border-b border-01 px-4 py-3.5 last:border-b-0 tablet:flex-row tablet:items-center tablet:px-5" data-testid="toolset-row">
       <Link href={toolsetHref(set.id)} className="flex min-w-0 flex-1 items-center gap-3 hover:underline">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-label-13 text-01">{set.name}</span>
+          <span className="flex flex-wrap items-center gap-2 text-label-13 text-01">
+            {set.name}
+            <Chip tone={statusChipTone(shareStatus(set).tone)}>{shareStatus(set).label}</Chip>
+          </span>
           <span className="break-all font-mono text-mono-xs text-03">/my/{set.slug}</span>
           <span className="text-body-xs text-03">
             {set.toolCount} tool{set.toolCount === 1 ? "" : "s"} · changed <UtcTime value={set.updatedAt} relative midSentence />
