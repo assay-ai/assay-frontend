@@ -15,7 +15,6 @@ import { entryAfterFix, entryAlreadyFixed, isEntryFix, refusedCallView, viaText,
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
-import { getCatalogueToolVersions } from "@/services/catalogue.service";
 import { getRefusedCall, getToolset, listRefusedCalls, replaceToolsetEntries, type RefusedCall, type UpdateAgentAccessBody } from "@/services/toolsets.service";
 import { toast } from "@/utils/toast";
 
@@ -174,14 +173,7 @@ export async function runEntryFix(
 }
 
 export function RefusedCallCard({ call, onClose }: { call: RefusedCall; onClose?: () => void }) {
-  // A retired version names its replacement from the tool's published versions ([contract gap]: the refused call does not carry it).
-  const versions = useQuery({
-    queryKey: ["catalogue-tool-versions", call.toolId],
-    enabled: call.refusalCode === "CONTRACT_VERSION_RETIRED" && Boolean(call.toolId),
-    retry: 0,
-    queryFn: () => getCatalogueToolVersions(call.toolId!),
-  });
-  const view = refusedCallView(call, { versions: versions.data?.versions });
+  const view = refusedCallView(call);
   const names = useEntityNames({ kinds: ["agent"] });
   const toolsets = useToolsets();
   const queryClient = useQueryClient();

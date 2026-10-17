@@ -60,11 +60,6 @@ export interface RefusedCallView {
   note: string | null;
 }
 
-/** What the card knows besides the call: the tool's published versions (for a retired one's replacement). */
-export interface RefusedCallContext {
-  versions?: readonly Pick<ToolVersionBrief, "semver" | "major" | "status">[];
-}
-
 const fromAgent = (p: RefusedProvider) => p.source === "AGENT";
 
 function differentAsset(p: RefusedProvider): boolean {
@@ -106,16 +101,9 @@ export function providerReason(p: RefusedProvider): string {
   }
 }
 
-/**
- * What a CONTRACT_VERSION_MISMATCH provider serves and what the call used,
- * read from the router's own sentence: "binding b-1 serves ^1, not contract
- * v2.0.0". [contract gap] the refused provider has no structured fields for
- * either; when the sentence changes, the reason falls back to a plain one.
- */
-export function mismatchOf(p: Pick<RefusedProvider, "detail">): { serves: number[]; callMajor: number | null } {
-  const match = /serves (.+?), not contract v(\d+\.\d+\.\d+)/.exec(p.detail ?? "");
-  if (!match) return { serves: [], callMajor: null };
-  return { serves: parseVersionRange(match[1]) ?? [], callMajor: majorOf(match[2]) };
+/** What a CONTRACT_VERSION_MISMATCH provider serves and what the call used (the API's structured fields). */
+export function mismatchOf(p: Pick<RefusedProvider, "servedMajors" | "requestedMajor">): { serves: number[]; callMajor: number | null } {
+  return { serves: [...(p.servedMajors ?? [])].sort((a, b) => a - b), callMajor: typeof p.requestedMajor === "number" ? p.requestedMajor : null };
 }
 
 /** Whose rule dropped a provider, in words. */
@@ -172,37 +160,28 @@ function providerFix(call: RefusedCall, p: RefusedProvider): RefusalFix | null {
   }
 }
 
-/** The version a retired call should move to, as "v2.0.0", and its major; null when there is none. */
-export function replacementOf(context: RefusedCallContext): { label: string; major: number } | null {
-  const versions = context.versions ?? [];
-  const retired = retiredMajors(context);
-  if (retired.length === 0) return null;
-  const label = newerVersion(versions, Math.max(...retired));
-  const major = parseSemver(label?.slice(1))?.major;
-  return label && major !== undefined ? { label, major } : null;
-}
-
 /**
- * The majors the call could have used: the RETIRED ones. A catalogue read
- * just before the retirement job ran still says DEPRECATED, so then every
- * major below the newest active one counts.
+ * What replaces a retired version, from the call's own `details.replacement`:
+ * "v2.0.0" when it is this tool at a newer major, "get_weather_pro v1.0.0"
+ * when it is another tool. null when nothing does.
  */
-function retiredMajors(context: RefusedCallContext): number[] {
-  const versions = context.versions ?? [];
-  const retired = versions.filter((v) => v.status === "RETIRED").map((v) => v.major);
-  if (retired.length > 0) return [...new Set(retired)];
-  const active = versions.filter((v) => v.status === "ACTIVE").map((v) => v.major);
-  if (active.length === 0) return [];
-  const newest = Math.max(...active);
-  return [...new Set(versions.filter((v) => v.major < newest).map((v) => v.major))];
+export function replacementOf(call: Pick<RefusedCall, "toolId" | "details">): { label: string; major: number | null; toolId: string; sameTool: boolean } | null {
+  const r = call.details?.replacement;
+  if (!r) return null;
+  const sameTool = r.toolId === call.toolId;
+  const label = sameTool ? (r.semver ? `v${r.semver}` : r.major !== null ? `v${r.major}` : r.label) : r.semver ? `${r.name} v${r.semver}` : r.name;
+  return { label, major: r.major, toolId: r.toolId, sameTool };
 }
 
-function callFix(call: RefusedCall, context: RefusedCallContext): RefusalFix | null {
+function callFix(call: RefusedCall): RefusalFix | null {
   switch (call.refusalCode) {
     case "CONTRACT_VERSION_RETIRED": {
-      const next = replacementOf(context);
-      if (next && call.toolsetId && call.toolId && call.endpointKind === "TOOLSET" && call.toolsetVersion === null) {
-        return { kind: "move-major", toolsetId: call.toolsetId, toolId: call.toolId, from: retiredMajors(context), to: next.major, label: `Use ${next.label}` };
+      const next = replacementOf(call);
+      if (next && !next.sameTool) return { kind: "link", href: routes.exploreTool(next.toolId), label: `Use ${next.label}` };
+      if (next && next.major !== null && call.toolsetId && call.toolId && call.endpointKind === "TOOLSET" && call.toolsetVersion === null) {
+        // Every major below the replacement is the retired one(s) the entry may still name.
+        const from = Array.from({ length: next.major - 1 }, (_, i) => i + 1);
+        return { kind: "move-major", toolsetId: call.toolsetId, toolId: call.toolId, from, to: next.major, label: `Use ${next.label}` };
       }
       // A locked tool set version or a pinned URL: the agent needs a new URL.
       if (next) return { kind: "link", href: "/connect", label: `Get a URL for ${next.label}` };
@@ -275,14 +254,14 @@ function fieldsFor(call: RefusedCall, reason: string): string[] {
 }
 
 /** The plain reason; T3 refusals say which field or version, not only "No provider fits". */
-function reasonOf(call: RefusedCall, context: RefusedCallContext): string {
+function reasonOf(call: RefusedCall): string {
   const all = (reason: string) => call.providers.length > 0 && call.providers.every((p) => p.reason === reason);
   if (call.refusalCode === "UNSUPPORTED_INPUT_FIELD") {
     const fields = fieldsFor(call, "UNSUPPORTED_INPUT_FIELD");
     return fields.length > 0 ? `No allowed provider supports ${fieldList(fields)}.` : refusalText(call.refusalCode);
   }
   if (call.refusalCode === "CONTRACT_VERSION_RETIRED") {
-    const next = replacementOf(context);
+    const next = replacementOf(call);
     return next ? `This version of the tool was retired. Use ${next.label}.` : refusalText(call.refusalCode);
   }
   if (call.refusalCode === "NO_PROVIDER_MATCHES_RULES") {
@@ -294,12 +273,12 @@ function reasonOf(call: RefusedCall, context: RefusedCallContext): string {
   return refusalText(call.refusalCode);
 }
 
-function noteOf(call: RefusedCall, context: RefusedCallContext): string | null {
+function noteOf(call: RefusedCall): string | null {
   if (call.refusalCode === "UNSUPPORTED_INPUT_FIELD") {
     const fields = fieldList(fieldsFor(call, "UNSUPPORTED_INPUT_FIELD")) || "an optional input";
     return `Your agent sent ${fields}, and no provider it may use accepts it, so the call was refused rather than run without it. Call without ${fields}, or allow a provider that accepts it.`;
   }
-  if (call.refusalCode === "CONTRACT_VERSION_RETIRED" && !replacementOf(context)) {
+  if (call.refusalCode === "CONTRACT_VERSION_RETIRED" && !replacementOf(call)) {
     return "No newer version of this tool serves yet. Pick another tool that does the same job.";
   }
   return null;
@@ -337,7 +316,7 @@ export function entryAlreadyFixed(entry: ToolsetEntry | ToolsetEntryInput, fix: 
   return entry.toolVersionRange != null && majors.includes(fix.to) && !fix.from.some((m) => majors.includes(m));
 }
 
-export function refusedCallView(call: RefusedCall, context: RefusedCallContext = {}): RefusedCallView {
+export function refusedCallView(call: RefusedCall): RefusedCallView {
   // One button per fix: a max price that cut three providers is removed once,
   // on the first of them, saying how many it brings back.
   const fixes = call.providers.map((p) => providerFix(call, p));
@@ -360,15 +339,15 @@ export function refusedCallView(call: RefusedCall, context: RefusedCallContext =
   });
   return {
     title: "Call refused · not charged",
-    reason: reasonOf(call, context),
+    reason: reasonOf(call),
     layer: refusalLayerText(call),
     providers,
     singleProviderNote:
       call.refusalCode === "NO_PROVIDER_MATCHES_RULES" && call.providers.length === 1
         ? "This tool has one provider, so nothing else can run it."
         : null,
-    fix: callFix(call, context),
-    note: noteOf(call, context),
+    fix: callFix(call),
+    note: noteOf(call),
   };
 }
 

@@ -371,7 +371,7 @@ function ToolsList() {
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
                       {tool.routable ? null : <UnavailableTag />}
-                      <ToolVersionBadges version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} />
+                      <ToolVersionBadges name={tool.name} version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} replacementName={tool.replacementName} replacementVersion={tool.replacementVersion} />
                       {blocked ? (
                         <span className="rounded-full bg-danger-10 px-2 py-0.5 text-label-xs text-danger-700">Blocked</span>
                       ) : null}

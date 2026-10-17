@@ -1846,36 +1846,27 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
       const passed = passedMajors(binding);
       const untested = majors.filter((major) => !passed.includes(major));
       const failedAt = failedMajors(binding);
-      const tester = untested.length === 0
-        ? [
-            { requirement: "TESTER_RUN", met: true, code: null, detail: `Run at revision ${binding.version}.` },
-            { requirement: "TESTER_PASSED", met: true, code: null, detail: "Every layer passed, including verification." },
-          ]
-        : [
-            ...untested
-              .filter((major) => !failedAt.includes(major))
-              .map((major) => ({
-                requirement: "TESTER_RUN",
-                met: false,
-                code: "no_run_at_revision",
-                detail: `Contract v${major}: No test has run at revision ${binding.version} yet.`,
-              })),
-            ...untested.map((major) =>
-              failedAt.includes(major)
-                ? {
-                    requirement: "TESTER_PASSED",
-                    met: false,
-                    code: "last_run_failed",
-                    detail: `Contract v${major}: The last test failed at the response mapping: your API's answer has no temperature_c.`,
-                  }
-                : {
-                    requirement: "TESTER_PASSED",
-                    met: false,
-                    code: "no_run_at_revision",
-                    detail: `Contract v${major}: Run a passing test first.`,
-                  },
-            ),
-          ];
+      // One row per major for each tester requirement, each naming its major (as the API answers).
+      const tester = [
+        ...majors.map((major) =>
+          passed.includes(major) || failedAt.includes(major)
+            ? { requirement: "TESTER_RUN", met: true, code: null, detail: `Contract v${major}: Run at revision ${binding.version}.`, major }
+            : { requirement: "TESTER_RUN", met: false, code: "no_run_at_revision", detail: `Contract v${major}: No test has run at revision ${binding.version} yet.`, major },
+        ),
+        ...majors.map((major) =>
+          passed.includes(major)
+            ? { requirement: "TESTER_PASSED", met: true, code: null, detail: `Contract v${major}: Every layer passed, including verification.`, major }
+            : failedAt.includes(major)
+              ? {
+                  requirement: "TESTER_PASSED",
+                  met: false,
+                  code: "last_run_failed",
+                  detail: `Contract v${major}: The last test failed at the response mapping: your API's answer has no temperature_c.`,
+                  major,
+                }
+              : { requirement: "TESTER_PASSED", met: false, code: "no_run_at_revision", detail: `Contract v${major}: Run a passing test first.`, major },
+        ),
+      ];
       return {
         publishable: untested.length === 0,
         mappingVersion: binding.version,
@@ -1886,6 +1877,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
             met: true,
             code: null,
             detail: "$600.00 bonded against a $450.00 requirement.",
+            major: null,
           },
         ],
       };

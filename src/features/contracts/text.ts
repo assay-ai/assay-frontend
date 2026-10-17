@@ -170,9 +170,24 @@ export function deprecatedBadge(sunsetAt: string | null | undefined): string {
   return sunsetAt ? `Deprecated · stops on ${sunsetDay(sunsetAt)} (UTC)` : "Deprecated";
 }
 
-/** "Retired · use v2.0.0" — the badge text. */
-export function retiredBadge(replacement: string | null | undefined): string {
-  return replacement ? `Retired · use ${replacement}` : "Retired";
+/** "Retired on Feb 14, 2027 (UTC) · use v2.0.0" — the badge text. */
+export function retiredBadge(replacement: string | null | undefined, sunsetAt?: string | null): string {
+  const head = sunsetAt ? `Retired on ${sunsetDay(sunsetAt)} (UTC)` : "Retired";
+  return replacement ? `${head} · use ${replacement}` : head;
+}
+
+/**
+ * What the catalogue names as the replacement of a tool's old majors: "v2.0.0"
+ * when it is this tool at a newer major, "get_weather_pro v1.0.0" when it is
+ * another tool. null when the API names none.
+ */
+export function replacementLabel(
+  fields: { replacementName?: string | null; replacementVersion?: string | null },
+  toolName?: string,
+): string | null {
+  if (!fields.replacementName) return fields.replacementVersion ? `v${fields.replacementVersion}` : null;
+  if (toolName && fields.replacementName === toolName) return fields.replacementVersion ? `v${fields.replacementVersion}` : null;
+  return fields.replacementVersion ? `${fields.replacementName} v${fields.replacementVersion}` : fields.replacementName;
 }
 
 /** The newest servable version of a newer major than `major`, as "v2.0.0", or null. */

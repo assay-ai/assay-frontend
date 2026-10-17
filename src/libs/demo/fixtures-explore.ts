@@ -690,7 +690,14 @@ export const EXPLORE_FIXTURES: readonly DemoFixture[] = [
     match: /^\/catalogue\/tools\/[^/]+\/versions$/,
     body: (path) => {
       const tool = TOOLS.find((t) => t.id === idFromPath(path, 3));
-      return tool === undefined ? undefined : demoVersionList(tool.id, tool.name, tool.description);
+      return tool === undefined
+        ? undefined
+        : demoVersionList(
+            tool.id,
+            tool.name,
+            tool.description,
+            tool.offers.map((o) => ({ providerId: o.providerId, legalName: PROVIDER_BY_ID.get(o.providerId)?.legalName ?? o.providerId })),
+          );
     },
   },
   /*

@@ -446,7 +446,8 @@ export interface PublishRequirementResult {
   /** Stable reason code when unmet. */
   code: string | null;
   /** The specifics — how much stake is missing, which layer the tester failed at. */
-  detail: string | null;
+  detail: string | null;  /** T3: on TESTER_RUN and TESTER_PASSED, the contract major this row is for (one row per major); null otherwise. */
+  major?: number | null;
 }
 
 /**
