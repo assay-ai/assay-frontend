@@ -70,7 +70,9 @@
     min-width: 40px;
   }
 
-  :where(a[href]) {
+  /* Centre the label in the 40px box: a one-line summary otherwise sits at
+     the top of a collapsed disclosure, with dead space under it. */
+  :where(a[href], summary) {
     align-content: center;
   }
 
