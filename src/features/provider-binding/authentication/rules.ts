@@ -16,6 +16,8 @@ const RESERVED_HEADERS = new Set([
 const MAX_HEADERS = 10;
 const MAX_NAME_LENGTH = 64;
 const MAX_VALUE_BYTES = 4096;
+/** Printable ASCII plus space and tab: what the backend accepts in a value. */
+const PRINTABLE_ASCII = /^[\x20-\x7E\t]*$/;
 const TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
 export const QUERY_KEY_ERROR =
@@ -53,6 +55,7 @@ function headerProblem(header: CredentialHeaderInput): string | null {
   const lower = name.toLowerCase();
   if (RESERVED_HEADERS.has(lower) || lower.startsWith("x-assay-")) return `${name} is set by Assay and cannot be overridden.`;
   if (/[\r\n]/.test(header.value)) return "Header value cannot contain line breaks.";
+  if (!PRINTABLE_ASCII.test(header.value)) return "Use plain ASCII characters only.";
   if (new TextEncoder().encode(header.value).length > MAX_VALUE_BYTES) return `Header value is longer than ${MAX_VALUE_BYTES} bytes.`;
   return null;
 }
@@ -82,7 +85,11 @@ export function credentialHeaderProblems(headers: CredentialHeaderInput[]): Map<
 export function splitHeaderLine(text: string): CredentialHeaderInput | null {
   const at = text.indexOf(":");
   if (at < 0) return null;
-  return { name: text.slice(0, at).trim(), value: text.slice(at + 1).trim() };
+  const name = text.slice(0, at).trim();
+  const value = text.slice(at + 1).trim();
+  // A pasted URL ("https://host") is not a header line.
+  if (!TOKEN.test(name) || value.startsWith("//")) return null;
+  return { name, value };
 }
 
 export function originOf(endpoint: string): string | null {

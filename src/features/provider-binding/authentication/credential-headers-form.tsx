@@ -103,7 +103,7 @@ export function CredentialHeadersForm({
                   aria-label="Header value"
                   aria-invalid={invalid || undefined}
                   placeholder="Value"
-                  autoComplete="off"
+                  autoComplete="new-password"
                   spellCheck={false}
                   value={row.value}
                   className={cn("h-10 flex-1 font-mono text-mono-13", invalid && "border-danger-500")}

@@ -1,6 +1,6 @@
 "use client";
 
-import { AuthenticationPanel, runBlockedByCredentials, useBindingCredentials } from "../authentication/authentication-panel";
+import { AuthenticationPanel, runBlockedByCredentials, runCredentialsHint, useBindingCredentials } from "../authentication/authentication-panel";
 import { QUERY_KEY_ERROR, credentialQueryKeys } from "../authentication/rules";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronDown, Play } from "lucide-react";
@@ -100,13 +100,17 @@ export function ConnectStage({
   const [authMode, setAuthMode] = React.useState<BindingAuthMode>(binding?.authMode ?? "SIGNATURE");
   const credentialSets = useBindingCredentials(binding?.id ?? null, authMode);
   // Before the first save there is nowhere to store a key, so Run (which saves) stays open.
-  const credentialsMissing = runBlockedByCredentials({
+  const credentialGate = {
     hasBinding: binding !== null,
     mode: authMode,
     loading: credentialSets.isLoading,
+    isError: credentialSets.isError,
     sets: credentialSets.data,
     endpoint,
-  });
+    savedEndpoint: binding?.endpoint ?? null,
+  };
+  const credentialsMissing = runBlockedByCredentials(credentialGate);
+  const credentialsHint = runCredentialsHint(credentialGate);
   const [endpointTouched, setEndpointTouched] = React.useState(false);
   const [mappings, setMappings] = React.useState<{ request: ToolMapping; response: ToolMapping }>(() => ({
     request: binding?.requestMapping ?? seedRequestMapping(tool),
@@ -270,7 +274,8 @@ export function ConnectStage({
         <AuthenticationPanel
           bindingId={binding?.id ?? null}
           endpoint={endpoint}
-          publishedEndpoint={binding?.endpoint ?? null}
+          savedEndpoint={binding?.endpoint ?? null}
+          publishedEndpoint={binding?.publishedEndpoint ?? null}
           mode={authMode}
           onModeChange={setAuthMode}
           readOnly={readOnly}
@@ -396,7 +401,7 @@ export function ConnectStage({
           <span aria-live="polite" className="text-body-xs text-03">
             {phase === "saving" && !binding ? "Creating your draft listing takes a few seconds." : null}
             {readOnly ? "Your account is blocked, so changes are paused." : null}
-            {credentialsMissing && !readOnly ? "Add the API key headers for this address under Authentication first." : null}
+            {!readOnly ? credentialsHint : null}
           </span>
         </div>
         {error ? (
