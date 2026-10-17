@@ -321,6 +321,8 @@ const ERRORS: Record<string, string> = {
   TOOL_NOT_IN_TOOLSET: "This tool is not part of this server.",
   NO_PROVIDER_MATCHES_RULES: "No provider fits your limits.",
   TOOL_REMOVED: "This tool was removed by its maker.",
+  CONTRACT_VERSION_RETIRED: "This version of the tool was retired. Use its newer version.",
+  UNSUPPORTED_INPUT_FIELD: "No provider this agent may use accepts one of the inputs it sent.",
   QUOTA_EXCEEDED: "The free calls are used up.",
   CREDENTIAL_INVALID: "This agent key is not valid.",
   CREDENTIAL_REVOKED: "This agent key was revoked.",

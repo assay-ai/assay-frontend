@@ -11,10 +11,11 @@ import { Button } from "@/components/ui/button";
 import { includeProviderBody, maxPriceBody, verifiedOnlyBody } from "@/features/toolsets/access-result";
 import { defaultEntry, entryInput } from "@/features/toolsets/entry-rules";
 import { refusalText } from "@/features/toolsets/labels";
-import { refusedCallView, viaText, type RefusalFix } from "@/features/toolsets/refused";
+import { entryAfterFix, entryAlreadyFixed, isEntryFix, refusedCallView, viaText, type EntryFix, type RefusalFix } from "@/features/toolsets/refused";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
+import { getCatalogueToolVersions } from "@/services/catalogue.service";
 import { getRefusedCall, getToolset, listRefusedCalls, replaceToolsetEntries, type RefusedCall, type UpdateAgentAccessBody } from "@/services/toolsets.service";
 import { toast } from "@/utils/toast";
 
@@ -136,8 +137,51 @@ export function RefusedCallPanel({ callId, onClose }: { callId: string; onClose?
   return <RefusedCallCard call={query.data} onClose={onClose} />;
 }
 
+/** What a T3 fix did, said after it saved. */
+function entryFixDone(fix: EntryFix, toolName: string, setName: string): { title: string; description: string } {
+  switch (fix.kind) {
+    case "drop-required-field":
+      return { title: `${setName} no longer requires ${fix.fields.join(", ")}`, description: `Any provider of ${toolName} can serve the next call.` };
+    case "allow-major":
+      return { title: `${setName} now also uses ${fix.label.replace(/^Allow /, "")} of ${toolName}`, description: "The next call can go to providers that serve it." };
+    case "move-major":
+      return { title: `${setName} now uses ${fix.label.replace(/^Use /, "")} of ${toolName}`, description: "Check that your agent reads the new version's fields." };
+  }
+}
+
+/** The tool is no longer in the tool set; `message` is the set's name. */
+export class EntryGone extends Error {}
+
+/**
+ * One T3 fix on a tool set entry: read the set, rewrite that entry, save the
+ * whole list. Returns the list before (for Undo), or `before: null` when the
+ * entry already reads that way (nothing was sent).
+ */
+export async function runEntryFix(
+  fix: EntryFix,
+  io: { get: typeof getToolset; replace: typeof replaceToolsetEntries } = { get: getToolset, replace: replaceToolsetEntries },
+) {
+  const set = await io.get(fix.toolsetId);
+  const entry = set.entries.find((e) => e.toolId === fix.toolId);
+  if (!entry) throw new EntryGone(set.name);
+  if (entryAlreadyFixed(entry, fix)) return { set, before: null };
+  const before = set.entries.map(entryInput);
+  const next = await io.replace(
+    set.id,
+    set.entries.map((e) => (e.toolId === fix.toolId ? entryAfterFix(e, fix) : entryInput(e))),
+  );
+  return { set: next, before };
+}
+
 export function RefusedCallCard({ call, onClose }: { call: RefusedCall; onClose?: () => void }) {
-  const view = refusedCallView(call);
+  // A retired version names its replacement from the tool's published versions ([contract gap]: the refused call does not carry it).
+  const versions = useQuery({
+    queryKey: ["catalogue-tool-versions", call.toolId],
+    enabled: call.refusalCode === "CONTRACT_VERSION_RETIRED" && Boolean(call.toolId),
+    retry: 0,
+    queryFn: () => getCatalogueToolVersions(call.toolId!),
+  });
+  const view = refusedCallView(call, { versions: versions.data?.versions });
   const names = useEntityNames({ kinds: ["agent"] });
   const toolsets = useToolsets();
   const queryClient = useQueryClient();
@@ -178,6 +222,49 @@ export function RefusedCallCard({ call, onClose }: { call: RefusedCall; onClose?
       });
     },
     onError: () => toast.error("The tool could not be added. Try again."),
+  });
+  const editEntry = useMutation({
+    mutationFn: ({ fix }: { key: string; fix: EntryFix }) => runEntryFix(fix),
+    onSuccess: ({ set, before }, { key, fix }) => {
+      queryClient.setQueryData(toolsetKeys.one(set.id), set);
+      void queryClient.invalidateQueries({ queryKey: toolsetKeys.all });
+      setDone((d) => new Set(d).add(key));
+      if (!before) {
+        toast.success("Already changed", { description: `${set.name} already reads that way. The next call uses it.` });
+        return;
+      }
+      const said = entryFixDone(fix, call.toolName ?? "the tool", set.name);
+      toast.success(said.title, {
+        description: said.description,
+        duration: 8000,
+        action: {
+          label: "Undo",
+          onClick: () =>
+            void replaceToolsetEntries(set.id, before).then(
+              (back) => {
+                queryClient.setQueryData(toolsetKeys.one(set.id), back);
+                void queryClient.invalidateQueries({ queryKey: toolsetKeys.all });
+                setDone((d) => {
+                  const next = new Set(d);
+                  next.delete(key);
+                  return next;
+                });
+                toast.success("Undone");
+              },
+              () => toast.error("The change could not be undone. Open the tool set to change it back."),
+            ),
+        },
+      });
+    },
+    onError: (error) => {
+      if (error instanceof EntryGone) {
+        toast.error(`${call.toolName ?? "The tool"} is no longer in ${error.message}`, { description: "Nothing was changed." });
+      } else if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
+        toast.error("This tool set can't be changed from here", { description: "It may have been deleted, or it belongs to another team." });
+      } else {
+        toast.error("The change could not be saved. Try again.");
+      }
+    },
   });
   const access = useAgentAccess(call.agentId);
   const update = useUpdateAccess(call.agentId);
@@ -221,6 +308,20 @@ export function RefusedCallCard({ call, onClose }: { call: RefusedCall; onClose?
       if (done.has(key)) return <span className="text-label-13 text-success-700">Added</span>;
       return (
         <Button size="sm" variant="secondary" loading={addToSet.isPending} onClick={() => addToSet.mutate({ toolsetId: fix.toolsetId, toolId: fix.toolId })}>
+          {fix.label}
+        </Button>
+      );
+    }
+    if (isEntryFix(fix)) {
+      if (done.has(key)) return <span className="text-label-13 text-success-700">Done</span>;
+      return (
+        <Button
+          size="sm"
+          variant="secondary"
+          loading={editEntry.isPending && editEntry.variables?.key === key}
+          disabled={editEntry.isPending}
+          onClick={() => editEntry.mutate({ key, fix })}
+        >
           {fix.label}
         </Button>
       );
@@ -287,6 +388,11 @@ export function RefusedCallCard({ call, onClose }: { call: RefusedCall; onClose?
         </ul>
       ) : null}
       {view.singleProviderNote ? <p className="text-body-13 text-02">{view.singleProviderNote}</p> : null}
+      {view.note ? (
+        <p className="text-body-13 text-02" data-testid="refused-note">
+          {view.note}
+        </p>
+      ) : null}
       {view.fix ? <div className="flex flex-wrap gap-2">{fixButton("call", view.fix)}</div> : null}
     </section>
   );

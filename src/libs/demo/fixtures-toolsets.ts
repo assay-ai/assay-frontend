@@ -35,6 +35,7 @@ import {
   type DemoPublicSet,
 } from "./fixtures-public-toolsets";
 import type { DemoFixture } from "./fixtures";
+import { contractRefusedCalls } from "./fixtures-refusals-contracts";
 
 /**
  * DEMO ONLY — tool sets, "What this agent can use", the Connect preview,
@@ -64,6 +65,7 @@ const COBALT = "e41b7d93-2a58-4f60-b7c9-3d80f5a1e6c4";
 const LATTICE = "48e1b60c-d573-4a92-bf08-6c3d95e12a7b";
 const VERDANT = "c9f35a82-6014-4d7b-8e93-2a1c7f06b5d8";
 const QUANTA = "17d6c0a4-8b39-4e52-a1f7-59c2b8e3d07f";
+const NORTHWIND = "b7e04c25-9d13-4a6f-bc80-1e5f3a7d9c62";
 const HARBORLIGHT = "7c1e4f6a-2b93-4d17-9f0c-5a8e31d6b204";
 
 const RESEARCH_ID = "5f0c9b2e-7d41-4a83-b6e2-1c9a8d3f7e05";
@@ -830,7 +832,15 @@ function refusedCalls(): RefusedCall[] {
   if (s.variant === "single") return [marketQuote];
   const searchRule = research?.entries.find((e) => e.toolName === "search_web") ?? null;
   const searchReasons = reasons("search_web", searchRule);
+  // T3: the contract refusals (Must return, contract version, an input nobody accepts, retired).
+  const contract = contractRefusedCalls({
+    agentId: PROD_AGENT,
+    toolsetId: WEATHER_ID,
+    providers: { helios: HELIOS, northwind: NORTHWIND, quanta: QUANTA },
+    name: (id) => demoProvider(id)?.legalName ?? null,
+  });
   return [
+    ...contract,
     {
       callId: "rc-2b8e40c7-search-web",
       agentId: PROD_AGENT,
@@ -880,7 +890,7 @@ function refusedCalls(): RefusedCall[] {
       viewFilter: null,
       createdAt: demoMinutesAgo(150),
     },
-  ];
+  ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
 /* ------------------------------------------------------- the writes */
