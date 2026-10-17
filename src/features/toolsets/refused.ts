@@ -100,12 +100,20 @@ function callFix(call: RefusedCall): RefusalFix | null {
 }
 
 export function refusedCallView(call: RefusedCall): RefusedCallView {
-  const providers = call.providers.map((p) => ({
-    providerId: p.providerId,
-    reason: providerReason(p),
-    source: fromAgent(p) ? "This agent's provider limits" : "The tool set's rules",
-    fix: providerFix(call, p),
-  }));
+  // One button per fix: a max price that cut three providers is removed once.
+  const seen = new Set<string>();
+  const providers = call.providers.map((p) => {
+    const fix = providerFix(call, p);
+    const key = fix ? (fix.kind === "include-provider" ? `${fix.kind}:${fix.providerId}` : fix.kind === "link" ? fix.href : fix.kind) : "";
+    const first = Boolean(fix) && !seen.has(key);
+    seen.add(key);
+    return {
+      providerId: p.providerId,
+      reason: providerReason(p),
+      source: fromAgent(p) ? "This agent's provider limits" : "The tool set's rules",
+      fix: first ? fix : null,
+    };
+  });
   return {
     title: "Call refused · not charged",
     reason: refusalText(call.refusalCode),

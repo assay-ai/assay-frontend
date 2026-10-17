@@ -20,7 +20,7 @@ export default function McpNotFoundPage() {
           See all tools
         </Link>
       </section>
-      <ConnectPanel url={mcpEndpointUrl()} title="Or connect Everything: every tool on Assay, through one server." />
+      <ConnectPanel publicPage url={mcpEndpointUrl()} title="Or connect Everything: every tool on Assay, through one server." />
     </div>
   );
 }
