@@ -57,6 +57,18 @@ export function mcpToolName(tool: { name: string; toolId?: string; id?: string }
   return MCP_NAME_RE.test(id) ? id : null;
 }
 
+/**
+ * How a tool is named on every tool-set screen: by the name an agent calls it
+ * by (`get_weather`, `market-quote`), in monospace, with its catalogue title
+ * as a second line only when that differs ("Market quote"). One convention
+ * for pickers, chips, rows and results.
+ */
+export function toolDisplay(tool: { name: string; toolId?: string; id?: string }): { name: string; title: string | null } {
+  const mcp = mcpToolName(tool);
+  if (!mcp) return { name: tool.name, title: null };
+  return { name: mcp, title: mcp === tool.name ? null : tool.name };
+}
+
 /** Lowercased, trimmed, deduplicated and sorted — the canonical `tools=` list. */
 export function canonicalTools(names: readonly string[]): string[] {
   const set = new Set(names.map((name) => name.trim().toLowerCase()).filter((name) => name !== ""));
@@ -165,4 +177,20 @@ export function suggestServerName(choice: ConnectChoice): string {
   const path = choice.url.replace(/^[a-z]+:\/\/[^/]+/i, "").split("?")[0] ?? "";
   const last = path.split("/").filter(Boolean).at(-1)?.split("@")[0]?.replace(/^@/, "");
   return last ? clip(last) : "assay";
+}
+
+/**
+ * A suggested server name that no other server of the agent uses: two servers
+ * named "weather" in one client would clash (their tools share a prefix).
+ * `weather` → `weather2`, `weather3`… within the 9-character cap.
+ */
+export function uniqueServerName(base: string, taken: readonly (string | null)[]): string {
+  const used = new Set(taken.filter((t): t is string => Boolean(t)));
+  if (!used.has(base)) return base;
+  for (let n = 2; n < 100; n += 1) {
+    const suffix = String(n);
+    const candidate = `${base.slice(0, MAX_SERVER_NAME - suffix.length).replace(/-+$/, "")}${suffix}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  return base;
 }

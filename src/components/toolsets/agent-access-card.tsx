@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
-import { parseMcpUrl } from "@/features/connect/mcp-url";
+import { parseMcpUrl, toolDisplay } from "@/features/connect/mcp-url";
 import {
   accessSummary,
   draftBody,
@@ -163,6 +163,7 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
   const mySets = toolsets.data?.items ?? [];
   const deletedSets = access.allowedToolsets.filter((t) => t.deleted);
   const restricted = draft.mode === "RESTRICTED";
+  const excludeChanged = Boolean(body?.rules?.excludeProviderIds);
   const providers = catalogue.providers;
 
   return (
@@ -291,7 +292,12 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
                       disabled={none}
                       checked={draft.toolIds.includes(tool.toolId)}
                       onChange={(e) => patch({ toolIds: toggle(draft.toolIds, tool.toolId, e.target.checked) })}
-                      label={<span className="font-mono text-mono-12 [overflow-wrap:anywhere]">{tool.name}</span>}
+                      label={
+                        <span className="flex flex-col">
+                          <span className="font-mono text-mono-12 [overflow-wrap:anywhere]">{toolDisplay(tool).name}</span>
+                          {toolDisplay(tool).title ? <span className="text-body-xs text-03">{toolDisplay(tool).title}</span> : null}
+                        </span>
+                      }
                     />
                     <ResultText tool={tool} access={access} />
                   </li>
@@ -325,6 +331,14 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
               />
             ))}
           </div>
+          {excludeChanged ? (
+            <p className="text-body-xs text-primary-700" aria-live="polite" data-testid="exclude-pending">
+              {draft.exclude.length === 0
+                ? "No provider excluded"
+                : `${draft.exclude.length} provider${draft.exclude.length === 1 ? "" : "s"} excluded`}{" "}
+              — not saved yet: Save changes below.
+            </p>
+          ) : null}
         </fieldset>
         <Field
           id={`max-price-${access.agentId}`}
@@ -385,8 +399,9 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
 
 function ResultText({ tool, access, withName = false }: { tool: AgentToolEffect; access: AgentAccess; withName?: boolean }) {
   const tone = toolResultTone(tool);
-  const line = toolResultLine(tool, access.rules);
-  const text = withName ? line : line.slice(tool.name.length + 2);
+  const shown = { ...tool, name: toolDisplay(tool).name };
+  const line = toolResultLine(shown, access.rules);
+  const text = withName ? line : line.slice(shown.name.length + 2);
   return (
     <span className={cn("flex min-w-0 items-start gap-1.5 text-body-13", tone === "blocked" ? "text-03" : tone === "warn" ? "text-warning-700" : "text-02")}>
       {tone === "blocked" ? (
@@ -396,7 +411,7 @@ function ResultText({ tool, access, withName = false }: { tool: AgentToolEffect;
       ) : (
         <CircleCheck aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-success-500" />
       )}
-      <span className="min-w-0 [overflow-wrap:anywhere]">{tool.providersTotal === 0 ? `${withName ? `${tool.name}: ` : ""}no provider yet` : text}</span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">{tool.providersTotal === 0 ? `${withName ? `${shown.name}: ` : ""}no provider yet` : text}</span>
     </span>
   );
 }
