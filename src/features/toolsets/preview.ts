@@ -43,24 +43,36 @@ export function previewCounts(preview: Pick<McpUrlPreview, "tools" | "listedCoun
 }
 
 /**
- * "Your agent will see 4 tools, 3 usable now (~960 tokens). 11 more are
- * blocked for this agent." In search mode: "4 tools (search) — about 0.9k
- * tokens; 37 tools reachable". While the preview loads the caller shows a
- * skeleton or "~"; this is never asked for a number it does not have, so it
- * never says 0 for "not known yet".
+ * The one summary line, with the same counts the warnings use:
+ *
+ *   all fine     "Your agent will see 3 tools (~690 tokens)."
+ *   otherwise    "3 tools here: 1 ready to use, 2 blocked for this agent (~230 tokens)."
+ *   search mode  "4 tools (search) — about 0.9k tokens; 3 of 14 tools reachable, 11 blocked for this agent"
+ *
+ * While the preview loads the caller shows a skeleton or "~"; this is never
+ * asked for a number it does not have, so it never says 0 for "not known yet".
  */
 export function previewSummary(
   preview: Pick<McpUrlPreview, "tools" | "listedCount" | "estimatedTokens"> & Partial<Pick<McpUrlPreview, "discovery" | "reachableCount">>,
 ): string {
-  if (preview.discovery === "SEARCH") {
-    const reachable = preview.reachableCount ?? preview.tools.filter((t) => t.allowed && !t.noProviderFits).length;
-    return `${tools(preview.listedCount)} (search) — about ${aboutTokens(preview.estimatedTokens)} tokens; ${tools(reachable)} reachable`;
-  }
   const c = previewCounts(preview);
-  const blocked = c.blocked > 0 ? ` ${c.blocked} ${c.listed === 0 ? "" : "more "}${c.blocked === 1 ? "is" : "are"} blocked for this agent.` : "";
-  if (c.listed === 0) return `Your agent will see no tools here.${blocked}`;
-  const usable = c.usable < c.listed ? `, ${c.usable} usable now` : "";
-  return `Your agent will see ${tools(c.listed)}${usable} (${tokensText(preview.estimatedTokens)} tokens).${blocked}`;
+  const blockedText = c.blocked > 0 ? `${c.blocked} blocked for this agent` : null;
+  if (preview.discovery === "SEARCH") {
+    const reachable = preview.reachableCount ?? c.usable;
+    const of = reachable < c.inView ? `${reachable} of ${tools(c.inView)} reachable` : `${tools(reachable)} reachable`;
+    return `${tools(preview.listedCount)} (search) — about ${aboutTokens(preview.estimatedTokens)} tokens; ${[of, blockedText].filter(Boolean).join(", ")}`;
+  }
+  const noFit = c.listed - c.usable;
+  if (c.blocked === 0 && noFit === 0) {
+    return c.listed === 0 ? "Your agent will see no tools here." : `Your agent will see ${tools(c.listed)} (${tokensText(preview.estimatedTokens)} tokens).`;
+  }
+  const parts = [
+    c.usable > 0 ? `${c.usable} ready to use` : "none ready to use",
+    blockedText,
+    noFit > 0 ? `${noFit} with no provider that fits its limits` : null,
+  ].filter(Boolean);
+  const cost = c.listed > 0 ? ` (${tokensText(preview.estimatedTokens)} tokens)` : "";
+  return `${tools(c.inView)} here: ${parts.join(", ")}${cost}.`;
 }
 
 export type PreviewFix =

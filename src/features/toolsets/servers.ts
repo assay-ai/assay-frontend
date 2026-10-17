@@ -13,7 +13,9 @@ export function serverLabel(server: Pick<ServerInUse, "canonicalUrl" | "name" | 
   if (!parsed) return { title: server.name, detail: null };
   switch (parsed.choice.kind) {
     case "everything":
-      return { title: `Everything${free}`, detail: "Every tool on Assay" };
+      return parsed.options.discovery === "full"
+        ? { title: `Everything, all tools listed${free}`, detail: "Every tool on Assay, each one listed to the agent" }
+        : { title: `Everything${free}`, detail: "Every tool on Assay; the agent searches" };
     case "toolset":
       return { title: `${server.name}${free}`, detail: parsed.choice.version ? `Your tool set · locked to v${parsed.choice.version}` : "Your tool set · live Draft" };
     case "tools": {

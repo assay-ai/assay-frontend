@@ -264,9 +264,26 @@ const VERBS = new Set(["get", "search", "list", "find", "fetch", "lookup", "read
 /** At most 9 characters (§7.1: a client prefix plus a 48-character tool name stays within 64). */
 export const MAX_SERVER_NAME = 9;
 
+/**
+ * A name of at most 9 characters, never cut mid-word: whole words from the
+ * start while they fit ("weather-and-places" → "weather"), else the last word
+ * when that fits ("web-research" → "research"), and only a word too long for
+ * any of that is cut.
+ */
 function clip(text: string): string {
   const cleaned = text.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
-  return cleaned.slice(0, MAX_SERVER_NAME).replace(/-+$/g, "") || "assay";
+  if (cleaned.length <= MAX_SERVER_NAME) return cleaned || "assay";
+  const words = cleaned.split("-").filter(Boolean);
+  let head = "";
+  for (const word of words) {
+    const next = head ? `${head}-${word}` : word;
+    if (next.length > MAX_SERVER_NAME) break;
+    head = next;
+  }
+  if (head.length >= 4) return head;
+  const last = words.at(-1) ?? "";
+  if (last.length >= 4 && last.length <= MAX_SERVER_NAME) return last;
+  return (head || cleaned.slice(0, MAX_SERVER_NAME)).replace(/-+$/g, "") || "assay";
 }
 
 /**
