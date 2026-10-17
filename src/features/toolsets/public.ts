@@ -10,7 +10,8 @@ import { BADGE_LABELS } from "./labels";
 /**
  * Public tool sets: cards, trust facts and weekly figures (design spec §7.8,
  * §7.10 "Catalogue"). Cards carry tool ids, never prices, so the price range
- * and "No backup provider" are joined here from the public catalogue. Figures
+ * and "No backup provider" are joined here from the public catalogue; "Not
+ * reviewed" and "Routes to the publisher's own provider" come from the server. Figures
  * arrive rounded and k-checked; a withheld one says "Fewer than 5", never 0.
  */
 
@@ -40,7 +41,7 @@ export interface TrustFacts {
   priceRange: string | null;
   /** Tools only one provider runs: if it is down, the call fails. */
   noBackup: string[];
-  /** Tools not in the public catalogue: one maker's own, not reviewed by Assay. */
+  /** One maker's own tools, not reviewed by Assay (the server's `notReviewed`). */
   notReviewed: string[];
   /** Tools no longer served. */
   removed: string[];
@@ -49,7 +50,7 @@ export interface TrustFacts {
 
 /** The facts shown above Connect on a tool set's page and as chips on its card. */
 export function trustFacts(
-  card: Pick<PublicToolsetCard, "toolIds" | "routesToPublisher"> & { entries?: PublicToolsetEntry[] },
+  card: Pick<PublicToolsetCard, "toolIds"> & { routesToPublisher?: boolean; entries?: PublicToolsetEntry[] },
   catalogue: readonly PublicTool[],
 ): TrustFacts {
   const byId = new Map(catalogue.map((t) => [t.id, t]));
@@ -65,7 +66,7 @@ export function trustFacts(
     const providers = entry && entry.providerMode === "ONLY" ? Math.min(entry.providerCount, tool.providerCount) : tool.providerCount;
     return providers === 1;
   });
-  const notReviewed = catalogue.length === 0 ? [] : card.toolIds.filter((id) => !byId.has(id) && !entryOf(id)?.removed);
+  const notReviewed = (card.entries ?? []).filter((e) => e.notReviewed && !e.removed).map((e) => e.toolId);
   return {
     priceRange: priceRangeText(tools),
     noBackup: noBackup.map(nameOf),
@@ -121,4 +122,10 @@ export interface CatalogueToolsetFilters {
   category: string | null;
   publisher: "official" | "provider" | "community" | null;
   sort: "popular" | "trending" | "new";
+}
+
+/** A tool's price by its name, from the public catalogue: "$0.0008–$0.001 a call", "Free"; null when unknown. */
+export function priceOfTool(catalogue: readonly Pick<PublicTool, "name" | "fromPrice" | "price" | "pricingMode" | "routable">[], name: string): string | null {
+  const tool = catalogue.find((t) => t.name === name);
+  return tool ? priceRangeText([tool]) : null;
 }

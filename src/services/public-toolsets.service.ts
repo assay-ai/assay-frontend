@@ -24,12 +24,8 @@ export interface PublicToolsetUrls {
 }
 
 export interface PublicToolsetCard {
-  /**
-   * The tool set's id, for "Make my own version", Report and allowing it in
-   * "What this agent can use". NOT sent by the backend yet (contract gap):
-   * without it those three actions are off on public pages.
-   */
-  id?: string;
+  /** For "Make my own version", Report and allowing it in "What this agent can use". */
+  id: string;
   handle: string;
   slug: string;
   name: string;
@@ -43,11 +39,8 @@ export interface PublicToolsetCard {
   toolIds: string[];
   activeUsers: Figure | null;
   mcpUrls: PublicToolsetUrls;
-  /**
-   * "Routes to the publisher's own provider" (§7.7, computed at publish).
-   * NOT sent by the backend yet (contract gap); the badge shows only when it is.
-   */
-  routesToPublisher?: boolean;
+  /** "Routes to the publisher's own provider": for at least one tool, the rules leave only the publisher's providers. */
+  routesToPublisher: boolean;
 }
 
 export interface PublicToolsetList {
@@ -64,6 +57,18 @@ export interface PublicToolsetEntry {
   onEmpty: "FAIL" | "FALLBACK_BEST" | string;
   /** No longer served (removed or retired): "Removed". */
   removed: boolean;
+  /** One maker's own tool, not reviewed for the catalogue: "Not reviewed". */
+  notReviewed: boolean;
+}
+
+/** What changed between two versions; settings use internal names (shown through `settingLabel`). */
+export interface PublicToolsetDiff {
+  from: number;
+  to: number;
+  added: string[];
+  removed: string[];
+  rulesChanged: string[];
+  settingsChanged: string[];
 }
 
 export interface PublicToolsetStats {
@@ -80,6 +85,10 @@ export interface PublicToolsetPage extends PublicToolsetCard {
   changelog: string | null;
   publishedAt: string;
   entries: PublicToolsetEntry[];
+  /** Any entry is "Not reviewed". */
+  notReviewed: boolean;
+  /** Only on by-token with `diffFrom`. */
+  diff?: PublicToolsetDiff | null;
   stats: PublicToolsetStats;
   forkedFrom: { handle: string; slug: string; version: number | null } | null;
   /** A link-only page in its grace period: old URLs stop serving then. */
@@ -91,6 +100,18 @@ export interface PublicToolsetVersion {
   publishedAt: string;
   changelog: string | null;
   toolCount: number;
+}
+
+/** One version a listed tool set serves on `/@…`, with its tools and, with `diffFrom`, the diff. */
+export interface PublicToolsetVersionDetail extends PublicToolsetVersion {
+  name: string;
+  description: string | null;
+  icon: string | null;
+  toolIds: string[];
+  entries: PublicToolsetEntry[];
+  notReviewed: boolean;
+  routesToPublisher: boolean;
+  diff: PublicToolsetDiff | null;
 }
 
 export interface PublicHandleProfile {
@@ -132,9 +153,17 @@ export function listPublicToolsetVersions(handle: string, slug: string): Promise
   return api.get<{ versions: PublicToolsetVersion[] }>(`/public/toolsets/@${encodeURIComponent(handle)}/${encodeURIComponent(slug)}/versions`);
 }
 
-/** A link-only tool set's page. The token travels in the body, never in a URL. */
-export function getToolsetByToken(token: string, v?: number | null): Promise<PublicToolsetPage> {
-  return api.post<PublicToolsetPage>("/public/toolsets/by-token", v ? { token, v } : { token });
+/** One version and, with `diffFrom`, what changed since that version ("Update available"). */
+export function getPublicToolsetVersion(handle: string, slug: string, v: number, diffFrom?: number | null): Promise<PublicToolsetVersionDetail> {
+  return api.get<PublicToolsetVersionDetail>(
+    `/public/toolsets/@${encodeURIComponent(handle)}/${encodeURIComponent(slug)}/versions/${v}`,
+    diffFrom ? { diffFrom } : {},
+  );
+}
+
+/** A link-only tool set's page. The token travels in the body, never in a URL. `diffFrom` adds the diff. */
+export function getToolsetByToken(token: string, v?: number | null, diffFrom?: number | null): Promise<PublicToolsetPage> {
+  return api.post<PublicToolsetPage>("/public/toolsets/by-token", { token, ...(v ? { v } : {}), ...(diffFrom ? { diffFrom } : {}) });
 }
 
 export function getPublicHandle(handle: string): Promise<PublicHandleProfile> {

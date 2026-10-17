@@ -40,7 +40,7 @@ afterEach(() => {
 describe("demo fixtures: tool sets, access, Connect preview, servers, refused calls", () => {
   it("are registered with the demo data layer, every new endpoint", () => {
     const routes = TOOLSET_FIXTURES.map((f) => `${f.method} ${String(f.match)}`);
-    expect(routes).toHaveLength(30);
+    expect(routes).toHaveLength(31);
     for (const fixture of TOOLSET_FIXTURES) expect(DEMO_FIXTURES).toContain(fixture);
   });
 
