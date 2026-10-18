@@ -143,12 +143,24 @@ export function BudgetOnlySheet({
   agentName,
   policy,
   bootstrap,
+  saveLabel = "Save",
+  onSaved,
+  beforeSave,
+  intro,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   agentName: string;
   policy: SpendPolicy | null;
   bootstrap: BudgetBootstrap | null;
+  /** The save button's label, e.g. "Save and approve" on the consent page. */
+  saveLabel?: string;
+  /** Runs once the limits are saved (or left unchanged) and the sheet has closed. */
+  onSaved?: () => void;
+  /** Runs before saving; a returned reason is shown and nothing is saved. */
+  beforeSave?: () => Promise<string | null>;
+  /** A line above the fields, e.g. who the limits apply to. */
+  intro?: React.ReactNode;
 }) {
   const draft = useBudgetDraft({ policy, bootstrap, open, mode: "budget" });
   const [busy, setBusy] = React.useState(false);
@@ -158,8 +170,23 @@ export function BudgetOnlySheet({
   }, [open]);
   const submit = async () => {
     if (!draft.validate()) return;
+    if (beforeSave) {
+      setBusy(true);
+      setError(null);
+      let reason: string | null;
+      try {
+        reason = await beforeSave();
+      } finally {
+        setBusy(false);
+      }
+      if (reason) {
+        setError(reason);
+        return;
+      }
+    }
     if (!draft.dirty) {
       onOpenChange(false);
+      onSaved?.();
       return;
     }
     setBusy(true);
@@ -168,6 +195,7 @@ export function BudgetOnlySheet({
       await draft.save();
       toast.success("Saved. The new limits apply from the next call.");
       onOpenChange(false);
+      onSaved?.();
     } catch (caught) {
       setError(caught instanceof ApiError ? plainError(caught.code) : "The limits could not be saved. Try again.");
     } finally {
@@ -185,6 +213,7 @@ export function BudgetOnlySheet({
           </SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pt-4">
+          {intro ? <p className="text-body-13 text-02">{intro}</p> : null}
           <BudgetFields draft={draft} />
           {error ? (
             <p role="alert" className="text-body-13 text-danger-600">
@@ -198,7 +227,7 @@ export function BudgetOnlySheet({
               Cancel
             </Button>
             <Button type="button" loading={busy} disabled={!draft.creatable} onClick={() => void submit()}>
-              Save
+              {saveLabel}
             </Button>
           </div>
         </SheetFooter>

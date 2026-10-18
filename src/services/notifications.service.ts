@@ -59,6 +59,7 @@ export type NotificationEvent =
   | "call.refused_repeatedly"
   | "session.expiring"
   | "session.expired"
+  | "oauth.grant_stopped_reuse"
   | "free_quota.exhausted"
   | "payment_intent.refunded"
   | "slash.compensation_received"

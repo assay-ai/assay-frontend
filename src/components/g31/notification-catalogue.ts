@@ -162,6 +162,14 @@ export const NOTIFICATION_CATALOGUE: Readonly<Record<NotificationEvent, Notifica
     nonSuppressible: true,
     hasProducer: true,
   },
+  "oauth.grant_stopped_reuse": {
+    // An app's sign-in was used twice, so the connection was stopped (possible theft).
+    severity: "CRITICAL",
+    channels: EVERYTHING,
+    aggregation: "PER_EVENT",
+    nonSuppressible: true,
+    hasProducer: true,
+  },
 
   // ── Free tier ─────────────────────────────────────────────────────────────
   "free_quota.exhausted": {
@@ -404,6 +412,7 @@ export const NOTIFICATION_EVENT_LABEL: Readonly<Record<NotificationEvent, string
   "call.refused_repeatedly": "An agent keeps getting the same refusal",
   "session.expiring": "Agent credential expiring soon",
   "session.expired": "Agent credential expired",
+  "oauth.grant_stopped_reuse": "App stopped: sign-in used twice",
   "free_quota.exhausted": "Free calls used up",
   "payment_intent.refunded": "Call refunded",
   "slash.compensation_received": "Compensation received",
