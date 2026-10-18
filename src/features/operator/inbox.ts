@@ -16,11 +16,21 @@ import { approveBlockedBecause, approverRolesFor, isOwnRequest } from "./approva
  */
 
 /**
- * What the Home heading and the nav badge both count: approvals this operator
- * can decide, plus — for whoever can rule — every open on-chain dispute.
+ * Provider tool reviews and buyer call disputes waiting for this operator.
+ * The caller counts each only for a role that can decide it (`useToolWork`).
  */
-export function needsYouCount(needsYouApprovals: number, openDisputes: number, canRule: boolean, toSign: number = 0): number {
-  return needsYouApprovals + (canRule ? openDisputes + toSign : 0);
+export interface ToolWork {
+  reviews?: number;
+  callDisputes?: number;
+}
+
+/**
+ * What the Home heading and the nav badge both count: approvals this operator
+ * can decide, plus — for whoever can rule — every open on-chain dispute, plus
+ * the pending provider tool reviews and open call disputes its roles decide.
+ */
+export function needsYouCount(needsYouApprovals: number, openDisputes: number, canRule: boolean, toSign: number = 0, work: ToolWork = {}): number {
+  return needsYouApprovals + (canRule ? openDisputes + toSign : 0) + (work.reviews ?? 0) + (work.callDisputes ?? 0);
 }
 
 // ── Approvals ───────────────────────────────────────────────────────────────
@@ -62,12 +72,15 @@ export function waitingSummary(counts: { needsYou: number; yours: number; others
  * approvals and disputes: "2 to approve · 2 to rule". Null when it is one kind
  * only (the section below says it). Pure.
  */
-export function needsYouBreakdown(approvals: number, disputes: number, canRule: boolean, toSign: number = 0): string | null {
-  if (!canRule) return null;
+export function needsYouBreakdown(approvals: number, disputes: number, canRule: boolean, toSign: number = 0, work: ToolWork = {}): string | null {
+  const reviews = work.reviews ?? 0;
+  const calls = work.callDisputes ?? 0;
   const parts = [
     ...(approvals > 0 ? [`${approvals} to approve`] : []),
-    ...(disputes > 0 ? [`${disputes} to rule`] : []),
-    ...(toSign > 0 ? [`${toSign} to sign`] : []),
+    ...(canRule && disputes > 0 ? [`${disputes} to rule`] : []),
+    ...(canRule && toSign > 0 ? [`${toSign} to sign`] : []),
+    ...(reviews > 0 ? [`${reviews} to review`] : []),
+    ...(calls > 0 ? [`${calls} call ${calls === 1 ? "dispute" : "disputes"}`] : []),
   ];
   return parts.length < 2 ? null : parts.join(" · ");
 }
