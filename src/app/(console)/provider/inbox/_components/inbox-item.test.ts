@@ -88,7 +88,7 @@ describe("inboxView: stored rows read from event + payload", () => {
       }),
       names,
     );
-    expect(view.title).toBe("A $28.47 penalty is proposed against your stake");
+    expect(view.title).toBe("A penalty of up to $28.47 is proposed against your stake");
     expect(view.body).toContain("Nothing is taken before today 19:14 UTC.");
     expectReadable(view.body);
   });
@@ -134,6 +134,104 @@ describe("inboxView: stored rows read from event + payload", () => {
       'The buyer says: "Other". Reply by tomorrow 10:00 UTC. If you don\'t, the buyer wins: it is upheld automatically at Oct 21, 10:00 UTC.',
     );
     expect(view.body).not.toMatch(/may reply/i);
+  });
+
+  it("tells an arbiter win apart from a chain refusal, and never folds them together", () => {
+    const decided = (id: string, payload: Record<string, unknown>) =>
+      row({ id, event: "provider.slash_decided", title: "x", body: "y", payload: { proposalId: id, reservationHeldUntil: null, ...payload } });
+    const arbiter = decided("a", { resolutionKind: "CHAIN_ARBITER", penaltyAmount: "40000", decimals: 6 });
+    const chain = decided("b", { resolutionKind: "AUTO_CHAIN_VOIDED", penaltyAmount: "40000", decimals: 6 });
+    const arbiterView = inboxView(arbiter, names);
+    expect(arbiterView.title).toBe("$0.04 penalty was cancelled: nothing was taken");
+    expect(arbiterView.body).toBe("The arbiter ruled for you on chain. Any stake it reserved is free again.");
+    const folded = collapseNotices(
+      [arbiter, chain].map((item) => ({ ...item, view: inboxView(item, names) })),
+      (item) => item.view.groupKey,
+    );
+    expect(folded).toHaveLength(2);
+  });
+
+  it("folds cancellations only within one tool", () => {
+    const decided = (id: string, toolName: string) =>
+      row({ id, event: "provider.slash_decided", title: "x", body: "y", payload: { proposalId: id, toolName, resolutionKind: "AUTO_CHAIN_VOIDED" } });
+    const items = [decided("a", "get_weather"), decided("b", "get_usd_eur_rate"), decided("c", "get_weather")];
+    const folded = collapseNotices(
+      items.map((item) => ({ ...item, view: inboxView(item, names) })),
+      (item) => item.view.groupKey,
+    );
+    expect(folded.map((entry) => entry.repeats)).toEqual([1, 0]);
+  });
+
+  it("renders every other known provider event readably from its payload", () => {
+    const cases: NotificationItem[] = [
+      row({
+        event: "provider.sla_breach_proposed",
+        title: "SLA window w_102 closed in breach",
+        body: "Observed failure rate 15.00% … Estimated penalty 28470000 solana:EtWT/token:4zMM (uncapped)",
+        subjectType: "binding",
+        subjectId: "1fbd249d-d4a5-4f33-aa21-6aa69487b2fc",
+        payload: { label: "w_504", bindingId: "1fbd249d-d4a5-4f33-aa21-6aa69487b2fc", observedRate: 0.15, effectiveThreshold: 0.03806, verifiedCalls: 400, penaltyAmount: "28470000" },
+      }),
+      row({
+        event: "provider.sla_window_warning",
+        title: "SLA window w_1 is projected to breach",
+        body: "Top agent: dcff5fef-5f11-4bc6-8d85-d64e38da6e39.",
+        payload: { windowId: "w", bindingId: "1fbd249d-d4a5-4f33-aa21-6aa69487b2fc", observedFailureRate: 0.09, declaredFailureRate: 0.02, verifiedCalls: 100, callsRemaining: 300, topFailingRule: "insufficient_results", topAgentId: "dcff5fef-5f11-4bc6-8d85-d64e38da6e39" },
+      }),
+      row({
+        event: "provider.stake_grace_opened",
+        title: "Stake below your minimum — grace period started",
+        body: "Your stake for one binding is below your 100.000000 minimum.",
+        payload: { bindingId: "1fbd249d-d4a5-4f33-aa21-6aa69487b2fc", staked: "80000000", required: "100000000", graceDays: 5, expiresAt: "2026-10-20T10:00:00Z" },
+      }),
+      row({ event: "provider.stake_grace_expired", title: "x", body: "y", payload: { bindingId: "b9", staked: "80000000", required: "100000000", graceDays: 5 } }),
+      row({ event: "provider.stake_grace_cured", title: "x", body: "y", payload: { bindingId: "b9", staked: "120000000", required: "100000000" } }),
+      row({ event: "provider.slash_reversed", title: "40000 was returned to your stake", body: "Transaction 0xabc.", payload: { restored: "40000", proposalId: "p" } }),
+      row({
+        event: "provider.slash_decided",
+        title: "A proposed penalty against your stake was upheld",
+        body: "The proposal stands at 28470000. Nothing executes before 2026-10-18T19:14:37.507Z.",
+        payload: { proposalId: "p", outcome: "UPHELD", overturned: false, penaltyAmount: "28470000" },
+      }),
+    ];
+    const views = cases.map((item) => inboxView(item, names));
+    for (const view of views) {
+      expectReadable(view.title);
+      expectReadable(view.body);
+    }
+    expect(views[0]!.title).toBe("get_weather: a check window closed over your promise");
+    expect(views[0]!.body).toBe("15% of 400 checked calls failed; the limit was 3.8%. A penalty of up to $28.47 is proposed; your stake limits apply when it is filed.");
+    expect(views[1]!.title).toBe("get_weather: 9% of calls failed in a check window, over your 2% promise");
+    expect(views[2]!.title).toBe("get_weather: your stake is below the $100.00 minimum");
+    expect(views[3]!.body).toContain("minimum for 5 days");
+    expect(views[4]!.title).toBe("One paid tool: your stake is back above the minimum");
+    expect(views[5]!.title).toBe("$0.04 was returned to your stake");
+    expect(views[6]!.title).toBe("$28.47 penalty was upheld");
+  });
+
+  it("guards stored text when a known event lacks a payload field", () => {
+    const view = inboxView(
+      row({ event: "provider.slash_executed", title: "40000 was taken from your stake", body: "Case 1c9fb28b-336e-4024-83c7-dec937c49a9d.", payload: {} }),
+      names,
+    );
+    expect(view.title).toBe("$0.04 was taken from your stake");
+    expectReadable(view.title);
+    expectReadable(view.body);
+  });
+
+  it("guards the stored text of events it does not render", () => {
+    const view = inboxView(
+      row({
+        event: "provider.something_new",
+        title: "Binding 1fbd249d-d4a5-4f33-aa21-6aa69487b2fc is within 20% of its 100.000000 stake floor",
+        body: "Estimated penalty 28470000 solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1/token:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU before 2026-10-18T19:14:37.507Z, agent dcff5fef-5f11-4bc6-8d85-d64e38da6e39.",
+      }),
+      names,
+    );
+    expect(view.title).toBe("One of your tools is within 20% of its $100.00 stake floor");
+    expect(view.body).toBe("Estimated penalty $28.47 before today 19:14 UTC, an agent.");
+    expectReadable(view.title);
+    expectReadable(view.body);
   });
 
   it("keeps the stored text of events it does not know", () => {
