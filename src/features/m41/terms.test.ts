@@ -11,6 +11,8 @@ describe("provider terms copy (BUG-R5-03)", () => {
   it("states payouts the way every earnings screen does", () => {
     const row = (key: string) => DESIGN_TERMS.commercialTerms.find((term) => term.key === key);
     expect(row("payouts")?.value).toBe("as each call settles");
+    // A payment is final only after the 1-hour report window.
+    expect(row("payouts")?.caption).toBe("on chain; final 1 hour after each call");
     expect(row("slashedWhen")?.value).not.toContain("DATA_FAIL");
   });
 
