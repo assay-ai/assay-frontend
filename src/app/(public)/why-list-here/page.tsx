@@ -44,7 +44,13 @@ import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
   glossary's stake-rule sentence; import it from `libs/glossary.ts` once B6
   lands.
 */
-const STAKE_RECONCILE = `Payouts are never clawed back. Only your stake is at risk: at most ${DAILY_CAP_PERCENT}% of it in any 24 hours, and only if you fail more often than you promised, over at least ${MIN_CHECKED_CALLS} checked calls.`;
+/*
+  TODO(B6 glossary): the report window's length. The backend holds each paid
+  call's money for `collectHoldSeconds` (3600 s by default) so a buyer can
+  report a bad result; there is no frontend constant for it yet.
+*/
+const REPORT_WINDOW = "1 hour";
+const STAKE_RECONCILE = `Payouts are never clawed back. Each paid call's payment becomes yours ${REPORT_WINDOW} after the call, once the window for a buyer to report a bad result has closed, and a call that fails because of you (for example, your stake fell below the minimum) is not paid. After that hour, only your stake is at risk: at most ${DAILY_CAP_PERCENT}% of it in any 24 hours, and only if you fail more often than you promised, over at least ${MIN_CHECKED_CALLS} checked calls.`;
 
 /** The setup steps (`/provider/setup`) and the listing steps (the listing wizard), in their own words. */
 const STEPS: ReadonlyArray<{ group: string; when: string; steps: ReadonlyArray<{ title: string; detail: string }> }> = [
@@ -257,9 +263,10 @@ function StepsToList() {
           <p className="text-body-13 text-02">
             <span className="text-label-sm text-01">Stake, for paid calls. </span>
             Free listings need none. To charge per call, add a <Term k="stake">stake</Term> that covers $50 or 1,000
-            calls at your price, whichever is more; you get it back when you stop, after a waiting period. It is the
-            only money at risk: at most {DAILY_CAP_PERCENT}% of it in any 24 hours, and only if you fail more often
-            than you promised.
+            calls at your price, whichever is more; you get it back when you stop, after a waiting period. Once a
+            call's {REPORT_WINDOW} report window has closed, the stake is the only money at risk: at most{" "}
+            {DAILY_CAP_PERCENT}% of it in any 24 hours, and only if you fail more often than you promised, beyond a
+            statistical margin for the number of calls checked.
           </p>
         </div>
       </PanelBody>
@@ -369,8 +376,8 @@ export default function WhyListHerePage() {
 
 const FACTS: ReadonlyArray<{ value: string; key: string; sub: string }> = [
   { value: "Per call", key: "paid on chain", sub: "to your own wallet" },
-  { value: "0%", key: "reserve held", sub: "we hold nothing back" },
-  { value: "Never", key: "clawed back", sub: "a payout stays paid; only stake is at risk" },
+  { value: "0%", key: "standing reserve", sub: `No standing reserve: each paid call is held for ${REPORT_WINDOW} for buyer reports` },
+  { value: "Never", key: "clawed back", sub: "a payout stays paid" },
   { value: `${DAILY_CAP_PERCENT}%`, key: "most taken per 24 h", sub: "of your stake, enforced on chain" },
 ];
 

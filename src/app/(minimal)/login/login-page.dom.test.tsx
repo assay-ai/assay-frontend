@@ -32,7 +32,10 @@ describe("login, sent from a provider page", () => {
     expect(text).toContain("Sign in to start listing");
     expect(aside).toContain("Paid per call, on chain");
     expect(aside).toContain("Payouts are never clawed back");
-    expect(aside).toContain("At most 10% of it in any 24 hours, and only if you fail more often than you promised");
+    expect(aside).toContain("What is at risk");
+    expect(aside).toContain("payment is yours 1 hour after the call");
+    expect(aside).toContain("After that, only your stake: at most 10% of it in any 24 hours");
+    expect(aside).not.toContain("Only your stake is at risk");
     expect(aside).not.toContain("You don&#x27;t pay for results you can&#x27;t use");
     expect(aside).not.toContain("We hold, not charge");
     expect(aside).not.toContain("Not charged");

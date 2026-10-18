@@ -79,8 +79,10 @@ const PROOF_POINTS = [
 
 /*
   TODO(B6 glossary): the stake line below mirrors the glossary's stake rule;
-  import it from `libs/glossary.ts` once B6 lands.
+  import it from `libs/glossary.ts` once B6 lands. The report window is the
+  backend's `collectHoldSeconds` (3600 s by default); no frontend constant yet.
 */
+const REPORT_WINDOW = "1 hour";
 /** The provider's pitch, from `/why-list-here`: what you earn, what is never taken back, what is at risk. */
 const PROVIDER_POINTS = [
   {
@@ -95,8 +97,8 @@ const PROVIDER_POINTS = [
   },
   {
     icon: ShieldCheck,
-    title: "Only your stake is at risk",
-    detail: `At most ${DAILY_CAP_PERCENT}% of it in any 24 hours, and only if you fail more often than you promised, over at least ${MIN_CHECKED_CALLS} checked calls.`,
+    title: "What is at risk",
+    detail: `Each call's payment is yours ${REPORT_WINDOW} after the call, once a buyer can no longer report a bad result. After that, only your stake: at most ${DAILY_CAP_PERCENT}% of it in any 24 hours, and only if you fail more often than you promised, over at least ${MIN_CHECKED_CALLS} checked calls.`,
   },
 ];
 
