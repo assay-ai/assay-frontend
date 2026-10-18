@@ -95,6 +95,10 @@ export interface CatalogueProvider {
    */
   stake: CatalogueChainStake[];
   quality: CatalogueQuality | null;
+  /** CAIP-2 chains a call to this provider can settle on now (the router's answer); [] when it takes no call. */
+  chains?: string[];
+  /** Per caller: one of your agents' chains is in `chains`. null when unknown. */
+  servesYou?: boolean | null;
 }
 
 export interface CatalogueProviderTool {
@@ -106,6 +110,10 @@ export interface CatalogueProviderTool {
   promisedFailureRate?: number;
   /** Free calls one agent gets per UTC day on this listing; null for a PAID one. Absent on older APIs. */
   freeCallsPerAgentPerDay?: number | null;
+  /** CAIP-2 chains a call to this listing can settle on now; [] when it takes no call; null when unknown. */
+  chains?: string[] | null;
+  /** Per caller: one of your agents' chains is in `chains`. null when unknown. */
+  servesYou?: boolean | null;
 }
 
 export interface CatalogueProviderDetail extends CatalogueProvider {

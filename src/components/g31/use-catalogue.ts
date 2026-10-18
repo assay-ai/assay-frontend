@@ -84,6 +84,10 @@ export interface ProviderRow {
   failedCalls: number;
   /** Calls **your** organization made to them. Zero is the normal case now. */
   yourCalls: number;
+  /** Chains a call to them can settle on now (the router's answer); [] = takes no call now; undefined = not sent. */
+  chains?: string[];
+  /** Whether a call from one of your agents can settle with them now; null/undefined = unknown. */
+  servesYou?: boolean | null;
 }
 
 export interface ToolRow {
@@ -203,6 +207,8 @@ export function useCatalogue() {
       measuredCalls: row.quality ? row.quality.measuredCalls : 0,
       failedCalls: row.quality ? row.quality.failedCalls : 0,
       yourCalls: calls.filter((call) => call.providerId === row.providerId).length,
+      chains: row.chains,
+      servesYou: row.servesYou,
     }));
   }, [providersQuery.data, calls]);
 
