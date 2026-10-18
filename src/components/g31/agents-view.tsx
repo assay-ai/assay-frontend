@@ -282,6 +282,12 @@ function SubRow({ n, title, children }: { n: number; title: string; children: Re
   );
 }
 
+/** The latest call by any of an agent's keys, revoked ones included. */
+function latestUse(keys: readonly KeyRow[] | undefined): string | null {
+  const used = (keys ?? []).map((key) => key.lastUsedAt).filter((at): at is string => Boolean(at));
+  return used.length === 0 ? null : used.reduce((a, b) => (Date.parse(a) >= Date.parse(b) ? a : b));
+}
+
 function AgentCard({
   focusAccess,
   ctx,
@@ -382,7 +388,7 @@ function AgentCard({
       </SubRow>
 
       <SubRow n={2} title="Servers in use">
-        <ServersInUse agentId={agent.agentId} agentName={name} />
+        <ServersInUse agentId={agent.agentId} agentName={name} lastCallAt={latestUse(keys)} />
       </SubRow>
 
       {delegation ? (
