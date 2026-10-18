@@ -97,8 +97,10 @@ export function percentText(rate: number): string {
 
 /**
  * The failure rate, from the platform's own measurement, with its scope and
- * window: every call checked for any of the provider's tools in the last 30
- * days, open check windows included (`SlaWindowRepository.qualityByProvider`).
+ * window: every call checked for any of the provider's tools in the check
+ * windows active in the last 30 days, open ones included
+ * (`SlaWindowRepository.qualityByProvider`; a window counts whole, so the
+ * period is approximate by up to one 7-day window).
  * With `promised` (the listing's `promisedFailureRate`), the promise the
  * penalties are measured against sits beside it: "11% failed · promised at
  * most 5% · 95 checked calls to all their tools, last 30 days".
@@ -106,8 +108,13 @@ export function percentText(rate: number): string {
 export function failRateLabel(
   quality: { measuredCalls: number; failedCalls: number } | null | undefined,
   promised?: number | null,
+  /** What the promise covers, when it is narrower than the rate: "this tool" on a tool page's provider row. */
+  promiseScope?: string,
 ): string {
-  const promise = typeof promised === "number" ? ` · promised at most ${percentText(promised)}` : "";
+  const promise =
+    typeof promised === "number"
+      ? ` · promised at most ${percentText(promised)}${promiseScope ? ` for ${promiseScope}` : ""}`
+      : "";
   if (!quality || quality.measuredCalls <= 0) return `Not measured yet${promise}`;
   const calls = quality.measuredCalls === 1 ? "checked call" : "checked calls";
   return `${failRateShort(quality)}${promise} · ${quality.measuredCalls.toLocaleString("en-US")} ${calls} to all their tools, last ${FAILURE_RATE_WINDOW_DAYS} days`;
@@ -163,12 +170,15 @@ export interface ChainPrice {
   /** CAIP-2. */
   chainId: string;
   price: Money;
+  /** The one provider at that price, from the router's own priced set; null when several share it. */
   providerId: string | null;
+  /** Eligible listings on that chain the price was taken over. Optional for an older API. */
+  listings?: number;
 }
 
 /**
- * The chain prices, the one to lead with first: the first on one of the
- * reader's own chains (signed in), else the chain of the headline quote
+ * The chain prices, the one to lead with first: the reader's own chains in
+ * their order of preference (signed in), else the chain of the headline quote
  * (`held`), else the server's order.
  */
 export function orderChainPrices(
@@ -177,11 +187,79 @@ export function orderChainPrices(
   held: Money | null | undefined,
 ): ChainPrice[] {
   const list = [...(prices ?? [])];
-  const lead =
-    list.find((entry) => preferredChains?.includes(entry.chainId)) ??
-    list.find((entry) => held && entry.price.asset === held.asset) ??
-    list[0];
+  const preferred = (preferredChains ?? [])
+    .map((chainId) => list.find((entry) => entry.chainId === chainId))
+    .find((entry) => entry !== undefined);
+  const lead = preferred ?? list.find((entry) => held && entry.price.asset === held.asset) ?? list[0];
   return lead ? [lead, ...list.filter((entry) => entry !== lead)] : [];
+}
+
+/**
+ * The chains a buyer can pay on now, best funded first: balance rows with a
+ * spendable amount above zero. A $0 row (left by any past activity) is not a
+ * chain to lead a price with.
+ */
+export function fundedChains(rows: readonly { chainId: string; available: Money }[] | null | undefined): string[] {
+  return [...(rows ?? [])]
+    .filter((row) => toDecimal(row.available).gt(0))
+    .sort((a, b) => toDecimal(b.available).cmp(toDecimal(a.available)))
+    .map((row) => row.chainId);
+}
+
+/**
+ * The provider to name beside a chain's price: only when exactly one eligible
+ * listing serves that chain. With two or more, the price is the dearest of
+ * them, and naming one would say the wrong provider serves the call.
+ */
+export function chainProviderName(
+  entry: ChainPrice,
+  nameOf: (providerId: string) => string | null | undefined,
+): string | null {
+  if (entry.listings !== 1 || !entry.providerId) return null;
+  return nameOf(entry.providerId) ?? null;
+}
+
+/**
+ * The per-chain price lines of a tool page: the lead chain's "where" (under
+ * the big price; no name when the lead's own price is a range), and one full
+ * line per other chain.
+ */
+export function chainPriceLines(
+  ordered: readonly ChainPrice[],
+  options: {
+    chainName: (chainId: string) => string;
+    nameOf: (providerId: string) => string | null | undefined;
+    /** The lead chain's price is a range ("from …"), so no one provider sets it. */
+    leadIsRange?: boolean;
+  },
+): { lead: string | null; others: { chainId: string; text: string }[] } {
+  const [first, ...rest] = ordered;
+  return {
+    lead: first
+      ? chainPriceWhere(first.chainId, options.chainName, options.leadIsRange ? null : chainProviderName(first, options.nameOf))
+      : null,
+    others: rest.map((entry) => ({
+      chainId: entry.chainId,
+      text: chainPriceText(entry, options.chainName, chainProviderName(entry, options.nameOf)),
+    })),
+  };
+}
+
+/**
+ * "Paid on Robinhood Chain testnet, Solana devnet": the settlement chains,
+ * each marked when it has no price right now (a per-chain quote can fail while
+ * the chain stays in the tool's settlement list).
+ */
+export function paidOnText(
+  settles: readonly string[],
+  prices: readonly ChainPrice[] | null | undefined,
+  chainName: (chainId: string) => string,
+): string {
+  const priced = new Set((prices ?? []).map((entry) => entry.chainId));
+  const checkPrices = (prices ?? []).length > 0;
+  return `Paid on ${settles
+    .map((chainId) => `${chainName(chainId)}${checkPrices && !priced.has(chainId) ? " (price unavailable right now)" : ""}`)
+    .join(", ")}.`;
 }
 
 /** "on Robinhood Chain testnet (E2E Weather Ltd)", or without the name when it is not known or not one provider. */

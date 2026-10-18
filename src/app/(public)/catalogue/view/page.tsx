@@ -13,11 +13,11 @@ import { StartFreeCta } from "@/components/explorer/start-free";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 import {
-  chainPriceText,
-  chainPriceWhere,
+  chainPriceLines,
   checkSentences,
   failRateLabel,
   orderChainPrices,
+  paidOnText,
   listingOfferText,
   normalisedMode,
   failsOften,
@@ -106,12 +106,7 @@ function ToolPage() {
   const chainPrices = orderChainPrices(tool.prices, null, tool.price);
   const lead = chainPrices[0] ?? null;
   const held = lead?.price ?? tool.price;
-  const nameOf = (providerId: string | null) => serving.find((p) => p.providerId === providerId)?.name ?? null;
-  // Name the provider only when it is the one listing on that chain: with two, the price is the dearest of them.
-  const listingsOn = (chainId: string) =>
-    serving.filter((p) => listingOf(p.providerId)?.price.asset.split("/")[0] === chainId).length;
-  const providerFor = (entry: { chainId: string; providerId: string | null }) =>
-    listingsOn(entry.chainId) > 1 ? null : nameOf(entry.providerId);
+  const nameOf = (providerId: string) => serving.find((p) => p.providerId === providerId)?.name;
   // What the providers charge, against what a call is held for (the dearest
   // provider that can take it now). See `priceRange`.
   // "from" only over more than one listing that can be charged (`paidBindings`, when the API sends it).
@@ -119,6 +114,8 @@ function ToolPage() {
     held,
     (tool.paidBindings ?? 2) > 1 ? [tool.fromPrice, ...serving.map((p) => listingOf(p.providerId)?.price)] : [],
   );
+  // The provider is named only when exactly one eligible listing serves that chain (`listings`).
+  const lines = chainPriceLines(chainPrices, { chainName, nameOf, leadIsRange: range?.differs });
 
   return (
     <>
@@ -153,14 +150,14 @@ function ToolPage() {
           <h2 className="text-label-md text-01">What a call costs</h2>
           {/* One price line, free first: the free tier and the price together. */}
           <OfferPrice size="lg" offer={offerLine({ mode: tool.pricingMode, range, freeCallsPerDay: freeAllowance })} />
-          {lead && range ? (
+          {lead && range && lines.lead ? (
             <p className="-mt-2 text-body-13 text-02" data-testid="price-chain">
-              {chainPriceWhere(lead.chainId, chainName, range.differs ? null : providerFor(lead))}
+              {lines.lead}
             </p>
           ) : null}
-          {chainPrices.slice(1).map((entry) => (
-            <p key={entry.chainId} className="text-body-13 text-02" data-testid="chain-price">
-              {chainPriceText(entry, chainName, providerFor(entry))}
+          {lines.others.map((line) => (
+            <p key={line.chainId} className="text-body-13 text-02" data-testid="chain-price">
+              {line.text}
             </p>
           ))}
           <p className="text-body-13 text-02">
@@ -168,7 +165,7 @@ function ToolPage() {
           </p>
           {settles.length > 0 ? (
             <p className="text-body-xs text-03">
-              Paid on {settles.map((c) => chainName(c)).join(", ")}.{" "}
+              {paidOnText(settles, tool.prices, chainName)}{" "}
               {freeAllowance ? "You need funds there once the free calls run out." : "You pay from funds you hold there."}
             </p>
           ) : null}
@@ -250,7 +247,7 @@ function ToolPage() {
                         </span>
                       </div>
                       <Fact label={<ObservedFailuresLabel />}>
-                        {failRateLabel(provider.quality, listing?.promisedFailureRate)}
+                        {failRateLabel(provider.quality, listing?.promisedFailureRate, "this tool")}
                       </Fact>
                       <Fact label="Stake at risk">{stakeSummary(provider.stake, chainName)}</Fact>
                     </div>

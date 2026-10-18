@@ -121,7 +121,10 @@ export interface CatalogueChainPrice {
   /** CAIP-2. */
   chainId: string;
   price: CatalogueMoney;
+  /** The one provider at that price, from the router's own priced set; null when several share it. */
   providerId: string | null;
+  /** Eligible listings on that chain the price was taken over: name the provider only when 1. */
+  listings: number;
 }
 
 export interface CatalogueTool extends CatalogueToolVersionFields {
@@ -178,7 +181,7 @@ export interface CatalogueTool extends CatalogueToolVersionFields {
    * by this layer would be this file claiming knowledge it does not have.
    */
   settlementChains?: string[];
-  /** The price per chain, with the provider setting it. Empty when nothing is routable. */
+  /** The price per chain, with the provider setting it; a chain that cannot be quoted now is left out. */
   prices?: CatalogueChainPrice[];
 }
 
