@@ -117,8 +117,19 @@ function getStartedFactsFrom(data: AgentsAndKeys) {
   return { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts };
 }
 
+/**
+ * Not every fact is read yet. A bound key's pay permission counts: without it
+ * an agent that already pays read as "Let your agent pay" for a beat on every
+ * Overview load, then the card vanished (V1-1).
+ */
 function dataLoading(data: AgentsAndKeys): boolean {
-  return data.agentsQuery.isPending || (data.agents.length > 0 && data.keysQuery.isPending) || data.escrowQuery.isPending;
+  const agent = data.agents[0];
+  return (
+    data.agentsQuery.isPending ||
+    (data.agents.length > 0 && data.keysQuery.isPending) ||
+    data.escrowQuery.isPending ||
+    (agent !== undefined && data.readiness[agent.agentId]?.loading === true)
+  );
 }
 
 const DISMISS_EVENT = "assay:get-started-dismissed";
