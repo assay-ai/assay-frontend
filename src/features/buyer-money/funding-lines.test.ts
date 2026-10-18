@@ -81,11 +81,13 @@ describe("refund copy carries its condition (B7 review M1)", () => {
       refundableLine(summary, true),
       `${REFUNDABLE_ROW.beforeTime} 12:10 UTC ${REFUNDABLE_ROW.afterTime}`,
       REFUNDABLE_ROW.noEnd,
+      REFUNDABLE_ROW.empty,
+      REFUNDABLE_ROW.pointer,
     ];
     for (const text of texts) {
       expect(text).toMatch(/refund/i);
       expect(text, text).toMatch(/accepted/);
-      expect(text).not.toMatch(/can still be reported for a full refund|refundable if you report it/i);
+      expect(text).not.toMatch(/can still be reported for a full refund|refundable if you report it|can be reported for a full refund|a report would refund/i);
     }
   });
 });
