@@ -2,6 +2,8 @@ import Decimal from "decimal.js";
 
 import type { Money, ProviderEarningsFigures } from "@/interfaces";
 
+import { notCreditedBreakdown } from "./not-credited";
+
 export const EARNED_IN_WALLET = "already in your wallet — paid at each redemption";
 
 const calls = (count: number) => `${count} call${count === 1 ? "" : "s"}`;
@@ -51,12 +53,12 @@ export interface UnpaidLine {
 export const UNPAID_COPY: Record<UnpaidLine["key"], { reason: string; action: string; actionable: boolean }> = {
   debtOutstanding: {
     reason: "Passed our checks, but the buyer's payment did not go through yet. The money is still in their escrow.",
-    action: "Nothing to do: it is the buyer's debt. Paid to you when they settle. After 30 days it is written off, but still owed.",
+    action: "Nothing to do: it is the buyer's debt. Paid to you when they settle. After 30 days it shows as overdue.",
     actionable: false,
   },
   uncollected: {
-    reason: "Passed our checks, but the buyer did not settle within 30 days, so it was written off. You were not paid.",
-    action: "Nothing to do. The buyer still owes it and cannot make paid calls until they settle; you are paid then.",
+    reason: "Overdue: the buyer has not paid for 30 days. They are blocked from paid calls until they do.",
+    action: "Nothing to do. You will be paid when the buyer pays.",
     actionable: false,
   },
   forfeited: {
@@ -91,7 +93,7 @@ export function unpaidLines(
         `${format(totals.debtOutstanding)} for ${calls(n)} that passed our checks, but the ` +
         "buyer's payment could not be collected from their escrow. The money is still held " +
         "there; you are paid as soon as the buyer signs again. If they do not within 30 days, " +
-        "it is written off but the buyer still owes it, and you are paid if they settle later. " +
+        "it shows as overdue: the buyer still owes it, and you are paid when they settle. " +
         "The platform does not pay it in their place.",
     });
   }
@@ -101,14 +103,14 @@ export function unpaidLines(
       key: "uncollected",
       className: "PAID_UNCOLLECTED",
       ...UNPAID_COPY.uncollected,
-      label: "Never collected",
+      label: "Overdue",
       amount: totals.uncollected,
       calls: n,
       explanation:
-        `${format(totals.uncollected)} for ${calls(n)} that passed our checks, but the buyer ` +
-        "did not settle the payment within 30 days, so it was written off: you were not paid " +
-        "and no fee was taken. The buyer still owes it and cannot make paid calls until they " +
-        "settle; if they do, you are paid then. The platform does not pay it in their place.",
+        `${format(totals.uncollected)} for ${calls(n)} that passed our checks is overdue: the ` +
+        "buyer has not paid for 30 days. You were not paid and no fee was taken. The buyer " +
+        "still owes it and is blocked from paid calls until they pay; you will be paid then. " +
+        "The platform does not pay it in their place.",
     });
   }
   if (nonZero(totals.forfeited, totals.forfeitedCalls)) {
@@ -139,11 +141,12 @@ export interface EarningsSplit {
   /**
    * Open buyer debt: passed our checks, the buyer's payment is not collected
    * yet. Not in `earned`; paid once the buyer signs again — even after it is
-   * written off, since the buyer still owes it. Never shown as owed by the platform.
+   * overdue, since the buyer still owes it. Never shown as owed by the platform.
    */
   waitingOnBuyers: Money | null;
   waitingOnBuyersCalls: number;
   fee: Money | null;
+  /** "Not credited": the sum of its reasons (`notCreditedBreakdown`), the same calls Money lists. */
   notCredited: Money | null;
   notCreditedCalls: number;
 }
@@ -155,13 +158,14 @@ function positive(value: Money | null | undefined): Money | null {
 /** The month's money as the provider reads it: in the wallet, Assay's fee, not credited. */
 export function earningsSplit(totals: ProviderEarningsFigures | null | undefined): EarningsSplit {
   const waiting = positive(totals?.debtOutstanding);
+  const notCredited = notCreditedBreakdown(totals);
   return {
     inWallet: totals?.earned ?? null,
     waitingOnBuyers: waiting,
     waitingOnBuyersCalls: waiting ? (totals?.debtOutstandingCalls ?? 0) : 0,
     fee: positive(totals?.platformFee),
-    notCredited: positive(totals?.withheld),
-    notCreditedCalls: totals?.withheldCalls ?? 0,
+    notCredited: positive(notCredited.amount),
+    notCreditedCalls: notCredited.calls,
   };
 }
 
@@ -176,7 +180,7 @@ export interface HomeUnpaidNote {
 /**
  * The provider home's short notes on passed-but-unpaid money. Open buyer debt
  * says the provider has nothing to do (it is the buyer's debt); written-off
- * (never collected) calls say the same, so Home names every line Money's
+ * (overdue) calls say the same, so Home names every line Money's
  * "Passed, but not paid" lists, in its order; forfeited calls are the
  * provider's to avoid, so they link to Stake.
  *
@@ -205,7 +209,7 @@ export function homeUnpaidNotes(
     const n = totals.uncollectedCalls ?? 0;
     notes.push({
       key: "uncollected",
-      text: `${format(totals.uncollected)} for ${calls(n)} was never collected: the buyer did not settle within 30 days. They still owe it; you are paid if they settle.`,
+      text: `${format(totals.uncollected)} for ${calls(n)} is overdue: the buyer has not paid for 30 days. They are blocked from paid calls until they do; you will be paid then.`,
       tone: "neutral",
       link: { label: "Details", href: hrefs.money },
     });

@@ -67,7 +67,7 @@ describe("unpaidLines", () => {
     expect(lines[0].explanation).toMatch(/^\$0\.09 for 1 call that passed/);
     expect(lines[0].explanation).toMatch(/platform does not pay it/);
     expect(lines[1].explanation).toMatch(/buyer still owes it/);
-    expect(lines[1].explanation).toMatch(/you are paid then/);
+    expect(lines[1].explanation).toMatch(/you will be paid then/);
     expect(lines[1].explanation).not.toMatch(/nobody owes/);
     expect(lines[2].explanation).toMatch(/buyer was not charged/);
     for (const line of lines) expect(line.explanation).not.toMatch(/owed by the platform/);
@@ -92,6 +92,24 @@ describe("earningsSplit", () => {
     expect(split.waitingOnBuyers?.amount).toBe("1000000");
     expect(split.waitingOnBuyersCalls).toBe(2);
     expect(split.notCredited).toBeNull();
+  });
+
+  it("says not credited as the sum of its reasons, so Home and Money read the same calls", () => {
+    const split = earningsSplit({
+      calls: 108,
+      earned: usd("6084000"),
+      platformFee: usd("676000"),
+      // A stale summary: the reasons are what counts.
+      withheld: usd("540000"),
+      withheldCalls: 14,
+      withheldByClass: [
+        { class: "PAID_UNCREDITED", calls: 12, amount: usd("353000") },
+        { class: "SYSTEM_ERROR", calls: 8, amount: usd("297000") },
+        { class: "REQUEST_ERROR", calls: 2, amount: usd("90000") },
+      ],
+    });
+    expect(split.notCredited?.amount).toBe("740000");
+    expect(split.notCreditedCalls).toBe(22);
   });
 });
 
@@ -125,9 +143,13 @@ describe("unpaidLines: reason and next step", () => {
     expect(lines[0].action).toMatch(/^Nothing to do/);
     expect(lines[0].action).toMatch(/30 days/);
     expect(lines[1].actionable).toBe(false);
-    expect(lines[1].action).toMatch(/buyer still owes it/);
-    expect(lines[1].action).toMatch(/you are paid then/);
-    expect(lines[0].action).toMatch(/written off, but still owed/);
+    expect(lines[1].reason).toMatch(/blocked from paid calls/);
+    expect(lines[1].action).toMatch(/You will be paid when the buyer pays/);
+    expect(lines[0].action).toMatch(/shows as overdue/);
+    // Overdue, never "written off" beside "still owed" (D money P2).
+    expect(lines[1].label).toBe("Overdue");
+    expect(lines[1].reason).toBe("Overdue: the buyer has not paid for 30 days. They are blocked from paid calls until they do.");
+    for (const line of lines) expect(`${line.reason} ${line.action} ${line.explanation}`).not.toMatch(/written off/);
   });
 
   it("tells the provider how to avoid a forfeit", () => {
@@ -168,7 +190,7 @@ describe("homeUnpaidNotes", () => {
       hrefs,
     );
     expect(notes.map((n) => n.key)).toEqual(["uncollected", "forfeited"]);
-    expect(notes[0].text).toMatch(/^\$0\.81 for 2 calls was never collected/);
+    expect(notes[0].text).toMatch(/^\$0\.81 for 2 calls is overdue: the buyer has not paid for 30 days/);
     expect(notes[0].tone).toBe("neutral");
     expect(notes[0].link.href).toBe(hrefs.money);
     expect(notes[0].text).not.toMatch(/platform (owes|pays)/);
