@@ -8,6 +8,8 @@
  * build links with it, never by hand.
  */
 
+import type { CallsFilter } from "@/features/buyer/call-outcome";
+
 function withQuery(path: string, params: Record<string, string>): string {
   return `${path}?${new URLSearchParams(params).toString()}`;
 }
@@ -18,7 +20,8 @@ function under(base: string, sub?: string): string {
 
 export const routes = {
   receipt: (intentId: string) => withQuery("/receipts/view", { id: intentId }),
-  approval: (approvalId: string) => withQuery("/approvals/view", { id: approvalId }),
+  /** A paid call opened from a link (a notification): its outcome and receipt. Takes the call id. */
+  payment: (callId: string) => withQuery("/payments/view", { id: callId }),
   exploreProvider: (providerId: string) => withQuery("/explore/providers/view", { id: providerId }),
   /** The signed-in tool list, opened at one tool. */
   exploreTool: (toolId: string) => withQuery("/explore", { tool: toolId }),
@@ -26,8 +29,12 @@ export const routes = {
   publicTool: (toolIdOrName: string) => withQuery("/catalogue/view", { tool: toolIdOrName }),
   /** The public (signed-out) provider page. */
   publicProvider: (providerId: string) => withQuery("/catalogue/provider", { id: providerId }),
-  /** The Calls list, optionally filtered: status is all | charged | not-charged | free. */
-  calls: (filters: { status?: string; tool?: string; agent?: string; reason?: string } = {}) => {
+  /**
+   * The Calls list, optionally filtered. `status` is typed to the values the
+   * page reads (`parseCallsFilter`, plus `refused`), so every link spells it
+   * the one way the page understands; `call` opens one refused call.
+   */
+  calls: (filters: { status?: CallsFilter | "refused"; tool?: string; call?: string } = {}) => {
     const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => Boolean(v))) as Record<string, string>;
     return Object.keys(params).length > 0 ? withQuery("/spend/calls", params) : "/spend/calls";
   },
