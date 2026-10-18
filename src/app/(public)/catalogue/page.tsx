@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Store } from "lucide-react";
+import { ChevronRight, ShieldAlert, Store } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -77,6 +77,8 @@ function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: num
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
+            {tool.kind === "PROVIDER" ? <MakerChip handle={tool.handle ?? null} /> : null}
+            {tool.notReviewed ? <NotReviewedTag /> : null}
             {tool.routable ? null : <UnavailableTag />}
             <ToolVersionBadges name={tool.name} version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} replacementName={tool.replacementName} replacementVersion={tool.replacementVersion} />
           </div>
@@ -98,6 +100,31 @@ function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: num
     </li>
   );
 }
+
+/** "One maker's API · @acme": a provider tool, served by its maker only (no backup provider). */
+function MakerChip({ handle }: { handle: string | null }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-03 px-2 py-0.5 text-label-xs text-02" title="Only its maker serves it, so it has no backup provider.">
+      One maker&apos;s API{handle ? ` · @${handle}` : ""}
+    </span>
+  );
+}
+
+function NotReviewedTag() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">
+      <ShieldAlert aria-hidden="true" className="size-3" />
+      Not reviewed
+    </span>
+  );
+}
+
+type KindFilter = "all" | "STANDARD" | "PROVIDER";
+const KIND_FILTERS: { id: KindFilter; label: string }[] = [
+  { id: "all", label: "All tools" },
+  { id: "STANDARD", label: "Backed by several providers" },
+  { id: "PROVIDER", label: "One maker's API" },
+];
 
 function ProviderRow({ provider, chainName }: { provider: PublicProvider; chainName: (id: string) => string }) {
   return (
@@ -148,6 +175,7 @@ export default function CataloguePage() {
   const [view, setView] = React.useState<"tools" | "providers" | "toolsets">(initial.view);
   const [query, setQuery] = React.useState(initial.q);
   const [freeOnly, setFreeOnly] = React.useState(initial.free);
+  const [kind, setKind] = React.useState<KindFilter>("all");
   React.useEffect(() => {
     const next = explorerHref({ view, q: query, free: freeOnly });
     const current = `${window.location.pathname}${window.location.search}`;
@@ -165,8 +193,10 @@ export default function CataloguePage() {
     );
     const inTopic = topic && rows.some((t) => t.category) ? rows.filter((t) => t.category === topic) : rows;
     const free = freeOnly ? inTopic.filter((t) => hasFreeCalls(t.pricingMode)) : inTopic;
-    return needle ? free.filter((t) => matches(needle, t.name, t.description, t.id)) : free;
-  }, [tools.data, needle, freeOnly, topic]);
+    const ofKind = kind === "all" ? free : free.filter((t) => (t.kind ?? "STANDARD") === kind);
+    return needle ? ofKind.filter((t) => matches(needle, t.name, t.description, t.id, t.handle)) : ofKind;
+  }, [tools.data, needle, freeOnly, topic, kind]);
+  const hasProviderTools = Boolean(tools.data?.tools.some((t) => t.kind === "PROVIDER"));
   const topicKnown = Boolean(tools.data?.tools.some((t) => t.category));
 
   const providerRows = React.useMemo(() => {
@@ -261,7 +291,7 @@ export default function CataloguePage() {
             ) : null}
             {active.isSuccess && view !== "toolsets" ? (
               <span className="text-body-xs text-03">
-                {needle || (view === "tools" && (freeOnly || (topic && topicKnown))) ? `${visible} of ${total}` : total}
+                {needle || (view === "tools" && (freeOnly || kind !== "all" || (topic && topicKnown))) ? `${visible} of ${total}` : total}
               </span>
             ) : null}
           </div>
@@ -274,6 +304,26 @@ export default function CataloguePage() {
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
+
+        {view === "tools" && hasProviderTools ? (
+          <div role="group" aria-label="Kind of tool" className="flex flex-wrap gap-2" data-testid="kind-filter">
+            {KIND_FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                aria-pressed={kind === f.id}
+                onClick={() => setKind(f.id)}
+                className={
+                  kind === f.id
+                    ? "rounded-full border border-primary-500 bg-primary-10 px-3 text-label-13 text-primary-700"
+                    : "rounded-full border border-02 bg-01 px-3 text-label-13 text-02 hover:text-01"
+                }
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {view === "toolsets" ? (
           <ToolsetCatalogue query={query} onClearQuery={() => setQuery("")} />
@@ -301,17 +351,18 @@ export default function CataloguePage() {
         ) : visible === 0 ? (
           <PageState
             kind="empty"
-            title={needle ? `Nothing matches “${query.trim()}”` : "No tool has free calls right now"}
+            title={needle ? `Nothing matches “${query.trim()}”` : freeOnly ? "No tool has free calls right now" : "No tool of this kind yet"}
             description={
               view === "tools"
                 ? `Search looks at a tool's name and description${freeOnly ? ", among tools with free calls" : ""}.`
                 : "Search looks at a provider's name."
             }
             action={{
-              label: freeOnly && view === "tools" ? "Show all tools" : "Clear the search",
+              label: (freeOnly || kind !== "all") && view === "tools" ? "Show all tools" : "Clear the search",
               onClick: () => {
                 setQuery("");
                 setFreeOnly(false);
+                setKind("all");
               },
             }}
           />
