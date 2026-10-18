@@ -38,15 +38,15 @@ export function PublicFooter({
       <div className="flex w-full flex-col gap-3 px-4 py-6 tablet:flex-row tablet:items-center tablet:justify-between tablet:px-7">
         <span className="text-label-13 text-02">Assay</span>
         <nav aria-label="Footer">
-          <ul className="flex flex-wrap gap-x-5 gap-y-2">
+          <ul className="flex flex-wrap gap-x-5">
             {publicFooterLinks({ signedIn }).map((link) => (
               <li key={link.id}>
                 {link.external ? (
-                  <a href={link.href} target="_blank" rel="noopener noreferrer" className="text-body-13 text-03 hover:text-01">
+                  <a href={link.href} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center text-body-13 text-03 hover:text-01">
                     {link.label}
                   </a>
                 ) : (
-                  <LinkComponent href={link.href} className="text-body-13 text-03 hover:text-01">
+                  <LinkComponent href={link.href} className="inline-flex min-h-10 items-center text-body-13 text-03 hover:text-01">
                     {link.label}
                   </LinkComponent>
                 )}

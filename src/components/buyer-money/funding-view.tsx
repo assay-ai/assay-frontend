@@ -368,7 +368,7 @@ function EscrowCard({
                 used={escrow.spentInWindow ?? { amount: "0", asset: "", decimals: money.decimals }}
                 limit={escrow.maxPerWindow}
                 refillsAt={refillsAt}
-                refillHint="your time; 24 h after the first payment in the window"
+                refillHint="24 h after the first payment in the window"
               />
             </>
           ) : (

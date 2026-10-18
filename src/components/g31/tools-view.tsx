@@ -6,10 +6,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { ToolContractSection } from "@/components/contracts/tool-contract";
+import { ToolVersionBadges } from "@/components/contracts/version-badges";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
 import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
-import { ToolAccessControl, useSpendPolicy } from "@/components/explorer/tool-access-control";
+import { ExploreAgentPicker, ToolAccessControl, useExploreAgent } from "@/components/explorer/tool-access-control";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
@@ -128,6 +130,8 @@ function ToolDetail({
 
   return (
     <div className="flex flex-col gap-4 border-t border-01 bg-02 px-4 py-4 tablet:px-5">
+      {/* Allow / Block first, naming the agent it is for (Explore's agent picker sets which). */}
+      <ToolAccessControl toolId={tool.toolId} toolName={tool.name} allToolIds={allToolIds} className="self-start" />
       {tool.description ? <p className="text-body-13 text-02">{tool.description}</p> : null}
 
       <SettlesElsewhere tool={tool} buyerChains={buyerChains} chains={chains} />
@@ -151,6 +155,8 @@ function ToolDetail({
           </ul>
         </div>
       </div>
+
+      <ToolContractSection toolId={tool.toolId} compact />
 
       <div className="flex flex-col gap-2">
         <h3 className="text-label-13 text-01">Who serves it</h3>
@@ -224,7 +230,6 @@ function ToolDetail({
             `Your agents have not called it ${callsWindow}.`
           )}
         </p>
-        <ToolAccessControl toolId={tool.toolId} toolName={tool.name} allToolIds={allToolIds} />
       </div>
     </div>
   );
@@ -236,7 +241,7 @@ function ToolsList() {
   const router = useRouter();
   const openId = params.get("tool");
   const [query, setQuery] = React.useState("");
-  const policy = useSpendPolicy();
+  const explore = useExploreAgent();
   const { chains } = useChains();
   const openRef = React.useRef<HTMLLIElement | null>(null);
 
@@ -304,11 +309,15 @@ function ToolsList() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        {policy.data ? (
+        <ExploreAgentPicker />
+        {explore.agent && explore.access.data ? (
           <p className="text-body-13 text-03">
-            {accessSummary(policy.data.allowedTools, tools.length)}{" "}
-            <Link href="/limits" className="text-primary-600 hover:underline">
-              Spending limits
+            {accessSummary(explore.access.data, explore.name)}{" "}
+            <Link
+              href={`/agents?agent=${encodeURIComponent(explore.agent.agentId)}#access`}
+              className="text-primary-600 hover:underline"
+            >
+              What this agent can use
             </Link>
           </p>
         ) : null}
@@ -341,7 +350,7 @@ function ToolsList() {
         <ul className="flex w-full flex-col overflow-hidden rounded-xl border border-01 bg-01">
           {visible.map((tool) => {
             const open = openId === tool.toolId;
-            const blocked = policy.data ? toolAccess(policy.data.allowedTools, tool.toolId) === "blocked" : false;
+            const blocked = explore.access.data ? toolAccess(explore.access.data, tool.toolId) === "blocked" : false;
             const serving = providers.filter((p) => p.toolIds.includes(tool.toolId));
             // The backend's own figure first (its total over every free-capable listing, capped).
             const freeAllowance = tool.freeCallsPerDay ?? freeAllowanceOf(tool.toolId);
@@ -362,6 +371,7 @@ function ToolsList() {
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
                       {tool.routable ? null : <UnavailableTag />}
+                      <ToolVersionBadges name={tool.name} version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} replacementName={tool.replacementName} replacementVersion={tool.replacementVersion} />
                       {blocked ? (
                         <span className="rounded-full bg-danger-10 px-2 py-0.5 text-label-xs text-danger-700">Blocked</span>
                       ) : null}

@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import * as React from "react";
 
 import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
@@ -23,12 +24,17 @@ import { PausedBanner } from "./pause-all";
  */
 export const BUYER_BANNER_ORDER = ["account-block", "debt", "paused"] as const;
 
+/** Pages whose own content must come first: the debt banner is one line there. */
+export const COMPACT_BANNER_PATHS = ["/connect", "/agents", "/toolsets", "/spend/calls", "/limits"];
+
 export function BuyerBannerStack() {
+  const pathname = usePathname() ?? "";
+  const compact = COMPACT_BANNER_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const debts = useBuyerDebtsQuery();
   const owed = debtBannerSummary(debts.data) !== null;
   const banners: Record<(typeof BUYER_BANNER_ORDER)[number], React.ReactNode> = {
     "account-block": <AccountBlockBanner />,
-    debt: <BuyerDebtBanner />,
+    debt: <BuyerDebtBanner compact={compact} />,
     paused: <PausedBanner owed={owed} />,
   };
   return (

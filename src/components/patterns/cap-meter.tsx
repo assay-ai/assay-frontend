@@ -29,7 +29,7 @@ export interface CapSentenceInput {
   /** What happens at the limit. Default "Paid calls are refused". */
   consequence?: string;
   /**
-   * What the refill time means, appended after it: "your time; 24 h after the
+   * What the refill time means, appended after it: "24 h after the
    * window's first payment". A rolling window and a calendar day read the same
    * otherwise.
    */

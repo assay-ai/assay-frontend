@@ -26,6 +26,8 @@ const detail = (overrides: Partial<ToolBindingDetail> = {}): ToolBindingDetail =
   id: ID,
   toolId: "t-1",
   endpoint: "https://api.example.com/search",
+  authMode: "SIGNATURE",
+  publishedEndpoint: null,
   pricingMode: "PAID",
   price: { amount: "250000", asset: "eip155:46630/erc20:0xa0b8", decimals: 6 },
   status: "DRAFT",

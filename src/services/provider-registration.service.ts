@@ -17,9 +17,9 @@ import { api } from "./api";
  * one would let any caller with a valid token register or edit another
  * tenant's provider by naming a different id.
  *
- * The connectivity trio (`connectivity-check`, `endpoint`, `egress-ips`) lives
+ * The connectivity pair (`connectivity-check`, `endpoint`) lives
  * on its own backend controller and was not in this task's list. It is here
- * because `ProviderRegistrationState` already carries `egressIps` and
+ * because `ProviderRegistrationState` already carries
  * `lastConnectivityCheck`, so the onboarding screen reads the check's result
  * whether or not it can run one — see the report.
  */
@@ -70,7 +70,7 @@ export function updateProviderRegistration(
 
 /**
  * `POST /providers/me/connectivity-check` — probe an endpoint from the
- * platform's egress addresses. Never saves.
+ * platform. Never saves.
  *
  * Omit `endpoint` to re-probe whatever is already on the row; pass one to test
  * a URL the provider is still typing. Always answers 200, `UNREACHABLE` and
@@ -93,14 +93,4 @@ export function checkProviderConnectivity(endpoint?: string): Promise<CheckConne
  */
 export function declareProviderEndpoint(endpoint: string): Promise<CheckConnectivityResponse> {
   return api.put<CheckConnectivityResponse>("/providers/me/endpoint", { endpoint });
-}
-
-/**
- * `GET /providers/egress-ips` — the addresses to allowlist.
- *
- * An empty list is a real, non-error state: it means this deployment is not
- * behind fixed egress addresses, not that something is misconfigured.
- */
-export function getPlatformEgressIps(): Promise<{ egressIps: string[] }> {
-  return api.get<{ egressIps: string[] }>("/providers/egress-ips");
 }

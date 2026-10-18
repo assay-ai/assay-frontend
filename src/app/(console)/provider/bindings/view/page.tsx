@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { BindingHeader, bindingQueryKey, useBinding } from "@/features/provider-binding/binding-header";
 import { BuyerPreview } from "@/features/provider-binding/buyer-preview";
+import { servedSummary, majorChoices, moveNotice, termsOf } from "@/features/provider-binding/contract-terms";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { slaReading } from "@/features/provider-sla/reading";
 import { isAssetMismatch, readableDerivation } from "@/features/provider-stake/derivation";
@@ -260,6 +261,11 @@ function OverviewContent() {
 
   const toolName = binding ? names.bindingLabel(binding) : "";
   const tool = binding ? names.tool(binding.toolId) : null;
+  // T3: which contract versions it serves, and whether they are on their way out.
+  const choices = tool ? majorChoices(tool) : [];
+  const served = binding && choices.length > 0 ? termsOf(binding) : null;
+  const move = served ? moveNotice(served, choices) : null;
+  const addMajor = choices.find((c) => c.status === "ACTIVE" && c.current)?.major ?? choices.find((c) => c.status === "ACTIVE")?.major ?? null;
 
   let primary: React.ReactNode = null;
   if (binding?.status === "DRAFT") {
@@ -320,11 +326,28 @@ function OverviewContent() {
             <Banner tone="warning" title="This listing takes no paid traffic" description={assetMismatch} />
           ) : null}
 
+          {move ? (
+            <Banner
+              tone="warning"
+              title={addMajor ? `Add v${addMajor} to keep this listing serving` : "Move this listing to the newer version"}
+              description={move}
+              action={
+                <Link
+                  href={routes.bindingWizard(bindingId, "connect")}
+                  className="touch-target inline-flex shrink-0 items-center rounded-md border border-02 bg-01 px-3 text-label-13 text-01 hover:bg-02"
+                >
+                  {addMajor ? `Add v${addMajor} and test` : "Update and test"}
+                </Link>
+              }
+            />
+          ) : null}
+
           {showFirstRun ? <FirstRunCard binding={binding} toolName={toolName} description={tool?.description ?? null} /> : null}
 
           <Panel className="w-full">
             <PanelBody className="p-4 tablet:p-5">
               <StatusTimeline steps={lifecycle(binding, testPassed)} label="Listing status" />
+              {served ? <p className="pt-3 text-body-13 text-02">{servedSummary(served)}</p> : null}
             </PanelBody>
           </Panel>
 

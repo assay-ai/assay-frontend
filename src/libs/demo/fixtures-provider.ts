@@ -1,3 +1,9 @@
+import { formatVersionRange, parseVersionRange } from "@/features/contracts/semver";
+import type { ToolContractVersion } from "@/interfaces/contracts";
+import { ApiError } from "@/libs/ApiClient";
+
+import { demoContractVersions, WEATHER_TOOL_ID, weatherSunsetAt } from "./fixtures-contracts";
+import { demoContractMismatch, demoRetiredMajor } from "./demo-switches";
 import {
   DEMO_PENALTY_AMOUNTS,
   DEMO_PENALTY_PROPOSALS,
@@ -104,8 +110,6 @@ const STAKE_ADDRESS = "0x9F2c8A1e5D7b30C4f6A8e2B915D3c7E04A6b1F82";
 /** The console credential this provider's own actions are stamped with. */
 const CONSOLE_CREDENTIAL = "cred_8f3a1d0c";
 
-const EGRESS_IPS = ["203.0.113.21", "203.0.113.22", "198.51.100.9"];
-
 /** CAIP-10 for the payout address. Built lazily — see the module docstring. */
 function payoutAccount(): string {
   return `${DEMO_CHAIN_ID}:${PAYOUT_ADDRESS}`;
@@ -171,6 +175,17 @@ interface DemoBinding {
   seeded?: { inputs: string[] };
   /** What a test call against this listing returns, when not the market quote. */
   sample?: { query: string; rawBody: string; mapped: Record<string, unknown> };
+  /** T3: the contract majors served; the tool's current major when unset. */
+  range?: string;
+  /** T3: optional outputs returned. */
+  provides?: string[];
+  /** T3: optional inputs accepted. */
+  supports?: string[];
+  /**
+   * T3: the majors a passing test already exists for at `version` (the seed's
+   * own runs). A test run in this tab adds to them (`rememberRun`).
+   */
+  testedMajors?: number[];
 }
 
 const BINDINGS: DemoBinding[] = [
@@ -225,6 +240,8 @@ const BINDINGS: DemoBinding[] = [
     id: "d5e02b88-1c74-493a-8b2f-6a1c9d4e7503",
     toolId: "chain-activity",
     toolName: "Chain activity summary",
+    // T3: a live listing still on v1, which is deprecated: the Overview asks to add v2.
+    range: "^1",
     endpoint: `${API_HOST}/v1/activity`,
     pricingMode: "FREE",
     priceMajor: "0",
@@ -268,6 +285,45 @@ const BINDINGS: DemoBinding[] = [
       { target: "asOf", selector: "$.vessel.position.ts" },
     ],
   },
+  /*
+    T3: a weather draft started on contract v1, before v2 came out. v1 is now
+    deprecated (stops in 120 days; `?contracts=retired` retires it), so the
+    editor says to add v2, re-map and test. It already returns the optional
+    `uv_index` and accepts the optional `units`.
+  */
+  {
+    id: "f2c84d19-3b6e-4a07-9d51-8e2f0a7c4b63",
+    toolId: "weather-now",
+    toolName: "Weather now",
+    endpoint: `${API_HOST}/v1/weather`,
+    pricingMode: "PAID",
+    priceMajor: "0.002",
+    status: "DRAFT",
+    version: 3,
+    publishedVersion: null,
+    freeQuotaPerAgent: null,
+    freeDailyBudget: null,
+    slaFailureRate: 0.02,
+    timeoutMs: 8000,
+    maxRps: null,
+    maxDailyCalls: null,
+    upstreamPath: "/v1/weather",
+    outputs: [
+      { target: "temperature", selector: "$.current.temp" },
+      { target: "observed_at", selector: "$.current.time" },
+      { target: "uv_index", selector: "$.current.uv" },
+    ],
+    seeded: { inputs: ["latitude", "longitude", "units"] },
+    sample: {
+      query: "?latitude=38.72&longitude=-9.14&units=metric",
+      rawBody: '{"current":{"temp":19.4,"time":"2026-10-16T14:00:00Z","uv":4.2}}',
+      mapped: { temperature: 19.4, observed_at: "2026-10-16T14:00:00Z", uv_index: 4.2 },
+    },
+    range: "^1",
+    provides: ["uv_index"],
+    supports: ["units"],
+    testedMajors: [1],
+  },
 ];
 
 /**
@@ -279,18 +335,17 @@ const BINDINGS: DemoBinding[] = [
 const DRAFT_PREFIX = "demo-draft-";
 
 const DRAFT_TOOLS: Record<string, Pick<DemoBinding, "toolName" | "outputs" | "seeded" | "sample">> = {
-  "weather-now": {
-    toolName: "Weather now",
+  "air-quality": {
+    toolName: "Air quality",
     outputs: [
-      { target: "temperature", selector: "$.temperature" },
-      { target: "conditions", selector: "$.conditions" },
+      { target: "aqi", selector: "$.aqi" },
       { target: "observedAt", selector: "$.observedAt" },
     ],
-    seeded: { inputs: ["city", "units"] },
+    seeded: { inputs: ["city"] },
     sample: {
-      query: "?city=Lisbon&units=metric",
-      rawBody: '{"temperature":21.4,"conditions":"Clear","observedAt":"2026-10-16T08:40:00Z"}',
-      mapped: { temperature: 21.4, conditions: "Clear", observedAt: "2026-10-16T08:40:00Z" },
+      query: "?city=Lisbon",
+      rawBody: '{"aqi":31,"pm25":7.2,"observedAt":"2026-10-16T08:40:00Z"}',
+      mapped: { aqi: 31, observedAt: "2026-10-16T08:40:00Z" },
     },
   },
 };
@@ -377,6 +432,12 @@ function withSavedLimits(binding: DemoBinding): DemoBinding {
   return next;
 }
 
+/** Stored credential summaries per binding, then per origin: names and hints only, never a value. */
+const demoCredentialSets = new Map<string, Map<string, { origin: string; headers: { name: string; hint: string | null }[]; updatedAt: string }>>();
+
+/** The auth mode a tab chose per listing. Only the mode: the demo never keeps a credential value. */
+const demoAuthModes = new Map<string, "NONE" | "API_KEY" | "SIGNATURE" | "BOTH">();
+
 /** A write's answer: the stored listing with what was sent laid over it. Echoed; the free limits, pricing mode and price are kept for the tab (see `rememberLimits`). */
 function withWrite(binding: DemoBinding, data: Record<string, unknown>): DemoBinding {
   const next = { ...binding };
@@ -398,6 +459,9 @@ function withWrite(binding: DemoBinding, data: Record<string, unknown>): DemoBin
   if (data.freeDailyBudget === null || typeof data.freeDailyBudget === "number") {
     next.freeDailyBudget = data.freeDailyBudget;
     rememberLimits(next.id, { freeDailyBudget: data.freeDailyBudget });
+  }
+  if (data.authMode === "NONE" || data.authMode === "API_KEY" || data.authMode === "SIGNATURE" || data.authMode === "BOTH") {
+    demoAuthModes.set(next.id, data.authMode);
   }
   if (data.maxRps === null || typeof data.maxRps === "number") next.maxRps = data.maxRps;
   if (data.maxDailyCalls === null || typeof data.maxDailyCalls === "number") next.maxDailyCalls = data.maxDailyCalls;
@@ -467,7 +531,281 @@ function bindingDetail(binding: DemoBinding, id: string) {
     maxDailyCalls: binding.maxDailyCalls,
     publishedVersion: binding.publishedVersion,
     hasUnpublishedChanges: binding.publishedVersion !== binding.version,
+    toolVersionRange: termsFor(binding).range,
+    providesOutputFields: [...termsFor(binding).provides],
+    supportsInputFields: [...termsFor(binding).supports],
+    authMode: demoAuthModes.get(binding.id) ?? ("SIGNATURE" as const),
+    publishedEndpoint: binding.publishedVersion !== null ? binding.endpoint : null,
   };
+}
+
+// ── Contract versions (T3) ──────────────────────────────────────────────────
+
+/** A catalogue tool as the fixture writes it: schemas plus the optional fields of its one version. */
+interface DemoCatalogueTool {
+  id: string;
+  name: string;
+  description: string;
+  tier: "UNVERIFIED" | "VERIFIED" | "GUARANTEED";
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  optionalOutputs?: string[];
+  optionalInputs?: string[];
+  /** Set by `weatherCatalogueTool`: the shared contract story's versions. */
+  versions?: ToolContractVersion[];
+}
+
+/** One published version, 1.0.0 and current, for a tool with no version story. */
+function firstVersion(tool: DemoCatalogueTool): ToolContractVersion {
+  return {
+    version: 1,
+    semver: "1.0.0",
+    major: 1,
+    status: "ACTIVE",
+    summary: tool.description,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    outputSchema: tool.outputSchema,
+    optionalInputFields: [...(tool.optionalInputs ?? [])],
+    optionalOutputFields: [...(tool.optionalOutputs ?? [])],
+    examples: [],
+    tier: tool.tier,
+    sunsetAt: null,
+    changelog: "First version.",
+    publishedAt: minutesAgo(180 * 24 * 60),
+    isCurrent: true,
+  };
+}
+
+/** The catalogue row with `currentVersion` and `versions` (T3). */
+function withContract(tool: DemoCatalogueTool) {
+  const { optionalOutputs: _outputs, optionalInputs: _inputs, versions: given, ...row } = tool;
+  const versions = given ?? [firstVersion(tool)];
+  const current = versions.find((v) => v.isCurrent) ?? versions[0] ?? null;
+  return { ...row, currentVersion: current?.semver ?? null, versions };
+}
+
+/**
+ * The weather tool a provider binds: the shared get_weather contract
+ * (`fixtures-contracts.ts`) — 1.0.0 and 1.1.0 deprecated, 2.0.0 current —
+ * under the provider console's own id. Its schemas are the current version's.
+ */
+function weatherCatalogueTool(): DemoCatalogueTool {
+  const versions = demoContractVersions(WEATHER_TOOL_ID);
+  const current = versions.find((v) => v.isCurrent) ?? versions[0]!;
+  return {
+    id: "weather-now",
+    name: "Weather now",
+    description: current.description,
+    tier: "VERIFIED",
+    inputSchema: current.inputSchema as Record<string, unknown>,
+    outputSchema: current.outputSchema as Record<string, unknown>,
+    versions,
+  };
+}
+
+/**
+ * Chain activity summary: 1.0.0 deprecated (same sunset as get_weather v1),
+ * 2.0.0 current — v2 counts transfers as transfer_count. The demo's live
+ * listing still serves only v1, so its Overview shows the deadline and "Add v2".
+ */
+function chainActivityVersions(): ToolContractVersion[] {
+  const base = firstVersion({
+    id: "chain-activity",
+    name: "Chain activity summary",
+    description: "Transfer and active-address counts for one chain over a named window.",
+    tier: "UNVERIFIED",
+    inputSchema: { type: "object", required: ["chainId"], properties: { chainId: { type: "string" }, window: { type: "string" } } },
+    outputSchema: {
+      type: "object",
+      required: ["window", "transfers", "addresses"],
+      properties: { window: { type: "string" }, transfers: { type: "integer" }, addresses: { type: "integer" } },
+    },
+  });
+  const sunsetAt = weatherSunsetAt();
+  return [
+    {
+      ...base,
+      version: 2,
+      semver: "2.0.0",
+      major: 2,
+      outputSchema: {
+        type: "object",
+        required: ["window", "transfer_count", "addresses"],
+        properties: { window: { type: "string" }, transfer_count: { type: "integer" }, addresses: { type: "integer" } },
+      },
+      changelog: "transfers is now transfer_count. Breaking: re-map and test for v2.",
+      publishedAt: minutesAgo(30 * 24 * 60),
+      isCurrent: true,
+      examples: [{ title: "Base, last 24 hours", arguments: { chainId: "eip155:8453", window: "24h" } }],
+    },
+    {
+      ...base,
+      status: demoRetiredMajor() ? "RETIRED" : "DEPRECATED",
+      sunsetAt,
+      isCurrent: false,
+      examples: [{ title: "Base, last 24 hours", arguments: { chainId: "eip155:8453", window: "24h" } }],
+    },
+  ];
+}
+
+/** The provider catalogue's versions of a tool, by its console id. */
+function catalogueVersionsOf(toolId: string): ToolContractVersion[] {
+  if (toolId === "weather-now") return demoContractVersions(WEATHER_TOOL_ID);
+  if (toolId === "chain-activity") return chainActivityVersions();
+  return [{ ...firstVersion({ id: toolId, name: toolId, description: toolId, tier: "VERIFIED", inputSchema: {}, outputSchema: {}, optionalOutputs: toolId === "air-quality" ? ["pm25"] : [] }) }];
+}
+
+function currentMajorOfTool(toolId: string): number {
+  const versions = catalogueVersionsOf(toolId);
+  return (versions.find((v) => v.isCurrent) ?? versions[0])?.major ?? 1;
+}
+
+/*
+  DEMO ONLY: what a listing serves and which majors passed a test in this tab,
+  kept like the free limits above (sessionStorage), so a changed range shows
+  after a save and the publish check names the version still untested.
+*/
+const TERMS_KEY = "assay.demo.binding-terms";
+interface KeptTerms {
+  range?: string;
+  provides?: string[];
+  supports?: string[];
+  /** `${mappingVersion}:${major}` of every passing run. */
+  passed?: string[];
+  /** `${mappingVersion}:${major}` of runs that failed (`?contracts=mismatch`). */
+  failed?: string[];
+  /** The terms were changed in this tab: the stage set's own runs no longer count. */
+  changed?: boolean;
+}
+let savedTerms: Record<string, KeptTerms> | null = null;
+
+function keptTerms(): Record<string, KeptTerms> {
+  if (savedTerms) return savedTerms;
+  savedTerms = {};
+  if (typeof window === "undefined") return savedTerms;
+  try {
+    const raw = window.sessionStorage.getItem(TERMS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) savedTerms = parsed as Record<string, KeptTerms>;
+  } catch {
+    // Storage blocked or malformed: start from the stage set.
+  }
+  return savedTerms;
+}
+
+function rememberTerms(id: string, terms: KeptTerms): void {
+  const kept = keptTerms();
+  savedTerms = { ...kept, [id]: { ...kept[id], ...terms } };
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(TERMS_KEY, JSON.stringify(savedTerms));
+  } catch {
+    // Storage blocked: kept until reload.
+  }
+}
+
+/** Forgets what this tab saved (tests). */
+export function resetDemoBindingTerms(): void {
+  savedTerms = {};
+  try {
+    window.sessionStorage.removeItem(TERMS_KEY);
+  } catch {
+    // No window or storage.
+  }
+}
+
+/** The listing's terms: what this tab saved, else the stage set's, else the tool's current major. */
+function termsFor(binding: DemoBinding): { range: string; provides: string[]; supports: string[] } {
+  const kept = keptTerms()[binding.id] ?? {};
+  return {
+    range: kept.range ?? binding.range ?? `^${currentMajorOfTool(binding.toolId)}`,
+    provides: kept.provides ?? binding.provides ?? [],
+    supports: kept.supports ?? binding.supports ?? [],
+  };
+}
+
+/** The majors with a passing run at the listing's current revision. */
+function passedMajors(binding: DemoBinding): number[] {
+  const kept = (keptTerms()[binding.id]?.passed ?? [])
+    .map((key) => key.split(":").map(Number))
+    .filter(([version]) => version === binding.version)
+    .map(([, major]) => major!);
+  // A live listing's own revision was tested on every major it serves when it was published.
+  const seeded = keptTerms()[binding.id]?.changed
+    ? []
+    : binding.publishedVersion === binding.version
+      ? (parseVersionRange(termsFor(binding).range) ?? [1])
+      : (binding.testedMajors ?? []);
+  const failed = failedMajors(binding);
+  return [...new Set([...seeded, ...kept])].filter((major) => !failed.includes(major));
+}
+
+function rememberRun(binding: DemoBinding, major: number): void {
+  const key = `${binding.version}:${major}`;
+  const passed = keptTerms()[binding.id]?.passed ?? [];
+  const failed = (keptTerms()[binding.id]?.failed ?? []).filter((k) => k !== key);
+  if (!passed.includes(key)) rememberTerms(binding.id, { passed: [...passed, key], failed });
+}
+
+/** A failing run at this revision: the publish check says so instead of "no test yet". */
+function rememberFailedRun(binding: DemoBinding, major: number): void {
+  const key = `${binding.version}:${major}`;
+  const failed = keptTerms()[binding.id]?.failed ?? [];
+  const passed = (keptTerms()[binding.id]?.passed ?? []).filter((k) => k !== key);
+  if (!failed.includes(key)) rememberTerms(binding.id, { failed: [...failed, key], passed });
+}
+
+function failedMajors(binding: DemoBinding): number[] {
+  return (keptTerms()[binding.id]?.failed ?? [])
+    .filter((key) => key.startsWith(`${binding.version}:`))
+    .map((key) => Number(key.split(":")[1]));
+}
+
+/**
+ * The backend's own contract check (`assertBindingContract`): every major
+ * has a published version; every declared field is an optional field there.
+ */
+function contractProblems(toolId: string, range: string, provides: readonly string[], supports: readonly string[]): string[] {
+  const majors = parseVersionRange(range);
+  if (!majors) return [`"${range}" is not a version range (write ^1, or ^1 || ^2)`];
+  const versions = catalogueVersionsOf(toolId).filter((v) => v.status !== "DRAFT");
+  const problems: string[] = [];
+  const inRange = majors.map((major) => versions.filter((v) => v.major === major)[0]).filter((v): v is ToolContractVersion => Boolean(v));
+  for (const major of majors) if (!versions.some((v) => v.major === major)) problems.push(`contract v${major} has no published version to serve`);
+  for (const field of provides) {
+    if (!inRange.some((v) => v.optionalOutputFields.includes(field))) problems.push(`"${field}" is not an optional output of the contract in ${formatVersionRange(majors)}`);
+  }
+  for (const field of supports) {
+    if (!inRange.some((v) => v.optionalInputFields.includes(field))) problems.push(`"${field}" is not an optional input of the contract in ${formatVersionRange(majors)}`);
+    // `?contracts=mismatch`: the demo listing's request mapping never reads "units".
+    else if (field === "units" && demoContractMismatch()) problems.push(`the request mapping never reads "${field}", so it would be dropped`);
+  }
+  return problems;
+}
+
+/** A write's contract terms laid over the listing; throws the backend's 400 when they do not fit. */
+function withTerms(binding: DemoBinding, data: Record<string, unknown>, path: string): void {
+  const strings = (value: unknown): string[] | undefined =>
+    Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : undefined;
+  const range = typeof data.toolVersionRange === "string" ? data.toolVersionRange : undefined;
+  const provides = strings(data.providesOutputFields);
+  const supports = strings(data.supportsInputFields);
+  if (range === undefined && provides === undefined && supports === undefined) return;
+  const now = termsFor(binding);
+  const next = { range: range ?? now.range, provides: provides ?? now.provides, supports: supports ?? now.supports };
+  const problems = contractProblems(binding.toolId, next.range, next.provides, next.supports);
+  if (problems.length > 0) {
+    throw new ApiError(
+      "PROVIDER_BINDING_CONTRACT_MISMATCH",
+      `This binding does not fit the tool's contract: ${problems.join("; ")}`,
+      400,
+      path,
+      { problems },
+    );
+  }
+  // A changed range or field list is a new revision: every major needs a new test.
+  rememberTerms(binding.id, { range: formatVersionRange(parseVersionRange(next.range)!), provides: next.provides, supports: next.supports, passed: [], changed: true });
 }
 
 // ── Traffic, quality and earnings ───────────────────────────────────────────
@@ -1266,7 +1604,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         {
           key: "endpoint",
           title: "Endpoint",
-          caption: "Reachable from our egress addresses",
+          caption: "Reachable from Assay",
           status: "DONE",
         },
         { key: "terms", title: "Terms", caption: "Three documents, versioned", status: "DONE" },
@@ -1300,7 +1638,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
           },
         ],
       },
-      egressIps: EGRESS_IPS,
       lastConnectivityCheck: {
         outcome: "REACHABLE",
         endpoint: API_HOST,
@@ -1309,15 +1646,9 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         failureKind: null,
         failureCode: null,
         detail: null,
-        egressIps: EGRESS_IPS,
         checkedAt: minutesAgo(180),
       },
     }),
-  },
-  {
-    method: "GET",
-    match: "/providers/egress-ips",
-    body: () => ({ egressIps: EGRESS_IPS }),
   },
 
   // ── Capital ──────────────────────────────────────────────────────────────
@@ -1430,6 +1761,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
           name: "Chain activity summary",
           description: "Transfer and active-address counts for one chain over a named window.",
           tier: "UNVERIFIED",
+          versions: chainActivityVersions(),
           inputSchema: {
             type: "object",
             required: ["chainId"],
@@ -1466,25 +1798,27 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
             },
           },
         },
+        weatherCatalogueTool(),
         {
-          id: "weather-now",
-          name: "Weather now",
-          description: "Current temperature and conditions for a city.",
+          id: "air-quality",
+          name: "Air quality",
+          description: "The air quality index for a city, with the time it was measured.",
           tier: "VERIFIED",
           inputSchema: {
             type: "object",
             required: ["city"],
-            properties: { city: { type: "string", examples: ["Lisbon"] }, units: { type: "string", enum: ["metric", "imperial"] } },
+            properties: { city: { type: "string", examples: ["Lisbon"] } },
           },
           outputSchema: {
             type: "object",
-            required: ["temperature", "conditions", "observedAt"],
+            required: ["aqi", "observedAt"],
             properties: {
-              temperature: { type: "number" },
-              conditions: { type: "string" },
+              aqi: { type: "integer" },
               observedAt: { type: "string", format: "date-time" },
+              pm25: { type: "number", description: "Fine particles, µg/m³" },
             },
           },
+          optionalOutputs: ["pm25"],
         },
         {
           /* Seeded for tests; the listing wizard must never offer it. */
@@ -1495,7 +1829,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
           inputSchema: { type: "object", properties: {} },
           outputSchema: { type: "object", properties: {} },
         },
-      ],
+      ].map((tool) => withContract(tool as DemoCatalogueTool)),
       settlementAsset: { assetId: DEMO_ASSET, symbol: "USDG", decimals: 6 },
     }),
   },
@@ -1509,27 +1843,55 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     match: /^\/providers\/me\/tool-bindings\/[^/]+\/publish-check$/,
     body: (path) => {
       const binding = bindingFor(idIn(path, 3));
+      // T3: the tester requirements are asked once per contract major served.
+      const majors = parseVersionRange(termsFor(binding).range) ?? [1];
+      const passed = passedMajors(binding);
+      const untested = majors.filter((major) => !passed.includes(major));
+      const failedAt = failedMajors(binding);
+      // One row per major for each tester requirement, each naming its major (as the API answers).
+      const tester = [
+        ...majors.map((major) =>
+          passed.includes(major) || failedAt.includes(major)
+            ? { requirement: "TESTER_RUN", met: true, code: null, detail: `Contract v${major}: Run at revision ${binding.version}.`, major }
+            : { requirement: "TESTER_RUN", met: false, code: "no_run_at_revision", detail: `Contract v${major}: No test has run at revision ${binding.version} yet.`, major },
+        ),
+        ...majors.map((major) =>
+          passed.includes(major)
+            ? { requirement: "TESTER_PASSED", met: true, code: null, detail: `Contract v${major}: Every layer passed, including verification.`, major }
+            : failedAt.includes(major)
+              ? {
+                  requirement: "TESTER_PASSED",
+                  met: false,
+                  code: "last_run_failed",
+                  detail: `Contract v${major}: The last test failed at the response mapping: your API's answer has no temperature_c.`,
+                  major,
+                }
+              : { requirement: "TESTER_PASSED", met: false, code: "no_run_at_revision", detail: `Contract v${major}: Run a passing test first.`, major },
+        ),
+      ];
+      // API key / Both with no stored headers: the publish gate asks for them.
+      const mode = demoAuthModes.get(binding.id);
+      const needsKey = (mode === "API_KEY" || mode === "BOTH") && (demoCredentialSets.get(binding.id)?.size ?? 0) === 0;
+      const credentials = needsKey
+        ? [{
+            requirement: "API_KEY_CREDENTIALS",
+            met: false,
+            code: "credentials_missing_for_origin",
+            detail: "No API key headers are stored for this address.",
+          }]
+        : [];
       return {
-        publishable: true,
+        publishable: untested.length === 0 && !needsKey,
         mappingVersion: binding.version,
         requirements: [
-          {
-            requirement: "TESTER_RUN",
-            met: true,
-            code: null,
-            detail: `Run at revision ${binding.version}.`,
-          },
-          {
-            requirement: "TESTER_PASSED",
-            met: true,
-            code: null,
-            detail: "Every layer passed, including verification.",
-          },
+          ...tester,
+          ...credentials,
           {
             requirement: "STAKE_AT_MINIMUM_ON_EVERY_CHAIN",
             met: true,
             code: null,
             detail: "$600.00 bonded against a $450.00 requirement.",
+            major: null,
           },
         ],
       };
@@ -1552,13 +1914,28 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     */
     method: "POST",
     match: /^\/providers\/me\/tool-bindings\/[^/]+\/test$/,
-    body: (path) => {
+    body: (path, _query, data = {}) => {
       const binding = bindingFor(idIn(path, 3));
+      // T3: the run is checked against one contract version; by default the newest of the highest major served.
+      const versions = catalogueVersionsOf(binding.toolId);
+      const majors = parseVersionRange(termsFor(binding).range) ?? [1];
+      const asked = typeof data.toolVersion === "number" ? versions.find((v) => v.version === data.toolVersion) : undefined;
+      const tested =
+        asked ??
+        versions.filter((v) => v.major === Math.max(...majors)).sort((a, b) => b.version - a.version)[0] ??
+        versions[0];
+      // `?contracts=mismatch`: v2 renamed temperature to temperature_c, and this API still answers temperature.
+      const fails = demoContractMismatch() && tested?.major === 2;
+      if (tested && !fails) rememberRun(binding, tested.major);
+      if (tested && fails) rememberFailedRun(binding, tested.major);
       return {
         callId: "call_7f21c93a4b08",
-        outcome: "PASSED",
-        failedLayer: null,
+        outcome: fails ? "FAILED" : "PASSED",
+        failedLayer: fails ? "RESPONSE_MAPPING" : null,
+        warnings: [],
         mappingVersion: binding.version,
+        toolVersion: tested?.version ?? 1,
+        toolVersionSemver: tested?.semver ?? "1.0.0",
         layers: [
           { layer: "REQUEST_MAPPING", status: "PASSED", code: null, detail: null, fault: null },
           {
@@ -1569,8 +1946,18 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
             fault: null,
           },
           { layer: "CLASSIFICATION", status: "PASSED", code: "OK", detail: null, fault: null },
-          { layer: "RESPONSE_MAPPING", status: "PASSED", code: null, detail: null, fault: null },
-          { layer: "VERIFICATION", status: "PASSED", code: null, detail: null, fault: null },
+          fails
+            ? {
+                layer: "RESPONSE_MAPPING",
+                status: "FAILED",
+                code: "TOOL_MAPPING_REQUIRED_FIELD_MISSING",
+                detail: "Your API's answer has no temperature_c, which v2 requires. v2 renamed temperature to temperature_c: map it to the field your API returns.",
+                fault: "PROVIDER",
+              }
+            : { layer: "RESPONSE_MAPPING", status: "PASSED", code: null, detail: null, fault: null },
+          fails
+            ? { layer: "VERIFICATION", status: "NOT_REACHED", code: null, detail: null, fault: null }
+            : { layer: "VERIFICATION", status: "PASSED", code: null, detail: null, fault: null },
         ],
         request: {
           method: "GET",
@@ -1635,6 +2022,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
       const toolId = typeof data.toolId === "string" ? data.toolId : BINDINGS[3].toolId;
       const listed = BINDINGS.find((binding) => binding.toolId === toolId);
       const binding = withWrite(listed ?? draftBinding(toolId), data);
+      withTerms(binding, data, "/providers/me/tool-bindings");
       return {
         ...bindingDetail(binding, binding.id),
         ...(isMapping(data.requestMapping) ? { requestMapping: data.requestMapping } : {}),
@@ -1643,10 +2031,44 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     },
   },
   {
+    method: "GET",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+\/credentials$/,
+    body: (path) => [...(demoCredentialSets.get(idIn(path, 3) ?? "")?.values() ?? [])],
+  },
+  {
+    // Write-only: the demo answers with names and a hint, and keeps no value.
+    method: "PUT",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+\/credentials$/,
+    body: (path, _query, data = {}) => {
+      const summary = {
+        origin: typeof data.origin === "string" ? data.origin : "",
+        headers: (Array.isArray(data.headers) ? data.headers : []).map((header: { name?: unknown; value?: unknown }) => {
+          const value = typeof header.value === "string" ? header.value : "";
+          return { name: String(header.name ?? ""), hint: value.length >= 16 ? value.slice(-4) : null };
+        }),
+        updatedAt: justNow(),
+      };
+      const id = idIn(path, 3) ?? "";
+      const sets = demoCredentialSets.get(id) ?? new Map();
+      sets.set(summary.origin, summary);
+      demoCredentialSets.set(id, sets);
+      return summary;
+    },
+  },
+  {
+    method: "DELETE",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+\/credentials$/,
+    body: (path, query) => {
+      demoCredentialSets.get(idIn(path, 3) ?? "")?.delete(String(query.origin ?? ""));
+      return null;
+    },
+  },
+  {
     method: "PATCH",
     match: /^\/providers\/me\/tool-bindings\/[^/]+$/,
     body: (path, _query, data = {}) => {
       const id = idIn(path, 3) ?? BINDINGS[0].id;
+      withTerms(bindingFor(id), data, path);
       return {
         ...bindingDetail(withWrite(bindingFor(id), data), id),
         ...(isMapping(data.requestMapping) ? { requestMapping: data.requestMapping } : {}),

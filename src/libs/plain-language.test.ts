@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   humanize,
+  knowsError,
   plain,
   plainAuditAction,
   plainDecision,
@@ -54,6 +55,38 @@ describe("errors", () => {
     expect(plainError("PAYMENT_VOUCHER_ADMISSION_PAUSED")).toMatch(/^Paid calls are paused/);
     expect(plainError("UNBONDING_NOT_MATURED")).toMatch(/still unlocking/);
     expect(plainError("OPERATOR_AUTHORITY_EXCEEDED")).toMatch(/above your approval limit/);
+  });
+
+  it("knows the credential and mapping hardening codes", () => {
+    expect(plainError("PROVIDER_RESERVED_MAPPING_HEADER")).toBe(
+      "Headers starting with x-assay- are set by Assay. Remove this header from your mapping.",
+    );
+    expect(plainError("PROVIDER_CREDENTIAL_ORIGIN_LIVE")).toBe(
+      "Your live tool uses these headers. Publish a new address first, then remove them.",
+    );
+  });
+
+  it.each([
+    "CREDENTIAL_IN_QUERY",
+    "SECRET_IN_MAPPING",
+    "INVALID_CREDENTIAL_HEADERS",
+    "CREDENTIAL_ORIGIN_MISMATCH",
+    "CREDENTIAL_VAULT_UNAVAILABLE",
+    "ENDPOINT_PORT_NOT_SUPPORTED",
+    "RESERVED_MAPPING_HEADER",
+    "CREDENTIAL_ORIGIN_LIVE",
+    "CREDENTIALS_REQUIRED_FOR_AUTH_MODE",
+  ])("gives %s its own sentence, bare and PROVIDER_-prefixed", (code) => {
+    const generic = plainError("NOT_A_REAL_CODE_XYZ");
+    expect(knowsError(code)).toBe(true);
+    expect(plainError(code)).not.toBe(generic);
+    expect(plainError(`PROVIDER_${code}`)).toBe(plainError(code));
+  });
+
+  it("knows the credentials-required-for-auth-mode code", () => {
+    expect(plainError("PROVIDER_CREDENTIALS_REQUIRED_FOR_AUTH_MODE")).toBe(
+      "Add your API key headers for the live address first, then switch to API key.",
+    );
   });
 
   it("never shows an unknown code as the sentence", () => {

@@ -12,6 +12,7 @@ function report(overrides: Partial<Record<BindingTestLayer, Partial<BindingTestL
     outcome: "PASSED",
     failedLayer: null,
     mappingVersion: 1,
+    warnings: [],
     layers: LAYERS.map((layer) => ({ layer, status: "PASSED", code: null, detail: null, fault: null, ...overrides[layer] })),
     request: { method: "GET", url: "https://api.example.com/v1/quote?q=1", headerNames: [], body: null },
     upstream: { status: 200, latencyMs: 120, rawBody: "{}", rawBodyTruncated: false, contentType: "application/json", transportError: null },

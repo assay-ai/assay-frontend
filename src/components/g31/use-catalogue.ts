@@ -1,5 +1,6 @@
 "use client";
 
+import type { ToolVersionBrief } from "@/interfaces/contracts";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
@@ -118,6 +119,14 @@ export interface ToolRow {
   settlementChains: string[] | undefined;
   /** Your own traffic on this tool. */
   yourCalls: number;
+  /** T3: the version unpinned URLs serve, e.g. "2.0.0"; absent on an older backend. */
+  version?: string | null;
+  /** T3: every published version, newest first, with status and sunset. */
+  versions?: ToolVersionBrief[];
+  /** T3: majors still serving until their sunset. */
+  deprecatedMajors?: number[];
+  replacementName?: string | null;
+  replacementVersion?: string | null;
   listed: Money | null;
   charged: Money | null;
 }
@@ -224,6 +233,11 @@ export function useCatalogue() {
         unroutableReason: row.unroutableReason,
         settlementChains: row.settlementChains,
         yourCalls: own.length,
+        version: row.version,
+        versions: row.versions,
+        deprecatedMajors: row.deprecatedMajors,
+        replacementName: row.replacementName ?? null,
+        replacementVersion: row.replacementVersion ?? null,
         listed,
         charged,
       };

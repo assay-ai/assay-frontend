@@ -6,7 +6,7 @@
  *   Overview   /                       (Get started lives here for new accounts)
  *   Activity   /spend                  Spend · Calls · Not charged
  *   Money      /funding                Funding · Statements
- *   Controls   /agents                 Agents & keys · Connect · Spending limits
+ *   Controls   /agents                 Agents & keys · Connect · Spending limits · Tool sets
  *   Explore    /explore
  *
  * Rare pages (Alerts settings, Activity log, Settings, Help) sit in the
@@ -42,7 +42,7 @@ export const BUYER_NAV_ITEMS: BuyerNavItem[] = [
     id: "controls",
     label: "Controls",
     href: "/agents",
-    match: ["/agents", "/limits", "/connect", "/approvals"],
+    match: ["/agents", "/limits", "/connect", "/approvals", "/toolsets/mine"],
   },
   { id: "explore", label: "Explore", href: "/explore", match: ["/explore"] },
 ];
@@ -72,6 +72,7 @@ export const BUYER_SECTION_TABS: Partial<Record<BuyerSectionId, SectionTab[]>> =
     { id: "agents", label: "Agents & keys", href: "/agents" },
     { id: "connect", label: "Connect", href: "/connect" },
     { id: "budgets", label: "Spending limits", href: "/limits" },
+    { id: "toolsets", label: "Tool sets", href: "/toolsets/mine" },
   ],
 };
 

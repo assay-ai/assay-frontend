@@ -13,6 +13,7 @@ import {
   useLimitsContext,
 } from "@/components/buyer-money/agent-limits";
 import { PauseAllCard } from "@/components/buyer-money/pause-all";
+import { AgentAccessCard } from "@/components/toolsets/agent-access-card";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { plainActor } from "@/features/buyer-money/budget-form";
@@ -31,6 +32,9 @@ import { relativeTime } from "./format";
  *     one card with one "Effective limit" naming what binds, and one sheet;
  *   - the **account ceiling** — on chain, the whole escrow — shown here and
  *     changed on Money.
+ *
+ * Next to each agent's spending limits: What this agent can use (its access
+ * and provider limits, `components/toolsets/agent-access-card.tsx`).
  *
  * The kill switch is the first thing on the page (and in the top bar). The
  * older refuse-above rule shows only while it is set, as one line with Remove.
@@ -86,7 +90,20 @@ export function LimitsView() {
             </p>
           ) : null}
           {ctx.agents.map((agent) => (
-            <AgentLimitsCard key={agent.agentId} ctx={ctx} agent={agent} onChanged={refresh} />
+            <React.Fragment key={agent.agentId}>
+              <AgentLimitsCard ctx={ctx} agent={agent} onChanged={refresh} />
+              <section
+                aria-label={`What ${agent.label ?? "this agent"} can use`}
+                data-testid="agent-access-card"
+                className="flex w-full flex-col gap-3 rounded-xl border border-01 bg-01 p-4 shadow-hair tablet:p-5"
+              >
+                <header className="flex flex-col gap-0.5">
+                  <h2 className="text-label-md text-01">What {agent.label ?? "this agent"} can use</h2>
+                  <p className="text-body-13 text-02">Which tools it may call and which providers may serve them, whatever server it calls through.</p>
+                </header>
+                <AgentAccessCard agentId={agent.agentId} agentName={agent.label ?? "This agent"} />
+              </section>
+            </React.Fragment>
           ))}
           <AccountCeilingCard ctx={ctx} />
           <OldRuleLine policy={ctx.policy} freeOnly={Boolean(ctx.freeOnlyChainName)} />
@@ -142,7 +159,7 @@ function HowLimitsStop({ freeOnlyChainName }: { freeOnlyChainName?: string | nul
           limits. The contract refuses anything over them, Assay included.
         </li>
         <li>
-          <span className="text-01">Checked by Assay:</span> the monthly limit, rate limits, allowed tools and Pause all.
+          <span className="text-01">Checked by Assay:</span> the monthly limit, rate limits, what each agent can use and Pause all.
           They are enforced by Assay&apos;s software, not by your wallet or the contract, so treat them as a control and not as
           a guarantee.
         </li>

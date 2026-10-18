@@ -8,7 +8,7 @@ import type {
 } from "@/services/public-explorer.service";
 
 import { DEMO_NOW_MS } from "./demo-clock";
-import { EXPLORE_FIXTURES } from "./fixtures-explore";
+import { demoCategoryOf, EXPLORE_FIXTURES } from "./fixtures-explore";
 import type { DemoFixture } from "./fixtures";
 
 /**
@@ -45,6 +45,10 @@ function publicTool(row: CatalogueTool): PublicTool {
     id: row.id,
     name: row.name,
     description: row.description,
+    summary: row.summary,
+    version: row.version,
+    versions: row.versions?.map((v) => ({ ...v })),
+    deprecatedMajors: row.deprecatedMajors ? [...row.deprecatedMajors] : undefined,
     tier: row.tier,
     providerCount: row.providerCount,
     fromPrice: row.fromPrice,
@@ -54,6 +58,7 @@ function publicTool(row: CatalogueTool): PublicTool {
     settlementChains: row.routable ? (row.settlementChains ?? null) : null,
     freeCallsPerDay: row.freeCallsPerDay ?? null,
     paidBindings: row.paidBindings ?? 0,
+    category: demoCategoryOf(row.name),
   };
 }
 
@@ -169,6 +174,11 @@ export const PUBLIC_FIXTURES: readonly DemoFixture[] = [
     body: () => ({
       tools: (signedIn<{ tools: CatalogueTool[] }>("/catalogue/tools")?.tools ?? []).map(publicTool),
     }),
+  },
+  {
+    method: "GET",
+    match: /^\/public\/catalogue\/tools\/[^/]+\/versions$/,
+    body: (path) => signedIn(`/catalogue/tools/${path.split("/")[4] ?? ""}/versions`),
   },
   {
     method: "GET",

@@ -46,6 +46,7 @@ const UNLINKED: Record<string, string> = {
   "/funding/escrow": "opened from Funding",
   "/funding/escrow/limits": "opened from Funding",
   "/funding/auto-top-up": "opened from Funding",
+  "/connect/preview": "where the MCP host sends a browser that opens a filtered MCP URL",
 };
 
 describe("buyer navigation", () => {

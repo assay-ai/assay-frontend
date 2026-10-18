@@ -3,6 +3,7 @@
 import { Check, CircleAlert, Minus, TriangleAlert, X } from "lucide-react";
 import * as React from "react";
 
+import { Alert } from "@/components/ui/alert";
 import type { BindingTestReport } from "@/interfaces";
 import { cn } from "@/utils";
 
@@ -21,6 +22,12 @@ const MARK: Record<PipelineStatus, string> = {
   fail: "bg-danger-500 text-on-color",
   warn: "bg-warning-10 text-warning-600",
   skipped: "border border-02 bg-02 text-03",
+};
+
+const WARNING_TITLE: Record<BindingTestReport["warnings"][number]["code"], string> = {
+  ACCEPTS_UNSIGNED: "Signature not enforced",
+  ACCEPTS_WITHOUT_CREDENTIALS: "API key not enforced",
+  NO_AUTHENTICATION: "No authentication",
 };
 
 const WORD: Record<PipelineStatus, string> = {
@@ -108,6 +115,16 @@ export function TestPipelineView({
           </li>
         ))}
       </ol>
+
+      {report.warnings.map((warning) => (
+        <Alert
+          key={warning.code}
+          variant="warning"
+          title={WARNING_TITLE[warning.code]}
+          description={warning.message}
+          showClose={false}
+        />
+      ))}
 
       <details className="rounded-lg border border-01 bg-02 px-3.5 py-2.5">
         <summary className="cursor-pointer select-none text-label-13 text-02">Show the raw exchange</summary>

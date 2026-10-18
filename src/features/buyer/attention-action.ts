@@ -1,3 +1,5 @@
+import { contractNoticeAction, readContractNotice } from "@/features/toolsets/contract-notices";
+import { readUpdateNotice, updateNoticeHref } from "@/features/toolsets/sharing";
 import { routes } from "@/libs/routes";
 
 /**
@@ -14,8 +16,19 @@ export function attentionAction(note: {
   event: string;
   subjectType?: string | null;
   subjectId?: string | null;
+  payload?: unknown;
 }): AttentionAction | null {
   switch (note.event) {
+    case "toolset.update_available": {
+      const notice = readUpdateNotice(note.payload);
+      return notice ? { label: "See what changed", href: updateNoticeHref(notice) } : { label: "Review agents", href: "/agents" };
+    }
+    case "tool_version.deprecated":
+    case "tool_version.retired": {
+      const notice = readContractNotice(note.payload);
+      if (notice) return contractNoticeAction(notice);
+      return note.subjectId ? { label: "See the versions", href: routes.exploreTool(note.subjectId) } : null;
+    }
     case "balance.low":
     case "balance.zero":
     case "deposit.failed":
