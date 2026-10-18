@@ -6,6 +6,7 @@ import { OPERATOR_FIXTURES } from "./fixtures-operator";
 import { PROVIDER_FIXTURES, providerNotifications } from "./fixtures-provider";
 import { PUBLIC_FIXTURES } from "./fixtures-public";
 import { contractNotices } from "./fixtures-refusals-contracts";
+import { T4_FIXTURES, t4Notifications } from "./fixtures-t4";
 import { DEMO_WEATHER_TOOLSET, demoToolsetNotifications, TOOLSET_FIXTURES } from "./fixtures-toolsets";
 
 /**
@@ -88,14 +89,16 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
       if (events.length > 0 && events.some((event) => typeof event === "string" && event.startsWith("provider."))) {
         // T3: the provider's tool_version.* notices ride along (the Inbox asks for them by name).
         const provider = providerNotifications() as { items: unknown[]; pageInfo: unknown };
-        return { ...provider, items: [...contractNotices("PROVIDER"), ...provider.items] };
+        return { ...provider, items: [...t4Notifications("PROVIDER"), ...contractNotices("PROVIDER"), ...provider.items] };
       }
       const buyer = BUYER_FIXTURES.find((fixture) => fixture.method === "GET" && fixture.match === "/notifications");
       const feed = (buyer ? buyer.body(path, query) : { items: [], pageInfo: { nextCursor: null, hasMore: false } }) as { items: unknown[]; pageInfo: unknown };
       // `?connect=update-available`: a tool set "prod" uses has a new version (FR-17).
-      return { ...feed, items: [...demoToolsetNotifications(), ...contractNotices("BUYER", DEMO_WEATHER_TOOLSET), ...feed.items] };
+      return { ...feed, items: [...demoToolsetNotifications(), ...t4Notifications("BUYER"), ...contractNotices("BUYER", DEMO_WEATHER_TOOLSET), ...feed.items] };
     },
   },
+  // T4 first: it answers a few paths the files below also match (receipts, the public handle, catalogues).
+  ...T4_FIXTURES,
   ...TOOLSET_FIXTURES,
   ...BUYER_FIXTURES,
   ...EXPLORE_FIXTURES,
