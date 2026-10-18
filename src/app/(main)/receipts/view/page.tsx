@@ -46,6 +46,7 @@ import { ErrorBlock } from "@/features/g30/ui";
 import { collectionAt, collectionView, isCollectionState, timelineStamp, timelineZoneNote } from "@/features/g30/receipt-collection";
 import { OwedReceiptAction } from "@/features/buyer-debt/owed-row-action";
 import { ReceiptReport, RefundableNow, receiptReportState, useCallReports } from "@/features/call-disputes/receipt-report";
+import { receiptRefetchInterval } from "@/features/g30/refund-promise";
 import { useNow } from "@/features/call-disputes/ui";
 import { owedCallState } from "@/features/buyer-debt/debt-summary";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
@@ -131,6 +132,9 @@ function ReceiptPageContent() {
     // cannot read its figures has to say so, immediately and in words.
     retry: 0,
     networkMode: "always" as const,
+    // While it promises a refund, fetched again every minute: the promise is
+    // the backend's, and it lapses (W1A review C1). The clock bounds it between fetches.
+    refetchInterval: (query) => receiptRefetchInterval(query.state.data),
   });
 
   const receipt = receiptQuery.data;

@@ -116,6 +116,11 @@ export interface Receipt {
    * own filing predicate. The only source of a refund promise on a receipt.
    */
   refundableIfReportedNow?: boolean;
+  /**
+   * When `refundableIfReportedNow` lapses (the hold's collectable time minus
+   * the filing guard). Null when it is false or no end is known yet.
+   */
+  refundableIfReportedUntil?: string | null;
 }
 
 /* ------------------------------------------------------------------- summary */

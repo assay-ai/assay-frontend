@@ -1139,7 +1139,12 @@ function receiptBody(call: DemoCall) {
     disputeFilingClosesAt: charged && settled ? minutesAgo(Math.max(callAge(call) - 1, 0) - 7 * 1440) : null,
     // The backend's own answer: a report now is refunded in full while the hold has more than a minute left.
     refundableIfReportedNow:
-      charged && settled !== null && Date.parse(minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES + 1)) - 60_000 > Date.now(),
+      charged && settled !== null && Date.parse(minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES)) - 60_000 > Date.now(),
+    // When that lapses: the collectable time minus the 60 s guard.
+    refundableIfReportedUntil:
+      charged && settled !== null && Date.parse(minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES)) - 60_000 > Date.now()
+        ? new Date(Date.parse(minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES)) - 60_000).toISOString()
+        : null,
   };
 }
 

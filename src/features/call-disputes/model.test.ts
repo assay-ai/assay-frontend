@@ -165,6 +165,22 @@ describe("the report window on a receipt", () => {
     expect(late).toMatchObject({ open: true, guaranteed: false, holdEndsAt: null });
     expect(late.text).not.toMatch(/refunded in full|no refund/i);
   });
+  // W1A review C1: the flag was true when fetched; the page stayed open past the hold.
+  it("a stale 'true' after the hold has ended never says 'refunded in full'", () => {
+    const view = reportWindow(receipt, t0 + 2 * H);
+    expect(view).toMatchObject({ open: true, guaranteed: false, holdEndsAt: null });
+    expect(view.text).not.toMatch(/refunded in full/);
+    expect(view.text).toMatch(/^The 1-hour hold has ended/);
+  });
+  it("a stale 'true' past the backend's refundableIfReportedUntil promises nothing, even with no hold fields", () => {
+    const until = "2026-10-18T10:20:00.000Z";
+    const bounded = { ...receipt, refundableIfReportedUntil: until };
+    expect(reportWindow(bounded, Date.parse(until) - 60_000)).toMatchObject({ guaranteed: true, holdEndsAt: until });
+    expect(reportWindow(bounded, Date.parse(until))).toMatchObject({ guaranteed: false });
+    expect(reportWindow(bounded, Date.parse(until)).text).not.toMatch(/refunded in full/);
+    const unredeemed = { ...bounded, disputeWindowEndsAt: null, collectableAt: null };
+    expect(reportWindow(unredeemed, Date.parse(until) + 1).text).not.toMatch(/refunded in full|no refund/i);
+  });
   it("closed after 7 days, and for calls that did not settle", () => {
     expect(reportWindow(receipt, t0 + 8 * 24 * H)).toMatchObject({ open: false, guaranteed: false });
     expect(reportWindow({ ...receipt, disputeFilingClosesAt: null }, t0).open).toBe(false);
