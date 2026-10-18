@@ -252,6 +252,8 @@ export default function OperatorHome() {
   const stale = staleChainData(health.data);
   // D16: stale chain data, or freshness that could not be read, never reads as a calm Home.
   const calmBlocker = calmStateBlocker({ stale, unreadable: health.isError });
+  // Only the calm empty state needs the health read: the inbox sections render without it.
+  const calmUnknown = health.isLoading;
   const lastChecked = Math.max(pending.dataUpdatedAt, disputes.dataUpdatedAt, health.dataUpdatedAt, toolWork.dataUpdatedAt, cancelsDue.dataUpdatedAt);
   const refreshing = pending.isFetching || disputes.isFetching || health.isFetching || toolWork.isFetching;
   const refresh = () => {
@@ -270,7 +272,7 @@ export default function OperatorHome() {
 
   const needsYouTotal = needsYouCount(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count, work);
   const breakdown = needsYouBreakdown(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count, work);
-  const loading = pending.isLoading || health.isLoading || cancelsDue.isLoading || (caps.rule && (disputes.isLoading || toSign.isLoading));
+  const loading = pending.isLoading || cancelsDue.isLoading || (caps.rule && (disputes.isLoading || toSign.isLoading));
   const nothing = needsYouTotal === 0 && groups.yours.length === 0;
   // Every waiting request, accounted for in one line: the same split and numbers as the Approvals tabs.
   const waiting = waitingSummary({ needsYou: groups.needsYou.length, yours: groups.yours.length, others: groups.others.length });
@@ -333,6 +335,8 @@ export default function OperatorHome() {
           code={pending.error instanceof ApiError ? pending.error.code : null}
           details={pending.error instanceof Error ? pending.error.message : null}
         />
+      ) : nothing && calmUnknown ? (
+        <PageState kind="loading" rows={1} label="Checking the chain data before saying nothing needs you" />
       ) : nothing && calmBlocker ? (
         // Stale chain data: never a calm "Nothing needs you" (D16).
         <div role="status" className="flex w-full flex-col items-center gap-3 rounded-xl border border-warning-20 bg-warning-10 px-4 py-8 text-center" data-testid="stale-empty">
@@ -380,7 +384,7 @@ export default function OperatorHome() {
                     <span className="min-w-0 flex-1 text-label-sm text-01">
                       Cancel {possessive(providers.lookup(row.providerId) ?? row.providerName)} {formatMoney(row.amount)} penalty
                       <span className="block text-body-xs font-normal text-03">
-                        {row.toolName ? `${row.toolName} · ` : ""}open it to get the cancel signed, or to see that nothing stands on chain
+                        {row.toolName ? `${row.toolName} · ` : ""}open it to see what stands on chain
                       </span>
                     </span>
                     {row.nextDeadline ? (

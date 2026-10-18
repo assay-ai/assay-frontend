@@ -286,7 +286,12 @@ export function penaltyNext(
     case "CANCEL_REQUESTED":
       return {
         kind: "text",
-        text: !known ? "Arbiter signs the cancel" : left <= 0 ? "Cancel overdue" : `Arbiter signs the cancel · ${durationLeft(left)} left`,
+        // Past due, the list cannot tell whether the record still stands or was executed: the page reads it.
+        text: !known
+          ? "Arbiter signs the cancel"
+          : left <= 0
+            ? "Cancel overdue · open it to see what stands on chain"
+            : `Arbiter signs the cancel · ${durationLeft(left)} left`,
         until,
         urgent: known && left < 24 * 3_600_000,
       };
