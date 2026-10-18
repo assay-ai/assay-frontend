@@ -81,8 +81,8 @@ export function SettingsView() {
             {wallets.length > 0 ? (
               <p className="pt-2 text-body-xs text-03" data-testid="wallets-purpose">
                 Your wallet signs deposits, withdrawals and changes to your on-chain limits. Your Assay balance is not
-                kept in it: it sits on chain in an escrow only your wallet controls, so money left in the wallet is not
-                part of your balance.
+                kept in it: it sits on chain in an escrow that only your wallet can withdraw from, and Assay can take from it
+                only for calls that pass our checks. Money left in the wallet is not part of your balance.
               </p>
             ) : null}
             {!email && methods.length === 0 && wallets.length === 0 ? (

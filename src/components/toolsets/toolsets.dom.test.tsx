@@ -284,7 +284,7 @@ describe("Servers in use", () => {
         c.setQueryData(toolsetKeys.servers("a1"), { servers: [], overBudget: false }),
       ),
     );
-    expect(out).toContain("so they came through Everything: every tool it may use");
+    expect(out).toContain("Calls without one reach Everything: every tool it may use");
     expect(out).not.toContain("No server yet");
   });
 

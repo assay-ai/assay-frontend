@@ -65,14 +65,15 @@ const WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * The line when no server is listed. A call made without a server address
- * (an unscoped call: no URL, so no URL rules) is not listed, yet it reached
- * every tool the agent may use — so an agent that called in the window is
- * never told it is "not connected" (review B P1).
+ * (an unscoped call: no URL, so no URL rules) is not listed, yet it reaches
+ * every tool the agent may use — so an agent whose keys were used in the
+ * window is never told it is "not connected" (review B P1). `lastCallAt` is a
+ * key's last use, not only MCP calls, so the line does not claim more.
  */
 export function noServerText(agentName: string, lastCallAt: string | null | undefined, now = Date.now()): string {
   const called = lastCallAt ? now - Date.parse(lastCallAt) <= WINDOW_MS : false;
   return called
-    ? `${agentName} made calls in the last 30 days without a server address we could list, so they came through Everything: every tool it may use. Connect it to choose what it uses.`
+    ? `${agentName} used its keys in the last 30 days, but not through a server address we could list. Calls without one reach Everything: every tool it may use. Connect it to choose what it uses.`
     : `No server yet: connect ${agentName} to choose what it uses.`;
 }
 

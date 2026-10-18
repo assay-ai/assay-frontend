@@ -27,7 +27,7 @@ export default function TeamPage() {
           is not available yet.
         </p>
         <p className="text-body-13 text-02">
-          Each of your integrations can still have its own agent key, and spending limits apply to every call.
+          Each of your integrations can still have its own agent key, and spending limits apply to every paid call.
         </p>
         <div className="flex flex-wrap gap-2 pt-1">
           {SUPPORT_URL ? (
