@@ -339,7 +339,7 @@ export function noticeView(item: NoticeSource, ctx: NoticeContext): NoticeView {
         autoUphold === undefined
           ? "If you don't, it is decided without your side."
           : autoUphold
-            ? `If you don't, the buyer wins: it is upheld automatically at ${autoUphold}.`
+            ? `If you don't, the buyer wins: it can be upheld automatically from ${autoUphold}.`
             : "If you don't, an operator decides it without your side.";
       return {
         title: "A buyer reported a bad result on a call you served",
