@@ -24,6 +24,8 @@ export const PROVIDER_NOTIFICATION_EVENTS = [
   // T3: a contract major a binding serves is going away. Filed per organization for buyers too; the payload's role says whose.
   "tool_version.deprecated",
   "tool_version.retired",
+  // A buyer reported a bad result on a call this provider served: reply within 24 hours.
+  "call_dispute.opened",
 ] as const;
 
 /**
@@ -36,7 +38,7 @@ export function isProviderEvent(event: string | null | undefined, payload?: unkn
   if (event === "tool_version.deprecated" || event === "tool_version.retired") {
     return Boolean(payload && typeof payload === "object" && (payload as { role?: unknown }).role === "PROVIDER");
   }
-  return event.startsWith("provider.");
+  return event.startsWith("provider.") || event === "call_dispute.opened";
 }
 
 /**

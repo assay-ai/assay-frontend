@@ -270,6 +270,39 @@ export const NOTIFICATION_CATALOGUE: Readonly<Record<NotificationEvent, Notifica
     hasProducer: true,
   },
 
+  // ── Buyer call disputes (G3.B1; producers: CallDisputeService, HeldCollectionService) ──
+  "call_dispute.opened": {
+    // Sent to the provider: its one chance to reply comes before the decision.
+    severity: "WARNING",
+    channels: IN_APP_EMAIL,
+    aggregation: "PER_EVENT",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+  "call_dispute.responded": {
+    severity: "INFO",
+    channels: IN_APP_ONLY,
+    aggregation: "PER_EVENT",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+  "call_dispute.decided": {
+    // Sent to the buyer and to the provider.
+    severity: "INFO",
+    channels: IN_APP_EMAIL,
+    aggregation: "PER_EVENT",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+  "call_dispute.refunded": {
+    // The provider was blocked and the held payment went back before any decision.
+    severity: "INFO",
+    channels: IN_APP_EMAIL,
+    aggregation: "PER_EVENT",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+
   // ── Digest ────────────────────────────────────────────────────────────────
   "digest.daily": {
     severity: "INFO",
@@ -317,6 +350,10 @@ export const NOTIFICATION_EVENT_LABEL: Readonly<Record<NotificationEvent, string
   "toolset.update_available": "A tool set you use has a new version",
   "tool_version.deprecated": "A version of a tool you use is going away",
   "tool_version.retired": "A version of a tool you use stopped working",
+  "call_dispute.opened": "A buyer reported a bad result on a call you served",
+  "call_dispute.responded": "The provider replied to your report",
+  "call_dispute.decided": "A report about a bad result was decided",
+  "call_dispute.refunded": "A call you reported was refunded",
   "digest.daily": "Daily summary",
 };
 

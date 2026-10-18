@@ -29,6 +29,12 @@ export function attentionAction(note: {
       if (notice) return contractNoticeAction(notice);
       return note.subjectId ? { label: "See the versions", href: routes.exploreTool(note.subjectId) } : null;
     }
+    case "call_dispute.responded":
+    case "call_dispute.decided":
+    case "call_dispute.refunded":
+      return note.subjectId ? { label: "See the report", href: routes.callDispute(note.subjectId) } : { label: "See your reports", href: "/spend/disputes" };
+    case "call_dispute.opened":
+      return note.subjectId ? { label: "Reply", href: routes.providerCallDispute(note.subjectId) } : { label: "Open disputes", href: "/provider/call-disputes" };
     case "balance.low":
     case "balance.zero":
     case "deposit.failed":

@@ -57,6 +57,17 @@ export const routes = {
   penalty: (id: string) => withQuery("/provider/penalties", { case: id }),
   /** The Stake page; `sheet` opens the stake or withdraw sheet on arrival. */
   stake: (sheet?: "stake" | "withdraw") => (sheet ? withQuery("/provider/capital", { sheet }) : "/provider/capital"),
+  /** "Publish your own API": one provider tool, optionally opened on a step of its flow. */
+  providerApi: (toolId: string, step?: "name" | "contract" | "connect" | "share") =>
+    withQuery("/provider/apis/view", step ? { id: toolId, step } : { id: toolId }),
+  /** A buyer's dispute over a call it reported: its status timeline. */
+  callDispute: (disputeId: string) => withQuery("/spend/disputes/view", { id: disputeId }),
+  /** A dispute over a call this provider served: reply within the window. */
+  providerCallDispute: (disputeId: string) => withQuery("/provider/call-disputes/view", { id: disputeId }),
+  /** The operator's review of a provider tool. */
+  operatorReview: (toolId: string) => withQuery("/operator/tools/reviews/view", { id: toolId }),
+  /** The operator's view of a buyer's dispute over a call. */
+  operatorCallDispute: (disputeId: string) => withQuery("/operator/disputes/view", { id: disputeId }),
   /** A verdict screen of a binding: `sub` is e.g. "evidence". */
   verdict: (bindingId: string, verdictId: string, sub?: string) =>
     withQuery(under("/provider/bindings/view/verdicts/view", sub), {
