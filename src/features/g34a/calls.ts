@@ -181,7 +181,8 @@ export function isCredited(row: ProviderCallRow): boolean {
     row.classification !== "PAID_BUYER_DEBT" &&
     row.classification !== "PAID_UNCOLLECTED" &&
     // A buyer debt voided by a late failing verdict stays SETTLED, but is
-    // PAID_UNCREDITED with zero amounts: nobody was credited.
+    // PAID_UNCREDITED: nobody was credited. Its provider_amount is the share
+    // forgone, and its platform_fee is 0 (no fee was taken).
     row.classification !== "PAID_UNCREDITED"
   );
 }

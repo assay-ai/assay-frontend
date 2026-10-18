@@ -740,7 +740,7 @@ function withheldBody(query: Record<string, unknown>) {
     },
     {
       bucket: "NOT_COLLECTED",
-      label: "not collected (the provider could not be paid)",
+      label: "not collected (the charge was cancelled or never taken)",
       calls: 0,
       amount: minorMoney(0),
     },
@@ -1137,6 +1137,14 @@ function receiptBody(call: DemoCall) {
     disputeWindowEndsAt: charged && settled ? minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES + 1) : null,
     // "Report a bad result" is accepted for 7 days after the call settled; null when it can't be reported.
     disputeFilingClosesAt: charged && settled ? minutesAgo(Math.max(callAge(call) - 1, 0) - 7 * 1440) : null,
+    // The backend's own answer: a report now is refunded in full while the hold has more than a minute left.
+    refundableIfReportedNow:
+      charged && settled !== null && Date.parse(minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES)) - 60_000 > Date.now(),
+    // When that lapses: the collectable time minus the 60 s guard.
+    refundableIfReportedUntil:
+      charged && settled !== null && Date.parse(minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES)) - 60_000 > Date.now()
+        ? new Date(Date.parse(minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES)) - 60_000).toISOString()
+        : null,
   };
 }
 

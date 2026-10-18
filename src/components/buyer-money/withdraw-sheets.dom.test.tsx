@@ -6,8 +6,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 /*
   FIX-PLAN P0-4: a withdrawal request pauses every paid call on the escrow's
-  chain, even for a partial amount. That was a tick box; it is now a warning
-  right above the button, naming the chain, with the button the one confirm.
+  chain, even for a partial amount: a warning right above the button names the
+  chain. Wave-1 audit M6/I2: an explicit tick box confirms it too, and the
+  sheet never promises the full amount (the claim pays min(requested, balance),
+  and paid calls can land before the request is on chain).
 */
 const usd = (amount: string) => ({ amount, asset: "eip155:46630/erc20:0x1", decimals: 6 });
 const money = vi.hoisted(() => ({ openHolds: "0" }));
@@ -37,7 +39,7 @@ vi.mock("@/features/buyer-debt/use-open-hold-intent-ids", () => ({ useOpenHoldIn
 vi.mock("@/features/buyer-debt/use-owed-intent-ids", () => ({ useOwedIntentIds: () => new Set<string>() }));
 vi.mock("@/features/buyer-debt/settle-debt-sheet", () => ({ useSettleDebt: () => ({ openSettle: () => undefined }) }));
 
-import { WithdrawSheet, withdrawHeldNote, withdrawPauseWarning } from "./withdraw-sheets";
+import { WithdrawSheet, withdrawAcknowledgement, withdrawHeldNote, withdrawPauseWarning, withdrawReceiveNote } from "./withdraw-sheets";
 
 afterEach(() => {
   cleanup();
@@ -59,7 +61,7 @@ function enter(amount: string) {
   fireEvent.change(screen.getByRole("textbox"), { target: { value: amount } });
 }
 
-describe("Withdraw: the pause is stated, not ticked", () => {
+describe("Withdraw: the pause is stated and acknowledged", () => {
   it("warns above the button, naming the chain, for a partial withdrawal of $5 of $13.24", () => {
     open();
     enter("5");
@@ -72,48 +74,58 @@ describe("Withdraw: the pause is stated, not ticked", () => {
     expect(warning.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("has no checkbox, and the button is the one confirm", () => {
+  // Wave-1 audit M6: removing the tick box weakened consent; it is back, beside the warning.
+  it("asks for an explicit tick before the request can be sent", () => {
     open();
     enter("5");
-    expect(screen.queryByRole("checkbox")).toBeNull();
-    expect(screen.queryByText(/Tick the box/)).toBeNull();
-    expect((screen.getByRole("button", { name: /Request \$5\.00 \(free\)/ }) as HTMLButtonElement).disabled).toBe(false);
+    const box = screen.getByRole("checkbox");
+    expect(box.closest("label")?.textContent).toBe(withdrawAcknowledgement("Robinhood Chain testnet"));
+    const button = () => screen.getByRole("button", { name: /Request \$5\.00 \(free\)/ }) as HTMLButtonElement;
+    expect(button().disabled).toBe(true);
+    fireEvent.click(box);
+    expect(button().disabled).toBe(false);
   });
 
-  // B2 review I3: the request is capped at balance − held, so it is paid in full.
-  it("says the held money stays in escrow and the full amount is paid out", () => {
+  // Wave-1 audit I2: the claim pays min(requested, balance); calls can land first.
+  it("with calls held: the held money is not part of the request, and you receive up to the amount", () => {
     money.openHolds = "400000";
     open();
     enter("5");
     expect(screen.getByTestId("withdraw-held-receive").textContent).toBe(
-      "$0.40 is held by calls being checked. It stays in your escrow and is not part of this request: you receive the $5.00 you ask for.",
+      "$0.40 is held by calls being checked and is not part of this request. You receive up to $5.00. It can be less if paid calls land before the request is on chain; never more.",
     );
     // Said once: the older held line gives way to it.
     expect(screen.queryByTestId("withdraw-held-note")).toBeNull();
-    expect(document.body.textContent).not.toMatch(/at least|less than you ask/);
+    expect(document.body.textContent).not.toMatch(/you receive the \$|amount you ask for\./);
   });
 
-  it("with nothing held, says you receive what you ask for", () => {
+  it("with nothing held: still up to the amount, never a promise of all of it", () => {
     open();
     enter("5");
-    expect(document.body.textContent).toContain("You receive the amount you ask for.");
+    expect(screen.getByTestId("withdraw-receive").textContent).toBe(
+      "You receive up to $5.00. It can be less if paid calls land before the request is on chain; never more.",
+    );
   });
 });
 
 describe("withdraw copy", () => {
   it("falls back to 'this chain' before the chain is known", () => {
     expect(withdrawPauseWarning(null)).toContain("paid calls on this chain stop");
+    expect(withdrawAcknowledgement(null)).toContain("paid calls on this chain stop");
   });
 
-  it("never subtracts the held amount, and is silent with nothing held", () => {
+  it("never promises the full amount, never subtracts the held amount, and is silent with nothing held", () => {
     expect(withdrawHeldNote(usd("100000"), usd("400000"), 0)).toBe(
-      "$0.40 is held by calls being checked. It stays in your escrow and is not part of this request: you receive the $0.10 you ask for.",
+      "$0.40 is held by calls being checked and is not part of this request. You receive up to $0.10. It can be less if paid calls land before the request is on chain; never more.",
     );
     expect(withdrawHeldNote(usd("100000"), usd("0"), 0)).toBeNull();
     expect(withdrawHeldNote(null, usd("400000"), 0)).toBeNull();
     // With unpaid calls the held line above already names the amount.
     expect(withdrawHeldNote(usd("5000000"), usd("400000"), 1)).toBe(
-      "That money stays in your escrow and is not part of this request: you receive the $5.00 you ask for.",
+      "That money is not part of this request. You receive up to $5.00. It can be less if paid calls land before the request is on chain; never more.",
+    );
+    expect(withdrawReceiveNote(null)).toBe(
+      "You receive up to the amount you ask for. It can be less if paid calls land before the request is on chain; never more.",
     );
   });
 });
