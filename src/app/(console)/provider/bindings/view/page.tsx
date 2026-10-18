@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Loader2, PartyPopper, Pause, Pencil, Play } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
@@ -17,6 +17,8 @@ import { Panel, PanelBody, PanelHeader, PanelTitle, PanelTitles } from "@/compon
 import { BindingHeader, bindingQueryKey, useBinding } from "@/features/provider-binding/binding-header";
 import { BuyerPreview } from "@/features/provider-binding/buyer-preview";
 import { servedSummary, majorChoices, moveNotice, termsOf } from "@/features/provider-binding/contract-terms";
+import { priceLine } from "@/features/provider-binding/listing-copy";
+import { ResumeSheet } from "@/features/provider-binding/resume-sheet";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { slaReading } from "@/features/provider-sla/reading";
 import { isAssetMismatch, readableDerivation } from "@/features/provider-stake/derivation";
@@ -37,7 +39,9 @@ import { formatMoney } from "@/utils/money";
  * next (one primary action), the numbers that exist (no "—" tiles), and its
  * terms at a glance. Right after publishing (`?welcome=1`) or until the first
  * call lands it shows the "Your tool is live" first-run card, which listens
- * for that first call.
+ * for that first call. A draft has no Overview: it opens the wizard where it
+ * was left. Resume asks first, showing the price, promise and stake it takes
+ * on again (the same resume call as before).
  */
 
 const REFRESH_MS = 60_000;
@@ -185,10 +189,17 @@ function OverviewContent() {
   const bindingId = params.get("binding") ?? "";
   const welcome = params.get("welcome") === "1";
   const queryClient = useQueryClient();
+  const router = useRouter();
   const names = useProviderToolNames();
 
   const bindingQuery = useBinding(bindingId, { refetchInterval: REFRESH_MS });
   const binding = bindingQuery.data;
+
+  // A draft is finished in the wizard, so that is where its link lands.
+  const isDraft = binding?.status === "DRAFT";
+  React.useEffect(() => {
+    if (isDraft) router.replace(routes.bindingWizard(bindingId));
+  }, [isDraft, bindingId, router]);
 
   const check = useQuery({
     queryKey: ["provider", "tool-binding", bindingId, "publish-check"],
@@ -241,6 +252,7 @@ function OverviewContent() {
     void queryClient.invalidateQueries({ queryKey: ["provider", "tool-bindings"] });
   };
   const [pauseOpen, setPauseOpen] = React.useState(false);
+  const [resumeOpen, setResumeOpen] = React.useState(false);
   const pause = useMutation({ mutationFn: () => pauseToolBinding(bindingId), onSuccess: apply });
   const resume = useMutation({ mutationFn: () => resumeToolBinding(bindingId), onSuccess: apply });
 
@@ -293,7 +305,7 @@ function OverviewContent() {
     );
   } else if (binding?.status === "PAUSED") {
     primary = (
-      <Button icon={<Play aria-hidden="true" />} loading={resume.isPending} onClick={() => resume.mutate()}>
+      <Button icon={<Play aria-hidden="true" />} loading={resume.isPending} onClick={() => setResumeOpen(true)}>
         Resume
       </Button>
     );
@@ -305,12 +317,6 @@ function OverviewContent() {
   return (
     <>
       <BindingHeader bindingId={bindingId} binding={binding} active="overview" actions={primary} />
-
-      {resume.isError ? (
-        <p role="alert" className="text-body-13 text-danger-600">
-          {resume.error instanceof ApiError ? plainError(resume.error.code) : "It could not be resumed. Try again."}
-        </p>
-      ) : null}
 
       {!binding ? (
         <PageState kind="loading" rows={4} label="Loading this listing" />
@@ -361,11 +367,11 @@ function OverviewContent() {
                 <Figure
                   label="Failures vs your promise"
                   value={reading.headline}
-                  note={reading.sample ?? reading.advice}
+                  note={reading.sample ? `${reading.sample}. ${reading.advice}` : reading.advice}
                   tone={reading.tone === "danger" ? "danger" : reading.tone === "warning" ? "warning" : "ok"}
                 />
               ) : reading.sample ? (
-                <Figure label="Failures vs your promise" value="Too early" note={reading.sample} />
+                <Figure label="Failures vs your promise" value="Too early" note={`${reading.sample}. ${reading.advice}`} />
               ) : null}
             </section>
           ) : null}
@@ -386,13 +392,9 @@ function OverviewContent() {
                 <div className="flex flex-col gap-0.5">
                   <dt className="text-body-xs text-03">Price</dt>
                   <dd className="text-body-13 text-01">
-                    {binding.pricingMode === "FREE"
-                      ? "Free"
-                      : `${formatMoney(binding.price, { decimals: 6 })} a call${
-                          binding.pricingMode === "FREEMIUM" && binding.freeQuotaPerAgent
-                            ? ` after ${binding.freeQuotaPerAgent.toLocaleString("en-US")} free calls per agent a day`
-                            : ""
-                        }`}
+                    {binding.pricingMode === "FREEMIUM" && binding.freeQuotaPerAgent
+                      ? `${binding.freeQuotaPerAgent.toLocaleString("en-US")} free calls per agent a day, then ${priceLine({ ...binding, pricingMode: "PAID" })}`
+                      : priceLine(binding)}
                   </dd>
                 </div>
                 <div className="flex flex-col gap-0.5">
@@ -416,6 +418,16 @@ function OverviewContent() {
           </Panel>
         </>
       )}
+
+      {binding?.status === "PAUSED" ? (
+        <ResumeSheet
+          open={resumeOpen}
+          onOpenChange={setResumeOpen}
+          binding={binding}
+          toolName={toolName}
+          onConfirm={() => resume.mutateAsync()}
+        />
+      ) : null}
 
       <ConfirmSheet
         open={pauseOpen}

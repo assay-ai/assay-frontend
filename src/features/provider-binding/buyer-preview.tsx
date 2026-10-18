@@ -20,6 +20,7 @@ export function BuyerPreview({
   price,
   freeCalls,
   failureRate,
+  hasCalls = false,
   className,
 }: {
   toolName: string;
@@ -29,6 +30,8 @@ export function BuyerPreview({
   freeCalls: number | null;
   /** Fraction, e.g. 0.02. */
   failureRate: number | null;
+  /** The listing has served calls: Explore shows their numbers next to this row already. */
+  hasCalls?: boolean;
   className?: string;
 }) {
   // A paid mode with no price typed yet is not "Free": say the price is still to come.
@@ -66,7 +69,11 @@ export function BuyerPreview({
             <span className="rounded-full bg-03 px-2 py-0.5 text-label-xs text-02">Backed by your stake</span>
           ) : null}
         </div>
-        <p className="text-body-xs text-03">Calls and the measured failure rate appear here after your first calls.</p>
+        <p className="text-body-xs text-03">
+          {hasCalls
+            ? "In Explore, buyers also see this tool's calls in the last 30 days and its measured failure rate."
+            : "Calls and the measured failure rate appear here after your first calls."}
+        </p>
       </div>
     </section>
   );
