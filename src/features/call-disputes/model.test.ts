@@ -179,11 +179,12 @@ describe("buyer words", () => {
   });
 
   it("an after-hold report says what accepting it means for the money", () => {
-    expect(BUYER_COPY.afterHold).toMatch(/counts against the provider's quality.*money is not returned/);
+    expect(BUYER_COPY.afterHold).toMatch(/already been collected.*counts against the provider's quality; a refund is not guaranteed/);
   });
 
   it("refer to an organization by a short, stable reference, never its id", () => {
-    expect(shortRef("org-buyer")).toMatch(/^#[0-9a-f]{4}$/);
+    expect(shortRef("org-buyer")).toMatch(/^#[0-9a-f]{6}$/);
+    expect(shortRef("3f9c2a71-5b08-4d6e-9a14-7c2e0b5d8f13")).not.toContain("3f9c2a71");
     expect(shortRef("org-buyer")).toBe(shortRef("org-buyer"));
     expect(shortRef("org-buyer")).not.toBe(shortRef("org-buyer-2"));
   });

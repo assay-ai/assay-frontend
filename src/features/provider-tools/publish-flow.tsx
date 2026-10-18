@@ -136,11 +136,9 @@ export function PublishApiFlow({ toolId }: { toolId: string | null }) {
             <Link href="/provider/inbox" className="inline-flex min-h-10 items-center text-primary-600 hover:underline">
               Open your Inbox
             </Link>
-            {SUPPORT_URL ? (
-              <a href={SUPPORT_URL} className="inline-flex min-h-10 items-center text-primary-600 hover:underline">
-                Contact support
-              </a>
-            ) : null}
+            <a href={SUPPORT_URL ?? "/how-it-works"} className="inline-flex min-h-10 items-center text-primary-600 hover:underline">
+              {SUPPORT_URL ? "Contact support" : "Help & contact"}
+            </a>
           </p>
         </div>
       ) : (
@@ -237,7 +235,8 @@ function useReplacementCandidates(tool: ProviderTool, enabled: boolean): { id: s
     const rank = (v: string) => ["PRIVATE", "UNLISTED", "LISTED"].indexOf(v);
     const rows = new Map<string, { id: string; name: string; note: string | null }>();
     for (const t of listed.data?.tools ?? []) {
-      if (t.id === tool.id || t.routable === false) continue;
+      // Serving now, and not itself pointing elsewhere (a tool whose current version is deprecated names its replacement).
+      if (t.id === tool.id || t.routable === false || t.replacementName) continue;
       rows.set(t.id, { id: t.id, name: t.name, note: t.kind === "PROVIDER" ? "one maker's API" : "standard tool" });
     }
     for (const t of own.data?.items ?? []) {
@@ -256,6 +255,10 @@ function DeprecateSheet({ tool, row, onClose }: { tool: ProviderTool; row: Versi
   const major = row?.semver.split(".")[0] ?? "";
   const [replacement, setReplacement] = React.useState("");
   React.useEffect(() => setReplacement(""), [row]);
+  // earliestSunsetAt moves with the clock: read the tool again whenever the sheet opens.
+  React.useEffect(() => {
+    if (row) void queryClient.invalidateQueries({ queryKey: providerToolKeys.one(tool.id) });
+  }, [row, queryClient, tool.id]);
   const candidates = useReplacementCandidates(tool, row !== null);
   const run = useMutation({
     mutationFn: () => deprecateProviderToolMajor(tool.id, row!.version, `${day}T00:00:00.000Z`, replacement || null),
@@ -287,7 +290,9 @@ function DeprecateSheet({ tool, row, onClose }: { tool: ProviderTool; row: Versi
                 </option>
               ))}
             </select>
-            <span className="text-body-xs text-03">Agents locked to v{major} are told to move to it before the date. Only tools that serve now and reach at least the same agents are offered.</span>
+            <span className="text-body-xs text-03">
+              Agents locked to v{major} are told to move to it before the date. Offered: tools that serve now, are not deprecated, and reach at least the same agents (listed tools, or your own shared at least as widely).
+            </span>
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-label-13 text-01">Stops on (UTC)</span>
@@ -297,7 +302,18 @@ function DeprecateSheet({ tool, row, onClose }: { tool: ProviderTool; row: Versi
               {`Earliest: ${formatDate(`${min}T00:00:00.000Z`)} (UTC), so callers get at least 90 days' notice.`}
             </span>
           </label>
-          {run.isError ? <p className="text-body-13 text-danger-700">{providerToolErrorView(run.error).text}</p> : null}
+          {run.isError ? (
+            <div role="alert" className="text-body-13 text-danger-700">
+              <p>{providerToolErrorView(run.error).text}</p>
+              {providerToolErrorView(run.error).problems.length > 0 ? (
+                <ul className="list-disc pl-4">
+                  {providerToolErrorView(run.error).problems.map((p, i) => (
+                    <li key={i}>{p}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button variant="danger" disabled={tooSoon} loading={run.isPending} onClick={() => run.mutate()}>
               Deprecate v{major}

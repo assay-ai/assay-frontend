@@ -372,6 +372,7 @@ const ERRORS: Record<string, string> = {
   UPSTREAM_TIMEOUT: "The provider took too long. Nothing was charged.",
   ARGUMENTS_INVALID: "The tool's inputs are not valid.",
   TOOL_DISABLED: "This tool is turned off.",
+  INTERNAL_ERROR: "Something went wrong on our side. Try again in a moment; if it keeps happening, contact support.",
   DISPUTE_NOT_WITHDRAWABLE: "This dispute can no longer be withdrawn.",
   DISPUTE_ALREADY_ACKNOWLEDGED: "This dispute was already acknowledged.",
   SLASH_PROPOSAL_RESPONSE_WINDOW_CLOSED: "It is too late to dispute this penalty.",

@@ -23,14 +23,57 @@ export interface FieldRow {
   type: FieldType;
   required: boolean;
   description: string;
+  /** A list's item type, kept as it was ("string" for a new list). */
+  itemType?: string;
+}
+
+/** What the rows don't show but the schema keeps: `additionalProperties`. */
+export interface SchemaExtras {
+  additionalProperties?: unknown;
 }
 
 const FIELD_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const SIMPLE_KEYS = new Set(["type", "description"]);
 const ARRAY_KEYS = new Set(["type", "description", "items"]);
 
-/** The rows of a flat object schema, or null when it needs the JSON editor. */
+/** The rows of a flat object schema, or null when it needs the JSON editor (including any schema the rows could not write back exactly). */
 export function fieldsFromSchema(text: string): FieldRow[] | null {
+  const rows = rowsOf(text);
+  if (!rows) return null;
+  // Lossless or not at all: the rows must write back the very schema they came from.
+  const original = JSON.parse(text) as Record<string, unknown>;
+  const back = JSON.parse(schemaFromFields(rows, schemaExtras(text))) as Record<string, unknown>;
+  return canonical(normalised(back)) === canonical(normalised(original)) ? rows : null;
+}
+
+/** `required: []` and a missing `required` are the same schema. */
+function normalised(schema: Record<string, unknown>): Record<string, unknown> {
+  const { required, ...rest } = schema;
+  return Array.isArray(required) && required.length > 0 ? { ...rest, required: [...(required as string[])].sort() } : rest;
+}
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonical((value as Record<string, unknown>)[k])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** The schema-level keys the rows keep without showing them. */
+export function schemaExtras(text: string): SchemaExtras {
+  try {
+    const schema = JSON.parse(text) as Record<string, unknown>;
+    return schema && typeof schema === "object" && "additionalProperties" in schema ? { additionalProperties: schema.additionalProperties } : {};
+  } catch {
+    return {};
+  }
+}
+
+function rowsOf(text: string): FieldRow[] | null {
   let schema: unknown;
   try {
     schema = JSON.parse(text);
@@ -56,25 +99,26 @@ export function fieldsFromSchema(text: string): FieldRow[] | null {
       const items = p.items as { type?: unknown } | null;
       if (!items || typeof items !== "object" || Object.keys(items).some((k) => k !== "type") || typeof items.type !== "string") return null;
     }
-    rows.push({ name, type: p.type as FieldType, required: required.has(name), description: typeof p.description === "string" ? p.description : "" });
+    const itemType = p.type === "array" && p.items ? String((p.items as { type: string }).type) : undefined;
+    rows.push({ name, type: p.type as FieldType, required: required.has(name), description: typeof p.description === "string" ? p.description : "", ...(itemType ? { itemType } : {}) });
   }
   return rows;
 }
 
-/** The JSON Schema text the rows stand for. A list holds text unless the JSON editor says otherwise. */
-export function schemaFromFields(rows: readonly FieldRow[]): string {
+/** The JSON Schema text the rows stand for. A list keeps its item type (text for a new list); `extras` keeps what the rows don't show. */
+export function schemaFromFields(rows: readonly FieldRow[], extras: SchemaExtras = {}): string {
   const properties: Record<string, Record<string, unknown>> = {};
   for (const row of rows) {
     const name = row.name.trim();
     if (!name) continue;
     properties[name] = {
       type: row.type,
-      ...(row.type === "array" ? { items: { type: "string" } } : {}),
+      ...(row.type === "array" ? { items: { type: row.itemType ?? "string" } } : {}),
       ...(row.description.trim() ? { description: row.description.trim() } : {}),
     };
   }
   const required = rows.filter((r) => r.required && r.name.trim()).map((r) => r.name.trim());
-  return JSON.stringify({ type: "object", properties, required }, null, 2);
+  return JSON.stringify({ type: "object", properties, required, ...("additionalProperties" in extras ? { additionalProperties: extras.additionalProperties } : {}) }, null, 2);
 }
 
 /** What is wrong with the rows, in words; empty when they can be saved. */
@@ -84,7 +128,7 @@ export function fieldProblems(rows: readonly FieldRow[]): string[] {
   for (const [i, row] of rows.entries()) {
     const name = row.name.trim();
     if (!name) problems.push(`Field ${i + 1} needs a name.`);
-    else if (!FIELD_NAME_RE.test(name)) problems.push(`“${name}”: use letters, digits and “_”, starting with a letter.`);
+    else if (!FIELD_NAME_RE.test(name)) problems.push(`“${name}”: use letters, digits and “_”, starting with a letter or “_”, at most 64 characters.`);
     else if (seen.has(name)) problems.push(`“${name}” is there twice.`);
     seen.add(name);
   }

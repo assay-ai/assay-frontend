@@ -20,7 +20,7 @@ import {
 import { toast } from "@/utils/toast";
 
 import { FieldsEditor, TryPanel, type TryOutcome } from "./fields-editor";
-import { fieldsFromSchema, optionalFromSchema, optionalNames, schemaFromFields, starterCheck, starterExample, type FieldRow } from "./schema-fields";
+import { fieldsFromSchema, optionalFromSchema, optionalNames, schemaExtras, schemaFromFields, starterCheck, starterExample, type FieldRow } from "./schema-fields";
 
 import { contractBody, contractFormFor, providerToolErrorView, rulesTextOf, type PublishStepId } from "./model";
 import { providerToolKeys } from "./queries";
@@ -155,8 +155,8 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
     (side === "input" ? setInputRows : setOutputRows)(rows);
     setForm((f) =>
       side === "input"
-        ? { ...f, inputSchema: schemaFromFields(rows), optionalInputFields: optionalNames(rows) }
-        : { ...f, outputSchema: schemaFromFields(rows), optionalOutputFields: optionalNames(rows) },
+        ? { ...f, inputSchema: schemaFromFields(rows, schemaExtras(f.inputSchema)), optionalInputFields: optionalNames(rows) }
+        : { ...f, outputSchema: schemaFromFields(rows, schemaExtras(f.outputSchema)), optionalOutputFields: optionalNames(rows) },
     );
   };
   const applyTried = (outcome: TryOutcome) => {

@@ -16,6 +16,7 @@ import {
   publishLabel,
   retiredBadge,
   sunsetDay,
+  sunsetDayFrom,
   sunsetProblem,
 } from "./text";
 
@@ -157,6 +158,12 @@ describe("deprecation in words (UTC)", () => {
     expect(sunsetProblem("2027-01-16", now)).toBeNull();
     expect(sunsetProblem("2027-01-14", now)).toMatch(/Pick Jan 16, 2027 or later/);
     expect(sunsetProblem("", now)).toBe("Pick a date.");
+  });
+
+  it("starts the date picker at the first whole UTC day of the server's earliest sunset", () => {
+    expect(sunsetDayFrom("2027-01-16T00:00:00.000Z")).toBe("2027-01-16");
+    expect(sunsetDayFrom("2027-01-16T15:30:00.000Z")).toBe("2027-01-17");
+    expect(sunsetDayFrom("2026-12-31T23:59:59.999Z")).toBe("2027-01-01");
   });
 
   it("labels Must return as the spec does", () => {

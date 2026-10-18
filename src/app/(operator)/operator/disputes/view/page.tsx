@@ -102,7 +102,7 @@ function DisputeScreen() {
 
 
       <section aria-label="Timeline" className="flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 px-4 py-4">
-        <DisputeTimeline dispute={d} side="buyer" now={now} onElapsed={() => void detail.refetch()} />
+        <DisputeTimeline dispute={d} side="operator" now={now} onElapsed={() => void detail.refetch()} />
         <p className="text-body-xs text-03">{d.refundGuaranteed ? "Filed inside the 1-hour hold: the payment is held; upholding refunds it in full." : "Filed after the hold: the payment was already collected. Upholding counts against quality; a refund is not guaranteed."} Times are in UTC.</p>
       </section>
 

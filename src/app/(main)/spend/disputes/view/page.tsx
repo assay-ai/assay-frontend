@@ -125,7 +125,9 @@ function ReportContent() {
           confirming ? (
             <span className="flex flex-wrap items-center gap-2" role="group" aria-label="Withdraw the report?">
               <span className="text-body-13 text-02">
-                Withdraw it? The call stays charged{d.refundGuaranteed ? ", and the held payment goes to the provider" : ""}.
+                {d.refundGuaranteed
+                  ? "Withdraw it? The call stays charged and the held payment goes to the provider."
+                  : "Withdraw it? The payment was already collected, so nothing changes for your money: it only stops counting against the provider's quality."}
               </span>
               <Button variant="danger" size="sm" className="touch-target" loading={withdraw.isPending} onClick={() => withdraw.mutate()}>
                 Withdraw

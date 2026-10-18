@@ -83,7 +83,7 @@ function ActionSheet({ cutoff, action, toolName, onClose, onDone }: { cutoff: Mo
   const lifting = action === "revert" && Boolean(cutoff?.confirmedAt);
   return (
     <Sheet open={cutoff !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <SheetContent className="tablet:max-w-[520px]">
+      <SheetContent className="tablet:max-w-[520px]" onOpenAutoFocus={(e) => e.preventDefault()}>
         <SheetHeader>
           <SheetTitle>{action === "confirm" ? `Confirm the takedown of ${toolName}?` : lifting ? `Lift the takedown of ${toolName}?` : `Reject the takedown of ${toolName}?`}</SheetTitle>
           <SheetDescription>

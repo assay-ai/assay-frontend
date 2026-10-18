@@ -18,9 +18,13 @@ import type { DemoFixture } from "./fixtures";
 
 /**
  * T4 — "Publish your own API", provider tool review and buyer call disputes —
- * DEMO ONLY. Same rules as the rest of the stage set (`demo-api.ts`): no
- * state; a write echoes what it was sent, so the screen moves, and a reload
- * shows the picture again.
+ * DEMO ONLY. It keeps a small per-tab memory (sessionStorage key
+ * `demo-t4`, cleared by `?fresh` in the URL): a write here (a reply, a
+ * withdrawal, a filed report, a confirmed takedown, a published version, a
+ * review decision, a deprecation) shows on the next read in the same tab, so
+ * testers see the screen move. Nothing reaches a server, and a new tab or
+ * `?fresh` shows the seeded picture again. `?demoState=empty|error` empties or
+ * fails the T4 lists.
  *
  * What a tester can open:
  *
@@ -874,8 +878,8 @@ function buyerSpecs(): DisputeSpec[] {
   return [
     { id: "d0c1a2b3-0001-4e00-8000-000000000001", intentId: "a1d4f7c2-9e35-4b18-8c60-2f7a9d3e5b01", toolId: tool("geocode"), bindingId: null, providerId: "b7e04c25-9d13-4a6f-bc80-1e5f3a7d9c62", reason: "WRONG_DATA", reasonLabel: REASON_LABEL.WRONG_DATA!, note: "The coordinates are for a town of the same name in another country.", amount: "0.0012", filedMinutesAgo: 40, state: "OPEN", refundGuaranteed: true },
     { id: "d0c1a2b3-0002-4e00-8000-000000000002", intentId: "b2e5a8d3-0f46-4c29-9d71-3a8b0e4f6c12", toolId: tool("ocr_extract"), bindingId: null, providerId: "e41b7d93-2a58-4f60-b7c9-3d80f5a1e6c4", reason: "EMPTY_OR_GARBAGE", reasonLabel: REASON_LABEL.EMPTY_OR_GARBAGE!, note: "Half the page came back as symbols.", amount: "0.0035", filedMinutesAgo: 30 * HOUR, state: "OPEN", replyMinutesAfter: 2 * HOUR, reply: "The scan was 72 dpi; we return what can be read. Text over 150 dpi extracts cleanly.", refundGuaranteed: true },
-    { id: "d0c1a2b3-0003-4e00-8000-000000000003", intentId: "c3f6b9e4-1a57-4d30-8e82-4b9c1f5a7d23", toolId: tool("kyc_lookup"), bindingId: null, providerId: "c9f35a82-6014-4d7b-8e93-2a1c7f06b5d8", reason: "WRONG_FORMAT", reasonLabel: REASON_LABEL.WRONG_FORMAT!, note: null, amount: "0.012", filedMinutesAgo: 4 * DAY, state: "UPHELD", resolvedMinutesAgo: 2 * DAY, resolutionNote: "The answer had no results field, which the tool promises. Upheld and refunded.", refundState: "REFUNDED", refundGuaranteed: true },
-    { id: "d0c1a2b3-0004-4e00-8000-000000000004", intentId: "d4a7c0f5-2b68-4e41-9f93-5c0d2a6b8e34", toolId: tool("price_quote"), bindingId: null, providerId: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", reason: "TOO_SLOW", reasonLabel: REASON_LABEL.TOO_SLOW!, note: "Took 9 seconds.", amount: "0.001", filedMinutesAgo: 5 * DAY, state: "REJECTED", replyMinutesAfter: 3 * HOUR, reply: "It answered within the 10-second limit the listing promises.", resolvedMinutesAgo: 3 * DAY, resolutionNote: "The call answered inside the promised 10 seconds and the rate was correct. Rejected.", refundState: null, refundGuaranteed: false },
+    { id: "d0c1a2b3-0003-4e00-8000-000000000003", intentId: "c3f6b9e4-1a57-4d30-8e82-4b9c1f5a7d23", toolId: tool("kyc_lookup"), bindingId: null, providerId: "c9f35a82-6014-4d7b-8e93-2a1c7f06b5d8", reason: "WRONG_FORMAT", reasonLabel: REASON_LABEL.WRONG_FORMAT!, note: null, amount: "0.012", filedMinutesAgo: 4 * DAY, state: "UPHELD", resolvedMinutesAgo: 2 * DAY, resolutionNote: "The answer had no results field, which the tool promises, so the report was accepted and the call refunded.", refundState: "REFUNDED", refundGuaranteed: true },
+    { id: "d0c1a2b3-0004-4e00-8000-000000000004", intentId: "d4a7c0f5-2b68-4e41-9f93-5c0d2a6b8e34", toolId: tool("price_quote"), bindingId: null, providerId: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", reason: "TOO_SLOW", reasonLabel: REASON_LABEL.TOO_SLOW!, note: "Took 9 seconds.", amount: "0.001", filedMinutesAgo: 5 * DAY, state: "REJECTED", replyMinutesAfter: 3 * HOUR, reply: "It answered within the 10-second limit the listing promises.", resolvedMinutesAgo: 3 * DAY, resolutionNote: "The call answered inside the promised 10 seconds and the rate was correct, so the report was not accepted.", refundState: null, refundGuaranteed: false },
     { id: "d0c1a2b3-0005-4e00-8000-000000000005", intentId: "e5b8d1a6-3c79-4f52-8a04-6d1e3b7c9f45", toolId: tool("deep_search"), bindingId: null, providerId: "9c1d4f60-3a77-4c18-9b02-6e5a1f2d8b41", reason: "EMPTY_OR_GARBAGE", reasonLabel: REASON_LABEL.EMPTY_OR_GARBAGE!, note: "No sources at all.", amount: "1.20", filedMinutesAgo: 3 * HOUR, state: "OPEN", refundState: "REFUNDED", refundGuaranteed: true },
     // Reported after the 1-hour hold: the payment was already collected.
     { id: "d0c1a2b3-0006-4e00-8000-000000000006", intentId: "f6c9e2b7-4d80-4a63-9b15-7e2f4c8d0a56", toolId: tool("ocr_extract"), bindingId: null, providerId: "e41b7d93-2a58-4f60-b7c9-3d80f5a1e6c4", reason: "OTHER", reasonLabel: REASON_LABEL.OTHER!, note: "The page came back in the wrong language.", amount: "0.0035", filedMinutesAgo: 5 * HOUR, state: "OPEN", refundGuaranteed: false },
@@ -891,7 +895,7 @@ function buyerNow(): DisputeSpec[] {
 function providerSpecs(): DisputeSpec[] {
   return [
     { id: "d0c1a2b3-0101-4e00-8000-000000000101", intentId: "f1a2b3c4-0101-4e00-8000-000000000101", toolId: "market-quote", bindingId: "b1f7c2d4-8e35-4a19-b6c0-2d9f4e71a830", providerId: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", reason: "WRONG_DATA", reasonLabel: REASON_LABEL.WRONG_DATA!, note: "The quote is a day old.", amount: "0.45", filedMinutesAgo: 50, state: "OPEN", refundGuaranteed: true },
-    { id: "d0c1a2b3-0102-4e00-8000-000000000102", intentId: "f1a2b3c4-0102-4e00-8000-000000000102", toolId: "fx-rates", bindingId: null, providerId: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", reason: "WRONG_FORMAT", reasonLabel: REASON_LABEL.WRONG_FORMAT!, note: "Rates came back as strings.", amount: "0.002", filedMinutesAgo: 20 * HOUR, state: "OPEN", replyMinutesAfter: 90, reply: "Fixed in mapping v8: rates are numbers again. The answer still held the right values.", refundGuaranteed: true },
+    { id: "d0c1a2b3-0102-4e00-8000-000000000102", intentId: "f1a2b3c4-0102-4e00-8000-000000000102", toolId: "fx-rates", bindingId: null, providerId: "3f8a2b71-5c04-4d9e-8a16-7b2c9e0d4a53", reason: "WRONG_FORMAT", reasonLabel: REASON_LABEL.WRONG_FORMAT!, note: "Rates came back as strings.", amount: "0.002", filedMinutesAgo: 20 * HOUR, state: "OPEN", replyMinutesAfter: 90, reply: "Fixed in mapping v8: rates are numbers again. The answer still held the right values.", refundGuaranteed: true },
     { id: "d0c1a2b3-0103-4e00-8000-000000000103", intentId: "f1a2b3c4-0103-4e00-8000-000000000103", toolId: "market-quote", bindingId: "b1f7c2d4-8e35-4a19-b6c0-2d9f4e71a830", providerId: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", reason: "EMPTY_OR_GARBAGE", reasonLabel: REASON_LABEL.EMPTY_OR_GARBAGE!, note: null, amount: "0.45", filedMinutesAgo: 30 * HOUR, state: "OPEN", refundGuaranteed: false },
     { id: "d0c1a2b3-0104-4e00-8000-000000000104", intentId: "f1a2b3c4-0104-4e00-8000-000000000104", toolId: "market-quote", bindingId: "b1f7c2d4-8e35-4a19-b6c0-2d9f4e71a830", providerId: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", reason: "TOO_SLOW", reasonLabel: REASON_LABEL.TOO_SLOW!, note: "12 seconds.", amount: "0.45", filedMinutesAgo: 6 * DAY, state: "UPHELD", resolvedMinutesAgo: 4 * DAY, resolutionNote: "The call took 12 s against an 8 s promise. Upheld; the held payment went back to the buyer.", refundState: "REFUNDED", refundGuaranteed: true },
   ];
@@ -906,10 +910,10 @@ function operatorSpecs(): DisputeSpec[] {
     b[0]!,
     { ...p[1]!, flaggedBuyer: true },
     b[1]!,
-    { id: "d0c1a2b3-0201-4e00-8000-000000000201", intentId: "f1a2b3c4-0201-4e00-8000-000000000201", toolId: "vessel-positions", bindingId: null, providerId: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", reason: "WRONG_DATA", reasonLabel: REASON_LABEL.WRONG_DATA!, note: "The ship is shown on land.", amount: "6.00", filedMinutesAgo: 50 * HOUR, state: "OPEN", refundGuaranteed: true, needsSecondOperator: true },
-    { id: "d0c1a2b3-0202-4e00-8000-000000000202", intentId: "f1a2b3c4-0202-4e00-8000-000000000202", toolId: "chain-activity", bindingId: null, providerId: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", reason: "OTHER", reasonLabel: REASON_LABEL.OTHER!, note: "The provider charged for a call that timed out.", amount: "0.08", filedMinutesAgo: 74 * HOUR, state: "OPEN", replyMinutesAfter: 5 * HOUR, reply: "The call finished in 7.8 s; our logs show a 200.", refundGuaranteed: true },
-    { id: "d0c1a2b3-0203-4e00-8000-000000000203", intentId: "f1a2b3c4-0203-4e00-8000-000000000203", toolId: "weather-now", bindingId: null, providerId: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", reason: "WRONG_DATA", reasonLabel: REASON_LABEL.WRONG_DATA!, note: "Sunny, during a storm warning.", amount: "0.004", filedMinutesAgo: 60 * HOUR, state: "OPEN", replyMinutesAfter: 6 * HOUR, reply: "Our source updates every 15 minutes; the warning came after the call.", refundGuaranteed: true },
-    { id: "d0c1a2b3-0204-4e00-8000-000000000204", intentId: "f1a2b3c4-0204-4e00-8000-000000000204", toolId: "fx-rates", bindingId: null, providerId: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", reason: "EMPTY_OR_GARBAGE", reasonLabel: REASON_LABEL.EMPTY_OR_GARBAGE!, note: "An empty rates table.", amount: "0.002", filedMinutesAgo: 55 * HOUR, state: "OPEN", refundGuaranteed: true },
+    { id: "d0c1a2b3-0201-4e00-8000-000000000201", intentId: "f1a2b3c4-0201-4e00-8000-000000000201", toolId: "vessel-positions", bindingId: null, providerId: "b7e04c25-9d13-4a6f-bc80-1e5f3a7d9c62", reason: "WRONG_DATA", reasonLabel: REASON_LABEL.WRONG_DATA!, note: "The ship is shown on land.", amount: "6.00", filedMinutesAgo: 50 * HOUR, state: "OPEN", refundGuaranteed: true, needsSecondOperator: true },
+    { id: "d0c1a2b3-0202-4e00-8000-000000000202", intentId: "f1a2b3c4-0202-4e00-8000-000000000202", toolId: "chain-activity", bindingId: null, providerId: "17d6c0a4-8b39-4e52-a1f7-59c2b8e3d07f", reason: "OTHER", reasonLabel: REASON_LABEL.OTHER!, note: "The provider charged for a call that timed out.", amount: "0.08", filedMinutesAgo: 74 * HOUR, state: "OPEN", replyMinutesAfter: 5 * HOUR, reply: "The call finished in 7.8 s; our logs show a 200.", refundGuaranteed: true },
+    { id: "d0c1a2b3-0203-4e00-8000-000000000203", intentId: "f1a2b3c4-0203-4e00-8000-000000000203", toolId: "weather-now", bindingId: null, providerId: "9c1d4f60-3a77-4c18-9b02-6e5a1f2d8b41", reason: "WRONG_DATA", reasonLabel: REASON_LABEL.WRONG_DATA!, note: "Sunny, during a storm warning.", amount: "0.004", filedMinutesAgo: 60 * HOUR, state: "OPEN", replyMinutesAfter: 6 * HOUR, reply: "Our source updates every 15 minutes; the warning came after the call.", refundGuaranteed: true },
+    { id: "d0c1a2b3-0204-4e00-8000-000000000204", intentId: "f1a2b3c4-0204-4e00-8000-000000000204", toolId: "fx-rates", bindingId: null, providerId: "3f8a2b71-5c04-4d9e-8a16-7b2c9e0d4a53", reason: "EMPTY_OR_GARBAGE", reasonLabel: REASON_LABEL.EMPTY_OR_GARBAGE!, note: "An empty rates table.", amount: "0.002", filedMinutesAgo: 55 * HOUR, state: "OPEN", refundGuaranteed: true },
     b[4]!,
     b[5]!,
     ...queueFiller(),
@@ -917,6 +921,15 @@ function operatorSpecs(): DisputeSpec[] {
     b[3]!,
   ];
 }
+
+/** Each demo listing's provider, as the catalogue names it (fixtures-explore), so the operator sees who serves what. */
+const PROVIDER_OF_TOOL: Readonly<Record<string, string>> = {
+  "market-quote": "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09", // Tidewater Markets
+  "fx-rates": "3f8a2b71-5c04-4d9e-8a16-7b2c9e0d4a53", // Meridian Index
+  "chain-activity": "17d6c0a4-8b39-4e52-a1f7-59c2b8e3d07f", // Quanta Signals
+  "vessel-positions": "b7e04c25-9d13-4a6f-bc80-1e5f3a7d9c62", // Northwind Geo
+  "weather-now": "9c1d4f60-3a77-4c18-9b02-6e5a1f2d8b41", // Helios Data Labs
+};
 
 /** Enough open disputes that the operator queue has more than one page. */
 function queueFiller(): DisputeSpec[] {
@@ -930,7 +943,7 @@ function queueFiller(): DisputeSpec[] {
       intentId: `f1a2b3c4-0300-4e00-8000-${n}`,
       toolId: tools[i % tools.length]!,
       bindingId: null,
-      providerId: "5a2c9e18-7f46-4b03-9d51-8c6e2a4f7b09",
+      providerId: PROVIDER_OF_TOOL[tools[i % tools.length]!]!,
       reason,
       reasonLabel: REASON_LABEL[reason]!,
       note: null,
@@ -1184,6 +1197,25 @@ const FIXTURES: readonly DemoFixture[] = [
         return refuse("TOOL_PROVIDER_TOOL_INVALID", "Not a valid provider tool", 400, path, { problems: ["the URL can't be read"] });
       }
       if (/^(localhost|127\.|10\.|192\.168\.)/.test(parsed.hostname)) refuse("TOOL_PROVIDER_TOOL_INVALID", "Not a valid provider tool", 400, path, { problems: ["a private address can't be tried"] });
+      // An OpenAPI document with several operations needs one named; one with a security scheme answers 401 until a header is sent.
+      const operations = [...openapi.matchAll(/operationId:\s*["']?([A-Za-z0-9_.-]+)/g)].map((m) => m[1]!);
+      const operationId = typeof data?.operationId === "string" ? data.operationId : null;
+      if (openapi && operations.length > 1 && !(operationId && operations.includes(operationId))) {
+        refuse("TOOL_PROVIDER_TOOL_INVALID", "Not a valid provider tool", 400, path, { problems: [`name the operation to try (operationId); there are: ${operations.join(", ")}`] });
+      }
+      const headerNames = data?.headers && typeof data.headers === "object" ? Object.keys(data.headers as Record<string, unknown>).map((n) => n.toLowerCase()) : [];
+      if (openapi && /securitySchemes|security:/.test(openapi) && headerNames.length === 0) {
+        return {
+          source: "OPENAPI",
+          ran: true,
+          passed: false,
+          ranAt: new Date().toISOString(),
+          request: { method: "GET", url: `${parsed.origin}${parsed.pathname}`, headerNames: [] },
+          upstream: { status: 401, latencyMs: 96, contentType: "application/json", bodyKind: "JSON", body: { error: "unauthorized" }, transportError: null },
+          inferred: { endpoint: `${parsed.origin}${parsed.pathname}`, inputSchema: { type: "object", properties: {}, required: [] }, outputSchema: null, examples: [], requestMapping: { method: "GET", path: parsed.pathname }, responseMapping: null, operationId },
+          warnings: [{ code: "AUTH_REQUIRED", detail: "The endpoint answered 401." }],
+        };
+      }
       const params = [...parsed.searchParams.keys()];
       const inputs = params.length > 0 ? params : ["query"];
       const credential = /authorization|x-api-key|bearer/i.test(curl);
@@ -1195,9 +1227,9 @@ const FIXTURES: readonly DemoFixture[] = [
         ran: true,
         passed: true,
         ranAt: new Date().toISOString(),
-        request: { method: "GET", url: `${parsed.origin}${parsed.pathname}`, headerNames: credential ? ["authorization"] : [] },
+        request: { method: "GET", url: `${parsed.origin}${parsed.pathname}`, headerNames: credential ? ["authorization"] : headerNames },
         upstream: { status: 200, latencyMs: 184, contentType: "application/json", bodyKind: "JSON", body: { results: ["first result", "second result"], total: 2 }, transportError: null },
-        inferred: { endpoint: `${parsed.origin}${parsed.pathname}`, inputSchema, outputSchema, examples: [{ title: "A call", arguments: args, result: { results: ["first result", "second result"], total: 2 } }], requestMapping: { method: "GET", path: parsed.pathname }, responseMapping: { results: "$.body.results", total: "$.body.total" }, operationId: null },
+        inferred: { endpoint: `${parsed.origin}${parsed.pathname}`, inputSchema, outputSchema, examples: [{ title: "A call", arguments: args, result: { results: ["first result", "second result"], total: 2 } }], requestMapping: { method: "GET", path: parsed.pathname }, responseMapping: { results: "$.body.results", total: "$.body.total" }, operationId },
         warnings: credential ? [{ code: "CREDENTIAL_DETECTED", detail: "A credential was sent with the test only." }] : [],
       };
     },

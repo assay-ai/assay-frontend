@@ -40,7 +40,7 @@ export function DisputeChip({ view }: { view: DisputeStatusView }) {
 }
 
 /** The clock in the 40 px-friendly stepper: reported, reply, decision, refund. */
-export function DisputeTimeline({ dispute, side, now, onElapsed }: { dispute: CallDispute; side: "buyer" | "provider"; now: number; onElapsed?: () => void }) {
+export function DisputeTimeline({ dispute, side, now, onElapsed }: { dispute: CallDispute; side: "buyer" | "provider" | "operator"; now: number; onElapsed?: () => void }) {
   return <StatusTimeline steps={disputeTimeline(dispute, now, side)} label="Report status" alwaysDay onElapsed={onElapsed} />;
 }
 
