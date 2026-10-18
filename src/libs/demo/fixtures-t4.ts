@@ -1106,6 +1106,8 @@ function publicToolOf(spec: ToolSpec): PublicTool {
     pricingMode: "PAID",
     routable: true,
     settlementChains: ["eip155:46630"],
+    // A maker's own API: one chain, one listing. Its maker is not on the public provider list, so it is not named.
+    prices: [{ chainId: "eip155:46630", price: usd("0.002"), providerId: null }],
     paidBindings: 1,
     freeCallsPerDay: null,
     kind: "PROVIDER",

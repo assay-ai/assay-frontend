@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { notChargedSplit } from "@/features/explorer/explorer-text";
-import type { CatalogueTool } from "@/services/catalogue.service";
+import type { CatalogueProviderDetail, CatalogueTool } from "@/services/catalogue.service";
 import type { PublicNotCharged, PublicProviderDetail, PublicTool } from "@/services/public-explorer.service";
 
 import { demoResponse } from "./demo-api";
@@ -44,6 +44,36 @@ describe("demo: the provider console's public links resolve", () => {
     const { items } = get<{ items: { toolId: string; status: string }[] }>("/providers/me/tool-bindings");
     for (const binding of items) {
       expect(ids.has(binding.toolId)).toBe(binding.status === "ACTIVE");
+    }
+  });
+});
+
+describe("demo: prices per chain and promised failure rates (B3)", () => {
+  it("states each routable tool's price per chain, set by a listed provider at that price", () => {
+    const { tools } = get<{ tools: PublicTool[] }>("/public/catalogue/tools");
+    const { providers } = get<{ providers: { providerId: string }[] }>("/public/catalogue/providers");
+    const standard = tools.filter((t) => t.routable && (t.kind ?? "STANDARD") === "STANDARD");
+    expect(standard.length).toBeGreaterThan(0);
+    for (const tool of standard) {
+      expect(tool.prices?.map((p) => p.chainId), tool.name).toEqual(tool.settlementChains);
+      const [entry] = tool.prices!;
+      expect(entry.price).toEqual(tool.price);
+      expect(providers.some((p) => p.providerId === entry.providerId), tool.name).toBe(true);
+      const detail = get<PublicProviderDetail>(`/public/catalogue/providers/${entry.providerId}`);
+      expect(detail.tools.find((t) => t.toolId === tool.id)?.price).toEqual(entry.price);
+    }
+    for (const tool of tools.filter((t) => !t.routable)) expect(tool.prices ?? []).toEqual([]);
+  });
+
+  it("gives every listing a promised failure rate, on the public and the signed-in detail alike", () => {
+    const { providers } = get<{ providers: { providerId: string }[] }>("/public/catalogue/providers");
+    for (const { providerId } of providers) {
+      const detail = get<PublicProviderDetail>(`/public/catalogue/providers/${providerId}`);
+      const signed = get<CatalogueProviderDetail>(`/catalogue/providers/${providerId}`);
+      for (const tool of detail.tools) {
+        expect(tool.promisedFailureRate).toBeGreaterThan(0);
+        expect(tool.promisedFailureRate).toBe(signed.tools.find((t) => t.toolId === tool.toolId)?.promisedFailureRate);
+      }
     }
   });
 });
