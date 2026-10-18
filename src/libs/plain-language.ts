@@ -435,6 +435,8 @@ const ERRORS: Record<string, string> = {
   INVALID_CREDENTIAL_HEADERS: "Some header names or values aren't allowed. Check the highlighted rows.",
   CREDENTIAL_ORIGIN_MISMATCH: "These headers belong to an old address. Enter them again for the current endpoint.",
   CREDENTIAL_VAULT_UNAVAILABLE: "We can't reach the key store right now. Your API wasn't called. Try again in a minute.",
+  CREDENTIAL_VAULT_NOT_CONFIGURED:
+    "Key storage isn't set up on this server, so headers can't be saved. Nothing was stored. Tell Assay support.",
   ENDPOINT_PORT_NOT_SUPPORTED:
     "Your API uses a port Assay can't reach. Use port 443 or one of 8443, 2053, 2083, 2087, 2096.",
   RESERVED_MAPPING_HEADER: "Headers starting with x-assay- are set by Assay. Remove this header from your mapping.",
@@ -446,14 +448,28 @@ const ERRORS: Record<string, string> = {
 
 const ERROR_PREFIXES = ["MCP_", "PAYMENT_", "SETTLEMENT_", "PROVIDER_", "TOOL_"];
 
-/** An API error code as one sentence. Unknown codes get a safe generic sentence. */
-export function plainError(code: string | null | undefined): string {
-  if (!code) return "Something went wrong. Try again.";
-  if (ERRORS[code]) return ERRORS[code]!;
+/**
+ * An API error code as one sentence. Unknown codes get a safe generic
+ * sentence; pass the HTTP status (`ApiError.status`) and an unknown 5xx says
+ * it is Assay's side, instead of "Something went wrong". It does not claim
+ * nothing changed: a 5xx does not prove that.
+ */
+export function plainError(code: string | null | undefined, status?: number): string {
+  if (code && ERRORS[code]) return ERRORS[code]!;
   for (const prefix of ERROR_PREFIXES) {
-    if (code.startsWith(prefix) && ERRORS[code.slice(prefix.length)]) return ERRORS[code.slice(prefix.length)]!;
+    if (code?.startsWith(prefix) && ERRORS[code.slice(prefix.length)]) return ERRORS[code.slice(prefix.length)]!;
   }
+  if (status !== undefined && status >= 500) return serverErrorSentence(status);
+  if (!code) return "Something went wrong. Try again.";
   return "Something went wrong. Try again, and if it keeps happening, contact support.";
+}
+
+/** An unknown 5xx: Assay's side, and what to do. */
+function serverErrorSentence(status: number): string {
+  if (status === 503 || status === 502 || status === 504) {
+    return `This part of Assay is unavailable right now (HTTP ${status}). Try again in a few minutes; if it keeps happening, tell Assay support.`;
+  }
+  return `Something failed on Assay's side (HTTP ${status}). Try again; if it keeps happening, tell Assay support.`;
 }
 
 /** Whether the dictionary has a sentence of its own for this code. */
