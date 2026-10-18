@@ -19,11 +19,13 @@ import {
   checkSlashDelay,
   confirmWordMatches,
   daysToSeconds,
+  dollars,
   delayToForm,
   formToParams,
   moneyToRaw,
   paramChanges,
   paramsToForm,
+  paramText,
   percentToBps,
   splitText,
   verifierStatusText,
@@ -98,11 +100,18 @@ describe("formToParams mirrors X402Config._validate", () => {
 
   it("checks that two penalties fit the minimum stake's cap and the verifier's day", () => {
     // 10% of 100 = 10; two penalties of 6 = 12 do not fit.
-    expect(errorsOf({ penaltyAmount: "6" }).penaltyAmount).toMatch(/10% of 100 USDG is 10 USDG/);
+    expect(errorsOf({ penaltyAmount: "6" }).penaltyAmount).toMatch(/10% of \$100\.00 is \$10\.00/);
     expect(errorsOf({ penaltyAmount: "5" }).penaltyAmount).toBeUndefined();
-    expect(errorsOf({ verifierDailyCap: "1.5" }).verifierDailyCap).toMatch(/2 USDG or more/);
+    expect(errorsOf({ verifierDailyCap: "1.5" }).verifierDailyCap).toMatch(/\$2\.00 or more/);
     // A penalty of 0 (shadow mode) needs no allowance.
     expect(errorsOf({ penaltyAmount: "0" })).toEqual({});
+  });
+
+  it("writes money in dollars, never in the token's symbol (B12)", () => {
+    expect(paramText("penaltyAmount", PARAMS, ASSET)).toMatch(/^\$\d/);
+    expect(paramText("minimumStake", PARAMS, ASSET)).not.toMatch(/USDG/);
+    expect(dollars(BigInt(1_000_000), 6)).toBe("$1.00");
+    expect(dollars(BigInt(500_000_000), 6)).toBe("$500.00");
   });
 
   it("lists only what changed, addresses flagged", () => {
