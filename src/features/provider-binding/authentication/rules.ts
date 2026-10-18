@@ -61,6 +61,34 @@ export function credentialQueryKeys(endpoint: string): string[] {
   return found;
 }
 
+/**
+ * "Move it to an API key header": the address without its credential-like
+ * query parameters, and each one as a header to store instead. The values
+ * only ever go to the write-only headers form; the address that is saved
+ * never carries them.
+ */
+export function moveQueryKeys(endpoint: string): { endpoint: string; headers: CredentialHeaderInput[] } | null {
+  let url: URL;
+  try {
+    url = new URL(endpoint.trim());
+  } catch {
+    return null;
+  }
+  const headers: CredentialHeaderInput[] = [];
+  for (const [key, value] of [...url.searchParams.entries()]) {
+    if (!isCredentialQueryKey(key)) continue;
+    if (!headers.some((header) => header.name === key)) headers.push({ name: key, value });
+    url.searchParams.delete(key);
+  }
+  if (headers.length === 0) return null;
+  // `URL` keeps a bare "?" once the last parameter is gone, and adds a "/" to
+  // a bare origin: give the address back as the provider typed it.
+  let text = url.href.replace(/\?$/, "");
+  const typedHadPath = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]+\//i.test(endpoint.trim());
+  if (!typedHadPath && url.pathname === "/") text = text.replace(/\/(?=$|[?#])/, "");
+  return { endpoint: text, headers };
+}
+
 function headerProblem(header: CredentialHeaderInput): string | null {
   const name = header.name.trim();
   if (name === "") return "Header name is required.";
