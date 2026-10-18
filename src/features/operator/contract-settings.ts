@@ -59,11 +59,16 @@ export const PARAM_GROUPS: readonly ParamGroup[] = [
   {
     title: "Penalties",
     fields: [
-      { key: "penaltyAmount", label: "Penalty per failed check", kind: "money", help: "What one upheld penalty takes from a provider's stake. 0 records penalties without taking anything." },
+      {
+        key: "penaltyAmount",
+        label: "Most one penalty part can take",
+        kind: "money",
+        help: "A penalty is worked out per window off chain (its calls' value × how far over the declared failure rate × the multiplier), then split among the agents it harmed. Each agent's part is capped at this. 0 records penalties without taking anything.",
+      },
       { key: "slashCapBps", label: "Penalty cap (share of stake)", kind: "percent", help: `A share of the provider's stake. At most ${CONFIG_LIMITS.maxSlashCapBps / 100}%.` },
       { key: "slashAgentBps", label: "Paid to the agent", kind: "percent", help: "The share of a penalty paid to the agent whose calls failed. More than 0%." },
       { key: "slashPlatformBps", label: "Paid to the treasury", kind: "percent", help: "The share kept by Assay. The rest stays with the provider." },
-      { key: "verifierDailyCap", label: "Verifier daily limit", kind: "money", help: "The most one verifier key can penalise in a day. At least two penalties." },
+      { key: "verifierDailyCap", label: "Verifier daily limit", kind: "money", help: "The most one verifier key can penalise in a day, all parts together. At least two penalty parts." },
     ],
   },
   {
@@ -177,7 +182,7 @@ export function formToParams(
   const money = (key: "minimumStake" | "penaltyAmount" | "verifierDailyCap"): bigint | null => {
     const raw = moneyToRaw(form[key], context.decimals);
     if (raw === null) {
-      errors[key] = `Enter an amount in ${context.symbol}, with at most ${context.decimals} decimals.`;
+      errors[key] = `Enter a dollar amount, with at most ${context.decimals} decimals.`;
       return null;
     }
     return raw;
@@ -215,7 +220,7 @@ export function formToParams(
   if (verifierDailyCap !== null && verifierDailyCap === BigInt(0)) errors.verifierDailyCap = "The daily limit must be more than 0.";
   if (penaltyAmount !== null) {
     const two = BigInt(2) * penaltyAmount;
-    const fmt = (raw: bigint) => `${formatUnits(raw, context.decimals)} ${context.symbol}`;
+    const fmt = (raw: bigint) => dollars(raw, context.decimals);
     // `minimumStake * slashCapBps / 10_000 >= 2 * penaltyAmount`: two maximal penalties fit a provider at the minimum.
     if (minimumStake !== null && minimumStake > BigInt(0) && slashCapBps !== null && slashCapBps > 0 && !errors.minimumStake) {
       const capAtMinimum = (minimumStake * BigInt(slashCapBps)) / BigInt(10_000);
@@ -247,7 +252,16 @@ export function formToParams(
   };
 }
 
-/** One setting as people read it: "10%", "1 USDG", "11 days", "0x4246…0388". */
+/**
+ * A token amount in dollars, as every other operator page writes money: the
+ * settlement token is a dollar stablecoin, so "$1.00", never "1 USDG".
+ */
+export function dollars(raw: bigint, decimals: number): string {
+  const value = Number(formatUnits(raw, decimals));
+  return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: Math.max(2, decimals) })}`;
+}
+
+/** One setting as people read it: "10%", "$1.00", "11 days", "0x4246…0388". */
 export function paramText(key: ConfigParamKey, params: ConfigParams, asset: { decimals: number; symbol: string }): string {
   const value = params[key];
   switch (paramField(key).kind) {
@@ -256,7 +270,7 @@ export function paramText(key: ConfigParamKey, params: ConfigParams, asset: { de
     case "percent":
       return `${Number(value) / 100}%`;
     case "money":
-      return `${Number(formatUnits(value as bigint, asset.decimals)).toLocaleString("en-US", { maximumFractionDigits: asset.decimals })} ${asset.symbol}`;
+      return dollars(value as bigint, asset.decimals);
     case "days":
       return durationWords(Number(value));
   }

@@ -31,7 +31,8 @@ import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { chainDisplayName, durationWords } from "@/features/operator/call-summary";
+import { durationText } from "@/features/operator/arbiter";
+import { chainDisplayName } from "@/features/operator/call-summary";
 import { ContractCallAction } from "@/features/operator/contract-call-action";
 import {
   PARAM_GROUPS,
@@ -247,7 +248,7 @@ function ContractsScreen() {
             description="How long a provider has to dispute a penalty before it can be taken."
             action={<Button size="sm" variant="secondary" onClick={() => setSheet("delay")}>Change</Button>}
           >
-            <p className="text-heading-sm tabular-nums text-01">{durationWords(data.slashDelaySeconds)}</p>
+            <p className="text-heading-sm tabular-nums text-01">{durationText(data.slashDelaySeconds)}</p>
           </SettingCard>
 
           <SettingCard
@@ -846,7 +847,7 @@ function ParamsSheet({ open, settings, deployment, onClose, onDone }: SheetProps
                 inputMode={field.kind === "address" ? "text" : "decimal"}
                 autoComplete="off"
                 spellCheck={false}
-                suffix={field.kind === "percent" ? "%" : field.kind === "money" ? settings.asset.symbol : field.kind === "days" ? "days" : undefined}
+                suffix={field.kind === "percent" ? "%" : field.kind === "money" ? "$" : field.kind === "days" ? "days" : undefined}
                 hint={
                   changed && field.kind !== "address"
                     ? `${field.help} Now ${paramText(field.key, settings.params, settings.asset)}.`
@@ -893,7 +894,7 @@ function DelaySheet({ open, settings, deployment, onClose, onDone }: SheetProps)
         }
         return {
           call: { functionName: "setSlashDelay", args: [BigInt(checked.seconds)] },
-          changes: [{ label: "Dispute window", before: durationWords(settings.slashDelaySeconds), after: durationWords(checked.seconds) }],
+          changes: [{ label: "Dispute window", before: durationText(settings.slashDelaySeconds), after: durationText(checked.seconds) }],
         };
       }}
       signLabel="Sign and save the window"
@@ -910,7 +911,7 @@ function DelaySheet({ open, settings, deployment, onClose, onDone }: SheetProps)
             setError(undefined);
           }}
           inputMode="numeric"
-          hint={`10 minutes to 22 days. Now ${durationWords(settings.slashDelaySeconds)}.`}
+          hint={`10 minutes to 22 days. Now ${durationText(settings.slashDelaySeconds)}.`}
           error={error}
         />
         <Segmented value={unit} onValueChange={(next) => setUnit(next as DelayUnit)} aria-label="Unit">
