@@ -29,12 +29,22 @@ export function attentionAction(note: {
       if (notice) return contractNoticeAction(notice);
       return note.subjectId ? { label: "See the versions", href: routes.exploreTool(note.subjectId) } : null;
     }
+    case "call_dispute.opened":
     case "call_dispute.responded":
     case "call_dispute.decided":
-    case "call_dispute.refunded":
+    case "call_dispute.refunded": {
+      // The payload says whose side the notice is for: the provider's goes to its console.
+      const provider = (note.payload as { role?: unknown } | null | undefined)?.role === "provider";
+      if (provider) return note.subjectId ? { label: note.event === "call_dispute.opened" ? "Reply" : "Open the report", href: routes.providerCallDispute(note.subjectId) } : { label: "Open reports", href: "/provider/call-disputes" };
       return note.subjectId ? { label: "See the report", href: routes.callDispute(note.subjectId) } : { label: "See your reports", href: "/spend/disputes" };
-    case "call_dispute.opened":
-      return note.subjectId ? { label: "Reply", href: routes.providerCallDispute(note.subjectId) } : { label: "Open disputes", href: "/provider/call-disputes" };
+    }
+    case "provider_tool.approved":
+    case "provider_tool.rejected":
+    case "provider_tool.taken_down":
+    case "provider_tool.takedown_lifted":
+      return note.subjectId ? { label: "Open your API", href: routes.providerApi(note.subjectId) } : { label: "Your own APIs", href: "/provider/apis" };
+    case "provider_tool.promotion_invited":
+      return { label: "See the invitation", href: "/provider/apis" };
     case "balance.low":
     case "balance.zero":
     case "deposit.failed":

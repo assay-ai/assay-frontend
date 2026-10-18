@@ -26,6 +26,7 @@ import { routes } from "@/libs/routes";
 import type { PublicHandleTool, PublicToolsetCard, PublicToolsetPage } from "@/services/public-toolsets.service";
 import type { PublicTool } from "@/services/public-explorer.service";
 import { cn } from "@/utils";
+import { formatMoney } from "@/utils/money";
 
 import { ConnectPanel } from "./connect-panel";
 import { Chip, CopyButton, CopyLine, CopyToolsetSheet, DiffView, FigureGrid, ReportSheet } from "./toolset-bits";
@@ -567,7 +568,7 @@ export function PublicHandleView() {
         </p>
       </header>
       {data.tools.length > 0 ? <ConnectPanel publicPage url={data.mcpUrl ?? buildMcpUrl({ kind: "maker", handle: data.handle }, { free: false }, mcpHost())} title={`Connect every tool from @${data.handle}`} /> : null}
-      {data.tools.length > 0 ? <HandleTools handle={data.handle} tools={data.tools} /> : null}
+      {data.tools.length > 0 ? <HandleTools handle={data.handle} tools={data.tools} catalogue={tools.data?.tools ?? []} /> : null}
       {data.toolsets.length === 0 ? (
         data.tools.length > 0 ? null : (
           <PageState kind="empty" title={`@${data.handle} has not listed a tool set yet`} description="Tools and tool sets shared only by link do not show here." action={{ label: "See all tool sets", href: "/catalogue?view=toolsets" }} />
@@ -604,13 +605,22 @@ export function PublicHandleView() {
  * was reviewed; one maker serves each, so none has a backup provider. The
  * tier is at most "Verified".
  */
-export function HandleTools({ handle, tools }: { handle: string; tools: PublicHandleTool[] }) {
+export function HandleTools({ handle, tools, catalogue = [] }: { handle: string; tools: PublicHandleTool[]; catalogue?: readonly PublicTool[] }) {
+  const priceOf = (id: string) => {
+    const row = catalogue.find((t) => t.id === id);
+    if (!row) return null;
+    if (row.pricingMode === "FREE") return "Free";
+    return row.price ? `${formatMoney(row.price, { decimals: 4 })} a call` : null;
+  };
   return (
     <section aria-labelledby="handle-tools-title" className="flex flex-col gap-2" data-testid="handle-tools">
       <h2 id="handle-tools-title" className="text-label-md text-01">
         Tools by @{handle} <span className="text-body-13 text-03">· {tools.length}</span>
       </h2>
-      <p className="text-body-13 text-03">One maker&apos;s own APIs: only @{handle} serves them, so there is no backup provider.</p>
+      <p className="text-body-13 text-03">One maker&apos;s own APIs: only @{handle} serves them, so there is no backup provider. Each one was reviewed by Assay before it was listed.</p>
+      <p className="text-body-xs text-03" data-testid="tier-explainer">
+        <span className="text-label-xs text-02">Verified</span>: the reviewer vouches that it does what it says. <span className="text-label-xs text-02">Unverified</span>: listed, but its answers could not be judged as well. A maker&apos;s own API is never Guaranteed.
+      </p>
       <ul className="flex flex-col divide-y divide-01 overflow-hidden rounded-xl border border-01 bg-01">
         {tools.map((tool) => (
           <li key={tool.id}>
@@ -626,7 +636,9 @@ export function HandleTools({ handle, tools }: { handle: string; tools: PublicHa
                   ) : (
                     <Chip>Unverified</Chip>
                   )}
-                  {tool.reviewed ? null : (
+                  {tool.reviewed ? (
+                    <Chip>Reviewed</Chip>
+                  ) : (
                     <Chip tone="warning">
                       <ShieldAlert aria-hidden="true" className="size-3" />
                       Not reviewed
@@ -636,6 +648,7 @@ export function HandleTools({ handle, tools }: { handle: string; tools: PublicHa
                 </span>
                 {tool.summary ? <span className="line-clamp-2 text-body-13 text-02">{tool.summary}</span> : null}
                 <span className="text-body-xs text-03">
+                  {priceOf(tool.id) ? `${priceOf(tool.id)} · ` : ""}
                   {tool.category}
                   {tool.replacementName ? ` · now also a standard tool with backups: ${tool.replacementName}` : ""}
                 </span>

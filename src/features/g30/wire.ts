@@ -109,6 +109,8 @@ export interface Receipt {
   collectableAt?: string | null;
   /** Report before this and an upheld dispute refunds the call in full; after it, a quality signal. */
   disputeWindowEndsAt?: string | null;
+  /** "Report a bad result" is accepted until then; null when the call cannot be reported. */
+  disputeFilingClosesAt?: string | null;
 }
 
 /* ------------------------------------------------------------------- summary */

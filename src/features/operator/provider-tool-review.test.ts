@@ -46,6 +46,17 @@ describe("operator navigation with provider tools and call disputes", () => {
     expect(operatorTitleFor("/operator/disputes/view")).toBe("Call dispute");
   });
 
+  it("every demo preset and every single role fits the bar, Contracts for Admin only", () => {
+    const presets: OperatorRole[][] = [["ADJL", "POL"], ["SRE", "SUP"], ["OPS_ADMIN"], ["ADJ"], ["ADJL", "TRE", "POLA"]];
+    for (const roles of [...presets, ...ALL.map((r) => [r])]) {
+      const items = operatorNavFor(roles);
+      expect(items.length).toBeLessThanOrEqual(8);
+      expect(items.some((i) => i.id === "contracts")).toBe(roles.includes("OPS_ADMIN"));
+    }
+    expect(operatorNavFor(["ADJL", "POL"]).map((i) => i.id)).toEqual(["home", "penalties", "blocks", "arbiter", "tools", "team", "activity"]);
+    expect(operatorNavFor(["ADJL", "POL", "OPS_ADMIN"])).toHaveLength(8);
+  });
+
   it("offers only the Tools tabs a role can use", () => {
     expect(operatorToolsTabs(["POL"]).map((t) => t.id)).toEqual(["standard", "reviews", "promotions"]);
     expect(operatorToolsTabs(["ADJ"]).map((t) => t.id)).toEqual(["reviews", "takedowns"]);
@@ -93,6 +104,7 @@ describe("takedowns", () => {
     id: "c1",
     targetType: "TOOL",
     targetId: "t1",
+    targetName: "acme__x",
     action: "TAKEDOWN",
     actedBy: "op-1",
     actedAt: "2026-10-18T00:00:00.000Z",

@@ -191,6 +191,8 @@ export interface OperatorToolList {
 /** `GET /operator/tools/:id` (`OperatorToolDto`). */
 export interface OperatorTool extends OperatorToolSummary {
   replacementToolId: string | null;
+  /** The earliest `sunsetAt` a deprecation accepts if sent now (the API states it; absent on an older backend). */
+  earliestSunsetAt?: string;
   /** Published versions, newest first. */
   versions: ToolContractVersion[];
   draft: ContractDraft | null;

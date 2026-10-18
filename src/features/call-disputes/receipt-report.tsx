@@ -34,6 +34,9 @@ export function ReceiptReport({ receipt, toolName }: { receipt: Receipt; toolNam
   const hold = reportWindow(receipt, now);
   const openReport = latest && latest.state === "OPEN" ? latest : null;
 
+  // The API says when a call can't be reported at all (not settled, free, your own): no button then.
+  if (!latest && !receipt.disputeFilingClosesAt) return null;
+
   if (latest) {
     const status = buyerStatus(latest, now);
     return (

@@ -133,8 +133,10 @@ const VERSION_TONE: Record<string, "neutral" | "warning" | "danger" | "success">
 };
 
 /** Published versions, newest first, with the one agents get and what each changed. */
-export function VersionHistory({ tool, onDeprecate }: { tool: Pick<ProviderTool, "versions" | "currentVersion" | "visibility">; onDeprecate?: (row: VersionRow) => void }) {
+export function VersionHistory({ tool, onDeprecate }: { tool: Pick<ProviderTool, "versions" | "currentVersion" | "visibility" | "status" | "removedAt">; onDeprecate?: (row: VersionRow) => void }) {
   const rows = versionRows(tool);
+  // A taken-down tool serves no version, whatever each one's own status says.
+  const removed = Boolean(tool.removedAt) || tool.status === "REMOVED";
   if (rows.length === 0) return <p className="text-body-13 text-03">No version is published yet.</p>;
   return (
     <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01" data-testid="version-history">
@@ -143,8 +145,8 @@ export function VersionHistory({ tool, onDeprecate }: { tool: Pick<ProviderTool,
           <span className="flex min-w-0 flex-col gap-1">
             <span className="flex flex-wrap items-center gap-1.5">
               <span className="font-mono text-mono-13 text-01">v{row.semver}</span>
-              <Chip tone={VERSION_TONE[row.status] ?? "neutral"}>{row.statusLabel}</Chip>
-              {row.isCurrent ? <Chip tone="primary">Agents get this one</Chip> : null}
+              {removed ? <Chip tone="danger">Not served</Chip> : <Chip tone={VERSION_TONE[row.status] ?? "neutral"}>{row.statusLabel}</Chip>}
+              {row.isCurrent && !removed ? <Chip tone="primary">Agents get this one</Chip> : null}
               {tool.visibility === "LISTED" || row.approved ? row.approved ? <Chip tone="success">Reviewed</Chip> : <Chip tone="warning">Not reviewed</Chip> : null}
             </span>
             <span className="text-body-xs text-03">

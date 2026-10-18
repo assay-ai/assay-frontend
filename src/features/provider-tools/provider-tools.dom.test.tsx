@@ -66,6 +66,7 @@ const base: ProviderTool = {
   binding: { bindingId: "b1", status: "ACTIVE", mappingVersion: 1, publishedVersion: 1 },
   mcpUrls: { handle: null },
   quality: { windowDays: 30, calls: 0, schemaFailures: 0, schemaPassRate: null, rulesJudged: 0, rulesFailed: 0, rulesPassRate: null, slaVerifiedCalls: 0, slaFailedCalls: 0, slaFailureRate: null, disputesDecided: null, disputesUpheld: null, quality: null, maxTier: "VERIFIED" },
+  earliestSunsetAt: "2027-01-20T00:00:00.000Z",
 };
 
 const failing: ProviderToolGate = {
@@ -112,7 +113,8 @@ describe("step 1 on a saved tool", () => {
     const words = text(render(<NameStep tool={base} onContinue={() => undefined} />));
     expect(words).toContain("acme__search_posts");
     expect(words).toContain("mcp__acme__acme__search_posts");
-    expect(words).toContain("29 of 64 characters");
+    expect(words).toContain("Agents call it (18 of 48 characters)");
+    expect(words).toContain("How an agent app shows it");
   });
 });
 

@@ -121,10 +121,13 @@ function Tile({ label, value, opens = "page" }: { label: string; value: number |
 }
 
 /** Pending provider tool reviews and open call disputes: each a link to its queue. */
-function ToolWorkLinks({ work }: { work: ToolWork }) {
+function ToolWorkLinks({ work, readOnly }: { work: ToolWork; readOnly: { reviews: number; callDisputes: number } }) {
   const rows = [
     { count: work.reviews ?? 0, label: "Provider tools to review", hint: "First reviews and changes to listed tools, oldest first.", href: "/operator/tools/reviews" },
-    { count: work.callDisputes ?? 0, label: "Call disputes to decide", hint: "Buyers' reports of bad results; a silent provider is upheld at 72 h.", href: "/operator/disputes" },
+    { count: work.callDisputes ?? 0, label: "Call disputes to decide", hint: "Buyers' reports of bad results. An operator decides within 72 hours.", href: "/operator/disputes" },
+    { count: work.takedowns ?? 0, label: "Takedowns to confirm", hint: "Another operator took a provider tool down; confirm or reject it within 72 hours.", href: "/operator/tools/takedowns" },
+    { count: readOnly.reviews, label: "Provider tools in review (read only)", hint: "Deciding needs an Adjudicator, a Lead adjudicator or a Policy author.", href: "/operator/tools/reviews" },
+    { count: readOnly.callDisputes, label: "Call disputes (read only)", hint: "Deciding needs an Adjudicator or a Lead adjudicator.", href: "/operator/disputes" },
   ].filter((row) => row.count > 0);
   if (rows.length === 0) return null;
   return (
@@ -283,10 +286,12 @@ export default function OperatorHome() {
           </div>
           <QuickAction caps={caps} />
         </div>
-      ) : (
+      ) : null}
+      {nothing && !loading && !pending.isError ? <ToolWorkLinks work={{}} readOnly={toolWork.readOnly} /> : null}
+      {loading || pending.isError || nothing ? null : (
         <>
           {needsYouTotal === 0 ? <p className="text-body-13 text-03">Nothing needs you right now.</p> : null}
-          <ToolWorkLinks work={toolWork.work} />
+          <ToolWorkLinks work={toolWork.work} readOnly={toolWork.readOnly} />
           {groups.needsYou.length > 0 ? (
             <RowSection
               id="to-approve"
@@ -462,7 +467,7 @@ export default function OperatorHome() {
             </DropdownMenuContent>
           </DropdownMenu>
           <Link href={caps.rule ? "/operator/arbiter" : "/operator/cases"} className={TILE}>
-            <Tile label="Disputes open" value={openDisputes} />
+            <Tile label="Penalty disputes open" value={openDisputes} />
           </Link>
           <Link href="/operator/approvals" className={TILE}>
             <Tile label="Approvals waiting" value={pending.data ? openApprovals : null} />

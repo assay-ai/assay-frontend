@@ -13,6 +13,7 @@ import { routes } from "@/libs/routes";
 import {
   shareProviderToolUnlisted,
   submitProviderToolReview,
+  unpublishProviderTool,
   withdrawProviderToolReview,
   type ProviderTool,
   type ProviderToolGate,
@@ -155,13 +156,26 @@ export function ShareStep({ tool, gate, onStep }: { tool: ProviderTool; gate: Pr
     onError,
   });
   const withdraw = useMutation({ mutationFn: () => withdrawProviderToolReview(tool.id), onSuccess: store, onError });
+  const unshare = useMutation({
+    mutationFn: () => unpublishProviderTool(tool.id),
+    onSuccess: (updated) => {
+      store(updated);
+      toast.success(`${updated.name} is back to only your team. Link-only tool sets stop reaching it now.`);
+    },
+    onError,
+  });
 
   const options: { id: ProviderToolVisibility; title: string; body: React.ReactNode; disabled: boolean }[] = [
     {
       id: "PRIVATE",
       title: VISIBILITY_LABEL.PRIVATE,
-      body: "Your own agents call it through your private tool sets. Nothing outside your team sees it.",
-      disabled: tool.visibility !== "PRIVATE",
+      body:
+        tool.visibility === "LISTED"
+          ? "A listed tool can't go back to only your team from here: ask support to remove it from the catalogue."
+          : pending
+            ? "Withdraw the review first, then you can stop sharing it."
+            : "Your own agents call it through your private tool sets. Nothing outside your team sees it.",
+      disabled: tool.visibility === "LISTED" || pending,
     },
     {
       id: "UNLISTED",
@@ -171,6 +185,7 @@ export function ShareStep({ tool, gate, onStep }: { tool: ProviderTool; gate: Pr
           Anyone with the link to one of your link-only tool sets can call it. It is marked <NotReviewedChip /> and no other team can add it to their own tool sets.
         </>
       ),
+      // Once listed it stays reachable by everyone; "Anyone with the link" is a step down only via support.
       disabled: listed,
     },
     {
@@ -181,7 +196,7 @@ export function ShareStep({ tool, gate, onStep }: { tool: ProviderTool; gate: Pr
     },
   ];
 
-  const busy = share.isPending || submit.isPending || withdraw.isPending;
+  const busy = share.isPending || submit.isPending || withdraw.isPending || unshare.isPending;
   const sharedNote = tool.visibility !== "PRIVATE" ? "Your public name is locked now: it can only change through Assay support." : "Sharing locks your public name.";
 
   return (
@@ -260,7 +275,8 @@ export function ShareStep({ tool, gate, onStep }: { tool: ProviderTool; gate: Pr
         {choice === "LISTED" && pending ? (
           <>
             <p className="text-body-13 text-02">
-              In review{tool.review.submittedAt ? <> since <UtcTime value={tool.review.submittedAt} midSentence /></> : null}.
+              Review requested: Listed in the catalogue{tool.review.reviewSemver ? ` (v${tool.review.reviewSemver})` : ""}, sent{" "}
+              {tool.review.submittedAt ? <UtcTime value={tool.review.submittedAt} midSentence alwaysDay /> : null}.
             </p>
             <Button variant="secondary" loading={withdraw.isPending} onClick={() => withdraw.mutate()}>
               Withdraw the review
@@ -273,6 +289,11 @@ export function ShareStep({ tool, gate, onStep }: { tool: ProviderTool; gate: Pr
           </Button>
         ) : null}
         {choice === "PRIVATE" && tool.visibility === "PRIVATE" ? <p className="text-body-13 text-02">It stays with your team. You can share it any time.</p> : null}
+        {choice === "PRIVATE" && tool.visibility === "UNLISTED" && !pending ? (
+          <Button variant="secondary" loading={unshare.isPending} disabled={busy} onClick={() => unshare.mutate()}>
+            Stop sharing: only my team
+          </Button>
+        ) : null}
       </div>
 
       {tool.visibility === "UNLISTED" ? (

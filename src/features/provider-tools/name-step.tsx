@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, CircleDashed } from "lucide-react";
+import { Check } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
@@ -14,12 +14,15 @@ import { handleErrorView, handleProblem, normaliseHandle, type HandleErrorView }
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
 import { listPublicCategories } from "@/services/public-toolsets.service";
-import { createProviderTool, updateProviderTool, type ProviderTool } from "@/services/provider-tools.service";
+import { createProviderTool, listProviderTools, updateProviderTool, type ProviderTool } from "@/services/provider-tools.service";
 import { claimOrgHandle } from "@/services/toolsets.service";
 import { toast } from "@/utils/toast";
 
+import { TryPanel, type TryOutcome } from "./fields-editor";
+
 import {
   createBody,
+  FULL_NAME_MAX,
   fullToolName,
   localNameProblem,
   MODEL_NAME_MAX,
@@ -98,35 +101,43 @@ function HandleClaim() {
 }
 
 function NamePreview({ handle, localName }: { handle: string; localName: string }) {
+  const full = fullToolName(handle, localName || "your_tool");
   const seen = modelSeenName(handle, localName || "your_tool");
   const warning = localName ? nameLengthWarning(handle, localName) : null;
+  const tooLongForApps = seen.length > MODEL_NAME_MAX;
   return (
     <div className="flex flex-col gap-1 rounded-lg bg-02 px-3 py-2.5" data-testid="name-preview">
-      <p className="text-body-xs text-03">Agents call it</p>
-      <p className="break-all font-mono text-mono-13 text-01">{fullToolName(handle, localName || "your_tool")}</p>
-      <p className="pt-1 text-body-xs text-03">
-        A model sees it behind the client prefix ({seen.length} of {MODEL_NAME_MAX} characters)
+      <p className="text-body-xs text-03">
+        Agents call it ({full.length} of {FULL_NAME_MAX} characters)
       </p>
-      <p className="break-all font-mono text-mono-12 text-02">{seen}</p>
+      <p className="break-all font-mono text-mono-13 text-01">{full}</p>
       {warning ? <p className="text-body-xs text-warning-700">{warning}</p> : null}
+      {tooLongForApps ? (
+        <p className="text-body-xs text-warning-700">Some agent apps cut names longer than {MODEL_NAME_MAX} characters once they add their own prefix. A shorter tool name keeps the whole name visible.</p>
+      ) : null}
+      <details className="text-body-xs text-03">
+        <summary className="inline-flex min-h-10 cursor-pointer items-center">How an agent app shows it</summary>
+        <p>Apps such as Claude put the server&apos;s name in front, like this; it still fits:</p>
+        <p className="break-all font-mono text-mono-12 text-02">{seen}</p>
+      </details>
     </div>
   );
 }
 
-/** What others need before they can use it; shown before any work starts. */
+/** What others need before they can use it; shown before any work starts, as information (step 3 checks it). */
 function UpFrontChecklist() {
   const items = [
-    { text: "A passing test of your endpoint (step 3)", href: null },
-    { text: "Stake at the minimum on every chain you are paid on", href: routes.stake() },
-    { text: "A payout wallet", href: "/provider/setup?step=wallet" },
+    { text: "a passing test of your endpoint", href: null },
+    { text: "stake at the minimum on every chain you are paid on", href: routes.stake() },
+    { text: "a payout wallet", href: "/provider/setup?step=wallet" },
   ];
   return (
     <section className="flex flex-col gap-1.5 rounded-lg border border-01 px-3.5 py-3">
-      <p className="text-label-13 text-01">Before anyone outside your team can use it</p>
+      <p className="text-label-13 text-01">Before anyone outside your team can use it, it needs (step 3 checks these for you):</p>
       <ul className="flex flex-col gap-1">
         {items.map((item) => (
           <li key={item.text} className="flex items-center gap-2 text-body-13 text-02">
-            <CircleDashed aria-hidden="true" className="size-3.5 shrink-0 text-03" />
+            <span aria-hidden="true" className="text-03">·</span>
             {item.href ? (
               <Link href={item.href} className="inline-flex min-h-10 items-center text-primary-600 hover:underline">
                 {item.text}
@@ -137,7 +148,7 @@ function UpFrontChecklist() {
           </li>
         ))}
       </ul>
-      <p className="text-body-xs text-03">Keeping it to your own team needs none of these. Step 3 checks them all for you.</p>
+      <p className="text-body-xs text-03">Keeping it to your own team needs none of these. Nothing to do here now.</p>
     </section>
   );
 }
@@ -172,9 +183,14 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
   const [tags, setTags] = React.useState((tool?.tags ?? []).join(", "));
   const [summary, setSummary] = React.useState("");
   const [touched, setTouched] = React.useState(false);
+  // What a try run of the endpoint worked out: the new tool starts from it instead of a placeholder schema.
+  const [tried, setTried] = React.useState<TryOutcome | null>(null);
   const listId = React.useId();
 
-  const owner = tool?.handle ?? handle.data?.handle ?? null;
+  // A provider that already publishes tools holds its public name: never ask it to claim it again.
+  const ownTools = useQuery({ queryKey: [...providerToolKeys.all, "handle"], queryFn: () => listProviderTools({ limit: 1 }), retry: 0, enabled: !tool });
+  const existing = ownTools.data?.items[0]?.handle ?? null;
+  const owner = tool?.handle ?? handle.data?.handle ?? existing;
   const nameProblem = localNameProblem(owner, localName);
   const categoryProblem = category.trim() === "" ? "Pick a topic." : CATEGORY_RE.test(category.trim()) ? null : "Lowercase letters, digits and “-”, starting with a letter.";
   const summaryProblem = summary.trim() === "" ? "Say in one line what it does." : summary.length > SUMMARY_MAX ? `At most ${SUMMARY_MAX} characters.` : /[\r\n]/.test(summary) ? "Keep it on one line." : null;
@@ -185,9 +201,9 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
         createBody(localName, category, {
           summary: summary.trim(),
           description: summary.trim(),
-          inputSchema: STARTER_INPUT as Record<string, unknown>,
-          outputSchema: STARTER_OUTPUT as Record<string, unknown>,
-          examples: [],
+          inputSchema: tried?.inputSchema ?? (STARTER_INPUT as Record<string, unknown>),
+          outputSchema: tried?.outputSchema ?? (STARTER_OUTPUT as Record<string, unknown>),
+          examples: tried?.examples.slice(0, 10) ?? [],
         }),
       ),
     onSuccess: (created) => {
@@ -244,17 +260,17 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
     );
   }
 
-  const noHandle = handle.isSuccess && !handle.data?.handle;
+  const noHandle = handle.isSuccess && !handle.data?.handle && !existing && !ownTools.isPending;
   const ready = !noHandle && owner !== null && !nameProblem && !categoryProblem && !summaryProblem;
   return (
     <section className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 px-4 py-4">
       <h2 className="text-label-md text-01">Name it</h2>
       <UpFrontChecklist />
       {noHandle ? <HandleClaim /> : null}
-      {handle.data?.handle ? (
+      {owner ? (
         <p className="flex items-center gap-1.5 text-body-13 text-02">
           <Check aria-hidden="true" className="size-3.5 text-success-700" />
-          Published as <span className="font-mono text-mono-13 text-01">@{handle.data.handle}</span>
+          Published as <span className="font-mono text-mono-13 text-01">@{owner}</span>, your public name
         </p>
       ) : null}
       <Field
@@ -279,6 +295,14 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
         error={touched && summary ? (summaryProblem ?? undefined) : undefined}
         className="font-sans"
       />
+      {tried ? (
+        <p className="flex items-center gap-1.5 text-body-13 text-success-700">
+          <Check aria-hidden="true" className="size-3.5" />
+          Inputs, outputs and an example come from your endpoint&apos;s answer; you can change them in step 2.
+        </p>
+      ) : (
+        <TryPanel compact onUse={(outcome) => setTried(outcome)} />
+      )}
       {create.isError ? <ErrorBox view={providerToolErrorView(create.error)} onSuggestion={(s) => setLocalName(s.includes("__") ? s.split("__").pop()! : s)} /> : null}
       <div className="flex flex-col gap-1">
         <Button

@@ -60,8 +60,16 @@ function midnightIn(days: number): string {
 
 /** When major 1 of get_weather stops (or stopped, with `?contracts=retired`). */
 export function weatherSunsetAt(): string {
-  return demoRetiredMajor() ? midnightIn(-2) : midnightIn(120);
+  if (demoRetiredMajor()) return midnightIn(-2);
+  // One calendar date for every demo session, so screens tested on different days agree (it was
+  // "120 days from today", which moved by a day between sessions). Never under the 90-day notice.
+  const fixed = WEATHER_SUNSET;
+  const earliest = midnightIn(91);
+  return Date.parse(fixed) >= Date.parse(earliest) ? fixed : earliest;
 }
+
+/** get_weather v1's announced sunset (UTC midnight). */
+const WEATHER_SUNSET = "2027-02-15T00:00:00.000Z";
 
 /* ------------------------------------------------------------- get_weather */
 

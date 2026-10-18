@@ -17,7 +17,7 @@ import { fileCallDispute, type CallDispute, type CallDisputeEvidence, type CallD
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
 
-import { disputeErrorText, disputeTimeline, NOTE_MAX, REASON_OPTIONS, type DisputeStatusView, type ReportWindowView } from "./model";
+import { DISPUTE_COPY, disputeErrorText, disputeTimeline, NOTE_MAX, REASON_OPTIONS, reasonLabel, type DisputeStatusView, type ReportWindowView } from "./model";
 
 /**
  * The parts of "Report a bad result" every side shares: the status chip,
@@ -117,7 +117,7 @@ export function ReportSheet({
         <SheetHeader>
           <SheetTitle>Report a bad result</SheetTitle>
           <SheetDescription>
-            On this call to <span className="break-all font-mono text-mono-12">{toolName}</span>. The provider may reply once; Assay decides within 72 hours.
+            On this call to <span className="break-all font-mono text-mono-12">{toolName}</span>. {DISPUTE_COPY.reply} {DISPUTE_COPY.decides}
           </SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-3 px-[18px] pb-5 pt-3" data-testid="report-sheet">
@@ -138,7 +138,8 @@ export function ReportSheet({
                 {option.label}
               </label>
             ))}
-            {hint ? <p className="text-body-xs text-03">{hint}</p> : null}
+            {/* The hint's line is always there, so the options never move when it appears. */}
+            <p className="min-h-[2.5em] text-body-xs text-03">{hint ?? "Pick the one that fits best."}</p>
           </fieldset>
           <label className="flex flex-col gap-1.5">
             <span className="text-label-13 text-01">{reason === "OTHER" ? "What was wrong" : "Anything else (optional)"}</span>
@@ -150,6 +151,15 @@ export function ReportSheet({
           {file.isError ? (
             <p role="alert" className="text-body-13 text-danger-700">
               {disputeErrorText(file.error)}
+            </p>
+          ) : null}
+          <p className="text-body-xs text-03">
+            {DISPUTE_COPY.limit}
+            {hold.guaranteed ? ` ${DISPUTE_COPY.held}` : ""}
+          </p>
+          {reason ? (
+            <p className="text-body-13 text-01" data-testid="report-summary">
+              Reporting: <span className="text-label-13">{reasonLabel(reason)}</span>
             </p>
           ) : null}
           <div className="flex flex-wrap gap-2">

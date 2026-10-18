@@ -56,6 +56,7 @@ export type NotificationEvent =
   | "spend.threshold_crossed"
   | "velocity.anomaly"
   | "agent.paused"
+  | "call.refused_repeatedly"
   | "session.expiring"
   | "session.expired"
   | "free_quota.exhausted"
@@ -68,6 +69,9 @@ export type NotificationEvent =
   | "provider.slash_proposed"
   | "provider.sla_breach_proposed"
   | "provider.sla_window_warning"
+  | "provider.slash_decided"
+  | "provider.slash_executed"
+  | "provider.slash_reversed"
   | "provider.payout_sent"
   | "toolset.update_available"
   | "tool_version.deprecated"
@@ -76,6 +80,11 @@ export type NotificationEvent =
   | "call_dispute.responded"
   | "call_dispute.decided"
   | "call_dispute.refunded"
+  | "provider_tool.approved"
+  | "provider_tool.rejected"
+  | "provider_tool.taken_down"
+  | "provider_tool.takedown_lifted"
+  | "provider_tool.promotion_invited"
   | "digest.daily";
 
 /** `NotificationChannelDto`. One row per channel the organization has ever configured. */

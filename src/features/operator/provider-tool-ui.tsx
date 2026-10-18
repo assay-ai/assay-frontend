@@ -9,6 +9,7 @@ import { Chip } from "@/components/toolsets/toolset-bits";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { changeText } from "@/features/contracts/text";
+import { cn } from "@/utils";
 import type { ContractChange } from "@/interfaces/contracts";
 import { takedownProviderTool, type ModerationCutoff } from "@/services/operator-provider-tools.service";
 import type { ProviderToolVersion } from "@/services/provider-tools.service";
@@ -74,6 +75,72 @@ export function ReviewedVersion({ version }: { version: ProviderToolVersion }) {
         <pre className="mx-3 mb-3 max-h-[360px] overflow-auto rounded-lg bg-02 p-3 font-mono text-mono-12 text-01">{pretty({ examples: version.examples, checks: version.rules })}</pre>
       </details>
     </article>
+  );
+}
+
+type FieldMark = "added" | "removed" | "changed" | "same";
+
+function fieldsOf(schema: unknown): Record<string, { type: string; description: string }> {
+  const props = ((schema as { properties?: Record<string, { type?: unknown; description?: unknown }> } | null)?.properties) ?? {};
+  return Object.fromEntries(Object.entries(props).map(([name, p]) => [name, { type: String(p?.type ?? "any"), description: String(p?.description ?? "") }]));
+}
+
+/** The fields of two versions side by side: added, removed, changed (type or wording), unchanged. Pure. */
+export function fieldDiff(before: unknown, after: unknown): { name: string; mark: FieldMark; type: string; was: string | null }[] {
+  const a = fieldsOf(before);
+  const b = fieldsOf(after);
+  const names = [...new Set([...Object.keys(a), ...Object.keys(b)])];
+  return names.map((name) => {
+    const old = a[name];
+    const now = b[name];
+    if (!old) return { name, mark: "added" as const, type: now!.type, was: null };
+    if (!now) return { name, mark: "removed" as const, type: old.type, was: null };
+    if (old.type !== now.type || old.description !== now.description) return { name, mark: "changed" as const, type: now.type, was: old.type !== now.type ? old.type : "wording" };
+    return { name, mark: "same" as const, type: now.type, was: null };
+  });
+}
+
+const MARK: Record<FieldMark, { sign: string; className: string; label: string }> = {
+  added: { sign: "+", className: "bg-success-10 text-success-700", label: "added" },
+  removed: { sign: "−", className: "bg-danger-10 text-danger-700", label: "removed" },
+  changed: { sign: "~", className: "bg-warning-10 text-warning-700", label: "changed" },
+  same: { sign: " ", className: "text-03", label: "unchanged" },
+};
+
+/** A change, field by field against the approved version, so nothing has to be found by eye in the schema. */
+export function FieldDiff({ before, after }: { before: ProviderToolVersion; after: ProviderToolVersion }) {
+  const sides = [
+    { title: "What agents send", rows: fieldDiff(before.inputSchema, after.inputSchema) },
+    { title: "What it returns", rows: fieldDiff(before.outputSchema, after.outputSchema) },
+  ];
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-01 px-3.5 py-3" data-testid="field-diff">
+      <p className="text-label-13 text-01">
+        v{before.semver} → v{after.semver}, field by field
+      </p>
+      {before.summary !== after.summary ? (
+        <p className="text-body-13 text-02 [overflow-wrap:anywhere]">
+          <span className="rounded bg-warning-10 px-1 text-warning-700">~ summary</span> “{before.summary}” → “{after.summary}”
+        </p>
+      ) : null}
+      <div className="grid grid-cols-1 gap-3 tablet:grid-cols-2">
+        {sides.map((side) => (
+          <div key={side.title} className="flex flex-col gap-1">
+            <span className="text-body-xs text-03">{side.title}</span>
+            <ul className="flex flex-col gap-0.5 font-mono text-mono-12">
+              {side.rows.map((row) => (
+                <li key={row.name} className={cn("rounded px-1.5 py-0.5 [overflow-wrap:anywhere]", MARK[row.mark].className)}>
+                  <span aria-hidden="true">{MARK[row.mark].sign} </span>
+                  {row.name}: {row.type}
+                  {row.was && row.mark === "changed" ? <span className="font-sans text-body-xs"> (was {row.was})</span> : null}
+                  <span className="sr-only">, {MARK[row.mark].label}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -98,7 +98,7 @@ describe("operator queues", () => {
   it("has open call disputes with every SLA mark", () => {
     const rows = call<{ items: OperatorCallDisputeRow[] }>("GET", "/operator/call-disputes", { state: "OPEN" }).items;
     const marks = new Set(rows.flatMap((d) => slaMarks(d, Date.now()).map((m) => m.label)));
-    for (const label of ["Provider may reply", "Provider silent", "Auto-uphold at 72 h", "Decide by 72 h", "Past 72 h"]) expect(marks).toContain(label);
+    for (const label of ["Provider may reply", "Provider silent", "Auto-uphold at 72 h", "Decide by 72 h", "Paged · auto-uphold at 72 h", "Paged · decide by 72 h", "Overdue: decide now"]) expect(marks).toContain(label);
     expect(rows.some((d) => d.buyerHistory.flagged)).toBe(true);
     expect(call<{ items: OperatorCallDisputeRow[] }>("GET", "/operator/call-disputes", { state: "OPEN", flaggedOnly: true }).items.every((d) => d.buyerHistory.flagged)).toBe(true);
     const twoPerson = rows.find((d) => d.needsSecondOperator)!;
@@ -110,7 +110,8 @@ describe("buyer and provider reports", () => {
   it("covers open, replied, upheld and refunded, rejected, and refunded because the provider was blocked", () => {
     const { items } = call<{ items: CallDispute[] }>("GET", "/call-disputes");
     const labels = items.map((d) => buyerStatus(d, Date.now()).label);
-    expect(labels).toEqual(expect.arrayContaining(["Waiting for the provider", "Waiting for a decision", "Upheld · refunded", "Rejected", "Refunded"]));
+    expect(labels).toEqual(expect.arrayContaining(["Waiting for the provider", "Waiting for a decision", "Upheld · refunded", "Rejected", "Refunded · decision pending"]));
+    expect(items.some((d) => !d.refundGuaranteed && d.state === "OPEN" && d.reason === "OTHER")).toBe(true);
     for (const d of items) expect(call<{ intentId: string }>("GET", `/receipts/${d.intentId}`).intentId).toBe(d.intentId);
   });
 
@@ -131,8 +132,12 @@ describe("buyer and provider reports", () => {
   });
 
   it("rings both bells with the new events", () => {
-    expect(t4Notifications("BUYER").map((n) => (n as { event: string }).event)).toEqual(["call_dispute.refunded", "call_dispute.responded", "call_dispute.decided"]);
-    expect(t4Notifications("PROVIDER").map((n) => (n as { event: string }).event)).toEqual(["call_dispute.opened"]);
+    const buyer = t4Notifications("BUYER") as { event: string; payload: { role?: string; state?: string } }[];
+    expect(buyer.map((n) => n.event)).toEqual(["call_dispute.refunded", "call_dispute.responded", "call_dispute.decided", "call_dispute.decided"]);
+    expect(buyer.every((n) => n.payload.role === "buyer")).toBe(true);
+    expect(buyer.map((n) => n.payload.state)).toContain("REJECTED");
+    const provider = (t4Notifications("PROVIDER") as { event: string; payload: { role?: string } }[]).map((n) => n.event);
+    expect(provider).toEqual(expect.arrayContaining(["provider_tool.taken_down", "provider_tool.rejected", "provider_tool.promotion_invited", "provider_tool.approved", "call_dispute.opened", "call_dispute.decided"]));
   });
 });
 
@@ -145,5 +150,62 @@ describe("public pages", () => {
     const { tools } = call<{ tools: PublicTool[] }>("GET", "/public/catalogue/tools");
     expect(tools.filter((t) => t.kind === "PROVIDER").length).toBeGreaterThanOrEqual(4);
     expect(tools.some((t) => t.kind === "STANDARD")).toBe(true);
+  });
+});
+
+describe("a write shows on the next read (this tab's memory)", () => {
+  it("a reply sent", () => {
+    const open = call<{ items: CallDispute[] }>("GET", "/providers/me/call-disputes", { state: "OPEN" }).items.find((d) => d.canRespond)!;
+    call("POST", `/providers/me/call-disputes/${open.id}/respond`, {}, { response: "Checked." });
+    const again = call<CallDispute>("GET", `/providers/me/call-disputes/${open.id}`);
+    expect([again.providerResponse, again.canRespond, again.autoUpholdAt]).toEqual(["Checked.", false, null]);
+  });
+
+  it("a report withdrawn, and one filed from a receipt with what the form said", () => {
+    const first = call<{ items: CallDispute[] }>("GET", "/call-disputes").items.find((d) => d.state === "OPEN" && d.canRespond)!;
+    call("POST", `/call-disputes/${first.id}/withdraw`);
+    expect(call<CallDispute>("GET", `/call-disputes/${first.id}`).state).toBe("WITHDRAWN");
+    const filed = call<CallDispute>("POST", "/call-disputes", {}, { subjectType: "PAYMENT_INTENT", subjectId: DEMO_AFTER_HOLD_RECEIPT, reason: "TOO_SLOW", note: "Nine seconds." });
+    const read = call<CallDispute>("GET", `/call-disputes/${filed.id}`);
+    expect([read.reason, read.note, read.refundGuaranteed]).toEqual(["TOO_SLOW", "Nine seconds.", false]);
+    expect(call<{ items: CallDispute[] }>("GET", "/call-disputes").items[0]!.id).toBe(filed.id);
+  });
+
+  it("a takedown confirmed leaves the queue", () => {
+    expect(call<ModerationCutoff[]>("GET", "/operator/cutoffs", { pending: true })).toHaveLength(1);
+    call("POST", "/operator/cutoffs/cut-lottery/confirm");
+    expect(call<ModerationCutoff[]>("GET", "/operator/cutoffs", { pending: true })).toHaveLength(0);
+  });
+
+  it("publishing a first version ticks the gate's \"A version is published\"", () => {
+    const draft = call<{ items: ProviderToolSummary[] }>("GET", "/provider/tools").items.find((t) => t.status === "DRAFT")!;
+    const before = call<ProviderToolGate>("GET", `/provider/tools/${draft.id}/publish-check`).requirements.find((r) => r.requirement === "PUBLISHED_VERSION")!;
+    expect(before.met).toBe(false);
+    call("POST", `/provider/tools/${draft.id}/versions/1/publish`);
+    const after = call<ProviderToolGate>("GET", `/provider/tools/${draft.id}/publish-check`).requirements.find((r) => r.requirement === "PUBLISHED_VERSION")!;
+    expect(after.met).toBe(true);
+    expect(call<ProviderTool>("GET", `/provider/tools/${draft.id}`).currentSemver).toBe("1.0.0");
+  });
+
+  it("the blocked-provider refund never waits for a reply", () => {
+    const blocked = call<{ items: CallDispute[] }>("GET", "/call-disputes").items.find((d) => d.state === "OPEN" && d.refundState === "REFUNDED")!;
+    expect(blocked.autoUpholdAt).toBeNull();
+  });
+
+  it("the review content changes a minute after the page first opened it", () => {
+    vi.useFakeTimers();
+    const cobalt = "3e9b7f15-6c20-4d84-a1e7-5f0c2b8d4a93";
+    const first = call<ReviewDetail>("GET", `/operator/reviews/${cobalt}`).contentHash;
+    vi.setSystemTime(Date.now() + 61_000);
+    expect(call<ReviewDetail>("GET", `/operator/reviews/${cobalt}`).contentHash).not.toBe(first);
+    vi.useRealTimers();
+  });
+
+  it("the operator queue has more than one page", () => {
+    const page1 = call<{ items: OperatorCallDisputeRow[]; pageInfo: { hasMore: boolean; nextCursor: string | null } }>("GET", "/operator/call-disputes", { state: "OPEN", order: "ASC", limit: 20 });
+    expect(page1.pageInfo.hasMore).toBe(true);
+    const page2 = call<{ items: OperatorCallDisputeRow[] }>("GET", "/operator/call-disputes", { state: "OPEN", order: "ASC", limit: 20, cursor: page1.pageInfo.nextCursor });
+    expect(page2.items.length).toBeGreaterThan(0);
+    expect(Date.parse(page1.items[0]!.createdAt)).toBeLessThanOrEqual(Date.parse(page1.items[1]!.createdAt));
   });
 });

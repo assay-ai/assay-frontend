@@ -182,6 +182,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
         identity: data,
         pathname,
         needsYou,
+        sectionCounts: { tools: (toolWork.work.reviews ?? 0) + (toolWork.work.takedowns ?? 0), penalties: toolWork.work.callDisputes ?? 0 },
         expiresAt: session.expiresAt,
         onSignOut: () => void signOut(),
         demo: demoEnabled() && demoPreset ? { current: demoPreset, onSwitch: switchDemoRole } : null,
@@ -218,7 +219,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
       {shell ? (
         <>
           <div className="md:hidden">
-            <OperatorBottomTabs identity={shell.identity} pathname={pathname} needsYou={needsYou} />
+            <OperatorBottomTabs identity={shell.identity} pathname={pathname} needsYou={needsYou} sectionCounts={shell.sectionCounts} />
           </div>
           <ConsoleShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
         </>

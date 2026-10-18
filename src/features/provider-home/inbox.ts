@@ -24,10 +24,15 @@ export const PROVIDER_NOTIFICATION_EVENTS = [
   // T3: a contract major a binding serves is going away. Filed per organization for buyers too; the payload's role says whose.
   "tool_version.deprecated",
   "tool_version.retired",
-  // A buyer reported a bad result on a call this provider served: reply within 24 hours.
+  // Buyer reports on calls this provider served (provider side only: see isProviderEvent).
   "call_dispute.opened",
-  // Its decision. Sent to the buyer too, so it counts only as the provider's (see isProviderEvent).
   "call_dispute.decided",
+  // "Publish your own API": review, takedown and promotion notices.
+  "provider_tool.approved",
+  "provider_tool.rejected",
+  "provider_tool.taken_down",
+  "provider_tool.takedown_lifted",
+  "provider_tool.promotion_invited",
 ] as const;
 
 /**
@@ -40,12 +45,12 @@ export function isProviderEvent(event: string | null | undefined, payload?: unkn
   if (event === "tool_version.deprecated" || event === "tool_version.retired") {
     return Boolean(payload && typeof payload === "object" && (payload as { role?: unknown }).role === "PROVIDER");
   }
-  if (event === "call_dispute.decided") {
-    // The buyer gets this event too. Until the backend sends `role`, a notice without one is let in.
+  if (event.startsWith("call_dispute.")) {
+    // Every call_dispute.* notice says whose side it is for; an organization can be both.
     const role = payload && typeof payload === "object" ? (payload as { role?: unknown }).role : undefined;
-    return role === undefined || role === "PROVIDER";
+    return role === "provider";
   }
-  return event.startsWith("provider.") || event === "call_dispute.opened";
+  return event.startsWith("provider.") || event.startsWith("provider_tool.");
 }
 
 /**

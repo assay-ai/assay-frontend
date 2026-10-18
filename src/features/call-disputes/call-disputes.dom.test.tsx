@@ -43,6 +43,12 @@ const dispute: CallDispute = {
   canRespond: true,
   refundGuaranteed: true,
   refundNotice: "",
+  replyDueAt: "2026-10-19T10:00:00.000Z",
+  pageAt: "2026-10-20T10:00:00.000Z",
+  decisionDueAt: "2026-10-21T10:00:00.000Z",
+  autoUpholdAt: null,
+  holdEndsAt: null,
+  filingClosesAt: "2026-10-25T10:00:00.000Z",
   createdAt: FILED,
   updatedAt: "2026-10-18T10:20:00.000Z",
 };
@@ -51,7 +57,7 @@ describe("the report timeline", () => {
   it("shows a refund that landed before the decision (the provider was blocked)", () => {
     const words = text(renderToStaticMarkup(<DisputeTimeline dispute={dispute} side="buyer" now={t0 + 30 * 60_000} />));
     expect(words).toContain("Reported");
-    expect(words).toContain("Provider may reply");
+    expect(words).toContain("No reply needed: provider blocked");
     expect(words).toContain("Refunded");
     expect(words).toContain("The provider was blocked");
     expect(words).toContain("Decided by");
@@ -85,6 +91,7 @@ describe("the receipt's Report a bad result", () => {
       createdAt: FILED,
       settledAt: FILED,
       disputeWindowEndsAt: "2026-10-18T11:00:00.000Z",
+      disputeFilingClosesAt: "2026-10-25T10:00:00.000Z",
       chargedPrice: usd,
     } as unknown as Receipt;
     const client = new QueryClient();

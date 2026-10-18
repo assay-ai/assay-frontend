@@ -110,6 +110,9 @@ function PromotionsScreen() {
       <header className="flex flex-col gap-1">
         <h1 className="text-heading-md text-01">Promotion candidates</h1>
         <p className="text-body-13 text-02">One maker&apos;s APIs that do the same job. A standard tool made from them gives agents backup providers.</p>
+        <p className="text-body-xs text-03">
+          “Anyone with the link” tools are shared but not reviewed; inviting their providers is fine, since the standard tool is reviewed in the contract editor before it serves. Listed tools come first.
+        </p>
       </header>
       {groups.isPending ? (
         <PageState kind="loading" rows={4} label="Loading candidates" />
@@ -125,7 +128,7 @@ function PromotionsScreen() {
                 {group.category} <span className="text-body-13 text-03">· {group.tools.length} tools</span>
               </h2>
               <ul className="flex flex-col divide-y divide-01 rounded-xl border border-01 bg-01">
-                {group.tools.map((tool) => (
+                {[...group.tools].sort((a, b) => Number(b.visibility === "LISTED") - Number(a.visibility === "LISTED")).map((tool) => (
                   <li key={tool.toolId} className="flex flex-col gap-2 px-4 py-3 tablet:flex-row tablet:items-start tablet:justify-between">
                     <div className="flex min-w-0 flex-col gap-1">
                       <span className="flex flex-wrap items-center gap-1.5">

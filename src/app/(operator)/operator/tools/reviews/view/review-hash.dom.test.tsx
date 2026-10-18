@@ -48,6 +48,7 @@ function detail(hash: string): ReviewDetail {
       binding: null,
       mcpUrls: { handle: null },
       quality: {} as ReviewDetail["tool"]["quality"],
+      earliestSunsetAt: "2027-01-20T00:00:00.000Z",
     },
     kind: "FIRST",
     pending: true,

@@ -74,13 +74,16 @@ export interface ReviewDetail {
   gate: ProviderToolGate;
 }
 
+/** The review's reason: APPROVED, or the §7.6 checklist item a rejected tool fails. Free text is refused. */
+export type ReviewReasonCode = "APPROVED" | "IMPERSONATION" | "MODEL_INSTRUCTIONS" | "SECRET_INPUTS" | "EXAMPLES_MISMATCH" | "PRICING_UNCLEAR";
+
 export interface ReviewDecisionBody {
   decision: "APPROVE" | "REJECT";
   contentHash: string;
   /** Required to reject: what the provider sees, and what to fix. */
   note?: string;
   tier?: "UNVERIFIED" | "VERIFIED";
-  reasonCode: string;
+  reasonCode: ReviewReasonCode;
   ticketRef?: string;
 }
 
@@ -104,6 +107,8 @@ export interface ModerationCutoff {
   id: string;
   targetType: "TOOLSET" | "HANDLE" | "TOOL" | string;
   targetId: string;
+  /** A tool's name, a toolset's name or the handle; null when the target no longer exists. */
+  targetName: string | null;
   action: "DELIST" | "TAKEDOWN" | string;
   actedBy: string;
   actedAt: string;
@@ -184,8 +189,11 @@ export function takedownProviderTool(toolId: string, body: ModerationBody): Prom
   return operatorApi.post<ModerationCutoff>(`/operator/tools/${encodeURIComponent(toolId)}/takedown`, body);
 }
 
-export function listCutoffs(pending?: boolean): Promise<ModerationCutoff[]> {
-  return operatorApi.get<ModerationCutoff[]>("/operator/cutoffs", pending === undefined ? {} : { pending });
+export function listCutoffs(query: { pending?: boolean; targetType?: "TOOLSET" | "HANDLE" | "TOOL" } = {}): Promise<ModerationCutoff[]> {
+  const params: Record<string, unknown> = {};
+  if (query.pending !== undefined) params.pending = query.pending;
+  if (query.targetType) params.targetType = query.targetType;
+  return operatorApi.get<ModerationCutoff[]>("/operator/cutoffs", params);
 }
 
 export function confirmCutoff(id: string, body: ModerationBody): Promise<ModerationCutoff> {

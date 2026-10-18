@@ -177,7 +177,7 @@ export function BuyerDebtBanner({ wrapperClassName, compact = false }: { wrapper
                         <Link
                           href={routes.receipt(debt.intentId)}
                           data-testid="buyer-debt-row-link"
-                          className="underline-offset-2 hover:underline focus-visible:underline"
+                          className="inline-flex min-h-10 items-center underline-offset-2 hover:underline focus-visible:underline"
                           aria-label={`Receipt for the ${formatMoney(debt.amount, { decimals: 4 })} call to ${names.name("tool", debt.toolId)}`}
                         >
                           <DebtRowText debt={debt} toolName={names.name("tool", debt.toolId)} state={state} />
