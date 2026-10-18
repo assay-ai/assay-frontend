@@ -8,6 +8,7 @@ import * as React from "react";
 import { PageHeader } from "@/components/g31/chrome";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
+import { REFUNDABLE_ROW } from "@/features/buyer-money/funding-lines";
 import { buyerStatus, BUYER_COPY, disputeReasonLabel, fullDateTime } from "@/features/call-disputes/model";
 import { callDisputeKeys, DisputeChip, useNow } from "@/features/call-disputes/ui";
 import { useEntityNames } from "@/hooks/useEntityNames";
@@ -48,7 +49,7 @@ export default function ReportsPage() {
         <PageState
           kind="empty"
           title="No reports"
-          description="When a call returns a bad result, open it under Calls and choose “Report a bad result”. Still refundable lists the calls a report would refund in full right now."
+          description={`When a call returns a bad result, open it under Calls and choose “Report a bad result”. ${REFUNDABLE_ROW.pointer}`}
           action={{ label: "See calls still refundable", href: routes.calls({ status: "refundable" }) }}
         />
       ) : (

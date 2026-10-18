@@ -209,7 +209,7 @@ function CallsList() {
             }
             description={
               filter === "refundable"
-                ? "No charged call can be reported for a full refund right now. A call stays here for its 1-hour hold, on chains that have one."
+                ? REFUNDABLE_ROW.empty
                 : filter === "owed"
                 ? query.hasNextPage
                   ? "None of the calls loaded so far is owed. Older calls may be: load more to look further back."
