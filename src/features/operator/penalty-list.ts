@@ -34,9 +34,11 @@ export interface PenaltyRow {
   proposedAt: string | null;
   disputedAt: string | null;
   nextDeadline: string | null;
+  /** A record was written on chain; null when the source does not say. */
+  onChain: boolean | null;
 }
 
-export type PenaltyTabId = "needs-ruling" | "signature" | "window" | "executed" | "cancelled" | "all" | "acted" | "recent";
+export type PenaltyTabId = "needs-ruling" | "signature" | "old-process" | "window" | "executed" | "cancelled" | "all" | "acted" | "recent";
 
 export interface PenaltyTab {
   id: PenaltyTabId;
@@ -47,9 +49,11 @@ export interface PenaltyTab {
 
 /** The tabs when the backend lists every penalty. */
 export const STATUS_TABS: readonly PenaltyTab[] = [
-  // The retired objection process still needs a decision, so its rows sit here too.
-  { id: "needs-ruling", label: "Needs ruling", statuses: ["CHAIN_DISPUTED", "DISPUTED"] },
+  // Only what the arbiter can rule on: disputed on chain. The same count as Home and Arbiter.
+  { id: "needs-ruling", label: "Needs ruling", statuses: ["CHAIN_DISPUTED"] },
   { id: "signature", label: "Waiting for signature", statuses: ["CANCEL_REQUESTED"] },
+  // The retired in-app objection process (D15): nobody rules these on chain, so they wait apart.
+  { id: "old-process", label: "Old process", statuses: ["DISPUTED"] },
   { id: "window", label: "In dispute window", statuses: ["PROPOSED"] },
   { id: "executed", label: "Executed", statuses: ["EXECUTED", "COMPENSATED"] },
   { id: "cancelled", label: "Cancelled", statuses: ["CANCELLED", "EXPIRED"] },
@@ -102,6 +106,7 @@ export function rowFromCase(row: OperatorCaseListRow): PenaltyRow {
     proposedAt: row.proposedAt,
     disputedAt: row.disputedAt,
     nextDeadline: row.nextDeadline,
+    onChain: row.onChain ?? null,
   };
 }
 
@@ -116,6 +121,7 @@ export function rowFromDispute(dispute: ArbiterDispute, providerName: string): P
     proposedAt: null,
     disputedAt: dispute.disputedAt,
     nextDeadline: dispute.expiresAt,
+    onChain: true,
   };
 }
 
@@ -130,6 +136,7 @@ export function rowFromQueue(row: AdjudicationQueueRow): PenaltyRow {
     proposedAt: null,
     disputedAt: null,
     nextDeadline: row.dueAt,
+    onChain: null,
   };
 }
 
@@ -173,6 +180,7 @@ export function rowFromBrief(brief: OperatorCaseBrief, providerName: string, now
     proposedAt: proposal.clocks.proposedAt,
     disputedAt: facts.disputedAt,
     nextDeadline,
+    onChain: facts.stage !== "not-on-chain",
   };
 }
 
@@ -254,30 +262,56 @@ export type PenaltyNext =
   | { kind: "text"; text: string; until: string | null; urgent: boolean }
   | { kind: "none" };
 
+/** "Not on chain after 5 days", counted from the proposal; null when the proposal time is unknown. */
+function notOnChainText(proposedAt: string | null | undefined, now: number): string | null {
+  const at = proposedAt ? Date.parse(proposedAt) : Number.NaN;
+  if (Number.isNaN(at)) return null;
+  const days = Math.max(1, Math.floor((now - at) / 86_400_000));
+  return `Not on chain after ${days} ${days === 1 ? "day" : "days"}`;
+}
+
 /** What happens next on the penalty, and when. */
-export function penaltyNext(row: Pick<PenaltyRow, "status" | "disputedAt" | "nextDeadline">, now: number = Date.now()): PenaltyNext {
+export function penaltyNext(
+  row: Pick<PenaltyRow, "status" | "disputedAt" | "nextDeadline"> & Partial<Pick<PenaltyRow, "onChain" | "proposedAt">>,
+  now: number = Date.now(),
+): PenaltyNext {
   const until = row.nextDeadline;
   const left = until ? Date.parse(until) - now : Number.NaN;
   const known = !Number.isNaN(left);
+  // Not on chain and its computed date has passed: that date says nothing any more (operator review E).
+  const stuck = row.onChain === false && (!known || left <= 0) ? notOnChainText(row.proposedAt, now) : null;
   switch (row.status) {
     case "CHAIN_DISPUTED":
       return until ? { kind: "dispute", until, from: row.disputedAt } : { kind: "text", text: "Arbiter rules", until: null, urgent: false };
     case "CANCEL_REQUESTED":
       return {
         kind: "text",
-        text: !known ? "Arbiter signs the cancel" : left <= 0 ? "Cancel overdue" : `Arbiter signs the cancel · ${durationLeft(left)} left`,
+        // Past due, the list cannot tell whether the record still stands or was executed: the page reads it.
+        text: !known
+          ? "Arbiter signs the cancel"
+          : left <= 0
+            ? "Cancel overdue · open it to see what stands on chain"
+            : `Arbiter signs the cancel · ${durationLeft(left)} left`,
         until,
         urgent: known && left < 24 * 3_600_000,
       };
     case "PROPOSED":
+      if (stuck) return { kind: "text", text: `${stuck} · suspend it if it should not stand`, until: null, urgent: true };
       return {
         kind: "text",
-        text: !known ? "Waiting to go on chain" : left <= 0 ? "Executable now" : `Executable in ${durationLeft(left)}`,
+        text: row.onChain === false || !known ? "Waiting to go on chain" : left <= 0 ? "Executable now" : `Executable in ${durationLeft(left)}`,
         until,
         urgent: false,
       };
     case "DISPUTED":
-      return { kind: "text", text: "Open it to see where it stands", until, urgent: false };
+      // The retired objection process: an operator suspends it from its page; nothing rules it on chain.
+      if (stuck) return { kind: "text", text: `Old process · ${stuck.charAt(0).toLowerCase()}${stuck.slice(1)} · suspend it from its page`, until: null, urgent: true };
+      return {
+        kind: "text",
+        text: !known ? "Old process · suspend it from its page" : left <= 0 ? "Old process · decision overdue" : `Old process · decide within ${durationLeft(left)}`,
+        until,
+        urgent: known && left <= 0,
+      };
     default:
       return { kind: "none" };
   }

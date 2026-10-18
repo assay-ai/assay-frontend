@@ -8,7 +8,7 @@ import { CopyChip } from "@/components/patterns/copy-chip";
 import { PageState } from "@/components/patterns/page-state";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ConfirmedCancelCall } from "@/features/operator/confirmed-cancel-call";
-import { operatorErrorSentence } from "@/features/operator/operator-errors";
+import { nothingStandingOutcome, operatorErrorSentence } from "@/features/operator/operator-errors";
 import type { CancelIntent } from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
@@ -22,6 +22,11 @@ import { WhatHappens } from "./what-happens";
  * browser holds the arbiter's wallet, otherwise a file to download and sign
  * in the arbiter's multi-signer wallet.
  * The case moves to cancelled on its own once the chain watcher sees it.
+ *
+ * When nothing of the penalty stands on chain (409 SLASH_NOTHING_STANDING,
+ * read from the chain by the backend), there is nothing to sign: the sheet
+ * says what the read showed (`error.context.chainStatus`, `closed`) and the
+ * page reads the penalty again. Nothing is changed by that answer.
  */
 function evmCancelCall(intent: CancelIntent, penaltyAsset: string): SlashContractCall {
   return {
@@ -44,6 +49,7 @@ export function CancelSheet({
   penaltyAsset,
   deadlineSentence,
   onSigned,
+  onNothingStanding,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -52,8 +58,15 @@ export function CancelSheet({
   /** When it must be signed by and what happens if not (`cancelDeadlineSentence`). */
   deadlineSentence: string;
   onSigned: (hash: string | null) => void;
+  /** The backend found nothing on chain to cancel (see the error's context): read the penalty again. */
+  onNothingStanding?: (error: ApiError) => void;
 }) {
-  const build = useMutation({ mutationFn: () => createCancelIntent(proposalId) });
+  const build = useMutation({
+    mutationFn: () => createCancelIntent(proposalId),
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === "SLASH_NOTHING_STANDING") onNothingStanding?.(error);
+    },
+  });
   const { mutate, reset } = build;
 
   React.useEffect(() => {
@@ -62,6 +75,7 @@ export function CancelSheet({
   }, [open, mutate, reset]);
 
   const intent = build.data;
+  const nothingStanding = build.error instanceof ApiError && build.error.code === "SLASH_NOTHING_STANDING";
   const [signing, setSigning] = React.useState(false);
 
   return (
@@ -72,14 +86,34 @@ export function CancelSheet({
           <SheetDescription className="sr-only">Only the arbiter&rsquo;s key can retire the record on chain.</SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
-          <WhatHappens
-            lines={[
-              { icon: <ShieldCheck />, text: "The reserved stake goes back to the provider once it lands." },
-              { icon: <PenLine />, text: "Signed by the arbiter key: sign here if this browser holds it, or download the file to sign." },
-              { icon: <Clock />, text: deadlineSentence },
-            ]}
-          />
-          {build.isPending || build.isIdle ? (
+          {nothingStanding ? null : (
+            <WhatHappens
+              lines={[
+                { icon: <ShieldCheck />, text: "The reserved stake goes back to the provider once it lands." },
+                { icon: <PenLine />, text: "Signed by the arbiter key: sign here if this browser holds it, or download the file to sign." },
+                { icon: <Clock />, text: deadlineSentence },
+              ]}
+            />
+          )}
+          {nothingStanding && build.error instanceof ApiError ? (
+            (() => {
+              const outcome = nothingStandingOutcome(build.error);
+              return (
+                <div
+                  role={outcome.alert ? "alert" : "status"}
+                  className={
+                    outcome.alert
+                      ? "flex w-full flex-col gap-1 rounded-lg border border-danger-20 bg-danger-10 px-3.5 py-3"
+                      : "flex w-full flex-col gap-1 rounded-lg border border-01 bg-02 px-3.5 py-3"
+                  }
+                  data-testid="nothing-on-chain"
+                >
+                  <p className={outcome.alert ? "text-label-13 text-danger-700" : "text-label-13 text-01"}>{outcome.title}</p>
+                  <p className="text-body-13 text-02">{outcome.next}</p>
+                </div>
+              );
+            })()
+          ) : build.isPending || build.isIdle ? (
             <PageState kind="loading" rows={2} label="Preparing the cancel" bare />
           ) : build.isError ? (
             <PageState

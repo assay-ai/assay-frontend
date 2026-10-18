@@ -148,8 +148,13 @@ export interface PlatformHealth {
   policiesTotal: number;
   stakeLocked: Money;
   providersWithStake: number;
-  openDisputes: number;
-  oldestOpenDisputeAgeSeconds: number | null;
+  /**
+   * Non-EVM cases still in the retired in-app objection statuses (DISPUTED,
+   * UNDER_REVIEW, AWAITING_SECOND): the Penalties list's "Old process" tab.
+   * None of them is on chain or waiting for the arbiter.
+   */
+  oldProcessCases: number;
+  oldestOldProcessCaseAgeSeconds: number | null;
   /** The EVM chain-state cache, one row per chain. Absent on an older backend. */
   chainState?: ChainStateHealth[];
   /** Every provider on a slash hold, one row per provider and chain. Absent on an older backend. */
@@ -295,6 +300,12 @@ export interface OperatorCaseListRow {
   disputedAt: string | null;
   /** The next instant it moves on its own (lapses, must be signed by, executable from). Null once closed. */
   nextDeadline: string | null;
+  /**
+   * Whether a record of it was ever written on chain. False while it waits to
+   * go there: its dates are then computed, not the chain's. Absent from an
+   * older backend.
+   */
+  onChain?: boolean;
 }
 
 export interface ListOperatorCasesQuery {
@@ -378,7 +389,18 @@ export interface OperatorCaseBrief {
    * With `chainStatus: PENDING` and a non-zero count the case is partly
    * disputed: the other parts keep executing. Absent from an older backend.
    */
-  chainDisputedParts?: number;  /** The provider's penalties upheld or executed in the last 30 days (follow-up C4). Absent from an older backend. */
+  chainDisputedParts?: number;
+  /**
+   * What stands on chain for the case: STANDING (Pending or Disputed: anyone
+   * could execute it once due, a cancel has something to act on), EXECUTED
+   * (the stake was taken, even under a requested cancel), GONE (nothing
+   * stands and nothing was taken), UNKNOWN (could not be told; read as
+   * standing). Absent from an older backend (read as STANDING).
+   */
+  chainRecord?: "STANDING" | "EXECUTED" | "GONE" | "UNKNOWN";
+  /** STANDING or UNKNOWN; the same reading as `chainRecord`, kept for simple reads. */
+  chainStanding?: boolean;
+  /** The provider's penalties upheld or executed in the last 30 days (follow-up C4). Absent from an older backend. */
   upheldViolations30d?: number;
 }
 

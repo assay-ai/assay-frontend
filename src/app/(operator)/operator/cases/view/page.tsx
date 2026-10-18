@@ -46,6 +46,8 @@ import type { OperatorCaseBrief } from "@/interfaces/operator";
 import { getArbiterTerms, getOperatorCase, listApprovals } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
 
+import { nothingStandingOutcome } from "@/features/operator/operator-errors";
+
 import { CancelSheet } from "./_components/cancel-sheet";
 import { MoreActions } from "./_components/more-actions";
 import { SuspendSheet } from "./_components/suspend-sheet";
@@ -117,7 +119,7 @@ function BackToPenalties() {
   );
 }
 
-type Result = { title: string; next: string; approvalId?: string; txHash?: string | null; approvers?: string[]; expiresAt?: string };
+type Result = { title: string; next: string; approvalId?: string; txHash?: string | null; approvers?: string[]; expiresAt?: string; alert?: boolean };
 
 export default function OperatorCasePage() {
   const proposalId = useSearchParam("id");
@@ -299,7 +301,7 @@ export default function OperatorCasePage() {
             <StatusChip status={chip.status} detail={chip.detail} />
           </div>
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-13 text-02">
-            <span>{proposal.toolName}</span>
+            <span>{proposal.toolName || "Penalty"}</span>
             <span aria-hidden="true" className="text-03">·</span>
             <span>
               proposed <UtcTime value={proposal.clocks.proposedAt} midSentence />
@@ -324,7 +326,12 @@ export default function OperatorCasePage() {
         </div>
       </header>
 
-      {result ? (
+      {result?.alert ? (
+        <div role="alert" className="flex w-full flex-col gap-1 rounded-lg border border-danger-20 bg-danger-10 p-3.5">
+          <p className="text-label-13 text-danger-700">{result.title}</p>
+          <p className="text-body-13 text-02">{result.next}</p>
+        </div>
+      ) : result ? (
         <ResultCard
           tone={result.approvalId ? "queued" : "done"}
           title={result.title}
@@ -356,6 +363,11 @@ export default function OperatorCasePage() {
         </section>
 
         <aside className="flex w-full min-w-0 flex-col gap-4 xl:sticky xl:top-4 xl:col-start-2 xl:row-span-3 xl:row-start-1 xl:self-start">
+          {next.alert ? (
+            <p role="alert" className="w-full rounded-lg border border-danger-20 bg-danger-10 px-3.5 py-2.5 text-label-13 text-danger-700">
+              {next.title}: the stake was taken.
+            </p>
+          ) : null}
           <NextStepCard
             layout="stack"
             kind={next.kind}
@@ -493,6 +505,12 @@ export default function OperatorCasePage() {
           proposalId={proposalId}
           penaltyAsset={proposal.penaltyAmount.asset}
           deadlineSentence={cancelDeadlineSentence(facts, when)}
+          onNothingStanding={(error) => {
+            // Say what the backend's chain read showed (it changes nothing), then read the penalty again.
+            setSheet(null);
+            setResult(nothingStandingOutcome(error));
+            refetch();
+          }}
           onSigned={(hash) => {
             setResult({ title: "Cancel sent", next: "The penalty shows as cancelled once the chain watcher reads it back.", txHash: hash });
             refetch();

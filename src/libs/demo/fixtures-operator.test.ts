@@ -191,3 +191,41 @@ describe("the arbiter's calls in the demo pass the signing guard unchanged", () 
     ).not.toThrow();
   });
 });
+
+describe("B11 shapes: old-process count, chainStanding, cancels to sign", () => {
+  it("health counts old-process cases, the same rows as the Old process tab", async () => {
+    const fixtures = await load();
+    const health = call(fixtures, "GET", "/operator/health") as import("@/interfaces/operator").PlatformHealth;
+    const oldTab = (call(fixtures, "GET", "/operator/cases", { status: "DISPUTED" }) as { items: OperatorCaseListRow[] }).items;
+    expect(health.oldProcessCases).toBe(1);
+    expect(oldTab).toHaveLength(1);
+    expect(oldTab[0]).toMatchObject({ onChain: false });
+  });
+
+  it("lists the CANCEL_REQUESTED rows Home's 'Cancels to sign' reads: one standing, one executed while it waited", async () => {
+    const fixtures = await load();
+    const rows = (call(fixtures, "GET", "/operator/cases", { status: "CANCEL_REQUESTED" }) as { items: OperatorCaseListRow[] }).items;
+    const records = rows.map((row) => {
+      expect(row).toMatchObject({ status: "CANCEL_REQUESTED", onChain: true });
+      return (call(fixtures, "GET", `/operator/cases/${row.proposalId}`) as OperatorCaseBrief).chainRecord;
+    });
+    expect(records.sort()).toEqual(["EXECUTED", "STANDING"]);
+  });
+
+  it("C1: the executed-while-waiting case never reads as nothing taken", async () => {
+    const fixtures = await load();
+    const base = fixtures.demoSessionBase();
+    const brief = call(fixtures, "GET", "/operator/cases/6a0f3b9e-7c21-4d58-9e04-b1c2d3e4f5a6") as OperatorCaseBrief;
+    const facts = caseFacts(brief, base);
+    expect(facts.executedWhileCancelWaited).toBe(true);
+    expect(brief.chainStanding).toBe(false);
+  });
+
+  it("says a closed record no longer stands", async () => {
+    const fixtures = await load();
+    const rows = (call(fixtures, "GET", "/operator/cases") as { items: OperatorCaseListRow[] }).items;
+    const cancelled = rows.find((row) => row.status === "CANCELLED")!;
+    const brief = call(fixtures, "GET", `/operator/cases/${cancelled.proposalId}`) as OperatorCaseBrief;
+    expect(brief.chainStanding).toBe(false);
+  });
+});

@@ -65,8 +65,8 @@ export interface ListOperatorCallDisputesQuery {
   state?: readonly CallDisputeState[];
   refundState?: RefundState;
   flaggedOnly?: boolean;
-  /** By filing time. The queue reads oldest first (ASC): the SLA runs from the filing. Default DESC. */
-  order?: "ASC" | "DESC";
+  /** By filing time, lower case on the wire. The queue reads oldest first (asc): the SLA runs from the filing. Default desc. */
+  order?: "asc" | "desc";
   limit?: number;
   cursor?: string;
 }
