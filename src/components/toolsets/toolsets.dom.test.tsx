@@ -277,6 +277,17 @@ describe("Servers in use", () => {
     expect(out).toContain("Connect research-bot");
   });
 
+  it("empty after calls: says they came through Everything, never \"not connected\"", () => {
+    const recent = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString();
+    const out = text(
+      render(<ServersInUse agentId="a1" agentName="research-bot" lastCallAt={recent} />, (c) =>
+        c.setQueryData(toolsetKeys.servers("a1"), { servers: [], overBudget: false }),
+      ),
+    );
+    expect(out).toContain("so they came through Everything: every tool it may use");
+    expect(out).not.toContain("No server yet");
+  });
+
   it("a server that no longer serves says so instead of a count", () => {
     const gone = { overBudget: false, servers: [{ ...SERVERS.servers[0]!, available: false, toolCount: null, estimatedTokens: null }] };
     const out = text(render(<ServersInUse agentId="a1" agentName="research-bot" />, (c) => c.setQueryData(toolsetKeys.servers("a1"), gone)));
