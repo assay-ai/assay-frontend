@@ -2,6 +2,7 @@ import type { StageCheck, StageCheckStatus } from "@/components/ui/stage-list";
 import { formatDateTime } from "@/libs/utc-time";
 import { formatMoney, toDecimal } from "@/utils/money";
 import { presentVerdict } from "@/utils/verdict";
+import { refundPromiseLive } from "./refund-promise";
 
 import type { Receipt, ReceiptStage, WireStageName, WireStageStatus } from "./wire";
 
@@ -611,7 +612,7 @@ function holdRows(receipt: Receipt, now: number, report: ReceiptReportState): Re
   const windowEnds = receipt.disputeWindowEndsAt ?? null;
   if (windowEnds) {
     const open = now < Date.parse(windowEnds);
-    const refundable = report === "open" || (report === "none" && receipt.refundableIfReportedNow === true);
+    const refundable = report === "open" || (report === "none" && refundPromiseLive(receipt, now));
     if (!reportable) {
       rows.push({ at: windowEnds, label: open ? "Hold ends" : "Hold ended", tone: "neutral" });
     } else if (open && refundable) {

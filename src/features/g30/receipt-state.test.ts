@@ -505,6 +505,14 @@ describe("receiptTimeline — the 1-hour hold", () => {
     expect(labels(uncovered)).not.toContain("Refundable until then");
   });
 
+  // W1A review C1: the backend's own end of the promise bounds the timeline too.
+  it("past refundableIfReportedUntil, a stale 'true' no longer reads 'Refundable until then'", () => {
+    const bounded = { ...receipt, refundableIfReportedUntil: "2026-10-16T00:10:00.000Z" };
+    const rows = receiptTimeline(bounded, "CHARGED", { now: INSIDE });
+    expect(labels(rows)).toContain("Hold ends");
+    expect(labels(rows)).not.toContain("Refundable until then");
+  });
+
   // Wave-1 audit I1: inside the hour but not guaranteed by the backend (e.g. no escrow hold on the chain).
   it("inside the hold without the backend's guarantee: 'Hold ends', no refund promise", () => {
     const rows = receiptTimeline({ ...receipt, refundableIfReportedNow: false }, "CHARGED", { now: INSIDE });

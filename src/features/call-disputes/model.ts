@@ -5,6 +5,7 @@ import { plainError } from "@/libs/plain-language";
 import type { CallDispute, CallDisputeReason } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
 import { DECISION_HOURS, HELD_TIMEOUT_DAYS, PROVIDER_REPLY_HOURS, REPORTS_PER_DAY } from "@/libs/dispute-deadlines";
+import { refundPromiseLive } from "@/features/g30/refund-promise";
 
 /**
  * "Report a bad result" (backlog G3.B1, analysis of the dispute hold), the
@@ -319,7 +320,9 @@ export interface ReportWindowView {
  * `refundableIfReportedNow`: the same predicate the filing applies to
  * `refundGuaranteed` (wave-1 audit I1). It is never inferred from the hold
  * fields here, since a chain without the escrow hold, or the hold's last
- * minute, is not guaranteed although it can look so. While a report is
+ * minute, is not guaranteed although it can look so. Nor is it extended past
+ * `refundableIfReportedUntil` or the hold's end: a page left open must not keep
+ * a promise the backend has dropped (W1A review C1). While a report is
  * accepted:
  *  - guaranteed, inside the 1-hour hold: a full refund if accepted;
  *  - guaranteed, the payment not collected yet: also a full refund;
@@ -332,6 +335,7 @@ export function reportWindow(
     disputeWindowEndsAt?: string | null;
     disputeFilingClosesAt?: string | null;
     refundableIfReportedNow?: boolean;
+    refundableIfReportedUntil?: string | null;
     chargedPrice: Money;
   },
   now: number,
@@ -340,7 +344,9 @@ export function reportWindow(
   const open = closes !== null && now < Date.parse(closes);
   const holdEnds = receipt.disputeWindowEndsAt ?? null;
   const inHold = holdEnds !== null && now < Date.parse(holdEnds);
-  const guaranteed = open && receipt.refundableIfReportedNow === true;
+  // Bounded by the clock (W1A review C1): a flag fetched inside the hold is not extended past it.
+  const guaranteed = open && refundPromiseLive(receipt, now);
+  const promiseEnds = receipt.refundableIfReportedUntil ?? holdEnds;
   if (!open) {
     return {
       open: false,
@@ -350,9 +356,9 @@ export function reportWindow(
     };
   }
   if (guaranteed && inHold) {
-    return { open, guaranteed, holdEndsAt: holdEnds, text: "The payment is still held. Report it now and, if your report is accepted, you are refunded in full." };
+    return { open, guaranteed, holdEndsAt: promiseEnds, text: "The payment is still held. Report it now and, if your report is accepted, you are refunded in full." };
   }
-  if (guaranteed) {
+  if (guaranteed && holdEnds === null) {
     return { open, guaranteed, holdEndsAt: null, text: "The payment has not been collected yet. Report it now and, if your report is accepted, you are refunded in full." };
   }
   if (holdEnds !== null && !inHold) {
