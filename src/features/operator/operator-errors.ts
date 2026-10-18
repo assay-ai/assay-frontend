@@ -29,6 +29,7 @@ export function operatorErrorSentence(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === "SLASH_CHAIN_UNAVAILABLE") return chainUnavailableSentence(error);
     if (error.code === "SLASH_NOTHING_STANDING") return nothingStandingOutcome(error).next;
+    if (error.code === "SLASH_MANUAL_ACTION_REFUSED") return manualActionRefusedSentence(error);
     if (SENTENCES[error.code]) return SENTENCES[error.code]!;
     if (error.status === 409) return "This penalty changed in the meantime, so nothing was done. Reload it and try again.";
     if (error.status === 422 || error.code === "VALIDATION_FAILED") return "Some details were not accepted. Check the form and try again.";
@@ -77,6 +78,33 @@ export function nothingStandingOutcome(error: Pick<ApiError, "context">): { titl
     };
   }
   return { title: "Nothing is on chain to cancel", next: `${NOTHING_ON_CHAIN} Nothing was changed.`, alert: false };
+}
+
+/** B18: why the backend refused a stuck-cancel action, from `error.context.reason`. Nothing was changed. */
+const MANUAL_REFUSAL: Readonly<Record<string, string>> = {
+  CHANGED: "This penalty changed since it was read (someone else acted, or a sweep did).",
+  NOT_CANCEL_REQUESTED: "This penalty no longer waits on a cancel.",
+  SWEEP_SETTLES: "The background sweep settles this penalty on its own.",
+  CHAIN_UNKNOWN: "Its record on chain could not be told: a record was written but is not found.",
+  STANDING: "Its record still stands on chain, so the arbiter's cancel is still the way.",
+  EXECUTED: "Its record was executed on chain: the stake was taken.",
+  NOT_EXECUTED: "Its record no longer reads executed on chain.",
+  NOT_GONE: "Its record does not read cancelled on chain.",
+  UPHELD_USE_REPROPOSE: "The penalty is upheld: it is proposed again, not closed.",
+  CASE_STATUS: "The penalty's status does not allow this.",
+  ALREADY_RECORDED: "The execution is already recorded.",
+  EXECUTED_BEYOND_DECISION: "The chain took more than the penalty now says is owed; this needs a pay-back and a human.",
+  DISPUTED_ON_CHAIN: "The provider disputed this record on chain, so it is never proposed again.",
+  BENEFICIARY_NOT_AN_AGENT:
+    "The chain paid the agents' share to an account that is not one of the window's agents, so recording it here would leave that money credited to nobody. This needs a compensation decision by a human.",
+  SPLIT_NOT_EXPRESSIBLE:
+    "The chain paid the whole agents' share to one agent, but more than one agent was harmed, so the others were underpaid. This needs a compensation decision by a human.",
+};
+
+export function manualActionRefusedSentence(error: Pick<ApiError, "context">): string {
+  const reason = typeof error.context?.reason === "string" ? error.context.reason : null;
+  const why = (reason && MANUAL_REFUSAL[reason]) ?? "Its guard no longer holds on a fresh chain read.";
+  return `${why} Nothing was changed. Reload the penalty to see where it stands.`;
 }
 
 /**

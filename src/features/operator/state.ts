@@ -89,6 +89,14 @@ const ACTION_ROLES = {
   compensate: ["ADJL", "TRE"],
   /* `cancel-intent` guards the same pair as `compensation-intent`. */
   cancel: ["ADJL", "TRE"],
+  /*
+    B18: the stuck-cancel actions, by the pair that handles the cancels to
+    sign. Close is one person (`S-15`); record (`S-16`) and re-propose
+    (`S-17`) are two-person, see `TWO_PERSON_ACTIONS`.
+  */
+  closeCancel: ["ADJL", "TRE"],
+  recordExecution: ["ADJL", "TRE"],
+  repropose: ["ADJL", "TRE"],
 } as const satisfies Record<string, readonly OperatorRole[]>;
 
 export type OperatorAction = keyof typeof ACTION_ROLES;
@@ -107,7 +115,8 @@ export function may(roles: readonly OperatorRole[], action: OperatorAction): boo
  * `cancel` is not here: it is gated on the on-chain record, see
  * {@link isCancelRequested}.
  */
-export type StatusGatedAction = Exclude<OperatorAction, "sweep" | "cancel">;
+export type StatusGatedAction = Exclude<OperatorAction, "sweep" | "cancel" | "closeCancel" | "recordExecution" | "repropose">;
+/* The B18 actions are gated on the brief's live chain read (`manualActions`), never on the status alone. */
 
 const ACTION_STATUSES: Record<StatusGatedAction, readonly SlashProposalStatus[]> = {
   claim: ["DISPUTED", "UNDER_REVIEW", "AWAITING_SECOND"],
@@ -286,6 +295,8 @@ export function isSweepable(outcome: string | null): boolean {
 export const TWO_PERSON_ACTIONS: readonly OperatorAction[] = Object.freeze([
   "sweep",
   "compensate",
+  "recordExecution",
+  "repropose",
 ]);
 
 /**

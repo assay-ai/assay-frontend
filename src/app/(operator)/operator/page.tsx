@@ -380,7 +380,8 @@ export default function OperatorHome() {
                 const at = row.nextDeadline ? Date.parse(row.nextDeadline) : Number.NaN;
                 const overdue = !Number.isNaN(at) && at <= now;
                 return (
-                  <Link key={row.proposalId} href={routes.operatorCase(row.proposalId)} className="flex w-full min-w-0 flex-col gap-1 px-4 py-3 hover:bg-02 tablet:flex-row tablet:items-center tablet:gap-4">
+                  // `act=resolve`: the penalty opens on its stuck-cancel action when its live read offers one (B18).
+                  <Link key={row.proposalId} href={`${routes.operatorCase(row.proposalId)}&act=resolve`} className="flex w-full min-w-0 flex-col gap-1 px-4 py-3 hover:bg-02 tablet:flex-row tablet:items-center tablet:gap-4">
                     <span className="min-w-0 flex-1 text-label-sm text-01">
                       Cancel {possessive(providers.lookup(row.providerId) ?? row.providerName)} {formatMoney(row.amount)} penalty
                       <span className="block text-body-xs font-normal text-03">

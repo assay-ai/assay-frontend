@@ -16,12 +16,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   cancelDeadlineSentence,
   caseAuthority,
+  manualActionCopy,
   caseFacts,
   caseNextStep,
   caseTimelineSteps,
   pendingRequestStep,
   type CaseActionId,
   type CaseStage,
+  type ManualActionKind,
   type PendingRequest,
 } from "@/features/operator/case-flow";
 import { approvalNeeds, approvalTargetId, approveBlockedBecause, isOwnRequest, penaltyPhrase } from "@/features/operator/approvals";
@@ -45,13 +47,14 @@ import { ApiError } from "@/libs/ApiClient";
 import { createConfigChainReader } from "@/libs/chains/evm/contract-config";
 import { explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { formatDateTime } from "@/libs/utc-time";
-import type { OperatorCaseBrief } from "@/interfaces/operator";
+import type { ManualCaseActionResult, OperatorCaseBrief } from "@/interfaces/operator";
 import { getOperatorCase, listApprovals } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
 
 import { nothingStandingOutcome } from "@/features/operator/operator-errors";
 
 import { CancelSheet } from "./_components/cancel-sheet";
+import { ManualActionSheet } from "./_components/manual-action-sheet";
 import { MoreActions } from "./_components/more-actions";
 import { SuspendSheet } from "./_components/suspend-sheet";
 import { WhyNotLine } from "./_components/why-not-line";
@@ -96,6 +99,8 @@ const WAITING_WHAT: Record<string, string> = {
   "slash.suspend": "A suspension of this penalty",
   "slash.compensated": "A pay-back of this penalty",
   "slash.sweep": "A fleet sweep from this penalty",
+  "slash.record_execution": "Recording this penalty's on-chain execution",
+  "slash.repropose": "Proposing this penalty again",
 };
 
 /** Instants in sentences always carry their day, in running-text case ("before today 18:41"). */
@@ -126,11 +131,14 @@ type Result = { title: string; next: string; approvalId?: string; txHash?: strin
 
 export default function OperatorCasePage() {
   const proposalId = useSearchParam("id");
+  // `act=resolve` (from Home's "Cancels to sign" rows): open the stuck-cancel action, when one is offered.
+  const act = useSearchParam("act");
   const identity = useOperatorSession();
   const queryClient = useQueryClient();
   const providers = useProviderNames();
   const directory = useOperatorDirectory();
-  const [sheet, setSheet] = React.useState<"suspend" | "cancel" | null>(null);
+  const [sheet, setSheet] = React.useState<"suspend" | "cancel" | ManualActionKind | null>(null);
+  const opened = React.useRef(false);
   const [result, setResult] = React.useState<Result | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
   React.useEffect(() => {
@@ -172,6 +180,15 @@ export default function OperatorCasePage() {
   const waitingSuspend = live.find((a) => a.action === "slash.suspend") ?? null;
   // Any two-person request on this penalty (suspend, pay back, sweep) is said once, above the columns.
   const waitingAny = waitingSuspend ?? live.find((a) => a.action in PENALTY_APPROVAL_CODES) ?? null;
+
+  // Home's row asked for the action: open it once, and only if the brief's read offers it to this operator.
+  React.useEffect(() => {
+    if (opened.current || act !== "resolve" || !caseQuery.data) return;
+    opened.current = true;
+    const auth = caseAuthority(caseQuery.data, identity, caseFacts(caseQuery.data, Date.now()));
+    const kind: ManualActionKind | null = auth.recordExecution ? "record" : auth.repropose ? "repropose" : auth.closeCancel ? "close" : null;
+    if (kind) setSheet(kind);
+  }, [act, caseQuery.data, identity]);
 
   // After an action, everything on the page is read again: status, next step, history.
   const refetch = React.useCallback(() => {
@@ -265,6 +282,12 @@ export default function OperatorCasePage() {
         return waitingAny ? { label: "Review and approve", href: approvalHref(waitingAny.id) } : undefined;
       case "open-request":
         return waitingAny ? { label: "Open the request", href: approvalHref(waitingAny.id) } : undefined;
+      case "close-cancel":
+        return { label: "Close the cancel", onClick: () => setSheet("close") };
+      case "record-execution":
+        return { label: "Record the execution (needs approval)", onClick: () => setSheet("record"), tone: primary ? "danger" : undefined };
+      case "repropose":
+        return { label: "Propose again (needs approval)", onClick: () => setSheet("repropose") };
       default:
         return undefined;
     }
@@ -287,6 +310,33 @@ export default function OperatorCasePage() {
     }
     refetch();
   };
+
+  const onManualDone = (kind: ManualActionKind) => (answer: TwoPersonAnswer<ManualCaseActionResult>) => {
+    const copy = manualActionCopy(kind, { penalty: penaltyText, applied: null });
+    if (answer.kind === "queued") {
+      const approvers = directory.isPending ? undefined : eligibleApprovers(copy.code, directory.operators, identity.id);
+      const what = kind === "record" ? `Recording the on-chain execution of ${penaltyName}` : `Proposing ${penaltyName} again`;
+      const sent = sentForApproval(what, approvers, approvalNeeds(copy.code, identity.roles), answer.approval.expiresAt);
+      setResult({ ...sent, approvalId: answer.approval.approvalId, approvers, expiresAt: answer.approval.expiresAt });
+    } else {
+      setResult({
+        title: answer.result.alreadyDone ? "Already closed: nothing stands on chain" : "Cancel closed: nothing stands on chain",
+        next: answer.result.alreadyDone
+          ? "Another request closed it a moment ago; nothing more was written. The penalty has left Waiting for signature."
+          : "The record read cancelled on chain just now. The penalty has left Waiting for signature; nothing was taken from the provider.",
+      });
+    }
+    refetch();
+  };
+  const manualWaiting = (kind: ManualActionKind) => {
+    const action = manualActionCopy(kind, { penalty: penaltyText, applied: null }).approvalAction;
+    return action ? (live.find((a) => a.action === action) ?? null) : null;
+  };
+  const appliedText = facts.manual.appliedMinor
+    ? formatMoney({ ...proposal.penaltyAmount, amount: facts.manual.appliedMinor })
+    : null;
+  // The stuck-cancel action this operator may take now, for the alert lines' links.
+  const manualHere: ManualActionKind | null = authority.recordExecution ? "record" : authority.closeCancel ? "close" : authority.repropose ? "repropose" : null;
 
   // Ruling is neutral: Cancel and Uphold carry equal weight, each opening its sheet on the Arbiter.
   const ruling = next.kind === "action" && next.action === "rule";
@@ -338,6 +388,11 @@ export default function OperatorCasePage() {
         <div role="alert" className="flex w-full flex-col gap-1 rounded-lg border border-danger-20 bg-danger-10 p-3.5">
           <p className="text-label-13 text-danger-700">{result.title}</p>
           <p className="text-body-13 text-02">{result.next}</p>
+          {manualHere === "record" ? (
+            <Button variant="secondary" size="sm" className="touch-target self-start" onClick={() => setSheet("record")}>
+              Record the execution
+            </Button>
+          ) : null}
         </div>
       ) : result ? (
         <ResultCard
@@ -374,6 +429,14 @@ export default function OperatorCasePage() {
           {next.alert ? (
             <p role="alert" className="w-full rounded-lg border border-danger-20 bg-danger-10 px-3.5 py-2.5 text-label-13 text-danger-700">
               {next.title}: the stake was taken.
+              {manualHere === "record" ? (
+                <>
+                  {" "}
+                  <button type="button" className="hit-area underline underline-offset-2" onClick={() => setSheet("record")}>
+                    Record it
+                  </button>
+                </>
+              ) : null}
             </p>
           ) : null}
           <NextStepCard
@@ -523,6 +586,23 @@ export default function OperatorCasePage() {
           onDone={onSuspended}
         />
       ) : null}
+      {(["close", "record", "repropose"] as const).map((kind) =>
+        (kind === "close" ? authority.closeCancel : kind === "record" ? authority.recordExecution : authority.repropose) ? (
+          <ManualActionSheet
+            key={kind}
+            kind={kind}
+            open={sheet === kind}
+            onOpenChange={(open) => setSheet(open ? kind : null)}
+            proposalId={proposalId}
+            penaltyText={penaltyText}
+            appliedText={appliedText}
+            closedCase={proposal.status !== "UPHELD"}
+            me={identity}
+            waiting={manualWaiting(kind)}
+            onDone={onManualDone(kind)}
+          />
+        ) : null,
+      )}
       {authority.cancel ? (
         <CancelSheet
           open={sheet === "cancel"}

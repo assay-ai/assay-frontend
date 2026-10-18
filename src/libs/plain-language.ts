@@ -527,6 +527,9 @@ const AUDIT_ACTIONS: Record<string, string> = {
   "operator.change": "Change operator",
   "operator.remove": "Remove operator",
   "slash.compensated": "Compensation paid",
+  "slash.chain_cancel_closed": "Requested cancel closed (nothing on chain)",
+  "slash.execution_recorded": "On-chain execution recorded",
+  "slash.reproposed": "Penalty proposed again",
 };
 
 /** An audit-log `action` as a short past-tense phrase. */

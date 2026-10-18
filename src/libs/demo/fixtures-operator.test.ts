@@ -238,3 +238,26 @@ describe("B11 shapes: old-process count, chainStanding, cancels to sign", () => 
     expect(brief.chainStanding).toBe(false);
   });
 });
+
+describe("B18 shapes: manualActions", () => {
+  it("offers only the record of the execution made while the cancel waited, and nothing on any other case", async () => {
+    const fixtures = await load();
+    const rows = (call(fixtures, "GET", "/operator/cases") as { items: OperatorCaseListRow[] }).items;
+    for (const row of rows) {
+      const brief = call(fixtures, "GET", `/operator/cases/${row.proposalId}`) as OperatorCaseBrief;
+      const offered = Object.entries(brief.manualActions ?? {})
+        .filter(([, option]) => option.allowed)
+        .map(([name]) => name);
+      expect(offered).toEqual(row.proposalId === "6a0f3b9e-7c21-4d58-9e04-b1c2d3e4f5a6" ? ["recordExecution"] : []);
+    }
+  });
+
+  it("queues the record for a second operator, as the API does", async () => {
+    const fixtures = await load();
+    const answer = call(fixtures, "POST", "/operator/cases/6a0f3b9e-7c21-4d58-9e04-b1c2d3e4f5a6/record-execution", {}, {
+      reasonCode: "EXECUTED_WHILE_CANCEL_WAITED",
+      note: "Read the record on the explorer: executed.",
+    }) as { approvalId: string; status: string; action: string };
+    expect(answer).toMatchObject({ status: "PENDING", action: "slash.record_execution" });
+  });
+});
