@@ -1,7 +1,6 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Info } from "lucide-react";
 import * as React from "react";
 
 import { DepositChainChoice } from "@/components/funding/deposit-chain-choice";
@@ -13,6 +12,7 @@ import { testTokenHelp } from "@/features/buyer-money/gas-help";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { DEPOSIT_MINIMUM_USD } from "@/features/explorer/buyer-costs";
 import { depositChoice } from "@/features/funding/deposit-chain";
+import { depositWalletView, useDepositWallet } from "@/features/funding/deposit-wallet";
 import { depositUnavailableOn, depositableChains, offeredChains } from "@/features/funding/depositable-chains";
 import { chainBalances } from "@/features/g30/balance";
 import { usePendingTransactions } from "@/hooks/usePendingTransactions";
@@ -32,7 +32,11 @@ import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-mone
  * Add funds, in a drawer opened from anywhere (funding hero, Get started,
  * Overview, the account menu via `/funding?action=deposit`).
  *
- * - The amount starts empty: one careless click must not move $25.
+ * - $20 is preselected (B7), so "Balance after" shows at once; nothing moves
+ *   before the two wallet prompts.
+ * - The wallet's own token and gas balances are read first (pinned token and
+ *   escrow), so a short balance or no gas is said before any prompt, with an
+ *   estimate of the network fee and of the time to credit.
  * - The $5 minimum is said before anyone types.
  * - One source line instead of a chain radio and a one-option select.
  * - Approve → Deposit as a tracked two-signature flow; "Confirmed" at the end.
@@ -41,6 +45,7 @@ import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-mone
 const MINIMUM = DEPOSIT_MINIMUM_USD;
 const DECIMALS = 6;
 const PRESETS = ["5", "20", "50"];
+const PRESELECTED = "20";
 
 export interface DepositSheetProps {
   open: boolean;
@@ -54,7 +59,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
   const readOnly = useAccountReadOnly();
   const money = useBuyerMoney();
   const pending = usePendingTransactions();
-  const [amount, setAmount] = React.useState("");
+  const [amount, setAmount] = React.useState(PRESELECTED);
   const [picked, setPicked] = React.useState<string | null>(null);
 
   const depositable = depositableChains(money.chains, {
@@ -89,14 +94,23 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
 
   // One run per attempt: created in the first step, read by the second.
   const runRef = React.useRef<DepositRun | null>(null);
-  // Every way of closing (Done, Next, the X) starts the next opening empty.
+  // Every way of closing (Done, Next, the X) starts the next opening at the preselected amount.
   React.useEffect(() => {
     if (open) return;
-    setAmount("");
+    setAmount(PRESELECTED);
     runRef.current = null;
   }, [open]);
   const resetKey = `${amount}|${chainId ?? ""}`;
   const evm = chainId !== null && isEvmChain(chainId);
+  // What the depositing wallet holds, before any prompt (pinned token and escrow; EVM only).
+  const walletQuery = useDepositWallet({ chainId, address: wallet, enabled: open && evm });
+  const walletView = depositWalletView({
+    balances: walletQuery.data ?? null,
+    amountAtomic: parsed.atomic ?? null,
+    decimals: DECIMALS,
+    tokenSymbol: symbol,
+    nativeSymbol: "ETH",
+  });
 
   const steps: WalletStep[] = [
     {
@@ -187,7 +201,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
               ? amount.trim() === ""
                 ? "Pick or enter an amount."
                 : (parsed.error ?? "Enter an amount.")
-              : null;
+              : walletView.blocker;
 
   const needsCaps = !money.capsSet;
   const tokenHelp = testTokenHelp(chain);
@@ -245,13 +259,26 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
       </div>
 
       {chainId ? (
-        <p className="text-body-13 text-02" data-testid="deposit-source">
+        <p className="text-body-13 text-02 [overflow-wrap:anywhere]" data-testid="deposit-source">
           From {wallet ? shortAddress(chainId, wallet) : "your wallet"} on {chainName} ·{" "}
-          {evm ? "you pay a small network fee in ETH" : "network fee paid by Assay"}
+          {evm ? "you pay a small network fee in ETH" : "network fee paid by Assay"} · usually credited in under a minute
         </p>
       ) : null}
-      {evm ? <GasHelpNote chain={chain} /> : null}
-      {tokenHelp ? (
+
+      {walletView.rows.length > 0 ? (
+        <dl className="flex flex-col gap-1 rounded-lg border border-01 bg-02 px-3 py-2 text-body-xs" data-testid="deposit-wallet">
+          {walletView.rows.map((row) => (
+            <div key={row.label} className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <dt className="text-02">{row.label}</dt>
+              <dd className={row.bad ? "font-mono text-warning-700" : "font-mono text-01"}>{row.value}</dd>
+            </div>
+          ))}
+          {walletView.feeText ? <p className="pt-1 text-03">{walletView.feeText}</p> : null}
+        </dl>
+      ) : null}
+      {/* Where to get test ETH and the test token: only when the wallet lacks it, or its balances are unknown. */}
+      {evm && (walletView.needsGas || !walletQuery.data) ? <GasHelpNote chain={chain} /> : null}
+      {tokenHelp && (walletView.needsToken || !walletQuery.data) ? (
         <p className="text-body-xs text-03" data-testid="test-token-help">
           {tokenHelp}
         </p>
@@ -259,22 +286,13 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
 
       {/* Money truths stay visible: a deposit is final, and getting it back takes about an hour. */}
       <ul className="flex list-disc flex-col gap-1 rounded-lg border border-01 bg-02 py-2 pl-7 pr-3 text-body-xs text-02" data-testid="deposit-truths">
+        <li>
+          You deposit {symbol}, a dollar token on {chainName ?? "this chain"}, spent on this chain only.
+          {evm ? " Two wallet prompts: one allows the transfer, one makes it." : ""}
+        </li>
         <li>Deposits settle on chain and are final: there is no card and no chargeback.</li>
         <li>You can withdraw what you have not spent at any time; it takes about an hour.</li>
       </ul>
-
-      <details className="group rounded-lg border border-01 bg-02 px-3 py-2 text-body-xs text-02">
-        <summary className="flex cursor-pointer select-none items-center gap-1.5 text-label-xs text-02">
-          <Info aria-hidden="true" className="size-3.5" />
-          About deposits
-        </summary>
-        <ul className="mt-2 flex list-disc flex-col gap-1 pl-4">
-          <li>
-            You deposit {symbol}, a dollar token on {chainName ?? "this chain"}. It is spent on this chain only.
-          </li>
-          {evm ? <li>Two wallet prompts: one allows the transfer, one makes it. Both cost a little ETH.</li> : null}
-        </ul>
-      </details>
     </WalletActionSheet>
   );
 }
