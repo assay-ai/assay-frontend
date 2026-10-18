@@ -56,7 +56,7 @@ export interface RequestRow {
   id: string;
   /** The selector into the tool's input, or `—` for a constant. */
   toolField: string;
-  /** `identity`, `constant`, or the transform chain joined with `→`. */
+  /** `unchanged`, `constant`, or the transform chain joined with `→`. */
   transform: string;
   /** Where the value lands on the provider's own request. */
   upstreamField: string;
@@ -101,7 +101,7 @@ function requestLeafRows(node: Json, destination: string, out: RequestRow[]): vo
       ? "constant"
       : leaf.transforms.length > 0
         ? leaf.transforms.map(transformStepName).join(" → ")
-        : "identity",
+        : "unchanged",
     upstreamField: isConstant ? `${destination} = ${literal(leaf.constant)}` : destination,
     status: statusOf(leaf),
   });

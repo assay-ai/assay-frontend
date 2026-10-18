@@ -35,13 +35,19 @@ describe("wizard seeds", () => {
     expect(argumentsFromText(fields, { live: "yes" }).error).toMatch(/true or false/);
   });
 
-  it("forwards every argument by name", () => {
+  it("forwards every argument by name; optional ones may be missing; no path (D22)", () => {
     const tool = { id: "t", name: "T", description: "", tier: "VERIFIED" as const, inputSchema, outputSchema: {} };
-    expect(seedRequestMapping(tool)).toEqual({
+    const seed = seedRequestMapping(tool);
+    expect(seed).toEqual({
       method: "GET",
-      path: "/",
-      query: { symbol: { $path: "$.symbol" }, limit: { $path: "$.limit" }, live: { $path: "$.live" } },
+      query: {
+        symbol: { $path: "$.symbol" },
+        limit: { $path: "$.limit", $optional: true },
+        live: { $path: "$.live", $optional: true },
+      },
     });
+    // No path: the address is called as typed, never with a trailing "/".
+    expect("path" in seed).toBe(false);
   });
 
   it("says what a tool returns and needs in words", () => {

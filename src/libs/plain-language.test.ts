@@ -76,6 +76,7 @@ describe("errors", () => {
     "RESERVED_MAPPING_HEADER",
     "CREDENTIAL_ORIGIN_LIVE",
     "CREDENTIALS_REQUIRED_FOR_AUTH_MODE",
+    "CREDENTIAL_VAULT_NOT_CONFIGURED",
   ])("gives %s its own sentence, bare and PROVIDER_-prefixed", (code) => {
     const generic = plainError("NOT_A_REAL_CODE_XYZ");
     expect(knowsError(code)).toBe(true);
@@ -87,6 +88,26 @@ describe("errors", () => {
     expect(plainError("PROVIDER_CREDENTIALS_REQUIRED_FOR_AUTH_MODE")).toBe(
       "Add your API key headers for the live address first, then switch to API key.",
     );
+  });
+
+  it("says a vault that is not set up is a storage problem, and that nothing was stored", () => {
+    expect(plainError("PROVIDER_CREDENTIAL_VAULT_NOT_CONFIGURED", 503)).toBe(
+      "Key storage isn't set up on this server, so headers can't be saved. Nothing was stored. Tell Assay support.",
+    );
+  });
+
+  it("gives an unknown 5xx a status-aware sentence instead of the generic one", () => {
+    const generic = plainError("SOMETHING_NOBODY_KNOWS");
+    expect(plainError("SOMETHING_NOBODY_KNOWS", 503)).toBe(
+      "This part of Assay is unavailable right now (HTTP 503). Try again in a few minutes; if it keeps happening, tell Assay support.",
+    );
+    expect(plainError("SOMETHING_NOBODY_KNOWS", 500)).toMatch(/^Something failed on Assay's side \(HTTP 500\)/);
+    expect(plainError("SOMETHING_NOBODY_KNOWS", 502)).toMatch(/HTTP 502/);
+    expect(plainError("SOMETHING_NOBODY_KNOWS", 500)).not.toBe(generic);
+    // A known code keeps its own sentence; a 4xx keeps the generic one.
+    expect(plainError("PROVIDER_CREDENTIAL_VAULT_UNAVAILABLE", 503)).toBe(plainError("CREDENTIAL_VAULT_UNAVAILABLE"));
+    expect(plainError("SOMETHING_NOBODY_KNOWS", 400)).toBe(generic);
+    expect(plainError(null, 503)).toMatch(/HTTP 503/);
   });
 
   it("never shows an unknown code as the sentence", () => {

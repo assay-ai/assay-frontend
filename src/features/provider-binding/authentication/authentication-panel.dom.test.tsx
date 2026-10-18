@@ -48,6 +48,34 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe("AuthenticationPanel choice (D10)", () => {
+  it("preselects nothing and asks for a choice", () => {
+    mount({ mode: null, bindingId: null, savedEndpoint: null });
+    expect(screen.getByText("Choose one. There is no default.")).toBeTruthy();
+    for (const radio of screen.getAllByRole("radio")) expect((radio as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("explains every option before the choice, and recommends the signature", () => {
+    mount({ mode: null, bindingId: null, savedEndpoint: null });
+    expect(screen.getByRole("radio", { name: /^Assay signature \(recommended\)/ })).toBeTruthy();
+    expect(screen.getByText(/Your API checks the signature and refuses anything else/)).toBeTruthy();
+    expect(screen.getByText(/Assay sends headers you store here/)).toBeTruthy();
+    expect(screen.getByText(/A signature and your API key headers/)).toBeTruthy();
+    expect(screen.getByText(/Your API accepts any call/)).toBeTruthy();
+  });
+
+  it("explains the signature inline, with a snippet and the full guide (D23)", () => {
+    mount({ mode: "SIGNATURE" });
+    expect(screen.getByText("How to check the signature")).toBeTruthy();
+    expect(screen.getByText(/older than 5 minutes/)).toBeTruthy();
+    expect(screen.getByText(/assayVerify/)).toBeTruthy();
+    // The package is not on npm yet: the copy says so above the snippet.
+    expect(screen.getByText("The npm package is coming soon; until then follow the Full guide.")).toBeTruthy();
+    const guide = screen.getByRole("link", { name: /^Full guide/ }) as HTMLAnchorElement;
+    expect(guide.href).toBe("https://github.com/assay-ai/assay-provider-verify#readme");
+  });
+});
+
 describe("AuthenticationPanel", () => {
   it("warns under Neither", () => {
     mount({ mode: "NONE" });
@@ -57,13 +85,13 @@ describe("AuthenticationPanel", () => {
   it("reports the picked mode", () => {
     const onModeChange = vi.fn();
     mount({ mode: "API_KEY", onModeChange });
-    fireEvent.click(screen.getByRole("radio", { name: "Neither" }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Neither/ }));
     expect(onModeChange).toHaveBeenCalledWith("NONE");
   });
 
   it("saves typed headers, then no input holds the value", async () => {
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: "Replace headers" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add headers" }));
     expect(screen.getAllByLabelText("Header name")).toHaveLength(1);
     fireEvent.change(screen.getByLabelText("Header name"), { target: { value: "X-Key" } });
     fireEvent.change(screen.getByLabelText("Header value"), { target: { value: "v" } });
@@ -75,7 +103,7 @@ describe("AuthenticationPanel", () => {
 
   it("splits a pasted Name: value line", async () => {
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: "Replace headers" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add headers" }));
     fireEvent.paste(screen.getByLabelText("Header name"), { clipboardData: { getData: () => "Authorization: Bearer sk-1" } });
     expect((screen.getByLabelText("Header name") as HTMLInputElement).value).toBe("Authorization");
     expect((screen.getByLabelText("Header value") as HTMLInputElement).value).toBe("Bearer sk-1");
@@ -114,21 +142,24 @@ describe("AuthenticationPanel", () => {
 
   it("writes for the saved origin, and waits for Run when the typed origin moved", async () => {
     const view = mount({ endpoint: "https://p.test/v2" });
-    fireEvent.click(await screen.findByRole("button", { name: "Replace headers" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add headers" }));
     fireEvent.change(screen.getByLabelText("Header name"), { target: { value: "X-Key" } });
     fireEvent.change(screen.getByLabelText("Header value"), { target: { value: "v" } });
     fireEvent.click(screen.getByRole("button", { name: "Save headers" }));
     await waitFor(() => expect(service.putBindingCredentials).toHaveBeenCalledWith("b1", "https://p.test", [{ name: "X-Key", value: "v" }]));
     view.unmount();
-    mount({ endpoint: "https://new.test/v1" });
-    expect(await screen.findByText("Run once to save the new address, then add its headers.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Replace headers" }) as HTMLButtonElement).disabled).toBe(true);
+    const onSaveConnection = vi.fn();
+    mount({ endpoint: "https://new.test/v1", onSaveConnection });
+    expect(await screen.findByText("Saves the new address so you can add its headers. Your API is not called.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Add headers" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
+    expect(onSaveConnection).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the rows and explains a failed save", async () => {
     service.putBindingCredentials.mockRejectedValue(new ApiError("PROVIDER_CREDENTIAL_VAULT_UNAVAILABLE", "x", 503));
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: "Replace headers" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add headers" }));
     fireEvent.change(screen.getByLabelText("Header name"), { target: { value: "X-Key" } });
     fireEvent.change(screen.getByLabelText("Header value"), { target: { value: "secret-v" } });
     fireEvent.click(screen.getByRole("button", { name: "Save headers" }));
@@ -142,10 +173,46 @@ describe("AuthenticationPanel", () => {
     expect(await screen.findByText("••••cdef")).toBeTruthy();
   });
 
-  it("disables the credentials before the first save", () => {
-    mount({ bindingId: null });
-    expect(screen.getByText("Save the connection first.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Replace headers" }) as HTMLButtonElement).disabled).toBe(true);
+  it("offers Save connection before the first save, so headers can be added before any test", () => {
+    const onSaveConnection = vi.fn();
+    mount({ bindingId: null, savedEndpoint: null, onSaveConnection });
+    expect(screen.queryByText("Save the connection first.")).toBeNull();
+    expect(screen.queryByRole("button", { name: /headers/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
+    expect(onSaveConnection).toHaveBeenCalledTimes(1);
+  });
+
+  it("says Replace headers only when headers are stored for this address", async () => {
+    service.listBindingCredentials.mockResolvedValue([setFor("https://p.test")]);
+    mount();
+    expect(await screen.findByRole("button", { name: "Replace headers" })).toBeTruthy();
+    expect(screen.getByText(/used for every tool|every tool you list on it uses them/i)).toBeTruthy();
+  });
+
+  it("reads a vault that is not set up as a storage problem (503)", async () => {
+    service.putBindingCredentials.mockRejectedValue(new ApiError("PROVIDER_CREDENTIAL_VAULT_NOT_CONFIGURED", "x", 503));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Add headers" }));
+    fireEvent.change(screen.getByLabelText("Header name"), { target: { value: "X-Key" } });
+    fireEvent.change(screen.getByLabelText("Header value"), { target: { value: "v" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save headers" }));
+    expect(
+      await screen.findByText("Key storage isn't set up on this server, so headers can't be saved. Nothing was stored. Tell Assay support."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Something went wrong/)).toBeNull();
+  });
+
+  it("opens the form prefilled with headers moved out of the address", async () => {
+    const onPendingDone = vi.fn();
+    mount({ pendingHeaders: [{ name: "api_key", value: "moved-value" }], onPendingDone });
+    expect(((await screen.findByLabelText("Header name")) as HTMLInputElement).value).toBe("api_key");
+    expect((screen.getByLabelText("Header value") as HTMLInputElement).value).toBe("moved-value");
+    expect(screen.getByText(/Check the header name your API reads/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save headers" }));
+    await waitFor(() =>
+      expect(service.putBindingCredentials).toHaveBeenCalledWith("b1", "https://p.test", [{ name: "api_key", value: "moved-value" }]),
+    );
+    await waitFor(() => expect(onPendingDone).toHaveBeenCalled());
   });
 });
 
@@ -183,16 +250,26 @@ describe("runBlockedByCredentials", () => {
 });
 
 describe("CredentialHeadersForm rows", () => {
-  it("flags an empty row next to a filled one and does not save", async () => {
+  it("opens without an error, and checks a row once focus leaves it", async () => {
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: "Replace headers" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add headers" }));
+    expect(screen.queryByText("Header name is required.")).toBeNull();
+    // Moving from the name to the value of the same row is not leaving it.
+    fireEvent.blur(screen.getByLabelText("Header name"), { relatedTarget: screen.getByLabelText("Header value") });
+    expect(screen.queryByText("Header name is required.")).toBeNull();
+    fireEvent.blur(screen.getByLabelText("Header value"), { relatedTarget: document.body });
+    expect(screen.getByText("Header name is required.")).toBeTruthy();
+  });
+
+  it("flags an empty row next to a filled one on save, and does not save", async () => {
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Add headers" }));
     fireEvent.change(screen.getByLabelText("Header name"), { target: { value: "X-Key" } });
     fireEvent.change(screen.getByLabelText("Header value"), { target: { value: "v" } });
     fireEvent.click(screen.getByRole("button", { name: "Add header" }));
+    expect(screen.queryByText("Header name is required.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save headers" }));
     expect(screen.getByText("Header name is required.")).toBeTruthy();
-    const save = screen.getByRole("button", { name: "Save headers" }) as HTMLButtonElement;
-    expect(save.disabled).toBe(true);
-    fireEvent.click(save);
     expect(service.putBindingCredentials).not.toHaveBeenCalled();
   });
 });

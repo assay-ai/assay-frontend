@@ -189,7 +189,8 @@ export interface SaveToolBindingBody {
   requestMapping: ToolMapping;
   responseMapping: ToolMapping;
   pricingMode: PricingMode;
-  authMode?: BindingAuthMode;
+  /** Required: there is no default (D10). */
+  authMode: BindingAuthMode;
   /** Minor units, digits only. */
   priceAmount: string;
   /** CAIP-19 asset id. */

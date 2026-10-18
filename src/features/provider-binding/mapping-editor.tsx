@@ -585,7 +585,7 @@ function CellInput({
 
 function chainLabel(row: EditorRow): string {
   if (row.kind === "constant") return "constant";
-  if (row.transforms.length === 0) return "identity";
+  if (row.transforms.length === 0) return "unchanged";
   return row.transforms.map(transformStepName).join(" → ");
 }
 
