@@ -112,7 +112,7 @@ export function rejectMode(
  * then falls back to the id, shortened.
  */
 export interface ApprovalContext {
-  readonly blocks: ReadonlyMap<string, Pick<AccountBlock, "subjectKind" | "subject" | "active" | "reasonCode" | "blockedBy">>;
+  readonly blocks: ReadonlyMap<string, Pick<AccountBlock, "subjectKind" | "subject" | "active" | "reasonCode" | "blockedBy"> & { subjectName?: string | null }>;
   readonly operators: ReadonlyMap<
     string,
     Pick<OperatorDirectoryEntry, "subject" | "displayName" | "walletAddress" | "roles" | "authorityLimit">
@@ -238,9 +238,9 @@ export function limitText(minor: unknown, asset: ApprovalContext["asset"]): stri
   return amount === "0" ? "$0" : `${amount} minor units`;
 }
 
-/** A block's subject in words: `wallet 0x0000…0abc` or `organization 1b2c3d4e…`. */
-function blockSubject(block: Pick<AccountBlock, "subjectKind" | "subject">): string {
-  if (block.subjectKind === "ORGANIZATION") return `organization ${block.subject}`;
+/** A block's subject in words: `wallet 0x0000…0abc`, the organization's name, or `organization 1b2c3d4e…` when it has none. */
+function blockSubject(block: Pick<AccountBlock, "subjectKind" | "subject"> & { subjectName?: string | null }): string {
+  if (block.subjectKind === "ORGANIZATION") return block.subjectName ?? `organization ${shortId(block.subject)}`;
   const parts = block.subject.split(":");
   const address = parts.length >= 3 ? parts.slice(2).join(":") : block.subject;
   const chain = parts.length >= 3 ? `${parts[0]}:${parts[1]}` : "eip155:1";
