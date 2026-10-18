@@ -20,7 +20,7 @@ import {
 
 import { demoEnabled } from "@/libs/demo/demo-api";
 
-import { applyIdentityChange, isOperatorConsolePath, signedOutLanding, unauthorizedTarget } from "./buyer-session";
+import { applyIdentityChange, handleUnauthorized, isOperatorConsolePath, signedOutLanding } from "./buyer-session";
 
 /**
  * Bridges Privy's client-side auth state onto the axios session used by
@@ -50,7 +50,9 @@ import { applyIdentityChange, isOperatorConsolePath, signedOutLanding, unauthori
  *     was tried and removed.
  *  5. Register the `ApiClient` 401 handler. `ApiClient` is a module-level
  *     singleton and cannot import a router or a query client, so it exposes
- *     `onUnauthorized` and this is the one place with both. A Privy token
+ *     `onUnauthorized` and this is the one place with both. A protected
+ *     page goes to sign-in; a public page stays put with the token cleared
+ *     (`handleUnauthorized`). A Privy token
  *     expiring is the first 401 this app has ever had to handle — the old
  *     demo token never did. A 424 (`AUTH_WALLET_NOT_LINKED`) never reaches
  *     this handler: `ApiClient` only calls it for 401, and a brand-new
@@ -103,17 +105,22 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
       if (isOperatorConsolePath(pathnameRef.current)) return;
       redirectingRef.current = true;
 
-      clearSessionToken();
-      queryClient.clear();
-      // A cleared local token with a live Privy session would silently
-      // re-authenticate on the next mount and mask the expiry, so end the
-      // Privy session too. Best-effort: the redirect must not wait on it or
-      // get blocked by it failing.
-      void logout().catch(() => {});
-      // Back to the same page after signing in. "Your session expired" only
-      // when this page load had one; a first-time visitor at `/` gets How it works.
+      // The token, the data and the Privy session go on every page. A
+      // protected page then goes to sign-in (back here after it; "Your
+      // session expired" only when this page load had one; a first-time
+      // visitor at `/` gets How it works). A public page stays put: it needs
+      // no session.
       const search = typeof window === "undefined" ? "" : window.location.search;
-      router.replace(unauthorizedTarget({ pathname: pathnameRef.current, search, previous: lastIdentityRef.current }));
+      handleUnauthorized(
+        { pathname: pathnameRef.current, search, previous: lastIdentityRef.current },
+        {
+          clearSessionToken,
+          clearCache: () => queryClient.clear(),
+          resetCache: () => void queryClient.resetQueries(),
+          logout,
+          navigate: (href) => router.replace(href),
+        },
+      );
     });
   }, [queryClient, router, logout]);
 
