@@ -36,7 +36,7 @@ export const DESIGN_TERMS: ProviderTermsSummary = {
     "I accept the provider agreement v1.0, the payout terms v1.0 and the slash policy v1.0",
   commercialTerms: [
     { key: "takeRate", label: "Take rate", value: "10%", caption: "flat, no per-call fee floor" },
-    { key: "payouts", label: "Payouts", value: "as each call settles", caption: "on-chain and final" },
+    { key: "payouts", label: "Payouts", value: "as each call settles", caption: "on chain; final 1 hour after each call" },
     {
       key: "reserveHeld",
       label: "Standing reserve",
