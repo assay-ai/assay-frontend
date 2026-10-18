@@ -25,6 +25,8 @@ import {
   type PendingRequest,
 } from "@/features/operator/case-flow";
 import { approvalNeeds, approvalTargetId, approveBlockedBecause, isOwnRequest, penaltyPhrase } from "@/features/operator/approvals";
+import { useArbiterTerms } from "@/features/operator/arbiter-terms";
+import { dollars } from "@/features/operator/contract-settings";
 import { eligibleApprovers, isLiveApproval } from "@/features/operator/inbox";
 import { OperatorMeasurement } from "@/features/operator/operator-measurement";
 import { PENALTY_APPROVAL_CODES } from "@/features/operator/penalty-list";
@@ -40,10 +42,11 @@ import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-
 import { CaseContext } from "@/features/provider-slash-case/context";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
+import { createConfigChainReader } from "@/libs/chains/evm/contract-config";
 import { explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { formatDateTime } from "@/libs/utc-time";
 import type { OperatorCaseBrief } from "@/interfaces/operator";
-import { getArbiterTerms, getOperatorCase, listApprovals } from "@/services/operator.service";
+import { getOperatorCase, listApprovals } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
 
 import { nothingStandingOutcome } from "@/features/operator/operator-errors";
@@ -144,11 +147,16 @@ export default function OperatorCasePage() {
   const brief = caseQuery.data;
   const penaltyAsset = brief?.case.proposal.penaltyAmount.asset ?? "";
   const chainId = penaltyAsset.startsWith("eip155:") ? (penaltyAsset.split("/")[0] ?? null) : null;
-  const terms = useQuery({
-    queryKey: ["operator", "arbiter", "terms", chainId],
-    queryFn: () => getArbiterTerms(chainId!),
-    enabled: chainId !== null,
+  // The split falls back to the last read when the chain can't be read now (with its time).
+  const { query: terms, split } = useArbiterTerms(chainId);
+  // The verifier's daily limit, read from the contracts like the Contracts page (read only).
+  const deployment = chainId ? (stakeDeploymentFor(chainId) ?? null) : null;
+  const config = useQuery({
+    queryKey: ["operator", "contracts", chainId, "settings"],
+    queryFn: () => createConfigChainReader(deployment!).readSettings(),
+    enabled: deployment !== null,
     staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
     retry: 0,
   });
 
@@ -283,7 +291,7 @@ export default function OperatorCasePage() {
   // Ruling is neutral: Cancel and Uphold carry equal weight, each opening its sheet on the Arbiter.
   const ruling = next.kind === "action" && next.action === "rule";
   const primary = next.kind === "action" && !ruling ? actionFor(next.action, true) : undefined;
-  const reduction = stakeReduction(proposal.appliedAmount ?? proposal.penaltyAmount, terms.data?.slashAgentBps ?? null, true);
+  const reduction = stakeReduction(proposal.appliedAmount ?? proposal.penaltyAmount, split?.agentBps ?? null, true);
   const readOnlyRuling = facts.stage === "disputed" && !authority.rule;
   const restoration = showsRestoration(facts.stage, brief, facts.expired);
   const pendingActions = live.map((a) => a.action);
@@ -405,11 +413,12 @@ export default function OperatorCasePage() {
                 <ArrowRight aria-hidden="true" className="size-3.5 text-03" />
               </Link>
             </Fact>
-            <Fact label="Tool">{proposal.bindingLabel || proposal.toolName}</Fact>
-            {reduction && terms.data && (facts.stage === "executed" || !MOVES_NOTHING.includes(facts.stage)) ? (
+            {/* The tool's name; never the binding's internal id. */}
+            <Fact label="Tool">{proposal.toolName ?? "—"}</Fact>
+            {reduction && split && (facts.stage === "executed" || !MOVES_NOTHING.includes(facts.stage)) ? (
               <Fact
                 label={facts.stage === "executed" ? "Taken from the stake" : facts.stage === "upheld" ? "Taken from the stake when it executes" : "Taken from the stake if upheld"}
-                hint={`The agents' and the platform's shares. The provider's ${keptShareText(terms.data.slashAgentBps)} is never taken.`}
+                hint={`The agents' and the platform's shares. The provider's ${keptShareText(split.agentBps)} is never taken.`}
               >
                 {formatMoney(reduction)}
               </Fact>
@@ -419,14 +428,30 @@ export default function OperatorCasePage() {
             </Fact>
             {brief.upheldViolations30d ? (
               <Fact label="Other penalties upheld" hint="Against this provider in the last 30 days.">
-                {brief.upheldViolations30d}
+                <Link
+                  href={`/operator/cases?tab=all&q=${encodeURIComponent(providerName)}`}
+                  className="hit-area inline-flex items-center gap-1 text-01 underline-offset-2 hover:underline"
+                >
+                  {brief.upheldViolations30d}
+                  <ArrowRight aria-hidden="true" className="size-3.5 text-03" />
+                </Link>
+              </Fact>
+            ) : null}
+            {config.data ? (
+              <Fact label="Verifier daily limit" hint="The most one verifier key can take in a day, all penalties together. Enforced on chain; set on Contracts.">
+                {dollars(config.data.params.verifierDailyCap, config.data.asset.decimals)}
               </Fact>
             ) : null}
           </dl>
         </aside>
 
         <div className="w-full min-w-0 xl:col-start-1 xl:row-start-2">
-          <PenaltyMoney penalty={proposal.appliedAmount ?? proposal.penaltyAmount} stage={facts.stage} agentBps={terms.data?.slashAgentBps ?? null} />
+          <PenaltyMoney
+            penalty={proposal.appliedAmount ?? proposal.penaltyAmount}
+            stage={facts.stage}
+            agentBps={split?.agentBps ?? null}
+            lastKnownAt={split?.lastKnown ? split.readAt : null}
+          />
         </div>
 
         <Tabs defaultValue="measurement" className="flex w-full min-w-0 flex-col gap-4 xl:col-start-1 xl:row-start-3">
