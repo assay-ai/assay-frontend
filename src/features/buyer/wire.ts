@@ -18,7 +18,12 @@ import type { Money } from "@/interfaces";
 
 /** One terminal-state bucket of the withheld figure. */
 export interface WithheldBucket {
-  /** `FAILED_VERIFICATION` | `PROVIDER_OR_PLATFORM_ERROR` | anything later. */
+  /**
+   * `FAILED_VERIFICATION` | `PROVIDER_OR_PLATFORM_ERROR` | `NOT_COLLECTED` |
+   * anything later. Always every bucket, zero-filled; the total equals
+   * `GET /receipts/summary`'s `notChargedTotal` for the same window. Rendered
+   * through `not-charged.ts`, never mapped per screen.
+   */
   bucket: string;
   /** The API's own wording, e.g. "failed verification". Not the design's. */
   label: string;
@@ -54,7 +59,10 @@ export interface SummaryTotals {
   listedTotal: Money;
   /** Served and collected. Open or written-off buyer debt is in `owedTotal`. */
   chargedTotal: Money;
-  /** The guarantee's withheld figure: a part of `notChargedTotal`, not all of it. */
+  /**
+   * Refunded, voided and expired calls only: a part of `notChargedTotal`, not
+   * all of it. Screens read `notChargedTotal` and `GET /withheld`'s lines.
+   */
   withheldTotal: Money;
   /** `listedTotal = chargedTotal + notChargedTotal + owedTotal + inProgressTotal`. */
   notChargedTotal: Money;
