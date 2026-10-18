@@ -200,8 +200,16 @@ describe("what a suspension tells the operator about the chain", () => {
 });
 
 describe("the two-person case actions", () => {
-  it("are the sweep and the record half of compensate", () => {
-    expect(TWO_PERSON_ACTIONS).toEqual(["sweep", "compensate"]);
+  it("are the sweep, the record half of compensate, and the B18 record and re-propose", () => {
+    expect(TWO_PERSON_ACTIONS).toEqual(["sweep", "compensate", "recordExecution", "repropose"]);
+  });
+
+  it("B18: the stuck-cancel actions are the cancel's pair, ADJL and TRE", () => {
+    for (const action of ["closeCancel", "recordExecution", "repropose"] as const) {
+      expect(may(["ADJL"], action)).toBe(true);
+      expect(may(["TRE"], action)).toBe(true);
+      expect(may(["ADJ", "SRE", "SUP"], action)).toBe(false);
+    }
   });
 });
 

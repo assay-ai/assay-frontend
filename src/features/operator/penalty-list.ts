@@ -197,6 +197,8 @@ const PENDING_DETAIL: Record<string, string> = {
   "slash.suspend": "suspend pending",
   "slash.compensated": "pay-back pending",
   "slash.sweep": "sweep pending",
+  "slash.record_execution": "execution record pending",
+  "slash.repropose": "re-proposal pending",
 };
 
 /**
@@ -329,6 +331,8 @@ export const PENALTY_APPROVAL_CODES: Record<string, string> = {
   "slash.suspend": "S-1",
   "slash.compensated": "S-5",
   "slash.sweep": "S-11",
+  "slash.record_execution": "S-16",
+  "slash.repropose": "S-17",
 };
 
 /** A two-person request on a penalty no one has decided yet: what it is, and the Next column's words. */

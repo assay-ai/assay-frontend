@@ -12,6 +12,7 @@ import type {
   OpenFleetSweepBody, OperatorCaseBrief, OperatorIdentity, PlatformHealth,
   ListOperatorCasesQuery, OperatorCaseListRow,
   RecordCompensationBody, SecondSignatureBody, SuspendProposalBody,
+  ManualCaseActionBody, ManualCaseActionResult,
 } from "@/interfaces/operator";
 
 import { operatorApi } from "./operator-api";
@@ -209,6 +210,47 @@ export async function recordCompensation(
   return toTwoPersonAnswer(
     await operatorApi.postWithStatus<unknown>(
       `/operator/cases/${encodeURIComponent(proposalId)}/compensated`, body,
+    ),
+  );
+}
+
+/**
+ * B18 `POST /operator/cases/:id/close-nothing-standing`. `ADJL` or `TRE`, one
+ * person (`S-15`). Closes a requested cancel whose record reads cancelled on
+ * a fresh chain read; refused (409 `SLASH_MANUAL_ACTION_REFUSED`, or 503 when
+ * the chain cannot be read) otherwise, with nothing changed.
+ */
+export function closeNothingStanding(proposalId: string, body: ManualCaseActionBody): Promise<ManualCaseActionResult> {
+  return operatorApi.post<ManualCaseActionResult>(
+    `/operator/cases/${encodeURIComponent(proposalId)}/close-nothing-standing`, body,
+  );
+}
+
+/**
+ * B18 `POST /operator/cases/:id/record-execution`. `ADJL` or `TRE`, plus a
+ * second `ADJL` or `TRE` (`S-16`): answered 202 and run once approved.
+ */
+export async function recordStuckExecution(
+  proposalId: string, body: ManualCaseActionBody,
+): Promise<TwoPersonAnswer<ManualCaseActionResult>> {
+  return toTwoPersonAnswer(
+    await operatorApi.postWithStatus<ManualCaseActionResult>(
+      `/operator/cases/${encodeURIComponent(proposalId)}/record-execution`, body,
+    ),
+  );
+}
+
+/**
+ * B18 `POST /operator/cases/:id/repropose`. `ADJL` or `TRE`, plus a second
+ * `ADJ` or `ADJL` (`S-17`): answered 202 and run once approved; the
+ * scheduler's next proposal pass then puts it on chain.
+ */
+export async function reproposeCase(
+  proposalId: string, body: ManualCaseActionBody,
+): Promise<TwoPersonAnswer<ManualCaseActionResult>> {
+  return toTwoPersonAnswer(
+    await operatorApi.postWithStatus<ManualCaseActionResult>(
+      `/operator/cases/${encodeURIComponent(proposalId)}/repropose`, body,
     ),
   );
 }
