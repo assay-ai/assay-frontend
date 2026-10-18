@@ -53,12 +53,18 @@ export function attentionAction(note: {
       return { label: "Raise limit", href: "/limits" };
     case "velocity.anomaly":
     case "agent.paused":
-      return { label: "Review agent", href: "/agents" };
+      return { label: "Review agent", href: agentHref(note.subjectType === "agent" ? note.subjectId : null) };
     case "session.expiring":
     case "session.expired":
-      return { label: "Renew key", href: "/agents" };
-    case "free_quota.exhausted":
+      // The subject is the key; its agent rides in the payload.
+      return { label: "Renew key", href: agentHref(payloadString(note.payload, "agentId")) };
+    case "free_quota.exhausted": {
+      // Funds help only where the tool falls through to paid calls; a free-only tool waits for the reset.
+      const toolId = payloadString(note.payload, "toolId");
+      const paidPath = (note.payload as { fallThroughToPaid?: unknown } | null | undefined)?.fallThroughToPaid;
+      if (paidPath === false && toolId) return { label: "See the tool", href: routes.exploreTool(toolId) };
       return { label: "Add funds", href: "/funding?action=deposit" };
+    }
     case "payment_intent.refunded":
       return note.subjectId ? { label: "View receipt", href: routes.receipt(note.subjectId) } : { label: "View calls", href: routes.calls({ status: "not-charged" }) };
     case "withdrawal.initiated":
@@ -68,4 +74,13 @@ export function attentionAction(note: {
     default:
       return null;
   }
+}
+
+function agentHref(agentId: string | null | undefined): string {
+  return agentId ? routes.agent(agentId) : "/agents";
+}
+
+function payloadString(payload: unknown, key: string): string | null {
+  const value = (payload as Record<string, unknown> | null | undefined)?.[key];
+  return typeof value === "string" && value ? value : null;
 }

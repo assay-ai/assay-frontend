@@ -37,14 +37,14 @@ import {
   type AlertPreset,
   type ExternalChannel,
 } from "@/features/buyer/alert-presets";
-import { attentionAction } from "@/features/buyer/attention-action";
-import { contractNoticeText, isContractNoticeEvent, notificationTitle, readContractNotice } from "@/features/toolsets/contract-notices";
+import { groupAlerts, readableBody } from "@/features/buyer/alert-model";
+import { contractNoticeText, isContractNoticeEvent, readContractNotice } from "@/features/toolsets/contract-notices";
 import { ContractNoticeFix } from "@/components/toolsets/contract-notice-fix";
 import { readUpdateNotice, updateNoticeText } from "@/features/toolsets/sharing";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { plainError } from "@/libs/plain-language";
 import { ApiError } from "@/libs/ApiClient";
-import { listNotifications } from "@/services/account.service";
+import { getUnreadCount, listNotifications, markAllNotificationsRead } from "@/services/account.service";
 import {
   listNotificationChannels,
   listNotificationDeliveries,
@@ -58,6 +58,8 @@ import {
 } from "@/services/notifications.service";
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
+
+import { presentAlert, useAlertLimitContext, useMarkAlertsRead } from "@/components/layout/alert-entry";
 
 import { AGGREGATION_LABEL, NOTIFICATION_CATALOGUE, NOTIFICATION_EVENT_LABEL } from "./notification-catalogue";
 import { PageHeader, StatusPill } from "./chrome";
@@ -86,8 +88,12 @@ interface Notification {
   createdAt: string;
 }
 
-/** The body as a person reads it; a tool-set update is told from its payload, in plain words. */
-function alertBody(item: Notification): string {
+/**
+ * The body as a person reads it: a tool-set update or a contract notice is
+ * told from its payload; any other body only when it is written for a person
+ * (`readableBody`), so an older notice never shows an id or an enum code.
+ */
+function alertBody(item: Notification): string | null {
   if (item.event === "toolset.update_available") {
     const notice = readUpdateNotice(item.payload);
     if (notice) return updateNoticeText(notice);
@@ -96,16 +102,8 @@ function alertBody(item: Notification): string {
     const notice = readContractNotice(item.payload);
     if (notice) return contractNoticeText(item.event, notice);
   }
-  return item.body;
+  return readableBody(item.body);
 }
-
-/** The title as a person reads it; a contract notice names the day it stops (UTC). */
-function alertTitle(item: Notification): string {
-  return notificationTitle(item);
-}
-
-/** Events whose row carries its next step as a link. */
-const LINKED_EVENTS = new Set(["toolset.update_available", "tool_version.deprecated", "tool_version.retired"]);
 
 const SEVERITY_TONE = {
   INFO: "neutral",
@@ -189,6 +187,30 @@ export function AlertsView() {
     enabled: logOpen,
     retry: false,
     queryFn: () => listNotifications({ limit: 25 }) as Promise<{ items: Notification[] }>,
+  });
+  const limits = useAlertLimitContext(logOpen);
+  const alertGroups = React.useMemo(() => groupAlerts(feed.data?.items ?? []), [feed.data]);
+
+  // Opening the list is reading it: what it shows is marked read, once.
+  const markRead = useMarkAlertsRead();
+  const marked = React.useRef(new Set<string>());
+  React.useEffect(() => {
+    if (!logOpen) return;
+    const ids = alertGroups.filter((g) => g.unread).flatMap((g) => g.ids).filter((id) => !marked.current.has(id));
+    if (ids.length === 0) return;
+    for (const id of ids) marked.current.add(id);
+    markRead.mutate(ids);
+  }, [logOpen, alertGroups, markRead]);
+  const unreadQuery = useQuery({
+    queryKey: ["notifications", "unread-count"],
+    enabled: logOpen,
+    queryFn: getUnreadCount,
+  });
+  const markAll = useMutation({
+    mutationFn: markAllNotificationsRead,
+    onSuccess: () => toast.success("Every alert is marked read."),
+    onError: (error) => toast.error(error instanceof ApiError ? plainError(error.code) : "Alerts could not be marked read"),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
   const deliveriesQuery = useQuery({
@@ -345,7 +367,12 @@ export function AlertsView() {
               </div>
             );
           })}
-          {available.length < EDITABLE_CHANNELS.length ? (
+          {!available.includes("EMAIL") ? (
+            <p className="text-body-xs text-03" data-testid="email-not-available">
+              Email alerts are not available yet. For now alerts reach you only in the app: the bell on every page and
+              Needs attention on Overview.
+            </p>
+          ) : available.length < EDITABLE_CHANNELS.length ? (
             <p className="text-body-xs text-03">More channels are coming.</p>
           ) : null}
         </PanelBody>
@@ -483,18 +510,27 @@ export function AlertsView() {
         <SheetContent className="tablet:max-w-[640px]">
           <SheetHeader>
             <SheetTitle>Recent alerts</SheetTitle>
-            <SheetDescription>Newest first. Open one to see where it was delivered.</SheetDescription>
+            <SheetDescription>Newest first. Opening this list marks them read. Open one to see where it was delivered.</SheetDescription>
           </SheetHeader>
+          {(unreadQuery.data?.count ?? 0) > 0 ? (
+            <div className="px-[18px] pt-3">
+              <Button variant="secondary" size="sm" type="button" loading={markAll.isPending} onClick={() => markAll.mutate()}>
+                Mark all {unreadQuery.data!.count} unread as read
+              </Button>
+            </div>
+          ) : null}
           <div className="flex w-full flex-col gap-3 px-[18px] pb-6 pt-4">
             {feed.isPending ? (
               <PageState kind="loading" rows={4} label="Loading recent alerts" />
             ) : feed.isError ? (
               <PageState kind="error" bare description="Recent alerts could not be loaded." onRetry={() => void feed.refetch()} />
-            ) : (feed.data?.items.length ?? 0) === 0 ? (
+            ) : alertGroups.length === 0 ? (
               <p className="text-body-13 text-02">No alerts yet.</p>
             ) : (
-              feed.data?.items.map((item) => {
+              alertGroups.map(({ note: item }) => {
                 const expanded = expandedId === item.id;
+                const { title, action } = presentAlert(item, limits);
+                const body = alertBody(item);
                 return (
                   <div key={item.id} className="flex w-full flex-col gap-1.5 rounded-lg border border-01 bg-02 p-3.5">
                     <button
@@ -504,7 +540,7 @@ export function AlertsView() {
                       onClick={() => setExpandedId(expanded ? null : item.id)}
                     >
                       <StatusPill label={URGENCY[item.severity] ?? item.severity} tone={SEVERITY_TONE[item.severity] ?? "neutral"} />
-                      <span className="min-w-0 flex-1 truncate text-label-sm text-01">{alertTitle(item)}</span>
+                      <span className="min-w-0 flex-1 truncate text-label-sm text-01">{title}</span>
                       <span className="text-body-xs text-03">
                         <UtcTime value={item.createdAt} />
                       </span>
@@ -514,11 +550,11 @@ export function AlertsView() {
                         <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-03" />
                       )}
                     </button>
-                    <p className="text-body-13 text-02">{alertBody(item)}</p>
-                    {LINKED_EVENTS.has(item.event) && attentionAction(item) ? (
+                    {body ? <p className="text-body-13 text-02">{body}</p> : null}
+                    {action ? (
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <Link href={attentionAction(item)!.href} className="min-h-10 self-start content-center text-label-13 font-semibold text-primary-600 hover:underline">
-                          {attentionAction(item)!.label}
+                        <Link href={action.href} className="min-h-10 self-start content-center text-label-13 font-semibold text-primary-600 hover:underline">
+                          {action.label}
                         </Link>
                         {isContractNoticeEvent(item.event) ? <ContractNoticeFix payload={item.payload} /> : null}
                       </div>

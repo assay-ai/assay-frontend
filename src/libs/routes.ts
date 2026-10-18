@@ -22,6 +22,8 @@ export const routes = {
   receipt: (intentId: string) => withQuery("/receipts/view", { id: intentId }),
   /** A paid call opened from a link (a notification): its outcome and receipt. Takes the call id. */
   payment: (callId: string) => withQuery("/payments/view", { id: callId }),
+  /** Agents & keys, opened at one agent. */
+  agent: (agentId: string) => withQuery("/agents", { agent: agentId }),
   exploreProvider: (providerId: string) => withQuery("/explore/providers/view", { id: providerId }),
   /** The signed-in tool list, opened at one tool. */
   exploreTool: (toolId: string) => withQuery("/explore", { tool: toolId }),
