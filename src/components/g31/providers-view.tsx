@@ -122,7 +122,7 @@ function ProviderStake({ stake, chainName }: { stake: ChainStake[]; chainName: (
  * from the router's own gates and your agents' chains; nothing shows before
  * it has loaded.
  */
-export function ServingChip({ fit }: { fit: { chains?: readonly string[] | null; servesYou?: boolean | null } }) {
+export function ServingChip({ fit }: { fit: { chains?: readonly string[] | null; servesYou?: boolean | null; notServedReason?: "WITHDRAWING" | null } }) {
   const status = servingStatus(fit);
   if (status.kind === "not-loaded") return null;
   return (

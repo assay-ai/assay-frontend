@@ -9,7 +9,9 @@ import type { OnEmpty, ProviderMode } from "@/services/toolsets.service";
  *
  * Advisory only: the server's routing rules decide every call.
  */
-export type ServingKind = "serves" | "other-chain" | "not-taking-calls" | "unknown" | "not-loaded";
+export type ServingKind = "serves" | "other-chain" | "not-taking-calls" | "withdrawing" | "unknown" | "not-loaded";
+
+type Fit = { chains?: readonly string[] | null; servesYou?: boolean | null; notServedReason?: "WITHDRAWING" | null };
 
 export interface ServingStatus {
   kind: ServingKind;
@@ -25,10 +27,12 @@ export interface ServingStatus {
  * Only a known `false` is split by `chains` into "not taking calls" (no chain
  * at all) and "doesn't take payment on your chain".
  */
-export function servingStatus(fit: { chains?: readonly string[] | null; servesYou?: boolean | null } | null | undefined): ServingStatus {
+export function servingStatus(fit: Fit | null | undefined): ServingStatus {
   if (fit?.servesYou === undefined) return { kind: "not-loaded", label: "", tone: "neutral" };
   if (fit.servesYou === null) return { kind: "unknown", label: "Can't check right now", tone: "neutral" };
   if (fit.servesYou) return { kind: "serves", label: "Serves you", tone: "success" };
+  // The reason is the buyer's own: every agent is withdrawing, so no chain is left to pay on.
+  if (fit.notServedReason === "WITHDRAWING") return { kind: "withdrawing", label: "Not while you're withdrawing", tone: "warning" };
   if (Array.isArray(fit.chains) && fit.chains.length === 0) return { kind: "not-taking-calls", label: "Not taking calls now", tone: "danger" };
   return { kind: "other-chain", label: "Doesn't take payment on your chain", tone: "warning" };
 }
@@ -43,6 +47,7 @@ export interface ProviderOffer {
   price: Money | null;
   chains?: readonly string[] | null;
   servesYou?: boolean | null;
+  notServedReason?: "WITHDRAWING" | null;
 }
 
 export interface RuleDraft {
@@ -94,6 +99,9 @@ export function nothingRunsWarning(rule: RuleDraft, offers: readonly ProviderOff
   if (rule.onEmpty === "FALLBACK_BEST" && offers.some(serves)) return null;
   const refused = `Every ${toolName} call from your agents would be refused (not charged).`;
   if (kept.length === 0) return `No provider is left under this rule. ${refused}`;
+  if (kept.every((offer) => servingStatus(offer).kind === "withdrawing")) {
+    return `Nothing can run for you while every agent's balance has a withdrawal pending. ${refused}`;
+  }
   const reasons = kept.map((offer) => `${offer.name} ${servingStatus(offer).kind === "not-taking-calls" ? "isn't taking calls now" : "doesn't take payment on your chain"}`);
   return `Nothing left can run for you: ${reasons.join("; ")}. ${refused}`;
 }

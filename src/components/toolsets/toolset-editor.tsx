@@ -723,6 +723,7 @@ function useProviderOffers(toolId: string, providers: readonly ProviderRow[]): P
       price: listing?.price ?? null,
       chains: listing?.chains,
       servesYou: listing?.servesYou,
+      notServedReason: listing?.notServedReason,
     };
   });
 }
