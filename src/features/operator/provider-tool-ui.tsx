@@ -10,11 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { changeText } from "@/features/contracts/text";
 import { cn } from "@/utils";
-import type { ContractChange } from "@/interfaces/contracts";
+import type { ContractChange, OperatorToolSummary } from "@/interfaces/contracts";
 import { takedownProviderTool, type ModerationCutoff, type TakedownReasonCode } from "@/services/operator-provider-tools.service";
 import type { ProviderToolVersion } from "@/services/provider-tools.service";
 
-import { MODERATION_NOTE_MIN, OPERATOR_CASES_TABS, operatorToolsTabs, TAKEDOWN_PUBLIC_NOTE_MAX, TAKEDOWN_REASONS, toolReviewErrorText } from "./provider-tool-review";
+import { mayTakeDownTools, MODERATION_NOTE_MIN, OPERATOR_CASES_TABS, operatorToolsTabs, TAKEDOWN_PUBLIC_NOTE_MAX, TAKEDOWN_REASONS, toolReviewErrorText } from "./provider-tool-review";
 import { useOperatorSession } from "./session-context";
 
 /** Tools' tabs, the ones this operator can use. */
@@ -255,5 +255,57 @@ export function TakedownSheet({ toolId, toolName, open, onOpenChange, onDone }: 
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+/* ----------------------------------------------------- takedown entry points */
+
+/** Whether a tool can be taken down at all: a live provider tool (D24: never a standard tool). */
+export function takeDownable(tool: Pick<OperatorToolSummary, "kind" | "status">): boolean {
+  return tool.kind === "PROVIDER" && tool.status !== "REMOVED" && tool.status !== "DRAFT";
+}
+
+export interface TakedownSearch {
+  /** Live provider tools matching the query, at most 8. */
+  matches: OperatorToolSummary[];
+  /** Standard tools matching it: named so the operator knows why they are not offered. */
+  standard: OperatorToolSummary[];
+}
+
+/** The Takedowns search: by name or topic, provider tools only. Pure. */
+export function takedownSearch(tools: readonly OperatorToolSummary[], query: string): TakedownSearch {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return { matches: [], standard: [] };
+  const hit = (t: OperatorToolSummary) => t.name.toLowerCase().includes(needle) || t.category.toLowerCase().includes(needle);
+  return {
+    matches: tools.filter((t) => takeDownable(t) && hit(t)).slice(0, 8),
+    standard: tools.filter((t) => t.kind === "STANDARD" && hit(t)).slice(0, 3),
+  };
+}
+
+/**
+ * "Take down" for one provider tool, from any page that shows it: the same
+ * sheet, endpoint (A-25), roles and second-operator confirmation as from its
+ * review. Renders nothing for a role that may not, or a tool that can't be.
+ */
+export function TakeDownButton({
+  tool,
+  size,
+  onDone,
+}: {
+  tool: Pick<OperatorToolSummary, "id" | "name" | "kind" | "status">;
+  size?: "sm";
+  onDone?: (cutoff: ModerationCutoff) => void;
+}) {
+  const me = useOperatorSession();
+  const [open, setOpen] = React.useState(false);
+  if (!mayTakeDownTools(me.roles) || !takeDownable(tool)) return null;
+  return (
+    <>
+      <Button variant="danger" size={size} className={size ? "touch-target" : undefined} onClick={() => setOpen(true)}>
+        Take down
+      </Button>
+      <TakedownSheet toolId={tool.id} toolName={tool.name} open={open} onOpenChange={setOpen} onDone={onDone} />
+    </>
   );
 }
