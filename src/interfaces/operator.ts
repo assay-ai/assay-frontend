@@ -148,7 +148,17 @@ export interface PlatformHealth {
   policiesTotal: number;
   stakeLocked: Money;
   providersWithStake: number;
+  /**
+   * Non-EVM cases still in the retired in-app objection statuses (DISPUTED,
+   * UNDER_REVIEW, AWAITING_SECOND): the Penalties list's "Old process" tab.
+   * None of them is on chain or waiting for the arbiter. Absent from an older
+   * backend, which sends the same figure as `openDisputes`.
+   */
+  oldProcessCases?: number;
+  oldestOldProcessCaseAgeSeconds?: number | null;
+  /** @deprecated The same figure as `oldProcessCases`; never "disputes on chain". */
   openDisputes: number;
+  /** @deprecated The same figure as `oldestOldProcessCaseAgeSeconds`. */
   oldestOpenDisputeAgeSeconds: number | null;
   /** The EVM chain-state cache, one row per chain. Absent on an older backend. */
   chainState?: ChainStateHealth[];
@@ -295,6 +305,12 @@ export interface OperatorCaseListRow {
   disputedAt: string | null;
   /** The next instant it moves on its own (lapses, must be signed by, executable from). Null once closed. */
   nextDeadline: string | null;
+  /**
+   * Whether a record of it was ever written on chain. False while it waits to
+   * go there: its dates are then computed, not the chain's. Absent from an
+   * older backend.
+   */
+  onChain?: boolean;
 }
 
 export interface ListOperatorCasesQuery {
@@ -378,7 +394,14 @@ export interface OperatorCaseBrief {
    * With `chainStatus: PENDING` and a non-zero count the case is partly
    * disputed: the other parts keep executing. Absent from an older backend.
    */
-  chainDisputedParts?: number;  /** The provider's penalties upheld or executed in the last 30 days (follow-up C4). Absent from an older backend. */
+  chainDisputedParts?: number;
+  /**
+   * Whether anything of the case is Pending or Disputed on chain: whether
+   * anyone could execute it, or a cancel has anything to act on. Absent from
+   * an older backend (then read as standing, as before).
+   */
+  chainStanding?: boolean;
+  /** The provider's penalties upheld or executed in the last 30 days (follow-up C4). Absent from an older backend. */
   upheldViolations30d?: number;
 }
 

@@ -493,6 +493,12 @@ export default function OperatorCasePage() {
           proposalId={proposalId}
           penaltyAsset={proposal.penaltyAmount.asset}
           deadlineSentence={cancelDeadlineSentence(facts, when)}
+          onNothingStanding={() => {
+            // The sheet closes with the signature step: say what the backend read, then read the penalty again.
+            setSheet(null);
+            setResult({ title: "Nothing is on chain to cancel", next: "Nothing can be executed, and there is nothing to sign. The backend read the chain and closed its side." });
+            refetch();
+          }}
           onSigned={(hash) => {
             setResult({ title: "Cancel sent", next: "The penalty shows as cancelled once the chain watcher reads it back.", txHash: hash });
             refetch();
