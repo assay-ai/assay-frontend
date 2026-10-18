@@ -33,7 +33,7 @@ import { SUPPORT_URL } from "@/libs/support";
 import { supportsDelegation } from "@/features/delegation/delegation-form";
 
 import { CapsSheet } from "./caps-sheet";
-import { CreateKeyForm, NEW_KEY_PAYS_NOTE, createKeyErrorText, useCreateKey } from "./create-key";
+import { CreateKeyForm, createKeyErrorText, newKeyPaysNote, payingKeyName, useCreateKey } from "./create-key";
 import { DepositSheet } from "./deposit-sheet";
 import { LetAgentPaySheet } from "./let-agent-pay-sheet";
 import { McpConfigTabs } from "./mcp-config-tabs";
@@ -231,7 +231,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
                 ? "Your key is ready, and the config below already carries it. It is shown once: copy it now."
                 : "You have a key. Its full value was shown once, when it was made: create a new key here to get a config ready to paste."}
             </p>
-            {createdToken ? <p className="text-body-xs text-03">{NEW_KEY_PAYS_NOTE}</p> : null}
+            {createdToken ? <p className="text-body-xs text-03">{newKeyPaysNote(payingKeyName(readiness))}</p> : null}
             <McpConfigTabs
               token={createdToken}
               keyPrefix={liveKeys[0]?.prefix ?? null}

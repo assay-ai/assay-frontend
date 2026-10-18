@@ -16,7 +16,7 @@ import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { isMcpClient, keyMode, mcpConfig, type McpClient } from "@/features/buyer-money/mcp-config";
-import { NEW_KEY_PAYS_NOTE } from "@/components/buyer-money/create-key";
+import { newKeyPaysNote, payingKeyName } from "@/components/buyer-money/create-key";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
 import {
   buildMcpUrl,
@@ -563,7 +563,11 @@ export function ConnectBody({
         {url && !blocked ? (
           <div className="flex min-w-0 flex-col gap-2">
             <KeyLine prefix={keyPrefix} keyName={keyName} agentName={agent?.label ?? null} full={Boolean(created)} />
-            {created ? <p className="text-body-xs text-03">{NEW_KEY_PAYS_NOTE}</p> : null}
+            {created ? (
+              <p className="text-body-xs text-03">
+                {newKeyPaysNote(effectiveAgentId ? payingKeyName(data.readiness[effectiveAgentId]) : null)}
+              </p>
+            ) : null}
             <McpConfigTabs
               token={created?.token ?? null}
               keyPrefix={keyPrefix}
