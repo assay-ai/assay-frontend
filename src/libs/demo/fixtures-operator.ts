@@ -732,6 +732,8 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
     chainStatus: c.chainStatus,
     chainExecutableAt: executableAt,
     chainDisputedParts: original.chainStatus === "DISPUTED" ? 1 : 0,
+    // Every demo record that may stand does (B11): Pending, Disputed, or under a requested cancel.
+    chainStanding: STANDING.includes(c.chainStatus),
     upheldViolations30d: c.providerId === NORTHWIND ? 2 : 0,
   };
 }
@@ -846,6 +848,11 @@ const PROVIDER_NAMES: Record<string, string> = {
 
 const CLOSED_WITHOUT_PENALTY = ["OVERTURNED", "WAIVED", "CANCELLED"];
 
+/** Chain mirrors under which a record stands (`chainStanding`). */
+const STANDING: readonly string[] = ["PENDING", "DISPUTED", "CANCEL_REQUESTED"];
+/** Chain mirrors of a penalty never written on chain (`onChain: false`). */
+const NEVER_ON_CHAIN: readonly string[] = ["NONE", "PROPOSING", "REFUSED"];
+
 /** The backend's list status for a demo case, in the same precedence (`findOperatorCasePage`). */
 function listStatus(c: DemoCase): OperatorCaseStatus {
   if (c.status === "REVERSED") return "COMPENSATED";
@@ -884,6 +891,7 @@ function caseListRow(original: DemoCase): OperatorCaseListRow {
     proposedAt: minutesAgo(c.proposedMinutesAgo),
     disputedAt,
     nextDeadline,
+    onChain: !NEVER_ON_CHAIN.includes(original.chainStatus),
   };
 }
 
@@ -1159,8 +1167,11 @@ function health(): PlatformHealth {
     policiesTotal: 31,
     stakeLocked: usd("48210.00"),
     providersWithStake: 8,
-    openDisputes: DISPUTED.length,
-    oldestOpenDisputeAgeSeconds: 23 * 86_400,
+    // No demo case is in the retired objection process (D15); the deprecated names carry the same figure.
+    oldProcessCases: 0,
+    oldestOldProcessCaseAgeSeconds: null,
+    openDisputes: 0,
+    oldestOpenDisputeAgeSeconds: null,
     chainState: [
       {
         chainId: DEMO_CHAIN_ID,

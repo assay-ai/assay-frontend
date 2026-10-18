@@ -191,3 +191,33 @@ describe("the arbiter's calls in the demo pass the signing guard unchanged", () 
     ).not.toThrow();
   });
 });
+
+describe("B11 shapes: old-process count, chainStanding, cancels to sign", () => {
+  it("health counts old-process cases, with the deprecated names carrying the same figure", async () => {
+    const fixtures = await load();
+    const health = call(fixtures, "GET", "/operator/health") as import("@/interfaces/operator").PlatformHealth;
+    expect(health.oldProcessCases).toBe(0);
+    expect(health.oldestOldProcessCaseAgeSeconds).toBeNull();
+    expect(health.openDisputes).toBe(health.oldProcessCases);
+  });
+
+  it("lists the CANCEL_REQUESTED rows Home's 'Cancels to sign' reads, each on chain and standing", async () => {
+    const fixtures = await load();
+    const rows = (call(fixtures, "GET", "/operator/cases", { status: "CANCEL_REQUESTED" }) as { items: OperatorCaseListRow[] }).items;
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.status).toBe("CANCEL_REQUESTED");
+      expect(row.onChain).toBe(true);
+      const brief = call(fixtures, "GET", `/operator/cases/${row.proposalId}`) as OperatorCaseBrief;
+      expect(brief.chainStanding).toBe(true);
+    }
+  });
+
+  it("says a closed record no longer stands", async () => {
+    const fixtures = await load();
+    const rows = (call(fixtures, "GET", "/operator/cases") as { items: OperatorCaseListRow[] }).items;
+    const cancelled = rows.find((row) => row.status === "CANCELLED")!;
+    const brief = call(fixtures, "GET", `/operator/cases/${cancelled.proposalId}`) as OperatorCaseBrief;
+    expect(brief.chainStanding).toBe(false);
+  });
+});
