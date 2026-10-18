@@ -130,3 +130,68 @@ describe("the demo agent rename", () => {
     expect(() => demoResponse("PATCH", "/agents/00000000-0000-4000-8000-000000000000", {}, { label: "x" })).toThrow(/not found/i);
   });
 });
+
+describe("the demo's money results (B7)", () => {
+  const withDemo = <T,>(body: () => T): T => {
+    const prev = process.env.NEXT_PUBLIC_DEMO_CHAINS;
+    process.env.NEXT_PUBLIC_DEMO_CHAINS = "robinhood";
+    try {
+      return body();
+    } finally {
+      process.env.NEXT_PUBLIC_DEMO_CHAINS = prev;
+    }
+  };
+  type M = { amount: string };
+  const n = (m: M) => BigInt(m.amount);
+
+  it("the escrow's lifetime counters add up to its balance", () => {
+    withDemo(() => {
+      const escrow = demoResponse("GET", "/escrow", {}) as { balance: M; lifetime: { deposited: M; spent: M; withdrawn: M } };
+      expect(n(escrow.lifetime.deposited) - n(escrow.lifetime.spent) - n(escrow.lifetime.withdrawn)).toBe(n(escrow.balance));
+    });
+  });
+
+  it("lists one cancelled withdrawal, which moved no money", () => {
+    withDemo(() => {
+      const { items } = demoResponse("GET", "/withdrawals", {}) as { items: { status: string; received: M | null }[] };
+      expect(items.map((w) => w.status)).toEqual(["CANCELLED"]);
+      expect(items[0]!.received).toBeNull();
+    });
+  });
+
+  it("each month's statement adds up, months chain, and the current one matches the escrow", () => {
+    withDemo(() => {
+      const now = new Date();
+      const month = (offset: number) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1)).toISOString();
+      type Item = { opening: M; deposits: M; withdrawals: M; paid: M; closing: M; check: { matches: boolean } | null };
+      const statement = (from: string, to: string) => (demoResponse("GET", "/statements/balance", { from, to }) as { items: Item[] }).items[0]!;
+      const current = statement(month(0), month(1));
+      const previous = statement(month(-1), month(0));
+      for (const s of [current, previous]) {
+        expect(n(s.opening) + n(s.deposits) - n(s.withdrawals) - n(s.paid)).toBe(n(s.closing));
+      }
+      expect(previous.closing.amount).toBe(current.opening.amount);
+      expect(current.check?.matches).toBe(true);
+      expect(previous.check).toBeNull();
+    });
+  });
+
+  it("Still refundable lists exactly the calls whose receipt says a report now is refunded in full", () => {
+    withDemo(() => {
+      const { items } = demoResponse("GET", "/tool-calls", { refundable: "true" }) as {
+        items: { intentId: string; refundableIfReportedUntil: string | null }[];
+      };
+      // Both ways: every call whose receipt promises a full refund is listed, and nothing else.
+      const all = demoResponse("GET", "/tool-calls", { from: "2000-01-01T00:00:00Z", to: "2100-01-01T00:00:00Z" }) as { items: { intentId: string }[] };
+      const promised = all.items
+        .filter((call) => (demoResponse("GET", `/receipts/${call.intentId}`, {}) as { refundableIfReportedNow: boolean }).refundableIfReportedNow)
+        .map((call) => call.intentId);
+      expect(items.map((item) => item.intentId).sort()).toEqual(promised.sort());
+      for (const item of items) {
+        const receipt = demoResponse("GET", `/receipts/${item.intentId}`, {}) as { refundableIfReportedNow: boolean; refundableIfReportedUntil: string | null };
+        expect(receipt.refundableIfReportedNow).toBe(true);
+        expect(item.refundableIfReportedUntil).toBe(receipt.refundableIfReportedUntil);
+      }
+    });
+  });
+});

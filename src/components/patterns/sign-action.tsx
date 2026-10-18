@@ -306,11 +306,12 @@ export function SignAction({
           <span className="text-label-13 text-02">{headline}</span>
           <ol className="flex flex-col gap-2">
             {steps.map((step, index) => (
-              <li key={step.id} className="flex items-center gap-2.5">
+              <li key={step.id} className="flex items-start gap-2.5">
                 <StepIcon status={statuses[index]!} />
+                {/* Wraps, never cuts: at 390 px "Allow the escrow to take $20.00 USDG" must read whole (B7). */}
                 <span
                   className={cn(
-                    "min-w-0 flex-1 truncate text-body-13",
+                    "min-w-0 flex-1 text-body-13 [overflow-wrap:anywhere]",
                     statuses[index] === "upcoming" ? "text-02" : "text-01",
                   )}
                 >

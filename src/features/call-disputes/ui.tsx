@@ -17,7 +17,18 @@ import { fileCallDispute, type CallDispute, type CallDisputeEvidence, type CallD
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
 
-import { BUYER_COPY, disputeErrorText, disputeTimeline, NOTE_MAX, REASON_OPTIONS, reasonLabel, type DisputeStatusView, type ReportWindowView } from "./model";
+import {
+  BUYER_COPY,
+  DEADLINE_SENTENCE,
+  disputeErrorText,
+  disputeTimeline,
+  filedToast,
+  NOTE_MAX,
+  REASON_OPTIONS,
+  reasonLabel,
+  type DisputeStatusView,
+  type ReportWindowView,
+} from "./model";
 
 /**
  * The parts of "Report a bad result" every side shares: the status chip,
@@ -104,7 +115,8 @@ export function ReportSheet({
     mutationFn: () => fileCallDispute({ subjectType: "PAYMENT_INTENT", subjectId: intentId, reason: reason!, ...(note.trim() ? { note: note.trim().slice(0, NOTE_MAX) } : {}) }),
     onSuccess: (dispute) => {
       void queryClient.invalidateQueries({ queryKey: callDisputeKeys.all });
-      toast.success(dispute.refundGuaranteed ? "Reported. The payment stays held until it is decided." : "Reported. It counts against the provider's quality.");
+      // When it is answered and decided by; never the outcome, which nobody has decided yet.
+      toast.success(filedToast(dispute));
       onFiled?.(dispute);
       onOpenChange(false);
     },
@@ -117,7 +129,9 @@ export function ReportSheet({
         <SheetHeader>
           <SheetTitle>Report a bad result</SheetTitle>
           <SheetDescription>
-            On this call to <span className="break-all font-mono text-mono-12">{toolName}</span>. {BUYER_COPY.reply} {BUYER_COPY.decides}
+            On this call to <span className="break-all font-mono text-mono-12">{toolName}</span>.{" "}
+            {/* The automatic acceptance only exists for a report the refund guarantee covers. */}
+            {hold.guaranteed ? `${DEADLINE_SENTENCE.buyer} ${BUYER_COPY.decides}` : `${BUYER_COPY.reply} ${BUYER_COPY.decides}`}
           </SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-3 px-[18px] pb-5 pt-3" data-testid="report-sheet">

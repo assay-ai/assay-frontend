@@ -7,9 +7,9 @@ import * as React from "react";
 
 import { PageHeader } from "@/components/g31/chrome";
 import { PageState } from "@/components/patterns/page-state";
-import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
-import { buyerStatus, BUYER_COPY } from "@/features/call-disputes/model";
+import { REFUNDABLE_ROW } from "@/features/buyer-money/funding-lines";
+import { buyerStatus, BUYER_COPY, disputeReasonLabel, fullDateTime } from "@/features/call-disputes/model";
 import { callDisputeKeys, DisputeChip, useNow } from "@/features/call-disputes/ui";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
@@ -46,7 +46,12 @@ export default function ReportsPage() {
       ) : list.isError ? (
         <PageState kind="error" description="Your reports could not be loaded." onRetry={() => void list.refetch()} code={list.error instanceof ApiError ? list.error.code : null} />
       ) : items.length === 0 ? (
-        <PageState kind="empty" title="No reports" description="When a call returns a bad result, open it under Calls and choose “Report a bad result”." action={{ label: "Open Calls", href: routes.calls() }} />
+        <PageState
+          kind="empty"
+          title="No reports"
+          description={`When a call returns a bad result, open it under Calls and choose “Report a bad result”. ${REFUNDABLE_ROW.pointer}`}
+          action={{ label: "See calls still refundable", href: routes.calls({ status: "refundable" }) }}
+        />
       ) : (
         <ul className="flex w-full flex-col overflow-hidden rounded-xl border border-01 bg-01" data-testid="report-list">
           {items.map((d) => {
@@ -57,7 +62,7 @@ export default function ReportsPage() {
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className="break-all font-mono text-mono-13 text-01">{d.toolId ? names.name("tool", d.toolId) : "A call"}</span>
                     <span className="text-body-xs text-03">
-                      {d.reasonLabel} · reported <UtcTime value={d.createdAt} midSentence />
+                      {disputeReasonLabel(d)} · reported {fullDateTime(d.createdAt, now)}
                       {d.amount ? ` · ${formatMoney(d.amount, { decimals: 4 })}` : ""}
                     </span>
                   </span>

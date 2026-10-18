@@ -11,7 +11,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
-import { DISPUTE_COPY, providerStatus, replyDueAt } from "@/features/call-disputes/model";
+import { DEADLINE_SENTENCE, DISPUTE_COPY, providerStatus, replyDueAt } from "@/features/call-disputes/model";
 import { callDisputeKeys, DisputeChip, useNow } from "@/features/call-disputes/ui";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { ApiError } from "@/libs/ApiClient";
@@ -22,7 +22,8 @@ import { formatMoney } from "@/utils/money";
 /**
  * Bad-result reports — route `/provider/call-disputes`: buyers' reports about
  * calls you served. Reply once within 24 hours; a report you stay silent on
- * is upheld automatically at 72 hours. The buyer is never named.
+ * can be upheld automatically from 72 hours (the daily auto-uphold cap can
+ * defer it). The buyer is never named.
  */
 
 const FILTERS: { id: "open" | "all"; label: string; state: CallDisputeState[] | undefined }[] = [
@@ -53,7 +54,7 @@ export default function ProviderReportsPage() {
       <header className="flex w-full flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h1 className="text-heading-sm text-01 tablet:text-heading-md">Bad-result reports</h1>
-          <p className="text-body-13 text-03">Buyers&apos; reports about calls you served. Reply by the deadline on each one. {DISPUTE_COPY.silent}</p>
+          <p className="text-body-13 text-03">Buyers&apos; reports about calls you served. {DEADLINE_SENTENCE.provider}</p>
           <details className="text-body-13 text-02">
             <summary className="inline-flex min-h-10 cursor-pointer items-center text-label-13 text-02 hover:text-01">How this works</summary>
             <ul className="flex list-disc flex-col gap-0.5 pb-1 pl-5">

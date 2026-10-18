@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { callOutcome, matchesFilter, parseCallsFilter, statusesFor } from "./call-outcome";
+import { CALLS_FILTERS, callOutcome, matchesFilter, parseCallsFilter, refundableOnly, statusesFor } from "./call-outcome";
 
 const m = (amount: string) => ({ amount, asset: "a", decimals: 6 });
 
@@ -37,5 +37,17 @@ describe("callOutcome", () => {
     expect(callOutcome({ ...settled, debt: "WRITTEN_OFF" })).toBe("owed");
     expect(matchesFilter({ ...settled, debt: "VOIDED" }, "not-charged")).toBe(true);
     expect(statusesFor("not-charged")).toContain("SETTLED");
+  });
+});
+
+describe("Still refundable (B7)", () => {
+  it("is a chip the URL can name, asks the API for refundable calls, and re-derives nothing", () => {
+    expect(parseCallsFilter("refundable")).toBe("refundable");
+    expect(CALLS_FILTERS.find((f) => f.value === "refundable")?.label).toBe("Still refundable");
+    expect(statusesFor("refundable")).toEqual(["SETTLED"]);
+    expect(refundableOnly("refundable")).toBe(true);
+    expect(refundableOnly("charged")).toBeUndefined();
+    // The backend's predicate decides; the page keeps whatever it returned.
+    expect(matchesFilter({ status: "SETTLED", price: m("1000"), charged: m("1000") }, "refundable")).toBe(true);
   });
 });

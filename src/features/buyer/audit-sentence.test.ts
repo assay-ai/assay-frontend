@@ -131,3 +131,27 @@ describe("agent.renamed", () => {
     expect(line).toBe("You renamed the agent “My agent” to “Research bot”");
   });
 });
+
+describe("money events (B7)", () => {
+  it("deposits and withdrawals read as sentences, in dollars at two places", () => {
+    const me = "me@example.com";
+    expect(
+      auditSentence(entry({ actorType: "system", actorId: "deposit-finality", action: "deposit.credited", after: { amount: "25.000000", amountAtomic: "25000000" } }), () => null, me),
+    ).toEqual({ title: "Deposit: $25.00 added", line: "Your deposit reached your balance and can pay for calls" });
+    expect(
+      auditSentence(entry({ action: "withdrawal.requested", actorId: me, after: { amount: "13.240000" } }), () => null, me),
+    ).toEqual({
+      title: "Withdrawal: $13.24 requested",
+      line: "You asked to withdraw up to $13.24 from the escrow; paid calls on that chain pause until it is claimed or cancelled",
+    });
+    expect(auditSentence(entry({ action: "withdrawal.cancelled", actorId: me, after: { amount: "0.000000" } }), () => null, me).title).toBe(
+      "Withdrawal cancelled",
+    );
+    expect(
+      auditSentence(entry({ actorType: "system", actorId: "escrow-withdrawal-index", action: "withdrawal.claimed", after: { amount: "13.000000" } }), () => null, me),
+    ).toEqual({ title: "Withdrawal: $13.00 claimed", line: "$13.00 left the escrow for your wallet" });
+  });
+  it("keeps a sub-cent amount's digits", () => {
+    expect(auditSentence(entry({ action: "deposit.credited", after: { amount: "0.0045" } }), () => null).title).toBe("Deposit: $0.0045 added");
+  });
+});
