@@ -14,15 +14,18 @@ const ASSET = "eip155:46630/erc20:0x1";
 const usd = (amount: string) => ({ amount, asset: ASSET, decimals: 6 });
 const api = vi.hoisted(() => ({
   refundable: [] as unknown[],
+  secondPage: [] as unknown[],
   withdrawals: [] as unknown[],
   escrow: null as unknown,
   path: "/",
 }));
 
 vi.mock("@/services/tool-calls.service", () => ({
-  listToolCalls: vi.fn(async (query: { refundable?: boolean }) => {
+  listToolCalls: vi.fn(async (query: { refundable?: boolean; cursor?: string }) => {
     if (!query.refundable) throw new Error("the line must ask the backend for refundable calls");
-    return { items: api.refundable, pageInfo: { nextCursor: null, hasMore: false } };
+    if (query.cursor === "p2") return { items: api.secondPage, pageInfo: { nextCursor: null, hasMore: false } };
+    const more = api.secondPage.length > 0;
+    return { items: api.refundable, pageInfo: { nextCursor: more ? "p2" : null, hasMore: more } };
   }),
 }));
 vi.mock("@/services/funding.service", () => ({ listWithdrawals: vi.fn(async () => ({ items: api.withdrawals })) }));
@@ -41,6 +44,7 @@ import { WithdrawalPendingBanner } from "./withdrawal-banner";
 afterEach(() => {
   cleanup();
   api.refundable = [];
+  api.secondPage = [];
   api.withdrawals = [];
   api.escrow = null;
   api.path = "/";
@@ -66,8 +70,15 @@ describe("Funding result lines (B7)", () => {
     api.refundable = [{ charged: usd("250000"), refundableIfReportedUntil: "2026-10-19T12:10:00Z" }];
     wrap(<RefundableNowLine />);
     const line = await screen.findByTestId("funding-refundable");
-    expect(line.textContent).toContain("$0.25 charged recently can still be reported for a full refund (1 call).");
+    expect(line.textContent).toContain("$0.25 charged recently (1 call) is still covered: a report accepted for any of them is refunded in full.");
     expect(screen.getByRole("link", { name: "See them" }).getAttribute("href")).toBe("/spend/calls?status=refundable");
+  });
+
+  it("sums every page of the backend's list, not only the first", async () => {
+    api.refundable = [{ charged: usd("250000"), refundableIfReportedUntil: null }];
+    api.secondPage = [{ charged: usd("100000"), refundableIfReportedUntil: null }];
+    wrap(<RefundableNowLine />);
+    expect((await screen.findByTestId("funding-refundable")).textContent).toContain("$0.35 charged recently (2 calls)");
   });
 
   it("shows nothing when nothing is refundable", async () => {

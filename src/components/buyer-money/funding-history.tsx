@@ -19,7 +19,7 @@ import { explorerTxUrl } from "@/libs/chains/explorer";
 import { routes } from "@/libs/routes";
 import { findChain } from "@/services/chains.service";
 import { listWithdrawals } from "@/services/funding.service";
-import { listToolCalls } from "@/services/tool-calls.service";
+import { listToolCalls, type ToolCall } from "@/services/tool-calls.service";
 import { cn } from "@/utils";
 
 import { useBuyerMoney } from "./use-buyer-money";
@@ -44,6 +44,20 @@ export function EscrowReconciliation({ escrow }: { escrow: BuyerEscrow }) {
   );
 }
 
+/** Pages the backend's refundable list, up to {@link REFUNDABLE_PAGES} pages; `truncated` past that. */
+const REFUNDABLE_PAGES = 10;
+async function allRefundable(): Promise<{ items: ToolCall[]; truncated: boolean }> {
+  const items: ToolCall[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < REFUNDABLE_PAGES; page += 1) {
+    const result = await listToolCalls({ refundable: true, limit: 100, cursor });
+    items.push(...(result.items ?? []));
+    if (!result.pageInfo?.hasMore || !result.pageInfo.nextCursor) return { items, truncated: false };
+    cursor = result.pageInfo.nextCursor;
+  }
+  return { items, truncated: true };
+}
+
 /**
  * The calls a report filed now would refund in full, summed. The list is
  * `GET /tool-calls?refundable=true`, the receipt's own predicate, so this
@@ -52,7 +66,7 @@ export function EscrowReconciliation({ escrow }: { escrow: BuyerEscrow }) {
 export function RefundableNowLine() {
   const query = useQuery({
     queryKey: ["tool-calls", "refundable", "summary"],
-    queryFn: () => listToolCalls({ refundable: true, limit: 100 }),
+    queryFn: () => allRefundable(),
     retry: 0,
     // The answer lapses with the hold; read it again rather than keep an old promise.
     refetchInterval: 60_000,
@@ -65,7 +79,7 @@ export function RefundableNowLine() {
       data-testid="funding-refundable"
     >
       <p className="min-w-0 flex-1 text-body-13 text-success-700">
-        {refundableLine(summary)}
+        {refundableLine(summary, query.data?.truncated)}
         {summary.soonestUntil ? (
           <>
             {" "}
