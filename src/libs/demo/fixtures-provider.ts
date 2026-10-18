@@ -880,6 +880,18 @@ function verdictMix() {
 }
 
 /**
+ * "Not credited" by reason, as the backend sends it: all three classes, in its
+ * order, each summing into `withheld` / `withheldCalls`.
+ */
+function withheldByClass(failed: [number, string], endpoint: [number, string], refused: [number, string]) {
+  return [
+    { class: "PAID_UNCREDITED", calls: failed[0], amount: money(failed[1]) },
+    { class: "SYSTEM_ERROR", calls: endpoint[0], amount: money(endpoint[1]) },
+    { class: "REQUEST_ERROR", calls: refused[0], amount: money(refused[1]) },
+  ];
+}
+
+/**
  * Earnings by tool, sized as one day. `earned` is Σ provider_amount and
  * `platformFee` is Σ platform_fee, so the two add back to the gross the call
  * count implies at that binding's price — 408 settled × $0.45 = $183.60, of
@@ -894,6 +906,9 @@ function earningsGroups() {
       platformFee: money("18.36"),
       withheld: money("1.62"),
       withheldCalls: 4,
+      // Two failed checks, one endpoint error, one refused request: the four
+      // not-credited rows of the per-call file.
+      withheldByClass: withheldByClass([2, "0.81"], [1, "0.405"], [1, "0.405"]),
       // One passed call whose buyer has not settled its payment yet, and one
       // whose buyer never did (written off after 30 days). One each, so the
       // figure never equals the two failed checks' $0.81 on Money.
@@ -911,6 +926,7 @@ function earningsGroups() {
       platformFee: money("1.80"),
       withheld: money("0"),
       withheldCalls: 0,
+      withheldByClass: withheldByClass([0, "0"], [0, "0"], [0, "0"]),
       // One call forfeited while the stake was below the minimum.
       forfeited: money("0.072"),
       forfeitedCalls: 1,
@@ -922,6 +938,7 @@ function earningsGroups() {
       platformFee: money("0"),
       withheld: money("0"),
       withheldCalls: 0,
+      withheldByClass: withheldByClass([0, "0"], [0, "0"], [0, "0"]),
     },
   ];
 }
@@ -934,6 +951,7 @@ function earningsTotals() {
     platformFee: money("20.16"),
     withheld: money("1.62"),
     withheldCalls: 4,
+    withheldByClass: withheldByClass([2, "0.81"], [1, "0.405"], [1, "0.405"]),
     debtOutstanding: money("0.405"),
     debtOutstandingCalls: 1,
     forfeited: money("0.072"),
@@ -2219,29 +2237,57 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/payouts",
-    /* `chainTxRef` is an EVM transaction hash here, never a base58 signature. */
+    /*
+      `chainTxRef` is an EVM transaction hash here, never a base58 signature.
+      Rail-B redemptions (one transaction each, with its calls) newest, then
+      the older payout runs: both are payments to the wallet.
+    */
     override: "always",
     body: () =>
       page([
         {
+          id: "ple_7a20c3e1",
+          kind: "REDEMPTION",
+          batchId: null,
+          amount: { ...money("0.405"), asset: DEMO_ASSET },
+          chainTxRef: "0x9c3e0d8a51b47f26e8d1c0a3b5f7e9d2c4a6b8e0f1d3c5a7b9e1f3d5c7a9b1e3",
+          calls: 1,
+          createdAt: minutesAgo(7),
+        },
+        {
+          id: "ple_6b14d2f0",
+          kind: "REDEMPTION",
+          batchId: null,
+          amount: { ...money("1.215"), asset: DEMO_ASSET },
+          chainTxRef: "0x2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3c5e7b9d1f3a",
+          calls: 3,
+          createdAt: minutesAgo(31),
+        },
+        {
           id: "ple_5c81a04f",
+          kind: "BATCH",
           batchId: "pb_2026-09-16-08",
           amount: { ...money("52.18"), asset: DEMO_ASSET },
           chainTxRef: "0x58f09cc907edec4fd5fda8cf1d3a0f9f04661d42150a744ce90f20cf4171a71f",
+          calls: 129,
           createdAt: minutesAgo(52),
         },
         {
           id: "ple_3d07f9b2",
+          kind: "BATCH",
           batchId: "pb_2026-09-15-19",
           amount: { ...money("64.91"), asset: DEMO_ASSET },
           chainTxRef: "0x1ef5cc71b2166cbfe9971f4bff054dda0d3d2bcfb71eb18aec2a7b0e32469391",
+          calls: 160,
           createdAt: minutesAgo(1320),
         },
         {
           id: "ple_91e26cd7",
+          kind: "BATCH",
           batchId: "pb_2026-09-12-11",
           amount: { ...money("64.35"), asset: DEMO_ASSET },
           chainTxRef: "0x0555b7515f9639e142ee463706cefc42f8a8a9dad3b062c26b1675788ab5b2c2",
+          calls: null,
           createdAt: minutesAgo(6000),
         },
       ]),
