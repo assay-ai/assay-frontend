@@ -13,6 +13,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 import { ConnectPanel } from "@/components/toolsets/connect-panel";
 import { ToolsetCatalogue } from "@/components/toolsets/public-toolsets";
+import { usePublicToolsets } from "@/components/toolsets/use-toolsets";
 import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
@@ -33,6 +34,7 @@ import {
 import {
   publicErrorText,
   usePublicFeatures,
+  usePublicNotCharged,
   usePublicProviderDetails,
   usePublicProviders,
   usePublicTools,
@@ -53,6 +55,10 @@ import type { PublicProvider, PublicTool } from "@/services/public-explorer.serv
  * refused to charge, across every buyer). The tools come before the long
  * proof so a phone visitor sees them without scrolling past it. Data is the
  * platform's aggregate only (`GET /public/*`).
+ *
+ * Nothing here shows an empty promise: the Tool sets tab appears once a tool
+ * set is listed, and the proof folds into one line until a paid call has been
+ * checked in its window.
  */
 
 function errorCode(error: unknown): string | null {
@@ -157,6 +163,33 @@ function ProviderRow({ provider, chainName }: { provider: PublicProvider; chainN
   );
 }
 
+/**
+ * The proof of the promise, labelled with its window. Before any paid call
+ * was checked in the window it is one line that opens on demand: a panel of
+ * zeros next to a provider with thousands of calls reads as a broken promise.
+ */
+function Proof() {
+  const query = usePublicNotCharged();
+  const days = query.data?.windowDays ?? 30;
+  if (query.isSuccess && query.data.totals.callsChecked === 0) {
+    return (
+      <details className="rounded-xl border border-01 bg-01 px-4 tablet:px-6" data-testid="proof-collapsed">
+        <summary className="min-h-12 cursor-pointer py-3 text-body-13 text-02 hover:text-01">
+          <span className="text-label-13 text-01">What our checks refused to charge, last {days} days:</span> no paid
+          calls to show yet
+        </summary>
+        <NotChargedProof className="mb-4 border-0 p-0 tablet:p-0" />
+      </details>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2" data-testid="proof">
+      <p className="text-label-xs uppercase tracking-wide text-03">Last {days} days · paid calls, across every buyer</p>
+      <NotChargedProof />
+    </div>
+  );
+}
+
 export default function CataloguePage() {
   // View, search and the free filter live in the URL, so Back from a tool
   // page lands on the same list. Local state keeps typing instant; the URL
@@ -184,6 +217,11 @@ export default function CataloguePage() {
   const tools = usePublicTools();
   const providers = usePublicProviders();
   const features = usePublicFeatures();
+  // The same first page the Tool sets tab asks for, so opening it is instant.
+  const toolsets = usePublicToolsets({ sort: "popular", limit: 60 });
+  // An empty tab is a dead end: shown once a tool set is listed, or when a link opened it.
+  const showToolsets = (toolsets.data?.total ?? 0) > 0 || view === "toolsets";
+  const freeCount = tools.data ? tools.data.tools.filter((t) => hasFreeCalls(t.pricingMode)).length : null;
   const chainName = useChainName();
   const needle = query.trim().toLowerCase();
 
@@ -222,8 +260,8 @@ export default function CataloguePage() {
         url={serverUrl}
         title={
           topic
-            ? `This is an MCP server URL: every ${topic} tool, as one server. Add it to your client.`
-            : "This is an MCP server URL: every tool below, as one server. Add it to your client."
+            ? `One MCP URL for every ${topic} tool: connect your agent to it, or use a tool set URL for a smaller group.`
+            : "One MCP URL for everything below: connect your agent to it, or use a tool set URL for a smaller group."
         }
       />
       {topic ? (
@@ -272,7 +310,7 @@ export default function CataloguePage() {
               className="inline-flex rounded-md bg-03 p-0.5"
             >
               <SegmentedItem value="tools">Tools</SegmentedItem>
-              <SegmentedItem value="toolsets">Tool sets</SegmentedItem>
+              {showToolsets ? <SegmentedItem value="toolsets">Tool sets</SegmentedItem> : null}
               <SegmentedItem value="providers">Providers</SegmentedItem>
             </Segmented>
             {view === "tools" ? (
@@ -285,8 +323,9 @@ export default function CataloguePage() {
                     ? "rounded-full border border-primary-500 bg-primary-10 px-2.5 py-1 text-label-xs text-primary-700"
                     : "rounded-full border border-02 bg-01 px-2.5 py-1 text-label-xs text-02 hover:text-01"
                 }
+                aria-label={freeCount === null ? "Free calls" : `Free calls: ${plural(freeCount, "tool")}`}
               >
-                Free calls
+                Free calls{freeCount === null ? null : <span className="ml-1 font-mono">{freeCount}</span>}
               </button>
             ) : null}
             {active.isSuccess && view !== "toolsets" ? (
@@ -377,7 +416,7 @@ export default function CataloguePage() {
         )}
       </section>
 
-      {view === "toolsets" ? null : <NotChargedProof />}
+      {view === "toolsets" ? null : <Proof />}
 
       <section className="flex flex-col gap-3 rounded-xl border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:justify-between tablet:p-6">
         <div className="flex flex-col gap-1">
