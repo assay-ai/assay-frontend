@@ -36,7 +36,13 @@ import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-mone
  * while a request stands. The latter is a warning right above the button,
  * naming the chain, because it holds for a partial amount too: the backend
  * refuses every voucher on that chain while a request is open (the escrow's
- * `withdraw()` reads no voucher state). A tick box hid it.
+ * `withdraw()` reads no voucher state). An explicit tick confirms it as well
+ * (wave-1 audit M6).
+ *
+ * The sheet never promises the full amount (wave-1 audit I2): the claim pays
+ * `min(requested, balance)`, the request is not checked against spendable on
+ * the server, and a paid call admitted before the request lands is redeemed
+ * out of the balance first.
  */
 
 /** The pause a withdrawal request causes, in one sentence. Per chain, never account-wide. */
@@ -44,20 +50,33 @@ export function withdrawPauseWarning(chainName: string | null): string {
   return `While this request is open (about 1 h), every agent's paid calls on ${chainName ?? "this chain"} stop, even for a partial amount. Free calls keep working.`;
 }
 
+/** The tick that confirms the pause and the payout, beside the warning. */
+export function withdrawAcknowledgement(chainName: string | null): string {
+  return `I understand paid calls on ${chainName ?? "this chain"} stop until I claim or cancel this, and I may receive less than I ask for.`;
+}
+
 /**
- * What a request for `requested` pays out while calls hold money: all of it.
- * The request is capped at balance − held, paid calls stop the moment it
- * stands, and held calls can take at most what they hold, so the claim pays
- * the full amount. Null when no amount is chosen yet or nothing is held.
+ * What a request pays out: up to the amount, never more. `withdraw()` pays
+ * `min(requested, balance)`, and paid calls that land before the request is on
+ * chain are paid out of the balance first.
+ */
+export function withdrawReceiveNote(requested: Money | null): string {
+  const upTo = requested ? formatLimit(requested) : "the amount you ask for";
+  return `You receive up to ${upTo}. It can be less if paid calls land before the request is on chain; never more.`;
+}
+
+/**
+ * The held money and what a request for `requested` pays out while calls hold
+ * money. Null when no amount is chosen yet or nothing is held.
  *
  * With unpaid calls, the held amount and its Settle button are already said
- * above (`withdrawHeldText`), so only the second sentence is returned.
+ * above (`withdrawHeldText`), so it is not named again.
  */
 export function withdrawHeldNote(requested: Money | null, held: Money | null, owedCalls: number): string | null {
   if (!requested || !held || BigInt(held.amount) <= 0n) return null;
-  const receive = `stays in your escrow and is not part of this request: you receive the ${formatLimit(requested)} you ask for.`;
-  if (owedCalls > 0) return `That money ${receive}`;
-  return `${formatLimit(held)} is held by calls being checked. It ${receive}`;
+  const receive = withdrawReceiveNote(requested);
+  if (owedCalls > 0) return `That money is not part of this request. ${receive}`;
+  return `${formatLimit(held)} is held by calls being checked and is not part of this request. ${receive}`;
 }
 
 function positive(amount: string | undefined): boolean {
@@ -178,6 +197,7 @@ export function WithdrawSheet({
       disabled={Boolean(disabledReason)}
       disabledReason={disabledReason}
       describeError={describeMoneyError}
+      acknowledge={cancelling ? undefined : withdrawAcknowledgement(chainName)}
       successTitle={cancelling ? "Request cancelled" : "Withdrawal requested"}
       successDescription={
         cancelling ? (
@@ -235,7 +255,9 @@ export function WithdrawSheet({
               {heldNote}
             </p>
           ) : (
-            <p className="text-body-xs text-03">You receive the amount you ask for.</p>
+            <p className="text-body-xs text-03" data-testid="withdraw-receive">
+              {withdrawReceiveNote(parsed.atomic ? { asset: "", decimals: money.decimals, amount: parsed.atomic } : null)}
+            </p>
           )}
           {/* Last, so it sits right above the button: the consequence of pressing it. */}
           <p
