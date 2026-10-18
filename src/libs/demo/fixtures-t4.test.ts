@@ -176,6 +176,7 @@ describe("public pages", () => {
     const { tools } = call<{ tools: PublicTool[] }>("GET", "/public/catalogue/tools");
     for (const tool of tools.filter((t) => t.routable)) {
       expect(tool.prices?.map((p) => p.chainId), tool.name).toEqual(tool.settlementChains);
+      for (const entry of tool.prices ?? []) expect(entry.listings, tool.name).toBeGreaterThan(0);
     }
   });
 });

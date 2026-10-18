@@ -51,17 +51,23 @@ describe("demo: the provider console's public links resolve", () => {
 describe("demo: prices per chain and promised failure rates (B3)", () => {
   it("states each routable tool's price per chain, set by a listed provider at that price", () => {
     const { tools } = get<{ tools: PublicTool[] }>("/public/catalogue/tools");
-    const { providers } = get<{ providers: { providerId: string }[] }>("/public/catalogue/providers");
+    const { providers } = get<{ providers: { providerId: string; toolIds: string[] }[] }>("/public/catalogue/providers");
     const standard = tools.filter((t) => t.routable && (t.kind ?? "STANDARD") === "STANDARD");
     expect(standard.length).toBeGreaterThan(0);
     for (const tool of standard) {
       expect(tool.prices?.map((p) => p.chainId), tool.name).toEqual(tool.settlementChains);
       const [entry] = tool.prices!;
       expect(entry.price).toEqual(tool.price);
+      // `listings` counts the listings serving the chain; a provider is named only when one sets the price.
+      const serving = providers.filter((p) => p.toolIds.includes(tool.id));
+      expect(entry.listings, tool.name).toBe(serving.length);
+      if (entry.providerId === null) continue;
       expect(providers.some((p) => p.providerId === entry.providerId), tool.name).toBe(true);
       const detail = get<PublicProviderDetail>(`/public/catalogue/providers/${entry.providerId}`);
       expect(detail.tools.find((t) => t.toolId === tool.id)?.price).toEqual(entry.price);
     }
+    // Some tool is served by one listing alone, so the demo shows a named provider somewhere.
+    expect(standard.some((t) => t.prices?.[0]?.listings === 1 && t.prices[0].providerId)).toBe(true);
     for (const tool of tools.filter((t) => !t.routable)) expect(tool.prices ?? []).toEqual([]);
   });
 

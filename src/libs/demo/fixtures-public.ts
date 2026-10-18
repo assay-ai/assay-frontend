@@ -56,7 +56,12 @@ function publicTool(row: CatalogueTool): PublicTool {
     pricingMode: row.pricingMode,
     routable: row.routable,
     settlementChains: row.routable ? (row.settlementChains ?? null) : null,
-    prices: (row.prices ?? []).map((entry) => ({ chainId: entry.chainId, price: entry.price, providerId: entry.providerId })),
+    prices: (row.prices ?? []).map((entry) => ({
+      chainId: entry.chainId,
+      price: entry.price,
+      providerId: entry.providerId,
+      listings: entry.listings,
+    })),
     freeCallsPerDay: row.freeCallsPerDay ?? null,
     paidBindings: row.paidBindings ?? 0,
     category: demoCategoryOf(row.name),
