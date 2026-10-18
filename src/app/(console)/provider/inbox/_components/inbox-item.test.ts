@@ -234,6 +234,15 @@ describe("inboxView: stored rows read from event + payload", () => {
     expectReadable(view.body);
   });
 
+  it("reads a full-scale figure at the payload's own decimals", () => {
+    const view = inboxView(
+      row({ event: "provider.something_new", title: "Floor 100.000000000", body: "Six places 1.500000 stay as written.", payload: { decimals: 9 } }),
+      names,
+    );
+    expect(view.title).toBe("Floor $100.00");
+    expect(view.body).toBe("Six places 1.500000 stay as written.");
+  });
+
   it("keeps the stored text of events it does not know", () => {
     const view = inboxView(row({ event: "provider.payout_sent", title: "Payout sent", body: "Your payout of $4.00 was sent." }), names);
     expect(view.title).toBe("Payout sent");

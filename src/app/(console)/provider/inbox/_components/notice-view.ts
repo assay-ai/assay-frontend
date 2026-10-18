@@ -112,7 +112,7 @@ function cancelReason(payload: Payload): { key: string; sentence: string } {
 }
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const MINOR = (amount: string): string => penaltyMoney({ amount, asset: "", decimals: DEFAULT_DECIMALS });
+const minor = (amount: string, decimals: number): string => penaltyMoney({ amount, asset: "", decimals });
 
 /**
  * The guard for stored text, which is shown only for events this table does
@@ -121,7 +121,13 @@ const MINOR = (amount: string): string => penaltyMoney({ amount, asset: "", deci
  * "no raw units, ids or 6-decimal figures in a provider notice" must not
  * depend on every payload being well-formed.
  */
-export function sanitizeStoredText(value: string, ctx: Pick<NoticeContext, "now"> = {}): string {
+export function sanitizeStoredText(
+  value: string,
+  ctx: Pick<NoticeContext, "now"> = {},
+  /** The payload's `decimals` when it has one. Stored text never states its scale; the platform's stablecoins are 6. */
+  decimals: number = DEFAULT_DECIMALS,
+): string {
+  const MINOR = (amount: string) => minor(amount, decimals);
   return (
     value
       // "28470000 solana:…/token:…": minor units with their asset id.
@@ -129,8 +135,11 @@ export function sanitizeStoredText(value: string, ctx: Pick<NoticeContext, "now"
       // "A penalty of 28470000", "stands at 40000", "40000 was taken": minor units by context.
       .replace(/\b(penalty of |stands at |amount of )(\d{4,30})\b(?![.:/])/gi, (_m, lead: string, amount: string) => `${lead}${MINOR(amount)}`)
       .replace(/^(\d{4,30})(?= (?:was|is|were) )/i, (_m, amount: string) => MINOR(amount))
-      // "100.000000": a figure at the asset's full scale.
-      .replace(/\b(\d{1,30})\.(\d{6})\b/g, (_m, whole: string, fraction: string) => MINOR(`${whole}${fraction}`))
+      // "100.000000": a figure written at the asset's full scale (`MoneyUtil.format`).
+      // Only a fraction exactly `decimals` long is taken for one.
+      .replace(new RegExp(`\\b(\\d{1,30})\\.(\\d{${decimals}})\\b`, "g"), (_m, whole: string, fraction: string) =>
+        MINOR(`${whole}${fraction}`),
+      )
       // Ids: a binding or a tool is "one of your tools"; an agent is "an agent".
       .replace(new RegExp(`\\b(?:binding|tool) ${UUID}`, "gi"), "One of your tools")
       .replace(new RegExp(`\\bagent:? ${UUID}`, "gi"), "an agent")
@@ -145,8 +154,8 @@ export function sanitizeStoredText(value: string, ctx: Pick<NoticeContext, "now"
 export function noticeView(item: NoticeSource, ctx: NoticeContext): NoticeView {
   const p = payloadOf(item);
   const stored: NoticeView = {
-    title: sanitizeStoredText(item.title, ctx),
-    body: sanitizeStoredText(item.body, ctx),
+    title: sanitizeStoredText(item.title, ctx, number(p, "decimals") ?? DEFAULT_DECIMALS),
+    body: sanitizeStoredText(item.body, ctx, number(p, "decimals") ?? DEFAULT_DECIMALS),
     target: null,
     groupKey: null,
   };
