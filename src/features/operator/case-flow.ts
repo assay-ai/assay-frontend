@@ -69,10 +69,16 @@ export interface CaseFacts {
   executedWhileCancelWaited: boolean;
   /**
    * The chain side still reads "cancel requested" though nothing stands.
-   * Nothing closes it from the console (the owner decides); the page says
-   * there is nothing to sign. False otherwise.
+   * There is nothing to sign; when the brief's read allows it, the B18
+   * actions below close it or propose it again. False otherwise.
    */
   closeOutstanding: boolean;
+  /**
+   * B18: which stuck-cancel action the brief's live chain read allows
+   * (`manualActions`). The backend reads the chain again before it acts and
+   * refuses if the guard no longer holds. All false on an older backend.
+   */
+  manual: { close: boolean; record: boolean; repropose: boolean; appliedMinor: string | null };
   /**
    * Not on chain yet, and its computed dates have passed: "Not on chain after
    * 5 days", counted from the proposal. Null otherwise.
@@ -153,6 +159,12 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
     nothingOnChain,
     executedWhileCancelWaited,
     closeOutstanding: nothingOnChain && chain === "CANCEL_REQUESTED",
+    manual: {
+      close: brief.manualActions?.closeNothingStanding.allowed === true,
+      record: brief.manualActions?.recordExecution.allowed === true,
+      repropose: brief.manualActions?.repropose.allowed === true,
+      appliedMinor: brief.manualActions?.recordExecution.appliedMinor ?? null,
+    },
     notOnChainForDays,
   };
 }
@@ -310,7 +322,19 @@ export function caseTimelineSteps(
 
 // ── The next step ───────────────────────────────────────────────────────────
 
-export type CaseActionId = "suspend" | "rule" | "cancel" | "compensate" | "sweep" | "block" | "approve" | "open-request";
+export type CaseActionId =
+  | "suspend"
+  | "rule"
+  | "cancel"
+  | "compensate"
+  | "sweep"
+  | "block"
+  | "approve"
+  | "open-request"
+  // B18: the stuck-cancel actions, each shown only when its guard holds on the brief's read.
+  | "close-cancel"
+  | "record-execution"
+  | "repropose";
 
 export interface CaseNextStep {
   kind: "action" | "waiting" | "done";
@@ -339,6 +363,12 @@ export interface CaseAuthority {
   cancel: boolean;
   compensate: boolean;
   block: boolean;
+  /** B18: may close a cancel with nothing standing (`S-15`): role, and the brief's read allows it. */
+  closeCancel: boolean;
+  /** B18: may ask to record an execution while the cancel waited (`S-16`, two-person). */
+  recordExecution: boolean;
+  /** B18: may ask to propose an upheld penalty again (`S-17`, two-person). */
+  repropose: boolean;
 }
 
 export function caseAuthority(
@@ -374,6 +404,9 @@ export function caseAuthority(
     cancel: may(identity.roles, "cancel") && facts.stage === "cancel-requested" && !facts.nothingOnChain && !facts.executedWhileCancelWaited,
     compensate: may(identity.roles, "compensate") && status !== null && isLegalInStatus("compensate", status),
     block: caps.block,
+    closeCancel: may(identity.roles, "closeCancel") && facts.manual.close,
+    recordExecution: may(identity.roles, "recordExecution") && facts.manual.record,
+    repropose: may(identity.roles, "repropose") && facts.manual.repropose,
   };
 }
 
@@ -396,6 +429,30 @@ export function caseNextStep(
   format: (iso: string) => string,
 ): CaseNextStep {
   const suspendSecondary = authority.suspend.allowed ? ("suspend" as const) : null;
+  if (facts.executedWhileCancelWaited && authority.recordExecution) {
+    return {
+      kind: "action",
+      title: "Executed on chain while the cancel waited",
+      description:
+        "The stake was taken: the penalty was executed on chain before the cancel landed. Record the execution on the case; a second Lead adjudicator or Treasury approves it.",
+      action: "record-execution",
+      secondary: null,
+      until: null,
+      alert: true,
+    };
+  }
+  if (facts.executedWhileCancelWaited && facts.manual.record) {
+    return {
+      kind: "waiting",
+      title: "Executed on chain while the cancel waited",
+      description:
+        "The stake was taken: the penalty was executed on chain before the cancel landed. A Lead adjudicator or Treasury records it on the case, with a second approver.",
+      action: null,
+      secondary: null,
+      until: null,
+      alert: true,
+    };
+  }
   if (facts.executedWhileCancelWaited) {
     return {
       kind: "waiting",
@@ -406,6 +463,38 @@ export function caseNextStep(
       secondary: null,
       until: null,
       alert: true,
+    };
+  }
+  if (facts.closeOutstanding && facts.manual.repropose) {
+    return authority.repropose
+      ? {
+          kind: "action",
+          title: "Propose the upheld penalty again",
+          description:
+            "Its earlier record was cancelled on chain, so nothing stands and the decided penalty is not on chain. Propose it again; a second adjudicator approves it.",
+          action: "repropose",
+          secondary: null,
+          until: null,
+        }
+      : {
+          kind: "waiting",
+          title: "The upheld penalty is not on chain",
+          description:
+            "Its earlier record was cancelled on chain, so nothing stands. A Lead adjudicator or Treasury proposes it again, with a second approver.",
+          action: null,
+          secondary: null,
+          until: null,
+        };
+  }
+  if (facts.closeOutstanding && authority.closeCancel) {
+    return {
+      kind: "action",
+      title: "Close the cancel: nothing stands on chain",
+      description:
+        "Its record reads cancelled on chain: nothing can be executed, and there is nothing to sign. Nothing was taken from the provider's stake. Close the cancel so it leaves Waiting for signature.",
+      action: "close-cancel",
+      secondary: null,
+      until: null,
     };
   }
   if (facts.closeOutstanding) {
@@ -548,6 +637,8 @@ const REQUEST_WORDS: Record<string, { noun: string; does: string }> = {
   "slash.compensated": { noun: "pay-back", does: "pay the penalty back into the provider's stake" },
   "slash.suspend": { noun: "suspension", does: "suspend this penalty" },
   "slash.sweep": { noun: "fleet sweep", does: "decide every case with the same defect the way this one was decided" },
+  "slash.record_execution": { noun: "execution record", does: "record the execution the chain made while the cancel waited" },
+  "slash.repropose": { noun: "re-proposal", does: "propose this upheld penalty on chain again" },
 };
 
 export interface PendingRequest {
@@ -713,3 +804,99 @@ export function shortWhyNot(
   return names === null ? why : `${why} · ${askLabel(names, rolesPhrase(check.roles))}`;
 }
 
+
+// ── B18: the stuck-cancel actions ───────────────────────────────────────────
+
+export type ManualActionKind = "close" | "record" | "repropose";
+
+/** One line of a manual action's "What happens": money, chain, approver, undo. */
+export interface ManualActionLine {
+  kind: "money" | "chain" | "approver" | "undo";
+  text: string;
+}
+
+export interface ManualActionCopy {
+  /** Register code: `S-15`, `S-16`, `S-17`. */
+  code: "S-15" | "S-16" | "S-17";
+  /** The approval action it is queued as; null for the one-person close. */
+  approvalAction: string | null;
+  twoPerson: boolean;
+  title: string;
+  lines: ManualActionLine[];
+  /** The confirmation the operator ticks before the button enables. */
+  confirm: string;
+  submit: string;
+}
+
+/**
+ * What each B18 action does, said before it is sent: whether money moves,
+ * whether anything is written on chain, whether it can be undone, and who
+ * approves it. Pure. Each line states what the backend guarantees, never an
+ * outcome it does not (the chain is read again first, and refused if it
+ * changed).
+ */
+export function manualActionCopy(
+  kind: ManualActionKind,
+  amounts: { penalty: string; applied: string | null },
+  /** Closed here with no penalty (overturned, suspended, waived): the stake was owed nothing. */
+  closed = true,
+): ManualActionCopy {
+  switch (kind) {
+    case "close":
+      return {
+        code: "S-15",
+        approvalAction: null,
+        twoPerson: false,
+        title: "Close the cancel: nothing stands on chain",
+        lines: [
+          { kind: "money", text: `No money moves. The ${amounts.penalty} penalty was never taken, and it stays that way.` },
+          { kind: "chain", text: "Nothing is sent on chain. The record is read again first; unless it still reads cancelled, nothing changes." },
+          { kind: "approver", text: "One person: no second approver. Recorded in Activity under your name." },
+          { kind: "undo", text: "It can't be undone: the penalty leaves Waiting for signature for good." },
+        ],
+        confirm: "I checked that this penalty's record reads cancelled on chain and that nothing of it stands.",
+        submit: "Close the cancel",
+      };
+    case "record":
+      return {
+        code: "S-16",
+        approvalAction: "slash.record_execution",
+        twoPerson: true,
+        title: "Record the execution on the penalty",
+        lines: [
+          {
+            kind: "money",
+            text: closed
+              ? `${amounts.applied ? `${amounts.applied} was` : "The penalty was"} already taken from the provider's stake on chain. Recording it moves no money now; paying it back is a separate request.`
+              : `${amounts.applied ? `${amounts.applied} was` : "The penalty was"} already taken from the provider's stake on chain. Recording it moves no money; the penalty closes as executed.`,
+          },
+          { kind: "chain", text: "Nothing is sent on chain. The record is read again when it is approved; unless it still reads executed, nothing is written." },
+          { kind: "approver", text: "Needs a second approver: a Lead adjudicator or Treasury other than you." },
+          { kind: "undo", text: "It can't be undone." },
+        ],
+        confirm: "I checked that this penalty's record reads executed on chain, and who it paid.",
+        submit: "Send for approval",
+      };
+    case "repropose":
+      return {
+        code: "S-17",
+        approvalAction: "slash.repropose",
+        twoPerson: true,
+        title: "Propose the upheld penalty again",
+        lines: [
+          {
+            kind: "money",
+            text: `Once it is on chain, up to ${amounts.penalty} of the provider's stake is reserved again. Nothing is taken until it becomes executable.`,
+          },
+          {
+            kind: "chain",
+            text: "Written on chain as a new record by the next proposal pass, with every usual check (stake, caps, the provider's dispute window). The old record is read again first; unless it still reads cancelled, nothing changes.",
+          },
+          { kind: "approver", text: "Needs a second approver: an Adjudicator or Lead adjudicator other than you." },
+          { kind: "undo", text: "It can't be undone here. The provider can dispute the new record on chain." },
+        ],
+        confirm: "I checked that the earlier record reads cancelled on chain and was never disputed.",
+        submit: "Send for approval",
+      };
+  }
+}
