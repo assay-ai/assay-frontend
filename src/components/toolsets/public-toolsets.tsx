@@ -572,12 +572,8 @@ export function PublicHandleView() {
           publicPage
           url={data.mcpUrl ?? buildMcpUrl({ kind: "maker", handle: data.handle }, { free: false }, mcpHost())}
           title={`Connect every tool from @${data.handle}`}
-          detail={
-            <span className="flex flex-col gap-1.5" data-testid="handle-connect-hint">
-              <span>Add this URL to your agent app as an MCP server: every listed tool of @{data.handle} becomes one server.</span>
-              <CopyLine value={data.mcpUrl ?? buildMcpUrl({ kind: "maker", handle: data.handle }, { free: false }, mcpHost())} label="Copy URL" />
-            </span>
-          }
+          copyable
+          detail={<span data-testid="handle-connect-hint">Add this URL to your agent app as an MCP server: every listed tool of @{data.handle} becomes one server.</span>}
         />
       ) : null}
       {data.tools.length > 0 ? <HandleTools handle={data.handle} tools={data.tools} catalogue={tools.data?.tools ?? []} /> : null}

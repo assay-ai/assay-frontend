@@ -11,6 +11,7 @@ import { loginHref } from "@/libs/login-redirect";
 import { cn } from "@/utils";
 
 import { ConnectSheet } from "./connect-sheet";
+import { CopyLine } from "./toolset-bits";
 
 /**
  * The panel at the top of every page an MCP URL opens in a browser (design
@@ -38,6 +39,7 @@ export function ConnectPanel({
   className,
   nextPath,
   connectLabel = "Connect",
+  copyable = false,
 }: {
   /** The MCP URL the page stands for; null while it is not known yet. */
   url: string | null;
@@ -53,6 +55,8 @@ export function ConnectPanel({
   nextPath?: string;
   /** Replaces the default "Connect" label. */
   connectLabel?: string;
+  /** Show the URL once, with a Copy button, instead of as plain text. */
+  copyable?: boolean;
 }) {
   const privySignedIn = useSignedIn();
   const signedIn = !publicPage || privySignedIn || demoEnabled();
@@ -77,7 +81,7 @@ export function ConnectPanel({
       <Plug aria-hidden="true" className="hidden size-5 shrink-0 text-primary-600 tablet:block" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className="text-label-sm text-01">{title}</p>
-        {url ? <p className={cn("break-all font-mono text-mono-12 text-02", compact && "hidden tablet:block")}>{url}</p> : null}
+        {url && copyable ? <CopyLine value={url} label="Copy URL" /> : url ? <p className={cn("break-all font-mono text-mono-12 text-02", compact && "hidden tablet:block")}>{url}</p> : null}
         {detail ? <div className={cn("text-body-13 text-02", compact && "hidden tablet:block")}>{detail}</div> : null}
       </div>
       {signedIn ? (

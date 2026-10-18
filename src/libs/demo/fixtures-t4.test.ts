@@ -40,6 +40,26 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+describe("provider tools: try it", () => {
+  const doc = "openapi: 3.0.0\nservers: [{ url: https://api.example.com }]\npaths:\n  /search: { get: { operationId: searchPosts } }\n  /post: { get: { operationId: getPost } }";
+
+  it("asks for the operation when the document has several, then runs the one named", () => {
+    expect(refusal(() => call("POST", "/provider/tools/try", {}, { openapi: doc })).context?.problems).toEqual(["name the operation to try (operationId); there are: searchPosts, getPost"]);
+    expect(call<{ inferred: { operationId: string } }>("POST", "/provider/tools/try", {}, { openapi: doc, operationId: "getPost" }).inferred.operationId).toBe("getPost");
+  });
+
+  it("answers 401 with AUTH_REQUIRED until a header is sent, and echoes header names only", () => {
+    const secured = `${doc}\ncomponents: { securitySchemes: { key: { type: apiKey } } }`;
+    const first = call<{ passed: boolean; warnings: { code: string }[] }>("POST", "/provider/tools/try", {}, { openapi: secured, operationId: "getPost" });
+    expect(first.passed).toBe(false);
+    expect(first.warnings.map((w) => w.code)).toEqual(["AUTH_REQUIRED"]);
+    const again = call<{ passed: boolean; request: { headerNames: string[] } }>("POST", "/provider/tools/try", {}, { openapi: secured, operationId: "getPost", headers: { "X-Api-Key": "k1" } });
+    expect(again.passed).toBe(true);
+    expect(again.request.headerNames).toEqual(["x-api-key"]);
+    expect(JSON.stringify(again)).not.toContain("k1");
+  });
+});
+
 describe("provider tools: every state", () => {
   it("lists one own tool per state, all under the demo's public name", () => {
     const { items } = call<{ items: ProviderToolSummary[] }>("GET", "/provider/tools");

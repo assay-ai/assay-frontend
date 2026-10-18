@@ -330,7 +330,7 @@ export interface TryProviderToolBody {
   timeoutMs?: number;
 }
 
-export type TryWarningCode = "CREDENTIAL_DETECTED" | "OPTION_IGNORED" | "MISSING_TEST_VALUES" | "AUTH_REQUIRED" | "NOT_SUPPORTED" | "NO_JSON_RESPONSE" | "EXAMPLE_TOO_LARGE";
+export type TryWarningCode = "CREDENTIAL_DETECTED" | "OPTION_IGNORED" | "MISSING_TEST_VALUES" | "AUTH_REQUIRED" | "NOT_SUPPORTED" | "NO_JSON_RESPONSE" | "EXAMPLE_TOO_LARGE" | "UNSIGNED_FOREIGN_ORIGIN";
 
 export interface ProviderToolTryResult {
   source: string;

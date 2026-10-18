@@ -453,7 +453,10 @@ export function providerToolErrorView(error: unknown): ProviderToolErrorView {
   const context = (error.context ?? {}) as Record<string, unknown>;
   switch (error.code) {
     case "TOOL_PROVIDER_TOOL_INVALID":
-      return { text: "It could not be saved. Fix these first:", ...none, problems: strings(context.problems).map(problemText) };
+    {
+      const problems = strings(context.problems).map(problemText);
+      return { text: problems.length > 0 ? "It could not be saved. Fix these first:" : "It could not be saved: something in it is not valid.", ...none, problems };
+    }
     case "TOOL_PROVIDER_TOOL_NAME_TAKEN": {
       const suggestion = typeof context.suggestion === "string" ? context.suggestion : null;
       return { text: suggestion ? `That name is taken. “${suggestion}” is free.` : "That name is taken. Try another one.", ...none, suggestion };

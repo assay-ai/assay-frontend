@@ -211,8 +211,7 @@ export default function ProviderApisPage() {
         <PageState
           kind="empty"
           title="No APIs of your own yet"
-          description="Name it, describe what agents send and get back, connect your endpoint, then choose who can use it. Four steps; your progress is saved."
-          action={{ label: "Publish your own API", href: "/provider/apis/new" }}
+          description="Name it, describe what agents send and get back, connect your endpoint, then choose who can use it. Four steps; your progress is saved. Start with “Publish your own API” above."
         />
       ) : (
         <ul className="flex w-full flex-col overflow-hidden rounded-lg border border-01 bg-01" data-testid="own-api-list">

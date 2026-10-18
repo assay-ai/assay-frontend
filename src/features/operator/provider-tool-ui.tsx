@@ -206,7 +206,8 @@ export function TakedownSheet({ toolId, toolName, open, onOpenChange, onDone }: 
   };
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="tablet:max-w-[520px]">
+      {/* Focus stays on the sheet, not the first reason chip: a focus ring there reads as a choice already made. */}
+      <SheetContent className="tablet:max-w-[520px]" onOpenAutoFocus={(e) => e.preventDefault()}>
         <SheetHeader>
           <SheetTitle>Take {toolName} down?</SheetTitle>
           <SheetDescription>At once: it disappears from every view, including pinned tool set versions, and calls get an error. A second operator confirms it within 72 hours, or it comes back.</SheetDescription>

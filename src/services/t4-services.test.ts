@@ -80,6 +80,14 @@ describe("provider tools", () => {
     expect(put).toHaveBeenCalledWith("/provider/tools/t1/replacement", { replacementToolId: null });
   });
 
+  it("unpublishes, and tries a curl or an OpenAPI operation", async () => {
+    post.mockResolvedValue({});
+    await tools.unpublishProviderTool("t 1");
+    expect(post).toHaveBeenLastCalledWith("/provider/tools/t%201/unpublish");
+    await tools.tryProviderTool({ openapi: "openapi: 3.0.0", operationId: "getPost", headers: { Authorization: "Bearer k" } });
+    expect(post).toHaveBeenLastCalledWith("/provider/tools/try", { openapi: "openapi: 3.0.0", operationId: "getPost", headers: { Authorization: "Bearer k" } });
+  });
+
   it("dismisses an invitation by its two ids", async () => {
     post.mockResolvedValue(undefined);
     await tools.dismissPromotionInvitation("std", "src");

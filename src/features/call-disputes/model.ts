@@ -84,8 +84,7 @@ export const BUYER_COPY = {
   decides: `Assay's review team decides within ${DECISION_HOURS} hours.`,
   silentHeld: `If the provider stays silent, your report is accepted automatically at ${DECISION_HOURS} hours and you are refunded.`,
   held: "The payment stays held until your report is decided.",
-  afterHold:
-    "The payment has already been collected. If your report is accepted, it counts against the provider's quality, but the money is not returned unless it had not been paid out yet: a refund is not guaranteed.",
+  afterHold: "The payment has already been collected. If your report is accepted, it counts against the provider's quality; a refund is not guaranteed.",
   limit: DISPUTE_COPY.limit,
   safetyNet: DISPUTE_COPY.safetyNet,
 } as const;
@@ -172,7 +171,7 @@ export function providerStatus(dispute: CallDispute, now: number): DisputeStatus
  * The timeline: reported (and held), the provider's reply, a refund before
  * the decision (a blocked provider), the decision, and the refund.
  */
-export function disputeTimeline(dispute: CallDispute, now: number, side: "buyer" | "provider" = "buyer"): StatusTimelineStep[] {
+export function disputeTimeline(dispute: CallDispute, now: number, side: "buyer" | "provider" | "operator" = "buyer"): StatusTimelineStep[] {
   const steps: StatusTimelineStep[] = [];
   const decided = dispute.state === "UPHELD" || dispute.state === "REJECTED";
   const withdrawn = dispute.state === "WITHDRAWN";
@@ -259,7 +258,7 @@ export function disputeTimeline(dispute: CallDispute, now: number, side: "buyer"
   return steps;
 }
 
-function refundStep(dispute: CallDispute, decided: boolean, side: "buyer" | "provider"): StatusTimelineStep | null {
+function refundStep(dispute: CallDispute, decided: boolean, side: "buyer" | "provider" | "operator"): StatusTimelineStep | null {
   const refunded = money(dispute.restoredAmount ?? dispute.refundAmount ?? dispute.amount);
   if (!decided) {
     if (dispute.refundState === "REFUNDED") return null;
@@ -376,7 +375,7 @@ export function disputeQueueQuery(show: "open" | "all", flaggedOnly: boolean, cu
 
 /**
  * A short, stable reference for an organization the operator may not see by
- * id: "#4f2a" (FNV-1a of the id, 4 hex digits). It tells two rows apart and
+ * id: "#4f2a9c" (FNV-1a of the id, 6 hex digits). It tells two rows apart and
  * never shows the id itself.
  */
 export function shortRef(id: string): string {
@@ -385,7 +384,7 @@ export function shortRef(id: string): string {
     hash ^= id.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
-  return `#${(hash & 0xffff).toString(16).padStart(4, "0")}`;
+  return `#${(hash & 0xffffff).toString(16).padStart(6, "0")}`;
 }
 
 /** Oldest first: the queue's order is the SLA's. */
