@@ -12,7 +12,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
 import { bindingStatusChip } from "@/features/provider-binding/binding-header";
-import { LISTING_KINDS_SENTENCE, liveFirst, priceLine } from "@/features/provider-binding/listing-copy";
+import { LISTING_KINDS_SENTENCE, listingKind, liveFirst, priceLine } from "@/features/provider-binding/listing-copy";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { REPLY_PROMISE } from "@/features/provider-tool-requests/request-sheet";
 import type { ToolBindingSummary } from "@/interfaces";
@@ -20,13 +20,13 @@ import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { discardToolBinding, listToolBindings } from "@/services/provider-tool-bindings.service";
-import { labelForEndpoint } from "@/utils/provider-label";
 
 /**
  * Listings — every catalogue tool you serve, by name, live first, with its
  * state and price, and one way to add another. A draft opens the wizard where
  * it was left, and can be discarded; a published listing opens its Overview.
- * The row never shows a raw host or IP (`labelForEndpoint`).
+ * A row never shows its address (host, IP or port), only the tool and its
+ * kind; the address is in the listing's Settings → Connection.
  */
 
 const LIST_LIMIT = 25;
@@ -106,7 +106,9 @@ export default function ProviderToolsPage() {
                 >
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span className="truncate text-label-sm text-01">{names.bindingLabel(binding)}</span>
-                    <span className="truncate text-body-xs text-03">{labelForEndpoint(binding.endpoint)}</span>
+                    {listingKind(names.toolName(binding.toolId)) ? (
+                      <span className="truncate text-body-xs text-03">{listingKind(names.toolName(binding.toolId))}</span>
+                    ) : null}
                   </span>
                   <span className="text-body-13 text-02 tablet:w-56 tablet:text-right">{priceLine(binding)}</span>
                   <span className="flex items-center gap-2 tablet:w-44 tablet:justify-end">

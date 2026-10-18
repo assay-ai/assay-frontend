@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-import { labelForEndpoint, SELF_HOSTED } from "@/utils/provider-label";
+import { describe, expect, it } from "vitest";
 
 import { bindingLabelOf } from "./tool-name";
 
@@ -15,21 +16,17 @@ describe("a listing's name", () => {
   });
 });
 
-describe("an endpoint's short label", () => {
-  it("shows a domain name, without port or path", () => {
-    expect(labelForEndpoint("https://api.acme.example:8443/v1/quote?x=1")).toBe("api.acme.example");
-  });
-
+describe("no address on a listing outside Settings → Connection", () => {
+  const SRC = join(__dirname, "../..");
   it.each([
-    "http://[2001:db8::1]:4010/v1",
-    "http://203.0.113.7:4010/v1",
-    "http://localhost:4010",
-    "http://api.localhost/v1",
-    "http://internal-box/v1",
-    "not a url",
-  ])("never shows a host or IP for %s", (endpoint) => {
-    const label = labelForEndpoint(endpoint);
-    expect(label).toBe(SELF_HOSTED);
-    expect(label).not.toMatch(/\d+\.\d+|::|:\d+|localhost/);
+    "app/(console)/provider/bindings/page.tsx",
+    "features/provider-binding/binding-header.tsx",
+    "features/provider-binding/tool-name.tsx",
+    "app/(console)/provider/policy-changes/page.tsx",
+    "app/(console)/provider/page.tsx",
+    "app/(console)/layout.tsx",
+  ])("%s renders no endpoint", (file) => {
+    const source = readFileSync(join(SRC, file), "utf8");
+    expect(source).not.toMatch(/\.endpoint\b|labelForEndpoint|new URL\(/);
   });
 });

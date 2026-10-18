@@ -516,7 +516,7 @@ export default function ProviderAccountPage() {
                       <span className="text-body-xs text-03">
                         You claim it when you{" "}
                         <Link href="/provider/apis/new" className="text-primary-600 underline-offset-2 hover:underline">
-                          publish your own API
+                          publish your API
                         </Link>
                         . Listings of catalogue tools do not need one.
                       </span>

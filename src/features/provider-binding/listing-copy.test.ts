@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { foldDrafts, liveFirst, priceLine } from "./listing-copy";
+import { foldDrafts, LISTING_KINDS_SENTENCE, listingKind, liveFirst, priceLine } from "./listing-copy";
 
 const usd = (amount: string) => ({ amount, asset: "usdg", decimals: 6 });
 
@@ -29,5 +29,23 @@ describe("listing order", () => {
     const { shown, drafts } = foldDrafts(rows);
     expect(shown.map((row) => row.id)).toEqual(["a1", "a2", "p1"]);
     expect(drafts.map((row) => row.id)).toEqual(["d1", "d2"]);
+  });
+});
+
+describe("listing words", () => {
+  it("says Your API, never own API", () => {
+    expect(LISTING_KINDS_SENTENCE).toContain("Your API");
+    expect(LISTING_KINDS_SENTENCE).not.toMatch(/own API/i);
+  });
+
+  it("marks a listing of your API apart from a catalogue tool", () => {
+    expect(listingKind("acme__search_posts")).toMatch(/^Your API/);
+    expect(listingKind("get_weather")).toBe("Catalogue tool");
+    expect(listingKind(null)).toBeNull();
+  });
+
+  it("folds a single draft too, and keeps an all-live list whole", () => {
+    expect(foldDrafts([{ status: "DRAFT" as const }]).drafts).toHaveLength(1);
+    expect(foldDrafts([{ status: "ACTIVE" as const }, { status: "PAUSED" as const }]).drafts).toHaveLength(0);
   });
 });
