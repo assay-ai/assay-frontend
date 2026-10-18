@@ -894,7 +894,7 @@ export function approvalTargetId(approval: Pick<OperatorApproval, "target" | "pa
 
 /** The Activity log, filtered to what the request is about. */
 export function approvalActivityHref(approval: Pick<OperatorApproval, "target" | "payload">): string {
-  return `/operator/override-log?targetId=${encodeURIComponent(approvalTargetId(approval))}`;
+  return `/operator/activity?targetId=${encodeURIComponent(approvalTargetId(approval))}`;
 }
 
 /**

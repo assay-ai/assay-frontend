@@ -337,7 +337,7 @@ export default function OperatorCasePage() {
           title={result.title}
           next={result.next}
           link={result.approvalId ? { label: "Open the request", href: approvalHref(result.approvalId) } : null}
-          activityHref={result.approvalId ? null : `/operator/override-log?targetId=${encodeURIComponent(proposalId)}`}
+          activityHref={result.approvalId ? null : `/operator/activity?targetId=${encodeURIComponent(proposalId)}`}
           txUrl={result.txHash && chainId && stakeDeploymentFor(chainId) ? explorerTxLink(stakeDeploymentFor(chainId)!, result.txHash) : null}
           onDismiss={() => setResult(null)}
         />
@@ -463,7 +463,7 @@ export default function OperatorCasePage() {
               </ol>
             )}
             <p className="pt-3 text-body-13">
-              <Link href={`/operator/override-log?targetId=${encodeURIComponent(proposalId)}`} className="hit-area text-primary-700 underline-offset-2 hover:underline">
+              <Link href={`/operator/activity?targetId=${encodeURIComponent(proposalId)}`} className="hit-area text-primary-700 underline-offset-2 hover:underline">
                 Operator actions on this penalty, in Activity
               </Link>
             </p>
