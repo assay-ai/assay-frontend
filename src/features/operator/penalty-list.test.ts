@@ -87,4 +87,10 @@ describe("the row's next step", () => {
     expect(rowFromCase({ ...base, onChain: false }).onChain).toBe(false);
     expect(rowFromCase(base).onChain).toBeNull();
   });
+
+  it("a cancel past due never claims what stands: the page reads it", () => {
+    expect(penaltyNext(row({ status: "CANCEL_REQUESTED", onChain: true, nextDeadline: iso(NOW - DAY) }), NOW)).toMatchObject({
+      text: "Cancel overdue · open it to see what stands on chain",
+    });
+  });
 });
