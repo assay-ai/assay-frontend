@@ -68,15 +68,18 @@ export interface ChargedHeadlineProps {
    * panel to carry the delta, so the headline carries it instead.
    */
   notCharged: string;
+  /** Under the sentence: while the call is refundable, the countdown and "Report a bad result". */
+  action?: React.ReactNode;
 }
 
 /** The charged receipt's headline: white surface, the sentence, listed and paid side by side. */
-export function ChargedHeadline({ headline, sub, listed, paid, notCharged }: ChargedHeadlineProps) {
+export function ChargedHeadline({ headline, sub, listed, paid, notCharged, action }: ChargedHeadlineProps) {
   return (
     <section className="flex w-full flex-col gap-5 rounded-xl border border-01 bg-01 px-[22px] py-[18px] tablet:flex-row tablet:items-center">
       <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
         <h2 className="text-heading-sm text-01">{headline}</h2>
         {sub ? <p className="text-body-sm text-02">{sub}</p> : null}
+        {action}
       </div>
       <div className="flex w-full items-center gap-3 tablet:w-auto tablet:shrink-0 tablet:gap-9">
         <Amount
@@ -252,6 +255,7 @@ const MOBILE_MARK: Record<string, { icon: typeof Check; className: string }> = {
   failed: { icon: X, className: "text-danger-500" },
   "not-sampled": { icon: Minus, className: "text-03" },
   "not-reached": { icon: Minus, className: "text-03" },
+  "not-applicable": { icon: Minus, className: "text-03" },
 };
 
 const MOBILE_WORD: Record<string, string> = {
@@ -259,6 +263,7 @@ const MOBILE_WORD: Record<string, string> = {
   failed: "failed",
   "not-sampled": "not sampled",
   "not-reached": "not reached",
+  "not-applicable": "does not apply",
 };
 
 export interface MobileStageListProps {
