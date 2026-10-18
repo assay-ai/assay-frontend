@@ -52,3 +52,18 @@ export function withdrawableByAsset(rows: readonly FullBalance[]): WithdrawableL
 export function nothingToWithdraw(lines: readonly WithdrawableLine[]): boolean {
   return lines.every((line) => line.complete && BigInt(line.amount.amount) === 0n);
 }
+
+/** An agent key that can still make calls: not revoked and not expired. */
+export function isLiveKey(key: { revokedAt: string | null; expiresAt: string | null }, now = Date.now()): boolean {
+  if (key.revokedAt) return false;
+  return !key.expiresAt || Date.parse(key.expiresAt) > now;
+}
+
+/**
+ * The "Ask us to close the account" request is offered only once all three
+ * steps are done: nothing left to withdraw, records saved, no key that works.
+ * Unknown (still loading, or unreadable) is never done.
+ */
+export function readyToClose(steps: { withdrawn: boolean; recordsKept: boolean; liveKeys: number | null }): boolean {
+  return steps.withdrawn && steps.recordsKept && steps.liveKeys === 0;
+}

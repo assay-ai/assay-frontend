@@ -60,7 +60,28 @@ function updateTargetOf(server: ServerInUse): UpdateTarget | null {
 }
 const POLL_MS = 10_000;
 
-export function ServersInUse({ agentId, agentName }: { agentId: string; agentName: string }) {
+/** The window Servers in use covers (the backend's `SERVERS_IN_USE_WINDOW_DAYS`). */
+const WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * The line when no server is listed. A call made without a server address
+ * (an unscoped call: no URL, so no URL rules) is not listed, yet it reaches
+ * every tool the agent may use — so an agent whose keys were used in the
+ * window is never told it is "not connected" (review B P1). `lastCallAt` is a
+ * key's last use, not only MCP calls, so the line does not claim more.
+ */
+export function noServerText(agentName: string, lastCallAt: string | null | undefined, now = Date.now()): string {
+  const called = lastCallAt ? now - Date.parse(lastCallAt) <= WINDOW_MS : false;
+  return called
+    ? `${agentName} used its keys in the last 30 days, but not through a server address we could list. Calls without one reach Everything: every tool it may use. Connect it to choose what it uses.`
+    : `No server yet: connect ${agentName} to choose what it uses.`;
+}
+
+/**
+ * `lastCallAt`: the agent's latest call by any of its keys, when known, so an
+ * empty list can say the calls came through Everything.
+ */
+export function ServersInUse({ agentId, agentName, lastCallAt }: { agentId: string; agentName: string; lastCallAt?: string | null }) {
   const [sheet, setSheet] = React.useState<{ url: string | null; changing: boolean } | null>(null);
   const [poll, setPoll] = React.useState<number | false>(false);
   const [updating, setUpdating] = React.useState<UpdateTarget | null>(null);
@@ -98,7 +119,9 @@ export function ServersInUse({ agentId, agentName }: { agentId: string; agentNam
           </button>
         </p>
       ) : servers.length === 0 ? (
-        <p className="text-body-13 text-02">No server yet: connect {agentName} to choose what it uses.</p>
+        <p className="text-body-13 text-02" data-testid="no-server">
+          {noServerText(agentName, lastCallAt)}
+        </p>
       ) : (
         <>
           {over ? (

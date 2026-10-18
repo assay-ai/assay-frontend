@@ -135,8 +135,12 @@ export function PauseAllCard({ className }: { className?: string }) {
   );
 }
 
-/** The top-bar button, so the stop is one click from every screen. */
-export function PauseAllButton({ className }: { className?: string }) {
+/**
+ * The top-bar button, so the stop is one click from every screen. `compact`
+ * (the mobile header) is the icon alone at every state; its label is still
+ * read out, and the paused state shows in the button's colour and the banner.
+ */
+export function PauseAllButton({ className, compact = false }: { className?: string; compact?: boolean }) {
   const { paused, available, mutation } = usePauseAll();
   const [confirming, setConfirming] = React.useState(false);
   if (!available) return null;
@@ -151,7 +155,7 @@ export function PauseAllButton({ className }: { className?: string }) {
         onClick={() => setConfirming(true)}
         aria-label={paused ? "Paid calls are paused. Resume them" : "Pause all paid calls"}
       >
-        <span className={paused ? undefined : "hidden lg:inline"}>{paused ? "Paused · Resume" : "Pause all"}</span>
+        {compact ? null : <span className={paused ? undefined : "hidden lg:inline"}>{paused ? "Paused · Resume" : "Pause all"}</span>}
       </Button>
       <PauseAllConfirm open={confirming} onOpenChange={setConfirming} pausing={!paused} onConfirm={() => mutation.mutateAsync(!paused)} />
     </>

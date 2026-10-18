@@ -14,6 +14,8 @@ import {
   type ParsedCaps,
 } from "@/features/buyer-money/caps";
 
+import { DollarUnit } from "./dollar-unit";
+
 /**
  * Light / Standard / Custom, and the two numbers behind them. Shared by the
  * safety-caps drawer and the "let your agent pay" drawer, so both read alike.
@@ -87,7 +89,7 @@ export function CapsFields({
             id={`${idPrefix}-per-call`}
             label="Most per call"
             inputMode="decimal"
-            suffix={unit}
+            suffix={<DollarUnit symbol={unit} />}
             placeholder="1.00"
             value={value.perCall}
             error={value.perCall ? (parsed.perCall.error ?? undefined) : undefined}
@@ -98,7 +100,7 @@ export function CapsFields({
             id={`${idPrefix}-per-day`}
             label="Most per 24 hours"
             inputMode="decimal"
-            suffix={unit}
+            suffix={<DollarUnit symbol={unit} />}
             placeholder="20.00"
             value={value.perDay}
             error={value.perDay ? (parsed.perDay.error ?? undefined) : undefined}

@@ -12,7 +12,7 @@ import { BottomTabBar } from "@/components/layout/bottom-tab-bar";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
 import { BuyerSectionTabs } from "@/components/layout/section-tabs";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { BUYER_NAV_ITEMS, sectionFor } from "@/components/layout/nav-config";
+import { BUYER_NAV_ITEMS, documentTitleFor, mobileTitleFor, sectionFor } from "@/components/layout/nav-config";
 import { AlertsMenu } from "@/components/layout/alerts-menu";
 import { BuyerSearch } from "@/components/layout/buyer-search";
 import { TopBar } from "@/components/layout/top-bar";
@@ -21,6 +21,7 @@ import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { routes } from "@/libs/routes";
 import { SettleDebtProvider } from "@/features/buyer-debt/settle-debt-sheet";
 import { getUnreadCount } from "@/services";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useTheme } from "@/providers/ThemeProvider";
 
 /**
@@ -31,43 +32,13 @@ import { useTheme } from "@/providers/ThemeProvider";
  * bar with the same five sections inline. Sections, their tabs and the
  * account menu's links all come from `nav-config.ts`.
  *
+ * The browser tab names the page and the mobile header names the section,
+ * both from `nav-config.ts` (`documentTitleFor`, `mobileTitleFor`).
+ *
  * Both are always in the DOM and hidden with `md:` rather than swapped on a
  * measured width, so the first paint is correct at either size and there is no
  * layout jump after hydration.
  */
-
-const TITLES: Record<string, string> = {
-  "/": "Overview",
-  "/spend": "Spend",
-  "/spend/calls": "Calls",
-  "/guarantee": "Not charged",
-  "/funding": "Funding",
-  "/limits": "Spending limits",
-  "/alerts": "Alerts",
-  "/approvals": "Approvals",
-  "/explore": "Explore",
-  "/agents": "Agents & keys",
-  "/audit-log": "Activity log",
-  "/statements": "Statements",
-  "/team": "Team",
-  "/settings": "Settings",
-  "/settings/close": "Close account",
-  "/connect": "Connect",
-  "/connect/preview": "MCP server",
-  "/toolsets/mine": "Tool sets",
-  "/onboarding": "Get started",
-};
-
-/** Longest prefix wins, so /funding/withdraw beats /funding. */
-function titleFor(pathname: string): string {
-  if (TITLES[pathname]) return TITLES[pathname];
-  const match = Object.keys(TITLES)
-    .filter((href) => href !== "/" && pathname.startsWith(href))
-    .sort((a, b) => b.length - a.length)[0];
-  if (match) return TITLES[match];
-  if (pathname.startsWith("/receipts/view")) return "Receipt";
-  return "Assay";
-}
 
 export default function BuyerLayout({ children }: { children: React.ReactNode }) {
   const { themeType } = useTheme();
@@ -84,6 +55,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
   const openAlerts = () => router.push("/alerts");
 
   const activeNavId = sectionFor(pathname) ?? undefined;
+  useDocumentTitle(documentTitleFor(pathname));
 
   return (
     <div className="flex min-h-screen flex-col bg-01">
@@ -109,7 +81,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
 
       <div className="md:hidden">
         <MobileTopBar
-          title={titleFor(pathname)}
+          title={mobileTitleFor(pathname)}
           alertCount={alertCount}
           onAlertsClick={openAlerts}
           alerts={<AlertsMenu count={alertCount} variant="mobile" />}
@@ -117,6 +89,8 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
           avatar={
             <>
               <TestnetChip compact />
+              {/* The emergency stop one tap away at phone width, next to the bell (icon only). */}
+              <PauseAllButton compact />
               {/* The same theme switch as the desktop bar, so the choice is reachable at every width. */}
               <ThemeToggle />
               <WalletMenu />

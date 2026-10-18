@@ -1,4 +1,4 @@
-import type { McpUrlPreview, ServerInUse } from "@/services/toolsets.service";
+import type { McpUrlPreview, NoFitReason, PreviewTool, ServerInUse } from "@/services/toolsets.service";
 
 /**
  * The Connect sheet's summary line and warnings (design spec §7.11), from
@@ -28,18 +28,74 @@ function tools(n: number): string {
   return `${n} tool${n === 1 ? "" : "s"}`;
 }
 
+/** A paid tool whose providers settle only on chains this agent does not pay on (the call is refused). */
+function paidElsewhere(tool: PreviewTool): boolean {
+  return !tool.noProviderFits && tool.noFitReason === "OTHER_CHAIN" && tool.pricingMode !== "FREEMIUM";
+}
+
 /**
  * Every count the sheet shows, from one place: the tools this URL serves
  * (`inView`), those `tools/list` returns this agent (`listed`), those of them
- * a provider can run now (`usable`), and those access blocks (`blocked`).
+ * a provider can run now for this agent (`usable`), and those access blocks
+ * (`blocked`). A paid tool none of whose providers settles on the agent's
+ * chain is listed but not usable.
  */
 export function previewCounts(preview: Pick<McpUrlPreview, "tools" | "listedCount">) {
   return {
     inView: preview.tools.length,
     listed: preview.listedCount,
-    usable: preview.tools.filter((t) => t.listed && !t.noProviderFits).length,
+    usable: preview.tools.filter((t) => t.listed && !t.noProviderFits && !paidElsewhere(t)).length,
     blocked: preview.tools.filter((t) => !t.allowed).length,
   };
+}
+
+/**
+ * Why a tool here cannot run for this agent. `free-only`: a FREEMIUM tool
+ * whose providers take no payment on the agent's chain — its free calls run,
+ * its paid ones are refused — so it is listed with the others but not counted
+ * as unable to run.
+ */
+export type CantRunReason = "blocked" | NoFitReason | "free-only" | "no-provider";
+
+/** One tool's reason, from the preview's own fields. Null when it can run. */
+export function cantRunReason(tool: PreviewTool): CantRunReason | null {
+  if (!tool.allowed) return "blocked";
+  if (tool.noProviderFits) return tool.noFitReason ?? "RULES";
+  if (tool.noFitReason === "OTHER_CHAIN") return tool.pricingMode === "FREEMIUM" ? "free-only" : "OTHER_CHAIN";
+  return tool.listed ? null : "no-provider";
+}
+
+const REASON_ONE: Record<CantRunReason, string> = {
+  blocked: "blocked for this agent",
+  RULES: "no provider fits this agent's limits",
+  OTHER_CHAIN: "its providers don't take payment on your chain",
+  "free-only": "free calls only: its providers don't take payment on your chain",
+  "no-provider": "no provider is taking calls for it now",
+};
+
+const REASON_MANY: Record<CantRunReason, (n: number) => string> = {
+  blocked: (n) => `${n} blocked for this agent`,
+  RULES: (n) => `${n} with no provider that fits its limits`,
+  OTHER_CHAIN: (n) => `${n} whose providers don't take payment on your chain`,
+  "free-only": (n) => `${n} with free calls only on your chain`,
+  "no-provider": (n) => `${n} with no provider taking calls`,
+};
+
+const REASON_ORDER: readonly CantRunReason[] = ["blocked", "RULES", "OTHER_CHAIN", "no-provider"];
+
+/** The tools here that cannot run (or run free calls only) for this agent, each with its reason in words. */
+export function cantRunTools(preview: Pick<McpUrlPreview, "tools">): { toolId: string; name: string; reason: CantRunReason; text: string }[] {
+  return preview.tools.flatMap((tool) => {
+    const reason = cantRunReason(tool);
+    return reason ? [{ toolId: tool.toolId, name: tool.name, reason, text: REASON_ONE[reason] }] : [];
+  });
+}
+
+/** "2 blocked for this agent, 5 with no provider taking calls": the reasons that stop a tool, counted. */
+function reasonCounts(reasons: readonly CantRunReason[]): string {
+  return REASON_ORDER.filter((r) => reasons.includes(r))
+    .map((r) => REASON_MANY[r](reasons.filter((x) => x === r).length))
+    .join(", ");
 }
 
 /**
@@ -47,8 +103,10 @@ export function previewCounts(preview: Pick<McpUrlPreview, "tools" | "listedCoun
  *
  *   all fine     "Your agent will see 3 tools (~690 tokens)."
  *   otherwise    "3 tools here: 1 ready to use, 2 blocked for this agent (~230 tokens)."
- *   search mode  "4 tools (search) — about 0.9k tokens; 3 of 14 tools reachable, 11 blocked for this agent"
+ *   search mode  "Your agent can reach 1 of 8 tools (7 can't run: 7 with no provider taking calls) through search: 3 tools listed, about 0.4k tokens."
  *
+ * In search mode the tools listed are the search helpers and any pinned ones,
+ * not the tools reached, so the two counts are never put side by side bare.
  * While the preview loads the caller shows a skeleton or "~"; this is never
  * asked for a number it does not have, so it never says 0 for "not known yet".
  */
@@ -56,20 +114,29 @@ export function previewSummary(
   preview: Pick<McpUrlPreview, "tools" | "listedCount" | "estimatedTokens"> & Partial<Pick<McpUrlPreview, "discovery" | "reachableCount">>,
 ): string {
   const c = previewCounts(preview);
-  const blockedText = c.blocked > 0 ? `${c.blocked} blocked for this agent` : null;
   if (preview.discovery === "SEARCH") {
-    const reachable = preview.reachableCount ?? c.usable;
-    const of = reachable < c.inView ? `${reachable} of ${tools(c.inView)} reachable` : `${tools(reachable)} reachable`;
-    return `${tools(preview.listedCount)} (search) — about ${aboutTokens(preview.estimatedTokens)} tokens; ${[of, blockedText].filter(Boolean).join(", ")}`;
+    // The tools that actually run: the backend's reachableCount also counts a
+    // tool the rules emptied, which is then counted again under "can't run".
+    const reachable = c.usable;
+    const of = reachable < c.inView ? `${reachable} of ${tools(c.inView)}` : tools(reachable);
+    const cant = cantRunTools(preview)
+      .map((t) => t.reason)
+      .filter((r) => r !== "free-only");
+    const why = cant.length > 0 ? ` (${cant.length} can't run: ${reasonCounts(cant)})` : "";
+    return `Your agent can reach ${of}${why} through search: ${tools(preview.listedCount)} listed, about ${aboutTokens(preview.estimatedTokens)} tokens.`;
   }
+  const blockedText = c.blocked > 0 ? `${c.blocked} blocked for this agent` : null;
   const noFit = c.listed - c.usable;
   if (c.blocked === 0 && noFit === 0) {
     return c.listed === 0 ? "Your agent will see no tools here." : `Your agent will see ${tools(c.listed)} (${tokensText(preview.estimatedTokens)} tokens).`;
   }
+  const noFitReasons = preview.tools
+    .filter((t) => t.listed && (t.noProviderFits || paidElsewhere(t)))
+    .map((t) => cantRunReason(t) ?? "RULES");
   const parts = [
     c.usable > 0 ? `${c.usable} ready to use` : "none ready to use",
     blockedText,
-    noFit > 0 ? `${noFit} with no provider that fits its limits` : null,
+    noFitReasons.length > 0 ? reasonCounts(noFitReasons) : null,
   ].filter(Boolean);
   const cost = c.listed > 0 ? ` (${tokensText(preview.estimatedTokens)} tokens)` : "";
   return `${tools(c.inView)} here: ${parts.join(", ")}${cost}.`;
@@ -133,6 +200,17 @@ export function previewWarnings(preview: McpUrlPreview): PreviewWarning[] {
       tone: "warning",
       text: `No provider fits this agent's provider limits for ${names(noFit)}, so ${noFit.length === 1 ? "it" : "they"} can't run now.`,
       fix: { kind: "open-access" },
+    });
+  }
+  // Read from the tools (the backend sends no warning for it): a paid tool
+  // whose providers settle only on chains this agent does not pay on. Not the
+  // agent's limits, so no "open access" fix (review 2026-10-18 F-P1).
+  const elsewhere = preview.tools.filter((t) => t.allowed && paidElsewhere(t)).map((t) => t.name);
+  if (elsewhere.length > 0) {
+    out.push({
+      code: "OTHER_CHAIN",
+      tone: "warning",
+      text: `The providers of ${names(elsewhere)} don't take payment on your chain, so paid calls from this agent are refused.`,
     });
   }
   const single = of("NO_BACKUP_PROVIDER")

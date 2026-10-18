@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 import type { FullBalance } from "@/features/g30/balance";
 import type { ToolCall } from "@/services/tool-calls.service";
 
-import { ApprovalLinkView, outcomeOf } from "./approval-link-view";
+import { ApiError } from "@/libs/ApiClient";
+
+import { outcomeOf, PaymentLinkView, paymentNotFound } from "./payment-link-view";
 
 /**
  * This suite exists because of a measured miss on a sibling file.
@@ -78,12 +80,12 @@ function markup(balances?: FullBalance[]): string {
   if (balances) client.setQueryData(["balances"], { balances });
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
-      <ApprovalLinkView approvalId="approval-1" />
+      <PaymentLinkView callId="approval-1" />
     </QueryClientProvider>,
   );
 }
 
-describe("ApprovalLinkView — the outcome, never dead approve buttons", () => {
+describe("PaymentLinkView — the outcome, never dead approve buttons", () => {
   it("shows a call still in progress with its price and a receipt link", () => {
     const html = markup([SOLANA_ROW]);
     expect(html).toContain("Still in progress");
@@ -98,7 +100,7 @@ describe("ApprovalLinkView — the outcome, never dead approve buttons", () => {
     client.setQueryData(["tool-call", "approval-1"], { ...CALL, status: "SETTLED", charged: money("250000") });
     const html = renderToStaticMarkup(
       <QueryClientProvider client={client}>
-        <ApprovalLinkView approvalId="approval-1" />
+        <PaymentLinkView callId="approval-1" />
       </QueryClientProvider>,
     );
     expect(html).toContain("Already settled");
@@ -124,5 +126,17 @@ describe("outcomeOf — buyer debt (final review M1/M2)", () => {
     // A voided debt and a forfeited payment keep the SETTLED status: never "Already settled · Charged".
     expect(outcomeOf("SETTLED", "VOIDED")).toEqual({ chip: "not-charged", headline: "Not charged" });
     expect(outcomeOf("SETTLED", null, true)).toEqual({ chip: "not-charged", headline: "Not charged" });
+  });
+});
+
+describe("paymentNotFound — a bad link says not found, not try again", () => {
+  it("treats a 404 and a 400 (a malformed id) as not found", () => {
+    expect(paymentNotFound(new ApiError("NOT_FOUND", "x", 404))).toBe(true);
+    expect(paymentNotFound(new ApiError("VALIDATION_FAILED", "x", 400))).toBe(true);
+  });
+
+  it("keeps a server or network failure as try again", () => {
+    expect(paymentNotFound(new ApiError("UNAVAILABLE", "x", 503))).toBe(false);
+    expect(paymentNotFound(new Error("offline"))).toBe(false);
   });
 });

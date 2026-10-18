@@ -112,7 +112,7 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
   const disabledReason = readOnly
     ? "Your account is blocked, so the ceiling cannot change now."
     : !money.escrow?.exists
-      ? "Add funds first: your first deposit opens your escrow."
+      ? "Add funds first: your first deposit sets up your balance."
       : !body
         ? (parsed.perCall.error ?? parsed.perDay.error ?? "Choose a ceiling.")
         : unchanged
@@ -157,7 +157,7 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
       onOpenChange={onOpenChange}
       chain={money.chain}
       title="Account ceiling (on chain)"
-      description="Protects your whole escrow: the most any one call can cost, and the most all your agents together can spend in 24 hours. Nobody can go past it, Assay included. Each agent's own spending limits sit under it."
+      description="Protects your whole balance: the most any one call can cost, and the most all your agents together can spend in 24 hours. Nobody can go past it, Assay included. Each agent's own spending limits sit under it."
       steps={steps}
       label="Sign to apply (free, no gas)"
       resetKey={`${value.perCall}|${value.perDay}`}

@@ -4,10 +4,10 @@ import type { ReactNode } from "react";
 
 import { RecordGate } from "@/components/record/record-gate";
 
-/** No `?id=` → "no approval selected" instead of a page that waits forever. */
+/** No `?id=` → "no payment selected" instead of a page that waits forever. */
 export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <RecordGate param="id" record="approval" backHref="/limits" backLabel="Spending limits">
+    <RecordGate param="id" record="payment" backHref="/spend/calls" backLabel="Calls">
       {children}
     </RecordGate>
   );

@@ -1,11 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { FullBalance } from "@/features/g30/balance";
 
+import { isLiveKey, readyToClose } from "@/features/buyer/close-account";
+
 import { CloseAccountView } from "./close-account-view";
+
+// A deployment with a support link: the close request is a real link once the steps are done.
+vi.mock("@/libs/support", () => ({ SUPPORT_URL: "mailto:support@example.com" }));
 
 const SOLANA = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
 const EVM = "eip155:46630";
@@ -40,9 +45,10 @@ const EVM_ROW: FullBalance = {
  * cache empty, which is the state a browser is in while the API is unreachable
  * — the state a real page was measured in on 2026-09-10.
  */
-function markup(balances?: FullBalance[]): string {
+function markup(balances?: FullBalance[], seed?: (client: QueryClient) => void): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   if (balances) client.setQueryData(["balances"], { balances });
+  seed?.(client);
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <CloseAccountView />
@@ -83,5 +89,102 @@ describe("CloseAccountView — withdraw step", () => {
     expect(html).toContain("could not read this chain");
     expect(html).not.toContain("$4.00");
     expect(html).not.toContain("must be withdrawn first");
+  });
+});
+
+const EMPTY_EVM_ROW: FullBalance = {
+  ...EVM_ROW,
+  available: { ...EVM_ROW.available, amount: "0" },
+  withdrawable: { ...EVM_ROW.available, amount: "0" },
+};
+
+describe("CloseAccountView — the close request (review B P1)", () => {
+  it("offers the request but keeps it off until 3 of 3, and says so", () => {
+    const html = markup([EVM_ROW]);
+    expect(html).toContain("Ask us to close the account");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Ask us to close the account/);
+    expect(html).not.toContain('href="mailto:support@example.com"');
+    expect(html).toContain("0 of 3 steps done. The request opens at 3 of 3.");
+  });
+
+  it("ticks the keys step from data: no agent means no key that works", () => {
+    const html = markup([EMPTY_EVM_ROW], (client) => {
+      client.setQueryData(["holds"], { items: [] });
+      client.setQueryData(["escrow", "debts"], { account: EVM_ROW.accountId, debts: [] });
+      client.setQueryData(["agents"], { items: [] });
+    });
+    const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    expect(text).toContain("Withdraw your money , done");
+    expect(text).toContain("Revoke your agent keys , done");
+    // Withdrawn and no keys, but the records are not ticked yet: 2 of 3, still off.
+    expect(html).toContain("2 of 3 steps done.");
+  });
+});
+
+describe("CloseAccountView — unknown or owed is never withdrawn (review m2)", () => {
+  const seedAllBut = (skip: "holds" | "debts") => (client: QueryClient) => {
+    if (skip !== "holds") client.setQueryData(["holds"], { items: [] });
+    if (skip !== "debts") client.setQueryData(["escrow", "debts"], { account: EVM_ROW.accountId, debts: [] });
+    client.setQueryData(["agents"], { items: [] });
+  };
+  const stripped = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+
+  it("does not tick Withdraw while the holds are not read", () => {
+    const text = stripped(markup([EMPTY_EVM_ROW], seedAllBut("holds")));
+    expect(text).not.toContain("Withdraw your money , done");
+    expect(text).toContain("1 of 3 steps done.");
+  });
+
+  it("does not tick Withdraw while the debts are not read", () => {
+    expect(stripped(markup([EMPTY_EVM_ROW], seedAllBut("debts")))).not.toContain("Withdraw your money , done");
+  });
+
+  it("does not tick Withdraw while a payment is owed, and says to settle it", () => {
+    const text = stripped(
+      markup([EMPTY_EVM_ROW], (client) => {
+        seedAllBut("debts")(client);
+        client.setQueryData(["escrow", "debts"], {
+          account: EVM_ROW.accountId,
+          debts: [{ intentId: "int-1", payer: EVM_ROW.accountId, amount: EVM_ROW.available, state: "OUTSTANDING" }],
+        });
+      }),
+    );
+    expect(text).not.toContain("Withdraw your money , done");
+    expect(text).toContain("A payment is still owed");
+  });
+});
+
+describe("CloseAccountView — a deployment without a support link (review m7)", () => {
+  it("says closing is done by the team, with no button to nowhere", async () => {
+    vi.resetModules();
+    vi.doMock("@/libs/support", () => ({ SUPPORT_URL: null }));
+    const { CloseAccountView: View } = await import("./close-account-view");
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <View />
+      </QueryClientProvider>,
+    );
+    expect(html).toContain("Closing is done by the Assay team, not in the app.");
+    expect(html).not.toContain("Ask us to close the account");
+    vi.doUnmock("@/libs/support");
+  });
+});
+
+describe("readyToClose and isLiveKey", () => {
+  it("is ready only with every step done, and never on an unknown key count", () => {
+    expect(readyToClose({ withdrawn: true, recordsKept: true, liveKeys: 0 })).toBe(true);
+    expect(readyToClose({ withdrawn: true, recordsKept: true, liveKeys: null })).toBe(false);
+    expect(readyToClose({ withdrawn: true, recordsKept: false, liveKeys: 0 })).toBe(false);
+    expect(readyToClose({ withdrawn: false, recordsKept: true, liveKeys: 0 })).toBe(false);
+    expect(readyToClose({ withdrawn: true, recordsKept: true, liveKeys: 1 })).toBe(false);
+  });
+
+  it("counts a key that is neither revoked nor expired", () => {
+    const now = Date.parse("2026-10-18T12:00:00Z");
+    expect(isLiveKey({ revokedAt: null, expiresAt: null }, now)).toBe(true);
+    expect(isLiveKey({ revokedAt: "2026-10-01T00:00:00Z", expiresAt: null }, now)).toBe(false);
+    expect(isLiveKey({ revokedAt: null, expiresAt: "2026-10-18T11:00:00Z" }, now)).toBe(false);
+    expect(isLiveKey({ revokedAt: null, expiresAt: "2026-10-19T00:00:00Z" }, now)).toBe(true);
   });
 });

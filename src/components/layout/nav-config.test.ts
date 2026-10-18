@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -9,6 +9,9 @@ import {
   allBuyerNavHrefs,
   BUYER_NAV_ITEMS,
   BUYER_SECTION_TABS,
+  documentTitleFor,
+  mobileTitleFor,
+  pageTitleFor,
   sectionFor,
 } from "./nav-config";
 
@@ -38,15 +41,14 @@ const UNLINKED: Record<string, string> = {
   "/explore/tools": "inside Explore",
   "/receipts/view": "a record page, opened from a call",
   "/spend/disputes/view": "a record page, opened from a report or a receipt",
-  "/approvals": "redirects to /limits",
-  "/approvals/view": "a record page, opened from a link",
-  "/team": "redirects to /limits",
+  "/payments/view": "a record page, opened from a notification",
+  "/team": "says an account is one person for now; not a menu entry",
   "/settings/close": "linked from Settings",
   "/funding/deposit": "opened from Funding",
   "/funding/withdraw": "opened from Funding",
   "/funding/escrow": "opened from Funding",
   "/funding/escrow/limits": "opened from Funding",
-  "/funding/auto-top-up": "opened from Funding",
+  "/funding/auto-top-up": "says there is no auto top-up and points at the alerts",
   "/connect/preview": "where the MCP host sends a browser that opens a filtered MCP URL",
 };
 
@@ -68,7 +70,7 @@ describe("buyer navigation", () => {
     expect(missing).toEqual([]);
   });
 
-  it("reaches Get started, Connect, Statements, Activity log and Settings", () => {
+  it("reaches Get started, Connect, Statements, Account history and Settings", () => {
     const linked = allBuyerNavHrefs();
     for (const href of ["/onboarding", "/connect", "/statements", "/audit-log", "/settings", "/alerts"]) {
       expect(linked).toContain(href);
@@ -76,7 +78,6 @@ describe("buyer navigation", () => {
   });
 
   it("does not link pages that cannot act yet", () => {
-    expect(allBuyerNavHrefs()).not.toContain("/approvals");
     expect(allBuyerNavHrefs()).not.toContain("/team");
   });
 
@@ -116,5 +117,57 @@ describe("active section and tab", () => {
 
   it("does not treat a shared prefix as a match", () => {
     expect(sectionFor("/spending")).toBeNull();
+  });
+});
+
+/** A page that only sends the browser on (`ClientRedirect` or `redirect()`), so it never shows a title. */
+function isRedirectPage(route: string): boolean {
+  const file = join(MAIN_DIR, route === "/" ? "" : route, "page.tsx");
+  return /ClientRedirect|redirect\(/.test(readFileSync(file, "utf8"));
+}
+
+describe("page titles", () => {
+  const buyerRoutes = routesUnder(MAIN_DIR);
+
+  it("gives every buyer page that renders its own title", () => {
+    const untitled = buyerRoutes.filter((route) => !isRedirectPage(route) && pageTitleFor(route) === null);
+    expect(untitled).toEqual([]);
+  });
+
+  it("names the page in the browser tab, the record kind on a record page", () => {
+    expect(documentTitleFor("/spend/calls")).toBe("Calls — Assay");
+    expect(documentTitleFor("/spend/disputes")).toBe("Reports — Assay");
+    expect(documentTitleFor("/spend/disputes/view")).toBe("Report — Assay");
+    expect(documentTitleFor("/receipts/view")).toBe("Receipt — Assay");
+    expect(documentTitleFor("/payments/view")).toBe("Payment — Assay");
+    expect(documentTitleFor("/audit-log")).toBe("Account history — Assay");
+    expect(documentTitleFor("/nowhere")).toBe("Assay");
+  });
+
+  it("gives the tabs of one section different titles", () => {
+    for (const tabs of Object.values(BUYER_SECTION_TABS)) {
+      const titles = (tabs ?? []).map((tab) => documentTitleFor(tab.href));
+      expect(new Set(titles).size).toBe(titles.length);
+    }
+  });
+
+  it("shows the section in the mobile header, and the page outside the five", () => {
+    expect(mobileTitleFor("/connect")).toBe("Controls");
+    expect(mobileTitleFor("/toolsets/mine")).toBe("Controls");
+    expect(mobileTitleFor("/spend/disputes/view")).toBe("Activity");
+    expect(mobileTitleFor("/payments/view")).toBe("Activity");
+    expect(mobileTitleFor("/")).toBe("Overview");
+    expect(mobileTitleFor("/settings")).toBe("Settings");
+    expect(mobileTitleFor("/audit-log")).toBe("Account history");
+  });
+});
+
+describe("labels", () => {
+  it("keeps the Controls tabs short enough for a phone", () => {
+    expect(BUYER_SECTION_TABS.controls!.map((tab) => tab.label)).toEqual(["Agents", "Connect", "Limits", "Tool sets"]);
+  });
+
+  it("calls the audit log Account history, never Activity", () => {
+    expect(ACCOUNT_MENU_LINKS.find((link) => link.href === "/audit-log")?.label).toBe("Account history");
   });
 });
