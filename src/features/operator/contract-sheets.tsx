@@ -25,7 +25,7 @@ import {
 import type { SaveContractDraftBody, ToolContractVersion } from "@/interfaces/contracts";
 import type { TwoPersonAnswer } from "./two-person";
 import { approverPhrase } from "./two-person";
-import { categoryProblem, contractErrorMessage, toolNameFrom, toolNameProblem, type MajorRow } from "./contract-editor";
+import { categoryProblem, contractErrorMessage, suggestToolName, toolNameProblem, type MajorRow } from "./contract-editor";
 import { CONTRACT_REASONS, DEPRECATE_REASONS } from "./reasons";
 import { useOperatorSession } from "./session-context";
 import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "./sheet-footer";
@@ -42,8 +42,8 @@ import { WhatHappens, type WhatHappensLine } from "./what-happens";
 export const NOTE_MIN = 20;
 export const NOTE_MAX = 1000;
 
-function useReasonForm() {
-  const [reason, setReason] = React.useState("");
+function useReasonForm(preset = "") {
+  const [reason, setReason] = React.useState(preset);
   const [note, setNote] = React.useState("");
   const [errors, setErrors] = React.useState<{ reason?: string; note?: string }>({});
   const check = (): boolean => {
@@ -55,7 +55,7 @@ function useReasonForm() {
     return !next.reason && !next.note;
   };
   const reset = () => {
-    setReason("");
+    setReason(preset);
     setNote("");
     setErrors({});
   };
@@ -106,7 +106,7 @@ export function PublishSheet({
 }) {
   const me = useOperatorSession();
   const queryClient = useQueryClient();
-  const form = useReasonForm();
+  const form = useReasonForm("PLANNED_CHANGE");
   const needs = approverPhrase("P-10", me.roles);
   const [moved, setMoved] = React.useState<string | null>(null);
 
@@ -148,7 +148,7 @@ export function PublishSheet({
   const label = publishLabel(plan.bump, plan.nextSemver, { firstVersion: plan.firstVersion });
   const lines: WhatHappensLine[] = [
     { icon: GitBranch, text: bumpEffect(plan.bump, plan.nextSemver, { firstVersion: plan.firstVersion }), tone: plan.bump === "MAJOR" && !plan.firstVersion ? "warning" : "neutral" },
-    { icon: Users, text: `Nothing changes until ${needs} approves it` },
+    { icon: Users, text: `Nothing changes until ${needs} approves it (an operator allowed to approve contract changes; they get a link)` },
     { icon: History, text: "A published version can't be unpublished. A mistake is fixed with a new version" },
   ];
   const shown = plan.changes.slice(0, 6);
@@ -235,7 +235,7 @@ export function MakeCurrentSheet({
 }) {
   const me = useOperatorSession();
   const queryClient = useQueryClient();
-  const form = useReasonForm();
+  const form = useReasonForm("PLANNED_CHANGE");
   const needs = approverPhrase("P-11", me.roles);
   const move = useMutation({
     mutationFn: (input: { version: number; body: { reasonCode: string; note: string } }) => moveCurrentVersion(tool.id, { version: input.version, ...input.body }),
@@ -260,6 +260,7 @@ export function MakeCurrentSheet({
     eligible < 2
       ? { icon: Ban, text: eligible === 0 ? `No provider can serve v${target.major} yet: calls would be refused` : `Only one provider can serve v${target.major}: no backup if it fails`, tone: "warning" as const }
       : { icon: Users, text: `${eligible} providers can serve v${target.major} now` },
+    { icon: Users, text: `Nothing changes until ${needs} approves it (an operator allowed to approve contract changes)` },
     { icon: History, text: "It can be moved back later with another request" },
   ];
 
@@ -506,7 +507,7 @@ export function AcceptRequestSheet({
   const { reset } = accept;
   React.useEffect(() => {
     if (!request) return;
-    const suggested = toolNameFrom(request.title);
+    const suggested = suggestToolName(request.title);
     setName(suggested);
     setCategory("");
     setNote(`Accepted. We are drafting ${suggested} as a standard tool.`);

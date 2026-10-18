@@ -10,7 +10,11 @@ import { fieldList, mustReturnLabel, sunsetDay } from "./text";
  * offers and the warnings, from the tool's published versions. Pure.
  */
 
-type VersionLike = Pick<ToolVersionBrief, "version" | "semver" | "major" | "status" | "sunsetAt" | "isCurrent">;
+type VersionLike = Pick<ToolVersionBrief, "version" | "semver" | "major" | "status" | "sunsetAt" | "isCurrent"> & { changelog?: string | null };
+
+/** "Calls can go to providers of v1 or v2" — what more than one version in a row means. */
+export const MANY_VERSIONS_HINT =
+  "With more than one version ticked, a call can go to a provider of any of them, so your agent must handle both shapes. The newest one a provider serves is used.";
 
 export interface MajorChoice {
   major: number;
@@ -96,7 +100,8 @@ export function contractChipParts(
   const required = entry.requireOutputFields ?? [];
   if (required.length > 0) parts.push(mustReturnLabel([...required]));
   const majors = parseVersionRange(entry.toolVersionRange);
-  if (majors && !(majors.length === 1 && majors[0] === currentMajor)) parts.push(majorsChipText(majors));
+  // Named as the tool's version, so it never reads like the tool set's own "Lock to v3".
+  if (majors && !(majors.length === 1 && majors[0] === currentMajor)) parts.push(`tool ${majorsChipText(majors)}`);
   return parts;
 }
 
@@ -126,12 +131,15 @@ export function entryContractWarning(range: string | null | undefined, versions:
   if (inRange.length === 0 || inRange.some((c) => c.status === "ACTIVE")) return null;
   const newer = choices.find((c) => c.status === "ACTIVE" && !majors.includes(c.major) && c.major > Math.max(...majors));
   const fix = newer ? { label: `Allow v${newer.major}`, range: formatVersionRange([...majors, newer.major]) } : null;
+  // What the newer version changes, from its own changelog, so "Allow v2" is not a leap in the dark.
+  const changed = newer ? versions.find((v) => v.major === newer.major && v.changelog)?.changelog ?? null : null;
+  const allowText = newer ? ` Allow v${newer.major} too: calls can then use either.${changed ? ` v${newer.major}: ${changed}` : ""}` : "";
   const names = majorsChipText(majors).replace(/ only$/, "");
   if (inRange.every((c) => c.status === "RETIRED")) {
-    return { tone: "danger", text: `Uses ${names}, which was retired: calls to this tool are refused.`, fix };
+    return { tone: "danger", text: `Uses ${names}, which was retired: calls to this tool are refused.${allowText}`, fix };
   }
   const soonest = inRange.map((c) => c.sunsetAt).filter((s): s is string => Boolean(s)).sort()[0];
-  return { tone: "warning", text: `Uses ${names}, which stops working on ${sunsetDay(soonest)} (UTC).`, fix };
+  return { tone: "warning", text: `Uses ${names}, which stops working on ${sunsetDay(soonest)} (UTC).${allowText}`, fix };
 }
 
 /** "Must return" fields that the chosen majors no longer offer (they would refuse every call). */

@@ -129,7 +129,7 @@ const PROBLEM_TEXT: ReadonlyArray<readonly [RegExp, (m: RegExpExecArray) => stri
   [/^optional (input|output) field "(.+)" is not in the (?:input|output) schema$/, (m) => `"${m[2]}" is marked optional but is not a field of the ${m[1]} schema.`],
   [/^optional (input|output) field "(.+)" cannot also be required$/, (m) => `"${m[2]}" can't be both optional and required. Remove it from "required" or from the optional list.`],
   [/^(input|output) schema requires "(.+)", which it does not define$/, (m) => `The ${m[1]} schema requires "${m[2]}" but has no such field.`],
-  [/^output field "(.+)" is neither required nor optional/, (m) => `Output "${m[1]}" must be either required (every provider returns it) or optional (tick it under optional outputs).`],
+  [/^output field "(.+)" is neither required nor optional/, (m) => `Output "${m[1]}" is neither required nor an extra field. Keep it as an extra field, or make it required.`],
   [/^a publish of this draft awaits a second operator \(approval ([^)]+)\); reject it to edit$/, () => "This draft is waiting for approval to publish, so it can't change. Reject that request in Approvals to edit it."],
   [/^the draft changed after its publish was requested; request it again$/, () => "The draft changed after its publish was requested. Send the publish again."],
   [/^v(\d+) is the current major; move the current version first$/, (m) => `v${m[1]} is the version agents get by default. Make another version the default first.`],
@@ -170,9 +170,24 @@ export function deprecatedBadge(sunsetAt: string | null | undefined): string {
   return sunsetAt ? `Deprecated · stops on ${sunsetDay(sunsetAt)} (UTC)` : "Deprecated";
 }
 
-/** "Retired · use v2.0.0" — the badge text. */
-export function retiredBadge(replacement: string | null | undefined): string {
-  return replacement ? `Retired · use ${replacement}` : "Retired";
+/** "Retired on Feb 14, 2027 (UTC) · use v2.0.0" — the badge text. */
+export function retiredBadge(replacement: string | null | undefined, sunsetAt?: string | null): string {
+  const head = sunsetAt ? `Retired on ${sunsetDay(sunsetAt)} (UTC)` : "Retired";
+  return replacement ? `${head} · use ${replacement}` : head;
+}
+
+/**
+ * What the catalogue names as the replacement of a tool's old majors: "v2.0.0"
+ * when it is this tool at a newer major, "get_weather_pro v1.0.0" when it is
+ * another tool. null when the API names none.
+ */
+export function replacementLabel(
+  fields: { replacementName?: string | null; replacementVersion?: string | null },
+  toolName?: string,
+): string | null {
+  if (!fields.replacementName) return fields.replacementVersion ? `v${fields.replacementVersion}` : null;
+  if (toolName && fields.replacementName === toolName) return fields.replacementVersion ? `v${fields.replacementVersion}` : null;
+  return fields.replacementVersion ? `${fields.replacementName} v${fields.replacementVersion}` : fields.replacementName;
 }
 
 /** The newest servable version of a newer major than `major`, as "v2.0.0", or null. */

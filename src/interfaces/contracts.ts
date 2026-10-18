@@ -81,6 +81,8 @@ export interface ToolVersionList {
   currentVersion: string | null;
   /** Newest first. */
   versions: ToolContractVersion[];
+  /** Per listed provider, sorted by name. Absent on an older backend. */
+  providers?: ToolVersionProvider[];
 }
 
 /** The contract-version half of a catalogue tool card (T3). Optional: an older backend omits it. */
@@ -93,6 +95,20 @@ export interface CatalogueToolVersionFields {
   versions?: ToolVersionBrief[];
   /** Majors still serving until their sunset. */
   deprecatedMajors?: number[];
+  /** What replaces the deprecated majors: this tool at a newer major, or another listed tool. */
+  replacementToolId?: string | null;
+  replacementName?: string | null;
+  replacementMajor?: number | null;
+  replacementVersion?: string | null;
+}
+
+/** One listed provider of a tool: the majors and optional fields it declares (`ToolVersionProviderDto`). */
+export interface ToolVersionProvider {
+  providerId: string;
+  legalName: string;
+  servedMajors: number[];
+  providesOutputFields: string[];
+  supportsInputFields: string[];
 }
 
 /** `_meta["assay/deprecated"]` on an MCP tool. */
@@ -137,6 +153,8 @@ export interface ContractDraft {
   tier: ToolContractTier | null;
   changelog: string | null;
   updatedAt: string;
+  /** The operator who last saved it; they can't approve its publish. null for a seeded version. */
+  editedBy?: string | null;
 }
 
 /** Per major: its newest version and how many bindings serve it (`ContractMajorDto`). */

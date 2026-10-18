@@ -53,7 +53,10 @@ export function ContractTermsPanel({
         <h3 id="contract-terms-title" className="text-label-sm text-01">
           What you serve
         </h3>
-        <p className="text-body-xs text-03">Each version you tick gets its own test before you can publish.</p>
+        <p className="text-body-xs text-03">
+          The contract is what agents send and get back for this tool. A new version number (v2) means it changed in a way your
+          mapping must follow. Each version you tick gets its own test before you can publish.
+        </p>
       </div>
 
       {move ? (

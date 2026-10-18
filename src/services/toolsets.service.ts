@@ -490,6 +490,12 @@ export interface RefusedProvider {
   source: "AGENT" | "TOOLSET" | "REQUEST" | "MIGRATION" | string;
   /** T3: on MISSING_OUTPUT_FIELD and UNSUPPORTED_INPUT_FIELD, the fields. */
   fields?: string[];
+  /** T3, CONTRACT_VERSION_MISMATCH: the majors the binding serves, e.g. [1]. */
+  servedMajors?: number[];
+  /** T3, CONTRACT_VERSION_MISMATCH: the major the call was routed at. */
+  requestedMajor?: number;
+  /** T3, CONTRACT_VERSION_MISMATCH: the majors the call may use; null when unconstrained. */
+  requestedRange?: number[] | null;
   detail: string;
   rule?: string;
 }
@@ -508,6 +514,19 @@ export interface RefusedCall {
   toolsetVersion: number | null;
   viewFilter: Record<string, unknown> | null;
   createdAt: string;
+  /** T3: per code. On CONTRACT_VERSION_RETIRED, what replaces it (null when nothing does). */
+  details?: { replacement?: RefusedCallReplacement | null };
+}
+
+/** What to call instead of a retired contract version (`RefusedCallReplacementDto`). */
+export interface RefusedCallReplacement {
+  /** Another tool, or the same tool at another major. */
+  toolId: string;
+  name: string;
+  major: number | null;
+  semver: string | null;
+  /** As the agent was told, e.g. `get_weather@2 (v2.0.0)`. */
+  label: string;
 }
 
 export function listRefusedCalls(query: ListQuery & { agentId?: string } = {}): Promise<CursorPage<RefusedCall>> {

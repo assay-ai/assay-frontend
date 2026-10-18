@@ -71,6 +71,8 @@ const HARBORLIGHT = "7c1e4f6a-2b93-4d17-9f0c-5a8e31d6b204";
 
 const RESEARCH_ID = "5f0c9b2e-7d41-4a83-b6e2-1c9a8d3f7e05";
 const WEATHER_ID = "a83e6d14-2f5b-4c97-8e0a-6b1d4c2f9a37";
+/** The tool set the contract notices name: it routes get_weather to v1 (T3). */
+export const DEMO_WEATHER_TOOLSET = { id: WEATHER_ID, name: "Weather and places" } as const;
 
 const TIER_RANK = { NEW: 0, ESTABLISHED: 1, TRUSTED: 2 } as const;
 

@@ -4,7 +4,7 @@ import { attentionAction } from "@/features/buyer/attention-action";
 import { isProviderEvent } from "@/features/provider-home/inbox";
 import type { RefusedCall, RefusedProvider, ToolsetEntry } from "@/services/toolsets.service";
 
-import { contractNoticeAction, contractNoticeText, contractNoticeTitle, readContractNotice, replacementText } from "./contract-notices";
+import { allowMajorOf, contractNoticeAction, contractNoticeText, contractNoticeTitle, notificationTitle, readContractNotice, replacementText } from "./contract-notices";
 import { entryAfterFix, entryAlreadyFixed, mismatchOf, providerReason, refusedCallView, replacementOf, sourceText, type EntryFix } from "./refused";
 
 function call(over: Partial<RefusedCall> = {}): RefusedCall {
@@ -50,15 +50,15 @@ describe("T3 provider reasons, in words", () => {
   it("names the field or the version, and whose rule it was", () => {
     expect(providerReason(prov({ reason: "MISSING_OUTPUT_FIELD", fields: ["uv_index"] }))).toBe("Doesn't return uv_index, and the tool set requires it");
     expect(providerReason(prov({ reason: "UNSUPPORTED_INPUT_FIELD", source: "REQUEST", fields: ["units"] }))).toBe("Doesn't accept the input units this call sent");
-    expect(providerReason(prov({ reason: "CONTRACT_VERSION_MISMATCH", source: "MIGRATION", detail: "binding b1 serves ^2, not contract v1.1.0" }))).toBe(
+    expect(providerReason(prov({ reason: "CONTRACT_VERSION_MISMATCH", source: "MIGRATION", servedMajors: [2], requestedMajor: 1, requestedRange: [1] }))).toBe(
       "Serves only v2; this call uses v1",
     );
-    expect(providerReason(prov({ reason: "CONTRACT_VERSION_MISMATCH", source: "MIGRATION", detail: "something else" }))).toBe(
+    expect(providerReason(prov({ reason: "CONTRACT_VERSION_MISMATCH", source: "MIGRATION" }))).toBe(
       "Doesn't serve the version of the tool this call uses",
     );
     expect(sourceText("REQUEST")).toBe("The call's own inputs");
     expect(sourceText("MIGRATION")).toBe("Contract version");
-    expect(mismatchOf({ detail: "binding b serves ^1 || ^2, not contract v3.0.0" })).toEqual({ serves: [1, 2], callMajor: 3 });
+    expect(mismatchOf({ servedMajors: [2, 1], requestedMajor: 3 })).toEqual({ serves: [1, 2], callMajor: 3 });
   });
 });
 
@@ -84,7 +84,7 @@ describe("T3 refused calls and their one-click fixes", () => {
     const view = refusedCallView(
       call({
         refusalLayer: "SERVER",
-        providers: [prov({ reason: "CONTRACT_VERSION_MISMATCH", source: "MIGRATION", detail: "binding b1 serves ^2, not contract v1.1.0" })],
+        providers: [prov({ reason: "CONTRACT_VERSION_MISMATCH", source: "MIGRATION", servedMajors: [2], requestedMajor: 1, requestedRange: [1] })],
       }),
     );
     expect(view.reason).toBe("No provider serves this version of the tool yet.");
@@ -112,20 +112,25 @@ describe("T3 refused calls and their one-click fixes", () => {
     expect(view.fix).toEqual({ kind: "link", href: "/explore?tool=t-weather", label: "See the inputs it accepts" });
   });
 
-  it("retired: names the replacement from the tool's versions and moves the entry to it", () => {
-    const versions = [
-      { semver: "2.0.0", major: 2, status: "ACTIVE" as const },
-      { semver: "1.1.0", major: 1, status: "RETIRED" as const },
-    ];
-    const view = refusedCallView(call({ refusalCode: "CONTRACT_VERSION_RETIRED", refusalLayer: "SERVER" }), { versions });
+  it("retired: names the replacement the call carries and moves the entry to it", () => {
+    const replacement = { toolId: "t-weather", name: "get_weather", major: 2, semver: "2.0.0", label: "get_weather@2 (v2.0.0)" };
+    const view = refusedCallView(call({ refusalCode: "CONTRACT_VERSION_RETIRED", refusalLayer: "SERVER", details: { replacement } }));
     expect(view.reason).toBe("This version of the tool was retired. Use v2.0.0.");
     expect(view.fix).toEqual({ kind: "move-major", toolsetId: "s-weather", toolId: "t-weather", from: [1], to: 2, label: "Use v2.0.0" });
-    // A catalogue read before the retirement job ran still says DEPRECATED.
-    expect(replacementOf({ versions: [versions[0]!, { ...versions[1]!, status: "DEPRECATED" }] })).toEqual({ label: "v2.0.0", major: 2 });
+    expect(replacementOf({ toolId: "t-weather", details: { replacement } })).toEqual({ label: "v2.0.0", major: 2, toolId: "t-weather", sameTool: true });
+    // Another tool replaces it: open that tool.
+    const other = refusedCallView(
+      call({ refusalCode: "CONTRACT_VERSION_RETIRED", details: { replacement: { ...replacement, toolId: "t-pro", name: "get_weather_pro", semver: "1.0.0", major: 1 } } }),
+    );
+    expect(other.fix).toEqual({ kind: "link", href: "/explore?tool=t-pro", label: "Use get_weather_pro v1.0.0" });
     // A locked version or a pinned URL can't be edited here: a new URL.
-    expect(refusedCallView(call({ refusalCode: "CONTRACT_VERSION_RETIRED", toolsetVersion: 3 }), { versions }).fix).toEqual({ kind: "link", href: "/connect", label: "Get a URL for v2.0.0" });
-    // Nothing newer: find another tool.
-    const none = refusedCallView(call({ refusalCode: "CONTRACT_VERSION_RETIRED" }), { versions: [] });
+    expect(refusedCallView(call({ refusalCode: "CONTRACT_VERSION_RETIRED", toolsetVersion: 3, details: { replacement } })).fix).toEqual({
+      kind: "link",
+      href: "/connect",
+      label: "Get a URL for v2.0.0",
+    });
+    // Nothing replaces it: find another tool.
+    const none = refusedCallView(call({ refusalCode: "CONTRACT_VERSION_RETIRED", details: { replacement: null } }));
     expect(none.fix).toMatchObject({ label: "Find a replacement tool" });
     expect(none.reason).toBe("This version of the tool was retired.");
   });
@@ -155,7 +160,14 @@ describe("tool_version notices", () => {
       "Version 1 of get_weather stops working on Feb 15, 2027 (UTC). Use get_weather v2.0.0 instead. Tool sets and URLs locked to v1 need to move before then; everything else moves by itself.",
     );
     expect(contractNoticeText("tool_version.retired", notice)).not.toMatch(/CONTRACT_VERSION_RETIRED/);
-    expect(attentionAction({ event: "tool_version.deprecated", payload })).toEqual({ label: "See the versions", href: "/explore?tool=t-weather" });
+    expect(attentionAction({ event: "tool_version.deprecated", payload })).toEqual({ label: "Check your tool sets", href: "/toolsets/mine" });
+    // A notice that names the tool set opens it, and offers "Allow v2".
+    const named = readContractNotice({ ...payload, toolsetId: "s-weather", toolsetName: "Weather and places" })!;
+    expect(contractNoticeAction(named)).toEqual({ label: "Open Weather and places", href: "/toolsets/mine?id=s-weather" });
+    expect(allowMajorOf(named)).toBe(2);
+    // An old deprecation read after its day says it in the past, never "stops" on a day gone by.
+    expect(contractNoticeTitle("tool_version.deprecated", notice, Date.parse("2027-06-01T00:00:00Z"))).toMatch(/stopped on/);
+    expect(notificationTitle({ event: "tool_version.deprecated", title: "server title", payload })).toBe(contractNoticeTitle("tool_version.deprecated", notice));
   });
 
   it("a provider is told to serve v2, and only provider notices reach the Inbox", () => {

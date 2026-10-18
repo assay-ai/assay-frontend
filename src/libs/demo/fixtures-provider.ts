@@ -2,7 +2,8 @@ import { formatVersionRange, parseVersionRange } from "@/features/contracts/semv
 import type { ToolContractVersion } from "@/interfaces/contracts";
 import { ApiError } from "@/libs/ApiClient";
 
-import { demoContractVersions, WEATHER_TOOL_ID } from "./fixtures-contracts";
+import { demoContractVersions, WEATHER_TOOL_ID, weatherSunsetAt } from "./fixtures-contracts";
+import { demoContractMismatch, demoRetiredMajor } from "./demo-switches";
 import {
   DEMO_PENALTY_AMOUNTS,
   DEMO_PENALTY_PROPOSALS,
@@ -239,6 +240,8 @@ const BINDINGS: DemoBinding[] = [
     id: "d5e02b88-1c74-493a-8b2f-6a1c9d4e7503",
     toolId: "chain-activity",
     toolName: "Chain activity summary",
+    // T3: a live listing still on v1, which is deprecated: the Overview asks to add v2.
+    range: "^1",
     endpoint: `${API_HOST}/v1/activity`,
     pricingMode: "FREE",
     priceMajor: "0",
@@ -601,9 +604,55 @@ function weatherCatalogueTool(): DemoCatalogueTool {
   };
 }
 
+/**
+ * Chain activity summary: 1.0.0 deprecated (same sunset as get_weather v1),
+ * 2.0.0 current — v2 counts transfers as transfer_count. The demo's live
+ * listing still serves only v1, so its Overview shows the deadline and "Add v2".
+ */
+function chainActivityVersions(): ToolContractVersion[] {
+  const base = firstVersion({
+    id: "chain-activity",
+    name: "Chain activity summary",
+    description: "Transfer and active-address counts for one chain over a named window.",
+    tier: "UNVERIFIED",
+    inputSchema: { type: "object", required: ["chainId"], properties: { chainId: { type: "string" }, window: { type: "string" } } },
+    outputSchema: {
+      type: "object",
+      required: ["window", "transfers", "addresses"],
+      properties: { window: { type: "string" }, transfers: { type: "integer" }, addresses: { type: "integer" } },
+    },
+  });
+  const sunsetAt = weatherSunsetAt();
+  return [
+    {
+      ...base,
+      version: 2,
+      semver: "2.0.0",
+      major: 2,
+      outputSchema: {
+        type: "object",
+        required: ["window", "transfer_count", "addresses"],
+        properties: { window: { type: "string" }, transfer_count: { type: "integer" }, addresses: { type: "integer" } },
+      },
+      changelog: "transfers is now transfer_count. Breaking: re-map and test for v2.",
+      publishedAt: minutesAgo(30 * 24 * 60),
+      isCurrent: true,
+      examples: [{ title: "Base, last 24 hours", arguments: { chainId: "eip155:8453", window: "24h" } }],
+    },
+    {
+      ...base,
+      status: demoRetiredMajor() ? "RETIRED" : "DEPRECATED",
+      sunsetAt,
+      isCurrent: false,
+      examples: [{ title: "Base, last 24 hours", arguments: { chainId: "eip155:8453", window: "24h" } }],
+    },
+  ];
+}
+
 /** The provider catalogue's versions of a tool, by its console id. */
 function catalogueVersionsOf(toolId: string): ToolContractVersion[] {
   if (toolId === "weather-now") return demoContractVersions(WEATHER_TOOL_ID);
+  if (toolId === "chain-activity") return chainActivityVersions();
   return [{ ...firstVersion({ id: toolId, name: toolId, description: toolId, tier: "VERIFIED", inputSchema: {}, outputSchema: {}, optionalOutputs: toolId === "air-quality" ? ["pm25"] : [] }) }];
 }
 
@@ -624,6 +673,8 @@ interface KeptTerms {
   supports?: string[];
   /** `${mappingVersion}:${major}` of every passing run. */
   passed?: string[];
+  /** `${mappingVersion}:${major}` of runs that failed (`?contracts=mismatch`). */
+  failed?: string[];
   /** The terms were changed in this tab: the stage set's own runs no longer count. */
   changed?: boolean;
 }
@@ -686,13 +737,29 @@ function passedMajors(binding: DemoBinding): number[] {
     : binding.publishedVersion === binding.version
       ? (parseVersionRange(termsFor(binding).range) ?? [1])
       : (binding.testedMajors ?? []);
-  return [...new Set([...seeded, ...kept])];
+  const failed = failedMajors(binding);
+  return [...new Set([...seeded, ...kept])].filter((major) => !failed.includes(major));
 }
 
 function rememberRun(binding: DemoBinding, major: number): void {
   const key = `${binding.version}:${major}`;
   const passed = keptTerms()[binding.id]?.passed ?? [];
-  if (!passed.includes(key)) rememberTerms(binding.id, { passed: [...passed, key] });
+  const failed = (keptTerms()[binding.id]?.failed ?? []).filter((k) => k !== key);
+  if (!passed.includes(key)) rememberTerms(binding.id, { passed: [...passed, key], failed });
+}
+
+/** A failing run at this revision: the publish check says so instead of "no test yet". */
+function rememberFailedRun(binding: DemoBinding, major: number): void {
+  const key = `${binding.version}:${major}`;
+  const failed = keptTerms()[binding.id]?.failed ?? [];
+  const passed = (keptTerms()[binding.id]?.passed ?? []).filter((k) => k !== key);
+  if (!failed.includes(key)) rememberTerms(binding.id, { failed: [...failed, key], passed });
+}
+
+function failedMajors(binding: DemoBinding): number[] {
+  return (keptTerms()[binding.id]?.failed ?? [])
+    .filter((key) => key.startsWith(`${binding.version}:`))
+    .map((key) => Number(key.split(":")[1]));
 }
 
 /**
@@ -711,6 +778,8 @@ function contractProblems(toolId: string, range: string, provides: readonly stri
   }
   for (const field of supports) {
     if (!inRange.some((v) => v.optionalInputFields.includes(field))) problems.push(`"${field}" is not an optional input of the contract in ${formatVersionRange(majors)}`);
+    // `?contracts=mismatch`: the demo listing's request mapping never reads "units".
+    else if (field === "units" && demoContractMismatch()) problems.push(`the request mapping never reads "${field}", so it would be dropped`);
   }
   return problems;
 }
@@ -1692,6 +1761,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
           name: "Chain activity summary",
           description: "Transfer and active-address counts for one chain over a named window.",
           tier: "UNVERIFIED",
+          versions: chainActivityVersions(),
           inputSchema: {
             type: "object",
             required: ["chainId"],
@@ -1777,25 +1847,28 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
       const majors = parseVersionRange(termsFor(binding).range) ?? [1];
       const passed = passedMajors(binding);
       const untested = majors.filter((major) => !passed.includes(major));
-      const tester = untested.length === 0
-        ? [
-            { requirement: "TESTER_RUN", met: true, code: null, detail: `Run at revision ${binding.version}.` },
-            { requirement: "TESTER_PASSED", met: true, code: null, detail: "Every layer passed, including verification." },
-          ]
-        : [
-            ...untested.map((major) => ({
-              requirement: "TESTER_RUN",
-              met: false,
-              code: "no_run_at_revision",
-              detail: `Contract v${major}: No test has run at revision ${binding.version} yet.`,
-            })),
-            ...untested.map((major) => ({
-              requirement: "TESTER_PASSED",
-              met: false,
-              code: "no_run_at_revision",
-              detail: `Contract v${major}: Run a passing test first.`,
-            })),
-          ];
+      const failedAt = failedMajors(binding);
+      // One row per major for each tester requirement, each naming its major (as the API answers).
+      const tester = [
+        ...majors.map((major) =>
+          passed.includes(major) || failedAt.includes(major)
+            ? { requirement: "TESTER_RUN", met: true, code: null, detail: `Contract v${major}: Run at revision ${binding.version}.`, major }
+            : { requirement: "TESTER_RUN", met: false, code: "no_run_at_revision", detail: `Contract v${major}: No test has run at revision ${binding.version} yet.`, major },
+        ),
+        ...majors.map((major) =>
+          passed.includes(major)
+            ? { requirement: "TESTER_PASSED", met: true, code: null, detail: `Contract v${major}: Every layer passed, including verification.`, major }
+            : failedAt.includes(major)
+              ? {
+                  requirement: "TESTER_PASSED",
+                  met: false,
+                  code: "last_run_failed",
+                  detail: `Contract v${major}: The last test failed at the response mapping: your API's answer has no temperature_c.`,
+                  major,
+                }
+              : { requirement: "TESTER_PASSED", met: false, code: "no_run_at_revision", detail: `Contract v${major}: Run a passing test first.`, major },
+        ),
+      ];
       // API key / Both with no stored headers: the publish gate asks for them.
       const mode = demoAuthModes.get(binding.id);
       const needsKey = (mode === "API_KEY" || mode === "BOTH") && (demoCredentialSets.get(binding.id)?.size ?? 0) === 0;
@@ -1818,6 +1891,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
             met: true,
             code: null,
             detail: "$600.00 bonded against a $450.00 requirement.",
+            major: null,
           },
         ],
       };
@@ -1850,11 +1924,14 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         asked ??
         versions.filter((v) => v.major === Math.max(...majors)).sort((a, b) => b.version - a.version)[0] ??
         versions[0];
-      if (tested) rememberRun(binding, tested.major);
+      // `?contracts=mismatch`: v2 renamed temperature to temperature_c, and this API still answers temperature.
+      const fails = demoContractMismatch() && tested?.major === 2;
+      if (tested && !fails) rememberRun(binding, tested.major);
+      if (tested && fails) rememberFailedRun(binding, tested.major);
       return {
         callId: "call_7f21c93a4b08",
-        outcome: "PASSED",
-        failedLayer: null,
+        outcome: fails ? "FAILED" : "PASSED",
+        failedLayer: fails ? "RESPONSE_MAPPING" : null,
         warnings: [],
         mappingVersion: binding.version,
         toolVersion: tested?.version ?? 1,
@@ -1869,8 +1946,18 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
             fault: null,
           },
           { layer: "CLASSIFICATION", status: "PASSED", code: "OK", detail: null, fault: null },
-          { layer: "RESPONSE_MAPPING", status: "PASSED", code: null, detail: null, fault: null },
-          { layer: "VERIFICATION", status: "PASSED", code: null, detail: null, fault: null },
+          fails
+            ? {
+                layer: "RESPONSE_MAPPING",
+                status: "FAILED",
+                code: "TOOL_MAPPING_REQUIRED_FIELD_MISSING",
+                detail: "Your API's answer has no temperature_c, which v2 requires. v2 renamed temperature to temperature_c: map it to the field your API returns.",
+                fault: "PROVIDER",
+              }
+            : { layer: "RESPONSE_MAPPING", status: "PASSED", code: null, detail: null, fault: null },
+          fails
+            ? { layer: "VERIFICATION", status: "NOT_REACHED", code: null, detail: null, fault: null }
+            : { layer: "VERIFICATION", status: "PASSED", code: null, detail: null, fault: null },
         ],
         request: {
           method: "GET",

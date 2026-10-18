@@ -112,7 +112,7 @@ function ToolPage() {
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="break-all font-mono text-heading-md text-01">{tool.name}</h1>
           {tool.routable ? null : <UnavailableTag />}
-          <ToolVersionBadges version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} />
+          <ToolVersionBadges name={tool.name} version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} replacementName={tool.replacementName} replacementVersion={tool.replacementVersion} />
         </div>
         {tool.description ? <p className="max-w-[760px] text-body-md text-02">{tool.description}</p> : null}
       </header>

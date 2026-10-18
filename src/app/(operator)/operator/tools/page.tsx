@@ -56,7 +56,7 @@ function ToolsScreen() {
   const [now] = React.useState(() => Date.now());
 
   const tools = useQuery({ queryKey: ["operator", "tools", "list"], queryFn: listOperatorTools, retry: 0 });
-  const requests = useQuery({ queryKey: ["operator", "tool-requests"], queryFn: listOperatorToolRequests, retry: 0 });
+  const requests = useQuery({ queryKey: ["operator", "tool-requests"], queryFn: () => listOperatorToolRequests(), retry: 0 });
   const pending = useQuery({
     queryKey: ["operator", "approvals", "pending-count"],
     queryFn: () => listApprovals({ status: "PENDING", limit: 100 }),
@@ -94,7 +94,7 @@ function ToolsScreen() {
       {requests.isSuccess && waiting.length > 0 ? (
         <section aria-labelledby="requests-title" className="flex w-full flex-col gap-2">
           <h2 id="requests-title" className="text-label-md text-01">
-            Tool requests waiting for an answer <span className="tabular-nums text-03">{waiting.length}</span>
+            Tool requests to decide <span className="tabular-nums text-03">{waiting.length}</span>
           </h2>
           <ul className="flex w-full flex-col divide-y divide-01 rounded-xl border border-01 bg-01">
             {waiting.map((request) => {
@@ -102,7 +102,10 @@ function ToolsScreen() {
               return (
                 <li key={request.id} className="flex w-full flex-col gap-2 px-4 py-3 tablet:flex-row tablet:items-center tablet:justify-between">
                   <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-label-13 text-01 [overflow-wrap:anywhere]">{request.title}</span>
+                    <span className="text-label-13 text-01 [overflow-wrap:anywhere]">
+                      {request.title}
+                      {request.status === "ACKNOWLEDGED" ? <span className="ml-2 rounded-full bg-03 px-2 py-0.5 text-label-xs text-02">Looked at</span> : null}
+                    </span>
                     <span className="text-body-xs text-03">
                       {overdue ? <span className="text-danger-600">Answer overdue since </span> : "Answer due "}
                       <UtcTime value={request.firstResponseDueAt} midSentence />
@@ -150,10 +153,11 @@ function ToolsScreen() {
         request={accepting}
         onClose={() => setAccepting(null)}
         onAccepted={(toolId) => {
+          const requestId = accepting?.id;
           setAccepting(null);
           void requests.refetch();
           void tools.refetch();
-          if (toolId) router.push(routes.operatorTool(toolId));
+          if (toolId) router.push(routes.operatorTool(toolId, requestId));
         }}
       />
     </>

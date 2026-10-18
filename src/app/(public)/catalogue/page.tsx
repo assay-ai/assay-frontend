@@ -78,7 +78,7 @@ function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: num
           <div className="flex flex-wrap items-center gap-2">
             <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
             {tool.routable ? null : <UnavailableTag />}
-            <ToolVersionBadges version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} />
+            <ToolVersionBadges name={tool.name} version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} replacementName={tool.replacementName} replacementVersion={tool.replacementVersion} />
           </div>
           {tool.summary || tool.description ? <p className="line-clamp-2 text-body-13 text-02">{tool.summary || tool.description}</p> : null}
           {/* Phones: the price line sits under the name, full width. */}
