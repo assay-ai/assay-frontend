@@ -125,7 +125,7 @@ function dollars(value: unknown): string | null {
 
 /**
  * Entries whose generic "changed X from A to B" reading would be system talk
- * ("Assay changed charged from 6.00 to 0.00", "set credential to assay_live_…").
+ * ("Assay changed charged from 6.00 to 0.00", "set credential to assay_sk_live_…").
  * Each gets the sentence a person would say.
  */
 function specific(

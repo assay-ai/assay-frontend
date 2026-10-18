@@ -26,22 +26,41 @@ export function isMcpClient(value: unknown): value is McpClient {
 /** Placeholder shown when the key itself is not on screen (it is shown once, at creation). */
 export const KEY_PLACEHOLDER = "PASTE_YOUR_KEY_HERE";
 
+/** The clear-text start of every API key. There is no test-key prefix. */
+export const API_KEY_PREFIX = "assay_sk_live_";
+
 /**
- * What stands in for the key when it is not on screen: the bare placeholder
- * when no key is known, else the key's own visible prefix, so a person with a
- * key sees which key goes there (`assay_live_ab12…REST_OF_YOUR_KEY`).
+ * What stands in for the key when it is not on screen: the API key's own
+ * visible prefix, so a person with a key sees which key goes there
+ * (`assay_sk_live_ab12…REST_OF_YOUR_KEY`); else the bare placeholder.
  */
 export function keyPlaceholder(keyPrefix?: string | null): string {
   const prefix = keyPrefix?.trim();
-  return prefix ? `${prefix.replace(/[.…]+$/, "")}…REST_OF_YOUR_KEY` : KEY_PLACEHOLDER;
+  return prefix && prefix.startsWith(API_KEY_PREFIX) ? `${prefix.replace(/[.…]+$/, "")}…REST_OF_YOUR_KEY` : KEY_PLACEHOLDER;
 }
 
-/** "live" or "test", read off the key's visible prefix (`assay_live_…`, `assay_test_…`); null when it does not say. */
-export function keyMode(keyPrefix?: string | null): "live" | "test" | null {
-  if (!keyPrefix) return null;
-  if (/_test_/i.test(keyPrefix)) return "test";
-  if (/_live_/i.test(keyPrefix)) return "live";
-  return null;
+/** "live" for an API key's visible prefix (`assay_sk_live_…`); null when it does not say. */
+export function keyMode(keyPrefix?: string | null): "live" | null {
+  return keyPrefix?.trim().startsWith(API_KEY_PREFIX) ? "live" : null;
+}
+
+/**
+ * A credential row as a key list shows it. An OAuth grant (an app sign-in)
+ * has no prefix: it is named by its client, never as "null…".
+ */
+export interface CredentialLike {
+  prefix: string | null;
+  oauthClient?: { name: string } | null;
+}
+
+export function credentialLabel(credential: CredentialLike): string {
+  if (credential.prefix) return `${credential.prefix.replace(/[.…]+$/, "")}…`;
+  return credential.oauthClient?.name ? `Signed in with ${credential.oauthClient.name}` : "App sign-in";
+}
+
+/** The key an API-key hint names: the first with a prefix. An app sign-in has none to show. */
+export function keyForHint<T extends { prefix: string | null }>(keys: readonly T[]): (T & { prefix: string }) | null {
+  return (keys.find((key) => key.prefix) as (T & { prefix: string }) | undefined) ?? null;
 }
 
 /** A shell word: bare when it is plainly safe, else in double quotes (`?` and `&` mean something to a shell). */

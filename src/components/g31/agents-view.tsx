@@ -23,6 +23,7 @@ import { Field } from "@/components/ui/field";
 import { AGENT_LABEL_MAX, agentLabelError } from "@/features/buyer-money/agent-label";
 import type { AgentReadiness } from "@/features/buyer-money/agent-readiness";
 import { capsToForm } from "@/features/buyer-money/caps";
+import { credentialLabel } from "@/features/buyer-money/mcp-config";
 import { permissionExpiry } from "@/features/buyer-money/permission-expiry";
 import { type DelegateBinding, supportsDelegation } from "@/features/delegation/delegation-form";
 import { hasTightenDelay, tightenDelayLabel } from "@/features/delegation/unsettled";
@@ -395,7 +396,7 @@ function AgentCard({
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-label-13 text-01">{key.name}</span>
                     <span className="text-body-xs text-03">
-                      <span className="font-mono">{key.prefix}…</span> ·{" "}
+                      <span className={key.prefix ? "font-mono" : undefined}>{credentialLabel(key)}</span> ·{" "}
                       {key.lastUsedAt ? `last used ${relativeTime(key.lastUsedAt)}` : "never used"}
                     </span>
                   </span>
@@ -421,7 +422,7 @@ function AgentCard({
           <ul className="flex flex-col gap-1">
             {revoked.map((key) => (
               <li key={key.id} className="text-body-xs text-03">
-                {key.name} · <span className="font-mono">{key.prefix}…</span> · revoked {relativeTime(key.revokedAt)}
+                {key.name} · <span className={key.prefix ? "font-mono" : undefined}>{credentialLabel(key)}</span> · revoked {relativeTime(key.revokedAt)}
               </li>
             ))}
           </ul>

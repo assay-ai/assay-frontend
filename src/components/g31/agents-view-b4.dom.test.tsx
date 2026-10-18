@@ -94,4 +94,14 @@ describe("the agent card while its keys load", () => {
     expect(out).toContain("Paid calls are by invitation during testnet");
     expect(out).not.toContain("Needs authorisation");
   });
+
+  it("labels an OAuth grant (null prefix) as an app sign-in, never 'null…'", () => {
+    const base = { agentId: AGENT, scopes: [], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
+    const named = { ...base, id: "g1", name: "Claude Code · 2026-10-17", prefix: null, oauthClient: { name: "Claude Code" } };
+    const bare = { ...base, id: "g2", name: "Another app", prefix: null };
+    const out = text(render((client) => client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [named, bare] })));
+    expect(out).toContain("Signed in with Claude Code");
+    expect(out).toContain("App sign-in");
+    expect(out).not.toContain("null");
+  });
 });

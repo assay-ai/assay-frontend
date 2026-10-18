@@ -297,17 +297,17 @@ describe("Servers in use", () => {
 
 describe("the client tabs", () => {
   it("has the four clients, Claude Code first with its one-liner and the full key at creation", () => {
-    const html = render(<McpConfigTabs token="assay_live_full_key" url="https://mcp.example.com/" />);
+    const html = render(<McpConfigTabs token="assay_sk_live_full_key" url="https://mcp.example.com/" />);
     const out = text(html);
     expect(out).toContain("Claude Code Claude Desktop Cursor Other");
     // Phone: the tab row wraps rather than clipping "Other".
     expect(html).toContain("flex-wrap");
-    expect(out).toContain('claude mcp add --transport http assay https://mcp.example.com/ --header "Authorization: Bearer assay_live_full_key"');
+    expect(out).toContain('claude mcp add --transport http assay https://mcp.example.com/ --header "Authorization: Bearer assay_sk_live_full_key"');
   });
 
   it("without the key, names it by its prefix", () => {
-    const out = text(render(<McpConfigTabs token={null} keyPrefix="assay_live_ab12" url="https://mcp.example.com/" />));
-    expect(out).toContain("assay_live_ab12…REST_OF_YOUR_KEY");
+    const out = text(render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" />));
+    expect(out).toContain("assay_sk_live_ab12…REST_OF_YOUR_KEY");
   });
 
   it("snippets wrap on a phone, so the URL and the header stay visible (review F, 390px)", () => {

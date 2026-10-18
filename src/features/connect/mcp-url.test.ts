@@ -10,6 +10,7 @@ import {
   toolDisplay,
   uniqueServerName,
   parseMcpUrl,
+  RESERVED_FIRST_SEGMENTS,
   sameChoice,
   suggestServerName,
   webPageOf,
@@ -86,6 +87,16 @@ describe("parseMcpUrl — a URL back into the question (Change, browser redirect
     expect(parseMcpUrl("https://mcp.example.com/?tools=Bad Name!", HOST)).toBeNull();
   });
 
+  it("refuses the host's reserved paths, which are not MCP URLs", () => {
+    expect(parseMcpUrl("https://mcp.example.com/oauth/authorize", HOST)).toBeNull();
+    expect(parseMcpUrl("https://mcp.example.com/.well-known/x", HOST)).toBeNull();
+    for (const first of RESERVED_FIRST_SEGMENTS) {
+      expect(parseMcpUrl(`https://mcp.example.com/${first}`, HOST)).toBeNull();
+      expect(parseMcpUrl(`https://mcp.example.com/${first}/x?free=1`, HOST)).toBeNull();
+    }
+    expect(RESERVED_FIRST_SEGMENTS).toEqual(["t", ".well-known", "health", "status", "docs", "oauth"]);
+  });
+
   it("works on the unconfigured placeholder host too", () => {
     expect(parseMcpUrl("https://<your-mcp-host>/my/kit", "https://<your-mcp-host>")?.choice).toEqual({ kind: "toolset", slug: "kit" });
   });
@@ -132,8 +143,8 @@ describe("the snippet for each of the four clients", () => {
   });
 
   it("Claude Code: one `claude mcp add` line with the full key", () => {
-    expect(mcpConfig("claude-code", { url, token: "assay_live_sk1" })).toBe(
-      'claude mcp add --transport http assay https://mcp.example.com/ --header "Authorization: Bearer assay_live_sk1"',
+    expect(mcpConfig("claude-code", { url, token: "assay_sk_live_sk1" })).toBe(
+      'claude mcp add --transport http assay https://mcp.example.com/ --header "Authorization: Bearer assay_sk_live_sk1"',
     );
   });
 
@@ -159,9 +170,8 @@ describe("the snippet for each of the four clients", () => {
     });
   });
 
-  it("names a live or test key by its prefix", () => {
-    expect(keyMode("assay_live_ab12")).toBe("live");
-    expect(keyMode("assay_test_ab12")).toBe("test");
+  it("names an API key live by its prefix", () => {
+    expect(keyMode("assay_sk_live_ab12")).toBe("live");
     expect(keyMode(null)).toBeNull();
   });
 });

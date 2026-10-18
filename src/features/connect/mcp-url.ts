@@ -216,6 +216,12 @@ function tidy(choice: ConnectChoice): ConnectChoice {
 }
 
 /**
+ * First path segments the MCP host keeps for itself (sharing links, discovery,
+ * health, docs, the OAuth endpoints). A URL under one is never an MCP URL.
+ */
+export const RESERVED_FIRST_SEGMENTS: readonly string[] = ["t", ".well-known", "health", "status", "docs", "oauth"];
+
+/**
  * A URL back into the question and its options, for "Change" on a server
  * row and for a Connect panel opened from a browser redirect. `null` when it
  * is not a URL of this MCP host at all ("We couldn't read this URL").
@@ -229,6 +235,7 @@ export function parseMcpUrl(url: string, host: string = mcpHost()): ParsedConnec
   const [rawPath = "", rawQuery = ""] = rest.split("?");
   const path = (rawPath === "" ? "/" : rawPath).replace(/%40/gi, "@").toLowerCase();
   if (path.includes("%") || path.includes("//") || path.split("/").some((s) => s === "." || s === "..")) return null;
+  if (RESERVED_FIRST_SEGMENTS.includes(path.split("/")[1] ?? "")) return null;
   const params = new URLSearchParams(rawQuery);
   const free = params.getAll("free").at(-1)?.trim() === "1";
   const tools = canonicalTools((params.get("tools") ?? "").split(","));

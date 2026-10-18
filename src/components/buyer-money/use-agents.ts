@@ -30,7 +30,10 @@ export interface KeyRow {
   id: string;
   agentId: string;
   name: string;
-  prefix: string;
+  /** The key's clear-text start; null for an OAuth grant (an app sign-in), which has no key to show. */
+  prefix: string | null;
+  /** The app an OAuth grant was made for; absent or null for an API key. */
+  oauthClient?: { name: string } | null;
   scopes: string[];
   lastUsedAt: string | null;
   expiresAt: string | null;

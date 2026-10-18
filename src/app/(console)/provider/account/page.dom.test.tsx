@@ -5,6 +5,7 @@ import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /* B9: Account names the public name and the payout wallet, each with where to change it. */
+const keys = vi.hoisted(() => ({ agents: [] as unknown[], credentials: [] as unknown[] }));
 const handle = vi.hoisted(() => ({ value: { handle: "acme", status: "ACTIVE", lockedAt: null, canChange: true } as unknown }));
 
 vi.mock("@/services/provider-registration.service", () => ({
@@ -28,8 +29,8 @@ vi.mock("@/services/provider-registration.service", () => ({
   })),
 }));
 vi.mock("@/services/account.service", () => ({
-  listAgents: vi.fn(async () => ({ items: [] })),
-  listCredentials: vi.fn(async () => ({ items: [] })),
+  listAgents: vi.fn(async () => ({ items: keys.agents })),
+  listCredentials: vi.fn(async () => ({ items: keys.credentials })),
   createCredential: vi.fn(),
 }));
 vi.mock("@/components/toolsets/use-toolsets", () => ({
@@ -66,5 +67,28 @@ describe("Account: public name and payout wallet", () => {
     mount();
     expect(await screen.findByText("Not claimed yet")).toBeTruthy();
     expect(screen.getByRole("link", { name: "publish your API" }).getAttribute("href")).toBe("/provider/apis/new");
+  });
+});
+
+describe("Account: API keys", () => {
+  afterEach(() => {
+    keys.agents = [];
+    keys.credentials = [];
+  });
+
+  it("masks an API key and names an OAuth grant (null prefix) as an app sign-in", async () => {
+    handle.value = { handle: "acme", status: "ACTIVE", lockedAt: null, canChange: true };
+    const base = { agentId: "a1", scopes: [], lastUsedAt: null, expiresAt: null, revokedAt: null, createdAt: "2026-10-17T00:00:00Z" };
+    keys.agents = [{ agentId: "a1", label: "Main" }];
+    keys.credentials = [
+      { ...base, id: "k1", name: "Deploy", prefix: "assay_sk_live_8f3a" },
+      { ...base, id: "g1", name: "Claude Code · 2026-10-17", prefix: null, oauthClient: { name: "Claude Code" } },
+      { ...base, id: "g2", name: "Another app", prefix: null },
+    ];
+    mount();
+    expect(await screen.findByText("••••8f3a")).toBeTruthy();
+    expect(screen.getByText("Signed in with Claude Code")).toBeTruthy();
+    expect(screen.getByText("App sign-in")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("null");
   });
 });
