@@ -145,6 +145,20 @@ describe("the report window on a receipt", () => {
     expect(view.text).toMatch(/not been collected yet.*refunded in full/);
     expect(view.text).not.toMatch(/no refund/i);
   });
+  // Re-review R1: the backend guarantees a not-yet-held call only while nothing else happened to the payment.
+  it("with a released hold, a debt or a forfeit: neither a refund promise nor 'no refund'", () => {
+    const bare = { ...receipt, disputeWindowEndsAt: null, collectableAt: null };
+    for (const over of [
+      { holdReleasedAt: "2026-10-18T10:10:00.000Z" },
+      { debt: "OUTSTANDING" },
+      { forfeited: true },
+      { chargeNote: "uncollected:DelegateIsRevoked" },
+    ]) {
+      const view = reportWindow({ ...bare, ...over }, t0 + 5 * 60_000);
+      expect(view).toMatchObject({ open: true, guaranteed: false, holdEndsAt: null });
+      expect(view.text).not.toMatch(/refunded in full|no refund/i);
+    }
+  });
   it("closed after 7 days, and for calls that did not settle", () => {
     expect(reportWindow(receipt, t0 + 8 * 24 * H).open).toBe(false);
     expect(reportWindow({ ...receipt, disputeFilingClosesAt: null }, t0).open).toBe(false);
@@ -170,7 +184,7 @@ describe("the decided dispute copy", () => {
     for (const text of Object.values(DISPUTE_COPY)) expect((text.match(/\d+ (hours|days)/g) ?? []).length).toBeLessThanOrEqual(1);
     const open = buyerStatus(dispute(), t0 + H).detail;
     expect(open).not.toMatch(/7 days/);
-    expect(buyerStatus(dispute({ refundGuaranteed: false }), t0 + H).detail).toMatch(/after the 1-hour hold, so there is no refund for this call\. .*penalty on their stake/);
+    expect(buyerStatus(dispute({ refundGuaranteed: false }), t0 + H).detail).toMatch(/^This report is not covered by the refund guarantee, so there is no refund for this call\. .*penalty on their stake/);
   });
 });
 

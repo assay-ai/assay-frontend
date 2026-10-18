@@ -92,7 +92,7 @@ export const BUYER_COPY = {
   decides: `Assay's review team decides within ${DECISION_HOURS} hours.`,
   silentHeld: `If the provider stays silent, your report is accepted automatically at ${DECISION_HOURS} hours and you are refunded.`,
   held: "The payment stays held until your report is decided.",
-  afterHold: `It was reported after the 1-hour hold, so ${AFTER_HOLD_OUTCOME}`,
+  afterHold: `This report is not covered by the refund guarantee, so ${AFTER_HOLD_OUTCOME}`,
   limit: DISPUTE_COPY.limit,
   safetyNet: DISPUTE_COPY.safetyNet,
 } as const;
@@ -319,9 +319,11 @@ export interface ReportWindowView {
  *  - the payment is in its 1-hour hold (`disputeWindowEndsAt` ahead): a full
  *    refund if accepted;
  *  - the payment has not been collected yet (a voucher not redeemed into the
- *    hold: `disputeWindowEndsAt` and `collectableAt` both null): also a full
- *    refund — the backend marks a report filed then as guaranteed;
+ *    hold): also a full refund — the backend marks a report filed then as
+ *    guaranteed, but only while nothing else happened to the payment: no
+ *    hold fields, the hold not released, no debt, no forfeit, no charge note;
  *  - the hold has really ended (`disputeWindowEndsAt` passed): no refund.
+ * Anything else promises neither a refund nor "no refund".
  */
 export function reportWindow(
   receipt: {
@@ -329,6 +331,10 @@ export function reportWindow(
     disputeWindowEndsAt?: string | null;
     disputeFilingClosesAt?: string | null;
     collectableAt?: string | null;
+    holdReleasedAt?: string | null;
+    debt?: string | null;
+    forfeited?: boolean;
+    chargeNote?: string | null;
     chargedPrice: Money;
   },
   now: number,
@@ -336,7 +342,13 @@ export function reportWindow(
   const closes = receipt.disputeFilingClosesAt ?? null;
   const open = closes !== null && now < Date.parse(closes);
   const holdEnds = receipt.disputeWindowEndsAt ?? null;
-  const notCollectedYet = holdEnds === null && (receipt.collectableAt ?? null) === null;
+  const notCollectedYet =
+    holdEnds === null &&
+    !receipt.collectableAt &&
+    !receipt.holdReleasedAt &&
+    !receipt.debt &&
+    !receipt.forfeited &&
+    !receipt.chargeNote;
   const inHold = holdEnds !== null && now < Date.parse(holdEnds);
   const guaranteed = open && (inHold || notCollectedYet);
   if (!open) {
@@ -356,7 +368,7 @@ export function reportWindow(
   if (holdEnds !== null) {
     return { open, guaranteed, holdEndsAt: null, text: `The 1-hour hold has ended, so ${AFTER_HOLD_OUTCOME}` };
   }
-  // A collection time but no hold end: the API sends both or neither; say only what is certain.
+  // No live hold and no guarantee (a released hold, a debt, a forfeit): say only what is certain.
   return { open, guaranteed, holdEndsAt: null, text: "If your report is accepted, it counts against the provider's quality." };
 }
 

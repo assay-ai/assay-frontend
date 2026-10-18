@@ -7,7 +7,7 @@ import type { Receipt } from "@/features/g30/wire";
 import type { CallDispute } from "@/services/call-disputes.service";
 
 import { buyerStatus } from "./model";
-import { ReceiptReport } from "./receipt-report";
+import { ReceiptReport, receiptReportState } from "./receipt-report";
 import { DisputeChip, DisputeTimeline, EvidencePanes } from "./ui";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => undefined, replace: () => undefined }), usePathname: () => "/" }));
@@ -100,5 +100,16 @@ describe("the receipt's Report a bad result", () => {
     expect(words).toContain("Bad result?");
     expect(words).toContain("The payment is still held");
     expect(words).toContain("Report a bad result");
+  });
+});
+
+// Re-review R2: only a report covered by the refund guarantee keeps the payment held.
+describe("receiptReportState", () => {
+  it("is open only for an open report with the refund guarantee", () => {
+    expect(receiptReportState([{ state: "OPEN", refundGuaranteed: true }])).toBe("open");
+    expect(receiptReportState([{ state: "OPEN", refundGuaranteed: false }])).toBe("closed");
+    expect(receiptReportState([{ state: "REJECTED", refundGuaranteed: true }])).toBe("closed");
+    expect(receiptReportState([{ state: "WITHDRAWN", refundGuaranteed: true }])).toBe("none");
+    expect(receiptReportState(undefined)).toBe("none");
   });
 });

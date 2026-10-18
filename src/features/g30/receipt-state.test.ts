@@ -478,6 +478,14 @@ describe("receiptTimeline — the 1-hour hold", () => {
     expect(rows.find((r) => r.label === "Refundable hour ended")?.meta).toBe("you reported it");
   });
 
+  // Re-review R2: an open report without the guarantee ("closed" here) does not stop collection.
+  it("with a report not covered by the guarantee past collectableAt: released, and you reported it", () => {
+    const rows = receiptTimeline(receipt, "CHARGED", { now: AFTER, report: "closed" });
+    expect(labels(rows).slice(-2)).toEqual(["Refundable hour ended", "Released to the provider"]);
+    expect(rows.find((r) => r.label === "Refundable hour ended")?.meta).toBe("you reported it");
+    expect(labels(rows)).not.toContain("Held for your report until it is decided");
+  });
+
   // B2 review I2: no refund promise on a call that cannot be reported, or already was.
   it("on a call that cannot be reported: 'Hold ends', no promise", () => {
     const own = { ...receipt, disputeFilingClosesAt: null };

@@ -28,13 +28,17 @@ export function useCallReports(intentId: string) {
 }
 
 /**
- * Where this call's reports leave its money: `open` while one is being
- * decided (the payment stays held for it), `closed` once decided, `none`
- * with no report (a withdrawn one included).
+ * Where this call's reports leave its money: `open` while one covered by the
+ * refund guarantee is being decided (only then does the payment stay held
+ * for it), `closed` for any other report (decided, or open without the
+ * guarantee: collection goes ahead), `none` with no report (a withdrawn one
+ * included).
  */
-export function receiptReportState(items: readonly Pick<CallDispute, "state">[] | undefined): ReceiptReportState {
+export function receiptReportState(
+  items: readonly Pick<CallDispute, "state" | "refundGuaranteed">[] | undefined,
+): ReceiptReportState {
   const live = (items ?? []).filter((d) => d.state !== "WITHDRAWN");
-  if (live.some((d) => d.state === "OPEN")) return "open";
+  if (live.some((d) => d.state === "OPEN" && d.refundGuaranteed)) return "open";
   return live.length > 0 ? "closed" : "none";
 }
 
