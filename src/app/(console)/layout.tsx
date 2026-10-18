@@ -1,5 +1,6 @@
 "use client";
 
+import { usePrivy } from "@privy-io/react-auth";
 import { useQuery } from "@tanstack/react-query";
 import { Inbox as InboxIcon, UserRound } from "lucide-react";
 import Link from "next/link";
@@ -8,8 +9,9 @@ import type * as React from "react";
 import { Toaster } from "sonner";
 
 import { AlertFill, CheckCircle } from "@/components/icons";
+import { consoleShellReady } from "@/components/layout/console-gate";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
-import { providerSectionFor, providerTitleFor } from "@/components/layout/provider-nav-config";
+import { PROVIDER_EXPLAINER, providerSectionFor, providerTitleFor } from "@/components/layout/provider-nav-config";
 import { ProviderTabBar } from "@/components/layout/provider-tab-bar";
 import { Sidebar, type SidebarBindingItem } from "@/components/layout/sidebar";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -19,6 +21,8 @@ import { ChecklistPill } from "@/components/patterns/setup-checklist";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { useListingProgress } from "@/features/provider-home/use-listing-progress";
 import { useProviderInbox } from "@/features/provider-home/use-provider-inbox";
+import { getSessionToken } from "@/libs/ApiClient";
+import { demoEnabled } from "@/libs/demo/demo-api";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
 import { useTheme } from "@/providers/ThemeProvider";
@@ -58,6 +62,15 @@ import { routes } from "@/libs/routes";
  * no bottom tab bar — the tab bar is the buyer's, and the provider frames do
  * not draw one. Both chromes are always in the DOM and CSS picks, matching
  * `(main)/layout.tsx`, so the first paint is correct at either width.
+ *
+ * ## No shell before the session resolves
+ *
+ * Until Privy settles on a signed-in person (or a stored session token is
+ * there), the shell is not drawn: a neutral loader is. Without it a
+ * signed-out visitor saw "Welcome", the sidebar and skeleton rows flash
+ * before the 401 sent them to sign-in. `consoleShellReady` is visual only:
+ * every query below still runs as before, and the session bridge and the
+ * 401 handler still decide who is signed in and where they go.
  */
 
 /** The binding a screen is about: its id rides in `?binding=` (see `libs/routes.ts`). */
@@ -99,6 +112,7 @@ function PhoneIconLink({
 
 export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
   const { themeType } = useTheme();
+  const { ready, authenticated } = usePrivy();
   const pathname = usePathname();
   const bindingParam = useSearchParams().get("binding");
 
@@ -146,6 +160,20 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
     <ChecklistPill label="Get listed" steps={progress.steps} href="/provider" linkAs={Link} />
   ) : null;
 
+  const shellReady = consoleShellReady({
+    demo: demoEnabled(),
+    ready,
+    authenticated,
+    storedToken: getSessionToken() !== null,
+  });
+  if (!shellReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-02" role="status" aria-live="polite">
+        <span className="text-body-13 text-03">Loading your console…</span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-02 tablet:flex-row">
       <div className="sticky top-0 z-30 tablet:hidden">
@@ -174,7 +202,17 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
         bindings={bindings}
         header={pill}
         linkAs={Link}
-        footer={<ThemeToggle />}
+        footer={
+          <div className="flex flex-col items-center gap-2 desktop:items-start">
+            <Link
+              href={PROVIDER_EXPLAINER.href}
+              className="hidden text-body-xs text-02 underline-offset-2 hover:text-01 hover:underline desktop:inline"
+            >
+              {PROVIDER_EXPLAINER.label}
+            </Link>
+            <ThemeToggle />
+          </div>
+        }
       />
 
       {/* Desktop Main: gap 16, padding [22, 26]. Mobile Content
