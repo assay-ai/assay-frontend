@@ -14,7 +14,7 @@ import { deleteBindingCredentials, listBindingCredentials } from "@/services/pro
 
 import { CredentialHeadersForm } from "./credential-headers-form";
 import { originOf } from "./rules";
-import { requestKeysUrl, SIGNATURE_GUIDE_URL, signatureSnippet } from "./signature-guide";
+import { requestKeysUrl, SIGNATURE_GUIDE_URL, SIGNATURE_PACKAGE_NOTE, signatureSnippet } from "./signature-guide";
 
 export interface AuthenticationPanelProps {
   /** null before the first save: the mode is chosen, the credentials form waits. */
@@ -230,6 +230,7 @@ export function AuthenticationPanel({
             </li>
             <li>Refuse a call whose signature is missing, wrong or older than 5 minutes (answer 401).</li>
           </ul>
+          {SIGNATURE_PACKAGE_NOTE ? <p className="text-body-xs text-warning-700">{SIGNATURE_PACKAGE_NOTE}</p> : null}
           <CodeBlock title="Express (Node)" code={signatureSnippet(keysUrl)} />
           <a
             href={SIGNATURE_GUIDE_URL}

@@ -11,6 +11,13 @@
  * served at `/.well-known/assay-request-keys.json` on the API host.
  */
 
+/**
+ * Shown above the snippet while `@assay-ai/provider-verify` is not on npm.
+ * Set to null once the package is published, and the line goes away.
+ */
+export const SIGNATURE_PACKAGE_NOTE: string | null =
+  "The npm package is coming soon; until then follow the Full guide.";
+
 export const SIGNATURE_GUIDE_URL = "https://github.com/assay-ai/assay-provider-verify#readme";
 
 export const SIGNATURE_HEADERS = ["Signature", "Signature-Input", "Content-Digest"] as const;

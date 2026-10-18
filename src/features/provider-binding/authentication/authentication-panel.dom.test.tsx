@@ -69,6 +69,8 @@ describe("AuthenticationPanel choice (D10)", () => {
     expect(screen.getByText("How to check the signature")).toBeTruthy();
     expect(screen.getByText(/older than 5 minutes/)).toBeTruthy();
     expect(screen.getByText(/assayVerify/)).toBeTruthy();
+    // The package is not on npm yet: the copy says so above the snippet.
+    expect(screen.getByText("The npm package is coming soon; until then follow the Full guide.")).toBeTruthy();
     const guide = screen.getByRole("link", { name: /^Full guide/ }) as HTMLAnchorElement;
     expect(guide.href).toBe("https://github.com/assay-ai/assay-provider-verify#readme");
   });
