@@ -233,6 +233,8 @@ const memory = {
   suspended: new Map<string, Suspension>(),
   /** Executed penalties paid back by an approved pay-back here: case id → who asked and when. */
   compensated: new Map<string, { by: string; at: string }>(),
+  /** B18: executions made while the cancel waited, recorded by an approved request here: case id → who and when. */
+  recorded: new Map<string, { by: string; at: string }>(),
   /** Blocks lifted by an approval here: block id → who and when. */
   lifted: new Map<string, Lift>(),
   /** Blocks created here, newest first. */
@@ -256,6 +258,7 @@ interface StoredMemory {
   added: OperatorApproval[];
   suspended: [string, Suspension][];
   compensated: [string, { by: string; at: string }][];
+  recorded?: [string, { by: string; at: string }][];
   lifted: [string, Lift][];
   blocks: AccountBlock[];
   removed: string[];
@@ -276,6 +279,7 @@ function loadMemory(): void {
     memory.added = stored.added;
     memory.suspended = new Map(stored.suspended);
     memory.compensated = new Map(stored.compensated);
+    memory.recorded = new Map(stored.recorded ?? []);
     memory.lifted = new Map(stored.lifted);
     memory.blocks = stored.blocks;
     memory.removed = new Set(stored.removed);
@@ -294,6 +298,7 @@ function saveMemory(): void {
     added: memory.added,
     suspended: [...memory.suspended],
     compensated: [...memory.compensated],
+    recorded: [...memory.recorded],
     lifted: [...memory.lifted],
     blocks: memory.blocks,
     removed: [...memory.removed],
@@ -317,6 +322,8 @@ function nextId(prefix: string): string {
 function caseNow(c: DemoCase): DemoCase {
   // Paid back by an approved pay-back: executed on chain, then compensated (the list's "Closed · paid back").
   if (memory.compensated.has(c.id)) return { ...c, status: "REVERSED" };
+  // B18: an execution recorded here — the mirror now says what the chain did.
+  if (memory.recorded.has(c.id)) return { ...c, chainStatus: "EXECUTED", chainRecord: "EXECUTED" };
   if (!memory.suspended.has(c.id)) return c;
   // Suspending closes the case; a record standing on chain gets its cancel requested.
   const standing = c.chainStatus === "PENDING" || c.chainStatus === "DISPUTED";
@@ -420,6 +427,10 @@ function approve(id: string) {
     // The API answers an approved A-11 with the arbiter's unsigned setBlocked; nothing is blocked yet.
     result = setBlockedCall(String(approval.payload.account ?? ""));
     remember({ id: nextId("log"), code: "A-11", label: "Arbiter on-chain block", action: "arbiter.block", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "chain_blocklist", targetId: String(approval.payload.account ?? ""), reasonCode: bodyText(approval.payload, "reasonCode"), reason: bodyText(approval.payload, "note"), ticketRef: null });
+  } else if (approval.action === "slash.record_execution") {
+    const caseId = String(approval.payload.proposalId ?? "");
+    memory.recorded.set(caseId, { by: approval.requestedBy, at: nowIso() });
+    remember({ id: nextId("log"), code: "S-16", label: "Record an on-chain execution while the cancel waited", action: "slash.execution_recorded", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "slash_proposal", targetId: caseId, reasonCode, reason: note, ticketRef: null });
   } else if (approval.action === "slash.compensated") {
     const caseId = String(approval.payload.proposalId ?? "");
     memory.compensated.set(caseId, { by: approval.requestedBy, at: nowIso() });
@@ -776,6 +787,25 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
     chainRecord: c.chainRecord ?? (STANDING.includes(c.chainStatus) ? "STANDING" : c.chainStatus === "EXECUTED" ? "EXECUTED" : "GONE"),
     chainStanding: c.chainRecord ? c.chainRecord === "STANDING" || c.chainRecord === "UNKNOWN" : STANDING.includes(c.chainStatus),
     upheldViolations30d: c.providerId === NORTHWIND ? 2 : 0,
+    manualActions: demoManualActions(c),
+  };
+}
+
+/**
+ * B18, as the backend offers it: an action only where the demo's own chain
+ * read allows it. The one demo record executed while its cancel waited can be
+ * recorded; nothing else is stuck.
+ */
+function demoManualActions(c: DemoCase): NonNullable<OperatorCaseBrief["manualActions"]> {
+  const waiting = c.chainStatus === "CANCEL_REQUESTED";
+  const refusal = waiting ? ("SWEEP_SETTLES" as const) : ("NOT_CANCEL_REQUESTED" as const);
+  const executed = waiting && c.chainRecord === "EXECUTED";
+  return {
+    closeNothingStanding: { allowed: false, refusal: executed ? "EXECUTED" : refusal },
+    recordExecution: executed
+      ? { allowed: true, refusal: null, appliedMinor: usd(c.penalty).amount }
+      : { allowed: false, refusal, appliedMinor: null },
+    repropose: { allowed: false, refusal: executed ? "EXECUTED" : refusal },
   };
 }
 
@@ -1360,6 +1390,28 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
     body: (path, _query, data) => {
       const id = lastSegment(path, 1);
       return queue("slash.compensated", "S-5", `slash_proposal:${id}`, { proposalId: id, body: { ...data } });
+    },
+  },
+  {
+    // B18 S-16 / S-17: two-person, queued as the API answers them.
+    method: "POST",
+    match: /^\/operator\/cases\/[^/]+\/(record-execution|repropose)$/,
+    body: (path, _query, data) => {
+      const id = lastSegment(path, 1);
+      const record = path.endsWith("/record-execution");
+      return queue(record ? "slash.record_execution" : "slash.repropose", record ? "S-16" : "S-17", `slash_proposal:${id}`, {
+        proposalId: id,
+        body: { ...data },
+      });
+    },
+  },
+  {
+    // B18 S-15: one person; the demo has no case with nothing standing, so this is never offered.
+    method: "POST",
+    match: /^\/operator\/cases\/[^/]+\/close-nothing-standing$/,
+    body: (path) => {
+      const found = CASE_BY_ID.get(lastSegment(path, 1));
+      return { proposalId: lastSegment(path, 1), status: found?.status ?? "CANCELLED", chainStatus: "CANCELLED", chainEpoch: 0 };
     },
   },
   {
