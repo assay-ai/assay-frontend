@@ -201,7 +201,8 @@ export function cancelDeadlineNotice(
     return {
       overdue: !Number.isNaN(at) && now.getTime() >= at,
       text:
-        "We could not confirm what stands on chain for this penalty. Signing the cancel reads the chain first "
+        (!Number.isNaN(at) && now.getTime() >= at ? "If the penalty still stands on chain, its deadline has passed. " : "")
+        + "We could not confirm what stands on chain for this penalty. Signing the cancel reads the chain first "
         + `and says whether there is anything for ${signer} to sign.`,
     };
   }

@@ -43,7 +43,7 @@ export function payingKeyName(readiness: Pick<AgentReadiness, "boundCredential" 
 
 export function newKeyPaysNote(payingKey?: string | null): string {
   return payingKey
-    ? `This key makes free calls only. Your agent pays through its key “${payingKey}”; moved to this one, it can't make paid calls until a payment key is bound to this key too.`
+    ? `This key makes free calls only. Your agent pays through its key “${payingKey}”. If you switch the agent to this key, it can make paid calls only once a payment key is bound to this key as well.`
     : "This key makes free calls only: no payment key is bound to it.";
 }
 

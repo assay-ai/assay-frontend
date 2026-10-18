@@ -165,13 +165,16 @@ describe("C1: an executed record is never \"nothing was taken\"", () => {
     const facts = caseFacts(b, NOW);
     expect(facts.chainUnconfirmed).toBe(true);
     const next = caseNextStep(facts, caseAuthority(b, ADMIN, facts), fmt);
-    expect(next).toMatchObject({ kind: "action", action: "cancel", title: "Check the chain and get the cancel signed" });
-    expect(next.description).toContain("could not confirm what stands on chain");
+    expect(next).toMatchObject({ kind: "action", action: "cancel", title: "Check the chain and get the cancel signed now" });
+    expect(next.description).toContain("We could not confirm what stands there");
     expect(allText(b)).not.toMatch(/anyone can execute/i);
     expect(cancelDeadlineSentence(facts, fmt)).not.toMatch(/anyone can execute/i);
     const notice = cancelDeadlineNotice("CANCEL_REQUESTED", iso(NOW - DAY), new Date(NOW), "eip155:46630", "UNKNOWN");
     expect(notice?.overdue).toBe(true);
     expect(notice?.text).not.toMatch(/anyone can execute/i);
+    // Still urgent (review m2): a failed read may hide a record that stands.
+    expect(next.description).toContain("its deadline has passed");
+    expect(notice?.text).toContain("its deadline has passed");
   });
 });
 
