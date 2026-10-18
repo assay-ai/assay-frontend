@@ -1124,7 +1124,37 @@ function receiptBody(call: DemoCall) {
     evaluatedAt: call.verdict ? settled : null,
     settledAt: charged ? settled : null,
     holdReleasedAt: charged ? null : settled,
+    // The dispute hold: a charged call's payment is held for an hour after it settles.
+    collectableAt: charged && settled ? minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES) : null,
+    disputeWindowEndsAt: charged && settled ? minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES + 1) : null,
   };
+}
+
+/** The dispute hold: how long a charged call's payment stays held after it settles. */
+const HOLD_MINUTES = 60;
+
+/** The catalogue tool id of each tool this account calls (fixtures-explore's ids). */
+export const DEMO_BUYER_TOOL_IDS = Object.fromEntries(TOOL_IDS.map((key) => [key, TOOLS[key].id])) as Record<ToolId, string>;
+export type DemoBuyerTool = ToolId;
+
+/**
+ * A charged, passed call of `tool` that settled `settledMinutesAgo` ago, as
+ * its receipt — for the "Report a bad result" pictures (inside and after the
+ * 1-hour hold) and the calls behind the demo's reports. Not in the calls list:
+ * it would change every total the other screens agree on.
+ */
+export function demoSettledReceipt(intentId: string, tool: ToolId, settledMinutesAgo: number) {
+  return receiptBody({
+    intentId,
+    toolId: tool,
+    minutesAgo: settledMinutesAgo + 1,
+    charged: TOOLS[tool].price,
+    status: "SETTLED",
+    verdict: "PASS",
+    classification: "DATA_RESULT",
+    reasonCode: null,
+    score: 0.91,
+  });
 }
 
 /* ---------------------------------------------------------------- verdicts */
