@@ -48,6 +48,8 @@ export interface NoticeView {
 const DEFAULT_DECIMALS = 6;
 /** The backend's `STAKE_HEADROOM_WARNING_RATIO` (20%), for rows written before `margin` was in the payload. */
 const HEADROOM_PERCENT = 20n;
+/** The backend's grace period, for rows written before `graceDays` was in the payload. */
+const DEFAULT_GRACE_DAYS = 7;
 /** The provider's one reply is accepted for 24 h after filing (`CALL_DISPUTE_SLA.providerReplyMs`). */
 const REPLY_WINDOW_MS = 24 * 3_600_000;
 
@@ -109,19 +111,58 @@ function cancelReason(payload: Payload): { key: string; sentence: string } {
   };
 }
 
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const MINOR = (amount: string): string => penaltyMoney({ amount, asset: "", decimals: DEFAULT_DECIMALS });
+
+/**
+ * The guard for stored text, which is shown only for events this table does
+ * not render or for a row whose payload lacks a field. Some producers still
+ * write minor units, asset ids, ids and ISO times into the text, and the rule
+ * "no raw units, ids or 6-decimal figures in a provider notice" must not
+ * depend on every payload being well-formed.
+ */
+export function sanitizeStoredText(value: string, ctx: Pick<NoticeContext, "now"> = {}): string {
+  return (
+    value
+      // "28470000 solana:…/token:…": minor units with their asset id.
+      .replace(/(\d{1,30}) ([a-z0-9-]+:[^\s/]+\/[^\s]+?)(?=[\s,.;)]|$)/gi, (_m, amount: string) => MINOR(amount))
+      // "A penalty of 28470000", "stands at 40000", "40000 was taken": minor units by context.
+      .replace(/\b(penalty of |stands at |amount of )(\d{4,30})\b(?![.:/])/gi, (_m, lead: string, amount: string) => `${lead}${MINOR(amount)}`)
+      .replace(/^(\d{4,30})(?= (?:was|is|were) )/i, (_m, amount: string) => MINOR(amount))
+      // "100.000000": a figure at the asset's full scale.
+      .replace(/\b(\d{1,30})\.(\d{6})\b/g, (_m, whole: string, fraction: string) => MINOR(`${whole}${fraction}`))
+      // Ids: a binding or a tool is "one of your tools"; an agent is "an agent".
+      .replace(new RegExp(`\\b(?:binding|tool) ${UUID}`, "gi"), "One of your tools")
+      .replace(new RegExp(`\\bagent:? ${UUID}`, "gi"), "an agent")
+      .replace(new RegExp(UUID, "gi"), "(id on the linked page)")
+      // ISO times.
+      .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z/g, (iso) =>
+        formatDateTime(iso, { now: ctx.now, alwaysDay: true, midSentence: true }),
+      )
+  );
+}
+
 export function noticeView(item: NoticeSource, ctx: NoticeContext): NoticeView {
   const p = payloadOf(item);
-  const stored: NoticeView = { title: item.title, body: item.body, target: null, groupKey: null };
+  const stored: NoticeView = {
+    title: sanitizeStoredText(item.title, ctx),
+    body: sanitizeStoredText(item.body, ctx),
+    target: null,
+    groupKey: null,
+  };
   const bindingId = text(p, "bindingId") ?? (item.subjectType === "binding" ? (item.subjectId ?? null) : null);
   const tool = text(p, "toolName") ?? ctx.toolName(bindingId);
   const addStake = { href: routes.stake("stake"), label: "Add stake" };
+  const graceDays = number(p, "graceDays") ?? DEFAULT_GRACE_DAYS;
+  const grace = `${graceDays} day${graceDays === 1 ? "" : "s"}`;
 
   switch (item.event) {
     case "provider.slash_proposed": {
       const penalty = amount(p, "penaltyAmount");
       const from = when(text(p, "earliestExecutionAt"), ctx);
       return {
-        title: `${penalty ? `A ${penaltyMoney(penalty)} penalty` : "A penalty"}${on(tool)} is proposed against your stake`,
+        // "Up to": the proposed figure is uncapped; the penalty page leads with what the chain reserved.
+        title: `${penalty ? `A penalty of up to ${penaltyMoney(penalty)}` : "A penalty"}${on(tool)} is proposed against your stake`,
         body:
           `${from ? `Nothing is taken before ${from}. ` : ""}Open the penalty to see the measurement and the deadline to dispute it. ` +
           "Your tools keep taking calls, and earnings already paid are not touched.",
@@ -176,7 +217,9 @@ export function noticeView(item: NoticeSource, ctx: NoticeContext): NoticeView {
             ? `The stake it reserved stays reserved until ${held}, but nothing can be taken from it.`
             : "Any stake it reserved is free again."),
         target: null,
-        groupKey: `slash-cancelled:${reason.key}:${held ? "held" : "free"}`,
+        // Folded only with the same reason on the same tool: an arbiter win
+        // never merges with a chain refusal, nor one tool's run with another's.
+        groupKey: `slash-cancelled:${reason.key}:${held ? "held" : "free"}:${tool ?? ""}`,
       };
     }
 
@@ -231,7 +274,7 @@ export function noticeView(item: NoticeSource, ctx: NoticeContext): NoticeView {
       return {
         title: `${tool ? `${tool}: your` : "Your"} stake (${formatMoney(staked)}) is within ${formatMoney(margin)} of the ${formatMoney(required)} minimum`,
         body:
-          "Below the minimum, paid calls continue for 7 days, then stop until you add stake. " +
+          `Below the minimum, paid calls continue for ${grace}, then stop until you add stake. ` +
           "A penalty can take you below it. Add stake to keep a margin.",
         target: addStake,
         groupKey: `stake-headroom:${bindingId ?? ""}`,
@@ -247,7 +290,7 @@ export function noticeView(item: NoticeSource, ctx: NoticeContext): NoticeView {
         title: `${tool ?? "One paid tool"}: your stake is below the ${formatMoney(required)} minimum`,
         body:
           `Your stake (${formatMoney(staked)}) is below the ${formatMoney(required)} minimum. ` +
-          `Paid calls continue${until ? ` until ${until}` : " for 7 days"}; unpaid earnings go to your stake meanwhile. ` +
+          `Paid calls continue${until ? ` until ${until}` : ` for ${grace}`}; unpaid earnings go to your stake meanwhile. ` +
           `If it is still below then, ${tool ?? "the tool"} stops taking paid calls. Add stake.`,
         target: addStake,
         groupKey: null,
@@ -258,7 +301,7 @@ export function noticeView(item: NoticeSource, ctx: NoticeContext): NoticeView {
       const required = amount(p, "required");
       return {
         title: `${tool ?? "One paid tool"} stopped taking paid calls: stake below the minimum`,
-        body: `Your stake stayed below the ${required ? `${formatMoney(required)} ` : ""}minimum for 7 days, so paid calls stopped. Add stake to start them again.`,
+        body: `Your stake stayed below the ${required ? `${formatMoney(required)} ` : ""}minimum for ${grace}, so paid calls stopped. Add stake to start them again.`,
         target: addStake,
         groupKey: null,
       };
