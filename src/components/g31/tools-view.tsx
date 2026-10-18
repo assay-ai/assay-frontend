@@ -100,6 +100,20 @@ export function SettlesElsewhere({
   );
 }
 
+/** Connect with "Only these tools" chosen: a key and a Copy away from a working config. */
+export function UseThisTool({ tool }: { tool: { name: string; toolId?: string } }) {
+  const mcpName = mcpToolName(tool);
+  if (!mcpName) return null;
+  return (
+    <Button asChild size="sm" data-testid="use-this-tool">
+      <Link href={routes.connectTools([mcpName])}>
+        <Plug aria-hidden="true" />
+        Use this tool
+      </Link>
+    </Button>
+  );
+}
+
 function ToolDetail({
   tool,
   providers,
@@ -123,7 +137,6 @@ function ToolDetail({
   callsWindow: string;
 }) {
   const chainName = useChainName();
-  const mcpName = mcpToolName(tool);
   const uncharged = tool.listed && tool.charged ? notCharged(tool.listed, tool.charged) : null;
   // The price per chain (D6), led by the chain the buyer has the most funds on.
   const chainPrices = orderChainPrices(tool.prices, leadChains, tool.price);
@@ -151,15 +164,7 @@ function ToolDetail({
       {/* Allow / Block first, naming the agent it is for (Explore's agent picker sets which). */}
       <div className="flex flex-wrap items-center gap-2">
         <ToolAccessControl toolId={tool.toolId} toolName={tool.name} allToolIds={allToolIds} className="self-start" />
-        {mcpName ? (
-          // Connect with "Only these tools" chosen: a key and a Copy away from a working config.
-          <Button asChild size="sm" data-testid="use-this-tool">
-            <Link href={routes.connectTools([mcpName])}>
-              <Plug aria-hidden="true" />
-              Use this tool
-            </Link>
-          </Button>
-        ) : null}
+        <UseThisTool tool={tool} />
       </div>
       {tool.description ? <p className="text-body-13 text-02">{tool.description}</p> : null}
 

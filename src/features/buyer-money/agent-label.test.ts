@@ -7,6 +7,8 @@ describe("agentLabelError — the same rule as PATCH /agents/:id", () => {
     expect(agentLabelError("  Research bot ")).toBeNull();
     expect(agentLabelError("Mia's agent (laptop) — Zoë")).toBeNull();
     expect(agentLabelError("a".repeat(AGENT_LABEL_MAX))).toBeNull();
+    // Counted by code point, like the server: 64 emoji fit.
+    expect(agentLabelError("\u{1F916}".repeat(AGENT_LABEL_MAX))).toBeNull();
   });
 
   it.each([
@@ -15,8 +17,11 @@ describe("agentLabelError — the same rule as PATCH /agents/:id", () => {
     ["too long", "a".repeat(AGENT_LABEL_MAX + 1)],
     ["a newline", "a\nb"],
     ["a tab", "a\tb"],
-    ["a bidi override", "agent‮txt"],
-    ["a zero-width joiner", "a‍b"],
+    ["a bidi override", "agent\u202Etxt"],
+    ["a zero-width joiner", "a\u200Db"],
+    ["only a Hangul filler", "\u3164"],
+    ["only a Braille blank", "\u2800\u2800"],
+    ["only combining marks", "\u034F\u0301"],
   ])("refuses %s", (_name, label) => {
     expect(agentLabelError(label)).not.toBeNull();
   });

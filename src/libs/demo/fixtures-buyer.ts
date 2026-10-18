@@ -1271,6 +1271,11 @@ const STAGING_AGENT = "b71e05a3-2c48-4d90-9f61-38ca7d0b2e54";
 /** Labels renamed on this tab (`PATCH /agents/:id`); a reload starts over. */
 const demoAgentLabels = new Map<string, string>();
 
+/** Forgets the renames (tests). */
+export function resetDemoAgentLabels(): void {
+  demoAgentLabels.clear();
+}
+
 function demoAgents(): { agentId: string; label: string; agentAccount: string; chainId: string; credentialCount: number }[] {
   const rows = [
     {
@@ -1391,7 +1396,7 @@ function freshCredentials(agentId: string) {
       {
         id: "cred_fresh",
         agentId,
-        name: "My agent",
+        name: "Key 1",
         prefix: "assay_live_f00d",
         scopes: ["tools:call"],
         lastUsedAt: stage === "call" ? null : minutesAgo(3),
@@ -1791,9 +1796,11 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     body: (path, _query, data) => {
       const agentId = segment(path);
       const label = typeof data?.label === "string" ? data.label.trim() : "";
-      const agent = demoAgents().find((row) => row.agentId === agentId) ?? demoAgents()[0]!;
+      const agent = demoAgents().find((row) => row.agentId === agentId);
+      // Like the server: an agent that is not this account's is not found.
+      if (!agent) throw new ApiError("ACCOUNT_AGENT_NOT_FOUND", "Agent not found", 404, path);
       if (label) demoAgentLabels.set(agentId, label);
-      return { ...agent, agentId, label: label || agent.label };
+      return { ...agent, label: label || agent.label };
     },
   },
   {
@@ -1898,7 +1905,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       return {
         id: "cred_demo_new",
         agentId: segment(path, 1),
-        name: typeof name === "string" && name.trim() ? name.trim() : "My agent",
+        name: typeof name === "string" && name.trim() ? name.trim() : "Key 1",
         prefix: "assay_live_d3m0",
         token: "assay_live_d3m0_demo-key-shown-once-not-a-real-secret",
         scopes: ["tools:call"],

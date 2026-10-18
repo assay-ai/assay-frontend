@@ -77,8 +77,8 @@ import {
  *
  * The title names what is connected and to which agent ("Connect Research
  * to My agent"). Copy is off while the snippet holds a placeholder: "Create a
- * key and fill it in" comes first, and "Copy the URL only" stays for a person
- * who has their key. The full key lives in this component's memory only.
+ * key and fill it in" comes first, and "Copy the URL only" (in the tabs) stays
+ * for a person who has their key. The full key lives in this component's memory only.
  *
  * On a phone the result comes first and Copy sticks to the bottom; URLs and
  * snippets wrap.
@@ -336,16 +336,6 @@ export function ConnectBody({
               : kind === "everything"
                 ? "Everything"
                 : null;
-  const copyUrlOnly = async () => {
-    if (!url || blocked) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success("URL copied. Your client also needs the header with your key.");
-    } catch {
-      toast.error("Copy did not work here: select the text and copy it.");
-    }
-    handOut();
-  };
   // `?tools=` takes each tool's MCP name (never its display name); tools no provider serves are shown, disabled.
   const toolOptions = catalogue.tools
     .map((t) => ({ tool: t, mcp: mcpToolName(t) }))
@@ -688,11 +678,6 @@ export function ConnectBody({
         >
           Done
         </Button>
-        {url && !blocked && !created ? (
-          <button type="button" className="min-h-10 text-label-13 font-semibold text-primary-600 hover:underline" onClick={() => void copyUrlOnly()} data-testid="connect-copy-url">
-            Copy the URL only
-          </button>
-        ) : null}
         {blocked ? <span className="text-body-xs text-danger-700">Nothing to copy: this agent can use none of these tools.</span> : null}
       </div>
     </>

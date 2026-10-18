@@ -51,10 +51,11 @@ export function getStartedStates(facts: GetStartedFacts): Record<GetStartedStepI
     funds: false,
     pay: !facts.escrowExists,
   };
-  // By invitation: neither blocked nor next, and never "current".
+  // By invitation: paying, and the funds only paying needs, are neither
+  // blocked nor next, and never "current".
   const invitation = payByInvitation(facts);
   if (invitation) blocked.pay = false;
-  const firstOpen = order.find((id) => !done[id] && !blocked[id] && !(id === "pay" && invitation)) ?? null;
+  const firstOpen = order.find((id) => !done[id] && !blocked[id] && !(invitation && OPTIONAL_BY_INVITATION.has(id))) ?? null;
   return Object.fromEntries(
     order.map((id) => [id, done[id] ? "done" : blocked[id] ? "blocked" : id === firstOpen ? "current" : "todo"]),
   ) as Record<GetStartedStepId, SetupStepState>;
@@ -69,12 +70,23 @@ export function payByInvitation(facts: GetStartedFacts): boolean {
   return facts.freeOnly !== true && facts.needsDelegation && !facts.keyBound;
 }
 
-/** Every counted step is done: step 4 by invitation does not hold the checklist open. */
+/**
+ * The steps that only paying needs. While paying is by invitation they are
+ * optional: a deposit then buys nothing, so the checklist must not ask for one.
+ */
+const OPTIONAL_BY_INVITATION: ReadonlySet<GetStartedStepId> = new Set(["funds", "pay"]);
+
+/** Whether a step is optional, not counted: funds and pay while paying is by invitation. */
+export function stepOptional(facts: GetStartedFacts, id: GetStartedStepId): boolean {
+  return payByInvitation(facts) && OPTIONAL_BY_INVITATION.has(id);
+}
+
+/** Every counted step is done: funds and pay by invitation do not hold the checklist open. */
 export function getStartedComplete(facts: GetStartedFacts): boolean {
   const states = getStartedStates(facts);
   const invitation = payByInvitation(facts);
   return (Object.entries(states) as [GetStartedStepId, SetupStepState][]).every(
-    ([id, state]) => state === "done" || (id === "pay" && invitation),
+    ([id, state]) => state === "done" || (invitation && OPTIONAL_BY_INVITATION.has(id)),
   );
 }
 

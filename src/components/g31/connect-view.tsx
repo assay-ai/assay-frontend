@@ -174,7 +174,10 @@ export function ConnectView() {
           // Closed: the preselection was used once; a later "Connect a tool set" starts fresh.
           if (!open && prefill) {
             setPrefill(null);
-            window.history.replaceState(null, "", window.location.pathname);
+            // Only `tools` goes: other parameters and the hash stay.
+            const next = new URL(window.location.href);
+            next.searchParams.delete("tools");
+            window.history.replaceState(window.history.state, "", next);
           }
         }}
         agentId={agent?.agentId ?? null}

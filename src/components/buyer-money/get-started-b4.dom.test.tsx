@@ -76,21 +76,27 @@ afterEach(() => {
 
 // The first test imports the whole Get started tree: give it time under a full run.
 describe("Get started, step 4 by invitation (D14)", { timeout: 30_000 }, () => {
-  it("does not hold the checklist open: key, call and funds done reads All set for free calls", async () => {
-    const out = text(await renderGetStarted());
-    expect(out).toContain("All set: your agent can make free calls");
-    expect(out).not.toContain("3 of 4");
-  });
-
-  it("names the paid path plainly as step 4, optional, while other steps are open", async () => {
+  it("reads All set for free calls after the key and the first call, with no deposit (review M1)", async () => {
     const out = text(
       await renderGetStarted((client) =>
         client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT, maxVoucherAmount: null, maxPerWindow: null, withdrawRequested: null }),
       ),
     );
+    expect(out).toContain("All set: your agent can make free calls");
+    expect(out).not.toMatch(/\d of \d/);
+  });
+
+  it("names funds and paying as optional while the first call is still awaited", async () => {
+    const out = text(
+      await renderGetStarted((client) => {
+        client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [{ ...KEY, lastUsedAt: null }] });
+        client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT, maxVoucherAmount: null, maxPerWindow: null, withdrawRequested: null });
+      }),
+    );
+    expect(out).toContain("1 of 2");
     expect(out).toContain("Paid calls: by invitation during testnet");
-    expect(out).toContain("Optional");
-    expect(out).toContain("2 of 3");
+    expect(out).toContain("Only needed for paid calls, which are by invitation during testnet.");
+    expect(out.match(/Optional/g)?.length).toBe(2);
     expect(out).toContain("Free calls work after step 2. Paid calls are by invitation during testnet.");
   });
 
