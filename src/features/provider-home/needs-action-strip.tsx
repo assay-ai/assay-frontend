@@ -10,7 +10,7 @@ import { formatRemaining, useCountdown } from "@/hooks/useCountdown";
 import { formatDateTime } from "@/libs/utc-time";
 import { cn } from "@/utils";
 
-import type { NeedsActionItem } from "./needs-action";
+import type { NeedsActionItem, WatchItem } from "./needs-action";
 
 function Deadline({ at }: { at: string }) {
   const { msLeft, hasPassed } = useCountdown(at);
@@ -93,5 +93,30 @@ export function NeedsActionStrip({
         ))}
       </ul>
     </section>
+  );
+}
+
+/**
+ * Warnings that need no action yet (D20: a window over the promise with too
+ * few calls for a penalty). Said in the Quality tab's words, in the warning
+ * tone, and not counted in "Needs action" or the badge.
+ */
+export function WatchList({ items }: { items: readonly WatchItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <ul className="flex w-full flex-col gap-2" aria-label="Warnings, no action needed yet">
+      {items.map((item) => (
+        <li key={item.id} className="flex w-full flex-col gap-3 rounded-lg border border-warning-20 bg-01 p-4 tablet:flex-row tablet:items-center tablet:gap-3.5">
+          <CircleAlert aria-hidden="true" className="hidden size-4 shrink-0 text-warning-600 tablet:block" />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <p className="text-label-sm leading-[1.4] text-01">{item.title}</p>
+            <p className="text-body-13 leading-[1.55] text-02">{item.detail}</p>
+          </div>
+          <Button size="sm" variant="secondary" asChild className="self-start tablet:self-center">
+            <Link href={item.href}>See quality</Link>
+          </Button>
+        </li>
+      ))}
+    </ul>
   );
 }

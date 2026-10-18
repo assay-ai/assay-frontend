@@ -5,15 +5,13 @@ import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import { contractNoticeAction, contractNoticeText, contractNoticeTitle, isContractNoticeEvent, readContractNotice } from "@/features/toolsets/contract-notices";
 import { routes } from "@/libs/routes";
-import { formatMoney, symbolForAsset } from "@/utils/money";
+
+import { noticeView, type NoticeContext, type NoticeView } from "./notice-view";
 
 /**
- * One inbox item card.
- *
- * Lives in `_components` rather than inside `page.tsx` so it can be rendered
- * in isolation: `notifications` has no producer anywhere in the backend, so
- * the only way to see this component with data in it is to hand it data
- * directly. See the inbox screen's page docstring for why the row list is empty.
+ * One inbox item card, rendered from the notice's `event` and `payload`
+ * (`notice-view.ts`), so stored rows written in minor units or with ids read
+ * the same as new ones.
  */
 
 /**
@@ -60,35 +58,6 @@ const SEVERITY_ICON = {
   INFO: { Icon: CircleCheck, tone: "text-success-500", border: "border-01" },
 } as const;
 
-/** The platform settles in 6-decimal stablecoins; the notification carries no scale. */
-const NOTIFICATION_ASSET_DECIMALS = 6;
-
-/**
- * The penalty notification's body names the amount in raw minor units and the
- * asset by its chain-scoped id ("Estimated penalty 28470000 solana:…/token:…").
- * Neither is something a person reads, so the pair is rewritten as money.
- * Bodies that do not match are returned untouched.
- */
-export function formatNotificationBody(body: string): string {
-  return body.replace(/(\d{1,30}) ([a-z0-9-]+:[^\s/]+\/[^\s]+?)(?=[\s,.;)]|$)/gi, (_match, amount: string, asset: string) =>
-    formatMoney(
-      { amount, asset, decimals: NOTIFICATION_ASSET_DECIMALS },
-      { symbol: symbolForAsset(asset), decimals: 2 }
-    )
-  );
-}
-
-/**
- * The penalty title carries the amount in raw minor units with no asset at all
- * ("A penalty of 28470000 is proposed against your stake"), so the settlement
- * scale is assumed here too.
- */
-export function formatNotificationTitle(title: string): string {
-  return title.replace(/\b(penalty of )(\d{1,30})\b(?![.:/])/gi, (_match, lead: string, amount: string) =>
-    `${lead}${formatMoney({ amount, asset: "", decimals: NOTIFICATION_ASSET_DECIMALS }, { decimals: 2 })}`
-  );
-}
-
 /** Where a notification's subject lives, when the console has a page for it. */
 export function notificationHref(item: Pick<NotificationItem, "subjectType" | "subjectId">): { href: string; label: string } | null {
   const id = item.subjectId;
@@ -121,21 +90,57 @@ function contractView(item: NotificationItem): { title: string; body: string; ta
   return { title: contractNoticeTitle(item.event, provider), body: contractNoticeText(item.event, provider), target: contractNoticeAction(provider) };
 }
 
-export function InboxItem({ item }: { item: NotificationItem }) {
-  const { Icon, tone, border } = SEVERITY_ICON[item.severity] ?? SEVERITY_ICON.INFO;
+/** No tool names known: a notice without a resolver still never shows an id. */
+const NO_NAMES: NoticeContext = { toolName: () => null };
+
+/** A notice in the provider's words: contract notices from their own copy, the rest from `event` + `payload`. */
+export function inboxView(item: NotificationItem, ctx: NoticeContext = NO_NAMES): NoticeView & { target: { href: string; label: string } | null } {
   const contract = contractView(item);
-  const target = contract?.target ?? notificationHref(item);
+  if (contract) return { title: contract.title, body: contract.body, target: contract.target, groupKey: null };
+  const view = noticeView(item, ctx);
+  return { ...view, target: view.target ?? notificationHref(item) };
+}
+
+/**
+ * One card. `repeats` is how many older notices saying the same thing were
+ * folded into it (see `collapseNotices`); `since` is the oldest of them.
+ */
+export function InboxItem({
+  item,
+  view,
+  repeats = 0,
+  since,
+  unread,
+}: {
+  item: NotificationItem;
+  view?: NoticeView;
+  repeats?: number;
+  since?: string;
+  /** Unread when any folded notice is; defaults to this one's own state. */
+  unread?: boolean;
+}) {
+  const { Icon, tone, border } = SEVERITY_ICON[item.severity] ?? SEVERITY_ICON.INFO;
+  const shown = view ?? inboxView(item);
+  const target = shown.target ?? notificationHref(item);
+  const isUnread = unread ?? !item.readAt;
 
   return (
     <article className={`flex w-full flex-col gap-3 rounded-lg border bg-01 p-4 tablet:flex-row tablet:items-center tablet:gap-3.5 ${border}`}>
       <Icon width={18} height={18} strokeWidth={1.5} aria-hidden="true" className={`hidden shrink-0 tablet:block ${tone}`} />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className="text-label-sm leading-[1.4] text-01">
-          {item.readAt ? null : <span className="mr-1.5 inline-block size-2 rounded-full bg-primary-500 align-middle" aria-label="Unread" />}
-          {contract ? contract.title : formatNotificationTitle(item.title)}
+          {isUnread ? <span className="mr-1.5 inline-block size-2 rounded-full bg-primary-500 align-middle" aria-label="Unread" /> : null}
+          {shown.title}
         </p>
-        <p className="break-words text-body-13 leading-[1.55] text-02 [overflow-wrap:anywhere]">{contract ? contract.body : formatNotificationBody(item.body)}</p>
-        <UtcTime value={item.createdAt} className="text-body-xs text-03" />
+        <p className="break-words text-body-13 leading-[1.55] text-02 [overflow-wrap:anywhere]">{shown.body}</p>
+        <p className="text-body-xs text-03">
+          <UtcTime value={item.createdAt} />
+          {repeats > 0 && since ? (
+            <>
+              {" "}· said {repeats + 1} times since <UtcTime value={since} />
+            </>
+          ) : null}
+        </p>
       </div>
       {target ? (
         <Button size="sm" variant="secondary" asChild className="self-start tablet:self-center">

@@ -1,6 +1,9 @@
 import type { BindingStatus, Money, SlaWindow } from "@/interfaces";
 import type { PenaltyNotice } from "@/features/provider-penalties/use-penalty-summary";
-import { checkWindowScope } from "@/features/provider-sla/reading";
+import { checkWindowScope, slaReading } from "@/features/provider-sla/reading";
+import { penaltyMoney } from "@/features/provider-penalties/money";
+import { stakeStatus } from "@/features/provider-stake/stake-status";
+import type { CallDispute } from "@/services/call-disputes.service";
 import { routes } from "@/libs/routes";
 import { formatMoney } from "@/utils/money";
 
@@ -9,12 +12,19 @@ import { formatMoney } from "@/utils/money";
  * most urgent first, each with the one thing to do about it.
  *
  *   penalty      a pending penalty you can still dispute (countdown to executableAt)
- *   sla          an open window already past half of your promised failure rate
+ *   report       a buyer's bad-result report you can still reply to (countdown to replyDueAt)
  *   stake        your stake no longer covers your paid tools
+ *   sla          an open window already past half of your promised failure rate,
+ *                with enough checked calls for a penalty to be possible (D20)
  *   paused       a tool that stopped taking calls without you asking
+ *
+ * A window over (or near) the promise but still short of its minimum sample
+ * cannot lead to a penalty, so it is not an action: `slaWatchItems` returns it
+ * as a warning notice with the Quality tab's own sentence, and the two pages
+ * never disagree.
  */
 
-export type NeedsActionKind = "penalty" | "sla" | "stake" | "paused";
+export type NeedsActionKind = "penalty" | "report" | "sla" | "stake" | "paused";
 
 export interface NeedsActionItem {
   id: string;
@@ -30,9 +40,11 @@ export interface NeedsActionItem {
 
 export interface NeedsActionInput {
   penalties: readonly PenaltyNotice[];
+  /** Open bad-result reports on the provider's calls. */
+  reports?: readonly Pick<CallDispute, "id" | "bindingId" | "canRespond" | "replyDueAt" | "autoUpholdAt" | "reasonLabel">[];
   openWindows: readonly SlaWindow[];
   bindings: readonly { id: string; toolId: string; status: BindingStatus; endpoint: string }[];
-  stake: { enough: boolean | null; shortfall: Money | null };
+  stake: { enough: boolean | null; shortfall: Money | null; required?: Money | null; staked?: Money | null };
   label: (binding: { toolId: string; endpoint?: string | null }) => string;
   /** Clock for "is this window still open"; injectable for tests. */
   now?: number;
@@ -55,14 +67,35 @@ export function needsActionItems(input: NeedsActionInput): NeedsActionItem[] {
       id: `penalty:${penalty.id}`,
       kind: "penalty",
       tone: "danger",
-      title: `Penalty${penalty.toolName ? ` on ${penalty.toolName}` : ""}${penalty.amount ? `: ${formatMoney(penalty.amount, { decimals: 2 })}` : ""}`,
+      title: `Penalty${penalty.toolName ? ` on ${penalty.toolName}` : ""}${penalty.amount ? `: ${penaltyMoney(penalty.amount)}` : ""}`,
       detail: "Dispute it before the deadline if you think it is wrong. After that it can be taken from your stake.",
       deadline: penalty.executableAt,
       action: { label: "Review", href: penalty.href },
     });
   }
 
+  const now = input.now ?? Date.now();
+  for (const report of input.reports ?? []) {
+    if (!report.canRespond || Date.parse(report.replyDueAt) <= now) continue; // same rule as `repliableReports`
+    const binding = report.bindingId ? input.bindings.find((b) => b.id === report.bindingId) : undefined;
+    const name = binding ? input.label(binding) : null;
+    items.push({
+      id: `report:${report.id}`,
+      kind: "report",
+      tone: "danger",
+      title: `A buyer reported a bad result${name ? ` on ${name}` : ""}: reply needed`,
+      detail: report.autoUpholdAt
+        ? "Reply before the deadline, or the buyer wins: a report with no reply is upheld automatically."
+        : "Reply before the deadline, or an operator decides it without your side.",
+      deadline: report.replyDueAt,
+      action: { label: "Reply", href: routes.providerCallDispute(report.id) },
+    });
+  }
+
   if (input.stake.enough === false) {
+    const health = input.stake.required
+      ? stakeStatus({ required: input.stake.required, staked: input.stake.staked ?? null, enough: false })
+      : null;
     items.push({
       id: "stake",
       kind: "stake",
@@ -70,24 +103,17 @@ export function needsActionItems(input: NeedsActionInput): NeedsActionItem[] {
       title: input.stake.shortfall
         ? `Your stake is ${formatMoney(input.stake.shortfall, { decimals: 2 })} short`
         : "Your stake does not cover your paid tools",
-      detail: "Paid calls go only to tools with enough stake behind them. Add stake to keep earning.",
+      detail: health?.sentence ?? "Paid calls go only to tools with enough stake behind them. Add stake to keep earning.",
       action: { label: "Add stake", opens: "stake" },
     });
   }
 
-  // One row per tool: the window still open now. A window past its deadline is
-  // closed; whatever it decided shows up as a penalty, not as a warning.
-  const now = input.now ?? Date.now();
-  const latestOpen = new Map<string, SlaWindow>();
-  for (const window of input.openWindows) {
-    if (window.deadlineAt && Date.parse(window.deadlineAt) <= now) continue;
-    const seen = latestOpen.get(window.bindingId);
-    if (!seen || (window.deadlineAt ?? "") > (seen.deadlineAt ?? "")) latestOpen.set(window.bindingId, window);
-  }
-  for (const window of latestOpen.values()) {
+  for (const window of openWindowsByTool(input.openWindows, now)) {
     if (window.observedFailureRate === null || window.declaredFailureRate <= 0) continue;
     const share = window.observedFailureRate / window.declaredFailureRate;
     if (share < SLA_WARNING_SHARE && !window.warningLevel) continue;
+    // D20: under the minimum sample no penalty is possible; that is a notice, not an action.
+    if (window.verifiedCalls < window.minVerifiedCalls) continue;
     const binding = input.bindings.find((b) => b.id === window.bindingId);
     const name = input.label(binding ?? { toolId: window.toolId });
     const over = share >= 1;
@@ -119,9 +145,58 @@ export function needsActionItems(input: NeedsActionInput): NeedsActionItem[] {
     });
   }
 
-  const rank: Record<NeedsActionKind, number> = { penalty: 0, stake: 1, sla: 2, paused: 3 };
+  const rank: Record<NeedsActionKind, number> = { penalty: 0, report: 1, stake: 2, sla: 3, paused: 4 };
   return items.sort((a, b) => {
     if (rank[a.kind] !== rank[b.kind]) return rank[a.kind] - rank[b.kind];
     return (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999");
   });
+}
+
+/**
+ * One window per tool: the one still open now. A window past its deadline is
+ * closed; whatever it decided shows up as a penalty, not as a warning.
+ */
+function openWindowsByTool(windows: readonly SlaWindow[], now: number): SlaWindow[] {
+  const latestOpen = new Map<string, SlaWindow>();
+  for (const window of windows) {
+    if (window.deadlineAt && Date.parse(window.deadlineAt) <= now) continue;
+    const seen = latestOpen.get(window.bindingId);
+    if (!seen || (window.deadlineAt ?? "") > (seen.deadlineAt ?? "")) latestOpen.set(window.bindingId, window);
+  }
+  return [...latestOpen.values()];
+}
+
+/** A warning that needs no action yet: shown among the Inbox notices and on Home, not counted. */
+export interface WatchItem {
+  id: string;
+  title: string;
+  /** The Quality tab's own sentence, with its sample ("Not enough calls yet (13 of 400)"). */
+  detail: string;
+  href: string;
+}
+
+/**
+ * D20: windows at or over the warning share whose sample is still below the
+ * minimum. No penalty is possible yet, so they say exactly what the Quality
+ * tab says, as a warning rather than a "Needs action" item.
+ */
+export function slaWatchItems(input: Pick<NeedsActionInput, "openWindows" | "bindings" | "label" | "now">): WatchItem[] {
+  const now = input.now ?? Date.now();
+  const items: WatchItem[] = [];
+  for (const window of openWindowsByTool(input.openWindows, now)) {
+    if (window.observedFailureRate === null || window.declaredFailureRate <= 0) continue;
+    if (window.verifiedCalls >= window.minVerifiedCalls) continue;
+    const share = window.observedFailureRate / window.declaredFailureRate;
+    if (share < SLA_WARNING_SHARE && !window.warningLevel) continue;
+    const binding = input.bindings.find((b) => b.id === window.bindingId);
+    const name = input.label(binding ?? { toolId: window.toolId });
+    const reading = slaReading(window, window.declaredFailureRate, { now });
+    items.push({
+      id: `sla-watch:${window.windowId}`,
+      title: `${name}: ${percent(window.observedFailureRate)} of calls failed in ${checkWindowScope(window, now)}, ${share > 1 ? "over" : "near"} your ${percent(window.declaredFailureRate)} promise`,
+      detail: [reading.advice, reading.sample ? `${reading.sample}.` : null].filter(Boolean).join(" "),
+      href: routes.binding(window.bindingId, "quality"),
+    });
+  }
+  return items;
 }

@@ -35,7 +35,7 @@ describe("inboxHeadline", () => {
         { event: "provider.slash_executed", readAt: "2026-10-01T00:00:00Z", subjectId: "p3" },
       ],
     });
-    expect(breakdown).toEqual({ penalties: 1, notices: 1 });
+    expect(breakdown).toEqual({ penalties: 1, reports: 0, notices: 1 });
     expect(inboxHeadline(breakdown)).toBe("2 new: 1 penalty to decide on, 1 unread notice (marked with a dot).");
     expect(inboxHeadline({ penalties: 0, notices: 0 })).toMatch(/^Nothing new/);
   });
@@ -49,5 +49,22 @@ describe("call disputes in the provider Inbox", () => {
     expect(isProviderEvent("call_dispute.decided", {})).toBe(false);
     expect(isProviderEvent("call_dispute.responded", { role: "buyer" })).toBe(false);
     expect(isProviderEvent("provider_tool.taken_down")).toBe(true);
+  });
+});
+
+describe("open reports and folded notices in the badge", () => {
+  it("counts a report once, not again through its notice, and a folded run once", () => {
+    const breakdown = inboxBreakdown({
+      urgent: [],
+      reports: ["d1"],
+      notifications: [
+        { event: "call_dispute.opened", readAt: null, subjectId: "d1", payload: { role: "provider" } },
+        { event: "provider.stake_headroom_low", readAt: null, subjectId: "b1", payload: { bindingId: "b1" } },
+        { event: "provider.stake_headroom_low", readAt: null, subjectId: "b1", payload: { bindingId: "b1" } },
+      ],
+      groupKey: (item) => (item.event === "provider.stake_headroom_low" ? `headroom:${item.subjectId}` : null),
+    });
+    expect(breakdown).toEqual({ penalties: 0, reports: 1, notices: 1 });
+    expect(inboxHeadline(breakdown)).toBe("2 new: 1 report to reply to, 1 unread notice (marked with a dot).");
   });
 });
