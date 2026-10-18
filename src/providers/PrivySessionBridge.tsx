@@ -20,7 +20,13 @@ import {
 
 import { demoEnabled } from "@/libs/demo/demo-api";
 
-import { applyIdentityChange, handleUnauthorized, isOperatorConsolePath, signedOutLanding } from "./buyer-session";
+import {
+  applyIdentityChange,
+  handleUnauthorized,
+  isOperatorConsolePath,
+  onPublicShell,
+  signedOutLanding,
+} from "./buyer-session";
 
 /**
  * Bridges Privy's client-side auth state onto the axios session used by
@@ -84,10 +90,15 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
   // a navigation actually lands (see the effect below), so a *later* 401 —
   // on the next page — is free to redirect again.
   const redirectingRef = useRef(false);
+  // Set when a 401 left a public page where it was. No navigation will reset
+  // `redirectingRef` then, so the next identity change does: someone who signs
+  // in again on that page, and whose session later expires, is handled again.
+  const stayedRef = useRef(false);
 
   useEffect(() => {
     pathnameRef.current = pathname;
     redirectingRef.current = false;
+    stayedRef.current = false;
   }, [pathname]);
 
   useEffect(() => {
@@ -111,8 +122,8 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
       // visitor at `/` gets How it works). A public page stays put: it needs
       // no session.
       const search = typeof window === "undefined" ? "" : window.location.search;
-      handleUnauthorized(
-        { pathname: pathnameRef.current, search, previous: lastIdentityRef.current },
+      const outcome = handleUnauthorized(
+        { pathname: pathnameRef.current, search, previous: lastIdentityRef.current, publicShell: onPublicShell() },
         {
           clearSessionToken,
           clearCache: () => queryClient.clear(),
@@ -121,6 +132,7 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
           navigate: (href) => router.replace(href),
         },
       );
+      stayedRef.current = outcome === "stay";
     });
   }, [queryClient, router, logout]);
 
@@ -155,6 +167,11 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
         startWalletLink,
       },
     );
+    // A new identity after a 401 that stayed: the burst is over, so a later 401 is handled again.
+    if (reacted !== lastIdentityRef.current && stayedRef.current) {
+      stayedRef.current = false;
+      redirectingRef.current = false;
+    }
     lastIdentityRef.current = reacted;
     return cancel;
   }, [ready, authenticated, user?.id, getAccessToken, queryClient, onOperatorConsole]);

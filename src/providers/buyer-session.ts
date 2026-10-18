@@ -107,6 +107,30 @@ const PUBLIC_PAGES = new Set([
 ]);
 const PUBLIC_PREFIXES = ["/catalogue/"];
 
+/**
+ * Public shells now mounted (`components/layout/public-shell.tsx`). The 404
+ * page renders in the public shell at an address nobody can list, so it
+ * counts as public by what is on screen rather than by its path. Only the
+ * `(public)` layout and the 404 page render the shell (a test pins that).
+ */
+let publicShells = 0;
+
+/** Called by a mounting public shell; the returned function unregisters it. */
+export function markPublicShell(): () => void {
+  publicShells += 1;
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    publicShells -= 1;
+  };
+}
+
+/** Whether a public shell is on screen. */
+export function onPublicShell(): boolean {
+  return publicShells > 0;
+}
+
 /** Whether `pathname` is a public page, readable with no session. */
 export function isPublicPath(pathname: string | null | undefined): boolean {
   if (!pathname || !pathname.startsWith("/") || pathname.split("/").some((seg) => seg === ".." || seg === ".")) {
@@ -114,6 +138,15 @@ export function isPublicPath(pathname: string | null | undefined): boolean {
   }
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   return PUBLIC_PAGES.has(path) || PUBLIC_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+export interface UnauthorizedInput {
+  pathname: string;
+  search: string;
+  /** The identity this page load last resolved: string = signed in, null = signed out, undefined = not resolved yet. */
+  previous: string | null | undefined;
+  /** A public shell is on screen (`onPublicShell()`): the 404 page, at an address that is not a public path. */
+  publicShell?: boolean;
 }
 
 /**
@@ -130,13 +163,8 @@ export function isPublicPath(pathname: string | null | undefined): boolean {
  * on `/` they get the product's front page (How it works), anywhere else plain
  * sign-in that returns them here.
  */
-export function unauthorizedTarget(input: {
-  pathname: string;
-  search: string;
-  /** The identity this page load last resolved: string = signed in, null = signed out, undefined = not resolved yet. */
-  previous: string | null | undefined;
-}): string {
-  if (isPublicPath(input.pathname)) return `${input.pathname}${input.search}`;
+export function unauthorizedTarget(input: UnauthorizedInput): string {
+  if (isPublicPath(input.pathname) || input.publicShell) return `${input.pathname}${input.search}`;
   const hadSession = typeof input.previous === "string";
   if (!hadSession && input.pathname === "/") return "/how-it-works";
   return loginHref({ next: `${input.pathname}${input.search}`, reason: hadSession ? "expired" : undefined });
@@ -161,10 +189,7 @@ export interface UnauthorizedEffects {
  * expiry. Then a protected page goes to sign-in, and a public page stays put,
  * its queries reset so they refetch without the token.
  */
-export function handleUnauthorized(
-  input: { pathname: string; search: string; previous: string | null | undefined },
-  effects: UnauthorizedEffects,
-): void {
+export function handleUnauthorized(input: UnauthorizedInput, effects: UnauthorizedEffects): "stay" | "navigate" {
   effects.clearSessionToken();
   const target = unauthorizedTarget(input);
   const stay = target === `${input.pathname}${input.search}`;
@@ -172,7 +197,9 @@ export function handleUnauthorized(
   else effects.clearCache();
   // Best-effort: the redirect must not wait on it or get blocked by it failing.
   void effects.logout().catch(() => {});
-  if (!stay) effects.navigate(target);
+  if (stay) return "stay";
+  effects.navigate(target);
+  return "navigate";
 }
 
 /**
