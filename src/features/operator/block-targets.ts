@@ -90,14 +90,14 @@ export function noTargetText(query: string): string {
 }
 
 /**
- * A block's subject in words: the organization's name (the server names every
- * one, listed or not), or the short wallet. The short id is only for a row
- * whose organization no longer exists.
+ * A block's subject in words: the organization's public name (the provider's
+ * name or its @handle, from the server), or the short wallet. An organization
+ * with neither reads "Unnamed organization" and a short id.
  */
 export function blockSubjectLabel(
   block: Pick<AccountBlock, "subjectKind" | "subject"> & { subjectName?: string | null },
   providerName: (id: string) => string | null,
 ): string {
-  if (block.subjectKind === "ORGANIZATION") return block.subjectName ?? providerName(block.subject) ?? `Organization ${block.subject.slice(0, 8)}…`;
+  if (block.subjectKind === "ORGANIZATION") return block.subjectName ?? providerName(block.subject) ?? `Unnamed organization ${block.subject.slice(0, 8)}…`;
   return walletLabel(block.subject);
 }

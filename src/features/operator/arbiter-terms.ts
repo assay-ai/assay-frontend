@@ -32,10 +32,21 @@ function readAll(): Record<string, Kept> {
   }
 }
 
-/** The last split read for a chain, or null. Never throws. */
-export function lastKnownSplit(chainId: string): Kept | null {
+/** A kept read older than this is not drawn: too old to stand for "the split". */
+export const LAST_KNOWN_MAX_AGE_MS = 7 * 86_400_000;
+
+/**
+ * The last split read for a chain, or null: also null when the stored value is
+ * out of range (a share is 1 to 10000 basis points), dated in the future, or
+ * older than a week. Never throws.
+ */
+export function lastKnownSplit(chainId: string, now: number = Date.now()): Kept | null {
   const kept = readAll()[chainId];
-  return kept && Number.isFinite(kept.readAt) && Number.isInteger(kept.terms?.slashAgentBps) ? kept : null;
+  if (!kept || !Number.isFinite(kept.readAt)) return null;
+  const bps = kept.terms?.slashAgentBps;
+  if (!Number.isInteger(bps) || bps <= 0 || bps > 10_000) return null;
+  if (kept.readAt > now || now - kept.readAt > LAST_KNOWN_MAX_AGE_MS) return null;
+  return kept;
 }
 
 /** Keep a successful read. Never throws. */

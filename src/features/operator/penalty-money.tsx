@@ -55,6 +55,17 @@ export function keptShareText(agentBps: number, platformBps: number = SLASH_PLAT
   return pct(Math.max(0, 10_000 - agentBps - platformBps));
 }
 
+/** The note under a split drawn from the last read, not a live one: when it was read. */
+export function lastReadNote(lastKnownAt: number): string {
+  return `Split as last read from the chain, ${formatDateTime(lastKnownAt)}; it could not be read just now.`;
+}
+
+/** The side panel's "Taken from the stake" hint, labelled when the split is the last read. */
+export function reductionHint(agentBps: number, lastKnownAt: number | null = null): string {
+  const base = `The agents' and the platform's shares. The provider's ${keptShareText(agentBps)} is never taken.`;
+  return lastKnownAt ? `${base} ${lastReadNote(lastKnownAt)}` : base;
+}
+
 /**
  * How much the provider's stake goes down if it executes: agents plus
  * platform. With `display`, the two parts as the money card draws them (to the
@@ -139,7 +150,7 @@ export function PenaltyMoney({
       ) : null}
       {heading.split && split && lastKnownAt ? (
         <p className="text-body-xs text-03">
-          Split as last read from the chain, {formatDateTime(lastKnownAt)}; it could not be read just now.
+          {lastReadNote(lastKnownAt)}
         </p>
       ) : null}
     </section>

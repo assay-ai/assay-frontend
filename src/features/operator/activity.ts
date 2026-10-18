@@ -67,7 +67,7 @@ export function isOfKind(entry: Pick<OverrideLogEntry, "code" | "action" | "targ
   downloaded and never signed must not read as done.
 */
 const VERBS: Readonly<Record<string, string>> = {
-  "A-2": "paused",
+  "A-2": "paused or suspended the binding",
   "A-9": "blocked",
   "A-10": "lifted the block on",
   "A-11": "prepared the on-chain block of",
@@ -77,8 +77,8 @@ const VERBS: Readonly<Record<string, string>> = {
   "A-15": "delisted",
   "A-16": "took down",
   "A-17": "took down the public name",
-  "A-18": "confirmed the takedown of",
-  "A-19": "reverted the takedown of",
+  "A-18": "confirmed the cutoff of",
+  "A-19": "reverted the cutoff of",
   "A-20": "relisted",
   "A-21": "renamed the public name",
   "A-22": "reassigned the public name",

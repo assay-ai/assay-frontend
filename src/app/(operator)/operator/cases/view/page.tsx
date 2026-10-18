@@ -30,7 +30,7 @@ import { dollars } from "@/features/operator/contract-settings";
 import { eligibleApprovers, isLiveApproval } from "@/features/operator/inbox";
 import { OperatorMeasurement } from "@/features/operator/operator-measurement";
 import { PENALTY_APPROVAL_CODES } from "@/features/operator/penalty-list";
-import { keptShareText, PenaltyMoney, stakeReduction } from "@/features/operator/penalty-money";
+import { PenaltyMoney, reductionHint, stakeReduction } from "@/features/operator/penalty-money";
 import { reasonLabel } from "@/features/operator/reasons";
 import { rememberRecentPenalty } from "@/features/operator/recent-penalties";
 import { rulingHref } from "@/features/operator/ruling-link";
@@ -418,7 +418,7 @@ export default function OperatorCasePage() {
             {reduction && split && (facts.stage === "executed" || !MOVES_NOTHING.includes(facts.stage)) ? (
               <Fact
                 label={facts.stage === "executed" ? "Taken from the stake" : facts.stage === "upheld" ? "Taken from the stake when it executes" : "Taken from the stake if upheld"}
-                hint={`The agents' and the platform's shares. The provider's ${keptShareText(split.agentBps)} is never taken.`}
+                hint={reductionHint(split.agentBps, split.lastKnown ? split.readAt : null)}
               >
                 {formatMoney(reduction)}
               </Fact>
@@ -438,7 +438,7 @@ export default function OperatorCasePage() {
               </Fact>
             ) : null}
             {config.data ? (
-              <Fact label="Verifier daily limit" hint="The most one verifier key can take in a day, all penalties together. Enforced on chain; set on Contracts.">
+              <Fact label="Verifier daily limit" hint="The most one verifier key can penalise in a day, all parts together. Enforced on chain; set on Contracts.">
                 {dollars(config.data.params.verifierDailyCap, config.data.asset.decimals)}
               </Fact>
             ) : null}

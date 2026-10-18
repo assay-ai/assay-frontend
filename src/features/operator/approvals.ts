@@ -238,9 +238,9 @@ export function limitText(minor: unknown, asset: ApprovalContext["asset"]): stri
   return amount === "0" ? "$0" : `${amount} minor units`;
 }
 
-/** A block's subject in words: `wallet 0x0000…0abc`, the organization's name, or `organization 1b2c3d4e…` when it has none. */
+/** A block's subject in words: `wallet 0x0000…0abc`, the organization's public name, or `unnamed organization 1b2c3d4e…`. */
 function blockSubject(block: Pick<AccountBlock, "subjectKind" | "subject"> & { subjectName?: string | null }): string {
-  if (block.subjectKind === "ORGANIZATION") return block.subjectName ?? `organization ${shortId(block.subject)}`;
+  if (block.subjectKind === "ORGANIZATION") return block.subjectName ?? `unnamed organization ${shortId(block.subject)}`;
   const parts = block.subject.split(":");
   const address = parts.length >= 3 ? parts.slice(2).join(":") : block.subject;
   const chain = parts.length >= 3 ? `${parts[0]}:${parts[1]}` : "eip155:1";
