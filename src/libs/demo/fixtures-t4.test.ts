@@ -118,7 +118,7 @@ describe("operator queues", () => {
   it("has open call disputes with every SLA mark", () => {
     const rows = call<{ items: OperatorCallDisputeRow[] }>("GET", "/operator/call-disputes", { state: "OPEN" }).items;
     const marks = new Set(rows.flatMap((d) => slaMarks(d, Date.now()).map((m) => m.label)));
-    for (const label of ["Provider may reply", "Provider silent", "Auto-uphold at 72 h", "Decide by 72 h", "Paged · auto-uphold at 72 h", "Paged · decide by 72 h", "Overdue: decide now"]) expect(marks).toContain(label);
+    for (const label of ["Provider may reply", "Provider silent", "Auto-uphold from 72 h", "Decide by 72 h", "Paged · auto-uphold from 72 h", "Paged · decide by 72 h", "Overdue: decide now"]) expect(marks).toContain(label);
     expect(rows.some((d) => d.buyerHistory.flagged)).toBe(true);
     expect(call<{ items: OperatorCallDisputeRow[] }>("GET", "/operator/call-disputes", { state: "OPEN", flaggedOnly: true }).items.every((d) => d.buyerHistory.flagged)).toBe(true);
     const twoPerson = rows.find((d) => d.needsSecondOperator)!;

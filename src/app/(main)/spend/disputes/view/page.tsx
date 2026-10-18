@@ -7,9 +7,8 @@ import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { PageState } from "@/components/patterns/page-state";
-import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
-import { buyerStatus, BUYER_COPY, disputeErrorText, refundedBeforeDecision } from "@/features/call-disputes/model";
+import { buyerStatus, BUYER_COPY, disputeErrorText, disputeReasonLabel, fullDateTime, refundedBeforeDecision } from "@/features/call-disputes/model";
 import { CallLink, callDisputeKeys, DisputeChip, DisputeTimeline, EvidencePanes, useNow } from "@/features/call-disputes/ui";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
@@ -27,7 +26,7 @@ import { toast } from "@/utils/toast";
 function ReportContent() {
   const id = useSearchParams().get("id") ?? "";
   const queryClient = useQueryClient();
-  const names = useEntityNames({ kinds: ["tool"] });
+  const names = useEntityNames({ kinds: ["tool", "provider"] });
   const now = useNow(30_000);
   const report = useQuery({ queryKey: callDisputeKeys.one(id), queryFn: () => getCallDispute(id), enabled: Boolean(id), retry: 0 });
   const [confirming, setConfirming] = React.useState(false);
@@ -66,14 +65,23 @@ function ReportContent() {
   const d = report.data;
   const status = buyerStatus(d, now);
   const amount = d.amount ? formatMoney(d.amount, { decimals: 4 }) : null;
+  const providerName = names.lookup("provider", d.providerId);
+  const callAt = typeof d.evidence?.call?.createdAt === "string" ? d.evidence.call.createdAt : null;
   return frame(
     <>
       <header className="flex flex-col gap-1.5">
         <h1 className="break-all font-mono text-heading-md text-01">{d.toolId ? names.name("tool", d.toolId) : "Reported call"}</h1>
+        {providerName || callAt ? (
+          <p className="text-body-13 text-02" data-testid="report-call-line">
+            {providerName ? `by ${providerName}` : null}
+            {providerName && callAt ? " · " : null}
+            {callAt ? `call on ${fullDateTime(callAt, now)}` : null}
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-2">
           <DisputeChip view={status} />
           <span className="text-body-13 text-03">
-            {d.reasonLabel} · reported <UtcTime value={d.createdAt} midSentence />
+            {disputeReasonLabel(d)} · reported {fullDateTime(d.createdAt, now)}
             {amount ? ` · the call cost ${amount}` : ""}
           </span>
         </div>
