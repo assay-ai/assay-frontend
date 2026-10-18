@@ -18,9 +18,10 @@ import { cn } from "@/utils";
 import { PageHeader } from "./chrome";
 
 /**
- * Account › Activity log (`/audit-log`): who changed what, as plain sentences
+ * Account › Account history (`/audit-log`): who changed what, as plain sentences
  * in day-grouped cards ("You changed daily cap from 40.00 to 75.00 · 14:02").
- * Calls are receipts, not audit events, and stay under Activity › Calls.
+ * Calls are receipts, not audit events, and stay under Activity › Calls. Not
+ * called "Activity log": Activity is the calls-and-spend section.
  *
  * No search box: `GET /audit-log` ignores `search` today (BUG-R2-B4-02).
  * Export is not offered until there is something to export to.
@@ -101,7 +102,7 @@ export function AuditLogView() {
 
   return (
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
-      <PageHeader title="Activity log" />
+      <PageHeader title="Account history" />
       <p className="-mt-2 text-body-13 text-03">
         Who changed what on your account: spending limits, agent keys and alerts. Individual calls are under Activity › Calls.
       </p>
@@ -127,14 +128,14 @@ export function AuditLogView() {
       {log.isError ? (
         <PageState
           kind="error"
-          title="The activity log could not be loaded"
-          description="This is not an empty log. Try again in a moment."
+          title="Your account history could not be loaded"
+          description="This is not an empty history. Try again in a moment."
           onRetry={() => void log.refetch()}
           code={log.error instanceof ApiError ? log.error.code : null}
           details={log.error.message}
         />
       ) : log.isPending ? (
-        <PageState kind="loading" rows={6} label="Loading the activity log" />
+        <PageState kind="loading" rows={6} label="Loading your account history" />
       ) : visible.length === 0 ? (
         entries.length > 0 ? (
           <PageState
