@@ -306,13 +306,36 @@ export function staleChainSentence(stale: { lagSeconds: number | null }): string
  * past their deadline, and the section title "Cancels to sign (4, 3 overdue)".
  * `nextDeadline` is the list's (the instant it must be signed by). Pure.
  */
-export function cancelsDue(rows: readonly { nextDeadline: string | null }[], now: number = Date.now()): { count: number; overdue: number; title: string } {
+export function cancelsDue(
+  rows: readonly { nextDeadline: string | null }[],
+  now: number = Date.now(),
+  more = false,
+): { count: number; overdue: number; title: string } {
   const overdue = rows.filter((row) => {
     const at = row.nextDeadline ? Date.parse(row.nextDeadline) : Number.NaN;
     return !Number.isNaN(at) && at <= now;
   }).length;
   const count = rows.length;
-  return { count, overdue, title: `Cancels to sign (${count}${overdue > 0 ? `, ${overdue} overdue` : ""})` };
+  // More than one page: the count is a floor ("100+"), never a wrong exact number.
+  return { count, overdue, title: `Cancels to sign (${count}${more ? "+" : ""}${overdue > 0 ? `, ${overdue}${more ? "+" : ""} overdue` : ""})` };
+}
+
+/**
+ * What Home and the nav badge both add to the Needs-you count, built in one
+ * place so the two can never be assembled differently. Pure.
+ */
+export function needsYouWork(base: ToolWork, cancels: number, toolRequestsOverdue: number): ToolWork {
+  return { ...base, cancels, toolRequestsOverdue };
+}
+
+/**
+ * Why Home may not show a calm "Nothing needs you" (D16): stale chain data,
+ * or chain freshness that could not be read at all. Null when it may. Pure.
+ */
+export function calmStateBlocker(health: { stale: { lagSeconds: number | null } | null; unreadable: boolean }): string | null {
+  if (health.stale) return staleChainSentence(health.stale);
+  if (health.unreadable) return "Can't confirm: chain data freshness could not be read (disputes and rulings may be missing)";
+  return null;
 }
 
 /** Tool requests past their answer deadline (`firstResponseDueAt`). Pure. */

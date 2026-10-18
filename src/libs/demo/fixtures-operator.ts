@@ -462,6 +462,10 @@ interface DemoCase {
   outcome?: string | null;
   /** The window's measurement: calls posted and verified, failed, and the declared failure rate. */
   m: { posted: number; verified: number; failed: number; sla: number };
+  /** What the chain shows (the brief's `chainRecord`), when it is not what the mirror implies. */
+  chainRecord?: "STANDING" | "EXECUTED" | "GONE" | "UNKNOWN";
+  /** A case still in the retired in-app objection process (the list's `DISPUTED`, "Old process"). */
+  oldProcess?: boolean;
 }
 
 const CASES: DemoCase[] = [
@@ -617,6 +621,42 @@ const CASES: DemoCase[] = [
     outcome: "UPHELD",
     m: { posted: 300, verified: 208, failed: 14, sla: 0.02 },
   },
+  // B11: an overturned case whose record a stranger executed while its cancel waited.
+  {
+    id: "6a0f3b9e-7c21-4d58-9e04-b1c2d3e4f5a6",
+    providerId: VERDANT,
+    tool: "geo_tiles",
+    binding: "Verdant tiles",
+    window: "w_42",
+    penalty: "7.25",
+    status: "OVERTURNED",
+    chainStatus: "CANCEL_REQUESTED",
+    proposedMinutesAgo: 5 * DAY,
+    executableIn: 22 * HOUR,
+    disputedMinutesAgo: null,
+    requestId: `0x${"6a".repeat(32)}`,
+    resolvedMinutesAgo: 3 * DAY,
+    outcome: "OVERTURNED_PLATFORM_DEFECT",
+    chainRecord: "EXECUTED",
+    m: { posted: 320, verified: 210, failed: 16, sla: 0.03 },
+  },
+  // B11 / D15: a case still in the retired objection process, never written on chain.
+  {
+    id: "e1d2c3b4-a596-4870-8f9e-0a1b2c3d4e5f",
+    providerId: TIDEWATER,
+    tool: "fx_rates",
+    binding: "Tidewater FX",
+    window: "w_29",
+    penalty: "3.60",
+    status: "AWAITING_SECOND",
+    chainStatus: "PROPOSING",
+    proposedMinutesAgo: 5 * DAY,
+    executableIn: 2 * DAY,
+    disputedMinutesAgo: null,
+    requestId: `0x${"e1".repeat(32)}`,
+    oldProcess: true,
+    m: { posted: 280, verified: 190, failed: 11, sla: 0.03 },
+  },
 ];
 
 const CASE_BY_ID = new Map(CASES.map((c) => [c.id, c]));
@@ -733,7 +773,8 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
     chainExecutableAt: executableAt,
     chainDisputedParts: original.chainStatus === "DISPUTED" ? 1 : 0,
     // Every demo record that may stand does (B11): Pending, Disputed, or under a requested cancel.
-    chainStanding: STANDING.includes(c.chainStatus),
+    chainRecord: c.chainRecord ?? (STANDING.includes(c.chainStatus) ? "STANDING" : c.chainStatus === "EXECUTED" ? "EXECUTED" : "GONE"),
+    chainStanding: c.chainRecord ? c.chainRecord === "STANDING" || c.chainRecord === "UNKNOWN" : STANDING.includes(c.chainStatus),
     upheldViolations30d: c.providerId === NORTHWIND ? 2 : 0,
   };
 }
@@ -834,6 +875,7 @@ function arbiterDispute(original: DemoCase): ArbiterDispute {
 }
 
 const DISPUTED = CASES.filter((c) => c.chainStatus === "DISPUTED");
+const OLD_PROCESS = CASES.filter((c) => c.oldProcess);
 
 const PROVIDER_NAMES: Record<string, string> = {
   [HELIOS]: "Helios Data Labs",
@@ -861,6 +903,7 @@ function listStatus(c: DemoCase): OperatorCaseStatus {
   if (c.expired) return "EXPIRED";
   if (c.chainStatus === "CANCELLED" || CLOSED_WITHOUT_PENALTY.includes(c.status)) return "CANCELLED";
   if (c.chainStatus === "DISPUTED") return "CHAIN_DISPUTED";
+  if (c.oldProcess) return "DISPUTED";
   return "PROPOSED";
 }
 
@@ -1167,11 +1210,11 @@ function health(): PlatformHealth {
     policiesTotal: 31,
     stakeLocked: usd("48210.00"),
     providersWithStake: 8,
-    // No demo case is in the retired objection process (D15); the deprecated names carry the same figure.
-    oldProcessCases: 0,
-    oldestOldProcessCaseAgeSeconds: null,
-    openDisputes: 0,
-    oldestOpenDisputeAgeSeconds: null,
+    // The retired objection process (D15); the deprecated names carry the same figure.
+    oldProcessCases: OLD_PROCESS.length,
+    oldestOldProcessCaseAgeSeconds: OLD_PROCESS.length > 0 ? 5 * 86_400 : null,
+    openDisputes: OLD_PROCESS.length,
+    oldestOpenDisputeAgeSeconds: OLD_PROCESS.length > 0 ? 5 * 86_400 : null,
     chainState: [
       {
         chainId: DEMO_CHAIN_ID,

@@ -19,7 +19,7 @@ const ADMIN: Pick<OperatorIdentity, "roles" | "authorityLimit"> = { roles: ["ADM
 function brief(overrides: {
   status?: string;
   chainStatus?: OperatorCaseBrief["chainStatus"];
-  chainStanding?: boolean;
+  chainRecord?: OperatorCaseBrief["chainRecord"];
   executableAt?: string | null;
   proposedAt?: string;
 }): OperatorCaseBrief {
@@ -71,7 +71,7 @@ function brief(overrides: {
     chainStatus: overrides.chainStatus ?? "CANCEL_REQUESTED",
     chainExecutableAt: overrides.executableAt === undefined ? iso(NOW - DAY) : overrides.executableAt,
     chainDisputedParts: 0,
-    ...(overrides.chainStanding === undefined ? {} : { chainStanding: overrides.chainStanding }),
+    ...(overrides.chainRecord === undefined ? {} : { chainRecord: overrides.chainRecord }),
   } as OperatorCaseBrief;
 }
 
@@ -84,20 +84,21 @@ function allText(b: OperatorCaseBrief): string {
 
 describe("a cancel with nothing standing on chain (case 34ccdb62)", () => {
   it("reads as cancelled, with nothing to execute and no signature step", () => {
-    const b = brief({ chainStanding: false });
+    const b = brief({ chainRecord: "GONE" });
     const facts = caseFacts(b, NOW);
     expect(facts.stage).toBe("cancelled");
     expect(facts.nothingOnChain).toBe(true);
     const authority = caseAuthority(b, ADMIN, facts);
     expect(authority.cancel).toBe(false);
     const next = caseNextStep(facts, authority, fmt);
-    expect(next).toMatchObject({ kind: "done", action: null });
+    // I1: the side still reads "cancel requested": the one step is to have the backend close it.
+    expect(next).toMatchObject({ kind: "action", action: "close-chain" });
     expect(next.description).toContain("Nothing is on chain: nothing can be executed");
     expect(allText(b)).not.toMatch(/anyone can execute/i);
   });
 
   it("an overdue cancel that still stands keeps its urgent step", () => {
-    const b = brief({ chainStanding: true });
+    const b = brief({ chainRecord: "STANDING" });
     const facts = caseFacts(b, NOW);
     expect(facts.stage).toBe("cancel-requested");
     const next = caseNextStep(facts, caseAuthority(b, ADMIN, facts), fmt);
@@ -110,7 +111,7 @@ describe("a cancel with nothing standing on chain (case 34ccdb62)", () => {
   });
 
   it("a cancel still requested on an open case, with nothing standing, has no signature step", () => {
-    const b = brief({ status: "UPHELD", chainStanding: false });
+    const b = brief({ status: "UPHELD", chainRecord: "GONE" });
     const facts = caseFacts(b, NOW);
     expect(facts.stage).toBe("cancel-requested");
     expect(caseAuthority(b, ADMIN, facts).cancel).toBe(false);
@@ -119,18 +120,68 @@ describe("a cancel with nothing standing on chain (case 34ccdb62)", () => {
   });
 
   it("an executable record with nothing standing never says anyone can execute it", () => {
-    const b = brief({ status: "PROPOSED", chainStatus: "PENDING", chainStanding: false });
+    const b = brief({ status: "PROPOSED", chainStatus: "PENDING", chainRecord: "GONE" });
     expect(caseFacts(b, NOW).stage).toBe("executable");
     expect(allText(b)).not.toMatch(/anyone/i);
     expect(allText(b)).toContain("Nothing is on chain");
   });
 
   it("the cancel notice says the same", () => {
-    expect(cancelDeadlineNotice("CANCEL_REQUESTED", iso(NOW - DAY), new Date(NOW), "eip155:46630", false)).toEqual({
+    expect(cancelDeadlineNotice("CANCEL_REQUESTED", iso(NOW - DAY), new Date(NOW), "eip155:46630", "GONE")).toEqual({
       overdue: false,
       text: "Nothing is on chain: nothing can be executed, and there is nothing to sign.",
     });
-    expect(cancelDeadlineNotice("CANCEL_REQUESTED", iso(NOW - DAY), new Date(NOW), "eip155:46630", true)?.overdue).toBe(true);
+    expect(cancelDeadlineNotice("CANCEL_REQUESTED", iso(NOW - DAY), new Date(NOW), "eip155:46630", "STANDING")?.overdue).toBe(true);
+  });
+});
+
+describe("C1: an executed record is never \"nothing was taken\"", () => {
+  it("a closed case whose record was executed while the cancel waited reads as executed, as an alert", () => {
+    const b = brief({ chainRecord: "EXECUTED" });
+    const facts = caseFacts(b, NOW);
+    expect(facts.stage).toBe("cancel-requested");
+    expect(facts.executedWhileCancelWaited).toBe(true);
+    expect(facts.nothingOnChain).toBe(false);
+    const authority = caseAuthority(b, ADMIN, facts);
+    expect(authority.cancel).toBe(false);
+    const next = caseNextStep(facts, authority, fmt);
+    expect(next).toMatchObject({ title: "Executed on chain while the cancel waited", alert: true, action: null });
+    expect(next.description).toContain("The stake was taken");
+    const text = allText(b);
+    expect(text).not.toMatch(/Nothing was taken|Nothing is on chain|nothing can be executed/i);
+    expect(cancelDeadlineNotice("CANCEL_REQUESTED", iso(NOW - DAY), new Date(NOW), "eip155:46630", "EXECUTED")?.text).toContain("stake was taken");
+  });
+
+  it("UNKNOWN reads as standing: the usual cancel step", () => {
+    const facts = caseFacts(brief({ chainRecord: "UNKNOWN" }), NOW);
+    expect(facts.stage).toBe("cancel-requested");
+    expect(facts.nothingOnChain).toBe(false);
+  });
+});
+
+describe("I1: a cancel-requested side with nothing on chain can be closed", () => {
+  it("offers Close the on-chain side to who gets cancels signed", () => {
+    const b = brief({ chainRecord: "GONE" });
+    const facts = caseFacts(b, NOW);
+    expect(facts.closeOutstanding).toBe(true);
+    const authority = caseAuthority(b, ADMIN, facts);
+    expect(authority.closeChain).toBe(true);
+    expect(caseNextStep(facts, authority, fmt)).toMatchObject({ kind: "action", action: "close-chain", title: "Close the on-chain side" });
+  });
+
+  it("someone who cannot sees nothing to do, and who can", () => {
+    const b = brief({ chainRecord: "GONE" });
+    const facts = caseFacts(b, NOW);
+    const support = { roles: ["SUP"], authorityLimit: null } as never;
+    const authority = caseAuthority(b, support, facts);
+    expect(authority.closeChain).toBe(false);
+    expect(caseNextStep(facts, authority, fmt)).toMatchObject({ kind: "done", action: null });
+  });
+
+  it("once closed (mirror CANCELLED), nothing is outstanding", () => {
+    const facts = caseFacts(brief({ chainStatus: "CANCELLED", chainRecord: "GONE" }), NOW);
+    expect(facts.closeOutstanding).toBe(false);
+    expect(caseNextStep(facts, caseAuthority(brief({ chainStatus: "CANCELLED", chainRecord: "GONE" }), ADMIN, facts), fmt).title).toBe("Penalty cancelled");
   });
 });
 
