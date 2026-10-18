@@ -69,6 +69,9 @@ export function safeNextPath(raw: string | null | undefined): string {
     if (url.origin !== "https://assay.invalid") return "/";
     const path = url.pathname;
     if (!path.startsWith("/") || path.startsWith("//")) return "/";
+    // Dot segments resolve only here ("/x/../%2f%2fevil" becomes "/%2f%2fevil"):
+    // check the path returned, so the output is never one this function refuses.
+    if (hidesAnotherOrigin(path)) return "/";
     if (path === "/login" || path.startsWith("/login/") || path === "/operator" || path.startsWith("/operator/")) return "/";
     return `${path}${url.search}${url.hash}`;
   } catch {
