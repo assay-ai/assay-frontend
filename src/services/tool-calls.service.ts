@@ -27,6 +27,11 @@ export interface ToolCall {
    * verification after it had become debt: not charged, provider not paid.
    */
   debt?: CallDebt | null;
+  /**
+   * SETTLED, and refunded because the buyer's report of a bad result was
+   * upheld (`debt` is `VOIDED`). Optional: older backends do not send it.
+   */
+  refundedByReport?: boolean;
   /** Wider than the OpenAPI enum, and nullable. See @/utils/verdict. */
   verdict: WireVerdict;
   createdAt: string;
