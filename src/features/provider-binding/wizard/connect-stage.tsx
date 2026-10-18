@@ -39,6 +39,7 @@ import { isStaleRun } from "../tester/report-view";
 import { createRunGuard } from "../tester/run-guard";
 
 import { previewRequest } from "./request-preview";
+import { readTestInput, writeTestInput } from "./test-input-store";
 import { argumentsFromText, seedArguments, seedRequestMapping, seedResponseMapping } from "./seeds";
 
 export interface ConnectDraft {
@@ -62,31 +63,6 @@ interface MajorRun {
 
 /** Where "Save draft and exit" goes: the listings. */
 const LISTINGS_PATH = "/provider/bindings";
-
-/** The last test input, kept with the draft on this device (it holds tool arguments, never a key). */
-function testInputKey(bindingId: string): string {
-  return `assay:binding-test-input:${bindingId}`;
-}
-
-export function readTestInput(bindingId: string | null | undefined): Record<string, string> | null {
-  if (!bindingId) return null;
-  try {
-    const raw = window.localStorage.getItem(testInputKey(bindingId));
-    const parsed: unknown = raw ? JSON.parse(raw) : null;
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
-    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
-  } catch {
-    return null;
-  }
-}
-
-export function writeTestInput(bindingId: string, values: Readonly<Record<string, string>>): void {
-  try {
-    window.localStorage.setItem(testInputKey(bindingId), JSON.stringify(values));
-  } catch {
-    // A private window or blocked storage: the input is simply not kept.
-  }
-}
 
 export function parseEndpoint(text: string): { value: string | null; error: string | null } {
   const trimmed = text.trim();

@@ -17,7 +17,10 @@ vi.mock("@/services/provider-tool-bindings.service", () => service);
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
-import { ConnectStage, readTestInput, writeTestInput } from "./connect-stage";
+import { clearSessionToken } from "@/libs/ApiClient";
+
+import { ConnectStage } from "./connect-stage";
+import { clearKeptTestInputs, readTestInput, writeTestInput } from "./test-input-store";
 
 const TOOL = {
   id: "t1",
@@ -149,14 +152,36 @@ describe("ConnectStage new listing", () => {
 });
 
 describe("test input kept with the draft", () => {
-  it("round-trips per listing, and ignores anything that is not text", () => {
+  it("round-trips per listing in this tab, and ignores anything that is not text", () => {
     writeTestInput("b-keep", { ids: "bitcoin", vsCurrency: "" });
     expect(readTestInput("b-keep")).toEqual({ ids: "bitcoin", vsCurrency: "" });
+    expect(window.localStorage.getItem("assay:binding-test-input:b-keep")).toBeNull();
     expect(readTestInput("b-other")).toBeNull();
     expect(readTestInput(null)).toBeNull();
-    window.localStorage.setItem("assay:binding-test-input:b-bad", JSON.stringify({ ids: 3, ok: "x" }));
+    window.sessionStorage.setItem("assay:binding-test-input:b-bad", JSON.stringify({ ids: 3, ok: "x" }));
     expect(readTestInput("b-bad")).toEqual({ ok: "x" });
-    window.localStorage.setItem("assay:binding-test-input:b-broken", "{");
+    window.sessionStorage.setItem("assay:binding-test-input:b-broken", "{");
     expect(readTestInput("b-broken")).toBeNull();
+  });
+
+  it("never keeps a field whose name looks like a secret", () => {
+    writeTestInput("b-secret", { ids: "bitcoin", apiKey: "sk-1", access_token: "t" });
+    expect(window.sessionStorage.getItem("assay:binding-test-input:b-secret")).toBe(JSON.stringify({ ids: "bitcoin" }));
+  });
+
+  it("forgets every listing's input on logout", () => {
+    writeTestInput("b-1", { ids: "a" });
+    writeTestInput("b-2", { ids: "b" });
+    window.sessionStorage.setItem("unrelated", "1");
+    clearKeptTestInputs();
+    expect(readTestInput("b-1")).toBeNull();
+    expect(readTestInput("b-2")).toBeNull();
+    expect(window.sessionStorage.getItem("unrelated")).toBe("1");
+  });
+
+  it("is cleared by every logout path (clearSessionToken)", () => {
+    writeTestInput("b-3", { ids: "c" });
+    clearSessionToken();
+    expect(readTestInput("b-3")).toBeNull();
   });
 });
