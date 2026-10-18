@@ -2,6 +2,7 @@ import type { StageCheck, StageCheckStatus } from "@/components/ui/stage-list";
 import { formatDateTime } from "@/libs/utc-time";
 import { formatMoney, toDecimal } from "@/utils/money";
 import { presentVerdict } from "@/utils/verdict";
+import { refundPromiseLive } from "./refund-promise";
 
 import type { Receipt, ReceiptStage, WireStageName, WireStageStatus } from "./wire";
 
@@ -597,8 +598,10 @@ export function receiptTimeline(
  * The 1-hour hold after a charge, as timeline rows, in time order.
  *
  * Neither row claims more than the receipt knows:
- *  - the end of the hour promises a refund only on a call that can be
- *    reported (`disputeFilingClosesAt`); on any other it is just "Hold ends";
+ *  - the hour is "Refundable" only while the backend says a report now is
+ *    refunded in full (`refundableIfReportedNow`), or for a report the
+ *    guarantee covers (`report === "open"`); otherwise it is just "Hold ends"
+ *    (wave-1 audit I1);
  *  - the payment's release is an expectation read from the clock, never
  *    "Paid": collection waits while a report is open, and for a blocked party
  *    or a retry. While a report is open the money is held for it.
@@ -609,15 +612,18 @@ function holdRows(receipt: Receipt, now: number, report: ReceiptReportState): Re
   const windowEnds = receipt.disputeWindowEndsAt ?? null;
   if (windowEnds) {
     const open = now < Date.parse(windowEnds);
+    const refundable = report === "open" || (report === "none" && refundPromiseLive(receipt, now));
     if (!reportable) {
       rows.push({ at: windowEnds, label: open ? "Hold ends" : "Hold ended", tone: "neutral" });
-    } else if (open) {
+    } else if (open && refundable) {
       rows.push({
         at: windowEnds,
         label: "Refundable until then",
         meta: report === "none" ? "report a bad result for a full refund" : "you reported it",
         tone: "primary",
       });
+    } else if (open) {
+      rows.push({ at: windowEnds, label: "Hold ends", ...(report === "none" ? {} : { meta: "you reported it" }), tone: "neutral" });
     } else {
       rows.push({ at: windowEnds, label: "Refundable hour ended", ...(report === "none" ? {} : { meta: "you reported it" }), tone: "neutral" });
     }
