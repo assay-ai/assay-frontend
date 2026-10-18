@@ -15,6 +15,11 @@ export function listAgents(query: ListQuery = {}): Promise<CursorPage<Agent>> {
   return api.get<CursorPage<Agent>>("/agents", query as Record<string, unknown>);
 }
 
+/** PATCH /agents/{agentId} — renames the agent. The label is the only field it changes. */
+export function renameAgent(agentId: string, label: string): Promise<Agent> {
+  return api.patch<Agent>(`/agents/${encodeURIComponent(agentId)}`, { label });
+}
+
 /** POST /agents/{agentId}/credentials — creates a credential; the secret is shown once. */
 export function createCredential(agentId: string, body?: unknown): Promise<unknown> {
   return api.post(`/agents/${agentId}/credentials`, body);
