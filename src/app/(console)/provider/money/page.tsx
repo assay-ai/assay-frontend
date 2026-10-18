@@ -14,7 +14,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { assetScopeNote, foldClasses, foldNotCredited, observedTakeRate, rowsInAsset, type CallRow } from "@/features/call-classes/csv";
+import { foldClasses, observedTakeRate, rowsInAsset, type CallRow } from "@/features/call-classes/csv";
 import { classLabel, reasonLabel } from "@/features/call-classes/labels";
 import { classNote, fromExport, fromLedger, takeCopy, type ReconSummary } from "@/features/call-classes/reconciliation";
 import { downloadCallsCsv, useCallsExport } from "@/features/call-classes/use-calls-export";
@@ -23,7 +23,15 @@ import { lossOf } from "@/features/provider-penalties/model";
 import { usePenalties } from "@/features/provider-penalties/use-penalties";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import { callsOfClass, earningsSplit, unpaidLines, type EarningsSplit, type UnpaidLine } from "@/features/provider-earnings/earned-tile";
-import { callCount, notCreditedReason, notCreditedRows, partsThatAddUp, unpaidCallAmount } from "@/features/provider-earnings/not-credited";
+import {
+  callCount,
+  notCreditedBreakdown,
+  notCreditedReason,
+  settlementShown,
+  shownReasonAmounts,
+  toolsLine,
+  unpaidCallAmount,
+} from "@/features/provider-earnings/not-credited";
 import { useChains } from "@/hooks/useChains";
 import type { Money, ProviderPayout } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
@@ -40,11 +48,12 @@ import { toast } from "@/utils/toast";
  *
  *  - This month: earned, as a split (in your wallet / Assay's fee / not
  *    credited). Calls that passed but paid nothing (yet): waiting on the
- *    buyer (buyer debt), never collected (written off) and forfeited, each
+ *    buyer (buyer debt), overdue (not paid for 30 days) and forfeited, each
  *    named and explained, never as owed by the platform.
- *  - Recent payments: one row per payment with its transaction on the explorer.
- *  - Not credited, grouped by plain reason (from the per-call export), with
- *    the tools it happened on.
+ *  - Recent payments: one row per payment with its transaction on the explorer:
+ *    each redemption (rail B, paid from the buyer's escrow) and each payout run.
+ *  - Not credited, grouped by plain reason (from the earnings report, so the
+ *    summary is the sum of its reasons), with the tools it happened on.
  *  - Check against your logs: download the per-call CSV, and an "Explain a
  *    difference" drawer (what each outcome means, how to join on the call id).
  *    `/provider/money/reconciliation` opens that drawer.
@@ -94,26 +103,21 @@ export default function ProviderMoneyPage() {
 
   const rows = React.useMemo(() => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)), [calls.rows, assetPending, displayAsset]);
   /*
-    Written-off and forfeited calls passed the check: they are explained under
-    "Passed, but not paid" (with their calls), so the reasons below keep to the
-    calls that earned nothing because of the answer or the request.
+    Not credited, by reason, from the earnings report: every call of the month
+    (the per-call file is capped), and a summary that is the sum of its
+    reasons. Overdue and forfeited calls passed the check: they are explained
+    under "Passed, but not paid", not here.
   */
-  const creditable = React.useMemo(() => notCreditedRows(rows), [rows]);
-  const passedUnpaidCalls = creditable.passedUnpaid;
-  const notCredited = React.useMemo(() => foldNotCredited(creditable.rows), [creditable]);
-  /* The reasons count one asset of the export; say so when the file holds calls in another. */
-  const scopeNote =
-    calls.isLoading || assetPending || !displayAsset || !calls.data
-      ? null
-      : assetScopeNote(calls.rows.length, rows.length, displayAssetLabel(displayAsset, chains));
+  const notCredited = React.useMemo(
+    () => notCreditedBreakdown(earnings.data?.totals, earnings.data?.groups),
+    [earnings.data],
+  );
   /* Each reason card's amount, adjusted by whole cents so the cards add up to their total on screen. */
-  const reasonAmounts = React.useMemo(() => {
-    const parts = notCredited.buckets.map((bucket) => bucket.notCredited);
-    const decimals = parts.find(Boolean)?.decimals ?? 6;
-    const shown = partsThatAddUp(parts.map((part) => part?.amount ?? "0"), decimals);
-    return parts.map((part, index) => (part ? { ...part, amount: shown[index] } : null));
-  }, [notCredited.buckets]);
+  const reasonAmounts = React.useMemo(() => shownReasonAmounts(notCredited.reasons), [notCredited.reasons]);
+  const passedUnpaidCalls = (earnings.data?.totals.uncollectedCalls ?? 0) + (earnings.data?.totals.forfeitedCalls ?? 0);
   const split = earningsSplit(earnings.data?.totals);
+  /* The wallet figure and the fee, rounded once from cents: the same figures the Explain drawer's Gross − fee = Net shows. */
+  const shown = settlementShown(split.inWallet, split.fee);
   // Normal money format; a sub-cent amount still shows its own digits (see `formatMoney`).
   const unpaid = unpaidLines(earnings.data?.totals, (value) => formatMoney(value, { decimals: 2 }));
   const monthName = MONTH.format(now);
@@ -196,13 +200,13 @@ export default function ProviderMoneyPage() {
           <PanelBody className="flex flex-col gap-4 p-4 tablet:p-5">
             <div className="flex flex-col gap-0.5">
               <span className="text-body-13 text-02">In your wallet this month</span>
-              <span className="font-mono text-heading-md text-01">{formatMoney(split.inWallet, { decimals: 2 })}</span>
+              <span className="font-mono text-heading-md text-01">{formatMoney(shown.net ?? split.inWallet, { decimals: 2 })}</span>
             </div>
             <MoneySplit
               segments={
                 [
-                  { label: "In your wallet", value: amountOf(split.inWallet), amount: formatMoney(split.inWallet, { decimals: 2 }), tone: "success" },
-                  split.fee ? { label: "Assay fee", value: amountOf(split.fee), amount: formatMoney(split.fee, { decimals: 2 }), tone: "neutral" } : null,
+                  { label: "In your wallet", value: amountOf(split.inWallet), amount: formatMoney(shown.net ?? split.inWallet, { decimals: 2 }), tone: "success" },
+                  split.fee ? { label: "Assay fee", value: amountOf(split.fee), amount: formatMoney(shown.fee, { decimals: 2 }), tone: "neutral" } : null,
                   split.notCredited
                     ? {
                         label: "Not credited",
@@ -245,7 +249,7 @@ export default function ProviderMoneyPage() {
                 lines={unpaid}
                 rows={calls.data ? rows : null}
                 feeRatePercent={feeRatePercent}
-                toolName={(id) => names.toolName(id) ?? "A tool"}
+                toolName={(id) => names.toolName(id) ?? "A tool no longer listed"}
               />
             ) : null}
           </PanelBody>
@@ -270,7 +274,7 @@ export default function ProviderMoneyPage() {
               kind="empty"
               bare
               title="No payments yet"
-              description="When a buyer's call to your tool settles, the payment shows up here with its transaction."
+              description="When a buyer's call to your tool is paid from their escrow, the payment shows up here with its transaction."
             />
           ) : (
             <ul className="flex flex-col">
@@ -287,24 +291,25 @@ export default function ProviderMoneyPage() {
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>Not credited this month</PanelTitle>
-            <PanelDescription>calls that earned nothing, by reason · no stake is taken for these</PanelDescription>
+            <PanelDescription>
+              {notCredited.calls > 0 ? `${callCount(notCredited.calls)} · ${formatMoney(notCredited.amount, { decimals: 2 })} · ` : ""}
+              calls that earned nothing, by reason · no stake is taken for these
+            </PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="flex flex-col gap-2 p-3 tablet:p-4">
-          {calls.isPending ? (
+          {earnings.isPending ? (
             <PageState kind="loading" rows={2} bare label="Loading calls" />
-          ) : calls.data && notCredited.buckets.length > 0 ? (
-            notCredited.buckets.map((bucket, index) => {
+          ) : notCredited.reasons.length > 0 ? (
+            notCredited.reasons.map((bucket, index) => {
               const reason = notCreditedReason(bucket.className);
-              const tools = [...new Set(rows.filter((r) => r.classification === bucket.className).map((r) => r.toolId))];
+              const tools = toolsLine(bucket.toolIds, names.toolName);
               return (
                 <div key={bucket.className} className="flex w-full flex-col gap-1 rounded-lg border border-01 bg-02 p-3.5 tablet:flex-row tablet:items-start tablet:gap-4">
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <p className="text-label-13 text-01">{reason.title}</p>
                     <p className="text-body-xs text-02">{reason.detail}</p>
-                    {tools.length > 0 ? (
-                      <p className="text-body-xs text-03">On {tools.map((tool) => names.toolName(tool) ?? "a tool").join(", ")}</p>
-                    ) : null}
+                    {tools ? <p className="text-body-xs text-03">On {tools}</p> : null}
                   </div>
                   <div className="flex shrink-0 items-baseline gap-3 tablet:flex-col tablet:items-end tablet:gap-0.5">
                     <span className="font-mono text-mono-sm font-semibold text-01">{formatMoney(reasonAmounts[index], { decimals: 2 })}</span>
@@ -313,7 +318,7 @@ export default function ProviderMoneyPage() {
                 </div>
               );
             })
-          ) : calls.data || !split.notCredited ? (
+          ) : !split.notCredited ? (
             <p className="px-1 py-3 text-body-13 text-02">
               {/* No calls is not "every call credited" (BUG-R17-P-02). */}
               {(earnings.data?.totals.calls ?? 0) === 0
@@ -323,22 +328,22 @@ export default function ProviderMoneyPage() {
                   : "Every call this month was credited."}
             </p>
           ) : (
-            // The per-call file is unavailable: the earnings totals still say how much, per tool.
+            // A backend without the reasons: the earnings totals still say how much, per tool.
             (earnings.data?.groups ?? [])
               .filter((group) => group.withheldCalls > 0)
               .map((group) => (
                 <div key={group.key} className="flex w-full items-center justify-between gap-3 rounded-lg border border-01 bg-02 p-3.5">
-                  <span className="text-label-13 text-01">{names.toolName(group.key) ?? "A tool"}</span>
+                  <span className="text-label-13 text-01">{names.toolName(group.key) ?? "A tool no longer listed"}</span>
                   <span className="text-body-xs text-03">
                     {callCount(group.withheldCalls)} · {formatMoney(group.withheld, { decimals: 2 })}
                   </span>
                 </div>
               ))
           )}
-          {calls.data && passedUnpaidCalls > 0 ? (
+          {passedUnpaidCalls > 0 ? (
             <p className="px-1 pt-1 text-body-xs text-03">
-              Not listed here: {callCount(passedUnpaidCalls)} that passed but {passedUnpaidCalls === 1 ? "was" : "were"} never paid
-              (written off, or forfeited). See{" "}
+              Not listed here: {callCount(passedUnpaidCalls)} that passed but {passedUnpaidCalls === 1 ? "was" : "were"} not paid
+              (overdue, or forfeited). See{" "}
               <a href="#passed-not-paid" className="underline underline-offset-2">
                 Passed, but not paid
               </a>{" "}
@@ -370,13 +375,13 @@ export default function ProviderMoneyPage() {
         monthName={monthName}
         calls={earnings.data?.totals.calls ?? null}
         split={split}
+        shown={shown}
         unpaid={unpaid}
         recon={recon}
         reconLoading={ledger.isPending && !ledger.isError}
         reconCapped={recon?.source === "export" && Boolean(calls.meta?.truncated)}
         loading={earnings.isPending}
-        scopeNote={scopeNote}
-        reasons={notCredited.buckets.map((bucket, index) => ({
+        reasons={notCredited.reasons.map((bucket, index) => ({
           key: bucket.className,
           title: notCreditedReason(bucket.className).title,
           calls: bucket.calls,
@@ -394,13 +399,27 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
   return (
     <li className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-md px-3 py-3 hover:bg-02">
       <span className="flex min-w-0 flex-1 flex-col">
-        {/* A payout carries no tool or call count; the day of the run is what it is for. */}
-        <span className="text-body-13 text-01">
-          Payout for calls settled on <UtcTime value={payout.createdAt} dateOnly />
-        </span>
-        <span className="text-body-xs text-03">
-          Sent to your wallet · <UtcTime value={payout.createdAt} />
-        </span>
+        {payout.kind === "REDEMPTION" ? (
+          <>
+            {/* Rail B: the buyer's escrow paid this transaction on chain, for these calls. */}
+            <span className="text-body-13 text-01">
+              Paid for {payout.calls != null ? callCount(payout.calls) : "calls"} from the buyer&apos;s escrow
+            </span>
+            <span className="text-body-xs text-03">
+              Sent to your wallet · <UtcTime value={payout.createdAt} />
+            </span>
+          </>
+        ) : (
+          <>
+            {/* A payout run: the day of the run is what it is for. */}
+            <span className="text-body-13 text-01">
+              Payout for {payout.calls != null ? callCount(payout.calls) : "calls"} settled on <UtcTime value={payout.createdAt} dateOnly />
+            </span>
+            <span className="text-body-xs text-03">
+              Sent to your wallet · <UtcTime value={payout.createdAt} />
+            </span>
+          </>
+        )}
       </span>
       <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(payout.amount, { decimals: 2 })}</span>
       {href ? (
@@ -550,30 +569,31 @@ function ExplainSheet({
   monthName,
   calls,
   split,
+  shown,
   unpaid,
   recon,
   reconLoading,
   reconCapped,
   reasons,
   loading,
-  scopeNote,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   monthName: string;
   calls: number | null;
   split: EarningsSplit;
+  /** The wallet figure and the fee as Money shows them (`settlementShown`). */
+  shown: ReturnType<typeof settlementShown>;
   unpaid: readonly UnpaidLine[];
   recon: ReconSummary | null;
   reconLoading: boolean;
   reconCapped: boolean;
   reasons: { key: string; title: string; calls: number; amount: Money | null }[];
   loading: boolean;
-  scopeNote: string | null;
 }) {
   const lines: { label: string; detail?: string; amount: string }[] = [
-    { label: "Paid to your wallet", amount: formatMoney(split.inWallet, { decimals: 2 }) },
-    ...(split.fee ? [{ label: "Assay fee", detail: "taken from each paid call", amount: formatMoney(split.fee, { decimals: 2 }) }] : []),
+    { label: "Paid to your wallet", amount: formatMoney(shown.net ?? split.inWallet, { decimals: 2 }) },
+    ...(split.fee ? [{ label: "Assay fee", detail: "taken from each paid call", amount: formatMoney(shown.fee, { decimals: 2 }) }] : []),
     ...(split.notCredited
       ? [{ label: "Not credited", detail: callCount(split.notCreditedCalls), amount: formatMoney(split.notCredited, { decimals: 2 }) }]
       : []),
@@ -613,7 +633,6 @@ function ExplainSheet({
             {reasons.length > 0 ? (
               <>
                 <p className="pt-1 text-label-xs text-02">Not credited, by reason</p>
-                {scopeNote ? <p className="text-body-xs text-03">{scopeNote}</p> : null}
                 <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01">
                   {reasons.map((reason) => (
                     <li key={reason.key} className="flex items-center justify-between gap-3 px-3 py-2.5">
@@ -662,7 +681,7 @@ function ExplainSheet({
 /** How an empty always-explained class reads in "No calls this month were …". */
 const EMPTY_CLASS_WORDS: Record<string, string> = {
   PAID_BUYER_DEBT: "waiting on the buyer",
-  PAID_UNCOLLECTED: "never collected",
+  PAID_UNCOLLECTED: "overdue",
   PROVIDER_FORFEITED: "forfeited",
 };
 
@@ -673,6 +692,8 @@ function ReconSection({ recon, loading, capped }: { recon: ReconSummary | null; 
   if (loading) return <PageState kind="loading" rows={3} bare label="Loading every call this month" />;
   if (!recon) return null;
   const take = takeCopy(recon);
+  /* Rounded once, from cents: the shown fee and net add up to the shown gross. */
+  const settlement = recon.take ? settlementShown(recon.net, recon.take) : { gross: recon.gross, fee: null, net: recon.net };
   return (
     <section className="flex flex-col gap-2" data-testid="provider-reconciliation">
       <h3 className="text-label-13 text-01">Every call, by outcome: {callCount(recon.totalCalls)}</h3>
@@ -717,9 +738,9 @@ function ReconSection({ recon, loading, capped }: { recon: ReconSummary | null; 
       </p>
       <dl className="flex flex-col divide-y divide-01 rounded-lg border border-01">
         {[
-          { label: "Gross", note: "Price of the paid calls, before Assay's fee.", amount: formatMoney(recon.gross, { decimals: 2 }), tone: "neutral" },
-          { label: take.label, note: take.note, amount: recon.take ? `−${formatMoney(recon.take, { decimals: 2 })}` : "—", tone: take.tone },
-          { label: "Net", note: "Gross minus the fee: what reached your wallet.", amount: formatMoney(recon.net, { decimals: 2 }), tone: "neutral" },
+          { label: "Gross", note: "Price of the paid calls, before Assay's fee.", amount: formatMoney(settlement.gross, { decimals: 2 }), tone: "neutral" },
+          { label: take.label, note: take.note, amount: settlement.fee ? `−${formatMoney(settlement.fee, { decimals: 2 })}` : "—", tone: take.tone },
+          { label: "Net", note: "Gross minus the fee: what reached your wallet.", amount: formatMoney(settlement.net, { decimals: 2 }), tone: "neutral" },
         ].map((line) => (
           <div key={line.label} className="flex items-start justify-between gap-3 px-3 py-2.5">
             <div className="flex min-w-0 flex-1 flex-col">

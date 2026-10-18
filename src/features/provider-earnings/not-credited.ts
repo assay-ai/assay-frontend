@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
 
+import type { Money, NotCreditedClass, ProviderEarningsFigures, ProviderEarningsGroup } from "@/interfaces";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -83,21 +84,6 @@ export function callCount(count: number): string {
 }
 
 /**
- * The classes that passed the check but were not paid: written off
- * (`PAID_UNCOLLECTED`) or forfeited (`PROVIDER_FORFEITED`). The export puts
- * them outside "credited", but they are not "not credited by our checks":
- * Money shows them under "Passed, but not paid". Kept out of the not-credited
- * fold, the reasons add up to `withheld` / `withheldCalls`.
- */
-export const PASSED_UNPAID_CLASSES: ReadonlySet<string> = new Set(["PAID_UNCOLLECTED", "PROVIDER_FORFEITED"]);
-
-/** The rows the "Not credited" reasons count, and how many passed-but-unpaid rows were left out. */
-export function notCreditedRows<T extends { classification: string }>(rows: readonly T[]): { rows: T[]; passedUnpaid: number } {
-  const kept = rows.filter((row) => !PASSED_UNPAID_CLASSES.has(row.classification));
-  return { rows: kept, passedUnpaid: rows.length - kept.length };
-}
-
-/**
  * What one passed-but-unpaid call is worth to the provider in a drill-down:
  * its share of the listed price, after Assay's fee — the same basis as the
  * line's total (the earnings report sums the provider share), so two $0.45
@@ -129,4 +115,105 @@ export function unpaidCallAmount(
     };
   }
   return { amount: listed, note: "listed price, before Assay's fee" };
+}
+
+/** One "Not credited" reason as Money lists it: its calls, its worth and the tools it happened on. */
+export interface NotCreditedReasonRow {
+  readonly className: NotCreditedClass;
+  readonly calls: number;
+  readonly amount: Money | null;
+  /** The tool ids with calls of this class, from the per-tool groups. */
+  readonly toolIds: string[];
+}
+
+/** "Not credited" for a window: one breakdown, and a summary that is its sum. */
+export interface NotCreditedBreakdown {
+  readonly calls: number;
+  readonly amount: Money | null;
+  /** Reasons with calls, most calls first. Empty when the backend sent no breakdown. */
+  readonly reasons: NotCreditedReasonRow[];
+}
+
+/**
+ * "Not credited" from the earnings report: the reasons are its
+ * `withheldByClass` (every call of the window, not the capped per-call file),
+ * and the summary is their sum — so the Money split, the reasons, the Explain
+ * drawer and the provider home all read the same calls (UX review 2026-10-18,
+ * D-P0-1: 14 calls in the summary beside 22 in its reasons).
+ *
+ * The tools per reason come from `groups` when they are per tool. An older
+ * backend sends no breakdown: the summary is then `withheld` and there are no
+ * reasons to list.
+ */
+export function notCreditedBreakdown(
+  totals: ProviderEarningsFigures | null | undefined,
+  groups: readonly ProviderEarningsGroup[] = [],
+): NotCreditedBreakdown {
+  const byClass = totals?.withheldByClass;
+  if (!byClass) {
+    return { calls: totals?.withheldCalls ?? 0, amount: totals?.withheld ?? null, reasons: [] };
+  }
+  const reasons = byClass
+    .filter((row) => row.calls > 0)
+    .map((row, index) => ({
+      index,
+      className: row.class,
+      calls: row.calls,
+      amount: row.amount,
+      toolIds: groups
+        .filter((group) => group.withheldByClass?.some((g) => g.class === row.class && g.calls > 0))
+        .map((group) => group.key),
+    }))
+    .sort((a, b) => b.calls - a.calls || a.index - b.index)
+    .map(({ index: _index, ...reason }) => reason);
+  const denom = byClass.find((row) => row.amount)?.amount ?? totals?.withheld ?? null;
+  const amount = denom
+    ? { ...denom, amount: byClass.reduce((sum, row) => sum + BigInt(row.amount?.amount || "0"), 0n).toString() }
+    : null;
+  return { calls: byClass.reduce((sum, row) => sum + row.calls, 0), amount, reasons };
+}
+
+/**
+ * The reasons' amounts as shown: whole cents that add up to the shown total
+ * (see {@link partsThatAddUp}), so the cards never sum to a cent more or less
+ * than the summary above them.
+ */
+export function shownReasonAmounts(reasons: readonly NotCreditedReasonRow[]): (Money | null)[] {
+  const decimals = reasons.find((reason) => reason.amount)?.amount?.decimals ?? 6;
+  const shown = partsThatAddUp(reasons.map((reason) => reason.amount?.amount ?? "0"), decimals);
+  return reasons.map((reason, index) => (reason.amount ? { ...reason.amount, amount: shown[index] } : null));
+}
+
+/**
+ * The tools a reason happened on, by name. A tool the catalogue no longer
+ * lists is counted, not named: "geocode_place, get_weather +8 other tools",
+ * never "a tool, a tool, …". Null when there is nothing to say.
+ */
+export function toolsLine(toolIds: readonly string[], toolName: (toolId: string) => string | null): string | null {
+  const named = [...new Set(toolIds.map(toolName).filter((name): name is string => Boolean(name)))];
+  const unnamed = toolIds.length - toolIds.filter((id) => toolName(id)).length;
+  const others = unnamed > 0 ? `${unnamed} ${named.length > 0 ? "other " : ""}tool${unnamed === 1 ? "" : "s"}` : null;
+  if (named.length === 0) return others;
+  return others ? `${named.join(", ")} +${others}` : named.join(", ");
+}
+
+/**
+ * The settlement's three figures rounded once, from cents: the fee and the net
+ * are whole cents that add up to the shown gross, so "Gross − fee = Net" holds
+ * on screen ($6.76 − $0.68 = $6.08, not $6.76 − $0.67 = $6.08). Every place that
+ * shows the fee or the net uses this, so the two read the same everywhere.
+ */
+export function settlementShown(
+  net: Money | null | undefined,
+  fee: Money | null | undefined,
+): { net: Money | null; fee: Money | null; gross: Money | null } {
+  const denom = net ?? fee ?? null;
+  if (!denom) return { net: null, fee: null, gross: null };
+  const [shownNet, shownFee] = partsThatAddUp([net?.amount ?? "0", fee?.amount ?? "0"], denom.decimals);
+  const gross = (BigInt(shownNet) + BigInt(shownFee)).toString();
+  return {
+    net: net ? { ...net, amount: shownNet } : null,
+    fee: fee ? { ...fee, amount: shownFee } : null,
+    gross: { ...denom, amount: gross },
+  };
 }
