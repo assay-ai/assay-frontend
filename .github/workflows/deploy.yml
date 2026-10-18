@@ -5,6 +5,8 @@ name: Deploy
 #
 #   push to develop -> GitHub environment "develop"
 #   push to main    -> GitHub environment "production"
+#   push to demo    -> GitHub environment "demo": the same app with the demo
+#                      data layer on (NEXT_PUBLIC_DEMO_CHAINS), no backend
 #
 # Each GitHub environment holds the values below. Every one is read from the
 # environment's Variables first and its Secrets second, so either tab works.
@@ -15,6 +17,8 @@ name: Deploy
 #     NEXT_PUBLIC_API_BASE_URL   e.g. https://api.example.com/api/v1
 #     NEXT_PUBLIC_PRIVY_APP_ID   the Privy app id (25 characters)
 #     NEXT_PUBLIC_MCP_URL        optional, shown in the /connect snippet
+#     NEXT_PUBLIC_DEMO_CHAINS    demo only: "robinhood" turns the demo data on
+#     NEXT_PUBLIC_SHOW_KITCHEN_SINK  optional: "1" keeps /kitchen-sink
 #     CLOUDFLARE_PAGES_PROJECT   the Pages project to deploy to
 #   Credentials (keep these as Secrets)
 #     CLOUDFLARE_API_TOKEN       a token with "Cloudflare Pages: Edit"
@@ -24,7 +28,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, demo]
   workflow_dispatch:
 
 permissions:
@@ -36,16 +40,18 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.ref_name == 'main' || github.ref_name == 'develop'
+    if: github.ref_name == 'main' || github.ref_name == 'develop' || github.ref_name == 'demo'
     runs-on: ubuntu-latest
     environment:
-      name: ${{ github.ref_name == 'main' && 'production' || 'develop' }}
+      name: ${{ github.ref_name == 'main' && 'production' || github.ref_name }}
       url: ${{ vars.NEXT_PUBLIC_BASE_URL }}
     env:
       NEXT_PUBLIC_BASE_URL: ${{ vars.NEXT_PUBLIC_BASE_URL || secrets.NEXT_PUBLIC_BASE_URL }}
       NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL || secrets.NEXT_PUBLIC_API_BASE_URL }}
       NEXT_PUBLIC_PRIVY_APP_ID: ${{ vars.NEXT_PUBLIC_PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
       NEXT_PUBLIC_MCP_URL: ${{ vars.NEXT_PUBLIC_MCP_URL || secrets.NEXT_PUBLIC_MCP_URL }}
+      NEXT_PUBLIC_DEMO_CHAINS: ${{ vars.NEXT_PUBLIC_DEMO_CHAINS || secrets.NEXT_PUBLIC_DEMO_CHAINS }}
+      NEXT_PUBLIC_SHOW_KITCHEN_SINK: ${{ vars.NEXT_PUBLIC_SHOW_KITCHEN_SINK || secrets.NEXT_PUBLIC_SHOW_KITCHEN_SINK }}
       CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || secrets.CLOUDFLARE_PAGES_PROJECT }}
     steps:
       - uses: actions/checkout@v4
@@ -68,11 +74,23 @@ jobs:
           [ "$HAS_TOKEN" = true ] || { echo "::error::Secret CLOUDFLARE_API_TOKEN is not set"; missing=1; }
           [ "$HAS_ACCOUNT" = true ] || { echo "::error::Secret CLOUDFLARE_ACCOUNT_ID is not set"; missing=1; }
           [ ${#NEXT_PUBLIC_PRIVY_APP_ID} -eq 25 ] || { echo "::error::NEXT_PUBLIC_PRIVY_APP_ID must be 25 characters"; missing=1; }
+          # The demo data layer only ever ships from the demo branch.
+          if [ "${{ github.ref_name }}" = demo ]; then
+            [ "$NEXT_PUBLIC_DEMO_CHAINS" = robinhood ] || { echo "::error::NEXT_PUBLIC_DEMO_CHAINS must be robinhood in the demo environment"; missing=1; }
+          elif [ -n "$NEXT_PUBLIC_DEMO_CHAINS" ]; then
+            echo "::error::NEXT_PUBLIC_DEMO_CHAINS must not be set outside the demo environment"; missing=1
+          fi
           exit $missing
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm build
+
+      # Demo pages hold made-up data: keep them out of search results.
+      - name: Keep the demo out of search engines
+        if: github.ref_name == 'demo'
+        run: |
+          printf '\n/*\n  X-Robots-Tag: noindex, nofollow\n' >> out/_headers
 
       # Each environment has its own Pages project, so every deploy is that
       # project's production deployment: deploy under the project's own
