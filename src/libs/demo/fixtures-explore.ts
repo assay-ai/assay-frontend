@@ -1,5 +1,6 @@
 import type { CursorPage } from "@/interfaces";
 import type {
+  CatalogueChainPrice,
   CatalogueChainStake,
   CatalogueMoney,
   CatalogueProvider,
@@ -554,7 +555,23 @@ function toolRow(tool: DemoTool): CatalogueTool {
     paidBindings: tool.pricingMode === "FREE" ? 0 : tool.offers.length,
     unroutableReason: tool.unroutableReason ?? null,
     settlementChains: [DEMO_CHAIN_ID],
+    /* One chain: its price is the quote, set by the dearest offer's provider. */
+    prices: priceOn(tool),
   };
+}
+
+/** The tool's price per chain: the one demo chain, at the dearest offer, naming who offers it. */
+function priceOn(tool: DemoTool): CatalogueChainPrice[] {
+  const top = tool.offers.reduce<DemoOffer | null>(
+    (worst, offer) => (worst === null || BigInt(usd(offer.price).amount) > BigInt(usd(worst.price).amount) ? offer : worst),
+    null,
+  );
+  return top ? [{ chainId: DEMO_CHAIN_ID, price: usd(top.price), providerId: top.providerId }] : [];
+}
+
+/** What each demo listing promises: 2% on a verified provider's listing, 5% otherwise. */
+function promisedRate(provider: DemoProvider): number {
+  return provider.verified ? 0.02 : 0.05;
 }
 
 function providerRow(provider: DemoProvider): CatalogueProvider {
@@ -580,6 +597,7 @@ function providerTools(provider: DemoProvider): CatalogueProviderTool[] {
     name: tool.name,
     pricingMode: tool.pricingMode ?? "PAID",
     price,
+    promisedFailureRate: promisedRate(provider),
     freeCallsPerAgentPerDay: tool.pricingMode === "FREEMIUM" || tool.pricingMode === "FREE" ? (tool.freePerAgent ?? 100) : null,
   }));
 }

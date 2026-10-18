@@ -171,6 +171,13 @@ describe("public pages", () => {
     expect(tools.filter((t) => t.kind === "PROVIDER").length).toBeGreaterThanOrEqual(4);
     expect(tools.some((t) => t.kind === "STANDARD")).toBe(true);
   });
+
+  it("prices every routable catalogue tool per chain, one entry per settlement chain", () => {
+    const { tools } = call<{ tools: PublicTool[] }>("GET", "/public/catalogue/tools");
+    for (const tool of tools.filter((t) => t.routable)) {
+      expect(tool.prices?.map((p) => p.chainId), tool.name).toEqual(tool.settlementChains);
+    }
+  });
 });
 
 describe("a write shows on the next read (this tab's memory)", () => {
