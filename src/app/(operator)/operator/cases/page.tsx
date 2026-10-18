@@ -35,6 +35,7 @@ import {
   type PenaltyTab,
   type PenaltyTabId,
 } from "@/features/operator/penalty-list";
+import { listLoadError } from "@/features/operator/operator-errors";
 import { penaltyIdFrom, readRecentPenalties, type RecentPenalty } from "@/features/operator/recent-penalties";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { useOperatorDirectory, usePenaltyBriefs, useProviderNames } from "@/features/operator/use-operator-lookups";
@@ -171,7 +172,13 @@ export default function PenaltiesPage() {
   let loading: boolean;
   let failed: unknown = null;
   if (!listMissing) {
-    rows = (list.data?.pages ?? []).flatMap((page) => page.items.map(rowFromCase));
+    // The list names each provider; a row whose name did not resolve shows the console's own name for it, never the id.
+    rows = (list.data?.pages ?? []).flatMap((page) =>
+      page.items.map((item) => {
+        const row = rowFromCase(item);
+        return row.providerName === row.providerId ? { ...row, providerName: providers.name(row.providerId) } : row;
+      }),
+    );
     loading = open.isLoading || list.isLoading;
     failed = open.isError ? open.error : list.isError ? list.error : null;
   } else if (tab.id === "needs-ruling") {
@@ -294,7 +301,7 @@ export default function PenaltiesPage() {
         ) : failed ? (
           <PageState
             kind="error"
-            description="The penalties could not be loaded."
+            description={listLoadError(failed, "The penalties")}
             onRetry={() => {
               void open.refetch();
               void list.refetch();
@@ -366,6 +373,7 @@ function labelOf(item: RecentPenalty, name: string | null): string {
 const EMPTY_TITLE: Record<PenaltyTabId, string> = {
   "needs-ruling": "Nothing to rule on",
   signature: "No cancel waiting for a signature",
+  "old-process": "No old-process case",
   window: "No penalty in its dispute window",
   executed: "No executed penalty",
   cancelled: "No cancelled penalty",
@@ -375,8 +383,10 @@ const EMPTY_TITLE: Record<PenaltyTabId, string> = {
 };
 
 const EMPTY_TEXT: Record<PenaltyTabId, string> = {
-  "needs-ruling": "When a provider disputes a penalty on chain, it shows here with its 30 days to rule.",
+  "needs-ruling": "When a provider disputes a penalty on chain, it shows here with its 30 days to rule. Old-process cases wait under Old process.",
   signature: "A penalty suspended after it went on chain waits here until the arbiter key signs its cancel.",
+  "old-process":
+    "Cases opened under the retired in-app objection process wait here. None is on chain or with the arbiter; suspend one from its page if it should not stand.",
   window: "New penalties wait here while the provider can still dispute them.",
   executed: "Penalties whose stake was taken show here.",
   cancelled: "Cancelled, suspended and expired penalties show here.",
