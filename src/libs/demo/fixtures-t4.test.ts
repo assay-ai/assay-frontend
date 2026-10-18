@@ -110,7 +110,7 @@ describe("buyer and provider reports", () => {
   it("covers open, replied, upheld and refunded, rejected, and refunded because the provider was blocked", () => {
     const { items } = call<{ items: CallDispute[] }>("GET", "/call-disputes");
     const labels = items.map((d) => buyerStatus(d, Date.now()).label);
-    expect(labels).toEqual(expect.arrayContaining(["Waiting for the provider", "Waiting for a decision", "Upheld · refunded", "Rejected", "Refunded · decision pending"]));
+    expect(labels).toEqual(expect.arrayContaining(["Waiting for the provider", "Waiting for a decision", "Accepted · refunded", "Not accepted", "Refunded · decision pending"]));
     expect(items.some((d) => !d.refundGuaranteed && d.state === "OPEN" && d.reason === "OTHER")).toBe(true);
     for (const d of items) expect(call<{ intentId: string }>("GET", `/receipts/${d.intentId}`).intentId).toBe(d.intentId);
   });
@@ -209,3 +209,20 @@ describe("a write shows on the next read (this tab's memory)", () => {
     expect(Date.parse(page1.items[0]!.createdAt)).toBeLessThanOrEqual(Date.parse(page1.items[1]!.createdAt));
   });
 });
+
+describe("takedown reasons and deprecation replacements", () => {
+  it("a takedown needs a reason the provider is told, and the provider sees it", () => {
+    const lottery = "5e2a9c46-7b13-4d80-9f62-0a8c3e1d5b97";
+    expect(refusal(() => call("POST", `/operator/tools/${lottery}/takedown`, {}, { reasonCode: "X", note: "n".repeat(20) })).status).toBe(400);
+    expect(call<ModerationCutoff>("POST", `/operator/tools/${lottery}/takedown`, {}, { reasonCode: "HARMFUL_OUTPUT", publicReasonCode: "HARMFUL_OUTPUT", note: "n".repeat(20) }).targetName).toBe("brightpath__lottery_predictor");
+    expect(call<ProviderTool>("GET", `/provider/tools/${lottery}`).takedown).toMatchObject({ reasonLabel: "Harmful output" });
+  });
+
+  it("a deprecation names its replacement, and refuses itself", () => {
+    const pdf = "9f5b1e07-6d84-4c23-b9a1-3e7f5c0d8b62";
+    const company = "4a7d3c58-9e12-4b60-a8f5-1d6c0e7b9a24";
+    expect(refusal(() => call("POST", `/provider/tools/${pdf}/versions/2/deprecate`, {}, { sunsetAt: "2027-03-01T00:00:00.000Z", replacementToolId: pdf })).context?.reason).toMatch(/itself/);
+    expect(call<ProviderTool>("POST", `/provider/tools/${pdf}/versions/2/deprecate`, {}, { sunsetAt: "2027-03-01T00:00:00.000Z", replacementToolId: company }).replacementName).toBe("brightpath__company_facts");
+  });
+});
+

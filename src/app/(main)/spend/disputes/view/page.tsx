@@ -9,7 +9,7 @@ import * as React from "react";
 import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
-import { buyerStatus, DISPUTE_COPY, disputeErrorText, refundedBeforeDecision } from "@/features/call-disputes/model";
+import { buyerStatus, BUYER_COPY, disputeErrorText, refundedBeforeDecision } from "@/features/call-disputes/model";
 import { CallLink, callDisputeKeys, DisputeChip, DisputeTimeline, EvidencePanes, useNow } from "@/features/call-disputes/ui";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
@@ -82,16 +82,8 @@ function ReportContent() {
 
       <section aria-label="Status" className="flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 px-5 py-4" data-testid="report-timeline">
         <DisputeTimeline dispute={d} side="buyer" now={now} onElapsed={() => void report.refetch()} />
-        {d.state === "OPEN" && !refundedBeforeDecision(d) ? (
-          <ul className="flex flex-col gap-0.5 text-body-13 text-02" data-testid="what-happens">
-            <li>{d.refundGuaranteed ? DISPUTE_COPY.held : DISPUTE_COPY.afterHold}</li>
-            {!d.providerRespondedAt ? <li>{DISPUTE_COPY.reply}</li> : null}
-            {!d.providerRespondedAt ? <li>{d.refundGuaranteed ? DISPUTE_COPY.silentRefund : DISPUTE_COPY.silent}</li> : null}
-            <li>{DISPUTE_COPY.decides}</li>
-          </ul>
-        ) : null}
         <p className="text-body-xs text-03">
-          Times are in UTC.{d.state === "OPEN" && d.refundGuaranteed ? ` ${DISPUTE_COPY.safetyNet}` : ""}
+          Times are in UTC.{d.state === "OPEN" && d.refundGuaranteed && d.holdEndsAt ? ` ${BUYER_COPY.safetyNet}` : ""}
         </p>
       </section>
 
@@ -103,12 +95,12 @@ function ReportContent() {
         <div className="flex min-w-0 flex-col gap-1">
           <dt className="text-body-xs text-03">The provider&apos;s reply</dt>
           <dd className="text-body-13 text-01 [overflow-wrap:anywhere]">
-            {d.providerResponse ?? (d.state === "OPEN" ? "No reply yet." : "The provider did not reply.")}
+            {d.providerResponse ?? (d.state === "OPEN" ? (refundedBeforeDecision(d) ? "No reply needed: the provider was blocked." : "No reply yet.") : d.state === "WITHDRAWN" ? "No reply: you withdrew the report." : "The provider did not reply.")}
           </dd>
         </div>
         {d.resolutionNote ? (
           <div className="flex min-w-0 flex-col gap-1 tablet:col-span-2">
-            <dt className="text-body-xs text-03">Why it was {d.state === "UPHELD" ? "upheld" : "rejected"}</dt>
+            <dt className="text-body-xs text-03">Why it was {d.state === "UPHELD" ? "accepted" : "not accepted"}</dt>
             <dd className="text-body-13 text-01 [overflow-wrap:anywhere]">{d.resolutionNote}</dd>
           </div>
         ) : null}
@@ -129,7 +121,7 @@ function ReportContent() {
 
       <div className="flex flex-wrap items-center gap-3">
         <CallLink intentId={d.intentId} />
-        {d.state === "OPEN" ? (
+        {d.state === "OPEN" && !refundedBeforeDecision(d) ? (
           confirming ? (
             <span className="flex flex-wrap items-center gap-2" role="group" aria-label="Withdraw the report?">
               <span className="text-body-13 text-02">

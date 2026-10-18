@@ -11,10 +11,10 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { changeText } from "@/features/contracts/text";
 import { cn } from "@/utils";
 import type { ContractChange } from "@/interfaces/contracts";
-import { takedownProviderTool, type ModerationCutoff } from "@/services/operator-provider-tools.service";
+import { takedownProviderTool, type ModerationCutoff, type TakedownReasonCode } from "@/services/operator-provider-tools.service";
 import type { ProviderToolVersion } from "@/services/provider-tools.service";
 
-import { MODERATION_NOTE_MIN, OPERATOR_CASES_TABS, operatorToolsTabs, TAKEDOWN_REASONS, toolReviewErrorText } from "./provider-tool-review";
+import { MODERATION_NOTE_MIN, OPERATOR_CASES_TABS, operatorToolsTabs, TAKEDOWN_PUBLIC_NOTE_MAX, TAKEDOWN_REASONS, toolReviewErrorText } from "./provider-tool-review";
 import { useOperatorSession } from "./session-context";
 
 /** Tools' tabs, the ones this operator can use. */
@@ -116,8 +116,13 @@ export function FieldDiff({ before, after }: { before: ProviderToolVersion; afte
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-01 px-3.5 py-3" data-testid="field-diff">
       <p className="text-label-13 text-01">
-        v{before.semver} → v{after.semver}, field by field
+        {before.semver === after.semver ? `v${after.semver}: what you read → what it says now` : `v${before.semver} → v${after.semver}, field by field`}
       </p>
+      {before.description !== after.description ? (
+        <p className="text-body-13 text-02 [overflow-wrap:anywhere]">
+          <span className="rounded bg-warning-10 px-1 text-warning-700">~ description</span> now reads: “{after.description}”
+        </p>
+      ) : null}
       {before.summary !== after.summary ? (
         <p className="text-body-13 text-02 [overflow-wrap:anywhere]">
           <span className="rounded bg-warning-10 px-1 text-warning-700">~ summary</span> “{before.summary}” → “{after.summary}”
@@ -166,18 +171,27 @@ export function ReviewChanges({ changes }: { changes: readonly unknown[] }) {
  * it is reverted.
  */
 export function TakedownSheet({ toolId, toolName, open, onOpenChange, onDone }: { toolId: string; toolName: string; open: boolean; onOpenChange: (open: boolean) => void; onDone?: (cutoff: ModerationCutoff) => void }) {
-  const [reason, setReason] = React.useState("");
+  const [reason, setReason] = React.useState<TakedownReasonCode | "">("");
   const [note, setNote] = React.useState("");
+  const [publicNote, setPublicNote] = React.useState("");
   const [errors, setErrors] = React.useState<{ reason?: string; note?: string }>({});
   React.useEffect(() => {
     if (open) {
       setReason("");
       setNote("");
+      setPublicNote("");
       setErrors({});
     }
   }, [open]);
   const run = useMutation({
-    mutationFn: () => takedownProviderTool(toolId, { reasonCode: reason, note: note.trim() }),
+    // The reason is told to the provider (and recorded in the register); `note` stays internal.
+    mutationFn: () =>
+      takedownProviderTool(toolId, {
+        reasonCode: reason,
+        publicReasonCode: reason as TakedownReasonCode,
+        note: note.trim(),
+        ...(publicNote.trim() ? { publicNote: publicNote.trim() } : {}),
+      }),
     onSuccess: (cutoff) => {
       onDone?.(cutoff);
       onOpenChange(false);
@@ -198,7 +212,32 @@ export function TakedownSheet({ toolId, toolName, open, onOpenChange, onDone }: 
           <SheetDescription>At once: it disappears from every view, including pinned tool set versions, and calls get an error. A second operator confirms it within 72 hours, or it comes back.</SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-3 px-[18px] pb-5 pt-3">
-          <ReasonChips label="Why" options={TAKEDOWN_REASONS} value={reason} onChange={setReason} note={note} onNoteChange={setNote} noteLabel="What a second operator needs to know" noteMin={MODERATION_NOTE_MIN} noteMax={1000} errors={errors} />
+          <ReasonChips
+            label="Why (shown to the provider)"
+            options={TAKEDOWN_REASONS}
+            value={reason}
+            onChange={(v) => setReason(v as TakedownReasonCode)}
+            note={note}
+            onNoteChange={setNote}
+            noteLabel="Internal note for the second operator (never shown to the provider)"
+            noteMin={MODERATION_NOTE_MIN}
+            noteMax={1000}
+            errors={errors}
+          />
+          <label className="flex flex-col gap-1.5">
+            <span className="text-label-13 text-01">Note to the provider (optional, shown to them)</span>
+            <textarea
+              value={publicNote}
+              maxLength={TAKEDOWN_PUBLIC_NOTE_MAX}
+              rows={2}
+              onChange={(e) => setPublicNote(e.target.value)}
+              placeholder="What to fix, or whom to contact"
+              className="rounded-md border border-02 bg-01 px-3 py-2 text-body-13 text-01"
+            />
+            <span className="text-body-xs text-03">
+              {publicNote.length} / {TAKEDOWN_PUBLIC_NOTE_MAX}. The provider sees this and the reason above on its tool&apos;s page and in its notice.
+            </span>
+          </label>
           {run.isError ? (
             <p role="alert" className="text-body-13 text-danger-700">
               {toolReviewErrorText(run.error)}

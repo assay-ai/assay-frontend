@@ -126,3 +126,19 @@ export function starterCheck(output: readonly FieldRow[]): Record<string, unknow
   const required = output.filter((r) => r.required && r.name.trim()).map((r) => r.name.trim());
   return required.length > 0 ? { id: "has_required_fields", type: "REQUIRED_FIELDS", path: "$", fields: required } : null;
 }
+
+/** The fields of an object schema. */
+export function schemaFieldNames(schema: unknown): string[] {
+  const props = (schema as { properties?: unknown } | null)?.properties;
+  return props && typeof props === "object" && !Array.isArray(props) ? Object.keys(props) : [];
+}
+
+/**
+ * The fields an imported schema does not require, as the optional list: so
+ * every field it brings is either required or optional, and the first save
+ * is never blocked by "neither required nor an extra field".
+ */
+export function optionalFromSchema(schema: unknown): string[] {
+  const required = new Set(Array.isArray((schema as { required?: unknown } | null)?.required) ? ((schema as { required: unknown[] }).required.filter((r) => typeof r === "string") as string[]) : []);
+  return schemaFieldNames(schema).filter((name) => !required.has(name));
+}

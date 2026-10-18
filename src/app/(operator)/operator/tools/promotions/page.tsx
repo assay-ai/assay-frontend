@@ -111,7 +111,7 @@ function PromotionsScreen() {
         <h1 className="text-heading-md text-01">Promotion candidates</h1>
         <p className="text-body-13 text-02">One maker&apos;s APIs that do the same job. A standard tool made from them gives agents backup providers.</p>
         <p className="text-body-xs text-03">
-          “Anyone with the link” tools are shared but not reviewed; inviting their providers is fine, since the standard tool is reviewed in the contract editor before it serves. Listed tools come first.
+          Why “Anyone with the link” tools are here too: they do the same job as listed ones, and a standard tool made from them gives their agents backup providers. They are not reviewed yet, but nothing of theirs is published: the standard tool goes through the contract editor and a second Policy person before it serves. Listed tools come first.
         </p>
       </header>
       {groups.isPending ? (
@@ -135,7 +135,7 @@ function PromotionsScreen() {
                         <Link href={routes.operatorReview(tool.toolId)} className="inline-flex min-h-10 items-center font-mono text-mono-13 text-01 hover:underline [overflow-wrap:anywhere]">
                           {tool.name}
                         </Link>
-                        <Chip>{tool.visibility === "LISTED" ? "Listed" : "Anyone with the link"}</Chip>
+                        <Chip>{tool.visibility === "LISTED" ? "Listed" : "Anyone with the link · not reviewed yet"}</Chip>
                         <span className="text-body-xs text-03">v{tool.semver}</span>
                         {tool.replacementToolId ? <Chip tone="success">Points to a standard tool</Chip> : null}
                       </span>

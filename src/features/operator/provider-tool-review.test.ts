@@ -55,13 +55,14 @@ describe("operator navigation with provider tools and call disputes", () => {
     }
     expect(operatorNavFor(["ADJL", "POL"]).map((i) => i.id)).toEqual(["home", "penalties", "blocks", "arbiter", "tools", "team", "activity"]);
     expect(operatorNavFor(["ADJL", "POL", "OPS_ADMIN"])).toHaveLength(8);
+    // Admin alone: no review, takedown, contract or arbiter role in the register (A-24, A-25, P-10, S-*), so 6 items.
+    expect(operatorNavFor(["OPS_ADMIN"]).map((i) => i.id)).toEqual(["home", "penalties", "blocks", "team", "contracts", "activity"]);
   });
 
-  it("offers only the Tools tabs a role can use", () => {
-    expect(operatorToolsTabs(["POL"]).map((t) => t.id)).toEqual(["standard", "reviews", "promotions"]);
-    expect(operatorToolsTabs(["ADJ"]).map((t) => t.id)).toEqual(["reviews", "takedowns"]);
-    expect(operatorToolsTabs(["SRE"]).map((t) => t.id)).toEqual(["reviews", "takedowns"]);
-    expect(operatorToolsTabs(["POLA"]).map((t) => t.id)).toEqual(["standard", "promotions"]);
+  it("shows every Tools tab, marking the ones a role can only read", () => {
+    expect(operatorToolsTabs(["POL"]).map((t) => t.label)).toEqual(["Standard tools", "Reviews", "Promotions", "Takedowns (read only)"]);
+    expect(operatorToolsTabs(["SRE", "SUP"]).map((t) => t.label)).toEqual(["Standard tools (read only)", "Reviews", "Promotions (read only)", "Takedowns"]);
+    expect(operatorToolsTabs(["SUP"])).toEqual([]);
   });
 });
 

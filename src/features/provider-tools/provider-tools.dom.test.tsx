@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { ProviderTool, ProviderToolGate } from "@/services/provider-tools.service";
 
 import { NameStep } from "./name-step";
+import { PublishApiFlow } from "./publish-flow";
+import { providerToolKeys } from "./queries";
 import { ShareStep } from "./share-steps";
 import { GateChecklist, ProviderToolChips, VersionHistory } from "./ui";
 
@@ -67,6 +69,7 @@ const base: ProviderTool = {
   mcpUrls: { handle: null },
   quality: { windowDays: 30, calls: 0, schemaFailures: 0, schemaPassRate: null, rulesJudged: 0, rulesFailed: 0, rulesPassRate: null, slaVerifiedCalls: 0, slaFailedCalls: 0, slaFailureRate: null, disputesDecided: null, disputesUpheld: null, quality: null, maxTier: "VERIFIED" },
   earliestSunsetAt: "2027-01-20T00:00:00.000Z",
+  takedown: null,
 };
 
 const failing: ProviderToolGate = {
@@ -134,3 +137,17 @@ describe("step 4", () => {
     expect(words).toContain("Resubmit for review");
   });
 });
+
+describe("a taken-down tool", () => {
+  it("says when and why, in the words the provider was given", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tool = { ...base, status: "REMOVED", removedAt: "2026-10-18T06:30:00.000Z", takedown: { at: "2026-10-18T06:30:00.000Z", reasonCode: "HARMFUL_OUTPUT", reasonLabel: "Harmful output", publicNote: "Contact support to publish it as entertainment." } };
+    client.setQueryData(providerToolKeys.one("t1"), tool);
+    const words = text(renderToStaticMarkup(<QueryClientProvider client={client}><PublishApiFlow toolId="t1" /></QueryClientProvider>));
+    expect(words).toContain("Why: Harmful output");
+    expect(words).toContain("Contact support to publish it as entertainment.");
+    expect(words).toContain("Not served");
+    expect(words).not.toContain("Agents get this one");
+  });
+});
+

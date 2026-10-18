@@ -20,7 +20,7 @@ import {
 import { toast } from "@/utils/toast";
 
 import { FieldsEditor, TryPanel, type TryOutcome } from "./fields-editor";
-import { fieldsFromSchema, optionalNames, schemaFromFields, starterCheck, starterExample, type FieldRow } from "./schema-fields";
+import { fieldsFromSchema, optionalFromSchema, optionalNames, schemaFromFields, starterCheck, starterExample, type FieldRow } from "./schema-fields";
 
 import { contractBody, contractFormFor, providerToolErrorView, rulesTextOf, type PublishStepId } from "./model";
 import { providerToolKeys } from "./queries";
@@ -69,7 +69,7 @@ function SchemaSide({ side, rows, onRows, disabled, children }: { side: "input" 
 }
 
 const RULES_HINT =
-  'Optional. A JSON list of checks run on every answer, e.g. [{ "id": "has_posts", "type": "MIN_ARRAY_LENGTH", "path": "$.posts", "min": 1 }]. Types: MIN_ARRAY_LENGTH, REQUIRED_FIELDS, FRESHNESS, VALUE_RANGE, VALID_URL, NO_DUPLICATES. A failed check counts against quality; it does not refuse the call.';
+  "Optional. Checks run on every answer, such as \u201ca list must not come back empty\u201d or \u201cthese fields must be there\u201d. Use \u201cAdd a starter check\u201d above to get one. A failed check counts against quality; it does not refuse the call.";
 
 function sameForm(a: ContractForm, b: ContractForm): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -162,7 +162,15 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
   const applyTried = (outcome: TryOutcome) => {
     const input = JSON.stringify(outcome.inputSchema, null, 2);
     const output = outcome.outputSchema ? JSON.stringify(outcome.outputSchema, null, 2) : form.outputSchema;
-    setForm((f) => ({ ...f, inputSchema: input, outputSchema: output, examples: JSON.stringify(outcome.examples.slice(0, 10), null, 2) }));
+    setForm((f) => ({
+      ...f,
+      inputSchema: input,
+      outputSchema: output,
+      // Every imported field lands required or optional, so the first save is not blocked.
+      optionalInputFields: optionalFromSchema(JSON.parse(input)),
+      optionalOutputFields: optionalFromSchema(JSON.parse(output)),
+      examples: JSON.stringify(outcome.examples.slice(0, 10), null, 2),
+    }));
     setInputRows(fieldsFromSchema(input));
     setOutputRows(fieldsFromSchema(output));
     toast.success("Filled in from your endpoint's answer. Check the descriptions: agents read them.");
@@ -323,7 +331,7 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
         disabled={frozen}
         rows={5}
         mono
-        hint='A JSON list, up to 10: [{ "title": "Posts about rain", "arguments": { … }, "result": { … } }]. Reviewers run them.'
+        hint="Up to 10 sample calls: what an agent sends and what comes back. Use “Add a starter example” above to get one with your fields; reviewers run them."
         error={built.errors.examples}
       />
       <TextBlock label="Checks on every answer (optional)" value={rules} onChange={setRules} disabled={frozen} rows={3} mono hint={RULES_HINT} error={built.errors.rules} />

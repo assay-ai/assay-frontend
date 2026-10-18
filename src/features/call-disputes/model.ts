@@ -74,6 +74,22 @@ export const DISPUTE_COPY = {
   limit: `You can report up to ${REPORTS_PER_DAY} calls in 24 hours.`,
 } as const;
 
+/**
+ * The buyer's words for the same rules: "upheld" and "operator" are internal,
+ * so a buyer reads "accepted" with what it means for the money, and "Assay's
+ * review team".
+ */
+export const BUYER_COPY = {
+  reply: DISPUTE_COPY.reply,
+  decides: `Assay's review team decides within ${DECISION_HOURS} hours.`,
+  silentHeld: `If the provider stays silent, your report is accepted automatically at ${DECISION_HOURS} hours and you are refunded.`,
+  held: "The payment stays held until your report is decided.",
+  afterHold:
+    "The payment has already been collected. If your report is accepted, it counts against the provider's quality, but the money is not returned unless it had not been paid out yet: a refund is not guaranteed.",
+  limit: DISPUTE_COPY.limit,
+  safetyNet: DISPUTE_COPY.safetyNet,
+} as const;
+
 function money(value: Money | null | undefined): string | null {
   return value ? formatMoney(value, { decimals: 4 }) : null;
 }
@@ -95,7 +111,7 @@ export function buyerStatus(dispute: CallDispute, now: number): DisputeStatusVie
     return {
       label: "Refunded · decision pending",
       tone: "teal",
-      detail: `The provider was blocked, so the payment${refunded ? ` of ${refunded}` : ""} went back to your balance. ${DISPUTE_COPY.decides}`,
+      detail: `The provider was blocked, so the payment${refunded ? ` of ${refunded}` : ""} went back to your balance. ${BUYER_COPY.decides}`,
     };
   }
   if (dispute.state === "OPEN") {
@@ -104,27 +120,27 @@ export function buyerStatus(dispute: CallDispute, now: number): DisputeStatusVie
     return {
       label: replyOpen ? "Waiting for the provider" : "Waiting for a decision",
       tone: "primary",
-      detail: dispute.refundGuaranteed ? `${DISPUTE_COPY.held} If it is upheld, you are refunded in full.` : DISPUTE_COPY.afterHold,
+      detail: dispute.refundGuaranteed ? `${BUYER_COPY.held} If it is accepted, you are refunded in full.` : BUYER_COPY.afterHold,
     };
   }
   if (dispute.state === "UPHELD") {
     switch (dispute.refundState) {
       case "REFUNDED":
-        return { label: "Upheld · refunded", tone: "success", detail: `You were refunded${refunded ? ` ${refunded}` : ""}.` };
+        return { label: "Accepted · refunded", tone: "success", detail: `You were refunded${refunded ? ` ${refunded}` : ""}.` };
       case "PENDING":
-        return { label: "Upheld · refund on its way", tone: "success", detail: "The refund is being booked. It lands in your balance within minutes." };
+        return { label: "Accepted · refund on its way", tone: "success", detail: "The refund is being booked. It lands in your balance within minutes." };
       case "NOT_CHARGED":
-        return { label: "Upheld", tone: "success", detail: "You were never charged for this call." };
+        return { label: "Accepted", tone: "success", detail: "You were never charged for this call." };
       case "NOT_REFUNDABLE":
-        return { label: "Upheld · no refund", tone: "warning", detail: "It counts against the provider, but the payment had already been collected, so nothing could be refunded." };
+        return { label: "Accepted · no refund", tone: "warning", detail: "It counts against the provider's quality. The payment had already been collected, so nothing could be refunded." };
       default:
-        return { label: "Upheld", tone: "success", detail: "It counts against the provider's quality." };
+        return { label: "Accepted", tone: "success", detail: "It counts against the provider's quality." };
     }
   }
   if (dispute.state === "REJECTED") {
     return dispute.refundState === "REFUNDED"
-      ? { label: "Rejected · refunded anyway", tone: "teal", detail: "The report was rejected, but the call was refunded because its provider was blocked." }
-      : { label: "Rejected", tone: "neutral", detail: "The call stays charged. The reviewer's reason is below." };
+      ? { label: "Not accepted · refunded anyway", tone: "teal", detail: "Your report was not accepted, but the call was refunded because its provider was blocked." }
+      : { label: "Not accepted", tone: "neutral", detail: "The call stays charged. The reviewer's reason is below." };
   }
   return { label: dispute.state, tone: "neutral", detail: "" };
 }
@@ -134,7 +150,13 @@ export function providerStatus(dispute: CallDispute, now: number): DisputeStatus
   if (dispute.state === "WITHDRAWN") return { label: "Withdrawn", tone: "neutral", detail: "The buyer withdrew the report." };
   if (dispute.state === "OPEN") {
     if (dispute.canRespond) {
-      return { label: "Reply needed", tone: "warning", detail: `Reply once, within ${PROVIDER_REPLY_HOURS} hours of the report. If you stay silent, it is upheld automatically at ${DECISION_HOURS} hours.` };
+      return {
+        label: "Reply needed",
+        tone: "warning",
+        detail: dispute.autoUpholdAt
+          ? `Reply once, within ${PROVIDER_REPLY_HOURS} hours of the report. If you stay silent, it is upheld automatically at ${DECISION_HOURS} hours.`
+          : `Reply once, within ${PROVIDER_REPLY_HOURS} hours of the report. ${DISPUTE_COPY.decides}`,
+      };
     }
     if (!dispute.providerRespondedAt && now >= Date.parse(replyDueAt(dispute))) {
       return { label: "Reply window closed", tone: "danger", detail: `You did not reply within ${PROVIDER_REPLY_HOURS} hours. The report is upheld automatically at ${DECISION_HOURS} hours unless an operator decides first.` };
@@ -174,7 +196,9 @@ export function disputeTimeline(dispute: CallDispute, now: number, side: "buyer"
     steps.push({ id: "reply", label: "Provider replied", state: "done", date: dispute.providerRespondedAt, description: reply ? `“${reply.length > 140 ? `${reply.slice(0, 139)}…` : reply}”` : undefined });
   } else if (blocked) {
     steps.push({ id: "reply", label: "No reply needed: provider blocked", state: "skipped" });
-  } else if (withdrawn || decided || replyClosed) {
+  } else if (withdrawn) {
+    steps.push({ id: "reply", label: side === "buyer" ? "Withdrawn before a reply" : "Withdrawn by the buyer", state: "skipped" });
+  } else if (decided || replyClosed) {
     steps.push({
       id: "reply",
       label: "No reply from the provider",
@@ -214,7 +238,7 @@ export function disputeTimeline(dispute: CallDispute, now: number, side: "buyer"
   if (decided) {
     steps.push({
       id: "decision",
-      label: dispute.state === "UPHELD" ? "Upheld" : "Rejected",
+      label: side === "buyer" ? (dispute.state === "UPHELD" ? "Accepted" : "Not accepted") : dispute.state === "UPHELD" ? "Upheld" : "Rejected",
       state: "done",
       date: dispute.resolvedAt ?? dispute.updatedAt,
     });
@@ -226,16 +250,16 @@ export function disputeTimeline(dispute: CallDispute, now: number, side: "buyer"
       state: dispute.providerRespondedAt || replyClosed ? "current" : "upcoming",
       date: decisionDueAt(dispute),
       dateLabel: "Decided by",
-      description: silent && dispute.autoUpholdAt ? (side === "buyer" ? DISPUTE_COPY.silentRefund : DISPUTE_COPY.silent) : DISPUTE_COPY.decides,
+      description: side === "buyer" ? (silent && dispute.autoUpholdAt ? BUYER_COPY.silentHeld : BUYER_COPY.decides) : silent && dispute.autoUpholdAt ? DISPUTE_COPY.silent : DISPUTE_COPY.decides,
     });
   }
 
-  const refund = refundStep(dispute, decided);
+  const refund = refundStep(dispute, decided, side);
   if (refund) steps.push(refund);
   return steps;
 }
 
-function refundStep(dispute: CallDispute, decided: boolean): StatusTimelineStep | null {
+function refundStep(dispute: CallDispute, decided: boolean, side: "buyer" | "provider"): StatusTimelineStep | null {
   const refunded = money(dispute.restoredAmount ?? dispute.refundAmount ?? dispute.amount);
   if (!decided) {
     if (dispute.refundState === "REFUNDED") return null;
@@ -243,7 +267,11 @@ function refundStep(dispute: CallDispute, decided: boolean): StatusTimelineStep 
       id: "refund",
       label: "Refund",
       state: "upcoming",
-      description: dispute.refundGuaranteed ? "In full, if upheld." : "Not guaranteed: the payment was already collected.",
+      description: dispute.refundGuaranteed
+        ? side === "buyer"
+          ? "In full, if your report is accepted."
+          : "In full to the buyer, if upheld."
+        : "Not guaranteed: the payment was already collected.",
     };
   }
   if (dispute.state === "REJECTED") {
@@ -295,8 +323,8 @@ export function reportWindow(
     };
   }
   return guaranteed
-    ? { open, guaranteed, holdEndsAt: holdEnds, text: "The payment is still held. Report it now and, if upheld, you are refunded in full." }
-    : { open, guaranteed, holdEndsAt: null, text: `The 1-hour hold has ended. ${DISPUTE_COPY.afterHold}` };
+    ? { open, guaranteed, holdEndsAt: holdEnds, text: "The payment is still held. Report it now and, if your report is accepted, you are refunded in full." }
+    : { open, guaranteed, holdEndsAt: null, text: `The 1-hour hold has ended. ${BUYER_COPY.afterHold}` };
 }
 
 /* ---------------------------------------------------------- operator SLA */
@@ -313,13 +341,15 @@ export interface SlaMark {
  * 48-hour page, and the 72-hour auto-uphold (provider silent) or overdue
  * (provider replied: held, paged).
  */
-export function slaMarks(dispute: Pick<CallDispute, "state" | "providerRespondedAt" | "replyDueAt" | "pageAt" | "decisionDueAt" | "autoUpholdAt">, now: number): SlaMark[] {
+export function slaMarks(dispute: Pick<CallDispute, "state" | "providerRespondedAt" | "replyDueAt" | "pageAt" | "decisionDueAt" | "autoUpholdAt" | "refundGuaranteed"> & { refundState?: string | null }, now: number): SlaMark[] {
   if (dispute.state !== "OPEN") return [];
   const silent = !dispute.providerRespondedAt;
   const auto = dispute.autoUpholdAt !== null;
   const marks: SlaMark[] = [];
   if (silent && now < Date.parse(dispute.replyDueAt)) marks.push({ label: "Provider may reply", tone: "neutral", dueAt: dispute.replyDueAt });
   if (silent && now >= Date.parse(dispute.replyDueAt)) marks.push({ label: "Provider silent", tone: "warning", dueAt: null });
+  // Every silent dispute says whether it upholds itself, and if not, why.
+  if (silent && !auto) marks.push({ label: dispute.refundState === "REFUNDED" ? "Already refunded: provider blocked" : dispute.refundGuaranteed ? "No auto-uphold: a large refund needs two operators" : "No auto-uphold: filed after the hold", tone: "neutral", dueAt: null });
   if (now >= Date.parse(dispute.decisionDueAt)) {
     marks.push(auto ? { label: "Auto-uphold due", tone: "danger", dueAt: dispute.decisionDueAt } : { label: "Overdue: decide now", tone: "danger", dueAt: dispute.decisionDueAt });
   } else if (now >= Date.parse(dispute.pageAt)) {
@@ -342,6 +372,20 @@ export function disputeQueueQuery(show: "open" | "all", flaggedOnly: boolean, cu
   return show === "open"
     ? { state: ["OPEN"] as const, order: "ASC" as const, flaggedOnly, cursor, limit: QUEUE_PAGE }
     : { order: "DESC" as const, flaggedOnly, cursor, limit: QUEUE_PAGE };
+}
+
+/**
+ * A short, stable reference for an organization the operator may not see by
+ * id: "#4f2a" (FNV-1a of the id, 4 hex digits). It tells two rows apart and
+ * never shows the id itself.
+ */
+export function shortRef(id: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < id.length; i += 1) {
+    hash ^= id.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `#${(hash & 0xffff).toString(16).padStart(4, "0")}`;
 }
 
 /** Oldest first: the queue's order is the SLA's. */

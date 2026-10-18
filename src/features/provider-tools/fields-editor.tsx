@@ -10,7 +10,7 @@ import { tryProviderTool, type ProviderToolTryResult } from "@/services/provider
 import { cn } from "@/utils";
 
 import { providerToolErrorView } from "./model";
-import { FIELD_TYPE_LABEL, FIELD_TYPES, fieldProblems, type FieldRow, type FieldType } from "./schema-fields";
+import { FIELD_TYPE_LABEL, FIELD_TYPES, fieldProblems, schemaFieldNames, type FieldRow, type FieldType } from "./schema-fields";
 
 /**
  * Two helpers of "Inputs & outputs" (and of step 1): the field editor — one
@@ -121,12 +121,16 @@ export interface TryOutcome {
 export function TryPanel({ onUse, disabled = false, compact = false }: { onUse: (outcome: TryOutcome) => void; disabled?: boolean; compact?: boolean }) {
   const [text, setText] = React.useState("");
   const [result, setResult] = React.useState<ProviderToolTryResult | null>(null);
+  const [applied, setApplied] = React.useState<string | null>(null);
   const run = useMutation({
     mutationFn: () => {
       const value = text.trim();
       return tryProviderTool(/^curl\s/i.test(value) ? { curl: value } : { openapi: value });
     },
-    onSuccess: setResult,
+    onSuccess: (r) => {
+      setResult(r);
+      setApplied(null);
+    },
   });
   const upstream = result?.upstream ?? null;
   return (
@@ -158,9 +162,25 @@ export function TryPanel({ onUse, disabled = false, compact = false }: { onUse: 
               ))}
             </ul>
           ) : null}
-          <Button className="self-start" disabled={disabled} onClick={() => onUse({ inputSchema: result.inferred.inputSchema, outputSchema: result.inferred.outputSchema, examples: result.inferred.examples })}>
-            Use these inputs, outputs and example
-          </Button>
+          <p className="text-body-13 text-02" data-testid="try-found">
+            Found inputs: {schemaFieldNames(result.inferred.inputSchema).join(", ") || "none"} · outputs: {result.inferred.outputSchema ? schemaFieldNames(result.inferred.outputSchema).join(", ") || "none" : "not worked out"} · {result.inferred.examples.length} example{result.inferred.examples.length === 1 ? "" : "s"}
+          </p>
+          {applied ? (
+            <p role="status" className="text-label-13 text-success-700" data-testid="try-applied">
+              {applied}
+            </p>
+          ) : (
+            <Button
+              className="self-start"
+              disabled={disabled}
+              onClick={() => {
+                onUse({ inputSchema: result.inferred.inputSchema, outputSchema: result.inferred.outputSchema, examples: result.inferred.examples });
+                setApplied("Applied. Fields the answer did not always have are marked optional; check the descriptions below.");
+              }}
+            >
+              Use these inputs, outputs and example
+            </Button>
+          )}
         </div>
       ) : null}
     </section>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
-import { deprecateProviderToolMajor, setProviderToolReplacement, type ProviderTool } from "@/services/provider-tools.service";
+import { deprecateProviderToolMajor, listProviderTools, setProviderToolReplacement, type ProviderTool } from "@/services/provider-tools.service";
+import { usePublicTools } from "@/features/explorer/use-public-explorer";
 import { formatDate } from "@/libs/utc-time";
 import { toast } from "@/utils/toast";
 import { UtcTime } from "@/components/patterns/utc-time";
@@ -118,9 +119,19 @@ export function PublishApiFlow({ toolId }: { toolId: string | null }) {
       {takenDown ? (
         <div role="alert" className="flex flex-col gap-1.5 rounded-lg border border-danger-20 bg-danger-10 px-3.5 py-3 text-body-13 text-danger-700" data-testid="taken-down">
           <p>
-            Assay took this tool down{tool?.removedAt ? <> on <UtcTime value={tool.removedAt} alwaysDay /></> : null}. It is removed from every view, including pinned tool set versions, and calls to it get an error. It can&apos;t be edited.
+            Assay took this tool down{tool?.takedown?.at ?? tool?.removedAt ? <> on <UtcTime value={tool?.takedown?.at ?? tool?.removedAt} alwaysDay /></> : null}. It is removed from every view, including pinned tool set versions, and calls to it get an error. It can&apos;t be edited.
           </p>
-          <p>The reason is in the notice Assay sent to your Inbox.</p>
+          {tool?.takedown?.reasonLabel || tool?.takedown?.reasonCode ? (
+            <p data-testid="takedown-reason">
+              <span className="text-label-13">Why:</span> {tool.takedown.reasonLabel ?? tool.takedown.reasonCode}
+            </p>
+          ) : null}
+          {tool?.takedown?.publicNote ? (
+            <p className="[overflow-wrap:anywhere]" data-testid="takedown-note">
+              <span className="text-label-13">Assay&apos;s note to you:</span> {tool.takedown.publicNote}
+            </p>
+          ) : null}
+          {!tool?.takedown?.reasonCode && !tool?.takedown?.publicNote ? <p>The notice Assay sent to your Inbox has the details.</p> : null}
           <p className="flex flex-wrap gap-x-4">
             <Link href="/provider/inbox" className="inline-flex min-h-10 items-center text-primary-600 hover:underline">
               Open your Inbox
@@ -218,17 +229,39 @@ function ToolFacts({ tool, readOnly }: { tool: ProviderTool; readOnly: boolean }
   );
 }
 
+/** Tools a deprecated major may point to: listed tools, and your own tools shared at least as widely; never itself, a deprecated or a removed one. */
+function useReplacementCandidates(tool: ProviderTool, enabled: boolean): { id: string; name: string; note: string | null }[] {
+  const listed = usePublicTools();
+  const own = useQuery({ queryKey: [...providerToolKeys.all, "replacement-candidates"], queryFn: () => listProviderTools({ limit: 100 }), enabled, retry: 0 });
+  return React.useMemo(() => {
+    const rank = (v: string) => ["PRIVATE", "UNLISTED", "LISTED"].indexOf(v);
+    const rows = new Map<string, { id: string; name: string; note: string | null }>();
+    for (const t of listed.data?.tools ?? []) {
+      if (t.id === tool.id || t.routable === false) continue;
+      rows.set(t.id, { id: t.id, name: t.name, note: t.kind === "PROVIDER" ? "one maker's API" : "standard tool" });
+    }
+    for (const t of own.data?.items ?? []) {
+      if (t.id === tool.id || t.status !== "ACTIVE" || t.removedAt || rank(t.visibility) < rank(tool.visibility)) continue;
+      if (!rows.has(t.id)) rows.set(t.id, { id: t.id, name: t.name, note: "your own" });
+    }
+    return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [listed.data, own.data, tool.id, tool.visibility]);
+}
+
 function DeprecateSheet({ tool, row, onClose }: { tool: ProviderTool; row: VersionRow | null; onClose: () => void }) {
   const queryClient = useQueryClient();
   const min = earliestSunsetDay(tool.earliestSunsetAt);
   const [day, setDay] = React.useState(min);
   React.useEffect(() => setDay(min), [row, min]);
   const major = row?.semver.split(".")[0] ?? "";
+  const [replacement, setReplacement] = React.useState("");
+  React.useEffect(() => setReplacement(""), [row]);
+  const candidates = useReplacementCandidates(tool, row !== null);
   const run = useMutation({
-    mutationFn: () => deprecateProviderToolMajor(tool.id, row!.version, `${day}T00:00:00.000Z`),
+    mutationFn: () => deprecateProviderToolMajor(tool.id, row!.version, `${day}T00:00:00.000Z`, replacement || null),
     onSuccess: (updated) => {
       queryClient.setQueryData(providerToolKeys.one(updated.id), updated);
-      toast.success(`v${major} is deprecated; it stops on ${day} (UTC)`);
+      toast.success(`v${major} is deprecated; it stops on ${day} (UTC)${updated.replacementName ? `. Agents are pointed to ${updated.replacementName}` : ""}`);
       onClose();
     },
   });
@@ -243,17 +276,25 @@ function DeprecateSheet({ tool, row, onClose }: { tool: ProviderTool; row: Versi
           <SheetDescription>Agents locked to v{major} keep working until the date below, and get a notice now. After it, v{major} stops answering calls.</SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-3 px-[18px] pb-5 pt-3">
-          {current ? (
-            <p className="rounded-lg bg-02 px-3 py-2.5 text-body-13 text-01" data-testid="deprecate-replacement">
-              Replacement: <span className="font-mono text-mono-13">v{current.semver}</span>, the version agents get by default. Agents locked to v{major} should move to it before the date.
-            </p>
-          ) : null}
+          <label className="flex flex-col gap-1.5" data-testid="deprecate-replacement">
+            <span className="text-label-13 text-01">Replacement</span>
+            <select value={replacement} onChange={(e) => setReplacement(e.target.value)} className="min-h-10 rounded-md border border-02 bg-01 px-2 text-body-13 text-01">
+              <option value="">{current ? `This tool's v${current.semver} (agents get it by default)` : "No other tool"}</option>
+              {candidates.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.note ? ` (${c.note})` : ""}
+                </option>
+              ))}
+            </select>
+            <span className="text-body-xs text-03">Agents locked to v{major} are told to move to it before the date. Only tools that serve now and reach at least the same agents are offered.</span>
+          </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-label-13 text-01">Stops on (UTC)</span>
             <input type="date" value={day} min={min} onChange={(e) => setDay(e.target.value)} className="min-h-10 rounded-md border border-02 bg-01 px-3 font-mono text-mono-sm text-01" />
             <span className={tooSoon ? "text-body-xs text-danger-600" : "text-body-xs text-03"}>
-              {inWords ? `${inWords} (UTC). ` : ""}
-              {formatDate(`${min}T00:00:00.000Z`)} at the earliest: callers get at least 90 days&apos; notice.
+              {inWords && day !== min ? `Stops on ${inWords} (UTC). ` : ""}
+              {`Earliest: ${formatDate(`${min}T00:00:00.000Z`)} (UTC), so callers get at least 90 days' notice.`}
             </span>
           </label>
           {run.isError ? <p className="text-body-13 text-danger-700">{providerToolErrorView(run.error).text}</p> : null}

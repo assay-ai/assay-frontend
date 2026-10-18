@@ -66,7 +66,7 @@ describe("Tools tabs", () => {
     );
     expect(text(html)).toContain("Reviews");
     expect(text(html)).toContain("Takedowns");
-    expect(text(html)).not.toContain("Standard tools");
+    expect(text(html)).toContain("Standard tools (read only)");
     expect(html).toContain('aria-current="page"');
   });
 });

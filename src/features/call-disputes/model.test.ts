@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "@/libs/ApiClient";
 import type { CallDispute } from "@/services/call-disputes.service";
 
-import { buyerStatus, decisionDueAt, DISPUTE_COPY, disputeQueueQuery, disputeErrorText, disputeTimeline, providerStatus, replyDueAt, reportWindow, slaMarks } from "./model";
+import { BUYER_COPY, buyerStatus, decisionDueAt, DISPUTE_COPY, shortRef, disputeQueueQuery, disputeErrorText, disputeTimeline, providerStatus, replyDueAt, reportWindow, slaMarks } from "./model";
 
 const FILED = "2026-10-18T10:00:00.000Z";
 const H = 3_600_000;
@@ -58,7 +58,7 @@ describe("the timeline", () => {
     const steps = disputeTimeline(dispute(), t0 + H);
     expect(ids(steps)).toEqual(["reported:done", "reply:current", "decision:upcoming", "refund:upcoming"]);
     expect(steps[0]!.description).toMatch(/held, not paid out/);
-    expect(steps[2]!.description).toMatch(/upheld automatically at 72 hours/);
+    expect(steps[2]!.description).toMatch(/accepted automatically at 72 hours/);
   });
 
   it("the provider replied: an operator decides", () => {
@@ -103,8 +103,8 @@ describe("one-line status", () => {
     expect(buyerStatus(dispute(), t0 + H).label).toBe("Waiting for the provider");
     expect(buyerStatus(dispute(), t0 + 25 * H).label).toBe("Waiting for a decision");
     expect(buyerStatus(dispute({ refundState: "REFUNDED" }), t0 + H)).toMatchObject({ label: "Refunded · decision pending", tone: "teal" });
-    expect(buyerStatus(dispute({ state: "UPHELD", refundState: "PENDING" }), t0).label).toBe("Upheld · refund on its way");
-    expect(buyerStatus(dispute({ state: "REJECTED" }), t0).label).toBe("Rejected");
+    expect(buyerStatus(dispute({ state: "UPHELD", refundState: "PENDING" }), t0).label).toBe("Accepted · refund on its way");
+    expect(buyerStatus(dispute({ state: "REJECTED" }), t0).label).toBe("Not accepted");
   });
 
   it("for the provider", () => {
@@ -123,6 +123,8 @@ describe("operator SLA marks", () => {
     ]);
     expect(slaMarks(dispute({ providerRespondedAt: FILED, autoUpholdAt: null }), t0 + 73 * H).map((m) => m.label)).toEqual(["Overdue: decide now"]);
     expect(slaMarks(dispute({ state: "UPHELD" }), t0)).toEqual([]);
+    expect(slaMarks(dispute({ autoUpholdAt: null }), t0 + 25 * H).map((m) => m.label)).toContain("No auto-uphold: a large refund needs two operators");
+    expect(slaMarks(dispute({ autoUpholdAt: null, refundGuaranteed: false }), t0 + 25 * H).map((m) => m.label)).toContain("No auto-uphold: filed after the hold");
   });
 });
 
@@ -160,5 +162,29 @@ describe("the decided dispute copy", () => {
     const open = buyerStatus(dispute(), t0 + H).detail;
     expect(open).not.toMatch(/7 days/);
     expect(buyerStatus(dispute({ refundGuaranteed: false }), t0 + H).detail).toMatch(/already been collected.*a refund is not guaranteed/);
+  });
+});
+
+describe("buyer words", () => {
+  it("never say upheld or operator to a buyer", () => {
+    const states = ["OPEN", "UPHELD", "REJECTED", "WITHDRAWN"] as const;
+    const refunds = [null, "REFUNDED", "PENDING", "NOT_REFUNDABLE", "NOT_CHARGED"];
+    const texts: string[] = [...Object.values(BUYER_COPY)];
+    for (const state of states) for (const refundState of refunds) {
+      const v = buyerStatus(dispute({ state, refundState }), t0 + H);
+      texts.push(v.label, v.detail);
+      for (const step of disputeTimeline(dispute({ state, refundState, refundGuaranteed: false }), t0 + H, "buyer")) texts.push(String(step.label), String(step.description ?? ""));
+    }
+    for (const text of texts) expect(text).not.toMatch(/upheld|operator/i);
+  });
+
+  it("an after-hold report says what accepting it means for the money", () => {
+    expect(BUYER_COPY.afterHold).toMatch(/counts against the provider's quality.*money is not returned/);
+  });
+
+  it("refer to an organization by a short, stable reference, never its id", () => {
+    expect(shortRef("org-buyer")).toMatch(/^#[0-9a-f]{4}$/);
+    expect(shortRef("org-buyer")).toBe(shortRef("org-buyer"));
+    expect(shortRef("org-buyer")).not.toBe(shortRef("org-buyer-2"));
   });
 });

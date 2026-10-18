@@ -17,7 +17,7 @@ import { fileCallDispute, type CallDispute, type CallDisputeEvidence, type CallD
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
 
-import { DISPUTE_COPY, disputeErrorText, disputeTimeline, NOTE_MAX, REASON_OPTIONS, reasonLabel, type DisputeStatusView, type ReportWindowView } from "./model";
+import { BUYER_COPY, disputeErrorText, disputeTimeline, NOTE_MAX, REASON_OPTIONS, reasonLabel, type DisputeStatusView, type ReportWindowView } from "./model";
 
 /**
  * The parts of "Report a bad result" every side shares: the status chip,
@@ -117,7 +117,7 @@ export function ReportSheet({
         <SheetHeader>
           <SheetTitle>Report a bad result</SheetTitle>
           <SheetDescription>
-            On this call to <span className="break-all font-mono text-mono-12">{toolName}</span>. {DISPUTE_COPY.reply} {DISPUTE_COPY.decides}
+            On this call to <span className="break-all font-mono text-mono-12">{toolName}</span>. {BUYER_COPY.reply} {BUYER_COPY.decides}
           </SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-3 px-[18px] pb-5 pt-3" data-testid="report-sheet">
@@ -154,8 +154,8 @@ export function ReportSheet({
             </p>
           ) : null}
           <p className="text-body-xs text-03">
-            {DISPUTE_COPY.limit}
-            {hold.guaranteed ? ` ${DISPUTE_COPY.held}` : ""}
+            {BUYER_COPY.limit}
+            {hold.guaranteed ? ` ${BUYER_COPY.held}` : ""}
           </p>
           {reason ? (
             <p className="text-body-13 text-01" data-testid="report-summary">

@@ -251,10 +251,11 @@ export function connectHref(tool: Pick<ProviderTool, "id" | "binding">, stage: "
 }
 
 export function gateRows(gate: ProviderToolGate, tool: Pick<ProviderTool, "id" | "binding">): GateRow[] {
-  return gate.requirements.map((row) => gateRow(row, tool));
+  const ran = gate.requirements.find((r) => r.requirement === "TESTER_RUN")?.met ?? true;
+  return gate.requirements.map((row) => gateRow(row, tool, ran));
 }
 
-function gateRow(row: GateRequirement, tool: Pick<ProviderTool, "id" | "binding">): GateRow {
+function gateRow(row: GateRequirement, tool: Pick<ProviderTool, "id" | "binding">, ran = true): GateRow {
   const base = { requirement: row.requirement, met: row.met, detail: row.detail };
   switch (row.requirement) {
     case "PROVIDER_ACTIVE":
@@ -268,7 +269,10 @@ function gateRow(row: GateRequirement, tool: Pick<ProviderTool, "id" | "binding"
     case "TESTER_RUN":
       return { ...base, label: "Your endpoint was tested", todo: "Run a test of your endpoint.", fix: { kind: "link", label: "Run a test", href: connectHref(tool) } };
     case "TESTER_PASSED":
-      return { ...base, label: "The test passed", todo: "Get a passing test of your current connection.", fix: { kind: "link", label: "Test again", href: connectHref(tool) } };
+      // Before any test ran there is nothing to repeat: the same fix as "was tested", once.
+      return ran
+        ? { ...base, label: "The test passed", todo: "Get a passing test of your current connection.", fix: { kind: "link", label: "Test again", href: connectHref(tool) } }
+        : { ...base, label: "The test passed", todo: "Comes with the first test above.", fix: null };
     case "PAYOUT_ACCOUNT":
       return { ...base, label: "A payout wallet is set", todo: "Add a payout wallet so you can be paid.", fix: { kind: "link", label: "Add a payout wallet", href: "/provider/setup?step=wallet" } };
     case "STAKE_AT_MINIMUM_ON_EVERY_CHAIN":

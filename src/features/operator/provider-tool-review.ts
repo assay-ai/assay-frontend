@@ -46,14 +46,20 @@ export function toolsHomeFor(roles: readonly OperatorRole[]): string {
   return "/operator/tools/takedowns";
 }
 
-/** The tabs of Tools this operator can use. */
+/**
+ * The tabs of Tools: all four for anyone who sees the section, so nothing is
+ * hidden. A tab this role can only read says "(read only)", and its page says
+ * which role acts there.
+ */
 export function operatorToolsTabs(roles: readonly OperatorRole[]): SectionTab[] {
-  const tabs: SectionTab[] = [];
-  if (holds(roles, CONTRACT_ROLES)) tabs.push({ id: "standard", label: "Standard tools", href: "/operator/tools", match: ["/operator/tools"] });
-  if (mayReviewTools(roles) || mayTakeDownTools(roles)) tabs.push({ id: "reviews", label: "Reviews", href: "/operator/tools/reviews", match: ["/operator/tools/reviews"] });
-  if (mayPromote(roles)) tabs.push({ id: "promotions", label: "Promotions", href: "/operator/tools/promotions", match: ["/operator/tools/promotions"] });
-  if (mayTakeDownTools(roles) || mayConfirmCutoffs(roles)) tabs.push({ id: "takedowns", label: "Takedowns", href: "/operator/tools/takedowns", match: ["/operator/tools/takedowns"] });
-  return tabs;
+  if (!seesTools(roles)) return [];
+  const ro = (can: boolean, label: string) => (can ? label : `${label} (read only)`);
+  return [
+    { id: "standard", label: ro(holds(roles, CONTRACT_ROLES), "Standard tools"), href: "/operator/tools", match: ["/operator/tools"] },
+    { id: "reviews", label: ro(mayReviewTools(roles) || mayTakeDownTools(roles), "Reviews"), href: "/operator/tools/reviews", match: ["/operator/tools/reviews"] },
+    { id: "promotions", label: ro(mayPromote(roles), "Promotions"), href: "/operator/tools/promotions", match: ["/operator/tools/promotions"] },
+    { id: "takedowns", label: ro(mayTakeDownTools(roles) || mayConfirmCutoffs(roles), "Takedowns"), href: "/operator/tools/takedowns", match: ["/operator/tools/takedowns"] },
+  ];
 }
 
 /** The tabs of Penalties: slash cases, and buyers' disputes over calls. */
@@ -181,13 +187,17 @@ export const TIER_HINT = {
   UNVERIFIED: "Unverified: listed in the catalogue without the badge, for a tool that passes but whose answers you could not judge well.",
 } as const;
 
+/** The takedown reasons the API accepts; the provider is told the one picked. */
 export const TAKEDOWN_REASONS = [
   { value: "IMPERSONATION", label: "Impersonation" },
-  { value: "MALICIOUS", label: "Malicious or harmful" },
   { value: "MODEL_INSTRUCTIONS", label: "Instructions to models" },
-  { value: "LEGAL", label: "Legal request" },
-  { value: "OTHER", label: "Other" },
+  { value: "SECRET_COLLECTION", label: "Collects secrets" },
+  { value: "HARMFUL_OUTPUT", label: "Harmful output" },
+  { value: "LEGAL_REQUEST", label: "Legal request" },
+  { value: "POLICY_VIOLATION", label: "Policy violation" },
 ] as const;
+
+export const TAKEDOWN_PUBLIC_NOTE_MAX = 500;
 
 export const MODERATION_NOTE_MIN = 20;
 

@@ -100,6 +100,7 @@ const tool = (over: Partial<ProviderTool> = {}): ProviderTool => ({
     maxTier: "VERIFIED",
   },
   earliestSunsetAt: "2027-01-20T00:00:00.000Z",
+  takedown: null,
   ...over,
 });
 
@@ -261,5 +262,12 @@ describe("errors", () => {
 
   it("marks a gate refusal so the checklist is shown", () => {
     expect(providerToolErrorView(new ApiError("TOOL_PROVIDER_TOOL_GATE_FAILED", "no", 409, "/", { failed: "STAKE" })).gateFailed).toBe(true);
+  });
+});
+
+describe("imported schemas", () => {
+  it("every field an import brings is required or optional", async () => {
+    const { optionalFromSchema } = await import("./schema-fields");
+    expect(optionalFromSchema({ type: "object", properties: { results: { type: "array" }, total: { type: "integer" } }, required: ["results"] })).toEqual(["total"]);
   });
 });
