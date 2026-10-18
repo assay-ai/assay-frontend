@@ -159,7 +159,7 @@ function TeamScreen() {
           onDismiss={() => setResult(null)}
         />
       ) : (
-        <ResultCard title={`${what}: done`} next="It applies from their next request." activityHref="/operator/override-log?kind=operators" onDismiss={() => setResult(null)} />
+        <ResultCard title={`${what}: done`} next="It applies from their next request." activityHref="/operator/activity?kind=operators" onDismiss={() => setResult(null)} />
       ),
     );
   };
@@ -225,7 +225,7 @@ function TeamScreen() {
             {rows.map((row) => {
               const change = changes.get(row.id);
               return (
-                <li key={row.id} className={cn(TEAM_GRID, "relative flex min-w-0 flex-col gap-1 px-4 py-2.5 pr-14 tablet:pr-4")}>
+                <li key={row.id} id={`operator-${row.id}`} className={cn(TEAM_GRID, "relative flex min-w-0 flex-col gap-1 px-4 py-2.5 pr-14 tablet:pr-4 target:bg-primary-10")}>
                   <div className="flex min-w-0 flex-col">
                     <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-label-13 text-01">
                       <span className="truncate">{operatorLabel(row)}</span>
@@ -269,7 +269,7 @@ function TeamScreen() {
                         <DropdownMenuContent align="end" className="min-w-[180px] border border-01">
                           <DropdownMenuItem onSelect={() => setSheet({ kind: "change", row })}>Change access</DropdownMenuItem>
                           <DropdownMenuItem asChild>
-                            <Link href={`/operator/override-log?targetId=${encodeURIComponent(row.id)}`}>History in Activity</Link>
+                            <Link href={`/operator/activity?targetId=${encodeURIComponent(row.id)}`}>History in Activity</Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => setSheet({ kind: "remove", row })} className="text-danger-600 focus:text-danger-700">
                             Remove
@@ -369,7 +369,7 @@ function TeamScreen() {
                 <ResultCard
                   title={`${operatorLabel(row)} was removed`}
                   next="Every session they held has ended. Their past actions stay in Activity."
-                  activityHref={`/operator/override-log?targetId=${encodeURIComponent(row.id)}`}
+                  activityHref={`/operator/activity?targetId=${encodeURIComponent(row.id)}`}
                   onDismiss={() => setResult(null)}
                 />,
               );
