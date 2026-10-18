@@ -35,8 +35,9 @@ import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-mone
  * - $20 is preselected (B7), so "Balance after" shows at once; nothing moves
  *   before the two wallet prompts.
  * - The wallet's own token and gas balances are read first (pinned token and
- *   escrow), so a short balance or no gas is said before any prompt, with an
- *   estimate of the network fee and of the time to credit.
+ *   escrow), so a short balance or no gas is warned about before any prompt,
+ *   with an estimate of the network fee and of the time to credit. A warning
+ *   only: the wallet's estimate stays the gate.
  * - The $5 minimum is said before anyone types.
  * - One source line instead of a chain radio and a one-option select.
  * - Approve → Deposit as a tracked two-signature flow; "Confirmed" at the end.
@@ -201,7 +202,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
               ? amount.trim() === ""
                 ? "Pick or enter an amount."
                 : (parsed.error ?? "Enter an amount.")
-              : walletView.blocker;
+              : null;
 
   const needsCaps = !money.capsSet;
   const tokenHelp = testTokenHelp(chain);
@@ -274,6 +275,12 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
             </div>
           ))}
           {walletView.feeText ? <p className="pt-1 text-03">{walletView.feeText}</p> : null}
+          {/* A warning, never a block: the wallet's own estimate is the gate. */}
+          {walletView.warning ? (
+            <p className="pt-1 text-warning-700" data-testid="deposit-wallet-warning">
+              {walletView.warning}
+            </p>
+          ) : null}
         </dl>
       ) : null}
       {/* Where to get test ETH and the test token: only when the wallet lacks it, or its balances are unknown. */}

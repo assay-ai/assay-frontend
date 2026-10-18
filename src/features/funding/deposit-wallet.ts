@@ -42,8 +42,13 @@ export interface DepositWalletRow {
 
 export interface DepositWalletView {
   rows: DepositWalletRow[];
-  /** Why the deposit would fail, in one sentence, or null. */
-  blocker: string | null;
+  /**
+   * Why the deposit may fail, in one sentence, or null. A warning only (B7
+   * review m3): the read goes through the served RPC and can lag a faucet
+   * top-up, so it never disables the button; the wallet's own estimate,
+   * which runs as the sender before any prompt, is the gate.
+   */
+  warning: string | null;
   /** "Network fee: about 0.0000046 ETH for both steps", or null. */
   feeText: string | null;
   /** The wallet holds none of the token: show where to get some. */
@@ -65,7 +70,7 @@ export function depositWalletView(input: {
   nativeSymbol: string;
 }): DepositWalletView {
   const { balances, amountAtomic, decimals, tokenSymbol, nativeSymbol } = input;
-  if (!balances) return { rows: [], blocker: null, feeText: null, needsToken: false, needsGas: false };
+  if (!balances) return { rows: [], warning: null, feeText: null, needsToken: false, needsGas: false };
   const tokenText = `${formatDecimal(units(balances.tokenAtomic, decimals))} ${tokenSymbol}`;
   const nativeText = `${formatDecimal(units(balances.nativeWei, NATIVE_DECIMALS), { decimals: 6, symbol: "" })} ${nativeSymbol}`;
   const amount = amountAtomic ? BigInt(amountAtomic) : null;
@@ -77,10 +82,10 @@ export function depositWalletView(input: {
     { label: `${tokenSymbol} in this wallet`, value: tokenText, bad: shortOfToken || balances.tokenAtomic === 0n },
     { label: `${nativeSymbol} for network fees`, value: nativeText, bad: noGas || shortOfGas },
   ];
-  const blocker = shortOfToken
-    ? `This wallet holds ${tokenText}, less than the ${formatDecimal(units(amount!, decimals))} you are depositing. Deposit less, or add ${tokenSymbol} to it first.`
+  const warning = shortOfToken
+    ? `This wallet seems to hold ${tokenText}, less than the ${formatDecimal(units(amount!, decimals))} you are depositing. Deposit less, or add ${tokenSymbol} to it first.`
     : noGas
-      ? `This wallet holds no ${nativeSymbol} to pay the network fee. Send a little ${nativeSymbol} to it first.`
+      ? `This wallet seems to hold no ${nativeSymbol} for the network fee. Send a little ${nativeSymbol} to it first.`
       : shortOfGas
         ? `This wallet's ${nativeText} may not cover the network fee. Add a little ${nativeSymbol} first.`
         : null;
@@ -88,7 +93,7 @@ export function depositWalletView(input: {
     fee !== null
       ? `Network fee: about ${formatDecimal(units(fee, NATIVE_DECIMALS), { decimals: 8, symbol: "" })} ${nativeSymbol} for both steps; your wallet shows the exact fee.`
       : null;
-  return { rows, blocker, feeText, needsToken: balances.tokenAtomic === 0n, needsGas: noGas };
+  return { rows, warning, feeText, needsToken: balances.tokenAtomic === 0n, needsGas: noGas };
 }
 
 /** What the demo's wallet holds: enough for any preset, and a little test ETH. */
@@ -120,6 +125,8 @@ export function useDepositWallet(input: { chainId: string | null; address: strin
     },
     enabled: input.enabled && Boolean(deployment) && /^0x[0-9a-fA-F]{40}$/.test(address),
     retry: 0,
-    staleTime: 15_000,
+    // Read afresh each time the sheet opens: a faucet top-up a moment ago must show.
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
