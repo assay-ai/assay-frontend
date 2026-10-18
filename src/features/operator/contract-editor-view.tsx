@@ -25,6 +25,8 @@ import { ApiError } from "@/libs/ApiClient";
 import { discardContractDraft, getOperatorTool, getOperatorToolRequest, listOperatorTools, saveContractDraft } from "@/services/operator-contracts.service";
 import { listApprovals } from "@/services/operator.service";
 import { cn } from "@/utils";
+import { routes } from "@/libs/routes";
+import { toast } from "@/utils/toast";
 
 import {
   contractErrorMessage,
@@ -43,6 +45,8 @@ import {
 } from "./contract-editor";
 import { DeprecateSheet, MakeCurrentSheet, PublishSheet, type PublishPlan } from "./contract-sheets";
 import { eligibleApprovers } from "./inbox";
+import { mayTakeDownTools } from "./provider-tool-review";
+import { TakeDownButton, takeDownable } from "./provider-tool-ui";
 import { ResultCard } from "./result-card";
 import { useOperatorSession } from "./session-context";
 import { approvalHref, approverPhrase, sentForApproval, type TwoPersonAnswer } from "./two-person";
@@ -173,6 +177,30 @@ export function ContractEditorScreen({ toolId, fromRequest = "" }: { toolId: str
       </div>
 
       {result}
+
+      {takeDownable(tool) && mayTakeDownTools(me.roles) ? (
+        <section aria-labelledby="abuse-title" className="flex w-full flex-col gap-2 rounded-xl border border-danger-20 bg-danger-10 px-4 py-3.5">
+          <h2 id="abuse-title" className="text-label-md text-01">
+            If it is abuse
+          </h2>
+          <div className="flex flex-col gap-2 tablet:flex-row tablet:items-center tablet:justify-between">
+            <p className="text-body-13 text-02">
+              A takedown removes this provider tool from every view at once; a second operator confirms within 72 hours.{" "}
+              <Link href={routes.operatorReview(tool.id)} className="text-primary-600 hover:underline">
+                Read what it serves first
+              </Link>
+            </p>
+            <TakeDownButton
+              tool={tool}
+              onDone={() => {
+                toast.success(`${tool.name} is down. A second operator confirms it under Takedowns.`);
+                void queryClient.invalidateQueries({ queryKey: ["operator", "tools"] });
+                void queryClient.invalidateQueries({ queryKey: ["operator", "cutoffs"] });
+              }}
+            />
+          </div>
+        </section>
+      ) : null}
 
       {pending.publish ? (
         <WaitingLine
