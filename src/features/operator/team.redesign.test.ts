@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { OperatorApproval, OperatorRole } from "@/interfaces/operator";
 
-import { actsOnMoney, ROLE_PRESETS, capabilitiesFor } from "./roles";
+import { actsOnMoney, ROLE_PRESETS, capabilitiesFor, zeroLimitText } from "./roles";
 import { roleName } from "./roles";
 import { firstNames, inviteLimit, invitesOf, limitCell, limitMoney, teamTabs } from "./team";
 import { approverPhrase } from "./two-person";
@@ -111,5 +111,16 @@ describe("role presets say which dispute each one decides (B12)", () => {
     }
     expect(by("treasury").description).toMatch(/prepares arbiter rulings on disputed penalties \(the arbiter key signs\)/i);
     expect(by("treasury").description).not.toMatch(/call disputes/i);
+  });
+});
+
+describe("what $0 rules out (D25)", () => {
+  it("names the money actions the backend gates for these roles (S-1, S-5, S-14)", () => {
+    expect(zeroLimitText(["ADJL"])).toBe(
+      "At $0 they can't suspend a penalty, compensate a provider, or uphold a buyer's call-dispute refund, nor approve one. Everything else their role allows still works.",
+    );
+    expect(zeroLimitText(["TRE"])).toBe("At $0 they can't compensate a provider, nor approve one. Everything else their role allows still works.");
+    expect(zeroLimitText(["OPS_ADMIN"])).toBe("This role moves no money, so the limit changes nothing.");
+    expect(ROLE_PRESETS.filter((p) => /call disputes/.test(p.short)).every((p) => p.short.includes("buyer call disputes"))).toBe(true);
   });
 });

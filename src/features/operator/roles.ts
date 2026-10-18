@@ -111,7 +111,10 @@ export function actsOnMoney(roles: readonly OperatorRole[]): boolean {
  * screen and the "Why you can't, and who can" lines all read `checkAction`,
  * so the banner can never promise an action a screen then hides.
  */
-export type ConsoleAction = "rule" | "suspend" | "block" | "blockOnChain" | "compensate" | "manageTeam";
+export type ConsoleAction = "rule" | "suspend" | "block" | "blockOnChain" | "compensate" | "manageTeam" | "upholdRefund";
+
+/** Who decides buyer call disputes (S-14); upholding one refunds the buyer, under the authority limit. */
+const CALL_DISPUTE_ROLES: readonly OperatorRole[] = ["ADJ", "ADJL"];
 
 const ACTION_ROLES: Readonly<Record<ConsoleAction, readonly OperatorRole[]>> = {
   rule: ARBITER_RULING_ROLES,
@@ -120,6 +123,7 @@ const ACTION_ROLES: Readonly<Record<ConsoleAction, readonly OperatorRole[]>> = {
   blockOnChain: ARBITER_BLOCK_ROLES,
   compensate: COMPENSATE_ROLES,
   manageTeam: ADMIN_ROLES,
+  upholdRefund: CALL_DISPUTE_ROLES,
 };
 
 /** What the action is, as a verb phrase: "suspend a penalty". */
@@ -130,6 +134,7 @@ export const ACTION_WHAT: Readonly<Record<ConsoleAction, string>> = {
   blockOnChain: "block a wallet on chain",
   compensate: "compensate a provider",
   manageTeam: "add and change operators",
+  upholdRefund: "uphold a buyer's call-dispute refund",
 };
 
 /** The action as a subject, for the one-line why-not: "Blocking accounts needs …". */
@@ -140,10 +145,30 @@ export const ACTION_DOING: Readonly<Record<ConsoleAction, string>> = {
   blockOnChain: "Blocking a wallet on chain",
   compensate: "Compensating a provider",
   manageTeam: "Changing the team",
+  upholdRefund: "Upholding a call-dispute refund",
 };
 
-/** Actions on money: the authority limit applies (the backend refuses above it). */
-export const MONEY_ACTIONS: ReadonlySet<ConsoleAction> = new Set(["suspend", "compensate"]);
+/**
+ * Actions on money: the authority limit applies (the backend refuses above it,
+ * for the actor and for the approver): S-1 suspend, S-5 compensate, S-14
+ * upholding a buyer's call dispute (its refund).
+ */
+export const MONEY_ACTIONS: ReadonlySet<ConsoleAction> = new Set(["suspend", "compensate", "upholdRefund"]);
+
+/** The limit field's hint on Team: what it bounds, and what $0 means for these roles (D25). */
+export function limitHint(roles: readonly OperatorRole[]): string {
+  return `Penalties, compensations and call-dispute refunds above it need someone with a higher limit. ${zeroLimitText(roles)}`;
+}
+
+/**
+ * What a $0 limit rules out for these roles, in one line (D25), from the same
+ * money actions the backend gates. With no roles yet, every money action.
+ */
+export function zeroLimitText(roles: readonly OperatorRole[]): string {
+  const held = [...MONEY_ACTIONS].filter((action) => roles.length === 0 || holds(roles, ACTION_ROLES[action]));
+  if (held.length === 0) return "This role moves no money, so the limit changes nothing.";
+  return `At $0 they can't ${serialList(held.map((action) => ACTION_WHAT[action]), "or")}, nor approve one. Everything else their role allows still works.`;
+}
 
 export interface ActionCheck {
   allowed: boolean;
@@ -294,6 +319,7 @@ const ACTION_DOES: Readonly<Record<ConsoleAction, string>> = {
   blockOnChain: "blocks wallets on chain",
   compensate: "compensates providers",
   manageTeam: "adds, changes and removes operators",
+  upholdRefund: "upholds buyer call-dispute refunds",
 };
 
 /** The approvals, short, for a role card. */
@@ -319,7 +345,7 @@ function sentence(text: string): string {
  * say "up to its limit (none at $0)", as the Home banner then says. Pure.
  */
 export function roleDescription(roles: readonly OperatorRole[]): string {
-  const allowed = BANNER_ACTIONS.filter((action) => holds(roles, ACTION_ROLES[action]));
+  const allowed = [...BANNER_ACTIONS, "upholdRefund" as const].filter((action) => holds(roles, ACTION_ROLES[action]));
   const plain = allowed.filter((action) => !MONEY_ACTIONS.has(action)).map((action) => ACTION_DOES[action]);
   const money = allowed.filter((action) => MONEY_ACTIONS.has(action)).map((action) => ACTION_DOES[action]);
   const approves = [...new Set(APPROVES.filter((row) => holds(roles, row.roles)).map((row) => APPROVAL_SHORT[row.code] ?? row.what))];
@@ -344,7 +370,7 @@ export function roleDescription(roles: readonly OperatorRole[]): string {
 export const ROLE_PRESETS: readonly RolePreset[] = Object.freeze(
   (
     [
-      { id: "lead", label: "Lead adjudicator", short: "Decides call disputes, prepares arbiter rulings, blocks accounts", roles: ["ADJL"] },
+      { id: "lead", label: "Lead adjudicator", short: "Decides buyer call disputes, prepares arbiter rulings", roles: ["ADJL"] },
       { id: "adjudicator", label: "Adjudicator", short: "Decides buyer call disputes; suspends penalties", roles: ["ADJ"] },
       { id: "support", label: "Support / on-call", short: "Blocks accounts; suspends penalties within a limit", roles: ["SRE", "SUP"] },
       { id: "treasury", label: "Treasury", short: "Prepares arbiter rulings (arbiter key signs); compensates providers", roles: ["TRE"] },
