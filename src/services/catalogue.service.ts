@@ -18,9 +18,9 @@ import type { ToolTier } from "./tools.service";
  *
  * Three fields are nullable and each null means *we do not know*, never *none*:
  *
- * - `quality` — null until the provider has a closed SLA window. Around two
- *   thirds of providers on a young deployment have never been measured, and
- *   drawing that as 100% would put the least-proven provider at the top.
+ * - `quality` — null until a call to the provider has been checked in the last
+ *   30 days (open and closed check windows, D5). Drawing that as 100% would
+ *   put the least-proven provider at the top.
  * - `stake` — **a list per chain, and EMPTY when the stake source cannot say**
  *   (an RPC outage, an unproved stake authority, a provider staked in a mode
  *   this deployment does not read). `$0.00` would read as "nothing at risk",
@@ -102,12 +102,26 @@ export interface CatalogueProviderTool {
   name: string;
   pricingMode: string;
   price: CatalogueMoney;
+  /** The failure rate this listing promises, 0..1 — what its penalties are measured against. */
+  promisedFailureRate?: number;
   /** Free calls one agent gets per UTC day on this listing; null for a PAID one. Absent on older APIs. */
   freeCallsPerAgentPerDay?: number | null;
 }
 
 export interface CatalogueProviderDetail extends CatalogueProvider {
   tools: CatalogueProviderTool[];
+}
+
+/**
+ * What a call costs on one chain, and whose listing sets that price — the
+ * router's quote for a buyer paying there. A buyer pays on one chain, so a
+ * tool on two chains has two prices, not one.
+ */
+export interface CatalogueChainPrice {
+  /** CAIP-2. */
+  chainId: string;
+  price: CatalogueMoney;
+  providerId: string | null;
 }
 
 export interface CatalogueTool extends CatalogueToolVersionFields {
@@ -164,6 +178,8 @@ export interface CatalogueTool extends CatalogueToolVersionFields {
    * by this layer would be this file claiming knowledge it does not have.
    */
   settlementChains?: string[];
+  /** The price per chain, with the provider setting it. Empty when nothing is routable. */
+  prices?: CatalogueChainPrice[];
 }
 
 export function listCatalogueProviders(): Promise<{ providers: CatalogueProvider[] }> {

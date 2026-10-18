@@ -17,6 +17,7 @@ import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
 import {
+  chainPriceText,
   checkSentences,
   costSentence,
   failRateLabel,
@@ -25,6 +26,7 @@ import {
   notTakingPaidCalls,
   offerLine,
   offerSubLine,
+  orderChainPrices,
   plural,
   priceRange,
   routingNotes,
@@ -115,9 +117,20 @@ function ToolDetail({
 }) {
   const chainName = useChainName();
   const uncharged = tool.listed && tool.charged ? notCharged(tool.listed, tool.charged) : null;
+  // The price per chain (D6), led by a chain the buyer holds funds on.
+  const chainPrices = orderChainPrices(tool.prices, buyerChains, tool.price);
+  const lead = chainPrices[0] ?? null;
+  const held = lead?.price ?? tool.price;
+  const listingFor = (providerId: string) => details.get(providerId)?.tools.find((t) => t.toolId === tool.toolId);
+  const nameOf = (providerId: string | null) => providers.find((p) => p.providerId === providerId)?.name ?? null;
+  // Name the provider only when it is the one listing on that chain.
+  const providerFor = (entry: { chainId: string; providerId: string | null }) =>
+    providers.filter((p) => listingFor(p.providerId)?.price.asset.split("/")[0] === entry.chainId).length > 1
+      ? null
+      : nameOf(entry.providerId);
   // Same as the public tool page: "from" only over more than one listing that can be charged.
   const range = priceRange(
-    tool.price,
+    held,
     (tool.paidBindings ?? 2) > 1
       ? [
           tool.fromPrice,
@@ -126,7 +139,7 @@ function ToolDetail({
       : [],
   );
   // Free first, then paid: a FREEMIUM tool says its free calls before any range.
-  const costLine = costSentence({ mode: tool.pricingMode, price: tool.price, range, freeCallsPerDay: freeAllowance });
+  const costLine = costSentence({ mode: tool.pricingMode, price: held, range, freeCallsPerDay: freeAllowance });
 
   return (
     <div className="flex flex-col gap-4 border-t border-01 bg-02 px-4 py-4 tablet:px-5">
@@ -139,6 +152,16 @@ function ToolDetail({
       <div className="grid grid-cols-1 gap-4 tablet:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <h3 className="text-label-13 text-01">What a call costs</h3>
+          {lead && range ? (
+            <p className="text-body-13 text-01" data-testid="price-chain">
+              {chainPriceText(lead, chainName, range.differs ? null : providerFor(lead))}
+            </p>
+          ) : null}
+          {chainPrices.slice(1).map((entry) => (
+            <p key={entry.chainId} className="text-body-13 text-02" data-testid="chain-price">
+              {chainPriceText(entry, chainName, providerFor(entry))}
+            </p>
+          ))}
           <p className="text-body-13 text-02">
             {costLine}
           </p>
@@ -165,7 +188,7 @@ function ToolDetail({
         ) : (
           <ul className="flex flex-col divide-y divide-01 overflow-hidden rounded-lg border border-01 bg-01">
             {providers.map((provider) => {
-              const listing = details.get(provider.providerId)?.tools.find((t) => t.toolId === tool.toolId);
+              const listing = listingFor(provider.providerId);
               return (
                 <li key={provider.providerId}>
                   <Link
@@ -182,12 +205,12 @@ function ToolDetail({
                         {listing ? (
                           <span className="text-body-xs text-03">
                             {formatCallPrice(listing.price)} per call
-                            {notTakingPaidCalls(tool.price, listing.price) ? " · not taking paid calls right now" : ""}
+                            {notTakingPaidCalls(held, listing.price) ? " · not taking paid calls right now" : ""}
                           </span>
                         ) : null}
                       </div>
                       <Fact label={<ObservedFailuresLabel />}>
-                        {failRateLabel(provider.quality == null ? null : provider)}
+                        {failRateLabel(provider.quality == null ? null : provider, listing?.promisedFailureRate)}
                       </Fact>
                       <Fact label="Stake at risk">{stakeSummary(provider.stake, chainName)}</Fact>
                     </div>
@@ -199,13 +222,14 @@ function ToolDetail({
           </ul>
         )}
         {routingNotes(
-          tool.price,
+          held,
           providers.map((p) => ({
             name: p.name,
-            price: details.get(p.providerId)?.tools.find((t) => t.toolId === tool.toolId)?.price,
+            price: listingFor(p.providerId)?.price,
             quality: p.quality == null ? null : p,
           })),
           chainName,
+          { chainsListed: chainPrices.length > 1 },
         ).map((note) => (
           <p key={note} className="text-body-13 text-02" data-testid="routing-note">
             {note}
@@ -243,6 +267,7 @@ function ToolsList() {
   const [query, setQuery] = React.useState("");
   const explore = useExploreAgent();
   const { chains } = useChains();
+  const chainName = useChainName();
   const openRef = React.useRef<HTMLLIElement | null>(null);
 
   const balancesQuery = useQuery<{ balances: FullBalance[] }, ApiError>({
@@ -354,11 +379,15 @@ function ToolsList() {
             const serving = providers.filter((p) => p.toolIds.includes(tool.toolId));
             // The backend's own figure first (its total over every free-capable listing, capped).
             const freeAllowance = tool.freeCallsPerDay ?? freeAllowanceOf(tool.toolId);
-            // "from" only over listings that can be charged: one paid listing is one price.
-            const range = priceRange(tool.price, (tool.paidBindings ?? 2) > 1 ? [tool.fromPrice] : []);
+            // The buyer's own chain first (D6); "from" only over listings that can be charged.
+            const lead = orderChainPrices(tool.prices, buyerChains, tool.price)[0] ?? null;
+            const range = priceRange(lead?.price ?? tool.price, (tool.paidBindings ?? 2) > 1 ? [tool.fromPrice] : []);
             // One price line, free first — the same line the public Explorer shows.
             const offer = offerLine({ mode: tool.pricingMode, range, freeCallsPerDay: freeAllowance });
-            const sub = offerSubLine(tool.pricingMode, range);
+            // A tool on several chains says which chain the row's price is for.
+            const sub = [offerSubLine(tool.pricingMode, range), (tool.prices?.length ?? 0) > 1 && lead ? `on ${chainName(lead.chainId)}` : ""]
+              .filter(Boolean)
+              .join(" · ");
             return (
               <li key={tool.toolId} ref={open ? openRef : undefined} className="border-b border-01 last:border-b-0">
                 <button
@@ -383,7 +412,7 @@ function ToolsList() {
                     {/* Phones: the price line sits under the name, full width. */}
                     <OfferPrice offer={offer} className="tablet:hidden" />
                     {/* Phones too: the most a call is held for, when providers charge different prices. */}
-                    {range?.differs && sub ? <span className="text-body-xs text-03 tablet:hidden">{sub}</span> : null}
+                    {(range?.differs || (tool.prices?.length ?? 0) > 1) && sub ? <span className="text-body-xs text-03 tablet:hidden">{sub}</span> : null}
                   </div>
                   <div className="hidden w-[220px] shrink-0 flex-col items-end gap-0.5 text-right tablet:flex">
                     <OfferPrice offer={offer} />

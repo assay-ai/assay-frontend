@@ -22,6 +22,15 @@ export interface PublicChainStake extends Money {
   chainId: string;
 }
 
+/** The price per chain, with the provider whose listing sets it (`prices[]`). */
+export interface PublicChainPrice {
+  /** CAIP-2. */
+  chainId: string;
+  price: Money;
+  providerId: string | null;
+}
+
+/** Measured over the last 30 days, open and closed check windows (D5). */
 export interface PublicQuality {
   /** Passed ÷ measured, 0..1. */
   rate: number;
@@ -48,6 +57,8 @@ export interface PublicTool extends CatalogueToolVersionFields {
   routable: boolean;
   /** CAIP-2 chains a call would settle on; null when nothing is routable. */
   settlementChains: string[] | null;
+  /** The price per chain, with the provider setting it; empty when nothing is routable. */
+  prices?: PublicChainPrice[];
   /**
    * Routable listings that can be charged (PAID or FREEMIUM). "from" is printed
    * only over more than one. Optional: a backend before 716a7c0 does not send
@@ -86,6 +97,8 @@ export interface PublicProviderTool {
   name: string;
   pricingMode: string;
   price: Money;
+  /** The failure rate this listing promises, 0..1. */
+  promisedFailureRate?: number;
   /** Free calls one agent gets per UTC day; null for a PAID listing. */
   freeCallsPerAgentPerDay: number | null;
 }
