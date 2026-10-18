@@ -70,7 +70,34 @@ describe("the demo /withheld split", () => {
       expect(buckets.map((b) => [b.bucket, b.calls, b.amount.amount])).toEqual([
         ["FAILED_VERIFICATION", 2, "1201200"],
         ["PROVIDER_OR_PLATFORM_ERROR", 1, "12000"],
+        ["NOT_COLLECTED", 0, "0"],
       ]);
+    } finally {
+      process.env.NEXT_PUBLIC_DEMO_CHAINS = prev;
+    }
+  });
+
+  it("agrees with /receipts/summary's not charged for the same window", () => {
+    const prev = process.env.NEXT_PUBLIC_DEMO_CHAINS;
+    process.env.NEXT_PUBLIC_DEMO_CHAINS = "robinhood";
+    try {
+      const now = Date.now();
+      for (const days of [1, 7, 30, 60]) {
+        const window = {
+          from: new Date(now - days * 86_400_000).toISOString(),
+          to: new Date(now + 60_000).toISOString(),
+        };
+        const withheld = (
+          demoResponse("GET", "/withheld", window) as {
+            withheld: { withheld: { calls: number; amount: { amount: string } } }[];
+          }
+        ).withheld[0]!.withheld;
+        const { totals } = demoResponse("GET", "/receipts/summary", { ...window, groupBy: "day" }) as {
+          totals: { notChargedTotal: { amount: string }; notChargedCalls: number };
+        };
+        expect(withheld.amount.amount, `${days} days`).toBe(totals.notChargedTotal.amount);
+        expect(withheld.calls, `${days} days`).toBe(totals.notChargedCalls);
+      }
     } finally {
       process.env.NEXT_PUBLIC_DEMO_CHAINS = prev;
     }
