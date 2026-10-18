@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 import type { PlatformHealth } from "@/interfaces/operator";
 
 import {
+  calmStateBlocker,
   cancelsDue,
   healthIssues,
   lagText,
   needsYouBreakdown,
   needsYouCount,
+  needsYouWork,
   oldestCallDisputeDue,
   overdueToolRequests,
   staleChainData,
@@ -110,5 +112,30 @@ describe("lag and stale chain data", () => {
       chainState: [chain(true, 4736 * 60)],
     } as unknown as PlatformHealth;
     expect(healthIssues(health).map((issue) => issue.text)).toEqual(["Chain indexer 3 d 6 h behind"]);
+  });
+});
+
+describe("Home and the nav badge share one rule", () => {
+  it("both build the work the same way, so the counts are equal", () => {
+    const base = { reviews: 1, callDisputes: 2, takedowns: 0 };
+    const home = needsYouCount(1, 2, true, 1, needsYouWork(base, 4, 5));
+    const badge = needsYouCount(1, 2, true, 1, needsYouWork(base, 4, 5));
+    expect(home).toBe(badge);
+    expect(home).toBe(1 + 2 + 1 + 1 + 2 + 4 + 5);
+  });
+
+  it("past one page the cancels title is a floor", () => {
+    const rows = Array.from({ length: 100 }, () => ({ nextDeadline: iso(NOW - HOUR) }));
+    expect(cancelsDue(rows, NOW, true).title).toBe("Cancels to sign (100+, 100+ overdue)");
+  });
+});
+
+describe("D16: when Home may not look calm", () => {
+  it("stale chain data, or freshness that could not be read, blocks 'Nothing needs you'", () => {
+    expect(calmStateBlocker({ stale: { lagSeconds: 7 * 3600 }, unreadable: false })).toBe(
+      "Can't confirm: chain data is 7 h old (disputes and rulings may be missing)",
+    );
+    expect(calmStateBlocker({ stale: null, unreadable: true })).toMatch(/^Can't confirm: chain data freshness could not be read/);
+    expect(calmStateBlocker({ stale: null, unreadable: false })).toBeNull();
   });
 });

@@ -196,21 +196,30 @@ describe("B11 shapes: old-process count, chainStanding, cancels to sign", () => 
   it("health counts old-process cases, with the deprecated names carrying the same figure", async () => {
     const fixtures = await load();
     const health = call(fixtures, "GET", "/operator/health") as import("@/interfaces/operator").PlatformHealth;
-    expect(health.oldProcessCases).toBe(0);
-    expect(health.oldestOldProcessCaseAgeSeconds).toBeNull();
+    const oldTab = (call(fixtures, "GET", "/operator/cases", { status: "DISPUTED" }) as { items: OperatorCaseListRow[] }).items;
+    expect(health.oldProcessCases).toBe(1);
+    expect(oldTab).toHaveLength(1);
+    expect(oldTab[0]).toMatchObject({ onChain: false });
     expect(health.openDisputes).toBe(health.oldProcessCases);
   });
 
-  it("lists the CANCEL_REQUESTED rows Home's 'Cancels to sign' reads, each on chain and standing", async () => {
+  it("lists the CANCEL_REQUESTED rows Home's 'Cancels to sign' reads: one standing, one executed while it waited", async () => {
     const fixtures = await load();
     const rows = (call(fixtures, "GET", "/operator/cases", { status: "CANCEL_REQUESTED" }) as { items: OperatorCaseListRow[] }).items;
-    expect(rows.length).toBeGreaterThan(0);
-    for (const row of rows) {
-      expect(row.status).toBe("CANCEL_REQUESTED");
-      expect(row.onChain).toBe(true);
-      const brief = call(fixtures, "GET", `/operator/cases/${row.proposalId}`) as OperatorCaseBrief;
-      expect(brief.chainStanding).toBe(true);
-    }
+    const records = rows.map((row) => {
+      expect(row).toMatchObject({ status: "CANCEL_REQUESTED", onChain: true });
+      return (call(fixtures, "GET", `/operator/cases/${row.proposalId}`) as OperatorCaseBrief).chainRecord;
+    });
+    expect(records.sort()).toEqual(["EXECUTED", "STANDING"]);
+  });
+
+  it("C1: the executed-while-waiting case never reads as nothing taken", async () => {
+    const fixtures = await load();
+    const base = fixtures.demoSessionBase();
+    const brief = call(fixtures, "GET", "/operator/cases/6a0f3b9e-7c21-4d58-9e04-b1c2d3e4f5a6") as OperatorCaseBrief;
+    const facts = caseFacts(brief, base);
+    expect(facts.executedWhileCancelWaited).toBe(true);
+    expect(brief.chainStanding).toBe(false);
   });
 
   it("says a closed record no longer stands", async () => {

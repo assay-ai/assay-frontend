@@ -46,6 +46,8 @@ import type { OperatorCaseBrief } from "@/interfaces/operator";
 import { getArbiterTerms, getOperatorCase, listApprovals } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
 
+import { nothingStandingOutcome } from "@/features/operator/operator-errors";
+
 import { CancelSheet } from "./_components/cancel-sheet";
 import { MoreActions } from "./_components/more-actions";
 import { SuspendSheet } from "./_components/suspend-sheet";
@@ -117,7 +119,7 @@ function BackToPenalties() {
   );
 }
 
-type Result = { title: string; next: string; approvalId?: string; txHash?: string | null; approvers?: string[]; expiresAt?: string };
+type Result = { title: string; next: string; approvalId?: string; txHash?: string | null; approvers?: string[]; expiresAt?: string; alert?: boolean };
 
 export default function OperatorCasePage() {
   const proposalId = useSearchParam("id");
@@ -125,7 +127,7 @@ export default function OperatorCasePage() {
   const queryClient = useQueryClient();
   const providers = useProviderNames();
   const directory = useOperatorDirectory();
-  const [sheet, setSheet] = React.useState<"suspend" | "cancel" | null>(null);
+  const [sheet, setSheet] = React.useState<"suspend" | "cancel" | "close" | null>(null);
   const [result, setResult] = React.useState<Result | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
   React.useEffect(() => {
@@ -251,6 +253,8 @@ export default function OperatorCasePage() {
         return { label: authority.suspend.twoPerson ? "Suspend (needs approval)" : "Suspend penalty", onClick: () => setSheet("suspend"), tone: primary ? "danger" : undefined };
       case "cancel":
         return { label: "Get the cancel signed", onClick: () => setSheet("cancel") };
+      case "close-chain":
+        return { label: "Confirm and close", onClick: () => setSheet("close") };
       case "approve":
         return waitingAny ? { label: "Review and approve", href: approvalHref(waitingAny.id) } : undefined;
       case "open-request":
@@ -299,7 +303,7 @@ export default function OperatorCasePage() {
             <StatusChip status={chip.status} detail={chip.detail} />
           </div>
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-13 text-02">
-            <span>{proposal.toolName}</span>
+            <span>{proposal.toolName || "Penalty"}</span>
             <span aria-hidden="true" className="text-03">·</span>
             <span>
               proposed <UtcTime value={proposal.clocks.proposedAt} midSentence />
@@ -324,7 +328,12 @@ export default function OperatorCasePage() {
         </div>
       </header>
 
-      {result ? (
+      {result?.alert ? (
+        <div role="alert" className="flex w-full flex-col gap-1 rounded-lg border border-danger-20 bg-danger-10 p-3.5">
+          <p className="text-label-13 text-danger-700">{result.title}</p>
+          <p className="text-body-13 text-02">{result.next}</p>
+        </div>
+      ) : result ? (
         <ResultCard
           tone={result.approvalId ? "queued" : "done"}
           title={result.title}
@@ -356,6 +365,11 @@ export default function OperatorCasePage() {
         </section>
 
         <aside className="flex w-full min-w-0 flex-col gap-4 xl:sticky xl:top-4 xl:col-start-2 xl:row-span-3 xl:row-start-1 xl:self-start">
+          {next.alert ? (
+            <p role="alert" className="w-full rounded-lg border border-danger-20 bg-danger-10 px-3.5 py-2.5 text-label-13 text-danger-700">
+              {next.title}: the stake was taken.
+            </p>
+          ) : null}
           <NextStepCard
             layout="stack"
             kind={next.kind}
@@ -486,17 +500,18 @@ export default function OperatorCasePage() {
           onDone={onSuspended}
         />
       ) : null}
-      {authority.cancel ? (
+      {authority.cancel || authority.closeChain ? (
         <CancelSheet
-          open={sheet === "cancel"}
-          onOpenChange={(open) => setSheet(open ? "cancel" : null)}
+          mode={authority.closeChain ? "close" : "sign"}
+          open={sheet === "cancel" || sheet === "close"}
+          onOpenChange={(open) => setSheet(open ? (authority.closeChain ? "close" : "cancel") : null)}
           proposalId={proposalId}
           penaltyAsset={proposal.penaltyAmount.asset}
           deadlineSentence={cancelDeadlineSentence(facts, when)}
-          onNothingStanding={() => {
-            // The sheet closes with the signature step: say what the backend read, then read the penalty again.
+          onNothingStanding={(error) => {
+            // Say what the backend's chain read showed (and whether it closed anything), then read the penalty again.
             setSheet(null);
-            setResult({ title: "Nothing is on chain to cancel", next: "Nothing can be executed, and there is nothing to sign. The backend read the chain and closed its side." });
+            setResult(nothingStandingOutcome(error));
             refetch();
           }}
           onSigned={(hash) => {

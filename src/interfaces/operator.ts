@@ -396,10 +396,14 @@ export interface OperatorCaseBrief {
    */
   chainDisputedParts?: number;
   /**
-   * Whether anything of the case is Pending or Disputed on chain: whether
-   * anyone could execute it, or a cancel has anything to act on. Absent from
-   * an older backend (then read as standing, as before).
+   * What stands on chain for the case: STANDING (Pending or Disputed: anyone
+   * could execute it once due, a cancel has something to act on), EXECUTED
+   * (the stake was taken, even under a requested cancel), GONE (nothing
+   * stands and nothing was taken), UNKNOWN (could not be told; read as
+   * standing). Absent from an older backend (read as STANDING).
    */
+  chainRecord?: "STANDING" | "EXECUTED" | "GONE" | "UNKNOWN";
+  /** STANDING or UNKNOWN; the same reading as `chainRecord`, kept for simple reads. */
   chainStanding?: boolean;
   /** The provider's penalties upheld or executed in the last 30 days (follow-up C4). Absent from an older backend. */
   upheldViolations30d?: number;

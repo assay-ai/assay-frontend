@@ -7,7 +7,7 @@ import { Toaster } from "sonner";
 
 import { AlertFill, CheckCircle } from "@/components/icons";
 import { PageState } from "@/components/patterns/page-state";
-import { groupApprovals, needsYouCount } from "@/features/operator/inbox";
+import { groupApprovals, needsYouCount, needsYouWork } from "@/features/operator/inbox";
 import { mayAnswerToolRequests } from "@/features/operator/contract-editor";
 import { may } from "@/features/operator/state";
 import { useCancelsDue, useToolRequestsDue } from "@/features/operator/use-cancels-due";
@@ -126,7 +126,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
         disputesQuery.data?.length ?? 0,
         canRule,
         toSign.count,
-        { ...toolWork.work, cancels: cancelsDue.count, toolRequestsOverdue: requestsDue.overdue.length },
+        needsYouWork(toolWork.work, cancelsDue.count, requestsDue.overdue.length),
       )
     : 0;
 

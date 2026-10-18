@@ -23,6 +23,8 @@ import {
   groupApprovals,
   needsYouBreakdown,
   needsYouCount,
+  needsYouWork,
+  calmStateBlocker,
   oldestCallDisputeDue,
   sortDisputesByDaysLeft,
   staleChainData,
@@ -234,9 +236,9 @@ export default function OperatorHome() {
   const openDisputes = disputes.data ? disputeRows.length : null;
 
   const toolWork = useToolWork(me);
-  const cancelsDue = useCancelsDue(may(me.roles, "cancel"), now);
+  const cancelsDue = useCancelsDue(may(me.roles, "cancel"));
   const answersRequests = mayAnswerToolRequests(me.roles);
-  const requestsDue = useToolRequestsDue(answersRequests, now);
+  const requestsDue = useToolRequestsDue(answersRequests);
   const callQueue = useQuery({
     queryKey: ["operator", "call-disputes", "oldest-open"],
     queryFn: () => listOperatorCallDisputes({ state: ["OPEN"], order: "asc", limit: 20 }),
@@ -245,8 +247,11 @@ export default function OperatorHome() {
     retry: 0,
   });
   const callDisputeDue = oldestCallDisputeDue(callQueue.data?.items ?? [], now);
-  const work: ToolWork = { ...toolWork.work, cancels: cancelsDue.count, toolRequestsOverdue: requestsDue.overdue.length };
+  // The same builder as the nav badge (layout), so the two counts cannot drift.
+  const work: ToolWork = needsYouWork(toolWork.work, cancelsDue.count, requestsDue.overdue.length);
   const stale = staleChainData(health.data);
+  // D16: stale chain data, or freshness that could not be read, never reads as a calm Home.
+  const calmBlocker = calmStateBlocker({ stale, unreadable: health.isError });
   const lastChecked = Math.max(pending.dataUpdatedAt, disputes.dataUpdatedAt, health.dataUpdatedAt, toolWork.dataUpdatedAt, cancelsDue.dataUpdatedAt);
   const refreshing = pending.isFetching || disputes.isFetching || health.isFetching || toolWork.isFetching;
   const refresh = () => {
@@ -265,7 +270,7 @@ export default function OperatorHome() {
 
   const needsYouTotal = needsYouCount(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count, work);
   const breakdown = needsYouBreakdown(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count, work);
-  const loading = pending.isLoading || cancelsDue.isLoading || (caps.rule && (disputes.isLoading || toSign.isLoading));
+  const loading = pending.isLoading || health.isLoading || cancelsDue.isLoading || (caps.rule && (disputes.isLoading || toSign.isLoading));
   const nothing = needsYouTotal === 0 && groups.yours.length === 0;
   // Every waiting request, accounted for in one line: the same split and numbers as the Approvals tabs.
   const waiting = waitingSummary({ needsYou: groups.needsYou.length, yours: groups.yours.length, others: groups.others.length });
@@ -328,11 +333,11 @@ export default function OperatorHome() {
           code={pending.error instanceof ApiError ? pending.error.code : null}
           details={pending.error instanceof Error ? pending.error.message : null}
         />
-      ) : nothing && stale ? (
+      ) : nothing && calmBlocker ? (
         // Stale chain data: never a calm "Nothing needs you" (D16).
         <div role="status" className="flex w-full flex-col items-center gap-3 rounded-xl border border-warning-20 bg-warning-10 px-4 py-8 text-center" data-testid="stale-empty">
           <div className="flex flex-col gap-1">
-            <p className="text-label-md text-warning-700">{staleChainSentence(stale)}</p>
+            <p className="text-label-md text-warning-700">{calmBlocker}</p>
             <p className="text-body-13 text-02">
               Nothing else waits for you. {checkedAgo(lastChecked || now, now).replace(/^c/, "C")}; Home updates once the chain indexer catches up.
             </p>
@@ -353,9 +358,9 @@ export default function OperatorHome() {
       {nothing && !loading && !pending.isError ? <ToolWorkLinks work={{}} readOnly={toolWork.readOnly} /> : null}
       {loading || pending.isError || nothing ? null : (
         <>
-          {stale ? (
+          {calmBlocker ? (
             <p role="status" className="w-full rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5 text-body-13 text-warning-700">
-              {staleChainSentence(stale)}.
+              {calmBlocker}.
             </p>
           ) : needsYouTotal === 0 ? (
             <p className="text-body-13 text-03">Nothing needs you right now.</p>

@@ -57,10 +57,22 @@ export interface CaseFacts {
   cancel: { deadline: string | null; ifUnsigned: "expires" | "executes" } | null;
   /**
    * The backend read that nothing of the case is Pending or Disputed on chain
-   * (`chainStanding: false`): nobody can execute it and a cancel has nothing
+   * (`chainRecord: GONE`): nobody can execute it and a cancel has nothing
    * to act on. False when the brief does not say (an older backend).
    */
   nothingOnChain: boolean;
+  /**
+   * The record (or a part) was executed on chain while this platform's cancel
+   * waited (`chainRecord: EXECUTED` under a `CANCEL_REQUESTED` mirror): the
+   * stake was taken. Never read as "nothing was taken".
+   */
+  executedWhileCancelWaited: boolean;
+  /**
+   * The chain side still reads "cancel requested" though nothing stands: a
+   * fresh read by the backend closes it (the cancel-intent call answers 409,
+   * closed). False otherwise.
+   */
+  closeOutstanding: boolean;
   /**
    * Not on chain yet, and its computed dates have passed: "Not on chain after
    * 5 days", counted from the proposal. Null otherwise.
@@ -89,7 +101,11 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
   const executableAt = clocks.chainExecutableAt ?? clocks.earliestExecutionAt ?? null;
   const legacyStatus = status === "DISPUTED" || status === "UNDER_REVIEW" || status === "AWAITING_SECOND";
 
-  const nothingOnChain = brief.chainStanding === false;
+  // Only GONE means nothing stands and nothing was taken. EXECUTED is money moved; UNKNOWN (and a
+  // backend without the field) reads as standing.
+  const record = brief.chainRecord ?? "STANDING";
+  const nothingOnChain = record === "GONE";
+  const executedWhileCancelWaited = record === "EXECUTED" && chain === "CANCEL_REQUESTED";
 
   let stage: CaseStage;
   // Executed on chain, then paid back by the treasury: the chain still reads EXECUTED.
@@ -135,6 +151,8 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
     expired,
     cancel,
     nothingOnChain,
+    executedWhileCancelWaited,
+    closeOutstanding: nothingOnChain && chain === "CANCEL_REQUESTED",
     notOnChainForDays,
   };
 }
@@ -239,6 +257,14 @@ export function caseTimelineSteps(
     steps.push({ id: "end", label: "Executed, then compensated", state: "done", date: proposal.resolvedAt });
   } else if (stage === "cancelled") {
     steps.push({ id: "end", label: facts.expired ? "Expired" : "Cancelled", state: "done", date: proposal.resolvedAt });
+  } else if (stage === "cancel-requested" && facts.executedWhileCancelWaited) {
+    steps.push({
+      id: "end",
+      label: "Executed on chain while the cancel waited",
+      state: "current",
+      urgent: true,
+      description: "The stake was taken. Nothing can be cancelled any more.",
+    });
   } else if (stage === "cancel-requested" && facts.nothingOnChain) {
     steps.push({
       id: "end",
@@ -284,7 +310,7 @@ export function caseTimelineSteps(
 
 // ── The next step ───────────────────────────────────────────────────────────
 
-export type CaseActionId = "suspend" | "rule" | "cancel" | "compensate" | "sweep" | "block" | "approve" | "open-request";
+export type CaseActionId = "suspend" | "rule" | "cancel" | "close-chain" | "compensate" | "sweep" | "block" | "approve" | "open-request";
 
 export interface CaseNextStep {
   kind: "action" | "waiting" | "done";
@@ -294,6 +320,8 @@ export interface CaseNextStep {
   action: CaseActionId | null;
   /** A quiet action next to a waiting card (e.g. Suspend while the window is open). */
   secondary: CaseActionId | null;
+  /** Money moved that should not have: drawn as an alert, never a calm card. */
+  alert?: boolean;
   /** The instant the description points at, for a countdown. */
   until: string | null;
   /** A short line under the description, e.g. who must approve. Never the deadline again. */
@@ -309,6 +337,8 @@ export interface CaseAuthority {
   suspend: { allowed: boolean; open: boolean; twoPerson: boolean; reason: string | null };
   rule: boolean;
   cancel: boolean;
+  /** May ask the backend to read the chain and close a "cancel requested" side with nothing standing. */
+  closeChain: boolean;
   compensate: boolean;
   block: boolean;
 }
@@ -343,7 +373,8 @@ export function caseAuthority(
   return {
     suspend: { allowed: legal && check.allowed, open: legal, twoPerson: status ? suspendIsTwoPerson(status) : false, reason: suspendReason },
     rule: caps.rule,
-    cancel: may(identity.roles, "cancel") && facts.stage === "cancel-requested" && !facts.nothingOnChain,
+    cancel: may(identity.roles, "cancel") && facts.stage === "cancel-requested" && !facts.nothingOnChain && !facts.executedWhileCancelWaited,
+    closeChain: may(identity.roles, "cancel") && facts.closeOutstanding,
     compensate: may(identity.roles, "compensate") && status !== null && isLegalInStatus("compensate", status),
     block: caps.block,
   };
@@ -368,6 +399,38 @@ export function caseNextStep(
   format: (iso: string) => string,
 ): CaseNextStep {
   const suspendSecondary = authority.suspend.allowed ? ("suspend" as const) : null;
+  if (facts.executedWhileCancelWaited) {
+    return {
+      kind: "waiting",
+      title: "Executed on chain while the cancel waited",
+      description:
+        "The stake was taken: the penalty was executed on chain before the cancel landed. Nothing can be cancelled any more. Operations has been alerted to record it and decide on paying it back.",
+      action: null,
+      secondary: null,
+      until: null,
+      alert: true,
+    };
+  }
+  if (facts.closeOutstanding) {
+    return authority.closeChain
+      ? {
+          kind: "action",
+          title: "Close the on-chain side",
+          description:
+            "Nothing is on chain: nothing can be executed, and there is nothing to sign. The on-chain side still reads \"cancel requested\"; confirming has the backend read the chain again and close it.",
+          action: "close-chain",
+          secondary: null,
+          until: null,
+        }
+      : {
+          kind: "done",
+          title: "Nothing is on chain",
+          description: "Nothing is on chain: nothing can be executed, and there is nothing to sign. A Lead adjudicator or Treasury closes the on-chain side.",
+          action: null,
+          secondary: null,
+          until: null,
+        };
+  }
   // "Anyone can execute" only while something stands on chain (B11).
   if (facts.nothingOnChain && ["cancel-requested", "executable", "upheld", "window-open", "disputed"].includes(facts.stage)) {
     return {

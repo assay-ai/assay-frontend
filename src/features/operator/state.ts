@@ -164,9 +164,9 @@ export function disputedPartsNote(
  * carries that time (`chainExecutableAt`); an older backend does not, and the
  * warning is then given without it rather than dropped.
  *
- * "Anyone can execute" only while something stands: with `chainStanding:
- * false` (the brief's own reading) there is nothing to execute and nothing to
- * sign, whatever the dates say.
+ * "Anyone can execute" only while something stands: with `chainRecord`
+ * GONE (the brief's own reading) there is nothing to execute and nothing to
+ * sign, whatever the dates say; EXECUTED means the stake was already taken.
  *
  * `null` for every other chain status — there is no cancel waiting.
  */
@@ -175,10 +175,13 @@ export function cancelDeadlineNotice(
   chainExecutableAt: string | null | undefined,
   now: Date,
   chain?: string | null,
-  chainStanding?: boolean,
+  chainRecord?: "STANDING" | "EXECUTED" | "GONE" | "UNKNOWN",
 ): { overdue: boolean; text: string } | null {
   if (!isCancelRequested(chainStatus)) return null;
-  if (chainStanding === false) {
+  if (chainRecord === "EXECUTED") {
+    return { overdue: true, text: "Executed on chain while the cancel waited: the stake was taken. Nothing can be cancelled any more." };
+  }
+  if (chainRecord === "GONE") {
     return { overdue: false, text: "Nothing is on chain: nothing can be executed, and there is nothing to sign." };
   }
   const signer = cancelSignerOf(chain);
