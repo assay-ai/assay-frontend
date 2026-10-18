@@ -22,7 +22,8 @@ import { demoEnabled } from "@/libs/demo/demo-api";
 import { loginHref } from "@/libs/login-redirect";
 import { formatDate } from "@/libs/utc-time";
 import { plainError } from "@/libs/plain-language";
-import type { PublicToolsetCard, PublicToolsetPage } from "@/services/public-toolsets.service";
+import { routes } from "@/libs/routes";
+import type { PublicHandleTool, PublicToolsetCard, PublicToolsetPage } from "@/services/public-toolsets.service";
 import type { PublicTool } from "@/services/public-explorer.service";
 import { cn } from "@/utils";
 
@@ -562,12 +563,15 @@ export function PublicHandleView() {
           </p>
         ) : null}
         <p className="text-body-13 text-02">
-          {data.handle === "assay" ? "Official tool sets, kept up to date by Assay." : `Tool sets @${data.handle} shared in the catalogue.`}
+          {data.handle === "assay" ? "Official tool sets, kept up to date by Assay." : `The tools and tool sets @${data.handle} lists in the catalogue.`}
         </p>
       </header>
-      {data.tools.length > 0 ? <ConnectPanel publicPage url={buildMcpUrl({ kind: "maker", handle: data.handle }, { free: false }, mcpHost())} title={`Connect every tool from @${data.handle}`} /> : null}
+      {data.tools.length > 0 ? <ConnectPanel publicPage url={data.mcpUrl ?? buildMcpUrl({ kind: "maker", handle: data.handle }, { free: false }, mcpHost())} title={`Connect every tool from @${data.handle}`} /> : null}
+      {data.tools.length > 0 ? <HandleTools handle={data.handle} tools={data.tools} /> : null}
       {data.toolsets.length === 0 ? (
-        <PageState kind="empty" title={`@${data.handle} has not listed a tool set yet`} description="Tool sets shared only by link do not show here." action={{ label: "See all tool sets", href: "/catalogue?view=toolsets" }} />
+        data.tools.length > 0 ? null : (
+          <PageState kind="empty" title={`@${data.handle} has not listed a tool set yet`} description="Tools and tool sets shared only by link do not show here." action={{ label: "See all tool sets", href: "/catalogue?view=toolsets" }} />
+        )
       ) : (
         <ul className="grid grid-cols-1 gap-3 tablet:grid-cols-2" data-testid="handle-toolsets">
           {data.toolsets.map((card) => (
@@ -592,6 +596,56 @@ export function PublicHandleView() {
       )}
       <ReportSheet open={reporting} onOpenChange={setReporting} label={`@${data.handle}`} target={{ handle: data.handle }} />
     </>,
+  );
+}
+
+/**
+ * A public name's own tools (`{handle}__{tool}`): LISTED ones only, so each
+ * was reviewed; one maker serves each, so none has a backup provider. The
+ * tier is at most "Verified".
+ */
+export function HandleTools({ handle, tools }: { handle: string; tools: PublicHandleTool[] }) {
+  return (
+    <section aria-labelledby="handle-tools-title" className="flex flex-col gap-2" data-testid="handle-tools">
+      <h2 id="handle-tools-title" className="text-label-md text-01">
+        Tools by @{handle} <span className="text-body-13 text-03">· {tools.length}</span>
+      </h2>
+      <p className="text-body-13 text-03">One maker&apos;s own APIs: only @{handle} serves them, so there is no backup provider.</p>
+      <ul className="flex flex-col divide-y divide-01 overflow-hidden rounded-xl border border-01 bg-01">
+        {tools.map((tool) => (
+          <li key={tool.id}>
+            <Link href={routes.publicTool(tool.id)} className="group flex w-full items-center gap-3 px-4 py-3.5 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500">
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
+                  {tool.tier === "VERIFIED" ? (
+                    <Chip tone="success">
+                      <BadgeCheck aria-hidden="true" className="size-3" />
+                      Verified
+                    </Chip>
+                  ) : (
+                    <Chip>Unverified</Chip>
+                  )}
+                  {tool.reviewed ? null : (
+                    <Chip tone="warning">
+                      <ShieldAlert aria-hidden="true" className="size-3" />
+                      Not reviewed
+                    </Chip>
+                  )}
+                  {tool.version ? <span className="text-body-xs text-03">v{tool.version}</span> : null}
+                </span>
+                {tool.summary ? <span className="line-clamp-2 text-body-13 text-02">{tool.summary}</span> : null}
+                <span className="text-body-xs text-03">
+                  {tool.category}
+                  {tool.replacementName ? ` · now also a standard tool with backups: ${tool.replacementName}` : ""}
+                </span>
+              </span>
+              <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03 group-hover:text-02" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

@@ -115,6 +115,23 @@ function ToolPage() {
           <ToolVersionBadges name={tool.name} version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} replacementName={tool.replacementName} replacementVersion={tool.replacementVersion} />
         </div>
         {tool.description ? <p className="max-w-[760px] text-body-md text-02">{tool.description}</p> : null}
+        {tool.kind === "PROVIDER" ? (
+          <p className="flex flex-wrap items-center gap-2 text-body-13 text-02" data-testid="maker-facts">
+            <span className="rounded-full bg-03 px-2 py-0.5 text-label-xs text-02">One maker&apos;s API</span>
+            {tool.notReviewed ? <span className="rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">Not reviewed</span> : null}
+            <span>
+              Only its maker serves it, so there is no backup provider.
+              {tool.handle ? (
+                <>
+                  {" "}
+                  <Link href={`/toolsets/handle?handle=${encodeURIComponent(tool.handle)}`} className="text-primary-600 hover:underline">
+                    More from @{tool.handle}
+                  </Link>
+                </>
+              ) : null}
+            </span>
+          </p>
+        ) : null}
       </header>
 
       <div className="grid grid-cols-1 gap-4 tablet:grid-cols-2">
