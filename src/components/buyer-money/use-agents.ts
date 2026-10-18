@@ -7,6 +7,7 @@ import { splitDebts } from "@/features/buyer-debt/debt-copy";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 
 import { agentReadiness, type AgentReadiness } from "@/features/buyer-money/agent-readiness";
+import type { CredentialLike } from "@/features/buyer-money/mcp-config";
 import { supportsDelegation } from "@/features/delegation/delegation-form";
 import { useChains } from "@/hooks/useChains";
 import type { EscrowDelegate } from "@/interfaces";
@@ -26,14 +27,10 @@ export interface AgentRow {
   agentAccount?: string;
 }
 
-export interface KeyRow {
+export interface KeyRow extends CredentialLike {
   id: string;
   agentId: string;
   name: string;
-  /** The key's clear-text start; null for an OAuth grant (an app sign-in), which has no key to show. */
-  prefix: string | null;
-  /** The app an OAuth grant was made for; absent or null for an API key. */
-  oauthClient?: { name: string } | null;
   scopes: string[];
   lastUsedAt: string | null;
   expiresAt: string | null;

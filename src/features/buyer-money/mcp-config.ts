@@ -30,13 +30,19 @@ export const KEY_PLACEHOLDER = "PASTE_YOUR_KEY_HERE";
 export const API_KEY_PREFIX = "assay_sk_live_";
 
 /**
+ * The most of a key ever shown in clear. The server stores fewer characters;
+ * this bound only makes sure a full token passed by mistake is never echoed.
+ */
+export const KEY_PREFIX_VISIBLE_LENGTH = 22;
+
+/**
  * What stands in for the key when it is not on screen: the API key's own
  * visible prefix, so a person with a key sees which key goes there
  * (`assay_sk_live_ab12…REST_OF_YOUR_KEY`); else the bare placeholder.
  */
 export function keyPlaceholder(keyPrefix?: string | null): string {
-  const prefix = keyPrefix?.trim();
-  return prefix && prefix.startsWith(API_KEY_PREFIX) ? `${prefix.replace(/[.…]+$/, "")}…REST_OF_YOUR_KEY` : KEY_PLACEHOLDER;
+  const prefix = keyPrefix?.trim().replace(/[.…]+$/, "").slice(0, KEY_PREFIX_VISIBLE_LENGTH);
+  return prefix && prefix.startsWith(API_KEY_PREFIX) ? `${prefix}…REST_OF_YOUR_KEY` : KEY_PLACEHOLDER;
 }
 
 /** "live" for an API key's visible prefix (`assay_sk_live_…`); null when it does not say. */
@@ -45,12 +51,22 @@ export function keyMode(keyPrefix?: string | null): "live" | null {
 }
 
 /**
+ * The app an OAuth grant was made for, as a credential row carries it
+ * (`AgentCredentialDto.oauthClient`, spec §7.10 item 4). Absent or null for an
+ * API key.
+ */
+export interface CredentialOAuthClient {
+  name: string;
+}
+
+/**
  * A credential row as a key list shows it. An OAuth grant (an app sign-in)
  * has no prefix: it is named by its client, never as "null…".
  */
 export interface CredentialLike {
+  /** The key's clear-text start; null for an OAuth grant, which has no key to show. */
   prefix: string | null;
-  oauthClient?: { name: string } | null;
+  oauthClient?: CredentialOAuthClient | null;
 }
 
 export function credentialLabel(credential: CredentialLike): string {

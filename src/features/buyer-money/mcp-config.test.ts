@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { credentialLabel, KEY_PLACEHOLDER, keyMode, keyPlaceholder, keyForHint } from "@/features/buyer-money/mcp-config";
+import { credentialLabel, KEY_PLACEHOLDER, KEY_PREFIX_VISIBLE_LENGTH, keyMode, keyPlaceholder, keyForHint } from "@/features/buyer-money/mcp-config";
 
 describe("keyMode — read off the key's visible prefix", () => {
   it("names an API key live", () => {
@@ -20,6 +20,14 @@ describe("keyPlaceholder — what stands in for a key not on screen", () => {
   it("names an API key by its prefix", () => {
     expect(keyPlaceholder("assay_sk_live_ab12cd34")).toBe("assay_sk_live_ab12cd34…REST_OF_YOUR_KEY");
     expect(keyPlaceholder("assay_sk_live_ab12cd34…")).toBe("assay_sk_live_ab12cd34…REST_OF_YOUR_KEY");
+  });
+
+  it("never echoes a full token: only the visible prefix is kept", () => {
+    const token = "assay_sk_live_ab12cd34ef56gh78ij90kl12mn34op56";
+    const out = keyPlaceholder(token);
+    expect(out).toBe(`${token.slice(0, KEY_PREFIX_VISIBLE_LENGTH)}…REST_OF_YOUR_KEY`);
+    expect(out).not.toContain(token);
+    expect(KEY_PREFIX_VISIBLE_LENGTH).toBe(22);
   });
 
   it("is the bare placeholder without a prefix, or with one that is not an API key's", () => {
