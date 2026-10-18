@@ -19,6 +19,7 @@ import { runEscrowAction } from "@/features/escrow/relayed-submission";
 import { withdrawGasGrantNote } from "@/features/escrow/withdraw-gas-grant-note";
 import { useCountdown } from "@/hooks/useCountdown";
 import { usePendingTransactions } from "@/hooks/usePendingTransactions";
+import type { Money } from "@/interfaces/api";
 import { waitForSuccess } from "@/libs/chains/evm/deposit-transaction";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { isEvmChain } from "@/libs/chains/registry";
@@ -31,9 +32,35 @@ import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-mone
  * Getting unspent money out: Request (free) → Wait ~1 h → Claim (you pay gas).
  *
  * The two things buyers got wrong before are said inside the drawer: a new
- * request REPLACES the standing one (it does not add), and agents stop paying
- * while a request stands — the latter as a checkbox, not a paragraph.
+ * request REPLACES the standing one (it does not add), and paid calls stop
+ * while a request stands. The latter is a warning right above the button,
+ * naming the chain, because it holds for a partial amount too: the backend
+ * refuses every voucher on that chain while a request is open (the escrow's
+ * `withdraw()` reads no voucher state). A tick box hid it.
  */
+
+/** The pause a withdrawal request causes, in one sentence. Per chain, never account-wide. */
+export function withdrawPauseWarning(chainName: string | null): string {
+  return `While this request is open (about 1 h), every agent's paid calls on ${chainName ?? "this chain"} stop, even for a partial amount. Free calls keep working.`;
+}
+
+/**
+ * "Held by calls being checked: $0.40; you receive at least $4.60": the least
+ * a request of `requested` pays out when every held call is charged. Null when
+ * nothing is held or no amount is chosen yet.
+ */
+export function withdrawFloorText(
+  requested: Money | null,
+  held: Money | null,
+  owedCalls: number,
+): string | null {
+  if (!requested || !held || BigInt(held.amount) <= 0n) return null;
+  const floor = BigInt(requested.amount) - BigInt(held.amount);
+  const least = { ...requested, amount: (floor > 0n ? floor : 0n).toString() };
+  const by = owedCalls > 0 ? "Held for calls being checked or not yet paid" : "Held by calls being checked";
+  return `${by}: ${formatLimit(held)}; you receive at least ${formatLimit(least)}.`;
+}
+
 function positive(amount: string | undefined): boolean {
   return Boolean(amount && BigInt(amount) > 0n);
 }
@@ -76,6 +103,8 @@ export function WithdrawSheet({
   const owedIntentIds = useOwedIntentIds();
   const { openSettle } = useSettleDebt();
   const heldText = held ? withdrawHeldText(formatLimit(held), openHoldIds, owedIntentIds) : null;
+  const requestedMoney: Money | null = parsed.atomic && held ? { ...held, amount: parsed.atomic } : null;
+  const floorText = cancelling ? null : withdrawFloorText(requestedMoney, held, heldText?.owed ?? 0);
   const settleFirst = () => {
     onOpenChange(false);
     openSettle();
@@ -131,6 +160,7 @@ export function WithdrawSheet({
   ];
 
   const availableAt = money.escrow?.withdrawAvailableAt;
+  const chainName = money.chainName;
 
   return (
     <WalletActionSheet
@@ -149,17 +179,17 @@ export function WithdrawSheet({
       disabled={Boolean(disabledReason)}
       disabledReason={disabledReason}
       describeError={describeMoneyError}
-      acknowledge={cancelling ? undefined : "My agents stop paying for calls until I claim this or cancel it."}
       successTitle={cancelling ? "Request cancelled" : "Withdrawal requested"}
       successDescription={
         cancelling ? (
           "Your agents can pay again."
         ) : availableAt ? (
           <>
-            Next: claim it on the Funding page from <UtcTime value={availableAt} />. Your agents are paused until then.
+            Next: claim it on the Funding page from <UtcTime value={availableAt} />. Paid calls on {chainName ?? "this chain"} are
+            paused until then; free calls keep working.
           </>
         ) : (
-          "Next: claim it on the Funding page in about an hour. Your agents are paused until then."
+          `Next: claim it on the Funding page in about an hour. Paid calls on ${chainName ?? "this chain"} are paused until then; free calls keep working.`
         )
       }
       doneAction={{ label: "Close", onClick: () => onOpenChange(false) }}
@@ -186,7 +216,8 @@ export function WithdrawSheet({
               hint={available ? `Available to withdraw now: ${formatLimit(available)}` : undefined}
             />
           </div>
-          {heldText ? (
+          {/* Once an amount is chosen, the floor line below names the held amount; an unpaid call keeps its settle button. */}
+          {heldText && (!floorText || heldText.owed > 0) ? (
             <div className="flex flex-col gap-2">
               <p className="text-body-13 text-02" data-testid="withdraw-held-note">
                 {heldText.text}
@@ -200,8 +231,22 @@ export function WithdrawSheet({
               hour again.
             </p>
           ) : null}
-          <p className="text-body-xs text-03">
-            Calls your agents already made are paid first, so you may receive less than you ask for, never more.
+          {floorText ? (
+            <p className="text-body-13 text-02" data-testid="withdraw-floor">
+              {floorText}
+            </p>
+          ) : (
+            <p className="text-body-xs text-03">
+              Calls your agents already made are paid first, so you may receive less than you ask for, never more.
+            </p>
+          )}
+          {/* Last, so it sits right above the button: the consequence of pressing it. */}
+          <p
+            role="note"
+            data-testid="withdraw-pause-warning"
+            className="rounded-lg border border-warning-20 bg-warning-10 px-3 py-2.5 text-body-13 text-warning-700"
+          >
+            {withdrawPauseWarning(chainName)}
           </p>
         </>
       )}
