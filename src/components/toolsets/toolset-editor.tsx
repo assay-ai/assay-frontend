@@ -114,6 +114,7 @@ export function ToolsetPage({ id, slug, free, version }: { id: string | null; sl
     <>
       <ConnectPanel
         compact
+        copyable
         url={buildMcpUrl({ kind: "toolset", slug: set.slug, version: version ?? null }, { free: Boolean(free) })}
         title={`Connect ${set.name}`}
         detail={version ? `Locked to v${version}: only these tools, with these provider rules.` : "Its own MCP server: only these tools, with these provider rules."}
@@ -277,7 +278,10 @@ function EntriesEditor({ set }: { set: Toolset }) {
   return (
     <section aria-label="Tools in this set" className="flex w-full flex-col gap-3 rounded-xl border border-01 bg-01 p-4 shadow-hair tablet:p-5" data-testid="toolset-entries">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-label-md text-01">Tools</h2>
+        <h2 className="flex items-center gap-2 text-label-md text-01">
+          Tools
+          <Chip tone="primary">Draft</Chip>
+        </h2>
         <span className="text-body-xs text-03" aria-live="polite">
           {save.isPending ? "Saving…" : save.isSuccess ? "Saved" : null}
           {!save.isPending && undoRows ? (
@@ -289,7 +293,8 @@ function EntriesEditor({ set }: { set: Toolset }) {
       </div>
       <p className="flex items-start gap-2 rounded-lg bg-primary-10 px-3 py-2 text-body-13 text-primary-700" data-testid="draft-notice">
         <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-        {DRAFT_NOTICE} Agents connected to /my/{set.slug} see each saved change on their next call; some apps list tools again only after a restart.
+        This is the Draft: what /my/{set.slug} serves now. {DRAFT_NOTICE} Agents connected to it see each saved change on their next
+        call; some apps list tools again only after a restart.
       </p>
 
       {rows.length === 0 ? (
