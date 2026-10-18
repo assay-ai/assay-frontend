@@ -76,7 +76,7 @@ describe("demo fixtures: tool sets, access, Connect preview, servers, refused ca
     const preview = call<McpUrlPreview>("POST", "/mcp-urls/preview", { url: `${HOST}/my/research`, agentId: PROD });
     expect(preview.toolsetName).toBe("Research kit");
     const search = preview.tools.find((t) => t.name === "search_web")!;
-    expect(search).toMatchObject({ allowed: true, noProviderFits: true, price: null });
+    expect(search).toMatchObject({ allowed: true, noProviderFits: true, noFitReason: "RULES", price: null });
     expect(preview.warnings.find((w) => w.code === "NO_PROVIDER_FITS")?.tools).toContainEqual({ toolId: search.toolId, name: "search_web" });
   });
 
