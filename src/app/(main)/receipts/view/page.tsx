@@ -45,7 +45,7 @@ import {
 import { ErrorBlock } from "@/features/g30/ui";
 import { collectionAt, collectionView, isCollectionState, timelineStamp, timelineZoneNote } from "@/features/g30/receipt-collection";
 import { OwedReceiptAction } from "@/features/buyer-debt/owed-row-action";
-import { ReceiptReport, RefundableNow } from "@/features/call-disputes/receipt-report";
+import { ReceiptReport, RefundableNow, receiptReportState, useCallReports } from "@/features/call-disputes/receipt-report";
 import { useNow } from "@/features/call-disputes/ui";
 import { owedCallState } from "@/features/buyer-debt/debt-summary";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
@@ -111,8 +111,11 @@ function ReceiptPageContent() {
   const names = useEntityNames({ kinds: ["tool", "provider"] });
   // The same debts query as the banner (one request): a written-off row takes its write-off time from it.
   const debtsQuery = useBuyerDebtsQuery();
-  // The 1-hour hold's rows (refundable until, paid to provider) turn over on this clock.
+  // One clock for the whole receipt: the hold rows, the headline countdown and the report box
+  // all turn over together at the end of the hour.
   const now = useNow(30_000);
+  // The same query the report box reads: an open report keeps the payment held.
+  const reportsQuery = useCallReports(intentId);
 
   const receiptQuery = useQuery<Receipt, ApiError>({
     queryKey: ["receipt", intentId],
@@ -246,7 +249,11 @@ function ReceiptPageContent() {
   // The receipt, told once: the headline, the money strip, the check rows and
   // the timeline all read from it, so a call charged with no check result can
   // never say "Check passed", and a charged call never closes on "not charged".
-  const told = receiptStory(receipt, state, { now, collectionClosing });
+  const told = receiptStory(receipt, state, {
+    now,
+    collectionClosing,
+    report: receiptReportState(reportsQuery.data?.items),
+  });
   const story = told.notCharged;
   const checks = told.checks;
   const events: TimelineEvent[] = told.timeline.map(({ at, ...row }) => ({ ...stamp(at), ...row }));
@@ -299,7 +306,7 @@ function ReceiptPageContent() {
           notCharged={withheld}
           action={
             receipt.status === "SETTLED" ? (
-              <RefundableNow receipt={receipt} toolName={names.name("tool", receipt.toolId)} />
+              <RefundableNow receipt={receipt} toolName={names.name("tool", receipt.toolId)} now={now} />
             ) : null
           }
         />
@@ -400,7 +407,14 @@ function ReceiptPageContent() {
       </dl>
 
       {/* A charged call: "Report a bad result", or the report's status once filed. */}
-      {receipt.status === "SETTLED" ? <ReceiptReport receipt={receipt} toolName={names.name("tool", receipt.toolId)} /> : null}
+      {receipt.status === "SETTLED" ? (
+        <ReceiptReport
+          receipt={receipt}
+          toolName={names.name("tool", receipt.toolId)}
+          now={now}
+          buttonAbove={state === "CHARGED"}
+        />
+      ) : null}
 
       {/* Only on a call that was not charged: what the other outcomes mean. */}
       {finalNotCharged ? (

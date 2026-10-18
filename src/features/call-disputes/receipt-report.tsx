@@ -8,58 +8,61 @@ import * as React from "react";
 
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
-import { refundableUntil } from "@/features/g30/receipt-state";
+import { refundableUntil, type ReceiptReportState } from "@/features/g30/receipt-state";
 import type { Receipt } from "@/features/g30/wire";
 import { formatRemaining } from "@/hooks/useCountdown";
 import { routes } from "@/libs/routes";
-import { listCallDisputes } from "@/services/call-disputes.service";
+import { listCallDisputes, type CallDispute } from "@/services/call-disputes.service";
 
-import { buyerStatus, reportWindow, type ReportWindowView } from "./model";
+import { buyerStatus, reportWindow } from "./model";
 import { callDisputeKeys, DisputeChip, ReportSheet, useNow } from "./ui";
 
-/**
- * What a report filed after the 1-hour hold leads to, said concretely (owner
- * decision D9): no refund, a mark on the provider's quality, and possibly a
- * penalty on their stake.
- */
-export const AFTER_HOLD_TEXT =
-  "The 1-hour hold has ended. No refund. Your report counts against the provider's quality and can lead to a penalty on their stake.";
-
-/** The report window on a receipt, with the after-hold outcome in plain words. */
-export function receiptHold(receipt: Receipt, now: number): ReportWindowView {
-  const hold = reportWindow(receipt, now);
-  return hold.open && !hold.guaranteed ? { ...hold, text: AFTER_HOLD_TEXT } : hold;
-}
-
-function useCallReports(intentId: string) {
+/** The reports filed on this call; one query, shared by the page, the headline and the report box. */
+export function useCallReports(intentId: string) {
   return useQuery({
     queryKey: callDisputeKeys.forIntent(intentId),
     queryFn: () => listCallDisputes({ intentId, limit: 5 }),
+    enabled: Boolean(intentId),
     retry: 0,
   });
 }
 
 /**
- * Beside the receipt's headline while the call is still refundable: how long
- * is left, and "Report a bad result" right there rather than at the foot of
- * the page. Nothing once the hour is over or the call is reported (the
- * report's status is shown further down).
+ * Where this call's reports leave its money: `open` while one is being
+ * decided (the payment stays held for it), `closed` once decided, `none`
+ * with no report (a withdrawn one included).
  */
-export function RefundableNow({ receipt, toolName }: { receipt: Receipt; toolName: string }) {
+export function receiptReportState(items: readonly Pick<CallDispute, "state">[] | undefined): ReceiptReportState {
+  const live = (items ?? []).filter((d) => d.state !== "WITHDRAWN");
+  if (live.some((d) => d.state === "OPEN")) return "open";
+  return live.length > 0 ? "closed" : "none";
+}
+
+/**
+ * Beside the receipt's headline while a report would still be refunded in
+ * full: how long is left, and "Report a bad result" right there rather than
+ * at the foot of the page. Before the payment is collected there is no clock
+ * yet, so it says when the hour starts. Nothing once the refund is no longer
+ * guaranteed or the call is reported (the report's status is shown further
+ * down).
+ */
+export function RefundableNow({ receipt, toolName, now: nowProp }: { receipt: Receipt; toolName: string; now?: number }) {
   const router = useRouter();
-  const now = useNow(30_000);
+  const ticking = useNow(30_000);
+  const now = nowProp ?? ticking;
   const [open, setOpen] = React.useState(false);
   const reports = useCallReports(receipt.intentId);
-  const hold = receiptHold(receipt, now);
-  const until = refundableUntil(receipt, now);
-  if (!hold.guaranteed || !hold.holdEndsAt || !until) return null;
+  const hold = reportWindow(receipt, now);
+  if (!hold.guaranteed) return null;
   if ((reports.data?.items?.length ?? 0) > 0) return null;
-  const left = formatRemaining(Date.parse(hold.holdEndsAt) - now);
+  const until = refundableUntil(receipt, now);
+  const line =
+    hold.holdEndsAt && until
+      ? `${until} · ${formatRemaining(Date.parse(hold.holdEndsAt) - now)} left to report it for a full refund.`
+      : "Refundable: the 1-hour hold starts when the payment is collected.";
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-1.5" data-testid="receipt-refundable">
-      <p className="text-body-13 text-02">
-        {until} · {left} left to report it for a full refund.
-      </p>
+      <p className="text-body-13 text-02">{line}</p>
       <Button size="sm" variant="primary" icon={<Flag aria-hidden="true" />} disabled={reports.isPending} className="touch-target" onClick={() => setOpen(true)}>
         Report a bad result
       </Button>
@@ -71,16 +74,30 @@ export function RefundableNow({ receipt, toolName }: { receipt: Receipt; toolNam
 /**
  * The receipt's "Report a bad result": what a report filed now would mean
  * (inside the 1-hour hold: a full refund if accepted; after it: no refund, a
- * quality signal that can lead to a penalty on the provider's stake), the button, and once reported, the report's status with a link
- * to its timeline.
+ * quality signal that can lead to a penalty on the provider's stake), the
+ * button, and once reported, the report's status with a link to its timeline.
+ *
+ * `buttonAbove`: the headline already offers the button while the refund is
+ * guaranteed (`RefundableNow`), so this box only explains then.
  */
-export function ReceiptReport({ receipt, toolName }: { receipt: Receipt; toolName: string }) {
+export function ReceiptReport({
+  receipt,
+  toolName,
+  now: nowProp,
+  buttonAbove = false,
+}: {
+  receipt: Receipt;
+  toolName: string;
+  now?: number;
+  buttonAbove?: boolean;
+}) {
   const router = useRouter();
-  const now = useNow(30_000);
+  const ticking = useNow(30_000);
+  const now = nowProp ?? ticking;
   const [open, setOpen] = React.useState(false);
   const reports = useCallReports(receipt.intentId);
   const latest = [...(reports.data?.items ?? [])].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0] ?? null;
-  const hold = receiptHold(receipt, now);
+  const hold = reportWindow(receipt, now);
   const openReport = latest && latest.state === "OPEN" ? latest : null;
 
   // The API says when a call can't be reported at all (not settled, free, your own): no button then.
@@ -130,10 +147,14 @@ export function ReceiptReport({ receipt, toolName }: { receipt: Receipt; toolNam
           ) : null}
         </p>
       </div>
-      <Button variant={hold.guaranteed ? "primary" : "secondary"} icon={<Flag aria-hidden="true" />} disabled={!hold.open || reports.isPending} className="self-start tablet:self-auto" onClick={() => setOpen(true)}>
-        Report a bad result
-      </Button>
-      <ReportSheet open={open} onOpenChange={setOpen} intentId={receipt.intentId} toolName={toolName} hold={hold} onFiled={(d) => router.push(routes.callDispute(d.id))} />
+      {buttonAbove && hold.guaranteed ? null : (
+        <>
+          <Button variant={hold.guaranteed ? "primary" : "secondary"} icon={<Flag aria-hidden="true" />} disabled={!hold.open || reports.isPending} className="self-start tablet:self-auto" onClick={() => setOpen(true)}>
+            Report a bad result
+          </Button>
+          <ReportSheet open={open} onOpenChange={setOpen} intentId={receipt.intentId} toolName={toolName} hold={hold} onFiled={(d) => router.push(routes.callDispute(d.id))} />
+        </>
+      )}
     </section>
   );
 }

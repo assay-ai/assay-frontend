@@ -133,8 +133,17 @@ describe("the report window on a receipt", () => {
   it("inside the hold: a full refund if upheld", () => {
     expect(reportWindow(receipt, t0 + 30 * 60_000)).toMatchObject({ open: true, guaranteed: true, holdEndsAt: "2026-10-18T11:00:00.000Z" });
   });
-  it("after the hold: still open, a quality signal", () => {
+  it("after the hold: still open, no refund, a quality signal", () => {
     expect(reportWindow(receipt, t0 + 2 * H)).toMatchObject({ open: true, guaranteed: false });
+    expect(reportWindow(receipt, t0 + 2 * H).text).toMatch(/^The 1-hour hold has ended, so there is no refund/);
+  });
+  // B2 review C1: a rail-B voucher not yet redeemed into the hold has no hold fields, and a report filed then IS guaranteed.
+  it("before the payment is collected: a full refund, never 'No refund'", () => {
+    const fresh = { ...receipt, disputeWindowEndsAt: null, collectableAt: null };
+    const view = reportWindow(fresh, t0 + 5 * 60_000);
+    expect(view).toMatchObject({ open: true, guaranteed: true, holdEndsAt: null });
+    expect(view.text).toMatch(/not been collected yet.*refunded in full/);
+    expect(view.text).not.toMatch(/no refund/i);
   });
   it("closed after 7 days, and for calls that did not settle", () => {
     expect(reportWindow(receipt, t0 + 8 * 24 * H).open).toBe(false);
@@ -161,7 +170,7 @@ describe("the decided dispute copy", () => {
     for (const text of Object.values(DISPUTE_COPY)) expect((text.match(/\d+ (hours|days)/g) ?? []).length).toBeLessThanOrEqual(1);
     const open = buyerStatus(dispute(), t0 + H).detail;
     expect(open).not.toMatch(/7 days/);
-    expect(buyerStatus(dispute({ refundGuaranteed: false }), t0 + H).detail).toMatch(/already been collected.*a refund is not guaranteed/);
+    expect(buyerStatus(dispute({ refundGuaranteed: false }), t0 + H).detail).toMatch(/after the 1-hour hold, so there is no refund for this call\. .*penalty on their stake/);
   });
 });
 
@@ -179,7 +188,7 @@ describe("buyer words", () => {
   });
 
   it("an after-hold report says what accepting it means for the money", () => {
-    expect(BUYER_COPY.afterHold).toMatch(/already been collected.*counts against the provider's quality; a refund is not guaranteed/);
+    expect(BUYER_COPY.afterHold).toMatch(/no refund for this call\. If your report is accepted, it counts against the provider's quality and can lead to a penalty on their stake/);
   });
 
   it("refer to an organization by a short, stable reference, never its id", () => {
