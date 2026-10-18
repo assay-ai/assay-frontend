@@ -8,7 +8,29 @@
  *  - one sentence, no jargon inside the definition of jargon;
  *  - say what it means for the reader's money or work, not how it is built;
  *  - no roadmap, no internal names, no codes.
+ *
+ * The shared vocabulary (FIX-PLAN 2026-10-18 §2) lives here too: Reserved,
+ * Refundable until, Report a bad result, Not charged, Failure rate, Agent
+ * limit vs Account ceiling. The stake rule and the worked penalty example are
+ * built from the same constants the provider screens use, so they cannot
+ * drift from them.
  */
+
+import { DAILY_CAP_PERCENT } from "@/features/explorer/provider-economics";
+import { PENALTY_MULTIPLIER } from "@/features/provider-penalties/estimate";
+import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
+
+/**
+ * The worked example's inputs: a $0.10 tool that promised at most 3% failures
+ * and failed 12% of 1,000 paid calls in one window. The penalty is the
+ * backend's formula (`estimatePenalty`): calls × price × (observed − promised)
+ * × multiplier.
+ */
+const EXAMPLE = { price: 0.1, calls: 1000, promised: 0.03, observed: 0.12 } as const;
+const EXAMPLE_PENALTY = (
+  EXAMPLE.calls * EXAMPLE.price * (EXAMPLE.observed - EXAMPLE.promised) * PENALTY_MULTIPLIER
+).toFixed(2);
+const pct = (rate: number) => `${Math.round(rate * 100)}%`;
 
 export const GLOSSARY = {
   escrow: {
@@ -50,7 +72,45 @@ export const GLOSSARY = {
   },
   "not-charged": {
     term: "Not charged",
-    definition: "The amount you would have paid at the listed price but did not, because the result failed our checks.",
+    definition:
+      "What you did not pay at the listed price: calls that failed our checks, gave no usable result, or whose payment was not collected. It is always the listed price minus what was charged, what is owed and what is still in progress.",
+  },
+  reserved: {
+    term: "Reserved",
+    definition:
+      "A call's price set aside from your balance while its result is checked; it is charged only if the result passes, and released if it does not.",
+  },
+  "refundable-until": {
+    term: "Refundable until",
+    definition:
+      "The hour after a call is charged. Report a bad result before this time (shown in UTC) and the payment is held back until the report is decided.",
+  },
+  report: {
+    term: "Report a bad result (a dispute)",
+    definition:
+      "Telling us a charged call's result was wrong: the provider can reply, and Assay's review team decides.",
+  },
+  "agent-limit": {
+    term: "Agent limit",
+    definition:
+      "The most one agent may spend: per call, per 24 hours or per month. It sits under your account ceiling, and the lowest of the two applies.",
+  },
+  "account-ceiling": {
+    term: "Account ceiling",
+    definition:
+      "The most any one call can cost, and the most all your agents together can spend in 24 hours. It is enforced on chain, so nobody can go past it, Assay included.",
+  },
+  usdg: {
+    term: "USDG",
+    definition: "The dollar stablecoin your balance is held in on this chain: 1 USDG is $1, so amounts are shown in dollars.",
+  },
+  "stake-rule": {
+    term: "Stake rule",
+    definition: `A provider that fails more often than it promised, over at least ${MIN_CHECKED_CALLS} checked calls in a window, loses part of its stake (never more than ${DAILY_CAP_PERCENT}% of it in any 24 hours), and part of that goes to the buyers it served badly. Within its promise, or below ${MIN_CHECKED_CALLS} checked calls, nothing is taken.`,
+  },
+  "penalty-example": {
+    term: "Penalty example",
+    definition: `A tool priced $${EXAMPLE.price.toFixed(2)} that promised at most ${pct(EXAMPLE.promised)} failures fails ${pct(EXAMPLE.observed)} of ${EXAMPLE.calls.toLocaleString("en-US")} paid calls in a window: ${EXAMPLE.calls.toLocaleString("en-US")} × $${EXAMPLE.price.toFixed(2)} × (${pct(EXAMPLE.observed)} − ${pct(EXAMPLE.promised)}) × ${PENALTY_MULTIPLIER} = up to about $${EXAMPLE_PENALTY} of its stake, and never more than ${DAILY_CAP_PERCENT}% of the stake in any 24 hours.`,
   },
   spent: {
     term: "Spent",
