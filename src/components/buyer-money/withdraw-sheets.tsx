@@ -97,8 +97,13 @@ export function WithdrawSheet({
   const readOnly = useAccountReadOnly();
   const money = useBuyerMoney();
   const [amount, setAmount] = React.useState("");
+  // "Use all" is preselected once per opening (B7); the buyer can still change it.
+  const [seeded, setSeeded] = React.useState(false);
   React.useEffect(() => {
-    if (!open) setAmount("");
+    if (!open) {
+      setAmount("");
+      setSeeded(false);
+    }
   }, [open]);
 
   const escrow = money.escrow;
@@ -109,6 +114,10 @@ export function WithdrawSheet({
   const available = escrow?.spendable ?? null;
   const held = escrow?.openHolds && positive(escrow.openHolds.amount) ? escrow.openHolds : null;
   const all = available && toDecimal(available).gt(0) ? toDecimal(available).toString() : null;
+  if (open && mode !== "cancel" && !seeded && all !== null) {
+    setSeeded(true);
+    setAmount(all);
+  }
   const raw = parseAmountInput(amount, { decimals: money.decimals });
   const overMax = Boolean(raw.value && available && raw.value.gt(toDecimal(available)));
   const parsed = overMax
