@@ -143,6 +143,15 @@ describe("how a row reads", () => {
       expect(JSON.stringify(d)).not.toContain(BLOCK_ID);
     });
 
+    it("names the organization a lift is for, never its uuid (B12)", () => {
+      const ORG = "7e3a94c1-0000-4000-8000-000000000001";
+      const blocked = new Map(context.blocks);
+      blocked.set(BLOCK_ID, { ...context.blocks.get(BLOCK_ID)!, subjectKind: "ORGANIZATION", subject: ORG, subjectName: "Unlisted Data Co" });
+      const d = describeApproval({ action: "account.unblock", target: `account_block:${BLOCK_ID}`, payload: { blockId: BLOCK_ID } }, { ...context, blocks: blocked });
+      expect(d.sentence).toMatch(/^Lift the block on Unlisted Data Co/);
+      expect(JSON.stringify(d)).not.toContain(ORG);
+    });
+
     it("names who blocked by display name, not by a truncated handle", () => {
       const blocked = new Map(context.blocks);
       blocked.set(BLOCK_ID, { ...context.blocks.get(BLOCK_ID)!, blockedBy: "test-op-b@" });
