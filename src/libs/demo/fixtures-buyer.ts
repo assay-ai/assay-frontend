@@ -2140,14 +2140,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     },
   },
   {
-    method: "POST",
-    match: "/notifications/read-all",
-    body: () => {
-      for (const row of demoNotifications()) demoReadIds.add(row.id);
-      return undefined;
-    },
-  },
-  {
     method: "GET",
     match: /^\/notifications\/[^/]+\/deliveries$/,
     body: () => [
@@ -2212,7 +2204,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   },
 ];
 
-/** Alerts the demo visitor marked read (Dismiss, "See all alerts"), for this page load. */
+/** Alerts the demo visitor marked read (Dismiss, opening "See all alerts"), for this page load. */
 const demoReadIds = new Set<string>();
 
 /** Test hook: forget what was marked read. */

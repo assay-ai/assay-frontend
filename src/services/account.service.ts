@@ -54,11 +54,6 @@ export function markNotificationRead(id: string): Promise<unknown> {
   return api.patch(`/notifications/${encodeURIComponent(id)}/read`);
 }
 
-/** POST /notifications/read-all — every unread alert of the organization. */
-export function markAllNotificationsRead(): Promise<unknown> {
-  return api.post("/notifications/read-all");
-}
-
 /** GET /spend-policy — the Limits screen. A limit REFUSES a call; it is not an alert. */
 export function getSpendPolicy(): Promise<unknown> {
   return api.get("/spend-policy");
