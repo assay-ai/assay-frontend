@@ -94,7 +94,7 @@ export function HealthStrip({ health, error }: { health: PlatformHealth | undefi
           <MetricTile
             label="Stake locked"
             value={formatMoney(health.stakeLocked)}
-            sub={`${count(health.providersWithStake)} ${health.providersWithStake === 1 ? "provider" : "providers"}`}
+            sub={`bonded by ${count(health.providersWithStake)} ${health.providersWithStake === 1 ? "provider" : "providers"}`}
           />
           {/* The retired in-app objection process, not on chain (D15): the Penalties list's "Old process" tab. */}
           <Link

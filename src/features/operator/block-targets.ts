@@ -89,11 +89,15 @@ export function noTargetText(query: string): string {
   return `No provider called “${query}”. Paste a wallet, or the organization id.`;
 }
 
-/** A block's subject in words: the provider's name, or the short wallet. */
+/**
+ * A block's subject in words: the organization's name (the server names every
+ * one, listed or not), or the short wallet. The short id is only for a row
+ * whose organization no longer exists.
+ */
 export function blockSubjectLabel(
-  block: Pick<AccountBlock, "subjectKind" | "subject">,
+  block: Pick<AccountBlock, "subjectKind" | "subject"> & { subjectName?: string | null },
   providerName: (id: string) => string | null,
 ): string {
-  if (block.subjectKind === "ORGANIZATION") return providerName(block.subject) ?? `Organization ${block.subject.slice(0, 8)}…`;
+  if (block.subjectKind === "ORGANIZATION") return block.subjectName ?? providerName(block.subject) ?? `Organization ${block.subject.slice(0, 8)}…`;
   return walletLabel(block.subject);
 }

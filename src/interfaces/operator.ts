@@ -566,6 +566,8 @@ export interface AccountBlock {
   subject: string;
   /** What enforcement matches on: the uuid, or `namespace:address` (no chain reference). */
   subjectKey: string;
+  /** An organization's name (the provider's, else the organization's own); null for a wallet. */
+  subjectName: string | null;
   active: boolean;
   reasonCode: string;
   /** Internal. Never shown to the blocked account. */
