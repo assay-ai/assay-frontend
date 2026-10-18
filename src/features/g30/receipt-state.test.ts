@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   COLLECTION_STATES,
+  chargedCheck,
+  chargedHeadline,
+  receiptStory,
+  receiptTimeline,
+  refundableUntil,
   STATE_CARDS,
   canContestRejection,
   deriveReceiptState,
@@ -112,8 +117,13 @@ describe("receiptFlow and relevanceReached", () => {
     ]);
   });
 
-  it("draws held → check passed → charged for a charged call", () => {
-    expect(receiptFlow(r("100000"), "CHARGED").map((n) => n.label)).toEqual(["Held", "Check passed", "Charged"]);
+  it("draws held → check passed → charged for a charged call that passed", () => {
+    const passed = { ...r("100000", [{ stage: "SCHEMA", status: "PASSED" }]), verdict: { status: "PASS" } } as Receipt;
+    expect(receiptFlow(passed, "CHARGED").map((n) => n.label)).toEqual(["Held", "Check passed", "Charged"]);
+  });
+
+  it("never draws 'Check passed' on a charged call with no check result", () => {
+    expect(receiptFlow(r("100000"), "CHARGED").map((n) => n.label)).toEqual(["Held", "Served (not checked)", "Charged"]);
   });
 
   it("says the relevance stage was reached only when it ran or was sampled out", () => {
@@ -255,5 +265,234 @@ describe("receiptFlow — collection states", () => {
   it("draws a forfeited call as released in full, though withheld is zero", () => {
     const forfeited = settledReceipt({ forfeited: true, chargedPrice: usd("0") });
     expect(receiptFlow(forfeited, "FORFEITED").at(-1)).toMatchObject({ label: "Released to you", amount: "$2.50" });
+  });
+});
+
+/* ------------------------------------------------- one story (P0-2) */
+
+describe("receiptStory — headline, money strip, checks and timeline agree", () => {
+  const FOUR = ["SCHEMA", "DETERMINISTIC_RULES", "CROSS_CHECK", "SEMANTIC"];
+  const stagesOf = (...statuses: string[]) =>
+    FOUR.map((stage, i) => ({
+      stage,
+      status: statuses[i] ?? statuses[statuses.length - 1],
+      passed: (statuses[i] ?? statuses[statuses.length - 1]) === "PASSED",
+      note: "checks stop at the first failure",
+      detail: "checks stop at the first failure",
+    })) as unknown as Receipt["stages"];
+  const SETTLED_AT = "2026-10-16T00:00:02.000Z";
+  const RELEASED_AT = "2026-10-16T00:00:03.000Z";
+  const NOW = Date.parse("2026-10-16T00:30:00.000Z");
+
+  type Row = {
+    name: string;
+    status: string;
+    charged: string;
+    verdict: string | null;
+    stages: Receipt["stages"];
+    settledAt: string | null;
+    holdReleasedAt: string | null;
+    headline: RegExp | null;
+    step: string;
+    closing: [string, string] | null;
+  };
+
+  const table: Row[] = [
+    {
+      // The seeded call e17d…0007: SETTLED, rail B, no verification record, so a null verdict,
+      // every stage not reached, no settledAt and a released hold.
+      name: "SETTLED + null verdict + every stage not reached + hold released",
+      status: "SETTLED",
+      charged: "20000",
+      verdict: null,
+      stages: stagesOf("NOT_REACHED"),
+      settledAt: null,
+      holdReleasedAt: RELEASED_AT,
+      headline: /^Charged \$0\.02\. Served; no check result was recorded for this call\.$/,
+      step: "Served (not checked)",
+      closing: ["Charged", "$0.02"],
+    },
+    {
+      name: "SETTLED + PASS verdict + every stage not reached",
+      status: "SETTLED",
+      charged: "20000",
+      verdict: "PASS",
+      stages: stagesOf("NOT_REACHED"),
+      settledAt: SETTLED_AT,
+      holdReleasedAt: null,
+      headline: /Served; no check result was recorded/,
+      step: "Served (not checked)",
+      closing: ["Charged", "$0.02"],
+    },
+    {
+      name: "SETTLED + null verdict + nothing dated",
+      status: "SETTLED",
+      charged: "20000",
+      verdict: null,
+      stages: stagesOf("NOT_REACHED"),
+      settledAt: null,
+      holdReleasedAt: null,
+      headline: /Served; no check result was recorded/,
+      step: "Served (not checked)",
+      closing: null,
+    },
+    {
+      name: "SETTLED + PASS + checks passed (relevance not sampled)",
+      status: "SETTLED",
+      charged: "20000",
+      verdict: "PASS",
+      stages: stagesOf("PASSED", "PASSED", "PASSED", "SKIPPED"),
+      settledAt: SETTLED_AT,
+      holdReleasedAt: null,
+      headline: /^Charged \$0\.02\. (?!Served)/,
+      step: "Check passed",
+      closing: ["Charged", "$0.02"],
+    },
+    {
+      name: "SETTLED + PASS + charged, closed by holdReleasedAt",
+      status: "SETTLED",
+      charged: "20000",
+      verdict: "PASS",
+      stages: stagesOf("PASSED"),
+      settledAt: null,
+      holdReleasedAt: RELEASED_AT,
+      headline: /^Charged \$0\.02\./,
+      step: "Check passed",
+      closing: ["Charged", "$0.02"],
+    },
+    {
+      name: "REFUNDED + FAIL",
+      status: "REFUNDED",
+      charged: "0",
+      verdict: "FAIL",
+      stages: stagesOf("PASSED", "FAILED", "NOT_REACHED"),
+      settledAt: null,
+      holdReleasedAt: RELEASED_AT,
+      headline: null,
+      step: "Check failed",
+      closing: ["Hold released", "not charged"],
+    },
+    {
+      name: "EXPIRED + no verdict",
+      status: "EXPIRED",
+      charged: "0",
+      verdict: null,
+      stages: stagesOf("NOT_REACHED"),
+      settledAt: null,
+      holdReleasedAt: RELEASED_AT,
+      headline: null,
+      step: "Did not finish in time",
+      closing: ["Did not finish in time, hold released", "not charged"],
+    },
+  ];
+
+  for (const row of table) {
+    it(row.name, () => {
+      const receipt = settledReceipt({
+        status: row.status,
+        listedPrice: usd("20000"),
+        chargedPrice: usd(row.charged),
+        withheld: usd(row.charged === "0" ? "20000" : "0"),
+        verdict: { status: row.verdict } as Receipt["verdict"],
+        stages: row.stages,
+        settledAt: row.settledAt,
+        holdReleasedAt: row.holdReleasedAt,
+      });
+      const story = receiptStory(receipt, undefined, { now: NOW });
+      if (row.headline) expect(story.chargedHeadline).toMatch(row.headline);
+      else expect(story.chargedHeadline).toBeNull();
+      expect(story.flow[1]?.label).toBe(row.step);
+
+      const closing = story.timeline.slice(2).find((r) => r.label !== "Result checked") ?? null;
+      expect(closing ? [closing.label, closing.meta] : null).toEqual(row.closing);
+
+      // The one contradiction this table exists for.
+      if (row.charged !== "0") {
+        expect(story.flow.map((n) => n.label)).toContain("Charged");
+        expect(story.timeline.map((r) => r.meta)).not.toContain("not charged");
+      }
+      if (chargedCheck(receipt) !== "PASSED") {
+        expect(story.flow.map((n) => n.label)).not.toContain("Check passed");
+        expect(story.chargedHeadline ?? "").not.toMatch(/No result recorded/);
+      }
+    });
+  }
+
+  it("says 'Check passed' only for a pass verdict or a stage that passed", () => {
+    expect(chargedCheck({ verdict: { status: "PASS" }, stages: stagesOf("PASSED") } as Receipt)).toBe("PASSED");
+    expect(chargedCheck({ verdict: { status: "DEGRADED" }, stages: stagesOf("PASSED", "NOT_REACHED") } as Receipt)).toBe("PASSED");
+    expect(chargedCheck({ verdict: { status: "DEGRADED" }, stages: stagesOf("FAILED", "NOT_REACHED") } as Receipt)).toBe("CHECKED");
+    expect(chargedCheck({ verdict: { status: null }, stages: stagesOf("PASSED") } as unknown as Receipt)).toBe("UNCHECKED");
+    expect(chargedCheck({ verdict: { status: "PASS" }, stages: stagesOf("NOT_REACHED", "NOT_REACHED", "NOT_REACHED", "SKIPPED") } as Receipt)).toBe("UNCHECKED");
+  });
+
+  it("keeps the headline of a call that passed as presentVerdict words it", () => {
+    const receipt = settledReceipt({ stages: stagesOf("PASSED") });
+    expect(chargedHeadline(receipt)).not.toMatch(/Served; no check/);
+  });
+});
+
+describe("receiptTimeline — the 1-hour hold", () => {
+  const SETTLED = "2026-10-16T00:00:02.000Z";
+  const receipt = settledReceipt({
+    listedPrice: usd("50000"),
+    chargedPrice: usd("50000"),
+    stages: [{ stage: "SCHEMA", status: "PASSED", passed: true }] as unknown as Receipt["stages"],
+    settledAt: SETTLED,
+    disputeWindowEndsAt: "2026-10-16T01:00:02.000Z",
+    collectableAt: "2026-10-16T01:00:03.000Z",
+  });
+
+  it("inside the hold: refundable until the hour ends, paid to the provider after it", () => {
+    const rows = receiptTimeline(receipt, "CHARGED", { now: Date.parse("2026-10-16T00:18:00.000Z") });
+    expect(rows.map((r) => r.label)).toEqual([
+      "Call made",
+      "Money held",
+      "Charged",
+      "Refundable until then",
+      "Paid to provider after the hold",
+    ]);
+    expect(rows.at(-1)?.meta).toBe("$0.05");
+    expect(refundableUntil(receipt, Date.parse("2026-10-16T00:18:00.000Z"))).toMatch(/^Refundable until .*01:00 UTC$/);
+  });
+
+  it("after the hold: the hour ended and the provider was paid", () => {
+    const rows = receiptTimeline(receipt, "CHARGED", { now: Date.parse("2026-10-16T03:00:00.000Z") });
+    expect(rows.slice(-2).map((r) => r.label)).toEqual(["Refundable hour ended", "Paid to provider"]);
+    expect(refundableUntil(receipt, Date.parse("2026-10-16T03:00:00.000Z"))).toBeNull();
+  });
+
+  it("draws no hold on a call that was not charged", () => {
+    const refunded = settledReceipt({ status: "REFUNDED", chargedPrice: usd("0"), holdReleasedAt: SETTLED, collectableAt: null, disputeWindowEndsAt: null });
+    expect(receiptTimeline(refunded, "NOT_CHARGED").map((r) => r.label)).not.toContain("Paid to provider");
+  });
+
+  it("uses a debt's own closing row when one is given", () => {
+    const rows = receiptTimeline(settledReceipt({ settledAt: SETTLED }), "DEBT_OUTSTANDING", {
+      collectionClosing: { at: SETTLED, label: "Payment not taken", meta: "$2.50 owed", tone: "primary" },
+    });
+    expect(rows.at(-1)).toMatchObject({ label: "Payment not taken", meta: "$2.50 owed" });
+  });
+});
+
+describe("toStageChecks — a check that does not apply", () => {
+  it("says 'does not apply' once, not 'not reached' plus the same sentence twice", () => {
+    const receipt = settledReceipt({
+      stages: [
+        { stage: "SCHEMA", status: "PASSED", passed: true, note: "runs on every call" },
+        {
+          stage: "SEMANTIC",
+          status: "NOT_APPLICABLE",
+          passed: false,
+          note: "this check does not apply to this tool",
+          detail: "This check does not apply to this tool.",
+        },
+      ] as unknown as Receipt["stages"],
+    });
+    const semantic = toStageChecks(receipt).find((c) => c.id === "SEMANTIC");
+    expect(semantic).toMatchObject({ status: "not-applicable" });
+    expect(semantic?.note).toBeUndefined();
+    expect(semantic?.detail).toBeUndefined();
+    expect(relevanceReached(receipt)).toBe(false);
   });
 });
