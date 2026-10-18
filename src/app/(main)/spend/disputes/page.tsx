@@ -39,7 +39,7 @@ export default function ReportsPage() {
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
       <PageHeader title="Reports" />
       <p className="-mt-2 text-body-13 text-03">
-        Calls you reported as a bad result. Report one from its receipt under Calls: inside the 1-hour hold, an accepted report is refunded in full. {BUYER_COPY.limit}
+        Calls you reported as a bad result. Report one from its receipt under Calls: on chains with the 1-hour hold, a report accepted inside it is refunded in full, and the receipt says when that applies. {BUYER_COPY.limit}
       </p>
       {list.isPending ? (
         <PageState kind="loading" rows={4} label="Loading your reports" />

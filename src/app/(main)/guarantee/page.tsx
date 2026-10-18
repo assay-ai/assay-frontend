@@ -465,9 +465,10 @@ export default function GuaranteePage() {
           <div className="flex flex-col gap-1.5">
             <h3 className="text-label-13 text-01">How to report a bad result</h3>
             <p className="text-body-13 text-02">
-              Open the call and choose Report a bad result. A charge is refundable for 1 hour. After that there is no
-              refund, but your report counts against the provider&apos;s quality and can lead to a penalty on their
-              stake.
+              Open the call and choose Report a bad result. On chains with the 1-hour hold, a charge is refundable
+              for 1 hour if your report is accepted; the call&apos;s receipt says whether this one still is. Otherwise
+              there is no refund, but your report counts against the provider&apos;s quality and can lead to a
+              penalty on their stake.
             </p>
             <Link
               href={routes.disputes()}

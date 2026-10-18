@@ -129,38 +129,44 @@ describe("operator SLA marks", () => {
 });
 
 describe("the report window on a receipt", () => {
-  const receipt = { status: "SETTLED", createdAt: FILED, settledAt: FILED, disputeWindowEndsAt: "2026-10-18T11:00:00.000Z", disputeFilingClosesAt: "2026-10-25T10:00:00.000Z", chargedPrice: usd("20000") };
-  it("inside the hold: a full refund if upheld", () => {
+  const receipt = { status: "SETTLED", createdAt: FILED, settledAt: FILED, disputeWindowEndsAt: "2026-10-18T11:00:00.000Z", disputeFilingClosesAt: "2026-10-25T10:00:00.000Z", chargedPrice: usd("20000"), refundableIfReportedNow: true };
+  it("inside the hold, and the backend says a report now is refunded: a full refund if upheld", () => {
     expect(reportWindow(receipt, t0 + 30 * 60_000)).toMatchObject({ open: true, guaranteed: true, holdEndsAt: "2026-10-18T11:00:00.000Z" });
+    expect(reportWindow(receipt, t0 + 30 * 60_000).text).toMatch(/still held.*refunded in full/);
   });
   it("after the hold: still open, no refund, a quality signal", () => {
-    expect(reportWindow(receipt, t0 + 2 * H)).toMatchObject({ open: true, guaranteed: false });
-    expect(reportWindow(receipt, t0 + 2 * H).text).toMatch(/^The 1-hour hold has ended, so there is no refund/);
+    const after = { ...receipt, refundableIfReportedNow: false };
+    expect(reportWindow(after, t0 + 2 * H)).toMatchObject({ open: true, guaranteed: false });
+    expect(reportWindow(after, t0 + 2 * H).text).toMatch(/^The 1-hour hold has ended, so there is no refund/);
   });
   // B2 review C1: a rail-B voucher not yet redeemed into the hold has no hold fields, and a report filed then IS guaranteed.
-  it("before the payment is collected: a full refund, never 'No refund'", () => {
+  it("before the payment is collected, when the backend guarantees it: a full refund, never 'No refund'", () => {
     const fresh = { ...receipt, disputeWindowEndsAt: null, collectableAt: null };
     const view = reportWindow(fresh, t0 + 5 * 60_000);
     expect(view).toMatchObject({ open: true, guaranteed: true, holdEndsAt: null });
     expect(view.text).toMatch(/not been collected yet.*refunded in full/);
     expect(view.text).not.toMatch(/no refund/i);
   });
-  // Re-review R1: the backend guarantees a not-yet-held call only while nothing else happened to the payment.
-  it("with a released hold, a debt or a forfeit: neither a refund promise nor 'no refund'", () => {
+  // Wave-1 audit I1: the promise is the backend's (`refundableIfReportedNow`), never inferred from the hold fields.
+  it("without the backend's guarantee (no escrow hold on the chain, the last minute, a flag missing): no refund promise", () => {
     const bare = { ...receipt, disputeWindowEndsAt: null, collectableAt: null };
     for (const over of [
-      { holdReleasedAt: "2026-10-18T10:10:00.000Z" },
-      { debt: "OUTSTANDING" },
-      { forfeited: true },
-      { chargeNote: "uncollected:DelegateIsRevoked" },
+      { refundableIfReportedNow: false },
+      { refundableIfReportedNow: undefined },
+      { holdReleasedAt: "2026-10-18T10:10:00.000Z", refundableIfReportedNow: false },
+      { debt: "OUTSTANDING", refundableIfReportedNow: false },
     ]) {
       const view = reportWindow({ ...bare, ...over }, t0 + 5 * 60_000);
       expect(view).toMatchObject({ open: true, guaranteed: false, holdEndsAt: null });
       expect(view.text).not.toMatch(/refunded in full|no refund/i);
     }
+    // Inside the hour, but the backend would not guarantee it (e.g. within its last minute).
+    const late = reportWindow({ ...receipt, refundableIfReportedNow: false }, t0 + 59.5 * 60_000);
+    expect(late).toMatchObject({ open: true, guaranteed: false, holdEndsAt: null });
+    expect(late.text).not.toMatch(/refunded in full|no refund/i);
   });
   it("closed after 7 days, and for calls that did not settle", () => {
-    expect(reportWindow(receipt, t0 + 8 * 24 * H).open).toBe(false);
+    expect(reportWindow(receipt, t0 + 8 * 24 * H)).toMatchObject({ open: false, guaranteed: false });
     expect(reportWindow({ ...receipt, disputeFilingClosesAt: null }, t0).open).toBe(false);
   });
 });
