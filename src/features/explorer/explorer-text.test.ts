@@ -10,8 +10,12 @@ import {
   failRateShort,
   failsOften,
   HIGH_FAILURE_MIN_CALLS,
+  chainPriceLines,
   chainPriceText,
+  chainProviderName,
+  fundedChains,
   orderChainPrices,
+  paidOnText,
   stakeRuleSentence,
   uniformPromise,
   heldPriceSentence,
@@ -100,6 +104,11 @@ describe("failRateLabel", () => {
     );
     expect(failRateLabel(null, 0.05)).toBe("Not measured yet · promised at most 5%");
   });
+  it("says what a single listing's promise covers when the rate is provider-wide", () => {
+    expect(failRateLabel({ measuredCalls: 95, failedCalls: 10 }, 0.02, "this tool")).toBe(
+      "11% failed · promised at most 2% for this tool · 95 checked calls to all their tools, last 30 days",
+    );
+  });
   it("has one compact framing, the share that failed", () => {
     expect(failRateShort({ measuredCalls: 95, failedCalls: 10 })).toBe("11% failed");
     expect(failRateShort({ measuredCalls: 1000, failedCalls: 50 })).toBe("5.0% failed");
@@ -142,6 +151,47 @@ describe("per-chain prices", () => {
       "eip155:46630",
     ]);
     expect(orderChainPrices(undefined, null, evm)).toEqual([]);
+  });
+  it("follows the reader's own order of preference, not the server's", () => {
+    expect(orderChainPrices(prices, ["eip155:46630", "solana:devnet"], sol)[0].chainId).toBe("eip155:46630");
+    expect(orderChainPrices(prices, ["eip155:1", "solana:devnet"], evm)[0].chainId).toBe("solana:devnet");
+  });
+  it("leads with funded chains only, best funded first", () => {
+    const usdOn = (chainId: string, amount: string) => ({ chainId, available: { amount, asset: "x", decimals: 6 } });
+    expect(fundedChains([usdOn("a", "0"), usdOn("b", "5000000"), usdOn("c", "9000000")])).toEqual(["c", "b"]);
+    expect(fundedChains(undefined)).toEqual([]);
+  });
+  it("names a chain's provider only when exactly one listing serves it", () => {
+    const nameOf = (id: string) => ({ e2e: "E2E Weather Ltd", "open-meteo": "Open-Meteo Demo BV" })[id];
+    expect(chainProviderName({ ...prices[1], listings: 1 }, nameOf)).toBe("E2E Weather Ltd");
+    expect(chainProviderName({ ...prices[1], listings: 2 }, nameOf)).toBeNull();
+    expect(chainProviderName({ ...prices[1], providerId: null, listings: 1 }, nameOf)).toBeNull();
+    // An older API without the count names nobody rather than guessing.
+    expect(chainProviderName(prices[1], nameOf)).toBeNull();
+  });
+  it("draws the seed's two lines: Robinhood leads with its provider, Solana on its own line", () => {
+    const nameOf = (id: string) => ({ e2e: "E2E Weather Ltd", "open-meteo": "Open-Meteo Demo BV" })[id];
+    const seeded = prices.map((entry) => ({ ...entry, listings: 1 }));
+    const lines = chainPriceLines(orderChainPrices(seeded, null, evm), { chainName, nameOf });
+    expect(lines.lead).toBe("on Robinhood Chain testnet (E2E Weather Ltd)");
+    expect(lines.others).toEqual([
+      { chainId: "solana:devnet", text: "$0.25 per call on Solana devnet (Open-Meteo Demo BV)" },
+    ]);
+  });
+  it("names nobody when two listings share a chain, or when the lead price is a range", () => {
+    const nameOf = () => "Someone";
+    const shared = prices.map((entry) => ({ ...entry, listings: 2 }));
+    const lines = chainPriceLines(orderChainPrices(shared, null, evm), { chainName, nameOf });
+    expect(lines.lead).toBe("on Robinhood Chain testnet");
+    expect(lines.others[0].text).toBe("$0.25 per call on Solana devnet");
+    const ranged = chainPriceLines([{ ...prices[1], listings: 1 }], { chainName, nameOf, leadIsRange: true });
+    expect(ranged.lead).toBe("on Robinhood Chain testnet");
+  });
+  it("marks a settlement chain that has no price right now", () => {
+    expect(paidOnText(["eip155:46630", "solana:devnet"], [prices[1]], chainName)).toBe(
+      "Paid on Robinhood Chain testnet, Solana devnet (price unavailable right now).",
+    );
+    expect(paidOnText(["eip155:46630"], [], chainName)).toBe("Paid on Robinhood Chain testnet.");
   });
 });
 

@@ -27,7 +27,10 @@ export interface PublicChainPrice {
   /** CAIP-2. */
   chainId: string;
   price: Money;
+  /** The one provider at that price; null when several share it. */
   providerId: string | null;
+  /** Eligible listings on that chain: name the provider only when 1. */
+  listings: number;
 }
 
 /** Measured over the last 30 days, open and closed check windows (D5). */
