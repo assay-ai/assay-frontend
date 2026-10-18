@@ -10,7 +10,8 @@ const SECRET_WORDS = [
 const SECRET_WHOLE_TOKENS = new Set(["sig"]);
 /** Names that contain a secret word and are not secrets (`_` compared as `-`). */
 const SECRET_NAME_ALLOW_LIST = new Set([
-  "idempotency-key", "x-sort-key", "sort-key", "cache-key", "max-tokens", "keyword", "keywords",
+  "idempotency-key", "x-idempotency-key", "sort-key", "x-sort-key", "cache-key", "x-cache-key",
+  "max-tokens", "keyword", "keywords",
 ]);
 
 /** Whether a constant header name or query key looks like it carries a secret. */

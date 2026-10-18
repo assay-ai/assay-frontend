@@ -90,6 +90,15 @@ describe("splitHeaderLine", () => {
   });
 });
 
+describe("allow-list", () => {
+  it("does not flag x-idempotency-key or X-Cache-Key", () => {
+    expect(isSecretConstantHeader("x-idempotency-key")).toBe(false);
+    expect(isSecretConstantHeader("X-Cache-Key")).toBe(false);
+    expect(isCredentialQueryKey("x_cache_key")).toBe(false);
+    expect(isSecretConstantHeader("x-api-key")).toBe(true);
+  });
+});
+
 describe("originOf", () => {
   it("normalises origin", () => {
     expect(originOf("https://API.x.test:443/a?b")).toBe("https://api.x.test");

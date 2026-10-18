@@ -65,6 +65,12 @@ describe("errors", () => {
     );
   });
 
+  it("knows the credentials-required-for-auth-mode code", () => {
+    expect(plainError("PROVIDER_CREDENTIALS_REQUIRED_FOR_AUTH_MODE")).toBe(
+      "Add your API key headers for the live address first, then switch to API key.",
+    );
+  });
+
   it("never shows an unknown code as the sentence", () => {
     const sentence = plainError("SOMETHING_NOBODY_KNOWS");
     expect(sentence).not.toContain("SOMETHING");
