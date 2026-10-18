@@ -131,7 +131,7 @@ describe("inboxView: stored rows read from event + payload", () => {
       names,
     );
     expect(view.body).toBe(
-      'The buyer says: "Other". Reply by tomorrow 10:00 UTC. If you don\'t, the buyer wins: it is upheld automatically at Oct 21, 10:00 UTC.',
+      'The buyer says: "Other". Reply by tomorrow 10:00 UTC. If you don\'t, the buyer wins: it can be upheld automatically from Oct 21, 10:00 UTC.',
     );
     expect(view.body).not.toMatch(/may reply/i);
   });
