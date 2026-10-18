@@ -34,7 +34,7 @@ import {
 import { eligibleApprovers, operatorLabel } from "@/features/operator/inbox";
 import { OPERATOR_ADD_REASONS, OPERATOR_CHANGE_REASONS, OPERATOR_REMOVE_REASONS } from "@/features/operator/reasons";
 import { ResultCard } from "@/features/operator/result-card";
-import { ROLE_PRESETS, actsOnMoney, presetOf, removalWarnings, roleTitle } from "@/features/operator/roles";
+import { ROLE_PRESETS, actsOnMoney, limitHint, presetOf, removalWarnings, roleTitle } from "@/features/operator/roles";
 import { firstNames, inviteLimit, invitesOf, limitCell, limitMoney, teamTabs } from "@/features/operator/team";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { approvalHref, approverPhrase, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
@@ -498,7 +498,7 @@ function LimitField({
         value={choice}
         onChange={onChange}
         error={error ?? undefined}
-        hint="Penalties and compensations above it need someone with a higher limit. At $0 they can do everything else their role allows, but can't suspend a penalty or compensate a provider of any size, nor approve one."
+        hint={limitHint(roles)}
       />
     </div>
   );
