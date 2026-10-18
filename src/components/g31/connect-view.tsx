@@ -12,6 +12,7 @@ import { ConnectSheet } from "@/components/toolsets/connect-sheet";
 import { useAgentServers, useRecordConnect } from "@/components/toolsets/use-toolsets";
 import { Button } from "@/components/ui/button";
 import { keyOfAgent } from "@/features/buyer-money/agent-label";
+import { keyForHint } from "@/features/buyer-money/mcp-config";
 import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
 import { buildMcpUrl, parseMcpUrl } from "@/features/connect/mcp-url";
 
@@ -123,7 +124,7 @@ export function ConnectView() {
           {firstTime ? <p className="pb-2 text-label-13 text-01">Step 2: paste this into your client</p> : null}
           <McpConfigTabs
             token={created?.token ?? null}
-            keyPrefix={created?.prefix ?? live[0]?.prefix ?? null}
+            keyPrefix={created?.prefix ?? keyForHint(live)?.prefix ?? null}
             url={url}
             onCopy={(client) => agent && recordConnect.mutate({ url, serverName: "assay", client })}
             onCreateKey={!firstTime && agent ? () => create.mutate() : undefined}

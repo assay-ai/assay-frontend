@@ -39,7 +39,7 @@ import { LetAgentPaySheet } from "./let-agent-pay-sheet";
 import { McpConfigTabs } from "./mcp-config-tabs";
 import { useRecordConnect } from "@/components/toolsets/use-toolsets";
 import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
-import type { McpClient } from "@/features/buyer-money/mcp-config";
+import { keyForHint, type McpClient } from "@/features/buyer-money/mcp-config";
 import { GasHelpNote } from "./gas-help-note";
 import { useAgentsAndKeys } from "./use-agents";
 
@@ -223,7 +223,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
             {createdToken ? <p className="text-body-xs text-03">{NEW_KEY_PAYS_NOTE}</p> : null}
             <McpConfigTabs
               token={createdToken}
-              keyPrefix={liveKeys[0]?.prefix ?? null}
+              keyPrefix={keyForHint(liveKeys)?.prefix ?? null}
               onCopy={onCopyConfig}
               onCreateKey={() => createInPlace.mutate()}
               creatingKey={createInPlace.isPending}

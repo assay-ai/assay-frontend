@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { isMcpClient, keyMode, mcpConfig, type McpClient } from "@/features/buyer-money/mcp-config";
+import { isMcpClient, keyForHint, keyMode, mcpConfig, type McpClient } from "@/features/buyer-money/mcp-config";
 import { NEW_KEY_PAYS_NOTE } from "@/components/buyer-money/create-key";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
 import {
@@ -244,8 +244,10 @@ export function ConnectBody({
   const agentKeys: KeyRow[] = effectiveAgentId ? (data.keys[effectiveAgentId] ?? []) : [];
   const liveKeys = agentKeys.filter((k) => !k.revokedAt);
   const [created, setCreated] = React.useState<{ token: string; prefix: string; name: string } | null>(null);
-  const keyPrefix = created?.prefix ?? liveKeys[0]?.prefix ?? null;
-  const keyName = created?.name ?? liveKeys[0]?.name ?? null;
+  // An app sign-in (OAuth grant) has no prefix to name in the config: skip it.
+  const hintKey = keyForHint(liveKeys);
+  const keyPrefix = created?.prefix ?? hintKey?.prefix ?? null;
+  const keyName = created?.name ?? hintKey?.name ?? null;
   const createKey = useCreateKey(effectiveAgentId, agentKeys.length, (key) => setCreated({ token: key.token, prefix: key.prefix, name: key.name }));
   // A key made for another agent is not this agent's.
   React.useEffect(() => setCreated(null), [effectiveAgentId]);

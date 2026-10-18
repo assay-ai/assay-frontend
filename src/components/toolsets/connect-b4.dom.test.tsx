@@ -47,6 +47,26 @@ const KEY = {
   createdAt: "2026-10-18T00:00:00Z",
 };
 
+const GRANT = { ...KEY, id: "g1", name: "Claude Code · 2026-10-18", prefix: null, oauthClient: { name: "Claude Code" } };
+
+describe("the key hint skips an app sign-in (OAuth grant, null prefix)", () => {
+  it("names the API key even when a grant comes first", () => {
+    const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} /></Sheet>, [GRANT, KEY]);
+    const out = text(html);
+    expect(out).toContain("Uses the live key “laptop” assay_sk_live_ab12… of My agent");
+    expect(out).toContain("assay_sk_live_ab12…REST_OF_YOUR_KEY");
+    expect(out).not.toContain("null");
+  });
+
+  it("with only a grant, says there is no key for the config, never 'null…'", () => {
+    const out = text(render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} /></Sheet>, [GRANT]));
+    expect(out).toContain("My agent has no key yet");
+    expect(out).toContain("PASTE_YOUR_KEY_HERE");
+    expect(out).not.toContain("null");
+    expect(out).not.toContain("Claude Code · 2026-10-18");
+  });
+});
+
 describe("Use this tool: /connect?tools= preselects Only these tools", () => {
   it("reads ?tools= into the sheet's prefill URL, and refuses what is not a tool name", () => {
     expect(toolsPrefillUrl("?tools=get_weather")).toMatch(/\/\?tools=get_weather$/);
