@@ -2,7 +2,7 @@ import Decimal from "decimal.js";
 
 import type { Money, ProviderEarningsFigures } from "@/interfaces";
 
-import { notCreditedBreakdown } from "./not-credited";
+import { notCreditedBreakdown, settlementShown } from "./not-credited";
 
 export const EARNED_IN_WALLET = "already in your wallet — paid at each redemption";
 
@@ -56,6 +56,9 @@ export const UNPAID_COPY: Record<UnpaidLine["key"], { reason: string; action: st
     action: "Nothing to do: it is the buyer's debt. Paid to you when they settle. After 30 days it shows as overdue.",
     actionable: false,
   },
+  // The `uncollected` figure also holds legacy platform absorbs (seed and
+  // pre-launch rows only: nothing writes one any more), which owe nothing and
+  // block nobody. Every row production can write is a 30-day overdue debt.
   uncollected: {
     reason: "Overdue: the buyer has not paid for 30 days. They are blocked from paid calls until they do.",
     action: "Nothing to do. You will be paid when the buyer pays.",
@@ -133,7 +136,9 @@ export function unpaidLines(
 
 export interface EarningsSplit {
   /**
-   * What reached the wallet: all of `earned`. A provider is paid only out of
+   * What reached the wallet: all of `earned`, in whole cents. It and `fee` are
+   * rounded once together (`settlementShown`), so Home, Money's split and its
+   * Gross − fee = Net show the same cents (B13 review M4). A provider is paid only out of
    * the buyer's escrow, at each redemption, so nothing in `earned` is owed by
    * the platform or still to come.
    */
@@ -159,11 +164,12 @@ function positive(value: Money | null | undefined): Money | null {
 export function earningsSplit(totals: ProviderEarningsFigures | null | undefined): EarningsSplit {
   const waiting = positive(totals?.debtOutstanding);
   const notCredited = notCreditedBreakdown(totals);
+  const shown = settlementShown(totals?.earned, positive(totals?.platformFee));
   return {
-    inWallet: totals?.earned ?? null,
+    inWallet: shown.net,
     waitingOnBuyers: waiting,
     waitingOnBuyersCalls: waiting ? (totals?.debtOutstandingCalls ?? 0) : 0,
-    fee: positive(totals?.platformFee),
+    fee: shown.fee,
     notCredited: positive(notCredited.amount),
     notCreditedCalls: notCredited.calls,
   };

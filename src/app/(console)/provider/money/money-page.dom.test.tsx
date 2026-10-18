@@ -78,14 +78,15 @@ const redemption = (id: string, amount: string, calls: number, minutes: number):
   createdAt: new Date(Date.UTC(2026, 9, 17, 0, 60 - minutes)).toISOString(),
 });
 
-function render(): string {
+function renderToStaticMarkupRaw(payments: ProviderPayout[] = [redemption("a1", "90000", 1, 1), redemption("b2", "180000", 2, 5)]): string {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
   client.setQueryData(["provider", "earnings", "tool", "2026-10-01T00:00:00.000Z", "2026-11-01T00:00:00.000Z"], earnings);
   client.setQueryData(["provider", "payouts", "all"], {
-    items: [redemption("a1", "90000", 1, 1), redemption("b2", "180000", 2, 5)],
+    items: payments,
     pageInfo: { nextCursor: null, hasMore: false },
   });
   client.setQueryData(["display-assets", "provider"], []);
+  client.setQueryData(["chains"], { chains: [{ chainId: "eip155:46630", explorerBaseUrl: "https://explorer.test" }] });
   client.setQueryData(PROVIDER_CATALOGUE_KEY, {
     tools: [
       { id: "tool-rate", name: "get_usd_eur_rate", description: "", tier: "VERIFIED", inputSchema: {}, outputSchema: {} },
@@ -93,13 +94,15 @@ function render(): string {
     ],
     settlementAsset: null,
   });
-  return text(
-    renderToStaticMarkup(
-      <QueryClientProvider client={client}>
-        <ProviderMoneyPage />
-      </QueryClientProvider>,
-    ),
+  return renderToStaticMarkup(
+    <QueryClientProvider client={client}>
+      <ProviderMoneyPage />
+    </QueryClientProvider>,
   );
+}
+
+function render(payments?: ProviderPayout[]): string {
+  return text(renderToStaticMarkupRaw(payments));
 }
 
 beforeEach(() => {
@@ -146,5 +149,17 @@ describe("provider Money", () => {
     expect(words).toMatch(/In your wallet this month \$6\.08/);
     expect(words).toMatch(/Assay fee \d+% \$0\.68/);
     expect(words).not.toMatch(/\$0\.67/);
+  });
+
+  it("links only a real transaction, never an unobserved redemption (B13 review I1)", () => {
+    const real = redemption("c3", "90000", 1, 1);
+    const html = renderToStaticMarkupRaw([
+      real,
+      { ...redemption("d4", "45000", 1, 2), chainTxRef: null },
+      { ...redemption("e5", "45000", 1, 3), chainTxRef: "unobserved:seq=1" },
+    ]);
+    const links = [...html.matchAll(/href="(https:\/\/explorer\.test[^"]*)"/g)].map((m) => m[1]);
+    expect(links).toEqual([`https://explorer.test/tx/${real.chainTxRef}`]);
+    expect(html).not.toMatch(/unobserved/);
   });
 });
