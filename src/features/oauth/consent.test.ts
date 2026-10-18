@@ -1,0 +1,310 @@
+import { describe, expect, it } from "vitest";
+
+import { AUTHORIZE_ERROR_COPY, AUTHORIZE_ERROR_FALLBACK, authorizeErrorText } from "./authorize-error";
+
+import {
+  CONSENT_STRINGS,
+  consentFailure,
+  consentView,
+  defaultAgentId,
+  isContinueUrl,
+  limitsLine,
+  nameProblem,
+  startedAgo,
+  type ConsentRequest,
+} from "./consent";
+
+const usd = (amount: string) => ({ amount, asset: "eip155:46630/erc20:0x0", decimals: 6 });
+const NOW = new Date("2026-10-19T10:00:12.000Z");
+
+function agent(overrides: Partial<ConsentRequest["agents"][number]> = {}): ConsentRequest["agents"][number] {
+  return {
+    id: "agt-1",
+    label: "research-bot",
+    active: true,
+    limits: { perCall: usd("500000"), perDay: usd("5000000"), freeCallsPerDay: 100 },
+    access: { mode: "ALL", summary: "All tools" },
+    liveOAuthCredentials: 3,
+    ...overrides,
+  };
+}
+
+function request(overrides: Partial<ConsentRequest> = {}): ConsentRequest {
+  return {
+    requestId: "r",
+    createdAt: "2026-10-19T10:00:00.000Z",
+    expiresAt: "2026-10-19T10:10:00.000Z",
+    client: {
+      name: "Claude Code",
+      kind: "CIMD",
+      registrableDomain: "claude.ai",
+      host: "claude.ai",
+      verified: true,
+      builtin: false,
+      paymentClient: false,
+    },
+    returnTo: { kind: "WEB", display: "claude.ai" },
+    scope: ["assay:agent", "offline_access"],
+    agents: [agent()],
+    suggestedName: "Claude Code · 2026-10-19",
+    ...overrides,
+  };
+}
+
+const view = (req: ConsentRequest, agentId: string | null = defaultAgentId(req)) => consentView(req, { agentId, now: NOW });
+
+describe("consent view: the client", () => {
+  it('verified client → "Claude Code ✓ Verified"', () => {
+    const v = view(request());
+    expect(v.client.title).toBe("Claude Code ✓ Verified");
+    expect(v.client.verified).toBe(true);
+    expect(v.notVerified).toBeNull();
+    expect(v.client.domain).toBe("claude.ai");
+  });
+
+  it('builtin → "Assay app (says it is) · an app on this computer" and the will-not line', () => {
+    const v = view(
+      request({
+        client: {
+          name: "Assay app (assay-mcp)",
+          kind: "BUILTIN",
+          registrableDomain: null,
+          host: null,
+          verified: false,
+          builtin: true,
+          paymentClient: true,
+        },
+        returnTo: { kind: "LOCAL_APP", display: "an app on this computer" },
+      }),
+    );
+    expect(v.client.title).toBe("Assay app (says it is) · an app on this computer");
+    expect(v.cannotDo).toContain("make paid calls until you turn them on, on a separate page, with your wallet");
+    expect(v.cannotDo.join(" ")).not.toContain("Only the Assay app on your computer can");
+    // Any local process can claim to be the Assay app: no "Verified", and no amber either.
+    expect(v.client.verified).toBe(false);
+    expect(v.notVerified).toBeNull();
+  });
+
+  it("not verified → amber copy exactly §6.5, domain bold and the full host under it", () => {
+    const v = view(
+      request({
+        client: {
+          name: "Some Tool",
+          kind: "CIMD",
+          registrableDomain: "example.com",
+          host: "app.tools.example.com",
+          verified: false,
+          builtin: false,
+          paymentClient: false,
+        },
+        returnTo: { kind: "WEB", display: "app.tools.example.com" },
+      }),
+    );
+    expect(v.notVerified).toBe("Not verified by Assay. Only approve if you just started this from an app you trust.");
+    expect(v.client.title).toBe("Some Tool");
+    expect(v.client.domain).toBe("example.com");
+    expect(v.client.host).toBe("app.tools.example.com");
+  });
+
+  it("not verified, returning to a local app → says it is, and Assay can't confirm which app", () => {
+    const v = view(
+      request({
+        client: {
+          name: "Cursor",
+          kind: "CIMD",
+          registrableDomain: "cursor.com",
+          host: "cursor.com",
+          verified: false,
+          builtin: false,
+          paymentClient: false,
+        },
+        returnTo: { kind: "LOCAL_APP", display: "an app on this computer" },
+      }),
+    );
+    expect(v.client.title).toBe("Cursor (says it is) · an app on this computer · Assay can't confirm which app");
+    expect(v.notVerified).not.toBeNull();
+  });
+
+  it('DCR → "Self-registered app"', () => {
+    const v = view(
+      request({
+        client: {
+          name: "Visual Studio Code",
+          kind: "DCR",
+          registrableDomain: null,
+          host: null,
+          verified: false,
+          builtin: false,
+          paymentClient: false,
+        },
+        returnTo: { kind: "LOCAL_APP", display: "an app on this computer" },
+      }),
+    );
+    expect(v.client.kindLabel).toBe("Self-registered app");
+    expect(v.notVerified).not.toBeNull();
+  });
+
+  it("third-party will-not line names the Assay app as the only payer", () => {
+    expect(view(request()).cannotDo).toEqual([
+      "change limits, move funds or add people",
+      "make paid calls. Only the Assay app on your computer can, after you approve a payment key in your wallet.",
+    ]);
+  });
+
+  it("return and recency lines", () => {
+    const v = view(request());
+    expect(v.returnLine).toBe("After you approve, you go back to: claude.ai");
+    expect(v.recencyLine).toBe("Only approve if you clicked Connect in Claude Code in the last few minutes.");
+    expect(v.startedAgo).toBe("started 12 seconds ago");
+  });
+});
+
+describe("consent view: the agent", () => {
+  it('limits line "$0.50 a call · $5 a day · 100 free calls a day · All tools"', () => {
+    expect(limitsLine(agent())).toBe("$0.50 a call · $5 a day · 100 free calls a day · All tools");
+    expect(view(request()).limitsLine).toBe("$0.50 a call · $5 a day · 100 free calls a day · All tools");
+  });
+
+  it("limits line with no ceilings says so", () => {
+    expect(limitsLine(agent({ limits: { perCall: null, perDay: null, freeCallsPerDay: 100 } }))).toBe(
+      "No limit a call · No daily limit · 100 free calls a day · All tools",
+    );
+  });
+
+  it("the picker is hidden with one agent and shown with two", () => {
+    expect(view(request()).showAgentPicker).toBe(false);
+    expect(view(request({ agents: [agent(), agent({ id: "agt-2", label: "ops" })] })).showAgentPicker).toBe(true);
+  });
+
+  it("45 live → the warning text", () => {
+    const v = view(request({ agents: [agent({ liveOAuthCredentials: 45 })] }));
+    expect(v.agentNotes).toContain(
+      "This agent has 45 connected apps. Revoke ones you no longer use in Agents & keys.",
+    );
+    expect(v.approveDisabled).toBe(false);
+    expect(view(request({ agents: [agent({ liveOAuthCredentials: 44 })] })).agentNotes).toEqual([]);
+  });
+
+  it("inactive agent → Approve disabled + text", () => {
+    const v = view(request({ agents: [agent({ active: false })] }));
+    expect(v.approveDisabled).toBe(true);
+    expect(v.agentNotes).toContain("This agent is paused. Turn it back on in Agents & keys first.");
+  });
+
+  it("no agent chosen → Approve disabled", () => {
+    expect(view(request({ agents: [] }), null).approveDisabled).toBe(true);
+  });
+
+  it("defaults to the first active agent", () => {
+    const req = request({ agents: [agent({ id: "a", active: false }), agent({ id: "b" })] });
+    expect(defaultAgentId(req)).toBe("b");
+  });
+});
+
+describe("consent view: replaces", () => {
+  const replacing = (narrowed: boolean) =>
+    request({
+      agents: [agent({ id: "a" }), agent({ id: "b", label: "ops" })],
+      replaces: { id: "c-old", name: "Assay app on this Mac", agentId: "b", narrowed },
+    });
+
+  it("pre-selects the replaced grant's agent", () => {
+    expect(defaultAgentId(replacing(true))).toBe("b");
+  });
+
+  it('replaces narrowed → "Replaces {old}. Its tool limits are kept."', () => {
+    expect(view(replacing(true)).replaces).toEqual({
+      tone: "info",
+      text: "Replaces Assay app on this Mac. Its tool limits are kept.",
+    });
+  });
+
+  it("replaces, not narrowed → no tool-limits sentence", () => {
+    expect(view(replacing(false)).replaces).toEqual({ tone: "info", text: "Replaces Assay app on this Mac." });
+  });
+
+  it("picking another agent keeps the old one connected", () => {
+    expect(view(replacing(true), "a").replaces).toEqual({
+      tone: "warning",
+      text: "This keeps Assay app on this Mac connected. It will not be replaced.",
+    });
+  });
+
+  it("no replaces → nothing", () => {
+    expect(view(request()).replaces).toBeNull();
+  });
+
+  it("a replaced agent that is not in the list is not pre-selected", () => {
+    const req = request({ replaces: { id: "c", name: "Old", agentId: "gone", narrowed: false } });
+    expect(defaultAgentId(req)).toBe("agt-1");
+  });
+});
+
+describe("consent view: time", () => {
+  it("startedAgo", () => {
+    const at = (s: number) => new Date(Date.parse("2026-10-19T10:00:00.000Z") + s * 1000);
+    expect(startedAgo("2026-10-19T10:00:00.000Z", at(0))).toBe("started just now");
+    expect(startedAgo("2026-10-19T10:00:00.000Z", at(1))).toBe("started 1 second ago");
+    expect(startedAgo("2026-10-19T10:00:00.000Z", at(65))).toBe("started 1 minute ago");
+    expect(startedAgo("2026-10-19T10:00:00.000Z", at(300))).toBe("started 5 minutes ago");
+    expect(startedAgo("2026-10-19T10:00:00.000Z", at(-30))).toBe("started just now");
+  });
+
+  it("past expiresAt → expired", () => {
+    expect(view(request()).expired).toBe(false);
+    const late = consentView(request(), { agentId: "agt-1", now: new Date("2026-10-19T10:10:00.000Z") });
+    expect(late.expired).toBe(true);
+    expect(late.approveDisabled).toBe(true);
+  });
+});
+
+describe("consent failures", () => {
+  it("maps the API's codes to the §6.5 sentences", () => {
+    expect(consentFailure("OAUTH_REQUEST_NOT_FOUND")).toEqual({ kind: "final", text: CONSENT_STRINGS.expired });
+    expect(CONSENT_STRINGS.expired).toBe("This request expired. Go back to your app and try again.");
+    expect(consentFailure("OAUTH_REQUEST_ALREADY_DECIDED")).toEqual({
+      kind: "final",
+      text: "You already answered this request.",
+    });
+    expect(consentFailure("OAUTH_AGENT_NOT_ACTIVE").text).toBe(
+      "This agent is paused. Turn it back on in Agents & keys first.",
+    );
+    expect(consentFailure("OAUTH_GRANT_LIMIT_REACHED").kind).toBe("agent");
+    expect(consentFailure("OAUTH_CREDENTIAL_NAME_INVALID")).toEqual({
+      kind: "name",
+      text: "Use a name with letters or numbers. Invisible and control characters are removed.",
+    });
+    expect(consentFailure("SOMETHING_ELSE").kind).toBe("retry");
+  });
+
+  it("an empty name is refused before the request", () => {
+    expect(nameProblem("   ")).toBe("Give this connection a name.");
+    expect(nameProblem("Claude Code · 2026-10-19")).toBeNull();
+  });
+});
+
+describe("continue URL", () => {
+  it("accepts only {MCP}/oauth/authorize/continue", () => {
+    const mcp = "https://mcp.example.com";
+    expect(isContinueUrl("https://mcp.example.com/oauth/authorize/continue?request=abc", mcp)).toBe(true);
+    expect(isContinueUrl("https://evil.example/oauth/authorize/continue?request=abc", mcp)).toBe(false);
+    expect(isContinueUrl("https://mcp.example.com/other", mcp)).toBe(false);
+    expect(isContinueUrl("javascript:alert(1)", mcp)).toBe(false);
+    expect(isContinueUrl("not a url", mcp)).toBe(false);
+    // No configured MCP host: an http(s) URL with the continue path.
+    expect(isContinueUrl("http://localhost:3002/oauth/authorize/continue?request=abc", undefined)).toBe(true);
+    expect(isContinueUrl("https://mcp.example.com/oauth/authorize/continue?request=abc", undefined)).toBe(true);
+    expect(isContinueUrl("http://mcp.example.com/oauth/authorize/continue?request=abc", undefined)).toBe(false);
+    expect(isContinueUrl("ftp://x/oauth/authorize/continue", undefined)).toBe(false);
+  });
+});
+
+describe("authorize-error copy", () => {
+  it("one sentence per reason the MCP host sends, and a general one otherwise", () => {
+    expect(authorizeErrorText("client_unknown")).toBe(AUTHORIZE_ERROR_COPY.client_unknown);
+    expect(authorizeErrorText("client_metadata_invalid")).toBe(AUTHORIZE_ERROR_COPY.client_metadata_invalid);
+    expect(authorizeErrorText("redirect_uri_mismatch")).toBe(AUTHORIZE_ERROR_COPY.redirect_uri_mismatch);
+    expect(authorizeErrorText("toString")).toBe(AUTHORIZE_ERROR_FALLBACK);
+    expect(authorizeErrorText(null)).toBe(AUTHORIZE_ERROR_FALLBACK);
+  });
+});
