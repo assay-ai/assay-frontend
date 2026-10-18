@@ -273,7 +273,8 @@ export interface SlashProposalSummary {
   bindingId: string;
   bindingLabel: string;
   toolId: string;
-  toolName: string;
+  /** Null when the catalogue cannot name the tool (never an id). */
+  toolName: string | null;
   windowId: string | null;
   windowLabel: string | null;
   penaltyAmount: Money;
