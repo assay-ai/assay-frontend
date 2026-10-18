@@ -22,6 +22,7 @@ import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { lossOf } from "@/features/provider-penalties/model";
 import { usePenalties } from "@/features/provider-penalties/use-penalties";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
+import { isTransactionRef } from "@/features/provider-earnings/payments";
 import { callsOfClass, earningsSplit, unpaidLines, type EarningsSplit, type UnpaidLine } from "@/features/provider-earnings/earned-tile";
 import {
   callCount,
@@ -115,9 +116,8 @@ export default function ProviderMoneyPage() {
   /* Each reason card's amount, adjusted by whole cents so the cards add up to their total on screen. */
   const reasonAmounts = React.useMemo(() => shownReasonAmounts(notCredited.reasons), [notCredited.reasons]);
   const passedUnpaidCalls = (earnings.data?.totals.uncollectedCalls ?? 0) + (earnings.data?.totals.forfeitedCalls ?? 0);
+  /* The wallet figure and the fee come rounded once from cents: the same figures Home and the Explain drawer's Gross − fee = Net show. */
   const split = earningsSplit(earnings.data?.totals);
-  /* The wallet figure and the fee, rounded once from cents: the same figures the Explain drawer's Gross − fee = Net shows. */
-  const shown = settlementShown(split.inWallet, split.fee);
   // Normal money format; a sub-cent amount still shows its own digits (see `formatMoney`).
   const unpaid = unpaidLines(earnings.data?.totals, (value) => formatMoney(value, { decimals: 2 }));
   const monthName = MONTH.format(now);
@@ -200,13 +200,13 @@ export default function ProviderMoneyPage() {
           <PanelBody className="flex flex-col gap-4 p-4 tablet:p-5">
             <div className="flex flex-col gap-0.5">
               <span className="text-body-13 text-02">In your wallet this month</span>
-              <span className="font-mono text-heading-md text-01">{formatMoney(shown.net ?? split.inWallet, { decimals: 2 })}</span>
+              <span className="font-mono text-heading-md text-01">{formatMoney(split.inWallet, { decimals: 2 })}</span>
             </div>
             <MoneySplit
               segments={
                 [
-                  { label: "In your wallet", value: amountOf(split.inWallet), amount: formatMoney(shown.net ?? split.inWallet, { decimals: 2 }), tone: "success" },
-                  split.fee ? { label: "Assay fee", value: amountOf(split.fee), amount: formatMoney(shown.fee, { decimals: 2 }), tone: "neutral" } : null,
+                  { label: "In your wallet", value: amountOf(split.inWallet), amount: formatMoney(split.inWallet, { decimals: 2 }), tone: "success" },
+                  split.fee ? { label: "Assay fee", value: amountOf(split.fee), amount: formatMoney(split.fee, { decimals: 2 }), tone: "neutral" } : null,
                   split.notCredited
                     ? {
                         label: "Not credited",
@@ -375,7 +375,6 @@ export default function ProviderMoneyPage() {
         monthName={monthName}
         calls={earnings.data?.totals.calls ?? null}
         split={split}
-        shown={shown}
         unpaid={unpaid}
         recon={recon}
         reconLoading={ledger.isPending && !ledger.isError}
@@ -395,7 +394,9 @@ export default function ProviderMoneyPage() {
 function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: ReturnType<typeof useChains>["chains"] }) {
   const chainId = chainIdOfAsset(payout.amount.asset);
   const chain = chains.find((c) => c.chainId === chainId);
-  const href = chain && payout.chainTxRef ? explorerTxUrl(chain, payout.chainTxRef) : null;
+  // Only a real transaction gets a link: an unobserved redemption has no ref, and a ledger marker is not one.
+  const txRef = isTransactionRef(payout.chainTxRef) ? payout.chainTxRef : null;
+  const href = chain && txRef ? explorerTxUrl(chain, txRef) : null;
   return (
     <li className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-md px-3 py-3 hover:bg-02">
       <span className="flex min-w-0 flex-1 flex-col">
@@ -432,7 +433,9 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
           View transaction <ExternalLink aria-hidden="true" className="size-3" />
         </a>
       ) : (
-        <span className="w-36 text-right text-body-xs text-03">{payout.chainTxRef ? "Sent on chain" : "Being sent"}</span>
+        <span className="w-36 text-right text-body-xs text-03">
+          {payout.kind === "REDEMPTION" || payout.chainTxRef ? "Sent on chain" : "Being sent"}
+        </span>
       )}
     </li>
   );
@@ -569,7 +572,6 @@ function ExplainSheet({
   monthName,
   calls,
   split,
-  shown,
   unpaid,
   recon,
   reconLoading,
@@ -582,8 +584,6 @@ function ExplainSheet({
   monthName: string;
   calls: number | null;
   split: EarningsSplit;
-  /** The wallet figure and the fee as Money shows them (`settlementShown`). */
-  shown: ReturnType<typeof settlementShown>;
   unpaid: readonly UnpaidLine[];
   recon: ReconSummary | null;
   reconLoading: boolean;
@@ -592,8 +592,8 @@ function ExplainSheet({
   loading: boolean;
 }) {
   const lines: { label: string; detail?: string; amount: string }[] = [
-    { label: "Paid to your wallet", amount: formatMoney(shown.net ?? split.inWallet, { decimals: 2 }) },
-    ...(split.fee ? [{ label: "Assay fee", detail: "taken from each paid call", amount: formatMoney(shown.fee, { decimals: 2 }) }] : []),
+    { label: "Paid to your wallet", amount: formatMoney(split.inWallet, { decimals: 2 }) },
+    ...(split.fee ? [{ label: "Assay fee", detail: "taken from each paid call", amount: formatMoney(split.fee, { decimals: 2 }) }] : []),
     ...(split.notCredited
       ? [{ label: "Not credited", detail: callCount(split.notCreditedCalls), amount: formatMoney(split.notCredited, { decimals: 2 }) }]
       : []),

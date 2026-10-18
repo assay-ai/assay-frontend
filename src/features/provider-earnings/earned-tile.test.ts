@@ -94,6 +94,13 @@ describe("earningsSplit", () => {
     expect(split.notCredited).toBeNull();
   });
 
+  it("rounds the wallet figure and the fee once, from cents, for Home and Money alike", () => {
+    // $6.084 + $0.676 = $6.76: $6.08 + $0.68, never $6.08 beside $0.67.
+    const split = earningsSplit({ calls: 81, earned: usd("6084000"), platformFee: usd("676000"), withheld: null, withheldCalls: 0 });
+    expect(split.inWallet?.amount).toBe("6080000");
+    expect(split.fee?.amount).toBe("680000");
+  });
+
   it("says not credited as the sum of its reasons, so Home and Money read the same calls", () => {
     const split = earningsSplit({
       calls: 108,
