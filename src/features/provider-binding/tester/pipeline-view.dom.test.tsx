@@ -42,7 +42,7 @@ describe("TestPipelineView warnings", () => {
         report={report([{ code: "ACCEPTS_UNSIGNED", message: "Your API answered an unsigned request." }])}
       />,
     );
-    expect(screen.getByText("Signature not enforced")).toBeTruthy();
+    expect(screen.getByText("Signature not enforced · Warning (does not block Go live)")).toBeTruthy();
     expect(screen.getByText("Your API answered an unsigned request.")).toBeTruthy();
     expect(screen.getByText(/Test passed/)).toBeTruthy();
   });
@@ -56,8 +56,8 @@ describe("TestPipelineView warnings", () => {
         ])}
       />,
     );
-    expect(screen.getByText("API key not enforced")).toBeTruthy();
-    expect(screen.getByText("No authentication")).toBeTruthy();
+    expect(screen.getByText(/^API key not enforced/)).toBeTruthy();
+    expect(screen.getByText(/^No authentication/)).toBeTruthy();
   });
 
   it("renders no alert without warnings", () => {
@@ -73,8 +73,50 @@ describe("TestPipelineView warnings", () => {
       layer.layer === "UPSTREAM" ? { ...layer, status: "FAILED", code: "UPSTREAM_ERROR" } : layer,
     );
     render(<TestPipelineView report={failed} />);
-    expect(screen.getByText("No authentication")).toBeTruthy();
+    expect(screen.getByText(/^No authentication/)).toBeTruthy();
     expect(screen.getByText("Nothing proves a call came from Assay.")).toBeTruthy();
     expect(screen.getByText(/Test failed/)).toBeTruthy();
+  });
+});
+
+describe("TestPipelineView raw exchange and details", () => {
+  it("lists the header names sent, signature included, and never a value", () => {
+    const signed = report([]);
+    signed.request = {
+      method: "GET",
+      url: "https://api.example.com/v1/quote?q=1",
+      headerNames: ["accept", "x-assay-call-id", "signature-input", "signature"],
+      body: null,
+    };
+    render(<TestPipelineView report={signed} />);
+    expect(
+      screen.getByText(/Headers \(values not shown\): accept, x-assay-call-id, signature-input, signature/),
+    ).toBeTruthy();
+  });
+
+  it("puts the backend's wording behind Details on a failed step", () => {
+    const failed = report([]);
+    failed.outcome = "FAILED";
+    failed.failedLayer = "RESPONSE_MAPPING";
+    failed.layers = failed.layers.map((layer) =>
+      layer.layer === "RESPONSE_MAPPING"
+        ? {
+            ...layer,
+            status: "FAILED",
+            fault: "PLATFORM",
+            code: "TOOL_MAPPING_PATH_NOT_FOUND",
+            detail: "Mapping selector resolved to nothing: $.markets (at /markets) for binding: ed44c0de-0000-4000-8000-000000000001",
+          }
+        : layer.layer === "VERIFICATION"
+          ? { ...layer, status: "NOT_REACHED" }
+          : layer,
+    );
+    render(<TestPipelineView report={failed} />);
+    expect(screen.getByText(/Your answer has no “markets” field/)).toBeTruthy();
+    expect(screen.getByText("Details")).toBeTruthy();
+    expect(screen.getByText("Mapping selector resolved to nothing: $.markets (at /markets)")).toBeTruthy();
+    expect(screen.getByText("Fix: the mapping (yours; Advanced mapping)")).toBeTruthy();
+    expect(screen.queryByText(/Assay, not you/)).toBeNull();
+    expect(document.body.textContent).not.toContain("ed44c0de");
   });
 });

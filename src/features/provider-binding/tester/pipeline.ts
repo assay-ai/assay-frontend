@@ -4,26 +4,46 @@ import type {
   BindingTestReport,
   VerificationRuleResult,
 } from "@/interfaces";
-import { plainError, plainRule } from "@/libs/plain-language";
+import { plainRule } from "@/libs/plain-language";
 
 /**
  * A tester report as the four steps a provider can reason about, each passed
- * or failed, and — when one fails — whose fault it is in their words:
+ * or failed, and — when one fails — whose fix it is, in their words:
  *
- *   1 Request built      → "your test input" or "the mapping"
- *   2 Your API answered  → "your API" (or "your test input" when the API said the input was bad)
- *   3 Output mapped      → "the mapping"
+ *   1 Request built      → "your test input" or the mapping
+ *   2 Your API answered  → "your API"; "the address or path" for a 404;
+ *                          "Authentication" for a 401/403 or missing key headers;
+ *                          "your test input" for another 4xx; "Assay, not you"
+ *                          only when Assay could not prepare the call
+ *   3 Output mapped      → the mapping
  *   4 Checks             → "your API's data"
+ *
+ * In this wizard the mapping is the provider's own (they can change it under
+ * Advanced mapping), so a `PLATFORM` fault at steps 1 and 3 — the backend's
+ * "our mapping" — is theirs to fix, never "Assay, not you".
  *
  * The backend reports five layers (REQUEST_MAPPING, UPSTREAM, CLASSIFICATION,
  * RESPONSE_MAPPING, VERIFICATION); UPSTREAM and CLASSIFICATION are one step
- * to a provider ("did my API answer usefully"). The layer's own `fault`
- * (AGENT | PROVIDER | PLATFORM) wins over the per-step default when present.
+ * to a provider ("did my API answer usefully"). A layer's `AGENT` fault wins
+ * over the per-step default.
+ *
+ * Each step leads with a plain sentence; the backend's own text, when it
+ * differs, is kept as `details` for a "Details" disclosure, with the listing
+ * id taken out.
  */
 
 export type PipelineStepId = "request" | "api" | "mapped" | "checks";
 export type PipelineStatus = "pass" | "fail" | "warn" | "skipped";
-export type PipelineFault = "your test input" | "your API" | "the mapping" | "your API's data" | "Assay, not you";
+export const MAPPING_FAULT = "the mapping (yours; Advanced mapping)";
+
+export type PipelineFault =
+  | "your test input"
+  | "your API"
+  | typeof MAPPING_FAULT
+  | "your API's data"
+  | "the address or path"
+  | "Authentication"
+  | "Assay, not you";
 
 export interface PipelineStep {
   id: PipelineStepId;
@@ -33,6 +53,8 @@ export interface PipelineStep {
   sentence: string;
   /** Set on a failed step. */
   fault: PipelineFault | null;
+  /** The backend's own text, for "Details", when it says more than the sentence. */
+  details: string | null;
 }
 
 export interface TestPipeline {
@@ -69,17 +91,70 @@ function statusOf(result: BindingTestLayerResult | undefined): PipelineStatus {
   }
 }
 
+/** The layer's `AGENT` fault wins; anything else (PLATFORM included) is the step's own default. */
 function faultOf(result: BindingTestLayerResult | undefined, fallback: PipelineFault): PipelineFault {
   if (result?.fault === "AGENT") return "your test input";
-  if (result?.fault === "PLATFORM") return "Assay, not you";
   return fallback;
 }
 
-function detailSentence(result: BindingTestLayerResult | undefined): string | null {
-  if (!result) return null;
-  if (result.detail && result.detail.trim()) return result.detail.trim();
-  if (result.code) return plainError(result.code);
-  return null;
+/** The backend's detail without the listing id it appends ("… for binding: <uuid>"). */
+function rawDetail(result: BindingTestLayerResult | undefined): string | null {
+  const text = result?.detail?.replace(/\s*for binding:\s*\S+\s*$/i, "").trim();
+  return text ? text : null;
+}
+
+/** `$.vsCurrency` → `vsCurrency`, `$.data.answer` → `data.answer`, from a mapping error's detail. */
+function selectorField(detail: string | null): string | null {
+  const match = detail?.match(/:\s*\$\.?([A-Za-z0-9_.[\]-]+)/);
+  return match?.[1] ?? null;
+}
+
+/** `/markets` → `markets`, `/data/0/price` → `data.0.price`. */
+function pointerField(pointer: string | undefined): string | null {
+  const field = pointer?.replace(/^\//, "").replace(/\//g, ".");
+  return field ? field : null;
+}
+
+/** A plain sentence for a mapping failure at step 1 or 3, from its code and detail. */
+function mappingSentence(step: "request" | "mapped", code: string | null, detail: string | null): string | null {
+  switch (code) {
+    case "TOOL_MAPPING_PATH_NOT_FOUND": {
+      const field = selectorField(detail);
+      if (!field) return null;
+      return step === "request"
+        ? `Your test input has no “${field}”, and the request needs it. Fill it in, or tick “may be missing” for it under Advanced mapping.`
+        : `Your answer has no “${field}” field. Change your API, or map another field under Advanced mapping.`;
+    }
+    case "TOOL_MAPPING_TYPE_MISMATCH": {
+      const match = detail?.match(/at (\S+?)(?::\s*expected ([^,]+))?(?:,\s*got (.+))?$/);
+      const field = pointerField(match?.[1]);
+      if (!field) return null;
+      return match?.[2] && match[3]
+        ? `“${field}” has the wrong type: the tool expects ${match[2]}, ${step === "request" ? "your test input" : "your answer"} gave ${match[3]}.`
+        : `“${field}” has the wrong type for the tool.`;
+    }
+    case "TOOL_MAPPING_NULL_VALUE":
+      return step === "request"
+        ? "Your test input left a value empty that the request needs."
+        : "A value the tool needs is empty (null) in your answer.";
+    case "TOOL_MAPPING_REQUIRED_FIELD_MISSING":
+      return step === "request"
+        ? "Your test input is missing a value the request needs."
+        : "The result is missing a field the tool requires.";
+    case "TOOL_MAPPING_EMPTY_COLLECTION":
+      return "A list in your answer is empty where the tool needs at least one item.";
+    case "TOOL_MAPPING_TRANSFORM_FAILED":
+      return "A conversion step in the mapping failed on this value.";
+    case "body_not_json":
+      return "Your API's answer was not JSON, so there is nothing to map.";
+    default:
+      return null;
+  }
+}
+
+/** The details line: the backend's text, unless the sentence already is that text. */
+function detailsBeside(sentence: string, detail: string | null): string | null {
+  return detail && detail !== sentence ? detail : null;
 }
 
 function hostAndPath(url: string): string {
@@ -122,20 +197,23 @@ export function testPipeline(report: BindingTestReport): TestPipeline {
   // 1. Request built
   const requestStatus = statusOf(requestLayer);
   const inputProblem = /NULL_VALUE|INPUT|ARGUMENT|MISSING/i.test(requestLayer?.code ?? "");
+  const requestDetail = rawDetail(requestLayer);
+  const requestSentence =
+    requestStatus === "fail"
+      ? (mappingSentence("request", requestLayer?.code ?? null, requestDetail) ??
+        (inputProblem
+          ? "Your test input is missing a value the request needs."
+          : "The request mapping could not build a call from your test input."))
+      : report.request
+        ? `${report.request.method} ${hostAndPath(report.request.url)}`
+        : "Not run.";
   const request: PipelineStep = {
     id: "request",
     label: LABELS.request,
     status: requestStatus,
-    sentence:
-      requestStatus === "fail"
-        ? (detailSentence(requestLayer) ??
-          (inputProblem
-            ? "Your test input is missing a value the request needs."
-            : "The request mapping could not build a call from your test input."))
-        : report.request
-          ? `${report.request.method} ${hostAndPath(report.request.url)}`
-          : "Not run.",
-    fault: requestStatus === "fail" ? faultOf(requestLayer, inputProblem ? "your test input" : "the mapping") : null,
+    sentence: requestSentence,
+    fault: requestStatus === "fail" ? faultOf(requestLayer, inputProblem ? "your test input" : MAPPING_FAULT) : null,
+    details: requestStatus === "fail" ? detailsBeside(requestSentence, requestDetail) : null,
   };
 
   // 2. Your API answered (transport + classification)
@@ -151,16 +229,36 @@ export function testPipeline(report: BindingTestReport): TestPipeline {
           : "pass";
   const upstream = report.upstream;
   const requestError = report.classification?.responseClass === "REQUEST_ERROR";
+  const httpStatus = upstream?.status ?? 0;
+  const apiLayer = upstreamStatus === "fail" ? upstreamLayer : classLayer;
+  const apiDetail = rawDetail(apiLayer);
   let apiSentence: string;
+  let apiFault: PipelineFault = "your API";
   if (apiStatus === "skipped") apiSentence = "Not reached.";
-  else if (upstream?.transportError) {
+  else if (upstream?.transportError?.kind === "PLATFORM_UNAVAILABLE") {
+    // The invoker refused to dial: Assay's side, or the key headers this mode needs.
+    if (/credentials missing/i.test(upstream.transportError.detail ?? "")) {
+      apiSentence = "Add your API key headers under Authentication first. Your API wasn't called.";
+      apiFault = "Authentication";
+    } else {
+      apiSentence = "Assay could not prepare the call (key storage or signing). Your API wasn't called. Try again in a minute.";
+      apiFault = "Assay, not you";
+    }
+  } else if (upstream?.transportError) {
     apiSentence = `Could not reach your API${upstream.transportError.detail ? `: ${upstream.transportError.detail}` : "."}`;
+  } else if (apiStatus === "fail" && (httpStatus === 404 || httpStatus === 410)) {
+    apiSentence = `Your API answered HTTP ${httpStatus}: nothing at this address. Check the address, and the path under Advanced mapping.`;
+    apiFault = "the address or path";
+  } else if (apiStatus === "fail" && (httpStatus === 401 || httpStatus === 403)) {
+    apiSentence = `Your API refused the call (HTTP ${httpStatus}). Check the Authentication choice and your API key headers.`;
+    apiFault = "Authentication";
   } else if (apiStatus === "fail" && requestError) {
-    apiSentence = `Your API said the request was invalid (HTTP ${upstream?.status ?? "error"}). Check the test input.`;
+    apiSentence = `Your API said the request was invalid (HTTP ${httpStatus || "error"}). Check the test input.`;
+    apiFault = "your test input";
   } else if (apiStatus === "fail") {
-    apiSentence =
-      detailSentence(upstreamStatus === "fail" ? upstreamLayer : classLayer) ??
-      `Your API answered HTTP ${upstream?.status ?? "error"} with no usable result.`;
+    apiSentence = httpStatus
+      ? `Your API answered HTTP ${httpStatus} with no usable result.`
+      : (apiDetail ?? "Your API gave no usable result.");
   } else {
     apiSentence = upstream ? `HTTP ${upstream.status} in ${upstream.latencyMs} ms.` : "Answered.";
   }
@@ -169,10 +267,8 @@ export function testPipeline(report: BindingTestReport): TestPipeline {
     label: LABELS.api,
     status: apiStatus,
     sentence: apiSentence,
-    fault:
-      apiStatus === "fail"
-        ? faultOf(upstreamStatus === "fail" ? upstreamLayer : classLayer, requestError ? "your test input" : "your API")
-        : null,
+    fault: apiStatus === "fail" ? faultOf(apiLayer, apiFault) : null,
+    details: apiStatus === "fail" ? detailsBeside(apiSentence, apiDetail) : null,
   };
 
   // 3. Output mapped
@@ -188,7 +284,9 @@ export function testPipeline(report: BindingTestReport): TestPipeline {
     status: emptyResult ? "warn" : mappedStatus,
     sentence:
       mappedStatus === "fail"
-        ? (detailSentence(responseLayer) ?? "The response mapping could not read your API's answer.")
+        ? (mappingSentence("mapped", responseLayer?.code ?? null, rawDetail(responseLayer)) ??
+          rawDetail(responseLayer) ??
+          "The response mapping could not read your API's answer.")
         : mappedStatus === "skipped"
           ? "Not reached."
           : emptyResult
@@ -196,8 +294,10 @@ export function testPipeline(report: BindingTestReport): TestPipeline {
             : fieldCount !== null
               ? `${fieldCount} field${fieldCount === 1 ? "" : "s"} filled.`
               : "Result read.",
-    fault: mappedStatus === "fail" ? faultOf(responseLayer, "the mapping") : null,
+    fault: mappedStatus === "fail" ? faultOf(responseLayer, MAPPING_FAULT) : null,
+    details: null,
   };
+  if (mappedStatus === "fail") mapped.details = detailsBeside(mapped.sentence, rawDetail(responseLayer));
 
   // 4. Checks
   const verifyStatus = statusOf(verifyLayer);
@@ -210,7 +310,7 @@ export function testPipeline(report: BindingTestReport): TestPipeline {
       verifyStatus === "fail"
         ? failing.length > 0
           ? `Failed: ${failing.map((rule) => plainRule(rule.type)).join("; ")}.`
-          : (detailSentence(verifyLayer) ?? "The result did not pass the checks.")
+          : (rawDetail(verifyLayer) ?? "The result did not pass the checks.")
         : verifyStatus === "skipped"
           ? "Not reached."
           : emptyResult
@@ -219,6 +319,7 @@ export function testPipeline(report: BindingTestReport): TestPipeline {
               ? "The checks reached no decision."
               : "All checks passed.",
     fault: verifyStatus === "fail" ? faultOf(verifyLayer, "your API's data") : null,
+    details: null,
   };
 
   const steps = [request, api, mapped, checks];
