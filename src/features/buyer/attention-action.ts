@@ -42,7 +42,7 @@ export function attentionAction(note: {
     case "provider_tool.rejected":
     case "provider_tool.taken_down":
     case "provider_tool.takedown_lifted":
-      return note.subjectId ? { label: "Open your API", href: routes.providerApi(note.subjectId) } : { label: "Your own APIs", href: "/provider/apis" };
+      return note.subjectId ? { label: "Open your API", href: routes.providerApi(note.subjectId) } : { label: "Your APIs", href: "/provider/apis" };
     case "provider_tool.promotion_invited":
       return { label: "See the invitation", href: "/provider/apis" };
     case "balance.low":

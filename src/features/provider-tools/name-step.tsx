@@ -69,6 +69,10 @@ function HandleClaim() {
     <section className="flex flex-col gap-2 rounded-lg border border-warning-20 bg-warning-10 p-3.5" data-testid="handle-claim">
       <p className="text-label-13 text-01">First, claim your public name</p>
       <p className="text-body-13 text-02">Your tools are named after it, like @acme → acme__search_posts. It never shows an email, a wallet or a real name.</p>
+      <p className="text-body-13 text-02">
+        It is asked for now because a tool&apos;s name includes it from the first save. The draft itself stays private until you
+        choose who can use it.
+      </p>
       <div className="flex flex-col gap-2 tablet:flex-row tablet:items-start">
         <Field
           label="Public name"
