@@ -49,6 +49,7 @@ import {
 import { ErrorBlock } from "@/features/g30/ui";
 import { collectionAt, collectionView, isCollectionState, timelineStamp, timelineZoneNote } from "@/features/g30/receipt-collection";
 import { OwedReceiptAction } from "@/features/buyer-debt/owed-row-action";
+import { ReceiptReport } from "@/features/call-disputes/receipt-report";
 import { owedCallState } from "@/features/buyer-debt/debt-summary";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 import type { Receipt } from "@/features/g30/wire";
@@ -407,6 +408,9 @@ function ReceiptPageContent() {
           </div>
         ))}
       </dl>
+
+      {/* A charged call: "Report a bad result", or the report's status once filed. */}
+      {receipt.status === "SETTLED" && receipt.chargedPrice.amount !== "0" ? <ReceiptReport receipt={receipt} toolName={names.name("tool", receipt.toolId)} /> : null}
 
       {/* Only on a call that was not charged: what the other outcomes mean. */}
       {finalNotCharged ? (
