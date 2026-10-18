@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronRight, Gift, TriangleAlert } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Gift, Plug, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -36,6 +36,7 @@ import {
   smallestFreeAllowance,
   stakeSummary,
 } from "@/features/explorer/explorer-text";
+import { mcpToolName } from "@/features/connect/mcp-url";
 import { accessSummary, toolAccess } from "@/features/explorer/tool-access";
 import { chainBalances, type FullBalance } from "@/features/g30/balance";
 import { useChainName } from "@/hooks/useChainName";
@@ -122,6 +123,7 @@ function ToolDetail({
   callsWindow: string;
 }) {
   const chainName = useChainName();
+  const mcpName = mcpToolName(tool);
   const uncharged = tool.listed && tool.charged ? notCharged(tool.listed, tool.charged) : null;
   // The price per chain (D6), led by the chain the buyer has the most funds on.
   const chainPrices = orderChainPrices(tool.prices, leadChains, tool.price);
@@ -147,7 +149,18 @@ function ToolDetail({
   return (
     <div className="flex flex-col gap-4 border-t border-01 bg-02 px-4 py-4 tablet:px-5">
       {/* Allow / Block first, naming the agent it is for (Explore's agent picker sets which). */}
-      <ToolAccessControl toolId={tool.toolId} toolName={tool.name} allToolIds={allToolIds} className="self-start" />
+      <div className="flex flex-wrap items-center gap-2">
+        <ToolAccessControl toolId={tool.toolId} toolName={tool.name} allToolIds={allToolIds} className="self-start" />
+        {mcpName ? (
+          // Connect with "Only these tools" chosen: a key and a Copy away from a working config.
+          <Button asChild size="sm" data-testid="use-this-tool">
+            <Link href={routes.connectTools([mcpName])}>
+              <Plug aria-hidden="true" />
+              Use this tool
+            </Link>
+          </Button>
+        ) : null}
+      </div>
       {tool.description ? <p className="text-body-13 text-02">{tool.description}</p> : null}
 
       <SettlesElsewhere tool={tool} buyerChains={buyerChains} chains={chains} />

@@ -19,17 +19,20 @@ export function useSignedIn(): boolean {
 
 /**
  * The newcomer's call to action on the public pages. Signed out: "Start free"
- * with the one-line promise under it. Signed in: "Open app" straight to `next`,
- * because sending a signed-in person to a sign-in page is a dead step.
+ * with the one-line promise under it, and sign-in comes back to `next`.
+ * Signed in: "Open app" (or `signedInLabel`) straight to `next`, because
+ * sending a signed-in person to a sign-in page is a dead step.
  */
 export function StartFreeCta({
   next = "/",
   label = "Start free",
+  signedInLabel = "Open app",
   className,
   promiseClassName,
 }: {
   next?: string;
   label?: string;
+  signedInLabel?: string;
   className?: string;
   promiseClassName?: string;
 }) {
@@ -38,7 +41,7 @@ export function StartFreeCta({
     <div className={cn("flex flex-col items-start gap-1.5", className)}>
       <Button asChild>
         <Link href={signedIn ? next : loginHref({ next })}>
-          {signedIn ? "Open app" : label}
+          {signedIn ? signedInLabel : label}
           <ArrowRight aria-hidden="true" />
         </Link>
       </Button>

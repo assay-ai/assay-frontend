@@ -103,6 +103,19 @@ describe("suggestServerName — at most 9 characters", () => {
     expect(suggestServerName({ kind: "url", url: "https://mcp.example.com/@acme/twitter-kit@3" })).toBe("twitter");
   });
 
+  it("keeps the whole slug when it fits without its dashes, never a fragment (review F)", () => {
+    expect(suggestServerName({ kind: "toolset", slug: "tools-i-use" })).toBe("toolsiuse");
+    expect(suggestServerName({ kind: "toolset", slug: "my-tools" })).toBe("my-tools");
+    expect(suggestServerName({ kind: "toolset", slug: "geo-x-lookups" })).toBe("lookups");
+  });
+
+  it("never ends on a one- or two-letter word cut from a longer slug", () => {
+    for (const slug of ["tools-i-use-daily", "geo-x-lookups", "maps-of-the-world"]) {
+      const name = suggestServerName({ kind: "toolset", slug });
+      expect(name, slug).not.toMatch(/-[a-z0-9]{1,2}$/);
+    }
+  });
+
   it("never goes over 9 characters or ends on a dash", () => {
     for (const slug of ["abcdefgh-ijk", "a-very-long-slug-indeed", "x1"]) {
       const name = suggestServerName({ kind: "toolset", slug });
