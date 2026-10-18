@@ -364,7 +364,8 @@ describe("I3: a client cannot name itself verified", () => {
 
   it("a name that is only marks becomes 'Unnamed app'", () => {
     expect(displayClientName("✓ ✔ Verified")).toBe("Unnamed app");
-    expect(displayClientName("Verifiedness Tool")).toBe("Verifiedness Tool");
+    // "verified" goes whatever it is attached to.
+    expect(displayClientName("Verifiedness Tool")).toBe("ness Tool");
   });
 
   it("the suggested name and a replaced connection's name lose the marks too", () => {
@@ -401,5 +402,58 @@ describe("agent checks before approve", () => {
 
   it("an invisible-only name is empty", () => {
     expect(nameProblem("\u200b\u200e \u2028")).toBe("Give this connection a name.");
+  });
+});
+
+describe("fix round 2, R1: Unicode spoofs of a verified name", () => {
+  // The reviewer's table, plus zero-width and bidi cases.
+  const ROWS: [string, string][] = [
+    ["Claude Code Vеrified", "Claude Code"], // Cyrillic е
+    ["Claude Code Ｖｅｒｉｆｉｅｄ", "Claude Code"], // fullwidth
+    ["Claude Code \u{1D415}\u{1D41E}\u{1D42B}\u{1D422}\u{1D41F}\u{1D422}\u{1D41E}\u{1D41D}", "Claude Code"], // mathematical bold
+    ["Claude_Code_Verified", "Claude_Code"],
+    ["Claude Code \u{10102} Verified", "Claude Code"], // Aegean check mark
+    ["Claude Code \u{1FBB1}", "Claude Code"], // symbols for legacy computing check mark
+    ["Claude Code ⍻", "Claude Code"], // not check mark
+    ["Veri​fied Claude Code", "Claude Code"], // zero-width space inside the word
+    ["Claude Code ‮Verified", "Claude Code"], // RTL override before the word
+    ["Claude Code ‮deifirev", "Claude Code deifirev"], // the override is gone, so it reads as written
+    ["ClaudeVerified", "Claude"],
+    ["Claude Code V̲erified", "Claude Code"], // a combining mark inside the word
+    ["Claude Code νεrιfiεd", "Claude Code"], // Greek ν ε ι
+    ["Claude Code VERIFIED2", "Claude Code 2"],
+    ["Claude Code ✓️", "Claude Code"],
+  ];
+
+  it.each(ROWS)("%j shows as %j", (input, shown) => {
+    const out = displayClientName(input);
+    expect(out).toBe(shown);
+    expect(out.normalize("NFKC").toLowerCase()).not.toContain("verified");
+    expect(out).not.toMatch(/[\p{So}\p{Sk}\p{Cf}]/u);
+  });
+
+  it("keeps ordinary names as they are", () => {
+    for (const name of ["Café Tool", "(beta) Tool", "C++ helper", "Claude Code · 2026-10-19", "Verifiable Tool", "日本語ツール"]) {
+      expect(displayClientName(name)).toBe(name);
+    }
+  });
+
+  it("the suggested name gets the same treatment", () => {
+    expect(initialName({ suggestedName: "Claude Code Ｖｅｒｉｆｉｅｄ · 2026-10-19" })).toBe(
+      "Claude Code · 2026-10-19",
+    );
+  });
+
+  it("an unverified spoof never gets the badge, and the amber line shows", () => {
+    for (const [input] of ROWS) {
+      const v = view(
+        request({
+          client: { ...request().client, name: input, verified: false },
+          returnTo: { kind: "WEB", display: "example.com" },
+        }),
+      );
+      expect(v.client.title).not.toContain("✓");
+      expect(v.notVerified).not.toBeNull();
+    }
   });
 });

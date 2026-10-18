@@ -117,8 +117,12 @@ export function ConsentCard({
   }, [view.expired, done, finalText, finish]);
 
   const decide = async (decision: "approve" | "deny", options: { afterLimitsSaved?: boolean } = {}) => {
-    if (locked || inFlight.current || !activation.canAct()) return;
     const prefix = options.afterLimitsSaved ? `${CONSENT_STRINGS.limitsSavedNotApproved} ` : "";
+    if (locked || inFlight.current || !activation.canAct()) {
+      // Never silent after a save: say the limits were saved and the app was not approved.
+      if (prefix && !inFlight.current && !done) setError(`${prefix}${CONSENT_STRINGS.tapAgain}`);
+      return;
+    }
     setError(null);
     setAgentError(null);
     if (decision === "approve") {
@@ -174,6 +178,12 @@ export function ConsentCard({
 
   const precheck = async (): Promise<string | null> => {
     setError(null);
+    // The press that armed the buttons (say, the first tap after the page was
+    // hidden and shown again) never saves anything: it has to be pressed again.
+    if (!activation.canAct()) {
+      setError(CONSENT_STRINGS.tapAgain);
+      return CONSENT_STRINGS.tapAgain;
+    }
     const problem = nameProblem(name);
     if (problem) {
       setNameError(problem);
@@ -228,12 +238,23 @@ export function ConsentCard({
           ) : null}
 
           <div className="flex flex-col gap-1.5">
-            <p
-              className={cn("text-label-sm", view.client.verified ? "text-01" : "text-warning-700")}
-              data-testid="consent-client"
-            >
-              {view.client.title}
-            </p>
+            {/* The pill is its own element on the name's line, whatever the name says. */}
+            <div className="flex flex-wrap items-center gap-2" data-testid="consent-client-line">
+              <p
+                className={cn("text-label-sm", view.client.verified ? "text-01" : "text-warning-700")}
+                data-testid="consent-client"
+              >
+                {view.client.title}
+              </p>
+              {view.client.verified ? null : (
+                <span
+                  data-testid="consent-not-verified-pill"
+                  className="shrink-0 rounded-full border border-warning-20 bg-warning-10 px-2 py-0.5 text-label-13 text-warning-700"
+                >
+                  Not verified
+                </span>
+              )}
+            </div>
             {view.client.kindLabel ? <p className="text-body-xs text-03">{view.client.kindLabel}</p> : null}
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-body-13 text-02">
               {view.client.domain ? (

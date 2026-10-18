@@ -19,6 +19,7 @@ import { TopBar } from "@/components/layout/top-bar";
 import { WalletMenu } from "@/components/layout/wallet-menu";
 import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { routes } from "@/libs/routes";
+import { appNavigate } from "@/features/oauth/strict-pages";
 import { SettleDebtProvider } from "@/features/buyer-debt/settle-debt-sheet";
 import { getUnreadCount } from "@/services";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -52,7 +53,8 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
     retry: 0,
   });
   const alertCount = unread.data?.count ?? 0;
-  const openAlerts = () => router.push("/alerts");
+  // `appNavigate`: leaving a strict page (the consent page) is a full page load.
+  const openAlerts = () => appNavigate(router, "/alerts", { pathname });
 
   const activeNavId = sectionFor(pathname) ?? undefined;
   useDocumentTitle(documentTitleFor(pathname));
@@ -85,7 +87,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
           alertCount={alertCount}
           onAlertsClick={openAlerts}
           alerts={<AlertsMenu count={alertCount} variant="mobile" />}
-          onSearch={() => router.push(routes.calls())}
+          onSearch={() => appNavigate(router, routes.calls(), { pathname })}
           avatar={
             <>
               <TestnetChip compact />

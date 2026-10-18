@@ -23,6 +23,28 @@ export function loadPage(href: string): void {
   window.location.assign(href);
 }
 
+/** The two router methods `appNavigate` uses (Next's `useRouter()`). */
+export interface AppRouter {
+  push: (href: string) => void;
+  replace: (href: string) => void;
+}
+
+/**
+ * The shell's programmatic navigation (sign out, alerts, search, the 401
+ * handler): a full page load when leaving a strict page, else the router's
+ * client-side navigation as before. `pathname` defaults to the current one.
+ */
+export function appNavigate(
+  router: AppRouter,
+  href: string,
+  options: { replace?: boolean; pathname?: string | null; load?: (href: string) => void } = {},
+): void {
+  const from = options.pathname ?? (typeof window === "undefined" ? null : window.location.pathname);
+  if (isStrictPagePath(from)) (options.load ?? loadPage)(href);
+  else if (options.replace) router.replace(href);
+  else router.push(href);
+}
+
 /**
  * On a strict page: every plain left click on a same-origin link loads the
  * target as a new document instead of a client-side navigation. Links that

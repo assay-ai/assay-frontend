@@ -7,6 +7,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, LogOut, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+
+import { appNavigate } from "@/features/oauth/strict-pages";
 import * as React from "react";
 
 import { PauseAllConfirm, usePauseAll } from "@/components/buyer-money/pause-all";
@@ -133,7 +135,8 @@ export function WalletMenu({ className }: { className?: string }) {
       // Best effort: a failed Privy logout must not strand the user signed in
       // locally with a cleared token.
     }
-    router.replace("/login");
+    // From a strict page (the consent page) a full load: sign-in's captcha does not run under its policy.
+    appNavigate(router, "/login", { replace: true });
   }, [logout, queryClient, router]);
 
   return (
