@@ -105,7 +105,7 @@ export function VerifiedMark({
 export function ObservedFailuresLabel({ interactive = false }: { interactive?: boolean }) {
   return (
     <Term k="observed-failures" inline={!interactive}>
-      Observed failures
+      Failure rate
     </Term>
   );
 }
@@ -136,7 +136,7 @@ export function UnavailableTag() {
 export function FailsOftenChip({ className }: { className?: string }) {
   return (
     <span
-      title="At least 1 in 5 of this provider's checked calls failed. Failed calls are not charged, but they cost your agent time."
+      title="At least 1 in 5 of this provider's checked calls failed in the last 30 days, over at least 20 calls. Failed calls are not charged, but they cost your agent time."
       className={cn(
         "inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700",
         className,

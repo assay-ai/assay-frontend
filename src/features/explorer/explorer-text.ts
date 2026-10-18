@@ -1,4 +1,6 @@
 import type { Money } from "@/interfaces";
+import { DAILY_CAP_PERCENT } from "@/features/explorer/provider-economics";
+import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
 import { toDecimal, formatDecimal } from "@/utils/money";
 
 /**
@@ -84,32 +86,117 @@ export function priceSentence(input: {
   return `${price} per call. You pay only if the result passes the check.`;
 }
 
+/** How far back the public failure rate looks: the backend's `PUBLIC_QUALITY_WINDOW_DAYS` (D5). */
+export const FAILURE_RATE_WINDOW_DAYS = 30;
+
+/** A 0..1 rate as a person reads it: "5%", "2.5%", "0.1%". */
+export function percentText(rate: number): string {
+  const pct = rate * 100;
+  return `${Number(pct.toFixed(pct < 1 ? 2 : 1))}%`;
+}
+
 /**
- * Observed failures, from the platform's own measurement, with its window:
- * the public quality figure sums every CLOSED check window of every tool the
- * provider serves (`SlaWindowRepository.qualityByProvider`, no date filter),
- * so it is an all-time figure — not the open window a provider sees on Home.
+ * The failure rate, from the platform's own measurement, with its scope and
+ * window: every call checked for any of the provider's tools in the last 30
+ * days, open check windows included (`SlaWindowRepository.qualityByProvider`).
+ * With `promised` (the listing's `promisedFailureRate`), the promise the
+ * penalties are measured against sits beside it: "11% failed · promised at
+ * most 5% · 95 checked calls to all their tools, last 30 days".
  */
-export function failRateLabel(quality: { measuredCalls: number; failedCalls: number } | null | undefined): string {
+export function failRateLabel(
+  quality: { measuredCalls: number; failedCalls: number } | null | undefined,
+  promised?: number | null,
+): string {
+  const promise = typeof promised === "number" ? ` · promised at most ${percentText(promised)}` : "";
+  if (!quality || quality.measuredCalls <= 0) return `Not measured yet${promise}`;
+  const calls = quality.measuredCalls === 1 ? "checked call" : "checked calls";
+  return `${failRateShort(quality)}${promise} · ${quality.measuredCalls.toLocaleString("en-US")} ${calls} to all their tools, last ${FAILURE_RATE_WINDOW_DAYS} days`;
+}
+
+/** The failure rate alone, for a compact stat: "11% failed" / "Not measured yet". */
+export function failRateShort(quality: { measuredCalls: number; failedCalls: number } | null | undefined): string {
   if (!quality || quality.measuredCalls <= 0) return "Not measured yet";
   const pct = (quality.failedCalls / quality.measuredCalls) * 100;
   const shown = pct === 0 ? "0%" : pct < 0.1 ? "<0.1%" : `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`;
-  return `${shown} failed · ${quality.measuredCalls.toLocaleString("en-US")} ${quality.measuredCalls === 1 ? "call" : "calls"} checked, all time`;
+  return `${shown} failed`;
+}
+
+/**
+ * The one promised rate to show for a provider: set only when every listing
+ * that states one states the same, so a provider-wide figure is never paired
+ * with one tool's promise.
+ */
+export function uniformPromise(values: readonly (number | null | undefined)[]): number | null {
+  const stated = [...new Set(values.filter((v): v is number => typeof v === "number"))];
+  return stated.length === 1 ? stated[0] : null;
 }
 
 /** A failure rate at or above this, over enough calls, earns a warning chip. */
 export const HIGH_FAILURE_RATE = 0.2;
-/** Fewer measured calls than this is too few to call a provider unreliable. */
-export const HIGH_FAILURE_MIN_CALLS = 5;
+/** Fewer checked calls than this is too few to call a provider unreliable (D5). */
+export const HIGH_FAILURE_MIN_CALLS = 20;
 
 /**
  * Whether a provider fails often enough that a buyer should know before
- * routing to it: at least 20% of at least 5 measured calls. Shown, never
+ * routing to it: at least 20% of at least 20 checked calls. Shown, never
  * hidden — a failed call is not charged, but it still costs the agent time.
  */
 export function failsOften(quality: { measuredCalls: number; failedCalls: number } | null | undefined): boolean {
   if (!quality || quality.measuredCalls < HIGH_FAILURE_MIN_CALLS) return false;
   return quality.failedCalls / quality.measuredCalls >= HIGH_FAILURE_RATE;
+}
+
+/**
+ * The penalty rule in one sentence, as `/why-list-here` states it: a provider
+ * loses stake only for failing more often than it promised, judged over a
+ * full window, and never more than the daily cap.
+ */
+export function stakeRuleSentence(): string {
+  return (
+    `A provider that fails more often than it promised, over at least ${MIN_CHECKED_CALLS} checked calls in a window, ` +
+    `loses part of its stake (never more than ${DAILY_CAP_PERCENT}% of it in any 24 hours), and part of that goes to the buyers it served badly.`
+  );
+}
+
+/** One chain's price for a tool (`prices[]` on the catalogue): the quote there, and whose listing sets it. */
+export interface ChainPrice {
+  /** CAIP-2. */
+  chainId: string;
+  price: Money;
+  providerId: string | null;
+}
+
+/**
+ * The chain prices, the one to lead with first: the first on one of the
+ * reader's own chains (signed in), else the chain of the headline quote
+ * (`held`), else the server's order.
+ */
+export function orderChainPrices(
+  prices: readonly ChainPrice[] | null | undefined,
+  preferredChains: readonly string[] | null | undefined,
+  held: Money | null | undefined,
+): ChainPrice[] {
+  const list = [...(prices ?? [])];
+  const lead =
+    list.find((entry) => preferredChains?.includes(entry.chainId)) ??
+    list.find((entry) => held && entry.price.asset === held.asset) ??
+    list[0];
+  return lead ? [lead, ...list.filter((entry) => entry !== lead)] : [];
+}
+
+/** "on Robinhood Chain testnet (E2E Weather Ltd)", or without the name when it is not known or not one provider. */
+export function chainPriceWhere(chainId: string, chainName: (chainId: string) => string, providerName?: string | null): string {
+  return `on ${chainName(chainId)}${providerName ? ` (${providerName})` : ""}`;
+}
+
+/** "$0.10 per call on Robinhood Chain testnet (E2E Weather Ltd)" / "Free on Solana devnet". */
+export function chainPriceText(
+  entry: ChainPrice,
+  chainName: (chainId: string) => string,
+  providerName?: string | null,
+): string {
+  const price = formatCallPrice(entry.price);
+  return `${price}${price === "Free" ? "" : " per call"} ${chainPriceWhere(entry.chainId, chainName, providerName)}`;
 }
 
 /**
@@ -333,11 +420,13 @@ export function routingNotes(
   providers: readonly RoutingProvider[],
   /** Names a chain from its CAIP-2 id; when given, a provider paid on another chain is said as such. */
   chainName?: (chainId: string) => string,
+  /** `chainsListed`: the page already lists the price per chain, so the other-chain note is not repeated. */
+  options: { chainsListed?: boolean } = {},
 ): string[] {
   const notes: string[] = [];
   // A listing in another asset is priced on another chain: compare it to nothing, name its chain.
   const elsewhere = held && chainName ? providers.filter((p) => p.price && p.price.asset !== held.asset) : [];
-  if (held && chainName && elsewhere.length > 0) {
+  if (held && chainName && elsewhere.length > 0 && !options.chainsListed) {
     const chainOf = (asset: string) => chainName(asset.split("/")[0]);
     notes.push(
       `The price above is for ${chainOf(held.asset)}. ${elsewhere
@@ -358,7 +447,7 @@ export function routingNotes(
   if (failing.length > 0) {
     notes.push(
       taking.length === 1
-        ? "Calls go to the provider that is taking calls; this one has failed often recently. Failed results are never charged."
+        ? `Calls go to ${failing[0].name}, the only provider taking calls; it has failed often recently. Failed results are never charged.`
         : `${failing.map((p) => p.name).join(", ")} ${failing.length === 1 ? "has failed often recently and still takes" : "have failed often recently and still take"} calls. Failed results are never charged.`,
     );
   }
