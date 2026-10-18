@@ -16,6 +16,7 @@ import { entryAfterFix, entryAlreadyFixed, isEntryFix, refusedCallView, viaText,
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
+import { routes } from "@/libs/routes";
 import { getRefusedCall, getToolset, listRefusedCalls, replaceToolsetEntries, type RefusedCall, type ToolsetEntry, type ToolsetEntryInput, type UpdateAgentAccessBody } from "@/services/toolsets.service";
 import { toast } from "@/utils/toast";
 
@@ -30,7 +31,7 @@ import { toolsetKeys, useAgentAccess, useToolsets, useUpdateAccess } from "./use
  */
 
 export function refusedCallHref(callId: string): string {
-  return `/spend/calls?status=refused&call=${encodeURIComponent(callId)}`;
+  return routes.calls({ status: "refused", call: callId });
 }
 
 const PAGE = 50;

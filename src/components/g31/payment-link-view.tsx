@@ -41,13 +41,22 @@ export function outcomeOf(
   return { chip: "checking", headline: "Still in progress" };
 }
 
-export function ApprovalLinkView({ approvalId }: { approvalId: string }) {
+/**
+ * Whether a failed read means "no such payment": a 404, or a 400 for an id
+ * that is not even well formed (a mistyped or cut link). Anything else may be
+ * temporary, so the page says to try again.
+ */
+export function paymentNotFound(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 404 || error.status === 400);
+}
+
+export function PaymentLinkView({ callId }: { callId: string }) {
   const { nameOf } = useToolNames();
   const call = useQuery({
-    queryKey: ["tool-call", approvalId],
+    queryKey: ["tool-call", callId],
     retry: false,
-    enabled: approvalId !== "",
-    queryFn: () => getToolCall(approvalId),
+    enabled: callId !== "",
+    queryFn: () => getToolCall(callId),
   });
 
   const shell = (children: React.ReactNode) => (
@@ -60,10 +69,10 @@ export function ApprovalLinkView({ approvalId }: { approvalId: string }) {
     </div>
   );
 
-  if (call.isPending && approvalId !== "") return shell(<PageState kind="loading" rows={2} label="Opening the payment" />);
+  if (call.isPending && callId !== "") return shell(<PageState kind="loading" rows={2} label="Opening the payment" />);
 
-  if (approvalId === "" || call.isError || !call.data) {
-    const notFound = approvalId === "" || (call.error instanceof ApiError && call.error.status === 404);
+  if (callId === "" || call.isError || !call.data) {
+    const notFound = callId === "" || paymentNotFound(call.error);
     return shell(
       <PageState
         kind="empty"
