@@ -471,11 +471,11 @@ function server(over: Partial<ServerInUse> = {}): ServerInUse {
 describe("search mode in the Connect sheet (T2)", () => {
   it("reads 'Your agent can reach 1 of 8 tools (7 can't run: why) through search', never three bare counts", () => {
     expect(previewSummary(preview({ discovery: "SEARCH", listedCount: 4, estimatedTokens: 900, reachableCount: 37 }))).toBe(
-      "Your agent can reach 37 tools (1 can't run: 1 blocked for this agent) through search: 4 tools listed, about 0.9k tokens.",
+      "Your agent can reach 1 of 2 tools (1 can't run: 1 blocked for this agent) through search: 4 tools listed, about 0.9k tokens.",
     );
     const all = preview({ tools: [preview().tools[0]!] });
-    expect(previewSummary({ ...all, discovery: "SEARCH", listedCount: 4, estimatedTokens: 900, reachableCount: 37 })).toBe(
-      "Your agent can reach 37 tools through search: 4 tools listed, about 0.9k tokens.",
+    expect(previewSummary({ ...all, discovery: "SEARCH", listedCount: 4, estimatedTokens: 900, reachableCount: 1 })).toBe(
+      "Your agent can reach 1 tool through search: 4 tools listed, about 0.9k tokens.",
     );
     // The review's case: Everything, 1 of 8 reachable, the rest with no provider taking calls.
     const base = preview().tools[0]!;
@@ -491,19 +491,54 @@ describe("search mode in the Connect sheet (T2)", () => {
     );
   });
 
-  it("names a chain mismatch as the chain, not as the agent's limits (review F-P1)", () => {
+  it("does not count a rule-emptied tool as reachable and again as can't run (review m1)", () => {
+    // The backend's reachableCount includes it (tools/list lists it as "No provider fits").
     const base = preview().tools[0]!;
     const p = preview({
-      tools: [base, { ...base, toolId: "t9", name: "get_weather_om", noProviderFits: true, noFitReason: "OTHER_CHAIN", price: null, providerCount: 0 }],
+      discovery: "SEARCH",
+      listedCount: 4,
+      estimatedTokens: 900,
+      reachableCount: 3,
+      tools: [
+        base,
+        { ...base, toolId: "t3", name: "a", noProviderFits: true, noFitReason: "RULES", price: null },
+        { ...base, toolId: "t4", name: "b", noProviderFits: true, noFitReason: "RULES", price: null },
+      ],
+    });
+    expect(previewSummary(p)).toBe(
+      "Your agent can reach 1 of 3 tools (2 can't run: 2 with no provider that fits its limits) through search: 4 tools listed, about 0.9k tokens.",
+    );
+  });
+
+  it("names a paid tool on another chain as the chain, not as the agent's limits (review F-P1, M1)", () => {
+    const base = preview().tools[0]!;
+    const p = preview({
+      tools: [base, { ...base, toolId: "t9", name: "get_weather_om", noFitReason: "OTHER_CHAIN", providerCount: 1 }],
       listedCount: 2,
-      warnings: [{ code: "NO_PROVIDER_FITS", tools: [{ toolId: "t9", name: "get_weather_om" }] }],
     });
     expect(previewSummary(p)).toBe("2 tools here: 1 ready to use, 1 whose providers don't take payment on your chain (~2.8k tokens).");
-    expect(previewWarnings(p).map((w) => w.text)).toEqual([
-      "The providers left for get_weather_om don't take payment on your chain, so it can't run for this agent.",
+    expect(previewWarnings(p)).toEqual([
+      {
+        code: "OTHER_CHAIN",
+        tone: "warning",
+        text: "The providers of get_weather_om don't take payment on your chain, so paid calls from this agent are refused.",
+      },
     ]);
     expect(cantRunTools(p)).toEqual([
       { toolId: "t9", name: "get_weather_om", reason: "OTHER_CHAIN", text: "its providers don't take payment on your chain" },
+    ]);
+  });
+
+  it("keeps a freemium tool on another chain usable for free calls, and says so", () => {
+    const base = preview().tools[0]!;
+    const p = preview({
+      tools: [base, { ...base, toolId: "t9", name: "fx", pricingMode: "FREEMIUM", noFitReason: "OTHER_CHAIN" }],
+      listedCount: 2,
+    });
+    expect(previewCounts(p).usable).toBe(2);
+    expect(previewWarnings(p)).toEqual([]);
+    expect(cantRunTools(p)).toEqual([
+      { toolId: "t9", name: "fx", reason: "free-only", text: "free calls only: its providers don't take payment on your chain" },
     ]);
   });
 });

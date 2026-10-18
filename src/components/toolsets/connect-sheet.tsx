@@ -32,7 +32,7 @@ import { allowToolsBody, restoreBody } from "@/features/toolsets/access-result";
 import { defaultEntry } from "@/features/toolsets/entry-rules";
 import { ALWAYS_LATEST_LABEL, DISCOVERY_DETAILS, DISCOVERY_LABELS, DRAFT_NOTICE, HOW_AGENT_SEES_LABEL, lockLabel } from "@/features/toolsets/labels";
 import { badgeLabel } from "@/features/toolsets/public";
-import { cantRunTools, copyBlocked, offersFreeOnly, overBudgetWith, previewSummary, previewWarnings, type PreviewWarning } from "@/features/toolsets/preview";
+import { cantRunReason, cantRunTools, copyBlocked, offersFreeOnly, overBudgetWith, previewSummary, previewWarnings, type PreviewWarning } from "@/features/toolsets/preview";
 import { createCredential } from "@/services/account.service";
 import type { PublicToolsetCard } from "@/services/public-toolsets.service";
 import { createToolset, recordConnectUrl, type McpUrlPreview } from "@/services/toolsets.service";
@@ -866,7 +866,7 @@ export function ResultLine({
           <p className="mt-1 text-body-xs text-03">Tokens: what this tool list costs your agent&apos;s model on each request, estimated.</p>
           <ul className="mt-2 flex flex-col divide-y divide-01">
             {preview.tools
-              .filter((t) => t.listed && !t.noProviderFits)
+              .filter((t) => t.listed && cantRunReason(t) === null)
               .map((tool) => (
                 <li key={tool.toolId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-1.5">
                   <span className="break-all font-mono text-mono-12 text-01">{tool.name}</span>

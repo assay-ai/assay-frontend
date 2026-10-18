@@ -404,14 +404,15 @@ export interface PreviewTool {
   providerCount: number;
   noProviderFits: boolean;
   /**
-   * Why no provider fits, when none does: the rules removed every provider,
-   * the providers left settle only on a chain this buyer cannot pay on, or
-   * they are not taking calls. `null` when a provider fits.
+   * Why this agent cannot run it here: the rules removed every provider
+   * (`RULES`), or it has a paid price but no provider settles on the agent's
+   * own chain (`OTHER_CHAIN`; a FREEMIUM tool still serves its free calls).
+   * `null` when it can run.
    */
   noFitReason?: NoFitReason | null;
 }
 
-export type NoFitReason = "RULES" | "OTHER_CHAIN" | "NOT_TAKING_CALLS";
+export type NoFitReason = "RULES" | "OTHER_CHAIN";
 
 /** A tool a preview warning is about; `toolId` is null for an ignored `?tools=` name. */
 export interface PreviewWarningTool {
