@@ -129,6 +129,21 @@ describe("demo contract versions (T3)", () => {
     expect(call(fixtures, "GET", `${WEATHER}/publish-check`).publishable).toBe(true);
   });
 
+  it("asks for API key headers when the mode needs them and none are stored", async () => {
+    stub();
+    const fixtures = await load();
+    call(fixtures, "PATCH", WEATHER, { authMode: "API_KEY" });
+    const check = call(fixtures, "GET", `${WEATHER}/publish-check`) as {
+      publishable: boolean;
+      requirements: { requirement: string; met: boolean; code: string | null }[];
+    };
+    expect(check.publishable).toBe(false);
+    expect(check.requirements.find((r) => r.requirement === "API_KEY_CREDENTIALS")).toMatchObject({
+      met: false,
+      code: "credentials_missing_for_origin",
+    });
+  });
+
   it("asks for a test of v2 once it is added, and passes after one", async () => {
     stub();
     const fixtures = await load();

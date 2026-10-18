@@ -1796,11 +1796,23 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
               detail: `Contract v${major}: Run a passing test first.`,
             })),
           ];
+      // API key / Both with no stored headers: the publish gate asks for them.
+      const mode = demoAuthModes.get(binding.id);
+      const needsKey = (mode === "API_KEY" || mode === "BOTH") && (demoCredentialSets.get(binding.id)?.size ?? 0) === 0;
+      const credentials = needsKey
+        ? [{
+            requirement: "API_KEY_CREDENTIALS",
+            met: false,
+            code: "credentials_missing_for_origin",
+            detail: "No API key headers are stored for this address.",
+          }]
+        : [];
       return {
-        publishable: untested.length === 0,
+        publishable: untested.length === 0 && !needsKey,
         mappingVersion: binding.version,
         requirements: [
           ...tester,
+          ...credentials,
           {
             requirement: "STAKE_AT_MINIMUM_ON_EVERY_CHAIN",
             met: true,

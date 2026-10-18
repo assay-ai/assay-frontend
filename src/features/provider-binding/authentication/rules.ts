@@ -1,14 +1,27 @@
 import type { CredentialHeaderInput } from "@/interfaces/provider-bindings";
 
-// Mirrored from the backend (plan A Global Constraints). Keep in sync.
-const CREDENTIAL_QUERY_KEYS = new Set([
-  "key", "api_key", "apikey", "token", "access_token", "auth_token",
-  "secret", "client_secret", "password", "auth", "signature", "sig",
+// Mirrored from the backend credential rules (credential-rules.ts). Keep in sync.
+/** A name is flagged when a token (split on - and _) equals or ends with one of these. */
+const SECRET_WORDS = [
+  "key", "token", "secret", "password", "passwd", "auth", "authorization",
+  "credential", "signature", "session", "cookie",
+];
+/** Short words that count only as a whole token (`sig`, not `config`). */
+const SECRET_WHOLE_TOKENS = new Set(["sig"]);
+/** Names that contain a secret word and are not secrets (`_` compared as `-`). */
+const SECRET_NAME_ALLOW_LIST = new Set([
+  "idempotency-key", "x-sort-key", "sort-key", "cache-key", "max-tokens", "keyword", "keywords",
 ]);
-const SECRET_CONSTANT_HEADERS = new Set([
-  "authorization", "proxy-authorization", "cookie", "x-api-key",
-  "api-key", "x-auth-token", "x-access-token",
-]);
+
+/** Whether a constant header name or query key looks like it carries a secret. */
+export function looksLikeSecretName(name: string): boolean {
+  const normalised = name.trim().toLowerCase().replace(/_/g, "-");
+  if (SECRET_NAME_ALLOW_LIST.has(normalised)) return false;
+  return normalised
+    .split("-")
+    .filter((token) => token.length > 0)
+    .some((token) => SECRET_WHOLE_TOKENS.has(token) || SECRET_WORDS.some((word) => token.endsWith(word)));
+}
 const RESERVED_HEADERS = new Set([
   "host", "content-length", "content-type", "transfer-encoding", "connection",
   "upgrade", "te", "trailer", "signature", "signature-input", "content-digest",
@@ -26,11 +39,11 @@ export const SECRET_HEADER_ERROR =
   "This looks like a secret. Mappings are stored in plain text — add it under Authentication → API key instead.";
 
 export function isCredentialQueryKey(key: string): boolean {
-  return CREDENTIAL_QUERY_KEYS.has(key.trim().toLowerCase().replace(/-/g, "_"));
+  return looksLikeSecretName(key);
 }
 
 export function isSecretConstantHeader(name: string): boolean {
-  return SECRET_CONSTANT_HEADERS.has(name.trim().toLowerCase());
+  return looksLikeSecretName(name);
 }
 
 export function credentialQueryKeys(endpoint: string): string[] {
@@ -54,6 +67,7 @@ function headerProblem(header: CredentialHeaderInput): string | null {
   if (!TOKEN.test(name)) return "Header name has characters that are not allowed (no spaces or colons).";
   const lower = name.toLowerCase();
   if (RESERVED_HEADERS.has(lower) || lower.startsWith("x-assay-")) return `${name} is set by Assay and cannot be overridden.`;
+  if (header.value === "") return "Header value is required.";
   if (/[\r\n]/.test(header.value)) return "Header value cannot contain line breaks.";
   if (!PRINTABLE_ASCII.test(header.value)) return "Use plain ASCII characters only.";
   if (new TextEncoder().encode(header.value).length > MAX_VALUE_BYTES) return `Header value is longer than ${MAX_VALUE_BYTES} bytes.`;
