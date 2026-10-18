@@ -155,11 +155,13 @@ export function isAlertResolved(note: AlertNote, ctx: ResolvedContext): boolean 
 
 /**
  * Alerts about a risk that is still open until the person acts: a balance at
- * or near zero, a key expiring or expired, a withdrawal pending. Opening "See
- * all alerts" does not mark these read; they leave Needs attention only by
- * Dismiss, or when the condition clears.
+ * or near zero, a key expiring or expired, a withdrawal pending, a paused
+ * agent. Opening "See all alerts" does not mark these read while they may
+ * still be open; they leave Needs attention by Dismiss, by "Mark read" in See
+ * all, or once the condition has cleared.
  */
 export const OPEN_RISK_EVENTS: ReadonlySet<string> = new Set([
+  "agent.paused",
   "balance.zero",
   "balance.low",
   "session.expiring",
@@ -172,12 +174,19 @@ export const MARK_READ_ATTEMPTS = 2;
 
 /**
  * What opening "See all alerts" marks read: the unread copies shown, except
- * open risks, and only ids not yet tried `MARK_READ_ATTEMPTS` times — so a
- * re-render never sends the same request again, and a failure is retried once.
+ * an open risk that may still be open — one whose condition has cleared (the
+ * same `isAlertResolved` rule as Needs attention; unsure means not cleared) is
+ * marked too, or it would stay unread with nowhere to dismiss it. Only ids not
+ * yet tried `MARK_READ_ATTEMPTS` times — so a re-render never sends the same
+ * request again, and a failure is retried once.
  */
-export function idsToMarkOnOpen(groups: readonly AlertGroup<AlertNote>[], attempts: ReadonlyMap<string, number>): string[] {
+export function idsToMarkOnOpen(
+  groups: readonly AlertGroup<AlertNote>[],
+  attempts: ReadonlyMap<string, number>,
+  ctx: ResolvedContext,
+): string[] {
   return groups
-    .filter((group) => group.unread && !OPEN_RISK_EVENTS.has(group.note.event))
+    .filter((group) => group.unread && (!OPEN_RISK_EVENTS.has(group.note.event) || isAlertResolved(group.note, ctx)))
     .flatMap((group) => group.ids)
     .filter((id) => (attempts.get(id) ?? 0) < MARK_READ_ATTEMPTS);
 }
@@ -204,8 +213,14 @@ export function attentionRows<T extends AlertNote>(
   );
   const shown = groups.slice(0, ctx.shown);
   const more = !ctx.complete || groups.length > ctx.shown;
-  const total = ctx.complete ? groups.length : Math.max(groups.length, ctx.shown);
-  const countLabel = more && !ctx.complete ? `${total}+ items` : total === 1 ? "1 item" : `${total} items`;
+  // Not read to its end: say at least what was found, never more than is drawn.
+  const countLabel = !ctx.complete
+    ? groups.length > 0
+      ? `${groups.length}+ items`
+      : "More to see"
+    : groups.length === 1
+      ? "1 item"
+      : `${groups.length} items`;
   return { shown, countLabel, more };
 }
 

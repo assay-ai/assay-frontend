@@ -139,7 +139,13 @@ describe("attentionRows (Needs attention)", () => {
     const rows = attentionRows(notes, { now, balances: [], dismissed: new Set(), complete: false, shown: 5 });
     expect(rows.shown).toEqual([]);
     expect(rows.more).toBe(true);
-    expect(rows.countLabel).toBe("5+ items");
+    expect(rows.countLabel).toBe("More to see");
+  });
+  it("counts no more than it found while the list was not read to its end", () => {
+    const opens = Array.from({ length: 3 }, (_, i) => note({ id: `o${i}`, subjectId: `ag${i}` }));
+    const rows = attentionRows(opens, { now, balances: [], dismissed: new Set(), complete: false, shown: 5 });
+    expect(rows.shown).toHaveLength(3);
+    expect(rows.countLabel).toBe("3+ items");
   });
   it("leaves out dismissed and read copies, and brings back a copy whose dismiss failed", () => {
     const a = note({ id: "a", subjectId: "ag1" });
@@ -153,23 +159,31 @@ describe("attentionRows (Needs attention)", () => {
 });
 
 describe("idsToMarkOnOpen (See all alerts)", () => {
+  const now = Date.parse("2026-10-19T09:00:00Z");
+  const zero = note({ id: "z", event: "balance.zero", title: "Balance reached zero", payload: { asset: ASSET, threshold: "5000000" } });
   const groups = groupAlerts([
     note({ id: "v", subjectId: "ag1" }),
-    note({ id: "z", event: "balance.zero", title: "Balance reached zero" }),
+    zero,
     note({ id: "k", event: "session.expired", title: "Agent credential expired" }),
     note({ id: "w", event: "withdrawal.initiated", title: "Withdrawal requested" }),
+    note({ id: "p", event: "agent.paused", title: "Agent paused" }),
     note({ id: "r", event: "deposit.credited", title: "Deposit credited", readAt: "2026-10-14T00:00:00Z" }),
   ]);
-  it("marks unread alerts, never an open risk", () => {
-    expect(idsToMarkOnOpen(groups, new Map())).toEqual(["v"]);
+  const unknown = { now, balances: null };
+  it("marks unread alerts, never an open risk that may still be open (a paused agent included)", () => {
+    expect(idsToMarkOnOpen(groups, new Map(), unknown)).toEqual(["v"]);
+    expect(idsToMarkOnOpen(groups, new Map(), { now, balances: [{ asset: ASSET, available: usd("1000000") }] })).toEqual(["v"]);
+  });
+  it("also marks an open risk whose condition has cleared, so it cannot stay unread for good", () => {
+    expect(idsToMarkOnOpen(groups, new Map(), { now, balances: [{ asset: ASSET, available: usd("13240000") }] })).toEqual(["v", "z"]);
   });
   it("asks once per id, and retries a failure only once", () => {
     const attempts = new Map<string, number>();
-    for (const id of idsToMarkOnOpen(groups, attempts)) attempts.set(id, (attempts.get(id) ?? 0) + 1);
+    for (const id of idsToMarkOnOpen(groups, attempts, unknown)) attempts.set(id, (attempts.get(id) ?? 0) + 1);
     // A re-render before the list refreshes: the id is still unread, tried once, so one retry.
-    expect(idsToMarkOnOpen(groups, attempts)).toEqual(["v"]);
+    expect(idsToMarkOnOpen(groups, attempts, unknown)).toEqual(["v"]);
     attempts.set("v", MARK_READ_ATTEMPTS);
-    expect(idsToMarkOnOpen(groups, attempts)).toEqual([]);
+    expect(idsToMarkOnOpen(groups, attempts, unknown)).toEqual([]);
   });
 });
 

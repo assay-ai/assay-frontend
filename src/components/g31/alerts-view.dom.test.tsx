@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-import { AlertsView } from "./alerts-view";
+import { AlertRowActions, AlertsView } from "./alerts-view";
 
 function render(): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -30,5 +30,19 @@ describe("Where alerts go (D2)", () => {
     expect(out).toContain("Email alerts are not available yet.");
     expect(out).toContain("the bell on every page and Needs attention on Overview");
     expect(out).not.toContain("More channels are coming");
+  });
+});
+
+describe("See all alerts: Mark read on a row (R1-M1)", () => {
+  const html = (unread: boolean, action: { label: string; href: string } | null = null) =>
+    renderToStaticMarkup(<AlertRowActions action={action} unread={unread} marking={false} onMarkRead={() => undefined} />);
+
+  it("offers Mark read on an unread row, an open risk with no action included", () => {
+    expect(html(true)).toContain('data-testid="alert-mark-read"');
+    expect(html(true, { label: "Top up", href: "/funding?action=deposit" })).toContain("Top up");
+  });
+  it("offers no Mark read once the row is read", () => {
+    expect(html(false, { label: "Top up", href: "/funding?action=deposit" })).not.toContain("alert-mark-read");
+    expect(html(false)).toBe("");
   });
 });
