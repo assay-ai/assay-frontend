@@ -131,7 +131,7 @@ describe("inboxView: stored rows read from event + payload", () => {
       names,
     );
     expect(view.body).toBe(
-      'The buyer says: "Other". Reply by tomorrow 10:00 UTC. If you don\'t, the buyer wins: it can be upheld automatically from Oct 21, 10:00 UTC.',
+      'The buyer says: "Other". Reply by tomorrow 10:00 UTC. If you stay silent, it can be upheld automatically from Oct 21, 10:00 UTC.',
     );
     expect(view.body).not.toMatch(/may reply/i);
   });
@@ -232,6 +232,11 @@ describe("inboxView: stored rows read from event + payload", () => {
     expect(view.body).toBe("Estimated penalty $28.47 before today 19:14 UTC, an agent.");
     expectReadable(view.title);
     expectReadable(view.body);
+  });
+
+  it("never treats text as a full-scale figure at zero decimals", () => {
+    const view = inboxView(row({ event: "provider.something_new", title: "Version 1.a and 2.", body: "x", payload: { decimals: 0 } }), names);
+    expect(view.title).toBe("Version 1.a and 2.");
   });
 
   it("reads a full-scale figure at the payload's own decimals", () => {
