@@ -3,15 +3,18 @@
 import * as React from "react";
 
 import { PageState } from "@/components/patterns/page-state";
-import { NeedsActionStrip } from "@/features/provider-home/needs-action-strip";
+import { useProviderToolNames } from "@/features/provider-binding/tool-name";
+import { cancelledRunTitle, collapseNotices, inboxHeadline } from "@/features/provider-home/inbox";
+import { NeedsActionStrip, WatchList } from "@/features/provider-home/needs-action-strip";
+import { useProviderBindings } from "@/features/provider-home/use-listing-progress";
 import { useProviderNeedsAction } from "@/features/provider-home/use-needs-action";
-import { inboxHeadline } from "@/features/provider-home/inbox";
 import { useProviderInbox } from "@/features/provider-home/use-provider-inbox";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
+import { stakeStatus } from "@/features/provider-stake/stake-status";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
-import { formatMoney } from "@/utils/money";
 
-import { InboxItem } from "./_components/inbox-item";
+import { InboxItem, inboxView } from "./_components/inbox-item";
+import type { NoticeContext } from "./_components/notice-view";
 
 /**
  * Inbox — what needs a decision, then what Assay told you about your tools.
@@ -31,10 +34,28 @@ export default function ProviderInboxPage() {
 
   // The same "Needs action" list as Home: penalties, windows near the promise,
   // a short stake, a suspended tool.
-  const { attention: urgent } = useProviderNeedsAction();
+  const { attention: urgent, watch } = useProviderNeedsAction();
   const [stakeOpen, setStakeOpen] = React.useState(false);
   const stake = useStakeStatus();
   const loading = notifications.isPending || penalties.isLoading;
+
+  // Notices in the provider's words (from event + payload), tools by name, and
+  // repeats folded: the daily stake warning, a window's warnings, a run of
+  // penalties cancelled for one reason.
+  const names = useProviderToolNames();
+  const bindings = useProviderBindings();
+  const ctx: NoticeContext = React.useMemo(() => {
+    const byId = new Map((bindings.data?.items ?? []).map((binding) => [binding.id, binding.toolId]));
+    return { toolName: (bindingId) => (bindingId ? names.toolName(byId.get(bindingId)) : null) };
+  }, [bindings.data, names]);
+  const shown = collapseNotices(
+    items.map((item) => ({ ...item, view: inboxView(item, ctx) })),
+    (item) => item.view.groupKey,
+  ).map((entry) =>
+    entry.item.event === "provider.slash_decided" && entry.repeats > 0 && entry.item.view.groupKey?.startsWith("slash-cancelled:")
+      ? { ...entry, item: { ...entry.item, view: { ...entry.item.view, title: cancelledRunTitle(entry.repeats + 1) } } }
+      : entry,
+  );
 
   return (
     <>
@@ -48,7 +69,7 @@ export default function ProviderInboxPage() {
       {urgent.length > 0 ? <NeedsActionStrip items={urgent} onOpenStake={() => setStakeOpen(true)} /> : null}
 
       <section className="flex w-full flex-col gap-3" aria-labelledby="inbox-notices">
-        {items.length > 0 ? (
+        {items.length > 0 || watch.length > 0 ? (
           <h2 id="inbox-notices" className="text-label-md text-01">
             Notices
           </h2>
@@ -57,13 +78,16 @@ export default function ProviderInboxPage() {
             Notices
           </h2>
         )}
+        <WatchList items={watch} />
         {notifications.isPending ? (
           <PageState kind="loading" rows={3} label="Loading your inbox" />
         ) : notifications.isError ? (
           <PageState kind="error" description="Your inbox could not be loaded." onRetry={() => void notifications.refetch()} />
-        ) : items.length > 0 ? (
-          items.map((item) => <InboxItem key={item.id} item={item} />)
-        ) : urgent.length === 0 ? (
+        ) : shown.length > 0 ? (
+          shown.map(({ item, repeats, since, unread }) => (
+            <InboxItem key={item.id} item={item} view={item.view} repeats={item.event === "provider.slash_decided" ? 0 : repeats} since={since ?? undefined} unread={unread} />
+          ))
+        ) : urgent.length === 0 && watch.length === 0 ? (
           <PageState
             kind="empty"
             title="Nothing is waiting on you"
@@ -76,11 +100,7 @@ export default function ProviderInboxPage() {
         open={stakeOpen}
         onOpenChange={setStakeOpen}
         amount={stake.shortfall}
-        reason={
-          stake.required
-            ? `Your paid tools need ${formatMoney(stake.required, { decimals: 2 })} of stake in total.`
-            : "Stake backs the failure rate you promise on paid tools."
-        }
+        reason={stake.required ? stakeStatus(stake).sentence : "Stake backs the failure rate you promise on paid tools."}
         onStaked={() => void stake.refetch()}
       />
     </>

@@ -55,43 +55,108 @@ export function isProviderEvent(event: string | null | undefined, payload?: unkn
 
 /**
  * What the nav badge counts, and what the page heading states: the penalties
- * that need a decision plus unread provider notices. A notice about a penalty
- * already counted (its subject is one of that penalty's ids — the on-chain
- * request id or Assay's case id) is not counted twice.
+ * that need a decision, the bad-result reports waiting for a reply, plus
+ * unread provider notices. A notice about something already counted (its
+ * subject is one of that item's ids — a penalty's on-chain request id or
+ * Assay's case id, a report's id) is not counted twice, and notices folded
+ * together on the page (`collapseNotices`) count once.
  */
 export interface InboxBreakdown {
   /** Penalties that can still be disputed. */
   penalties: number;
-  /** Unread provider notices not about one of those penalties. */
+  /** Bad-result reports the provider can still reply to. */
+  reports: number;
+  /** Unread provider notices not about one of those. */
   notices: number;
 }
 
 export function inboxBreakdown(input: {
   urgent: readonly (readonly string[])[];
-  notifications: readonly { event: string; readAt?: string | null; subjectId?: string | null; payload?: unknown }[];
+  /** Open reports' ids. */
+  reports?: readonly string[];
+  notifications: readonly { event: string; readAt?: string | null; subjectId?: string | null; payload?: unknown; createdAt?: string }[];
+  /** The page's fold key (`collapseNotices`); unread notices with one key count once. */
+  groupKey?: (item: { event: string; subjectId?: string | null; payload?: unknown }) => string | null;
 }): InboxBreakdown {
-  const urgentIds = new Set(input.urgent.flat().map((id) => id.toLowerCase()));
+  const reports = input.reports ?? [];
+  const counted = new Set([...input.urgent.flat(), ...reports].map((id) => id.toLowerCase()));
   const unread = input.notifications.filter(
-    (item) => isProviderEvent(item.event, item.payload) && !item.readAt && !(item.subjectId && urgentIds.has(item.subjectId.toLowerCase())),
+    (item) => isProviderEvent(item.event, item.payload) && !item.readAt && !(item.subjectId && counted.has(item.subjectId.toLowerCase())),
   );
-  return { penalties: input.urgent.length, notices: unread.length };
+  const keys = new Set<string>();
+  let notices = 0;
+  for (const item of unread) {
+    const key = input.groupKey?.(item) ?? null;
+    if (key !== null) {
+      if (keys.has(key)) continue;
+      keys.add(key);
+    }
+    notices += 1;
+  }
+  return { penalties: input.urgent.length, reports: reports.length, notices };
 }
 
 export function inboxCount(input: Parameters<typeof inboxBreakdown>[0]): number {
-  const { penalties, notices } = inboxBreakdown(input);
-  return penalties + notices;
+  const { penalties, reports, notices } = inboxBreakdown(input);
+  return penalties + reports + notices;
 }
 
 /**
  * The Inbox heading: the badge's number broken into what it counts, so it can
  * be matched against the page ("2 new: 1 penalty to decide on, 1 unread notice").
  */
-export function inboxHeadline({ penalties, notices }: InboxBreakdown): string {
-  const total = penalties + notices;
+export function inboxHeadline({ penalties, reports = 0, notices }: Omit<InboxBreakdown, "reports"> & { reports?: number }): string {
+  const total = penalties + reports + notices;
   if (total === 0) return "Nothing new. Penalties to decide on and notices about your tools land here.";
   const parts = [
     penalties ? `${penalties} ${penalties === 1 ? "penalty" : "penalties"} to decide on` : null,
+    reports ? `${reports} ${reports === 1 ? "report" : "reports"} to reply to` : null,
     notices ? `${notices} unread ${notices === 1 ? "notice" : "notices"} (marked with a dot)` : null,
   ].filter(Boolean);
   return `${total} new: ${parts.join(", ")}.`;
+}
+
+/**
+ * Notices that say the same thing again, shown once (newest first in, newest
+ * kept): the daily stake warning, a window's repeated warnings, a run of
+ * penalties cancelled for one reason. `key` returns null for a notice that
+ * must stand alone. The kept notice counts as unread if any folded one is.
+ */
+export interface CollapsedNotice<T> {
+  item: T;
+  /** Older notices folded into this one. */
+  repeats: number;
+  /** The oldest folded notice's time; null when nothing was folded. */
+  since: string | null;
+  unread: boolean;
+}
+
+export function collapseNotices<T extends { createdAt: string; readAt?: string | null }>(
+  items: readonly T[],
+  key: (item: T) => string | null,
+): CollapsedNotice<T>[] {
+  const out: CollapsedNotice<T>[] = [];
+  const byKey = new Map<string, CollapsedNotice<T>>();
+  for (const item of items) {
+    const k = key(item);
+    const seen = k === null ? undefined : byKey.get(k);
+    if (seen) {
+      seen.repeats += 1;
+      if (!seen.since || item.createdAt < seen.since) seen.since = item.createdAt;
+      seen.unread = seen.unread || !item.readAt;
+      continue;
+    }
+    const entry: CollapsedNotice<T> = { item, repeats: 0, since: null, unread: !item.readAt };
+    out.push(entry);
+    if (k !== null) byKey.set(k, entry);
+  }
+  return out;
+}
+
+/**
+ * The title of a folded run of cancellations: "6 proposed penalties were
+ * cancelled: nothing was taken" — the reason is the notice's body.
+ */
+export function cancelledRunTitle(count: number): string {
+  return count === 1 ? "A proposed penalty was cancelled: nothing was taken" : `${count} proposed penalties were cancelled: nothing was taken`;
 }

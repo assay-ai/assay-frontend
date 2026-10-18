@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { SlaWindow } from "@/interfaces";
 
 import { callPrice } from "./format";
-import { needsActionItems, percent } from "./needs-action";
+import { needsActionItems, percent, slaWatchItems } from "./needs-action";
 
 const usd = (amount: string) => ({ amount, asset: "usdg", decimals: 6 });
 
@@ -21,8 +21,8 @@ function window(partial: Partial<SlaWindow>): SlaWindow {
     closedAt: null,
     declaredFailureRate: 0.02,
     minVerifiedCalls: 400,
-    totalCalls: 100,
-    verifiedCalls: 100,
+    totalCalls: 420,
+    verifiedCalls: 420,
     failedCalls: 1,
     observedFailureRate: 0.016,
     totalCallAmount: "0",
@@ -79,6 +79,47 @@ describe("needsActionItems", () => {
     expect(items[0]!.title).toBe("Penalty on Market quote: $12.50");
     expect(items[1]!.title).toBe("Your stake is $25.00 short");
     expect(items[2]!.tone).toBe("danger");
+  });
+
+  it("D20: no action under the minimum sample; a warning with the Quality sentence instead", () => {
+    // The reviewed case: 13 of 400 calls, 7.7% failed against a 5% promise.
+    const short = window({ verifiedCalls: 13, totalCalls: 13, failedCalls: 1, observedFailureRate: 0.077, declaredFailureRate: 0.05 });
+    expect(needsActionItems({ ...base, openWindows: [short] })).toEqual([]);
+    const [watch] = slaWatchItems({ ...base, openWindows: [short] });
+    expect(watch!.title).toBe("Market quote: 7.7% of calls failed in this check window (last 1 h), over your 5% promise");
+    expect(watch!.detail).toBe(
+      "Above your promise, but too few calls to judge. No penalty is possible until the window has enough calls. Not enough calls yet (13 of 400).",
+    );
+    expect(watch!.href).toBe("/provider/bindings/view/quality?binding=b1");
+  });
+
+  it("D20: from the minimum sample on, the window is an action and not a warning", () => {
+    const full = window({ verifiedCalls: 400, observedFailureRate: 0.03 });
+    expect(needsActionItems({ ...base, openWindows: [full] }).map((item) => item.kind)).toEqual(["sla"]);
+    expect(slaWatchItems({ ...base, openWindows: [full] })).toEqual([]);
+  });
+
+  it("puts an open bad-result report under Needs action with its reply deadline", () => {
+    const report = {
+      id: "d1",
+      bindingId: "b1",
+      canRespond: true,
+      replyDueAt: "2026-10-17T10:00:00Z",
+      autoUpholdAt: "2026-10-19T10:00:00Z",
+      reasonLabel: "Other",
+    };
+    const [item] = needsActionItems({ ...base, reports: [report] });
+    expect(item!.kind).toBe("report");
+    expect(item!.title).toBe("A buyer reported a bad result on Market quote: reply needed");
+    expect(item!.deadline).toBe("2026-10-17T10:00:00Z");
+    expect(item!.detail).toBe(
+      "Reply before the deadline. With no reply, the report can be upheld automatically; otherwise an operator decides.",
+    );
+    expect(item!.detail).not.toMatch(/buyer wins|is upheld automatically/i);
+    expect(item!.action).toEqual({ label: "Reply", href: "/provider/call-disputes/view?id=d1" });
+    // Replied, or past the reply window: nothing left to do.
+    expect(needsActionItems({ ...base, reports: [{ ...report, canRespond: false }] })).toEqual([]);
+    expect(needsActionItems({ ...base, reports: [{ ...report, replyDueAt: "2026-10-16T10:00:00Z" }] })).toEqual([]);
   });
 
   it("formats percentages", () => {
