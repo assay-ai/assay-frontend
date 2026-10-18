@@ -110,7 +110,7 @@ describe("the tool set row: Must return and Contract version", () => {
         </ul>,
       ),
     );
-    expect(out).toContain("Providers: Any (Assay picks) · Must return: uv_index · v1 only");
+    expect(out).toContain("Providers: Any (Assay picks) · Must return: uv_index · tool v1 only");
     expect(out).toMatch(/Uses v1, which stops working on \w{3} \d{1,2}, \d{4} \(UTC\)\./);
     expect(out).toContain("Allow v2");
   });

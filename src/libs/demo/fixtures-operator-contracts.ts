@@ -259,10 +259,11 @@ export function operatorContractFixtures(h: OperatorDemoHelpers): DemoFixture[] 
     {
       method: "GET",
       match: "/operator/tool-requests",
-      body: () => {
+      body: (_path, query) => {
+        const wanted = typeof query.status === "string" && query.status ? query.status.split(",") : ["OPEN"];
         const rows = requestRows(Date.now())
           .map(requestNow)
-          .filter((row) => row.status === "OPEN")
+          .filter((row) => wanted.includes(row.status))
           .map(({ description: _d, upstreamUrl: _u, firstRespondedAt: _f, resolutionNote: _n, closedAt: _c, toolId: _t, ...row }) => row);
         return { items: rows, pageInfo: { nextCursor: null, hasMore: false } };
       },

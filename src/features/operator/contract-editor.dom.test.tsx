@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { OperatorApproval, OperatorIdentity } from "@/interfaces/operator";
-import { demoOperatorTool, GEOCODE_TOOL_ID, TIDES_TOOL_ID, WEATHER_TOOL_ID } from "@/libs/demo/fixtures-contracts";
+import { demoOperatorTool, FX_TOOL_ID, GEOCODE_TOOL_ID, TIDES_TOOL_ID, WEATHER_TOOL_ID } from "@/libs/demo/fixtures-contracts";
 
 import { ContractEditorScreen } from "./contract-editor-view";
 import { OperatorSessionContext } from "./session-context";
@@ -59,17 +59,23 @@ describe("the contract editor", () => {
     expect(html).toContain("Agents get v2.0.0 by default");
     expect(html).toContain("Default for agents");
     expect(html).toMatch(/Deprecated .*Stops on .* \(UTC\)/);
-    expect(html).toContain("v2 is the version agents get by default. Make another version the default first.");
+    expect(html).toContain("v2 is the version agents get by default, so it can't be deprecated. Publish a newer version and make it the default first.");
   });
 
   it("suggests moving the default when a newer major is ready", () => {
     const html = text(render(GEOCODE_TOOL_ID));
     expect(html).toContain("v2.0.0 is ready: 2 providers can serve it.");
     expect(html).toContain("Make v2.0.0 the default");
-    // v1 is still the default, so it can't be deprecated yet; the newer v2 is made the default, not deprecated.
-    expect(html).toContain("v1 is the version agents get by default. Make another version the default first.");
-    expect(html).not.toContain("Deprecate v");
+    // v1 is still the default, so it can't be deprecated yet; any other major can.
+    expect(html).toContain("v1 is the version agents get by default, so it can't be deprecated. Make another version the default first.");
+    expect(html).toContain("Deprecate v2…");
     expect(html).toContain("Publish…");
+  });
+
+  it("offers Deprecate on an old major that still runs", () => {
+    const html = text(render(FX_TOOL_ID));
+    expect(html).toContain("Deprecate v1…");
+    expect(html).toContain("Agents get v2.0.0 by default");
   });
 
   it("writes a new tool's first version", () => {
@@ -101,6 +107,7 @@ describe("the contract editor", () => {
     expect(words).toContain("Open the request");
     expect(html).toContain("/operator/approvals?id=apr-demo-1");
     expect(words).toContain("The draft is locked while its publish waits for approval.");
+    expect(words).toContain("Locked: a publish of this draft is waiting for a second person. Open it in Approvals");
     // Every field and the Publish button are disabled.
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Publish v2\.1\.0…/);
   });

@@ -8,7 +8,8 @@ import { useSearchParam } from "@/hooks/useSearchParam";
 /** One standard tool, route `/operator/tools/view?id=`: its versions, bindings per version and the draft editor. */
 function ToolView() {
   const id = useSearchParam("id");
-  return <ContractEditorScreen toolId={id} />;
+  const from = useSearchParam("from");
+  return <ContractEditorScreen toolId={id} fromRequest={from} />;
 }
 
 export default function OperatorToolPage() {

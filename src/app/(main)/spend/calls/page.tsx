@@ -61,6 +61,14 @@ function CallsList() {
   const toolId = params.get("tool") || null;
   const names = useEntityNames({ kinds: ["tool", "provider"] });
 
+  // The refused list keeps any other query switch (a demo's ?fresh=, say), so it is not lost on the way.
+  const refusedHref = React.useCallback(() => {
+    const next = new URLSearchParams(params.toString());
+    next.set("status", "refused");
+    next.delete("call");
+    next.delete("tool");
+    return `/spend/calls?${next.toString()}`;
+  }, [params]);
   const setParams = React.useCallback(
     (next: { status?: CallsFilter; tool?: string | null }) => {
       const status = next.status ?? filter;
@@ -130,7 +138,7 @@ function CallsList() {
             type="button"
             role="radio"
             aria-checked={refused}
-            onClick={() => router.replace("/spend/calls?status=refused", { scroll: false })}
+            onClick={() => router.replace(refusedHref(), { scroll: false })}
             className={cn(
               "rounded-full border px-3 py-1.5 text-label-13 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
               refused ? "border-primary-500 bg-primary-10 text-primary-700" : "border-02 bg-01 text-02 hover:text-01",
@@ -154,7 +162,7 @@ function CallsList() {
       {refused ? (
         <div className="flex w-full flex-col gap-4">
           {callId ? (
-            <RefusedCallPanel callId={callId} onClose={() => router.replace("/spend/calls?status=refused", { scroll: false })} />
+            <RefusedCallPanel callId={callId} onClose={() => router.replace(refusedHref(), { scroll: false })} />
           ) : null}
           <RefusedCallsList openCallId={callId} />
         </div>

@@ -210,25 +210,16 @@ export interface GateRow extends PublishRequirementResult {
 }
 
 /**
- * The publish check as rows, with the tester requirements once per major.
- * The backend sends one entry per failing major ("Contract v2: …") and a
- * single entry when every major passed; with more than one major, that single
- * passed entry is shown once per major so each version reads as checked.
+ * The publish check as rows. The backend sends the tester requirements once
+ * per contract major, each with its `major` (and its detail prefixed
+ * "Contract vN:", which is dropped here since the row names the version).
  */
-export function gateRows(check: Pick<PublishCheck, "requirements">, majors: readonly number[]): GateRow[] {
-  const rows: GateRow[] = [];
-  for (const requirement of check.requirements) {
+export function gateRows(check: Pick<PublishCheck, "requirements">, _majors: readonly number[] = []): GateRow[] {
+  return check.requirements.map((requirement) => {
     const tester = requirement.requirement === "TESTER_RUN" || requirement.requirement === "TESTER_PASSED";
-    const { major, rest } = splitMajorDetail(requirement.detail);
-    if (tester && major !== null) {
-      rows.push({ ...requirement, detail: rest, major });
-    } else if (tester && requirement.met && majors.length > 1) {
-      for (const m of majors) rows.push({ ...requirement, major: m });
-    } else {
-      rows.push({ ...requirement, major: tester && majors.length === 1 ? majors[0]! : null });
-    }
-  }
-  return rows;
+    const major = typeof requirement.major === "number" ? requirement.major : null;
+    return { ...requirement, major, detail: tester ? splitMajorDetail(requirement.detail).rest : requirement.detail };
+  });
 }
 
 /* --------------------------------------------- PROVIDER_BINDING_CONTRACT_MISMATCH */

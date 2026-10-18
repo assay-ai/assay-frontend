@@ -9,10 +9,11 @@ import {
   OPTIONAL_INPUT_HINT,
   OPTIONAL_OUTPUT_HINT,
   deprecationSentence,
+  fieldList,
   newerVersion,
   sunsetDay,
 } from "@/features/contracts/text";
-import type { ToolContractVersion } from "@/interfaces/contracts";
+import type { ToolContractVersion, ToolVersionProvider } from "@/interfaces/contracts";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { cn } from "@/utils";
@@ -27,8 +28,8 @@ import { useToolVersions } from "./use-tool-versions";
  * instead), the extra fields only some providers return or accept, and the
  * changelog, newest first.
  *
- * Which providers return an extra field is not shown: the catalogue does
- * not say per provider (contract gap, see the T3 report).
+ * Each extra field names the providers that return (or accept) it, from
+ * the versions read's `providers`.
  */
 
 const SHOWN_VERSIONS = 3;
@@ -107,7 +108,7 @@ export function ToolContractView({
             return (
               <li key={c.major} className={cn("rounded-lg px-3 py-2 text-body-13", c.status === "RETIRED" ? "bg-danger-10 text-danger-700" : "bg-warning-10 text-warning-700")}>
                 {c.status === "RETIRED"
-                  ? `Version ${c.major} was retired: calls to it are refused.${replacement ? ` Use ${replacement} instead.` : ""}`
+                  ? `Version ${c.major} was retired${c.sunsetAt ? ` on ${sunsetDay(c.sunsetAt)} (UTC)` : ""}: calls to it are refused.${replacement ? ` Use ${replacement} instead.` : ""}`
                   : deprecationSentence(c.major, { sunsetAt: c.sunsetAt ?? "", replacement })}
               </li>
             );
@@ -115,7 +116,7 @@ export function ToolContractView({
         </ul>
       ) : null}
 
-      <OptionalFields version={current} publicPage={publicPage} />
+      <OptionalFields version={current} publicPage={publicPage} providers={query.data?.providers ?? []} />
 
       <div className="flex flex-col gap-2">
         <h4 className="text-label-xs text-02">What changed</h4>
@@ -141,7 +142,7 @@ function VersionRow({ version, replacement }: { version: ToolContractVersion; re
         <VersionChip semver={version.semver} title={`Version ${version.semver}`} />
         {version.isCurrent ? <span className="rounded-full bg-success-10 px-2 py-0.5 text-label-xs text-success-700">Current</span> : null}
         {version.status === "DEPRECATED" ? <DeprecatedBadge sunsetAt={version.sunsetAt} replacement={replacement} /> : null}
-        {version.status === "RETIRED" ? <RetiredBadge replacement={replacement} /> : null}
+        {version.status === "RETIRED" ? <RetiredBadge replacement={replacement} sunsetAt={version.sunsetAt} /> : null}
         {version.publishedAt ? <span className="text-body-xs text-03">Published {sunsetDay(version.publishedAt)}</span> : null}
       </span>
       <p className="text-body-13 text-02 [overflow-wrap:anywhere]">{version.changelog || "No notes for this version."}</p>
@@ -149,15 +150,31 @@ function VersionRow({ version, replacement }: { version: ToolContractVersion; re
   );
 }
 
-function OptionalFields({ version, publicPage }: { version: ToolContractVersion; publicPage: boolean }) {
+function OptionalFields({
+  version,
+  publicPage,
+  providers,
+}: {
+  version: ToolContractVersion;
+  publicPage: boolean;
+  providers: readonly ToolVersionProvider[];
+}) {
+  const who = (field: string, kind: "out" | "in") =>
+    providers
+      .filter((p) => p.servedMajors.includes(version.major) && (kind === "out" ? p.providesOutputFields : p.supportsInputFields).includes(field))
+      .map((p) => p.legalName);
   const outputs = version.optionalOutputFields ?? [];
   const inputs = version.optionalInputFields ?? [];
   if (outputs.length === 0 && inputs.length === 0) return null;
   return (
     <div className="flex flex-col gap-2" data-testid="optional-fields">
       <h4 className="text-label-xs text-02">Extra fields (not every provider)</h4>
-      {outputs.length > 0 ? <FieldGroup label="Extra fields it can return" hint={OPTIONAL_OUTPUT_HINT} fields={outputs} /> : null}
-      {inputs.length > 0 ? <FieldGroup label="Extra inputs it can take" hint={OPTIONAL_INPUT_HINT} fields={inputs} /> : null}
+      {outputs.length > 0 ? (
+        <FieldGroup label="Extra fields it can return" hint={OPTIONAL_OUTPUT_HINT} fields={outputs} who={(f) => who(f, "out")} verb="Returned by" known={providers.length > 0} />
+      ) : null}
+      {inputs.length > 0 ? (
+        <FieldGroup label="Extra inputs it can take" hint={OPTIONAL_INPUT_HINT} fields={inputs} who={(f) => who(f, "in")} verb="Accepted by" known={providers.length > 0} />
+      ) : null}
       <p className="text-body-xs text-03">
         {publicPage ? (
           "To get an extra field every time, add the tool to a tool set and set “Must return”."
@@ -175,17 +192,38 @@ function OptionalFields({ version, publicPage }: { version: ToolContractVersion;
   );
 }
 
-function FieldGroup({ label, hint, fields }: { label: string; hint: string; fields: readonly string[] }) {
+function FieldGroup({
+  label,
+  hint,
+  fields,
+  who,
+  verb,
+  known,
+}: {
+  label: string;
+  hint: string;
+  fields: readonly string[];
+  who: (field: string) => string[];
+  verb: string;
+  /** Whether the API said which providers declare what. */
+  known: boolean;
+}) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-body-13 text-01">{label}</span>
-      <span className="flex flex-wrap gap-1.5">
-        {fields.map((f) => (
-          <code key={f} className="rounded bg-03 px-1.5 py-0.5 font-mono text-mono-12 text-01 [overflow-wrap:anywhere]">
-            {f}
-          </code>
-        ))}
-      </span>
+      <ul className="flex flex-col gap-1">
+        {fields.map((f) => {
+          const names = who(f);
+          return (
+            <li key={f} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5" data-testid="optional-field">
+              <code className="rounded bg-03 px-1.5 py-0.5 font-mono text-mono-12 text-01 [overflow-wrap:anywhere]">{f}</code>
+              {known ? (
+                <span className="text-body-xs text-02">{names.length > 0 ? `${verb} ${fieldList(names)}` : "No provider offers it yet"}</span>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
       <span className="text-body-xs text-03">{hint}</span>
     </div>
   );

@@ -20,6 +20,11 @@ export interface ContractNotice {
   /** The backend's spelling, e.g. "get_weather@2 (v2.0.0)", or a replacement tool's name. */
   replacement: string | null;
   role: "BUYER" | "PROVIDER";
+  /** The tool set that routes the tool to this major, when the notice names one. */
+  toolsetId?: string | null;
+  toolsetName?: string | null;
+  /** The agent that called it, when the notice names one. */
+  agentId?: string | null;
 }
 
 export function isContractNoticeEvent(event: string | null | undefined): event is ContractNoticeEvent {
@@ -38,6 +43,9 @@ export function readContractNotice(payload: unknown): ContractNotice | null {
     sunsetAt: typeof p.sunsetAt === "string" ? p.sunsetAt : null,
     replacement: typeof p.replacement === "string" && p.replacement.length > 0 ? p.replacement : null,
     role: p.role === "PROVIDER" ? "PROVIDER" : "BUYER",
+    toolsetId: typeof p.toolsetId === "string" ? p.toolsetId : null,
+    toolsetName: typeof p.toolsetName === "string" ? p.toolsetName : null,
+    agentId: typeof p.agentId === "string" ? p.agentId : null,
   };
 }
 
@@ -50,10 +58,30 @@ export function replacementText(notice: Pick<ContractNotice, "replacement" | "to
 }
 
 /** The notice's title: "get_weather v1 stops on Feb 1, 2027" / "get_weather v1 no longer works". */
-export function contractNoticeTitle(event: ContractNoticeEvent, notice: ContractNotice): string {
+export function contractNoticeTitle(event: ContractNoticeEvent, notice: ContractNotice, now: number = Date.now()): string {
   const name = `${notice.toolName} v${notice.major}`;
   if (event === "tool_version.retired") return `${name} no longer works`;
-  return notice.sunsetAt ? `${name} stops on ${sunsetDay(notice.sunsetAt)} (UTC)` : `${name} is going away`;
+  if (!notice.sunsetAt) return `${name} is going away`;
+  // An old deprecation notice read after the day: say it in the past, never "stops" on a day gone by.
+  const past = Date.parse(notice.sunsetAt) <= now;
+  return `${name} ${past ? "stopped" : "stops"} on ${sunsetDay(notice.sunsetAt)} (UTC)`;
+}
+
+/**
+ * The one title a notification shows, in the bell and on the alerts page
+ * alike: a contract notice's plain title, else the server's.
+ */
+export function notificationTitle(item: { event: string; title: string; payload?: unknown }): string {
+  if (!isContractNoticeEvent(item.event)) return item.title;
+  const notice = readContractNotice(item.payload);
+  return notice ? contractNoticeTitle(item.event, notice) : item.title;
+}
+
+/** The newer major a buyer can widen its tool set entry to ("Allow v2"), or null. */
+export function allowMajorOf(notice: ContractNotice): number | null {
+  if (notice.role !== "BUYER" || !notice.toolsetId) return null;
+  const next = replacementText(notice);
+  return next?.sameTool && next.major !== null && next.major !== notice.major ? next.major : null;
 }
 
 /** The body: what happens and what to do, for the reader's role. */
@@ -79,5 +107,7 @@ export function contractNoticeAction(notice: ContractNotice): { label: string; h
     const next = replacementText(notice);
     return { label: next?.sameTool && next.major !== null ? `Serve v${next.major}` : "Open your tools", href: "/provider/bindings" };
   }
-  return { label: "See the versions", href: routes.exploreTool(notice.toolId) };
+  if (notice.toolsetId) return { label: `Open ${notice.toolsetName ?? "the tool set"}`, href: `/toolsets/mine?id=${encodeURIComponent(notice.toolsetId)}` };
+  if (notice.agentId) return { label: "Open the agent", href: `/agents?agent=${encodeURIComponent(notice.agentId)}#access` };
+  return { label: "Check your tool sets", href: "/toolsets/mine" };
 }

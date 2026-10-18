@@ -20,6 +20,11 @@ describe("wizard seeds", () => {
     expect(exampleOf(inputSchema, "missing")).toBe("");
   });
 
+  it("prefills from the contract's own worked example first (T3)", () => {
+    const examples = [{ title: "x", arguments: { symbol: "BTC-USD", limit: 5 } }];
+    expect(seedArguments(inputSchema, examples)).toEqual({ symbol: "BTC-USD", limit: "5", live: "" });
+  });
+
   it("types arguments by the schema and skips empty boxes", () => {
     const fields = schemaFields(inputSchema);
     expect(argumentsFromText(fields, { symbol: "BTC", limit: "5", live: "" })).toEqual({

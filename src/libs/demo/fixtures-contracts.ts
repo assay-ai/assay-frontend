@@ -10,6 +10,7 @@ import type {
   ToolContractVersion,
   ToolVersionBrief,
   ToolVersionList,
+  ToolVersionProvider,
 } from "@/interfaces/contracts";
 
 import { DEMO_NOW_MS } from "./demo-clock";
@@ -39,6 +40,8 @@ import { demoRetiredMajor } from "./demo-switches";
 
 export const WEATHER_TOOL_ID = "06399979-f8b8-4c9e-a9b1-bd2a5924d442";
 export const GEOCODE_TOOL_ID = "ad39dccc-aff2-54c1-b383-62e0ff392570";
+/** get_usd_eur_rate: 2.0.0 is the default and 1.0.0 still runs, so the editor offers "Deprecate v1". */
+export const FX_TOOL_ID = "a4b9882a-9bc1-4d64-807a-27c0b93daf0a";
 export const TIDES_TOOL_ID = "7c1e2f90-5b3a-4d18-9e6c-2a40b8d1f357";
 /** The accepted tool request that created get_tide_times. */
 export const TIDES_REQUEST_ID = "e2b7c4d1-0f3a-4a6e-8b95-71c2d0a9f4e3";
@@ -229,6 +232,49 @@ function geocodeVersions(): ToolContractVersion[] {
   ];
 }
 
+/* -------------------------------------------------------- get_usd_eur_rate */
+
+const FX_DESCRIPTION =
+  "The latest USD to EUR reference exchange rate published by the European Central Bank, with the date it was published for. Not a tradeable quote, and not intraday.";
+
+function fxVersions(): ToolContractVersion[] {
+  const input: ContractSchema = { type: "object", properties: {}, required: [] };
+  const common = {
+    summary: "The latest USD to EUR reference rate.",
+    description: FX_DESCRIPTION,
+    inputSchema: input,
+    optionalInputFields: [],
+    optionalOutputFields: [],
+    examples: [{ title: "Today's rate", arguments: {} }],
+    tier: "VERIFIED" as const,
+    sunsetAt: null,
+  };
+  return [
+    {
+      ...common,
+      version: 2,
+      semver: "2.0.0",
+      major: 2,
+      status: "ACTIVE",
+      outputSchema: { type: "object", properties: { rate: { type: "number" }, published_for: { type: "string", format: "date" } }, required: ["rate", "published_for"] },
+      changelog: "date is now published_for, the day the rate is for.",
+      publishedAt: daysAgo(40),
+      isCurrent: true,
+    },
+    {
+      ...common,
+      version: 1,
+      semver: "1.0.0",
+      major: 1,
+      status: "ACTIVE",
+      outputSchema: { type: "object", properties: { rate: { type: "number" }, date: { type: "string" } }, required: ["rate", "date"] },
+      changelog: "First version.",
+      publishedAt: daysAgo(200),
+      isCurrent: false,
+    },
+  ];
+}
+
 /* --------------------------------------------------------- everything else */
 
 /** A one-version contract for a catalogue tool with no story of its own. */
@@ -259,6 +305,7 @@ function plainVersions(name: string, description: string): ToolContractVersion[]
 export function demoContractVersions(toolId: string, name = "", description = ""): ToolContractVersion[] {
   if (toolId === WEATHER_TOOL_ID) return weatherVersions();
   if (toolId === GEOCODE_TOOL_ID) return geocodeVersions();
+  if (toolId === FX_TOOL_ID) return fxVersions();
   if (toolId === TIDES_TOOL_ID) return [];
   return plainVersions(name || "tool", description || name || "A tool.");
 }
@@ -285,12 +332,50 @@ export function demoVersionFields(toolId: string, name: string, description: str
     version: current?.semver ?? null,
     versions: versions.map(briefOf),
     deprecatedMajors: [...new Set(versions.filter((v) => v.status === "DEPRECATED").map((v) => v.major))].sort((a, b) => a - b),
+    // What replaces an old major (as the API names it): this tool at its current major.
+    ...replacementOf(versions, toolId, name),
   };
 }
 
-export function demoVersionList(toolId: string, name: string, description = ""): ToolVersionList {
+function replacementOf(versions: readonly ToolContractVersion[], toolId: string, name: string) {
+  const current = versions.find((v) => v.isCurrent) ?? null;
+  const old = versions.some((v) => (v.status === "DEPRECATED" || v.status === "RETIRED") && current && v.major < current.major);
+  return old && current
+    ? { replacementToolId: toolId as string | null, replacementName: name as string | null, replacementMajor: current.major, replacementVersion: current.semver }
+    : { replacementToolId: null, replacementName: null, replacementMajor: null, replacementVersion: null };
+}
+
+/**
+ * What each listed provider of get_weather declares — the same story the
+ * operator counts (v1: 3 providers, v2: 2) and the refused calls tell:
+ * Helios accepts units but has no uv_index, Northwind has neither and serves
+ * only v1, Quanta returns uv_index.
+ */
+const WEATHER_PROVIDERS: Readonly<Record<string, Omit<ToolVersionProvider, "providerId" | "legalName">>> = {
+  "9c1d4f60-3a77-4c18-9b02-6e5a1f2d8b41": { servedMajors: [1, 2], providesOutputFields: [], supportsInputFields: ["units"] },
+  "b7e04c25-9d13-4a6f-bc80-1e5f3a7d9c62": { servedMajors: [1], providesOutputFields: [], supportsInputFields: [] },
+  "17d6c0a4-8b39-4e52-a1f7-59c2b8e3d07f": { servedMajors: [1, 2], providesOutputFields: ["uv_index"], supportsInputFields: [] },
+};
+
+export function demoVersionList(
+  toolId: string,
+  name: string,
+  description = "",
+  /** The tool's listed providers, from the catalogue. */
+  offers: readonly { providerId: string; legalName: string }[] = [],
+): ToolVersionList {
   const versions = demoContractVersions(toolId, name, description);
-  return { toolId, name, currentVersion: versions.find((v) => v.isCurrent)?.semver ?? null, versions };
+  const current = versions.find((v) => v.isCurrent) ?? null;
+  const providers = offers
+    .map((o): ToolVersionProvider => ({
+      providerId: o.providerId,
+      legalName: o.legalName,
+      ...(toolId === WEATHER_TOOL_ID && WEATHER_PROVIDERS[o.providerId]
+        ? WEATHER_PROVIDERS[o.providerId]!
+        : { servedMajors: current ? [current.major] : [1], providesOutputFields: [], supportsInputFields: [] }),
+    }))
+    .sort((a, b) => a.legalName.localeCompare(b.legalName));
+  return { toolId, name, currentVersion: current?.semver ?? null, versions, providers };
 }
 
 /* ------------------------------------------------------- operator editor */
@@ -332,6 +417,19 @@ const OPERATOR_TOOLS: readonly DemoOperatorTool[] = [
       { major: 1, eligibleBindings: 2, activeBindings: 2 },
     ],
     suggested: 2,
+  },
+  {
+    id: FX_TOOL_ID,
+    name: "get_usd_eur_rate",
+    category: "finance",
+    tags: ["fx"],
+    status: "ACTIVE",
+    replacementToolId: null,
+    majors: [
+      { major: 2, eligibleBindings: 2, activeBindings: 2 },
+      { major: 1, eligibleBindings: 1, activeBindings: 2 },
+    ],
+    suggested: null,
   },
   {
     id: TIDES_TOOL_ID,
@@ -435,6 +533,8 @@ export function demoDraftOf(
     tier: (shape.tier as ContractDraft["tier"]) ?? null,
     changelog: shape.changelog,
     updatedAt: shape.updatedAt,
+    // The demo's own operator (Jordan) wrote every draft, so another Policy approver must approve it.
+    editedBy: "op-jordan",
   };
 }
 

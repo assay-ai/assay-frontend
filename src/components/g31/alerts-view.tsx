@@ -38,7 +38,8 @@ import {
   type ExternalChannel,
 } from "@/features/buyer/alert-presets";
 import { attentionAction } from "@/features/buyer/attention-action";
-import { contractNoticeText, contractNoticeTitle, isContractNoticeEvent, readContractNotice } from "@/features/toolsets/contract-notices";
+import { contractNoticeText, isContractNoticeEvent, notificationTitle, readContractNotice } from "@/features/toolsets/contract-notices";
+import { ContractNoticeFix } from "@/components/toolsets/contract-notice-fix";
 import { readUpdateNotice, updateNoticeText } from "@/features/toolsets/sharing";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { plainError } from "@/libs/plain-language";
@@ -100,11 +101,7 @@ function alertBody(item: Notification): string {
 
 /** The title as a person reads it; a contract notice names the day it stops (UTC). */
 function alertTitle(item: Notification): string {
-  if (isContractNoticeEvent(item.event)) {
-    const notice = readContractNotice(item.payload);
-    if (notice) return contractNoticeTitle(item.event, notice);
-  }
-  return item.title;
+  return notificationTitle(item);
 }
 
 /** Events whose row carries its next step as a link. */
@@ -519,9 +516,12 @@ export function AlertsView() {
                     </button>
                     <p className="text-body-13 text-02">{alertBody(item)}</p>
                     {LINKED_EVENTS.has(item.event) && attentionAction(item) ? (
-                      <Link href={attentionAction(item)!.href} className="min-h-10 self-start content-center text-label-13 font-semibold text-primary-600 hover:underline">
-                        {attentionAction(item)!.label}
-                      </Link>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <Link href={attentionAction(item)!.href} className="min-h-10 self-start content-center text-label-13 font-semibold text-primary-600 hover:underline">
+                          {attentionAction(item)!.label}
+                        </Link>
+                        {isContractNoticeEvent(item.event) ? <ContractNoticeFix payload={item.payload} /> : null}
+                      </div>
                     ) : null}
                     {expanded ? (
                       <div className="flex flex-col gap-1.5 border-t border-01 pt-2">
