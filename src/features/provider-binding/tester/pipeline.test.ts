@@ -79,7 +79,9 @@ describe("testPipeline", () => {
         ),
       );
       expect(pipeline.failed?.id).toBe("request");
-      expect(pipeline.failed?.fault).toBe(MAPPING);
+      // The chip agrees with the sentence: the input is missing a value.
+      expect(pipeline.failed?.fault).toBe("your test input");
+      expect(pipeline.failed?.fault).not.toMatch(/Assay/);
       expect(pipeline.failed?.sentence).toBe(
         "Your test input has no “vsCurrency”, and the request needs it. Fill it in, or tick “may be missing” for it under Advanced mapping.",
       );
@@ -180,6 +182,28 @@ describe("testPipeline", () => {
       );
       expect(pipeline.failed?.fault).toBe("Assay, not you");
       expect(pipeline.failed?.sentence).toMatch(/Your API wasn't called/);
+    });
+
+    it("headers over the 8 KiB cap are the provider's own headers, not Assay", () => {
+      const pipeline = testPipeline(
+        report(
+          { UPSTREAM: { status: "FAILED", code: "PLATFORM_UNAVAILABLE", detail: "outbound request headers exceed 8 KiB" } },
+          {
+            outcome: "FAILED",
+            upstream: {
+              status: 0,
+              latencyMs: 1,
+              rawBody: null,
+              rawBodyTruncated: false,
+              contentType: null,
+              transportError: { kind: "PLATFORM_UNAVAILABLE", detail: "outbound request headers exceed 8 KiB" },
+            },
+          },
+        ),
+      );
+      expect(pipeline.failed?.fault).toBe("your headers");
+      expect(pipeline.failed?.sentence).toMatch(/^Your headers are too large \(over 8 KiB together\)/);
+      expect(pipeline.failed?.sentence).not.toMatch(/Try again/);
     });
 
     it("missing API key headers point at Authentication", () => {

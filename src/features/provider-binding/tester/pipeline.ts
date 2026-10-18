@@ -13,6 +13,7 @@ import { plainRule } from "@/libs/plain-language";
  *   1 Request built      → "your test input" or the mapping
  *   2 Your API answered  → "your API"; "the address or path" for a 404;
  *                          "Authentication" for a 401/403 or missing key headers;
+ *                          "your headers" when they pass the 8 KiB cap;
  *                          "your test input" for another 4xx; "Assay, not you"
  *                          only when Assay could not prepare the call
  *   3 Output mapped      → the mapping
@@ -43,6 +44,7 @@ export type PipelineFault =
   | "your API's data"
   | "the address or path"
   | "Authentication"
+  | "your headers"
   | "Assay, not you";
 
 export interface PipelineStep {
@@ -196,7 +198,8 @@ export function testPipeline(report: BindingTestReport): TestPipeline {
 
   // 1. Request built
   const requestStatus = statusOf(requestLayer);
-  const inputProblem = /NULL_VALUE|INPUT|ARGUMENT|MISSING/i.test(requestLayer?.code ?? "");
+  // A selector that found nothing in the test input is a missing input first (the sentence also offers "may be missing").
+  const inputProblem = /NULL_VALUE|INPUT|ARGUMENT|MISSING|PATH_NOT_FOUND/i.test(requestLayer?.code ?? "");
   const requestDetail = rawDetail(requestLayer);
   const requestSentence =
     requestStatus === "fail"
@@ -240,6 +243,11 @@ export function testPipeline(report: BindingTestReport): TestPipeline {
     if (/credentials missing/i.test(upstream.transportError.detail ?? "")) {
       apiSentence = "Add your API key headers under Authentication first. Your API wasn't called.";
       apiFault = "Authentication";
+    } else if (/exceed 8 KiB/i.test(upstream.transportError.detail ?? "")) {
+      // The cap counts the provider's own headers (stored and mapped); retrying never fixes it.
+      apiSentence =
+        "Your headers are too large (over 8 KiB together). Shorten your API key headers under Authentication, or the headers in Advanced mapping. Your API wasn't called.";
+      apiFault = "your headers";
     } else {
       apiSentence = "Assay could not prepare the call (key storage or signing). Your API wasn't called. Try again in a minute.";
       apiFault = "Assay, not you";
