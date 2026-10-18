@@ -33,6 +33,8 @@ import { getProviderStake } from "@/services/provider-stake.service";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { formatMoney } from "@/utils/money";
 
+import { wholePercents } from "./_lib/shares";
+
 /**
  * Binding portfolio.
  *
@@ -47,7 +49,8 @@ import { formatMoney } from "@/utils/money";
  * ## The eight columns and where each one actually comes from
  *
  * The frame draws Binding · Tool · Mode · Price · Quality 30d · Share · Stake ·
- * Net 30d. Three of them have no first-class field on any provider endpoint,
+ * Net 30d. "Stake" reads "Stake needed": it is the minimum each tool needs,
+ * not what is staked (a provider with $119.95 staked read "$100.00" there). Three of them have no first-class field on any provider endpoint,
  * so they are assembled here rather than read:
  *
  * - **Stake** is `GET /providers/me/stake` → `requirement[]`, matched on
@@ -64,7 +67,8 @@ import { formatMoney } from "@/utils/money";
  * - **Share** is that same response's per-tool `calls` over `totals.calls` —
  *   the share of this provider's own served calls the binding carries. It is
  *   NOT a market share against other providers of the same tool; no provider
- *   endpoint exposes one.
+ *   endpoint exposes one. Calls on tools no longer listed here go to an
+ *   "Other" row, and the shares are rounded so they add up to 100%.
  *
  * **Quality 30d has no source and renders `—` on every row.** Two independent
  * reasons, either of which alone would be enough: `/providers/me/quality` is
@@ -125,11 +129,6 @@ function stakeCell(
   return formatMoney(item.minimum, { decimals: 2 });
 }
 
-function shareCell(group: ProviderEarningsGroup | undefined, totalCalls: number): string {
-  if (!group || totalCalls <= 0) return DASH;
-  return `${Math.round((group.calls / totalCalls) * 100)}%`;
-}
-
 function netCell(
   group: ProviderEarningsGroup | undefined,
   windowAsset: string | null | undefined,
@@ -183,25 +182,50 @@ export default function ProviderPortfolioPage() {
   const stakeChain = requirementChain(stake.data);
   const chainKnown = Boolean(stakeChain?.hasKnownStake && stakeChain.chainReadable);
 
-  const rows: PortfolioRow[] = items.map((binding) => {
+  /*
+    Calls on tools that are not among the listed ones (a tool no longer
+    listed, a removed draft): one "Other" row, so the shares add up to 100%.
+  */
+  const listedTools = new Set(items.map((binding) => binding.toolId));
+  const otherGroups = (earnings.data?.groups ?? []).filter((group) => !listedTools.has(group.key));
+  const otherCalls = otherGroups.reduce((sum, group) => sum + group.calls, 0);
+  const otherEarned = otherGroups.reduce((sum, group) => sum + BigInt(group.earned?.amount ?? "0"), 0n);
+  const otherDenom = otherGroups.find((group) => group.earned)?.earned ?? null;
+  const shares = wholePercents(
+    [...items.map((binding) => groupsByTool.get(binding.toolId)?.calls ?? 0), otherCalls],
+    totalCalls,
+  );
+
+  const rows: PortfolioRow[] = items.map((binding, index) => {
     const group = groupsByTool.get(binding.toolId);
     return {
       id: binding.id,
       tool: names.bindingLabel(binding),
       mode: binding.pricingMode === "FREE" ? "Free" : binding.pricingMode === "FREEMIUM" ? "Free + paid" : "Paid",
       price: priceCell(binding),
-      share: shareCell(group, totalCalls),
+      share: group && totalCalls > 0 ? `${shares[index]}%` : DASH,
       stake: stakeCell(binding, stake.data?.requirement, chainKnown),
       net: netCell(group, earnings.data?.asset),
     };
   });
+  if (otherCalls > 0) {
+    rows.push({
+      id: "other",
+      tool: `Other (${formatCount(otherGroups.length)} tool${otherGroups.length === 1 ? "" : "s"} not listed here)`,
+      mode: DASH,
+      price: DASH,
+      share: `${shares[items.length]}%`,
+      stake: DASH,
+      net: otherDenom ? formatMoney({ ...otherDenom, amount: otherEarned.toString() }, { decimals: 2 }) : DASH,
+    });
+  }
 
   const columns: TableColumn<PortfolioRow>[] = [
     { key: "tool", header: "Tool", cell: (r) => <span className="font-semibold">{r.tool}</span> },
     { key: "mode", header: "How agents pay", width: 130, align: "end", cell: (r) => r.mode },
     { key: "price", header: "Price", width: 110, align: "end", mono: true, cell: (r) => r.price },
     { key: "share", header: "Share", width: 100, align: "end", mono: true, cell: (r) => r.share },
-    { key: "stake", header: "Stake", width: 110, align: "end", mono: true, cell: (r) => r.stake },
+    { key: "stake", header: "Stake needed", width: 130, align: "end", mono: true, cell: (r) => r.stake },
     { key: "net", header: "Net 30d", width: 130, align: "end", mono: true, cell: (r) => r.net },
   ];
 
