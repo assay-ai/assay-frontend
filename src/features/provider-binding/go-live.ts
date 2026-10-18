@@ -39,14 +39,6 @@ export const DEFAULT_FREE_CALLS_PER_AGENT = 100;
 /** The promised failure rate offered by default, in percent. */
 export const DEFAULT_FAILURE_PERCENT = 2;
 
-/**
- * Free calls a listing gives per day, all agents together, when its provider
- * sets none: the backend's `DEFAULT_PROVIDER_DAILY_BUDGET`
- * (`free-tier/constants/free-quota.constants.ts`), shown as the placeholder of
- * "Free calls per day, all agents".
- */
-export const DEFAULT_FREE_DAILY_BUDGET = 50_000;
-
 /** The window volume the penalty example assumes; nothing is on the wire before a tool is live. */
 export const EXAMPLE_WINDOW_CALLS = 1000;
 

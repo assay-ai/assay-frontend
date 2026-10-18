@@ -24,4 +24,8 @@ describe("the console shell gate", () => {
   it("always draws on a demo build", () => {
     expect(consoleShellReady({ ...base, demo: true, ready: false })).toBe(true);
   });
+
+  it("never waits forever: after the timeout the page renders as before the gate", () => {
+    expect(consoleShellReady({ ...base, ready: false, timedOut: true })).toBe(true);
+  });
 });

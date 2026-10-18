@@ -2098,7 +2098,8 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     },
   },
   {
-    // As the API: only a never-published draft can be discarded; its credential sets go with it.
+    // As the API (status DRAFT and never published; the demo has no publishedAt, so publishedVersion
+    // stands for both): only such a draft can be discarded, and its credential sets go with it.
     method: "DELETE",
     match: /^\/providers\/me\/tool-bindings\/[^/]+$/,
     body: (path) => {
@@ -2108,7 +2109,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
       if (binding.status !== "DRAFT" || binding.publishedVersion !== null) {
         throw new ApiError(
           "PROVIDER_BINDING_NOT_DISCARDABLE",
-          "Only a draft that was never published can be discarded. Pause it instead.",
+          `Only a draft that was never published can be discarded; this one ${binding.status === "DRAFT" ? "was published" : `is ${binding.status}`}. Pause it instead.`,
           409,
           path,
         );

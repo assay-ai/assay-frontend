@@ -20,7 +20,6 @@ import { noteSaved } from "@/features/provider-binding/after-publish";
 import { BindingHeader, bindingQueryKey, useBinding } from "@/features/provider-binding/binding-header";
 import { integerFromInput } from "@/features/provider-binding/chrome";
 import {
-  DEFAULT_FREE_DAILY_BUDGET,
   freeBudgetFromInput,
   freeBudgetHint,
   freeBudgetWarning,
@@ -233,7 +232,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
               suffix="calls"
               value={extra.freeBudget}
               disabled={readOnly}
-              placeholder={`${DEFAULT_FREE_DAILY_BUDGET.toLocaleString("en-US")} (platform default)`}
+              placeholder="Platform default"
               onChange={(event) => setExtra((current) => ({ ...current, freeBudget: event.target.value }))}
               error={errors.freeBudget}
               hint={freeBudgetHint(mode)}

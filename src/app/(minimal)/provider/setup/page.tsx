@@ -555,9 +555,11 @@ function DoneScreen({ href, setup }: { href: string; setup: ProviderSetup }) {
       `Free tools need none. To charge, your stake must cover $${rule.floor.toFixed(0)} or ${rule.multiplier.toNumber().toLocaleString("en-US")} calls at your price, whichever is more. You get it back when you stop, after ${waitingPeriodPhrase(waitingPeriodOf(null, setup.terms))}.`,
     ],
     [
-      "Penalty",
-      `You promise a failure rate. Calls are measured in windows (${WINDOW_WORDS}). ${GLOSSARY["stake-rule"].definition} You can dispute a penalty before its deadline.`,
+      "Promise",
+      `You promise a failure rate. Calls are measured in windows (${WINDOW_WORDS}), and you can dispute a penalty before its deadline.`,
     ],
+    // The glossary's own words (third person), as their own rows: the same text as /why-list-here.
+    ["Penalty", GLOSSARY["stake-rule"].definition],
     ["Example", GLOSSARY["penalty-example"].definition],
   ];
   return (
