@@ -30,6 +30,9 @@ const WARNING_TITLE: Record<BindingTestReport["warnings"][number]["code"], strin
   NO_AUTHENTICATION: "No authentication",
 };
 
+/** Warnings never change the outcome (the backend says so); the label says it too. */
+const WARNING_NOTE = "Warning (does not block Go live)";
+
 const WORD: Record<PipelineStatus, string> = {
   pass: "passed",
   fail: "failed",
@@ -38,9 +41,10 @@ const WORD: Record<PipelineStatus, string> = {
 };
 
 /**
- * A test run as four steps with pass / fail, and for a failure, whose fault
- * it is — "your test input", "your API" or "the mapping" — so the provider
- * knows what to change. Raw request, response and mapped output stay one
+ * A test run as four steps with pass / fail, and for a failure, whose fix
+ * it is — "your test input", "your API", "the address or path",
+ * "Authentication" or their mapping — so the provider knows what to change.
+ * The backend's own wording sits behind "Details" on the failed step. Raw request, response and mapped output stay one
  * click away under "Show the raw exchange".
  */
 export function TestPipelineView({
@@ -106,6 +110,12 @@ export function TestPipelineView({
               <span className={cn("break-words text-body-xs", step.status === "fail" ? "text-danger-700" : "text-02")}>
                 {step.sentence}
               </span>
+              {step.details ? (
+                <details className="text-body-xs text-03">
+                  <summary className="cursor-pointer select-none">Details</summary>
+                  <code className="mt-1 block break-all font-mono text-mono-xs">{step.details}</code>
+                </details>
+              ) : null}
             </div>
             {step.fault ? (
               <span className="shrink-0 rounded-full bg-danger-10 px-2 py-0.5 text-label-xs text-danger-700">
@@ -120,7 +130,7 @@ export function TestPipelineView({
         <Alert
           key={warning.code}
           variant="warning"
-          title={WARNING_TITLE[warning.code]}
+          title={`${WARNING_TITLE[warning.code]} · ${WARNING_NOTE}`}
           description={warning.message}
           showClose={false}
         />
@@ -130,7 +140,7 @@ export function TestPipelineView({
         <summary className="cursor-pointer select-none text-label-13 text-02">Show the raw exchange</summary>
         <div className="mt-3 flex flex-col gap-3">
           {report.request ? (
-            <RawBlock title="We sent" body={`${report.request.method} ${report.request.url}${report.request.body ? `\n\n${pretty(report.request.body)}` : ""}`} />
+            <RawBlock title="We sent" body={sentText(report.request)} />
           ) : null}
           {report.upstream ? (
             <RawBlock
@@ -147,6 +157,18 @@ export function TestPipelineView({
       </details>
     </div>
   );
+}
+
+/**
+ * The request line, then the header names (the signature ones included, so a
+ * provider sees what to verify), then the body. Header values are never in the
+ * report, so none can show here.
+ */
+export function sentText(request: NonNullable<BindingTestReport["request"]>): string {
+  const lines = [`${request.method} ${request.url}`];
+  if (request.headerNames.length > 0) lines.push(`Headers (values not shown): ${request.headerNames.join(", ")}`);
+  if (request.body) lines.push("", pretty(request.body));
+  return lines.join("\n");
 }
 
 function RawBlock({ title, body }: { title: string; body: string }) {
