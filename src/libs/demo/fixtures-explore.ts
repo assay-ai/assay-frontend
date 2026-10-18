@@ -1,5 +1,6 @@
 import type { CursorPage } from "@/interfaces";
 import type {
+  CatalogueChainPrice,
   CatalogueChainStake,
   CatalogueMoney,
   CatalogueProvider,
@@ -554,7 +555,33 @@ function toolRow(tool: DemoTool): CatalogueTool {
     paidBindings: tool.pricingMode === "FREE" ? 0 : tool.offers.length,
     unroutableReason: tool.unroutableReason ?? null,
     settlementChains: [DEMO_CHAIN_ID],
+    /* One chain: its price is the quote, set by the dearest offer's provider. */
+    prices: priceOn(tool),
   };
+}
+
+/**
+ * The tool's price per chain: the one demo chain, at the dearest offer. Every
+ * offer is an eligible listing there, so `providerId` is set only when one
+ * provider alone charges that price, as the router's priced set would say.
+ */
+function priceOn(tool: DemoTool): CatalogueChainPrice[] {
+  const top = dearest(tool.offers.map((offer) => usd(offer.price)));
+  if (!top) return [];
+  const atTop = tool.offers.filter((offer) => usd(offer.price).amount === top.amount);
+  return [
+    {
+      chainId: DEMO_CHAIN_ID,
+      price: top,
+      providerId: atTop.length === 1 ? atTop[0].providerId : null,
+      listings: tool.offers.length,
+    },
+  ];
+}
+
+/** What each demo listing promises: 2% on a verified provider's listing, 5% otherwise. */
+function promisedRate(provider: DemoProvider): number {
+  return provider.verified ? 0.02 : 0.05;
 }
 
 function providerRow(provider: DemoProvider): CatalogueProvider {
@@ -580,6 +607,7 @@ function providerTools(provider: DemoProvider): CatalogueProviderTool[] {
     name: tool.name,
     pricingMode: tool.pricingMode ?? "PAID",
     price,
+    promisedFailureRate: promisedRate(provider),
     freeCallsPerAgentPerDay: tool.pricingMode === "FREEMIUM" || tool.pricingMode === "FREE" ? (tool.freePerAgent ?? 100) : null,
   }));
 }

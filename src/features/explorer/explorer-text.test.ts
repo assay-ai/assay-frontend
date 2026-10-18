@@ -7,7 +7,17 @@ import {
   readExplorerState,
   routingNotes,
   failRateLabel,
+  failRateShort,
   failsOften,
+  HIGH_FAILURE_MIN_CALLS,
+  chainPriceLines,
+  chainPriceText,
+  chainProviderName,
+  fundedChains,
+  orderChainPrices,
+  paidOnText,
+  stakeRuleSentence,
+  uniformPromise,
   heldPriceSentence,
   priceRange,
   formatCallPrice,
@@ -77,9 +87,121 @@ describe("failRateLabel", () => {
     expect(failRateLabel(null)).toBe("Not measured yet");
     expect(failRateLabel({ measuredCalls: 0, failedCalls: 0 })).toBe("Not measured yet");
   });
-  it("shows the share that failed and the sample size", () => {
-    expect(failRateLabel({ measuredCalls: 400, failedCalls: 8 })).toBe("2.0% failed · 400 calls checked, all time");
-    expect(failRateLabel({ measuredCalls: 1, failedCalls: 0 })).toBe("0% failed · 1 call checked, all time");
+  it("shows the share that failed, the sample size and its 30-day, all-tools scope", () => {
+    expect(failRateLabel({ measuredCalls: 400, failedCalls: 8 })).toBe(
+      "2.0% failed · 400 checked calls to all their tools, last 30 days",
+    );
+    expect(failRateLabel({ measuredCalls: 1, failedCalls: 0 })).toBe(
+      "0% failed · 1 checked call to all their tools, last 30 days",
+    );
+  });
+  it("puts the promised rate beside the observed one", () => {
+    expect(failRateLabel({ measuredCalls: 95, failedCalls: 10 }, 0.05)).toBe(
+      "11% failed · promised at most 5% · 95 checked calls to all their tools, last 30 days",
+    );
+    expect(failRateLabel({ measuredCalls: 95, failedCalls: 3 }, 0.025)).toBe(
+      "3.2% failed · promised at most 2.5% · 95 checked calls to all their tools, last 30 days",
+    );
+    expect(failRateLabel(null, 0.05)).toBe("Not measured yet · promised at most 5%");
+  });
+  it("says what a single listing's promise covers when the rate is provider-wide", () => {
+    expect(failRateLabel({ measuredCalls: 95, failedCalls: 10 }, 0.02, "this tool")).toBe(
+      "11% failed · promised at most 2% for this tool · 95 checked calls to all their tools, last 30 days",
+    );
+  });
+  it("has one compact framing, the share that failed", () => {
+    expect(failRateShort({ measuredCalls: 95, failedCalls: 10 })).toBe("11% failed");
+    expect(failRateShort({ measuredCalls: 1000, failedCalls: 50 })).toBe("5.0% failed");
+    expect(failRateShort(null)).toBe("Not measured yet");
+  });
+  it("names one promise only when every listing makes the same one", () => {
+    expect(uniformPromise([0.05, 0.05, undefined])).toBe(0.05);
+    expect(uniformPromise([0.05, 0.02])).toBeNull();
+    expect(uniformPromise([])).toBeNull();
+  });
+});
+
+describe("per-chain prices", () => {
+  const evm = { amount: "100000", asset: "eip155:46630/erc20:0xusdg", decimals: 6 };
+  const sol = { amount: "250000", asset: "solana:devnet/token:usdg", decimals: 6 };
+  const prices = [
+    { chainId: "solana:devnet", price: sol, providerId: "open-meteo" },
+    { chainId: "eip155:46630", price: evm, providerId: "e2e" },
+  ];
+  const names: Record<string, string> = { "eip155:46630": "Robinhood Chain testnet", "solana:devnet": "Solana devnet" };
+  const chainName = (id: string) => names[id] ?? id;
+
+  it("says the price, the chain and the provider that sets it", () => {
+    expect(chainPriceText(prices[1], chainName, "E2E Weather Ltd")).toBe(
+      "$0.10 per call on Robinhood Chain testnet (E2E Weather Ltd)",
+    );
+    expect(chainPriceText(prices[0], chainName, null)).toBe("$0.25 per call on Solana devnet");
+    expect(chainPriceText({ ...prices[0], price: { ...sol, amount: "0" } }, chainName, "X")).toBe(
+      "Free on Solana devnet (X)",
+    );
+  });
+  it("leads with the reader's own chain, else the headline quote's chain", () => {
+    expect(orderChainPrices(prices, ["solana:devnet"], evm).map((p) => p.chainId)).toEqual([
+      "solana:devnet",
+      "eip155:46630",
+    ]);
+    expect(orderChainPrices(prices, null, evm).map((p) => p.chainId)).toEqual(["eip155:46630", "solana:devnet"]);
+    expect(orderChainPrices(prices, ["eip155:1"], null).map((p) => p.chainId)).toEqual([
+      "solana:devnet",
+      "eip155:46630",
+    ]);
+    expect(orderChainPrices(undefined, null, evm)).toEqual([]);
+  });
+  it("follows the reader's own order of preference, not the server's", () => {
+    expect(orderChainPrices(prices, ["eip155:46630", "solana:devnet"], sol)[0].chainId).toBe("eip155:46630");
+    expect(orderChainPrices(prices, ["eip155:1", "solana:devnet"], evm)[0].chainId).toBe("solana:devnet");
+  });
+  it("leads with funded chains only, best funded first", () => {
+    const usdOn = (chainId: string, amount: string) => ({ chainId, available: { amount, asset: "x", decimals: 6 } });
+    expect(fundedChains([usdOn("a", "0"), usdOn("b", "5000000"), usdOn("c", "9000000")])).toEqual(["c", "b"]);
+    expect(fundedChains(undefined)).toEqual([]);
+  });
+  it("names a chain's provider only when exactly one listing serves it", () => {
+    const nameOf = (id: string) => ({ e2e: "E2E Weather Ltd", "open-meteo": "Open-Meteo Demo BV" })[id];
+    expect(chainProviderName({ ...prices[1], listings: 1 }, nameOf)).toBe("E2E Weather Ltd");
+    expect(chainProviderName({ ...prices[1], listings: 2 }, nameOf)).toBeNull();
+    expect(chainProviderName({ ...prices[1], providerId: null, listings: 1 }, nameOf)).toBeNull();
+    // An older API without the count names nobody rather than guessing.
+    expect(chainProviderName(prices[1], nameOf)).toBeNull();
+  });
+  it("draws the seed's two lines: Robinhood leads with its provider, Solana on its own line", () => {
+    const nameOf = (id: string) => ({ e2e: "E2E Weather Ltd", "open-meteo": "Open-Meteo Demo BV" })[id];
+    const seeded = prices.map((entry) => ({ ...entry, listings: 1 }));
+    const lines = chainPriceLines(orderChainPrices(seeded, null, evm), { chainName, nameOf });
+    expect(lines.lead).toBe("on Robinhood Chain testnet (E2E Weather Ltd)");
+    expect(lines.others).toEqual([
+      { chainId: "solana:devnet", text: "$0.25 per call on Solana devnet (Open-Meteo Demo BV)" },
+    ]);
+  });
+  it("names nobody when two listings share a chain, or when the lead price is a range", () => {
+    const nameOf = () => "Someone";
+    const shared = prices.map((entry) => ({ ...entry, listings: 2 }));
+    const lines = chainPriceLines(orderChainPrices(shared, null, evm), { chainName, nameOf });
+    expect(lines.lead).toBe("on Robinhood Chain testnet");
+    expect(lines.others[0].text).toBe("$0.25 per call on Solana devnet");
+    const ranged = chainPriceLines([{ ...prices[1], listings: 1 }], { chainName, nameOf, leadIsRange: true });
+    expect(ranged.lead).toBe("on Robinhood Chain testnet");
+  });
+  it("marks a settlement chain that has no price right now", () => {
+    expect(paidOnText(["eip155:46630", "solana:devnet"], [prices[1]], chainName)).toBe(
+      "Paid on Robinhood Chain testnet, Solana devnet (price unavailable right now).",
+    );
+    expect(paidOnText(["eip155:46630"], [], chainName)).toBe("Paid on Robinhood Chain testnet.");
+  });
+});
+
+describe("stakeRuleSentence", () => {
+  it("states the penalty rule as /why-list-here does: the promise, the sample, the daily cap", () => {
+    const text = stakeRuleSentence();
+    expect(text).toContain("fails more often than it promised");
+    expect(text).toContain("400 checked calls");
+    expect(text).toContain("10%");
+    expect(text).not.toMatch(/binding/i);
   });
 });
 
@@ -121,11 +243,14 @@ describe("misc", () => {
 
 describe("failsOften and priceRange", () => {
   const usd = (amount: string) => ({ amount, asset: "a", decimals: 6 });
-  it("flags at least 20% failures over at least 5 calls only", () => {
-    expect(failsOften({ measuredCalls: 8, failedCalls: 8 })).toBe(true);
-    expect(failsOften({ measuredCalls: 10, failedCalls: 2 })).toBe(true);
-    expect(failsOften({ measuredCalls: 10, failedCalls: 1 })).toBe(false);
-    expect(failsOften({ measuredCalls: 4, failedCalls: 4 })).toBe(false);
+  it("flags at least 20% failures over at least 20 checked calls only", () => {
+    expect(HIGH_FAILURE_MIN_CALLS).toBe(20);
+    // The seeded case: 8 of 8 failed is too few calls to call anyone unreliable.
+    expect(failsOften({ measuredCalls: 8, failedCalls: 8 })).toBe(false);
+    expect(failsOften({ measuredCalls: 19, failedCalls: 19 })).toBe(false);
+    expect(failsOften({ measuredCalls: 20, failedCalls: 4 })).toBe(true);
+    expect(failsOften({ measuredCalls: 20, failedCalls: 3 })).toBe(false);
+    expect(failsOften({ measuredCalls: 95, failedCalls: 10 })).toBe(false);
     expect(failsOften(null)).toBe(false);
   });
   it("says from the cheapest eligible price, held at the quote", () => {
@@ -151,13 +276,13 @@ describe("routingNotes", () => {
     expect(notes).toHaveLength(1);
     expect(notes[0]).toContain("Dear Co ($0.25 per call) is not taking paid calls right now");
   });
-  it("says the only provider taking calls fails often, and that failures are never charged", () => {
+  it("names the only provider taking calls when it fails often, and says failures are never charged", () => {
     const notes = routingNotes(usd("0.10"), [
-      { name: "Flaky", price: usd("0.10"), quality: { measuredCalls: 8, failedCalls: 8 } },
+      { name: "Flaky", price: usd("0.10"), quality: { measuredCalls: 40, failedCalls: 20 } },
       { name: "Dear Co", price: usd("0.25"), quality: null },
     ]);
     expect(notes[1]).toBe(
-      "Calls go to the provider that is taking calls; this one has failed often recently. Failed results are never charged.",
+      "Calls go to Flaky, the only provider taking calls; it has failed often recently. Failed results are never charged.",
     );
   });
   it("says nothing when every provider takes calls and none fails often", () => {
@@ -179,6 +304,18 @@ describe("routingNotes across chains", () => {
       (id) => names[id] ?? id,
     );
     expect(notes).toEqual(["The price above is for Robinhood Chain testnet. Open-Meteo charges $0.25 per call on Solana devnet."]);
+  });
+  it("leaves the other-chain note out when the price is already listed per chain", () => {
+    const notes = routingNotes(
+      evm,
+      [
+        { name: "E2E Weather", price: evm, quality: null },
+        { name: "Open-Meteo", price: sol, quality: null },
+      ],
+      (id) => names[id] ?? id,
+      { chainsListed: true },
+    );
+    expect(notes).toEqual([]);
   });
 });
 
