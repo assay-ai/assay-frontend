@@ -33,7 +33,7 @@ import { useOrgHandle } from "@/components/toolsets/use-toolsets";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
-import { credentialLabel } from "@/features/buyer-money/mcp-config";
+import { credentialLabel, type CredentialLike } from "@/features/buyer-money/mcp-config";
 import { termsVersionLabel } from "@/features/m41/terms";
 import { createCredential, listAgents, listCredentials } from "@/services/account.service";
 import { getProviderRegistration } from "@/services/provider-registration.service";
@@ -114,13 +114,10 @@ import { getProviderRegistration } from "@/services/provider-registration.servic
  */
 
 
-interface Credential {
+interface Credential extends CredentialLike {
   id: string;
   agentId: string;
   name: string;
-  /** Null for an OAuth grant (an app sign-in): there is no key to mask. */
-  prefix: string | null;
-  oauthClient?: { name: string } | null;
   scopes: string[];
   lastUsedAt: string | null;
   expiresAt: string | null;
@@ -155,7 +152,7 @@ interface TokenRow {
  * "••••8f3a": enough to tell two keys apart, never the key's raw prefix. An
  * OAuth grant has no key: it is named as the app sign-in it is.
  */
-function maskedKey(credential: Pick<Credential, "prefix" | "oauthClient">): string {
+function maskedKey(credential: CredentialLike): string {
   return credential.prefix ? `••••${credential.prefix.slice(-4)}` : credentialLabel(credential);
 }
 

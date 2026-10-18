@@ -94,6 +94,11 @@ describe("parseMcpUrl — a URL back into the question (Change, browser redirect
       expect(parseMcpUrl(`https://mcp.example.com/${first}`, HOST)).toBeNull();
       expect(parseMcpUrl(`https://mcp.example.com/${first}/x?free=1`, HOST)).toBeNull();
     }
+    expect(parseMcpUrl("https://mcp.example.com/OAUTH/x", HOST)).toBeNull();
+    expect(parseMcpUrl("https://mcp.example.com/.Well-Known/x", HOST)).toBeNull();
+    // Only the first segment is reserved: the same word further in still parses.
+    expect(parseMcpUrl("https://mcp.example.com/@acme/oauth", HOST)?.choice).toEqual({ kind: "shared", handle: "acme", slug: "oauth" });
+    expect(parseMcpUrl("https://mcp.example.com/my/docs", HOST)?.choice).toEqual({ kind: "toolset", slug: "docs" });
     expect(RESERVED_FIRST_SEGMENTS).toEqual(["t", ".well-known", "health", "status", "docs", "oauth"]);
   });
 
