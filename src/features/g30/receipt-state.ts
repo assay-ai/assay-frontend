@@ -496,7 +496,11 @@ export function isFinalNotCharged(state: ReceiptState, receipt: Receipt): boolea
 
 /* ------------------------------------------------------- the one story */
 
-/** Where this call's reports leave its money: one being decided, one decided, or none. */
+/**
+ * Where this call's reports leave its money: `open` for a report covered by
+ * the refund guarantee that is being decided (the payment stays held),
+ * `closed` for any other report, or `none`.
+ */
 export type ReceiptReportState = "none" | "open" | "closed";
 
 /** What the timeline needs besides the receipt. */

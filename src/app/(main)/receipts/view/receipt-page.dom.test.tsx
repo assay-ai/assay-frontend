@@ -108,12 +108,25 @@ describe("the receipt page tells one story", () => {
   it("a reportable call not yet collected never says 'No refund'", () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.parse("2026-10-13T18:20:00.000Z"));
-    const words = render(uncheckedReceipt({ providerId: "prv-1", disputeFilingClosesAt: "2026-10-20T18:10:00.000Z" }));
+    const words = render(
+      uncheckedReceipt({ providerId: "prv-1", disputeFilingClosesAt: "2026-10-20T18:10:00.000Z", holdReleasedAt: null }),
+    );
     expect(words).not.toMatch(/no refund/i);
     expect(words).toContain("Refundable: the 1-hour hold starts when the payment is collected.");
     expect(words).toContain("The payment has not been collected yet. Report it now and, if your report is accepted, you are refunded in full.");
     // One button, beside the headline; the box at the foot only explains.
     expect(words.match(/Report a bad result/g)).toHaveLength(1);
+  });
+
+  // Re-review R1: the e17d shape with a provider: the hold was released, so the backend guarantees nothing.
+  it("a reportable call whose hold was released promises neither a refund nor 'no refund'", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse("2026-10-13T18:20:00.000Z"));
+    const words = render(uncheckedReceipt({ providerId: "prv-1", disputeFilingClosesAt: "2026-10-20T18:10:00.000Z" }));
+    expect(words).not.toMatch(/refunded in full|no refund/i);
+    expect(words).not.toContain("left to report it");
+    expect(words).not.toContain("Refundable:");
+    expect(words).toContain("If your report is accepted, it counts against the provider's quality.");
   });
 
   it("a demo charged call inside the hold: the pre-B2 story, plus the countdown and the hold rows", () => {
