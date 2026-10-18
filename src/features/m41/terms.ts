@@ -39,9 +39,9 @@ export const DESIGN_TERMS: ProviderTermsSummary = {
     { key: "payouts", label: "Payouts", value: "as each call settles", caption: "on-chain and final" },
     {
       key: "reserveHeld",
-      label: "Reserve held",
+      label: "Standing reserve",
       value: "$0.00",
-      caption: "we hold nothing back against your account",
+      caption: "No standing reserve: each paid call is held for 1 hour for buyer reports",
     },
     { key: "clawback", label: "Clawback", value: "never", caption: "a paid payout stays paid" },
     {

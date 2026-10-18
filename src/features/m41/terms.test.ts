@@ -14,6 +14,13 @@ describe("provider terms copy (BUG-R5-03)", () => {
     expect(row("slashedWhen")?.value).not.toContain("DATA_FAIL");
   });
 
+  // B5 review M2: "we hold nothing back" contradicted the 1-hour hold for buyer reports.
+  it("says each paid call is held for buyer reports, not that nothing is held", () => {
+    const reserve = DESIGN_TERMS.commercialTerms.find((term) => term.key === "reserveHeld");
+    expect(reserve?.caption).toBe("No standing reserve: each paid call is held for 1 hour for buyer reports");
+    expect(reserve?.caption).not.toMatch(/nothing back/);
+  });
+
   it("names the policy the console's way", () => {
     expect(plainTermsLine("I accept the Payout Terms (2026-04-01) and the Slash Policy (2026-06-15)")).toBe(
       "I accept the Payout Terms (Apr 1, 2026 version) and the Penalty Policy (Jun 15, 2026 version)"
