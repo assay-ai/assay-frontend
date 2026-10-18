@@ -15,7 +15,13 @@ import { documentsEqual } from "@/features/provider-binding/mapping-editor";
 import { useProviderCatalogue } from "@/features/provider-binding/tool-name";
 import { ConnectStage, type ConnectDraft } from "@/features/provider-binding/wizard/connect-stage";
 import { LiveStage, REQUIREMENT_SENTENCE } from "@/features/provider-binding/wizard/live-stage";
-import { isWizardStage, wizardSteps, type WizardStage } from "@/features/provider-binding/wizard/stages";
+import {
+  accountStepsDone,
+  combinedProgress,
+  isWizardStage,
+  wizardSteps,
+  type WizardStage,
+} from "@/features/provider-binding/wizard/stages";
 import { ToolStage } from "@/features/provider-binding/wizard/tool-stage";
 import type {
   CatalogueTool,
@@ -238,7 +244,10 @@ function WizardContent() {
       <h1 className="text-heading-sm text-01 tablet:text-heading-md">
         {tool ? `List ${tool.name}` : "List a tool"}
       </h1>
-      <p className="text-body-13 text-03">Three steps. Your progress is saved as you go.</p>
+      <p className="text-body-13 text-03">
+        {registration.data ? `${combinedProgress(accountStepsDone(registration.data.steps), stage)} · ` : "Three steps. "}
+        Your progress is saved as you go.
+      </p>
       {back ? (
         <Link href={back} className="inline-flex min-h-10 items-center self-start text-body-13 text-primary-600 hover:underline">
           Back to publishing your API

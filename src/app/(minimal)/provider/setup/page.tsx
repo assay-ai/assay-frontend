@@ -1,6 +1,7 @@
 "use client";
 
 import { useConnectWallet } from "@privy-io/react-auth";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, CircleCheck, CircleX, PartyPopper, TriangleAlert, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -12,6 +13,8 @@ import { Stepper, type StepperStep } from "@/components/patterns/stepper";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
+import { stakeRuleOf } from "@/features/provider-binding/go-live";
+import { combinedProgress } from "@/features/provider-binding/wizard/stages";
 import { Outcome } from "@/features/m41/outcome";
 import { plainTermsLine, termLabel, termValue } from "@/features/m41/terms";
 import { addressFamily, useProviderSetup, type ProviderSetup } from "@/features/m41/use-setup";
@@ -20,8 +23,10 @@ import { waitingPeriodOf, waitingPeriodPhrase } from "@/features/provider-stake/
 import { useChainName } from "@/hooks/useChainName";
 import { useConnectedAddresses } from "@/hooks/useSigner";
 import { ApiError } from "@/libs/ApiClient";
+import { GLOSSARY } from "@/libs/glossary";
 import { knowsError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
+import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
 
 /**
@@ -31,9 +36,15 @@ import { cn } from "@/utils";
  *   2 Get paid  connect a wallet, sign a message (free); the chain follows the wallet
  *   3 Your API  the endpoint, checked as soon as you leave the field
  *
- * then one screen with one button: "Create your first tool listing", which
- * carries the endpoint (and a price from the public calculator, if one came
- * in on `?price=`) into the listing wizard.
+ * then one screen with one button: "Create your first tool listing" ("List
+ * another tool" once there are listings), which carries the endpoint (and a
+ * price from the public calculator, if one came in on `?price=`) into the
+ * listing wizard.
+ *
+ * That last screen is also the console's business explainer ("How earning,
+ * stake and penalties work", linked from the rail, Home and Account): price,
+ * stake and penalty in three lines, with the glossary's worked penalty
+ * example. Its numbers come from the shared constants, never typed here.
  *
  * The order is the backend's: registering creates the provider record and
  * needs the terms, and a payout proof and an endpoint are stored on that record.
@@ -133,6 +144,7 @@ export default function ProviderSetupPage() {
               review queue.
             </p>
           </header>
+          <p className="text-label-13 text-02">{combinedProgress([done.you, done.paid, done.api].filter(Boolean).length, null)}</p>
           <Stepper steps={stepperSteps} onSelect={(id) => setStage(id as Stage)} label="Setup progress" />
           {stage === "you" ? <YouStep setup={setup} onNext={() => setStage(done.paid ? (done.api ? "done" : "api") : "paid")} /> : null}
           {stage === "paid" ? <PaidStep setup={setup} onNext={() => setStage(done.api ? "done" : "api")} /> : null}
@@ -467,7 +479,7 @@ function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
   return (
     <Card
       title="Your API"
-      description="The HTTPS address Assay calls for your tools. Any JSON API works: you map it onto the tool when you list it, and change nothing on your side."
+      description="The HTTPS address Assay calls for your tools. Any JSON API works: you map it onto the tool when you list it, and change nothing on your side. Each tool you list can use a different address; this one is filled in for you."
     >
       <Field
         label="API address"
@@ -524,6 +536,15 @@ function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
 function DoneScreen({ href, setup }: { href: string; setup: ProviderSetup }) {
   const term = (pattern: RegExp) => setup.terms.commercialTerms.find((t) => pattern.test(`${t.key} ${t.label}`))?.value ?? null;
   const takeRate = term(/take.?rate/i);
+  // The same stake rule the wizard uses: `max(floor, multiplier × price)`, its published defaults until a stake is read.
+  const rule = stakeRuleOf(null);
+  // With listings already, this screen is the explainer, and its button lists another tool.
+  const listings = useQuery({
+    queryKey: ["provider", "tool-bindings", "setup-done"],
+    queryFn: () => listToolBindings({ limit: 1 }),
+    retry: 0,
+  });
+  const hasListings = (listings.data?.items.length ?? 0) > 0;
   const basics: [string, string][] = [
     [
       "Price",
@@ -531,20 +552,28 @@ function DoneScreen({ href, setup }: { href: string; setup: ProviderSetup }) {
     ],
     [
       "Stake",
-      `Free tools need none. To charge, your stake must cover $50 or 1,000 calls at your price, whichever is more. You get it back when you stop, after ${waitingPeriodPhrase(waitingPeriodOf(null, setup.terms))}.`,
+      `Free tools need none. To charge, your stake must cover $${rule.floor.toFixed(0)} or ${rule.multiplier.toNumber().toLocaleString("en-US")} calls at your price, whichever is more. You get it back when you stop, after ${waitingPeriodPhrase(waitingPeriodOf(null, setup.terms))}.`,
     ],
     [
-      "Penalty",
-      `You promise a failure rate. Calls are measured in windows (${WINDOW_WORDS}); if more fail than you promised in one window, part of your stake can be taken. You can dispute it before the deadline.`,
+      "Promise",
+      `You promise a failure rate. Calls are measured in windows (${WINDOW_WORDS}), and you can dispute a penalty before its deadline.`,
     ],
+    // The glossary's own words (third person), as their own rows: the same text as /why-list-here.
+    ["Penalty", GLOSSARY["stake-rule"].definition],
+    ["Example", GLOSSARY["penalty-example"].definition],
   ];
   return (
     <section className="flex w-full flex-col gap-5 rounded-xl border border-success-20 bg-01 p-5 tablet:p-8">
       <div className="flex items-start gap-3">
         <PartyPopper aria-hidden="true" className="mt-1 size-6 shrink-0 text-success-600" />
         <div className="flex flex-col gap-1">
-          <h1 className="text-heading-sm text-01">You are set up</h1>
-          <p className="text-body-13 text-02">Your account, payout wallet and API are ready. Next, list your first tool.</p>
+          <h1 className="text-heading-sm text-01">{hasListings ? "How earning, stake and penalties work" : "You are set up"}</h1>
+          <p className="text-body-13 text-02">
+            {hasListings
+              ? "Your account, payout wallet and API are set up. Here is how you earn and what you risk."
+              : "Your account, payout wallet and API are ready. Next, list your first tool."}
+          </p>
+          <p className="text-label-13 text-02">{combinedProgress(3, null)}</p>
         </div>
       </div>
       <dl className="flex w-full flex-col rounded-lg border border-01 bg-02 px-3.5 py-1">
@@ -571,12 +600,19 @@ function DoneScreen({ href, setup }: { href: string; setup: ProviderSetup }) {
           </li>
         ))}
       </ol>
-      <Button asChild className="self-stretch tablet:self-start">
-        <Link href={href}>
-          Create your first tool listing
-          <ArrowRight aria-hidden="true" />
-        </Link>
-      </Button>
+      <div className="flex flex-col gap-2 tablet:flex-row tablet:items-center">
+        <Button asChild className="self-stretch tablet:self-start">
+          <Link href={href}>
+            {hasListings ? "List another tool" : "Create your first tool listing"}
+            <ArrowRight aria-hidden="true" />
+          </Link>
+        </Button>
+        {hasListings ? (
+          <Button asChild variant="secondary" className="self-stretch tablet:self-start">
+            <Link href="/provider">Back to Home</Link>
+          </Button>
+        ) : null}
+      </div>
     </section>
   );
 }

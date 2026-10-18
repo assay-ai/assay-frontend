@@ -435,6 +435,9 @@ function withSavedLimits(binding: DemoBinding): DemoBinding {
 /** Stored credential summaries per binding, then per origin: names and hints only, never a value. */
 const demoCredentialSets = new Map<string, Map<string, { origin: string; headers: { name: string; hint: string | null }[]; updatedAt: string }>>();
 
+/** Drafts discarded in this tab (`DELETE …/tool-bindings/:id`): gone from the list until a reload. */
+const demoDiscarded = new Set<string>();
+
 /** The auth mode a tab chose per listing. Only the mode: the demo never keeps a credential value. */
 const demoAuthModes = new Map<string, "NONE" | "API_KEY" | "SIGNATURE" | "BOTH">();
 
@@ -1854,7 +1857,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/tool-bindings",
-    body: () => page(BINDINGS.map(bindingSummary)),
+    body: () => page(BINDINGS.filter((binding) => !demoDiscarded.has(binding.id)).map(bindingSummary)),
   },
   {
     method: "GET",
@@ -2092,6 +2095,28 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         ...(isMapping(data.requestMapping) ? { requestMapping: data.requestMapping } : {}),
         ...(isMapping(data.responseMapping) ? { responseMapping: data.responseMapping } : {}),
       };
+    },
+  },
+  {
+    // As the API (status DRAFT and never published; the demo has no publishedAt, so publishedVersion
+    // stands for both): only such a draft can be discarded, and its credential sets go with it.
+    method: "DELETE",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+$/,
+    body: (path) => {
+      const id = idIn(path, 3) ?? "";
+      const binding = id.startsWith(DRAFT_PREFIX) ? bindingFor(id) : BINDINGS.find((known) => known.id === id);
+      if (!binding) throw new ApiError("PROVIDER_BINDING_NOT_FOUND", "No binding of yours with this id", 404, path);
+      if (binding.status !== "DRAFT" || binding.publishedVersion !== null) {
+        throw new ApiError(
+          "PROVIDER_BINDING_NOT_DISCARDABLE",
+          `Only a draft that was never published can be discarded; this one ${binding.status === "DRAFT" ? "was published" : `is ${binding.status}`}. Pause it instead.`,
+          409,
+          path,
+        );
+      }
+      demoCredentialSets.delete(id);
+      demoDiscarded.add(id);
+      return null;
     },
   },
   {

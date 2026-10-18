@@ -225,3 +225,21 @@ describe("demo Money: not credited and payments", () => {
     for (const item of body.items) expect(["BATCH", "REDEMPTION"]).toContain(item.kind);
   });
 });
+
+describe("demo: discard a draft listing", () => {
+  const DRAFT = "/providers/me/tool-bindings/e7d63a10-9f28-45cb-a034-8c5b2e1f6d97";
+
+  it("discards a never-published draft and drops it from the list", async () => {
+    const fixtures = await load();
+    const ids = () => ((call(fixtures, "GET", "/providers/me/tool-bindings").items as { id: string }[]) ?? []).map((b) => b.id);
+    expect(ids()).toContain("e7d63a10-9f28-45cb-a034-8c5b2e1f6d97");
+
+    expect(call(fixtures, "DELETE", DRAFT)).toBeNull();
+    expect(ids()).not.toContain("e7d63a10-9f28-45cb-a034-8c5b2e1f6d97");
+  });
+
+  it("refuses a published listing, as the API does", async () => {
+    const fixtures = await load();
+    expect(() => call(fixtures, "DELETE", FX)).toThrow(/never published/);
+  });
+});

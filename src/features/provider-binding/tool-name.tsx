@@ -7,7 +7,6 @@ import { CopyChip } from "@/components/patterns/copy-chip";
 import type { CatalogueTool, ToolCatalogue } from "@/interfaces";
 import { listToolCatalogue } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
-import { labelForEndpoint } from "@/utils/provider-label";
 
 /**
  * Bindings by the tool they serve, not by id. Every provider surface that
@@ -18,7 +17,7 @@ import { labelForEndpoint } from "@/utils/provider-label";
  *
  *   const names = useProviderToolNames();
  *   names.toolName(binding.toolId)            // "Market quote", or null until it loads
- *   names.bindingLabel(binding)               // name, else the endpoint's host
+ *   names.bindingLabel(binding)               // name, else "…" while loading, else "Unknown tool"
  *   <ToolName toolId={binding.toolId} />      // name, or a short-id copy chip
  */
 
@@ -43,7 +42,17 @@ export function isFixtureTool(tool: Pick<CatalogueTool, "name" | "description">)
 
 export interface BindingLike {
   toolId: string;
-  endpoint?: string | null;
+}
+
+/**
+ * A listing's label: the tool's name, "…" while the catalogue loads, else
+ * "Unknown tool" (a tool missing from the catalogue). Never the endpoint: a
+ * host or an IP address is infrastructure, not a name, and it is the same for
+ * every listing on one API.
+ */
+export function bindingLabelOf(toolName: string | null, pending: boolean): string {
+  if (toolName) return toolName;
+  return pending ? "…" : "Unknown tool";
 }
 
 export function useProviderToolNames() {
@@ -60,11 +69,10 @@ export function useProviderToolNames() {
     return name ? name : null;
   }, [byId]);
 
-  /** The tool's name; before it loads (or if unknown) the endpoint's host; never a uuid. */
+  /** The tool's name; never a uuid, a host or an IP address. */
   const bindingLabel = React.useCallback(
-    (binding: BindingLike): string =>
-      toolName(binding.toolId) ?? (binding.endpoint ? labelForEndpoint(binding.endpoint) : "Your tool"),
-    [toolName],
+    (binding: BindingLike): string => bindingLabelOf(toolName(binding.toolId), catalogue.isPending),
+    [toolName, catalogue.isPending],
   );
 
   return {
@@ -79,12 +87,10 @@ export function useProviderToolNames() {
 /** A tool's name, or its id as a copy chip when the catalogue does not know it. */
 export function ToolName({
   toolId,
-  endpoint,
   className,
   copyable = true,
 }: {
   toolId: string;
-  endpoint?: string | null;
   className?: string;
   /** False inside links and buttons (a button inside one is invalid HTML). */
   copyable?: boolean;
@@ -92,7 +98,6 @@ export function ToolName({
   const names = useProviderToolNames();
   const name = names.toolName(toolId);
   if (name) return <span className={className}>{name}</span>;
-  if (endpoint) return <span className={className}>{labelForEndpoint(endpoint)}</span>;
   if (names.isPending) return <span className={cn("text-03", className)}>…</span>;
   return copyable ? <CopyChip value={toolId} /> : <span className={className}>Unknown tool</span>;
 }
