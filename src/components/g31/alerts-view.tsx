@@ -37,14 +37,14 @@ import {
   type AlertPreset,
   type ExternalChannel,
 } from "@/features/buyer/alert-presets";
-import { groupAlerts, readableBody } from "@/features/buyer/alert-model";
+import { groupAlerts, idsToMarkOnOpen, readableBody } from "@/features/buyer/alert-model";
 import { contractNoticeText, isContractNoticeEvent, readContractNotice } from "@/features/toolsets/contract-notices";
 import { ContractNoticeFix } from "@/components/toolsets/contract-notice-fix";
 import { readUpdateNotice, updateNoticeText } from "@/features/toolsets/sharing";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { plainError } from "@/libs/plain-language";
 import { ApiError } from "@/libs/ApiClient";
-import { getUnreadCount, listNotifications, markAllNotificationsRead } from "@/services/account.service";
+import { listNotifications } from "@/services/account.service";
 import {
   listNotificationChannels,
   listNotificationDeliveries,
@@ -191,27 +191,20 @@ export function AlertsView() {
   const limits = useAlertLimitContext(logOpen);
   const alertGroups = React.useMemo(() => groupAlerts(feed.data?.items ?? []), [feed.data]);
 
-  // Opening the list is reading it: what it shows is marked read, once.
+  // Opening the list is reading it: what it shows is marked read — except
+  // open risks (balance, keys, a pending withdrawal), which stay on Overview
+  // until dismissed there or cleared. `idsToMarkOnOpen` asks once per id and
+  // retries a failure once, so a re-render never repeats a request.
   const markRead = useMarkAlertsRead();
-  const marked = React.useRef(new Set<string>());
+  const { mutate: markIds } = markRead;
+  const attempts = React.useRef(new Map<string, number>());
   React.useEffect(() => {
     if (!logOpen) return;
-    const ids = alertGroups.filter((g) => g.unread).flatMap((g) => g.ids).filter((id) => !marked.current.has(id));
+    const ids = idsToMarkOnOpen(alertGroups, attempts.current);
     if (ids.length === 0) return;
-    for (const id of ids) marked.current.add(id);
-    markRead.mutate(ids);
-  }, [logOpen, alertGroups, markRead]);
-  const unreadQuery = useQuery({
-    queryKey: ["notifications", "unread-count"],
-    enabled: logOpen,
-    queryFn: getUnreadCount,
-  });
-  const markAll = useMutation({
-    mutationFn: markAllNotificationsRead,
-    onSuccess: () => toast.success("Every alert is marked read."),
-    onError: (error) => toast.error(error instanceof ApiError ? plainError(error.code) : "Alerts could not be marked read"),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["notifications"] }),
-  });
+    for (const id of ids) attempts.current.set(id, (attempts.current.get(id) ?? 0) + 1);
+    markIds(ids);
+  }, [logOpen, alertGroups, markIds]);
 
   const deliveriesQuery = useQuery({
     queryKey: ["notification-deliveries", expandedId],
@@ -510,15 +503,11 @@ export function AlertsView() {
         <SheetContent className="tablet:max-w-[640px]">
           <SheetHeader>
             <SheetTitle>Recent alerts</SheetTitle>
-            <SheetDescription>Newest first. Opening this list marks them read. Open one to see where it was delivered.</SheetDescription>
+            <SheetDescription>
+              Newest first. Opening this list marks them read, except alerts about an open risk (balance, keys, a pending
+              withdrawal): those stay in Needs attention on Overview until you dismiss them. Open one to see where it was delivered.
+            </SheetDescription>
           </SheetHeader>
-          {(unreadQuery.data?.count ?? 0) > 0 ? (
-            <div className="px-[18px] pt-3">
-              <Button variant="secondary" size="sm" type="button" loading={markAll.isPending} onClick={() => markAll.mutate()}>
-                Mark all {unreadQuery.data!.count} unread as read
-              </Button>
-            </div>
-          ) : null}
           <div className="flex w-full flex-col gap-3 px-[18px] pb-6 pt-4">
             {feed.isPending ? (
               <PageState kind="loading" rows={4} label="Loading recent alerts" />

@@ -10,6 +10,7 @@ import { alertTitle, isOldLimitAlert, type AlertNote, type LimitContext } from "
 import { attentionAction, type AttentionAction } from "@/features/buyer/attention-action";
 import { supportsDelegation } from "@/features/delegation/delegation-form";
 import { notificationTitle } from "@/features/toolsets/contract-notices";
+import { ApiError } from "@/libs/ApiClient";
 import { listAgents, markNotificationRead } from "@/services/account.service";
 import { cn } from "@/utils";
 
@@ -74,7 +75,8 @@ export function useAlertLimitContext(enabled = true): LimitContext {
   const policyQuery = useSpendPolicyQuery({ enabled });
   return React.useMemo(() => {
     const agents = agentsQuery.data?.items ?? [];
-    const policy = policyQuery.data ?? null;
+    // `null` once read = there is no policy; `undefined` = not known (loading or failed).
+    const policy = policyQuery.isSuccess ? (policyQuery.data ?? null) : undefined;
     const agentId =
       policy?.agentId && agents.some((a) => a.agentId === policy.agentId)
         ? policy.agentId
@@ -83,19 +85,35 @@ export function useAlertLimitContext(enabled = true): LimitContext {
           : null;
     const agent = agents.find((a) => a.agentId === agentId);
     return { policy, policyAgentId: agentId, delegation: supportsDelegation(agent?.agentAccount) };
-  }, [agentsQuery.data, policyQuery.data]);
+  }, [agentsQuery.data, policyQuery.isSuccess, policyQuery.data]);
 }
 
 /**
- * Marks alerts read (`PATCH /notifications/:id/read`, the person's session
- * only), then refreshes the badge and every alert list.
+ * Marks each id read, one request each, all settled: a copy that fails is
+ * retried once, and a 404 (already gone, or not this organization's) counts
+ * as done. Resolves with the ids that still failed, so a caller re-shows only
+ * those.
  */
+export async function markAlertsRead(
+  ids: readonly string[],
+  mark: (id: string) => Promise<unknown> = markNotificationRead,
+): Promise<string[]> {
+  const attempt = async (batch: readonly string[]) => {
+    const results = await Promise.allSettled(batch.map((id) => mark(id)));
+    return batch.filter((_, i) => {
+      const result = results[i]!;
+      return result.status === "rejected" && !(result.reason instanceof ApiError && result.reason.status === 404);
+    });
+  };
+  const failed = await attempt(ids);
+  return failed.length > 0 ? attempt(failed) : failed;
+}
+
+/** `markAlertsRead`, then refreshes the badge and every alert list. Resolves with the ids that failed. */
 export function useMarkAlertsRead() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (ids: readonly string[]) => {
-      await Promise.all(ids.map((id) => markNotificationRead(id)));
-    },
+    mutationFn: (ids: readonly string[]) => markAlertsRead(ids),
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },

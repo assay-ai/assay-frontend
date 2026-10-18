@@ -215,9 +215,5 @@ describe("the demo's alerts (B8)", () => {
     expect(read.readAt).not.toBeNull();
     expect(unreadIds()).not.toContain("ntf_4c17");
     expect(count()).toBe(before - 1);
-
-    demoResponse("POST", "/notifications/read-all");
-    expect(unreadIds()).not.toContain("ntf_8b30");
-    expect(count()).toBe(0);
   });
 });
