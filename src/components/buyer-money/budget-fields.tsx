@@ -10,6 +10,8 @@ import { budgetFormFrom, budgetPatch, type BudgetField, type BudgetForm } from "
 import { hasOldBudget } from "@/features/buyer-money/spending-limits";
 import { updateSpendPolicy, type SpendPolicy } from "@/services/limits.service";
 
+import { DollarUnit } from "./dollar-unit";
+
 /**
  * The Assay-checked part of an agent's spending limits: per month, and rate
  * limits under Advanced. Which tools it may use is "What this agent can use"
@@ -121,12 +123,12 @@ export function BudgetFields({ draft, unit = draft.unit }: { draft: BudgetDraft;
     <div className="flex flex-col gap-4" data-testid="budget-fields">
       {mode === "budget" ? (
         <>
-          <Field id="budget-per-call" label="Most per call" inputMode="decimal" suffix={unit} placeholder="No limit" value={form.perCall} error={errors.perCall} onChange={(e) => set({ perCall: e.target.value })} />
+          <Field id="budget-per-call" label="Most per call" inputMode="decimal" suffix={<DollarUnit symbol={unit} />} placeholder="No limit" value={form.perCall} error={errors.perCall} onChange={(e) => set({ perCall: e.target.value })} />
           <Field
             id="budget-per-day"
             label="Most per day"
             inputMode="decimal"
-            suffix={unit}
+            suffix={<DollarUnit symbol={unit} />}
             placeholder="No limit"
             hint="A calendar day: it starts again at 00:00 UTC."
             value={form.perDay}
@@ -139,7 +141,7 @@ export function BudgetFields({ draft, unit = draft.unit }: { draft: BudgetDraft;
         id="budget-per-month"
         label="Most per month"
         inputMode="decimal"
-        suffix={unit}
+        suffix={<DollarUnit symbol={unit} />}
         placeholder="No limit"
         hint="Checked by Assay before each call. Starts again on the 1st at 00:00 UTC."
         value={form.perMonth}
@@ -164,7 +166,7 @@ export function BudgetFields({ draft, unit = draft.unit }: { draft: BudgetDraft;
         <div className="mt-3 flex flex-col gap-4">
           <Field id="budget-calls-minute" label="Calls per minute" inputMode="numeric" placeholder="No limit" hint="Stops a retry loop. Refused attempts count too." value={form.callsPerMinute} error={errors.callsPerMinute} onChange={(e) => set({ callsPerMinute: e.target.value })} />
           <Field id="budget-calls-hour" label="Calls per hour" inputMode="numeric" placeholder="No limit" value={form.callsPerHour} error={errors.callsPerHour} onChange={(e) => set({ callsPerHour: e.target.value })} />
-          <Field id="budget-spend-hour" label="Spend per hour" inputMode="decimal" suffix={unit} placeholder="No limit" value={form.spendPerHour} error={errors.spendPerHour} onChange={(e) => set({ spendPerHour: e.target.value })} />
+          <Field id="budget-spend-hour" label="Spend per hour" inputMode="decimal" suffix={<DollarUnit symbol={unit} />} placeholder="No limit" value={form.spendPerHour} error={errors.spendPerHour} onChange={(e) => set({ spendPerHour: e.target.value })} />
           <p className="text-body-xs text-03" data-testid="tools-moved-note">
             Which tools it may use is set under What this agent can use, on the{" "}
             <Link href="/agents" className="text-primary-600 hover:underline">

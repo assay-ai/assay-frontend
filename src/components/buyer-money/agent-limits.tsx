@@ -286,7 +286,7 @@ export function SpendingLimitsActions({
             .
           </p>
         ) : !escrowReady ? (
-          <p className="text-body-xs text-03">Add funds first: your first deposit opens your escrow.</p>
+          <p className="text-body-xs text-03">Add funds first: your first deposit sets up your balance.</p>
         ) : null}
         <LetAgentPaySheet
           open={payOpen}
@@ -410,7 +410,7 @@ export function AccountCeilingCard({ ctx }: { ctx: LimitsContext }) {
           <h2 className="text-label-md text-01">Account ceiling</h2>
           <p className="text-body-13 text-02">
             {set
-              ? `${formatLimit(escrow.maxVoucherAmount)} a call · ${formatLimit(escrow.maxPerWindow)} per 24 hours, for all your agents together. Enforced on chain; it protects your whole escrow.`
+              ? `${formatLimit(escrow.maxVoucherAmount)} a call · ${formatLimit(escrow.maxPerWindow)} per 24 hours, for all your agents together. Enforced on chain; it protects your whole balance.`
               : "Not set, so paid calls are refused. It takes one free signature."}
           </p>
         </div>
@@ -420,7 +420,7 @@ export function AccountCeilingCard({ ctx }: { ctx: LimitsContext }) {
       </div>
       {set ? (
         <CapMeter
-          label="Spent from your escrow in the last 24 hours, all agents"
+          label="Spent from your balance in the last 24 hours, all agents"
           used={escrow.spentInWindow ?? { ...escrow.maxPerWindow!, amount: "0" }}
           limit={escrow.maxPerWindow}
           refillsAt={windowRefillAt(escrow.windowStartedAt, escrow.windowSeconds)}
@@ -436,7 +436,7 @@ export function AccountCeilingCard({ ctx }: { ctx: LimitsContext }) {
         }),
       ) ? (
         <p className="text-body-xs text-03" data-testid="ceiling-counts-all">
-          This counts every payment from your escrow, including keys you revoked and agents you removed, so it can be more
+          This counts every payment from your balance, including keys you revoked and agents you removed, so it can be more
           than the agents above add up to.
         </p>
       ) : null}
