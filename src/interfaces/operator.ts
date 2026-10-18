@@ -425,7 +425,8 @@ export type ManualActionRefusal =
   | "ALREADY_RECORDED"
   | "EXECUTED_BEYOND_DECISION"
   | "DISPUTED_ON_CHAIN"
-  | "BENEFICIARY_NOT_AN_AGENT";
+  | "BENEFICIARY_NOT_AN_AGENT"
+  | "SPLIT_NOT_EXPRESSIBLE";
 
 export interface ManualActionOption {
   allowed: boolean;

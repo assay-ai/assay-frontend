@@ -206,7 +206,7 @@ describe("B18: what happens, before it is sent", () => {
 });
 
 describe("B18: a refusal says why, and that nothing changed", () => {
-  it.each(["CHANGED", "STANDING", "EXECUTED", "CHAIN_UNKNOWN", "DISPUTED_ON_CHAIN", "BENEFICIARY_NOT_AN_AGENT", "SOMETHING_NEW"])("%s", (reason) => {
+  it.each(["CHANGED", "STANDING", "EXECUTED", "CHAIN_UNKNOWN", "DISPUTED_ON_CHAIN", "BENEFICIARY_NOT_AN_AGENT", "SPLIT_NOT_EXPRESSIBLE", "SOMETHING_NEW"])("%s", (reason) => {
     const error = new ApiError("SLASH_MANUAL_ACTION_REFUSED", "refused", 409, undefined, { reason });
     const sentence = operatorErrorSentence(error);
     expect(sentence).toContain("Nothing was changed.");
