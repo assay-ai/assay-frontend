@@ -63,6 +63,7 @@ export function ManualActionSheet({
   proposalId,
   penaltyText,
   appliedText,
+  closedCase,
   me,
   waiting = null,
   onDone,
@@ -74,12 +75,14 @@ export function ManualActionSheet({
   penaltyText: string;
   /** What the chain took, for the record action. */
   appliedText: string | null;
+  /** The penalty is closed with no penalty (not upheld): the record copy says a pay-back is separate. */
+  closedCase: boolean;
   me: Pick<OperatorIdentity, "id" | "roles">;
   /** The same request already waiting: a second one is not sent. */
   waiting?: OperatorApproval | null;
   onDone: (answer: TwoPersonAnswer<ManualCaseActionResult>) => void;
 }) {
-  const copy = manualActionCopy(kind, { penalty: penaltyText, applied: appliedText });
+  const copy = manualActionCopy(kind, { penalty: penaltyText, applied: appliedText }, closedCase);
   const directory = useOperatorDirectory();
   const [reason, setReason] = React.useState(REASONS[kind][0]!.value);
   const [note, setNote] = React.useState("");

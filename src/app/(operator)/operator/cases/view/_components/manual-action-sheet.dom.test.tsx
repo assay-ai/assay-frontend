@@ -34,6 +34,7 @@ function open(kind: "close" | "record" | "repropose", options: { waiting?: Opera
       proposalId="34ccdb62-b12c-45b7-bec6-74d0412526c1"
       penaltyText="$28.47"
       appliedText="$4.00"
+      closedCase
       me={{ id: "op-1", roles: ["ADJL"] }}
       waiting={options.waiting ?? null}
       onDone={onDone}

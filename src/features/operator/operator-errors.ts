@@ -95,6 +95,8 @@ const MANUAL_REFUSAL: Readonly<Record<string, string>> = {
   ALREADY_RECORDED: "The execution is already recorded.",
   EXECUTED_BEYOND_DECISION: "The chain took more than the penalty now says is owed; this needs a pay-back and a human.",
   DISPUTED_ON_CHAIN: "The provider disputed this record on chain, so it is never proposed again.",
+  BENEFICIARY_NOT_AN_AGENT:
+    "The chain paid the agents' share to an account that is not one of the window's agents, so recording it here would leave that money credited to nobody. This needs a compensation decision by a human.",
 };
 
 export function manualActionRefusedSentence(error: Pick<ApiError, "context">): string {
