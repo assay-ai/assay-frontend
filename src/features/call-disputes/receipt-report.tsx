@@ -17,7 +17,7 @@ import { callDisputeKeys, DisputeChip, ReportSheet, useNow } from "./ui";
 
 /**
  * The receipt's "Report a bad result": what a report filed now would mean
- * (inside the 1-hour hold: a full refund if upheld; after it: a quality
+ * (inside the 1-hour hold: a full refund if accepted; after it: a quality
  * signal), the button, and once reported, the report's status with a link
  * to its timeline.
  */

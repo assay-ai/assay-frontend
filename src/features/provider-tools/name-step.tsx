@@ -19,6 +19,7 @@ import { claimOrgHandle } from "@/services/toolsets.service";
 import { toast } from "@/utils/toast";
 
 import { TryPanel, type TryOutcome } from "./fields-editor";
+import { optionalFromSchema } from "./schema-fields";
 
 import {
   createBody,
@@ -204,6 +205,7 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
           inputSchema: tried?.inputSchema ?? (STARTER_INPUT as Record<string, unknown>),
           outputSchema: tried?.outputSchema ?? (STARTER_OUTPUT as Record<string, unknown>),
           examples: tried?.examples.slice(0, 10) ?? [],
+          ...(tried ? { optionalInputFields: optionalFromSchema(tried.inputSchema), optionalOutputFields: tried.outputSchema ? optionalFromSchema(tried.outputSchema) : [] } : {}),
         }),
       ),
     onSuccess: (created) => {

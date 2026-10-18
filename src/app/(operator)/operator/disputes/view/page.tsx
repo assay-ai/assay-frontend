@@ -9,7 +9,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Chip } from "@/components/toolsets/toolset-bits";
 import { Button } from "@/components/ui/button";
-import { DECISION_NOTE_MAX, DECISION_NOTE_MIN, disputeErrorText, REFUND_PLAN_TEXT, slaMarks } from "@/features/call-disputes/model";
+import { DECISION_NOTE_MAX, DECISION_NOTE_MIN, disputeErrorText, REFUND_PLAN_TEXT, shortRef, slaMarks } from "@/features/call-disputes/model";
 import { DisputeTimeline, EvidencePanes, useNow } from "@/features/call-disputes/ui";
 import { mayDecideCallDisputes } from "@/features/operator/provider-tool-review";
 import { ResultCard } from "@/features/operator/result-card";
@@ -83,7 +83,7 @@ function DisputeScreen() {
       <header className="flex flex-col gap-1.5">
         <h1 className="text-heading-md text-01">{d.reasonLabel}</h1>
         <p className="text-body-13 text-02 [overflow-wrap:anywhere]">
-          On <span className="font-mono">{toolName(d.toolId)}</span>, served by {providers.lookup(d.providerId) ?? "its provider"}, for buyer …{d.buyerOrganizationId.slice(-4)}
+          On <span className="font-mono">{toolName(d.toolId)}</span>, served by {providers.lookup(d.providerId) ?? `Provider ${shortRef(d.providerId)}`}, for Buyer {shortRef(d.buyerOrganizationId)}
         </p>
         <div className="flex flex-wrap items-center gap-1.5 text-body-13 text-03">
           <Chip tone={d.state === "OPEN" ? "warning" : d.state === "UPHELD" ? "success" : "neutral"}>{d.state === "OPEN" ? "Open" : d.state === "UPHELD" ? "Upheld" : d.state === "REJECTED" ? "Rejected" : "Withdrawn"}</Chip>

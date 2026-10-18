@@ -49,6 +49,7 @@ function detail(hash: string): ReviewDetail {
       mcpUrls: { handle: null },
       quality: {} as ReviewDetail["tool"]["quality"],
       earliestSunsetAt: "2027-01-20T00:00:00.000Z",
+  takedown: null,
     },
     kind: "FIRST",
     pending: true,
@@ -95,7 +96,7 @@ describe("a review is decided for the content read", () => {
     expect(await screen.findByTestId("review-stale")).toBeTruthy();
     expect(approveButton().disabled).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: /read the new content/ }));
+    fireEvent.click(screen.getByRole("button", { name: /read the change/ }));
     await waitFor(() => expect(screen.queryByTestId("review-stale")).toBeNull());
     expect(approveButton().disabled).toBe(false);
     fireEvent.click(approveButton());

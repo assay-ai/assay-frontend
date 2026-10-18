@@ -56,14 +56,20 @@ function ReviewScreen() {
   const queryClient = useQueryClient();
   const detail = useQuery({ queryKey: ["operator", "review", id], queryFn: () => getProviderToolReview(id), enabled: Boolean(id), retry: 0, refetchInterval: 30_000 });
   const [readHash, setReadHash] = React.useState<string | null>(null);
+  // The content as it was read, to show what changed when the provider edits it meanwhile.
+  const [readContent, setReadContent] = React.useState<ReviewDetail["covered"] | null>(null);
   const [checks, setChecks] = React.useState<Record<string, ManualCheck>>({});
   // Another review opened in the same page: what was read, and checked, was the other tool's content.
   React.useEffect(() => {
     setReadHash(null);
+    setReadContent(null);
     setChecks({});
   }, [id]);
   React.useEffect(() => {
-    if (detail.data && readHash === null) setReadHash(detail.data.contentHash);
+    if (detail.data && readHash === null) {
+      setReadHash(detail.data.contentHash);
+      setReadContent(detail.data.covered);
+    }
   }, [detail.data, readHash]);
   const [takingDown, setTakingDown] = React.useState(false);
   const [done, setDone] = React.useState<string | null>(null);
@@ -92,6 +98,7 @@ function ReviewScreen() {
   const changedSinceRead = readHash !== null && readHash !== review.contentHash;
   const reread = () => {
     setReadHash(review.contentHash);
+    setReadContent(review.covered);
     setChecks({});
     window.scrollTo({ top: 0 });
   };
@@ -130,9 +137,12 @@ function ReviewScreen() {
 
       {changedSinceRead ? (
         <div role="alert" className="flex flex-col gap-2 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-3 tablet:flex-row tablet:items-center tablet:justify-between" data-testid="review-stale">
-          <p className="text-body-13 text-01">The provider changed what is under review after you opened it. Read the new content before you decide.</p>
-          <Button variant="secondary" size="sm" className="touch-target" icon={<RefreshCw aria-hidden="true" />} onClick={reread}>
-            I&apos;ll read the new content
+          <div className="flex min-w-0 flex-col gap-2">
+            <p className="text-body-13 text-01">The provider changed what is under review after you opened it. What changed:</p>
+            {readContent?.[0] && review.covered[0] ? <FieldDiff before={readContent[0]} after={review.covered[0]} /> : null}
+          </div>
+          <Button variant="secondary" size="sm" className="touch-target shrink-0 self-start" icon={<RefreshCw aria-hidden="true" />} onClick={reread}>
+            I&apos;ve read the change
           </Button>
         </div>
       ) : null}
@@ -187,6 +197,8 @@ function ReviewScreen() {
           onDecided={(message) => {
             setDone(message);
             void queryClient.invalidateQueries({ queryKey: ["operator", "reviews"] });
+            void queryClient.invalidateQueries({ queryKey: ["operator", "promotions"] });
+            void queryClient.invalidateQueries({ queryKey: ["operator", "health"] });
             void detail.refetch();
           }}
         />

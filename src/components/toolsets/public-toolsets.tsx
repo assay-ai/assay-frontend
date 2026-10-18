@@ -567,18 +567,37 @@ export function PublicHandleView() {
           {data.handle === "assay" ? "Official tool sets, kept up to date by Assay." : `The tools and tool sets @${data.handle} lists in the catalogue.`}
         </p>
       </header>
-      {data.tools.length > 0 ? <ConnectPanel publicPage url={data.mcpUrl ?? buildMcpUrl({ kind: "maker", handle: data.handle }, { free: false }, mcpHost())} title={`Connect every tool from @${data.handle}`} /> : null}
+      {data.tools.length > 0 ? (
+        <ConnectPanel
+          publicPage
+          url={data.mcpUrl ?? buildMcpUrl({ kind: "maker", handle: data.handle }, { free: false }, mcpHost())}
+          title={`Connect every tool from @${data.handle}`}
+          detail={
+            <span className="flex flex-col gap-1.5" data-testid="handle-connect-hint">
+              <span>Add this URL to your agent app as an MCP server: every listed tool of @{data.handle} becomes one server.</span>
+              <CopyLine value={data.mcpUrl ?? buildMcpUrl({ kind: "maker", handle: data.handle }, { free: false }, mcpHost())} label="Copy URL" />
+            </span>
+          }
+        />
+      ) : null}
       {data.tools.length > 0 ? <HandleTools handle={data.handle} tools={data.tools} catalogue={tools.data?.tools ?? []} /> : null}
       {data.toolsets.length === 0 ? (
         data.tools.length > 0 ? null : (
           <PageState kind="empty" title={`@${data.handle} has not listed a tool set yet`} description="Tools and tool sets shared only by link do not show here." action={{ label: "See all tool sets", href: "/catalogue?view=toolsets" }} />
         )
       ) : (
+        <>
+        {data.tools.length > 0 ? (
+          <p className="text-body-xs text-03" data-testid="toolset-review-note">
+            Tool sets are not reviewed as a whole: each one is a list of tools with rules, and each tool in it shows its own review state on its page.
+          </p>
+        ) : null}
         <ul className="grid grid-cols-1 gap-3 tablet:grid-cols-2" data-testid="handle-toolsets">
           {data.toolsets.map((card) => (
             <ToolsetCard key={card.slug} card={card} catalogue={tools.data?.tools ?? []} />
           ))}
         </ul>
+        </>
       )}
       {data.handle === "assay" ? null : (
         <div>

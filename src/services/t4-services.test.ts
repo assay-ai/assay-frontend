@@ -64,6 +64,8 @@ describe("provider tools", () => {
     expect(post).toHaveBeenLastCalledWith("/provider/tools/t1/review/withdraw");
     await tools.deprecateProviderToolMajor("t1", 2, "2027-02-01T00:00:00.000Z");
     expect(post).toHaveBeenLastCalledWith("/provider/tools/t1/versions/2/deprecate", { sunsetAt: "2027-02-01T00:00:00.000Z" });
+    await tools.deprecateProviderToolMajor("t1", 2, "2027-02-01T00:00:00.000Z", "std-1");
+    expect(post).toHaveBeenLastCalledWith("/provider/tools/t1/versions/2/deprecate", { sunsetAt: "2027-02-01T00:00:00.000Z", replacementToolId: "std-1" });
   });
 
   it("reads the gate, discards the draft and sets the replacement", async () => {
@@ -128,8 +130,9 @@ describe("operator: provider tool review and takedown", () => {
   it("takes a tool down, and reads a lifted takedown's 202 as queued", async () => {
     opPost.mockResolvedValue({});
     const body = { reasonCode: "IMPERSONATION", note: "Pretends to be another company." };
-    await opTools.takedownProviderTool("t1", body);
-    expect(opPost).toHaveBeenCalledWith("/operator/tools/t1/takedown", body);
+    const takedown = { ...body, publicReasonCode: "IMPERSONATION" as const, publicNote: "Contact support to restore it." };
+    await opTools.takedownProviderTool("t1", takedown);
+    expect(opPost).toHaveBeenCalledWith("/operator/tools/t1/takedown", takedown);
     opPostWithStatus.mockResolvedValue({ status: 202, data: { approvalId: "ap1", status: "PENDING" } });
     const answer = await opTools.revertCutoff("c1", body);
     expect(opPostWithStatus).toHaveBeenCalledWith("/operator/cutoffs/c1/revert", body);

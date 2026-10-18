@@ -10,7 +10,7 @@ import { UtcTime } from "@/components/patterns/utc-time";
 import { Chip } from "@/components/toolsets/toolset-bits";
 import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
-import { bySlaUrgency, DISPUTE_COPY, disputeQueueQuery, slaMarks } from "@/features/call-disputes/model";
+import { bySlaUrgency, DISPUTE_COPY, disputeQueueQuery, shortRef, slaMarks } from "@/features/call-disputes/model";
 import { useNow } from "@/features/call-disputes/ui";
 import { mayDecideCallDisputes } from "@/features/operator/provider-tool-review";
 import { OperatorCasesTabs } from "@/features/operator/provider-tool-ui";
@@ -92,7 +92,7 @@ function DisputesScreen() {
                     {d.amount ? <span className="font-mono text-mono-12 text-02"> · {formatMoney(d.amount, { decimals: 4 })}</span> : null}
                   </span>
                   <span className="text-body-xs text-02 [overflow-wrap:anywhere]">
-                    <span className="font-mono">{toolName(d.toolId)}</span> · {providers.lookup(d.providerId) ?? "its provider"} · buyer …{d.buyerOrganizationId.slice(-4)}
+                    <span className="font-mono">{toolName(d.toolId)}</span> · {providers.lookup(d.providerId) ?? `Provider ${shortRef(d.providerId)}`} · Buyer {shortRef(d.buyerOrganizationId)}
                   </span>
                   <span className="flex flex-wrap items-center gap-1.5 text-body-xs text-03">
                     <span>

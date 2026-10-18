@@ -156,6 +156,7 @@ export function ShareStep({ tool, gate, onStep }: { tool: ProviderTool; gate: Pr
     onError,
   });
   const withdraw = useMutation({ mutationFn: () => withdrawProviderToolReview(tool.id), onSuccess: store, onError });
+  const [confirmUnshare, setConfirmUnshare] = React.useState(false);
   const unshare = useMutation({
     mutationFn: () => unpublishProviderTool(tool.id),
     onSuccess: (updated) => {
@@ -290,9 +291,21 @@ export function ShareStep({ tool, gate, onStep }: { tool: ProviderTool; gate: Pr
         ) : null}
         {choice === "PRIVATE" && tool.visibility === "PRIVATE" ? <p className="text-body-13 text-02">It stays with your team. You can share it any time.</p> : null}
         {choice === "PRIVATE" && tool.visibility === "UNLISTED" && !pending ? (
-          <Button variant="secondary" loading={unshare.isPending} disabled={busy} onClick={() => unshare.mutate()}>
-            Stop sharing: only my team
-          </Button>
+          confirmUnshare ? (
+            <span className="flex flex-wrap items-center gap-2" role="group" aria-label="Stop sharing?">
+              <span className="text-body-13 text-02">Stop sharing? Your link-only tool sets stop reaching it at once; your own team keeps it.</span>
+              <Button variant="danger" loading={unshare.isPending} disabled={busy} onClick={() => unshare.mutate()}>
+                Stop sharing
+              </Button>
+              <Button variant="ghost" disabled={unshare.isPending} onClick={() => setConfirmUnshare(false)}>
+                Keep sharing
+              </Button>
+            </span>
+          ) : (
+            <Button variant="secondary" disabled={busy} onClick={() => setConfirmUnshare(true)}>
+              Stop sharing: only my team
+            </Button>
+          )
         ) : null}
       </div>
 

@@ -185,7 +185,16 @@ export function decideProviderToolReview(toolId: string, body: ReviewDecisionBod
   return operatorApi.post<ReviewDecisionResult>(review(toolId), body);
 }
 
-export function takedownProviderTool(toolId: string, body: ModerationBody): Promise<ModerationCutoff> {
+/** The reason a provider is told its tool was taken down (a closed list). */
+export type TakedownReasonCode = "IMPERSONATION" | "MODEL_INSTRUCTIONS" | "SECRET_COLLECTION" | "HARMFUL_OUTPUT" | "LEGAL_REQUEST" | "POLICY_VIOLATION";
+
+/** The register body, plus what the provider is told: `note` stays internal; `publicNote` (at most 500) is for the provider. */
+export interface TakedownToolBody extends ModerationBody {
+  publicReasonCode: TakedownReasonCode;
+  publicNote?: string;
+}
+
+export function takedownProviderTool(toolId: string, body: TakedownToolBody): Promise<ModerationCutoff> {
   return operatorApi.post<ModerationCutoff>(`/operator/tools/${encodeURIComponent(toolId)}/takedown`, body);
 }
 

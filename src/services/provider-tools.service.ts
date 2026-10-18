@@ -156,6 +156,17 @@ export interface ProviderTool extends ProviderToolSummary {
   quality: ProviderToolQuality;
   /** The earliest `sunsetAt` a deprecation accepts if sent now (now + the 90-day minimum, UTC). */
   earliestSunsetAt: string;
+  /** The tool's own takedown while it stands, as told to the provider (never the operator's note); null otherwise. */
+  takedown: ProviderToolTakedown | null;
+}
+
+export interface ProviderToolTakedown {
+  at: string;
+  /** IMPERSONATION, MODEL_INSTRUCTIONS, SECRET_COLLECTION, HARMFUL_OUTPUT, LEGAL_REQUEST, POLICY_VIOLATION; null on an old takedown. */
+  reasonCode: string | null;
+  reasonLabel: string | null;
+  /** A note the operator wrote for the provider. */
+  publicNote: string | null;
 }
 
 export type GateRequirementCode =
@@ -277,9 +288,12 @@ export function publishProviderToolVersion(id: string, version: number): Promise
   return api.post<ProviderTool>(`${base(id)}/versions/${version}/publish`);
 }
 
-/** Deprecate a major other than the current one; `sunsetAt` at least 90 days away (UTC). */
-export function deprecateProviderToolMajor(id: string, version: number, sunsetAt: string): Promise<ProviderTool> {
-  return api.post<ProviderTool>(`${base(id)}/versions/${version}/deprecate`, { sunsetAt });
+/**
+ * Deprecate a major other than the current one; `sunsetAt` at least the tool's `earliestSunsetAt`.
+ * `replacementToolId`: a serving tool that reaches at least the same audience (409 TOOL_PROVIDER_TOOL_STATE with a reason otherwise).
+ */
+export function deprecateProviderToolMajor(id: string, version: number, sunsetAt: string, replacementToolId?: string | null): Promise<ProviderTool> {
+  return api.post<ProviderTool>(`${base(id)}/versions/${version}/deprecate`, { sunsetAt, ...(replacementToolId ? { replacementToolId } : {}) });
 }
 
 /** "Anyone with the link" (UNLISTED, "Not reviewed"), through the gate. Locks the public name. */

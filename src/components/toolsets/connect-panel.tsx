@@ -78,7 +78,7 @@ export function ConnectPanel({
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className="text-label-sm text-01">{title}</p>
         {url ? <p className={cn("break-all font-mono text-mono-12 text-02", compact && "hidden tablet:block")}>{url}</p> : null}
-        {detail ? <p className={cn("text-body-13 text-02", compact && "hidden tablet:block")}>{detail}</p> : null}
+        {detail ? <div className={cn("text-body-13 text-02", compact && "hidden tablet:block")}>{detail}</div> : null}
       </div>
       {signedIn ? (
         <Button type="button" className="self-start tablet:self-center" onClick={() => setOpen(true)} disabled={!url}>
