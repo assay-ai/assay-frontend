@@ -728,7 +728,7 @@ function useProviderOffers(toolId: string, providers: readonly ProviderRow[]): P
   });
 }
 
-/** "Open-Meteo Demo BV · $0.25 · Solana devnet · 5.0% failed  [Doesn't take payment on your chain]". */
+/** "Open-Meteo Demo BV · $0.25 · Solana devnet · 5% failed  [Doesn't take payment on your chain]". */
 function ProviderOfferLabel({ provider, offer, chainName }: { provider: ProviderRow; offer: ProviderOffer | undefined; chainName: (chainId: string) => string }) {
   const facts = [
     offer?.price ? formatCallPrice(offer.price) : null,
