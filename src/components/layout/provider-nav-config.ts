@@ -1,11 +1,15 @@
+import type { SectionTab } from "./nav-config";
+
 /**
  * The provider console's navigation — one file, so the sidebar, the phone
  * tab bar, the mobile title and the tests agree about where a page lives.
  *
  *   Home        /provider                     (Get listed checklist until live)
  *   Inbox       /provider/inbox
- *   Tools       /provider/bindings            your listings; a binding's pages; tool requests
- *   Penalties   /provider/penalties           badge = penalties that need you
+ *   Tools       /provider/bindings            your listings; a binding's pages; your own APIs
+ *                                             (/provider/apis); tool requests
+ *   Penalties   /provider/penalties           badge = penalties that need you; buyer reports
+ *                                             about bad results (/provider/call-disputes)
  *   Money       /provider/money
  *   Stake       /provider/capital             withdraw stake is a sheet here
  *   Account     /provider/account             policy changes sit under it
@@ -34,14 +38,14 @@ export const PROVIDER_NAV_ITEMS: ProviderNavItem[] = [
     id: "tools",
     label: "Tools",
     href: "/provider/bindings",
-    match: ["/provider/bindings", "/provider/tool-requests", "/provider/portfolio", "/provider/agent-traffic"],
+    match: ["/provider/bindings", "/provider/apis", "/provider/tool-requests", "/provider/portfolio", "/provider/agent-traffic"],
     phoneTab: true,
   },
   {
     id: "penalties",
     label: "Penalties",
     href: "/provider/penalties",
-    match: ["/provider/penalties", "/provider/capital/penalties", "/provider/cases", "/provider/disputes"],
+    match: ["/provider/penalties", "/provider/capital/penalties", "/provider/cases", "/provider/disputes", "/provider/call-disputes"],
     phoneTab: true,
   },
   { id: "money", label: "Money", href: "/provider/money", match: ["/provider/money"], phoneTab: true },
@@ -81,6 +85,11 @@ const PROVIDER_TITLES: Record<string, string> = {
   "/provider/bindings/new": "List a tool",
   "/provider/bindings/view": "Tool",
   "/provider/tool-requests": "Tool requests",
+  "/provider/apis": "Your own APIs",
+  "/provider/apis/new": "Publish your own API",
+  "/provider/apis/view": "Your API",
+  "/provider/call-disputes": "Bad-result reports",
+  "/provider/call-disputes/view": "Report",
   "/provider/portfolio": "Portfolio",
   "/provider/penalties": "Penalties",
   "/provider/money": "Money",
@@ -104,3 +113,16 @@ export function providerTitleFor(pathname: string): string {
 export function allProviderNavHrefs(): string[] {
   return PROVIDER_NAV_ITEMS.map((item) => item.href);
 }
+
+/** The tabs of the Tools section: your listings of standard tools, your own APIs, and tool requests. */
+export const PROVIDER_TOOLS_TABS: readonly SectionTab[] = [
+  { id: "listings", label: "Listings", href: "/provider/bindings", match: ["/provider/bindings"] },
+  { id: "apis", label: "Your own APIs", href: "/provider/apis", match: ["/provider/apis"] },
+  { id: "requests", label: "Tool requests", href: "/provider/tool-requests", match: ["/provider/tool-requests"] },
+];
+
+/** The tabs of the Penalties section: penalties on your stake, and buyers' reports about bad results. */
+export const PROVIDER_PENALTIES_TABS: readonly SectionTab[] = [
+  { id: "penalties", label: "Penalties", href: "/provider/penalties", match: ["/provider/penalties"] },
+  { id: "reports", label: "Bad-result reports", href: "/provider/call-disputes", match: ["/provider/call-disputes"] },
+];

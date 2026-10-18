@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
@@ -86,6 +87,9 @@ function WizardContent() {
   const endpointParam = params.get("endpoint") ?? "";
   const priceParam = params.get("price");
   const toolParam = params.get("tool");
+  // "Publish your own API" sends a provider tool here to connect and test it, and wants it back.
+  const backParam = params.get("back");
+  const back = backParam && /^\/provider\/apis\/view\?id=[^&]+(&step=[a-z]+)?$/.test(backParam) ? backParam : null;
 
   const catalogue = useProviderCatalogue();
   const existing = useQuery({
@@ -142,6 +146,7 @@ function WizardContent() {
     if (!id && endpointParam) extra.set("endpoint", endpointParam);
     if (priceParam) extra.set("price", priceParam);
     if (!id && pickedToolId && next !== "tool") extra.set("tool", pickedToolId);
+    if (back) extra.set("back", back);
     const query = extra.toString();
     router.replace(query ? `${href}${href.includes("?") ? "&" : "?"}${query}` : href, { scroll: false });
     window.scrollTo({ top: 0 });
@@ -224,7 +229,7 @@ function WizardContent() {
       if (!isAlreadyLive(error)) throw error instanceof ApiError ? new Error(plainError(error.code)) : error;
       void queryClient.invalidateQueries({ queryKey: bindingQueryKey(binding.id) });
     }
-    router.push(`${routes.binding(binding.id)}&welcome=1`);
+    router.push(back ?? `${routes.binding(binding.id)}&welcome=1`);
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -234,6 +239,11 @@ function WizardContent() {
         {tool ? `List ${tool.name}` : "List a tool"}
       </h1>
       <p className="text-body-13 text-03">Three steps. Your progress is saved as you go.</p>
+      {back ? (
+        <Link href={back} className="self-start text-body-13 text-primary-600 hover:underline">
+          Back to publishing your API
+        </Link>
+      ) : null}
     </header>
   );
 

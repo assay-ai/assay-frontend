@@ -5,6 +5,8 @@ import { Send } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { PROVIDER_TOOLS_TABS } from "@/components/layout/provider-nav-config";
+import { SectionTabs } from "@/components/layout/section-tabs";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
@@ -46,6 +48,7 @@ export default function ToolRequestsPage() {
 
   return (
     <>
+      <SectionTabs tabs={PROVIDER_TOOLS_TABS} label="Tools" />
       <header className="flex w-full flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h1 className="text-heading-sm text-01 tablet:text-heading-md">Tool requests</h1>

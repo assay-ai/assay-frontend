@@ -5,6 +5,8 @@ import { ArrowRight, Plus } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { PROVIDER_TOOLS_TABS } from "@/components/layout/provider-nav-config";
+import { SectionTabs } from "@/components/layout/section-tabs";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
@@ -44,10 +46,17 @@ export default function ProviderToolsPage() {
 
   return (
     <>
+      <SectionTabs tabs={PROVIDER_TOOLS_TABS} label="Tools" />
       <header className="flex w-full flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h1 className="text-heading-sm text-01 tablet:text-heading-md">Tools</h1>
-          <p className="text-body-13 text-03">The tools you list for agents to call. One listing per tool.</p>
+          <p className="text-body-13 text-03">
+            The tools you list for agents to call. One listing per tool. Your own API that no standard tool covers?{" "}
+            <Link href="/provider/apis" className="text-primary-600 hover:underline">
+              Publish it under your name
+            </Link>
+            .
+          </p>
         </div>
         <Button asChild>
           <Link href={routes.bindingWizard()}>
