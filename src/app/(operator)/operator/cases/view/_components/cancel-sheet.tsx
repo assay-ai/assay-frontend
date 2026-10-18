@@ -26,9 +26,7 @@ import { WhatHappens } from "./what-happens";
  * When nothing of the penalty stands on chain (409 SLASH_NOTHING_STANDING,
  * read from the chain by the backend), there is nothing to sign: the sheet
  * says what the read showed (`error.context.chainStatus`, `closed`) and the
- * page reads the penalty again. `mode: "close"` is the same call made on
- * purpose for a penalty the brief already reads as having nothing on chain:
- * the 409 with `closed` is its success.
+ * page reads the penalty again. Nothing is changed by that answer.
  */
 function evmCancelCall(intent: CancelIntent, penaltyAsset: string): SlashContractCall {
   return {
@@ -52,7 +50,6 @@ export function CancelSheet({
   deadlineSentence,
   onSigned,
   onNothingStanding,
-  mode = "sign",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -63,8 +60,6 @@ export function CancelSheet({
   onSigned: (hash: string | null) => void;
   /** The backend found nothing on chain to cancel (see the error's context): read the penalty again. */
   onNothingStanding?: (error: ApiError) => void;
-  /** "close": confirm nothing stands and close the on-chain side (no signature). */
-  mode?: "sign" | "close";
 }) {
   const build = useMutation({
     mutationFn: () => createCancelIntent(proposalId),
@@ -87,11 +82,11 @@ export function CancelSheet({
     <Sheet open={open} onOpenChange={(next) => (signing ? undefined : onOpenChange(next))}>
       <SheetContent showCloseButton={!signing}>
         <SheetHeader className="tablet:pt-5">
-          <SheetTitle className="pr-8">{mode === "close" ? "Close the on-chain side" : "Get the cancel signed"}</SheetTitle>
+          <SheetTitle className="pr-8">Get the cancel signed</SheetTitle>
           <SheetDescription className="sr-only">Only the arbiter&rsquo;s key can retire the record on chain.</SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
-          {nothingStanding || mode === "close" ? null : (
+          {nothingStanding ? null : (
             <WhatHappens
               lines={[
                 { icon: <ShieldCheck />, text: "The reserved stake goes back to the provider once it lands." },

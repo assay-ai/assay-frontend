@@ -156,8 +156,8 @@ describe("the health strip", () => {
     policiesTotal: 0,
     stakeLocked: { amount: "0", asset: "x", decimals: 6 },
     providersWithStake: 0,
-    openDisputes: 0,
-    oldestOpenDisputeAgeSeconds: null,
+    oldProcessCases: 0,
+    oldestOldProcessCaseAgeSeconds: null,
   };
   it("is all normal below the gate", () => {
     expect(healthIssues(base)).toEqual([]);
