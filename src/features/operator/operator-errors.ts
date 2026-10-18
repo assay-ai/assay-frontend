@@ -97,6 +97,8 @@ const MANUAL_REFUSAL: Readonly<Record<string, string>> = {
   DISPUTED_ON_CHAIN: "The provider disputed this record on chain, so it is never proposed again.",
   BENEFICIARY_NOT_AN_AGENT:
     "The chain paid the agents' share to an account that is not one of the window's agents, so recording it here would leave that money credited to nobody. This needs a compensation decision by a human.",
+  SPLIT_NOT_EXPRESSIBLE:
+    "The chain paid the whole agents' share to one agent, but more than one agent was harmed, so the others were underpaid. This needs a compensation decision by a human.",
 };
 
 export function manualActionRefusedSentence(error: Pick<ApiError, "context">): string {
