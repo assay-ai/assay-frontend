@@ -19,7 +19,7 @@ import {
 } from "@/libs/ApiClient";
 
 import { demoEnabled } from "@/libs/demo/demo-api";
-import { isStrictPagePath, loadPage } from "@/features/oauth/strict-pages";
+import { appNavigate } from "@/features/oauth/strict-pages";
 
 import {
   applyIdentityChange,
@@ -132,7 +132,7 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
           logout,
           // A strict page (the consent page) leaves its document for sign-in:
           // its policy would refuse the sign-in captcha (`strict-pages.ts`).
-          navigate: (href) => (isStrictPagePath(pathnameRef.current) ? loadPage(href) : router.replace(href)),
+          navigate: (href) => appNavigate(router, href, { replace: true, pathname: pathnameRef.current }),
         },
       );
       stayedRef.current = outcome === "stay";
@@ -144,7 +144,7 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
     // A 401 redirect in flight (an expired session signing out) wins.
     if (redirectingRef.current) return;
     const target = signedOutLanding({ ready, authenticated, pathname, demo: demoEnabled() });
-    if (target) router.replace(target);
+    if (target) appNavigate(router, target, { replace: true, pathname });
   }, [ready, authenticated, pathname, router]);
 
   // The operator console has its own session: on its pages the buyer login

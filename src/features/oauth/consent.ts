@@ -67,6 +67,7 @@ export const CONSENT_STRINGS = {
   noAgents: "You have no agent yet. Create one in Agents & keys first.",
   limitsSavedNotApproved: "Your limits were saved, but the app was not approved:",
   returnToApp: "Return to the app",
+  tapAgain: "Tap again to confirm.",
   retry: "That did not go through. Try again.",
   badRedirect: "Assay could not send you back to the app. Go back to your app and try again.",
 } as const;
@@ -136,28 +137,93 @@ export function defaultAgentId(request: ConsentRequest): string | null {
 }
 
 /**
- * Check marks and their lookalikes, and the emoji variation selector that
- * can follow them: ✓ ✔ ☑ ✅ √ 🗸 🗹 🆗 ✓︎.
+ * Characters never shown in a name an app supplied. Removed outright:
+ * format characters (zero-width, bidi overrides), controls and variation
+ * selectors, so a word they split joins up again and is matched whole.
  */
-const TRUST_MARKS = /[\u2713\u2714\u2611\u2705\u221A\u{1F5F8}\u{1F5F9}\u{1F197}\u2610\u2612\uFE0E\uFE0F]/gu;
-/** The word "verified" in any case, as a whole word. */
-const VERIFIED_WORD = /\bverified\b/giu;
+const INVISIBLE = /[\p{Cf}\p{Cc}\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/gu;
+/**
+ * Replaced by a space: private-use, line separators, every "other" and
+ * "modifier" symbol (every check mark, tick and emoji, not a list of them)
+ * and the square-root tick.
+ */
+const SYMBOLS = /[\p{Co}\p{Zl}\p{Zp}\p{So}\p{Sk}\u221A]/gu;
 
 /**
- * A name the client supplied, fit to show: without check marks or the word
- * "verified", so an app cannot name itself "Claude Code ✓ Verified". Whether
- * an app is verified comes only from the API's `verified` field (§6.3.6),
- * never from text. The backend should refuse such names too (carried to a
- * later backend task); this is the page's own defence.
+ * Cyrillic and Greek letters that look like Latin ones, folded for matching
+ * only (never in what is shown). Covers every letter of "verified" and the
+ * common confusables around them.
+ */
+const LATIN_LOOKALIKES: Readonly<Record<string, string>> = {
+  // Cyrillic
+  "\u0430": "a", "\u0435": "e", "\u0451": "e", "\u043e": "o", "\u0440": "p", "\u0441": "c", "\u0445": "x",
+  "\u0443": "y", "\u0456": "i", "\u0457": "i", "\u0458": "j", "\u0455": "s", "\u0501": "d", "\u0475": "v",
+  "\u04cf": "i", "\u04bd": "e", "\u0433": "r", "\u0493": "f", "\u051b": "q", "\u051d": "w", "\u0261": "g",
+  // Greek
+  "\u03bf": "o", "\u03bd": "v", "\u03b9": "i", "\u03b5": "e", "\u03f5": "e", "\u03c1": "p", "\u03ba": "k",
+  "\u03c5": "u", "\u03c4": "t", "\u03b1": "a", "\u03dd": "f", "\u03f2": "c", "\u03b3": "y", "\u03c7": "x",
+  // Latin variants
+  "\u0131": "i", "\u0269": "i", "\u0280": "r", "\u1d20": "v", "\u1d07": "e", "\u0257": "d", "\u0192": "f",
+};
+
+/** One character, folded for matching: lower case, marks dropped, lookalikes to Latin. */
+function foldForMatch(char: string): string {
+  return [...char.toLowerCase().replace(/\p{M}/gu, "")].map((c) => LATIN_LOOKALIKES[c] ?? c).join("");
+}
+
+/** Separators trimmed from the ends after a removal: space, `_`, `-`, `.`, `·` and the like. */
+const END_SEPARATORS = /^[\s\p{Pd}\p{Po}\p{Pe}_]+|[\s\p{Pd}\p{Po}\p{Ps}_]+$/gu;
+
+/**
+ * A name an app supplied, without anything that could read as a trust claim:
+ * NFKC first (fullwidth and mathematical letters become plain ones), then
+ * invisible characters and symbols removed, then every "verified" removed, case-insensitively,
+ * whatever it is attached to, matched on a copy where marks are ignored and
+ * Cyrillic and Greek lookalikes read as Latin. Separators left dangling at
+ * the ends are trimmed.
+ */
+function stripTrustText(raw: string): string {
+  const normalised = raw.normalize("NFKC");
+  const chars = [...normalised.replace(INVISIBLE, "").replace(SYMBOLS, " ")];
+  let changed = chars.join("") !== normalised;
+  const target = "verified";
+  for (;;) {
+    const folded = chars.map(foldForMatch);
+    const joined = folded.join("");
+    const at = joined.indexOf(target);
+    if (at < 0) break;
+    // Map the match back to characters of the shown name.
+    let offset = 0;
+    let from = -1;
+    let to = -1;
+    for (let i = 0; i < folded.length; i += 1) {
+      const next = offset + folded[i]!.length;
+      if (from < 0 && next > at) from = i;
+      if (next >= at + target.length) {
+        to = i;
+        break;
+      }
+      offset = next;
+    }
+    // Marks that followed the last letter go with it.
+    while (to + 1 < chars.length && folded[to + 1] === "") to += 1;
+    chars.splice(from, to - from + 1, " ");
+    changed = true;
+  }
+  const spaced = chars.join("").replace(/\s+/g, " ").trim();
+  return changed ? spaced.replace(END_SEPARATORS, "").trim() : spaced;
+}
+
+/**
+ * A name the client supplied, fit to show: no check mark or symbol of any
+ * kind, and no "verified" in any spelling, so an app cannot name itself
+ * "Claude Code ✓ Verified". Whether an app is verified comes only from the
+ * API's `verified` field (§6.3.6), never from text. The backend should refuse
+ * such names too (carried to a later backend task); this is the page's own
+ * defence.
  */
 export function displayClientName(name: string): string {
-  const cleaned = name
-    .replace(TRUST_MARKS, " ")
-    .replace(VERIFIED_WORD, " ")
-    .replace(/\s+/g, " ")
-    .replace(/^[\s·\-–—|:,.()[\]]+|[\s·\-–—|:,(\[]+$/gu, "")
-    .trim();
-  return cleaned || "Unnamed app";
+  return stripTrustText(name) || "Unnamed app";
 }
 
 function clientTitle(request: ConsentRequest, name: string): string {
@@ -290,7 +356,7 @@ export function visibleName(name: string): string {
 
 /** The name field's starting value: the API's suggestion, without trust marks. */
 export function initialName(request: Pick<ConsentRequest, "suggestedName">): string {
-  return request.suggestedName.replace(TRUST_MARKS, "").replace(VERIFIED_WORD, "").replace(/\s+/g, " ").trim();
+  return stripTrustText(request.suggestedName);
 }
 
 /** The API answered with a `redirectTo` that is not the `continue` step: the page does not go there. */

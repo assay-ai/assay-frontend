@@ -228,3 +228,31 @@ describe("scripts/connect-csp.js", () => {
     ).toThrow(/over 2000/);
   });
 });
+
+/* Fix round 2 (R2): a stray comment line once read as a rule path. */
+describe("_headers is well formed", () => {
+  const rulePathsOk = (text: string) => {
+    for (const line of text.split("\n")) {
+      if (!line.trim() || line.startsWith("#") || /^\s/.test(line)) continue;
+      expect(line, `rule line ${JSON.stringify(line)}`).toMatch(/^\/\S*$/);
+    }
+  };
+
+  it("every rule line of public/_headers is one path, with no space", async () => {
+    rulePathsOk(await headersFile());
+  });
+
+  it("and so is every rule line the build writes", async () => {
+    const text = await headersFile();
+    rulePathsOk(
+      connectCsp.completeHeaders(
+        text,
+        {
+          "/connect/*": { "/connect/authorize": "<script>a()</script>", "/connect/authorize-error": "<script>b()</script>" },
+          "/agents/enable-paid": { "/agents/enable-paid": "<script>c()</script>" },
+        },
+        ["https://api.example.com"],
+      ),
+    );
+  });
+});

@@ -42,6 +42,17 @@ vi.mock("@/features/auth/wallet-link", () => ({
   subscribeWalletLink: () => () => undefined,
 }));
 vi.mock("@/libs/demo/demo-api", () => ({ demoEnabled: () => false }));
+const strict = vi.hoisted(() => ({ loadPage: vi.fn() }));
+vi.mock("@/features/oauth/strict-pages", async (original) => {
+  const real = await original<typeof import("@/features/oauth/strict-pages")>();
+  return {
+    ...real,
+    loadPage: strict.loadPage,
+    // The real branch, with the page load observed instead of performed.
+    appNavigate: (...[router, href, options]: Parameters<typeof real.appNavigate>) =>
+      real.appNavigate(router, href, { ...options, load: strict.loadPage }),
+  };
+});
 
 import { PrivySessionBridge } from "./PrivySessionBridge";
 
@@ -116,5 +127,24 @@ describe("PrivySessionBridge on a 401", () => {
     expect(api.clearSessionToken).toHaveBeenCalled();
     expect(privy.logout).toHaveBeenCalledTimes(1);
     expect(nav.replace).not.toHaveBeenCalled();
+  });
+});
+
+/* Task 1.16 fix round 2 (R5): a 401 on a strict page leaves it with a full page load. */
+describe("PrivySessionBridge on a 401, on a strict page", () => {
+  it("loads the login page as a new document, never through the router", () => {
+    nav.pathname = "/connect/authorize";
+    mount();
+    fire401();
+    expect(strict.loadPage).toHaveBeenCalledWith("/login?next=%2Fconnect%2Fauthorize&reason=expired");
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
+  it("elsewhere, still the router", () => {
+    nav.pathname = "/agents";
+    mount();
+    fire401();
+    expect(nav.replace).toHaveBeenCalledWith("/login?next=%2Fagents&reason=expired");
+    expect(strict.loadPage).not.toHaveBeenCalled();
   });
 });

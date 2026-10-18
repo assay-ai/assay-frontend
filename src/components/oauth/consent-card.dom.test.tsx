@@ -490,3 +490,80 @@ describe("m7: a decision whose answer was lost", () => {
     expect(screen.queryByRole("button", { name: "Return to the app" })).toBeNull();
   });
 });
+
+describe("fix round 2, R4: the arming press never saves limits", () => {
+  it("sheet open, page hidden and shown, first tap on Save arms only: nothing saved; second tap saves and approves", async () => {
+    const save = vi.fn(() => Promise.resolve());
+    function FakeSheet(props: LimitsSheetProps) {
+      if (!props.open) return null;
+      return (
+        <button
+          type="button"
+          onClick={async () => {
+            if (await props.beforeSave()) return;
+            await save();
+            props.onOpenChange(false);
+            props.onSaved();
+          }}
+        >
+          {props.saveLabel}
+        </button>
+      );
+    }
+    const { onApprove } = mount({
+      recheck: vi.fn().mockResolvedValue(undefined),
+      setLimits: (slot) => <ConsentSetLimitsControl slot={slot} Sheet={FakeSheet} />,
+    });
+    arm();
+    await act(async () => {
+      press(screen.getByRole("button", { name: "Approve and set limits" }));
+    });
+    // Hidden and shown again: the buttons disarm and the delay starts over.
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    visibility.mockReturnValue("visible");
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      vi.advanceTimersByTime(ACTIVATION_DELAY_MS);
+    });
+    // A touch tap: no pointermove, its pointerdown arms, then its click.
+    const saveButton = () => screen.getByRole("button", { name: "Save and approve" });
+    act(() => {
+      fireEvent.pointerDown(saveButton());
+    });
+    await act(async () => {
+      fireEvent.click(saveButton());
+    });
+    expect(save).not.toHaveBeenCalled();
+    expect(onApprove).not.toHaveBeenCalled();
+    expect(screen.getByText("Tap again to confirm.")).toBeTruthy();
+    // The second tap acts.
+    await act(async () => {
+      press(saveButton());
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(onApprove).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("fix round 2, R1: the Not verified pill", () => {
+  it("sits on the name's line, in its own element, for every unverified client", () => {
+    mount({
+      request: request({
+        client: { ...request().client, name: "Claude Code Ｖｅｒｉｆｉｅｄ", verified: false },
+      }),
+    });
+    const line = screen.getByTestId("consent-client-line");
+    expect(screen.getByTestId("consent-client").textContent).toBe("Claude Code");
+    const pill = screen.getByTestId("consent-not-verified-pill");
+    expect(pill.parentElement).toBe(line);
+    expect(pill.textContent).toBe("Not verified");
+  });
+
+  it("no pill for a verified client", () => {
+    mount();
+    expect(screen.queryByTestId("consent-not-verified-pill")).toBeNull();
+  });
+});
