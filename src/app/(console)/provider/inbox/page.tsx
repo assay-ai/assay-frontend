@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { PageState } from "@/components/patterns/page-state";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
-import { cancelledRunTitle, collapseNotices, inboxHeadline } from "@/features/provider-home/inbox";
+import { cancelledRunTitle, collapseNotices, inboxHeadline, noticesBesideActions } from "@/features/provider-home/inbox";
 import { NeedsActionStrip, WatchList } from "@/features/provider-home/needs-action-strip";
 import { useProviderBindings } from "@/features/provider-home/use-listing-progress";
 import { useProviderNeedsAction } from "@/features/provider-home/use-needs-action";
@@ -30,7 +30,9 @@ import type { NoticeContext } from "./_components/notice-view";
  * here. "Mark all read" is not offered: the console has no call for it yet.
  */
 export default function ProviderInboxPage() {
-  const { notifications, items, penalties, breakdown } = useProviderInbox();
+  const { notifications, items: allItems, reportIds, penalties, breakdown } = useProviderInbox();
+  // A report waiting for a reply is in Needs action: its notice is not listed again.
+  const items = React.useMemo(() => noticesBesideActions(allItems, reportIds), [allItems, reportIds]);
 
   // The same "Needs action" list as Home: penalties, windows near the promise,
   // a short stake, a suspended tool.
