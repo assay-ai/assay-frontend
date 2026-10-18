@@ -14,11 +14,25 @@ import { SetupChecklist, type SetupStep } from "@/components/patterns/setup-chec
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import { capsAreSet } from "@/features/buyer-money/caps";
-import { AGENT_CLI_SOURCE, getStartedStates, payStage, type GetStartedFacts } from "@/features/buyer-money/get-started";
+import {
+  AGENT_CLI_SOURCE,
+  PAID_BY_INVITATION_TEXT,
+  PAID_BY_INVITATION_TITLE,
+  firstCallPrompt,
+  getStartedComplete,
+  getStartedStates,
+  payByInvitation,
+  payStage,
+  type GetStartedFacts,
+} from "@/features/buyer-money/get-started";
+import { mcpToolName } from "@/features/connect/mcp-url";
+import { nextKeyName } from "@/features/buyer-money/agent-label";
+import { useCatalogue } from "@/components/g31/use-catalogue";
+import { SUPPORT_URL } from "@/libs/support";
 import { supportsDelegation } from "@/features/delegation/delegation-form";
 
 import { CapsSheet } from "./caps-sheet";
-import { CreateKeyForm } from "./create-key";
+import { CreateKeyForm, NEW_KEY_PAYS_NOTE, createKeyErrorText, useCreateKey } from "./create-key";
 import { DepositSheet } from "./deposit-sheet";
 import { LetAgentPaySheet } from "./let-agent-pay-sheet";
 import { McpConfigTabs } from "./mcp-config-tabs";
@@ -36,7 +50,8 @@ import { useAgentsAndKeys } from "./use-agents";
  *   3. Add funds — only for paid calls; free calls work already.
  *   4. Let the agent pay — its spending limits (and the account ceiling,
  *      raised to fit if needed) in one drawer; the payment key is detected,
- *      never typed.
+ *      never typed. Until a payment key is bound this step reads "Paid
+ *      calls: by invitation during testnet" (D14) and is not counted.
  *
  * A done step shows only its summary (what was achieved, where to change it),
  * never the active-state buttons or "waiting" lines.
@@ -80,6 +95,7 @@ function freeOnlyChain(chainId: string | null): boolean {
 function getStartedFactsFrom(data: AgentsAndKeys) {
   const agent = data.agents[0] ?? null;
   const allKeys = data.agents.flatMap((a) => data.keys[a.agentId] ?? []);
+  const agentKeyCount = agent ? (data.keys[agent.agentId] ?? []).length : 0;
   const liveKeys = allKeys.filter((k) => !k.revokedAt);
   const escrow = data.escrowQuery.data;
   const readiness = agent ? data.readiness[agent.agentId] : undefined;
@@ -97,7 +113,7 @@ function getStartedFactsFrom(data: AgentsAndKeys) {
     needsDelegation: supportsDelegation(agent?.agentAccount),
     freeOnly: freeOnlyChain(chainIdOfAccount(escrow?.account ?? agent?.agentAccount)),
   };
-  return { agent, liveKeys, escrow, readiness, bound, facts };
+  return { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts };
 }
 
 function dataLoading(data: AgentsAndKeys): boolean {
@@ -121,8 +137,7 @@ export function useGetStartedShown(): boolean {
     return () => window.removeEventListener(DISMISS_EVENT, onDismiss);
   }, []);
   if (dismissed || dataLoading(data)) return false;
-  const states = getStartedStates(getStartedFactsFrom(data).facts);
-  return !Object.values(states).every((state) => state === "done");
+  return !getStartedComplete(getStartedFactsFrom(data).facts);
 }
 
 export function GetStarted({ placement }: { placement: "overview" | "page" }) {
@@ -138,7 +153,10 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   const [createdToken, setCreatedToken] = React.useState<string | null>(null);
   const [expanded, setExpanded] = React.useState<string | null | undefined>(undefined);
 
-  const { agent, liveKeys, escrow, readiness, bound, facts } = getStartedFactsFrom(data);
+  const { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts } = getStartedFactsFrom(data);
+  // Step 1 done, but the full key is gone: make a new one here and fill it in.
+  const createInPlace = useCreateKey(agent?.agentId ?? null, agentKeyCount, (key) => setCreatedToken(key.token));
+  const catalogue = useCatalogue();
   // Copying the config hands out `/`: Servers in use then waits for its first call.
   const recordConnect = useRecordConnect(agent?.agentId);
   const onCopyConfig = (client: McpClient) => {
@@ -153,7 +171,8 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   const grant = readiness?.grant?.status === "ACTIVE" ? readiness.grant : null;
   const payLine = grant ? `up to ${formatLimit(grant.maxVoucherAmount)} a call and ${formatLimit(grant.maxPerWindow)} per 24 hours` : null;
   const stage = payStage(facts);
-  const complete = Object.values(states).every((s) => s === "done");
+  const complete = getStartedComplete(facts);
+  const invitation = payByInvitation(facts);
 
   // The live listener: on while the first call or the payment key is awaited.
   const listen = (states.call === "current" || (states.pay !== "done" && stage === "bind")) && !revealing;
@@ -190,14 +209,23 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
           <div className="flex min-w-0 flex-col gap-2">
             <p className="text-body-13 text-02">
               {createdToken
-                ? "Your key is ready, and the config below already carries it:"
-                : "Your key is ready. Paste this into your MCP client, with your full key in place of the placeholder:"}
+                ? "Your key is ready, and the config below already carries it. It is shown once: copy it now."
+                : "You have a key. Its full value was shown once, when it was made: create a new key here to get a config ready to paste."}
             </p>
-            <McpConfigTabs token={createdToken} keyPrefix={liveKeys[0]?.prefix ?? null} onCopy={onCopyConfig} />
+            {createdToken ? <p className="text-body-xs text-03">{NEW_KEY_PAYS_NOTE}</p> : null}
+            <McpConfigTabs
+              token={createdToken}
+              keyPrefix={liveKeys[0]?.prefix ?? null}
+              onCopy={onCopyConfig}
+              onCreateKey={() => createInPlace.mutate()}
+              creatingKey={createInPlace.isPending}
+              createKeyError={createInPlace.isError ? createKeyErrorText(createInPlace.error) : null}
+            />
           </div>
         ) : (
           <CreateKeyForm
             agentId={agent.agentId}
+            defaultName={nextKeyName(agentKeyCount)}
             onCreated={(key) => {
               setCreatedToken(key.token);
               setRevealing(true);
@@ -224,8 +252,8 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
           </p>
         ) : (
           <div className="flex flex-col gap-2">
-            <p className="text-body-13 text-02">
-              For example, ask it to “search the web for today’s weather in Paris”. This step ticks itself when the call arrives.
+            <p className="text-body-13 text-02" data-testid="first-call-prompt">
+              {firstCallPrompt(catalogue.tools, mcpToolName)}
             </p>
             <Listening>Waiting for your agent&apos;s first call…</Listening>
           </div>
@@ -263,41 +291,29 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
     },
     {
       id: "pay",
-      title: facts.freeOnly ? "Let your agent pay (not needed on this chain)" : "Let your agent pay",
+      title: facts.freeOnly ? "Let your agent pay (not needed on this chain)" : invitation ? PAID_BY_INVITATION_TITLE : "Let your agent pay",
       description: facts.freeOnly
         ? "This chain serves free calls only, so your agent never pays here."
-        : "Allow your agent to pay, within spending limits you choose. Free signatures, no gas.",
+        : invitation
+          ? "Free calls work without it."
+          : "Allow your agent to pay, within spending limits you choose. Free signatures, no gas.",
       state: states.pay,
+      // By invitation: not counted as unfinished (D14).
+      optional: invitation,
       blockedReason: "Add funds first: your first deposit opens your escrow.",
       content: freeOnlyNote ? (
         freeOnlyNote
+      ) : invitation ? (
+        <PaidByInvitation
+          agentName={agentName}
+          onSetCaps={facts.escrowExists && !facts.capsSet ? () => setSheet("caps") : undefined}
+        />
       ) : states.pay === "done" ? (
           <div className="flex flex-col gap-1.5" data-testid="step-pay-done">
             <p className="text-body-13 text-02">{agentName} can pay for calls{payLine ? `: ${payLine}` : "."}</p>
             <Link href="/limits" className="self-start text-label-13 text-primary-600 hover:underline">
               Change its spending limits
             </Link>
-          </div>
-        ) : stage === "bind" ? (
-          <div className="flex min-w-0 flex-col gap-2.5">
-            <p className="text-body-13 text-02">To pay, {agentName} makes its own payment key. Run this on its machine:</p>
-            <CodeBlock title="Terminal" code={BIND_COMMAND} />
-            <p className="text-body-xs text-03" data-testid="agent-cli-source">{AGENT_CLI_SOURCE}</p>
-            <Listening>Waiting for the key. This updates by itself.</Listening>
-            {!facts.capsSet ? (
-              <Button type="button" variant="secondary" className="self-start" onClick={() => setSheet("caps")}>
-                Set your account ceiling now
-              </Button>
-            ) : null}
-          </div>
-        ) : stage === "caps" && !facts.keyBound && facts.needsDelegation ? (
-          <div className="flex min-w-0 flex-col gap-2.5">
-            <Button type="button" className="self-start" onClick={() => setSheet("caps")}>
-              Set your account ceiling
-            </Button>
-            <p className="text-body-13 text-02">Then run this on {agentName}&apos;s machine so it gets its payment key:</p>
-            <CodeBlock title="Terminal" code={BIND_COMMAND} />
-            <p className="text-body-xs text-03" data-testid="agent-cli-source">{AGENT_CLI_SOURCE}</p>
           </div>
         ) : stage === "caps" && !facts.needsDelegation ? (
           <Button type="button" onClick={() => setSheet("caps")}>
@@ -322,13 +338,15 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
         description={
           facts.freeOnly
             ? "Two steps to your agent's first call. This chain serves free calls only, so adding funds and letting your agent pay are not needed."
-            : "Four steps to your agent's first paid call. Free calls work after step 2."
+            : invitation
+              ? "Free calls work after step 2. Paid calls are by invitation during testnet."
+              : "Four steps to your agent's first paid call. Free calls work after step 2."
         }
         steps={steps}
         loading={loading}
         expandedId={revealing ? "key" : expanded}
         onExpandedChange={setExpanded}
-        doneTitle={facts.freeOnly ? "All set: your agent can make free calls" : "All set: your agent can call tools and pay for them"}
+        doneTitle={facts.freeOnly || invitation ? "All set: your agent can make free calls" : "All set: your agent can call tools and pay for them"}
         doneDescription="Watch its calls under Activity. Change its spending limits under Controls."
         onDismiss={
           placement === "overview"
@@ -357,5 +375,41 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
         delegateAccount={bound?.delegateAccount ?? null}
       />
     </>
+  );
+}
+
+/**
+ * Step 4 while no payment key is bound (D14): paid calls are by invitation
+ * during testnet. "Ask for access" goes to SUPPORT_URL when this deployment
+ * has one. An invited buyer still finds the payment-key command, folded away,
+ * and the step ticks on by itself once the key is bound.
+ */
+export function PaidByInvitation({ agentName, onSetCaps }: { agentName: string; onSetCaps?: () => void }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-2.5" data-testid="paid-by-invitation">
+      <p className="text-body-13 text-02">{PAID_BY_INVITATION_TEXT}</p>
+      {SUPPORT_URL ? (
+        <Button asChild variant="secondary" className="self-start">
+          <a href={SUPPORT_URL} target="_blank" rel="noreferrer" data-testid="ask-for-access">
+            Ask for access
+          </a>
+        </Button>
+      ) : null}
+      <details className="text-body-13 text-02">
+        <summary className="min-h-10 cursor-pointer select-none content-center text-label-13 text-01">Invited already?</summary>
+        <div className="mt-2 flex min-w-0 flex-col gap-2.5">
+          <p className="text-body-xs text-03" data-testid="agent-cli-source">
+            {AGENT_CLI_SOURCE.replace("the agent's machine", `${agentName}'s machine`)}
+          </p>
+          <CodeBlock title="Terminal" code={BIND_COMMAND} wrap />
+          <Listening>Waiting for the payment key. This updates by itself.</Listening>
+          {onSetCaps ? (
+            <Button type="button" variant="secondary" className="self-start" onClick={onSetCaps}>
+              Set your account ceiling
+            </Button>
+          ) : null}
+        </div>
+      </details>
+    </div>
   );
 }
