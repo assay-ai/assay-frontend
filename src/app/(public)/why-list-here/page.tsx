@@ -20,6 +20,7 @@ import {
   type ListingMode,
 } from "@/features/explorer/provider-economics";
 import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
+import { GLOSSARY, REPORT_WINDOW } from "@/libs/glossary";
 
 /**
  * For providers — route `/why-list-here`, with the earnings calculator
@@ -39,18 +40,8 @@ import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
  * behind sign-in.
  */
 
-/*
-  TODO(B6 glossary): `STAKE_RECONCILE` and the stake step mirror the
-  glossary's stake-rule sentence; import it from `libs/glossary.ts` once B6
-  lands.
-*/
-/*
-  TODO(B6 glossary): the report window's length. The backend holds each paid
-  call's money for `collectHoldSeconds` (3600 s by default) so a buyer can
-  report a bad result; there is no frontend constant for it yet.
-*/
-const REPORT_WINDOW = "1 hour";
-const STAKE_RECONCILE = `Payouts are never clawed back. Each paid call's payment becomes yours ${REPORT_WINDOW} after the call, once the window for a buyer to report a bad result has closed, and a call that fails because of you (for example, your stake fell below the minimum) is not paid. After that hour, only your stake is at risk: at most ${DAILY_CAP_PERCENT}% of it in any 24 hours, and only if you fail more often than you promised, over at least ${MIN_CHECKED_CALLS} checked calls.`;
+/** Never clawed back vs the stake, in the glossary's words: when a payment is final, then the stake rule. */
+const STAKE_RECONCILE = `Payouts are never clawed back. ${GLOSSARY["payout-final"].definition} ${GLOSSARY["stake-rule"].definition}`;
 
 /** The setup steps (`/provider/setup`) and the listing steps (the listing wizard), in their own words. */
 const STEPS: ReadonlyArray<{ group: string; when: string; steps: ReadonlyArray<{ title: string; detail: string }> }> = [
@@ -264,9 +255,8 @@ function StepsToList() {
             <span className="text-label-sm text-01">Stake, for paid calls. </span>
             Free listings need none. To charge per call, add a <Term k="stake">stake</Term> that covers $50 or 1,000
             calls at your price, whichever is more; you get it back when you stop, after a waiting period. Once a
-            call's {REPORT_WINDOW} report window has closed, the stake is the only money at risk: at most{" "}
-            {DAILY_CAP_PERCENT}% of it in any 24 hours, and only if you fail more often than you promised, beyond a
-            statistical margin for the number of calls checked.
+            call&apos;s {REPORT_WINDOW} report window has closed, the stake is the only money at risk.{" "}
+            {GLOSSARY["stake-rule"].definition}
           </p>
         </div>
       </PanelBody>

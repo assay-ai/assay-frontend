@@ -8,8 +8,7 @@ import { useEffect, useState } from "react";
 
 import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { Button } from "@/components/ui/button";
-import { DAILY_CAP_PERCENT } from "@/features/explorer/provider-economics";
-import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
+import { GLOSSARY } from "@/libs/glossary";
 import { safeNextPath } from "@/libs/login-redirect";
 import { cn } from "@/utils";
 
@@ -77,13 +76,10 @@ const PROOF_POINTS = [
   },
 ];
 
-/*
-  TODO(B6 glossary): the stake line below mirrors the glossary's stake rule;
-  import it from `libs/glossary.ts` once B6 lands. The report window is the
-  backend's `collectHoldSeconds` (3600 s by default); no frontend constant yet.
-*/
-const REPORT_WINDOW = "1 hour";
-/** The provider's pitch, from `/why-list-here`: what you earn, what is never taken back, what is at risk. */
+/**
+ * The provider's pitch, from `/why-list-here`: what you earn, when a payment
+ * is final, what the stake risks. The last two are the glossary's sentences.
+ */
 const PROVIDER_POINTS = [
   {
     icon: Coins,
@@ -93,12 +89,12 @@ const PROVIDER_POINTS = [
   {
     icon: Wallet,
     title: "Payouts are never clawed back",
-    detail: "A payout stays paid. A call whose result fails is simply not charged to the buyer and not paid to you.",
+    detail: GLOSSARY["payout-final"].definition,
   },
   {
     icon: ShieldCheck,
-    title: "What is at risk",
-    detail: `Each call's payment is yours ${REPORT_WINDOW} after the call, once a buyer can no longer report a bad result. After that, only your stake: at most ${DAILY_CAP_PERCENT}% of it in any 24 hours, and only if you fail more often than you promised, over at least ${MIN_CHECKED_CALLS} checked calls.`,
+    title: "What your stake risks",
+    detail: GLOSSARY["stake-rule"].definition,
   },
 ];
 
