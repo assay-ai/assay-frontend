@@ -103,3 +103,21 @@ describe("the demo /withheld split", () => {
     }
   });
 });
+
+describe("the demo agent rename", () => {
+  it("answers PATCH /agents/:id with the renamed agent, and GET /agents reads it back", () => {
+    vi.stubEnv("NEXT_PUBLIC_DEMO_CHAINS", "robinhood");
+    const before = demoResponse("GET", "/agents") as { items: { agentId: string; label: string }[] };
+    const first = before.items[0]!;
+
+    const renamed = demoResponse("PATCH", `/agents/${first.agentId}`, {}, { label: "  Research bot  " }) as {
+      agentId: string;
+      label: string;
+    };
+
+    expect(renamed).toMatchObject({ agentId: first.agentId, label: "Research bot" });
+    const after = demoResponse("GET", "/agents") as { items: { agentId: string; label: string }[] };
+    expect(after.items.find((a) => a.agentId === first.agentId)?.label).toBe("Research bot");
+    vi.unstubAllEnvs();
+  });
+});

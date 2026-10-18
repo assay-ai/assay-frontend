@@ -1267,6 +1267,33 @@ function evidenceBody(call: DemoCall) {
 
 const PROD_AGENT = "9d4c1f80-6b2e-4a57-8c31-7e05b9a2d146";
 const STAGING_AGENT = "b71e05a3-2c48-4d90-9f61-38ca7d0b2e54";
+
+/** Labels renamed on this tab (`PATCH /agents/:id`); a reload starts over. */
+const demoAgentLabels = new Map<string, string>();
+
+function demoAgents(): { agentId: string; label: string; agentAccount: string; chainId: string; credentialCount: number }[] {
+  const rows = [
+    {
+      agentId: PROD_AGENT,
+      label: "prod",
+      agentAccount: DEMO_BUYER_ACCOUNT,
+      chainId: DEMO_CHAIN_ID,
+      credentialCount: 2,
+    },
+    ...(freshStage()
+      ? []
+      : [
+          {
+            agentId: STAGING_AGENT,
+            label: "staging",
+            agentAccount: `${DEMO_CHAIN_ID}:${STAGING_ADDRESS}`,
+            chainId: DEMO_CHAIN_ID,
+            credentialCount: 1,
+          },
+        ]),
+  ];
+  return rows.map((row) => ({ ...row, label: demoAgentLabels.get(row.agentId) ?? row.label }));
+}
 const STAGING_ADDRESS = "0x2F5d8B17aC93e04f6b1D7c8A05E2f9B34cD61a70";
 /**
  * The prod agent's own payment key (bound with `agent-cli bind`), authorised to
@@ -1756,6 +1783,20 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
 
   /* --------------------------------------------------- agents, credentials */
   {
+    // Rename in place: answers the agent as renamed, and the label is kept
+    // for the tab so the next `GET /agents` (Connect, Overview, Explore) shows
+    // it too.
+    method: "PATCH",
+    match: /^\/agents\/[^/]+$/,
+    body: (path, _query, data) => {
+      const agentId = segment(path);
+      const label = typeof data?.label === "string" ? data.label.trim() : "";
+      const agent = demoAgents().find((row) => row.agentId === agentId) ?? demoAgents()[0]!;
+      if (label) demoAgentLabels.set(agentId, label);
+      return { ...agent, agentId, label: label || agent.label };
+    },
+  },
+  {
     method: "GET",
     match: "/agents",
     /*
@@ -1766,26 +1807,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     */
     override: "always",
     body: () => ({
-      items: [
-        {
-          agentId: PROD_AGENT,
-          label: "prod",
-          agentAccount: DEMO_BUYER_ACCOUNT,
-          chainId: DEMO_CHAIN_ID,
-          credentialCount: 2,
-        },
-        ...(freshStage()
-          ? []
-          : [
-        {
-          agentId: STAGING_AGENT,
-          label: "staging",
-          agentAccount: `${DEMO_CHAIN_ID}:${STAGING_ADDRESS}`,
-          chainId: DEMO_CHAIN_ID,
-          credentialCount: 1,
-        },
-            ]),
-      ],
+      items: demoAgents(),
       pageInfo: { nextCursor: null, hasMore: false },
     }),
   },
