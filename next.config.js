@@ -45,12 +45,7 @@ const originOf = (value) => {
  * enforced policy that misses one breaks sign-in. Promote it once the reports
  * are clean. Privy's list: https://docs.privy.io/security/implementation-guide/content-security-policy
  */
-const PRIVY_FRAMES = [
-  "https://auth.privy.io",
-  "https://verify.walletconnect.com",
-  "https://verify.walletconnect.org",
-  "https://challenges.cloudflare.com",
-];
+const { PRIVY_FRAMES, CONNECT_ORIGINS } = require("./scripts/csp-policy");
 const REPORT_ONLY_POLICY = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"} https://challenges.cloudflare.com`,
@@ -67,22 +62,26 @@ const REPORT_ONLY_POLICY = [
     "connect-src 'self'",
     originOf(process.env.NEXT_PUBLIC_API_BASE_URL),
     originOf(process.env.NEXT_PUBLIC_MCP_URL),
-    "https://auth.privy.io",
-    "https://*.rpc.privy.systems",
-    "wss://relay.walletconnect.com",
-    "wss://relay.walletconnect.org",
-    "wss://www.walletlink.org",
-    "https://explorer-api.walletconnect.com",
-    "https://pulse.walletconnect.org",
-    "https://api.web3modal.org",
-    "https://rpc.testnet.chain.robinhood.com",
-    "https://*.solana.com",
+    ...CONNECT_ORIGINS,
   ]
     .filter(Boolean)
     .join(" "),
   "worker-src 'self' blob:",
   "manifest-src 'self'",
 ].join("; ");
+
+/**
+ * The consent and enable-paid pages (spec R-WEB-4): no framing at all, not
+ * even by the app itself, and no referrer. In production `public/_headers`
+ * sends these plus the strict policy of R-WEB-2; `next dev` cannot run under
+ * that policy (it needs inline and eval'd scripts), so here only these three,
+ * which override the site-wide values for the same keys.
+ */
+const STRICT_PAGE_HEADERS = [
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "no-referrer" },
+];
 
 const SECURITY_HEADERS = [
   { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
@@ -110,7 +109,11 @@ module.exports = {
     ? {}
     : {
         async headers() {
-          return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+          return [
+            { source: "/:path*", headers: SECURITY_HEADERS },
+            { source: "/connect/:path+", headers: STRICT_PAGE_HEADERS },
+            { source: "/agents/enable-paid", headers: STRICT_PAGE_HEADERS },
+          ];
         },
       }),
   turbopack: {

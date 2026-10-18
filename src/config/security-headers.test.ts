@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 
 import { describe, expect, it } from "vitest";
@@ -65,5 +66,147 @@ describe("security headers", () => {
     } finally {
       (process.env as Record<string, string>).NODE_ENV = previous ?? "test";
     }
+  });
+});
+
+/* Spec R-WEB-2 and R-WEB-4: the consent and enable-paid pages. */
+const csp = require("../../scripts/csp-policy.js") as {
+  PRIVY_FRAMES: string[];
+  CONNECT_ORIGINS: string[];
+  STRICT_PATHS: string[];
+  strictPolicy: (options?: { scriptHashes?: string[]; connectOrigins?: string[] }) => string;
+};
+const connectCsp = require("../../scripts/connect-csp.js") as {
+  completeHeaders: (text: string, pages: Record<string, Record<string, string>>, connectOrigins: string[]) => string;
+  inlineScriptHashes: (html: string) => Set<string>;
+};
+
+async function headersFile(): Promise<string> {
+  return (await import("node:fs")).readFileSync(require.resolve("../../public/_headers"), "utf8");
+}
+
+/** The headers of one `_headers` block, by its exact path line. */
+function block(text: string, path: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  let inside = false;
+  for (const line of text.split("\n")) {
+    if (/^\S/.test(line)) inside = line.trim() === path;
+    else if (inside && line.includes(":")) {
+      const i = line.indexOf(":");
+      headers[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+    }
+  }
+  return headers;
+}
+
+const directives = (policy: string) =>
+  Object.fromEntries(
+    policy.split(";").map((part) => {
+      const [name, ...values] = part.trim().split(/\s+/);
+      return [name, values.join(" ")];
+    }),
+  );
+
+describe("strict pages: /connect/* and /agents/enable-paid", () => {
+  it("_headers /connect/* has frame-ancestors 'none', X-Frame-Options DENY, Referrer-Policy no-referrer", async () => {
+    const text = await headersFile();
+    expect(csp.STRICT_PATHS).toEqual(["/connect/*", "/agents/enable-paid"]);
+    for (const path of csp.STRICT_PATHS) {
+      const headers = block(text, path);
+      expect(headers["X-Frame-Options"]).toBe("DENY");
+      expect(headers["Referrer-Policy"]).toBe("no-referrer");
+      expect(headers["Content-Security-Policy"]).toBe(csp.strictPolicy());
+      const policy = directives(headers["Content-Security-Policy"]);
+      expect(policy["frame-ancestors"]).toBe("'none'");
+      expect(policy["default-src"]).toBe("'self'");
+      expect(policy["script-src"]).toBe("'self'");
+      expect(policy["base-uri"]).toBe("'none'");
+      expect(policy["form-action"]).toBe("'self'");
+      expect(policy["object-src"]).toBe("'none'");
+      expect(policy["frame-src"]).toBe(csp.PRIVY_FRAMES.join(" "));
+      expect(policy["connect-src"]).toBe(["'self'", ...csp.CONNECT_ORIGINS].join(" "));
+      expect(headers["Content-Security-Policy"]).not.toMatch(/unsafe-eval|script-src[^;]*unsafe-inline/);
+    }
+  });
+
+  it("next dev refuses framing and the referrer on those pages too", async () => {
+    const previous = process.env.NODE_ENV;
+    (process.env as Record<string, string>).NODE_ENV = "development";
+    try {
+      const path = require.resolve("../../next.config.js");
+      delete require.cache[path];
+      const config = require(path) as { headers: () => Promise<{ source: string; headers: { key: string; value: string }[] }[]> };
+      const rules = await config.headers();
+      for (const source of ["/connect/:path+", "/agents/enable-paid"]) {
+        const rule = rules.find((r) => r.source === source);
+        expect(Object.fromEntries(rule!.headers.map((h) => [h.key, h.value]))).toEqual({
+          "Content-Security-Policy": "frame-ancestors 'none'",
+          "X-Frame-Options": "DENY",
+          "Referrer-Policy": "no-referrer",
+        });
+        // After the site-wide rule, so these win for the same keys.
+        expect(rules.indexOf(rule!)).toBeGreaterThan(rules.findIndex((r) => r.source === "/:path*"));
+      }
+    } finally {
+      (process.env as Record<string, string>).NODE_ENV = previous ?? "test";
+    }
+  });
+});
+
+describe("scripts/connect-csp.js", () => {
+  const sha = (text: string) => createHash("sha256").update(text, "utf8").digest("base64");
+  const page = (...scripts: string[]) =>
+    `<html><head><script src="/_next/static/a.js" async=""></script>${scripts.map((s) => `<script>${s}</script>`).join("")}<script></script></head></html>`;
+
+  it("hashes each inline script, never an external one or an empty one", () => {
+    expect([...connectCsp.inlineScriptHashes(page("a()", "b()", "a()"))].sort()).toEqual([sha("a()"), sha("b()")].sort());
+  });
+
+  it("gives each /connect page its own block with only its hashes, and completes exact paths in place", async () => {
+    const text = await headersFile();
+    const out = connectCsp.completeHeaders(
+      text,
+      {
+        "/connect/*": { "/connect/authorize": page("one()"), "/connect/authorize-error": page("two()") },
+        "/agents/enable-paid": { "/agents/enable-paid": page("three()") },
+      },
+      ["https://api.example.com"],
+    );
+    // The splat keeps the frame and referrer refusals.
+    expect(block(out, "/connect/*")).toEqual({
+      "Content-Security-Policy": "frame-ancestors 'none'",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "no-referrer",
+    });
+    expect(block(out, "/connect/authorize")["Content-Security-Policy"]).toBe(
+      csp.strictPolicy({ scriptHashes: [sha("one()")], connectOrigins: ["https://api.example.com"] }),
+    );
+    expect(block(out, "/connect/authorize-error")["Content-Security-Policy"]).toBe(
+      csp.strictPolicy({ scriptHashes: [sha("two()")], connectOrigins: ["https://api.example.com"] }),
+    );
+    expect(block(out, "/agents/enable-paid")).toEqual({
+      "Content-Security-Policy": csp.strictPolicy({ scriptHashes: [sha("three()")], connectOrigins: ["https://api.example.com"] }),
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "no-referrer",
+    });
+    // The site-wide block is untouched.
+    expect(block(out, "/*")).toEqual(block(text, "/*"));
+  });
+
+  it("leaves a path with no pages yet at the bare policy", async () => {
+    const text = await headersFile();
+    const out = connectCsp.completeHeaders(text, { "/connect/*": { "/connect/authorize": page("x()") } }, []);
+    expect(block(out, "/agents/enable-paid")["Content-Security-Policy"]).toBe(csp.strictPolicy());
+  });
+
+  it("refuses a policy that is not strictPolicy(), and a line over Cloudflare's limit", async () => {
+    const text = await headersFile();
+    expect(() =>
+      connectCsp.completeHeaders(text.replace("script-src 'self';", "script-src 'self' 'unsafe-inline';"), {}, []),
+    ).toThrow(/not strictPolicy/);
+    const many = Array.from({ length: 40 }, (_, i) => `s${i}()`);
+    expect(() =>
+      connectCsp.completeHeaders(text, { "/connect/*": { "/connect/authorize": page(...many) } }, []),
+    ).toThrow(/over 2000/);
   });
 });

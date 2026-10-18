@@ -143,12 +143,18 @@ export function BudgetOnlySheet({
   agentName,
   policy,
   bootstrap,
+  saveLabel = "Save",
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   agentName: string;
   policy: SpendPolicy | null;
   bootstrap: BudgetBootstrap | null;
+  /** The save button's label, e.g. "Save and approve" on the consent page. */
+  saveLabel?: string;
+  /** Runs once the limits are saved (or left unchanged) and the sheet has closed. */
+  onSaved?: () => void;
 }) {
   const draft = useBudgetDraft({ policy, bootstrap, open, mode: "budget" });
   const [busy, setBusy] = React.useState(false);
@@ -160,6 +166,7 @@ export function BudgetOnlySheet({
     if (!draft.validate()) return;
     if (!draft.dirty) {
       onOpenChange(false);
+      onSaved?.();
       return;
     }
     setBusy(true);
@@ -168,6 +175,7 @@ export function BudgetOnlySheet({
       await draft.save();
       toast.success("Saved. The new limits apply from the next call.");
       onOpenChange(false);
+      onSaved?.();
     } catch (caught) {
       setError(caught instanceof ApiError ? plainError(caught.code) : "The limits could not be saved. Try again.");
     } finally {
@@ -198,7 +206,7 @@ export function BudgetOnlySheet({
               Cancel
             </Button>
             <Button type="button" loading={busy} disabled={!draft.creatable} onClick={() => void submit()}>
-              Save
+              {saveLabel}
             </Button>
           </div>
         </SheetFooter>
