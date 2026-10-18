@@ -5,12 +5,14 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { SetupChecklist, type SetupStep } from "@/components/patterns/setup-checklist";
+import { useAgentsAndKeys } from "@/components/buyer-money/use-agents";
+import { checklistProgress, SetupChecklist, type SetupStep } from "@/components/patterns/setup-checklist";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { closeAccountHeldText } from "@/features/buyer-debt/debt-copy";
 import { useSettleDebt } from "@/features/buyer-debt/settle-debt-sheet";
 import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
-import { nothingToWithdraw, withdrawableByAsset } from "@/features/buyer/close-account";
+import { isLiveKey, nothingToWithdraw, readyToClose, withdrawableByAsset } from "@/features/buyer/close-account";
 import { chainBalances, type FullBalance } from "@/features/g30/balance";
 import { useChainName } from "@/hooks/useChainName";
 import type { Money } from "@/interfaces";
@@ -22,13 +24,16 @@ import { formatMoney } from "@/utils/money";
 import { PageHeader } from "./chrome";
 
 /**
- * Account › Close account, as a 3-step checklist that ticks from data:
+ * Account › Close account, as a 3-step checklist:
  *  1. Withdraw your money — the withdrawable total per asset (accounts on one
- *     chain merged; different assets never added), each with Withdraw;
- *  2. Export your records — Statement CSV, Calls, Activity log;
- *  3. Close — not possible in the app (no endpoint), so the step ends on
- *     what can be done: revoke agent keys, and ask support when this
- *     deployment has a support link.
+ *     chain merged; different assets never added), each with Withdraw; ticks
+ *     from the balances;
+ *  2. Export your records — Statement CSV, Calls, Account history; saving a
+ *     file happens outside the app, so the person ticks it;
+ *  3. Revoke your agent keys — ticks from the keys: none still works.
+ * Closing itself has no endpoint, so below the steps "Ask us to close the
+ * account" opens the support link, enabled at 3 of 3 (when this deployment
+ * has one; without it the page says so instead of a button to nowhere).
  */
 
 interface Hold {
@@ -63,6 +68,17 @@ export function CloseAccountView() {
     openHolds.map((hold) => hold.intentId ?? ""),
     owedIntentIds,
   );
+
+  const [recordsKept, setRecordsKept] = React.useState(false);
+  const { agentsQuery, keysQuery } = useAgentsAndKeys();
+  const keysUnreadable = agentsQuery.isError || keysQuery.isError;
+  // Null while unknown. No agents at all means no key, so it is known at once.
+  const liveKeys: number | null =
+    agentsQuery.isSuccess && (agentsQuery.data?.items ?? []).length === 0
+      ? 0
+      : keysQuery.isSuccess
+        ? Object.values(keysQuery.data ?? {}).flat().filter((key) => isLiveKey(key)).length
+        : null;
 
   const rows = chainBalances(balances.data?.balances);
   const lines = withdrawableByAsset(rows);
@@ -131,51 +147,56 @@ export function CloseAccountView() {
     {
       id: "export",
       title: "Export your records",
-      state: withdrawn ? "current" : "todo",
+      state: recordsKept ? "done" : withdrawn ? "current" : "todo",
       description: "Keep your statements and call history; they are not available once the account is closed.",
       content: (
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" asChild>
-            <Link href="/statements">Statement CSV</Link>
-          </Button>
-          <Button variant="secondary" size="sm" asChild>
-            <Link href="/spend">Spend CSV</Link>
-          </Button>
-          <Button variant="secondary" size="sm" asChild>
-            <Link href={routes.calls()}>Calls</Link>
-          </Button>
-          <Button variant="secondary" size="sm" asChild>
-            <Link href="/audit-log">Activity log</Link>
-          </Button>
+        <div className="flex flex-col gap-2.5">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" asChild>
+              <Link href="/statements">Statement CSV</Link>
+            </Button>
+            <Button variant="secondary" size="sm" asChild>
+              <Link href="/spend">Spend CSV</Link>
+            </Button>
+            <Button variant="secondary" size="sm" asChild>
+              <Link href={routes.calls()}>Calls</Link>
+            </Button>
+            <Button variant="secondary" size="sm" asChild>
+              <Link href="/audit-log">Account history</Link>
+            </Button>
+          </div>
+          {/* Saving a file happens outside the app, so only the person can say it is done. */}
+          <Checkbox
+            checked={recordsKept}
+            onChange={(event) => setRecordsKept(event.target.checked)}
+            label="I have saved the records I need"
+          />
         </div>
       ),
     },
     {
-      // Closing has no endpoint, so this step ends on what a person CAN do:
-      // make the account unable to spend, and (when this deployment has one)
-      // ask support — never a greyed-out step with nowhere to go.
-      id: "close",
-      title: SUPPORT_URL ? "Revoke agent keys, then ask us to close it" : "Revoke your agent keys",
-      state: withdrawn ? "current" : "todo",
-      description: SUPPORT_URL
-        ? "Closing is done by the Assay team. Revoke your agent keys so nothing can spend in the meantime, then send the request."
-        : "Closing is done by the Assay team, not in the app. Revoke your agent keys: with no money and no keys the account cannot spend and costs nothing, and you can sign in again any time.",
-      content: (
-        <div className="flex flex-wrap gap-2">
-          <Button variant={SUPPORT_URL ? "secondary" : "primary"} size="sm" asChild>
+      // Ticks from data: no key of any agent can still make a call.
+      id: "keys",
+      title: "Revoke your agent keys",
+      state: liveKeys === 0 ? "done" : recordsKept ? "current" : "todo",
+      description:
+        liveKeys === null
+          ? keysUnreadable
+            ? "Your agent keys could not be read, so we cannot say whether one still works. Try again in a moment."
+            : "Checking your agent keys…"
+          : liveKeys === 0
+            ? "No agent key works any more, so nothing can spend from this account."
+            : `${liveKeys} agent key${liveKeys === 1 ? " still works" : "s still work"}. Revoke ${liveKeys === 1 ? "it" : "them"} so nothing can spend in the meantime.`,
+      content:
+        liveKeys === 0 ? undefined : (
+          <Button size="sm" asChild>
             <Link href="/agents">Revoke agent keys</Link>
           </Button>
-          {SUPPORT_URL ? (
-            <Button size="sm" asChild>
-              <a href={SUPPORT_URL} target="_blank" rel="noreferrer">
-                Ask support to close it <ArrowRight aria-hidden="true" className="size-3.5" />
-              </a>
-            </Button>
-          ) : null}
-        </div>
-      ),
+        ),
     },
   ];
+  const progress = checklistProgress(steps);
+  const ready = readyToClose({ withdrawn, recordsKept, liveKeys });
 
   return (
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
@@ -184,7 +205,48 @@ export function CloseAccountView() {
         title="Before you close"
         description="Three steps. Each ticks itself off when it is done."
         steps={steps}
+        doneTitle="Ready to close"
+        doneDescription="Your money is withdrawn, your records are saved and no agent key works."
       />
+      {/*
+        Closing has no endpoint: the Assay team does it. The request is the
+        last step, offered once the three above are done (3 of 3), and only
+        when this deployment has somewhere to send it.
+      */}
+      <section
+        aria-label="Close the account"
+        className="flex w-full flex-col gap-2.5 rounded-xl border border-01 bg-01 p-4 shadow-hair tablet:p-5"
+      >
+        <h2 className="text-label-md text-01">Close the account</h2>
+        {SUPPORT_URL ? (
+          <>
+            <p className="text-body-13 text-02">
+              Closing is done by the Assay team. Send the request once the three steps are done.
+            </p>
+            {ready ? (
+              <Button size="sm" className="self-start" asChild>
+                <a href={SUPPORT_URL} target="_blank" rel="noreferrer">
+                  Ask us to close the account <ArrowRight aria-hidden="true" className="size-3.5" />
+                </a>
+              </Button>
+            ) : (
+              <Button size="sm" type="button" className="self-start" disabled>
+                Ask us to close the account
+              </Button>
+            )}
+            {ready ? null : (
+              <p className="text-body-xs text-03" data-testid="close-not-ready">
+                {progress.done} of {progress.total} steps done. The request opens at {progress.total} of {progress.total}.
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-body-13 text-02">
+            Closing is done by the Assay team, not in the app. With no money and no working keys the account cannot spend
+            and costs nothing, and you can sign in again any time.
+          </p>
+        )}
+      </section>
     </div>
   );
 }
