@@ -313,28 +313,25 @@ export interface ReportWindowView {
 }
 
 /**
- * What a report filed now would mean, from the receipt's hold fields.
+ * What a report filed now would mean.
  *
- * Three cases while a report is accepted:
- *  - the payment is in its 1-hour hold (`disputeWindowEndsAt` ahead): a full
- *    refund if accepted;
- *  - the payment has not been collected yet (a voucher not redeemed into the
- *    hold): also a full refund — the backend marks a report filed then as
- *    guaranteed, but only while nothing else happened to the payment: no
- *    hold fields, the hold not released, no debt, no forfeit, no charge note;
- *  - the hold has really ended (`disputeWindowEndsAt` passed): no refund.
- * Anything else promises neither a refund nor "no refund".
+ * Whether it is refunded in full is the backend's answer,
+ * `refundableIfReportedNow`: the same predicate the filing applies to
+ * `refundGuaranteed` (wave-1 audit I1). It is never inferred from the hold
+ * fields here, since a chain without the escrow hold, or the hold's last
+ * minute, is not guaranteed although it can look so. While a report is
+ * accepted:
+ *  - guaranteed, inside the 1-hour hold: a full refund if accepted;
+ *  - guaranteed, the payment not collected yet: also a full refund;
+ *  - the hold has really ended (`disputeWindowEndsAt` passed): no refund;
+ *  - anything else promises neither a refund nor "no refund".
  */
 export function reportWindow(
   receipt: {
     status: string;
     disputeWindowEndsAt?: string | null;
     disputeFilingClosesAt?: string | null;
-    collectableAt?: string | null;
-    holdReleasedAt?: string | null;
-    debt?: string | null;
-    forfeited?: boolean;
-    chargeNote?: string | null;
+    refundableIfReportedNow?: boolean;
     chargedPrice: Money;
   },
   now: number,
@@ -342,15 +339,8 @@ export function reportWindow(
   const closes = receipt.disputeFilingClosesAt ?? null;
   const open = closes !== null && now < Date.parse(closes);
   const holdEnds = receipt.disputeWindowEndsAt ?? null;
-  const notCollectedYet =
-    holdEnds === null &&
-    !receipt.collectableAt &&
-    !receipt.holdReleasedAt &&
-    !receipt.debt &&
-    !receipt.forfeited &&
-    !receipt.chargeNote;
   const inHold = holdEnds !== null && now < Date.parse(holdEnds);
-  const guaranteed = open && (inHold || notCollectedYet);
+  const guaranteed = open && receipt.refundableIfReportedNow === true;
   if (!open) {
     return {
       open: false,
@@ -359,16 +349,16 @@ export function reportWindow(
       text: closes !== null ? "The time to report this call has passed." : "Only a finished, charged call can be reported.",
     };
   }
-  if (inHold) {
+  if (guaranteed && inHold) {
     return { open, guaranteed, holdEndsAt: holdEnds, text: "The payment is still held. Report it now and, if your report is accepted, you are refunded in full." };
   }
-  if (notCollectedYet) {
+  if (guaranteed) {
     return { open, guaranteed, holdEndsAt: null, text: "The payment has not been collected yet. Report it now and, if your report is accepted, you are refunded in full." };
   }
-  if (holdEnds !== null) {
+  if (holdEnds !== null && !inHold) {
     return { open, guaranteed, holdEndsAt: null, text: `The 1-hour hold has ended, so ${AFTER_HOLD_OUTCOME}` };
   }
-  // No live hold and no guarantee (a released hold, a debt, a forfeit): say only what is certain.
+  // No guarantee from the backend (no escrow hold on this chain, a released hold, a debt, a forfeit): say only what is certain.
   return { open, guaranteed, holdEndsAt: null, text: "If your report is accepted, it counts against the provider's quality." };
 }
 

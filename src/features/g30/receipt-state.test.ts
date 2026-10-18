@@ -446,6 +446,7 @@ describe("receiptTimeline — the 1-hour hold", () => {
     disputeWindowEndsAt: "2026-10-16T01:00:02.000Z",
     collectableAt: "2026-10-16T01:00:03.000Z",
     disputeFilingClosesAt: "2026-10-23T00:00:02.000Z",
+    refundableIfReportedNow: true,
   });
   const labels = (rows: { label: string }[]) => rows.map((r) => r.label);
 
@@ -496,8 +497,19 @@ describe("receiptTimeline — the 1-hour hold", () => {
   });
 
   it("on a call already reported: says so instead of inviting a report", () => {
-    const rows = receiptTimeline(receipt, "CHARGED", { now: INSIDE, report: "closed" });
-    expect(rows.find((r) => r.label === "Refundable until then")?.meta).toBe("you reported it");
+    const covered = receiptTimeline({ ...receipt, refundableIfReportedNow: false }, "CHARGED", { now: INSIDE, report: "open" });
+    expect(covered.find((r) => r.label === "Refundable until then")?.meta).toBe("you reported it");
+    // A report the guarantee does not cover: the hour is not a refund window for it.
+    const uncovered = receiptTimeline({ ...receipt, refundableIfReportedNow: false }, "CHARGED", { now: INSIDE, report: "closed" });
+    expect(uncovered.find((r) => r.label === "Hold ends")?.meta).toBe("you reported it");
+    expect(labels(uncovered)).not.toContain("Refundable until then");
+  });
+
+  // Wave-1 audit I1: inside the hour but not guaranteed by the backend (e.g. no escrow hold on the chain).
+  it("inside the hold without the backend's guarantee: 'Hold ends', no refund promise", () => {
+    const rows = receiptTimeline({ ...receipt, refundableIfReportedNow: false }, "CHARGED", { now: INSIDE });
+    expect(labels(rows)).toContain("Hold ends");
+    expect(rows.map((r) => `${r.label} ${r.meta ?? ""}`).join(" ")).not.toMatch(/Refundable|full refund/);
   });
 
   it("draws no hold on a call that was not charged", () => {

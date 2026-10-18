@@ -7,7 +7,7 @@ import type { Receipt } from "@/features/g30/wire";
 import type { CallDispute } from "@/services/call-disputes.service";
 
 import { buyerStatus } from "./model";
-import { ReceiptReport, receiptReportState } from "./receipt-report";
+import { ReceiptReport, RefundableNow, receiptReportState } from "./receipt-report";
 import { DisputeChip, DisputeTimeline, EvidencePanes } from "./ui";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => undefined, replace: () => undefined }), usePathname: () => "/" }));
@@ -93,6 +93,7 @@ describe("the receipt's Report a bad result", () => {
       disputeWindowEndsAt: "2026-10-18T11:00:00.000Z",
       disputeFilingClosesAt: "2026-10-25T10:00:00.000Z",
       chargedPrice: usd,
+      refundableIfReportedNow: true,
     } as unknown as Receipt;
     const client = new QueryClient();
     const words = text(renderToStaticMarkup(<QueryClientProvider client={client}><ReceiptReport receipt={receipt} toolName="acme__search_posts" /></QueryClientProvider>));
@@ -100,6 +101,30 @@ describe("the receipt's Report a bad result", () => {
     expect(words).toContain("Bad result?");
     expect(words).toContain("The payment is still held");
     expect(words).toContain("Report a bad result");
+  });
+
+  // Wave-1 audit I1: a chain without the escrow hold looks the same on the hold fields; the backend says no.
+  it("promises no refund in the hold when the backend would not guarantee one", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(t0 + 10 * 60_000));
+    const receipt = {
+      intentId: "i1",
+      toolId: "tool-1",
+      status: "SETTLED",
+      createdAt: FILED,
+      settledAt: FILED,
+      disputeWindowEndsAt: "2026-10-18T11:00:00.000Z",
+      disputeFilingClosesAt: "2026-10-25T10:00:00.000Z",
+      chargedPrice: usd,
+      refundableIfReportedNow: false,
+    } as unknown as Receipt;
+    const client = new QueryClient();
+    const report = text(renderToStaticMarkup(<QueryClientProvider client={client}><ReceiptReport receipt={receipt} toolName="acme__search_posts" /></QueryClientProvider>));
+    const headline = renderToStaticMarkup(<QueryClientProvider client={client}><RefundableNow receipt={receipt} toolName="acme__search_posts" now={t0 + 10 * 60_000} /></QueryClientProvider>);
+    vi.useRealTimers();
+    expect(report).not.toMatch(/refunded in full|full refund/);
+    expect(report).toContain("Report a bad result");
+    expect(headline).toBe("");
   });
 });
 

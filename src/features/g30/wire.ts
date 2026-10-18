@@ -111,6 +111,11 @@ export interface Receipt {
   disputeWindowEndsAt?: string | null;
   /** "Report a bad result" is accepted until then; null when the call cannot be reported. */
   disputeFilingClosesAt?: string | null;
+  /**
+   * Whether a report filed now is refunded in full if upheld: the backend's
+   * own filing predicate. The only source of a refund promise on a receipt.
+   */
+  refundableIfReportedNow?: boolean;
 }
 
 /* ------------------------------------------------------------------- summary */

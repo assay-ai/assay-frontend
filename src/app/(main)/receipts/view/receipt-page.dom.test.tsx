@@ -109,12 +109,25 @@ describe("the receipt page tells one story", () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.parse("2026-10-13T18:20:00.000Z"));
     const words = render(
-      uncheckedReceipt({ providerId: "prv-1", disputeFilingClosesAt: "2026-10-20T18:10:00.000Z", holdReleasedAt: null }),
+      uncheckedReceipt({ providerId: "prv-1", disputeFilingClosesAt: "2026-10-20T18:10:00.000Z", holdReleasedAt: null, refundableIfReportedNow: true }),
     );
     expect(words).not.toMatch(/no refund/i);
     expect(words).toContain("Refundable: the 1-hour hold starts when the payment is collected.");
     expect(words).toContain("The payment has not been collected yet. Report it now and, if your report is accepted, you are refunded in full.");
     // One button, beside the headline; the box at the foot only explains.
+    expect(words.match(/Report a bad result/g)).toHaveLength(1);
+  });
+
+  // Wave-1 audit I1: the same call where the backend would not guarantee a refund (no escrow hold on its chain).
+  it("a reportable call not yet collected, on a chain without the hold, promises no refund", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse("2026-10-13T18:20:00.000Z"));
+    const words = render(
+      uncheckedReceipt({ providerId: "prv-1", disputeFilingClosesAt: "2026-10-20T18:10:00.000Z", holdReleasedAt: null, refundableIfReportedNow: false }),
+    );
+    expect(words).not.toMatch(/refunded in full|full refund|no refund/i);
+    expect(words).not.toContain("Refundable:");
+    expect(words).toContain("If your report is accepted, it counts against the provider's quality.");
     expect(words.match(/Report a bad result/g)).toHaveLength(1);
   });
 

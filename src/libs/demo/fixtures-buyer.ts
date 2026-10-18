@@ -1137,6 +1137,9 @@ function receiptBody(call: DemoCall) {
     disputeWindowEndsAt: charged && settled ? minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES + 1) : null,
     // "Report a bad result" is accepted for 7 days after the call settled; null when it can't be reported.
     disputeFilingClosesAt: charged && settled ? minutesAgo(Math.max(callAge(call) - 1, 0) - 7 * 1440) : null,
+    // The backend's own answer: a report now is refunded in full while the hold has more than a minute left.
+    refundableIfReportedNow:
+      charged && settled !== null && Date.parse(minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES + 1)) - 60_000 > Date.now(),
   };
 }
 
