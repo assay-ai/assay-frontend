@@ -159,8 +159,8 @@ describe("operator: provider tool review and takedown", () => {
 describe("operator: call disputes", () => {
   it("lists open disputes, flagged buyers only on request", async () => {
     opGet.mockResolvedValue({ items: [], pageInfo: {} });
-    await opDisputes.listOperatorCallDisputes({ state: ["OPEN"], flaggedOnly: true, order: "ASC", cursor: "c1" });
-    expect(opGet).toHaveBeenCalledWith("/operator/call-disputes", { limit: 50, state: "OPEN", flaggedOnly: true, order: "ASC", cursor: "c1" });
+    await opDisputes.listOperatorCallDisputes({ state: ["OPEN"], flaggedOnly: true, order: "asc", cursor: "c1" });
+    expect(opGet).toHaveBeenCalledWith("/operator/call-disputes", { limit: 50, state: "OPEN", flaggedOnly: true, order: "asc", cursor: "c1" });
   });
 
   it("returns the decision, or the approval it waits on", async () => {

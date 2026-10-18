@@ -415,8 +415,8 @@ export const QUEUE_PAGE = 20;
 
 export function disputeQueueQuery(show: "open" | "all", flaggedOnly: boolean, cursor?: string) {
   return show === "open"
-    ? { state: ["OPEN"] as const, order: "ASC" as const, flaggedOnly, cursor, limit: QUEUE_PAGE }
-    : { order: "DESC" as const, flaggedOnly, cursor, limit: QUEUE_PAGE };
+    ? { state: ["OPEN"] as const, order: "asc" as const, flaggedOnly, cursor, limit: QUEUE_PAGE }
+    : { order: "desc" as const, flaggedOnly, cursor, limit: QUEUE_PAGE };
 }
 
 /**
