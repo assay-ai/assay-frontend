@@ -402,6 +402,56 @@ export interface OperatorCaseBrief {
   chainStanding?: boolean;
   /** The provider's penalties upheld or executed in the last 30 days (follow-up C4). Absent from an older backend. */
   upheldViolations30d?: number;
+  /**
+   * B18: the three operator actions for a case stuck behind a requested
+   * cancel the backend's sweep cannot settle, each with whether its guard
+   * holds on the brief's own live chain read. The action reads the chain
+   * again before it acts. Absent from an older backend (nothing offered).
+   */
+  manualActions?: OperatorCaseManualActions;
+}
+
+/** Why a B18 action is refused, as the backend names it (`StuckCaseRefusal`). */
+export type ManualActionRefusal =
+  | "NOT_CANCEL_REQUESTED"
+  | "SWEEP_SETTLES"
+  | "CHAIN_UNKNOWN"
+  | "STANDING"
+  | "EXECUTED"
+  | "NOT_EXECUTED"
+  | "NOT_GONE"
+  | "UPHELD_USE_REPROPOSE"
+  | "CASE_STATUS"
+  | "ALREADY_RECORDED"
+  | "EXECUTED_BEYOND_DECISION"
+  | "DISPUTED_ON_CHAIN";
+
+export interface ManualActionOption {
+  allowed: boolean;
+  refusal: ManualActionRefusal | null;
+}
+
+export interface OperatorCaseManualActions {
+  /** `S-15`: the record reads cancelled and the case is closed with no penalty. One person. */
+  closeNothingStanding: ManualActionOption;
+  /** `S-16`: the record reads executed while the cancel waited. Two-person. */
+  recordExecution: ManualActionOption & {
+    /** What the chain took, minor units of the penalty's asset; set when the record reads executed. */
+    appliedMinor: string | null;
+  };
+  /** `S-17`: the record reads cancelled and the case is still upheld. Two-person. */
+  repropose: ManualActionOption;
+}
+
+/** The body of a B18 action: the same reason and note as a suspension. */
+export type ManualCaseActionBody = SuspendProposalBody;
+
+/** What a B18 action answers once it ran (200). */
+export interface ManualCaseActionResult {
+  proposalId: string;
+  status: string;
+  chainStatus: string;
+  chainEpoch: number;
 }
 
 /** `POST /operator/cases/:id/decide`. */

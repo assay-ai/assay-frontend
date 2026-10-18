@@ -28,6 +28,8 @@ const ACTION_LABEL: Readonly<Record<string, string>> = {
   "slash.suspend": "Suspend a penalty (cancels it)",
   "slash.sweep": "Decide every penalty with the same defect",
   "slash.compensated": "Record a pay-back and close the penalty",
+  "slash.record_execution": "Record an execution made on chain while the cancel waited",
+  "slash.repropose": "Propose an upheld penalty on chain again",
   "account.unblock": "Lift an account block",
   "operator.add": "Add an operator",
   "operator.change": "Raise someone's roles or limit, or take their Admin role away",
@@ -46,6 +48,8 @@ export const APPROVER_ROLES: Readonly<Record<string, readonly OperatorRole[]>> =
   "S-1": ["ADJ", "ADJL"],
   "S-11": ["ADJ", "ADJL"],
   "S-5": ["ADJL", "TRE"],
+  "S-16": ["ADJL", "TRE"],
+  "S-17": ["ADJ", "ADJL"],
   "A-10": ["ADJL"],
   "A-12": ["OPS_ADMIN"],
   "A-13": ["OPS_ADMIN"],
@@ -396,6 +400,10 @@ export function approvalTitle(
     }
     case "slash.compensated":
       return `Pay back ${penaltyName(text(payload.proposalId) ?? targetId, context)}`;
+    case "slash.record_execution":
+      return `Record the on-chain execution of ${penaltyName(text(payload.proposalId) ?? targetId, context)}`;
+    case "slash.repropose":
+      return `Propose ${penaltyName(text(payload.proposalId) ?? targetId, context)} on chain again`;
     case "arbiter.block": {
       // The two most dangerous requests name who they are about (operator review 2026-10-16b, P1-6).
       const account = text(payload.account) ?? targetId.split(":").pop() ?? "";
@@ -456,6 +464,27 @@ export function approvalOutcome(
         text: parts ? `The penalty is cancelled: ${parts.provider} keeps its ${parts.amount}` : "The penalty is cancelled: the provider keeps the amount",
       });
       lines.push({ kind: "chain", text: "If it stands on chain, the arbiter must still sign the cancel. It can't be undone" });
+      break;
+    case "slash.record_execution":
+      // The money already moved on chain: approving records it, after a fresh read of the record.
+      lines.push({
+        kind: "money",
+        text: parts
+          ? `Records that the chain took ${possessive(parts.provider)} penalty while the cancel waited; no money moves now`
+          : "Records that the chain took the penalty while the cancel waited; no money moves now",
+      });
+      lines.push({ kind: "chain", text: "The record is read on chain again first; if it no longer reads executed, nothing is written" });
+      lines.push({ kind: "record", text: "It can't be undone. Paying it back is a separate request" });
+      break;
+    case "slash.repropose":
+      lines.push({
+        kind: "money",
+        text: parts
+          ? `Up to ${parts.amount} of ${possessive(parts.provider)} stake is reserved again once it is on chain`
+          : "Up to the decided penalty of the provider's stake is reserved again once it is on chain",
+      });
+      lines.push({ kind: "chain", text: "The old record is read on chain again first; the next proposal pass then puts the new one on chain" });
+      lines.push({ kind: "record", text: "It can't be undone here; the provider can dispute the new record on chain" });
       break;
     case "arbiter.block": {
       const account = text(payload.account);
@@ -686,6 +715,24 @@ function describeLong(
       };
     }
 
+    case "slash.record_execution": {
+      const id = text(payload.proposalId) ?? targetId;
+      return {
+        sentence: `Record that ${penaltyName(id, context)} was executed on chain while its cancel waited${because}.`,
+        target: caseTarget(id, context),
+        fields: [...commonFields(body), ...extraFields(body)],
+      };
+    }
+
+    case "slash.repropose": {
+      const id = text(payload.proposalId) ?? targetId;
+      return {
+        sentence: `Propose ${penaltyName(id, context)} on chain again under a new record, its earlier one being cancelled${because}.`,
+        target: caseTarget(id, context),
+        fields: [...commonFields(body), ...extraFields(body)],
+      };
+    }
+
     case "slash.compensated": {
       const id = text(payload.proposalId) ?? targetId;
       const signature = text(body.signature);
@@ -749,6 +796,10 @@ export function approvedResultSentence(action: string, result: unknown, target?:
       return `${target ? `${target.charAt(0).toUpperCase()}${target.slice(1)} suspended` : "Penalty suspended"}. If it stands on chain, its cancel is requested and still needs the arbiter's signature.`;
     case "slash.compensated":
       return `${target ? `${target.charAt(0).toUpperCase()}${target.slice(1)} recorded as paid back` : "Recorded as paid back"} into the provider's stake. Penalty closed.`;
+    case "slash.record_execution":
+      return "Approved. The record read executed on chain, and the execution is recorded on the penalty.";
+    case "slash.repropose":
+      return "Approved. The penalty goes on chain again with the next proposal pass.";
     case "account.unblock": {
       const subject =
         target ??
@@ -876,6 +927,10 @@ export function approvalChanges(
       return [{ label: "Penalty", before: "Stands", after: "Cancelled" }];
     case "slash.compensated":
       return [{ label: "Penalty", before: "Executed", after: "Paid back to the provider" }];
+    case "slash.record_execution":
+      return [{ label: "Penalty", before: "Cancel requested", after: "Executed (recorded)" }];
+    case "slash.repropose":
+      return [{ label: "On chain", before: "Cancelled record", after: "Proposed again" }];
     case "slash.sweep":
       return [{ label: "Cases with this defect", before: "Open", after: "Decided like this one" }];
     default:
