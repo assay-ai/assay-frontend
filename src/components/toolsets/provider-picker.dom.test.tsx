@@ -84,9 +84,9 @@ describe("the provider picker", () => {
 
     await waitFor(() => expect(screen.getAllByTestId("serving-chip")).toHaveLength(2));
     const [e2e, meteo] = screen.getAllByTestId("provider-option");
-    expect(within(e2e).getByTestId("provider-facts").textContent).toMatch(/^\$0\.10 · Robinhood Chain testnet · 11% failed$/);
+    expect(within(e2e).getByTestId("provider-facts").textContent).toMatch(/^\$0\.10 · Robinhood Chain testnet · 10\.5% failed$/);
     expect(e2e.textContent).toContain("Serves you");
-    expect(within(meteo).getByTestId("provider-facts").textContent).toContain("Solana devnet · 5.0% failed");
+    expect(within(meteo).getByTestId("provider-facts").textContent).toContain("Solana devnet · 5% failed");
     expect(meteo.textContent).toContain("Doesn't take payment on your chain");
   });
 
