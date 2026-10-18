@@ -99,6 +99,8 @@ export interface CatalogueProvider {
   chains?: string[] | null;
   /** Per caller: one of your agents' chains is in `chains`. null when unknown. */
   servesYou?: boolean | null;
+  /** Per caller: WITHDRAWING when servesYou is false because every agent has a standing withdrawal. */
+  notServedReason?: "WITHDRAWING" | null;
 }
 
 export interface CatalogueProviderTool {
@@ -114,6 +116,8 @@ export interface CatalogueProviderTool {
   chains?: string[] | null;
   /** Per caller: one of your agents' chains is in `chains`. null when unknown. */
   servesYou?: boolean | null;
+  /** Per caller: WITHDRAWING when servesYou is false because every agent has a standing withdrawal. */
+  notServedReason?: "WITHDRAWING" | null;
 }
 
 export interface CatalogueProviderDetail extends CatalogueProvider {

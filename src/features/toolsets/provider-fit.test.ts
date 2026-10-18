@@ -105,3 +105,13 @@ describe("chainsText", () => {
     expect(chainsText({ chains: [], servesYou: null }, name)).toBeNull();
   });
 });
+
+describe("every agent withdrawing (n4)", () => {
+  const off = (offer: ProviderOffer): ProviderOffer => ({ ...offer, servesYou: false, notServedReason: "WITHDRAWING" });
+  it("names the withdrawal, not the chain, on the chip and in the warning", () => {
+    expect(servingStatus(off(E2E))).toMatchObject({ kind: "withdrawing", label: "Not while you're withdrawing" });
+    const text = nothingRunsWarning(rule(), [off(E2E), off(METEO)], "get_weather");
+    expect(text).toContain("withdrawal pending");
+    expect(text).not.toContain("your chain");
+  });
+});

@@ -88,6 +88,8 @@ export interface ProviderRow {
   chains?: string[] | null;
   /** Whether a call from one of your agents can settle with them now; null/undefined = unknown. */
   servesYou?: boolean | null;
+  /** WITHDRAWING when they don't serve you because every agent of yours is withdrawing. */
+  notServedReason?: "WITHDRAWING" | null;
 }
 
 export interface ToolRow {
@@ -209,6 +211,7 @@ export function useCatalogue() {
       yourCalls: calls.filter((call) => call.providerId === row.providerId).length,
       chains: row.chains,
       servesYou: row.servesYou,
+      notServedReason: row.notServedReason,
     }));
   }, [providersQuery.data, calls]);
 
