@@ -176,3 +176,52 @@ describe("demo contract versions (T3)", () => {
     expect(thrown({ providesOutputFields: ["pm10"] })?.context).toEqual({ problems: ['"pm10" is not an optional output of the contract in ^1'] });
   });
 });
+
+describe("demo Money: not credited and payments", () => {
+  it("says not credited as the sum of its reasons, per tool and in total, matching the per-call file", async () => {
+    const fixtures = await load();
+    const { foldNotCredited, parseCallsCsv } = await import("@/features/call-classes/csv");
+    const { demoCallsCsv } = await import("./fixtures-provider-calls");
+    type Figures = {
+      key?: string;
+      withheld: { amount: string };
+      withheldCalls: number;
+      withheldByClass: { class: string; calls: number; amount: { amount: string } }[];
+    };
+    const body = call(fixtures, "GET", "/providers/me/earnings") as unknown as { totals: Figures; groups: Figures[] };
+
+    for (const figures of [body.totals, ...body.groups]) {
+      expect(figures.withheldByClass.map((r) => r.class)).toEqual(["PAID_UNCREDITED", "SYSTEM_ERROR", "REQUEST_ERROR"]);
+      const calls = figures.withheldByClass.reduce((s, r) => s + r.calls, 0);
+      const amount = figures.withheldByClass.reduce((s, r) => s + BigInt(r.amount.amount), 0n);
+      expect(calls).toBe(figures.withheldCalls);
+      expect(amount.toString()).toBe(figures.withheld.amount);
+    }
+
+    // The per-call file's not-credited rows, by class, are the same calls.
+    const notCreditedClasses = new Set(["PAID_UNCREDITED", "SYSTEM_ERROR", "REQUEST_ERROR"]);
+    const rows = parseCallsCsv(demoCallsCsv()).filter((row) => notCreditedClasses.has(row.classification));
+    const folded = foldNotCredited(rows);
+    for (const reason of body.totals.withheldByClass) {
+      const bucket = folded.buckets.find((b) => b.className === reason.class);
+      expect(bucket?.calls ?? 0).toBe(reason.calls);
+      expect(bucket?.notCredited?.amount ?? "0").toBe(reason.amount.amount);
+    }
+  });
+
+  it("lists rail-B redemptions as payments, with their calls, beside the payout runs", async () => {
+    const fixtures = await load();
+    const body = call(fixtures, "GET", "/providers/me/payouts") as unknown as {
+      items: { kind: string; batchId: string | null; calls: number | null; chainTxRef: string | null }[];
+    };
+    const redemptions = body.items.filter((item) => item.kind === "REDEMPTION");
+    expect(redemptions.length).toBeGreaterThan(0);
+    for (const item of redemptions) {
+      expect(item.batchId).toBeNull();
+      expect(item.calls).toBeGreaterThan(0);
+      expect(item.chainTxRef).toMatch(/^0x[0-9a-f]{64}$/);
+    }
+    expect(body.items.some((item) => item.kind === "BATCH")).toBe(true);
+    for (const item of body.items) expect(["BATCH", "REDEMPTION"]).toContain(item.kind);
+  });
+});
