@@ -157,6 +157,14 @@ function specific(
         line: "Your deposit reached your balance and can pay for calls",
       };
     }
+    case "agent.renamed": {
+      const from = text(before.label);
+      const to = text(after.label);
+      return {
+        title: "Agent renamed",
+        line: to ? `${subject} renamed ${from ? `the agent “${from}”` : "an agent"} to “${to}”` : `${subject} renamed an agent`,
+      };
+    }
     case "credential.created": {
       const name = text(after.name) ?? text(after.label);
       return { title: "Agent key created", line: `${subject} created ${name ? `the agent key “${name}”` : "an agent key"}` };

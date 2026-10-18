@@ -35,6 +35,7 @@ import {
   usePublicProviders,
   usePublicTools,
 } from "@/features/explorer/use-public-explorer";
+import { mcpToolName } from "@/features/connect/mcp-url";
 import { useChainName } from "@/hooks/useChainName";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useSearchParam } from "@/hooks/useSearchParam";
@@ -69,6 +70,8 @@ function ToolPage() {
       .map((d) => d.data)
       .find((d) => d?.providerId === providerId)
       ?.tools.find((t) => t.toolId === tool?.id);
+  // The name an agent calls it by, for "Use this tool" (`/connect?tools=`).
+  const mcpName = tool ? mcpToolName(tool) : null;
   // A static export cannot set per-tool metadata; name the tool in the tab.
   useDocumentTitle(tool ? `${tool.name}: price and record — Assay` : null);
   // The backend's own figure when the public API sends it; otherwise the smallest per-listing allowance.
@@ -289,7 +292,13 @@ function ToolPage() {
               : "Sign up, create an agent key and add funds. You pay only for results that pass."}
           </p>
         </div>
-        <StartFreeCta next={routes.exploreTool(tool.id)} className="tablet:items-end" />
+        {/* "Use this tool": Connect with only this tool chosen; signed out, sign-in comes back there. */}
+        <StartFreeCta
+          next={mcpName ? routes.connectTools([mcpName]) : routes.exploreTool(tool.id)}
+          label={mcpName ? "Use this tool" : "Start free"}
+          signedInLabel={mcpName ? "Use this tool" : "Open app"}
+          className="tablet:items-end"
+        />
       </section>
     </>
   );

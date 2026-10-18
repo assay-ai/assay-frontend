@@ -265,21 +265,26 @@ const VERBS = new Set(["get", "search", "list", "find", "fetch", "lookup", "read
 export const MAX_SERVER_NAME = 9;
 
 /**
- * A name of at most 9 characters, never cut mid-word: whole words from the
- * start while they fit ("weather-and-places" → "weather"), else the last word
- * when that fits ("web-research" → "research"), and only a word too long for
- * any of that is cut.
+ * A name of at most 9 characters, never cut mid-word: the whole text, else
+ * the whole text without its dashes ("tools-i-use" → "toolsiuse"), else whole
+ * words from the start while they fit ("weather-and-places" → "weather"),
+ * never ending on a one- or two-letter word ("tools-i" names nothing), else
+ * the last word when that fits ("web-research" → "research"), and only a word
+ * too long for any of that is cut.
  */
 function clip(text: string): string {
   const cleaned = text.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
   if (cleaned.length <= MAX_SERVER_NAME) return cleaned || "assay";
   const words = cleaned.split("-").filter(Boolean);
-  let head = "";
+  const joined = words.join("");
+  if (joined.length <= MAX_SERVER_NAME) return joined;
+  const kept: string[] = [];
   for (const word of words) {
-    const next = head ? `${head}-${word}` : word;
-    if (next.length > MAX_SERVER_NAME) break;
-    head = next;
+    if ([...kept, word].join("-").length > MAX_SERVER_NAME) break;
+    kept.push(word);
   }
+  while (kept.length > 1 && kept.at(-1)!.length <= 2) kept.pop();
+  const head = kept.join("-");
   if (head.length >= 4) return head;
   const last = words.at(-1) ?? "";
   if (last.length >= 4 && last.length <= MAX_SERVER_NAME) return last;

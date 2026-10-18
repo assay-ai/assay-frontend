@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronRight, Gift, TriangleAlert } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Gift, Plug, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -36,6 +36,7 @@ import {
   smallestFreeAllowance,
   stakeSummary,
 } from "@/features/explorer/explorer-text";
+import { mcpToolName } from "@/features/connect/mcp-url";
 import { accessSummary, toolAccess } from "@/features/explorer/tool-access";
 import { chainBalances, type FullBalance } from "@/features/g30/balance";
 import { useChainName } from "@/hooks/useChainName";
@@ -99,6 +100,20 @@ export function SettlesElsewhere({
   );
 }
 
+/** Connect with "Only these tools" chosen: a key and a Copy away from a working config. */
+export function UseThisTool({ tool }: { tool: { name: string; toolId?: string } }) {
+  const mcpName = mcpToolName(tool);
+  if (!mcpName) return null;
+  return (
+    <Button asChild size="sm" data-testid="use-this-tool">
+      <Link href={routes.connectTools([mcpName])}>
+        <Plug aria-hidden="true" />
+        Use this tool
+      </Link>
+    </Button>
+  );
+}
+
 function ToolDetail({
   tool,
   providers,
@@ -147,7 +162,10 @@ function ToolDetail({
   return (
     <div className="flex flex-col gap-4 border-t border-01 bg-02 px-4 py-4 tablet:px-5">
       {/* Allow / Block first, naming the agent it is for (Explore's agent picker sets which). */}
-      <ToolAccessControl toolId={tool.toolId} toolName={tool.name} allToolIds={allToolIds} className="self-start" />
+      <div className="flex flex-wrap items-center gap-2">
+        <ToolAccessControl toolId={tool.toolId} toolName={tool.name} allToolIds={allToolIds} className="self-start" />
+        <UseThisTool tool={tool} />
+      </div>
       {tool.description ? <p className="text-body-13 text-02">{tool.description}</p> : null}
 
       <SettlesElsewhere tool={tool} buyerChains={buyerChains} chains={chains} />

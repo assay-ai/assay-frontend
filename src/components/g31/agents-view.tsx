@@ -1,11 +1,12 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Plus } from "lucide-react";
+import { KeyRound, Pencil, Plus } from "lucide-react";
 import * as React from "react";
 
-import { AgentHealthLine } from "@/components/buyer-money/agent-health";
+import { AgentHealthLine, ReadinessChip } from "@/components/buyer-money/agent-health";
 import { CreateKeySheet } from "@/components/buyer-money/create-key";
+import { PaidByInvitation } from "@/components/buyer-money/get-started";
 import { LetAgentPaySheet } from "@/components/buyer-money/let-agent-pay-sheet";
 import { EffectiveLimitLines, type LimitsContext, rowsFor, SpendingLimitsActions, useLimitsContext } from "@/components/buyer-money/agent-limits";
 import { type AgentRow, type KeyRow } from "@/components/buyer-money/use-agents";
@@ -13,21 +14,22 @@ import { limitLines } from "@/features/buyer-money/spending-limits";
 import { CapMeter } from "@/components/patterns/cap-meter";
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { CopyChip } from "@/components/patterns/copy-chip";
+import { Skeleton } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
-import { CodeBlock } from "@/components/ui/code-block";
+import { Field } from "@/components/ui/field";
+import { AGENT_LABEL_MAX, agentLabelError } from "@/features/buyer-money/agent-label";
 import type { AgentReadiness } from "@/features/buyer-money/agent-readiness";
 import { capsToForm } from "@/features/buyer-money/caps";
-import { AGENT_CLI_SOURCE } from "@/features/buyer-money/get-started";
 import { permissionExpiry } from "@/features/buyer-money/permission-expiry";
 import { type DelegateBinding, supportsDelegation } from "@/features/delegation/delegation-form";
 import { hasTightenDelay, tightenDelayLabel } from "@/features/delegation/unsettled";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { shortAddress } from "@/libs/chains/format";
-import { revokeCredential } from "@/services/account.service";
+import { renameAgent, revokeCredential } from "@/services/account.service";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { toast } from "@/utils/toast";
 
@@ -48,16 +50,20 @@ import { relativeTime } from "./format";
  *   2. Servers in use — the MCP URLs it was handed or called through, and
  *      Connect (the Connect sheet).
  *   3. Payment key — bound by `agent-cli bind`, detected automatically.
+ *      Without one, paid calls are by invitation during testnet (D14).
  *   4. Spending limits — the effective limit and what binds it, what it spent
  *      in the last 24 hours, and Change spending limits / Stop it paying.
  *   5. What this agent can use — its access and provider limits. The fix
  *      links of refused calls open it: `/agents?agent={id}#access`.
  *
+ * The agent's name is renamed in place (`PATCH /agents/:id`); Connect,
+ * Overview and Explore read the same label. A skeleton stands in for the
+ * card while its keys load: it never says "No key" from a loading state.
+ *
  * Two different stops, never both called "revoke": **Stop it paying** removes
  * the on-chain permission (the API key still works for free calls); **Revoke
  * key** ends the API key for every call, free and paid. Both are immediate.
  */
-const BIND_COMMAND = "agent-cli keygen && agent-cli bind";
 const POLL_MS = 5_000;
 
 /** Whether the agent pays through this key: its payment key was bound on it and is allowed to pay. */
@@ -212,6 +218,8 @@ export function AgentsView() {
             agent={agent}
             keys={data.keys[agent.agentId]}
             keysPending={data.keysQuery.isPending}
+            keysFailed={data.keysQuery.isError}
+            onRetryKeys={data.refetchKeys}
             readiness={data.readiness[agent.agentId]!}
             escrowReady={Boolean(data.escrowQuery.data?.exists)}
             onNewKey={() => setNewKeyFor(agent)}
@@ -229,6 +237,7 @@ export function AgentsView() {
       <CreateKeySheet
         agentId={newKeyFor?.agentId ?? null}
         agentName={newKeyFor?.label}
+        keyCount={newKeyFor ? (data.keys[newKeyFor.agentId] ?? []).length : 0}
         open={newKeyFor !== null}
         onOpenChange={(open) => !open && setNewKeyFor(null)}
       />
@@ -294,6 +303,8 @@ function AgentCard({
   agent,
   keys,
   keysPending,
+  keysFailed,
+  onRetryKeys,
   readiness,
   escrowReady,
   onNewKey,
@@ -306,6 +317,9 @@ function AgentCard({
   agent: AgentRow;
   keys: KeyRow[] | undefined;
   keysPending: boolean;
+  /** The keys could not be read: say so, never "no key". */
+  keysFailed: boolean;
+  onRetryKeys: () => void;
   readiness: AgentReadiness;
   escrowReady: boolean;
   onNewKey: () => void;
@@ -326,6 +340,28 @@ function AgentCard({
   const [now] = React.useState(() => Date.now());
   const expiry = readiness.freeOnly ? null : permissionExpiry(grant, now);
 
+  if (keysPending || readiness.loading) {
+    return (
+      <section
+        aria-label={name}
+        aria-busy="true"
+        data-testid="agent-card-loading"
+        className="flex w-full flex-col gap-3.5 rounded-xl border border-01 bg-01 p-4 shadow-hair tablet:p-5"
+      >
+        <header className="flex w-full flex-wrap items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <h2 className="text-label-md text-01">{name}</h2>
+            <Skeleton className="h-4 w-64 max-w-full" />
+          </div>
+          <Skeleton className="h-5 w-20 rounded-full" />
+        </header>
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <span className="sr-only">Loading this agent&apos;s keys</span>
+      </section>
+    );
+  }
+
   return (
     <section
       aria-label={name}
@@ -333,16 +369,21 @@ function AgentCard({
       className="flex w-full flex-col gap-3.5 rounded-xl border border-01 bg-01 p-4 shadow-hair tablet:p-5"
     >
       <header className="flex w-full flex-wrap items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <h2 className="text-label-md text-01">{name}</h2>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <AgentName agent={agent} />
           <AgentHealthLine readiness={readiness} />
         </div>
-        <StatusChip status={readiness.status} />
+        <ReadinessChip readiness={readiness} />
       </header>
 
       <SubRow n={1} title="Keys">
-        {keysPending ? (
-          <p className="text-body-13 text-03">Loading keys…</p>
+        {keysFailed ? (
+          <div className="flex flex-wrap items-center gap-2" role="alert" data-testid="keys-unreadable">
+            <p className="text-body-13 text-02">We could not read this agent&apos;s keys. This does not change what it can call.</p>
+            <Button size="sm" variant="secondary" type="button" onClick={onRetryKeys}>
+              Retry
+            </Button>
+          </div>
         ) : live.length === 0 ? (
           <p className="text-body-13 text-02">No live key. Create one to connect this agent.</p>
         ) : (
@@ -391,7 +432,7 @@ function AgentCard({
         <ServersInUse agentId={agent.agentId} agentName={name} lastCallAt={latestUse(keys)} />
       </SubRow>
 
-      {delegation ? (
+      {delegation && !keysFailed ? (
         <SubRow n={3} title="Payment key">
           {bound?.delegateAccount && chainId ? (
             <p className="text-body-13 text-02">
@@ -401,17 +442,7 @@ function AgentCard({
           ) : live.length === 0 ? (
             <p className="text-body-13 text-03">Create a key first.</p>
           ) : (
-            <>
-              <p className="text-body-13 text-02">
-                To pay, the agent makes its own payment key. Run this on the agent&apos;s machine:
-              </p>
-              <CodeBlock title="Terminal" code={BIND_COMMAND} />
-              <p className="text-body-xs text-03" data-testid="agent-cli-source">{AGENT_CLI_SOURCE}</p>
-              <p className="flex items-center gap-1.5 text-body-xs text-03" aria-live="polite">
-                <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-primary-500 motion-reduce:animate-none" />
-                Waiting for the key. This updates by itself.
-              </p>
-            </>
+            <PaidByInvitation agentName={name} />
           )}
         </SubRow>
       ) : null}
@@ -488,4 +519,105 @@ function AgentCard({
       </details>
     </section>
   );
+}
+
+/**
+ * The agent's name, renamed in place. The label is display text only; the
+ * server checks it the same way (`agentLabelError`) and records
+ * `agent.renamed`.
+ */
+function AgentName({ agent }: { agent: AgentRow }) {
+  const queryClient = useQueryClient();
+  const name = agent.label ?? "Agent";
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(name);
+  const [touched, setTouched] = React.useState(false);
+  const rename = useMutation({
+    mutationFn: (label: string) => renameAgent(agent.agentId, label),
+    onSuccess: (_row, label) => {
+      setEditing(false);
+      // Patched in place, not refetched: the browser may answer a refetch of
+      // `/agents` from its 10-second cache with the old name. Connect,
+      // Overview and Explore all read this one query.
+      queryClient.setQueriesData({ queryKey: ["agents"] }, (old: unknown) => withLabel(old, agent.agentId, label));
+      toast.success(`Renamed to “${label}”`);
+    },
+  });
+  const problem = agentLabelError(draft);
+  const save = () => {
+    setTouched(true);
+    if (problem) return;
+    const label = draft.trim();
+    if (label === name) {
+      setEditing(false);
+      return;
+    }
+    rename.mutate(label);
+  };
+
+  if (!editing) {
+    return (
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <h2 className="min-w-0 break-words text-label-md text-01">{name}</h2>
+        <button
+          type="button"
+          data-testid="rename-agent"
+          className="inline-flex min-h-10 items-center gap-1 text-label-13 text-primary-600 hover:underline tablet:min-h-0"
+          onClick={() => {
+            setDraft(name);
+            setTouched(false);
+            rename.reset();
+            setEditing(true);
+          }}
+        >
+          <Pencil aria-hidden="true" className="size-3.5" />
+          Rename
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="flex w-full max-w-[420px] flex-col gap-2"
+      data-testid="rename-agent-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        save();
+      }}
+    >
+      <Field
+        id={`agent-name-${agent.agentId}`}
+        label="Agent name"
+        value={draft}
+        autoFocus
+        onChange={(event) => setDraft(event.target.value)}
+        hint={`Shown in Connect, Overview and Explore. Up to ${AGENT_LABEL_MAX} characters.`}
+        error={
+          touched && problem
+            ? problem
+            : rename.isError
+              ? rename.error instanceof ApiError
+                ? plainError(rename.error.code)
+                : "The name could not be saved. Try again."
+              : undefined
+        }
+      />
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" size="sm" loading={rename.isPending}>
+          Save
+        </Button>
+        <Button type="button" size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={rename.isPending}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** An agents page with one agent's label replaced; anything else is returned as it was. */
+export function withLabel(page: unknown, agentId: string, label: string): unknown {
+  if (!page || typeof page !== "object" || !Array.isArray((page as { items?: unknown }).items)) return page;
+  const items = (page as { items: { agentId?: string }[] }).items;
+  return { ...page, items: items.map((item) => (item.agentId === agentId ? { ...item, label } : item)) };
 }

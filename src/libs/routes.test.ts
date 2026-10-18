@@ -50,3 +50,10 @@ describe("routes", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("routes.connectTools", () => {
+  it("opens Connect with the tools chosen", () => {
+    expect(routes.connectTools(["get_weather"])).toBe("/connect?tools=get_weather");
+    expect(routes.connectTools(["a_b", "c-d"])).toBe("/connect?tools=a_b,c-d");
+  });
+});

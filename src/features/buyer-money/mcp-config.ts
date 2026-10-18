@@ -94,7 +94,7 @@ export function pasteHint(client: McpClient): string {
     case "claude-code":
       return "Run this in a terminal. Claude Code adds the server for this project.";
     case "claude-desktop":
-      return "Paste this into claude_desktop_config.json (Settings › Developer › Edit config), then restart Claude Desktop.";
+      return "Requires Node.js: Claude Desktop starts this server with npx. Paste this into claude_desktop_config.json (Settings › Developer › Edit config), then restart Claude Desktop.";
     case "cursor":
       return "Paste this into ~/.cursor/mcp.json, then reload Cursor.";
     case "other":
