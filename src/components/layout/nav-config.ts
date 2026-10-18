@@ -6,13 +6,17 @@
  *   Overview   /                       (Get started lives here for new accounts)
  *   Activity   /spend                  Spend · Calls · Not charged
  *   Money      /funding                Funding · Statements
- *   Controls   /agents                 Agents & keys · Connect · Spending limits · Tool sets
+ *   Controls   /agents                 Agents · Connect · Limits · Tool sets
  *   Explore    /explore
  *
- * Rare pages (Alerts settings, Activity log, Settings, Help) sit in the
- * account menu, on desktop and on mobile alike. Pages with no working
- * backend action (Approvals, Team) are deliberately absent: an unbuilt
- * feature is hidden, never a dead link. Re-add them here when they can act.
+ * Rare pages (Alerts settings, Account history, Settings, Help) sit in the
+ * account menu, on desktop and on mobile alike. Team is deliberately absent:
+ * it only says that an account is one person for now, so it is not a menu
+ * entry. A payment link (`/payments/view`) is opened from a notification.
+ *
+ * Every buyer page also has a title here (`PAGE_TITLES`): the browser tab
+ * names the page, and the mobile header names the section (the page's own
+ * heading is right under it, so repeating it there only got cut off).
  *
  * The same five items show at every width: inline in the top bar from 768,
  * as the bottom tab bar below it. `nav-config.test.ts` asserts every route
@@ -35,14 +39,14 @@ export const BUYER_NAV_ITEMS: BuyerNavItem[] = [
     id: "activity",
     label: "Activity",
     href: "/spend",
-    match: ["/spend", "/guarantee", "/receipts"],
+    match: ["/spend", "/guarantee", "/receipts", "/payments"],
   },
   { id: "money", label: "Money", href: "/funding", match: ["/funding", "/statements"] },
   {
     id: "controls",
     label: "Controls",
     href: "/agents",
-    match: ["/agents", "/limits", "/connect", "/approvals", "/toolsets/mine"],
+    match: ["/agents", "/limits", "/connect", "/toolsets/mine"],
   },
   { id: "explore", label: "Explore", href: "/explore", match: ["/explore"] },
 ];
@@ -70,9 +74,10 @@ export const BUYER_SECTION_TABS: Partial<Record<BuyerSectionId, SectionTab[]>> =
     { id: "statements", label: "Statements", href: "/statements" },
   ],
   controls: [
-    { id: "agents", label: "Agents & keys", href: "/agents" },
+    // Short labels: the four must fit a 390px strip without being cut.
+    { id: "agents", label: "Agents", href: "/agents" },
     { id: "connect", label: "Connect", href: "/connect" },
-    { id: "budgets", label: "Spending limits", href: "/limits" },
+    { id: "budgets", label: "Limits", href: "/limits" },
     { id: "toolsets", label: "Tool sets", href: "/toolsets/mine" },
   ],
 };
@@ -94,7 +99,8 @@ export const DOCS_URL: string | null = process.env.NEXT_PUBLIC_DOCS_URL?.trim() 
 export const ACCOUNT_MENU_LINKS: AccountMenuLink[] = [
   { id: "get-started", label: "Get started", href: "/onboarding" },
   { id: "alerts", label: "Alert settings", href: "/alerts" },
-  { id: "audit-log", label: "Activity log", href: "/audit-log" },
+  // Not "Activity": that is the calls-and-spend section.
+  { id: "audit-log", label: "Account history", href: "/audit-log" },
   { id: "settings", label: "Settings", href: "/settings" },
   DOCS_URL
     ? { id: "help", label: "Help & docs", href: DOCS_URL, external: true }
@@ -130,6 +136,65 @@ export function activeTabFor(tabs: readonly SectionTab[], pathname: string): str
     }
   }
   return best?.id ?? null;
+}
+
+/**
+ * Each buyer page's own name, for the browser tab ("Calls — Assay"). Record
+ * pages are named after the record kind; the longest matching path wins, so
+ * /spend/disputes/view is "Report" and not "Reports".
+ */
+export const PAGE_TITLES: Readonly<Record<string, string>> = {
+  "/": "Overview",
+  "/onboarding": "Get started",
+  "/spend": "Spend",
+  "/spend/calls": "Calls",
+  "/spend/disputes": "Reports",
+  "/spend/disputes/view": "Report",
+  "/receipts/view": "Receipt",
+  "/payments/view": "Payment",
+  "/guarantee": "Not charged",
+  "/funding": "Funding",
+  "/funding/auto-top-up": "Auto top-up",
+  "/statements": "Statements",
+  "/agents": "Agents & keys",
+  "/connect": "Connect",
+  "/connect/preview": "MCP server",
+  "/limits": "Spending limits",
+  "/toolsets/mine": "Tool sets",
+  "/explore": "Explore",
+  "/explore/providers": "Providers",
+  "/explore/providers/view": "Provider",
+  "/alerts": "Alerts",
+  "/audit-log": "Account history",
+  "/team": "Team",
+  "/settings": "Settings",
+  "/settings/close": "Close account",
+};
+
+/** The page's name at a path: the longest matching entry of `PAGE_TITLES`, else null. */
+export function pageTitleFor(pathname: string): string | null {
+  let best: string | null = null;
+  for (const prefix of Object.keys(PAGE_TITLES)) {
+    if (matchesPath(pathname, prefix) && (best === null || prefix.length > best.length)) best = prefix;
+  }
+  return best === null ? null : PAGE_TITLES[best]!;
+}
+
+/** The browser tab's title: "Calls — Assay". */
+export function documentTitleFor(pathname: string): string {
+  const page = pageTitleFor(pathname);
+  return page ? `${page} — Assay` : "Assay";
+}
+
+/**
+ * The mobile header's title: the section ("Controls", "Activity"), because
+ * the page's own heading sits right below it; a page outside the five
+ * sections (Settings, Alerts…) keeps its own name.
+ */
+export function mobileTitleFor(pathname: string): string {
+  const section = sectionFor(pathname);
+  if (section) return BUYER_NAV_ITEMS.find((item) => item.id === section)!.label;
+  return pageTitleFor(pathname) ?? "Assay";
 }
 
 /** Every href the buyer chrome links to (sections, tabs, account menu). */
