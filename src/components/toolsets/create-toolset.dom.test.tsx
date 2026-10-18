@@ -62,7 +62,7 @@ describe("Start from tools you've used", () => {
     const rows = screen.getAllByTestId("used-tool");
     expect(rows.map((row) => row.getAttribute("data-state"))).toEqual(["ready", "no-provider", "no-provider"]);
     expect(rows[1].textContent).toContain("geocode_place");
-    expect(rows[1].textContent).toContain("Can't run now: no provider is taking calls for it now");
+    expect(rows[1].textContent).toContain("Can't run now: no provider is taking calls for it");
 
     fireEvent.change(nameBox(), { target: { value: "Weather kit" } });
     expect(screen.getByTestId("new-toolset-url").textContent).toMatch(/\/my\/weather-kit$/);

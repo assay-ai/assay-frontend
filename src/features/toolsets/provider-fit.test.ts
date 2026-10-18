@@ -19,8 +19,9 @@ const METEO: ProviderOffer = {
 const rule = (over: Partial<RuleDraft> = {}): RuleDraft => ({
   providerMode: "BEST",
   providerIds: [],
-  verifiedOnly: false,
+  minTier: null,
   maxPriceAtomic: null,
+  maxPriceAsset: USD("0").asset,
   onEmpty: "FAIL",
   ...over,
 });
@@ -30,8 +31,13 @@ describe("servingStatus", () => {
     expect(servingStatus({ chains: ["eip155:46630"], servesYou: true }).label).toBe("Serves you");
     expect(servingStatus({ chains: ["solana:devnet"], servesYou: false }).label).toBe("Doesn't take payment on your chain");
     expect(servingStatus({ chains: [], servesYou: false }).label).toBe("Not taking calls now");
-    expect(servingStatus({ chains: null, servesYou: null })).toMatchObject({ kind: "unknown", label: "" });
-    expect(servingStatus(undefined).kind).toBe("unknown");
+    expect(servingStatus({ chains: null, servesYou: null })).toMatchObject({ kind: "unknown", label: "Can't check right now", tone: "neutral" });
+    expect(servingStatus(undefined)).toMatchObject({ kind: "not-loaded", label: "" });
+  });
+
+  it("an unchecked provider (servesYou null) is never 'Not taking calls', even with no known chain", () => {
+    expect(servingStatus({ chains: [], servesYou: null })).toMatchObject({ kind: "unknown", label: "Can't check right now" });
+    expect(servingStatus({ chains: null, servesYou: false }).kind).toBe("other-chain");
   });
 });
 
@@ -39,8 +45,14 @@ describe("keptByRule", () => {
   it("applies the mode, verified-only and the max price", () => {
     expect(keptByRule(rule({ providerMode: "ONLY", providerIds: ["meteo"] }), [E2E, METEO])).toEqual([METEO]);
     expect(keptByRule(rule({ providerMode: "EXCLUDE", providerIds: ["meteo"] }), [E2E, METEO])).toEqual([E2E]);
-    expect(keptByRule(rule({ verifiedOnly: true }), [E2E, METEO])).toEqual([METEO]);
+    expect(keptByRule(rule({ minTier: "ESTABLISHED" }), [E2E, METEO])).toEqual([METEO]);
+    expect(keptByRule(rule({ minTier: "TRUSTED" }), [E2E, METEO])).toEqual([]);
     expect(keptByRule(rule({ maxPriceAtomic: "200000" }), [E2E, METEO])).toEqual([E2E]);
+  });
+
+  it("never compares a max price across assets", () => {
+    const solanaPriced = { ...METEO, price: { amount: "250000", asset: "solana:devnet/token:usdc", decimals: 6 } };
+    expect(keptByRule(rule({ maxPriceAtomic: "200000" }), [E2E, solanaPriced])).toEqual([E2E, solanaPriced]);
   });
 });
 
@@ -60,7 +72,7 @@ describe("nothingRunsWarning", () => {
   });
 
   it("says when the rule leaves no provider", () => {
-    expect(nothingRunsWarning(rule({ verifiedOnly: true, maxPriceAtomic: "1" }), [E2E, METEO], "get_weather")).toMatch(/^No provider is left under this rule/);
+    expect(nothingRunsWarning(rule({ minTier: "ESTABLISHED", maxPriceAtomic: "1" }), [E2E, METEO], "get_weather")).toMatch(/^No provider is left under this rule/);
   });
 
   it("is silent when something serves you, or when Assay may fall back to one that does", () => {
@@ -69,8 +81,10 @@ describe("nothingRunsWarning", () => {
   });
 
   it("never warns on missing data", () => {
-    const unknown = { ...METEO, chains: undefined, servesYou: undefined };
-    expect(nothingRunsWarning(rule({ providerMode: "ONLY", providerIds: ["meteo"] }), [E2E, unknown], "get_weather")).toBeNull();
+    const unloaded = { ...METEO, chains: undefined, servesYou: undefined };
+    expect(nothingRunsWarning(rule({ providerMode: "ONLY", providerIds: ["meteo"] }), [E2E, unloaded], "get_weather")).toBeNull();
+    const unchecked = { ...METEO, chains: null, servesYou: null };
+    expect(nothingRunsWarning(rule({ providerMode: "ONLY", providerIds: ["meteo"] }), [E2E, unchecked], "get_weather")).toBeNull();
     expect(nothingRunsWarning(rule(), [], "get_weather")).toBeNull();
   });
 
@@ -83,9 +97,11 @@ describe("nothingRunsWarning", () => {
 describe("chainsText", () => {
   const name = (id: string) => ({ "solana:devnet": "Solana devnet", "eip155:46630": "Robinhood Chain testnet" })[id] ?? id;
   it("names chains, says when it takes no call, and stays silent when unknown", () => {
-    expect(chainsText(["solana:devnet"], name)).toBe("Takes payment on Solana devnet");
-    expect(chainsText(["eip155:46630", "solana:devnet"], name)).toBe("Takes payment on Robinhood Chain testnet and Solana devnet");
-    expect(chainsText([], name)).toBe("Takes no calls right now");
-    expect(chainsText(null, name)).toBeNull();
+    expect(chainsText({ chains: ["solana:devnet"], servesYou: false }, name)).toBe("Takes payment on Solana devnet");
+    expect(chainsText({ chains: ["eip155:46630", "solana:devnet"], servesYou: true }, name)).toBe("Takes payment on Robinhood Chain testnet and Solana devnet");
+    expect(chainsText({ chains: [], servesYou: false }, name)).toBe("Takes no calls right now");
+    expect(chainsText({ chains: null, servesYou: null }, name)).toBeNull();
+    // Unchecked: no "takes no calls" claim.
+    expect(chainsText({ chains: [], servesYou: null }, name)).toBeNull();
   });
 });

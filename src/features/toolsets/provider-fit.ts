@@ -9,20 +9,28 @@ import type { OnEmpty, ProviderMode } from "@/services/toolsets.service";
  *
  * Advisory only: the server's routing rules decide every call.
  */
-export type ServingKind = "serves" | "other-chain" | "not-taking-calls" | "unknown";
+export type ServingKind = "serves" | "other-chain" | "not-taking-calls" | "unknown" | "not-loaded";
 
 export interface ServingStatus {
   kind: ServingKind;
-  /** Short chip text; empty for `unknown`, which shows no chip. */
+  /** Short chip text; empty for `not-loaded`, which shows no chip. */
   label: string;
   tone: "success" | "warning" | "danger" | "neutral";
 }
 
+/**
+ * `servesYou` decides first: `null` is the backend's "could not check" (a
+ * router or escrow read failed) and reads "Can't check right now", never "Not
+ * taking calls"; `undefined` means nothing has loaded yet and shows nothing.
+ * Only a known `false` is split by `chains` into "not taking calls" (no chain
+ * at all) and "doesn't take payment on your chain".
+ */
 export function servingStatus(fit: { chains?: readonly string[] | null; servesYou?: boolean | null } | null | undefined): ServingStatus {
-  if (fit?.servesYou === true) return { kind: "serves", label: "Serves you", tone: "success" };
-  if (Array.isArray(fit?.chains) && fit.chains.length === 0) return { kind: "not-taking-calls", label: "Not taking calls now", tone: "danger" };
-  if (fit?.servesYou === false) return { kind: "other-chain", label: "Doesn't take payment on your chain", tone: "warning" };
-  return { kind: "unknown", label: "", tone: "neutral" };
+  if (fit?.servesYou === undefined) return { kind: "not-loaded", label: "", tone: "neutral" };
+  if (fit.servesYou === null) return { kind: "unknown", label: "Can't check right now", tone: "neutral" };
+  if (fit.servesYou) return { kind: "serves", label: "Serves you", tone: "success" };
+  if (Array.isArray(fit.chains) && fit.chains.length === 0) return { kind: "not-taking-calls", label: "Not taking calls now", tone: "danger" };
+  return { kind: "other-chain", label: "Doesn't take payment on your chain", tone: "warning" };
 }
 
 /** One provider's listing of one tool, as the provider picker shows it. */
@@ -40,20 +48,30 @@ export interface ProviderOffer {
 export interface RuleDraft {
   providerMode: ProviderMode;
   providerIds: readonly string[];
-  /** "Only verified providers": a NEW provider is left out. */
-  verifiedOnly: boolean;
-  /** Atomic units in the offers' asset scale, or null for no limit. */
+  /** The tier the rule saves: ESTABLISHED leaves NEW out; TRUSTED leaves NEW and ESTABLISHED out. */
+  minTier: "ESTABLISHED" | "TRUSTED" | null;
+  /** Atomic units, or null for no limit. */
   maxPriceAtomic: string | null;
+  /** The asset `maxPriceAtomic` is in; a listing priced in another asset is not compared. */
+  maxPriceAsset: string | null;
   onEmpty: OnEmpty;
 }
+
+const TIER_RANK: Record<string, number> = { NEW: 0, ESTABLISHED: 1, TRUSTED: 2 };
 
 /** The providers a rule keeps, before the router's own gates. */
 export function keptByRule(rule: RuleDraft, offers: readonly ProviderOffer[]): ProviderOffer[] {
   return offers.filter((offer) => {
     if (rule.providerMode === "ONLY" && !rule.providerIds.includes(offer.providerId)) return false;
     if (rule.providerMode === "EXCLUDE" && rule.providerIds.includes(offer.providerId)) return false;
-    if (rule.verifiedOnly && offer.tier === "NEW") return false;
-    if (rule.maxPriceAtomic !== null && offer.price && BigInt(offer.price.amount) > BigInt(rule.maxPriceAtomic)) return false;
+    if (rule.minTier && (TIER_RANK[offer.tier] ?? 0) < TIER_RANK[rule.minTier]) return false;
+    if (
+      rule.maxPriceAtomic !== null &&
+      offer.price &&
+      offer.price.asset === rule.maxPriceAsset &&
+      BigInt(offer.price.amount) > BigInt(rule.maxPriceAtomic)
+    )
+      return false;
     return true;
   });
 }
@@ -69,7 +87,8 @@ export function keptByRule(rule: RuleDraft, offers: readonly ProviderOffer[]): P
  */
 export function nothingRunsWarning(rule: RuleDraft, offers: readonly ProviderOffer[], toolName: string): string | null {
   if (offers.length === 0) return null;
-  const serves = (offer: ProviderOffer) => servingStatus(offer).kind === "serves" || servingStatus(offer).kind === "unknown";
+  // Only a known "doesn't serve you" counts against a provider.
+  const serves = (offer: ProviderOffer) => ["serves", "unknown", "not-loaded"].includes(servingStatus(offer).kind);
   const kept = keptByRule(rule, offers);
   if (kept.some(serves)) return null;
   if (rule.onEmpty === "FALLBACK_BEST" && offers.some(serves)) return null;
@@ -79,9 +98,15 @@ export function nothingRunsWarning(rule: RuleDraft, offers: readonly ProviderOff
   return `Nothing left can run for you: ${reasons.join("; ")}. ${refused}`;
 }
 
-/** "Takes payment on Solana devnet" / "…on A and B"; null when the chains are not known. */
-export function chainsText(chains: readonly string[] | null | undefined, chainName: (chainId: string) => string): string | null {
+/**
+ * "Takes payment on Solana devnet" / "…on A and B"; null when the chains are
+ * not known. "Takes no calls right now" only when that is known (`servesYou`
+ * is a boolean), never for an unchecked provider.
+ */
+export function chainsText(fit: { chains?: readonly string[] | null; servesYou?: boolean | null }, chainName: (chainId: string) => string): string | null {
+  const { chains } = fit;
   if (!Array.isArray(chains)) return null;
+  if (chains.length === 0 && typeof fit.servesYou !== "boolean") return null;
   if (chains.length === 0) return "Takes no calls right now";
   const names = chains.map(chainName);
   const list = names.length <= 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;

@@ -76,13 +76,14 @@ export function providersLeft(entry: Pick<ToolsetEntryInput, "providerMode" | "p
 
 /** A slug from a name, as the backend generates one: `Research kit` → `research-kit`. */
 export function slugFrom(name: string): string {
+  // The server's own `slugify`, step for step, so a slug made here is the one it would make.
   const slug = name
-    .toLowerCase()
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 64)
     .replace(/-+$/g, "");
-  return slug.length >= 2 ? slug : `${slug || "set"}-1`;
+  return slug.length >= 2 ? slug : `set-${slug || "new"}`.slice(0, 64);
 }

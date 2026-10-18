@@ -504,7 +504,15 @@ export function RuleEditor({
   const chainName = useChainName();
   // Advisory: the server's routing rules still decide every call.
   const nothingRuns = nothingRunsWarning(
-    { providerMode: mode, providerIds: ids, verifiedOnly: verified, maxPriceAtomic: parsed.atomic ?? null, onEmpty },
+    {
+      providerMode: mode,
+      providerIds: ids,
+      // The same tier and asset Apply saves below.
+      minTier: verified ? (row.minTier === "TRUSTED" ? "TRUSTED" : "ESTABLISHED") : null,
+      maxPriceAtomic: parsed.atomic ?? null,
+      maxPriceAsset: asset || null,
+      onEmpty,
+    },
     offers,
     row.toolName,
   );
