@@ -383,7 +383,8 @@ function EscrowCard({
       {withdrawalPending && requested ? (
         <div className="flex w-full flex-col gap-3 rounded-lg border border-primary-20 bg-primary-5 p-3.5">
           <p className="text-body-13 text-01">
-            Withdrawal of up to {formatLimit(requested)}. Your agents cannot pay until you claim or cancel it.
+            Withdrawal of up to {formatLimit(requested)}. Every agent&apos;s paid calls on {money.chainName ?? "this chain"} are
+            paused until you claim or cancel it; free calls keep working.
           </p>
           <StatusTimeline
             label="Withdrawal"

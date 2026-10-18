@@ -37,7 +37,7 @@ vi.mock("@/features/buyer-debt/use-open-hold-intent-ids", () => ({ useOpenHoldIn
 vi.mock("@/features/buyer-debt/use-owed-intent-ids", () => ({ useOwedIntentIds: () => new Set<string>() }));
 vi.mock("@/features/buyer-debt/settle-debt-sheet", () => ({ useSettleDebt: () => ({ openSettle: () => undefined }) }));
 
-import { WithdrawSheet, withdrawFloorText, withdrawPauseWarning } from "./withdraw-sheets";
+import { WithdrawSheet, withdrawHeldNote, withdrawPauseWarning } from "./withdraw-sheets";
 
 afterEach(() => {
   cleanup();
@@ -80,13 +80,23 @@ describe("Withdraw: the pause is stated, not ticked", () => {
     expect((screen.getByRole("button", { name: /Request \$5\.00 \(free\)/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("says the least you receive while calls are being checked", () => {
+  // B2 review I3: the request is capped at balance − held, so it is paid in full.
+  it("says the held money stays in escrow and the full amount is paid out", () => {
     money.openHolds = "400000";
     open();
     enter("5");
-    expect(screen.getByTestId("withdraw-floor").textContent).toBe(
-      "Held by calls being checked: $0.40; you receive at least $4.60.",
+    expect(screen.getByTestId("withdraw-held-receive").textContent).toBe(
+      "$0.40 is held by calls being checked. It stays in your escrow and is not part of this request: you receive the $5.00 you ask for.",
     );
+    // Said once: the older held line gives way to it.
+    expect(screen.queryByTestId("withdraw-held-note")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/at least|less than you ask/);
+  });
+
+  it("with nothing held, says you receive what you ask for", () => {
+    open();
+    enter("5");
+    expect(document.body.textContent).toContain("You receive the amount you ask for.");
   });
 });
 
@@ -95,10 +105,15 @@ describe("withdraw copy", () => {
     expect(withdrawPauseWarning(null)).toContain("paid calls on this chain stop");
   });
 
-  it("never promises a negative amount, and is silent with nothing held", () => {
-    expect(withdrawFloorText(usd("100000"), usd("400000"), 0)).toBe("Held by calls being checked: $0.40; you receive at least $0.00.");
-    expect(withdrawFloorText(usd("100000"), usd("0"), 0)).toBeNull();
-    expect(withdrawFloorText(null, usd("400000"), 0)).toBeNull();
-    expect(withdrawFloorText(usd("5000000"), usd("400000"), 1)).toMatch(/^Held for calls being checked or not yet paid: /);
+  it("never subtracts the held amount, and is silent with nothing held", () => {
+    expect(withdrawHeldNote(usd("100000"), usd("400000"), 0)).toBe(
+      "$0.40 is held by calls being checked. It stays in your escrow and is not part of this request: you receive the $0.10 you ask for.",
+    );
+    expect(withdrawHeldNote(usd("100000"), usd("0"), 0)).toBeNull();
+    expect(withdrawHeldNote(null, usd("400000"), 0)).toBeNull();
+    // With unpaid calls the held line above already names the amount.
+    expect(withdrawHeldNote(usd("5000000"), usd("400000"), 1)).toBe(
+      "That money stays in your escrow and is not part of this request: you receive the $5.00 you ask for.",
+    );
   });
 });

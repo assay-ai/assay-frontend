@@ -45,20 +45,19 @@ export function withdrawPauseWarning(chainName: string | null): string {
 }
 
 /**
- * "Held by calls being checked: $0.40; you receive at least $4.60": the least
- * a request of `requested` pays out when every held call is charged. Null when
- * nothing is held or no amount is chosen yet.
+ * What a request for `requested` pays out while calls hold money: all of it.
+ * The request is capped at balance − held, paid calls stop the moment it
+ * stands, and held calls can take at most what they hold, so the claim pays
+ * the full amount. Null when no amount is chosen yet or nothing is held.
+ *
+ * With unpaid calls, the held amount and its Settle button are already said
+ * above (`withdrawHeldText`), so only the second sentence is returned.
  */
-export function withdrawFloorText(
-  requested: Money | null,
-  held: Money | null,
-  owedCalls: number,
-): string | null {
+export function withdrawHeldNote(requested: Money | null, held: Money | null, owedCalls: number): string | null {
   if (!requested || !held || BigInt(held.amount) <= 0n) return null;
-  const floor = BigInt(requested.amount) - BigInt(held.amount);
-  const least = { ...requested, amount: (floor > 0n ? floor : 0n).toString() };
-  const by = owedCalls > 0 ? "Held for calls being checked or not yet paid" : "Held by calls being checked";
-  return `${by}: ${formatLimit(held)}; you receive at least ${formatLimit(least)}.`;
+  const receive = `stays in your escrow and is not part of this request: you receive the ${formatLimit(requested)} you ask for.`;
+  if (owedCalls > 0) return `That money ${receive}`;
+  return `${formatLimit(held)} is held by calls being checked. It ${receive}`;
 }
 
 function positive(amount: string | undefined): boolean {
@@ -104,7 +103,7 @@ export function WithdrawSheet({
   const { openSettle } = useSettleDebt();
   const heldText = held ? withdrawHeldText(formatLimit(held), openHoldIds, owedIntentIds) : null;
   const requestedMoney: Money | null = parsed.atomic && held ? { ...held, amount: parsed.atomic } : null;
-  const floorText = cancelling ? null : withdrawFloorText(requestedMoney, held, heldText?.owed ?? 0);
+  const heldNote = cancelling ? null : withdrawHeldNote(requestedMoney, held, heldText?.owed ?? 0);
   const settleFirst = () => {
     onOpenChange(false);
     openSettle();
@@ -216,8 +215,8 @@ export function WithdrawSheet({
               hint={available ? `Available to withdraw now: ${formatLimit(available)}` : undefined}
             />
           </div>
-          {/* Once an amount is chosen, the floor line below names the held amount; an unpaid call keeps its settle button. */}
-          {heldText && (!floorText || heldText.owed > 0) ? (
+          {/* Once an amount is chosen, the note below names the held amount; an unpaid call keeps this line and its settle button. */}
+          {heldText && (!heldNote || heldText.owed > 0) ? (
             <div className="flex flex-col gap-2">
               <p className="text-body-13 text-02" data-testid="withdraw-held-note">
                 {heldText.text}
@@ -231,14 +230,12 @@ export function WithdrawSheet({
               hour again.
             </p>
           ) : null}
-          {floorText ? (
-            <p className="text-body-13 text-02" data-testid="withdraw-floor">
-              {floorText}
+          {heldNote ? (
+            <p className="text-body-13 text-02" data-testid="withdraw-held-receive">
+              {heldNote}
             </p>
           ) : (
-            <p className="text-body-xs text-03">
-              Calls your agents already made are paid first, so you may receive less than you ask for, never more.
-            </p>
+            <p className="text-body-xs text-03">You receive the amount you ask for.</p>
           )}
           {/* Last, so it sits right above the button: the consequence of pressing it. */}
           <p
