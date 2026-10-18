@@ -4,6 +4,7 @@ import {
   credentialQueryKeys,
   isCredentialQueryKey,
   isSecretConstantHeader,
+  looksLikeSecretName,
   originOf,
   splitHeaderLine,
 } from "./rules";
@@ -116,5 +117,14 @@ describe("rowProblem for credentials", () => {
     expect(rowProblem(row({ target: "token", section: "query", kind: "constant", text: '"x"' }))).toMatch(/Don't put keys in the URL/);
     expect(rowProblem(row({ target: "Authorization", section: "headers", kind: "constant", text: '"x"' }))).toMatch(/looks like a secret/);
     expect(rowProblem(row({ target: "token", section: "query", kind: "selector", text: "$.args.t" }))).toBeNull();
+  });
+});
+
+describe("looksLikeSecretName", () => {
+  it("matches the backend exactly: the name is not trimmed", () => {
+    expect(looksLikeSecretName("x-api-key")).toBe(true);
+    // The backend tokenises the raw name; padding stays in its last token ("key "), which no word ends.
+    expect(looksLikeSecretName(" x-api-key ")).toBe(false);
+    expect(looksLikeSecretName("X_API_KEY")).toBe(true);
   });
 });

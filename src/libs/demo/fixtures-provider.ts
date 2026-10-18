@@ -432,10 +432,10 @@ function withSavedLimits(binding: DemoBinding): DemoBinding {
   return next;
 }
 
-/** The auth mode a tab chose per listing. Only the mode: the demo never keeps a credential value. */
 /** Stored credential summaries per binding, then per origin: names and hints only, never a value. */
 const demoCredentialSets = new Map<string, Map<string, { origin: string; headers: { name: string; hint: string | null }[]; updatedAt: string }>>();
 
+/** The auth mode a tab chose per listing. Only the mode: the demo never keeps a credential value. */
 const demoAuthModes = new Map<string, "NONE" | "API_KEY" | "SIGNATURE" | "BOTH">();
 
 /** A write's answer: the stored listing with what was sent laid over it. Echoed; the free limits, pricing mode and price are kept for the tab (see `rememberLimits`). */

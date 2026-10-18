@@ -16,7 +16,7 @@ const SECRET_NAME_ALLOW_LIST = new Set([
 
 /** Whether a constant header name or query key looks like it carries a secret. */
 export function looksLikeSecretName(name: string): boolean {
-  const normalised = name.trim().toLowerCase().replace(/_/g, "-");
+  const normalised = name.toLowerCase().replace(/_/g, "-");
   if (SECRET_NAME_ALLOW_LIST.has(normalised)) return false;
   return normalised
     .split("-")
