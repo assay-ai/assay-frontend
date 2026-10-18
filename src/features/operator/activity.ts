@@ -11,7 +11,7 @@ import { reasonLabel } from "./reasons";
  * the wording is tested.
  */
 
-export type ActivityKind = "all" | "blocks" | "penalties" | "operators" | "arbiter";
+export type ActivityKind = "all" | "blocks" | "penalties" | "operators" | "arbiter" | "tools" | "contracts";
 
 export const ACTIVITY_KINDS: readonly { id: ActivityKind; label: string }[] = [
   { id: "all", label: "All" },
@@ -19,7 +19,17 @@ export const ACTIVITY_KINDS: readonly { id: ActivityKind; label: string }[] = [
   { id: "penalties", label: "Penalties" },
   { id: "operators", label: "Team" },
   { id: "arbiter", label: "Arbiter" },
+  { id: "tools", label: "Tools" },
+  { id: "contracts", label: "Contracts" },
 ];
+
+/**
+ * Why "Contracts" lists nothing: the contracts' settings (dispute window,
+ * fees, arbiter, pause) are changed by the admin key on chain, not through an
+ * operator action, so the register never holds them. The chip says where they live.
+ */
+export const CONTRACTS_NOT_HERE =
+  "Contract settings (dispute window, fees, arbiter, pause) are changed by the admin key on chain, not through this console, so they are not in Activity. Each change is a transaction of the contracts: open Contracts and follow Explorer.";
 
 /** The server-side `targetType` filter a kind maps to, when it maps to one. */
 export function targetTypeOf(kind: ActivityKind): string | undefined {
@@ -37,10 +47,15 @@ export function targetTypeOf(kind: ActivityKind): string | undefined {
 
 const ARBITER_CODES = new Set(["S-13", "A-11"]);
 
-/** Whether a row belongs to a kind — applied on the client too, since "arbiter" has no target type. */
+/** Provider tools, tool sets, public names, their reports and cutoffs, and standard tool versions. */
+const TOOL_TARGETS = new Set(["tool", "toolset", "handle", "moderation_cutoff", "toolset_report"]);
+
+/** Whether a row belongs to a kind — applied on the client too, since "arbiter" and "tools" have no one target type. */
 export function isOfKind(entry: Pick<OverrideLogEntry, "code" | "action" | "targetType">, kind: ActivityKind): boolean {
   if (kind === "all") return true;
   if (kind === "arbiter") return ARBITER_CODES.has(entry.code) || entry.action.startsWith("arbiter");
+  if (kind === "tools") return TOOL_TARGETS.has(entry.targetType) || /^P-1[0-2]$/.test(entry.code);
+  if (kind === "contracts") return false;
   return entry.targetType === targetTypeOf(kind);
 }
 
@@ -52,16 +67,39 @@ export function isOfKind(entry: Pick<OverrideLogEntry, "code" | "action" | "targ
   downloaded and never signed must not read as done.
 */
 const VERBS: Readonly<Record<string, string>> = {
+  "A-2": "paused or suspended the binding",
   "A-9": "blocked",
   "A-10": "lifted the block on",
   "A-11": "prepared the on-chain block of",
   "A-12": "added",
   "A-13": "changed the access of",
   "A-14": "removed",
+  "A-15": "delisted",
+  "A-16": "took down",
+  "A-17": "took down the public name",
+  "A-18": "confirmed the cutoff of",
+  "A-19": "reverted the cutoff of",
+  "A-20": "relisted",
+  "A-21": "renamed the public name",
+  "A-22": "reassigned the public name",
+  "A-23": "resolved a report about",
+  "A-24": "decided the catalogue review of",
+  "A-25": "took down",
+  "P-10": "published a version of",
+  "P-11": "moved the default version of",
+  "P-12": "deprecated a major of",
   "S-1": "suspended",
+  "S-2": "cancelled the attestation of",
+  "S-3": "decided the dispute on",
   "S-5": "recorded the pay-back of",
+  "S-8": "extended the dispute deadline of",
   "S-11": "opened a bulk decision from",
+  "S-12": "countersigned the decision on",
   "S-13": "prepared a ruling on",
+  "S-14": "decided the call dispute on",
+  "V-3": "removed strikes from",
+  "V-5": "forced full sampling on",
+  "V-7": "changed the verified label of",
 };
 
 /** The caveat of an entry logged when a transaction was built: it takes effect only once signed and landed. */
@@ -94,6 +132,10 @@ export type ActivityIcon = "block" | "unblock" | "chain" | "suspend" | "ruling" 
 
 export function activityIcon(entry: Pick<OverrideLogEntry, "code">): ActivityIcon {
   switch (entry.code) {
+    case "A-16":
+    case "A-17":
+    case "A-25":
+      return "block";
     case "A-9":
       return "block";
     case "A-10":
@@ -173,39 +215,72 @@ function fallbackTarget(entry: Pick<OverrideLogEntry, "targetType" | "targetId">
       return "an account";
     case "operator":
       return "an operator";
+    case "tool":
+      return typeof entry.after?.name === "string" ? entry.after.name : "a tool";
+    case "toolset":
+      return "a tool set";
+    case "handle":
+      return `@${entry.targetId}`;
+    case "moderation_cutoff":
+      return "a takedown";
+    case "toolset_report":
+      return "a report";
+    case "call_dispute":
+      return "a buyer's call";
+    case "provider":
+      return "a provider";
     default:
       return entry.targetType.replace(/_/g, " ");
   }
 }
 
-export function activityHref(entry: Pick<OverrideLogEntry, "targetType" | "targetId">): string | null {
+/**
+ * Where a row's target lives. A block opens the Blocks list filtered to it
+ * (`?q=` its id, `?show=lifted` once lifted); an operator, their Team row.
+ */
+export function activityHref(
+  entry: Pick<OverrideLogEntry, "targetType" | "targetId">,
+  block?: { active: boolean } | null,
+): string | null {
   switch (entry.targetType) {
     case "slash_proposal":
       return routes.operatorCase(entry.targetId);
     case "account_block":
-      return "/operator/blocks";
+      return `/operator/blocks?q=${encodeURIComponent(entry.targetId)}${block && !block.active ? "&show=lifted" : ""}`;
     case "operator":
-      return "/operator/operators";
+      return `/operator/operators#operator-${encodeURIComponent(entry.targetId)}`;
+    case "tool":
+      return routes.operatorTool(entry.targetId);
+    case "moderation_cutoff":
+      return "/operator/tools/takedowns";
+    case "call_dispute":
+      return routes.operatorCallDispute(entry.targetId);
     default:
       return null;
   }
 }
 
+/** A past-tense verb for every register code; an unknown code says "acted on", never its label. */
 function verbOf(entry: OverrideLogEntry): string {
   const ruling = rulingOf(entry);
   if (ruling === "UPHOLD") return "prepared an uphold of";
   if (ruling === "CANCEL") return "prepared a cancel of";
-  return VERBS[entry.code] ?? entry.label.toLowerCase();
+  const after = entry.after ?? {};
+  if (entry.code === "S-12" && String(after.secondKind ?? "").toUpperCase() === "OBJECTED") return "objected to the decision on";
+  if (entry.code === "A-24" && typeof after.decision === "string") {
+    return after.decision.toUpperCase().startsWith("APPROV") ? "approved for the catalogue" : "turned down for the catalogue";
+  }
+  return VERBS[entry.code] ?? "acted on";
 }
 
-export function activitySentence(entry: OverrideLogEntry, names: ActivityNames): ActivitySentence {
+export function activitySentence(entry: OverrideLogEntry, names: ActivityNames & { block?: (id: string) => { active: boolean } | null }): ActivitySentence {
   return {
     actor: names.operator(entry.actorSubject),
     verb: verbOf(entry),
     target: names.target(entry) ?? fallbackTarget(entry),
     reason: entry.reasonCode ? reasonLabel(entry.reasonCode) : null,
     approver: entry.approverSubject ? names.operator(entry.approverSubject) : null,
-    href: activityHref(entry),
+    href: activityHref(entry, entry.targetType === "account_block" ? names.block?.(entry.targetId) : null),
     pending: PENDING[entry.code] ?? null,
   };
 }

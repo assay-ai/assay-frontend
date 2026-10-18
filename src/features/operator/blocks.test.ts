@@ -9,6 +9,7 @@ import {
   validateBlockForm,
   validateUnblockForm,
 } from "./blocks";
+import { blockSubjectLabel } from "./block-targets";
 
 const ADDRESS = "0xA271A3407D3302f4b4Fbe469b9188487cedd7d45";
 const NOTE = "Key reported leaked by the customer on INC-123.";
@@ -177,5 +178,19 @@ describe("blockErrorMessage", () => {
   it("has words for a non-API failure", () => {
     expect(blockErrorMessage(new Error("boom"), "list")).toBe("The blocks could not be loaded.");
     expect(blockErrorMessage("boom", "block")).toMatch(/could not be completed/);
+  });
+});
+
+describe("blockSubjectLabel", () => {
+  const ORG = "7e3a94c1-0000-4000-8000-000000000001";
+  const none = () => null;
+
+  it("names an organization the catalogue does not list, from the server's name", () => {
+    expect(blockSubjectLabel({ subjectKind: "ORGANIZATION", subject: ORG, subjectName: "Unlisted Data Co" }, none)).toBe("Unlisted Data Co");
+  });
+
+  it("falls back to the catalogue, then to a short id only when nothing names it", () => {
+    expect(blockSubjectLabel({ subjectKind: "ORGANIZATION", subject: ORG, subjectName: null }, () => "Listed Co")).toBe("Listed Co");
+    expect(blockSubjectLabel({ subjectKind: "ORGANIZATION", subject: ORG, subjectName: null }, none)).toBe("Unnamed organization 7e3a94c1…");
   });
 });

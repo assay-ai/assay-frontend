@@ -3,6 +3,7 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import type { OperatorTool } from "@/interfaces/contracts";
 import type { OperatorApproval, OperatorIdentity } from "@/interfaces/operator";
 import { demoOperatorTool, FX_TOOL_ID, GEOCODE_TOOL_ID, TIDES_TOOL_ID, WEATHER_TOOL_ID } from "@/libs/demo/fixtures-contracts";
 
@@ -25,9 +26,9 @@ const JORDAN: OperatorIdentity = {
   status: "ACTIVE",
 };
 
-function render(toolId: string, approvals: OperatorApproval[] = [], me: OperatorIdentity = JORDAN): string {
+function render(toolId: string, approvals: OperatorApproval[] = [], me: OperatorIdentity = JORDAN, over: Partial<OperatorTool> = {}): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-  const tool = demoOperatorTool(toolId)!;
+  const tool = { ...demoOperatorTool(toolId)!, ...over };
   client.setQueryData(["operator", "tools", toolId], tool);
   client.setQueryData(["operator", "tools", "list"], { tools: [] });
   client.setQueryData(["operator", "approvals", "pending-count"], { items: approvals, pageInfo: { nextCursor: null, hasMore: false } });
@@ -117,5 +118,19 @@ describe("the contract editor", () => {
     expect(words).toContain("Read only: editing needs the Policy author or Policy approver role.");
     expect(words).not.toContain("Save draft");
     expect(words).not.toContain("Deprecate v1");
+  });
+
+  it("offers Take down on a live provider tool to a takedown role, never on a standard tool", () => {
+    const lead = { ...JORDAN, roles: ["ADJL"] as OperatorIdentity["roles"] };
+    expect(text(render(WEATHER_TOOL_ID, [], lead, { kind: "STANDARD" }))).not.toContain("Take down");
+    expect(text(render(WEATHER_TOOL_ID, [], lead, { kind: "PROVIDER", status: "ACTIVE" }))).toContain("Take down");
+    expect(text(render(WEATHER_TOOL_ID, [], { ...JORDAN, roles: ["POL"] }, { kind: "PROVIDER", status: "ACTIVE" }))).not.toContain("Take down");
+  });
+
+  it("hides the publish checklist from a role that cannot publish", () => {
+    const words = text(render(WEATHER_TOOL_ID, [], { ...JORDAN, roles: ["ADJL"] }));
+    expect(words).not.toContain("Fix before publishing");
+    expect(words).not.toContain("Worked out as you type");
+    expect(text(render(WEATHER_TOOL_ID))).toContain("Worked out as you type");
   });
 });
