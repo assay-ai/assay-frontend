@@ -17,6 +17,7 @@ import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases"
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
 import type { SlashStatusKey } from "@/libs/chains/evm/stake-slashes/status";
 import { splitPenalty } from "@/features/provider-slash-case/distribution";
+import { formatDate } from "@/libs/utc-time";
 
 export type PenaltyTab = "needs-action" | "disputed" | "closed";
 export const PENALTY_TABS: readonly { id: PenaltyTab; label: string }[] = [
@@ -245,4 +246,26 @@ export function openPenaltyPhrase(hold: OpenPenaltyHold): string {
     hold.disputed ? `${hold.disputed} disputed` : null,
   ].filter(Boolean);
   return parts.length > 1 ? `${head} (${parts.join(", ")})` : head;
+}
+
+/**
+ * A penalty's title: the tool and the window it was measured over
+ * ("get_weather, Oct 14 – Oct 15"), never an id. Without a tool name it says
+ * "Penalty"; without a window, the day it was proposed.
+ */
+export function penaltyTitle(input: {
+  toolName: string | null;
+  window: { openedAt: string; closedAt?: string | null; deadlineAt?: string | null } | null;
+  proposedAt: string;
+  now?: number;
+}): string {
+  const name = input.toolName ?? "Penalty";
+  const options = input.now === undefined ? {} : { now: input.now };
+  if (input.window) {
+    const start = formatDate(input.window.openedAt, options);
+    const endAt = input.window.closedAt ?? input.window.deadlineAt ?? null;
+    const end = endAt ? formatDate(endAt, options) : null;
+    return `${name}, ${end && end !== start ? `${start} – ${end}` : start}`;
+  }
+  return `${name}, proposed ${formatDate(input.proposedAt, options)}`;
 }

@@ -30,6 +30,38 @@ export const PENALTY_DEPLOYMENT = ROBINHOOD_TESTNET_STAKE;
 /** The query key of one Assay case, shared with every surface that reads it. */
 export const caseKey = (proposalId: string) => ["provider", "slash-proposal-case", proposalId] as const;
 
+/**
+ * The last rows read for a stake wallet, kept in this browser so a slow chain
+ * read shows the last-known penalties ("updating") instead of a spinner. A
+ * convenience only: the chain read replaces them as soon as it lands, and an
+ * unreadable store just means no head start.
+ */
+const LAST_KNOWN_KEY = (address: string) => `assay.provider.penalties.v1:${address.toLowerCase()}`;
+
+export function readLastKnown(address: string, nowSeconds: number): PenaltyRow[] | null {
+  try {
+    const raw = window.localStorage.getItem(LAST_KNOWN_KEY(address));
+    if (!raw) return null;
+    const rows = JSON.parse(raw) as PenaltyRow[];
+    if (!Array.isArray(rows)) return null;
+    // A stored "can dispute" goes stale with the clock; recompute it.
+    return rows.map((row) => ({
+      ...row,
+      canDispute: row.chainKey === "pending" && nowSeconds * 1000 < Date.parse(row.executableAt),
+    }));
+  } catch {
+    return null;
+  }
+}
+
+function writeLastKnown(address: string, rows: readonly PenaltyRow[]): void {
+  try {
+    window.localStorage.setItem(LAST_KNOWN_KEY(address), JSON.stringify(rows));
+  } catch {
+    // Private window or blocked storage: nothing to keep.
+  }
+}
+
 /** DEMO ONLY: the three records, dated from the demo's fixed anchor (`nowSeconds` is that anchor). */
 function demoChain(nowSeconds: number): { rows: ChainSlashRow[]; index: AssayCaseIndex } {
   const atomic = (major: string) => BigInt(Math.round(Number(major) * 1_000_000));
@@ -114,10 +146,22 @@ export function usePenalties(options: { withCases?: "open" | "all" | "none" } = 
   const chainRows = demo ? demoData!.rows : chain.data?.rows;
 
   const { decimals, symbol } = asset;
-  const rows: PenaltyRow[] = React.useMemo(
+  const liveRows: PenaltyRow[] = React.useMemo(
     () => sortPenalties((chainRows ?? []).map((row) => penaltyRowOf(row, { decimals, symbol }, index, nowSeconds))),
     [chainRows, decimals, symbol, index, nowSeconds],
   );
+
+  // Last-known rows while the chain read is still in flight (read after mount,
+  // so the server render and the first client render agree).
+  const [lastKnown, setLastKnown] = React.useState<PenaltyRow[] | null>(null);
+  React.useEffect(() => {
+    setLastKnown(!demo && ownAddress ? readLastKnown(ownAddress, Math.floor(Date.now() / 1000)) : null);
+  }, [demo, ownAddress]);
+  React.useEffect(() => {
+    if (!demo && ownAddress && chain.data && index?.status === "checked") writeLastKnown(ownAddress, liveRows);
+  }, [demo, ownAddress, chain.data, index, liveRows]);
+  const updating = !demo && !chainRows && chain.isLoading && lastKnown !== null;
+  const rows = updating ? lastKnown! : liveRows;
 
   const wanted = rows.filter((row) => row.proposalId && (withCases === "all" || (withCases === "open" && row.tab !== "closed")));
   const cases = useQueries({
@@ -141,7 +185,9 @@ export function usePenalties(options: { withCases?: "open" | "all" | "none" } = 
     demo,
     nowSeconds,
     asset,
-    isLoading: stake.isLoading || (!demo && ownAddress !== null && chain.isLoading),
+    isLoading: stake.isLoading || (!demo && ownAddress !== null && chain.isLoading && !updating),
+    /** Showing the last-known rows while the chain read runs. */
+    updating,
     isFetching: chain.isFetching,
     isError: !demo && chain.isError,
     error: chain.error,
