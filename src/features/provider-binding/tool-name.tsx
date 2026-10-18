@@ -51,14 +51,16 @@ export const REMOVED_TOOL_DRAFT = "Removed tool (draft)";
 
 /**
  * A listing's label: the tool's name, "…" while the catalogue loads, else
- * "Removed tool (draft)" for a draft, or "Unknown tool" (a tool missing from
- * the catalogue). Never the endpoint: a host or an IP address is
- * infrastructure, not a name, and it is the same for every listing on one API.
+ * "Removed tool (draft)" for a draft missing from a catalogue that LOADED,
+ * or "Unknown tool". A failed catalogue read proves nothing was removed, so
+ * it never says so: that could lead a provider to discard a valid draft.
+ * Never the endpoint: a host or an IP address is infrastructure, not a name,
+ * and it is the same for every listing on one API.
  */
-export function bindingLabelOf(toolName: string | null, pending: boolean, status?: string): string {
+export function bindingLabelOf(toolName: string | null, pending: boolean, status?: string, loaded = false): string {
   if (toolName) return toolName;
   if (pending) return "…";
-  return status === "DRAFT" ? REMOVED_TOOL_DRAFT : "Unknown tool";
+  return status === "DRAFT" && loaded ? REMOVED_TOOL_DRAFT : "Unknown tool";
 }
 
 export function useProviderToolNames() {
@@ -77,8 +79,9 @@ export function useProviderToolNames() {
 
   /** The tool's name; never a uuid, a host or an IP address. */
   const bindingLabel = React.useCallback(
-    (binding: BindingLike): string => bindingLabelOf(toolName(binding.toolId), catalogue.isPending, binding.status),
-    [toolName, catalogue.isPending],
+    (binding: BindingLike): string =>
+      bindingLabelOf(toolName(binding.toolId), catalogue.isPending, binding.status, catalogue.isSuccess),
+    [toolName, catalogue.isPending, catalogue.isSuccess],
   );
 
   return {
@@ -86,6 +89,8 @@ export function useProviderToolNames() {
     bindingLabel,
     tool: (toolId: string) => byId.get(toolId) ?? null,
     isPending: catalogue.isPending,
+    /** The catalogue was read: only then is a tool missing from it known to be gone. */
+    loaded: catalogue.isSuccess,
     catalogue: catalogue.data ?? null,
   };
 }

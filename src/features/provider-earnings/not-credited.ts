@@ -189,17 +189,20 @@ export function shownReasonAmounts(reasons: readonly NotCreditedReasonRow[]): (M
  * lists is counted, not named, and said to be removed, as the listings call
  * it (V1-9): "geocode_place, get_weather +8 removed tools", never "a tool, a
  * tool, …". Null when there is nothing to say, and while the catalogue loads
- * (`pending`), when every tool would read as removed.
+ * (`pending`). "Removed" only once the catalogue has loaded (`loaded`): a
+ * failed read says "other tools", never that they are gone.
  */
 export function toolsLine(
   toolIds: readonly string[],
   toolName: (toolId: string) => string | null,
   pending = false,
+  loaded = true,
 ): string | null {
   if (pending) return null;
   const named = [...new Set(toolIds.map(toolName).filter((name): name is string => Boolean(name)))];
   const unnamed = toolIds.length - toolIds.filter((id) => toolName(id)).length;
-  const others = unnamed > 0 ? `${unnamed} removed tool${unnamed === 1 ? "" : "s"}` : null;
+  const kind = loaded ? "removed " : named.length > 0 ? "other " : "";
+  const others = unnamed > 0 ? `${unnamed} ${kind}tool${unnamed === 1 ? "" : "s"}` : null;
   if (named.length === 0) return others;
   return others ? `${named.join(", ")} +${others}` : named.join(", ");
 }

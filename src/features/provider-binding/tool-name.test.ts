@@ -16,9 +16,12 @@ describe("a listing's name", () => {
   });
 
   it("says a draft's tool was removed when the catalogue no longer has it (V1-9)", () => {
-    expect(bindingLabelOf(null, false, "DRAFT")).toBe("Removed tool (draft)");
+    expect(bindingLabelOf(null, false, "DRAFT", true)).toBe("Removed tool (draft)");
+    // A failed catalogue read proves nothing was removed (review I2).
+    expect(bindingLabelOf(null, false, "DRAFT", false)).toBe("Unknown tool");
+    expect(bindingLabelOf(null, false, "DRAFT")).toBe("Unknown tool");
     expect(bindingLabelOf(null, true, "DRAFT")).toBe("…");
-    expect(bindingLabelOf(null, false, "PAUSED")).toBe("Unknown tool");
+    expect(bindingLabelOf(null, false, "PAUSED", true)).toBe("Unknown tool");
     expect(bindingLabelOf("get_weather", false, "DRAFT")).toBe("get_weather");
   });
 });
