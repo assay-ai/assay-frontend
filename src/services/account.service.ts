@@ -49,6 +49,11 @@ export function getUnreadCount(): Promise<{ count: number }> {
   return api.get<{ count: number }>("/notifications/unread-count");
 }
 
+/** PATCH /notifications/:id/read — the person's session only; idempotent; 404 outside the organization. */
+export function markNotificationRead(id: string): Promise<unknown> {
+  return api.patch(`/notifications/${encodeURIComponent(id)}/read`);
+}
+
 /** GET /spend-policy — the Limits screen. A limit REFUSES a call; it is not an alert. */
 export function getSpendPolicy(): Promise<unknown> {
   return api.get("/spend-policy");

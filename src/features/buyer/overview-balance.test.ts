@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { FullBalance } from "@/features/g30/balance";
 
-import { overviewBalance, singleBalanceSub } from "./overview-balance";
+import { absentBalanceTile, overviewBalance, singleBalanceSub } from "./overview-balance";
 
 const SOLANA = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
 const EVM = "eip155:46630";
@@ -100,5 +100,20 @@ describe("singleBalanceSub — money on its way in is named, not hidden", () => 
   it("adds both inbound buckets, as the Funding card does", () => {
     const row = { ...evmRow, pending: money("1500000"), pendingDeposits: money("500000") } as FullBalance;
     expect(singleBalanceSub(row)).toBe("available now · $2.00 confirming on chain");
+  });
+});
+
+describe("absentBalanceTile — a new account", () => {
+  it("reads $0.00 with the next step once loaded, never 'not available'", () => {
+    expect(absentBalanceTile(true, { freeOnly: false, chainName: null })).toEqual({
+      value: "$0.00",
+      sub: "add funds to make paid calls",
+    });
+  });
+  it("names the free-calls-only chain instead of asking for funds", () => {
+    expect(absentBalanceTile(true, { freeOnly: true, chainName: "Solana devnet" }).sub).toBe("free calls only on Solana devnet");
+  });
+  it("keeps the em-dash while nothing could be read", () => {
+    expect(absentBalanceTile(false, { freeOnly: false, chainName: null })).toEqual({ value: "—", sub: "not available" });
   });
 });
