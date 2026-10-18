@@ -740,7 +740,7 @@ function withheldBody(query: Record<string, unknown>) {
     },
     {
       bucket: "NOT_COLLECTED",
-      label: "not collected (the provider could not be paid)",
+      label: "not collected (the charge was cancelled or never taken)",
       calls: 0,
       amount: minorMoney(0),
     },

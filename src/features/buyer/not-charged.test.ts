@@ -36,7 +36,7 @@ const october = {
       },
       {
         bucket: "NOT_COLLECTED",
-        label: "not collected (the provider could not be paid)",
+        label: "not collected (the charge was cancelled or never taken)",
         calls: 5,
         amount: money("500000"),
       },
@@ -55,7 +55,7 @@ describe("notChargedLines", () => {
     expect(lines.map((l) => [l.label, l.calls, l.amount?.amount])).toEqual([
       ["Failed our checks (incl. wrong format)", 4, "170000"],
       ["No usable result", 10, "430000"],
-      ["Not collected (the provider could not be paid)", 5, "500000"],
+      ["Not collected (the charge was cancelled or never taken)", 5, "500000"],
     ]);
     expect(lines.reduce((n, l) => n + l.calls, 0)).toBe(october.withheld.calls);
   });

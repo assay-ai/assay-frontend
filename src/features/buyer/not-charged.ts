@@ -41,7 +41,9 @@ export const NOT_CHARGED_LINE_COPY: readonly NotChargedLineCopy[] = [
   },
   {
     bucket: "NOT_COLLECTED",
-    label: "Not collected (the provider could not be paid)",
+    // Not "the provider could not be paid": a debt voided by a late verdict or
+    // an upheld report is not the provider's doing (wave-1 audit M7).
+    label: "Not collected (the charge was cancelled or never taken)",
     note: "served, but the payment was not taken",
     phrase: "not collected",
   },

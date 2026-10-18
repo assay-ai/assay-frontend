@@ -39,7 +39,7 @@ const WITHHELD = {
     buckets: [
       { bucket: "FAILED_VERIFICATION", label: "failed verification", calls: 1, amount: m("1000000") },
       { bucket: "PROVIDER_OR_PLATFORM_ERROR", label: "provider or platform error", calls: 1, amount: m("500000") },
-      { bucket: "NOT_COLLECTED", label: "not collected (the provider could not be paid)", calls: 1, amount: m("500000") },
+      { bucket: "NOT_COLLECTED", label: "not collected (the charge was cancelled or never taken)", calls: 1, amount: m("500000") },
     ],
   },
   holdReleaseTotal: m("2000000"),
@@ -70,7 +70,7 @@ describe("StatementFigures — the statement adds up like /spend", () => {
     const html = renderToStaticMarkup(<StatementFigures totals={FIGURES} lines={notChargedLines(WITHHELD)} />);
     expect(html).toContain("Failed our checks (incl. wrong format)");
     expect(html).toContain("No usable result");
-    expect(html).toContain("Not collected (the provider could not be paid)");
+    expect(html).toContain("Not collected (the charge was cancelled or never taken)");
     expect(html).toContain("$1.00");
     expect(html).not.toContain("by the guarantee");
   });
