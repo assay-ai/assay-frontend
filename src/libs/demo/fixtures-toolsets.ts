@@ -729,6 +729,8 @@ export function demoPreview(url: string, agentId: string): McpUrlPreview {
       price: noProviderFits && !fallback ? null : priceDisplay(tool, fallback ? tool.offers.map((o) => o.providerId) : left),
       providerCount: tool.offers.length,
       noProviderFits: noProviderFits && !fallback,
+      // The demo's providers all settle on the buyer's chain and take calls, so only the rules empty a tool.
+      noFitReason: noProviderFits && !fallback ? ("RULES" as const) : null,
     };
   });
   const listed = tools.filter((t) => t.listed);
