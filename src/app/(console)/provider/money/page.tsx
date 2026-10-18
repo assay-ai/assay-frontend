@@ -303,7 +303,7 @@ export default function ProviderMoneyPage() {
           ) : notCredited.reasons.length > 0 ? (
             notCredited.reasons.map((bucket, index) => {
               const reason = notCreditedReason(bucket.className);
-              const tools = toolsLine(bucket.toolIds, names.toolName, names.isPending);
+              const tools = toolsLine(bucket.toolIds, names.toolName, names.isPending, names.loaded);
               return (
                 <div key={bucket.className} className="flex w-full flex-col gap-1 rounded-lg border border-01 bg-02 p-3.5 tablet:flex-row tablet:items-start tablet:gap-4">
                   <div className="flex min-w-0 flex-1 flex-col gap-1">

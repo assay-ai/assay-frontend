@@ -171,6 +171,11 @@ describe("toolsLine", () => {
   it("says nothing while the catalogue loads, rather than call every tool removed", () => {
     expect(toolsLine(["a", "x1"], () => null, true)).toBeNull();
   });
+
+  it("never says removed when the catalogue failed to load (review I2)", () => {
+    expect(toolsLine(["a", "x1"], toolName, false, false)).toBe("get_usd_eur_rate +1 other tool");
+    expect(toolsLine(["x1", "x2"], () => null, false, false)).toBe("2 tools");
+  });
 });
 
 describe("settlementShown", () => {
