@@ -101,3 +101,25 @@ describe("providers explorer · the stake stat, rendered", () => {
     expect(stat).not.toContain("$130.00");
   });
 });
+
+describe("ProviderCard — whether it serves you (B16)", () => {
+  const card = (fit: Pick<ProviderRow, "chains" | "servesYou">) =>
+    renderToStaticMarkup(<ProviderCard provider={{ ...row([]), ...fit }} chainName={(id) => NAMES[id] ?? id} />).replace(/&#x27;|&#39;/g, "'");
+
+  it("an unchecked provider reads 'Can't check right now', never 'Not taking calls'", () => {
+    for (const html of [card({ chains: null, servesYou: null }), card({ chains: [], servesYou: null })]) {
+      expect(html).toContain("Can't check right now");
+      expect(html).not.toContain("Not taking calls");
+      expect(html).not.toContain("Takes no calls");
+    }
+  });
+
+  it("says when it serves you, when it takes payment elsewhere, and when it takes no calls", () => {
+    expect(card({ chains: [CHAIN_4663], servesYou: true })).toContain("Serves you");
+    const elsewhere = card({ chains: [SOLANA], servesYou: false });
+    expect(elsewhere).toContain("Doesn't take payment on your chain");
+    expect(elsewhere).toContain("Takes payment on Solana mainnet");
+    expect(card({ chains: [], servesYou: false })).toContain("Not taking calls now");
+    expect(card({})).not.toContain('data-testid="serving-chip"');
+  });
+});

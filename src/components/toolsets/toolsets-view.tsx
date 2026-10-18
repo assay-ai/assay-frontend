@@ -7,11 +7,15 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { useCatalogue } from "@/components/g31/use-catalogue";
+import { useToolNames } from "@/components/g31/use-tool-names";
 import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
-import { defaultEntry } from "@/features/toolsets/entry-rules";
+import { buildMcpUrl } from "@/features/connect/mcp-url";
+import { defaultEntry, slugFrom } from "@/features/toolsets/entry-rules";
+import { freeSlugAmong, usedTools } from "@/features/toolsets/start-from-used";
 import { shareStatus } from "@/features/toolsets/sharing";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
@@ -26,8 +30,9 @@ import { errorText, toolsetKeys, useToolsets } from "./use-toolsets";
 /**
  * Controls › Tool sets (`/toolsets/mine`): the account's own tool sets. Each
  * one is its own MCP server at `/my/{slug}`, serving its Draft live. Create
- * names one (the address is generated); an account with none starts from the
- * tools its agents already used. A row opens `/toolsets/mine?id=`.
+ * names one and shows the address it will get; an account with none starts
+ * from the tools its agents already used (every one listed, the ones that
+ * can't run now tagged with why). A row opens `/toolsets/mine?id=`.
  */
 export function toolsetHref(id: string): string {
   return `/toolsets/mine?id=${encodeURIComponent(id)}`;
@@ -38,22 +43,18 @@ export function ToolsetsView() {
   const queryClient = useQueryClient();
   const query = useToolsets();
   const catalogue = useCatalogue();
-  const [creating, setCreating] = React.useState(false);
+  const names = useToolNames();
+  // null: no form; "empty": a name only; "used": a name and the tools the agents used.
+  const [creating, setCreating] = React.useState<null | "empty" | "used">(null);
   const [name, setName] = React.useState("");
+  const [picked, setPicked] = React.useState<string[] | null>(null);
   const [connect, setConnect] = React.useState<string | null>(null);
   const [sharing, setSharing] = React.useState<string | null>(null);
   const [slugHint, setSlugHint] = React.useState<string | null>(null);
 
-  // "Start from tools you've used": the agents' recent calls, most used first.
-  const used = React.useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const call of catalogue.calls) counts.set(call.toolId, (counts.get(call.toolId) ?? 0) + 1);
-    return [...counts.entries()]
-      .filter(([id]) => catalogue.tools.some((t) => t.toolId === id))
-      .sort((a, b) => b[1] - a[1])
-      .map(([id]) => id)
-      .slice(0, 20);
-  }, [catalogue.calls, catalogue.tools]);
+  // "Start from tools you've used": every tool the agents called recently, most used first.
+  const used = React.useMemo(() => usedTools(catalogue.calls, catalogue.tools, names.byId), [catalogue.calls, catalogue.tools, names.byId]);
+  const chosen = picked ?? used.filter((tool) => tool.defaultOn).map((tool) => tool.toolId);
 
   const create = useMutation({
     mutationFn: (input: { name: string; slug?: string; toolIds?: string[] }) =>
@@ -71,15 +72,29 @@ export function ToolsetsView() {
   });
 
   const sets = query.data?.items ?? [];
+  const open = (mode: "empty" | "used") => {
+    setCreating(mode);
+    setName(mode === "used" ? "Tools I use" : "");
+    setPicked(null);
+    setSlugHint(null);
+    create.reset();
+  };
+  const toolIds = creating === "used" ? chosen : [];
+  // The address the set gets, sent with the create so it is the one shown:
+  // from the name (numbered past the account's own sets), or the free one the
+  // server suggested.
+  const slug = slugHint ?? (name.trim() ? freeSlugAmong(slugFrom(name.trim()), sets.map((set) => set.slug)) : null);
 
   const createForm = (
     <form
-      className="flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 p-4 tablet:flex-row tablet:items-end"
+      className="flex w-full flex-col gap-3 rounded-xl border border-01 bg-01 p-4"
+      data-testid="create-toolset"
       onSubmit={(e) => {
         e.preventDefault();
-        if (name.trim()) create.mutate({ name: name.trim(), slug: slugHint ?? undefined });
+        if (name.trim()) create.mutate({ name: name.trim(), slug: slug ?? undefined, toolIds });
       }}
     >
+      {creating === "used" ? <h2 className="text-label-md text-01">Start from tools you&apos;ve used</h2> : null}
       <Field
         id="new-toolset-name"
         label="Name"
@@ -89,16 +104,51 @@ export function ToolsetsView() {
           setName(e.target.value);
           setSlugHint(null);
         }}
-        hint={slugHint ? `That address is taken; it will be /my/${slugHint}.` : "Its address is made from the name."}
+        hint={slugHint ? "That address was taken, so it gets the one below." : "Its address is made from the name and stays the same if you rename it."}
         error={create.isError && !slugHint ? errorText(create.error) : undefined}
-        wrapperClassName="flex-1"
+        wrapperClassName="tablet:w-[360px]"
         autoFocus
       />
+      {slug ? (
+        <p className="flex flex-col gap-0.5 text-body-xs text-03" data-testid="new-toolset-url">
+          Its MCP server URL
+          <span className="break-all font-mono text-mono-12 text-01">{buildMcpUrl({ kind: "toolset", slug })}</span>
+        </p>
+      ) : null}
+      {creating === "used" ? (
+        <fieldset className="flex flex-col gap-1">
+          <legend className="pb-1 text-label-xs text-02">Tools your agents called recently</legend>
+          <ul className="flex flex-col" data-testid="used-tools">
+            {used.map((tool) => (
+              <li key={tool.toolId} data-testid="used-tool" data-state={tool.state}>
+                <Checkbox
+                  className="min-h-10"
+                  checked={chosen.includes(tool.toolId)}
+                  disabled={!tool.selectable}
+                  onChange={(e) => setPicked(e.target.checked ? [...chosen, tool.toolId] : chosen.filter((id) => id !== tool.toolId))}
+                  label={
+                    <span className="flex flex-wrap items-center gap-x-2">
+                      <span className="font-mono text-mono-13">{tool.name}</span>
+                      <span className="text-body-xs text-03">
+                        {tool.calls} call{tool.calls === 1 ? "" : "s"}
+                      </span>
+                      {tool.reason ? <Chip tone={tool.selectable ? "warning" : "neutral"}>Can&apos;t run now: {tool.reason}</Chip> : null}
+                    </span>
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+          {used.some((tool) => tool.state === "no-provider") ? (
+            <p className="text-body-xs text-03">A tool that can&apos;t run now stays in the set and works again once a provider takes calls for it.</p>
+          ) : null}
+        </fieldset>
+      ) : null}
       <div className="flex gap-2">
-        <Button type="submit" loading={create.isPending} disabled={!name.trim()}>
-          Create
+        <Button type="submit" loading={create.isPending} disabled={!name.trim() || (creating === "used" && toolIds.length === 0)}>
+          {creating === "used" ? `Create with ${toolIds.length} tool${toolIds.length === 1 ? "" : "s"}` : "Create"}
         </Button>
-        <Button type="button" variant="ghost" onClick={() => setCreating(false)}>
+        <Button type="button" variant="ghost" onClick={() => setCreating(null)}>
           Cancel
         </Button>
       </div>
@@ -115,7 +165,7 @@ export function ToolsetsView() {
           </p>
         </div>
         {sets.length > 0 && !creating ? (
-          <Button icon={<Plus />} onClick={() => setCreating(true)}>
+          <Button icon={<Plus />} onClick={() => open("empty")}>
             New tool set
           </Button>
         ) : null}
@@ -144,12 +194,8 @@ export function ToolsetsView() {
                 : "No calls yet to start from. Make an empty tool set and add the tools your agent needs."}
             </p>
             <div className="flex flex-wrap gap-2">
-              {used.length > 0 ? (
-                <Button loading={create.isPending} onClick={() => create.mutate({ name: "Tools I use", toolIds: used })}>
-                  Start from tools you&apos;ve used
-                </Button>
-              ) : null}
-              <Button variant={used.length > 0 ? "secondary" : "primary"} onClick={() => setCreating(true)}>
+              {used.length > 0 ? <Button onClick={() => open("used")}>Start from tools you&apos;ve used</Button> : null}
+              <Button variant={used.length > 0 ? "secondary" : "primary"} onClick={() => open("empty")}>
                 {used.length > 0 ? "Start empty" : "New tool set"}
               </Button>
             </div>

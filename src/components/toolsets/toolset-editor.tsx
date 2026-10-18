@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Info, Share2, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,6 +8,7 @@ import * as React from "react";
 
 import { useSpendPolicyQuery } from "@/components/buyer-money/use-agents";
 import { useToolVersions } from "@/components/contracts/use-tool-versions";
+import { ServingChip } from "@/components/g31/providers-view";
 import { useCatalogue, type ProviderRow } from "@/components/g31/use-catalogue";
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { EntityPicker } from "@/components/patterns/entity-picker";
@@ -34,7 +35,11 @@ import { fieldList } from "@/features/contracts/text";
 import type { ToolVersionBrief } from "@/interfaces/contracts";
 import { defaultEntry, entryChipLabel, entryInput, entryProblem, providersLeft } from "@/features/toolsets/entry-rules";
 import { DRAFT_NOTICE, ON_EMPTY_LABELS, PROVIDER_MODE_LABELS, VERIFIED_ONLY_LABEL } from "@/features/toolsets/labels";
+import { nothingRunsWarning, type ProviderOffer } from "@/features/toolsets/provider-fit";
 import { shareStatus, sharedPage } from "@/features/toolsets/sharing";
+import { failRateShort, formatCallPrice } from "@/features/explorer/explorer-text";
+import { useChainName } from "@/hooks/useChainName";
+import { getCatalogueProvider } from "@/services/catalogue.service";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import {
@@ -109,6 +114,7 @@ export function ToolsetPage({ id, slug, free, version }: { id: string | null; sl
     <>
       <ConnectPanel
         compact
+        copyable
         url={buildMcpUrl({ kind: "toolset", slug: set.slug, version: version ?? null }, { free: Boolean(free) })}
         title={`Connect ${set.name}`}
         detail={version ? `Locked to v${version}: only these tools, with these provider rules.` : "Its own MCP server: only these tools, with these provider rules."}
@@ -272,7 +278,10 @@ function EntriesEditor({ set }: { set: Toolset }) {
   return (
     <section aria-label="Tools in this set" className="flex w-full flex-col gap-3 rounded-xl border border-01 bg-01 p-4 shadow-hair tablet:p-5" data-testid="toolset-entries">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-label-md text-01">Tools</h2>
+        <h2 className="flex items-center gap-2 text-label-md text-01">
+          Tools
+          <Chip tone="primary">Draft</Chip>
+        </h2>
         <span className="text-body-xs text-03" aria-live="polite">
           {save.isPending ? "Saving…" : save.isSuccess ? "Saved" : null}
           {!save.isPending && undoRows ? (
@@ -284,7 +293,8 @@ function EntriesEditor({ set }: { set: Toolset }) {
       </div>
       <p className="flex items-start gap-2 rounded-lg bg-primary-10 px-3 py-2 text-body-13 text-primary-700" data-testid="draft-notice">
         <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-        {DRAFT_NOTICE} Agents connected to /my/{set.slug} see each saved change on their next call; some apps list tools again only after a restart.
+        This is the Draft: what /my/{set.slug} serves now. {DRAFT_NOTICE} Agents connected to it see each saved change on their next
+        call; some apps list tools again only after a restart.
       </p>
 
       {rows.length === 0 ? (
@@ -490,6 +500,26 @@ export function RuleEditor({
   const parsed = parseAmountInput(max, { decimals, required: false });
   const problem = entryProblem({ providerMode: mode, providerIds: ids }) ?? contractProblem;
   const left = providersLeft({ providerMode: mode, providerIds: ids }, providers.map((p) => p.providerId));
+  const offers = useProviderOffers(row.toolId, providers);
+  const chainName = useChainName();
+  // Advisory: the server's routing rules still decide every call.
+  const nothingRuns = nothingRunsWarning(
+    {
+      providerMode: mode,
+      providerIds: ids,
+      // The same tier and asset Apply saves below.
+      minTier: verified ? (row.minTier === "TRUSTED" ? "TRUSTED" : "ESTABLISHED") : null,
+      maxPriceAtomic: parsed.atomic ?? null,
+      maxPriceAsset: asset || null,
+      onEmpty,
+    },
+    offers,
+    row.toolName,
+  );
+  // Apply asks twice when the rule would leave you nothing that runs; a
+  // changed rule (a different warning) asks again.
+  const [warnedFor, setWarnedFor] = React.useState<string | null>(null);
+  const warned = nothingRuns !== null && warnedFor === nothingRuns;
 
   return (
     <div className="flex flex-col gap-3 rounded-lg bg-02 p-3" data-testid="rule-editor">
@@ -517,20 +547,31 @@ export function RuleEditor({
           <p className="text-body-xs text-03">No provider serves this tool yet.</p>
         ) : (
           <ul className="flex flex-col gap-1.5" aria-label={mode === "ONLY" ? "Use only these providers" : "Never use these providers"}>
-            {providers.map((p) => (
-              <li key={p.providerId}>
+            {providers.map((p, index) => (
+              <li key={p.providerId} data-testid="provider-option">
                 <Checkbox
                   className="min-h-10"
                   checked={ids.includes(p.providerId)}
                   onChange={(e) => setIds(e.target.checked ? [...ids, p.providerId] : ids.filter((x) => x !== p.providerId))}
-                  label={`${p.name}${p.tier === "NEW" ? " · not verified yet" : ""}`}
+                  label={<ProviderOfferLabel provider={p} offer={offers[index]} chainName={chainName} />}
                 />
               </li>
             ))}
           </ul>
         )
       ) : (
-        <p className="text-body-xs text-03">Assay picks the best provider for each call, from all {providers.length} that serve it.</p>
+        <div className="flex flex-col gap-1.5">
+          <p className="text-body-xs text-03">Assay picks the best provider for each call, from all {providers.length} that serve it.</p>
+          {providers.length > 0 ? (
+            <ul className="flex flex-col gap-1.5" aria-label="Providers of this tool">
+              {providers.map((p, index) => (
+                <li key={p.providerId} data-testid="provider-option" className="flex min-h-10 items-center">
+                  <ProviderOfferLabel provider={p} offer={offers[index]} chainName={chainName} />
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       )}
       <Switch checked={verified} onChange={(e) => setVerified(e.target.checked)} label={VERIFIED_ONLY_LABEL} />
       <Field
@@ -601,10 +642,23 @@ export function RuleEditor({
           </div>
         </details>
       ) : null}
-      {mode !== "BEST" && providers.length > 0 && left <= 1 && !problem ? (
+      {mode !== "BEST" && providers.length > 0 && left <= 1 && !problem && !nothingRuns ? (
         <p className="flex items-center gap-1.5 text-body-xs text-warning-700">
           <TriangleAlert aria-hidden="true" className="size-3.5" />
           {left === 0 ? "No provider is left: every call will be refused." : "One provider left: no backup if it is down."}
+        </p>
+      ) : null}
+      {nothingRuns && !problem ? (
+        <p
+          role={warned ? "alert" : "status"}
+          className={cn("flex items-start gap-1.5 rounded-lg px-3 py-2 text-body-13", warned ? "bg-danger-10 text-danger-700" : "bg-warning-10 text-warning-700")}
+          data-testid="nothing-runs-warning"
+        >
+          <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            {nothingRuns}
+            {warned ? " Apply anyway?" : ""}
+          </span>
         </p>
       ) : null}
       {problem && tried ? <p className="text-body-xs text-danger-700">{problem}</p> : null}
@@ -616,6 +670,10 @@ export function RuleEditor({
           onClick={() => {
             if (problem) {
               setTried(true);
+              return;
+            }
+            if (nothingRuns && !warned) {
+              setWarnedFor(nothingRuns);
               return;
             }
             onApply({
@@ -631,13 +689,65 @@ export function RuleEditor({
             });
           }}
         >
-          Apply
+          {nothingRuns && warned ? "Apply anyway" : "Apply"}
         </Button>
         <Button size="sm" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Each provider's own listing of this tool (price, chains, whether it serves
+ * you), read from its catalogue page: the same cached query Explore uses.
+ * A row whose page has not loaded yet has no status, and is never counted
+ * against the rule.
+ */
+function useProviderOffers(toolId: string, providers: readonly ProviderRow[]): ProviderOffer[] {
+  const details = useQueries({
+    queries: providers.map((p) => ({
+      queryKey: ["catalogue", "provider", p.providerId],
+      queryFn: () => getCatalogueProvider(p.providerId),
+      retry: false,
+      staleTime: 60_000,
+    })),
+  });
+  return providers.map((p, index) => {
+    const listing = details[index]?.data?.tools.find((t) => t.toolId === toolId);
+    return {
+      providerId: p.providerId,
+      name: p.name,
+      tier: p.tier,
+      price: listing?.price ?? null,
+      chains: listing?.chains,
+      servesYou: listing?.servesYou,
+      notServedReason: listing?.notServedReason,
+    };
+  });
+}
+
+/** "Open-Meteo Demo BV · $0.25 · Solana devnet · 5.0% failed  [Doesn't take payment on your chain]". */
+function ProviderOfferLabel({ provider, offer, chainName }: { provider: ProviderRow; offer: ProviderOffer | undefined; chainName: (chainId: string) => string }) {
+  const facts = [
+    offer?.price ? formatCallPrice(offer.price) : null,
+    offer?.chains && offer.chains.length > 0 ? offer.chains.map(chainName).join(", ") : null,
+    failRateShort(provider),
+  ].filter(Boolean);
+  return (
+    <span className="flex flex-col gap-0.5">
+      <span className="flex flex-wrap items-center gap-1.5">
+        <span>
+          {provider.name}
+          {provider.tier === "NEW" ? " · not verified yet" : ""}
+        </span>
+        {offer ? <ServingChip fit={offer} /> : null}
+      </span>
+      <span className="text-body-xs text-03" data-testid="provider-facts">
+        {facts.join(" · ")}
+      </span>
+    </span>
   );
 }
 
