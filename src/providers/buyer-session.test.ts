@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import type { QueryClient } from "@tanstack/react-query";
@@ -9,6 +9,8 @@ import {
   handleUnauthorized,
   isOperatorConsolePath,
   isPublicPath,
+  markPublicShell,
+  onPublicShell,
   signedOutLanding,
   unauthorizedTarget,
   type BuyerSessionEffects,
@@ -231,6 +233,40 @@ describe("isPublicPath and the route groups", () => {
   });
 });
 
+/** Every source file under `dir`. */
+function sources(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) return sources(full);
+    return /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name) ? [full] : [];
+  });
+}
+
+// B5 review m4: the 404 renders the public shell at an address that is no public path.
+describe("the public shell", () => {
+  it("counts as public while mounted, and only then", () => {
+    expect(onPublicShell()).toBe(false);
+    const unmark = markPublicShell();
+    expect(onPublicShell()).toBe(true);
+    expect(unauthorizedTarget({ pathname: "/no-such-page", search: "", previous: "did:privy:1", publicShell: true })).toBe(
+      "/no-such-page",
+    );
+    unmark();
+    unmark();
+    expect(onPublicShell()).toBe(false);
+  });
+
+  it("is rendered only by the (public) layout and the 404 page", () => {
+    const SRC = join(__dirname, "..");
+    const users = sources(SRC)
+      .filter((file) => !file.endsWith(join("components", "layout", "public-shell.tsx")))
+      .filter((file) => readFileSync(file, "utf8").includes("<PublicShell"))
+      .map((file) => file.slice(SRC.length + 1))
+      .sort();
+    expect(users).toEqual([join("app", "(public)", "layout.tsx"), join("app", "not-found.tsx")]);
+  });
+});
+
 describe("handleUnauthorized", () => {
   function unauthorizedEffects() {
     return {
@@ -244,7 +280,7 @@ describe("handleUnauthorized", () => {
 
   it("on a public page: clears the token and the data, signs out, and stays", () => {
     const fx = unauthorizedEffects();
-    handleUnauthorized({ pathname: "/how-it-works", search: "", previous: "did:privy:1" }, fx);
+    expect(handleUnauthorized({ pathname: "/how-it-works", search: "", previous: "did:privy:1" }, fx)).toBe("stay");
     expect(fx.clearSessionToken).toHaveBeenCalledTimes(1);
     expect(fx.logout).toHaveBeenCalledTimes(1);
     // The page stays mounted: its queries must be told (reset), not stranded (clear).
@@ -255,7 +291,7 @@ describe("handleUnauthorized", () => {
 
   it("on a protected page: clears the token and the data, signs out, and goes to sign-in", () => {
     const fx = unauthorizedEffects();
-    handleUnauthorized({ pathname: "/funding", search: "", previous: "did:privy:1" }, fx);
+    expect(handleUnauthorized({ pathname: "/funding", search: "", previous: "did:privy:1" }, fx)).toBe("navigate");
     expect(fx.clearSessionToken).toHaveBeenCalledTimes(1);
     expect(fx.logout).toHaveBeenCalledTimes(1);
     expect(fx.clearCache).toHaveBeenCalledTimes(1);

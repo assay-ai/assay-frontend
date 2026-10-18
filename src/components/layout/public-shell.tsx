@@ -11,6 +11,7 @@ import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { usePublicFeatures } from "@/features/explorer/use-public-explorer";
 import { demoEnabled } from "@/libs/demo/demo-api";
 import { loginHref } from "@/libs/login-redirect";
+import { markPublicShell } from "@/providers/buyer-session";
 
 /**
  * The public shell: the public top bar over the page and the public footer
@@ -24,6 +25,8 @@ import { loginHref } from "@/libs/login-redirect";
  */
 export function PublicShell({ children }: { children: React.ReactNode }) {
   const { demo, reserves } = usePublicFeatures();
+  // A 401 here clears the token and stays (the 404 page too, whose address is no public path).
+  React.useEffect(() => markPublicShell(), []);
   // The same rule as the pages' Connect panels, so the bar never says "Sign in" over a working Connect.
   const signedIn = useSignedIn() || demoEnabled();
   // Sign in and Start free come back to this page (never with a fragment: a link-only token stays in the tab).
