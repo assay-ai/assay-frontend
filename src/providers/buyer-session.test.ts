@@ -1,9 +1,16 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+
 import type { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   applyIdentityChange,
+  handleUnauthorized,
   isOperatorConsolePath,
+  isPublicPath,
+  markPublicShell,
+  onPublicShell,
   signedOutLanding,
   unauthorizedTarget,
   type BuyerSessionEffects,
@@ -136,6 +143,166 @@ describe("unauthorizedTarget", () => {
     expect(unauthorizedTarget({ pathname: "/provider/setup", search: "", previous: null })).toBe(
       "/login?next=%2Fprovider%2Fsetup",
     );
+  });
+
+  // A2 (2026-10-18): a stale token on :4001 turned `/` → How it works → /login?next=%2Fhow-it-works.
+  it("keeps a public page where it is, with or without a session", () => {
+    for (const previous of [null, undefined, "did:privy:1"]) {
+      expect(unauthorizedTarget({ pathname: "/how-it-works", search: "", previous })).toBe("/how-it-works");
+      expect(unauthorizedTarget({ pathname: "/catalogue", search: "?view=providers", previous })).toBe(
+        "/catalogue?view=providers",
+      );
+      expect(unauthorizedTarget({ pathname: "/why-list-here", search: "", previous })).toBe("/why-list-here");
+    }
+  });
+
+  it("still sends every protected page to sign-in", () => {
+    for (const pathname of ["/funding", "/provider", "/provider/setup", "/toolsets/mine", "/explore", "/spend/calls"]) {
+      expect(unauthorizedTarget({ pathname, search: "", previous: "did:privy:1" })).toMatch(/^\/login\?next=/);
+      expect(unauthorizedTarget({ pathname, search: "", previous: null })).toMatch(/^\/login\?next=/);
+    }
+  });
+});
+
+describe("isPublicPath", () => {
+  it("matches the public pages and the pages under the catalogue", () => {
+    for (const path of [
+      "/how-it-works",
+      "/why-list-here",
+      "/calculator",
+      "/catalogue",
+      "/catalogue/view",
+      "/catalogue/provider",
+      "/demo",
+      "/reserves",
+      "/toolsets/view",
+      "/toolsets/handle",
+      "/how-it-works/",
+    ]) {
+      expect(isPublicPath(path), path).toBe(true);
+    }
+  });
+
+  it("never matches a signed-in page or a look-alike", () => {
+    for (const path of [
+      "/",
+      "/login",
+      "/funding",
+      "/explore",
+      "/toolsets/mine",
+      "/toolsets",
+      "/provider",
+      "/provider/setup",
+      "/operator",
+      "/catalogues",
+      "/how-it-works-admin",
+      "/demo/../funding",
+      null,
+      undefined,
+    ]) {
+      expect(isPublicPath(path), String(path)).toBe(false);
+    }
+  });
+});
+
+/** Every `page.tsx` under `dir` as a URL path, `[segment]` filled with a sample value. */
+function pagePaths(dir: string, segments: string[] = []): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) {
+      const group = name.startsWith("(") && name.endsWith(")");
+      return pagePaths(full, group ? segments : [...segments, /^\[.+\]$/.test(name) ? "sample" : name]);
+    }
+    return name === "page.tsx" ? ["/" + segments.join("/")] : [];
+  });
+}
+
+describe("isPublicPath and the route groups", () => {
+  const APP = join(__dirname, "../app");
+
+  it("covers every page of the (public) group", () => {
+    const pages = pagePaths(join(APP, "(public)"));
+    expect(pages.length).toBeGreaterThan(5);
+    expect(pages.filter((path) => !isPublicPath(path))).toEqual([]);
+  });
+
+  it("covers no page of a signed-in group", () => {
+    const pages = ["(main)", "(console)", "(minimal)", "(operator)"].flatMap((group) => pagePaths(join(APP, group)));
+    expect(pages.length).toBeGreaterThan(20);
+    expect(pages.filter((path) => isPublicPath(path))).toEqual([]);
+  });
+});
+
+/** Every source file under `dir`. */
+function sources(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) return sources(full);
+    return /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name) ? [full] : [];
+  });
+}
+
+// B5 review m4: the 404 renders the public shell at an address that is no public path.
+describe("the public shell", () => {
+  it("counts as public while mounted, and only then", () => {
+    expect(onPublicShell()).toBe(false);
+    const unmark = markPublicShell();
+    expect(onPublicShell()).toBe(true);
+    expect(unauthorizedTarget({ pathname: "/no-such-page", search: "", previous: "did:privy:1", publicShell: true })).toBe(
+      "/no-such-page",
+    );
+    unmark();
+    unmark();
+    expect(onPublicShell()).toBe(false);
+  });
+
+  it("is rendered only by the (public) layout and the 404 page", () => {
+    const SRC = join(__dirname, "..");
+    const users = sources(SRC)
+      .filter((file) => !file.endsWith(join("components", "layout", "public-shell.tsx")))
+      .filter((file) => readFileSync(file, "utf8").includes("<PublicShell"))
+      .map((file) => file.slice(SRC.length + 1))
+      .sort();
+    expect(users).toEqual([join("app", "(public)", "layout.tsx"), join("app", "not-found.tsx")]);
+  });
+});
+
+describe("handleUnauthorized", () => {
+  function unauthorizedEffects() {
+    return {
+      clearSessionToken: vi.fn(),
+      clearCache: vi.fn(),
+      resetCache: vi.fn(),
+      logout: vi.fn(() => Promise.resolve()),
+      navigate: vi.fn(),
+    };
+  }
+
+  it("on a public page: clears the token and the data, signs out, and stays", () => {
+    const fx = unauthorizedEffects();
+    expect(handleUnauthorized({ pathname: "/how-it-works", search: "", previous: "did:privy:1" }, fx)).toBe("stay");
+    expect(fx.clearSessionToken).toHaveBeenCalledTimes(1);
+    expect(fx.logout).toHaveBeenCalledTimes(1);
+    // The page stays mounted: its queries must be told (reset), not stranded (clear).
+    expect(fx.resetCache).toHaveBeenCalledTimes(1);
+    expect(fx.clearCache).not.toHaveBeenCalled();
+    expect(fx.navigate).not.toHaveBeenCalled();
+  });
+
+  it("on a protected page: clears the token and the data, signs out, and goes to sign-in", () => {
+    const fx = unauthorizedEffects();
+    expect(handleUnauthorized({ pathname: "/funding", search: "", previous: "did:privy:1" }, fx)).toBe("navigate");
+    expect(fx.clearSessionToken).toHaveBeenCalledTimes(1);
+    expect(fx.logout).toHaveBeenCalledTimes(1);
+    expect(fx.clearCache).toHaveBeenCalledTimes(1);
+    expect(fx.navigate).toHaveBeenCalledWith("/login?next=%2Ffunding&reason=expired");
+  });
+
+  it("does not wait on, or fail with, a sign-out that rejects", () => {
+    const fx = unauthorizedEffects();
+    fx.logout.mockImplementation(() => Promise.reject(new Error("privy down")));
+    expect(() => handleUnauthorized({ pathname: "/provider", search: "", previous: null }, fx)).not.toThrow();
+    expect(fx.navigate).toHaveBeenCalledWith("/login?next=%2Fprovider");
   });
 });
 

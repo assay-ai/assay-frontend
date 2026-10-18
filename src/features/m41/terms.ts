@@ -36,12 +36,12 @@ export const DESIGN_TERMS: ProviderTermsSummary = {
     "I accept the provider agreement v1.0, the payout terms v1.0 and the slash policy v1.0",
   commercialTerms: [
     { key: "takeRate", label: "Take rate", value: "10%", caption: "flat, no per-call fee floor" },
-    { key: "payouts", label: "Payouts", value: "as each call settles", caption: "on-chain and final" },
+    { key: "payouts", label: "Payouts", value: "as each call settles", caption: "on chain; final 1 hour after each call" },
     {
       key: "reserveHeld",
-      label: "Reserve held",
+      label: "Standing reserve",
       value: "$0.00",
-      caption: "we hold nothing back against your account",
+      caption: "No standing reserve: each paid call is held for 1 hour for buyer reports",
     },
     { key: "clawback", label: "Clawback", value: "never", caption: "a paid payout stays paid" },
     {

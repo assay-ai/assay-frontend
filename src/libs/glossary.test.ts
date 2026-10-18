@@ -27,6 +27,13 @@ describe("glossary", () => {
     // As the backend judges it (a statistical tolerance) and as /why-list-here says it (a per-penalty maximum).
     expect(GLOSSARY["stake-rule"].definition).toContain("beyond a margin for chance");
     expect(GLOSSARY["stake-rule"].definition).toContain("maximum set on chain");
+  });
+
+  it("says when a payment is final: after the 1-hour report window, then only the stake is at risk", () => {
+    const final = GLOSSARY["payout-final"].definition;
+    expect(final).toContain("1 hour after the call, once a buyer can no longer report a bad result");
+    expect(final).toContain("a call that fails because of the provider");
+    expect(final).toContain("After that, a payout is never clawed back, and only the provider's stake is at risk.");
     expect(GLOSSARY["penalty-example"].definition).toContain("maximum set on chain");
   });
 
