@@ -191,6 +191,6 @@ describe("blockSubjectLabel", () => {
 
   it("falls back to the catalogue, then to a short id only when nothing names it", () => {
     expect(blockSubjectLabel({ subjectKind: "ORGANIZATION", subject: ORG, subjectName: null }, () => "Listed Co")).toBe("Listed Co");
-    expect(blockSubjectLabel({ subjectKind: "ORGANIZATION", subject: ORG, subjectName: null }, none)).toBe("Organization 7e3a94c1…");
+    expect(blockSubjectLabel({ subjectKind: "ORGANIZATION", subject: ORG, subjectName: null }, none)).toBe("Unnamed organization 7e3a94c1…");
   });
 });

@@ -112,10 +112,10 @@ function ToolsScreen() {
                   <div className="flex min-w-0 flex-col gap-0.5">
                     <span className="text-label-13 text-01 [overflow-wrap:anywhere]">
                       {request.title}
-                      {request.status === "ACKNOWLEDGED" ? <span className="ml-2 rounded-full bg-03 px-2 py-0.5 text-label-xs text-02">Looked at</span> : null}
+                      {request.status === "ACKNOWLEDGED" ? <span className="ml-2 rounded-full bg-03 px-2 py-0.5 text-label-xs text-02">Being reviewed</span> : null}
                     </span>
                     <span className="text-body-xs text-03">
-                      {answered ? "Being reviewed; asked " : overdue ? <span className="text-danger-600">Answer overdue since </span> : "Answer due "}
+                      {answered ? "Asked " : overdue ? <span className="text-danger-600">Answer overdue since </span> : "Answer due "}
                       <UtcTime value={answered ? request.createdAt : request.firstResponseDueAt} midSentence />
                       {request.expectedMonthlyCalls ? ` · about ${request.expectedMonthlyCalls.toLocaleString("en-US")} calls a month` : ""}
                     </span>

@@ -911,7 +911,7 @@ function DelaySheet({ open, settings, deployment, onClose, onDone }: SheetProps)
             setError(undefined);
           }}
           inputMode="numeric"
-          hint={`10 minutes to 22 days. Now ${durationText(settings.slashDelaySeconds)}.`}
+          hint={`10 min to 528 h. Now ${settings.slashDelaySeconds % 3600 === 0 ? `${settings.slashDelaySeconds / 3600} h` : durationText(settings.slashDelaySeconds)}.`}
           error={error}
         />
         <Segmented value={unit} onValueChange={(next) => setUnit(next as DelayUnit)} aria-label="Unit">

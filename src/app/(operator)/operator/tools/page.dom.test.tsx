@@ -83,7 +83,8 @@ describe("tool requests on the Tools page", () => {
   it("never calls an answered request overdue", () => {
     const words = render(["ADJL"], [request({ status: "ACKNOWLEDGED" })]);
     expect(words).not.toContain("overdue");
-    expect(words).toContain("Being reviewed; asked");
+    expect(words).toContain("Being reviewed Asked");
+    expect(words).not.toContain("Looked at");
   });
 
   it("labels a tool never published as a draft, after the published ones", () => {

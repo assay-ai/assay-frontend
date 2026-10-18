@@ -565,13 +565,13 @@ function BlockSheet({
         <div className="flex w-full flex-col gap-4 px-[18px] pt-3">
           <WhatHappens
             lines={[
-              { icon: Ban, text: "Takes effect immediately; only you need to act. It stops paying and being paid through Assay within seconds" },
+              { icon: Ban, text: "The Assay block needs only you: it stops paying and being paid through Assay within seconds, on every instance" },
               { icon: Users, text: "Lifting the Assay block later needs two people" },
               ...(onChain && evm && chainId
                 ? [
                     {
                       icon: Link2,
-                      text: `On ${chainDisplayName(chainId)}: ${chainNeeds} approves, then the arbiter signs. Only the contracts' admin key can lift it there`,
+                      text: `On ${chainDisplayName(chainId)} it needs a second person: ${chainNeeds} approves, then the arbiter signs. Nothing is blocked on chain until it lands, and only the contracts' admin key can lift it there`,
                     },
                   ]
                 : []),
@@ -742,9 +742,9 @@ function ChainBlockPreview({ account, chainId }: { account: string; chainId: str
 }
 
 /**
- * Its stake as "bonded", per chain: the same measure Home's "Stake locked"
- * tile sums over every provider (its sub-line says "bonded by N providers"),
- * so the two read as one figure, not two that disagree.
+ * Its stake as "bonded", per chain: the same measure Home's "Stake bonded"
+ * tile sums over every provider, so the two read as one figure, not two that
+ * disagree.
  */
 function stakedPhrase(stake: readonly { chainId: string; amount: string; asset: string; decimals: number }[]): string {
   const parts = stake.map((s) => `${formatMoney({ amount: s.amount, asset: s.asset, decimals: s.decimals })} on ${chainDisplayName(s.chainId)}`);

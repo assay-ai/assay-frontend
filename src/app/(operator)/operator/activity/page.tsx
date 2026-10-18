@@ -255,13 +255,13 @@ function ActivityScreen() {
           kind="empty"
           title="Nothing here"
           description={
-            kind === "arbiter" && log.hasNextPage
-              ? "No arbiter action in the latest entries. Older ones may still match."
+            (kind === "arbiter" || kind === "tools") && log.hasNextPage
+              ? `No ${kind === "arbiter" ? "arbiter" : "tool"} action in the latest entries. Older ones may still match.`
               : q || targetId || mine || kind !== "all"
                 ? "Nothing matches these filters."
                 : "No manual action has been taken yet."
           }
-          action={kind === "arbiter" && log.hasNextPage ? { label: "Look further back", onClick: () => void log.fetchNextPage() } : undefined}
+          action={(kind === "arbiter" || kind === "tools") && log.hasNextPage ? { label: "Look further back", onClick: () => void log.fetchNextPage() } : undefined}
         />
       ) : (
         <div className="flex w-full flex-col gap-4">
