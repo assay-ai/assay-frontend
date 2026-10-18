@@ -1,9 +1,10 @@
 "use client";
 
 import { AuthenticationPanel, runBlockedByCredentials, runCredentialsHint, useBindingCredentials } from "../authentication/authentication-panel";
-import { QUERY_KEY_ERROR, credentialQueryKeys } from "../authentication/rules";
+import { QUERY_KEY_ERROR, credentialQueryKeys, moveQueryKeys } from "../authentication/rules";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronDown, Play } from "lucide-react";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import type { BindingAuthMode, BindingTestReport, CatalogueTool, ToolBindingDetail, ToolMapping } from "@/interfaces";
+import type { CredentialHeaderInput } from "@/interfaces/provider-bindings";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { testToolBinding } from "@/services/provider-tool-bindings.service";
@@ -36,6 +38,7 @@ import { TestPipelineView } from "../tester/pipeline-view";
 import { isStaleRun } from "../tester/report-view";
 import { createRunGuard } from "../tester/run-guard";
 
+import { previewRequest } from "./request-preview";
 import { argumentsFromText, seedArguments, seedRequestMapping, seedResponseMapping } from "./seeds";
 
 export interface ConnectDraft {
@@ -55,6 +58,34 @@ interface MajorRun {
   major: number;
   semver: string | null;
   report: BindingTestReport;
+}
+
+/** Where "Save draft and exit" goes: the listings. */
+const LISTINGS_PATH = "/provider/bindings";
+
+/** The last test input, kept with the draft on this device (it holds tool arguments, never a key). */
+function testInputKey(bindingId: string): string {
+  return `assay:binding-test-input:${bindingId}`;
+}
+
+export function readTestInput(bindingId: string | null | undefined): Record<string, string> | null {
+  if (!bindingId) return null;
+  try {
+    const raw = window.localStorage.getItem(testInputKey(bindingId));
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+  } catch {
+    return null;
+  }
+}
+
+export function writeTestInput(bindingId: string, values: Readonly<Record<string, string>>): void {
+  try {
+    window.localStorage.setItem(testInputKey(bindingId), JSON.stringify(values));
+  } catch {
+    // A private window or blocked storage: the input is simply not kept.
+  }
 }
 
 export function parseEndpoint(text: string): { value: string | null; error: string | null } {
@@ -96,8 +127,12 @@ export function ConnectStage({
   onContinue: () => void;
 }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [endpoint, setEndpoint] = React.useState(binding?.endpoint ?? initialEndpoint);
-  const [authMode, setAuthMode] = React.useState<BindingAuthMode>(binding?.authMode ?? "SIGNATURE");
+  // No default (D10): a new listing starts with no choice, and nothing is saved until one is made.
+  const [authMode, setAuthMode] = React.useState<BindingAuthMode | null>(binding?.authMode ?? null);
+  // Moved out of the address by "Move it to an API key header"; only ever handed to the write-only form.
+  const [pendingHeaders, setPendingHeaders] = React.useState<CredentialHeaderInput[] | null>(null);
   const credentialSets = useBindingCredentials(binding?.id ?? null, authMode);
   // Before the first save there is nowhere to store a key, so Run (which saves) stays open.
   const credentialGate = {
@@ -134,15 +169,18 @@ export function ConnectStage({
 
   const fields = React.useMemo(() => schemaFields(tool.inputSchema), [tool.inputSchema]);
   // Prefilled from the contract's own example (the current version's), so the first test can run at once.
-  const [args, setArgs] = React.useState<Record<string, string>>(() =>
-    seedArguments(tool.inputSchema, (tool.versions?.find((v) => v.isCurrent) ?? tool.versions?.[0])?.examples ?? []),
-  );
+  // The last test input kept with this draft wins; otherwise the contract's example.
+  const [args, setArgs] = React.useState<Record<string, string>>(() => {
+    const seeded = seedArguments(tool.inputSchema, (tool.versions?.find((v) => v.isCurrent) ?? tool.versions?.[0])?.examples ?? []);
+    const kept = readTestInput(binding?.id);
+    return kept ? { ...seeded, ...Object.fromEntries(Object.entries(kept).filter(([name]) => name in seeded)) } : seeded;
+  });
 
   // Run stays off until the page has hydrated, so the first click is never lost.
   const [hydrated, setHydrated] = React.useState(false);
   React.useEffect(() => setHydrated(true), []);
 
-  const [phase, setPhase] = React.useState<"idle" | "saving" | "testing">("idle");
+  const [phase, setPhase] = React.useState<"idle" | "saving" | "testing" | "saving-only" | "exiting">("idle");
   const [error, setError] = React.useState<string | null>(null);
   const [problems, setProblems] = React.useState<string[] | null>(null);
   const [runs, setRuns] = React.useState<MajorRun[] | null>(null);
@@ -162,22 +200,76 @@ export function ConnectStage({
   const endpointError = urlKeys.length > 0 ? QUERY_KEY_ERROR : parsedEndpoint.error;
   const mappingProblem = blocked.request ?? blocked.response;
 
-  const run = async () => {
+  const mappingInvalid = () => {
+    setAdvanced(true);
+    setError(`Fix the mapping first: ${mappingProblem}`);
+  };
+
+  /** Everything a save needs, or null with the reason shown. */
+  const prepare = (): ConnectDraft | null => {
     setError(null);
     setProblems(null);
     if (termsBlocked) {
       setError(termsBlocked);
-      return;
+      return null;
     }
     if (endpointError) {
       setEndpointTouched(true);
-      return;
+      return null;
+    }
+    if (authMode === null) {
+      setError("Choose how your API knows a call is from Assay, under Authentication.");
+      return null;
     }
     if (mappingProblem) {
-      setAdvanced(true);
-      setError(`Fix the mapping first: ${mappingProblem}`);
+      mappingInvalid();
+      return null;
+    }
+    return {
+      endpoint: parsedEndpoint.value!,
+      authMode,
+      requestMapping: mappings.request,
+      responseMapping: mappings.response,
+      terms: versioned ? terms : null,
+    };
+  };
+
+  const failed = (caught: unknown) => {
+    const mismatch = contractMismatchProblems(caught);
+    if (mismatch) {
+      setProblems(mismatch);
       return;
     }
+    setError(
+      caught instanceof ApiError
+        ? plainError(caught.code, caught.status)
+        : caught instanceof Error && caught.message
+          ? caught.message
+          : "That did not work. Check your connection and try again.",
+    );
+  };
+
+  /** Saves the draft without a test call: "Save connection" and "Save draft and exit". */
+  const saveOnly = async (then?: () => void) => {
+    const draft = prepare();
+    if (!draft) return;
+    if (!runGuard.enter()) return;
+    try {
+      setPhase(then ? "exiting" : "saving-only");
+      const saved = await onSave(draft);
+      writeTestInput(saved.id, args);
+      then?.();
+    } catch (caught) {
+      failed(caught);
+    } finally {
+      setPhase("idle");
+      runGuard.leave();
+    }
+  };
+
+  const run = async () => {
+    const draft = prepare();
+    if (!draft) return;
     const built = argumentsFromText(fields, args);
     if (built.error) {
       setError(built.error);
@@ -191,13 +283,8 @@ export function ConnectStage({
     if (!runGuard.enter()) return;
     try {
       setPhase("saving");
-      const saved = await onSave({
-        endpoint: parsedEndpoint.value!,
-        authMode,
-        requestMapping: mappings.request,
-        responseMapping: mappings.response,
-        terms: versioned ? terms : null,
-      });
+      const saved = await onSave(draft);
+      writeTestInput(saved.id, args);
       setPhase("testing");
       // One run per contract version served: each must pass before publishing.
       const done: MajorRun[] = [];
@@ -212,18 +299,7 @@ export function ConnectStage({
       }
       void queryClient.invalidateQueries({ queryKey: ["provider", "tool-binding", saved.id, "publish-check"] });
     } catch (caught) {
-      const mismatch = contractMismatchProblems(caught);
-      if (mismatch) {
-        setProblems(mismatch);
-        return;
-      }
-      setError(
-        caught instanceof ApiError
-          ? plainError(caught.code)
-          : caught instanceof Error && caught.message
-            ? caught.message
-            : "That did not work. Check your connection and try again.",
-      );
+      failed(caught);
     } finally {
       setPhase("idle");
       setTestingMajor(null);
@@ -247,6 +323,7 @@ export function ConnectStage({
     : null;
   const passed = gate ? gate.passed : testPassedBefore && !dirty;
   const multi = versioned && (runs?.length ?? terms.majors.length) > 1;
+  const preview = previewRequest(endpoint, mappings.request, args);
 
   return (
     <section aria-labelledby="connect-stage-title" className="flex w-full flex-col gap-5">
@@ -259,18 +336,43 @@ export function ConnectStage({
         </p>
       </div>
 
-      <Field
-        label="Your API's address"
-        placeholder="https://api.example.com/v1"
-        type="url"
-        inputMode="url"
-        value={endpoint}
-        disabled={readOnly}
-        onChange={(event) => setEndpoint(event.target.value)}
-        onBlur={() => setEndpointTouched(true)}
-        error={urlKeys.length > 0 || endpointTouched ? (endpointError ?? undefined) : undefined}
-        hint={initialEndpoint && !binding ? "Filled in from your account setup." : undefined}
-      />
+      <div className="flex flex-col gap-2">
+        <Field
+          label="Your API's address"
+          placeholder="https://api.example.com/v1"
+          type="url"
+          inputMode="url"
+          value={endpoint}
+          disabled={readOnly}
+          // A monospace font can draw "//" as a ligature that reads "/ /".
+          className="[font-variant-ligatures:none]"
+          onChange={(event) => setEndpoint(event.target.value)}
+          onBlur={() => setEndpointTouched(true)}
+          error={urlKeys.length > 0 || endpointTouched ? (endpointError ?? undefined) : undefined}
+          hint={
+            initialEndpoint && !binding && endpoint === initialEndpoint
+              ? "Filled in from your account setup. Change it if this tool is served elsewhere."
+              : undefined
+          }
+        />
+        {urlKeys.length > 0 && !readOnly ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="self-start"
+            onClick={() => {
+              const moved = moveQueryKeys(endpoint);
+              if (!moved) return;
+              setEndpoint(moved.endpoint);
+              setAuthMode((current) => (current === "SIGNATURE" || current === "BOTH" ? "BOTH" : "API_KEY"));
+              setPendingHeaders(moved.headers);
+            }}
+          >
+            Move it to an API key header
+          </Button>
+        ) : null}
+      </div>
 
       <div className="flex w-full flex-col gap-3 rounded-lg border border-01 bg-01 p-4">
         <h3 className="text-label-sm text-01">Authentication</h3>
@@ -282,6 +384,10 @@ export function ConnectStage({
           mode={authMode}
           onModeChange={setAuthMode}
           readOnly={readOnly}
+          onSaveConnection={() => void saveOnly()}
+          savingConnection={phase === "saving-only"}
+          pendingHeaders={pendingHeaders}
+          onPendingDone={() => setPendingHeaders(null)}
         />
       </div>
 
@@ -290,6 +396,12 @@ export function ConnectStage({
           <h3 className="text-label-sm text-01">How we call your API</h3>
           <p className="text-body-13 text-02">{requestMappingSummary(mappings.request)}</p>
           <p className="text-body-13 text-02">{responseMappingSummary(mappings.response)}</p>
+          {preview ? (
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-body-xs text-03">The request for your test input below:</span>
+              <code className="break-all font-mono text-mono-xs text-01 [font-variant-ligatures:none]">{preview}</code>
+            </div>
+          ) : null}
           <p className="text-body-xs text-03">
             We filled this in from the tool&apos;s fields. If your API uses other names or paths, change them under Advanced mapping. Most
             people do not need to.
@@ -387,7 +499,7 @@ export function ConnectStage({
             icon={<Play aria-hidden="true" />}
             onClick={() => void run()}
             disabled={!hydrated || readOnly || phase !== "idle" || urlKeys.length > 0 || credentialsMissing}
-            loading={phase !== "idle"}
+            loading={phase === "saving" || phase === "testing"}
           >
             {phase === "saving"
               ? binding
@@ -404,7 +516,7 @@ export function ConnectStage({
           <span aria-live="polite" className="text-body-xs text-03">
             {phase === "saving" && !binding ? "Creating your draft listing takes a few seconds." : null}
             {readOnly ? "Your account is blocked, so changes are paused." : null}
-            {!readOnly ? credentialsHint : null}
+            {!readOnly ? (authMode === null ? "Choose an option under Authentication first." : credentialsHint) : null}
           </span>
         </div>
         {error ? (
@@ -467,6 +579,15 @@ export function ConnectStage({
         <Button onClick={onContinue} disabled={!passed}>
           Continue to Go live
           <ArrowRight aria-hidden="true" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={!hydrated || readOnly || phase !== "idle"}
+          loading={phase === "exiting"}
+          onClick={() => (binding && !dirty ? router.push(LISTINGS_PATH) : void saveOnly(() => router.push(LISTINGS_PATH)))}
+        >
+          Save draft and exit
         </Button>
         {!passed ? (
           <span className="text-body-xs text-03">
