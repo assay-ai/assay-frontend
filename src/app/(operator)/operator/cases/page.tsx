@@ -13,6 +13,7 @@ import { useScrollFade } from "@/features/operator/scroll-fade";
 import { replaceUrlQuery } from "@/features/operator/url-params";
 import { approvalTargetId } from "@/features/operator/approvals";
 import { mayRule } from "@/features/operator/arbiter";
+import { OperatorCasesTabs } from "@/features/operator/provider-tool-ui";
 import { eligibleApprovers, isLiveApproval } from "@/features/operator/inbox";
 import {
   FALLBACK_TABS,
@@ -232,6 +233,7 @@ export default function PenaltiesPage() {
 
   return (
     <>
+      <OperatorCasesTabs />
       <header className="flex w-full flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
         <h1 className="text-heading-md text-01">Penalties</h1>
         <form onSubmit={submit} role="search" className="flex w-full flex-col gap-1 tablet:w-[360px]" noValidate>

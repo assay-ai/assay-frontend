@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
 import { mayAnswerToolRequests, mayEditContracts, pendingFor, toolStatusText } from "@/features/operator/contract-editor";
 import { AcceptRequestSheet, NewToolSheet } from "@/features/operator/contract-sheets";
+import { OperatorToolsTabs } from "@/features/operator/provider-tool-ui";
 import { useOperatorSession } from "@/features/operator/session-context";
 import type { OperatorToolSummary } from "@/interfaces/contracts";
 import { ApiError } from "@/libs/ApiClient";
@@ -70,6 +71,7 @@ function ToolsScreen() {
 
   return (
     <>
+      <OperatorToolsTabs />
       <header className="flex w-full flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-heading-md text-01">Tools</h1>
