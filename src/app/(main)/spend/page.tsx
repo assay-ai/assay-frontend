@@ -23,6 +23,8 @@ import {
   windowIdFromQuery,
   windowRange,
 } from "@/features/g30/period";
+import { notChargedLines, notChargedSplitText } from "@/features/buyer/not-charged";
+import { readWithheld } from "@/features/buyer/wire";
 import { reconcileSentence, spendBreakdown } from "@/features/g30/spend-buckets";
 import { OwedSummaryAction } from "@/features/buyer-debt/owed-row-action";
 import { changePercent, previousTotal, rankRows, spendCsv, spendCsvFilename, type RankedRow } from "@/features/g30/spend-view";
@@ -33,7 +35,7 @@ import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
-import { getReceiptsSummary } from "@/services";
+import { getReceiptsSummary, getWithheld } from "@/services";
 import { cn } from "@/utils";
 import { formatMoney, toDecimal } from "@/utils/money";
 
@@ -147,7 +149,17 @@ export default function SpendPage() {
     retry: 0,
   });
 
+  // Why calls were not charged, for the same window: the three lines every money screen shows.
+  const withheldQuery = useQuery({
+    queryKey: ["withheld", "spend", range.from, range.to, assetPick],
+    queryFn: () => getWithheld({ from: range.from, to: range.to }),
+    retry: 0,
+  });
+
   const summary = query.data;
+  const notChargedSplit = withheldQuery.data
+    ? notChargedSplitText(notChargedLines(readWithheld(withheldQuery.data, summary?.asset)))
+    : null;
   const labelOf = React.useCallback(
     (key: string) => {
       if (dimension.id === "tool") return names.name("tool", key);
@@ -268,8 +280,13 @@ export default function SpendPage() {
                 {plural(summary.totals.calls, "call")} ·{" "}
                 {plural(summary.totals.notChargedCalls ?? summary.totals.refundedCalls, "call")} not charged
                 {hasOwed ? ` · ${plural(summary.totals.owedCalls, "call")} owed` : ""}
-                {freeCalls > 0 ? ` · ${plural(freeCalls, "free call")}` : ""} · {win.label.toLowerCase()}
+                {` · ${plural(freeCalls, "free call")}`} · {win.label.toLowerCase()}
               </p>
+              {notChargedSplit ? (
+                <p className="text-body-13 text-03" data-testid="spend-not-charged-split">
+                  Not charged: {notChargedSplit}.
+                </p>
+              ) : null}
               {/* Owed stays in the line above; here, what it stops and the way out. */}
               {hasOwed ? (
                 <OwedSummaryAction owed={formatMoney(summary.totals.owedTotal)} calls={summary.totals.owedCalls} />
@@ -320,9 +337,11 @@ export default function SpendPage() {
                   <span className="inline-flex items-center gap-1.5">
                     <span aria-hidden="true" className="size-2 rounded-sm bg-teal-500" /> Not charged
                   </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span aria-hidden="true" className="size-2 rounded-sm bg-chart-6" /> Free
-                  </span>
+                  {freeCalls > 0 ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span aria-hidden="true" className="size-2 rounded-sm bg-chart-6" /> Free
+                    </span>
+                  ) : null}
                 </p>
               </div>
               <Segmented value={dimensionId} onValueChange={setDimensionId} aria-label="Group by" className="inline-flex self-start rounded-md bg-03 p-0.5">
