@@ -11,10 +11,11 @@ import { ThemeToggle } from "./theme-toggle";
 
 /**
  * Public Top Bar: 60px tall, `$bg-01` fill, 1px `$border-01` bottom hairline.
- * The marketing shell (How it works, Explore, Demo, provider pages), distinct
- * from the buyer console's `Top Bar` (56px).
+ * The marketing shell (How it works, Tools, Demo, provider pages), distinct
+ * from the buyer console's `Top Bar` (56px). "Tools" is the public
+ * `/catalogue`; the app's own "Explore" is a different page.
  *
- *   Assay [Testnet]  How it works · Explore · Demo · For providers · Docs
+ *   Assay [Testnet]  How it works · Tools · Demo · For providers · Docs
  *                                          Sign in  (+ List a tool)  [Start free]
  *   (signed in: [Open app] in place of "Sign in" and "Start free")
  *
@@ -53,7 +54,7 @@ export interface PublicTopBarNavItem extends Partial<PublicTopBarLink> {
 
 const DEFAULT_NAV_ITEMS: PublicTopBarNavItem[] = [
   { id: "how-it-works", label: "How it works", href: "/how-it-works" },
-  { id: "explore", label: "Explore", href: "/catalogue" },
+  { id: "tools", label: "Tools", href: "/catalogue" },
   { id: "demo", label: "Demo", href: "/demo" },
   { id: "providers", label: "For providers", href: "/why-list-here" },
   ...(DOCS_URL ? [{ id: "docs", label: "Docs", href: DOCS_URL, external: true }] : []),

@@ -11,9 +11,9 @@
  *
  * The shared vocabulary (FIX-PLAN 2026-10-18 §2) lives here too: Reserved,
  * Refundable until, Report a bad result, Not charged, Failure rate, Agent
- * limit vs Account ceiling. The stake rule and the worked penalty example are
- * built from the same constants the provider screens use, so they cannot
- * drift from them.
+ * limit vs Account ceiling. The stake rule, when a payment is final, and the
+ * worked penalty example are built from the same constants the provider
+ * screens use, so they cannot drift from them.
  */
 
 import { DAILY_CAP_PERCENT } from "@/features/explorer/provider-economics";
@@ -31,6 +31,14 @@ const EXAMPLE_PENALTY = (
   EXAMPLE.calls * EXAMPLE.price * (EXAMPLE.observed - EXAMPLE.promised) * PENALTY_MULTIPLIER
 ).toFixed(2);
 const pct = (rate: number) => `${Math.round(rate * 100)}%`;
+
+/**
+ * How long each paid call's money is held before the provider can collect it,
+ * so a buyer can report a bad result: the backend's `collectHoldSeconds`
+ * (3600 s by default). It decides when a payment is final, so the stake is
+ * the only money at risk only after it.
+ */
+export const REPORT_WINDOW = "1 hour";
 
 export const GLOSSARY = {
   escrow: {
@@ -107,6 +115,10 @@ export const GLOSSARY = {
   "stake-rule": {
     term: "Stake rule",
     definition: `A provider that fails clearly more often than it promised (beyond a margin for chance), over at least ${MIN_CHECKED_CALLS} checked calls in a window, loses part of its stake: never more than ${DAILY_CAP_PERCENT}% of it in any 24 hours, and each penalty is limited to a maximum set on chain. Part of it goes to the buyers it served badly. Within its promise, or below ${MIN_CHECKED_CALLS} checked calls, nothing is taken.`,
+  },
+  "payout-final": {
+    term: "When a payment is final",
+    definition: `Each paid call's payment becomes the provider's ${REPORT_WINDOW} after the call, once a buyer can no longer report a bad result, and a call that fails because of the provider (for example, its stake fell below the minimum) is not paid. After that, a payout is never clawed back, and only the provider's stake is at risk.`,
   },
   "penalty-example": {
     term: "Penalty example",
