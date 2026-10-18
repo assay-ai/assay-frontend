@@ -163,7 +163,7 @@ describe("idsToMarkOnOpen (See all alerts)", () => {
   const now = Date.parse("2026-10-19T09:00:00Z");
   const zero = note({ id: "z", event: "balance.zero", title: "Balance reached zero", payload: { asset: ASSET, threshold: "5000000" } });
   const groups = groupAlerts([
-    note({ id: "v", subjectId: "ag1" }),
+    note({ id: "v", event: "spend.threshold_crossed", title: "Daily spend at 80%", subjectId: "ag1", payload: { scope: "daily", band: 80 } }),
     zero,
     note({ id: "k", event: "session.expired", title: "Agent credential expired" }),
     note({ id: "w", event: "withdrawal.initiated", title: "Withdrawal requested" }),
@@ -191,6 +191,11 @@ describe("idsToMarkOnOpen (See all alerts)", () => {
     // No condition clears them: only Mark read or Dismiss does.
     expect(isAlertResolved(more[0]!.note, funded)).toBe(false);
     expect(isAlertResolved(more[2]!.note, funded)).toBe(false);
+  });
+  it("never marks an unusual call pattern on open: nothing shows it is over (V1-3)", () => {
+    const anomaly = groupAlerts([note({ id: "a", subjectId: "ag1" })]);
+    expect(isOpenRisk(anomaly[0]!.note)).toBe(true);
+    expect(idsToMarkOnOpen(anomaly, new Map(), { now, balances: [] })).toEqual([]);
   });
   it("asks once per id, and retries a failure only once", () => {
     const attempts = new Map<string, number>();
