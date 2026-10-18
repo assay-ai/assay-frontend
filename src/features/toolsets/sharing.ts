@@ -1,3 +1,5 @@
+import { buildMcpUrl } from "@/features/connect/mcp-url";
+import { mcpHost } from "@/features/connect/mcp-endpoint";
 import { rangeText } from "@/features/contracts/semver";
 import { formatDate } from "@/libs/utc-time";
 import type { Money } from "@/interfaces";
@@ -446,4 +448,44 @@ export function humanToolName(name: string): string {
   const rest = words.length > 1 && verbs.has(words[0]!) ? words.slice(1) : words;
   const text = rest.join(" ");
   return text ? `${text.charAt(0).toUpperCase()}${text.slice(1)}` : name;
+}
+
+/** Why a shared tool set needs a public name (D19), said where the name is asked for. */
+export const WHY_PUBLIC_NAME =
+  "Every shared tool set says who published it, on its page and in the catalogue, so people know where the tools come from. That is your public name. Choose it once; it can change until your first share.";
+
+/**
+ * The URL people will connect with once Share is pressed, shown before the
+ * public name is claimed (D19). `handle` is the claimed name, or the valid
+ * name being typed; `null` shows a placeholder. A link-only share's private
+ * code is made when it is shared, so it shows as one unless the set already
+ * has one. `null` for "Only my team".
+ */
+export function shareUrlPreview(input: {
+  visibility: ToolsetVisibility;
+  handle: string | null;
+  slug: string;
+  nextVersion: number;
+  /** `urls.unlisted` of a set already shared by link: its code stays. */
+  unlisted: string | null;
+  host?: string;
+}): { url: string; note: string } | null {
+  const host = input.host ?? mcpHost();
+  if (input.visibility === "PUBLIC") {
+    return {
+      url: input.handle
+        ? buildMcpUrl({ kind: "shared", handle: input.handle, slug: input.slug, version: input.nextVersion }, { free: false }, host)
+        : `${host}/@<your public name>/${input.slug}@${input.nextVersion}`,
+      note: "Listed in the catalogue under your public name.",
+    };
+  }
+  if (input.visibility === "UNLISTED") {
+    return input.unlisted
+      ? { url: `${input.unlisted}@${input.nextVersion}`, note: "Your current link, now serving the new version." }
+      : {
+          url: `${host}/u/<private code>@${input.nextVersion}`,
+          note: "The private code is made when you share. The link does not contain your public name; the page it opens shows who published it.",
+        };
+  }
+  return null;
 }

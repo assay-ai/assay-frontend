@@ -23,9 +23,11 @@ import {
   shareDialogModel,
   sharedLink,
   sharedPage,
+  shareUrlPreview,
   snapshotOfDraft,
   snapshotOfVersion,
   visibilityOf,
+  WHY_PUBLIC_NAME,
   type HandleErrorView,
 } from "@/features/toolsets/sharing";
 import { ApiError } from "@/libs/ApiClient";
@@ -156,6 +158,16 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
     },
   });
 
+  // The URL people will connect with, shown before anything is claimed (D19).
+  const typed = name.trim() && handleProblem(name) === null && !isReservedHandle(name) ? normaliseHandle(name) : null;
+  const preview = shareUrlPreview({
+    visibility,
+    handle: handle.data?.handle ?? typed,
+    slug: set.slug,
+    nextVersion: model.nextVersion,
+    unlisted: set.urls?.unlisted ?? null,
+  });
+
   const link = sharedLink(set);
   const page = sharedPage(set);
   const shared = current !== "PRIVATE";
@@ -264,7 +276,9 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
               <label htmlFor="share-handle-input" className="text-label-13 text-01">
                 Your {PUBLIC_NAME_LABEL.toLowerCase()}
               </label>
-              <p className="text-body-xs text-03">Shown as @name on everything you share. Choose it once; it can change until the first share.</p>
+              <p className="text-body-xs text-03" data-testid="share-why-name">
+                {WHY_PUBLIC_NAME}
+              </p>
               <div className={cn("flex min-h-11 items-center gap-1 rounded-xl border bg-shades-L5 px-3", handleError ? "border-danger-500" : "border-transparent")}>
                 <AtSign aria-hidden="true" className="size-4 shrink-0 text-03" />
                 <input
@@ -309,10 +323,6 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
                     </Link>
                   ) : null}
                 </div>
-              ) : name && handleProblem(name) === null ? (
-                <p className="text-body-xs text-03">
-                  People will see <span className="font-mono text-01">@{normaliseHandle(name)}/{set.slug}</span>
-                </p>
               ) : null}
             </section>
           )
@@ -320,6 +330,14 @@ export function ShareBody({ set, onDone }: { set: Toolset; onDone: () => void })
           <p className="text-body-13 text-02">
             Shared as <span className="font-mono text-01">@{handle.data.handle}/{set.slug}</span>
           </p>
+        ) : null}
+
+        {preview && !model.nothingToDo ? (
+          <section className="flex flex-col gap-1 rounded-lg border border-01 bg-02 p-3" data-testid="share-url-preview">
+            <span className="text-label-13 text-01">People will connect with</span>
+            <span className="break-all font-mono text-mono-12 text-01">{preview.url}</span>
+            <span className="text-body-xs text-03">{preview.note}</span>
+          </section>
         ) : null}
 
         <section className="flex flex-col gap-1.5" data-testid="share-version">
