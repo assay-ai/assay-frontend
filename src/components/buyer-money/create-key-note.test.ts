@@ -12,6 +12,7 @@ describe("the new key's free-calls note (V1-6)", () => {
     const note = newKeyPaysNote(name);
     expect(note).toContain("Your agent pays through its key “Key 1”");
     expect(note).not.toMatch(/again/);
+    expect(note).toContain("If you switch the agent to this key, it can make paid calls only once a payment key is bound to this key as well.");
   });
 
   it("says only that the key makes free calls when no key of the agent pays", () => {

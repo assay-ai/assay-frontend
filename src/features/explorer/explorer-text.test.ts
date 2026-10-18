@@ -115,6 +115,9 @@ describe("failRateLabel", () => {
     expect(failRateShort({ measuredCalls: 1000, failedCalls: 50 })).toBe("5% failed");
     expect(failRateShort({ measuredCalls: 100, failedCalls: 11 })).toBe("11% failed");
     expect(failRateShort({ measuredCalls: 1000, failedCalls: 5 })).toBe("0.5% failed");
+    // Below 1%, two decimals, as a promise reads (review m6).
+    expect(failRateShort({ measuredCalls: 10000, failedCalls: 25 })).toBe("0.25% failed");
+    expect(failRateLabel({ measuredCalls: 10000, failedCalls: 25 }, 0.0025)).toMatch(/^0\.25% failed · promised at most 0\.25%/);
     expect(failRateShort(null)).toBe("Not measured yet");
   });
   it("names one promise only when every listing makes the same one", () => {

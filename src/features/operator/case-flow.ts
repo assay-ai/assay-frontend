@@ -760,10 +760,10 @@ function cancelNextStep(facts: CaseFacts, authority: CaseAuthority, format: (iso
     // never "anyone can execute" (V1-15). The action reads the chain first.
     return {
       kind: authority.cancel ? "action" : "waiting",
-      title: authority.cancel ? "Check the chain and get the cancel signed" : "Waiting for the cancel signature",
+      title: authority.cancel ? "Check the chain and get the cancel signed now" : "Waiting for the cancel signature",
       description: authority.cancel
-        ? "The deadline has passed, and we could not confirm what stands on chain for this penalty. Get the cancel signed reads the chain first: it says whether there is anything to sign, and changes nothing if there is not."
-        : "The deadline for the cancel has passed, and we could not confirm what stands on chain for this penalty. A Lead adjudicator or Treasury can check it and get the cancel signed.",
+        ? "If the penalty still stands on chain, its deadline has passed. We could not confirm what stands there: Get the cancel signed reads the chain first, says whether there is anything to sign, and changes nothing if there is not."
+        : "If the penalty still stands on chain, the deadline for the cancel has passed. We could not confirm what stands there: a Lead adjudicator or Treasury has to check it and get the cancel signed now.",
       action: authority.cancel ? "cancel" : null,
       secondary: null,
       until: null,

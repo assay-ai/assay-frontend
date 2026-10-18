@@ -122,14 +122,15 @@ export function failRateLabel(
 
 /**
  * The failure rate alone, for a compact stat: "10.5% failed" / "Not measured
- * yet". One rule at every size, the promise's own (`percentText`): one
- * decimal, a trailing ".0" dropped ("5%", "10.5%"). It used to switch to
- * whole numbers at 10%, so "5.0%" and "11%" sat side by side (V1-7).
+ * yet". The promise's own rule (`percentText`) at every size: one decimal
+ * from 1%, two below, a trailing zero dropped ("5%", "10.5%", "0.25%"), so a
+ * rate reads like the promise beside it. It used to switch to whole numbers
+ * at 10%, so "5.0%" and "11%" sat side by side (V1-7).
  */
 export function failRateShort(quality: { measuredCalls: number; failedCalls: number } | null | undefined): string {
   if (!quality || quality.measuredCalls <= 0) return "Not measured yet";
   const pct = (quality.failedCalls / quality.measuredCalls) * 100;
-  const shown = pct === 0 ? "0%" : pct < 0.1 ? "<0.1%" : `${Number(pct.toFixed(1))}%`;
+  const shown = pct === 0 ? "0%" : pct < 0.1 ? "<0.1%" : percentText(quality.failedCalls / quality.measuredCalls);
   return `${shown} failed`;
 }
 
