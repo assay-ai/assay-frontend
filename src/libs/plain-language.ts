@@ -437,6 +437,7 @@ const ERRORS: Record<string, string> = {
   ENDPOINT_PORT_NOT_SUPPORTED:
     "Your API uses a port Assay can't reach. Use port 443 or one of 8443, 2053, 2083, 2087, 2096.",
   RESERVED_MAPPING_HEADER: "Headers starting with x-assay- are set by Assay. Remove this header from your mapping.",
+  CREDENTIALS_REQUIRED_FOR_AUTH_MODE: "Add your API key headers for the live address first, then switch to API key.",
   CREDENTIAL_ORIGIN_LIVE: "Your live tool uses these headers. Publish a new address first, then remove them.",
   URL_NOT_RECOGNISED: "We couldn't read this URL. Start a new one.",
   MCP_URL_NOT_FOUND: "This server URL does not serve anything (yet).",
