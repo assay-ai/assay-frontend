@@ -174,6 +174,16 @@ export function resumeToolBinding(id: string): Promise<PausedToolBinding> {
   return api.post<PausedToolBinding>(`/providers/me/tool-bindings/${id}/resume`);
 }
 
+/**
+ * `DELETE /providers/me/tool-bindings/{id}` — discard a draft that was never
+ * published: its stored credential headers, its test runs and the draft
+ * itself. Audited. `409 PROVIDER_BINDING_NOT_DISCARDABLE` for anything that
+ * was published or already took traffic (pause it instead).
+ */
+export function discardToolBinding(id: string): Promise<void> {
+  return api.delete<void>(`/providers/me/tool-bindings/${id}`);
+}
+
 /** `GET /providers/me/tool-bindings/{id}/credentials` — which headers are stored per origin. Values are never returned. */
 export function listBindingCredentials(id: string): Promise<CredentialSetSummary[]> {
   return api.get<CredentialSetSummary[]>(`/providers/me/tool-bindings/${id}/credentials`);

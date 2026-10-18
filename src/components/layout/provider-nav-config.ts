@@ -6,7 +6,7 @@ import type { SectionTab } from "./nav-config";
  *
  *   Home        /provider                     (Get listed checklist until live)
  *   Inbox       /provider/inbox
- *   Tools       /provider/bindings            your listings; a binding's pages; your own APIs
+ *   Listings    /provider/bindings            your listings; a listing's pages; your APIs
  *                                             (/provider/apis); tool requests
  *   Penalties   /provider/penalties           badge = penalties that need you; buyer reports
  *                                             about bad results (/provider/call-disputes)
@@ -17,6 +17,12 @@ import type { SectionTab } from "./nav-config";
  * Retired URLs (listing-path, register, exit, disputes, capital/penalties,
  * the minimal-shell duplicates, a binding's old tabs) are client redirects to
  * the page that replaced them, so old links and bookmarks still land.
+ *
+ * Words: a **listing** is a provider's endpoint serving a catalogue tool (the
+ * routes say "bindings"; no screen does), **your APIs** are the tools only
+ * this provider serves (`/provider/apis`), and a **tool request** asks Assay
+ * for a catalogue tool. `features/provider-binding/listing-copy.ts` has the
+ * one sentence that tells them apart.
  */
 
 export type ProviderSectionId = "home" | "inbox" | "tools" | "penalties" | "money" | "stake" | "account";
@@ -36,7 +42,7 @@ export const PROVIDER_NAV_ITEMS: ProviderNavItem[] = [
   { id: "inbox", label: "Inbox", href: "/provider/inbox", match: ["/provider/inbox"], phoneTab: false },
   {
     id: "tools",
-    label: "Tools",
+    label: "Listings",
     href: "/provider/bindings",
     match: ["/provider/bindings", "/provider/apis", "/provider/tool-requests", "/provider/portfolio", "/provider/agent-traffic"],
     phoneTab: true,
@@ -81,12 +87,12 @@ export function providerSectionFor(pathname: string): ProviderSectionId | null {
 const PROVIDER_TITLES: Record<string, string> = {
   "/provider": "Home",
   "/provider/inbox": "Inbox",
-  "/provider/bindings": "Tools",
+  "/provider/bindings": "Listings",
   "/provider/bindings/new": "List a tool",
-  "/provider/bindings/view": "Tool",
+  "/provider/bindings/view": "Listing",
   "/provider/tool-requests": "Tool requests",
-  "/provider/apis": "Your own APIs",
-  "/provider/apis/new": "Publish your own API",
+  "/provider/apis": "Your APIs",
+  "/provider/apis/new": "Publish your API",
   "/provider/apis/view": "Your API",
   "/provider/call-disputes": "Bad-result reports",
   "/provider/call-disputes/view": "Report",
@@ -109,15 +115,22 @@ export function providerTitleFor(pathname: string): string {
   return PROVIDER_NAV_ITEMS.find((item) => item.id === section)?.label ?? "Assay";
 }
 
+/**
+ * The business explainer: how a provider earns, what stake is and how much a
+ * penalty can take. It is the setup page's last screen, which stays reachable
+ * after setup from the rail, Home and Account.
+ */
+export const PROVIDER_EXPLAINER = { label: "How earning, stake and penalties work", href: "/provider/setup" } as const;
+
 /** Every href the provider chrome links to. */
 export function allProviderNavHrefs(): string[] {
-  return PROVIDER_NAV_ITEMS.map((item) => item.href);
+  return [...PROVIDER_NAV_ITEMS.map((item) => item.href), PROVIDER_EXPLAINER.href];
 }
 
-/** The tabs of the Tools section: your listings of standard tools, your own APIs, and tool requests. */
+/** The tabs of the Listings section: your listings of catalogue tools, your APIs, and tool requests. */
 export const PROVIDER_TOOLS_TABS: readonly SectionTab[] = [
   { id: "listings", label: "Listings", href: "/provider/bindings", match: ["/provider/bindings"] },
-  { id: "apis", label: "Your own APIs", href: "/provider/apis", match: ["/provider/apis"] },
+  { id: "apis", label: "Your APIs", href: "/provider/apis", match: ["/provider/apis"] },
   { id: "requests", label: "Tool requests", href: "/provider/tool-requests", match: ["/provider/tool-requests"] },
 ];
 

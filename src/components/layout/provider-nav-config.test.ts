@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   allProviderNavHrefs,
+  PROVIDER_EXPLAINER,
   PROVIDER_NAV_ITEMS,
+  PROVIDER_TOOLS_TABS,
   providerSectionFor,
   providerTitleFor,
 } from "./provider-nav-config";
@@ -32,7 +34,7 @@ describe("provider navigation", () => {
     expect(PROVIDER_NAV_ITEMS.map((item) => item.label)).toEqual([
       "Home",
       "Inbox",
-      "Tools",
+      "Listings",
       "Penalties",
       "Money",
       "Stake",
@@ -70,7 +72,23 @@ describe("provider navigation", () => {
   it("titles pages for the phone bar", () => {
     expect(providerTitleFor("/provider")).toBe("Home");
     expect(providerTitleFor("/provider/bindings/new")).toBe("List a tool");
-    expect(providerTitleFor("/provider/bindings/view/quality")).toBe("Tool");
+    expect(providerTitleFor("/provider/bindings/view/quality")).toBe("Listing");
+    expect(providerTitleFor("/provider/apis")).toBe("Your APIs");
     expect(providerTitleFor("/provider/cases/view")).toBe("Penalties");
+  });
+
+  it("uses one word per thing: Listings for bindings, Your APIs for provider tools, never Tools or binding", () => {
+    const labels = [
+      ...PROVIDER_NAV_ITEMS.map((item) => item.label),
+      ...PROVIDER_TOOLS_TABS.map((tab) => tab.label),
+      ...["/provider/bindings", "/provider/bindings/view", "/provider/apis", "/provider/apis/new"].map(providerTitleFor),
+    ];
+    expect(labels).toContain("Listings");
+    expect(labels).toContain("Your APIs");
+    expect(labels.filter((label) => /^Tools$|binding|own API/i.test(label))).toEqual([]);
+  });
+
+  it("links the business explainer to an existing route", () => {
+    expect(routesUnder(APP_DIR)).toContain(PROVIDER_EXPLAINER.href);
   });
 });

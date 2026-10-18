@@ -29,7 +29,7 @@ import {
 import { toast } from "@/utils/toast";
 
 /**
- * Your own APIs — route `/provider/apis` (design spec §7.6, §7.10).
+ * Your APIs — route `/provider/apis` (design spec §7.6, §7.10).
  *
  * Tools only you serve, named under your public name (`acme__search_posts`),
  * each with its state: Draft, Only my team, Anyone with the link ("Not
@@ -168,18 +168,23 @@ export default function ProviderApisPage() {
 
   return (
     <>
-      <SectionTabs tabs={PROVIDER_TOOLS_TABS} label="Tools" />
+      <SectionTabs tabs={PROVIDER_TOOLS_TABS} label="Listings" />
       <header className="flex w-full flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <h1 className="text-heading-sm text-01 tablet:text-heading-md">Your own APIs</h1>
+          <h1 className="text-heading-sm text-01 tablet:text-heading-md">Your APIs</h1>
           <p className="text-body-13 text-03">
-            An API no standard tool covers, published under your public name. Only you serve it, so it has no backup provider.
+            A new tool that no catalogue tool covers, published under your public name. Only you serve it, so it has no
+            backup provider. To serve a tool that is already in the catalogue,{" "}
+            <Link href="/provider/bindings" className="text-primary-600 hover:underline">
+              list it
+            </Link>{" "}
+            instead.
           </p>
         </div>
         <Button asChild>
           <Link href="/provider/apis/new">
             <Plus aria-hidden="true" />
-            Publish your own API
+            Publish your API
           </Link>
         </Button>
       </header>
@@ -201,7 +206,7 @@ export default function ProviderApisPage() {
           kind="error"
           description={
             listQuery.error instanceof ApiError && listQuery.error.status === 403
-              ? "Sign in as a person (not with an agent key) to manage your own APIs."
+              ? "Sign in as a person (not with an agent key) to manage your APIs."
               : "Your APIs could not be loaded."
           }
           onRetry={() => void listQuery.refetch()}
@@ -210,8 +215,8 @@ export default function ProviderApisPage() {
       ) : items.length === 0 ? (
         <PageState
           kind="empty"
-          title="No APIs of your own yet"
-          description="Name it, describe what agents send and get back, connect your endpoint, then choose who can use it. Four steps; your progress is saved. Start with “Publish your own API” above."
+          title="No APIs yet"
+          description="Name it, describe what agents send and get back, connect your endpoint, then choose who can use it. Four steps; your progress is saved. Start with “Publish your API” above."
         />
       ) : (
         <ul className="flex w-full flex-col overflow-hidden rounded-lg border border-01 bg-01" data-testid="own-api-list">
