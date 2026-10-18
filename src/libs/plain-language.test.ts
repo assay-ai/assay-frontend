@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   humanize,
+  knowsError,
   plain,
   plainAuditAction,
   plainDecision,
@@ -63,6 +64,23 @@ describe("errors", () => {
     expect(plainError("PROVIDER_CREDENTIAL_ORIGIN_LIVE")).toBe(
       "Your live tool uses these headers. Publish a new address first, then remove them.",
     );
+  });
+
+  it.each([
+    "CREDENTIAL_IN_QUERY",
+    "SECRET_IN_MAPPING",
+    "INVALID_CREDENTIAL_HEADERS",
+    "CREDENTIAL_ORIGIN_MISMATCH",
+    "CREDENTIAL_VAULT_UNAVAILABLE",
+    "ENDPOINT_PORT_NOT_SUPPORTED",
+    "RESERVED_MAPPING_HEADER",
+    "CREDENTIAL_ORIGIN_LIVE",
+    "CREDENTIALS_REQUIRED_FOR_AUTH_MODE",
+  ])("gives %s its own sentence, bare and PROVIDER_-prefixed", (code) => {
+    const generic = plainError("NOT_A_REAL_CODE_XYZ");
+    expect(knowsError(code)).toBe(true);
+    expect(plainError(code)).not.toBe(generic);
+    expect(plainError(`PROVIDER_${code}`)).toBe(plainError(code));
   });
 
   it("knows the credentials-required-for-auth-mode code", () => {

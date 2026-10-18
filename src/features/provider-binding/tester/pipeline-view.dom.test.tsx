@@ -64,4 +64,17 @@ describe("TestPipelineView warnings", () => {
     render(<TestPipelineView report={report([])} />);
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  it("keeps the warning next to the failure headline of a FAILED report", () => {
+    const failed = report([{ code: "NO_AUTHENTICATION", message: "Nothing proves a call came from Assay." }]);
+    failed.outcome = "FAILED";
+    failed.failedLayer = "UPSTREAM";
+    failed.layers = failed.layers.map((layer) =>
+      layer.layer === "UPSTREAM" ? { ...layer, status: "FAILED", code: "UPSTREAM_ERROR" } : layer,
+    );
+    render(<TestPipelineView report={failed} />);
+    expect(screen.getByText("No authentication")).toBeTruthy();
+    expect(screen.getByText("Nothing proves a call came from Assay.")).toBeTruthy();
+    expect(screen.getByText(/Test failed/)).toBeTruthy();
+  });
 });
