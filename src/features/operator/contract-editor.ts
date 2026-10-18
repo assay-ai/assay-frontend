@@ -391,11 +391,20 @@ export function pendingCurrentVersion(approval: OperatorApproval | null): number
 
 /* ------------------------------------------------------------------ list */
 
-/** "Draft · not published yet", "v2.0.0", for the tools list. */
+/**
+ * "v2.0.0", or "Draft, never published" for a tool no version was ever
+ * published of (a new draft, or a row seeded without one, `unseeded_…`).
+ */
 export function toolStatusText(tool: Pick<OperatorToolSummary, "status" | "currentSemver" | "hasDraft">): string {
-  if (tool.status === "DRAFT") return "New: no version published yet";
   if (tool.status === "REMOVED") return "Removed";
-  return tool.currentSemver ? `v${tool.currentSemver}` : "No version";
+  if (tool.status === "DRAFT" || !tool.currentSemver) return "Draft, never published";
+  return `v${tool.currentSemver}`;
+}
+
+/** Tools agents can get first, never-published drafts after them; each group keeps its order. */
+export function publishedFirst<T extends Pick<OperatorToolSummary, "status" | "currentSemver" | "hasDraft">>(tools: readonly T[]): T[] {
+  const never = (tool: T) => toolStatusText(tool) === "Draft, never published";
+  return [...tools.filter((t) => !never(t)), ...tools.filter(never)];
 }
 
 /* ------------------------------------------------------------------ names */

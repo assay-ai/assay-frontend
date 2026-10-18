@@ -10,8 +10,8 @@ import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
-import { mayAnswerToolRequests, mayEditContracts, pendingFor, toolStatusText } from "@/features/operator/contract-editor";
-import { AcceptRequestSheet, NewToolSheet } from "@/features/operator/contract-sheets";
+import { mayAnswerToolRequests, mayEditContracts, pendingFor, publishedFirst, toolStatusText } from "@/features/operator/contract-editor";
+import { ACCEPT_HANDOVER, AcceptRequestSheet, AnswerRequestSheet, NewToolSheet, type ToolRequestAnswer } from "@/features/operator/contract-sheets";
 import { OperatorToolsTabs } from "@/features/operator/provider-tool-ui";
 import { useOperatorSession } from "@/features/operator/session-context";
 import type { OperatorToolSummary } from "@/interfaces/contracts";
@@ -28,8 +28,11 @@ import { cn } from "@/utils";
  * One list: each tool with the version agents get by default, a "Draft"
  * chip when a change is being written, and "Waiting for approval" when a
  * publish or a default change waits for a second person. Above it, the tool
- * requests nobody has answered yet, each with "Create tool from it": that
- * accepts the request and opens the new draft tool in one step.
+ * requests nobody has decided yet, each with "Create tool from it" (accepts
+ * the request and opens the new draft tool in one step), "Decline" and, while
+ * nobody has answered, "Answer" (marks it being reviewed). All three are the
+ * one `PATCH`, whose role check is the server's; the buttons only show to the
+ * roles it accepts.
  */
 
 function Chip({ tone = "neutral", children }: { tone?: "neutral" | "warning" | "primary"; children: React.ReactNode }) {
@@ -53,6 +56,7 @@ function ToolsScreen() {
   const [q, setQ] = React.useState("");
   const [creating, setCreating] = React.useState(false);
   const [accepting, setAccepting] = React.useState<OperatorToolRequestRow | null>(null);
+  const [answering, setAnswering] = React.useState<{ request: OperatorToolRequestRow; answer: ToolRequestAnswer } | null>(null);
   // "Overdue" is read against the moment the page opened; the list refreshes on every visit.
   const [now] = React.useState(() => Date.now());
 
@@ -66,7 +70,7 @@ function ToolsScreen() {
   });
 
   const needle = q.trim().toLowerCase();
-  const rows = (tools.data?.tools ?? []).filter((t) => !needle || t.name.includes(needle) || t.category.includes(needle));
+  const rows = publishedFirst((tools.data?.tools ?? []).filter((t) => !needle || t.name.includes(needle) || t.category.includes(needle)));
   const waiting = requests.data?.items ?? [];
 
   return (
@@ -98,9 +102,11 @@ function ToolsScreen() {
           <h2 id="requests-title" className="text-label-md text-01">
             Tool requests to decide <span className="tabular-nums text-03">{waiting.length}</span>
           </h2>
+          {canAnswer && !canEdit ? <p className="text-body-13 text-03">{ACCEPT_HANDOVER}</p> : null}
           <ul className="flex w-full flex-col divide-y divide-01 rounded-xl border border-01 bg-01">
             {waiting.map((request) => {
-              const overdue = Date.parse(request.firstResponseDueAt) < now;
+              const answered = request.status === "ACKNOWLEDGED";
+              const overdue = !answered && Date.parse(request.firstResponseDueAt) < now;
               return (
                 <li key={request.id} className="flex w-full flex-col gap-2 px-4 py-3 tablet:flex-row tablet:items-center tablet:justify-between">
                   <div className="flex min-w-0 flex-col gap-0.5">
@@ -109,17 +115,27 @@ function ToolsScreen() {
                       {request.status === "ACKNOWLEDGED" ? <span className="ml-2 rounded-full bg-03 px-2 py-0.5 text-label-xs text-02">Looked at</span> : null}
                     </span>
                     <span className="text-body-xs text-03">
-                      {overdue ? <span className="text-danger-600">Answer overdue since </span> : "Answer due "}
-                      <UtcTime value={request.firstResponseDueAt} midSentence />
+                      {answered ? "Being reviewed; asked " : overdue ? <span className="text-danger-600">Answer overdue since </span> : "Answer due "}
+                      <UtcTime value={answered ? request.createdAt : request.firstResponseDueAt} midSentence />
                       {request.expectedMonthlyCalls ? ` · about ${request.expectedMonthlyCalls.toLocaleString("en-US")} calls a month` : ""}
                     </span>
                   </div>
                   {canAnswer ? (
-                    <Button variant="secondary" className="self-start tablet:self-auto" onClick={() => setAccepting(request)}>
-                      Create tool from it
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2 self-start tablet:shrink-0 tablet:self-auto">
+                      {!answered ? (
+                        <Button variant="ghost" onClick={() => setAnswering({ request, answer: "acknowledge" })}>
+                          Answer
+                        </Button>
+                      ) : null}
+                      <Button variant="ghost" onClick={() => setAnswering({ request, answer: "decline" })}>
+                        Decline
+                      </Button>
+                      <Button variant="secondary" onClick={() => setAccepting(request)}>
+                        Create tool from it
+                      </Button>
+                    </div>
                   ) : (
-                    <span className="text-body-xs text-03">Support, Provider success or a Lead adjudicator can accept it.</span>
+                    <span className="text-body-xs text-03">Support, Provider success or a Lead adjudicator can answer it.</span>
                   )}
                 </li>
               );
@@ -151,8 +167,18 @@ function ToolsScreen() {
       </section>
 
       <NewToolSheet open={creating} onClose={() => setCreating(false)} onCreated={(tool) => router.push(routes.operatorTool(tool.id))} />
+      <AnswerRequestSheet
+        request={answering?.request ?? null}
+        answer={answering?.answer ?? "decline"}
+        onClose={() => setAnswering(null)}
+        onAnswered={() => {
+          setAnswering(null);
+          void requests.refetch();
+        }}
+      />
       <AcceptRequestSheet
         request={accepting}
+        canWriteVersions={canEdit}
         onClose={() => setAccepting(null)}
         onAccepted={(toolId) => {
           const requestId = accepting?.id;
