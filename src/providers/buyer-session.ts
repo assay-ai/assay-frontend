@@ -90,12 +90,45 @@ export function applyIdentityChange(
 }
 
 /**
+ * The pages anyone may read without signing in: the `(public)` route group.
+ * Exact paths, plus everything under `/catalogue/`. `/toolsets/view` and
+ * `/toolsets/handle` are public, while `/toolsets/mine` is the signed-in list,
+ * so `/toolsets` is matched page by page, never as a prefix.
+ */
+const PUBLIC_PAGES = new Set([
+  "/how-it-works",
+  "/why-list-here",
+  "/calculator",
+  "/catalogue",
+  "/demo",
+  "/reserves",
+  "/toolsets/view",
+  "/toolsets/handle",
+]);
+const PUBLIC_PREFIXES = ["/catalogue/"];
+
+/** Whether `pathname` is a public page, readable with no session. */
+export function isPublicPath(pathname: string | null | undefined): boolean {
+  if (!pathname || !pathname.startsWith("/") || pathname.split("/").some((seg) => seg === ".." || seg === ".")) {
+    return false;
+  }
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  return PUBLIC_PAGES.has(path) || PUBLIC_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+/**
  * Where a buyer-API 401 sends this page.
  *
- * "Your session expired" is only true when this page load actually had a
- * signed-in identity (`previous` is a string). A visitor who never signed in
- * is not told their session expired: on `/` they get the product's front page
- * (How it works), anywhere else plain sign-in that returns them here.
+ * A public page stays where it is: it needs no session, so a dead token
+ * (cleared by `handleUnauthorized`) is no reason to put sign-in in front of
+ * it. A stale token on How it works used to end at
+ * `/login?next=%2Fhow-it-works`.
+ *
+ * Every other page still goes to sign-in. "Your session expired" is only true
+ * when this page load actually had a signed-in identity (`previous` is a
+ * string). A visitor who never signed in is not told their session expired:
+ * on `/` they get the product's front page (How it works), anywhere else plain
+ * sign-in that returns them here.
  */
 export function unauthorizedTarget(input: {
   pathname: string;
@@ -103,9 +136,43 @@ export function unauthorizedTarget(input: {
   /** The identity this page load last resolved: string = signed in, null = signed out, undefined = not resolved yet. */
   previous: string | null | undefined;
 }): string {
+  if (isPublicPath(input.pathname)) return `${input.pathname}${input.search}`;
   const hadSession = typeof input.previous === "string";
   if (!hadSession && input.pathname === "/") return "/how-it-works";
   return loginHref({ next: `${input.pathname}${input.search}`, reason: hadSession ? "expired" : undefined });
+}
+
+/** What a 401 does to this page. Injected for tests. */
+export interface UnauthorizedEffects {
+  clearSessionToken: () => void;
+  /** Drop every query: the page is about to be replaced. */
+  clearCache: () => void;
+  /** Empty every query and refetch the mounted ones: the page stays. */
+  resetCache: () => void;
+  logout: () => Promise<unknown>;
+  navigate: (href: string) => void;
+}
+
+/**
+ * The buyer API refused this page's session (after `ApiClient`'s one refresh
+ * and retry). On every page the dead token is cleared, the data it fetched is
+ * dropped and the Privy session is ended: a cleared local token with a live
+ * Privy session would silently re-authenticate on the next mount and mask the
+ * expiry. Then a protected page goes to sign-in, and a public page stays put,
+ * its queries reset so they refetch without the token.
+ */
+export function handleUnauthorized(
+  input: { pathname: string; search: string; previous: string | null | undefined },
+  effects: UnauthorizedEffects,
+): void {
+  effects.clearSessionToken();
+  const target = unauthorizedTarget(input);
+  const stay = target === `${input.pathname}${input.search}`;
+  if (stay) effects.resetCache();
+  else effects.clearCache();
+  // Best-effort: the redirect must not wait on it or get blocked by it failing.
+  void effects.logout().catch(() => {});
+  if (!stay) effects.navigate(target);
 }
 
 /**
