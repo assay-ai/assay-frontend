@@ -17,7 +17,7 @@ import { cn } from "@/utils";
  *
  *   const names = useProviderToolNames();
  *   names.toolName(binding.toolId)            // "Market quote", or null until it loads
- *   names.bindingLabel(binding)               // name, else "…" while loading, else "Unknown tool"
+ *   names.bindingLabel(binding)               // name, else "…" while loading, else "Removed tool (draft)" / "Unknown tool"
  *   <ToolName toolId={binding.toolId} />      // name, or a short-id copy chip
  */
 
@@ -42,17 +42,23 @@ export function isFixtureTool(tool: Pick<CatalogueTool, "name" | "description">)
 
 export interface BindingLike {
   toolId: string;
+  /** A draft whose tool left the catalogue is named as such (V1-9). */
+  status?: string;
 }
+
+/** A draft for a tool the catalogue no longer has: it can't go live, only be discarded. */
+export const REMOVED_TOOL_DRAFT = "Removed tool (draft)";
 
 /**
  * A listing's label: the tool's name, "…" while the catalogue loads, else
- * "Unknown tool" (a tool missing from the catalogue). Never the endpoint: a
- * host or an IP address is infrastructure, not a name, and it is the same for
- * every listing on one API.
+ * "Removed tool (draft)" for a draft, or "Unknown tool" (a tool missing from
+ * the catalogue). Never the endpoint: a host or an IP address is
+ * infrastructure, not a name, and it is the same for every listing on one API.
  */
-export function bindingLabelOf(toolName: string | null, pending: boolean): string {
+export function bindingLabelOf(toolName: string | null, pending: boolean, status?: string): string {
   if (toolName) return toolName;
-  return pending ? "…" : "Unknown tool";
+  if (pending) return "…";
+  return status === "DRAFT" ? REMOVED_TOOL_DRAFT : "Unknown tool";
 }
 
 export function useProviderToolNames() {
@@ -71,7 +77,7 @@ export function useProviderToolNames() {
 
   /** The tool's name; never a uuid, a host or an IP address. */
   const bindingLabel = React.useCallback(
-    (binding: BindingLike): string => bindingLabelOf(toolName(binding.toolId), catalogue.isPending),
+    (binding: BindingLike): string => bindingLabelOf(toolName(binding.toolId), catalogue.isPending, binding.status),
     [toolName, catalogue.isPending],
   );
 

@@ -14,6 +14,13 @@ describe("a listing's name", () => {
     expect(bindingLabelOf(null, true)).toBe("…");
     expect(bindingLabelOf(null, false)).toBe("Unknown tool");
   });
+
+  it("says a draft's tool was removed when the catalogue no longer has it (V1-9)", () => {
+    expect(bindingLabelOf(null, false, "DRAFT")).toBe("Removed tool (draft)");
+    expect(bindingLabelOf(null, true, "DRAFT")).toBe("…");
+    expect(bindingLabelOf(null, false, "PAUSED")).toBe("Unknown tool");
+    expect(bindingLabelOf("get_weather", false, "DRAFT")).toBe("get_weather");
+  });
 });
 
 describe("no address on a listing outside Settings → Connection", () => {
