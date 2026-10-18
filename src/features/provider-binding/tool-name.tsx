@@ -7,7 +7,6 @@ import { CopyChip } from "@/components/patterns/copy-chip";
 import type { CatalogueTool, ToolCatalogue } from "@/interfaces";
 import { listToolCatalogue } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
-import { labelForEndpoint } from "@/utils/provider-label";
 
 /**
  * Bindings by the tool they serve, not by id. Every provider surface that
@@ -43,7 +42,6 @@ export function isFixtureTool(tool: Pick<CatalogueTool, "name" | "description">)
 
 export interface BindingLike {
   toolId: string;
-  endpoint?: string | null;
 }
 
 /**
@@ -89,12 +87,10 @@ export function useProviderToolNames() {
 /** A tool's name, or its id as a copy chip when the catalogue does not know it. */
 export function ToolName({
   toolId,
-  endpoint,
   className,
   copyable = true,
 }: {
   toolId: string;
-  endpoint?: string | null;
   className?: string;
   /** False inside links and buttons (a button inside one is invalid HTML). */
   copyable?: boolean;
@@ -103,6 +99,5 @@ export function ToolName({
   const name = names.toolName(toolId);
   if (name) return <span className={className}>{name}</span>;
   if (names.isPending) return <span className={cn("text-03", className)}>…</span>;
-  if (endpoint) return <span className={className}>{labelForEndpoint(endpoint)}</span>;
   return copyable ? <CopyChip value={toolId} /> : <span className={className}>Unknown tool</span>;
 }

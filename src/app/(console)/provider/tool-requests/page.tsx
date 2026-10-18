@@ -56,7 +56,7 @@ export default function ToolRequestsPage() {
             Missing a tool your API could provide? Ask the Assay team to add it to the catalogue, so others can serve it
             too and buyers get a backup. {REPLY_PROMISE} Want it today?{" "}
             <Link href="/provider/apis" className="text-primary-600 hover:underline">
-              Publish your own API
+              Publish your API
             </Link>
             : a new tool that only you serve.
           </p>

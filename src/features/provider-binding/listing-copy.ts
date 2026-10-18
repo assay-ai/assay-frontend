@@ -7,12 +7,22 @@ import type { BindingStatus, Money, PricingMode } from "@/interfaces";
  *
  *  - a **listing** is your endpoint serving a tool from the catalogue (the
  *    routes still say "bindings"; the screens never do);
- *  - **your API** is a new tool only you serve, published under your name;
+ *  - **your API** is a new tool only you serve, published under your name
+ *    (its listing shows up among the listings too, marked "Your API");
  *  - a **tool request** asks Assay to add a catalogue tool.
  */
 export const LISTING_KINDS_SENTENCE =
   "A listing is your API serving a tool from the catalogue: others may serve the same tool, so buyers get a backup. " +
-  "Your own API is a new tool that only you serve. Want a catalogue tool that does not exist yet? Request it.";
+  "Your API is a new tool, published under your public name, that only you serve. Want a catalogue tool that does not exist yet? Request it.";
+
+/**
+ * What kind of listing a row is, for its second line (never its address):
+ * a provider tool is named `handle__tool`, so its listing serves your API.
+ */
+export function listingKind(toolName: string | null): string | null {
+  if (!toolName) return null;
+  return /^[a-z][a-z0-9-]{2,23}__/.test(toolName) ? "Your API · only you serve it" : "Catalogue tool";
+}
 
 /** One price format everywhere: "Free", "$0.10 a call", "Free calls, then $0.10 a call". */
 export function priceLine(binding: { pricingMode: PricingMode; price: Money | null }): string {
