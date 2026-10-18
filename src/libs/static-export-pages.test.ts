@@ -44,6 +44,9 @@ const NOT_A_RECORD = new Set([
   // Retired addresses: each page redirects on the client, and with no id it lands on the list.
   "(console)/provider/cases/view",
   "(console)/provider/disputes/view",
+  // A shared tool set: named by `?handle=&slug=` or by the `#token=` fragment, which a
+  // RecordGate cannot read; the page says "Not found" itself when neither names one.
+  "(public)/toolsets/view",
 ]);
 
 // BUG-R16-B1-01: a record screen opened with no id waited forever.

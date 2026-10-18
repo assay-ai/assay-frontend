@@ -719,7 +719,6 @@ export function useProviderSetup() {
     endpointBlockedBy,
     endpointAttempted,
     canWriteEndpoint,
-    egressIps: state?.egressIps ?? probe?.egressIps ?? [],
     // progress
     steps,
     currentStep,

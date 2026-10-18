@@ -23,7 +23,7 @@ export function useProviderInbox() {
 
   const items: NotificationItem[] = (notifications.data?.items ?? [])
     .filter(isNotification)
-    .filter((item) => isProviderEvent(item.event));
+    .filter((item) => isProviderEvent(item.event, item.payload));
   const breakdown = inboxBreakdown({
     urgent: penalties.needsAction.map((notice) => [notice.id, ...(notice.proposalId ? [notice.proposalId] : [])]),
     notifications: items,

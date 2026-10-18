@@ -78,3 +78,32 @@ export function demoTightenDelaySeconds(): number {
   if (!demoBuild()) return 0;
   return readSwitch("tighten", TIGHTEN_KEY, parseTightenSwitch, 0) ?? 0;
 }
+
+/*
+  ?contracts=retired — get_weather's major 1 has passed its sunset and is
+                       retired (T3), instead of deprecated with 120 days left.
+                       `?contracts=mismatch` keeps it deprecated but makes the
+                       weather listing's v2 test fail (its API has no
+                       temperature_c) and a save with the input "units"
+                       refused (the mapping never reads it).
+                       `?contracts=deprecated` goes back.
+*/
+const CONTRACTS_KEY = "assay.demo.contracts";
+
+export type DemoContracts = "retired" | "deprecated" | "mismatch";
+
+export function parseContractsSwitch(value: string | null | undefined): DemoContracts | null {
+  return value === "retired" || value === "deprecated" || value === "mismatch" ? value : null;
+}
+
+/** Whether the demo makes the weather listing fail its v2 test and refuse "units". Always false outside a demo build. */
+export function demoContractMismatch(): boolean {
+  if (!demoBuild()) return false;
+  return readSwitch("contracts", CONTRACTS_KEY, parseContractsSwitch, "deprecated") === "mismatch";
+}
+
+/** Whether the demo retires get_weather v1. Always false outside a demo build. */
+export function demoRetiredMajor(): boolean {
+  if (!demoBuild()) return false;
+  return readSwitch("contracts", CONTRACTS_KEY, parseContractsSwitch, "deprecated") === "retired";
+}

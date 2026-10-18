@@ -1,3 +1,4 @@
+import type { CatalogueToolVersionFields, ToolVersionList } from "@/interfaces/contracts";
 import type { Money } from "@/interfaces";
 
 import { api } from "./api";
@@ -28,9 +29,14 @@ export interface PublicQuality {
   failedCalls: number;
 }
 
-export interface PublicTool {
+export interface PublicTool extends CatalogueToolVersionFields {
   id: string;
   name: string;
+  /**
+   * The tool's topic (`tools.category`), for `/catalogue?category=`. Not sent by
+   * `GET /public/catalogue/tools` yet; without it the page cannot filter by topic.
+   */
+  category?: string | null;
   description: string;
   tier: string;
   providerCount: number;
@@ -154,4 +160,9 @@ export function getPublicProvider(providerId: string): Promise<PublicProviderDet
 
 export function getPublicNotCharged(): Promise<PublicNotCharged> {
   return api.get<PublicNotCharged>("/public/not-charged");
+}
+
+/** T3: a catalogue tool's published contract versions and changelog — no sign-in. */
+export function getPublicToolVersions(toolId: string): Promise<ToolVersionList> {
+  return api.get<ToolVersionList>(`/public/catalogue/tools/${encodeURIComponent(toolId)}/versions`);
 }

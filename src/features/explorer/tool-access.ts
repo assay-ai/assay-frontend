@@ -1,50 +1,61 @@
+import type { AgentAccess, UpdateAgentAccessBody } from "@/services/toolsets.service";
+
 /**
- * Allow / Block a tool from Explore, writing the same spend-policy allowlist as
- * Budgets (`/limits`): `allowedTools: null` allows every tool, a list allows
- * only those ids, `[]` allows none. The gateway refuses a call to a tool
- * outside the list before any money moves.
+ * Allow / Block a tool from Explore, writing the same "What this agent can
+ * use" as the Agents page (`PATCH /agents/:id/access`). Everything allows
+ * every tool; Only these allows the listed tools and tool sets. The server
+ * refuses a call to anything else before any money moves, whatever URL the
+ * call arrives through.
  *
- * There is no block list on the policy, so blocking one tool while every tool
- * is allowed turns the policy into an allow list of every tool known today
- * minus that one — and a tool listed later is then not allowed until someone
- * allows it. `blockSwitchesToList` says when that happens, so the screen can
- * say so before it writes.
+ * There is no block list, so blocking one tool while the agent can use
+ * everything turns its access into "Only these": every tool known today minus
+ * that one — and a tool listed later is then not allowed until someone allows
+ * it. `blockSwitchesToList` says when that happens, so the screen can say so
+ * before it writes.
  */
 
-export type ToolAccess = "allowed" | "blocked";
+export type ToolAccess = "allowed" | "blocked" | "via-toolset";
 
-export function toolAccess(allowedTools: readonly string[] | null | undefined, toolId: string): ToolAccess {
-  if (allowedTools === null || allowedTools === undefined) return "allowed";
-  return allowedTools.includes(toolId) ? "allowed" : "blocked";
+export function toolAccess(access: AgentAccess | null | undefined, toolId: string): ToolAccess {
+  if (!access || access.accessMode === "ALL") return "allowed";
+  if (access.allowedToolIds.includes(toolId)) return "allowed";
+  const standing = access.tools.find((t) => t.toolId === toolId)?.access;
+  if (standing === "ALLOWED") return "allowed";
+  if (standing === "VIA_TOOLSET_URL") return "via-toolset";
+  return "blocked";
 }
 
-export function blockSwitchesToList(allowedTools: readonly string[] | null | undefined): boolean {
-  return allowedTools === null || allowedTools === undefined;
+export function blockSwitchesToList(access: AgentAccess | null | undefined): boolean {
+  return !access || access.accessMode === "ALL";
 }
 
-/** The next `allowedTools` after allowing or blocking `toolId`, or `undefined` when nothing changes. */
-export function nextAllowedTools(
-  current: readonly string[] | null | undefined,
-  allToolIds: readonly string[],
-  toolId: string,
-  allow: boolean,
-): string[] | null | undefined {
-  const all = current === null || current === undefined;
+/**
+ * The PATCH body for allowing or blocking `toolId`, or `undefined` when
+ * nothing changes (already in that state, or allowed through a tool set,
+ * which this one-tool switch does not edit).
+ */
+export function nextAccessBody(access: AgentAccess, toolId: string, toolName: string, allow: boolean): UpdateAgentAccessBody | undefined {
+  const all = access.accessMode === "ALL";
   if (allow) {
-    if (all || current.includes(toolId)) return undefined;
-    const next = [...current, toolId];
-    // Every known tool allowed again: go back to "every tool", so new tools are allowed too.
-    return allToolIds.length > 0 && allToolIds.every((id) => next.includes(id)) ? null : next;
+    if (all || access.allowedToolIds.includes(toolId)) return undefined;
+    return { allowedToolIds: [...access.allowedToolIds, toolId], changeReason: `Allowed ${toolName} from Explore` };
   }
-  if (all) return allToolIds.filter((id) => id !== toolId);
-  if (!current.includes(toolId)) return undefined;
-  return current.filter((id) => id !== toolId);
+  if (all) {
+    return {
+      accessMode: "RESTRICTED",
+      allowedToolIds: access.tools.map((t) => t.toolId).filter((id) => id !== toolId),
+      changeReason: `Blocked ${toolName} from Explore`,
+    };
+  }
+  if (!access.allowedToolIds.includes(toolId)) return undefined;
+  return { allowedToolIds: access.allowedToolIds.filter((id) => id !== toolId), changeReason: `Blocked ${toolName} from Explore` };
 }
 
-/** The policy line shown after a change: "Your agents can use 9 of 11 tools". */
-export function accessSummary(allowedTools: readonly string[] | null | undefined, total: number): string {
-  if (allowedTools === null || allowedTools === undefined) return "Your agents can use every tool, including new ones.";
-  if (allowedTools.length === 0) return "Your agents cannot use any tool.";
-  const count = Math.min(allowedTools.length, total);
-  return `Your agents can use ${count} of ${total} ${total === 1 ? "tool" : "tools"}. New tools need allowing.`;
+/** The line shown after a change: "prod can use 9 of 11 tools". */
+export function accessSummary(access: AgentAccess | null | undefined, agentName: string): string {
+  if (!access || access.accessMode === "ALL") return `${agentName} can use every tool, including new ones.`;
+  const usable = access.tools.filter((t) => t.access !== "BLOCKED").length;
+  const total = access.tools.length;
+  if (usable === 0) return `${agentName} cannot use any tool.`;
+  return `${agentName} can use ${usable} of ${total} ${total === 1 ? "tool" : "tools"}. New tools need allowing.`;
 }

@@ -69,6 +69,9 @@ export type NotificationEvent =
   | "provider.sla_breach_proposed"
   | "provider.sla_window_warning"
   | "provider.payout_sent"
+  | "toolset.update_available"
+  | "tool_version.deprecated"
+  | "tool_version.retired"
   | "digest.daily";
 
 /** `NotificationChannelDto`. One row per channel the organization has ever configured. */

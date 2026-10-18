@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Check, CircleHelp, FileCog, Gavel, House, Keyboard, LogOut, Moon, Scale, ShieldBan, Sun, Timer, Users } from "lucide-react";
+import { Activity, Check, CircleHelp, FileCog, Gavel, House, Keyboard, LogOut, Moon, Scale, ShieldBan, Sun, Timer, Users, Wrench } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -49,6 +49,7 @@ const ICONS: Record<OperatorNavId, React.ComponentType<React.SVGProps<SVGSVGElem
   penalties: Gavel,
   blocks: ShieldBan,
   arbiter: Scale,
+  tools: Wrench,
   team: Users,
   contracts: FileCog,
   activity: Activity,

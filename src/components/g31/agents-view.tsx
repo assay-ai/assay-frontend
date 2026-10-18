@@ -7,7 +7,6 @@ import * as React from "react";
 import { AgentHealthLine } from "@/components/buyer-money/agent-health";
 import { CreateKeySheet } from "@/components/buyer-money/create-key";
 import { LetAgentPaySheet } from "@/components/buyer-money/let-agent-pay-sheet";
-import { McpConfigTabs } from "@/components/buyer-money/mcp-config-tabs";
 import { EffectiveLimitLines, type LimitsContext, rowsFor, SpendingLimitsActions, useLimitsContext } from "@/components/buyer-money/agent-limits";
 import { type AgentRow, type KeyRow } from "@/components/buyer-money/use-agents";
 import { limitLines } from "@/features/buyer-money/spending-limits";
@@ -32,6 +31,10 @@ import { revokeCredential } from "@/services/account.service";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { toast } from "@/utils/toast";
 
+import { AgentAccessCard } from "@/components/toolsets/agent-access-card";
+import { ServersInUse } from "@/components/toolsets/servers-in-use";
+import { UpdateFromAlert } from "@/components/toolsets/update-sheet";
+
 import { PayerDelegationsPanel } from "./agent-payment-delegation";
 import { relativeTime } from "./format";
 
@@ -42,9 +45,13 @@ import { relativeTime } from "./format";
  *   1. Keys — the agent's live API keys (revoked ones folded away), the MCP
  *      config to paste, and Revoke key behind a confirmation that names the
  *      key and says whether paying stops too.
- *   2. Payment key — bound by `agent-cli bind`, detected automatically.
- *   3. Spending limits — the effective limit and what binds it, what it spent
+ *   2. Servers in use — the MCP URLs it was handed or called through, and
+ *      Connect (the Connect sheet).
+ *   3. Payment key — bound by `agent-cli bind`, detected automatically.
+ *   4. Spending limits — the effective limit and what binds it, what it spent
  *      in the last 24 hours, and Change spending limits / Stop it paying.
+ *   5. What this agent can use — its access and provider limits. The fix
+ *      links of refused calls open it: `/agents?agent={id}#access`.
  *
  * Two different stops, never both called "revoke": **Stop it paying** removes
  * the on-chain permission (the API key still works for free calls); **Revoke
@@ -91,12 +98,35 @@ export function revokeKeyText(
   return { text, detail: "Nothing about paying changes: this key has no payment key." };
 }
 
+/**
+ * Whether `?agent=` names this agent: its id, a unique-looking id prefix (at
+ * least 6 characters, as people copy the short id), or its label. No
+ * `?agent=` names the first agent.
+ */
+export function agentMatches(asked: string | null, agent: AgentRow, index: number): boolean {
+  if (!asked) return index === 0;
+  const a = asked.trim().toLowerCase();
+  const id = agent.agentId.toLowerCase();
+  return id === a || (a.length >= 6 && id.startsWith(a)) || (agent.label ?? "").toLowerCase() === a;
+}
+
 export function AgentsView() {
   const queryClient = useQueryClient();
   const [needsPoll, setNeedsPoll] = React.useState(false);
   const data = useLimitsContext({ pollMs: needsPoll ? POLL_MS : false });
   const anyWaiting = Object.values(data.readiness).some((r) => r.next === "bind");
   React.useEffect(() => setNeedsPoll(anyWaiting), [anyWaiting]);
+
+  // `/agents?agent={id}#access`: the link a refused call's fix opens. Read after
+  // mount (a static export has no request to read it from at build time).
+  const [focus, setFocus] = React.useState<{ agentId: string | null; access: boolean }>({ agentId: null, access: false });
+  React.useEffect(() => {
+    const read = () =>
+      setFocus({ agentId: new URLSearchParams(window.location.search).get("agent"), access: window.location.hash === "#access" });
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
 
   const [newKeyFor, setNewKeyFor] = React.useState<AgentRow | null>(null);
   const [revoking, setRevoking] = React.useState<{ agent: AgentRow; key: KeyRow } | null>(null);
@@ -154,6 +184,7 @@ export function AgentsView() {
         <h1 className="text-heading-md text-01">Agents & keys</h1>
         <p className="text-body-13 text-02">Each agent&apos;s keys, whether it can pay, and how to stop it.</p>
       </header>
+      <UpdateFromAlert />
 
       {data.agentsQuery.isPending ? (
         <PageState kind="loading" rows={3} label="Loading your agents" />
@@ -173,9 +204,10 @@ export function AgentsView() {
           description="Your first agent is set up when you sign in for the first time. Reload in a moment."
         />
       ) : (
-        data.agents.map((agent) => (
+        data.agents.map((agent, i) => (
           <AgentCard
             key={agent.agentId}
+            focusAccess={focus.access && agentMatches(focus.agentId, agent, i)}
             ctx={data}
             agent={agent}
             keys={data.keys[agent.agentId]}
@@ -251,6 +283,7 @@ function SubRow({ n, title, children }: { n: number; title: string; children: Re
 }
 
 function AgentCard({
+  focusAccess,
   ctx,
   agent,
   keys,
@@ -262,6 +295,7 @@ function AgentCard({
   onLetPay,
   onChanged,
 }: {
+  focusAccess: boolean;
   ctx: LimitsContext;
   agent: AgentRow;
   keys: KeyRow[] | undefined;
@@ -274,7 +308,6 @@ function AgentCard({
   onChanged: () => void;
 }) {
   const [showRevoked, setShowRevoked] = React.useState(false);
-  const [configFor, setConfigFor] = React.useState<string | null>(null);
   const name = agent.label ?? "Agent";
   const revoked = (keys ?? []).filter((k) => k.revokedAt);
   const live = readiness.liveCredentials as KeyRow[];
@@ -319,18 +352,10 @@ function AgentCard({
                       {key.lastUsedAt ? `last used ${relativeTime(key.lastUsedAt)}` : "never used"}
                     </span>
                   </span>
-                  <Button size="sm" variant="secondary" type="button" onClick={() => setConfigFor(configFor === key.id ? null : key.id)} aria-expanded={configFor === key.id}>
-                    {configFor === key.id ? "Hide config" : "MCP config"}
-                  </Button>
                   <Button size="sm" variant="secondary" type="button" className="text-danger-600" data-testid="revoke-credential" onClick={() => onRevokeKey(key)}>
                     Revoke key
                   </Button>
                 </div>
-                {configFor === key.id ? (
-                  <div className="min-w-0">
-                    <McpConfigTabs token={null} keyPrefix={key.prefix} />
-                  </div>
-                ) : null}
               </li>
             ))}
           </ul>
@@ -356,8 +381,12 @@ function AgentCard({
         ) : null}
       </SubRow>
 
+      <SubRow n={2} title="Servers in use">
+        <ServersInUse agentId={agent.agentId} agentName={name} />
+      </SubRow>
+
       {delegation ? (
-        <SubRow n={2} title="Payment key">
+        <SubRow n={3} title="Payment key">
           {bound?.delegateAccount && chainId ? (
             <p className="text-body-13 text-02">
               <span className="font-mono text-01">{shortAddress(chainId, addressOfAccount(bound.delegateAccount))}</span>
@@ -382,7 +411,7 @@ function AgentCard({
       ) : null}
 
       {delegation ? (
-        <SubRow n={3} title="Spending limits">
+        <SubRow n={4} title="Spending limits">
           {grant && grant.status === "ACTIVE" ? (
             <>
               <EffectiveLimitLines lines={limitLines(rowsFor(ctx, agent))} />
@@ -436,10 +465,14 @@ function AgentCard({
         </SubRow>
       ) : null}
 
+      <SubRow n={delegation ? 5 : 3} title="What this agent can use">
+        <AgentAccessCard agentId={agent.agentId} agentName={name} highlight={focusAccess} />
+      </SubRow>
+
       <details className="text-body-xs text-03">
         <summary className="cursor-pointer select-none text-label-xs">Details</summary>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          Agent id <CopyChip value={agent.agentId} />
+          Agent id <code className="break-all font-mono text-mono-xs text-01">{agent.agentId}</code> <CopyChip value={agent.agentId} display="Copy" label="agent id" />
           {agent.agentAccount ? (
             <>
               · pays from <CopyChip value={addressOfAccount(agent.agentAccount)} />

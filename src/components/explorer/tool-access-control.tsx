@@ -1,125 +1,137 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Ban, Check } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
-import {
-  accessSummary,
-  blockSwitchesToList,
-  nextAllowedTools,
-  toolAccess,
-} from "@/features/explorer/tool-access";
+import { useAgentAccess, useUpdateAccess } from "@/components/toolsets/use-toolsets";
+import { accessSummary, blockSwitchesToList, nextAccessBody, toolAccess } from "@/features/explorer/tool-access";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
-import { getSpendPolicyTyped, updateSpendPolicy, type SpendPolicy } from "@/services/limits.service";
+import { listAgents } from "@/services/account.service";
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
 
-/**
- * The spend policy as Budgets reads it (same query key, so a change here shows
- * on /limits at once and the other way round). `null` = no policy yet.
- */
-export function useSpendPolicy() {
-  return useQuery({
-    queryKey: ["spend-policy"],
-    retry: false,
-    queryFn: async (): Promise<SpendPolicy | null> => {
-      try {
-        return await getSpendPolicyTyped();
-      } catch (error) {
-        if (error instanceof ApiError && error.code === "SPEND_POLICY_NOT_FOUND") return null;
-        throw error;
-      }
+/* The agent Explore's Allow / Block speaks for: picked once on the page, shared by every row. */
+let pickedAgent: string | null = null;
+const listeners = new Set<() => void>();
+function pickAgent(agentId: string) {
+  pickedAgent = agentId;
+  listeners.forEach((l) => l());
+}
+function usePickedAgent(): string | null {
+  return React.useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
     },
-  });
+    () => pickedAgent,
+    () => null,
+  );
 }
 
 /**
- * Allow / Block one tool for every agent on the account, inline. Blocking from
- * "every tool allowed" first says that new tools will then need allowing.
+ * The agent Explore's Allow / Block speaks for: the one picked with
+ * `ExploreAgentPicker`, else the account's first agent. What an agent can use
+ * is per agent, so every control names it.
  */
-export function ToolAccessControl({
-  toolId,
-  toolName,
-  allToolIds,
-  className,
-}: {
-  toolId: string;
-  toolName: string;
-  allToolIds: readonly string[];
-  className?: string;
-}) {
-  const queryClient = useQueryClient();
-  const policy = useSpendPolicy();
+export function useExploreAgent() {
+  const agents = useQuery({
+    queryKey: ["agents"],
+    retry: false,
+    queryFn: () => listAgents({ limit: 50 }) as unknown as Promise<{ items: { agentId: string; label?: string }[] }>,
+  });
+  const picked = usePickedAgent();
+  const items = agents.data?.items ?? [];
+  const agent = items.find((a) => a.agentId === picked) ?? items[0] ?? null;
+  const access = useAgentAccess(agent?.agentId);
+  return { agent, agents: items, name: agent?.label ?? "Your agent", access, many: items.length > 1 };
+}
+
+/** "Allow or block tools for: [prod ▾]" — only when there is more than one agent. */
+export function ExploreAgentPicker({ className }: { className?: string }) {
+  const { agent, agents, many } = useExploreAgent();
+  if (!many || !agent) return null;
+  return (
+    <label className={cn("inline-flex items-center gap-2 text-body-13 text-02", className)}>
+      Allow or block tools for
+      <select
+        className="min-h-10 rounded-md border border-02 bg-01 px-2 py-1 text-body-13 text-01"
+        value={agent.agentId}
+        onChange={(e) => pickAgent(e.target.value)}
+      >
+        {agents.map((a) => (
+          <option key={a.agentId} value={a.agentId}>
+            {a.label ?? "Agent"}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/**
+ * Allow / Block one tool for the agent, inline. Blocking from "Everything"
+ * first says that new tools will then need allowing.
+ */
+export function ToolAccessControl({ toolId, toolName, className }: { toolId: string; toolName: string; allToolIds?: readonly string[]; className?: string }) {
+  const { agent, name, access } = useExploreAgent();
+  const update = useUpdateAccess(agent?.agentId);
   const [confirming, setConfirming] = React.useState(false);
 
-  const mutation = useMutation({
-    mutationFn: (vars: { allowedTools: string[] | null; allow: boolean }) =>
-      updateSpendPolicy({
-        allowedTools: vars.allowedTools,
-        changeReason: `${vars.allow ? "Allowed" : "Blocked"} ${toolName} from Explore`,
-      }),
-    onSuccess: (next, vars) => {
-      queryClient.setQueryData(["spend-policy"], next);
-      void queryClient.invalidateQueries({ queryKey: ["spend-policy-history"] });
-      toast.success(`${toolName} ${vars.allow ? "allowed" : "blocked"} for your agents`, {
-        description: accessSummary(next.allowedTools, allToolIds.length),
-      });
-    },
-  });
+  if (!agent || access.isPending) return <span className={cn("h-8 w-[150px] animate-pulse rounded-md bg-03", className)} />;
+  if (access.isError || !access.data) return null;
 
-  if (policy.isPending) return <span className={cn("h-8 w-[150px] animate-pulse rounded-md bg-03", className)} />;
-  if (policy.isError) return null;
-  if (policy.data === null) {
+  const current = access.data;
+  const standing = toolAccess(current, toolId);
+  if (standing === "via-toolset") {
     return (
-      <Link href="/limits" className={cn("text-label-13 text-primary-600 hover:underline", className)}>
-        Set a budget to allow or block tools
+      <Link
+        href={`/agents?agent=${encodeURIComponent(agent.agentId)}#access`}
+        className={cn("text-label-13 text-02 hover:underline", className)}
+      >
+        Allowed through a tool set&apos;s URL
       </Link>
     );
   }
 
-  const current = policy.data.allowedTools;
-  const access = toolAccess(current, toolId);
+  function save(allow: boolean) {
+    const body = nextAccessBody(current, toolId, toolName, allow);
+    if (!body) return Promise.resolve();
+    return update.mutateAsync(body).then((next) => {
+      toast.success(`${toolName} ${allow ? "allowed" : "blocked"} for ${name}`, { description: accessSummary(next, name) });
+    });
+  }
 
   function change(allow: boolean) {
-    const next = nextAllowedTools(current, allToolIds, toolId, allow);
-    if (next === undefined) return;
     if (!allow && blockSwitchesToList(current)) {
       setConfirming(true);
       return;
     }
-    mutation.mutate(
-      { allowedTools: next, allow },
-      { onError: (error) => toast.error(error instanceof ApiError ? plainError(error.code) : "The change could not be saved") },
-    );
+    void save(allow).catch(() => undefined);
   }
 
   return (
     <>
-      <div role="group" aria-label={`Can your agents use ${toolName}?`} className={cn("inline-flex rounded-md bg-03 p-0.5", className)}>
+      <div role="group" aria-label={`Can ${name} use ${toolName}?`} className={cn("inline-flex rounded-md bg-03 p-0.5", className)}>
         {([true, false] as const).map((allow) => {
-          const active = (access === "allowed") === allow;
+          const active = (standing === "allowed") === allow;
           return (
             <button
               key={String(allow)}
               type="button"
               aria-pressed={active}
-              disabled={mutation.isPending}
+              disabled={update.isPending}
               onClick={() => change(allow)}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-label-13 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-60",
-                active
-                  ? allow
-                    ? "bg-01 text-success-700"
-                    : "bg-01 text-danger-700"
-                  : "text-02 hover:text-01",
+                active ? (allow ? "bg-01 text-success-700" : "bg-01 text-danger-700") : "text-02 hover:text-01",
               )}
             >
               {allow ? <Check aria-hidden="true" className="size-3.5" /> : <Ban aria-hidden="true" className="size-3.5" />}
-              {allow ? "Allowed" : "Blocked"}
+              {allow ? `Allowed for ${name}` : "Blocked"}
             </button>
           );
         })}
@@ -128,16 +140,14 @@ export function ToolAccessControl({
         open={confirming}
         onOpenChange={setConfirming}
         tone="danger"
-        title={`Block ${toolName} for your agents?`}
-        description="Your agents can use every tool today. Blocking one switches you to a list of allowed tools: tools listed on Assay later are not allowed until you allow them, here or in Spending limits."
+        title={`Block ${toolName} for ${name}?`}
+        description={`${name} can use every tool today. Blocking one switches it to Only these tools: tools listed on Assay later are not allowed until you allow them, here or under What this agent can use.`}
         changes={[
           { label: toolName, before: "Allowed", after: "Blocked" },
           { label: "New tools", before: "Allowed", after: "Need allowing" },
         ]}
         confirmLabel={`Block ${toolName}`}
-        onConfirm={() =>
-          mutation.mutateAsync({ allowedTools: nextAllowedTools(current, allToolIds, toolId, false) ?? [], allow: false })
-        }
+        onConfirm={() => save(false)}
         describeError={(error) => (error instanceof ApiError ? plainError(error.code) : "The change could not be saved")}
       />
     </>

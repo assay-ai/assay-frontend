@@ -245,6 +245,31 @@ export const NOTIFICATION_CATALOGUE: Readonly<Record<NotificationEvent, Notifica
     hasProducer: false,
   },
 
+  // ── Tool sets ─────────────────────────────────────────────────────────────
+  "toolset.update_available": {
+    severity: "INFO",
+    channels: IN_APP_EMAIL,
+    aggregation: "ONCE",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+
+  // ── Tool versions (T3; producer: ContractLifecycleService) ───────────────
+  "tool_version.deprecated": {
+    severity: "WARNING",
+    channels: IN_APP_EMAIL,
+    aggregation: "ONCE",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+  "tool_version.retired": {
+    severity: "WARNING",
+    channels: IN_APP_EMAIL,
+    aggregation: "ONCE",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+
   // ── Digest ────────────────────────────────────────────────────────────────
   "digest.daily": {
     severity: "INFO",
@@ -289,6 +314,9 @@ export const NOTIFICATION_EVENT_LABEL: Readonly<Record<NotificationEvent, string
   "provider.sla_breach_proposed": "SLA breach recorded",
   "provider.sla_window_warning": "SLA window at risk",
   "provider.payout_sent": "Payout sent",
+  "toolset.update_available": "A tool set you use has a new version",
+  "tool_version.deprecated": "A version of a tool you use is going away",
+  "tool_version.retired": "A version of a tool you use stopped working",
   "digest.daily": "Daily summary",
 };
 

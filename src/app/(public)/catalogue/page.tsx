@@ -5,11 +5,14 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { ToolVersionBadges } from "@/components/contracts/version-badges";
 import { FailsOftenChip, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { NotChargedProof, NotChargedSummary } from "@/components/explorer/not-charged-proof";
 import { StartFreeCta } from "@/components/explorer/start-free";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
+import { ConnectPanel } from "@/components/toolsets/connect-panel";
+import { ToolsetCatalogue } from "@/components/toolsets/public-toolsets";
 import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
@@ -34,6 +37,8 @@ import {
   usePublicProviders,
   usePublicTools,
 } from "@/features/explorer/use-public-explorer";
+import { mcpHost } from "@/features/connect/mcp-endpoint";
+import { buildMcpUrl } from "@/features/connect/mcp-url";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
@@ -73,8 +78,9 @@ function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: num
           <div className="flex flex-wrap items-center gap-2">
             <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
             {tool.routable ? null : <UnavailableTag />}
+            <ToolVersionBadges name={tool.name} version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} replacementName={tool.replacementName} replacementVersion={tool.replacementVersion} />
           </div>
-          {tool.description ? <p className="line-clamp-2 text-body-13 text-02">{tool.description}</p> : null}
+          {tool.summary || tool.description ? <p className="line-clamp-2 text-body-13 text-02">{tool.summary || tool.description}</p> : null}
           {/* Phones: the price line sits under the name, full width. */}
           <OfferPrice offer={offer} className="tablet:hidden" />
           {/* Phones too: when providers charge different prices, the most a call is held for is money, not decoration. */}
@@ -131,7 +137,15 @@ export default function CataloguePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initial = React.useMemo(() => readExplorerState(searchParams), [searchParams]);
-  const [view, setView] = React.useState<"tools" | "providers">(initial.view);
+  // The MCP URL this page stands for: a browser opening `/` (or `/c/{category}`) on the MCP host lands here.
+  // `/c/{category}` lands here as `?category=`: the list shows that topic, and the panel offers that topic's server.
+  const [topic, setTopic] = React.useState<string | null>(() => {
+    const category = searchParams.get("category");
+    return category && /^[a-z][a-z0-9-]{1,63}$/.test(category) ? category : null;
+  });
+  const free = searchParams.get("free") === "1";
+  const serverUrl = topic ? buildMcpUrl({ kind: "topic", category: topic }, { free }, mcpHost()) : `${mcpHost()}/${free ? "?free=1" : ""}`;
+  const [view, setView] = React.useState<"tools" | "providers" | "toolsets">(initial.view);
   const [query, setQuery] = React.useState(initial.q);
   const [freeOnly, setFreeOnly] = React.useState(initial.free);
   React.useEffect(() => {
@@ -149,9 +163,11 @@ export default function CataloguePage() {
     const rows = [...(tools.data?.tools ?? [])].sort(
       (a, b) => Number(b.routable) - Number(a.routable) || b.providerCount - a.providerCount || a.name.localeCompare(b.name),
     );
-    const free = freeOnly ? rows.filter((t) => hasFreeCalls(t.pricingMode)) : rows;
+    const inTopic = topic && rows.some((t) => t.category) ? rows.filter((t) => t.category === topic) : rows;
+    const free = freeOnly ? inTopic.filter((t) => hasFreeCalls(t.pricingMode)) : inTopic;
     return needle ? free.filter((t) => matches(needle, t.name, t.description, t.id)) : free;
-  }, [tools.data, needle, freeOnly]);
+  }, [tools.data, needle, freeOnly, topic]);
+  const topicKnown = Boolean(tools.data?.tools.some((t) => t.category));
 
   const providerRows = React.useMemo(() => {
     const rows = [...(providers.data?.providers ?? [])].sort((a, b) => b.toolIds.length - a.toolIds.length);
@@ -165,13 +181,37 @@ export default function CataloguePage() {
       details.map((d) => d.data?.tools.find((t) => t.toolId === toolId)?.freeCallsPerAgentPerDay),
     );
 
-  const active = view === "tools" ? tools : providers;
+  const active = view === "providers" ? providers : tools;
   const total = view === "tools" ? (tools.data?.tools.length ?? 0) : (providers.data?.providers.length ?? 0);
   const visible = view === "tools" ? toolRows.length : providerRows.length;
 
   return (
     <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-4 py-6 tablet:px-7 tablet:py-8">
-      <header className="flex flex-col gap-3">
+      <ConnectPanel
+        publicPage
+        url={serverUrl}
+        title={
+          topic
+            ? `This is an MCP server URL: every ${topic} tool, as one server. Add it to your client.`
+            : "This is an MCP server URL: every tool below, as one server. Add it to your client."
+        }
+      />
+      {topic ? (
+        <p className="flex flex-wrap items-center gap-2 text-body-13 text-02" data-testid="catalogue-topic">
+          <span className="rounded-full bg-primary-10 px-2.5 py-1 text-label-13 text-primary-700">Topic: {topic}</span>
+          {topicKnown ? null : <span>Topics are not listed yet, so every tool is shown.</span>}
+          <button type="button" className="min-h-10 text-label-13 text-primary-600 hover:underline" onClick={() => setTopic(null)}>
+            Show all tools
+          </button>
+        </p>
+      ) : null}
+      {view === "toolsets" ? (
+        <header className="flex flex-col gap-1">
+          <h1 className="text-heading-md text-01">Tool sets</h1>
+          <p className="text-body-13 text-02">Ready-made groups of tools, each with its own server URL. Connect one in three clicks, or make your own version.</p>
+        </header>
+      ) : (
+        <header className="flex flex-col gap-3">
         <h1 className="text-heading-lg text-01 tablet:text-display-md">Tools your agent can pay for — only when they work</h1>
         <p className="max-w-[720px] text-body-md text-02">
           Every tool here is served by providers who put up a <Term k="stake">stake</Term>. Each result is checked
@@ -186,21 +226,23 @@ export default function CataloguePage() {
           ) : null}
         </div>
         <NotChargedSummary />
-      </header>
+        </header>
+      )}
 
       <section aria-labelledby="list-title" className="flex flex-col gap-3">
         <div className="flex flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
           <div className="flex items-center gap-3">
             <h2 id="list-title" className="sr-only">
-              {view === "tools" ? "Tools" : "Providers"}
+              {view === "tools" ? "Tools" : view === "toolsets" ? "Tool sets" : "Providers"}
             </h2>
             <Segmented
               value={view}
-              onValueChange={(value) => setView(value as "tools" | "providers")}
+              onValueChange={(value) => setView(value as "tools" | "providers" | "toolsets")}
               aria-label="Show"
               className="inline-flex rounded-md bg-03 p-0.5"
             >
               <SegmentedItem value="tools">Tools</SegmentedItem>
+              <SegmentedItem value="toolsets">Tool sets</SegmentedItem>
               <SegmentedItem value="providers">Providers</SegmentedItem>
             </Segmented>
             {view === "tools" ? (
@@ -217,23 +259,25 @@ export default function CataloguePage() {
                 Free calls
               </button>
             ) : null}
-            {active.isSuccess ? (
+            {active.isSuccess && view !== "toolsets" ? (
               <span className="text-body-xs text-03">
-                {needle || (freeOnly && view === "tools") ? `${visible} of ${total}` : total}
+                {needle || (view === "tools" && (freeOnly || (topic && topicKnown))) ? `${visible} of ${total}` : total}
               </span>
             ) : null}
           </div>
           <Search
             wrapperClassName="w-full tablet:w-[300px]"
             shortcut={null}
-            placeholder={view === "tools" ? "Search tools by name or what they do" : "Search providers"}
-            aria-label={view === "tools" ? "Search tools" : "Search providers"}
+            placeholder={view === "tools" ? "Search tools by name or what they do" : view === "toolsets" ? "Search tool sets" : "Search providers"}
+            aria-label={view === "tools" ? "Search tools" : view === "toolsets" ? "Search tool sets" : "Search providers"}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
 
-        {active.isPending ? (
+        {view === "toolsets" ? (
+          <ToolsetCatalogue query={query} onClearQuery={() => setQuery("")} />
+        ) : active.isPending ? (
           <div className="rounded-xl border border-01 bg-01 px-4">
             <PageState kind="loading" rows={5} label={`Loading ${view}`} />
           </div>
@@ -282,7 +326,7 @@ export default function CataloguePage() {
         )}
       </section>
 
-      <NotChargedProof />
+      {view === "toolsets" ? null : <NotChargedProof />}
 
       <section className="flex flex-col gap-3 rounded-xl border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:justify-between tablet:p-6">
         <div className="flex flex-col gap-1">

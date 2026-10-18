@@ -15,6 +15,7 @@ import { Field } from "@/components/ui/field";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
+import { AuthenticationPanel } from "@/features/provider-binding/authentication/authentication-panel";
 import { noteSaved } from "@/features/provider-binding/after-publish";
 import { BindingHeader, bindingQueryKey, useBinding } from "@/features/provider-binding/binding-header";
 import { integerFromInput } from "@/features/provider-binding/chrome";
@@ -35,7 +36,7 @@ import { useProviderCatalogue } from "@/features/provider-binding/tool-name";
 import { liveFormOf, parseLiveForm, type LiveForm } from "@/features/provider-binding/wizard/live-stage";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
-import type { ToolBindingDetail, UpdateToolBindingBody } from "@/interfaces";
+import type { BindingAuthMode, ToolBindingDetail, UpdateToolBindingBody } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
@@ -85,6 +86,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
 
   const [form, setForm] = React.useState<LiveForm>(() => liveFormOf(binding, null));
   const [extra, setExtra] = React.useState<ExtraForm>(() => extraOf(binding));
+  const [authMode, setAuthMode] = React.useState<BindingAuthMode>(binding.authMode);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -121,6 +123,8 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
     else body[key] = parsedInt.value;
   }
 
+  if (authMode !== binding.authMode) body.authMode = authMode;
+
   const hasErrors = Object.keys(parsed.errors).length > 0 || Object.keys(errors).length > 0;
   const changed = Object.keys(body).length > 0;
   const pricingChanged = body.pricingMode !== undefined || body.priceAmount !== undefined || body.freeQuotaPerAgent !== undefined;
@@ -145,6 +149,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
       void queryClient.invalidateQueries({ queryKey: ["provider", "stake"] });
       setForm(liveFormOf(saved, null));
       setExtra(extraOf(saved));
+      setAuthMode(saved.authMode);
       toast.success(saved.hasUnpublishedChanges ? "Saved. Publish the changes to make them live." : "Saved");
     } catch (caught) {
       setError(caught instanceof ApiError ? plainError(caught.code) : "Your changes could not be saved. Try again.");
@@ -316,6 +321,26 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
               <ArrowRight aria-hidden="true" />
             </Link>
           </Button>
+        </PanelBody>
+      </Panel>
+
+      <Panel className="w-full" id="settings-authentication">
+        <PanelHeader>
+          <PanelTitles>
+            <PanelTitle>Authentication</PanelTitle>
+            <PanelDescription>How your API knows a request is from Assay</PanelDescription>
+          </PanelTitles>
+        </PanelHeader>
+        <PanelBody className="flex flex-col gap-3 p-4 tablet:p-5">
+          <AuthenticationPanel
+            bindingId={binding.id}
+            endpoint={binding.endpoint}
+            savedEndpoint={binding.endpoint}
+            publishedEndpoint={binding.publishedEndpoint}
+            mode={authMode}
+            onModeChange={setAuthMode}
+            readOnly={readOnly}
+          />
         </PanelBody>
       </Panel>
 

@@ -57,7 +57,12 @@ const ROW_STATE = { OPEN: null, REPLACING: "being collected", WRITTEN_OFF: "writ
  * tool and why sit under Details. Nothing shows while nothing is owed or the
  * list cannot be read (an older backend has no such route).
  */
-export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: string }) {
+/**
+ * `compact`: one line (the title) and the action, for pages whose own content
+ * must come first (Connect, tool sets, Agents): the detail stays one click
+ * away under Details.
+ */
+export function BuyerDebtBanner({ wrapperClassName, compact = false }: { wrapperClassName?: string; compact?: boolean }) {
   const query = useBuyerDebtsQuery();
   const { openSettle } = useSettleDebt();
   const names = useEntityNames({ kinds: ["tool"] });
@@ -68,6 +73,7 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
   // A debt before its `replaceableAt` cannot be signed yet; this moves on at that time.
   const now = useReplaceableNow(query.data, query.dataUpdatedAt);
   const noteId = React.useId();
+  const [open, setOpen] = React.useState(false);
   const summary = debtBannerSummary(query.data, { pausedByYou: paused, freeOnly, now });
   if (!summary) return null;
   const { own, others } = splitDebts(query.data);
@@ -75,6 +81,54 @@ export function BuyerDebtBanner({ wrapperClassName }: { wrapperClassName?: strin
   const collecting = summary.kind === "collecting";
   // DEMO ONLY: a `?debt=` picture follows the tab across pages; say it is one.
   const demoNote = demoDebtNote();
+
+  if (compact) {
+    return (
+      <div className={wrapperClassName}>
+        <div
+          role="region"
+          aria-label={collecting ? "Payment being collected" : "Payment owed"}
+          data-testid="buyer-debt-banner"
+          data-kind={summary.kind}
+          data-compact=""
+          className={cn("flex w-full flex-col rounded-lg border px-3 py-1.5", collecting ? "border-primary-20 bg-primary-10" : "border-warning-20 bg-warning-10")}
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <TriangleAlert aria-hidden="true" className={cn("size-4 shrink-0", collecting ? "text-primary-600" : "text-warning-600")} />
+            <p className="min-w-0 flex-1 truncate text-label-13 text-01" title={summary.title}>
+              {summary.title}
+            </p>
+            <button
+              type="button"
+              aria-expanded={open}
+              className="shrink-0 text-label-xs text-02 underline-offset-2 hover:underline"
+              onClick={() => setOpen((v) => !v)}
+            >
+              Details
+            </button>
+            {summary.actionLabel ? (
+              <Button size="sm" className="shrink-0" disabled={summary.actionDisabled} onClick={() => openSettle()}>
+                {summary.actionLabel}
+              </Button>
+            ) : null}
+          </div>
+          {open ? (
+            <div className="flex flex-col gap-1.5 pb-1.5 pl-6 pt-1 text-body-13 text-02">
+              <p className="[overflow-wrap:anywhere]">{summary.detail}</p>
+              {summary.waitingNote ? <p className="[overflow-wrap:anywhere]">{summary.waitingNote}</p> : null}
+              <ul className="flex flex-col gap-1">
+                {all.map((debt) => (
+                  <li key={debt.intentId} className="[overflow-wrap:anywhere]">
+                    <DebtRowText debt={debt} toolName={names.name("tool", debt.toolId)} state={ROW_STATE[debtStateOf(debt)]} elsewhere={others.includes(debt)} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={wrapperClassName}>

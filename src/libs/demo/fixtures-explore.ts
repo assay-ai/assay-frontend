@@ -17,6 +17,7 @@ import type { CatalogueTool as ToolCatalogueEntry, ToolTier } from "@/services/t
 
 import { DEMO_ASSET, DEMO_BUYER_ACCOUNT, DEMO_CHAIN_ID, minutesAgo, money } from "./fixtures";
 import type { DemoFixture } from "./fixtures";
+import { demoVersionFields, demoVersionList, registerDemoCatalogueTools, type DemoCatalogueToolRef } from "./fixtures-contracts";
 
 /**
  * DEMO ONLY — see `demo-api.ts` for the rules. **The marketplace surface.**
@@ -492,6 +493,31 @@ export function demoOfferPriceMinor(toolId: string, providerId: string): string 
   return offer ? usd(offer.price).amount : null;
 }
 
+/** The topic a demo tool sits in (the backend's `tools.category`), from its name. */
+export function demoCategoryOf(name: string): string {
+  const n = name.toLowerCase();
+  if (/weather|geocode/.test(n)) return "weather";
+  if (/usd|token|market|fx|chain/.test(n)) return "finance";
+  if (/wikipedia|research|summar/.test(n)) return "knowledge";
+  return "web";
+}
+
+/** The catalogue as the tool-set fixtures read it: each tool with its name, pricing and offers. */
+export function demoToolOffers(): readonly {
+  readonly id: string;
+  readonly name: string;
+  readonly pricingMode: string | null;
+  readonly offers: readonly { readonly providerId: string; readonly price: string }[];
+}[] {
+  return TOOLS;
+}
+
+/** A provider's legal name and tier, for the tool-set fixtures; null for an id the market does not hold. */
+export function demoProvider(providerId: string): { legalName: string; tier: "NEW" | "ESTABLISHED" | "TRUSTED" } | null {
+  const provider = PROVIDERS.find((p) => p.providerId === providerId);
+  return provider ? { legalName: provider.legalName, tier: provider.tier } : null;
+}
+
 /** Every offer a provider has listed, as `(tool, price)` pairs. */
 function offersOf(providerId: string): { tool: DemoTool; price: CatalogueMoney }[] {
   return TOOLS.flatMap((tool) =>
@@ -514,6 +540,7 @@ function toolRow(tool: DemoTool): CatalogueTool {
     id: tool.id,
     name: tool.name,
     description: tool.description,
+    ...demoVersionFields(tool.id, tool.name, tool.description),
     tier: tool.tier,
     providerCount: tool.offers.length,
     fromPrice: cheapest(prices),
@@ -657,6 +684,22 @@ export const EXPLORE_FIXTURES: readonly DemoFixture[] = [
     match: "/catalogue/tools",
     body: () => ({ tools: TOOLS.map(toolRow) }),
   },
+  /* T3: a tool's published contract versions, schemas and changelog. */
+  {
+    method: "GET",
+    match: /^\/catalogue\/tools\/[^/]+\/versions$/,
+    body: (path) => {
+      const tool = TOOLS.find((t) => t.id === idFromPath(path, 3));
+      return tool === undefined
+        ? undefined
+        : demoVersionList(
+            tool.id,
+            tool.name,
+            tool.description,
+            tool.offers.map((o) => ({ providerId: o.providerId, legalName: PROVIDER_BY_ID.get(o.providerId)?.legalName ?? o.providerId })),
+          );
+    },
+  },
   /*
     Listed after the exact path above, though the anchored pattern could not
     match it: `/catalogue/providers/{id}` requires a segment after the slash.
@@ -746,3 +789,6 @@ export const EXPLORE_FIXTURES: readonly DemoFixture[] = [
       ]),
   },
 ];
+
+/** The catalogue's tools, for the operator contract list (see `registerDemoCatalogueTools`). */
+registerDemoCatalogueTools(TOOLS.map((tool): DemoCatalogueToolRef => ({ id: tool.id, name: tool.name, description: tool.description })));

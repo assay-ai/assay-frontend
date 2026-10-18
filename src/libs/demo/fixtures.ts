@@ -5,6 +5,8 @@ import { EXPLORE_FIXTURES } from "./fixtures-explore";
 import { OPERATOR_FIXTURES } from "./fixtures-operator";
 import { PROVIDER_FIXTURES, providerNotifications } from "./fixtures-provider";
 import { PUBLIC_FIXTURES } from "./fixtures-public";
+import { contractNotices } from "./fixtures-refusals-contracts";
+import { DEMO_WEATHER_TOOLSET, demoToolsetNotifications, TOOLSET_FIXTURES } from "./fixtures-toolsets";
 
 /**
  * The stage set — DEMO ONLY. See `demo-api.ts` for the rules these obey.
@@ -83,13 +85,18 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
     match: "/notifications",
     body: (path, query) => {
       const events = ([] as unknown[]).concat(query.event ?? []);
-      if (events.length > 0 && events.every((event) => typeof event === "string" && event.startsWith("provider."))) {
-        return providerNotifications();
+      if (events.length > 0 && events.some((event) => typeof event === "string" && event.startsWith("provider."))) {
+        // T3: the provider's tool_version.* notices ride along (the Inbox asks for them by name).
+        const provider = providerNotifications() as { items: unknown[]; pageInfo: unknown };
+        return { ...provider, items: [...contractNotices("PROVIDER"), ...provider.items] };
       }
       const buyer = BUYER_FIXTURES.find((fixture) => fixture.method === "GET" && fixture.match === "/notifications");
-      return buyer ? buyer.body(path, query) : { items: [], pageInfo: { nextCursor: null, hasMore: false } };
+      const feed = (buyer ? buyer.body(path, query) : { items: [], pageInfo: { nextCursor: null, hasMore: false } }) as { items: unknown[]; pageInfo: unknown };
+      // `?connect=update-available`: a tool set "prod" uses has a new version (FR-17).
+      return { ...feed, items: [...demoToolsetNotifications(), ...contractNotices("BUYER", DEMO_WEATHER_TOOLSET), ...feed.items] };
     },
   },
+  ...TOOLSET_FIXTURES,
   ...BUYER_FIXTURES,
   ...EXPLORE_FIXTURES,
   ...PROVIDER_FIXTURES,

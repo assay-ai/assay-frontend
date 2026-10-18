@@ -4,6 +4,8 @@ import { ArrowLeft, Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { ToolContractSection } from "@/components/contracts/tool-contract";
+import { ToolVersionBadges } from "@/components/contracts/version-badges";
 import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { BuyerCosts } from "@/components/explorer/buyer-costs";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
@@ -110,6 +112,7 @@ function ToolPage() {
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="break-all font-mono text-heading-md text-01">{tool.name}</h1>
           {tool.routable ? null : <UnavailableTag />}
+          <ToolVersionBadges name={tool.name} version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} replacementName={tool.replacementName} replacementVersion={tool.replacementVersion} />
         </div>
         {tool.description ? <p className="max-w-[760px] text-body-md text-02">{tool.description}</p> : null}
       </header>
@@ -147,6 +150,8 @@ function ToolPage() {
           </ul>
         </section>
       </div>
+
+      <ToolContractSection toolId={tool.id} publicPage />
 
       <section className="flex flex-col gap-3">
         <h2 className="text-label-md text-01">Who serves it</h2>

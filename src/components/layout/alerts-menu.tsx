@@ -5,6 +5,7 @@ import { Bell, Gauge, Info, Settings, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { notificationTitle } from "@/features/toolsets/contract-notices";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { AlertBadge } from "@/components/ui/alert-badge";
 import {
@@ -36,6 +37,8 @@ interface AlertRow {
   readAt?: string | null;
   subjectType?: string | null;
   subjectId?: string | null;
+  /** The event payload; a tool-set update carries the versions and the diff. */
+  payload?: unknown;
   createdAt: string;
 }
 
@@ -109,7 +112,7 @@ export function AlertsMenu({ count, variant = "desktop" }: { count: number; vari
                 <span className="flex w-full items-start gap-2.5">
                   <span className="mt-0.5 shrink-0">{ICON[row.severity] ?? ICON.INFO}</span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className={cn("text-body-13", row.readAt ? "text-02" : "font-medium text-01")}>{row.title}</span>
+                    <span className={cn("text-body-13", row.readAt ? "text-02" : "font-medium text-01")}>{notificationTitle(row)}</span>
                     <span className="text-body-xs text-03">
                       <UtcTime value={row.createdAt} relative />
                       {action ? ` · ${action.label}` : ""}

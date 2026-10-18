@@ -12,7 +12,6 @@ const policy = {
   maxCallsPerMinute: 30,
   maxCallsPerHour: 400,
   maxSpendPerHour: usd("25000000"),
-  allowedTools: null,
   requireApprovalAbove: usd("25000000"),
 };
 
@@ -31,25 +30,19 @@ describe("budgetPatch", () => {
     expect(budgetPatch(budgetFormFrom(policy), policy, 6, false)).toMatchObject({ ok: true, changed: false });
   });
 
-  it("checks that call ≤ day ≤ month and that a tool list is not empty", () => {
+  it("checks that call ≤ day ≤ month", () => {
     const bad = budgetPatch({ ...budgetFormFrom(policy), perCall: "80", perMonth: "10" }, policy, 6, false);
     expect(bad.ok).toBe(false);
     if (!bad.ok) {
       expect(bad.errors.perCall).toMatch(/whole day/);
       expect(bad.errors.perDay).toMatch(/whole month/);
     }
-    const noTools = budgetPatch({ ...budgetFormFrom(policy), toolsMode: "only", tools: [] }, policy, 6, false);
-    expect(noTools.ok).toBe(false);
   });
 
-  it("writes the tool list by id and clears the older refuse-above rule on request", () => {
-    const result = budgetPatch(
-      { ...budgetFormFrom(policy), toolsMode: "only", tools: ["t1", "t1", "t2"], clearRefuseAbove: true, reason: "pilot" },
-      policy,
-      6,
-      false,
-    );
-    expect(result).toMatchObject({ ok: true, body: { allowedTools: ["t1", "t2"], requireApprovalAbove: null, changeReason: "pilot" } });
+  it("clears the older refuse-above rule on request, and never writes a tool list (access moved to the agent)", () => {
+    const result = budgetPatch({ ...budgetFormFrom(policy), clearRefuseAbove: true, reason: "pilot" }, policy, 6, false);
+    expect(result).toMatchObject({ ok: true, body: { requireApprovalAbove: null, changeReason: "pilot" } });
+    expect(result.ok && "allowedTools" in result.body).toBe(false);
   });
 });
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
+import { contractNoticeAction, contractNoticeText, contractNoticeTitle, isContractNoticeEvent, readContractNotice } from "@/features/toolsets/contract-notices";
 import { routes } from "@/libs/routes";
 import { formatMoney, symbolForAsset } from "@/utils/money";
 
@@ -33,6 +34,8 @@ export interface NotificationItem {
   subjectId?: string | null;
   /** Null means unread. */
   readAt?: string | null;
+  /** The event payload; a `tool_version.*` notice carries the tool, the major, the sunset and the replacement. */
+  payload?: unknown;
   createdAt: string;
 }
 
@@ -105,9 +108,19 @@ export function notificationHref(item: Pick<NotificationItem, "subjectType" | "s
   }
 }
 
+/** A contract notice in the provider's words, with its next step; null for every other event. */
+function contractView(item: NotificationItem): { title: string; body: string; target: { href: string; label: string } } | null {
+  if (!isContractNoticeEvent(item.event)) return null;
+  const notice = readContractNotice(item.payload);
+  if (!notice) return null;
+  const provider = { ...notice, role: "PROVIDER" as const };
+  return { title: contractNoticeTitle(item.event, provider), body: contractNoticeText(item.event, provider), target: contractNoticeAction(provider) };
+}
+
 export function InboxItem({ item }: { item: NotificationItem }) {
   const { Icon, tone, border } = SEVERITY_ICON[item.severity] ?? SEVERITY_ICON.INFO;
-  const target = notificationHref(item);
+  const contract = contractView(item);
+  const target = contract?.target ?? notificationHref(item);
 
   return (
     <article className={`flex w-full flex-col gap-3 rounded-lg border bg-01 p-4 tablet:flex-row tablet:items-center tablet:gap-3.5 ${border}`}>
@@ -115,9 +128,9 @@ export function InboxItem({ item }: { item: NotificationItem }) {
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className="text-label-sm leading-[1.4] text-01">
           {item.readAt ? null : <span className="mr-1.5 inline-block size-2 rounded-full bg-primary-500 align-middle" aria-label="Unread" />}
-          {formatNotificationTitle(item.title)}
+          {contract ? contract.title : formatNotificationTitle(item.title)}
         </p>
-        <p className="break-words text-body-13 leading-[1.55] text-02 [overflow-wrap:anywhere]">{formatNotificationBody(item.body)}</p>
+        <p className="break-words text-body-13 leading-[1.55] text-02 [overflow-wrap:anywhere]">{contract ? contract.body : formatNotificationBody(item.body)}</p>
         <UtcTime value={item.createdAt} className="text-body-xs text-03" />
       </div>
       {target ? (
