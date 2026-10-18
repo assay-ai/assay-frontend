@@ -719,16 +719,20 @@ export function statusWord(approval: Pick<OperatorApproval, "status" | "rejected
   return isWithdrawn(approval) ? "withdrawn" : approval.status.toLowerCase();
 }
 
-/** Who decided a row, in words: "Approved by x", "Withdrawn by x", "Rejected by x", "Expired". */
+/**
+ * Who asked and who decided, in one line: "Asked by A · approved by B",
+ * "Asked by A · rejected by B", "Asked and withdrawn by A", "Asked by A ·
+ * expired". `nameOf` turns a subject into the name the console shows.
+ */
 export function decisionText(
   approval: Pick<OperatorApproval, "status" | "approvedBy" | "rejectedBy" | "requestedBy">,
+  nameOf: (subject: string) => string = (subject) => subject,
 ): string {
-  if (approval.approvedBy) return `Approved by ${approval.approvedBy}`;
-  if (approval.rejectedBy) {
-    return isWithdrawn(approval) ? `Withdrawn by ${approval.rejectedBy}` : `Rejected by ${approval.rejectedBy}`;
-  }
-  const word = approval.status.toLowerCase();
-  return word.charAt(0).toUpperCase() + word.slice(1);
+  const asker = nameOf(approval.requestedBy);
+  if (isWithdrawn(approval)) return `Asked and withdrawn by ${asker}`;
+  if (approval.approvedBy) return `Asked by ${asker} · approved by ${nameOf(approval.approvedBy)}`;
+  if (approval.rejectedBy) return `Asked by ${asker} · rejected by ${nameOf(approval.rejectedBy)}`;
+  return `Asked by ${asker} · ${approval.status.toLowerCase()}`;
 }
 
 /**
