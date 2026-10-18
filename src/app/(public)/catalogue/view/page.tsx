@@ -13,8 +13,11 @@ import { StartFreeCta } from "@/components/explorer/start-free";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 import {
+  chainPriceText,
+  chainPriceWhere,
   checkSentences,
   failRateLabel,
+  orderChainPrices,
   listingOfferText,
   normalisedMode,
   failsOften,
@@ -98,11 +101,22 @@ function ToolPage() {
   }
 
   const settles = tool.settlementChains ?? [];
+  // A buyer pays on one chain, so the price is per chain (D6). Anonymous, the
+  // headline is the chain of the tool's own quote; every other chain gets its own line.
+  const chainPrices = orderChainPrices(tool.prices, null, tool.price);
+  const lead = chainPrices[0] ?? null;
+  const held = lead?.price ?? tool.price;
+  const nameOf = (providerId: string | null) => serving.find((p) => p.providerId === providerId)?.name ?? null;
+  // Name the provider only when it is the one listing on that chain: with two, the price is the dearest of them.
+  const listingsOn = (chainId: string) =>
+    serving.filter((p) => listingOf(p.providerId)?.price.asset.split("/")[0] === chainId).length;
+  const providerFor = (entry: { chainId: string; providerId: string | null }) =>
+    listingsOn(entry.chainId) > 1 ? null : nameOf(entry.providerId);
   // What the providers charge, against what a call is held for (the dearest
   // provider that can take it now). See `priceRange`.
   // "from" only over more than one listing that can be charged (`paidBindings`, when the API sends it).
   const range = priceRange(
-    tool.price,
+    held,
     (tool.paidBindings ?? 2) > 1 ? [tool.fromPrice, ...serving.map((p) => listingOf(p.providerId)?.price)] : [],
   );
 
@@ -139,8 +153,18 @@ function ToolPage() {
           <h2 className="text-label-md text-01">What a call costs</h2>
           {/* One price line, free first: the free tier and the price together. */}
           <OfferPrice size="lg" offer={offerLine({ mode: tool.pricingMode, range, freeCallsPerDay: freeAllowance })} />
+          {lead && range ? (
+            <p className="-mt-2 text-body-13 text-02" data-testid="price-chain">
+              {chainPriceWhere(lead.chainId, chainName, range.differs ? null : providerFor(lead))}
+            </p>
+          ) : null}
+          {chainPrices.slice(1).map((entry) => (
+            <p key={entry.chainId} className="text-body-13 text-02" data-testid="chain-price">
+              {chainPriceText(entry, chainName, providerFor(entry))}
+            </p>
+          ))}
           <p className="text-body-13 text-02">
-            {costSentence({ mode: tool.pricingMode, price: tool.price, range, freeCallsPerDay: freeAllowance })}
+            {costSentence({ mode: tool.pricingMode, price: held, range, freeCallsPerDay: freeAllowance })}
           </p>
           {settles.length > 0 ? (
             <p className="text-body-xs text-03">
@@ -206,7 +230,7 @@ function ToolPage() {
               const listing = listingOf(provider.providerId);
               // Priced above the hold: the router's quote is the dearest provider
               // that can take a call now, so this one is not being routed to.
-              const notRouted = notTakingPaidCalls(tool.price, listing?.price);
+              const notRouted = notTakingPaidCalls(held, listing?.price);
               return (
                 <li key={provider.providerId}>
                   <Link
@@ -225,7 +249,9 @@ function ToolPage() {
                           {notRouted ? " · not taking paid calls right now" : ""}
                         </span>
                       </div>
-                      <Fact label={<ObservedFailuresLabel />}>{failRateLabel(provider.quality)}</Fact>
+                      <Fact label={<ObservedFailuresLabel />}>
+                        {failRateLabel(provider.quality, listing?.promisedFailureRate)}
+                      </Fact>
                       <Fact label="Stake at risk">{stakeSummary(provider.stake, chainName)}</Fact>
                     </div>
                     <ChevronRight aria-hidden="true" className="mt-1 size-4 shrink-0 text-03 group-hover:text-02" />
@@ -237,9 +263,10 @@ function ToolPage() {
         )}
         {serving.length > 0
           ? routingNotes(
-              tool.price,
+              held,
               serving.map((p) => ({ name: p.name, price: listingOf(p.providerId)?.price, quality: p.quality })),
               chainName,
+              { chainsListed: chainPrices.length > 1 },
             ).map((note) => (
               <p key={note} className="text-body-13 text-02" data-testid="routing-note">
                 {note}
