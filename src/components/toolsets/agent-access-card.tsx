@@ -532,7 +532,7 @@ function SharedSetRow({
                 Make your own version
               </Link>
             ) : (
-              <Link href="/catalogue?view=toolsets" className="min-h-10 content-center text-label-13 text-primary-600 hover:underline">
+              <Link href="/explore/toolsets" className="min-h-10 content-center text-label-13 text-primary-600 hover:underline">
                 Find another tool set
               </Link>
             )}
