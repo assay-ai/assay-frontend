@@ -193,7 +193,7 @@ export function slaWatchItems(input: Pick<NeedsActionInput, "openWindows" | "bin
     const reading = slaReading(window, window.declaredFailureRate, { now });
     items.push({
       id: `sla-watch:${window.windowId}`,
-      title: `${name}: ${percent(window.observedFailureRate)} of calls failed in ${checkWindowScope(window, now)}, ${share > 1 ? "over" : "near"} your ${percent(window.declaredFailureRate)} promise`,
+      title: `${name}: ${percent(window.observedFailureRate)} of calls failed in ${checkWindowScope(window, now)}, ${share >= 1 ? "over" : "near"} your ${percent(window.declaredFailureRate)} promise`,
       detail: [reading.advice, reading.sample ? `${reading.sample}.` : null].filter(Boolean).join(" "),
       href: routes.binding(window.bindingId, "quality"),
     });

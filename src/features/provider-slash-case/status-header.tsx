@@ -302,7 +302,7 @@ export function StatusHeader({ data }: { data: SlashProposalCaseDetail }) {
           </span>
         ) : null}
         <p className="min-w-0 flex-1 truncate font-mono text-mono-sm font-semibold text-01">
-          {proposal.toolName}
+          {proposal.toolName ?? "Penalty"}
           {proposal.windowLabel ? (
             <span className="text-03"> · window {proposal.windowLabel}</span>
           ) : null}

@@ -43,7 +43,15 @@ export function stakeStatus(input: {
   const { required, staked, recommended } = input;
   if (input.enough === null) return { health: "unknown", label: null, sentence: "", gap: null };
   if (!required) {
-    return { health: "none", label: null, sentence: "No paid tool needs stake right now. Free tools go live without it.", gap: null };
+    const holds = staked ? toDecimal(staked).gt(0) : false;
+    return {
+      health: "none",
+      label: null,
+      sentence: holds
+        ? "No paid tool needs stake right now. Paid tools will use it when they go live."
+        : "No paid tool needs stake right now. Free tools go live without it.",
+      gap: null,
+    };
   }
   const have = staked ? toDecimal(staked) : new Decimal(0);
   const need = toDecimal(required);
