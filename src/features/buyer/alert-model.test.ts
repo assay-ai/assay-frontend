@@ -7,6 +7,7 @@ import {
   idsToMarkOnOpen,
   isAlertResolved,
   isOldLimitAlert,
+  isOpenRisk,
   MARK_READ_ATTEMPTS,
   readableBody,
   type AlertNote,
@@ -176,6 +177,20 @@ describe("idsToMarkOnOpen (See all alerts)", () => {
   });
   it("also marks an open risk whose condition has cleared, so it cannot stay unread for good", () => {
     expect(idsToMarkOnOpen(groups, new Map(), { now, balances: [{ asset: ASSET, available: usd("13240000") }] })).toEqual(["v", "z"]);
+  });
+  it("never marks a spend limit reached in full, or a failed deposit, on open (ruling)", () => {
+    const funded = { now, balances: [{ asset: ASSET, available: usd("99000000") }] };
+    const more = groupAlerts([
+      note({ id: "b100", event: "spend.threshold_crossed", title: "Daily spend at 100%", subjectId: "ag1", payload: { scope: "daily", band: 100 } }),
+      note({ id: "b80", event: "spend.threshold_crossed", title: "Daily spend at 80%", subjectId: "ag1", payload: { scope: "daily", band: 80 } }),
+      note({ id: "df", event: "deposit.failed", title: "Deposit failed", payload: { asset: ASSET } }),
+    ]);
+    expect(idsToMarkOnOpen(more, new Map(), funded)).toEqual(["b80"]);
+    expect(isOpenRisk(more[0]!.note)).toBe(true);
+    expect(isOpenRisk(more[1]!.note)).toBe(false);
+    // No condition clears them: only Mark read or Dismiss does.
+    expect(isAlertResolved(more[0]!.note, funded)).toBe(false);
+    expect(isAlertResolved(more[2]!.note, funded)).toBe(false);
   });
   it("asks once per id, and retries a failure only once", () => {
     const attempts = new Map<string, number>();
