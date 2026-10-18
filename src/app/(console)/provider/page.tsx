@@ -14,7 +14,7 @@ import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitle
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { FirstRunCard } from "@/features/provider-home/first-run-card";
 import { callPrice } from "@/features/provider-home/format";
-import { NeedsActionStrip } from "@/features/provider-home/needs-action-strip";
+import { NeedsActionStrip, WatchList } from "@/features/provider-home/needs-action-strip";
 import { useProviderNeedsAction } from "@/features/provider-home/use-needs-action";
 import {
   useListingProgress,
@@ -22,6 +22,7 @@ import {
   useProviderRegistration,
 } from "@/features/provider-home/use-listing-progress";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
+import { stakeStatus } from "@/features/provider-stake/stake-status";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import { earningsSplit, homeUnpaidNotes } from "@/features/provider-earnings/earned-tile";
 import type { BindingStatus, Money, ProviderEarnings, ToolBindingSummary } from "@/interfaces";
@@ -113,7 +114,7 @@ export default function ProviderHomePage() {
   const record = registration.data?.registration;
   const title = record?.legalName ?? "Welcome";
 
-  const { attention, loading: attentionLoading } = useProviderNeedsAction();
+  const { attention, watch, loading: attentionLoading } = useProviderNeedsAction();
 
   const steps: SetupStep[] = progress.steps.map((step) => ({
     id: step.id,
@@ -134,10 +135,12 @@ export default function ProviderHomePage() {
       ),
   }));
 
+  // One stake status for Home, Stake, the Inbox and the Add stake sheet (D21).
+  const stakeHealth = stakeStatus(stake);
   const subtitle = [
     live.length > 0 ? `${live.length} tool${live.length === 1 ? "" : "s"} live` : null,
-    stake.staked && stake.required
-      ? `stake ${formatMoney(stake.staked, { decimals: 2 })} of ${formatMoney(stake.required, { decimals: 2 })} needed`
+    stake.staked && stake.required && stakeHealth.label
+      ? `stake ${formatMoney(stake.staked, { decimals: 2 })} · ${stakeHealth.label} (${formatMoney(stake.required, { decimals: 2 })} minimum)`
       : null,
   ]
     .filter(Boolean)
@@ -189,7 +192,10 @@ export default function ProviderHomePage() {
           />
         )
       ) : (
-        <NeedsActionStrip items={attention} onOpenStake={() => setStakeOpen(true)} loading={attentionLoading} />
+        <>
+          <NeedsActionStrip items={attention} onOpenStake={() => setStakeOpen(true)} loading={attentionLoading} />
+          <WatchList items={watch} />
+        </>
       )}
 
       {showFirstRun && firstLive ? (
@@ -214,11 +220,7 @@ export default function ProviderHomePage() {
         open={stakeOpen}
         onOpenChange={setStakeOpen}
         amount={stake.shortfall}
-        reason={
-          stake.required
-            ? `Your paid tools need ${formatMoney(stake.required, { decimals: 2 })} of stake in total.`
-            : "Stake backs the failure rate you promise on paid tools."
-        }
+        reason={stake.required ? stakeHealth.sentence : "Stake backs the failure rate you promise on paid tools."}
         onStaked={() => void stake.refetch()}
       />
     </>
