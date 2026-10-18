@@ -10,7 +10,7 @@ import { checklistProgress, SetupChecklist, type SetupStep } from "@/components/
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { closeAccountHeldText } from "@/features/buyer-debt/debt-copy";
-import { useSettleDebt } from "@/features/buyer-debt/settle-debt-sheet";
+import { useBuyerDebtsQuery, useSettleDebt } from "@/features/buyer-debt/settle-debt-sheet";
 import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { isLiveKey, nothingToWithdraw, readyToClose, withdrawableByAsset } from "@/features/buyer/close-account";
 import { chainBalances, type FullBalance } from "@/features/g30/balance";
@@ -83,7 +83,11 @@ export function CloseAccountView() {
   const rows = chainBalances(balances.data?.balances);
   const lines = withdrawableByAsset(rows);
   const readable = balances.isSuccess;
-  const withdrawn = readable && nothingToWithdraw(lines) && openHolds.length === 0;
+  // Unknown is never done: the holds and the debts must be read too, and a
+  // payment still owed means the money side is not finished (review m2).
+  const debts = useBuyerDebtsQuery();
+  const noDebt = debts.isSuccess && (debts.data?.debts ?? []).length === 0;
+  const withdrawn = readable && holds.isSuccess && noDebt && nothingToWithdraw(lines) && openHolds.length === 0;
 
   const steps: SetupStep[] = [
     {
@@ -96,7 +100,11 @@ export function CloseAccountView() {
           : "Checking your balance…"
         : withdrawn
           ? "Nothing is left to withdraw."
-          : "Move everything you hold back to your wallet.",
+          : holds.isError || debts.isError
+            ? "Calls still being checked, or payments still owed, could not be read, so we cannot say this is done. Try again in a moment."
+            : debts.isSuccess && !noDebt
+              ? "A payment is still owed for a call your agent used. Settle it, then withdraw what is left."
+              : "Move everything you hold back to your wallet.",
       content: readable && !withdrawn ? (
         <div className="flex flex-col gap-2.5">
           <ul className="flex flex-col gap-2">
@@ -203,7 +211,7 @@ export function CloseAccountView() {
       <PageHeader title="Close account" />
       <SetupChecklist
         title="Before you close"
-        description="Three steps. Each ticks itself off when it is done."
+        description="Three steps. Steps 1 and 3 tick themselves off; tick step 2 when your records are saved."
         steps={steps}
         doneTitle="Ready to close"
         doneDescription="Your money is withdrawn, your records are saved and no agent key works."
