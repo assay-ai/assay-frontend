@@ -75,6 +75,14 @@ export const DISPUTE_COPY = {
 } as const;
 
 /**
+ * What a report filed after the 1-hour hold leads to (owner decision D9):
+ * no refund, a mark on the provider's quality that can lead to a penalty on
+ * their stake, and the sampling guarantee's compensation for that window.
+ */
+const AFTER_HOLD_OUTCOME =
+  "there is no refund for this call. If your report is accepted, it counts against the provider's quality and can lead to a penalty on their stake; if it does, you may be compensated for that window.";
+
+/**
  * The buyer's words for the same rules: "upheld" and "operator" are internal,
  * so a buyer reads "accepted" with what it means for the money, and "Assay's
  * review team".
@@ -84,7 +92,7 @@ export const BUYER_COPY = {
   decides: `Assay's review team decides within ${DECISION_HOURS} hours.`,
   silentHeld: `If the provider stays silent, your report is accepted automatically at ${DECISION_HOURS} hours and you are refunded.`,
   held: "The payment stays held until your report is decided.",
-  afterHold: "The payment has already been collected. If your report is accepted, it counts against the provider's quality; a refund is not guaranteed.",
+  afterHold: `It was reported after the 1-hour hold, so ${AFTER_HOLD_OUTCOME}`,
   limit: DISPUTE_COPY.limit,
   safetyNet: DISPUTE_COPY.safetyNet,
 } as const;
@@ -304,15 +312,33 @@ export interface ReportWindowView {
   text: string;
 }
 
-/** What a report filed now would mean, from the receipt's hold fields. */
+/**
+ * What a report filed now would mean, from the receipt's hold fields.
+ *
+ * Three cases while a report is accepted:
+ *  - the payment is in its 1-hour hold (`disputeWindowEndsAt` ahead): a full
+ *    refund if accepted;
+ *  - the payment has not been collected yet (a voucher not redeemed into the
+ *    hold: `disputeWindowEndsAt` and `collectableAt` both null): also a full
+ *    refund — the backend marks a report filed then as guaranteed;
+ *  - the hold has really ended (`disputeWindowEndsAt` passed): no refund.
+ */
 export function reportWindow(
-  receipt: { status: string; disputeWindowEndsAt?: string | null; disputeFilingClosesAt?: string | null; chargedPrice: Money },
+  receipt: {
+    status: string;
+    disputeWindowEndsAt?: string | null;
+    disputeFilingClosesAt?: string | null;
+    collectableAt?: string | null;
+    chargedPrice: Money;
+  },
   now: number,
 ): ReportWindowView {
   const closes = receipt.disputeFilingClosesAt ?? null;
   const open = closes !== null && now < Date.parse(closes);
   const holdEnds = receipt.disputeWindowEndsAt ?? null;
-  const guaranteed = open && holdEnds !== null && now < Date.parse(holdEnds);
+  const notCollectedYet = holdEnds === null && (receipt.collectableAt ?? null) === null;
+  const inHold = holdEnds !== null && now < Date.parse(holdEnds);
+  const guaranteed = open && (inHold || notCollectedYet);
   if (!open) {
     return {
       open: false,
@@ -321,9 +347,17 @@ export function reportWindow(
       text: closes !== null ? "The time to report this call has passed." : "Only a finished, charged call can be reported.",
     };
   }
-  return guaranteed
-    ? { open, guaranteed, holdEndsAt: holdEnds, text: "The payment is still held. Report it now and, if your report is accepted, you are refunded in full." }
-    : { open, guaranteed, holdEndsAt: null, text: `The 1-hour hold has ended. ${BUYER_COPY.afterHold}` };
+  if (inHold) {
+    return { open, guaranteed, holdEndsAt: holdEnds, text: "The payment is still held. Report it now and, if your report is accepted, you are refunded in full." };
+  }
+  if (notCollectedYet) {
+    return { open, guaranteed, holdEndsAt: null, text: "The payment has not been collected yet. Report it now and, if your report is accepted, you are refunded in full." };
+  }
+  if (holdEnds !== null) {
+    return { open, guaranteed, holdEndsAt: null, text: `The 1-hour hold has ended, so ${AFTER_HOLD_OUTCOME}` };
+  }
+  // A collection time but no hold end: the API sends both or neither; say only what is certain.
+  return { open, guaranteed, holdEndsAt: null, text: "If your report is accepted, it counts against the provider's quality." };
 }
 
 /* ---------------------------------------------------------- operator SLA */

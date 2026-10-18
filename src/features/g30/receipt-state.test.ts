@@ -422,7 +422,9 @@ describe("receiptStory — headline, money strip, checks and timeline agree", ()
     expect(chargedCheck({ verdict: { status: "PASS" }, stages: stagesOf("PASSED") } as Receipt)).toBe("PASSED");
     expect(chargedCheck({ verdict: { status: "DEGRADED" }, stages: stagesOf("PASSED", "NOT_REACHED") } as Receipt)).toBe("PASSED");
     expect(chargedCheck({ verdict: { status: "DEGRADED" }, stages: stagesOf("FAILED", "NOT_REACHED") } as Receipt)).toBe("CHECKED");
-    expect(chargedCheck({ verdict: { status: null }, stages: stagesOf("PASSED") } as unknown as Receipt)).toBe("UNCHECKED");
+    // The stages decide first: a tick in the checks panel never sits beside "no check result".
+    expect(chargedCheck({ verdict: { status: null }, stages: stagesOf("PASSED") } as unknown as Receipt)).toBe("PASSED");
+    expect(chargedCheck({ verdict: { status: null }, stages: stagesOf("NOT_REACHED") } as unknown as Receipt)).toBe("UNCHECKED");
     expect(chargedCheck({ verdict: { status: "PASS" }, stages: stagesOf("NOT_REACHED", "NOT_REACHED", "NOT_REACHED", "SKIPPED") } as Receipt)).toBe("UNCHECKED");
   });
 
@@ -434,6 +436,8 @@ describe("receiptStory — headline, money strip, checks and timeline agree", ()
 
 describe("receiptTimeline — the 1-hour hold", () => {
   const SETTLED = "2026-10-16T00:00:02.000Z";
+  const INSIDE = Date.parse("2026-10-16T00:18:00.000Z");
+  const AFTER = Date.parse("2026-10-16T03:00:00.000Z");
   const receipt = settledReceipt({
     listedPrice: usd("50000"),
     chargedPrice: usd("50000"),
@@ -441,30 +445,56 @@ describe("receiptTimeline — the 1-hour hold", () => {
     settledAt: SETTLED,
     disputeWindowEndsAt: "2026-10-16T01:00:02.000Z",
     collectableAt: "2026-10-16T01:00:03.000Z",
+    disputeFilingClosesAt: "2026-10-23T00:00:02.000Z",
   });
+  const labels = (rows: { label: string }[]) => rows.map((r) => r.label);
 
-  it("inside the hold: refundable until the hour ends, paid to the provider after it", () => {
-    const rows = receiptTimeline(receipt, "CHARGED", { now: Date.parse("2026-10-16T00:18:00.000Z") });
-    expect(rows.map((r) => r.label)).toEqual([
+  it("inside the hold: refundable until the hour ends, then it goes to the provider", () => {
+    const rows = receiptTimeline(receipt, "CHARGED", { now: INSIDE });
+    expect(labels(rows)).toEqual([
       "Call made",
       "Money held",
       "Charged",
       "Refundable until then",
-      "Paid to provider after the hold",
+      "Goes to the provider after the hold",
     ]);
+    expect(rows[3]?.meta).toBe("report a bad result for a full refund");
     expect(rows.at(-1)?.meta).toBe("$0.05");
-    expect(refundableUntil(receipt, Date.parse("2026-10-16T00:18:00.000Z"))).toMatch(/^Refundable until .*01:00 UTC$/);
+    expect(refundableUntil(receipt, INSIDE)).toMatch(/^Refundable until .*01:00 UTC$/);
   });
 
-  it("after the hold: the hour ended and the provider was paid", () => {
-    const rows = receiptTimeline(receipt, "CHARGED", { now: Date.parse("2026-10-16T03:00:00.000Z") });
-    expect(rows.slice(-2).map((r) => r.label)).toEqual(["Refundable hour ended", "Paid to provider"]);
-    expect(refundableUntil(receipt, Date.parse("2026-10-16T03:00:00.000Z"))).toBeNull();
+  it("after the hold: the hour ended and the payment was released, never asserted 'Paid'", () => {
+    const rows = receiptTimeline(receipt, "CHARGED", { now: AFTER });
+    expect(labels(rows).slice(-2)).toEqual(["Refundable hour ended", "Released to the provider"]);
+    expect(labels(rows).join(" ")).not.toMatch(/Paid to provider/);
+    expect(refundableUntil(receipt, AFTER)).toBeNull();
+  });
+
+  // B2 review I1: collection waits while a report is open.
+  it("with a report open past collectableAt: held for the report, not released or paid", () => {
+    const rows = receiptTimeline(receipt, "CHARGED", { now: AFTER, report: "open" });
+    expect(labels(rows)).toContain("Held for your report until it is decided");
+    expect(labels(rows).join(" ")).not.toMatch(/Released to the provider|Paid to provider/);
+    expect(rows.find((r) => r.label === "Refundable hour ended")?.meta).toBe("you reported it");
+  });
+
+  // B2 review I2: no refund promise on a call that cannot be reported, or already was.
+  it("on a call that cannot be reported: 'Hold ends', no promise", () => {
+    const own = { ...receipt, disputeFilingClosesAt: null };
+    const inside = receiptTimeline(own, "CHARGED", { now: INSIDE });
+    expect(labels(inside)).toContain("Hold ends");
+    expect(inside.map((r) => r.meta).join(" ")).not.toMatch(/report|refund/);
+    expect(labels(receiptTimeline(own, "CHARGED", { now: AFTER }))).toContain("Hold ended");
+  });
+
+  it("on a call already reported: says so instead of inviting a report", () => {
+    const rows = receiptTimeline(receipt, "CHARGED", { now: INSIDE, report: "closed" });
+    expect(rows.find((r) => r.label === "Refundable until then")?.meta).toBe("you reported it");
   });
 
   it("draws no hold on a call that was not charged", () => {
     const refunded = settledReceipt({ status: "REFUNDED", chargedPrice: usd("0"), holdReleasedAt: SETTLED, collectableAt: null, disputeWindowEndsAt: null });
-    expect(receiptTimeline(refunded, "NOT_CHARGED").map((r) => r.label)).not.toContain("Paid to provider");
+    expect(labels(receiptTimeline(refunded, "NOT_CHARGED")).join(" ")).not.toMatch(/provider|Refundable/);
   });
 
   it("uses a debt's own closing row when one is given", () => {

@@ -397,11 +397,15 @@ export function samplingExplainerCopy(
 /**
  * What the checks said about a charged call, the one fact the headline, the
  * money strip and the timeline all hang on:
- *  - `PASSED`: the verdict is a pass, or a check ran and passed;
- *  - `UNCHECKED`: no verdict was recorded, or no check ran at all (every
- *    stage not reached, not sampled or not applicable). The call was served
- *    and charged, but nothing may say "Check passed";
+ *  - `PASSED`: a check ran and passed, or the verdict is a pass with stages
+ *    that ran (or none sent);
+ *  - `UNCHECKED`: no check passed, and no verdict was recorded or no check
+ *    ran at all (every stage not reached, not sampled or not applicable). The
+ *    call was served and charged, but nothing may say "Check passed";
  *  - `CHECKED`: a verdict other than a pass, with no stage that passed.
+ *
+ * The stages decide first: a passed stage is drawn as a tick in the checks
+ * panel, so the headline must not say "no check result" beside it.
  */
 export type ChargedCheck = "PASSED" | "UNCHECKED" | "CHECKED";
 
@@ -409,9 +413,9 @@ export function chargedCheck(receipt: Pick<Receipt, "verdict" | "stages">): Char
   const verdict = receipt.verdict?.status ?? null;
   const statuses = (receipt.stages ?? []).map(stageStatus);
   const ran = statuses.some((status) => status === "passed" || status === "failed");
+  if (statuses.includes("passed")) return "PASSED";
   if (verdict === null || (statuses.length > 0 && !ran)) return "UNCHECKED";
-  if (verdict === "PASS" || statuses.includes("passed")) return "PASSED";
-  return "CHECKED";
+  return verdict === "PASS" ? "PASSED" : "CHECKED";
 }
 
 const UNCHECKED_SENTENCE = "Served; no check result was recorded for this call.";
@@ -492,6 +496,18 @@ export function isFinalNotCharged(state: ReceiptState, receipt: Receipt): boolea
 
 /* ------------------------------------------------------- the one story */
 
+/** Where this call's reports leave its money: one being decided, one decided, or none. */
+export type ReceiptReportState = "none" | "open" | "closed";
+
+/** What the timeline needs besides the receipt. */
+export interface ReceiptTimelineOptions {
+  now?: number;
+  /** The closing row of a debt or a forfeit, which replaces the ordinary one. */
+  collectionClosing?: ReceiptTimelineRow;
+  /** The buyer's reports on this call (`none` when unknown). */
+  report?: ReceiptReportState;
+}
+
 /** One timeline row before it is stamped: an instant, not a formatted time. */
 export interface ReceiptTimelineRow {
   at: string;
@@ -523,7 +539,7 @@ export interface ReceiptStory {
 export function receiptStory(
   receipt: Receipt,
   state: ReceiptState = deriveReceiptState(receipt),
-  options: { now?: number; collectionClosing?: ReceiptTimelineRow } = {},
+  options: ReceiptTimelineOptions = {},
 ): ReceiptStory {
   return {
     state,
@@ -544,7 +560,7 @@ export function receiptStory(
 export function receiptTimeline(
   receipt: Receipt,
   state: ReceiptState,
-  { now = Date.now(), collectionClosing }: { now?: number; collectionClosing?: ReceiptTimelineRow } = {},
+  { now = Date.now(), collectionClosing, report = "none" }: ReceiptTimelineOptions = {},
 ): ReceiptTimelineRow[] {
   const rows: ReceiptTimelineRow[] = [
     { at: receipt.createdAt, label: "Call made", tone: "neutral" },
@@ -569,31 +585,51 @@ export function receiptTimeline(
     );
   }
 
-  if (state === "CHARGED" && chargedSomething) rows.push(...holdRows(receipt, now));
+  if (state === "CHARGED" && chargedSomething) rows.push(...holdRows(receipt, now, report));
   return rows;
 }
 
-/** The 1-hour hold after a charge, as timeline rows, in time order. */
-function holdRows(receipt: Receipt, now: number): ReceiptTimelineRow[] {
+/**
+ * The 1-hour hold after a charge, as timeline rows, in time order.
+ *
+ * Neither row claims more than the receipt knows:
+ *  - the end of the hour promises a refund only on a call that can be
+ *    reported (`disputeFilingClosesAt`); on any other it is just "Hold ends";
+ *  - the payment's release is an expectation read from the clock, never
+ *    "Paid": collection waits while a report is open, and for a blocked party
+ *    or a retry. While a report is open the money is held for it.
+ */
+function holdRows(receipt: Receipt, now: number, report: ReceiptReportState): ReceiptTimelineRow[] {
   const rows: ReceiptTimelineRow[] = [];
+  const reportable = Boolean(receipt.disputeFilingClosesAt);
   const windowEnds = receipt.disputeWindowEndsAt ?? null;
   if (windowEnds) {
     const open = now < Date.parse(windowEnds);
-    rows.push(
-      open
-        ? { at: windowEnds, label: "Refundable until then", meta: "report a bad result for a full refund", tone: "primary" }
-        : { at: windowEnds, label: "Refundable hour ended", tone: "neutral" },
-    );
+    if (!reportable) {
+      rows.push({ at: windowEnds, label: open ? "Hold ends" : "Hold ended", tone: "neutral" });
+    } else if (open) {
+      rows.push({
+        at: windowEnds,
+        label: "Refundable until then",
+        meta: report === "none" ? "report a bad result for a full refund" : "you reported it",
+        tone: "primary",
+      });
+    } else {
+      rows.push({ at: windowEnds, label: "Refundable hour ended", ...(report === "none" ? {} : { meta: "you reported it" }), tone: "neutral" });
+    }
   }
   const collectable = receipt.collectableAt ?? null;
   if (collectable) {
-    const paid = now >= Date.parse(collectable);
-    rows.push({
-      at: collectable,
-      label: paid ? "Paid to provider" : "Paid to provider after the hold",
-      meta: charged(receipt),
-      tone: paid ? "success" : "neutral",
-    });
+    if (report === "open") {
+      rows.push({ at: collectable, label: "Held for your report until it is decided", meta: charged(receipt), tone: "primary" });
+    } else {
+      rows.push({
+        at: collectable,
+        label: now >= Date.parse(collectable) ? "Released to the provider" : "Goes to the provider after the hold",
+        meta: charged(receipt),
+        tone: "neutral",
+      });
+    }
   }
   return rows.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
 }

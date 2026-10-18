@@ -53,32 +53,47 @@ const notReached = ["SCHEMA", "DETERMINISTIC_RULES", "CROSS_CHECK", "SEMANTIC"].
 
 afterEach(() => vi.useRealTimers());
 
+/** The e17d…0007 shape: SETTLED, no verification record, a released hold. */
+function uncheckedReceipt(over: Partial<Receipt> = {}): Receipt {
+  return {
+    intentId: "e17d0000-0000-0000-0000-000000000007",
+    toolId: "tool-rate",
+    providerId: null,
+    classification: "DATA_RESULT",
+    status: "SETTLED",
+    listedPrice: usd("20000"),
+    chargedPrice: usd("20000"),
+    withheld: usd("0"),
+    verdict: { status: null },
+    stages: notReached,
+    policy: {},
+    sampling: {},
+    createdAt: "2026-10-13T17:55:23.000Z",
+    expiresAt: "2026-10-13T18:00:23.000Z",
+    updatedAt: "2026-10-13T18:10:00.000Z",
+    holdReleasedAt: "2026-10-13T18:10:00.000Z",
+    evaluatedAt: null,
+    settledAt: null,
+    collectableAt: null,
+    disputeWindowEndsAt: null,
+    disputeFilingClosesAt: null,
+    ...over,
+  } as unknown as Receipt;
+}
+
+/**
+ * The timeline rows, in order, as screen readers get them ("label: meta"):
+ * each row carries an sr-only "stamp — label: meta", then the visible stamp.
+ */
+const STAMP = String.raw`(?:Today|Yesterday|[A-Z][a-z]{2} \d+,) \d\d:\d\d:\d\d UTC`;
+function timelineLabels(words: string): string[] {
+  const rows = new RegExp(`${STAMP} — (.*?) ${STAMP} `, "g");
+  return [...timelineOf(words).matchAll(rows)].map((m) => m[1]!.trim());
+}
+
 describe("the receipt page tells one story", () => {
   it("a settled call with no check record (e17d…0007) never says 'Check passed' or 'not charged'", () => {
-    const receipt = {
-      intentId: "e17d0000-0000-0000-0000-000000000007",
-      toolId: "tool-rate",
-      providerId: null,
-      classification: "DATA_RESULT",
-      status: "SETTLED",
-      listedPrice: usd("20000"),
-      chargedPrice: usd("20000"),
-      withheld: usd("0"),
-      verdict: { status: null },
-      stages: notReached,
-      policy: {},
-      sampling: {},
-      createdAt: "2026-10-13T17:55:23.000Z",
-      expiresAt: "2026-10-13T18:00:23.000Z",
-      updatedAt: "2026-10-13T18:10:00.000Z",
-      holdReleasedAt: "2026-10-13T18:10:00.000Z",
-      evaluatedAt: null,
-      settledAt: null,
-      collectableAt: null,
-      disputeWindowEndsAt: null,
-      disputeFilingClosesAt: null,
-    } as unknown as Receipt;
-    const words = render(receipt);
+    const words = render(uncheckedReceipt());
     expect(words).toContain("Charged $0.02. Served; no check result was recorded for this call.");
     expect(words).toContain("Served (not checked)");
     expect(words).not.toContain("Check passed");
@@ -89,28 +104,54 @@ describe("the receipt page tells one story", () => {
     expect(timeline).not.toContain("Hold released");
   });
 
-  it("a demo charged call inside the hold: unchanged story, plus the countdown and the hold rows", () => {
+  // B2 review C1: a rail-B call whose voucher is not redeemed yet has no hold fields, and a report IS refunded.
+  it("a reportable call not yet collected never says 'No refund'", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse("2026-10-13T18:20:00.000Z"));
+    const words = render(uncheckedReceipt({ providerId: "prv-1", disputeFilingClosesAt: "2026-10-20T18:10:00.000Z" }));
+    expect(words).not.toMatch(/no refund/i);
+    expect(words).toContain("Refundable: the 1-hour hold starts when the payment is collected.");
+    expect(words).toContain("The payment has not been collected yet. Report it now and, if your report is accepted, you are refunded in full.");
+    // One button, beside the headline; the box at the foot only explains.
+    expect(words.match(/Report a bad result/g)).toHaveLength(1);
+  });
+
+  it("a demo charged call inside the hold: the pre-B2 story, plus the countdown and the hold rows", () => {
     vi.useFakeTimers();
     vi.setSystemTime(DEMO_NOW_MS);
     const receipt = demoSettledReceipt("5e1d0c2a-7b44-4f19-a3e8-0c9d6b2f4a71", "geocode", 15) as unknown as Receipt;
     const words = render(receipt);
-    expect(words).toContain("Check passed");
-    expect(words).not.toContain("Served (not checked)");
+    // Unchanged from before B2: the headline, its sub-line and the money strip.
+    expect(words).toContain(
+      "Charged $0.0012. Passed every check we run on this call. One check (relevance) runs on a sample of calls; this call was not in the sample.",
+    );
+    expect(words).toContain("Where the money went Held $0.0012 Check passed Charged $0.0012");
+    // The timeline: the pre-B2 rows, then only the two hold rows.
+    expect(timelineLabels(words)).toEqual([
+      "Call made",
+      "Money held: $0.0012",
+      "Result checked",
+      "Charged: $0.0012",
+      "Refundable until then: report a bad result for a full refund",
+      "Goes to the provider after the hold: $0.0012",
+    ]);
     expect(words).toMatch(/Refundable until \S+ UTC · \d+m left to report it for a full refund\./);
-    expect(words).toContain("Report a bad result");
-    const timeline = timelineOf(words);
-    expect(timeline).toMatch(/Charged \$[\d.]+ .*Refundable until then .*Paid to provider after the hold/);
-    expect(timeline).not.toContain("not charged");
+    expect(words.match(/Report a bad result/g)).toHaveLength(1);
   });
 
-  it("a demo charged call after the hold: no countdown, the hour ended and the provider was paid", () => {
+  it("a demo charged call after the hold: no countdown, the hour ended, the D9 outcome", () => {
     vi.useFakeTimers();
     vi.setSystemTime(DEMO_NOW_MS);
     const receipt = demoSettledReceipt("8b3f6e9d-2c15-4a70-9e41-d7a05c38b2f6", "price_quote", 180) as unknown as Receipt;
     const words = render(receipt);
-    expect(words).toContain("Check passed");
+    expect(words).toMatch(/Charged \$[\d.]+\. Passed every check we run on this call\./);
+    expect(words).toMatch(/Where the money went Held \$[\d.]+ Check passed Charged \$[\d.]+/);
     expect(words).not.toContain("left to report it");
-    expect(timelineOf(words)).toMatch(/Refundable hour ended .*Paid to provider/);
-    expect(words).toContain("No refund. Your report counts against the provider's quality and can lead to a penalty on their stake.");
+    const labels = timelineLabels(words).map((l) => l.replace(/: \$[\d.]+$/, ""));
+    expect(labels).toEqual(["Call made", "Money held", "Result checked", "Charged", "Refundable hour ended", "Released to the provider"]);
+    expect(words).not.toContain("Paid to provider");
+    expect(words).toContain(
+      "The 1-hour hold has ended, so there is no refund for this call. If your report is accepted, it counts against the provider's quality and can lead to a penalty on their stake",
+    );
   });
 });
