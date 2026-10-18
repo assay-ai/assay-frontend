@@ -41,6 +41,7 @@ import { formatMoney, toDecimal } from "@/utils/money";
 
 import { CapsSheet } from "./caps-sheet";
 import { DepositSheet } from "./deposit-sheet";
+import { EscrowReconciliation, RefundableNowLine, WithdrawalsList } from "./funding-history";
 import { PendingTxList } from "./pending-tx-list";
 import { useBuyerMoney } from "./use-buyer-money";
 import { ClaimSheet, WithdrawSheet } from "./withdraw-sheets";
@@ -218,6 +219,9 @@ export function FundingView() {
         </div>
       </section>
 
+      {/* Charged calls a report would still refund in full: the backend's answer, never a clock rule. */}
+      {noEscrow ? null : <RefundableNowLine />}
+
       {freeOnly ? (
         <div
           className="flex w-full items-start gap-3 rounded-lg border border-warning-20 bg-warning-10 px-4 py-3"
@@ -267,6 +271,8 @@ export function FundingView() {
       {balances.length > 1 ? <AccountBalances balances={balances} chains={chains} /> : null}
 
       <DepositsList />
+
+      {escrow?.exists ? <WithdrawalsList pending={withdrawalPending} /> : null}
 
       <MoneyDrawers action={action} onAction={onAction} capsNeed={{ perCall: needPerCall, perDay: needPerDay }} />
     </div>
@@ -413,6 +419,8 @@ function EscrowCard({
           </div>
         </div>
       ) : null}
+
+      <EscrowReconciliation escrow={escrow} />
 
       {escrow.observedAt ? (
         <p className="text-body-xs text-03">

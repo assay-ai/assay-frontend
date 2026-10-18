@@ -24,6 +24,7 @@ import {
   callOutcome,
   matchesFilter,
   parseCallsFilter,
+  refundableOnly,
   statusesFor,
   type CallsFilter,
 } from "@/features/buyer/call-outcome";
@@ -86,6 +87,7 @@ function CallsList() {
       listToolCalls({
         limit: PAGE,
         status: statusesFor(filter),
+        refundable: refundableOnly(filter),
         toolId: toolId ?? undefined,
         cursor: pageParam ?? undefined,
       }),
@@ -192,7 +194,9 @@ function CallsList() {
             title={
               filter === "charged"
                 ? "No charged calls"
-                : filter === "owed"
+                : filter === "refundable"
+                  ? "No call is still refundable"
+                  : filter === "owed"
                   ? query.hasNextPage
                     ? "No owed calls among the latest"
                     : "Nothing owed"
@@ -203,7 +207,9 @@ function CallsList() {
                     : "No calls to this tool"
             }
             description={
-              filter === "owed"
+              filter === "refundable"
+                ? "No charged call can be reported for a full refund right now. A call stays here for its 1-hour hold, on chains that have one."
+                : filter === "owed"
                 ? query.hasNextPage
                   ? "None of the calls loaded so far is owed. Older calls may be: load more to look further back."
                   : "Every paid call's payment was collected. An owed call shows here until you settle it."
@@ -253,6 +259,17 @@ function CallsList() {
                       </span>
                       {paymentNote && outcome !== "owed" ? (
                         <span className="text-body-xs text-03">{paymentNote}</span>
+                      ) : null}
+                      {filter === "refundable" ? (
+                        <span className="text-body-xs text-success-700" data-testid="call-refundable-until">
+                          {call.refundableIfReportedUntil ? (
+                            <>
+                              Refundable until <UtcTime value={call.refundableIfReportedUntil} midSentence /> if you report it
+                            </>
+                          ) : (
+                            "Refundable if you report it: the 1-hour hold starts when the payment is collected"
+                          )}
+                        </span>
                       ) : null}
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-0.5">
