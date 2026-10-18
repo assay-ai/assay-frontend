@@ -13,6 +13,7 @@ import {
   shareDialogModel,
   sharedLink,
   shareStatus,
+  shareUrlPreview,
   snapshotOfDraft,
   updateNoticeHref,
   updateNoticeText,
@@ -217,5 +218,24 @@ describe("what changed in a tool's provider rule, in words", () => {
     expect(humanToolName("get_token_market")).toBe("Token market");
     expect(humanToolName("cobalt__news_search")).toBe("News search");
     expect(humanToolName("summarize_document")).toBe("Summarize document");
+  });
+});
+
+describe("shareUrlPreview (D19: the final URL before the name is claimed)", () => {
+  const base = { slug: "tools-i-use", nextVersion: 1, unlisted: null, host: "https://mcp.example.com" };
+  it("a catalogue share shows @name/slug@version, with a placeholder until a name is typed", () => {
+    expect(shareUrlPreview({ ...base, visibility: "PUBLIC", handle: "acme" })?.url).toBe("https://mcp.example.com/@acme/tools-i-use@1");
+    expect(shareUrlPreview({ ...base, visibility: "PUBLIC", handle: null })?.url).toBe("https://mcp.example.com/@<your public name>/tools-i-use@1");
+  });
+  it("a link share has no name in it; its code is made on share, or kept when it exists", () => {
+    const fresh = shareUrlPreview({ ...base, visibility: "UNLISTED", handle: "acme" });
+    expect(fresh?.url).toBe("https://mcp.example.com/u/<private code>@1");
+    expect(fresh?.note).toContain("does not contain your public name");
+    expect(shareUrlPreview({ ...base, visibility: "UNLISTED", handle: "acme", nextVersion: 3, unlisted: "https://mcp.example.com/u/tok123" })?.url).toBe(
+      "https://mcp.example.com/u/tok123@3",
+    );
+  });
+  it("nothing for Only my team", () => {
+    expect(shareUrlPreview({ ...base, visibility: "PRIVATE", handle: "acme" })).toBeNull();
   });
 });

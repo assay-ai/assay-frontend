@@ -6,6 +6,7 @@ import * as React from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { failRateShort, FAILURE_RATE_WINDOW_DAYS, stakeRuleSentence } from "@/features/explorer/explorer-text";
+import { chainsText, servingStatus } from "@/features/toolsets/provider-fit";
 import { useChainName } from "@/hooks/useChainName";
 import { chainName as chainNameOf } from "@/utils/chain";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -115,6 +116,23 @@ function ProviderStake({ stake, chainName }: { stake: ChainStake[]; chainName: (
 }
 
 /**
+ * Whether this provider takes a call from YOUR agents now (B16): "Serves you",
+ * "Doesn't take payment on your chain", "Not taking calls now", or "Can't
+ * check right now" when the backend could not read it. Computed by the backend
+ * from the router's own gates and your agents' chains; nothing shows before
+ * it has loaded.
+ */
+export function ServingChip({ fit }: { fit: { chains?: readonly string[] | null; servesYou?: boolean | null; notServedReason?: "WITHDRAWING" | null } }) {
+  const status = servingStatus(fit);
+  if (status.kind === "not-loaded") return null;
+  return (
+    <span data-testid="serving-chip" data-kind={status.kind}>
+      <StatusPill label={status.label} tone={status.tone} />
+    </span>
+  );
+}
+
+/**
  * Exported so `providers-view.dom.test.tsx` can render it and assert on the
  * markup that comes out. The Stake stat's regression was a THROW at render,
  * which a test over the presenter alone would have missed the shape of — it
@@ -143,12 +161,13 @@ export function ProviderCard({
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
           <span className="truncate text-label-md text-01">{provider.name}</span>
-          <span className="flex">
+          <span className="flex flex-wrap gap-1.5">
             {provider.verified ? (
               <StatusPill label="VERIFIED" tone="primary" />
             ) : (
               <StatusPill label="NOT VERIFIED" tone="neutral" />
             )}
+            <ServingChip fit={provider} />
           </span>
         </div>
         <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
@@ -156,6 +175,7 @@ export function ProviderCard({
 
       <p className="text-body-13 text-02">
         {provider.toolIds.length} {provider.toolIds.length === 1 ? "tool" : "tools"} served
+        {chainsText(provider, chainName) ? ` · ${chainsText(provider, chainName)}` : ""}
         {provider.yourCalls > 0
           ? ` · you have called them ${provider.yourCalls} ${provider.yourCalls === 1 ? "time" : "times"} (calls to all their tools)${callsWindow ? ` ${callsWindow}` : ""}`
           : ""}
@@ -315,7 +335,7 @@ export function ProvidersView() {
                   ? `${providers.length} provider${providers.length === 1 ? " is" : "s are"} listed, ${verifiedCount} of them verified. Clear the verified filter to see the rest — an unverified provider is one whose identity we have not checked, not one whose answers are bad.`
                   : query.trim()
                     ? `${providers.length} provider${providers.length === 1 ? " is" : "s are"} listed. Search matches a provider's name and id.`
-                    : "This list is the whole platform, not your own traffic — so it is empty only when nobody has published a binding yet. A provider appears the moment one of their bindings goes active."
+                    : "This list is the whole platform, not your own traffic — so it is empty only when nobody has listed a tool yet. A provider appears the moment one of their tools goes live."
               }
             />
           ) : (

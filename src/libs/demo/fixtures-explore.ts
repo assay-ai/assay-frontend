@@ -598,6 +598,9 @@ function providerRow(provider: DemoProvider): CatalogueProvider {
     fromPrice: cheapest(offers.map((offer) => offer.price)),
     stake: provider.stake.map(bonded),
     quality: provider.quality,
+    // One demo chain, and the demo buyer's agent pays on it: every listing serves it.
+    chains: offers.length > 0 ? [DEMO_CHAIN_ID] : [],
+    servesYou: offers.length > 0,
   };
 }
 
@@ -609,6 +612,8 @@ function providerTools(provider: DemoProvider): CatalogueProviderTool[] {
     price,
     promisedFailureRate: promisedRate(provider),
     freeCallsPerAgentPerDay: tool.pricingMode === "FREEMIUM" || tool.pricingMode === "FREE" ? (tool.freePerAgent ?? 100) : null,
+    chains: [DEMO_CHAIN_ID],
+    servesYou: true,
   }));
 }
 

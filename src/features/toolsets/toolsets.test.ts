@@ -390,7 +390,9 @@ describe("a tool set entry's provider rule", () => {
   it("makes a slug from a name", () => {
     expect(slugFrom("Research kit")).toBe("research-kit");
     expect(slugFrom("Café — Météo!")).toBe("cafe-meteo");
-    expect(slugFrom("x")).toBe("x-1");
+    expect(slugFrom("x")).toBe("set-x");
+    expect(slugFrom("!!")).toBe("set-new");
+    expect(slugFrom("ÉTÉ")).toBe("ete");
   });
 });
 

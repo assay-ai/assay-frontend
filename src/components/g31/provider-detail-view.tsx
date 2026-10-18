@@ -24,6 +24,7 @@ import {
   stakeSummary,
   uniformPromise,
 } from "@/features/explorer/explorer-text";
+import { chainsText } from "@/features/toolsets/provider-fit";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
@@ -31,7 +32,9 @@ import { routes } from "@/libs/routes";
 import { getCatalogueProvider } from "@/services/catalogue.service";
 import { formatMoney } from "@/utils/money";
 
+import { ServingChip } from "./providers-view";
 import { useCatalogue } from "./use-catalogue";
+import { useExploreAgent } from "@/components/explorer/tool-access-control";
 
 /**
  * Explore › provider (`/explore/providers/view?id=`): who they are, how often
@@ -43,6 +46,7 @@ import { useCatalogue } from "./use-catalogue";
 export function ProviderDetailView({ providerId }: { providerId: string }) {
   const chainName = useChainName();
   const { calls, tools } = useCatalogue();
+  const explore = useExploreAgent();
   const allToolIds = React.useMemo(() => tools.map((t) => t.toolId), [tools]);
 
   const entry = useQuery({
@@ -56,9 +60,9 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
   const own = React.useMemo(() => calls.filter((c) => c.providerId === providerId).slice(0, 10), [calls, providerId]);
 
   const back = (
-    <Link href="/explore" className="inline-flex items-center gap-1.5 self-start text-label-13 text-02 hover:text-01">
+    <Link href="/explore/providers" className="inline-flex items-center gap-1.5 self-start text-label-13 text-02 hover:text-01">
       <ArrowLeft aria-hidden="true" className="size-3.5" />
-      All tools
+      All providers
     </Link>
   );
 
@@ -70,7 +74,7 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
           kind="empty"
           title="We could not find this provider"
           description="They may have left the platform."
-          action={{ label: "See all tools", href: "/explore" }}
+          action={{ label: "See all providers", href: "/explore/providers" }}
         />
       </div>
     );
@@ -109,8 +113,12 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
           <h1 className="text-heading-md text-01">{provider.legalName}</h1>
           <VerifiedMark verified={provider.verified} interactive />
           {failsOften(provider.quality) ? <FailsOftenChip /> : null}
+          <ServingChip fit={provider} />
         </div>
-        <p className="text-body-13 text-02">Serves {plural(provider.tools.length, "tool")} on Assay.</p>
+        <p className="text-body-13 text-02">
+          Serves {plural(provider.tools.length, "tool")} on Assay
+          {chainsText(provider, chainName) ? ` · ${chainsText(provider, chainName)}` : ""}.
+        </p>
       </header>
 
       <section className="grid grid-cols-1 gap-4 rounded-xl border border-01 bg-01 p-4 tablet:grid-cols-3 tablet:p-5">
@@ -129,6 +137,19 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>Tools they serve</PanelTitle>
+            {provider.tools.length > 0 ? (
+              <p className="text-body-xs text-03" data-testid="tool-switch-scope">
+                Allow or block each tool for {explore.name}. Blocking a tool blocks it from every provider. To keep{" "}
+                {explore.name} away from this provider only, use{" "}
+                <Link
+                  href={explore.agent ? `/agents?agent=${encodeURIComponent(explore.agent.agentId)}#access` : "/agents"}
+                  className="text-primary-600 hover:underline"
+                >
+                  its provider limits
+                </Link>
+                .
+              </p>
+            ) : null}
           </PanelTitles>
         </PanelHeader>
         <PanelBody>
@@ -141,7 +162,11 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
                   <Link href={routes.exploreTool(tool.toolId)} className="flex min-w-0 flex-1 flex-col gap-1 hover:underline">
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
+                      <ServingChip fit={tool} />
                     </span>
+                    {chainsText(tool, chainName) ? (
+                      <span className="text-body-xs text-03">{chainsText(tool, chainName)}</span>
+                    ) : null}
                     {/* This provider's own listing: one price, its free calls first (as on the public page). */}
                     <OfferPrice
                       offer={offerLine({
