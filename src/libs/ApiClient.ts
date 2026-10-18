@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from "axios";
 
 import type { ApiEnvelope, ApiErrorBody } from "@/interfaces";
+import { clearKeptTestInputs } from "@/features/provider-binding/wizard/test-input-store";
 import { debtRefusalSentence } from "@/libs/buyer-debt";
 import { demoEnabled, demoResponse } from "@/libs/demo/demo-api";
 import { SLASH_HOLD_ERROR_CODES, slashHoldAudienceOf, slashHoldErrorText } from "@/libs/slash-hold";
@@ -54,6 +55,7 @@ export function setSessionToken(token: string): void {
   }
 }
 
+/** Every logout path calls this, so per-session leftovers are cleared here too. */
 export function clearSessionToken(): void {
   if (typeof window === "undefined") return;
   try {
@@ -61,6 +63,7 @@ export function clearSessionToken(): void {
   } catch {
     /* nothing to do */
   }
+  clearKeptTestInputs();
 }
 
 /**

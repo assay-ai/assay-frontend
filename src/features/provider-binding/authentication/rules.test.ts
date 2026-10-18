@@ -5,6 +5,7 @@ import {
   isCredentialQueryKey,
   isSecretConstantHeader,
   looksLikeSecretName,
+  moveQueryKeys,
   originOf,
   splitHeaderLine,
 } from "./rules";
@@ -126,5 +127,34 @@ describe("looksLikeSecretName", () => {
     // The backend tokenises the raw name; padding stays in its last token ("key "), which no word ends.
     expect(looksLikeSecretName(" x-api-key ")).toBe(false);
     expect(looksLikeSecretName("X_API_KEY")).toBe(true);
+  });
+});
+
+describe("moveQueryKeys", () => {
+  it("takes credential-like parameters out of the address, as headers", () => {
+    expect(moveQueryKeys("https://httpbin.org/anything?api_key=ux-review-dummy-value")).toEqual({
+      endpoint: "https://httpbin.org/anything",
+      headers: [{ name: "api_key", value: "ux-review-dummy-value" }],
+    });
+  });
+
+  it("keeps the other parameters and a bare origin as typed", () => {
+    expect(moveQueryKeys("https://x.test/v1?units=metric&apikey=k")).toEqual({
+      endpoint: "https://x.test/v1?units=metric",
+      headers: [{ name: "apikey", value: "k" }],
+    });
+    expect(moveQueryKeys("https://x.test?token=t")?.endpoint).toBe("https://x.test");
+  });
+
+  it("keeps the other pairs byte for byte, re-encoding nothing", () => {
+    expect(moveQueryKeys("https://x.test/v1?ids=bitcoin,ethereum&api_key=k%2Fv&q=a%20b&flag")).toEqual({
+      endpoint: "https://x.test/v1?ids=bitcoin,ethereum&q=a%20b&flag",
+      headers: [{ name: "api_key", value: "k/v" }],
+    });
+  });
+
+  it("returns null when there is nothing to move", () => {
+    expect(moveQueryKeys("https://x.test/v1?units=metric")).toBeNull();
+    expect(moveQueryKeys("not a url")).toBeNull();
   });
 });
