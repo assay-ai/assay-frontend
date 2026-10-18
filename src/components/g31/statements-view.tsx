@@ -12,6 +12,7 @@ import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
+import { notChargedLines, type NotChargedLine } from "@/features/buyer/not-charged";
 import { recentMonths } from "@/features/buyer/period";
 import { MATCHES_SENTENCE, ReconcileNote, reconcileState } from "@/features/buyer/reconcile-note";
 import { readWithheld } from "@/features/buyer/wire";
@@ -52,10 +53,11 @@ function notChargedOf(figures: SummaryFigures): Money {
 
 /**
  * The month's figures, adding up like /spend's buckets:
- * listed = paid + not charged + owed + in progress. The guarantee's withheld
- * amount is a part of not charged, not all of it (final review M1).
+ * listed = paid + not charged + owed + in progress. Not charged is itemised
+ * into the same three lines as the Not charged page (`GET /withheld`), so
+ * every not-charged call has its reason on the statement.
  */
-export function StatementFigures({ totals, withheldSub }: { totals: SummaryFigures; withheldSub: string | null }) {
+export function StatementFigures({ totals, lines }: { totals: SummaryFigures; lines: readonly NotChargedLine[] | null }) {
   const notChargedCalls = totals.notChargedCalls ?? totals.refundedCalls;
   const owedCalls = totals.owedCalls ?? 0;
   const inProgressCalls = totals.inProgressCalls ?? 0;
@@ -68,17 +70,21 @@ export function StatementFigures({ totals, withheldSub }: { totals: SummaryFigur
       />
       <KeyValueRow
         label={<Term k="not-charged">Not charged</Term>}
-        sub={[
-          plural(notChargedCalls, "call"),
-          hasMoney(totals.withheldTotal)
-            ? `${formatMoney(totals.withheldTotal, { decimals: 2 })} by the guarantee${withheldSub ? ` (${withheldSub})` : ""}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(" · ")}
+        sub={plural(notChargedCalls, "call")}
         value={`−${formatMoney(notChargedOf(totals), { decimals: 2 })}`}
         valueClassName="text-teal-600"
       />
+      {(lines ?? [])
+        .filter((line) => line.calls > 0)
+        .map((line) => (
+          <KeyValueRow
+            key={line.bucket}
+            label={<span className="pl-3">{line.label}</span>}
+            sub={<span className="pl-3">{`${plural(line.calls, "call")}${line.note ? ` · ${line.note}` : ""}`}</span>}
+            value={formatMoney(line.amount, { decimals: 2 })}
+            valueClassName="font-normal text-03"
+          />
+        ))}
       {owedCalls > 0 || hasMoney(totals.owedTotal) ? (
         <KeyValueRow
           label={<Term k="owed">Owed</Term>}
@@ -134,16 +140,10 @@ function StatementsContent() {
   });
   const withheld = withheldQuery.data ? readWithheld(withheldQuery.data, summary.data?.asset) : null;
   const matches = reconcileState(withheld) === "matches";
-  const notChargedCalls = withheld?.withheld.calls ?? null;
-  const failedChecks = withheld?.withheld.buckets.find((b) => b.bucket === "FAILED_VERIFICATION")?.calls ?? null;
-  const noResult = withheld?.withheld.buckets.find((b) => b.bucket === "PROVIDER_OR_PLATFORM_ERROR")?.calls ?? null;
 
   const totals = summary.data?.totals;
-  // Why calls were withheld, from `GET /withheld`: a part of Not charged, never all of it.
-  const withheldSub =
-    notChargedCalls !== null && failedChecks !== null && noResult !== null
-      ? `${formatCount(failedChecks)} failed checks, ${formatCount(noResult)} had no usable result or went uncollected`
-      : null;
+  // Why calls were not charged, from `GET /withheld`: the three lines add up to Not charged.
+  const lines = withheld ? notChargedLines(withheld) : null;
   const groups = summary.data?.groups ?? [];
 
   const download = React.useCallback(() => {
@@ -234,7 +234,7 @@ function StatementsContent() {
               {!totals || totals.calls === 0 ? (
                 <p className="py-3 text-body-13 text-02">No paid calls in {period.label}, so there is nothing to itemise.</p>
               ) : (
-                <StatementFigures totals={totals} withheldSub={withheldSub} />
+                <StatementFigures totals={totals} lines={lines} />
               )}
             </PanelBody>
           </Panel>
