@@ -5,6 +5,9 @@ import Link from "next/link";
 import * as React from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { failRateShort, FAILURE_RATE_WINDOW_DAYS, stakeRuleSentence } from "@/features/explorer/explorer-text";
+import { useChainName } from "@/hooks/useChainName";
+import { chainName as chainNameOf } from "@/utils/chain";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Search } from "@/components/ui/search";
 import { ApiError } from "@/libs/ApiClient";
@@ -45,7 +48,7 @@ import { routes } from "@/libs/routes";
 type SortKey = "quality" | "calls" | "price" | "name";
 
 const SORTS: { value: SortKey; label: string }[] = [
-  { value: "quality", label: "Quality" },
+  { value: "quality", label: "Failure rate" },
   { value: "calls", label: "Calls" },
   { value: "price", label: "Price" },
   { value: "name", label: "Name" },
@@ -76,7 +79,7 @@ const SORTS: { value: SortKey; label: string }[] = [
  * has to say which chain it belongs to, or the card shows a number that is
  * true on one chain and false on the other with nothing saying which.
  */
-function ProviderStake({ stake }: { stake: ChainStake[] }) {
+function ProviderStake({ stake, chainName }: { stake: ChainStake[]; chainName: (chainId: string) => string }) {
   const lines = stakeLines(stake);
 
   return (
@@ -100,9 +103,7 @@ function ProviderStake({ stake }: { stake: ChainStake[] }) {
           {lines.map((line) => (
             <span key={line.chainId} className="flex min-w-0 flex-col">
               {line.label ? (
-                <span className="truncate font-mono text-mono-xs text-03" title={line.chainId}>
-                  {line.label}
-                </span>
+                <span className="truncate text-body-xs text-03">{chainName(line.chainId)}</span>
               ) : null}
               <span className="font-mono text-mono-13 font-semibold text-01">{line.amount}</span>
             </span>
@@ -119,7 +120,16 @@ function ProviderStake({ stake }: { stake: ChainStake[] }) {
  * which a test over the presenter alone would have missed the shape of — it
  * has to be the component, and the assertion has to be the DOM.
  */
-export function ProviderCard({ provider, callsWindow }: { provider: ProviderRow; callsWindow?: string }) {
+export function ProviderCard({
+  provider,
+  callsWindow,
+  chainName = (chainId) => chainNameOf(chainId),
+}: {
+  provider: ProviderRow;
+  callsWindow?: string;
+  /** Names a chain for the stake lines (`useChainName` on the page): never a raw CAIP-2 id. */
+  chainName?: (chainId: string) => string;
+}) {
   return (
     <Link
       href={routes.exploreProvider(provider.providerId)}
@@ -147,26 +157,29 @@ export function ProviderCard({ provider, callsWindow }: { provider: ProviderRow;
       <p className="text-body-13 text-02">
         {provider.toolIds.length} {provider.toolIds.length === 1 ? "tool" : "tools"} served
         {provider.yourCalls > 0
-          ? ` · you have called them ${provider.yourCalls} ${provider.yourCalls === 1 ? "time" : "times"}${callsWindow ? ` ${callsWindow}` : ""}`
+          ? ` · you have called them ${provider.yourCalls} ${provider.yourCalls === 1 ? "time" : "times"} (calls to all their tools)${callsWindow ? ` ${callsWindow}` : ""}`
           : ""}
         .
       </p>
 
       <div className="flex w-full gap-2.5 border-t border-01 pt-2.5">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <MicroLabel className="font-sans">Quality</MicroLabel>
+          <MicroLabel className="font-sans">Failure rate</MicroLabel>
           {provider.quality == null ? (
             <span className="truncate font-mono text-mono-13 text-03">not measured</span>
           ) : (
-            <span
-              className="font-mono text-mono-13 font-semibold text-teal-600"
-              title={`${provider.measuredCalls.toLocaleString()} calls measured across the platform, all time`}
-            >
-              {(provider.quality * 100).toFixed(1)}%
-            </span>
+            <>
+              <span className="font-mono text-mono-13 font-semibold text-01" data-testid="provider-failure-rate">
+                {failRateShort(provider)}
+              </span>
+              <span className="text-body-xs text-03">
+                of {provider.measuredCalls.toLocaleString("en-US")} checked calls to all their tools, last{" "}
+                {FAILURE_RATE_WINDOW_DAYS} days
+              </span>
+            </>
           )}
         </div>
-        <ProviderStake stake={provider.stake} />
+        <ProviderStake stake={provider.stake} chainName={chainName} />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <MicroLabel className="font-sans">From</MicroLabel>
           <span className="font-mono text-mono-13 font-semibold text-01">
@@ -180,6 +193,7 @@ export function ProviderCard({ provider, callsWindow }: { provider: ProviderRow;
 
 export function ProvidersView() {
   const { providers, tools, isPending, isError, error, callsWindow } = useCatalogue();
+  const chainName = useChainName();
   const [query, setQuery] = React.useState("");
   const [verifiedOnly, setVerifiedOnly] = React.useState(false);
   const [sort, setSort] = React.useState<SortKey>("quality");
@@ -220,7 +234,7 @@ export function ProvidersView() {
 
       <PageHeader
         title="Providers"
-        subtitle={`${providers.length} providers · ${tools.length} tools · quality is measured on real traffic across the platform, not claimed`}
+        subtitle={`${providers.length} providers · ${tools.length} tools · failure rates are measured on real traffic across the platform, not claimed`}
         actions={
           <>
             <Search
@@ -259,11 +273,10 @@ export function ProvidersView() {
 
       <div className="flex w-full items-start gap-2.5 rounded-lg border border-01 bg-01 px-4 py-3">
         <Info aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-03" />
-        <p className="text-body-13 text-02">
-          Anyone can register, write their own binding and publish it. A provider stakes before
-          serving paid traffic, and loses part of that stake when they return a response our checks
-          reject. The verified label is an identity check, not a gate — it tells you who you are
-          buying from, not whether they are any good. Quality does that.
+        <p className="text-body-13 text-02" data-testid="providers-stake-rule">
+          Anyone can register and list a tool, and a provider stakes before serving paid calls.{" "}
+          {stakeRuleSentence()} The verified label is an identity check, not a gate: it tells you who
+          you are buying from, not whether their results are good. The failure rate does that.
         </p>
       </div>
 
@@ -308,7 +321,12 @@ export function ProvidersView() {
           ) : (
             <div className="grid w-full grid-cols-1 gap-3 tablet:grid-cols-2 desktop:grid-cols-3">
               {visible.map((provider) => (
-                <ProviderCard key={provider.providerId} provider={provider} callsWindow={callsWindow} />
+                <ProviderCard
+                  key={provider.providerId}
+                  provider={provider}
+                  callsWindow={callsWindow}
+                  chainName={chainName}
+                />
               ))}
             </div>
           )}

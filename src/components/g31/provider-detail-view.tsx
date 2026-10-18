@@ -14,7 +14,16 @@ import { StatusChip } from "@/components/patterns/status-chip";
 import { Term } from "@/components/patterns/term";
 import { Panel, PanelBody, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { callOutcome } from "@/features/buyer/call-outcome";
-import { failRateLabel, failsOften, formatCallPrice, offerLine, plural, stakeSummary } from "@/features/explorer/explorer-text";
+import {
+  failRateLabel,
+  failsOften,
+  formatCallPrice,
+  offerLine,
+  percentText,
+  plural,
+  stakeSummary,
+  uniformPromise,
+} from "@/features/explorer/explorer-text";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
@@ -105,7 +114,9 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
       </header>
 
       <section className="grid grid-cols-1 gap-4 rounded-xl border border-01 bg-01 p-4 tablet:grid-cols-3 tablet:p-5">
-        <Fact label={<ObservedFailuresLabel interactive />}>{failRateLabel(provider.quality)}</Fact>
+        <Fact label={<ObservedFailuresLabel interactive />}>
+          {failRateLabel(provider.quality, uniformPromise(provider.tools.map((tool) => tool.promisedFailureRate)))}
+        </Fact>
         <Fact label="Stake at risk">{stakeSummary(provider.stake, chainName)}</Fact>
         <Fact label="Cheapest call">{provider.fromPrice ? formatCallPrice(provider.fromPrice) : "—"}</Fact>
         <p className="text-body-xs text-03 tablet:col-span-3">
@@ -139,6 +150,9 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
                         freeCallsPerDay: tool.freeCallsPerAgentPerDay,
                       })}
                     />
+                    {typeof tool.promisedFailureRate === "number" ? (
+                      <span className="text-body-xs text-03">Promises at most {percentText(tool.promisedFailureRate)} failed</span>
+                    ) : null}
                   </Link>
                   <ToolAccessControl toolId={tool.toolId} toolName={tool.name} allToolIds={allToolIds} />
                 </li>

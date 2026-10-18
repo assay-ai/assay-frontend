@@ -8,7 +8,16 @@ import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, VerifiedMark }
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
-import { failRateLabel, failsOften, formatCallPrice, offerLine, plural, stakeSummary } from "@/features/explorer/explorer-text";
+import {
+  failRateLabel,
+  failsOften,
+  formatCallPrice,
+  offerLine,
+  percentText,
+  plural,
+  stakeSummary,
+  uniformPromise,
+} from "@/features/explorer/explorer-text";
 import { publicErrorText, usePublicProvider, usePublicTools } from "@/features/explorer/use-public-explorer";
 import { useChainName } from "@/hooks/useChainName";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -76,7 +85,9 @@ function ProviderPage() {
       </header>
 
       <section className="grid grid-cols-1 gap-4 rounded-xl border border-01 bg-01 p-4 tablet:grid-cols-2 tablet:p-5">
-        <Fact label={<ObservedFailuresLabel interactive />}>{failRateLabel(provider.quality)}</Fact>
+        <Fact label={<ObservedFailuresLabel interactive />}>
+          {failRateLabel(provider.quality, uniformPromise(provider.tools.map((tool) => tool.promisedFailureRate)))}
+        </Fact>
         <Fact label="Stake at risk">{stakeSummary(provider.stake, chainName)}</Fact>
         <p className="text-body-xs text-03 tablet:col-span-2">
           Failures are measured by Assay on real calls, not reported by the provider. If they fail more often than they
@@ -102,6 +113,9 @@ function ProviderPage() {
                       <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
                       {describe.get(tool.toolId) ? (
                         <span className="line-clamp-2 text-body-xs text-02">{describe.get(tool.toolId)}</span>
+                      ) : null}
+                      {typeof tool.promisedFailureRate === "number" ? (
+                        <span className="text-body-xs text-03">Promises at most {percentText(tool.promisedFailureRate)} failed</span>
                       ) : null}
                     </span>
                     <OfferPrice

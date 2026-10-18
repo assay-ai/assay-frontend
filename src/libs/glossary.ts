@@ -118,9 +118,9 @@ export const GLOSSARY = {
       "Assay checked who the company behind this provider is; it is not a quality score and says nothing about their stake or failure rate.",
   },
   "observed-failures": {
-    term: "Observed failures",
+    term: "Failure rate",
     definition:
-      "The share of a provider's checked calls whose result failed, measured by Assay on real calls rather than reported by the provider: all time and across all their tools, counting finished check windows only (each lasts up to 7 days), so the latest days join once their window closes. \"Not measured yet\" until their first paid calls have been checked.",
+      "The share of a provider's checked calls whose result failed, measured by Assay on real calls rather than reported by the provider: the check windows active in the last 30 days (each covers up to 7 days, so the period is approximate), across all their tools, including calls still in an open window. \"Promised at most\" is the rate the provider committed to; penalties are judged against it, one finished check window at a time. \"Not measured yet\" until their first paid calls have been checked.",
   },
   mcp: {
     term: "MCP",
