@@ -4,6 +4,7 @@ import type { AgentAccess, AgentToolEffect, McpUrlPreview, RefusedCall } from "@
 
 import {
   accessSummary,
+  unusableTools,
   allowToolsBody,
   excludeProviderBody,
   includeProviderBody,
@@ -59,7 +60,7 @@ describe("What this agent can use — the combined result per tool", () => {
     expect(toolResultLine(tool({ providersTotal: 2, providersLeft: 2 }), rules)).toBe("get_weather: both providers");
     expect(toolResultLine(tool({ providersTotal: 1, providersLeft: 1 }), rules)).toBe("get_weather: 1 provider, no backup");
     expect(toolResultLine(tool({ providersLeft: 0 }), access().rules)).toBe("get_weather: no provider fits (your limit: max $0.01)");
-    expect(toolResultLine(tool({ providersTotal: 0, providersLeft: 0 }), rules)).toBe("get_weather: no provider serves it yet");
+    expect(toolResultLine(tool({ providersTotal: 0, providersLeft: 0 }), rules)).toBe("get_weather: no provider is taking calls for it now");
     expect(toolResultLine(tool({ access: "BLOCKED" }), rules)).toBe("get_weather: not in this agent's list");
     expect(toolResultLine(tool({ access: "VIA_TOOLSET_URL", providersLeft: 4 }), rules)).toBe(
       "get_weather: all 4 providers · only through its tool set's URL",
@@ -82,6 +83,31 @@ describe("What this agent can use — the combined result per tool", () => {
   it("summarises the agent's access in one line", () => {
     expect(accessSummary(access())).toBe("Can use 1 of 2 tools.");
     expect(accessSummary(access({ accessMode: "ALL" }))).toMatch(/^Can use every tool, including new ones\. 2 of 2/);
+  });
+
+  it("names every tool it may use but cannot run, with the reason, instead of a bare \"1 of 8\"", () => {
+    const rules = { excludeProviderIds: [], maxPrice: usd("10000"), minTier: null, minQuality: null };
+    const everything = access({
+      accessMode: "ALL",
+      rules,
+      tools: [
+        tool({ providersTotal: 2, providersLeft: 2 }),
+        tool({ toolId: "t-geo", name: "geocode_place", providersTotal: 0, providersLeft: 0 }),
+        tool({ toolId: "t-fx", name: "get_usd_eur_rate", providersTotal: 1, providersLeft: 0 }),
+      ],
+    });
+    expect(accessSummary(everything)).toBe(
+      "Can use every tool, including new ones. 1 of 3 can run now; 2 can't (1 with no provider taking calls, 1 outside its limits).",
+    );
+    expect(unusableTools(everything)).toEqual([
+      { toolId: "t-geo", name: "geocode_place", reason: "no-provider", text: "no provider is taking calls for it now" },
+      { toolId: "t-fx", name: "get_usd_eur_rate", reason: "limits", text: "every provider is outside this agent's limits (max $0.01)" },
+    ]);
+    // A blocked tool is "not in this agent's list", not a tool that can't run.
+    expect(unusableTools(access({ tools: [tool({ access: "BLOCKED", providersLeft: 0 })] }))).toEqual([]);
+    expect(accessSummary(access({ tools: [tool(), tool({ toolId: "t-geo", name: "geocode_place", providersTotal: 0, providersLeft: 0 })] }))).toBe(
+      "Can use 2 of 2 tools. 1 of them can't run now (1 with no provider taking calls).",
+    );
     expect(accessSummary(access({ tools: [tool({ access: "BLOCKED" })] }))).toMatch(/no tool at all/);
   });
 
