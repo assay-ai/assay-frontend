@@ -78,6 +78,13 @@ export function SettingsView() {
                 divider={index < wallets.length - 1}
               />
             ))}
+            {wallets.length > 0 ? (
+              <p className="pt-2 text-body-xs text-03" data-testid="wallets-purpose">
+                Your wallet signs deposits, withdrawals and changes to your on-chain limits. Your Assay balance is not
+                kept in it: it sits on chain in an escrow only your wallet controls, so money left in the wallet is not
+                part of your balance.
+              </p>
+            ) : null}
             {!email && methods.length === 0 && wallets.length === 0 ? (
               <p className="py-3 text-body-13 text-02">
                 {demo
