@@ -8,20 +8,22 @@ const conflict = (context: Record<string, unknown>) => new ApiError("SLASH_NOTHI
 
 describe("409 SLASH_NOTHING_STANDING reads its context", () => {
   it("C1: EXECUTED is an alert that the stake was taken, never 'nothing'", () => {
-    const outcome = nothingStandingOutcome(conflict({ chainStatus: "EXECUTED", closed: false }));
+    const outcome = nothingStandingOutcome(conflict({ chainStatus: "EXECUTED" }));
     expect(outcome).toMatchObject({ title: "Executed on chain while the cancel waited", alert: true });
     expect(outcome.next).toContain("The stake was taken");
     expect(outcome.next).not.toMatch(/closed its side|nothing to sign/);
-    expect(operatorErrorSentence(conflict({ chainStatus: "EXECUTED", closed: false }))).toContain("The stake was taken");
+    expect(operatorErrorSentence(conflict({ chainStatus: "EXECUTED" }))).toContain("The stake was taken");
   });
 
-  it("says 'closed its side' only when closed is true", () => {
-    expect(nothingStandingOutcome(conflict({ chainStatus: "CANCELLED", closed: true })).next).toContain("closed its side");
-    expect(nothingStandingOutcome(conflict({ chainStatus: "CANCELLED", closed: false })).next).not.toContain("closed its side");
+  it("never says anything was closed or changed on chain", () => {
+    for (const chainStatus of ["CANCELLED", "NOT_FOUND", "PROPOSING", "EXECUTED"]) {
+      expect(nothingStandingOutcome(conflict({ chainStatus })).next).not.toMatch(/closed its side/);
+    }
+    expect(nothingStandingOutcome(conflict({ chainStatus: "CANCELLED" })).next).toContain("Nothing was changed");
   });
 
-  it("a written record not found is flagged for a person, nothing changed", () => {
-    expect(nothingStandingOutcome(conflict({ chainStatus: "NOT_FOUND", closed: false }))).toMatchObject({ alert: true, title: "The on-chain record was not found" });
+  it("a record not found is said plainly, nothing changed", () => {
+    expect(nothingStandingOutcome(conflict({ chainStatus: "NOT_FOUND" }))).toMatchObject({ alert: false, title: "No record of this penalty is found on chain" });
   });
 });
 

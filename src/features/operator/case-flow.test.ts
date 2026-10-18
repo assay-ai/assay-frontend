@@ -91,8 +91,7 @@ describe("a cancel with nothing standing on chain (case 34ccdb62)", () => {
     const authority = caseAuthority(b, ADMIN, facts);
     expect(authority.cancel).toBe(false);
     const next = caseNextStep(facts, authority, fmt);
-    // I1: the side still reads "cancel requested": the one step is to have the backend close it.
-    expect(next).toMatchObject({ kind: "action", action: "close-chain" });
+    expect(next).toMatchObject({ kind: "done", action: null });
     expect(next.description).toContain("Nothing is on chain: nothing can be executed");
     expect(allText(b)).not.toMatch(/anyone can execute/i);
   });
@@ -159,29 +158,23 @@ describe("C1: an executed record is never \"nothing was taken\"", () => {
   });
 });
 
-describe("I1: a cancel-requested side with nothing on chain can be closed", () => {
-  it("offers Close the on-chain side to who gets cancels signed", () => {
+describe("a cancel-requested side with nothing on chain (owner rule: the console closes nothing)", () => {
+  it("says there is nothing to sign, with no action, for any role", () => {
     const b = brief({ chainRecord: "GONE" });
     const facts = caseFacts(b, NOW);
     expect(facts.closeOutstanding).toBe(true);
-    const authority = caseAuthority(b, ADMIN, facts);
-    expect(authority.closeChain).toBe(true);
-    expect(caseNextStep(facts, authority, fmt)).toMatchObject({ kind: "action", action: "close-chain", title: "Close the on-chain side" });
+    for (const who of [ADMIN, { roles: ["SUP"], authorityLimit: null } as never]) {
+      const authority = caseAuthority(b, who, facts);
+      expect(authority.cancel).toBe(false);
+      expect(caseNextStep(facts, authority, fmt)).toMatchObject({ kind: "done", action: null, title: "Nothing is on chain" });
+    }
   });
 
-  it("someone who cannot sees nothing to do, and who can", () => {
-    const b = brief({ chainRecord: "GONE" });
+  it("once closed (mirror CANCELLED), it reads as a plain cancelled penalty", () => {
+    const b = brief({ chainStatus: "CANCELLED", chainRecord: "GONE" });
     const facts = caseFacts(b, NOW);
-    const support = { roles: ["SUP"], authorityLimit: null } as never;
-    const authority = caseAuthority(b, support, facts);
-    expect(authority.closeChain).toBe(false);
-    expect(caseNextStep(facts, authority, fmt)).toMatchObject({ kind: "done", action: null });
-  });
-
-  it("once closed (mirror CANCELLED), nothing is outstanding", () => {
-    const facts = caseFacts(brief({ chainStatus: "CANCELLED", chainRecord: "GONE" }), NOW);
     expect(facts.closeOutstanding).toBe(false);
-    expect(caseNextStep(facts, caseAuthority(brief({ chainStatus: "CANCELLED", chainRecord: "GONE" }), ADMIN, facts), fmt).title).toBe("Penalty cancelled");
+    expect(caseNextStep(facts, caseAuthority(b, ADMIN, facts), fmt).title).toBe("Penalty cancelled");
   });
 });
 

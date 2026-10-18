@@ -68,9 +68,9 @@ export interface CaseFacts {
    */
   executedWhileCancelWaited: boolean;
   /**
-   * The chain side still reads "cancel requested" though nothing stands: a
-   * fresh read by the backend closes it (the cancel-intent call answers 409,
-   * closed). False otherwise.
+   * The chain side still reads "cancel requested" though nothing stands.
+   * Nothing closes it from the console (the owner decides); the page says
+   * there is nothing to sign. False otherwise.
    */
   closeOutstanding: boolean;
   /**
@@ -310,7 +310,7 @@ export function caseTimelineSteps(
 
 // ── The next step ───────────────────────────────────────────────────────────
 
-export type CaseActionId = "suspend" | "rule" | "cancel" | "close-chain" | "compensate" | "sweep" | "block" | "approve" | "open-request";
+export type CaseActionId = "suspend" | "rule" | "cancel" | "compensate" | "sweep" | "block" | "approve" | "open-request";
 
 export interface CaseNextStep {
   kind: "action" | "waiting" | "done";
@@ -337,8 +337,6 @@ export interface CaseAuthority {
   suspend: { allowed: boolean; open: boolean; twoPerson: boolean; reason: string | null };
   rule: boolean;
   cancel: boolean;
-  /** May ask the backend to read the chain and close a "cancel requested" side with nothing standing. */
-  closeChain: boolean;
   compensate: boolean;
   block: boolean;
 }
@@ -374,7 +372,6 @@ export function caseAuthority(
     suspend: { allowed: legal && check.allowed, open: legal, twoPerson: status ? suspendIsTwoPerson(status) : false, reason: suspendReason },
     rule: caps.rule,
     cancel: may(identity.roles, "cancel") && facts.stage === "cancel-requested" && !facts.nothingOnChain && !facts.executedWhileCancelWaited,
-    closeChain: may(identity.roles, "cancel") && facts.closeOutstanding,
     compensate: may(identity.roles, "compensate") && status !== null && isLegalInStatus("compensate", status),
     block: caps.block,
   };
@@ -412,24 +409,15 @@ export function caseNextStep(
     };
   }
   if (facts.closeOutstanding) {
-    return authority.closeChain
-      ? {
-          kind: "action",
-          title: "Close the on-chain side",
-          description:
-            "Nothing is on chain: nothing can be executed, and there is nothing to sign. The on-chain side still reads \"cancel requested\"; confirming has the backend read the chain again and close it.",
-          action: "close-chain",
-          secondary: null,
-          until: null,
-        }
-      : {
-          kind: "done",
-          title: "Nothing is on chain",
-          description: "Nothing is on chain: nothing can be executed, and there is nothing to sign. A Lead adjudicator or Treasury closes the on-chain side.",
-          action: null,
-          secondary: null,
-          until: null,
-        };
+    return {
+      kind: "done",
+      title: "Nothing is on chain",
+      description:
+        "Nothing is on chain: nothing can be executed, and there is nothing to sign. Nothing was taken from the provider's stake. It still shows under Waiting for signature until its on-chain side is closed.",
+      action: null,
+      secondary: null,
+      until: null,
+    };
   }
   // "Anyone can execute" only while something stands on chain (B11).
   if (facts.nothingOnChain && ["cancel-requested", "executable", "upheld", "window-open", "disputed"].includes(facts.stage)) {

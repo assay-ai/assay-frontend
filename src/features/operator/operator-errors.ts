@@ -49,14 +49,12 @@ export function chainUnavailableSentence(error: Pick<ApiError, "message" | "cont
 }
 
 /**
- * What a 409 `SLASH_NOTHING_STANDING` means, from its context: `chainStatus`
- * (what the chain read showed) and `closed` (whether the call closed the
- * chain side). An EXECUTED record is money taken: an alert, never "nothing".
- * Pure.
+ * What a 409 `SLASH_NOTHING_STANDING` means, from its context's `chainStatus`
+ * (what the backend's chain read showed). The backend changes nothing. An
+ * EXECUTED record is money taken: an alert, never "nothing". Pure.
  */
 export function nothingStandingOutcome(error: Pick<ApiError, "context">): { title: string; next: string; alert: boolean } {
   const chainStatus = typeof error.context?.chainStatus === "string" ? error.context.chainStatus : null;
-  const closed = error.context?.closed === true;
   if (chainStatus === "EXECUTED") {
     return {
       title: "Executed on chain while the cancel waited",
@@ -64,28 +62,21 @@ export function nothingStandingOutcome(error: Pick<ApiError, "context">): { titl
       alert: true,
     };
   }
-  if (closed) {
-    return {
-      title: "Nothing is on chain to cancel",
-      next: "Nothing can be executed, and there is nothing to sign. The backend read the chain and closed its side.",
-      alert: false,
-    };
-  }
   if (chainStatus === "NOT_FOUND") {
     return {
-      title: "The on-chain record was not found",
-      next: "A record of this penalty was written on chain but is not found where it was written. Nothing was changed; it is left for someone to check.",
-      alert: true,
+      title: "No record of this penalty is found on chain",
+      next: "There is nothing to sign, and nothing was changed. If a record was written earlier, someone should check where it went.",
+      alert: false,
     };
   }
   if (chainStatus === "PROPOSING") {
     return {
       title: "Part of this penalty may still land on chain",
-      next: "Nothing stands now, but a part is still being proposed, so nothing was closed. Try again later.",
+      next: "Nothing stands now, but a part is still being proposed. Nothing was changed; try again later.",
       alert: false,
     };
   }
-  return { title: "Nothing is on chain to cancel", next: NOTHING_ON_CHAIN + " Nothing was changed here.", alert: false };
+  return { title: "Nothing is on chain to cancel", next: `${NOTHING_ON_CHAIN} Nothing was changed.`, alert: false };
 }
 
 /**

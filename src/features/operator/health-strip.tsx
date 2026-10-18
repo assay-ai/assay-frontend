@@ -104,9 +104,9 @@ export function HealthStrip({ health, error }: { health: PlatformHealth | undefi
           >
             <MetricTile
               label="Old-process cases"
-              value={count(health.oldProcessCases ?? health.openDisputes)}
+              value={count(health.oldProcessCases)}
               sub="not on chain · open the tab"
-              meta={(health.oldestOldProcessCaseAgeSeconds ?? health.oldestOpenDisputeAgeSeconds) == null ? DASH : `oldest ${age(health.oldestOldProcessCaseAgeSeconds ?? health.oldestOpenDisputeAgeSeconds)}`}
+              meta={health.oldestOldProcessCaseAgeSeconds === null ? DASH : `oldest ${age(health.oldestOldProcessCaseAgeSeconds)}`}
               className="h-full hover:border-02"
             />
           </Link>

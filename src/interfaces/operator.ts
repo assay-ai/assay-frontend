@@ -151,15 +151,10 @@ export interface PlatformHealth {
   /**
    * Non-EVM cases still in the retired in-app objection statuses (DISPUTED,
    * UNDER_REVIEW, AWAITING_SECOND): the Penalties list's "Old process" tab.
-   * None of them is on chain or waiting for the arbiter. Absent from an older
-   * backend, which sends the same figure as `openDisputes`.
+   * None of them is on chain or waiting for the arbiter.
    */
-  oldProcessCases?: number;
-  oldestOldProcessCaseAgeSeconds?: number | null;
-  /** @deprecated The same figure as `oldProcessCases`; never "disputes on chain". */
-  openDisputes: number;
-  /** @deprecated The same figure as `oldestOldProcessCaseAgeSeconds`. */
-  oldestOpenDisputeAgeSeconds: number | null;
+  oldProcessCases: number;
+  oldestOldProcessCaseAgeSeconds: number | null;
   /** The EVM chain-state cache, one row per chain. Absent on an older backend. */
   chainState?: ChainStateHealth[];
   /** Every provider on a slash hold, one row per provider and chain. Absent on an older backend. */

@@ -1210,11 +1210,9 @@ function health(): PlatformHealth {
     policiesTotal: 31,
     stakeLocked: usd("48210.00"),
     providersWithStake: 8,
-    // The retired objection process (D15); the deprecated names carry the same figure.
+    // The retired objection process (D15).
     oldProcessCases: OLD_PROCESS.length,
     oldestOldProcessCaseAgeSeconds: OLD_PROCESS.length > 0 ? 5 * 86_400 : null,
-    openDisputes: OLD_PROCESS.length,
-    oldestOpenDisputeAgeSeconds: OLD_PROCESS.length > 0 ? 5 * 86_400 : null,
     chainState: [
       {
         chainId: DEMO_CHAIN_ID,

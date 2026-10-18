@@ -127,7 +127,7 @@ export default function OperatorCasePage() {
   const queryClient = useQueryClient();
   const providers = useProviderNames();
   const directory = useOperatorDirectory();
-  const [sheet, setSheet] = React.useState<"suspend" | "cancel" | "close" | null>(null);
+  const [sheet, setSheet] = React.useState<"suspend" | "cancel" | null>(null);
   const [result, setResult] = React.useState<Result | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
   React.useEffect(() => {
@@ -253,8 +253,6 @@ export default function OperatorCasePage() {
         return { label: authority.suspend.twoPerson ? "Suspend (needs approval)" : "Suspend penalty", onClick: () => setSheet("suspend"), tone: primary ? "danger" : undefined };
       case "cancel":
         return { label: "Get the cancel signed", onClick: () => setSheet("cancel") };
-      case "close-chain":
-        return { label: "Confirm and close", onClick: () => setSheet("close") };
       case "approve":
         return waitingAny ? { label: "Review and approve", href: approvalHref(waitingAny.id) } : undefined;
       case "open-request":
@@ -500,16 +498,15 @@ export default function OperatorCasePage() {
           onDone={onSuspended}
         />
       ) : null}
-      {authority.cancel || authority.closeChain ? (
+      {authority.cancel ? (
         <CancelSheet
-          mode={authority.closeChain ? "close" : "sign"}
-          open={sheet === "cancel" || sheet === "close"}
-          onOpenChange={(open) => setSheet(open ? (authority.closeChain ? "close" : "cancel") : null)}
+          open={sheet === "cancel"}
+          onOpenChange={(open) => setSheet(open ? "cancel" : null)}
           proposalId={proposalId}
           penaltyAsset={proposal.penaltyAmount.asset}
           deadlineSentence={cancelDeadlineSentence(facts, when)}
           onNothingStanding={(error) => {
-            // Say what the backend's chain read showed (and whether it closed anything), then read the penalty again.
+            // Say what the backend's chain read showed (it changes nothing), then read the penalty again.
             setSheet(null);
             setResult(nothingStandingOutcome(error));
             refetch();
