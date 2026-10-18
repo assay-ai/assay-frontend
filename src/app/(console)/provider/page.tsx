@@ -11,9 +11,10 @@ import { SetupChecklist, type SetupStep } from "@/components/patterns/setup-chec
 import { StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
+import { PROVIDER_EXPLAINER } from "@/components/layout/provider-nav-config";
+import { foldDrafts, priceLine } from "@/features/provider-binding/listing-copy";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { FirstRunCard } from "@/features/provider-home/first-run-card";
-import { callPrice } from "@/features/provider-home/format";
 import { NeedsActionStrip, WatchList } from "@/features/provider-home/needs-action-strip";
 import { useProviderNeedsAction } from "@/features/provider-home/use-needs-action";
 import {
@@ -152,6 +153,9 @@ export default function ProviderHomePage() {
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="truncate text-heading-sm text-01 desktop:text-heading-md">{title}</h1>
           {subtitle ? <p className="text-body-13 text-03 tablet:truncate">{subtitle}</p> : null}
+          <Link href={PROVIDER_EXPLAINER.href} className="inline-flex min-h-10 items-center self-start text-body-13 text-primary-600 hover:underline">
+            {PROVIDER_EXPLAINER.label}
+          </Link>
         </div>
         {record ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -319,44 +323,55 @@ function ToolsPanel({
   label: (binding: ToolBindingSummary) => string;
 }) {
   const groups = byTool(earnings);
+  // Live first; drafts fold into one row, so they never push a live listing down.
+  const { shown, drafts } = foldDrafts(items);
   return (
     <Panel className="w-full">
       <PanelHeader>
         <PanelTitles>
-          <PanelTitle>Your tools</PanelTitle>
+          <PanelTitle>Your listings</PanelTitle>
           <PanelDescription>open one for its settings, quality and calls</PanelDescription>
         </PanelTitles>
         <Button size="sm" variant="ghost" asChild>
-          <Link href="/provider/bindings">All tools</Link>
+          <Link href="/provider/bindings">All listings</Link>
         </Button>
       </PanelHeader>
       <PanelBody className="p-2">
         <ul className="flex w-full flex-col">
-          {items.map((binding) => {
+          {shown.map((binding) => {
             const group = groups.get(binding.toolId);
-            const href = binding.status === "DRAFT" ? routes.bindingWizard(binding.id) : routes.binding(binding.id);
             return (
               <li key={binding.id}>
                 <Link
-                  href={href}
+                  href={routes.binding(binding.id)}
                   className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-md px-3 py-3 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                 >
                   <span className="min-w-0 flex-1 basis-40 truncate text-label-13 text-01">{label(binding)}</span>
                   <StatusChip status={BINDING_CHIP[binding.status]} />
-                  <span className="w-28 text-right font-mono text-mono-12 text-02">
-                    {binding.pricingMode === "FREE" ? "Free" : `${callPrice(binding.price)} / call`}
-                  </span>
+                  <span className="w-36 text-right text-body-13 text-02">{priceLine(binding)}</span>
                   {group ? (
                     <span className="w-36 text-right text-body-xs text-03">
                       {group.calls.toLocaleString("en-US")} calls · {formatMoney(group.earned, { decimals: 2 })}
                     </span>
-                  ) : binding.status === "DRAFT" ? (
-                    <span className="w-36 text-right text-body-xs text-primary-600">Continue setup</span>
                   ) : null}
                 </Link>
               </li>
             );
           })}
+          {drafts.length > 0 ? (
+            <li>
+              <Link
+                href={drafts.length === 1 ? routes.bindingWizard(drafts[0]!.id) : "/provider/bindings"}
+                className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-md px-3 py-3 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              >
+                <span className="min-w-0 flex-1 basis-40 truncate text-label-13 text-01">
+                  {drafts.length === 1 ? `Draft: ${label(drafts[0]!)}` : `Drafts (${drafts.length})`}
+                </span>
+                <StatusChip status="draft" />
+                <span className="w-36 text-right text-body-xs text-primary-600">Continue setup</span>
+              </Link>
+            </li>
+          ) : null}
         </ul>
       </PanelBody>
     </Panel>
