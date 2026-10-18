@@ -566,7 +566,7 @@ export function AlertsView() {
             <SheetTitle>Recent alerts</SheetTitle>
             <SheetDescription>
               Newest first. Opening this list marks them read, except alerts about a risk that may still be open (balance,
-              keys, a pending withdrawal, a paused agent): those stay in Needs attention on Overview until you dismiss them,
+              keys, a pending withdrawal, a paused agent, a spend limit reached, a failed deposit): those stay in Needs attention on Overview until you dismiss them,
               mark them read here, or the condition clears. Open one to see where it was delivered.
             </SheetDescription>
           </SheetHeader>

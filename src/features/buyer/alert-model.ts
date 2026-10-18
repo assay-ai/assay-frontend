@@ -156,18 +156,27 @@ export function isAlertResolved(note: AlertNote, ctx: ResolvedContext): boolean 
 /**
  * Alerts about a risk that is still open until the person acts: a balance at
  * or near zero, a key expiring or expired, a withdrawal pending, a paused
- * agent. Opening "See all alerts" does not mark these read while they may
+ * agent, a failed deposit (and a spend limit reached in full, see `isOpenRisk`).
+ * Opening "See all alerts" does not mark these read while they may
  * still be open; they leave Needs attention by Dismiss, by "Mark read" in See
  * all, or once the condition has cleared.
  */
 export const OPEN_RISK_EVENTS: ReadonlySet<string> = new Set([
   "agent.paused",
+  // A failed deposit has no condition to watch: it leaves only by hand.
+  "deposit.failed",
   "balance.zero",
   "balance.low",
   "session.expiring",
   "session.expired",
   "withdrawal.initiated",
 ]);
+
+/** An open risk: one of {@link OPEN_RISK_EVENTS}, or a spend limit reached in full (the 100% band). */
+export function isOpenRisk(note: AlertNote): boolean {
+  if (OPEN_RISK_EVENTS.has(note.event)) return true;
+  return note.event === "spend.threshold_crossed" && payloadField(note.payload, "band") === 100;
+}
 
 /** Most attempts at marking one alert read before giving up for this visit. */
 export const MARK_READ_ATTEMPTS = 2;
@@ -186,7 +195,7 @@ export function idsToMarkOnOpen(
   ctx: ResolvedContext,
 ): string[] {
   return groups
-    .filter((group) => group.unread && (!OPEN_RISK_EVENTS.has(group.note.event) || isAlertResolved(group.note, ctx)))
+    .filter((group) => group.unread && (!isOpenRisk(group.note) || isAlertResolved(group.note, ctx)))
     .flatMap((group) => group.ids)
     .filter((id) => (attempts.get(id) ?? 0) < MARK_READ_ATTEMPTS);
 }
