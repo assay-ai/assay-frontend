@@ -83,4 +83,13 @@ describe("Start from tools you've used", () => {
     fireEvent.change(nameBox(), { target: { value: "Research kit" } });
     expect(screen.getByTestId("new-toolset-url").textContent).toMatch(/\/my\/research-kit-2$/);
   });
+
+  it("is offered next to New tool set once the account has a set (V1-2)", () => {
+    sets.items = [{ slug: "tools-i-use" }];
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: "Start from tools you've used" }));
+    expect(nameBox().value).toBe("Tools I use");
+    expect(screen.getByTestId("new-toolset-url").textContent).toMatch(/\/my\/tools-i-use-2$/);
+    expect(screen.getAllByTestId("used-tool")).toHaveLength(3);
+  });
 });

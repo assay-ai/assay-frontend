@@ -54,7 +54,7 @@ describe("providers explorer · the failure rate, one framing", () => {
   it("shows the share that failed over its scope, never a quality percentage", () => {
     const html = markup([]);
     expect(html).toContain("Failure rate");
-    expect(html).toContain("5.0% failed");
+    expect(html).toContain("5% failed");
     expect(html).toContain("16,000 checked calls to all their tools, last 30 days");
     expect(html).not.toContain("95.0%");
     expect(html).not.toContain("Quality");

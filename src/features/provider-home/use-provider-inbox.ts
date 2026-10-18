@@ -32,13 +32,14 @@ export function useProviderInbox() {
   const items: NotificationItem[] = (notifications.data?.items ?? [])
     .filter(isNotification)
     .filter((item) => isProviderEvent(item.event, item.payload));
+  const reportIds = repliableReports(reports.data?.items ?? []).map((report) => report.id);
   const breakdown = inboxBreakdown({
     urgent: penalties.needsAction.map((notice) => [notice.id, ...(notice.proposalId ? [notice.proposalId] : [])]),
-    reports: repliableReports(reports.data?.items ?? []).map((report) => report.id),
+    reports: reportIds,
     notifications: items,
     groupKey: noticeGroupKey,
   });
   const count = breakdown.penalties + breakdown.reports + breakdown.notices;
 
-  return { notifications, items, penalties, count, breakdown };
+  return { notifications, items, reportIds, penalties, count, breakdown };
 }

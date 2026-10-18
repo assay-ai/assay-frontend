@@ -21,10 +21,13 @@ const service = vi.hoisted(() => ({
   discardToolBinding: vi.fn(),
 }));
 vi.mock("@/services/provider-tool-bindings.service", () => service);
+const removed = vi.hoisted(() => ({ on: false }));
 vi.mock("@/features/provider-binding/tool-name", () => ({
+  REMOVED_TOOL_DRAFT: "Removed tool (draft)",
   useProviderToolNames: () => ({
-    toolName: (id: string) => (id === "t-draft" ? "get_token_market" : "get_weather"),
-    bindingLabel: (b: { toolId: string }) => (b.toolId === "t-draft" ? "get_token_market" : "get_weather"),
+    toolName: (id: string) => (id === "t-draft" ? (removed.on ? null : "get_token_market") : "get_weather"),
+    bindingLabel: (b: { toolId: string }) =>
+      b.toolId === "t-draft" ? (removed.on ? "Removed tool (draft)" : "get_token_market") : "get_weather",
   }),
 }));
 
@@ -33,6 +36,7 @@ import ProviderToolsPage from "./page";
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  removed.on = false;
 });
 
 function mount() {
@@ -74,5 +78,19 @@ describe("Listings", () => {
     const confirm = await screen.findAllByRole("button", { name: "Discard draft" });
     fireEvent.click(confirm[confirm.length - 1]!);
     expect(await screen.findByText(/can no longer be discarded/)).toBeTruthy();
+  });
+
+  it("names a draft whose tool was removed, and still discards it (V1-9)", async () => {
+    removed.on = true;
+    service.discardToolBinding.mockResolvedValue(undefined);
+    const { container } = mount();
+    await screen.findByText("Removed tool (draft)");
+    expect(container.textContent).toContain("Its tool was removed");
+    expect(container.textContent).not.toContain("Unknown tool");
+    fireEvent.click(await screen.findByRole("button", { name: "Discard draft" }));
+    expect(await screen.findByText("Discard this draft for a removed tool?")).toBeTruthy();
+    const confirm = await screen.findAllByRole("button", { name: "Discard draft" });
+    fireEvent.click(confirm[confirm.length - 1]!);
+    await waitFor(() => expect(service.discardToolBinding).toHaveBeenCalledWith("d1"));
   });
 });
