@@ -73,6 +73,10 @@ jobs:
           done
           [ "$HAS_TOKEN" = true ] || { echo "::error::Secret CLOUDFLARE_API_TOKEN is not set"; missing=1; }
           [ "$HAS_ACCOUNT" = true ] || { echo "::error::Secret CLOUDFLARE_ACCOUNT_ID is not set"; missing=1; }
+          # The consent page only navigates to the MCP host it was built for.
+          if [ "${{ github.ref_name }}" != demo ] && [ -z "$NEXT_PUBLIC_MCP_URL" ]; then
+            echo "::error::NEXT_PUBLIC_MCP_URL is not set in this environment (neither as a Variable nor as a Secret)"; missing=1
+          fi
           [ ${#NEXT_PUBLIC_PRIVY_APP_ID} -eq 25 ] || { echo "::error::NEXT_PUBLIC_PRIVY_APP_ID must be 25 characters"; missing=1; }
           # The demo data layer only ever ships from the demo branch.
           if [ "${{ github.ref_name }}" = demo ]; then
@@ -110,3 +114,22 @@ jobs:
             --branch "$branch" \
             --commit-hash "${{ github.sha }}" \
             --commit-message "${{ github.ref_name }} ${{ github.sha }}"
+
+      # The consent page's headers as served (spec R-WEB-2, R-WEB-4). Cloudflare
+      # Pages joins a header set by two matching rules with a comma, in an order
+      # it does not document, so check what a browser actually gets.
+      - name: Check the consent page's headers
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            headers=$(curl -fsSIL "$NEXT_PUBLIC_BASE_URL/connect/authorize" | tr -d '\r') && break
+            sleep 10
+          done
+          csp=$(printf '%s\n' "$headers" | grep -i '^content-security-policy:' | tail -n 1)
+          xfo=$(printf '%s\n' "$headers" | grep -i '^x-frame-options:' | tail -n 1)
+          ref=$(printf '%s\n' "$headers" | grep -i '^referrer-policy:' | tail -n 1 | sed 's/^[^:]*:[[:space:]]*//' | awk -F',[[:space:]]*' '{print $NF}')
+          ok=1
+          printf '%s' "$csp" | grep -q "frame-ancestors 'none'" || { echo "::error::/connect/authorize: no frame-ancestors 'none'"; ok=0; }
+          printf '%s' "$csp" | grep -q "script-src 'self' 'sha256-" || { echo "::error::/connect/authorize: no hashed script-src"; ok=0; }
+          printf '%s' "$xfo" | grep -qi 'deny' || { echo "::error::/connect/authorize: X-Frame-Options has no DENY"; ok=0; }
+          [ "$ref" = "no-referrer" ] || { echo "::error::/connect/authorize: Referrer-Policy ends with '$ref', not no-referrer"; ok=0; }
+          [ $ok = 1 ]

@@ -66,4 +66,31 @@ function strictPolicy({ scriptHashes = [], connectOrigins = [] } = {}) {
   ].join("; ");
 }
 
-module.exports = { PRIVY_FRAMES, CONNECT_ORIGINS, STRICT_PATHS, strictPolicy };
+/**
+ * The catch-all for a splat (`/connect/*`) in the built `out/_headers`, for a
+ * response under it that has no block of its own (the 404 page, a page the
+ * build step did not see). Cloudflare Pages sends it together with the page's
+ * own policy, and a browser enforces both, so it can only narrow:
+ * - scripts: this origin plus the hashes of every page under the splat, so an
+ *   unknown inline script is refused there too;
+ * - every other directive of `strictPolicy()` except the two long origin lists
+ *   (`connect-src`, `frame-src`) and `default-src`, which would fall back onto
+ *   them and refuse the API on every page. Those two stay in each page's own
+ *   policy. Both lists would not fit Cloudflare's 2,000-character line.
+ */
+function fallbackPolicy({ scriptHashes = [] } = {}) {
+  return [
+    ["script-src 'self'", ...scriptHashes.map((hash) => `'sha256-${hash}'`)].join(" "),
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+  ].join("; ");
+}
+
+module.exports = { PRIVY_FRAMES, CONNECT_ORIGINS, STRICT_PATHS, strictPolicy, fallbackPolicy };

@@ -75,6 +75,7 @@ const csp = require("../../scripts/csp-policy.js") as {
   CONNECT_ORIGINS: string[];
   STRICT_PATHS: string[];
   strictPolicy: (options?: { scriptHashes?: string[]; connectOrigins?: string[] }) => string;
+  fallbackPolicy: (options?: { scriptHashes?: string[] }) => string;
 };
 const connectCsp = require("../../scripts/connect-csp.js") as {
   completeHeaders: (text: string, pages: Record<string, Record<string, string>>, connectOrigins: string[]) => string;
@@ -172,12 +173,20 @@ describe("scripts/connect-csp.js", () => {
       },
       ["https://api.example.com"],
     );
-    // The splat keeps the frame and referrer refusals.
+    // The splat keeps a catch-all policy with every page's hashes, and the frame and referrer refusals.
     expect(block(out, "/connect/*")).toEqual({
-      "Content-Security-Policy": "frame-ancestors 'none'",
+      "Content-Security-Policy": csp.fallbackPolicy({ scriptHashes: [sha("one()"), sha("two()")].sort() }),
       "X-Frame-Options": "DENY",
       "Referrer-Policy": "no-referrer",
     });
+    const fallback = directives(block(out, "/connect/*")["Content-Security-Policy"]);
+    expect(fallback["frame-ancestors"]).toBe("'none'");
+    expect(fallback["object-src"]).toBe("'none'");
+    expect(fallback["base-uri"]).toBe("'none'");
+    expect(fallback["form-action"]).toBe("'self'");
+    expect(fallback["script-src"]).toBe(["'self'", ...[sha("one()"), sha("two()")].sort().map((h) => `'sha256-${h}'`)].join(" "));
+    // No default-src there: it would fall back onto connect-src and refuse the API on every page.
+    expect(fallback["default-src"]).toBeUndefined();
     expect(block(out, "/connect/authorize")["Content-Security-Policy"]).toBe(
       csp.strictPolicy({ scriptHashes: [sha("one()")], connectOrigins: ["https://api.example.com"] }),
     );
@@ -191,6 +200,15 @@ describe("scripts/connect-csp.js", () => {
     });
     // The site-wide block is untouched.
     expect(block(out, "/*")).toEqual(block(text, "/*"));
+  });
+
+  it("refuses a strict page that loads a script from another origin", async () => {
+    const text = await headersFile();
+    for (const src of ["https://cdn.example.com/a.js", "//cdn.example.com/a.js"]) {
+      expect(() =>
+        connectCsp.completeHeaders(text, { "/connect/*": { "/connect/authorize": `<script src="${src}"></script>` } }, []),
+      ).toThrow(/outside this origin/);
+    }
   });
 
   it("leaves a path with no pages yet at the bare policy", async () => {

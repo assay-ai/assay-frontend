@@ -11,6 +11,7 @@ import { RID_STORAGE_KEY, forgetRequestId, takeRequestId } from "@/features/oaut
 import { ApiError } from "@/libs/ApiClient";
 
 import { ConsentCard } from "./consent-card";
+import { ConsentSetLimitsControl, type LimitsSheetProps } from "./consent-set-limits";
 
 const usd = (amount: string) => ({ amount, asset: "eip155:46630/erc20:0x0", decimals: 6 });
 const NOW = new Date("2026-10-19T10:00:12.000Z");
@@ -58,6 +59,7 @@ function mount(props: Partial<React.ComponentProps<typeof ConsentCard>> = {}) {
       onSignOut={() => undefined}
       onApprove={onApprove}
       onDeny={onDeny}
+      fetchedAt={Date.parse("2026-10-19T10:00:00.000Z")}
       {...props}
     />,
   );
@@ -66,6 +68,12 @@ function mount(props: Partial<React.ComponentProps<typeof ConsentCard>> = {}) {
 
 const approve = () => screen.getByRole("button", { name: "Approve" }) as HTMLButtonElement;
 const cancel = () => screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement;
+
+/** A click as a person makes it: the press, then the click. */
+function press(element: HTMLElement) {
+  fireEvent.pointerDown(element);
+  fireEvent.click(element);
+}
 
 /** Past the delay, then a fresh pointer movement. */
 function arm() {
@@ -147,12 +155,86 @@ describe("ConsentCard click guards", () => {
   });
 });
 
+describe("I1: only an interaction that starts after arming acts", () => {
+  it("after the delay, the press that arms the buttons does not approve; the next one does", async () => {
+    const { onApprove } = mount();
+    act(() => {
+      vi.advanceTimersByTime(ACTIVATION_DELAY_MS);
+    });
+    // One gesture: its pointerdown arms the buttons (and the browser re-renders
+    // before pointerup, as React does for a discrete event), its click must not act.
+    act(() => {
+      fireEvent.pointerDown(approve());
+    });
+    expect(approve().disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(approve());
+    });
+    expect(onApprove).not.toHaveBeenCalled();
+    await act(async () => {
+      press(approve());
+    });
+    expect(onApprove).toHaveBeenCalledTimes(1);
+  });
+
+  it("a press that began before arming does not approve when its click lands after", async () => {
+    const { onApprove } = mount();
+    act(() => {
+      vi.advanceTimersByTime(ACTIVATION_DELAY_MS);
+    });
+    // Hidden: the buttons disarm. A press starts while they are off, the page
+    // shows again, the delay passes, the pointer moves (arming), then the old
+    // press's click lands.
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    act(() => {
+      fireEvent.pointerDown(approve()); // starts while disarmed
+    });
+    visibility.mockReturnValue("visible");
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      vi.advanceTimersByTime(ACTIVATION_DELAY_MS);
+    });
+    act(() => {
+      fireEvent.pointerMove(window); // arms
+    });
+    expect(approve().disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(approve()); // the old press's click
+    });
+    expect(onApprove).not.toHaveBeenCalled();
+  });
+
+  it("a key press after arming acts (keyboard users)", async () => {
+    const { onApprove } = mount();
+    arm();
+    await act(async () => {
+      fireEvent.keyDown(approve(), { key: "Enter" });
+      fireEvent.click(approve());
+    });
+    expect(onApprove).toHaveBeenCalledTimes(1);
+  });
+
+  it("a double click right after arming approves at most once", async () => {
+    const onApprove = vi.fn(() => new Promise<void>(() => undefined));
+    mount({ onApprove });
+    arm();
+    await act(async () => {
+      press(approve());
+      press(approve());
+    });
+    expect(onApprove).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("ConsentCard decisions", () => {
   it("approves as the pre-selected agent with the name on the card", async () => {
     const { onApprove } = mount();
     arm();
     await act(async () => {
-      fireEvent.click(approve());
+      press(approve());
     });
     expect(onApprove).toHaveBeenCalledWith({ agentId: "agt-2", name: "Claude Code · 2026-10-19" });
   });
@@ -173,7 +255,7 @@ describe("ConsentCard decisions", () => {
     mount({ onApprove });
     arm();
     await act(async () => {
-      fireEvent.click(approve());
+      press(approve());
     });
     expect(screen.getByText("Use a name with letters or numbers. Invisible and control characters are removed.")).toBeTruthy();
   });
@@ -183,7 +265,7 @@ describe("ConsentCard decisions", () => {
     fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "  " } });
     arm();
     await act(async () => {
-      fireEvent.click(approve());
+      press(approve());
     });
     expect(onApprove).not.toHaveBeenCalled();
     expect(screen.getByText("Give this connection a name.")).toBeTruthy();
@@ -195,7 +277,7 @@ describe("ConsentCard decisions", () => {
     mount({ onApprove, onFinal });
     arm();
     await act(async () => {
-      fireEvent.click(approve());
+      press(approve());
     });
     expect(screen.getByTestId("consent-final").textContent).toBe("You already answered this request.");
     expect(onFinal).toHaveBeenCalled();
@@ -206,7 +288,7 @@ describe("ConsentCard decisions", () => {
     const { onDeny, onApprove } = mount();
     arm();
     await act(async () => {
-      fireEvent.click(cancel());
+      press(cancel());
     });
     expect(onDeny).toHaveBeenCalledTimes(1);
     expect(onApprove).not.toHaveBeenCalled();
@@ -257,5 +339,154 @@ describe("consent routes", () => {
         expect(line).not.toMatch(/analytics|gtag|posthog|segment|mixpanel|amplitude|plausible|sentry|datadog|hotjar/i);
       }
     }
+  });
+});
+
+describe("I5: Approve and set limits", () => {
+  function setup(overrides: Partial<React.ComponentProps<typeof ConsentCard>> = {}, saveResult: "ok" | "fail" = "ok") {
+    const save = vi.fn(() => (saveResult === "ok" ? Promise.resolve() : Promise.reject(new Error("save failed"))));
+    function FakeSheet(props: LimitsSheetProps) {
+      if (!props.open) return null;
+      return (
+        <div role="dialog">
+          <p>{props.intro}</p>
+          <button
+            type="button"
+            onClick={async () => {
+              const reason = await props.beforeSave();
+              if (reason) return;
+              try {
+                await save();
+              } catch {
+                return;
+              }
+              props.onOpenChange(false);
+              props.onSaved();
+            }}
+          >
+            {props.saveLabel}
+          </button>
+        </div>
+      );
+    }
+    const handles = mount({
+      setLimits: (slot) => <ConsentSetLimitsControl slot={slot} Sheet={FakeSheet} />,
+      ...overrides,
+    });
+    return { ...handles, save };
+  }
+  const openButton = () => screen.getByRole("button", { name: "Approve and set limits" }) as HTMLButtonElement;
+  const saveButton = () => screen.getByRole("button", { name: "Save and approve" }) as HTMLButtonElement;
+
+  it("saves, then approves once", async () => {
+    const recheck = vi.fn().mockResolvedValue(undefined);
+    const { onApprove, save } = setup({ recheck });
+    arm();
+    await act(async () => {
+      press(openButton());
+    });
+    expect(screen.getByText("These limits apply to everything ops-bot does, not only to this app.")).toBeTruthy();
+    await act(async () => {
+      press(saveButton());
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(recheck).toHaveBeenCalledTimes(2); // before opening, and before saving
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    expect(onApprove).toHaveBeenCalledWith({ agentId: "agt-2", name: "Claude Code · 2026-10-19" });
+  });
+
+  it("an empty name: the sheet does not open and nothing is saved", async () => {
+    const { onApprove, save } = setup();
+    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "\u200b " } });
+    arm();
+    await act(async () => {
+      press(openButton());
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(save).not.toHaveBeenCalled();
+    expect(onApprove).not.toHaveBeenCalled();
+    expect(screen.getByText("Give this connection a name.")).toBeTruthy();
+  });
+
+  it("the request ended while the sheet was open: nothing is saved", async () => {
+    const recheck = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new ApiError("OAUTH_REQUEST_NOT_FOUND", "x", 404));
+    const { onApprove, save } = setup({ recheck });
+    arm();
+    await act(async () => {
+      press(openButton());
+    });
+    await act(async () => {
+      press(saveButton());
+    });
+    expect(save).not.toHaveBeenCalled();
+    expect(onApprove).not.toHaveBeenCalled();
+    expect(screen.getByTestId("consent-final").textContent).toBe(
+      "This request expired. Go back to your app and try again.",
+    );
+  });
+
+  it("a failed save does not approve", async () => {
+    const { onApprove, save } = setup({}, "fail");
+    arm();
+    await act(async () => {
+      press(openButton());
+    });
+    await act(async () => {
+      press(saveButton());
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(onApprove).not.toHaveBeenCalled();
+  });
+
+  it("approve refused after the save: says the limits were saved and the app was not approved", async () => {
+    const onApprove = vi.fn().mockRejectedValue(new ApiError("OAUTH_GRANT_LIMIT_REACHED", "x", 409));
+    setup({ onApprove });
+    arm();
+    await act(async () => {
+      press(openButton());
+    });
+    await act(async () => {
+      press(saveButton());
+    });
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByText(
+        "Your limits were saved, but the app was not approved: This agent already has 50 connected apps, the most it can have. Revoke ones you no longer use in Agents & keys.",
+      ),
+    ).toBeTruthy();
+  });
+});
+
+describe("m7: a decision whose answer was lost", () => {
+  it("offers to return to the app when the retry reads as already answered", async () => {
+    const onApprove = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Network Error"))
+      .mockRejectedValueOnce(new ApiError("OAUTH_REQUEST_ALREADY_DECIDED", "x", 409));
+    const onResume = vi.fn();
+    mount({ onApprove, onResume });
+    arm();
+    await act(async () => {
+      press(approve());
+    });
+    expect(screen.getByText("That did not go through. Try again.")).toBeTruthy();
+    await act(async () => {
+      press(approve());
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Return to the app" }));
+    expect(onResume).toHaveBeenCalledTimes(1);
+  });
+
+  it("no such offer for a 409 without a lost answer first", async () => {
+    const onApprove = vi.fn().mockRejectedValue(new ApiError("OAUTH_REQUEST_ALREADY_DECIDED", "x", 409));
+    mount({ onApprove, onResume: vi.fn() });
+    arm();
+    await act(async () => {
+      press(approve());
+    });
+    expect(screen.queryByRole("button", { name: "Return to the app" })).toBeNull();
   });
 });
