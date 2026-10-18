@@ -230,9 +230,9 @@ describe("a write shows on the next read (this tab's memory)", () => {
   });
 
   it("the operator queue has more than one page", () => {
-    const page1 = call<{ items: OperatorCallDisputeRow[]; pageInfo: { hasMore: boolean; nextCursor: string | null } }>("GET", "/operator/call-disputes", { state: "OPEN", order: "ASC", limit: 20 });
+    const page1 = call<{ items: OperatorCallDisputeRow[]; pageInfo: { hasMore: boolean; nextCursor: string | null } }>("GET", "/operator/call-disputes", { state: "OPEN", order: "asc", limit: 20 });
     expect(page1.pageInfo.hasMore).toBe(true);
-    const page2 = call<{ items: OperatorCallDisputeRow[] }>("GET", "/operator/call-disputes", { state: "OPEN", order: "ASC", limit: 20, cursor: page1.pageInfo.nextCursor });
+    const page2 = call<{ items: OperatorCallDisputeRow[] }>("GET", "/operator/call-disputes", { state: "OPEN", order: "asc", limit: 20, cursor: page1.pageInfo.nextCursor });
     expect(page2.items.length).toBeGreaterThan(0);
     expect(Date.parse(page1.items[0]!.createdAt)).toBeLessThanOrEqual(Date.parse(page1.items[1]!.createdAt));
   });

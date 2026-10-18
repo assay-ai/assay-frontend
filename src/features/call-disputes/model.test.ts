@@ -167,8 +167,8 @@ describe("the report window on a receipt", () => {
 
 describe("the operator queue's query", () => {
   it("reads open disputes oldest first, so the ones closest to auto-uphold load on the first page", () => {
-    expect(disputeQueueQuery("open", false)).toMatchObject({ state: ["OPEN"], order: "ASC" });
-    expect(disputeQueueQuery("all", true, "c2")).toEqual({ order: "DESC", flaggedOnly: true, cursor: "c2", limit: 20 });
+    expect(disputeQueueQuery("open", false)).toMatchObject({ state: ["OPEN"], order: "asc" });
+    expect(disputeQueueQuery("all", true, "c2")).toEqual({ order: "desc", flaggedOnly: true, cursor: "c2", limit: 20 });
   });
 });
 
