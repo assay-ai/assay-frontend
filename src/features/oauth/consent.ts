@@ -166,10 +166,33 @@ const LATIN_LOOKALIKES: Readonly<Record<string, string>> = {
   "\u0131": "i", "\u0269": "i", "\u0280": "r", "\u1d20": "v", "\u1d07": "e", "\u0257": "d", "\u0192": "f",
 };
 
-/** One character, folded for matching: lower case, marks dropped, lookalikes to Latin. */
+/** Digits and signs that stand in for letters. */
+const LETTER_STANDINS: Readonly<Record<string, string>> = { "1": "i", l: "i", "|": "i", "3": "e", "0": "o", "5": "s", "4": "a" };
+
+/** Ignored between letters when matching: whitespace, `_`, `-` (any dash), `.`. Zero-width characters are already gone. */
+const MATCH_SEPARATOR = /^[\s_.\p{Pd}]$/u;
+
+/**
+ * One character, folded for matching: separators to nothing; otherwise NFKD
+ * with combining marks dropped (so `é`, `e` + U+0301 and `e` all read `e`),
+ * lower case, Cyrillic and Greek lookalikes to Latin, and digit stand-ins
+ * (`1 l |`→i, `3`→e, `0`→o, `5`→s, `4`→a) to letters.
+ */
 function foldForMatch(char: string): string {
-  return [...char.toLowerCase().replace(/\p{M}/gu, "")].map((c) => LATIN_LOOKALIKES[c] ?? c).join("");
+  if (MATCH_SEPARATOR.test(char)) return "";
+  return [...char.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase()]
+    .map((c) => LATIN_LOOKALIKES[c] ?? LETTER_STANDINS[c] ?? c)
+    .join("");
 }
+
+/** Never shown in any app's name: a trust claim. */
+const TRUST_PHRASES = ["verified"];
+/**
+ * Never shown in the name of an app other than the built-in one: the words
+ * of the built-in app's own header ("Assay app (says it is) · an app on this
+ * computer").
+ */
+const BUILTIN_TITLE_PHRASES = ["assay app", "says it is", "an app on this computer"];
 
 /** Separators trimmed from the ends after a removal: space, `_`, `-`, `.`, `·` and the like. */
 const END_SEPARATORS = /^[\s\p{Pd}\p{Po}\p{Pe}_]+|[\s\p{Pd}\p{Po}\p{Ps}_]+$/gu;
@@ -177,20 +200,28 @@ const END_SEPARATORS = /^[\s\p{Pd}\p{Po}\p{Pe}_]+|[\s\p{Pd}\p{Po}\p{Ps}_]+$/gu;
 /**
  * A name an app supplied, without anything that could read as a trust claim:
  * NFKC first (fullwidth and mathematical letters become plain ones), then
- * invisible characters and symbols removed, then every "verified" removed, case-insensitively,
- * whatever it is attached to, matched on a copy where marks are ignored and
- * Cyrillic and Greek lookalikes read as Latin. Separators left dangling at
- * the ends are trimmed.
+ * invisible characters and symbols removed, then each of `phrases` removed
+ * wherever it is, matched on a folded copy (`foldForMatch`) so case, accents,
+ * lookalike letters, digit stand-ins and separators between letters do not
+ * hide it. Brackets left empty and separators left dangling are removed.
  */
-function stripTrustText(raw: string): string {
+function stripTrustText(raw: string, phrases: readonly string[] = TRUST_PHRASES): string {
   const normalised = raw.normalize("NFKC");
   const chars = [...normalised.replace(INVISIBLE, "").replace(SYMBOLS, " ")];
   let changed = chars.join("") !== normalised;
-  const target = "verified";
+  const targets = phrases.map((phrase) => [...phrase].map(foldForMatch).join(""));
   for (;;) {
     const folded = chars.map(foldForMatch);
     const joined = folded.join("");
-    const at = joined.indexOf(target);
+    let at = -1;
+    let target = "";
+    for (const candidate of targets) {
+      const found = joined.indexOf(candidate);
+      if (found >= 0 && (at < 0 || found < at)) {
+        at = found;
+        target = candidate;
+      }
+    }
     if (at < 0) break;
     // Map the match back to characters of the shown name.
     let offset = 0;
@@ -206,12 +237,15 @@ function stripTrustText(raw: string): string {
       offset = next;
     }
     // Marks that followed the last letter go with it.
-    while (to + 1 < chars.length && folded[to + 1] === "") to += 1;
+    while (to + 1 < chars.length && folded[to + 1] === "" && /\p{M}/u.test(chars[to + 1]!)) to += 1;
     chars.splice(from, to - from + 1, " ");
     changed = true;
   }
-  const spaced = chars.join("").replace(/\s+/g, " ").trim();
-  return changed ? spaced.replace(END_SEPARATORS, "").trim() : spaced;
+  let spaced = chars.join("").replace(/\s+/g, " ").trim();
+  if (!changed) return spaced;
+  spaced = spaced.replace(/[(\[{]\s*[)\]}]/g, " ").replace(/\s+/g, " ").trim();
+  spaced = spaced.replace(END_SEPARATORS, "").trim();
+  return /[\p{L}\p{N}]/u.test(spaced) ? spaced : "";
 }
 
 /**
@@ -222,8 +256,12 @@ function stripTrustText(raw: string): string {
  * such names too (carried to a later backend task); this is the page's own
  * defence.
  */
-export function displayClientName(name: string): string {
-  return stripTrustText(name) || "Unnamed app";
+export function displayClientName(
+  name: string,
+  options: { builtin?: boolean; registrableDomain?: string | null } = {},
+): string {
+  const phrases = options.builtin ? TRUST_PHRASES : [...TRUST_PHRASES, ...BUILTIN_TITLE_PHRASES];
+  return stripTrustText(name, phrases) || options.registrableDomain || "Unnamed app";
 }
 
 function clientTitle(request: ConsentRequest, name: string): string {
@@ -255,7 +293,7 @@ export function consentView(
   const { client, replaces } = request;
   const agent = request.agents.find((a) => a.id === options.agentId) ?? null;
   const expired = options.now.getTime() >= localDeadline(request, options.fetchedAt);
-  const name = displayClientName(client.name);
+  const name = displayClientName(client.name, { builtin: client.builtin, registrableDomain: client.registrableDomain });
 
   const agentNotes: string[] = [];
   if (request.agents.length === 0) agentNotes.push(CONSENT_STRINGS.noAgents);
@@ -272,7 +310,8 @@ export function consentView(
 
   let replacesLine: ConsentView["replaces"] = null;
   if (replaces && agent) {
-    const old = displayClientName(replaces.name);
+    // `replaces` is only ever a grant of the built-in app, named "Assay app on {device}".
+    const old = displayClientName(replaces.name, { builtin: true });
     replacesLine =
       agent.id === replaces.agentId
         ? {
@@ -355,8 +394,12 @@ export function visibleName(name: string): string {
 }
 
 /** The name field's starting value: the API's suggestion, without trust marks. */
-export function initialName(request: Pick<ConsentRequest, "suggestedName">): string {
-  return stripTrustText(request.suggestedName);
+export function initialName(
+  request: Pick<ConsentRequest, "suggestedName"> & { client?: Pick<ConsentRequest["client"], "builtin"> },
+): string {
+  // The built-in app's suggestion is "Assay app on {device}"; any other app's is its own name and a date.
+  const builtin = request.client?.builtin ?? false;
+  return stripTrustText(request.suggestedName, builtin ? TRUST_PHRASES : [...TRUST_PHRASES, ...BUILTIN_TITLE_PHRASES]);
 }
 
 /** The API answered with a `redirectTo` that is not the `continue` step: the page does not go there. */

@@ -457,3 +457,69 @@ describe("fix round 2, R1: Unicode spoofs of a verified name", () => {
     }
   });
 });
+
+describe("fix round 3: accents, separators and digit stand-ins", () => {
+  const ROWS: [string, string][] = [
+    ["Claude Code Verífied", "Claude Code"], // í precomposed
+    ["Claude Code Verífied", "Claude Code"], // i + combining acute
+    ["Claude Code vérified", "Claude Code"], // é precomposed
+    ["Claude Code vérified", "Claude Code"], // e + combining acute
+    ["Claude Code verifíea", "Claude Code verifíea"], // not the word: kept
+    ["Claude Code verifíed", "Claude Code"], // í in the second i
+    ["Claude Code verifíed", "Claude Code"],
+    ["Claude Code ver_ified", "Claude Code"],
+    ["Claude Code ver-ified", "Claude Code"],
+    ["Claude Code ver.ified", "Claude Code"],
+    ["Claude Code ver ified", "Claude Code"],
+    ["Claude Code Verif1ed", "Claude Code"],
+    ["Claude Code V3rified", "Claude Code"],
+    ["Claude Code VERlFlED", "Claude Code"],
+    ["Claude Code V3r1f13d", "Claude Code"],
+    ["Claude Code |s verified", "Claude Code |s"],
+  ];
+
+  it.each(ROWS)("%j shows as %j", (input, shown) => {
+    expect(displayClientName(input)).toBe(shown);
+  });
+});
+
+describe("fix round 3: no app but the built-in one wears its title", () => {
+  const client = (name: string, registrableDomain: string | null = "example.com") =>
+    request({
+      client: { name, kind: "CIMD", registrableDomain, host: registrableDomain, verified: false, builtin: false, paymentClient: false },
+      returnTo: { kind: "LOCAL_APP", display: "an app on this computer" },
+    });
+
+  it.each([
+    ["Assay app", "example.com"],
+    ["Assay app (says it is) · an app on this computer", "example.com"],
+    ["ASSAY APP", "example.com"],
+    ["Assay_App", "example.com"],
+    ["Аssay аpp", "example.com"], // Cyrillic А, а
+    ["4ssay app helper", "helper"],
+    ["Helper, says it is", "Helper"],
+    ["Helper — an app on this computer", "Helper"],
+  ])("%j shows as %j", (name, shown) => {
+    const v = view(client(name));
+    expect(v.client.title.startsWith(`${shown} (says it is)`)).toBe(true);
+    expect(v.client.title).not.toMatch(/^Assay app/i);
+    expect(v.notVerified).not.toBeNull();
+  });
+
+  it("an empty name with no domain falls back to 'Unnamed app'", () => {
+    expect(displayClientName("Assay app", { registrableDomain: null })).toBe("Unnamed app");
+  });
+
+  it("the built-in client keeps its own title, and its suggested name", () => {
+    const builtin = request({
+      client: { name: "Assay app (assay-mcp)", kind: "BUILTIN", registrableDomain: null, host: null, verified: false, builtin: true, paymentClient: true },
+      suggestedName: "Assay app on this Mac",
+    });
+    expect(view(builtin).client.title).toBe("Assay app (says it is) · an app on this computer");
+    expect(initialName(builtin)).toBe("Assay app on this Mac");
+  });
+
+  it("another app's suggested name loses the phrases too", () => {
+    expect(initialName({ suggestedName: "Assay app · 2026-10-19", client: { builtin: false } })).toBe("2026-10-19");
+  });
+});
