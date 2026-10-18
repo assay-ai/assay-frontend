@@ -63,6 +63,7 @@ export const BUYER_SECTION_TABS: Partial<Record<BuyerSectionId, SectionTab[]>> =
     { id: "spend", label: "Spend", href: "/spend" },
     { id: "calls", label: "Calls", href: "/spend/calls", match: ["/spend/calls", "/receipts"] },
     { id: "not-charged", label: "Not charged", href: "/guarantee" },
+    { id: "reports", label: "Reports", href: "/spend/disputes", match: ["/spend/disputes"] },
   ],
   money: [
     { id: "funding", label: "Funding", href: "/funding" },

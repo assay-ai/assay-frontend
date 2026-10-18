@@ -37,6 +37,7 @@ const UNLINKED: Record<string, string> = {
   "/explore/providers/view": "a record page, opened from a row",
   "/explore/tools": "inside Explore",
   "/receipts/view": "a record page, opened from a call",
+  "/spend/disputes/view": "a record page, opened from a report or a receipt",
   "/approvals": "redirects to /limits",
   "/approvals/view": "a record page, opened from a link",
   "/team": "redirects to /limits",
@@ -109,6 +110,7 @@ describe("active section and tab", () => {
     expect(activeTabFor(tabs, "/spend/calls")).toBe("calls");
     expect(activeTabFor(tabs, "/receipts/view")).toBe("calls");
     expect(activeTabFor(tabs, "/guarantee")).toBe("not-charged");
+    expect(activeTabFor(tabs, "/spend/disputes/view")).toBe("reports");
     expect(activeTabFor(BUYER_SECTION_TABS.money!, "/funding/withdraw")).toBe("funding");
   });
 
