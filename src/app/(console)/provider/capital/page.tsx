@@ -150,11 +150,7 @@ export default function ProviderStakePage() {
   let headline: React.ReactNode;
   if (unreadable && !status.staked) {
     headline = "We could not read your stake from the chain just now. It is safe; try again in a minute.";
-  } else if (!status.required) {
-    headline = hasStake
-      ? "None of your tools needs stake right now. Paid tools will use it when they go live."
-      : "You need stake only for paid tools. Free tools can go live without it.";
-  } else if (status.enough) {
+  } else if (!status.required || status.enough) {
     // The same sentence as Home, the Inbox and the Add stake sheet (D21).
     headline = health.sentence;
   } else {

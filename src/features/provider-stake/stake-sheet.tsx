@@ -151,7 +151,14 @@ export function StakeSheet({ open, onOpenChange, amount, reason, onStaked }: Sta
       onOpenChange={onOpenChange}
       title="Add stake"
       description={
-        reason ?? `Stake is the deposit that lets your tools take paid calls. ${STAKE_REDUCED_ONLY_BY}`
+        // The caller's reason (the stake status) first, then what can reduce stake, always (D21).
+        typeof reason === "string" || reason === null || reason === undefined || reason === false ? (
+          `${typeof reason === "string" && reason.trim() ? `${reason.trim()} ` : "Stake is the deposit that lets your tools take paid calls. "}${STAKE_REDUCED_ONLY_BY}`
+        ) : (
+          <>
+            {reason} {STAKE_REDUCED_ONLY_BY}
+          </>
+        )
       }
       changes={
         parsed.value

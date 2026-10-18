@@ -36,6 +36,12 @@ describe("stakeStatus", () => {
 
   it("says nothing is needed without paid tools, and nothing while unknown", () => {
     expect(stakeStatus({ required: null, staked: usd("5"), enough: true }).health).toBe("none");
+    expect(stakeStatus({ required: null, staked: usd("5"), enough: true }).sentence).toBe(
+      "No paid tool needs stake right now. Paid tools will use it when they go live.",
+    );
+    expect(stakeStatus({ required: null, staked: null, enough: true }).sentence).toBe(
+      "No paid tool needs stake right now. Free tools go live without it.",
+    );
     expect(stakeStatus({ required, staked: null, enough: null }).health).toBe("unknown");
   });
 });
