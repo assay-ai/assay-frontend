@@ -169,7 +169,7 @@ export function ReportSheet({
 /** The link from a report back to its call. */
 export function CallLink({ intentId }: { intentId: string }) {
   return (
-    <Link href={routes.receipt(intentId)} className="text-body-13 text-primary-600 hover:underline">
+    <Link href={routes.receipt(intentId)} className="inline-flex min-h-10 items-center text-body-13 text-primary-600 hover:underline">
       Open the call
     </Link>
   );

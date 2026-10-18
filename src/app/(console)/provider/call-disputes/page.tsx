@@ -54,7 +54,7 @@ export default function ProviderReportsPage() {
         <div className="flex min-w-0 flex-col gap-0.5">
           <h1 className="text-heading-sm text-01 tablet:text-heading-md">Bad-result reports</h1>
           <p className="text-body-13 text-03">
-            Buyers&apos; reports about calls you served. Reply once within 24 hours: if you stay silent, the report is upheld automatically at 72 hours and the held payment goes back to the buyer.
+            Buyers&apos; reports about calls you served. Reply once within 24 hours: if you stay silent, the report is upheld automatically at 72 hours. A report filed while the payment was held then refunds the buyer; one filed after the hold only counts against quality.
           </p>
         </div>
         <Segmented value={filter} onValueChange={(v) => setFilter(v as "open" | "all")} aria-label="Show" className="inline-flex rounded-md bg-03 p-0.5">
@@ -84,6 +84,7 @@ export default function ProviderReportsPage() {
                       {d.reasonLabel} · reported <UtcTime value={d.createdAt} midSentence />
                       {d.amount ? ` · ${formatMoney(d.amount, { decimals: 4 })}` : ""}
                     </span>
+                    <span className="text-body-xs text-03">{d.refundGuaranteed ? "Payment held until it is decided" : "Filed after the hold: the payment may already be yours"}</span>
                     {d.canRespond ? (
                       <span className="text-body-xs text-warning-700">
                         Reply by <UtcTime value={replyDueAt(d)} midSentence />

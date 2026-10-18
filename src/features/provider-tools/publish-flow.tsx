@@ -55,7 +55,7 @@ export function PublishApiFlow({ toolId }: { toolId: string | null }) {
   };
 
   const back = (
-    <Link href="/provider/apis" className="inline-flex items-center gap-1.5 self-start rounded-md text-label-13 text-02 hover:text-01">
+    <Link href="/provider/apis" className="inline-flex min-h-10 items-center gap-1.5 self-start rounded-md text-label-13 text-02 hover:text-01">
       <ArrowLeft aria-hidden="true" className="size-3.5" />
       Your own APIs
     </Link>
@@ -129,12 +129,13 @@ export function PublishApiFlow({ toolId }: { toolId: string | null }) {
         </>
       )}
 
-      {tool ? <ToolFacts tool={tool} /> : null}
+      {tool ? <ToolFacts tool={tool} readOnly={takenDown} /> : null}
     </div>
   );
 }
 
-function ToolFacts({ tool }: { tool: ProviderTool }) {
+/** `readOnly`: a taken-down tool can't be changed, so its actions are hidden. */
+function ToolFacts({ tool, readOnly }: { tool: ProviderTool; readOnly: boolean }) {
   const queryClient = useQueryClient();
   const [deprecating, setDeprecating] = React.useState<VersionRow | null>(null);
   const clear = useMutation({
@@ -154,16 +155,18 @@ function ToolFacts({ tool }: { tool: ProviderTool }) {
           <p className="text-body-13 text-01">
             Agents of this tool are pointed to the standard tool <span className="font-mono text-mono-13">{tool.replacementName}</span>, which has backup providers.
           </p>
-          <Button variant="ghost" size="sm" loading={clear.isPending} onClick={() => clear.mutate()}>
+          {readOnly ? null : (
+            <Button variant="ghost" size="sm" className="touch-target" loading={clear.isPending} onClick={() => clear.mutate()}>
             Stop pointing there
           </Button>
+          )}
         </section>
       ) : null}
       <section aria-labelledby="versions-title" className="flex w-full flex-col gap-2">
         <h2 id="versions-title" className="text-label-md text-01">
           Versions
         </h2>
-        <VersionHistory tool={tool} onDeprecate={setDeprecating} />
+        <VersionHistory tool={tool} onDeprecate={readOnly ? undefined : setDeprecating} />
       </section>
       <section aria-labelledby="quality-title" className="flex w-full flex-col gap-2">
         <h2 id="quality-title" className="text-label-md text-01">

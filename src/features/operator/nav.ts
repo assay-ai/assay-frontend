@@ -16,12 +16,11 @@ import { capabilitiesFor } from "./roles";
  *   Tools      /operator/tools           standard tool contracts (Policy roles), provider tool
  *                                        reviews, promotions and takedowns (tabs); opens on
  *                                        the first tab this operator can use
- *
- * Eight items at most: the phone tab bar holds eight at 390px (48px each).
  *   Team       /operator/operators
  *   Contracts  /operator/contracts       the contracts' admin settings, only for Admin
  *   Activity   /operator/override-log    the override register, as sentences
  */
+/** Eight items at most: the phone tab bar holds eight at 390px (48px each). */
 export type OperatorNavId = "home" | "penalties" | "blocks" | "arbiter" | "tools" | "team" | "contracts" | "activity";
 
 export interface OperatorNavItem {

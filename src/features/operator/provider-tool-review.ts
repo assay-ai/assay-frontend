@@ -1,6 +1,7 @@
 import type { SectionTab } from "@/components/layout/nav-config";
 import type { OperatorRole } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
+import { CUTOFF_LATE_HOURS } from "@/libs/dispute-deadlines";
 import { plainError } from "@/libs/plain-language";
 import type { ModerationCutoff, ReviewChecklistItem, ReviewQueueItem } from "@/services/operator-provider-tools.service";
 
@@ -154,7 +155,7 @@ export function cutoffView(cutoff: ModerationCutoff, now: number): CutoffView {
     return { label: why[cutoff.revertReason ?? ""] ?? "Reverted", tone: "neutral", pending: false };
   }
   if (cutoff.confirmedAt) return { label: "Confirmed", tone: "danger", pending: false };
-  const late = Date.parse(cutoff.confirmBy) - now < 12 * 3_600_000;
+  const late = Date.parse(cutoff.confirmBy) - now < CUTOFF_LATE_HOURS * 3_600_000;
   return { label: "Waiting for a second operator", tone: late ? "danger" : "warning", pending: true };
 }
 
@@ -185,8 +186,7 @@ export function toolReviewErrorText(error: unknown): string {
       return "You took it down, so a different operator has to confirm it.";
     case "TOOLSET_CUTOFF_NOT_PENDING":
       return "It is no longer waiting for a confirmation.";
-    case "OPERATOR_ROLE_FORBIDDEN":
-    case "AUTH_FORBIDDEN":
+    case "OPERATOR_ROLE_REQUIRED":
       return "Your role can't do this.";
     default:
       return plainError(error.code);

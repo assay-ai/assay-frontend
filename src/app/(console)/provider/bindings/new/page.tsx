@@ -240,7 +240,7 @@ function WizardContent() {
       </h1>
       <p className="text-body-13 text-03">Three steps. Your progress is saved as you go.</p>
       {back ? (
-        <Link href={back} className="self-start text-body-13 text-primary-600 hover:underline">
+        <Link href={back} className="inline-flex min-h-10 items-center self-start text-body-13 text-primary-600 hover:underline">
           Back to publishing your API
         </Link>
       ) : null}

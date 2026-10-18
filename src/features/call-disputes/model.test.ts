@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "@/libs/ApiClient";
 import type { CallDispute } from "@/services/call-disputes.service";
 
-import { buyerStatus, decisionDueAt, disputeErrorText, disputeTimeline, providerStatus, replyDueAt, reportWindow, slaMarks } from "./model";
+import { buyerStatus, decisionDueAt, disputeQueueQuery, disputeErrorText, disputeTimeline, providerStatus, replyDueAt, reportWindow, slaMarks } from "./model";
 
 const FILED = "2026-10-18T10:00:00.000Z";
 const H = 3_600_000;
@@ -133,9 +133,16 @@ describe("the report window on a receipt", () => {
   });
 });
 
+describe("the operator queue's query", () => {
+  it("reads open disputes oldest first, so the ones closest to auto-uphold load on the first page", () => {
+    expect(disputeQueueQuery("open", false)).toMatchObject({ state: ["OPEN"], order: "ASC" });
+    expect(disputeQueueQuery("all", true, "c2")).toEqual({ order: "DESC", flaggedOnly: true, cursor: "c2" });
+  });
+});
+
 describe("errors", () => {
   it("says what happened", () => {
     expect(disputeErrorText(new ApiError("DISPUTE_ALREADY_OPEN", "x", 409))).toMatch(/already reported/);
-    expect(disputeErrorText(new ApiError("DISPUTE_RATE_LIMITED", "x", 429))).toMatch(/UTC/);
+    expect(disputeErrorText(new ApiError("DISPUTE_RATE_LIMITED", "x", 429))).toMatch(/in 24 hours/);
   });
 });

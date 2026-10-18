@@ -37,7 +37,7 @@ function DisputeScreen() {
   const [result, setResult] = React.useState<{ title: string; next: string; href?: string } | null>(null);
 
   const back = (
-    <Link href="/operator/disputes" className="inline-flex items-center gap-1.5 self-start text-label-13 text-02 hover:text-01">
+    <Link href="/operator/disputes" className="inline-flex min-h-10 items-center gap-1.5 self-start text-label-13 text-02 hover:text-01">
       <ArrowLeft aria-hidden="true" className="size-3.5" />
       Call disputes
     </Link>
@@ -169,6 +169,8 @@ function DecideForm({ dispute, onDone }: { dispute: OperatorCallDisputeDetail; o
   const [note, setNote] = React.useState("");
   const [ticket, setTicket] = React.useState("");
   const tooShort = note.trim().length < DECISION_NOTE_MIN;
+  // The money is moving (a voucher being redeemed, a held payment being collected): the server refuses for a minute.
+  const moving = dispute.intent?.refundPlan === "COLLECTION_IN_PROGRESS";
   const run = useMutation({
     mutationFn: () => decideOperatorCallDispute(dispute.id, { decision: decision!, note: note.trim(), ...(ticket.trim() ? { ticketRef: ticket.trim() } : {}) }),
     onSuccess: (answer) => {
@@ -212,12 +214,13 @@ function DecideForm({ dispute, onDone }: { dispute: OperatorCallDisputeDetail; o
         <span className="text-label-13 text-01">Ticket (optional)</span>
         <input value={ticket} maxLength={128} onChange={(e) => setTicket(e.target.value)} className="min-h-10 rounded-md border border-02 bg-01 px-3 font-mono text-mono-12 text-01" />
       </label>
+      {moving ? <p className="text-body-13 text-warning-700">The payment is moving right now. Wait a minute, then reload and decide.</p> : null}
       {run.isError ? (
         <p role="alert" className="rounded-lg border border-danger-20 bg-danger-10 px-3.5 py-2.5 text-body-13 text-danger-700">
           {disputeErrorText(run.error)}
         </p>
       ) : null}
-      <Button className="self-start" variant={decision === "REJECT" ? "danger" : "primary"} disabled={!decision || tooShort} loading={run.isPending} onClick={() => run.mutate()}>
+      <Button className="self-start" variant={decision === "REJECT" ? "danger" : "primary"} disabled={!decision || tooShort || moving} loading={run.isPending} onClick={() => run.mutate()}>
         {decision === "REJECT" ? "Reject" : dispute.needsSecondOperator ? "Ask a second operator to uphold" : "Uphold"}
       </Button>
     </section>

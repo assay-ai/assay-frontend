@@ -15,6 +15,7 @@ import { providerToolState } from "@/features/provider-tools/model";
 import { providerToolKeys } from "@/features/provider-tools/queries";
 import { ProviderToolChips } from "@/features/provider-tools/ui";
 import { ApiError } from "@/libs/ApiClient";
+import { DEFAULT_SLA_FAILURE_RATE } from "@/libs/dispute-deadlines";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { createToolBinding } from "@/services/provider-tool-bindings.service";
@@ -83,7 +84,7 @@ function InvitationCard({ invitation }: { invitation: PromotionInvitation }) {
         priceAmount: prefill.priceAmount,
         assetId: prefill.assetId,
         settlementChains: prefill.settlementChains,
-        slaFailureRate: 0.02,
+        slaFailureRate: DEFAULT_SLA_FAILURE_RATE,
         timeoutMs: prefill.timeoutMs,
       });
     },
@@ -105,6 +106,7 @@ function InvitationCard({ invitation }: { invitation: PromotionInvitation }) {
   const dismiss = useMutation({
     mutationFn: () => dismissPromotionInvitation(invitation.standardToolId, invitation.sourceToolId),
     onSuccess: refresh,
+    onError: (error) => toast.error(error instanceof ApiError ? plainError(error.code) : "It could not be dismissed. Try again."),
   });
   const drafting = invitation.standardToolStatus === "DRAFT";
   return (

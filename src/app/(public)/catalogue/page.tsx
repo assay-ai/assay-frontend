@@ -315,8 +315,8 @@ export default function CataloguePage() {
                 onClick={() => setKind(f.id)}
                 className={
                   kind === f.id
-                    ? "rounded-full border border-primary-500 bg-primary-10 px-3 text-label-13 text-primary-700"
-                    : "rounded-full border border-02 bg-01 px-3 text-label-13 text-02 hover:text-01"
+                    ? "min-h-10 rounded-full border border-primary-500 bg-primary-10 px-3 text-label-13 text-primary-700"
+                    : "min-h-10 rounded-full border border-02 bg-01 px-3 text-label-13 text-02 hover:text-01"
                 }
               >
                 {f.label}

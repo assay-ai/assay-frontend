@@ -103,11 +103,11 @@ export function GateChecklist({
             </span>
             {!row.met && row.fix ? (
               row.fix.kind === "link" ? (
-                <Button asChild variant="secondary" size="sm" className="self-start tablet:self-auto">
+                <Button asChild variant="secondary" size="sm" className="touch-target self-start tablet:self-auto">
                   <Link href={row.fix.href}>{row.fix.label}</Link>
                 </Button>
               ) : (
-                <Button variant="secondary" size="sm" className="self-start tablet:self-auto" onClick={() => onStep((row.fix as { step: PublishStepId }).step)}>
+                <Button variant="secondary" size="sm" className="touch-target self-start tablet:self-auto" onClick={() => onStep((row.fix as { step: PublishStepId }).step)}>
                   {row.fix.label}
                 </Button>
               )
@@ -165,7 +165,7 @@ export function VersionHistory({ tool, onDeprecate }: { tool: Pick<ProviderTool,
             {row.changelog ? <span className="text-body-13 text-02 [overflow-wrap:anywhere]">{row.changelog}</span> : null}
           </span>
           {row.canDeprecate && onDeprecate ? (
-            <Button variant="ghost" size="sm" className="self-start" onClick={() => onDeprecate(row)}>
+            <Button variant="ghost" size="sm" className="touch-target self-start" onClick={() => onDeprecate(row)}>
               Deprecate v{row.semver.split(".")[0]}
             </Button>
           ) : null}
