@@ -175,6 +175,12 @@ export default function PenaltiesPage() {
 
       <ProviderPendingTxList kinds={["dispute"]} />
 
+      {penalties.updating ? (
+        <p role="status" className="w-full text-body-xs text-03">
+          Showing your penalties as last read. Updating from the chain…
+        </p>
+      ) : null}
+
       <div role="tablist" aria-label="Penalties" className="flex w-full gap-1 overflow-x-auto border-b border-01">
         {PENALTY_TABS.map((item) => (
           <button
