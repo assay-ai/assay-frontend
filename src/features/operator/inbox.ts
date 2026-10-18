@@ -24,15 +24,28 @@ export interface ToolWork {
   callDisputes?: number;
   /** Provider-tool takedowns another operator took, waiting for this one to confirm. */
   takedowns?: number;
+  /** Penalties waiting for the arbiter's cancel signature (CANCEL_REQUESTED), for whoever gets it signed. */
+  cancels?: number;
+  /** Tool requests past their answer deadline, for whoever answers them. */
+  toolRequestsOverdue?: number;
 }
 
 /**
  * What the Home heading and the nav badge both count: approvals this operator
  * can decide, plus — for whoever can rule — every open on-chain dispute, plus
- * the pending provider tool reviews and open call disputes its roles decide.
+ * the pending provider tool reviews, open call disputes, cancels to sign and
+ * overdue tool requests its roles act on.
  */
 export function needsYouCount(needsYouApprovals: number, openDisputes: number, canRule: boolean, toSign: number = 0, work: ToolWork = {}): number {
-  return needsYouApprovals + (canRule ? openDisputes + toSign : 0) + (work.reviews ?? 0) + (work.callDisputes ?? 0) + (work.takedowns ?? 0);
+  return (
+    needsYouApprovals +
+    (canRule ? openDisputes + toSign : 0) +
+    (work.reviews ?? 0) +
+    (work.callDisputes ?? 0) +
+    (work.takedowns ?? 0) +
+    (work.cancels ?? 0) +
+    (work.toolRequestsOverdue ?? 0)
+  );
 }
 
 // ── Approvals ───────────────────────────────────────────────────────────────
@@ -84,6 +97,8 @@ export function needsYouBreakdown(approvals: number, disputes: number, canRule: 
     ...(reviews > 0 ? [`${reviews} to review`] : []),
     ...(calls > 0 ? [`${calls} call ${calls === 1 ? "dispute" : "disputes"}`] : []),
     ...((work.takedowns ?? 0) > 0 ? [`${work.takedowns} ${work.takedowns === 1 ? "takedown" : "takedowns"} to confirm`] : []),
+    ...((work.cancels ?? 0) > 0 ? [`${work.cancels} ${work.cancels === 1 ? "cancel" : "cancels"} to sign`] : []),
+    ...((work.toolRequestsOverdue ?? 0) > 0 ? [`${work.toolRequestsOverdue} tool ${work.toolRequestsOverdue === 1 ? "request" : "requests"} overdue`] : []),
   ];
   return parts.length < 2 ? null : parts.join(" · ");
 }
@@ -240,14 +255,87 @@ export function healthIssues(health: PlatformHealth): HealthIssue[] {
     if (chain.stale) {
       issues.push({
         id: `stale:${chain.chainId}`,
-        text:
-          chain.lagSeconds === null
-            ? "Chain indexer has not caught up"
-            : `Chain indexer ${Math.max(1, Math.round(chain.lagSeconds / 60))} min behind`,
+        text: chain.lagSeconds === null ? "Chain indexer has not caught up" : `Chain indexer ${lagText(chain.lagSeconds)} behind`,
       });
     }
   }
   return issues;
+}
+
+/**
+ * A lag or an age, in the two largest units: "3 d 7 h", "5 h 12 min",
+ * "12 min", "under a minute". Never minutes alone past an hour (operator
+ * review E: "4736 min behind").
+ */
+export function lagText(seconds: number): string {
+  const minutes = Math.floor(Math.max(0, seconds) / 60);
+  if (minutes < 1) return "under a minute";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return minutes % 60 === 0 ? `${hours} h` : `${hours} h ${minutes % 60} min`;
+  const days = Math.floor(hours / 24);
+  return hours % 24 === 0 ? `${days} d` : `${days} d ${hours % 24} h`;
+}
+
+/**
+ * The chain data behind the console when it is stale (D16): the worst lag of
+ * any stale chain, or `lagSeconds: null` when one never caught up. Null when
+ * every chain is current (or none is reported). Pure.
+ */
+export function staleChainData(health: Pick<PlatformHealth, "chainState"> | undefined): { lagSeconds: number | null } | null {
+  const stale = (health?.chainState ?? []).filter((chain) => chain.stale);
+  if (stale.length === 0) return null;
+  if (stale.some((chain) => chain.lagSeconds === null)) return { lagSeconds: null };
+  return { lagSeconds: Math.max(...stale.map((chain) => chain.lagSeconds ?? 0)) };
+}
+
+/**
+ * Home's empty state while chain data is stale: never "Nothing needs you",
+ * because disputes and rulings filed since may be missing (operator review E).
+ */
+export function staleChainSentence(stale: { lagSeconds: number | null }): string {
+  return stale.lagSeconds === null
+    ? "Can't confirm: chain data has not caught up yet (disputes and rulings may be missing)"
+    : `Can't confirm: chain data is ${lagText(stale.lagSeconds)} old (disputes and rulings may be missing)`;
+}
+
+// ── Cancels, tool requests, call disputes: what Home lists ─────────────────
+
+/**
+ * Penalties waiting for the arbiter's cancel signature: how many, how many
+ * past their deadline, and the section title "Cancels to sign (4, 3 overdue)".
+ * `nextDeadline` is the list's (the instant it must be signed by). Pure.
+ */
+export function cancelsDue(rows: readonly { nextDeadline: string | null }[], now: number = Date.now()): { count: number; overdue: number; title: string } {
+  const overdue = rows.filter((row) => {
+    const at = row.nextDeadline ? Date.parse(row.nextDeadline) : Number.NaN;
+    return !Number.isNaN(at) && at <= now;
+  }).length;
+  const count = rows.length;
+  return { count, overdue, title: `Cancels to sign (${count}${overdue > 0 ? `, ${overdue} overdue` : ""})` };
+}
+
+/** Tool requests past their answer deadline (`firstResponseDueAt`). Pure. */
+export function overdueToolRequests<T extends { firstResponseDueAt: string }>(rows: readonly T[], now: number = Date.now()): T[] {
+  return rows.filter((row) => {
+    const at = Date.parse(row.firstResponseDueAt);
+    return !Number.isNaN(at) && at < now;
+  });
+}
+
+/**
+ * "oldest due in 71h" / "oldest overdue by 3h": the open call dispute closest
+ * to its decision deadline (`decisionDueAt`). Null when none is open. Pure.
+ */
+export function oldestCallDisputeDue(rows: readonly { state: string; decisionDueAt: string }[], now: number = Date.now()): string | null {
+  const due = rows
+    .filter((row) => row.state === "OPEN")
+    .map((row) => Date.parse(row.decisionDueAt))
+    .filter((at) => !Number.isNaN(at));
+  if (due.length === 0) return null;
+  const left = Math.min(...due) - now;
+  const hours = (ms: number) => (ms < 3_600_000 ? `${Math.max(1, Math.floor(ms / 60_000))} min` : `${Math.floor(ms / 3_600_000)}h`);
+  return left > 0 ? `oldest due in ${hours(left)}` : `oldest overdue by ${hours(-left)}`;
 }
 
 function pct(share: number): string {

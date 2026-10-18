@@ -8,6 +8,9 @@ import { Toaster } from "sonner";
 import { AlertFill, CheckCircle } from "@/components/icons";
 import { PageState } from "@/components/patterns/page-state";
 import { groupApprovals, needsYouCount } from "@/features/operator/inbox";
+import { mayAnswerToolRequests } from "@/features/operator/contract-editor";
+import { may } from "@/features/operator/state";
+import { useCancelsDue, useToolRequestsDue } from "@/features/operator/use-cancels-due";
 import { useToSign } from "@/features/operator/use-to-sign";
 import { useToolWork } from "@/features/operator/use-tool-work";
 import { capabilitiesFor } from "@/features/operator/roles";
@@ -113,6 +116,9 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
   });
   const toSign = useToSign(Boolean(session && data && canRule));
   const toolWork = useToolWork(data, Boolean(session && data));
+  // Cancels to sign and overdue tool requests: the same queries (and keys) as Home.
+  const cancelsDue = useCancelsDue(Boolean(session && data && may(data.roles, "cancel")));
+  const requestsDue = useToolRequestsDue(Boolean(session && data && mayAnswerToolRequests(data.roles)));
   // The badge counts what this operator can act on — the same rule as the Home heading.
   const needsYou = data
     ? needsYouCount(
@@ -120,7 +126,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
         disputesQuery.data?.length ?? 0,
         canRule,
         toSign.count,
-        toolWork.work,
+        { ...toolWork.work, cancels: cancelsDue.count, toolRequestsOverdue: requestsDue.overdue.length },
       )
     : 0;
 

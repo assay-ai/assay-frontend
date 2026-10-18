@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { bySlaUrgency, DISPUTE_COPY, disputeQueueQuery, shortRef, slaMarks } from "@/features/call-disputes/model";
 import { useNow } from "@/features/call-disputes/ui";
+import { listLoadError } from "@/features/operator/operator-errors";
 import { mayDecideCallDisputes } from "@/features/operator/provider-tool-review";
 import { OperatorCasesTabs } from "@/features/operator/provider-tool-ui";
 import { useOperatorSession } from "@/features/operator/session-context";
@@ -78,7 +79,7 @@ function DisputesScreen() {
       {list.isPending ? (
         <PageState kind="loading" rows={4} label="Loading disputes" />
       ) : list.isError ? (
-        <PageState kind="error" description="The disputes could not be loaded." onRetry={() => void list.refetch()} code={list.error instanceof ApiError ? list.error.code : null} />
+        <PageState kind="error" description={listLoadError(list.error, "The disputes")} onRetry={() => void list.refetch()} code={list.error instanceof ApiError ? list.error.code : null} />
       ) : rows.length === 0 ? (
         <PageState kind="empty" title={show === "open" ? "No open disputes" : "No disputes"} description="Buyers report bad results from a call's receipt." />
       ) : (

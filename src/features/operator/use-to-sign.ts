@@ -15,8 +15,9 @@ import { APPROVED_BLOCKS_QUERY, approvedArbiterBlocks, type ApprovedArbiterBlock
  * The same queries (and keys) as the Arbiter page's sections, so the counts
  * never disagree. Only for an operator who rules.
  *
- * [backend] Penalties waiting for a cancel signature (CANCEL_REQUESTED) are
- * not here: no endpoint lists them yet; each shows on its penalty page.
+ * Penalties waiting for a cancel signature (CANCEL_REQUESTED) are counted
+ * apart, from the Penalties list (`useCancelsDue`): they are for whoever gets
+ * the cancel signed, not only for whoever rules.
  */
 export function useToSign(
   enabled: boolean,

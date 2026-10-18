@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, ChevronDown } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { MetricTile } from "@/components/ui/metric-tile";
@@ -9,27 +10,23 @@ import type { PlatformHealth } from "@/interfaces/operator";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
-import { healthIssues } from "./inbox";
+import { healthIssues, lagText } from "./inbox";
 
-function age(seconds: number | null): string {
-  if (seconds === null) return DASH;
-  const minutes = Math.max(0, Math.floor(seconds / 60));
-  if (minutes >= 1440) return `${Math.floor(minutes / 1440)} d`;
-  return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
+function age(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined) return DASH;
+  return seconds < 60 ? "1 min" : lagText(seconds);
 }
 
 /**
  * Platform health as one line — "All systems normal" in plain text, or what
- * is red in a danger box — that opens into the six figures. It starts open
- * only when something is red: the figures are context, not tasks.
+ * is red in a danger box — that opens into the six figures on demand. It
+ * stays closed even when red, so the inbox above it is never pushed below the
+ * fold (operator review E): the figures are context, not tasks.
  */
 export function HealthStrip({ health, error }: { health: PlatformHealth | undefined; error?: boolean }) {
   const issues = health ? healthIssues(health) : [];
   const red = issues.length > 0;
   const [open, setOpen] = React.useState(false);
-  React.useEffect(() => {
-    if (red) setOpen(true);
-  }, [red]);
 
   if (error) {
     return (
@@ -99,12 +96,20 @@ export function HealthStrip({ health, error }: { health: PlatformHealth | undefi
             value={formatMoney(health.stakeLocked)}
             sub={`${count(health.providersWithStake)} ${health.providersWithStake === 1 ? "provider" : "providers"}`}
           />
-          <MetricTile
-            label="Open disputes"
-            value={count(health.openDisputes)}
-            sub="on chain"
-            meta={health.oldestOpenDisputeAgeSeconds === null ? DASH : `oldest ${age(health.oldestOpenDisputeAgeSeconds)}`}
-          />
+          {/* The retired in-app objection process, not on chain (D15): the Penalties list's "Old process" tab. */}
+          <Link
+            href="/operator/cases?tab=old-process"
+            className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            aria-label="Old-process cases: open the Old process tab"
+          >
+            <MetricTile
+              label="Old-process cases"
+              value={count(health.oldProcessCases ?? health.openDisputes)}
+              sub="not on chain · open the tab"
+              meta={(health.oldestOldProcessCaseAgeSeconds ?? health.oldestOpenDisputeAgeSeconds) == null ? DASH : `oldest ${age(health.oldestOldProcessCaseAgeSeconds ?? health.oldestOpenDisputeAgeSeconds)}`}
+              className="h-full hover:border-02"
+            />
+          </Link>
         </div>
       ) : null}
     </section>
