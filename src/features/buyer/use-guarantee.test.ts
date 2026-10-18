@@ -37,6 +37,45 @@ describe("foldReasons", () => {
     expect(byKey["FAIL:stale_data"]?.label).toMatch(/^Failed our checks: /);
     expect(byKey.MISAPPLIED).toBeDefined();
   });
+
+  it("nests every reason under its line, so failed checks count the same everywhere", () => {
+    const forfeited = { ...call("SETTLED", "PASS"), charged: money("0"), forfeited: true } as ToolCall;
+    const voidedDebt = { ...call("SETTLED", "FAIL"), charged: money("0"), debt: "VOIDED" } as ToolCall;
+    const owed = { ...call("SETTLED", "PASS"), charged: money("0"), debt: "OUTSTANDING" } as ToolCall;
+    const calls = [
+      call("REFUNDED", "FAIL", "50000", "a"),
+      call("REFUNDED", null),
+      call("VOIDED", null),
+      call("EXPIRED", null),
+      forfeited,
+      voidedDebt,
+      owed,
+      call("SETTLED", "PASS"),
+    ];
+    const rows = foldReasons([{ intentId: "a", reasonCode: "stale_data" }] as VerdictRow[], calls);
+    const perBucket = (bucket: string) =>
+      rows.filter((r) => r.bucket === bucket).reduce((n, r) => n + r.calls, 0);
+    // Wrong format is a refund: it sits under "Failed our checks (incl. wrong format)".
+    expect(perBucket("FAILED_VERIFICATION")).toBe(2);
+    expect(perBucket("PROVIDER_OR_PLATFORM_ERROR")).toBe(2);
+    // An owed call and a charged one are not "not charged".
+    expect(perBucket("NOT_COLLECTED")).toBe(2);
+    expect(rows.find((r) => r.reason === "FORFEITED")?.label).toBe("The provider forfeited the payment");
+    // A late FAIL that voided a debt is not collected, not a refund.
+    expect(rows.find((r) => r.reason === "DEBT_VOIDED")?.bucket).toBe("NOT_COLLECTED");
+    expect(rows.some((r) => r.reason === "FAILED_CHECKS")).toBe(false);
+  });
+
+  it("tells a refund won by a report as that, never as a late check result", () => {
+    const upheld = { ...call("SETTLED", "PASS"), charged: money("0"), debt: "VOIDED", refundedByReport: true } as ToolCall;
+    const [row] = foldReasons([], [upheld]);
+    expect(row).toMatchObject({
+      reason: "REFUNDED_BY_REPORT",
+      label: "Refunded after your report was upheld",
+      bucket: "NOT_COLLECTED",
+      calls: 1,
+    });
+  });
 });
 
 describe("reconcileState", () => {

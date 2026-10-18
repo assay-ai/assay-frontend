@@ -9,6 +9,7 @@ import { listVerdicts, type VerdictRow } from "@/services/guarantee.service";
 import { plain } from "@/libs/plain-language";
 import { notCharged, toDecimal } from "@/utils/money";
 
+import { bucketOfStatus } from "./not-charged";
 import { monthPeriod, recentMonths, sumMoney, type Period } from "./period";
 import { readWithheld, type SummaryWire, type WithheldForAsset } from "./wire";
 
@@ -52,6 +53,12 @@ async function collectPages<T>(
 export interface FailureReason {
   /** A stable key: the verdict's `reasonCode` for a failed check, else the class. */
   reason: string;
+  /**
+   * The `GET /withheld` bucket the calls are counted in (from their status), so
+   * the reasons nest under the same three lines as the totals: "Failed our
+   * checks (incl. wrong format)" is one count everywhere.
+   */
+  bucket: string;
   /** The plain sentence a buyer reads. */
   label: string;
   calls: number;
@@ -94,6 +101,10 @@ export interface GuaranteeData {
   withheldError: ApiError | null;
   listed: Money | null;
   charged: Money | null;
+  /** The summary's not charged: equals the withheld total, so the bar adds up to listed. */
+  notCharged: Money | null;
+  /** Calls not finished yet, at their listed price. */
+  inProgress: Money | null;
   /** Buyer debt, open or written off: neither charged nor withheld. */
   owed: Money | null;
   /** How many calls `owed` is for. */
@@ -121,6 +132,16 @@ export interface GuaranteeState {
 const NOT_CHARGED_STATUSES = new Set(["REFUNDED", "VOIDED", "EXPIRED"]);
 
 /**
+ * A served call that was never collected and is not owed: the provider
+ * forfeited it, or its debt was voided. A legacy platform absorb is not
+ * visible on a call row (it reads as charged), so the Not collected line's
+ * figure comes from `GET /withheld`, never from this fold.
+ */
+function notCollected(call: ToolCall): boolean {
+  return call.status === "SETTLED" && (call.forfeited === true || call.debt === "VOIDED");
+}
+
+/**
  * Why each not-charged call was not charged, for EVERY such call — not only the
  * ones with a verdict. Grouped by the call's real reason, the same classes the
  * receipt tells (`notChargedReason` in features/g30/receipt-state):
@@ -128,23 +149,37 @@ const NOT_CHARGED_STATUSES = new Set(["REFUNDED", "VOIDED", "EXPIRED"]);
  *  - REFUNDED with no verdict: the result was in the wrong format;
  *  - a MISAPPLIED verdict: outside what the tool covers;
  *  - VOIDED: no usable result (provider error, rejected request or no answer);
- *  - EXPIRED: did not finish in time.
+ *  - EXPIRED: did not finish in time;
+ *  - SETTLED, forfeited or debt voided: not collected.
+ * Each row also carries its bucket, so the screen nests reasons under the
+ * same lines as the totals.
  */
 export function foldReasons(verdicts: VerdictRow[], calls: ToolCall[]): FailureReason[] {
   const reasonByIntent = new Map(verdicts.map((v) => [v.intentId, v.reasonCode]));
   const byReason = new Map<
     string,
-    { label: string; calls: number; amounts: Money[]; tools: Map<string, number>; providers: Map<string, number> }
+    {
+      reason: string;
+      bucket: string;
+      label: string;
+      calls: number;
+      amounts: Money[];
+      tools: Map<string, number>;
+      providers: Map<string, number>;
+    }
   >();
 
   for (const call of calls) {
-    if (!NOT_CHARGED_STATUSES.has(call.status) || !toDecimal(call.charged).isZero()) continue;
+    if (!(NOT_CHARGED_STATUSES.has(call.status) || notCollected(call)) || !toDecimal(call.charged).isZero()) continue;
     if (toDecimal(call.price).isZero()) continue; // free-tier calls are counted separately
-    const { key, label } = reasonOf(call, reasonByIntent.get(call.intentId) ?? null);
+    const bucket = bucketOfStatus(call.status) ?? "PROVIDER_OR_PLATFORM_ERROR";
+    const { key: reason, label } = reasonOf(call, reasonByIntent.get(call.intentId) ?? null);
+    // Keyed by bucket too: a late FAIL that voided a debt is not collected, not a refund.
+    const key = `${bucket}|${reason}`;
 
     let entry = byReason.get(key);
     if (!entry) {
-      entry = { label, calls: 0, amounts: [], tools: new Map(), providers: new Map() };
+      entry = { reason, bucket, label, calls: 0, amounts: [], tools: new Map(), providers: new Map() };
       byReason.set(key, entry);
     }
     entry.calls += 1;
@@ -167,9 +202,10 @@ export function foldReasons(verdicts: VerdictRow[], calls: ToolCall[]): FailureR
     return best;
   };
 
-  return [...byReason.entries()]
-    .map(([reason, entry]) => ({
-      reason,
+  return [...byReason.values()]
+    .map((entry) => ({
+      reason: entry.reason,
+      bucket: entry.bucket,
       label: entry.label,
       calls: entry.calls,
       amount: sumMoney(entry.amounts, null),
@@ -180,6 +216,12 @@ export function foldReasons(verdicts: VerdictRow[], calls: ToolCall[]): FailureR
 }
 
 function reasonOf(call: ToolCall, reasonCode: string | null): { key: string; label: string } {
+  if (call.status === "SETTLED") {
+    if (call.refundedByReport) return { key: "REFUNDED_BY_REPORT", label: "Refunded after your report was upheld" };
+    return call.forfeited
+      ? { key: "FORFEITED", label: "The provider forfeited the payment" }
+      : { key: "DEBT_VOIDED", label: "The payment was cancelled after a late check result" };
+  }
   if (call.verdict === "FAIL") {
     if (!reasonCode || /^quorum_/i.test(reasonCode)) {
       return { key: "FAILED_CHECKS", label: "Failed our checks" };
@@ -286,6 +328,8 @@ export function useGuarantee(anchor: Date, monthsBack = 3, assetKey: string | nu
           withheldError: withheldR.status === "rejected" ? asApiError(withheldR.reason) : null,
           listed: summary?.totals?.listedTotal ?? null,
           charged: summary?.totals?.chargedTotal ?? null,
+          notCharged: summary?.totals?.notChargedTotal ?? null,
+          inProgress: summary?.totals?.inProgressTotal ?? null,
           owed: summary?.totals?.owedTotal ?? null,
           owedCalls: summary?.totals?.owedCalls ?? 0,
           totalCalls: summary?.totals?.calls ?? 0,

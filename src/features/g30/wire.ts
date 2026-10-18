@@ -140,6 +140,8 @@ export interface SummaryFigures {
   /** Calls not finished yet, at their listed price. */
   inProgressTotal: Money;
   inProgressCalls: number;
+  /** Calls listed at zero (free tier), counted in `calls`. Optional: older backends do not send it. */
+  freeCalls?: number;
   failRate: number | null;
 }
 

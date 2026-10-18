@@ -15,10 +15,11 @@ import type { WithheldForAsset } from "./wire";
  *
  * The API checks `Σ HOLD_RELEASE == withheld + settlement remainders + orphans`.
  * A POSITIVE difference means more money was released back to the buyer than
- * the not-charged calls explain (on the running API: holds on pay-later voucher
- * calls released after the voucher was paid on chain, which the check does not
- * yet itemise) — money returned, never money taken, so it is an info line, not
- * an alarm. A NEGATIVE difference means less was released than the total
+ * the not-charged calls explain (a written-off pay-later call: its hold was
+ * released, but it is still owed, so it is not "not charged"). Forfeited,
+ * voided-debt and absorbed calls used to land here too; they are the
+ * `NOT_COLLECTED` line now (UX review 2026-10-18, P0-3). Money returned, never
+ * money taken, so it is an info line, not an alarm. A NEGATIVE difference means less was released than the total
  * claims, and that one is a warning with support.
  */
 export type ReconcileState = "matches" | "more-released" | "less-released" | "unknown";
@@ -71,7 +72,7 @@ export function ReconcileNote({
         <p className="text-body-13 text-02">
           {warning
             ? `Your balance history shows ${amount} less released than the calls not charged this month. Contact support and keep this month's statement.`
-            : `Holds released back to you this month come to ${amount} more than the calls not charged. Released money goes back to your balance, so this never means you paid more; it is usually a pay-later call's hold being released after it was paid.`}
+            : `Holds released back to you this month come to ${amount} more than the calls not charged. Released money goes back to your balance, so this never means you paid more; it is usually a pay-later call that is still owed after its hold was released.`}
           {SUPPORT_URL ? (
             <>
               {" "}

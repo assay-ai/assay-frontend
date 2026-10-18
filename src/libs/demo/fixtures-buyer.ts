@@ -643,6 +643,8 @@ function wireFigures(bucket: Bucket) {
     owedCalls: bucket.owedCalls,
     inProgressTotal: minorMoney(0),
     inProgressCalls: 0,
+    // The day-by-day model is paid calls only.
+    freeCalls: 0,
     failRate: bucket.calls === 0 ? null : bucket.refundedCalls / bucket.calls,
   };
 }
@@ -721,24 +723,28 @@ function withheldBody(query: Record<string, unknown>) {
     into.withheld += bucket.withheld;
   }
 
+  // Every bucket, zero-filled and in the API's order. The demo model has no
+  // served-but-never-collected call, so Not collected is always zero here.
   const buckets = [
-    verification.withheld > 0
-      ? {
-          bucket: "FAILED_VERIFICATION",
-          label: "failed verification",
-          calls: verification.refundedCalls,
-          amount: minorMoney(verification.withheld),
-        }
-      : null,
-    platform.withheld > 0
-      ? {
-          bucket: "PROVIDER_OR_PLATFORM_ERROR",
-          label: "provider or platform error",
-          calls: platform.refundedCalls,
-          amount: minorMoney(platform.withheld),
-        }
-      : null,
-  ].filter((row): row is NonNullable<typeof row> => row !== null);
+    {
+      bucket: "FAILED_VERIFICATION",
+      label: "failed verification",
+      calls: verification.refundedCalls,
+      amount: minorMoney(verification.withheld),
+    },
+    {
+      bucket: "PROVIDER_OR_PLATFORM_ERROR",
+      label: "provider or platform error",
+      calls: platform.refundedCalls,
+      amount: minorMoney(platform.withheld),
+    },
+    {
+      bucket: "NOT_COLLECTED",
+      label: "not collected (the provider could not be paid)",
+      calls: 0,
+      amount: minorMoney(0),
+    },
+  ];
 
   return {
     withheld: [
@@ -786,6 +792,7 @@ function toolCallRow(call: DemoCall) {
     charged: money(call.charged),
     forfeited: false,
     debt: demoCallDebt(call).debt,
+    refundedByReport: false,
     verdict: call.verdict,
     createdAt: minutesAgo(callAge(call)),
   };
