@@ -52,6 +52,8 @@ function ReviewScreen() {
   const queryClient = useQueryClient();
   const detail = useQuery({ queryKey: ["operator", "review", id], queryFn: () => getProviderToolReview(id), enabled: Boolean(id), retry: 0, refetchInterval: 30_000 });
   const [readHash, setReadHash] = React.useState<string | null>(null);
+  // Another review opened in the same page: what was read was the other tool's content.
+  React.useEffect(() => setReadHash(null), [id]);
   React.useEffect(() => {
     if (detail.data && readHash === null) setReadHash(detail.data.contentHash);
   }, [detail.data, readHash]);
@@ -59,7 +61,7 @@ function ReviewScreen() {
   const [done, setDone] = React.useState<string | null>(null);
 
   const back = (
-    <Link href="/operator/tools/reviews" className="inline-flex items-center gap-1.5 self-start text-label-13 text-02 hover:text-01">
+    <Link href="/operator/tools/reviews" className="inline-flex min-h-10 items-center gap-1.5 self-start text-label-13 text-02 hover:text-01">
       <ArrowLeft aria-hidden="true" className="size-3.5" />
       Reviews
     </Link>
@@ -106,7 +108,7 @@ function ReviewScreen() {
       {changedSinceRead ? (
         <div role="alert" className="flex flex-col gap-2 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-3 tablet:flex-row tablet:items-center tablet:justify-between" data-testid="review-stale">
           <p className="text-body-13 text-01">The provider changed what is under review after you opened it. Read the new content before you decide.</p>
-          <Button variant="secondary" size="sm" icon={<RefreshCw aria-hidden="true" />} onClick={reread}>
+          <Button variant="secondary" size="sm" className="touch-target" icon={<RefreshCw aria-hidden="true" />} onClick={reread}>
             I&apos;ll read the new content
           </Button>
         </div>

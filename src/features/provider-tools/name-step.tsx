@@ -25,6 +25,7 @@ import {
   MODEL_NAME_MAX,
   modelSeenName,
   nameLengthWarning,
+  parseTags,
   providerToolErrorView,
   type ProviderToolErrorView,
 } from "./model";
@@ -83,7 +84,7 @@ function HandleClaim() {
       {error?.suggestions.length ? (
         <div className="flex flex-wrap gap-2">
           {error.suggestions.map((s) => (
-            <Button key={s} variant="secondary" size="sm" onClick={() => {
+            <Button key={s} variant="secondary" size="sm" className="touch-target" onClick={() => {
               setName(s);
               claim.mutate(s);
             }}>
@@ -127,7 +128,7 @@ function UpFrontChecklist() {
           <li key={item.text} className="flex items-center gap-2 text-body-13 text-02">
             <CircleDashed aria-hidden="true" className="size-3.5 shrink-0 text-03" />
             {item.href ? (
-              <Link href={item.href} className="text-primary-600 hover:underline">
+              <Link href={item.href} className="inline-flex min-h-10 items-center text-primary-600 hover:underline">
                 {item.text}
               </Link>
             ) : (
@@ -153,7 +154,7 @@ function ErrorBox({ view, onSuggestion }: { view: ProviderToolErrorView; onSugge
         </ul>
       ) : null}
       {view.suggestion && onSuggestion ? (
-        <Button variant="secondary" size="sm" className="self-start" onClick={() => onSuggestion(view.suggestion!)}>
+        <Button variant="secondary" size="sm" className="touch-target self-start" onClick={() => onSuggestion(view.suggestion!)}>
           Use {view.suggestion}
         </Button>
       ) : null}
@@ -200,10 +201,7 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
     mutationFn: () =>
       updateProviderTool(tool!.id, {
         category: category.trim(),
-        tags: tags
-          .split(",")
-          .map((t) => t.trim().toLowerCase())
-          .filter(Boolean),
+        tags: parseTags(tags).tags,
       }),
     onSuccess: (updated) => {
       queryClient.setQueryData(providerToolKeys.one(updated.id), updated);
@@ -221,6 +219,7 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
 
   if (tool) {
     const tagsChanged = tags !== tool.tags.join(", ") || category !== tool.category;
+    const tagProblem = parseTags(tags).problem;
     return (
       <section className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 px-4 py-4">
         <h2 className="text-label-md text-01">Name</h2>
@@ -228,14 +227,14 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
         <p className="text-body-13 text-03">A tool&apos;s name can&apos;t change. To use another name, publish a new tool.</p>
         <div className="grid grid-cols-1 gap-3 tablet:grid-cols-2">
           <Field label="Topic" value={category} onChange={(e) => setCategory(e.target.value)} list={listId} error={categoryProblem ?? undefined} hint="Search and the catalogue group tools by it." />
-          <Field label="Tags (optional)" value={tags} onChange={(e) => setTags(e.target.value)} hint="Up to 10, separated by commas." className="font-sans" />
+          <Field label="Tags (optional)" value={tags} onChange={(e) => setTags(e.target.value)} hint="Up to 10, separated by commas." error={tagProblem ?? undefined} className="font-sans" />
         </div>
         {datalist}
         {tool.visibility === "LISTED" ? <p className="text-body-xs text-03">On a listed tool, a new topic or tags wait for the next review: change them with a new version in step 2.</p> : null}
         {save.isError ? <ErrorBox view={providerToolErrorView(save.error)} /> : null}
         <div className="flex flex-wrap gap-2">
           {tool.visibility !== "LISTED" ? (
-            <Button variant="secondary" disabled={!tagsChanged || categoryProblem !== null} loading={save.isPending} onClick={() => save.mutate()}>
+            <Button variant="secondary" disabled={!tagsChanged || categoryProblem !== null || tagProblem !== null} loading={save.isPending} onClick={() => save.mutate()}>
               Save topic and tags
             </Button>
           ) : null}

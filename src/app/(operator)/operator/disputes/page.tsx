@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
@@ -8,8 +8,9 @@ import * as React from "react";
 import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Chip } from "@/components/toolsets/toolset-bits";
+import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
-import { bySlaUrgency, slaMarks } from "@/features/call-disputes/model";
+import { bySlaUrgency, disputeQueueQuery, slaMarks } from "@/features/call-disputes/model";
 import { useNow } from "@/features/call-disputes/ui";
 import { mayDecideCallDisputes } from "@/features/operator/provider-tool-review";
 import { OperatorCasesTabs } from "@/features/operator/provider-tool-ui";
@@ -35,13 +36,16 @@ function DisputesScreen() {
   const now = useNow(30_000);
   const [show, setShow] = React.useState<"open" | "all">("open");
   const [flagged, setFlagged] = React.useState(false);
-  const list = useQuery({
-    queryKey: ["operator", "call-disputes", show, flagged],
-    queryFn: () => listOperatorCallDisputes({ state: show === "open" ? ["OPEN"] : undefined, flaggedOnly: flagged }),
+  // Open: oldest first from the server, so the disputes closest to auto-uphold always load first.
+  const list = useInfiniteQuery({
+    queryKey: ["operator", "call-disputes", "queue", show, flagged],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => listOperatorCallDisputes(disputeQueueQuery(show, flagged, pageParam)),
+    getNextPageParam: (last) => (last.pageInfo.hasMore ? (last.pageInfo.nextCursor ?? undefined) : undefined),
     retry: 0,
     refetchInterval: 60_000,
   });
-  const items = list.data?.items ?? [];
+  const items = React.useMemo(() => (list.data?.pages ?? []).flatMap((p) => p.items), [list.data]);
   const rows = show === "open" ? bySlaUrgency(items) : items;
   return (
     <>
@@ -60,7 +64,7 @@ function DisputesScreen() {
             type="button"
             aria-pressed={flagged}
             onClick={() => setFlagged((on) => !on)}
-            className={cn("rounded-full border px-3 text-label-13", flagged ? "border-primary-500 bg-primary-10 text-primary-700" : "border-02 bg-01 text-02 hover:text-01")}
+            className={cn("min-h-10 rounded-full border px-3 text-label-13", flagged ? "border-primary-500 bg-primary-10 text-primary-700" : "border-02 bg-01 text-02 hover:text-01")}
           >
             Mostly-rejected buyers
           </button>
@@ -106,6 +110,11 @@ function DisputesScreen() {
           ))}
         </ul>
       )}
+      {list.hasNextPage ? (
+        <Button variant="secondary" className="self-start" loading={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
+          Show more
+        </Button>
+      ) : null}
     </>
   );
 }

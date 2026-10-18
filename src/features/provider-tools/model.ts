@@ -2,6 +2,7 @@ import { problemText } from "@/features/contracts/text";
 import { formFor, parseForm, type ContractForm } from "@/features/operator/contract-editor";
 import type { OperatorTool } from "@/interfaces/contracts";
 import { ApiError } from "@/libs/ApiClient";
+import { SUNSET_MIN_DAYS } from "@/libs/dispute-deadlines";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import type {
@@ -69,6 +70,19 @@ export function nameLengthWarning(handle: string, localName: string): string | n
   const left = FULL_NAME_MAX - fullToolName(handle, localName).length;
   if (left < 0 || left > 6) return null;
   return left === 0 ? "This is the longest name allowed." : `${left} character${left === 1 ? "" : "s"} left before the limit.`;
+}
+
+/** A tag as search reads it: lowercase, digits and "-", at most 32 characters. */
+export const TAG_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
+export const TAGS_MAX = 10;
+
+/** "posts, Social" → ["posts", "social"]; with what is wrong, if anything. */
+export function parseTags(text: string): { tags: string[]; problem: string | null } {
+  const tags = [...new Set(text.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))];
+  if (tags.length > TAGS_MAX) return { tags, problem: `At most ${TAGS_MAX} tags.` };
+  const bad = tags.find((t) => !TAG_RE.test(t));
+  if (bad) return { tags, problem: `“${bad}”: use lowercase letters, digits and “-”, at most 32 characters.` };
+  return { tags, problem: null };
 }
 
 /** A free-text title as a tool name: "Search posts!" → "search_posts". */
@@ -360,7 +374,7 @@ export function versionRows(tool: Pick<ProviderTool, "versions" | "currentVersio
 
 /** The earliest sunset the API accepts: 90 days from now, as a UTC date (yyyy-mm-dd). */
 export function earliestSunset(now: number): string {
-  return new Date(now + 90 * 86_400_000 + 86_400_000).toISOString().slice(0, 10);
+  return new Date(now + (SUNSET_MIN_DAYS + 1) * 86_400_000).toISOString().slice(0, 10);
 }
 
 /* --------------------------------------------------------------- the form */

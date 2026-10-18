@@ -129,7 +129,7 @@ function PromotionsScreen() {
                   <li key={tool.toolId} className="flex flex-col gap-2 px-4 py-3 tablet:flex-row tablet:items-start tablet:justify-between">
                     <div className="flex min-w-0 flex-col gap-1">
                       <span className="flex flex-wrap items-center gap-1.5">
-                        <Link href={routes.operatorReview(tool.toolId)} className="font-mono text-mono-13 text-01 hover:underline [overflow-wrap:anywhere]">
+                        <Link href={routes.operatorReview(tool.toolId)} className="inline-flex min-h-10 items-center font-mono text-mono-13 text-01 hover:underline [overflow-wrap:anywhere]">
                           {tool.name}
                         </Link>
                         <Chip>{tool.visibility === "LISTED" ? "Listed" : "Anyone with the link"}</Chip>
@@ -142,7 +142,7 @@ function PromotionsScreen() {
                       </span>
                     </div>
                     {canPromote ? (
-                      <Button variant="secondary" size="sm" className="self-start" onClick={() => setPicked({ group, source: tool })}>
+                      <Button variant="secondary" size="sm" className="touch-target self-start" onClick={() => setPicked({ group, source: tool })}>
                         Make a standard tool
                       </Button>
                     ) : null}

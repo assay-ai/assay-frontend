@@ -48,11 +48,11 @@ export function ReceiptReport({ receipt, toolName }: { receipt: Receipt; toolNam
           {latest.reasonLabel} · <UtcTime value={latest.createdAt} /> · {status.detail}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="secondary" size="sm">
+          <Button asChild variant="secondary" size="sm" className="touch-target">
             <Link href={routes.callDispute(latest.id)}>See the report</Link>
           </Button>
           {!openReport && hold.open ? (
-            <Button variant="ghost" size="sm" icon={<Flag aria-hidden="true" />} onClick={() => setOpen(true)}>
+            <Button variant="ghost" size="sm" className="touch-target" icon={<Flag aria-hidden="true" />} onClick={() => setOpen(true)}>
               Report it again
             </Button>
           ) : null}

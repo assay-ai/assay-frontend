@@ -65,6 +65,8 @@ export interface ListOperatorCallDisputesQuery {
   state?: readonly CallDisputeState[];
   refundState?: RefundState;
   flaggedOnly?: boolean;
+  /** By filing time. The queue reads oldest first (ASC): the SLA runs from the filing. Default DESC. */
+  order?: "ASC" | "DESC";
   limit?: number;
   cursor?: string;
 }
@@ -74,6 +76,7 @@ export function listOperatorCallDisputes(query: ListOperatorCallDisputesQuery = 
   if (query.state && query.state.length > 0) params.state = query.state.join(",");
   if (query.refundState) params.refundState = query.refundState;
   if (query.flaggedOnly) params.flaggedOnly = true;
+  if (query.order) params.order = query.order;
   if (query.cursor) params.cursor = query.cursor;
   return operatorApi.get<CursorPage<OperatorCallDisputeRow>>("/operator/call-disputes", params);
 }

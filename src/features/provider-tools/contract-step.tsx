@@ -98,7 +98,14 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
       }
     },
   });
-  const discard = useMutation({ mutationFn: () => discardProviderToolDraft(tool.id), onSuccess: store });
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
+  const discard = useMutation({
+    mutationFn: () => discardProviderToolDraft(tool.id),
+    onSuccess: (updated) => {
+      setConfirmDiscard(false);
+      store(updated);
+    },
+  });
   const withdraw = useMutation({ mutationFn: () => withdrawProviderToolReview(tool.id), onSuccess: store });
 
   const set = <K extends keyof ContractForm>(field: K, value: ContractForm[K]) => setForm((f) => ({ ...f, [field]: value }));
@@ -153,7 +160,7 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
               ) : null}
               . What it covers can&apos;t change until it is decided.
             </p>
-            <Button variant="secondary" size="sm" loading={withdraw.isPending} onClick={() => withdraw.mutate()}>
+            <Button variant="secondary" size="sm" className="touch-target" loading={withdraw.isPending} onClick={() => withdraw.mutate()}>
               Withdraw the review to edit
             </Button>
           </div>
@@ -249,10 +256,21 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
           <Button variant="secondary" disabled={frozen || !dirty || built.body === null} loading={save.isPending} onClick={() => save.mutate()}>
             Save draft
           </Button>
-          {tool.draft && !firstVersion ? (
-            <Button variant="ghost" disabled={frozen} loading={discard.isPending} onClick={() => discard.mutate()}>
+          {tool.draft && !firstVersion && !confirmDiscard ? (
+            <Button variant="ghost" disabled={frozen} onClick={() => setConfirmDiscard(true)}>
               Discard draft
             </Button>
+          ) : null}
+          {tool.draft && !firstVersion && confirmDiscard ? (
+            <span className="flex flex-wrap items-center gap-2" role="group" aria-label="Discard the draft?">
+              <span className="text-body-13 text-02">Discard the draft? It can&apos;t be brought back.</span>
+              <Button variant="danger" loading={discard.isPending} onClick={() => discard.mutate()}>
+                Discard
+              </Button>
+              <Button variant="ghost" disabled={discard.isPending} onClick={() => setConfirmDiscard(false)}>
+                Keep it
+              </Button>
+            </span>
           ) : null}
         </div>
         <div className="flex flex-col gap-1 tablet:items-end">

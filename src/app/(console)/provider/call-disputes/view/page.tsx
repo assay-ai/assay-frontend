@@ -43,7 +43,7 @@ function ProviderReportContent() {
 
   const frame = (children: React.ReactNode) => (
     <>
-      <Link href="/provider/call-disputes" className="inline-flex items-center gap-1.5 self-start text-label-13 text-02 hover:text-01">
+      <Link href="/provider/call-disputes" className="inline-flex min-h-10 items-center gap-1.5 self-start text-label-13 text-02 hover:text-01">
         <ArrowLeft aria-hidden="true" className="size-3.5" />
         Bad-result reports
       </Link>
@@ -140,7 +140,7 @@ function ProviderReportContent() {
       </details>
 
       {d.bindingId ? (
-        <Link href={routes.binding(d.bindingId)} className="self-start text-body-13 text-primary-600 hover:underline">
+        <Link href={routes.binding(d.bindingId)} className="inline-flex min-h-10 items-center self-start text-body-13 text-primary-600 hover:underline">
           Open the listing that served it
         </Link>
       ) : null}

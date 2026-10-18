@@ -150,10 +150,10 @@ export function SchemaBlock({
                       You unticked <span className="font-mono text-mono-12 text-01">{name}</span>, so it is now neither an extra field nor returned by every provider. Pick one:
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      <Button variant="secondary" size="sm" disabled={disabled} onClick={() => onToggle(name, true)}>
+                      <Button variant="secondary" size="sm" className="touch-target" disabled={disabled} onClick={() => onToggle(name, true)}>
                         Keep as extra field
                       </Button>
-                      <Button variant="secondary" size="sm" disabled={disabled} onClick={() => schema && onText(withRequired(schema, name))}>
+                      <Button variant="secondary" size="sm" className="touch-target" disabled={disabled} onClick={() => schema && onText(withRequired(schema, name))}>
                         Make it required
                       </Button>
                     </div>

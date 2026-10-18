@@ -42,7 +42,7 @@ function ReportContent() {
 
   const frame = (children: React.ReactNode) => (
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
-      <Link href="/spend/disputes" className="inline-flex items-center gap-1.5 self-start text-label-13 text-02 hover:text-01">
+      <Link href="/spend/disputes" className="inline-flex min-h-10 items-center gap-1.5 self-start text-label-13 text-02 hover:text-01">
         <ArrowLeft aria-hidden="true" className="size-3.5" />
         Reports
       </Link>
@@ -121,15 +121,15 @@ function ReportContent() {
           confirming ? (
             <span className="flex flex-wrap items-center gap-2" role="group" aria-label="Withdraw the report?">
               <span className="text-body-13 text-02">Withdraw it? The call stays charged.</span>
-              <Button variant="danger" size="sm" loading={withdraw.isPending} onClick={() => withdraw.mutate()}>
+              <Button variant="danger" size="sm" className="touch-target" loading={withdraw.isPending} onClick={() => withdraw.mutate()}>
                 Withdraw
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
+              <Button variant="ghost" size="sm" className="touch-target" onClick={() => setConfirming(false)}>
                 Keep it
               </Button>
             </span>
           ) : (
-            <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
+            <Button variant="ghost" size="sm" className="touch-target" onClick={() => setConfirming(true)}>
               Withdraw the report
             </Button>
           )

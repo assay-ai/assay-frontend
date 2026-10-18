@@ -1,3 +1,4 @@
+import { DISPUTE_HOLD_MINUTES } from "@/libs/dispute-deadlines";
 import {
   DEMO_ASSET,
   DEMO_BUYER_ACCOUNT,
@@ -1131,7 +1132,7 @@ function receiptBody(call: DemoCall) {
 }
 
 /** The dispute hold: how long a charged call's payment stays held after it settles. */
-const HOLD_MINUTES = 60;
+const HOLD_MINUTES = DISPUTE_HOLD_MINUTES;
 
 /** The catalogue tool id of each tool this account calls (fixtures-explore's ids). */
 export const DEMO_BUYER_TOOL_IDS = Object.fromEntries(TOOL_IDS.map((key) => [key, TOOLS[key].id])) as Record<ToolId, string>;

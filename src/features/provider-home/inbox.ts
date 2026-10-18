@@ -26,6 +26,8 @@ export const PROVIDER_NOTIFICATION_EVENTS = [
   "tool_version.retired",
   // A buyer reported a bad result on a call this provider served: reply within 24 hours.
   "call_dispute.opened",
+  // Its decision. Sent to the buyer too, so it counts only as the provider's (see isProviderEvent).
+  "call_dispute.decided",
 ] as const;
 
 /**
@@ -37,6 +39,11 @@ export function isProviderEvent(event: string | null | undefined, payload?: unkn
   if (typeof event !== "string") return false;
   if (event === "tool_version.deprecated" || event === "tool_version.retired") {
     return Boolean(payload && typeof payload === "object" && (payload as { role?: unknown }).role === "PROVIDER");
+  }
+  if (event === "call_dispute.decided") {
+    // The buyer gets this event too. Until the backend sends `role`, a notice without one is let in.
+    const role = payload && typeof payload === "object" ? (payload as { role?: unknown }).role : undefined;
+    return role === undefined || role === "PROVIDER";
   }
   return event.startsWith("provider.") || event === "call_dispute.opened";
 }

@@ -40,3 +40,13 @@ describe("inboxHeadline", () => {
     expect(inboxHeadline({ penalties: 0, notices: 0 })).toMatch(/^Nothing new/);
   });
 });
+
+describe("call disputes in the provider Inbox", () => {
+  it("lets in a report and its decision, but not the buyer's copy of the decision", () => {
+    expect(isProviderEvent("call_dispute.opened")).toBe(true);
+    expect(isProviderEvent("call_dispute.decided", { role: "PROVIDER" })).toBe(true);
+    expect(isProviderEvent("call_dispute.decided", { role: "BUYER" })).toBe(false);
+    expect(isProviderEvent("call_dispute.decided", {})).toBe(true);
+    expect(isProviderEvent("call_dispute.responded")).toBe(false);
+  });
+});

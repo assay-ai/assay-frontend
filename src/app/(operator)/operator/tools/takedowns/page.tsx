@@ -148,7 +148,7 @@ function TakedownsScreen() {
             return (
               <li key={c.id} className="flex flex-col gap-2 px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Link href={routes.operatorReview(c.targetId)} className="font-mono text-mono-13 text-01 hover:underline [overflow-wrap:anywhere]">
+                  <Link href={routes.operatorReview(c.targetId)} className="inline-flex min-h-10 items-center font-mono text-mono-13 text-01 hover:underline [overflow-wrap:anywhere]">
                     {nameOf(c.targetId)}
                   </Link>
                   <Chip tone={view.tone}>{view.label}</Chip>
@@ -167,11 +167,11 @@ function TakedownsScreen() {
                 {canAct && !c.revertedAt ? (
                   <div className="flex flex-wrap items-center gap-2">
                     {view.pending ? (
-                      <Button variant="danger" size="sm" disabled={selfBlock !== null} onClick={() => setActing({ cutoff: c, action: "confirm" })}>
+                      <Button variant="danger" size="sm" className="touch-target" disabled={selfBlock !== null} onClick={() => setActing({ cutoff: c, action: "confirm" })}>
                         Confirm
                       </Button>
                     ) : null}
-                    <Button variant="secondary" size="sm" onClick={() => setActing({ cutoff: c, action: "revert" })}>
+                    <Button variant="secondary" size="sm" className="touch-target" onClick={() => setActing({ cutoff: c, action: "revert" })}>
                       {view.pending ? "Reject" : "Lift"}
                     </Button>
                     {selfBlock && view.pending ? <span className="text-body-xs text-03">{selfBlock}</span> : null}

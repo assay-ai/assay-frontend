@@ -4,6 +4,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import type { CallDispute, CallDisputeReason } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
+import { DECISION_HOURS, FILING_WINDOW_DAYS, HELD_TIMEOUT_DAYS, OPERATOR_PAGE_HOURS, PROVIDER_REPLY_HOURS } from "@/libs/dispute-deadlines";
 
 /**
  * "Report a bad result" (backlog G3.B1, analysis of the dispute hold), the
@@ -21,11 +22,7 @@ import { formatMoney } from "@/utils/money";
  */
 
 export const HOUR_MS = 3_600_000;
-export const PROVIDER_REPLY_HOURS = 24;
-export const OPERATOR_PAGE_HOURS = 48;
-export const DECISION_HOURS = 72;
-/** A report is accepted for 7 days after the call; after the hold it is a quality signal. */
-export const FILING_WINDOW_DAYS = 7;
+export { DECISION_HOURS, FILING_WINDOW_DAYS, HELD_TIMEOUT_DAYS, OPERATOR_PAGE_HOURS, PROVIDER_REPLY_HOURS } from "@/libs/dispute-deadlines";
 export const NOTE_MAX = 1000;
 export const REPLY_MAX = 1000;
 /** The operator's note, shown to both sides verbatim. */
@@ -92,7 +89,7 @@ export function buyerStatus(dispute: CallDispute, now: number): DisputeStatusVie
       label: replyOpen ? "Waiting for the provider" : "Waiting for a decision",
       tone: "primary",
       detail: dispute.refundGuaranteed
-        ? "The payment is held. If the report is upheld, you are refunded in full."
+        ? `The payment is held. If the report is upheld, you are refunded in full; if nothing is decided within ${HELD_TIMEOUT_DAYS} days, the provider is paid.`
         : "The 1-hour hold had ended, so this counts against the provider's quality; a refund is made only if the payment was not collected.",
     };
   }
@@ -320,6 +317,17 @@ export function slaMarks(dispute: Pick<CallDispute, "state" | "createdAt" | "pro
   return marks;
 }
 
+/**
+ * The operator queue's query: open disputes oldest first from the server
+ * (the default is newest first, which would push the most urgent ones past
+ * the first page), every dispute newest first.
+ */
+export function disputeQueueQuery(show: "open" | "all", flaggedOnly: boolean, cursor?: string) {
+  return show === "open"
+    ? { state: ["OPEN"] as const, order: "ASC" as const, flaggedOnly, cursor }
+    : { order: "DESC" as const, flaggedOnly, cursor };
+}
+
 /** Oldest first: the queue's order is the SLA's. */
 export function bySlaUrgency<T extends Pick<CallDispute, "createdAt">>(rows: readonly T[]): T[] {
   return [...rows].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
@@ -332,7 +340,7 @@ export const REFUND_PLAN_TEXT: Readonly<Record<string, string>> = {
   NOT_CHARGED: "The buyer was not charged; upholding only counts against the provider.",
   COLLECTION_IN_PROGRESS: "The payment is moving right now. Wait a minute before deciding.",
   COLLECTED: "The provider was already paid; upholding counts against quality but refunds nothing.",
-  ALREADY_REFUNDED: "Already refunded (the provider was blocked); the decision only counts for quality.",
+  ALREADY_REFUNDED: "The refund has already landed (a decision being retried); deciding again moves no money.",
 };
 
 /* ----------------------------------------------------------------- errors */
@@ -347,7 +355,7 @@ export function disputeErrorText(error: unknown): string {
     case "DISPUTE_ALREADY_OPEN":
       return "You already reported this call. Its status is below.";
     case "DISPUTE_RATE_LIMITED":
-      return "You have sent the most reports allowed for today. Try again tomorrow (UTC).";
+      return "You have sent the most reports allowed in 24 hours. Try again later.";
     case "DISPUTE_ALREADY_RESPONDED":
       return "A reply was already sent, or the report was decided.";
     case "DISPUTE_NOT_DECIDABLE":

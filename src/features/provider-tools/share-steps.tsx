@@ -236,7 +236,7 @@ export function ShareStep({ tool, gate, onStep }: { tool: ProviderTool; gate: Pr
         <div className="flex flex-col gap-2 rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-3">
           <p className="text-label-13 text-01">Changes requested{tool.review.decidedAt ? <> · <UtcTime value={tool.review.decidedAt} /></> : null}</p>
           <p className="text-body-13 text-01 [overflow-wrap:anywhere]">{tool.review.note}</p>
-          <Button variant="secondary" size="sm" className="self-start" onClick={() => onStep("contract")}>
+          <Button variant="secondary" size="sm" className="touch-target self-start" onClick={() => onStep("contract")}>
             Fix it in step 2
           </Button>
         </div>
@@ -288,7 +288,7 @@ export function ShareStep({ tool, gate, onStep }: { tool: ProviderTool; gate: Pr
         <div className="flex flex-col gap-1.5">
           <p className="text-label-13 text-01">Every listed tool of @{tool.handle}, as one server</p>
           <CopyLine value={tool.mcpUrls.handle} />
-          <Link href={`/toolsets/handle?handle=${encodeURIComponent(tool.handle)}`} className="self-start text-body-13 text-primary-600 hover:underline">
+          <Link href={`/toolsets/handle?handle=${encodeURIComponent(tool.handle)}`} className="inline-flex min-h-10 items-center self-start text-body-13 text-primary-600 hover:underline">
             See your public page
           </Link>
         </div>
