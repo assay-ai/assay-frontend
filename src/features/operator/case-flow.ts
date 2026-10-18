@@ -55,6 +55,17 @@ export interface CaseFacts {
    * record becomes executable by anyone at `executableAt`. `null` otherwise.
    */
   cancel: { deadline: string | null; ifUnsigned: "expires" | "executes" } | null;
+  /**
+   * The backend read that nothing of the case is Pending or Disputed on chain
+   * (`chainStanding: false`): nobody can execute it and a cancel has nothing
+   * to act on. False when the brief does not say (an older backend).
+   */
+  nothingOnChain: boolean;
+  /**
+   * Not on chain yet, and its computed dates have passed: "Not on chain after
+   * 5 days", counted from the proposal. Null otherwise.
+   */
+  notOnChainForDays: number | null;
 }
 
 function plusSeconds(iso: string | null, seconds: number): string | null {
@@ -78,10 +89,14 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
   const executableAt = clocks.chainExecutableAt ?? clocks.earliestExecutionAt ?? null;
   const legacyStatus = status === "DISPUTED" || status === "UNDER_REVIEW" || status === "AWAITING_SECOND";
 
+  const nothingOnChain = brief.chainStanding === false;
+
   let stage: CaseStage;
   // Executed on chain, then paid back by the treasury: the chain still reads EXECUTED.
   if (status === "REVERSED") stage = "compensated";
   else if (chain === "EXECUTED" || status === "EXECUTED" || status === "EXECUTING") stage = "executed";
+  // A closed case whose cancel has nothing on chain to act on is simply cancelled: no signature step.
+  else if (chain === "CANCEL_REQUESTED" && nothingOnChain && status !== null && CLOSED_CANCELLED.includes(status)) stage = "cancelled";
   else if (chain === "CANCEL_REQUESTED") stage = "cancel-requested";
   else if (chain === "CANCELLED" || (status !== null && CLOSED_CANCELLED.includes(status))) stage = "cancelled";
   else if (chainStage.kind === "disputed" || (chainStage.kind === "open" && chainStage.disputedParts > 0)) stage = "disputed";
@@ -103,6 +118,13 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
 
   const expired = stage === "cancelled" && disputedAt !== null && proposal.resolutionKind === "AUTO_CHAIN_VOIDED";
 
+  const computedAt = executableAt ? Date.parse(executableAt) : Number.NaN;
+  const proposedAt = proposal.clocks.proposedAt ? Date.parse(proposal.clocks.proposedAt) : Number.NaN;
+  const notOnChainForDays =
+    stage === "not-on-chain" && !Number.isNaN(computedAt) && computedAt <= now && !Number.isNaN(proposedAt)
+      ? Math.max(1, Math.floor((now - proposedAt) / 86_400_000))
+      : null;
+
   return {
     stage,
     status,
@@ -112,6 +134,8 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
     legacyStatus,
     expired,
     cancel,
+    nothingOnChain,
+    notOnChainForDays,
   };
 }
 
@@ -162,10 +186,13 @@ export function caseTimelineSteps(
           id: "window",
           label: windowLabel,
           state: stage === "window-open" ? "current" : stage === "not-on-chain" ? "upcoming" : "done",
-          date: wasDisputed ? facts.disputedAt : cutShort ? proposal.resolvedAt : facts.executableAt,
+          // Not on chain past its computed dates: no date that is already gone (operator review E).
+          date: facts.notOnChainForDays !== null ? null : wasDisputed ? facts.disputedAt : cutShort ? proposal.resolvedAt : facts.executableAt,
           dateLabel:
             stage === "not-on-chain"
-              ? "starts once it is on chain"
+              ? facts.notOnChainForDays !== null
+                ? `not on chain after ${daysText(facts.notOnChainForDays)}`
+                : "starts once it is on chain"
               : wasDisputed
                 ? "provider disputed"
                 : cutShort
@@ -212,6 +239,13 @@ export function caseTimelineSteps(
     steps.push({ id: "end", label: "Executed, then compensated", state: "done", date: proposal.resolvedAt });
   } else if (stage === "cancelled") {
     steps.push({ id: "end", label: facts.expired ? "Expired" : "Cancelled", state: "done", date: proposal.resolvedAt });
+  } else if (stage === "cancel-requested" && facts.nothingOnChain) {
+    steps.push({
+      id: "end",
+      label: "Nothing on chain to cancel",
+      state: "done",
+      description: "Nothing is on chain: nothing can be executed, and there is nothing to sign.",
+    });
   } else if (stage === "cancel-requested") {
     const disputedRecord = facts.cancel?.ifUnsigned === "expires";
     steps.push({
@@ -235,8 +269,9 @@ export function caseTimelineSteps(
       label: "Executed or cancelled",
       state: stage === "executable" ? "current" : "upcoming",
       // While disputed, the old executable time no longer applies: it moves with the ruling.
-      date: stage === "disputed" ? null : facts.executableAt,
-      dateLabel: stage === "disputed" ? "after the ruling" : "executable from",
+      // Not on chain past its computed date: that date is gone and means nothing yet.
+      date: stage === "disputed" || facts.notOnChainForDays !== null ? null : facts.executableAt,
+      dateLabel: stage === "disputed" ? "after the ruling" : facts.notOnChainForDays !== null ? "once it is on chain" : "executable from",
       // Upheld but not yet executable: say what the wait is (the contract runs it from max(frozen executableAt, uphold)).
       description:
         stage === "upheld" && !Number.isNaN(executableMs) && executableMs > now
@@ -308,10 +343,15 @@ export function caseAuthority(
   return {
     suspend: { allowed: legal && check.allowed, open: legal, twoPerson: status ? suspendIsTwoPerson(status) : false, reason: suspendReason },
     rule: caps.rule,
-    cancel: may(identity.roles, "cancel") && facts.stage === "cancel-requested",
+    cancel: may(identity.roles, "cancel") && facts.stage === "cancel-requested" && !facts.nothingOnChain,
     compensate: may(identity.roles, "compensate") && status !== null && isLegalInStatus("compensate", status),
     block: caps.block,
   };
+}
+
+/** "1 day", "5 days". */
+function daysText(days: number): string {
+  return `${days} ${days === 1 ? "day" : "days"}`;
 }
 
 function when(iso: string | null, format: (iso: string) => string): string {
@@ -328,6 +368,17 @@ export function caseNextStep(
   format: (iso: string) => string,
 ): CaseNextStep {
   const suspendSecondary = authority.suspend.allowed ? ("suspend" as const) : null;
+  // "Anyone can execute" only while something stands on chain (B11).
+  if (facts.nothingOnChain && ["cancel-requested", "executable", "upheld", "window-open", "disputed"].includes(facts.stage)) {
+    return {
+      kind: "done",
+      title: "Nothing is on chain",
+      description: "Nothing is on chain: nothing can be executed, and there is nothing to sign.",
+      action: null,
+      secondary: null,
+      until: null,
+    };
+  }
   switch (facts.stage) {
     case "cancel-requested":
       return cancelNextStep(facts, authority, format);
@@ -377,6 +428,16 @@ export function caseNextStep(
         until: null,
       };
     case "not-on-chain":
+      if (facts.notOnChainForDays !== null) {
+        return {
+          kind: "waiting",
+          title: `Not on chain after ${daysText(facts.notOnChainForDays)}`,
+          description: "Its dates were computed for when it lands, and they have passed: nothing can be executed until it is on chain.",
+          action: null,
+          secondary: suspendSecondary,
+          until: null,
+        };
+      }
       return {
         kind: "waiting",
         title: "Going on chain",
@@ -419,7 +480,9 @@ export function caseNextStep(
       return {
         kind: "done",
         title: "Penalty cancelled",
-        description: "Nothing was taken from the provider's stake. Nothing is left to do.",
+        description: facts.nothingOnChain
+          ? "Nothing is on chain: nothing can be executed. Nothing was taken from the provider's stake, and there is nothing to sign."
+          : "Nothing was taken from the provider's stake. Nothing is left to do.",
         action: null,
         secondary: null,
         until: null,
