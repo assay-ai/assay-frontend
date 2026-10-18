@@ -36,7 +36,7 @@ export function limitPhrases(rules: AgentRules): string[] {
 export function toolResultLine(tool: AgentToolEffect, rules: AgentRules): string {
   if (tool.access === "BLOCKED") return `${tool.name}: not in this agent's list`;
   const via = tool.access === "VIA_TOOLSET_URL" ? " · only through its tool set's URL" : "";
-  if (tool.providersTotal === 0) return `${tool.name}: no provider serves it yet${via}`;
+  if (tool.providersTotal === 0) return `${tool.name}: no provider is taking calls for it now${via}`;
   const limits = limitPhrases(rules);
   const limitNote = limits.length > 0 ? ` (your limit${limits.length > 1 ? "s" : ""}: ${limits.join(", ")})` : "";
   if (tool.providersLeft === 0) return `${tool.name}: no provider fits${limitNote}${via}`;
@@ -56,17 +56,73 @@ export function toolResultTone(tool: AgentToolEffect): ToolResultTone {
   return "ok";
 }
 
-/** "Can use 7 of 12 tools" — the one-line summary over the per-tool list. */
+/** Why a tool this agent may use cannot run now. */
+export type UnusableReason = "no-provider" | "limits";
+
+export interface UnusableTool {
+  toolId: string;
+  name: string;
+  reason: UnusableReason;
+  /** The reason in words: "no provider is taking calls for it now". */
+  text: string;
+}
+
+/** One reason in words, naming the agent's own limits when they are what cut every provider. */
+export function unusableReasonText(reason: UnusableReason, rules: AgentRules): string {
+  if (reason === "no-provider") return "no provider is taking calls for it now";
+  const limits = limitPhrases(rules);
+  return limits.length > 0
+    ? `every provider is outside this agent's limits (${limits.join(", ")})`
+    : "no provider fits this agent's rules";
+}
+
+/**
+ * The tools this agent may use but cannot run now, each with its reason —
+ * so "1 of 8" is never left unexplained (review B P1). A tool access blocks
+ * is "not in this agent's list" and is not counted here.
+ */
+export function unusableTools(access: AgentAccess): UnusableTool[] {
+  return access.tools
+    .filter((tool) => tool.access !== "BLOCKED" && tool.providersLeft === 0)
+    .map((tool) => {
+      const reason: UnusableReason = tool.providersTotal === 0 ? "no-provider" : "limits";
+      return { toolId: tool.toolId, name: tool.name, reason, text: unusableReasonText(reason, access.rules) };
+    });
+}
+
+/** "6 with no provider taking calls, 1 outside its limits". */
+function unusableCounts(list: readonly UnusableTool[]): string {
+  const none = list.filter((t) => t.reason === "no-provider").length;
+  const limits = list.length - none;
+  return [
+    none > 0 ? `${none} with no provider taking calls` : null,
+    limits > 0 ? `${limits} outside its limits` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+/**
+ * The one-line summary over the per-tool list:
+ *
+ *   Everything   "Can use every tool, including new ones. 1 of 8 can run now; 7 can't (6 with no provider taking calls, 1 outside its limits)."
+ *   Only these   "Can use 2 of 12 tools. 1 of them can't run now (1 with no provider taking calls)."
+ */
 export function accessSummary(access: AgentAccess): string {
+  const cant = unusableTools(access);
+  const why = cant.length > 0 ? ` (${unusableCounts(cant)})` : "";
   if (access.accessMode === "ALL") {
     const fits = access.tools.filter((t) => t.providersLeft > 0).length;
-    return access.tools.length === 0
-      ? "Can use every tool, including new ones."
-      : `Can use every tool, including new ones. ${fits} of ${access.tools.length} have a provider that fits its limits.`;
+    if (access.tools.length === 0) return "Can use every tool, including new ones.";
+    return `Can use every tool, including new ones. ${fits} of ${access.tools.length} can run now${
+      cant.length > 0 ? `; ${cant.length} can't${why}` : ""
+    }.`;
   }
   const usable = access.tools.filter((t) => t.access !== "BLOCKED").length;
   if (usable === 0) return "Can use no tool at all: allow a tool set or a tool below.";
-  return `Can use ${usable} of ${access.tools.length} tools.`;
+  return `Can use ${usable} of ${access.tools.length} tools.${
+    cant.length > 0 ? ` ${cant.length} of them can't run now${why}.` : ""
+  }`;
 }
 
 /** The allowed tool sets as the PATCH body spells them (the names stay server-side). */
