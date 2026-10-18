@@ -12,6 +12,8 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/components/patterns/testnet-chip", () => ({ TestnetChip: () => null }));
 
+import { GLOSSARY } from "@/libs/glossary";
+
 import LoginPage from "./page";
 
 function render(query: string) {
@@ -32,9 +34,10 @@ describe("login, sent from a provider page", () => {
     expect(text).toContain("Sign in to start listing");
     expect(aside).toContain("Paid per call, on chain");
     expect(aside).toContain("Payouts are never clawed back");
-    expect(aside).toContain("What is at risk");
-    expect(aside).toContain("payment is yours 1 hour after the call");
-    expect(aside).toContain("After that, only your stake: at most 10% of it in any 24 hours");
+    const plain = aside.replace(/&#x27;/g, "'");
+    expect(plain).toContain(GLOSSARY["payout-final"].definition);
+    expect(plain).toContain("What your stake risks");
+    expect(plain).toContain(GLOSSARY["stake-rule"].definition);
     expect(aside).not.toContain("Only your stake is at risk");
     expect(aside).not.toContain("You don&#x27;t pay for results you can&#x27;t use");
     expect(aside).not.toContain("We hold, not charge");

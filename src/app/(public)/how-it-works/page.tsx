@@ -7,8 +7,7 @@ import * as React from "react";
 import { BuyerCosts } from "@/components/explorer/buyer-costs";
 import { Term } from "@/components/patterns/term";
 import { MoneyPair } from "@/components/ui/money-pair";
-import { DAILY_CAP_PERCENT } from "@/features/explorer/provider-economics";
-import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
+import { GLOSSARY } from "@/libs/glossary";
 import {
   Panel,
   PanelBody,
@@ -315,12 +314,9 @@ export default function HowItWorksPage() {
               </div>
               <div className="flex w-full items-start gap-2.5 rounded-lg border border-01 bg-02 p-[15px]">
                 <Info aria-hidden="true" className="h-[15px] w-[15px] shrink-0 text-03" />
-                {/* TODO(B6 glossary): use the glossary's stake-rule sentence once B6 lands. */}
                 <p className="min-w-0 flex-1 text-body-13 text-02">
-                  Providers put up a <Term k="stake">stake</Term>. One that fails more often than it
-                  promised, over at least {MIN_CHECKED_CALLS} checked calls in a window, gets a{" "}
-                  <Term k="slash">penalty</Term>: part of its stake, never more than {DAILY_CAP_PERCENT}% of it in
-                  any 24 hours, and part of that goes to the buyers it served badly.
+                  Providers put up a <Term k="stake">stake</Term>, and a <Term k="slash">penalty</Term> can take
+                  part of it. {GLOSSARY["stake-rule"].definition}
                 </p>
               </div>
             </PanelBody>
