@@ -4,6 +4,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import type { CallDispute, CallDisputeReason } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
+import { formatClock, formatDate } from "@/libs/utc-time";
 import { DECISION_HOURS, HELD_TIMEOUT_DAYS, PROVIDER_REPLY_HOURS, REPORTS_PER_DAY } from "@/libs/dispute-deadlines";
 import { refundPromiseLive } from "@/features/g30/refund-promise";
 
@@ -15,9 +16,10 @@ import { refundPromiseLive } from "@/features/g30/refund-promise";
  *   - the payment is held for 1 hour after the call settles; a report filed
  *     inside that window is refunded in full if it is upheld;
  *   - the provider may reply once, within 24 hours;
- *   - an operator decides within 72 hours. A provider that stayed silent for
- *     24 hours is upheld automatically at 72 hours; a provider that replied
- *     keeps the payment held while an operator is paged.
+ *   - an operator decides within 72 hours. A report whose provider stayed
+ *     silent for 24 hours can be upheld automatically from 72 hours (the daily
+ *     auto-uphold cap can defer it); a provider that replied keeps the payment
+ *     held while an operator is paged.
  * The platform never pays a refund out of its own money: it comes from the
  * held payment, or from a debt that is voided.
  */
@@ -66,8 +68,7 @@ export function refundedBeforeDecision(dispute: Pick<CallDispute, "state" | "ref
  */
 export const DISPUTE_COPY = {
   reply: `The provider has ${PROVIDER_REPLY_HOURS} hours to reply.`,
-  silent: `If the provider stays silent, the report is upheld automatically at ${DECISION_HOURS} hours.`,
-  silentRefund: `If the provider stays silent, the report is upheld automatically at ${DECISION_HOURS} hours and you are refunded.`,
+  silent: `If the provider stays silent, the report can be upheld automatically from ${DECISION_HOURS} hours.`,
   decides: `An operator decides within ${DECISION_HOURS} hours.`,
   held: "The payment stays held until the report is decided.",
   afterHold: "The payment has already been collected. If the report is upheld, it counts against the provider's quality, but a refund is not guaranteed.",
@@ -91,12 +92,44 @@ const AFTER_HOLD_OUTCOME =
 export const BUYER_COPY = {
   reply: DISPUTE_COPY.reply,
   decides: `Assay's review team decides within ${DECISION_HOURS} hours.`,
-  silentHeld: `If the provider stays silent, your report is accepted automatically at ${DECISION_HOURS} hours and you are refunded.`,
+  silentHeld: `If the provider stays silent, your report can be accepted automatically from ${DECISION_HOURS} hours; if it is, you are refunded in full.`,
+  silent: `If the provider stays silent, your report can be accepted automatically from ${DECISION_HOURS} hours.`,
   held: "The payment stays held until your report is decided.",
   afterHold: `This report is not covered by the refund guarantee, so ${AFTER_HOLD_OUTCOME}`,
   limit: DISPUTE_COPY.limit,
   safetyNet: DISPUTE_COPY.safetyNet,
 } as const;
+
+/**
+ * The one deadline sentence each side reads (B7), the same rule in their
+ * words. "Can be … from": the daily auto-uphold cap can defer it, so it never
+ * says it will happen at a time.
+ */
+export const DEADLINE_SENTENCE = {
+  provider: `Reply within ${PROVIDER_REPLY_HOURS} h. If you don't, the report can be upheld automatically from ${DECISION_HOURS} h.`,
+  buyer: `The provider has ${PROVIDER_REPLY_HOURS} h to reply. If it doesn't, your report can be accepted automatically from ${DECISION_HOURS} h.`,
+} as const;
+
+/** "Oct 21, 14:23 UTC": a date that stays right tomorrow, unlike "14:23 UTC". */
+export function fullDateTime(value: string | number | Date, now: number = Date.now()): string {
+  return `${formatDate(value, { now })}, ${formatClock(value)} UTC`;
+}
+
+/** The toast after filing: when the provider replies by and when it is decided by; never the outcome. */
+export function filedToast(dispute: Pick<CallDispute, "decisionDueAt">, now: number = Date.now()): string {
+  return `Reported. The provider has ${PROVIDER_REPLY_HOURS} h to reply; we decide by ${fullDateTime(dispute.decisionDueAt, now)}.`;
+}
+
+/** "You can report until Oct 20, 14:23 UTC", while a report is accepted. */
+export function reportUntilText(closesAt: string | null | undefined, now: number = Date.now()): string | null {
+  if (!closesAt || now >= Date.parse(closesAt)) return null;
+  return `You can report this call until ${fullDateTime(closesAt, now)}.`;
+}
+
+/** One reason label everywhere: the form's own words, the backend's label only for a reason the form does not know. */
+export function disputeReasonLabel(dispute: Pick<CallDispute, "reason" | "reasonLabel">): string {
+  return reasonLabel(dispute.reason, dispute.reasonLabel);
+}
 
 function money(value: Money | null | undefined): string | null {
   return value ? formatMoney(value, { decimals: 4 }) : null;
@@ -162,12 +195,18 @@ export function providerStatus(dispute: CallDispute, now: number): DisputeStatus
         label: "Reply needed",
         tone: "warning",
         detail: dispute.autoUpholdAt
-          ? `Reply once, within ${PROVIDER_REPLY_HOURS} hours of the report. If you stay silent, it is upheld automatically at ${DECISION_HOURS} hours.`
+          ? `Reply once, within ${PROVIDER_REPLY_HOURS} hours of the report. If you stay silent, it can be upheld automatically from ${fullDateTime(dispute.autoUpholdAt, now)}.`
           : `Reply once, within ${PROVIDER_REPLY_HOURS} hours of the report. ${DISPUTE_COPY.decides}`,
       };
     }
     if (!dispute.providerRespondedAt && now >= Date.parse(replyDueAt(dispute))) {
-      return { label: "Reply window closed", tone: "danger", detail: `You did not reply within ${PROVIDER_REPLY_HOURS} hours. The report is upheld automatically at ${DECISION_HOURS} hours unless an operator decides first.` };
+      return {
+        label: "Reply window closed",
+        tone: "danger",
+        detail: dispute.autoUpholdAt
+          ? `You did not reply within ${PROVIDER_REPLY_HOURS} hours. The report can be upheld automatically from ${fullDateTime(dispute.autoUpholdAt, now)} unless an operator decides first.`
+          : `You did not reply within ${PROVIDER_REPLY_HOURS} hours. ${DISPUTE_COPY.decides}`,
+      };
     }
     return { label: "Waiting for a decision", tone: "primary", detail: `You replied. ${DISPUTE_COPY.decides}` };
   }
@@ -258,7 +297,17 @@ export function disputeTimeline(dispute: CallDispute, now: number, side: "buyer"
       state: dispute.providerRespondedAt || replyClosed ? "current" : "upcoming",
       date: decisionDueAt(dispute),
       dateLabel: "Decided by",
-      description: side === "buyer" ? (silent && dispute.autoUpholdAt ? BUYER_COPY.silentHeld : BUYER_COPY.decides) : silent && dispute.autoUpholdAt ? DISPUTE_COPY.silent : DISPUTE_COPY.decides,
+      description:
+        side === "buyer"
+          ? silent && dispute.autoUpholdAt
+            ? // A refund is named only where the backend guarantees one.
+              dispute.refundGuaranteed
+              ? BUYER_COPY.silentHeld
+              : BUYER_COPY.silent
+            : BUYER_COPY.decides
+          : silent && dispute.autoUpholdAt
+            ? DISPUTE_COPY.silent
+            : DISPUTE_COPY.decides,
     });
   }
 
@@ -394,9 +443,9 @@ export function slaMarks(dispute: Pick<CallDispute, "state" | "providerResponded
   if (now >= Date.parse(dispute.decisionDueAt)) {
     marks.push(auto ? { label: "Auto-uphold due", tone: "danger", dueAt: dispute.decisionDueAt } : { label: "Overdue: decide now", tone: "danger", dueAt: dispute.decisionDueAt });
   } else if (now >= Date.parse(dispute.pageAt)) {
-    marks.push({ label: auto ? "Paged · auto-uphold at 72 h" : "Paged · decide by 72 h", tone: "danger", dueAt: dispute.decisionDueAt });
+    marks.push({ label: auto ? "Paged · auto-uphold from 72 h" : "Paged · decide by 72 h", tone: "danger", dueAt: dispute.decisionDueAt });
   } else {
-    marks.push({ label: auto ? "Auto-uphold at 72 h" : "Decide by 72 h", tone: "neutral", dueAt: dispute.decisionDueAt });
+    marks.push({ label: auto ? "Auto-uphold from 72 h" : "Decide by 72 h", tone: "neutral", dueAt: dispute.decisionDueAt });
   }
   return marks;
 }

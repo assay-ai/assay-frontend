@@ -14,7 +14,7 @@ import { formatRemaining } from "@/hooks/useCountdown";
 import { routes } from "@/libs/routes";
 import { listCallDisputes, type CallDispute } from "@/services/call-disputes.service";
 
-import { buyerStatus, reportWindow } from "./model";
+import { buyerStatus, disputeReasonLabel, fullDateTime, reportUntilText, reportWindow } from "./model";
 import { callDisputeKeys, DisputeChip, ReportSheet, useNow } from "./ui";
 
 /** The reports filed on this call; one query, shared by the page, the headline and the report box. */
@@ -118,7 +118,7 @@ export function ReceiptReport({
           <DisputeChip view={status} />
         </div>
         <p className="text-body-13 text-02">
-          {latest.reasonLabel} · <UtcTime value={latest.createdAt} /> · {status.detail}
+          {disputeReasonLabel(latest)} · reported {fullDateTime(latest.createdAt, now)} · {status.detail}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="secondary" size="sm" className="touch-target">
@@ -150,6 +150,11 @@ export function ReceiptReport({
             </>
           ) : null}
         </p>
+        {reportUntilText(receipt.disputeFilingClosesAt, now) ? (
+          <p className="text-body-xs text-03" data-testid="receipt-report-until">
+            {reportUntilText(receipt.disputeFilingClosesAt, now)}
+          </p>
+        ) : null}
       </div>
       {buttonAbove && hold.guaranteed ? null : (
         <>
