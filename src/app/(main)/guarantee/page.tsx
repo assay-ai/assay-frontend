@@ -355,8 +355,9 @@ export default function GuaranteePage() {
                 <ul className="flex flex-col">
                   {reasonLines.map((line) => {
                     const nested = reasonsOf(line.bucket);
-                    // One reason that is the line itself (e.g. every refund failed a check) needs no sub-row.
-                    const showNested = line.bucket !== "NOT_COLLECTED" && nested.length > 0;
+                    // Not collected may hold calls no call row can show (a legacy absorb), so its
+                    // line's count comes from GET /withheld and the reasons below may be fewer.
+                    const showNested = nested.length > 0;
                     return (
                       <Fragment key={line.bucket}>
                         <ReasonRow
@@ -441,12 +442,18 @@ export default function GuaranteePage() {
         <h2 id="guarantee-coverage" className="text-label-md text-01">
           What the guarantee covers
         </h2>
-        <div className="grid w-full grid-cols-1 gap-4 tablet:grid-cols-3">
+        <div className="grid w-full grid-cols-1 gap-4 tablet:grid-cols-2 desktop:grid-cols-4">
           <div className="flex flex-col gap-1.5">
-            <h3 className="text-label-13 text-teal-600">Covered: not charged</h3>
+            <h3 className="text-label-13 text-teal-600">The guarantee: not charged</h3>
             <ul className="flex list-disc flex-col gap-1 pl-4 text-body-13 text-02">
               <li>A result that fails our checks, including one in the wrong format.</li>
+            </ul>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <h3 className="text-label-13 text-01">Also not charged</h3>
+            <ul className="flex list-disc flex-col gap-1 pl-4 text-body-13 text-02">
               <li>No usable result: the provider errored, rejected the request or never answered.</li>
+              <li>Not collected: the call was served, but the payment was not taken.</li>
             </ul>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -463,7 +470,7 @@ export default function GuaranteePage() {
               stake.
             </p>
             <Link
-              href="/spend/disputes"
+              href={routes.disputes()}
               className="inline-flex items-center gap-1 self-start text-label-13 text-primary-600 hover:underline"
             >
               Your reports

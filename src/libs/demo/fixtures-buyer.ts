@@ -643,6 +643,8 @@ function wireFigures(bucket: Bucket) {
     owedCalls: bucket.owedCalls,
     inProgressTotal: minorMoney(0),
     inProgressCalls: 0,
+    // The day-by-day model is paid calls only.
+    freeCalls: 0,
     failRate: bucket.calls === 0 ? null : bucket.refundedCalls / bucket.calls,
   };
 }
@@ -790,6 +792,7 @@ function toolCallRow(call: DemoCall) {
     charged: money(call.charged),
     forfeited: false,
     debt: demoCallDebt(call).debt,
+    refundedByReport: false,
     verdict: call.verdict,
     createdAt: minutesAgo(callAge(call)),
   };
