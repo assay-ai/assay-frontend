@@ -118,4 +118,11 @@ describe("the contract editor", () => {
     expect(words).not.toContain("Save draft");
     expect(words).not.toContain("Deprecate v1");
   });
+
+  it("hides the publish checklist from a role that cannot publish", () => {
+    const words = text(render(WEATHER_TOOL_ID, [], { ...JORDAN, roles: ["ADJL"] }));
+    expect(words).not.toContain("Fix before publishing");
+    expect(words).not.toContain("Worked out as you type");
+    expect(text(render(WEATHER_TOOL_ID))).toContain("Worked out as you type");
+  });
 });

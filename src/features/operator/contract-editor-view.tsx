@@ -562,7 +562,8 @@ function DraftEditor({
         hint="One or two sentences. Providers and agents read it in the catalogue and in their notices."
       />
 
-      <PreviewPanel preview={preview} />
+      {/* What publishing would do, and what to fix first: only for someone who can publish. */}
+      {canEdit ? <PreviewPanel preview={preview} /> : null}
 
       <div className="flex w-full flex-col gap-2">
         {save.error || discard.error ? <SaveError error={save.error ?? discard.error} /> : null}
