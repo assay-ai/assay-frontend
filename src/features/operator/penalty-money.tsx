@@ -5,6 +5,7 @@ import * as React from "react";
 import { MoneySplit } from "@/components/patterns/money-flow";
 import { SLASH_PLATFORM_BPS } from "@/features/provider-slash-case/distribution";
 import type { Money } from "@/interfaces/api";
+import { formatDateTime } from "@/libs/utc-time";
 import { formatMoney, splitForDisplay, toDecimal } from "@/utils/money";
 
 import type { CaseStage } from "./case-flow";
@@ -100,11 +101,14 @@ export function PenaltyMoney({
   penalty,
   stage,
   agentBps,
+  lastKnownAt = null,
 }: {
   penalty: Money;
   stage: CaseStage;
   /** From the chain's terms; null while unknown (the split is then not drawn). */
   agentBps: number | null;
+  /** Set when the chain can't be read now and `agentBps` is the last read: when it was read. */
+  lastKnownAt?: number | null;
 }) {
   const split = agentBps === null ? null : displaySplit(penalty, agentBps);
   const total = formatMoney(penalty);
@@ -132,6 +136,11 @@ export function PenaltyMoney({
         />
       ) : heading.split ? (
         <p className="text-body-13 text-02">The split is read from the chain&rsquo;s terms, which could not be read just now.</p>
+      ) : null}
+      {heading.split && split && lastKnownAt ? (
+        <p className="text-body-xs text-03">
+          Split as last read from the chain, {formatDateTime(lastKnownAt)}; it could not be read just now.
+        </p>
       ) : null}
     </section>
   );
