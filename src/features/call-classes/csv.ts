@@ -21,6 +21,15 @@ import type { Money } from "@/interfaces";
  * decimals` — fixed by the export service and documented on
  * `ProviderCallsExport`. The header line is parsed rather than assumed, so a
  * reordering upstream is a missing column here and not a silently shifted one.
+ *
+ * ## The money columns
+ *
+ * `provider_amount` is `0` on a passed call nothing was collected for
+ * (`PROVIDER_FORFEITED`, `PAID_UNCOLLECTED`), and the forgone share on a
+ * not-credited one (`PAID_UNCREDITED`, a voided buyer debt included), so its
+ * sum per class is the earnings report's `withheldByClass`. `platform_fee` is
+ * `0` on those passed-but-uncollected rows and on a voided debt; a REFUNDED or
+ * VOIDED call still carries its split. Fees are summed over credited rows only.
  */
 
 export interface CallRow {
