@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { KeyRound, Plus, TriangleAlert } from "lucide-react";
+import { KeyRound, Pencil, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -28,6 +28,9 @@ import {
 import { PageState } from "@/components/patterns/page-state";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { dateOnly, relativeTime } from "@/components/g31/format";
+import { PROVIDER_EXPLAINER } from "@/components/layout/provider-nav-config";
+import { useOrgHandle } from "@/components/toolsets/use-toolsets";
+import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { termsVersionLabel } from "@/features/m41/terms";
@@ -93,13 +96,20 @@ import { getProviderRegistration } from "@/services/provider-registration.servic
  * because a row for a document nobody versions could never disagree with
  * itself, which is the entire point of the "In force" column.
  *
+ * The API carries no link to the documents themselves, so the rows are not
+ * links; the panel links what a provider can read: the key terms on Setup and
+ * the business explainer.
+ *
+ * ## Who you are and where you are paid
+ *
+ * The public name (`GET /org/handle`) and the payout wallet per chain
+ * (`registration.payoutAccounts`), each with where to change it.
+ *
  * ## Nothing here writes the registration
  *
- * The frame draws no editable field: no legal name, no timezone, no contact
- * form, and its three panel actions are all disabled. So
- * `PATCH /providers/me/registration` has **no caller on this screen**, and the
- * stale-read trap that follows a provider write does not arise. A form is
- * deliberately not invented here.
+ * Contacts and the payout wallet are edited on Setup (`/provider/setup`),
+ * which already owns `PATCH /providers/me/registration` and the wallet proof;
+ * this screen links there ("Edit") rather than growing a second form.
  */
 
 
@@ -302,6 +312,8 @@ export default function ProviderAccountPage() {
 
   const record = registration.data?.registration;
   const published = registration.data?.terms;
+  const handle = useOrgHandle();
+  const chainName = useChainName();
 
   const seatRows: SeatRow[] = record
     ? [
@@ -420,6 +432,14 @@ export default function ProviderAccountPage() {
               <PanelTitle>Contacts</PanelTitle>
               <PanelDescription>who we reach about incidents and penalties</PanelDescription>
             </PanelTitles>
+            {record ? (
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/provider/setup?step=you">
+                  <Pencil aria-hidden="true" />
+                  Edit
+                </Link>
+              </Button>
+            ) : null}
           </PanelHeader>
           {/* Body — padding [6, 10, 10, 10]. */}
           <PanelBody className="px-2.5 pb-2.5 pt-1.5">
@@ -434,15 +454,6 @@ export default function ProviderAccountPage() {
                 description="Registration types an owner and a technical contact. Until it completes, there is nobody for an enforcement notice to reach."
               />
             )}
-            {seatRows.length > 0 ? (
-              <p className="px-3 pt-3 text-body-xs text-03">
-                To change a contact,{" "}
-                <Link href="/provider/setup?step=you" className="text-primary-600 underline-offset-2 hover:underline">
-                  edit your account details
-                </Link>
-                .
-              </p>
-            ) : null}
           </PanelBody>
         </Panel>
 
@@ -474,6 +485,71 @@ export default function ProviderAccountPage() {
         </Panel>
       </div>
 
+      {/* Who buyers see, and where the money goes. */}
+      {record ? (
+        <Panel>
+          <PanelHeader>
+            <PanelTitles>
+              <PanelTitle>Public name and payout wallet</PanelTitle>
+              <PanelDescription>what buyers see you as, and where your earnings land</PanelDescription>
+            </PanelTitles>
+          </PanelHeader>
+          <PanelBody className="p-4 tablet:p-5">
+            <dl className="grid w-full grid-cols-1 gap-x-6 gap-y-4 tablet:grid-cols-2">
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-body-xs text-03">Public name</dt>
+                <dd className="flex flex-col gap-0.5 text-body-13 text-01">
+                  {handle.isPending ? (
+                    <span className="text-03">…</span>
+                  ) : handle.data?.handle ? (
+                    <>
+                      <span className="font-mono">@{handle.data.handle}</span>
+                      <span className="text-body-xs text-03">
+                        {handle.data.canChange
+                          ? "Not locked yet: it locks once something you share is named after it."
+                          : "Locked: your shared tools and tool sets are named after it."}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Not claimed yet</span>
+                      <span className="text-body-xs text-03">
+                        You claim it when you{" "}
+                        <Link href="/provider/apis/new" className="text-primary-600 underline-offset-2 hover:underline">
+                          publish your API
+                        </Link>
+                        . Listings of catalogue tools do not need one.
+                      </span>
+                    </>
+                  )}
+                </dd>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-body-xs text-03">Payout wallet</dt>
+                <dd className="flex flex-col gap-1 text-body-13 text-01">
+                  {record.payoutAccounts.length === 0 ? (
+                    <span>None yet</span>
+                  ) : (
+                    record.payoutAccounts.map((account) => (
+                      <span key={account.chainId} className="flex flex-col">
+                        <span className="font-mono text-mono-12 [overflow-wrap:anywhere]">{account.accountId.split(":").pop()}</span>
+                        <span className="text-body-xs text-03">
+                          {chainName(account.chainId)}
+                          {account.status === "ACTIVE" ? "" : account.status === "UNBONDING" ? " · stopped: you are leaving this network" : " · stopped by Assay"}
+                        </span>
+                      </span>
+                    ))
+                  )}
+                  <Link href="/provider/setup?step=wallet" className="self-start text-body-xs text-primary-600 underline-offset-2 hover:underline">
+                    {record.payoutAccounts.length === 0 ? "Add a payout wallet" : "Change it (sign a message, free)"}
+                  </Link>
+                </dd>
+              </div>
+            </dl>
+          </PanelBody>
+        </Panel>
+      ) : null}
+
       {/* Terms. */}
       <Panel>
         <PanelHeader>
@@ -485,7 +561,20 @@ export default function ProviderAccountPage() {
         {/* Body — padding [6, 10, 10, 10]. */}
         <PanelBody className="px-2.5 pb-2.5 pt-1.5">
           {termRows.length > 0 ? (
-            <Table columns={TERM_COLUMNS} rows={termRows} caption="Terms" />
+            <>
+              <Table columns={TERM_COLUMNS} rows={termRows} caption="Terms" />
+              <p className="px-3 pt-3 text-body-xs text-03">
+                Read{" "}
+                <Link href="/provider/setup?step=you" className="text-primary-600 underline-offset-2 hover:underline">
+                  the key terms you accepted
+                </Link>{" "}
+                (price, fee, stake and penalties, under Key terms), or{" "}
+                <Link href={PROVIDER_EXPLAINER.href} className="text-primary-600 underline-offset-2 hover:underline">
+                  {PROVIDER_EXPLAINER.label.toLowerCase()}
+                </Link>
+                .
+              </p>
+            </>
           ) : (
             /* OUR copy. */
             <EmptyState

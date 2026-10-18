@@ -1,5 +1,8 @@
 import Decimal from "decimal.js";
 
+import { DAILY_CAP_PERCENT } from "@/features/explorer/provider-economics";
+import { estimatePenalty, exampleFailureRate } from "@/features/provider-penalties/estimate";
+import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
 import type { Money, PricingMode, ProviderStake, ProviderTermsSummary } from "@/interfaces";
 import { formatMoney } from "@/utils/money";
 
@@ -35,6 +38,28 @@ export function modeOfChoice(choice: PriceChoice): PricingMode {
 export const DEFAULT_FREE_CALLS_PER_AGENT = 100;
 /** The promised failure rate offered by default, in percent. */
 export const DEFAULT_FAILURE_PERCENT = 2;
+
+/** The window volume the penalty example assumes; nothing is on the wire before a tool is live. */
+export const EXAMPLE_WINDOW_CALLS = 1000;
+
+/**
+ * The worked penalty example at this listing's own price and promise, for Go
+ * live and Settings: "Example: at 4% failures in a window of 1,000 paid
+ * calls, up to about $X of your stake could be taken. …". Null for a free
+ * listing or without a price or promise. The formula is the backend's
+ * (`estimatePenalty`), and the caps are the stake rule's.
+ */
+export function penaltyExample(price: Money | null, mode: PricingMode, declaredRate: number | null): string | null {
+  if (mode === "FREE" || !price || declaredRate === null) return null;
+  const observed = exampleFailureRate(declaredRate);
+  const estimate = estimatePenalty({ price, calls: EXAMPLE_WINDOW_CALLS, observedRate: observed, declaredRate });
+  return (
+    `Example: at ${percentText(observed)}% failures in a window of ${EXAMPLE_WINDOW_CALLS.toLocaleString("en-US")} paid calls, ` +
+    `up to about ${formatMoney(estimate.penalty)} of your stake could be taken. The chain never lets penalties take more ` +
+    `than ${DAILY_CAP_PERCENT}% of your stake in any 24 hours. Within your promise, or below ${MIN_CHECKED_CALLS} checked ` +
+    `calls in a window, nothing is taken.`
+  );
+}
 
 export interface StakeRule {
   floor: Decimal;

@@ -7,11 +7,8 @@ import * as React from "react";
 import { PageState } from "@/components/patterns/page-state";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { PolicyChangeCard } from "@/features/provider-policy-changes/policy-change-card";
-import type { ToolBindingSummary } from "@/interfaces";
 import type { PolicyChange } from "@/interfaces/provider-policy-changes";
-import { listToolBindings } from "@/services";
 import { listPolicyChanges } from "@/services/provider-policy-changes.service";
-import { labelForEndpoint } from "@/utils/provider-label";
 
 /**
  * Policy change centre — route
@@ -41,28 +38,15 @@ import { labelForEndpoint } from "@/utils/provider-label";
  *
  * ## The tool label
  *
- * The DTO carries only `toolId` (a bare uuid) — no tool name, matching every
- * other provider screen's own gap (`labelForEndpoint` in
- * `@/utils/provider-label`). This screen resolves a human label the same way
- * the console rail does: join `change.bindings[0].bindingId` against `GET
- * /providers/me/tool-bindings` for that binding's `endpoint`, then take its
- * host. A tool this provider is bound to always has at least one binding row
- * (that is how it appears in this endpoint's join at all), so the fallback
- * only fires if the two reads race or disagree.
+ * The DTO carries only `toolId` (a bare uuid), so the label is the tool's
+ * name from the provider catalogue (`useProviderToolNames`), else "One of
+ * your tools". Never the endpoint's host: a listing is never named by its
+ * address.
  */
 
-function toolLabelFor(
-  change: PolicyChange,
-  endpointByBindingId: Map<string, string>,
-  toolName: (toolId: string) => string | null,
-): string {
-  const named = toolName(change.toolId);
-  if (named) return named;
-  for (const binding of change.bindings) {
-    const endpoint = endpointByBindingId.get(binding.bindingId);
-    if (endpoint) return labelForEndpoint(endpoint);
-  }
-  return "One of your tools";
+function toolLabelFor(change: PolicyChange, toolName: (toolId: string) => string | null): string {
+  // Never the endpoint: a host or an IP is infrastructure, not a tool's name.
+  return toolName(change.toolId) ?? "One of your tools";
 }
 
 export default function PolicyChangesPage() {
@@ -72,22 +56,8 @@ export default function PolicyChangesPage() {
     retry: 0,
   });
 
-  // Shell data already fetches this for the sidebar rail; this screen fetches
-  // its own copy rather than reaching into `(console)/layout.tsx`'s query,
-  // which is private to that file. React Query dedupes by key regardless.
-  const bindingsQuery = useQuery({
-    queryKey: ["provider", "tool-bindings", "sidebar"],
-    queryFn: () => listToolBindings({ limit: 50 }),
-  });
-
   const names = useProviderToolNames();
   const changes: PolicyChange[] = changesQuery.data ?? [];
-  const bindings: ToolBindingSummary[] = bindingsQuery.data?.items ?? [];
-  const endpointByBindingId = React.useMemo(() => {
-    const map = new Map<string, string>();
-    for (const binding of bindings) map.set(binding.id, binding.endpoint);
-    return map;
-  }, [bindings]);
 
   const subtitle =
     changes.length === 0
@@ -118,7 +88,7 @@ export default function PolicyChangesPage() {
             <PolicyChangeCard
               key={change.toolId}
               change={change}
-              toolLabel={toolLabelFor(change, endpointByBindingId, names.toolName)}
+              toolLabel={toolLabelFor(change, names.toolName)}
             />
           ))}
         </div>

@@ -61,7 +61,7 @@ export function PublishApiFlow({ toolId }: { toolId: string | null }) {
   const back = (
     <Link href="/provider/apis" className="inline-flex min-h-10 items-center gap-1.5 self-start rounded-md text-label-13 text-02 hover:text-01">
       <ArrowLeft aria-hidden="true" className="size-3.5" />
-      Your own APIs
+      Your APIs
     </Link>
   );
 
@@ -110,7 +110,7 @@ export function PublishApiFlow({ toolId }: { toolId: string | null }) {
           </>
         ) : (
           <>
-            <h1 className="text-heading-sm text-01 tablet:text-heading-md">Publish your own API</h1>
+            <h1 className="text-heading-sm text-01 tablet:text-heading-md">Publish your API</h1>
             <p className="text-body-13 text-03">Four steps. Your progress is saved after the first one, and only your team sees it until step 4.</p>
           </>
         )}
