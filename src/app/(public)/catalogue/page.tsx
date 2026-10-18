@@ -164,7 +164,7 @@ function ProviderRow({ provider, chainName }: { provider: PublicProvider; chainN
 }
 
 /**
- * The proof of the promise, labelled with its window. Before any paid call
+ * The proof of the promise, which names its own window. Before any paid call
  * was checked in the window it is one line that opens on demand: a panel of
  * zeros next to a provider with thousands of calls reads as a broken promise.
  */
@@ -182,12 +182,8 @@ function Proof() {
       </details>
     );
   }
-  return (
-    <div className="flex flex-col gap-2" data-testid="proof">
-      <p className="text-label-xs uppercase tracking-wide text-03">Last {days} days · paid calls, across every buyer</p>
-      <NotChargedProof />
-    </div>
-  );
+  // The panel names its own window ("across every buyer, in the last 30 days").
+  return <NotChargedProof />;
 }
 
 export default function CataloguePage() {
@@ -220,20 +216,25 @@ export default function CataloguePage() {
   // The same first page the Tool sets tab asks for, so opening it is instant.
   const toolsets = usePublicToolsets({ sort: "popular", limit: 60 });
   // An empty tab is a dead end: shown once a tool set is listed, or when a link opened it.
-  const showToolsets = (toolsets.data?.total ?? 0) > 0 || view === "toolsets";
-  const freeCount = tools.data ? tools.data.tools.filter((t) => hasFreeCalls(t.pricingMode)).length : null;
+  const toolsetsListed = (toolsets.data?.total ?? 0) > 0;
+  const showToolsets = toolsetsListed || view === "toolsets";
   const chainName = useChainName();
   const needle = query.trim().toLowerCase();
 
-  const toolRows = React.useMemo(() => {
+  // The topic and the kind of tool, before the free filter and search: what the Free chip counts over.
+  const scopedRows = React.useMemo(() => {
     const rows = [...(tools.data?.tools ?? [])].sort(
       (a, b) => Number(b.routable) - Number(a.routable) || b.providerCount - a.providerCount || a.name.localeCompare(b.name),
     );
     const inTopic = topic && rows.some((t) => t.category) ? rows.filter((t) => t.category === topic) : rows;
-    const free = freeOnly ? inTopic.filter((t) => hasFreeCalls(t.pricingMode)) : inTopic;
-    const ofKind = kind === "all" ? free : free.filter((t) => (t.kind ?? "STANDARD") === kind);
-    return needle ? ofKind.filter((t) => matches(needle, t.name, t.description, t.id, t.handle)) : ofKind;
-  }, [tools.data, needle, freeOnly, topic, kind]);
+    return kind === "all" ? inTopic : inTopic.filter((t) => (t.kind ?? "STANDARD") === kind);
+  }, [tools.data, topic, kind]);
+  const toolRows = React.useMemo(() => {
+    const free = freeOnly ? scopedRows.filter((t) => hasFreeCalls(t.pricingMode)) : scopedRows;
+    return needle ? free.filter((t) => matches(needle, t.name, t.description, t.id, t.handle)) : free;
+  }, [scopedRows, needle, freeOnly]);
+  // How many tools the Free chip would show here (search aside): the count beside it reads as exactly that.
+  const freeCount = tools.data ? scopedRows.filter((t) => hasFreeCalls(t.pricingMode)).length : null;
   const hasProviderTools = Boolean(tools.data?.tools.some((t) => t.kind === "PROVIDER"));
   const topicKnown = Boolean(tools.data?.tools.some((t) => t.category));
 
@@ -259,9 +260,9 @@ export default function CataloguePage() {
         publicPage
         url={serverUrl}
         title={
-          topic
-            ? `One MCP URL for every ${topic} tool: connect your agent to it, or use a tool set URL for a smaller group.`
-            : "One MCP URL for everything below: connect your agent to it, or use a tool set URL for a smaller group."
+          `One MCP URL for ${topic ? `every ${topic} tool` : "everything below"}: connect your agent to it${
+            toolsetsListed ? ", or open Tool sets for a smaller group's URL" : ""
+          }.`
         }
       />
       {topic ? (
@@ -310,7 +311,14 @@ export default function CataloguePage() {
               className="inline-flex rounded-md bg-03 p-0.5"
             >
               <SegmentedItem value="tools">Tools</SegmentedItem>
-              {showToolsets ? <SegmentedItem value="toolsets">Tool sets</SegmentedItem> : null}
+              {showToolsets ? (
+                <SegmentedItem value="toolsets">Tool sets</SegmentedItem>
+              ) : toolsets.isPending ? (
+                // Holds the tab's place while the list loads, so the control does not shift when it appears.
+                <SegmentedItem value="toolsets" disabled aria-hidden="true" className="invisible">
+                  Tool sets
+                </SegmentedItem>
+              ) : null}
               <SegmentedItem value="providers">Providers</SegmentedItem>
             </Segmented>
             {view === "tools" ? (

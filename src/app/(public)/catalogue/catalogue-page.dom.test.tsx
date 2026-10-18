@@ -5,8 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   search: "",
   toolsetTotal: 0,
+  toolsetsPending: false,
   callsChecked: 0,
-  tools: [] as Array<{ id: string; name: string; pricingMode: string | null }>,
+  tools: [] as Array<{ id: string; name: string; pricingMode: string | null; category?: string | null }>,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -44,7 +45,10 @@ vi.mock("@/features/explorer/use-public-explorer", () => ({
   }),
 }));
 vi.mock("@/components/toolsets/use-toolsets", () => ({
-  usePublicToolsets: () => ({ data: { toolsets: [], total: state.toolsetTotal } }),
+  usePublicToolsets: () =>
+    state.toolsetsPending
+      ? { isPending: true, data: undefined }
+      : { isPending: false, data: { toolsets: [], total: state.toolsetTotal } },
 }));
 vi.mock("@/components/toolsets/connect-panel", () => ({
   ConnectPanel: ({ title }: { title: string }) => <p data-testid="connect-panel">{title}</p>,
@@ -66,6 +70,7 @@ function render() {
 beforeEach(() => {
   state.search = "";
   state.toolsetTotal = 0;
+  state.toolsetsPending = false;
   state.callsChecked = 0;
   state.tools = [
     { id: "t1", name: "get_weather", pricingMode: "PAID" },
@@ -76,10 +81,22 @@ beforeEach(() => {
 
 /* A (2026-10-18), public catalogue findings. */
 describe("public catalogue", () => {
-  it("explains one URL for everything, or a tool set URL", () => {
+  it("explains one URL for everything, and points at tool sets only when some are listed", () => {
+    expect(render()).toContain("One MCP URL for everything below: connect your agent to it.");
+    expect(render()).not.toContain("Tool sets for a smaller group");
+    state.toolsetTotal = 2;
     expect(render()).toContain(
-      "One MCP URL for everything below: connect your agent to it, or use a tool set URL for a smaller group.",
+      "One MCP URL for everything below: connect your agent to it, or open Tool sets for a smaller group&#x27;s URL.",
     );
+  });
+
+  it("holds the Tool sets tab's place, hidden, while the list loads", () => {
+    state.toolsetsPending = true;
+    const html = render();
+    const tag = html.slice(html.lastIndexOf("<button", html.indexOf(">Tool sets<")), html.indexOf(">Tool sets<"));
+    expect(tag).toContain('aria-hidden="true"');
+    expect(tag).toContain("invisible");
+    expect(tag).toContain("disabled");
   });
 
   it("hides the Tool sets tab while none is listed", () => {
@@ -100,6 +117,16 @@ describe("public catalogue", () => {
     expect(render()).toContain('aria-label="Free calls: 0 tools"');
   });
 
+  it("counts free tools within the topic the list shows", () => {
+    state.search = "category=weather";
+    state.tools = [
+      { id: "t1", name: "get_weather", pricingMode: "FREE", category: "weather" },
+      { id: "t2", name: "search_web", pricingMode: "FREEMIUM", category: "search" },
+      { id: "t3", name: "lookup", pricingMode: "FREE", category: "search" },
+    ];
+    expect(render()).toContain('aria-label="Free calls: 1 tool"');
+  });
+
   it("folds the proof into one line, labelled with its window, before any paid call was checked", () => {
     const html = render();
     expect(html).toContain('data-testid="proof-collapsed"');
@@ -108,11 +135,11 @@ describe("public catalogue", () => {
     expect(html).not.toMatch(/<details[^>]*open/);
   });
 
-  it("shows the full proof, labelled last 30 days, once calls were checked", () => {
+  it("shows the full proof, which names its own window, once calls were checked", () => {
     state.callsChecked = 120;
     const html = render();
     expect(html).not.toContain('data-testid="proof-collapsed"');
-    expect(html).toContain("Last 30 days · paid calls, across every buyer");
     expect(html).toContain('data-testid="not-charged-proof"');
+    expect(html).not.toContain("Last 30 days · paid calls");
   });
 });
