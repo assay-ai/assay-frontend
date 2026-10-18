@@ -68,6 +68,28 @@ describe("safeNextPath", () => {
     expect(safeNextPath(raw)).toBe("/");
   });
 
+  it.each([
+    "/x/../%2f%2fevil.example",
+    "/%2e%2e/%2fevil.example",
+    "/a/%2e%2e/%5cevil",
+    "/a/./../%2F%2Fevil.example",
+  ])("refuses %j, whose dot segments resolve to an encoded //host (review I1)", (raw) => {
+    expect(safeNextPath(raw)).toBe("/");
+  });
+
+  it("is idempotent: what it returns, it accepts unchanged (review I1)", () => {
+    const inputs = [
+      "/provider", "/funding/deposit?amount=20", "/receipts/view?id=abc#raw", "/a/../provider", "/x/./y",
+      "/x/../%2f%2fevil.example", "/%2e%2e/%2fevil.example", "//evil.example", "/%2F%2Fevil.example",
+      "/%5Cevil.example", "/@evil.example", "/a/%2e%2e//evil", "/connect?url=https%3A%2F%2Fmcp.example",
+    ];
+    for (const raw of inputs) {
+      const once = safeNextPath(raw);
+      expect(safeNextPath(once)).toBe(once);
+    }
+    expect(safeNextPath("/a/../provider")).toBe("/provider");
+  });
+
   it("never returns anything that leaves the origin", () => {
     for (const raw of ["/x", "//x", "/\\x", "/%2F%2Fx", "/%5Cx", "https://x"]) {
       const next = safeNextPath(raw);
