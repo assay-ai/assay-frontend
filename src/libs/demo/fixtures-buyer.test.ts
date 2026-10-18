@@ -4,7 +4,7 @@ import { isReplaceable } from "@/features/buyer-debt/debt-copy";
 
 import { demoResponse } from "./demo-api";
 import { DEMO_FIXTURES } from "./fixtures";
-import { demoDebt, demoDebts } from "./fixtures-buyer";
+import { demoDebt, demoDebts, resetDemoAgentLabels } from "./fixtures-buyer";
 import { demoOfferPriceMinor } from "./fixtures-explore";
 
 describe("the demo buyer debt", () => {
@@ -105,6 +105,11 @@ describe("the demo /withheld split", () => {
 });
 
 describe("the demo agent rename", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetDemoAgentLabels();
+  });
+
   it("answers PATCH /agents/:id with the renamed agent, and GET /agents reads it back", () => {
     vi.stubEnv("NEXT_PUBLIC_DEMO_CHAINS", "robinhood");
     const before = demoResponse("GET", "/agents") as { items: { agentId: string; label: string }[] };
@@ -118,6 +123,10 @@ describe("the demo agent rename", () => {
     expect(renamed).toMatchObject({ agentId: first.agentId, label: "Research bot" });
     const after = demoResponse("GET", "/agents") as { items: { agentId: string; label: string }[] };
     expect(after.items.find((a) => a.agentId === first.agentId)?.label).toBe("Research bot");
-    vi.unstubAllEnvs();
+  });
+
+  it("refuses an agent that is not the account's, like the server", () => {
+    vi.stubEnv("NEXT_PUBLIC_DEMO_CHAINS", "robinhood");
+    expect(() => demoResponse("PATCH", "/agents/00000000-0000-4000-8000-000000000000", {}, { label: "x" })).toThrow(/not found/i);
   });
 });

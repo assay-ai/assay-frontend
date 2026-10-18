@@ -218,6 +218,8 @@ export function AgentsView() {
             agent={agent}
             keys={data.keys[agent.agentId]}
             keysPending={data.keysQuery.isPending}
+            keysFailed={data.keysQuery.isError}
+            onRetryKeys={data.refetchKeys}
             readiness={data.readiness[agent.agentId]!}
             escrowReady={Boolean(data.escrowQuery.data?.exists)}
             onNewKey={() => setNewKeyFor(agent)}
@@ -301,6 +303,8 @@ function AgentCard({
   agent,
   keys,
   keysPending,
+  keysFailed,
+  onRetryKeys,
   readiness,
   escrowReady,
   onNewKey,
@@ -313,6 +317,9 @@ function AgentCard({
   agent: AgentRow;
   keys: KeyRow[] | undefined;
   keysPending: boolean;
+  /** The keys could not be read: say so, never "no key". */
+  keysFailed: boolean;
+  onRetryKeys: () => void;
   readiness: AgentReadiness;
   escrowReady: boolean;
   onNewKey: () => void;
@@ -370,7 +377,14 @@ function AgentCard({
       </header>
 
       <SubRow n={1} title="Keys">
-        {live.length === 0 ? (
+        {keysFailed ? (
+          <div className="flex flex-wrap items-center gap-2" role="alert" data-testid="keys-unreadable">
+            <p className="text-body-13 text-02">We could not read this agent&apos;s keys. This does not change what it can call.</p>
+            <Button size="sm" variant="secondary" type="button" onClick={onRetryKeys}>
+              Retry
+            </Button>
+          </div>
+        ) : live.length === 0 ? (
           <p className="text-body-13 text-02">No live key. Create one to connect this agent.</p>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -418,7 +432,7 @@ function AgentCard({
         <ServersInUse agentId={agent.agentId} agentName={name} lastCallAt={latestUse(keys)} />
       </SubRow>
 
-      {delegation ? (
+      {delegation && !keysFailed ? (
         <SubRow n={3} title="Payment key">
           {bound?.delegateAccount && chainId ? (
             <p className="text-body-13 text-02">
@@ -576,10 +590,9 @@ function AgentName({ agent }: { agent: AgentRow }) {
         id={`agent-name-${agent.agentId}`}
         label="Agent name"
         value={draft}
-        maxLength={AGENT_LABEL_MAX + 16}
         autoFocus
         onChange={(event) => setDraft(event.target.value)}
-        hint="Shown in Connect, Overview and Explore."
+        hint={`Shown in Connect, Overview and Explore. Up to ${AGENT_LABEL_MAX} characters.`}
         error={
           touched && problem
             ? problem

@@ -49,6 +49,7 @@ export function useCreateKey(agentId: string | null, keyCount: number, onCreated
       onCreated(key);
       void queryClient.invalidateQueries({ queryKey: ["agent-keys"] });
       void queryClient.invalidateQueries({ queryKey: ["credentials"] });
+      void queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }

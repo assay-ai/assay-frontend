@@ -23,6 +23,7 @@ import {
   getStartedStates,
   payByInvitation,
   payStage,
+  stepOptional,
   type GetStartedFacts,
 } from "@/features/buyer-money/get-started";
 import { mcpToolName } from "@/features/connect/mcp-url";
@@ -264,8 +265,12 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
       title: facts.freeOnly ? "Add funds (not needed on this chain)" : "Add funds",
       description: facts.freeOnly
         ? "This chain serves free calls only, so there is nothing to fund."
-        : "Only for paid calls. Free calls already work. Minimum $5.00.",
+        : invitation
+          ? "Only needed for paid calls, which are by invitation during testnet."
+          : "Only for paid calls. Free calls already work. Minimum $5.00.",
       state: states.funds,
+      // A deposit buys nothing while paying is by invitation (D14): not counted.
+      optional: stepOptional(facts, "funds"),
       content: freeOnlyNote ? (
         freeOnlyNote
       ) : states.funds === "done" ? (
@@ -299,7 +304,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
           : "Allow your agent to pay, within spending limits you choose. Free signatures, no gas.",
       state: states.pay,
       // By invitation: not counted as unfinished (D14).
-      optional: invitation,
+      optional: stepOptional(facts, "pay"),
       blockedReason: "Add funds first: your first deposit opens your escrow.",
       content: freeOnlyNote ? (
         freeOnlyNote

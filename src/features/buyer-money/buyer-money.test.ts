@@ -4,7 +4,7 @@ import type { EscrowDelegate, Money } from "@/interfaces";
 
 import { agentReadiness, type ReadinessCredential } from "./agent-readiness";
 import { capsAreSet, capsSentence, capsSuccessText, capsToForm, keyGroups, parseCaps, presetDescription, presetFor } from "./caps";
-import { firstCallPrompt, getStartedComplete, getStartedStates, payByInvitation, payStage, type GetStartedFacts } from "./get-started";
+import { firstCallPrompt, getStartedComplete, getStartedStates, payByInvitation, payStage, stepOptional, type GetStartedFacts } from "./get-started";
 import { KEY_PLACEHOLDER, keyPlaceholder, mcpConfig } from "./mcp-config";
 import { PENDING_TX_MAX_AGE_MS, parsePending, withPending, withoutPending, type PendingTx } from "./pending-tx";
 import { nextUtcMidnight, nextUtcMonth, windowRefillAt } from "./refill";
@@ -256,12 +256,25 @@ describe("get started", () => {
       pay: "done",
     });
   });
+  it("does not ask for a deposit while paying is by invitation: funds is optional too (review M1)", () => {
+    const freeCalls = { ...none, hasLiveKey: true, firstCallSeen: true };
+    expect(getStartedStates(freeCalls)).toEqual({ key: "done", call: "done", funds: "todo", pay: "todo" });
+    expect(getStartedComplete(freeCalls)).toBe(true);
+    expect(stepOptional(freeCalls, "funds")).toBe(true);
+    expect(stepOptional(freeCalls, "pay")).toBe(true);
+    expect(stepOptional({ ...freeCalls, keyBound: true }, "funds")).toBe(false);
+    // The invited path: funds counts again once the payment key is bound.
+    expect(getStartedStates({ ...freeCalls, keyBound: true }).funds).toBe("current");
+    expect(getStartedComplete({ ...freeCalls, keyBound: true })).toBe(false);
+  });
   it("does not count paying by invitation as unfinished (D14)", () => {
     const freeDone = { ...none, hasLiveKey: true, firstCallSeen: true, hasFunds: true, escrowExists: true };
     expect(payByInvitation(freeDone)).toBe(true);
     expect(getStartedStates(freeDone).pay).toBe("todo");
     expect(getStartedComplete(freeDone)).toBe(true);
-    expect(getStartedComplete({ ...freeDone, hasFunds: false, escrowExists: false })).toBe(false);
+    // No deposit needed either while paying is by invitation (review M1).
+    expect(getStartedComplete({ ...freeDone, hasFunds: false, escrowExists: false })).toBe(true);
+    expect(getStartedComplete({ ...freeDone, firstCallSeen: false })).toBe(false);
   });
   it("counts paying once the payment key is bound: the invited path", () => {
     const bound = { ...none, hasLiveKey: true, firstCallSeen: true, hasFunds: true, escrowExists: true, keyBound: true };

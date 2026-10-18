@@ -65,6 +65,29 @@ describe("the agent card while its keys load", () => {
     expect(html).toContain('data-testid="rename-agent"');
   });
 
+  it("on a failed keys read, says so with Retry, never No key or Create a key first (review m1)", async () => {
+    // No refetch on mount: the render shows the failed read as it stands.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, refetchOnMount: false } } });
+    client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] });
+    client.setQueryData(["escrow-delegates", "live"], { delegates: [] });
+    client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT });
+    client.setQueryData(["escrow", "debts"], { account: ACCOUNT, debts: [] });
+    client.setQueryData(["spend-policy"], null);
+    client.setQueryData(["chains"], { chains: [] });
+    // A keys read that failed: the query's cache entry is in error.
+    await client.prefetchQuery({ queryKey: ["agent-keys", [AGENT]], queryFn: () => Promise.reject(new Error("down")), retry: false });
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <AgentsView />
+      </QueryClientProvider>,
+    );
+    const out = text(html);
+    expect(html).toContain('data-testid="keys-unreadable"');
+    expect(out).toContain("Retry");
+    expect(out).not.toMatch(/no live key|no key|create a key first/i);
+    expect(out).not.toContain("Payment key");
+  });
+
   it("states paid calls as by invitation when the agent has a key but no payment key (D14)", () => {
     const key = { id: "k1", agentId: AGENT, name: "Key 1", prefix: "assay_sk_live_ab12", scopes: [], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
     const out = text(render((client) => client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [key] })));

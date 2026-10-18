@@ -8,6 +8,7 @@ import { CopyChip } from "@/components/patterns/copy-chip";
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "@/utils/toast";
 import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
 import { MCP_CLIENTS, keyPlaceholder, mcpConfig, pasteHint, type McpClient } from "@/features/buyer-money/mcp-config";
 
@@ -29,8 +30,10 @@ export const TEMPLATE_COPY_REASON = "This config has a placeholder, not your key
  *
  * Copy is off while the block holds a placeholder: a copied template fails
  * in the client with nothing on screen to say why. `onCreateKey` puts "Create
- * a key and fill it in" first, so the next click gives a ready config. The
- * URL alone (under Other) stays copyable for a person who has their key.
+ * a key and fill it in" first, so the next click gives a ready config. "Copy
+ * the URL only" stays for a person who has their key: it copies the URL (no
+ * key) and counts as handing it out (`onCopy`), so Servers in use and "Is it
+ * working?" still follow it.
  *
  * Blocks wrap rather than scroll, so a phone shows the whole command.
  *
@@ -66,6 +69,16 @@ export function McpConfigTabs({
   const [own, setOwn] = React.useState<McpClient>(clientProp ?? "claude-code");
   const client = clientProp ?? own;
   const url = urlProp ?? mcpEndpointUrl();
+  const copyUrlOnly = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("URL copied. Your client also needs the header with your key.");
+    } catch {
+      toast.error("Copy did not work here: select the text and copy it.");
+      return;
+    }
+    onCopy?.(client);
+  };
   const setClient = (next: McpClient) => {
     setOwn(next);
     onClientChange?.(next);
@@ -80,6 +93,16 @@ export function McpConfigTabs({
           <p className="text-body-xs text-03">A key is shown in full only once, when it is made. This makes a new one and puts it in the config below.</p>
           {createKeyError ? <p className="text-body-xs text-danger-700">{createKeyError}</p> : null}
         </div>
+      ) : null}
+      {!token ? (
+        <button
+          type="button"
+          className="min-h-10 self-start text-label-13 font-semibold text-primary-600 hover:underline"
+          onClick={() => void copyUrlOnly()}
+          data-testid="copy-url-only"
+        >
+          Have your key? Copy the URL only
+        </button>
       ) : null}
       <Tabs value={client} onValueChange={(v) => setClient(v as McpClient)} className="flex w-full min-w-0 flex-col gap-3">
         <TabsList className="flex-wrap gap-x-4 gap-y-1">
