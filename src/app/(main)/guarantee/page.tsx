@@ -2,10 +2,10 @@
 
 import { ArrowRight, Calendar, ChevronRight, Info } from "lucide-react";
 import Link from "next/link";
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 
 import { DisplayAssetSelect, useDisplayAssetPick } from "@/components/display-asset-select";
-import { MoneySplit } from "@/components/patterns/money-flow";
+import { MoneySplit, type MoneyTone } from "@/components/patterns/money-flow";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 
@@ -28,17 +28,17 @@ import {
 import { CardRow } from "@/components/ui/card-row";
 import { OwedSummaryAction } from "@/features/buyer-debt/owed-row-action";
 import { Table, type TableColumn } from "@/components/ui/table";
+import { listedSplit, notChargedLines, type ListedSplitSegment } from "@/features/buyer/not-charged";
 import { formatCount, isZeroMoney, sharePercent } from "@/features/buyer/period";
 import { MATCHES_SENTENCE, ReconcileNote } from "@/features/buyer/reconcile-note";
-import { useGuarantee, type MonthRow } from "@/features/buyer/use-guarantee";
+import { useGuarantee, type FailureReason, type MonthRow } from "@/features/buyer/use-guarantee";
 import { usePublicFeatures } from "@/features/explorer/use-public-explorer";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { SUPPORT_URL } from "@/libs/support";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
-import type { WithheldBucket } from "@/features/buyer/wire";
-import { formatMoney, toDecimal } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 
 /**
  * Activity › Not charged (route `/guarantee`) — "prove the guarantee works for me".
@@ -55,18 +55,51 @@ import { formatMoney, toDecimal } from "@/utils/money";
  * shows only when every source answered and agreed.
  */
 
-/**
- * The design writes its own words for the two buckets the API emits; the API's
- * own `label` ("failed verification") is the fallback for a bucket added later,
- * so a new terminal state degrades to plain wording rather than to a blank.
- */
-const BUCKET_COPY: Record<string, { key: string; note: string }> = {
-  FAILED_VERIFICATION: { key: "Failed our checks", note: "the guarantee" },
-  PROVIDER_OR_PLATFORM_ERROR: {
-    key: "No usable result",
-    note: "a provider or platform error, never charged",
-  },
+/** The bar's colour per summary bucket. */
+const SPLIT_TONE: Record<ListedSplitSegment["key"], MoneyTone> = {
+  charged: "primary",
+  "not-charged": "teal",
+  owed: "warning",
+  "in-progress": "neutral",
 };
+
+function plural(n: number, one: string): string {
+  return `${formatCount(n)} ${n === 1 ? one : `${one}s`}`;
+}
+
+/** One row of "Why calls were not charged": a line of the split, or a reason nested under it. */
+function ReasonRow({
+  href,
+  label,
+  sub,
+  amount,
+  nested = false,
+}: {
+  href: string;
+  label: string;
+  sub: string;
+  amount: string;
+  nested?: boolean;
+}) {
+  return (
+    <li className="border-b border-01 last:border-b-0">
+      <Link
+        href={href}
+        className={
+          (nested ? "pl-8 tablet:pl-10 " : "") +
+          "flex w-full items-center gap-3 px-4 py-3 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 tablet:px-5"
+        }
+      >
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className={nested ? "text-body-13 text-02" : "text-label-sm text-01"}>{label}</span>
+          <span className="text-body-xs text-03">{sub}</span>
+        </div>
+        <span className="shrink-0 font-mono text-mono-13 font-semibold text-teal-600">{amount}</span>
+        <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
+      </Link>
+    </li>
+  );
+}
 
 function DecompositionRow({
   label,
@@ -115,8 +148,17 @@ export default function GuaranteePage() {
 
   const withheldTotal = data?.withheld?.withheld.amount ?? null;
   const withheldCalls = data?.withheld?.withheld.calls ?? 0;
-  const buckets: WithheldBucket[] = data?.withheld?.withheld.buckets ?? [];
+  // The three lines of "not charged", the same on Overview, Spend and Statements.
+  const lines = notChargedLines(data?.withheld);
   const percent = sharePercent(withheldTotal, data?.listed ?? null);
+  // Listed = charged + not charged + owed + in progress, each a share of listed.
+  const split = listedSplit({
+    listed: data?.listed ?? null,
+    charged: data?.charged ?? null,
+    notCharged: data?.notCharged ?? withheldTotal,
+    owed: data?.owed ?? null,
+    inProgress: data?.inProgress ?? null,
+  });
 
   const withheldUnavailable = Boolean(data?.withheldError);
   const reconciles = Boolean(data?.withheld?.ok) && !withheldUnavailable;
@@ -125,6 +167,8 @@ export default function GuaranteePage() {
   const noCallsAtAll = nothingWithheld && (data?.totalCalls ?? 0) === 0;
 
   const reasonRows = data?.reasons ?? [];
+  const reasonsOf = (bucket: string): FailureReason[] => reasonRows.filter((r) => r.bucket === bucket);
+  const reasonLines = lines.filter((line) => line.calls > 0 || reasonsOf(line.bucket).length > 0);
   const monthRows = (data?.months ?? []).map((m) => ({ ...m, id: m.period.key }));
   const anyMonthHasCalls = monthRows.some((m) => m.calls > 0);
 
@@ -154,8 +198,8 @@ export default function GuaranteePage() {
         <div className="flex min-w-0 flex-col gap-0.5">
           <h1 className="text-heading-md text-01">Not charged</h1>
           <p className="text-body-13 text-03">
-            What our checks refused to charge you for in {period.label}. Each amount was held, then released back to
-            you.
+            What you were not charged for in {period.label}: calls that failed our checks, had no usable result, or
+            were never collected. Each amount was held, then released back to you.
           </p>
         </div>
 
@@ -244,36 +288,28 @@ export default function GuaranteePage() {
               <MoneySplit
                 className="rounded-lg bg-01 p-4"
                 total={{ label: "Listed price of your calls", amount: formatMoney(listed) }}
-                segments={[
-                  { label: "Charged", value: toDecimal(charged).toNumber(), amount: formatMoney(charged), tone: "primary" },
-                  { label: "Not charged", value: toDecimal(withheldTotal).toNumber(), amount: formatMoney(withheldTotal), tone: "teal" },
-                  ...(isZeroMoney(data?.owed ?? null) || !data?.owed
-                    ? []
-                    : [
-                        {
-                          label: "Owed",
-                          value: toDecimal(data.owed).toNumber(),
-                          amount: formatMoney(data.owed),
-                          tone: "warning" as const,
-                        },
-                      ]),
-                ]}
+                // Shares are of listed, at the sentence's precision, not of the bar's own segments.
+                showPercent={false}
+                segments={split.map((segment) => ({
+                  label: segment.label,
+                  value: segment.value,
+                  amount: formatMoney(segment.amount),
+                  tone: SPLIT_TONE[segment.key],
+                  note: segment.percent ?? undefined,
+                }))}
               />
             ) : null}
           </div>
 
           <div className="flex w-full flex-col rounded-lg bg-01 px-[18px] py-4 desktop:w-[440px] desktop:shrink-0">
-            {buckets.map((bucket) => {
-              const copy = BUCKET_COPY[bucket.bucket];
-              return (
-                <DecompositionRow
-                  key={bucket.bucket}
-                  label={copy?.key ?? bucket.label}
-                  sub={`${formatCount(bucket.calls)} ${bucket.calls === 1 ? "call" : "calls"}${copy ? ` · ${copy.note}` : ""}`}
-                  value={formatMoney(bucket.amount)}
-                />
-              );
-            })}
+            {lines.map((line) => (
+              <DecompositionRow
+                key={line.bucket}
+                label={line.label}
+                sub={`${plural(line.calls, "call")}${line.note ? ` · ${line.note}` : ""}`}
+                value={formatMoney(line.amount)}
+              />
+            ))}
             <DecompositionRow
               total
               label="Total not charged"
@@ -304,9 +340,9 @@ export default function GuaranteePage() {
         </p>
       ) : null}
 
-      {!loading && !error && (reasonRows.length > 0 || anyMonthHasCalls) ? (
+      {!loading && !error && (reasonLines.length > 0 || anyMonthHasCalls) ? (
         <div className="flex w-full flex-col gap-4 desktop:flex-row desktop:items-start">
-          {reasonRows.length > 0 ? (
+          {reasonLines.length > 0 ? (
             <Panel className="flex-1">
               <PanelHeader>
                 <PanelTitles>
@@ -315,28 +351,41 @@ export default function GuaranteePage() {
                 </PanelTitles>
               </PanelHeader>
               <PanelBody>
+                {/* The same three lines as the card above; each call's reason sits under its line. */}
                 <ul className="flex flex-col">
-                  {reasonRows.map((r) => (
-                    <li key={r.reason} className="border-b border-01 last:border-b-0">
-                      <Link
-                        href={routes.calls({ status: "not-charged", tool: r.mostlyToolId ?? undefined })}
-                        className="flex w-full items-center gap-3 px-4 py-3 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 tablet:px-5"
-                      >
-                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className="text-body-sm text-01">{r.label}</span>
-                          <span className="text-body-xs text-03">
-                            {formatCount(r.calls)} {r.calls === 1 ? "call" : "calls"}
-                            {r.mostlyToolId ? ` · mostly ${names.name("tool", r.mostlyToolId)}` : ""}
-                            {names.lookup("provider", r.mostlyProviderId) ? ` from ${names.lookup("provider", r.mostlyProviderId)}` : ""}
-                          </span>
-                        </div>
-                        <span className="shrink-0 font-mono text-mono-13 font-semibold text-teal-600">
-                          {formatMoney(r.amount, { decimals: 2 })}
-                        </span>
-                        <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
-                      </Link>
-                    </li>
-                  ))}
+                  {reasonLines.map((line) => {
+                    const nested = reasonsOf(line.bucket);
+                    // One reason that is the line itself (e.g. every refund failed a check) needs no sub-row.
+                    const showNested = line.bucket !== "NOT_COLLECTED" && nested.length > 0;
+                    return (
+                      <Fragment key={line.bucket}>
+                        <ReasonRow
+                          href={routes.calls({ status: "not-charged" })}
+                          label={line.label}
+                          sub={`${plural(line.calls, "call")}${line.note ? ` · ${line.note}` : ""}`}
+                          amount={formatMoney(line.amount, { decimals: 2 })}
+                        />
+                        {showNested
+                          ? nested.map((r) => (
+                              <ReasonRow
+                                key={`${line.bucket}|${r.reason}`}
+                                nested
+                                href={routes.calls({ status: "not-charged", tool: r.mostlyToolId ?? undefined })}
+                                label={r.label}
+                                sub={
+                                  plural(r.calls, "call") +
+                                  (r.mostlyToolId ? ` · mostly ${names.name("tool", r.mostlyToolId)}` : "") +
+                                  (names.lookup("provider", r.mostlyProviderId)
+                                    ? ` from ${names.lookup("provider", r.mostlyProviderId)}`
+                                    : "")
+                                }
+                                amount={formatMoney(r.amount, { decimals: 2 })}
+                              />
+                            ))
+                          : null}
+                      </Fragment>
+                    );
+                  })}
                 </ul>
                 {!data?.reasonsComplete ? (
                   <p className="px-5 py-2.5 text-body-xs text-03">Built from the first 1,000 calls of this month.</p>
@@ -384,6 +433,45 @@ export default function GuaranteePage() {
           ) : null}
         </div>
       ) : null}
+
+      <section
+        aria-labelledby="guarantee-coverage"
+        className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 p-5"
+      >
+        <h2 id="guarantee-coverage" className="text-label-md text-01">
+          What the guarantee covers
+        </h2>
+        <div className="grid w-full grid-cols-1 gap-4 tablet:grid-cols-3">
+          <div className="flex flex-col gap-1.5">
+            <h3 className="text-label-13 text-teal-600">Covered: not charged</h3>
+            <ul className="flex list-disc flex-col gap-1 pl-4 text-body-13 text-02">
+              <li>A result that fails our checks, including one in the wrong format.</li>
+              <li>No usable result: the provider errored, rejected the request or never answered.</li>
+            </ul>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <h3 className="text-label-13 text-01">Not covered: charged</h3>
+            <ul className="flex list-disc flex-col gap-1 pl-4 text-body-13 text-02">
+              <li>A result that passes our checks but is still not what you needed.</li>
+            </ul>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <h3 className="text-label-13 text-01">How to report a bad result</h3>
+            <p className="text-body-13 text-02">
+              Open the call and choose Report a bad result. A charge is refundable for 1 hour. After that there is no
+              refund, but your report counts against the provider&apos;s quality and can lead to a penalty on their
+              stake.
+            </p>
+            <Link
+              href="/spend/disputes"
+              className="inline-flex items-center gap-1 self-start text-label-13 text-primary-600 hover:underline"
+            >
+              Your reports
+              <ArrowRight aria-hidden="true" className="size-3.5" />
+            </Link>
+          </div>
+        </div>
+      </section>
 
       <section className="flex w-full flex-col gap-3 rounded-xl border border-01 bg-01 p-5">
         <h2 className="text-label-md text-01">How this works</h2>
