@@ -182,6 +182,13 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   // When the data moves the current step on, let the checklist follow it again.
   const currentId = revealing ? "key" : (Object.entries(states).find(([, s]) => s === "current")?.[0] ?? null);
   React.useEffect(() => setExpanded(undefined), [currentId]);
+  // `?step=call` (Overview's "Make a first call") opens that step. Read after
+  // mount: a static export has no request to read it from at build time.
+  const [askedStep, setAskedStep] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const step = new URLSearchParams(window.location.search).get("step");
+    if (step) setAskedStep(step);
+  }, []);
 
   const loading = dataLoading(data);
   // On Overview, render nothing until the data says it is needed: a set-up
@@ -349,7 +356,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
         }
         steps={steps}
         loading={loading}
-        expandedId={revealing ? "key" : expanded}
+        expandedId={revealing ? "key" : expanded === undefined && askedStep && steps.some((step) => step.id === askedStep) ? askedStep : expanded}
         onExpandedChange={setExpanded}
         doneTitle={facts.freeOnly || invitation ? "All set: your agent can make free calls" : "All set: your agent can call tools and pay for them"}
         doneDescription="Watch its calls under Activity. Change its spending limits under Controls."

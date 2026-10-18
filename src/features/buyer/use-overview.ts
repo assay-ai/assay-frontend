@@ -30,6 +30,8 @@ export interface NotificationRow {
   body: string;
   subjectType?: string | null;
   subjectId?: string | null;
+  /** The event's own facts (a reset time, an asset, a cap): what "cleared" and "(old limit)" are read from. */
+  payload?: unknown;
   readAt?: string | null;
   createdAt: string;
 }
@@ -146,7 +148,9 @@ export function useOverview(anchor: Date, assetKey: string | null = null): Overv
       getReceiptsSummary({ from: yesterday.from, to: yesterday.to, groupBy: "tool" }) as Promise<SummaryWire>,
       loadChart(days),
       listToolCalls({ limit: 6, sort: "createdAt", order: "desc" }),
-      listNotifications({ limit: 5 }) as Promise<CursorPage<NotificationRow>>,
+      // Needs attention: unread only, so a dismissed (read) alert stays gone.
+      // More than it shows, because cleared and repeated ones are left out.
+      listNotifications({ limit: 20, unreadOnly: true }) as Promise<CursorPage<NotificationRow>>,
     ])
       .then(([balances, holds, withheldRaw, monthSummary, todaySummary, yesterdaySummary, chart, calls, notes]) => {
         if (cancelled) return;
