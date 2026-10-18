@@ -1,11 +1,12 @@
 "use client";
 
 import { DisplayAssetSelect, useDisplayAssetPick } from "@/components/display-asset-select";
-import { ChartNoAxesColumn, ChevronRight, Gauge, Info, Plus, TriangleAlert } from "lucide-react";
+import { ChartNoAxesColumn, ChevronRight, Plus, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { WalletSetupBanner } from "@/components/auth/wallet-setup-banner";
+import { ALERT_ICON, presentAlert, useAlertLimitContext, useMarkAlertsRead } from "@/components/layout/alert-entry";
 import { AgentHealthList } from "@/components/buyer-money/agent-health";
 import { GetStarted, useGetStartedShown } from "@/components/buyer-money/get-started";
 import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
@@ -39,16 +40,17 @@ import { callPaymentNote, heldCallsText } from "@/features/buyer-debt/debt-copy"
 import { OwedRowAction } from "@/features/buyer-debt/owed-row-action";
 import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
-import { attentionAction } from "@/features/buyer/attention-action";
+import { groupAlerts, isAlertResolved } from "@/features/buyer/alert-model";
 import { callOutcome } from "@/features/buyer/call-outcome";
-import { overviewBalance, singleBalanceSub } from "@/features/buyer/overview-balance";
-import { useOverview, type NotificationRow } from "@/features/buyer/use-overview";
+import { absentBalanceTile, overviewBalance, singleBalanceSub } from "@/features/buyer/overview-balance";
+import { useOverview } from "@/features/buyer/use-overview";
 import type { FullBalance } from "@/features/g30/balance";
 import { useChainName } from "@/hooks/useChainName";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { formatMoney, notCharged, toDecimal } from "@/utils/money";
+import { toast } from "@/utils/toast";
 
 /**
  * Overview (desktop design, with tablet 834 and mobile 390 variants).
@@ -65,11 +67,8 @@ import { formatMoney, notCharged, toDecimal } from "@/utils/money";
 
 const REFRESH_MS = 30_000;
 
-const SEVERITY_ICON: Record<NotificationRow["severity"], ReactNode> = {
-  INFO: <Info className="size-4 text-primary-500" />,
-  WARNING: <Gauge className="size-4 text-warning-500" />,
-  CRITICAL: <TriangleAlert className="size-4 text-danger-500" />,
-};
+/** Needs attention shows this many; the rest are behind "See all alerts". */
+const ATTENTION_SHOWN = 5;
 
 function HoldFigure({ label, value }: { label: string; value: string }) {
   return (
@@ -124,17 +123,35 @@ export default function OverviewPage() {
   const owedIntentIds = useOwedIntentIds();
   const oldestHold = openHolds.reduce((max, h) => Math.max(max, h.ageSeconds), 0);
 
-  // The same alert raised twice in the same minute (two workers, one event)
-  // is one thing that needs you, not two.
-  const notifications = useMemo(() => {
-    const seen = new Set<string>();
-    return (data?.notifications ?? []).filter((note) => {
-      const key = `${note.title}|${String(note.createdAt).slice(0, 16)}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
+  // Needs attention: unread alerts, the same alert raised twice in a minute
+  // as one, and an alert whose cause has cleared (free calls reset, balance
+  // funded) left out. Leaving one out is display only: it stays unread and is
+  // still in the bell and "See all alerts". Dismiss marks it read.
+  const limits = useAlertLimitContext();
+  const markRead = useMarkAlertsRead();
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
+  const attention = useMemo(() => {
+    // The page's opening time: a reset after it shows the alert until the next visit (never the reverse).
+    const now = anchor.getTime();
+    const balances = data ? (data.balances as readonly FullBalance[]) : null;
+    return groupAlerts(data?.notifications ?? []).filter(
+      (group) => group.unread && !dismissed.has(group.note.id) && !isAlertResolved(group.note, { now, balances }),
+    );
+  }, [anchor, data, dismissed]);
+  const notifications = attention.slice(0, ATTENTION_SHOWN);
+  const dismiss = (group: (typeof attention)[number]) => {
+    setDismissed((prev) => new Set(prev).add(group.note.id));
+    markRead.mutate(group.ids, {
+      onError: () => {
+        setDismissed((prev) => {
+          const next = new Set(prev);
+          next.delete(group.note.id);
+          return next;
+        });
+        toast.error("It could not be dismissed. Try again in a moment.");
+      },
     });
-  }, [data?.notifications]);
+  };
 
   const withheldAmount = data?.withheld?.withheld.amount ?? null;
   const withheldCalls = data?.withheld?.withheld.calls ?? 0;
@@ -163,6 +180,8 @@ export default function OverviewPage() {
   // A new or quiet account: no spend in the chart, nothing on hold, no calls.
   // The three empty panels fold into one line instead of three "nothing yet"s.
   const nothingYet = Boolean(data) && scaleMax === 0 && openHolds.length === 0 && (data?.recentCalls.length ?? 0) === 0;
+  // "Explore spend" waits for something to explore.
+  const hasSpend = Boolean(data) && (scaleMax > 0 || !isZeroMoney(data?.monthListed ?? null));
 
   const decimals = balance?.decimals ?? 6;
   const asset = balance?.asset ?? "";
@@ -184,12 +203,14 @@ export default function OverviewPage() {
           <p className="text-body-13 text-03">Your money, today&apos;s spend and anything that needs you. Updates every 30 seconds.</p>
         </div>
         <div className="flex shrink-0 items-center gap-2.5">
-          <Button variant="secondary" asChild>
-            <Link href="/spend">
-              <ChartNoAxesColumn className="size-[15px]" />
-              Explore spend
-            </Link>
-          </Button>
+          {hasSpend ? (
+            <Button variant="secondary" asChild>
+              <Link href="/spend">
+                <ChartNoAxesColumn className="size-[15px]" />
+                Explore spend
+              </Link>
+            </Button>
+          ) : null}
           {freeOnly.freeOnly ? (
             <span
               data-testid="overview-free-only"
@@ -241,14 +262,15 @@ export default function OverviewPage() {
         <MetricTile
           className="order-1 col-span-2 tablet:col-span-1"
           label="Balance"
-          // An em-dash, not $0.00: a zero balance and a balance that could not
-          // be read are different facts and only one of them stops a call.
+          // An em-dash only when the balance could not be read: a zero balance
+          // and an unread one are different facts. An account with no balance
+          // yet (nothing deposited) has $0.00.
           value={
             balanceState.kind === "single"
               ? formatMoney(balanceState.balance.available)
               : balanceState.kind === "multiple"
                 ? `${balanceState.chainCount} chains`
-                : "—"
+                : absentBalanceTile(Boolean(data), freeOnly).value
           }
           sub={
             balanceState.kind === "single"
@@ -257,7 +279,7 @@ export default function OverviewPage() {
                 ? ((data?.balances ?? []) as readonly FullBalance[])
                     .map((b) => `${formatMoney(b.available)} on ${chainName(b.chainId)}`)
                     .join(" · ")
-                : "not available"
+                : absentBalanceTile(Boolean(data), freeOnly).sub
           }
           meta={
             balance
@@ -293,7 +315,8 @@ export default function OverviewPage() {
         />
 
         <MetricTile
-          className="order-3 desktop:order-2"
+          // Alone on its row below desktop width, so it takes the whole row.
+          className="order-3 col-span-2 desktop:order-2 desktop:col-span-1"
           label="Spent today"
           value={data ? formatMoney(data.todayCharged) : "—"}
           sub={
@@ -322,8 +345,9 @@ export default function OverviewPage() {
               <span className="text-label-13 text-01">No calls yet.</span> Spend, money on hold and recent calls appear here
               after your agent&apos;s first call. {notifications.length === 0 ? "Nothing needs your attention." : null}
             </p>
+            {/* An empty call list helps nobody: the way to a first call is Get started's step 2. */}
             <Button variant="ghost" size="sm" asChild>
-              <Link href={routes.calls()}>See calls</Link>
+              <Link href="/onboarding?step=call">Make a first call</Link>
             </Button>
           </PanelBody>
         </Panel>
@@ -361,16 +385,20 @@ export default function OverviewPage() {
             <PanelTitles>
               <PanelTitle>Needs attention</PanelTitle>
               <PanelDescription>
-                {notifications.length === 1 ? "1 item" : `${formatCount(notifications.length)} items`}
+                {attention.length === 1 ? "1 item" : `${formatCount(attention.length)} items`}
               </PanelDescription>
             </PanelTitles>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/alerts?view=recent">See all alerts</Link>
+            </Button>
           </PanelHeader>
           <PanelBody>
             {notifications.length === 0 ? (
               <p className="px-5 py-4 text-body-sm text-02">Nothing needs your attention.</p>
             ) : (
-              notifications.map((note, i) => {
-                const action = attentionAction(note);
+              notifications.map((group, i) => {
+                const { note } = group;
+                const { title, action } = presentAlert(note, limits);
                 return (
                   <div
                     key={note.id}
@@ -380,9 +408,9 @@ export default function OverviewPage() {
                         : "flex w-full items-center gap-3 border-t border-01 px-4 py-3 tablet:px-5"
                     }
                   >
-                    <span className="shrink-0">{SEVERITY_ICON[note.severity] ?? SEVERITY_ICON.INFO}</span>
+                    <span className="shrink-0">{ALERT_ICON[note.severity] ?? ALERT_ICON.INFO}</span>
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <p className="text-body-sm text-01">{note.title}</p>
+                      <p className="text-body-sm text-01">{title}</p>
                       <p className="text-body-xs text-03">
                         <UtcTime value={note.createdAt} />
                       </p>
@@ -392,6 +420,15 @@ export default function OverviewPage() {
                         <Link href={action.href}>{action.label}</Link>
                       </Button>
                     ) : null}
+                    <button
+                      type="button"
+                      onClick={() => dismiss(group)}
+                      aria-label={`Dismiss: ${title}`}
+                      title="Dismiss (mark read)"
+                      className="flex size-8 shrink-0 items-center justify-center rounded-md text-03 transition-colors hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                    >
+                      <X aria-hidden="true" className="size-4" />
+                    </button>
                   </div>
                 );
               })
