@@ -1,7 +1,7 @@
 "use client";
 
 import { chargedCallsFromTotals, chargedFromTotals, owedFromTotals } from "@/features/g30/spend-buckets";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { CursorPage, Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
@@ -20,10 +20,10 @@ import { toDecimal } from "@/utils/money";
 
 import { attentionRows } from "./alert-model";
 import { monthPeriod, recentDays, type Period } from "./period";
+import { readWithheld, type HoldRow, type SummaryWire, type WithheldForAsset } from "./wire";
 
 /** Needs attention shows this many; the rest are behind "See all alerts". */
 export const ATTENTION_SHOWN = 5;
-import { readWithheld, type HoldRow, type SummaryWire, type WithheldForAsset } from "./wire";
 
 /** `GET /notifications` — `NotificationDto`, read off the running API. */
 export interface NotificationRow {
@@ -133,14 +133,19 @@ const ATTENTION_PAGES = 5;
  * from their own request, so "cleared" is judged here with balances unknown —
  * never hiding more than the page will.
  */
-async function readAttention(anchor: Date): Promise<{ items: NotificationRow[]; complete: boolean }> {
+async function readAttention(
+  anchor: Date,
+  maxPages: number,
+): Promise<{ items: NotificationRow[]; complete: boolean; pages: number }> {
   const items: NotificationRow[] = [];
   let cursor: string | undefined;
-  for (let page = 0; page < ATTENTION_PAGES; page += 1) {
+  let pages = 0;
+  while (pages < maxPages) {
     const result = (await listNotifications({ limit: ATTENTION_PAGE, unreadOnly: true, cursor })) as CursorPage<NotificationRow>;
+    pages += 1;
     items.push(...(result.items ?? []));
     cursor = result.pageInfo?.hasMore ? (result.pageInfo.nextCursor ?? undefined) : undefined;
-    if (!cursor) return { items, complete: true };
+    if (!cursor) return { items, complete: true, pages };
     const open = attentionRows(items, {
       now: anchor.getTime(),
       balances: null,
@@ -150,7 +155,7 @@ async function readAttention(anchor: Date): Promise<{ items: NotificationRow[]; 
     });
     if (open.shown.length >= ATTENTION_SHOWN) break;
   }
-  return { items, complete: false };
+  return { items, complete: false, pages };
 }
 
 /** `assetKey`: the display-asset pick; a change refetches without a reload. */
@@ -159,6 +164,9 @@ export function useOverview(anchor: Date, assetKey: string | null = null): Overv
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
   const [nonce, setNonce] = useState(0);
+  // The first load reads up to ATTENTION_PAGES pages; each 30-second refresh
+  // reads only as many as that load needed, so a refresh is not five reads.
+  const attentionPages = useRef<number | null>(null);
 
   const month = useMemo(() => monthPeriod(anchor), [anchor]);
   const days = useMemo(() => recentDays(anchor, 7), [anchor]);
@@ -188,12 +196,13 @@ export function useOverview(anchor: Date, assetKey: string | null = null): Overv
       loadChart(days),
       listToolCalls({ limit: 6, sort: "createdAt", order: "desc" }),
       // Needs attention: unread only, so a dismissed (read) alert stays gone.
-      readAttention(anchor),
+      readAttention(anchor, attentionPages.current ?? ATTENTION_PAGES),
     ])
       .then(([balances, holds, withheldRaw, monthSummary, todaySummary, yesterdaySummary, chart, calls, notes]) => {
         if (cancelled) return;
 
         const todayGroup = todaySummary.totals;
+        attentionPages.current = Math.max(1, notes.pages);
 
         setData({
           month,

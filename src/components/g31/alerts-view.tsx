@@ -37,6 +37,7 @@ import {
   type AlertPreset,
   type ExternalChannel,
 } from "@/features/buyer/alert-presets";
+import { useBalancesQuery } from "@/components/buyer-money/use-buyer-money";
 import { groupAlerts, idsToMarkOnOpen, readableBody } from "@/features/buyer/alert-model";
 import { contractNoticeText, isContractNoticeEvent, readContractNotice } from "@/features/toolsets/contract-notices";
 import { ContractNoticeFix } from "@/components/toolsets/contract-notice-fix";
@@ -164,6 +165,48 @@ function DeliveryRow({ delivery }: { delivery: NotificationDeliveryDto }) {
   );
 }
 
+/**
+ * A row's next steps in See all: its action, and "Mark read" while it is
+ * unread — the way to clear any alert by hand, an open risk included.
+ */
+export function AlertRowActions({
+  action,
+  contractPayload,
+  unread,
+  marking,
+  onMarkRead,
+}: {
+  action: { label: string; href: string } | null;
+  /** A contract notice's payload, for its in-place fix. */
+  contractPayload?: unknown;
+  unread: boolean;
+  marking: boolean;
+  onMarkRead: () => void;
+}) {
+  if (!action && !unread) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+      {action ? (
+        <Link href={action.href} className="min-h-10 self-start content-center text-label-13 font-semibold text-primary-600 hover:underline">
+          {action.label}
+        </Link>
+      ) : null}
+      {action && contractPayload !== undefined ? <ContractNoticeFix payload={contractPayload} /> : null}
+      {unread ? (
+        <button
+          type="button"
+          data-testid="alert-mark-read"
+          disabled={marking}
+          onClick={onMarkRead}
+          className="min-h-10 content-center text-label-13 text-02 hover:text-01 hover:underline disabled:opacity-60"
+        >
+          Mark read
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 const URGENCY: Record<string, string> = { CRITICAL: "Urgent", WARNING: "Warning", INFO: "Info" };
 
 export function AlertsView() {
@@ -198,13 +241,31 @@ export function AlertsView() {
   const markRead = useMarkAlertsRead();
   const { mutate: markIds } = markRead;
   const attempts = React.useRef(new Map<string, number>());
+  // A cleared balance alert is marked too: the balances as read now, or unknown (then never).
+  const balancesQuery = useBalancesQuery();
+  const balances = React.useMemo(
+    () => (balancesQuery.isSuccess ? (balancesQuery.data.balances ?? []) : null),
+    [balancesQuery.isSuccess, balancesQuery.data],
+  );
   React.useEffect(() => {
     if (!logOpen) return;
-    const ids = idsToMarkOnOpen(alertGroups, attempts.current);
+    const ids = idsToMarkOnOpen(alertGroups, attempts.current, { now: Date.now(), balances });
     if (ids.length === 0) return;
     for (const id of ids) attempts.current.set(id, (attempts.current.get(id) ?? 0) + 1);
     markIds(ids);
-  }, [logOpen, alertGroups, markIds]);
+  }, [logOpen, alertGroups, balances, markIds]);
+  // "Mark read" on one row: any alert, open risks included, by hand.
+  const [markingRow, setMarkingRow] = React.useState<string | null>(null);
+  const markRow = (ids: readonly string[], rowId: string) => {
+    setMarkingRow(rowId);
+    markIds(ids, {
+      onSuccess: (failed) => {
+        if (failed.length > 0) toast.error("It could not be marked read. Try again in a moment.");
+      },
+      onError: () => toast.error("It could not be marked read. Try again in a moment."),
+      onSettled: () => setMarkingRow(null),
+    });
+  };
 
   const deliveriesQuery = useQuery({
     queryKey: ["notification-deliveries", expandedId],
@@ -504,8 +565,9 @@ export function AlertsView() {
           <SheetHeader>
             <SheetTitle>Recent alerts</SheetTitle>
             <SheetDescription>
-              Newest first. Opening this list marks them read, except alerts about an open risk (balance, keys, a pending
-              withdrawal): those stay in Needs attention on Overview until you dismiss them. Open one to see where it was delivered.
+              Newest first. Opening this list marks them read, except alerts about a risk that may still be open (balance,
+              keys, a pending withdrawal, a paused agent): those stay in Needs attention on Overview until you dismiss them,
+              mark them read here, or the condition clears. Open one to see where it was delivered.
             </SheetDescription>
           </SheetHeader>
           <div className="flex w-full flex-col gap-3 px-[18px] pb-6 pt-4">
@@ -516,7 +578,7 @@ export function AlertsView() {
             ) : alertGroups.length === 0 ? (
               <p className="text-body-13 text-02">No alerts yet.</p>
             ) : (
-              alertGroups.map(({ note: item }) => {
+              alertGroups.map(({ note: item, ids, unread }) => {
                 const expanded = expandedId === item.id;
                 const { title, action } = presentAlert(item, limits);
                 const body = alertBody(item);
@@ -540,14 +602,13 @@ export function AlertsView() {
                       )}
                     </button>
                     {body ? <p className="text-body-13 text-02">{body}</p> : null}
-                    {action ? (
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <Link href={action.href} className="min-h-10 self-start content-center text-label-13 font-semibold text-primary-600 hover:underline">
-                          {action.label}
-                        </Link>
-                        {isContractNoticeEvent(item.event) ? <ContractNoticeFix payload={item.payload} /> : null}
-                      </div>
-                    ) : null}
+                    <AlertRowActions
+                      action={action}
+                      contractPayload={isContractNoticeEvent(item.event) ? item.payload : undefined}
+                      unread={unread}
+                      marking={markingRow === item.id}
+                      onMarkRead={() => markRow(ids, item.id)}
+                    />
                     {expanded ? (
                       <div className="flex flex-col gap-1.5 border-t border-01 pt-2">
                         {deliveriesQuery.isPending ? (
