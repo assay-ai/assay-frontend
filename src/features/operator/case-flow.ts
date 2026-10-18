@@ -838,6 +838,8 @@ export interface ManualActionCopy {
 export function manualActionCopy(
   kind: ManualActionKind,
   amounts: { penalty: string; applied: string | null },
+  /** Closed here with no penalty (overturned, suspended, waived): the stake was owed nothing. */
+  closed = true,
 ): ManualActionCopy {
   switch (kind) {
     case "close":
@@ -864,13 +866,15 @@ export function manualActionCopy(
         lines: [
           {
             kind: "money",
-            text: `${amounts.applied ? `${amounts.applied} was` : "The penalty was"} already taken from the provider's stake on chain. Recording it moves no money now; paying it back is a separate request.`,
+            text: closed
+              ? `${amounts.applied ? `${amounts.applied} was` : "The penalty was"} already taken from the provider's stake on chain. Recording it moves no money now; paying it back is a separate request.`
+              : `${amounts.applied ? `${amounts.applied} was` : "The penalty was"} already taken from the provider's stake on chain. Recording it moves no money; the penalty closes as executed.`,
           },
           { kind: "chain", text: "Nothing is sent on chain. The record is read again when it is approved; unless it still reads executed, nothing is written." },
           { kind: "approver", text: "Needs a second approver: a Lead adjudicator or Treasury other than you." },
           { kind: "undo", text: "It can't be undone." },
         ],
-        confirm: "I checked that this penalty's record reads executed on chain.",
+        confirm: "I checked that this penalty's record reads executed on chain, and who it paid.",
         submit: "Send for approval",
       };
     case "repropose":

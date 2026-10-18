@@ -320,8 +320,10 @@ export default function OperatorCasePage() {
       setResult({ ...sent, approvalId: answer.approval.approvalId, approvers, expiresAt: answer.approval.expiresAt });
     } else {
       setResult({
-        title: "Cancel closed: nothing stands on chain",
-        next: "The record read cancelled on chain just now. The penalty has left Waiting for signature; nothing was taken from the provider.",
+        title: answer.result.alreadyDone ? "Already closed: nothing stands on chain" : "Cancel closed: nothing stands on chain",
+        next: answer.result.alreadyDone
+          ? "Another request closed it a moment ago; nothing more was written. The penalty has left Waiting for signature."
+          : "The record read cancelled on chain just now. The penalty has left Waiting for signature; nothing was taken from the provider.",
       });
     }
     refetch();
@@ -594,6 +596,7 @@ export default function OperatorCasePage() {
             proposalId={proposalId}
             penaltyText={penaltyText}
             appliedText={appliedText}
+            closedCase={proposal.status !== "UPHELD"}
             me={identity}
             waiting={manualWaiting(kind)}
             onDone={onManualDone(kind)}

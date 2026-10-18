@@ -182,6 +182,14 @@ describe("B18: what happens, before it is sent", () => {
     expect(record).toContain("moves no money now");
   });
 
+  it("m4: record says a pay-back is separate only for a closed penalty; upheld closes as executed", () => {
+    const closed = manualActionCopy("record", { penalty: "$28.47", applied: "$4.00" }, true).lines[0]!.text;
+    const upheld = manualActionCopy("record", { penalty: "$28.47", applied: "$4.00" }, false).lines[0]!.text;
+    expect(closed).toContain("paying it back is a separate request");
+    expect(upheld).not.toMatch(/pay(ing)? it back/i);
+    expect(upheld).toContain("closes as executed");
+  });
+
   it("the approver roles match the backend register rows", () => {
     expect(approverRolesFor("S-16")).toEqual(["ADJL", "TRE"]);
     expect(approverRolesFor("S-17")).toEqual(["ADJ", "ADJL"]);
@@ -198,7 +206,7 @@ describe("B18: what happens, before it is sent", () => {
 });
 
 describe("B18: a refusal says why, and that nothing changed", () => {
-  it.each(["CHANGED", "STANDING", "EXECUTED", "CHAIN_UNKNOWN", "DISPUTED_ON_CHAIN", "SOMETHING_NEW"])("%s", (reason) => {
+  it.each(["CHANGED", "STANDING", "EXECUTED", "CHAIN_UNKNOWN", "DISPUTED_ON_CHAIN", "BENEFICIARY_NOT_AN_AGENT", "SOMETHING_NEW"])("%s", (reason) => {
     const error = new ApiError("SLASH_MANUAL_ACTION_REFUSED", "refused", 409, undefined, { reason });
     const sentence = operatorErrorSentence(error);
     expect(sentence).toContain("Nothing was changed.");

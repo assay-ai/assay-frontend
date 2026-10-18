@@ -474,7 +474,7 @@ export function approvalOutcome(
           : "Records that the chain took the penalty while the cancel waited; no money moves now",
       });
       lines.push({ kind: "chain", text: "The record is read on chain again first; if it no longer reads executed, nothing is written" });
-      lines.push({ kind: "record", text: "It can't be undone. Paying it back is a separate request" });
+      lines.push({ kind: "record", text: "It can't be undone. If the penalty was not owed, paying it back is a separate request" });
       break;
     case "slash.repropose":
       lines.push({

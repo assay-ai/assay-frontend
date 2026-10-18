@@ -424,7 +424,8 @@ export type ManualActionRefusal =
   | "CASE_STATUS"
   | "ALREADY_RECORDED"
   | "EXECUTED_BEYOND_DECISION"
-  | "DISPUTED_ON_CHAIN";
+  | "DISPUTED_ON_CHAIN"
+  | "BENEFICIARY_NOT_AN_AGENT";
 
 export interface ManualActionOption {
   allowed: boolean;
@@ -452,6 +453,8 @@ export interface ManualCaseActionResult {
   status: string;
   chainStatus: string;
   chainEpoch: number;
+  /** A repeat of an action that already ran (a double submit): nothing more was written. */
+  alreadyDone?: boolean;
 }
 
 /** `POST /operator/cases/:id/decide`. */
