@@ -60,6 +60,47 @@ describe("auditSentence", () => {
   });
 });
 
+describe("auditSentence — You, past tense, tool set, no raw ids (review F-P1)", () => {
+  it("says You for the signed-in person, whose entries carry a session id, not an email", () => {
+    const line = auditSentence(
+      entry({ actorId: "cred_9f2c1a7b", action: "credential.created", after: { name: "ux-review-key" } }),
+      () => null,
+      "me@example.com",
+    ).line;
+    expect(line).toBe("You created the agent key “ux-review-key”");
+    expect(auditSentence(entry({ actorId: "5b8e1c02-7a34-4d96-8f10-c6e3b92d7f45" }), () => null, null).line).toBe("By you");
+  });
+
+  it("says a report in words: the reason label, and whether a refund is guaranteed", () => {
+    const filed = auditSentence(
+      entry({ actorId: "cred_1", action: "call_dispute.filed", after: { intentId: "int_1", reason: "OTHER", refundGuaranteed: false } }),
+      () => null,
+    );
+    expect(filed).toEqual({
+      title: "Bad result reported",
+      line: "You reported a bad result on a call (reason: something else); reported after the refund window, so a refund is not guaranteed",
+    });
+    expect(filed.line).not.toMatch(/OTHER|int_1|refund guaranteed to/);
+  });
+
+  it("writes tool set, never Toolset, and never a list of ids", () => {
+    const replaced = auditSentence(
+      entry({ action: "toolset.entries_replaced", after: { toolIds: ["5b8e1c02-7a34-4d96-8f10-c6e3b92d7f45"] } }),
+      () => null,
+      "me@example.com",
+    );
+    expect(replaced).toEqual({ title: "Tool set tools changed", line: "You changed which tools are in a tool set; it now has 1 tool" });
+    expect(auditSentence(entry({ action: "toolset.created", after: { slug: "research", name: "Research", toolCount: 3 } }), () => null, "me@example.com").line).toBe(
+      "You created the tool set “Research” with 3 tools",
+    );
+    expect(auditSentence(entry({ action: "toolset.updated", before: { name: "A" }, after: { name: "B" } }), () => null, "me@example.com").line).toBe(
+      "You renamed the tool set “A” to “B”",
+    );
+    expect(auditSentence(entry({ action: "toolset.something_new" }), () => null, "me@example.com").title).not.toMatch(/Toolset/);
+    expect(auditSentence(entry({ action: "spend_policy.updated", after: { allowedToolIds: ["t1"] } }), () => null, "me@example.com").line).toBe("By you");
+  });
+});
+
 describe("day grouping", () => {
   it("labels today and yesterday and keeps order", () => {
     const now = new Date(2026, 9, 16, 12);
