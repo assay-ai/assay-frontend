@@ -17,7 +17,8 @@ import { chainDisplayName } from "@/features/operator/call-summary";
 import { Deadline } from "@/features/operator/deadline";
 import { DisputeLine } from "@/features/operator/dispute-line";
 import { HealthStrip } from "@/features/operator/health-strip";
-import { checkedAgo, groupApprovals, needsYouBreakdown, needsYouCount, sortDisputesByDaysLeft, waitingSummary } from "@/features/operator/inbox";
+import { checkedAgo, groupApprovals, needsYouBreakdown, needsYouCount, sortDisputesByDaysLeft, waitingSummary, type ToolWork } from "@/features/operator/inbox";
+import { useToolWork } from "@/features/operator/use-tool-work";
 import { ResultCard } from "@/features/operator/result-card";
 import { RoleIntro, useRoleIntro } from "@/features/operator/role-intro";
 import { capabilitiesFor } from "@/features/operator/roles";
@@ -119,6 +120,30 @@ function Tile({ label, value, opens = "page" }: { label: string; value: number |
   );
 }
 
+/** Pending provider tool reviews and open call disputes: each a link to its queue. */
+function ToolWorkLinks({ work }: { work: ToolWork }) {
+  const rows = [
+    { count: work.reviews ?? 0, label: "Provider tools to review", hint: "First reviews and changes to listed tools, oldest first.", href: "/operator/tools/reviews" },
+    { count: work.callDisputes ?? 0, label: "Call disputes to decide", hint: "Buyers' reports of bad results; a silent provider is upheld at 72 h.", href: "/operator/disputes" },
+  ].filter((row) => row.count > 0);
+  if (rows.length === 0) return null;
+  return (
+    <section aria-label="Tools and call disputes" className="grid w-full grid-cols-1 gap-2 tablet:grid-cols-2" data-testid="tool-work">
+      {rows.map((row) => (
+        <Link key={row.href} href={row.href} className={TILE}>
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-label-13 text-01">
+              {row.label} <span className="tabular-nums text-danger-700">{row.count}</span>
+            </span>
+            <span className="text-body-xs text-03">{row.hint}</span>
+          </span>
+          <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
+        </Link>
+      ))}
+    </section>
+  );
+}
+
 export default function OperatorHome() {
   const me = useOperatorSession();
   const caps = capabilitiesFor(me.roles);
@@ -166,20 +191,23 @@ export default function OperatorHome() {
   const openApprovals = groups.needsYou.length + groups.yours.length + groups.others.length;
   const openDisputes = caps.rule ? (disputes.data ? disputeRows.length : null) : (health.data?.openDisputes ?? null);
 
-  const lastChecked = Math.max(pending.dataUpdatedAt, disputes.dataUpdatedAt, health.dataUpdatedAt);
-  const refreshing = pending.isFetching || disputes.isFetching || health.isFetching;
+  const toolWork = useToolWork(me);
+  const lastChecked = Math.max(pending.dataUpdatedAt, disputes.dataUpdatedAt, health.dataUpdatedAt, toolWork.dataUpdatedAt);
+  const refreshing = pending.isFetching || disputes.isFetching || health.isFetching || toolWork.isFetching;
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["operator", "approvals"] });
     void queryClient.invalidateQueries({ queryKey: ["operator", "arbiter", "disputes"] });
     void queryClient.invalidateQueries({ queryKey: ["operator", "health"] });
     void queryClient.invalidateQueries({ queryKey: ["operator", "blocks"] });
+    void queryClient.invalidateQueries({ queryKey: ["operator", "reviews"] });
+    void queryClient.invalidateQueries({ queryKey: ["operator", "call-disputes"] });
   };
 
   const [results, setResults] = React.useState<ApprovalResult[]>([]);
   const onDecided = React.useCallback((result: ApprovalResult) => setResults((list) => [result, ...list.filter((r) => r.id !== result.id)]), []);
 
-  const needsYouTotal = needsYouCount(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count);
-  const breakdown = needsYouBreakdown(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count);
+  const needsYouTotal = needsYouCount(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count, toolWork.work);
+  const breakdown = needsYouBreakdown(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count, toolWork.work);
   const loading = pending.isLoading || (caps.rule && (disputes.isLoading || toSign.isLoading));
   const nothing = needsYouTotal === 0 && groups.yours.length === 0;
   // Every waiting request, accounted for in one line: the same split and numbers as the Approvals tabs.
@@ -258,6 +286,7 @@ export default function OperatorHome() {
       ) : (
         <>
           {needsYouTotal === 0 ? <p className="text-body-13 text-03">Nothing needs you right now.</p> : null}
+          <ToolWorkLinks work={toolWork.work} />
           {groups.needsYou.length > 0 ? (
             <RowSection
               id="to-approve"

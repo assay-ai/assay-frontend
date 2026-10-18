@@ -9,6 +9,7 @@ import { AlertFill, CheckCircle } from "@/components/icons";
 import { PageState } from "@/components/patterns/page-state";
 import { groupApprovals, needsYouCount } from "@/features/operator/inbox";
 import { useToSign } from "@/features/operator/use-to-sign";
+import { useToolWork } from "@/features/operator/use-tool-work";
 import { capabilitiesFor } from "@/features/operator/roles";
 import { OperatorBottomTabs, OperatorMobileTopBar, OperatorTopBar } from "@/features/operator/operator-shell";
 import { OperatorRefusal, SuspendedBanner } from "@/features/operator/operator-refusal";
@@ -111,6 +112,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
     retry: 0,
   });
   const toSign = useToSign(Boolean(session && data && canRule));
+  const toolWork = useToolWork(data, Boolean(session && data));
   // The badge counts what this operator can act on — the same rule as the Home heading.
   const needsYou = data
     ? needsYouCount(
@@ -118,6 +120,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
         disputesQuery.data?.length ?? 0,
         canRule,
         toSign.count,
+        toolWork.work,
       )
     : 0;
 

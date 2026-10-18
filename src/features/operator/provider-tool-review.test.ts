@@ -4,6 +4,7 @@ import type { OperatorRole } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import type { ModerationCutoff } from "@/services/operator-provider-tools.service";
 
+import { needsYouBreakdown, needsYouCount } from "./inbox";
 import { activeOperatorNav, OPERATOR_NAV_ITEMS, operatorNavFor, operatorTitleFor } from "./nav";
 import {
   approveBlockedBy,
@@ -116,5 +117,15 @@ describe("takedowns", () => {
   it("the one who took it down cannot confirm it", () => {
     expect(confirmBlockedBy(cutoff(), { id: "op-1" })).toMatch(/different operator/);
     expect(confirmBlockedBy(cutoff(), { id: "op-2" })).toBeNull();
+  });
+});
+
+describe("Needs you counts reviews and call disputes", () => {
+  it("adds them to the badge and names them in the breakdown", () => {
+    expect(needsYouCount(1, 2, false, 0, { reviews: 2, callDisputes: 3 })).toBe(6);
+    expect(needsYouCount(0, 0, true)).toBe(0);
+    expect(needsYouBreakdown(1, 0, false, 0, { reviews: 2 })).toBe("1 to approve · 2 to review");
+    expect(needsYouBreakdown(0, 1, true, 0, { callDisputes: 1 })).toBe("1 to rule · 1 call dispute");
+    expect(needsYouBreakdown(0, 0, false, 0, { reviews: 3 })).toBeNull();
   });
 });
