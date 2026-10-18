@@ -1,12 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Bell, Gauge, Info, Settings, TriangleAlert } from "lucide-react";
+import { Bell, Settings } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { notificationTitle } from "@/features/toolsets/contract-notices";
-import { UtcTime } from "@/components/patterns/utc-time";
 import { AlertBadge } from "@/components/ui/alert-badge";
 import {
   DropdownMenu,
@@ -16,53 +14,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { groupAlerts } from "@/features/buyer/alert-model";
 import { attentionAction } from "@/features/buyer/attention-action";
 import { listNotifications } from "@/services/account.service";
 import { cn } from "@/utils";
+
+import { AlertEntry, useAlertLimitContext, type AlertEntryNote } from "./alert-entry";
 
 /**
  * The bell: a popover with the latest alerts — each opening what it is about —
  * and a link to Alert settings. Before, the bell navigated straight to the
  * settings page, so the newest alert was two clicks and a sheet away.
  *
- * Built on the dropdown menu (Radix) for focus, Escape and arrow keys.
+ * Built on the dropdown menu (Radix) for focus, Escape and arrow keys. Each
+ * row is `AlertEntry`, the renderer "See all alerts" uses too.
  */
 
-interface AlertRow {
-  id: string;
-  event: string;
-  severity: "INFO" | "WARNING" | "CRITICAL" | string;
-  title: string;
-  body?: string | null;
-  readAt?: string | null;
-  subjectType?: string | null;
-  subjectId?: string | null;
-  /** The event payload; a tool-set update carries the versions and the diff. */
-  payload?: unknown;
-  createdAt: string;
-}
-
 const SHOWN = 6;
-
-const ICON: Record<string, React.ReactNode> = {
-  INFO: <Info aria-hidden="true" className="size-4 text-primary-500" />,
-  WARNING: <Gauge aria-hidden="true" className="size-4 text-warning-500" />,
-  CRITICAL: <TriangleAlert aria-hidden="true" className="size-4 text-danger-500" />,
-};
-
-/** The same alert raised twice in one minute is one row. Pure, for tests. */
-export function recentAlerts(items: readonly AlertRow[], limit = SHOWN): AlertRow[] {
-  const seen = new Set<string>();
-  const out: AlertRow[] = [];
-  for (const item of items) {
-    const key = `${item.title}|${String(item.createdAt).slice(0, 16)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(item);
-    if (out.length >= limit) break;
-  }
-  return out;
-}
 
 export function AlertsMenu({ count, variant = "desktop" }: { count: number; variant?: "desktop" | "mobile" }) {
   const [open, setOpen] = React.useState(false);
@@ -70,9 +38,10 @@ export function AlertsMenu({ count, variant = "desktop" }: { count: number; vari
     queryKey: ["notifications", "bell"],
     enabled: open,
     retry: 0,
-    queryFn: () => listNotifications({ limit: 20 }) as Promise<{ items: AlertRow[] }>,
+    queryFn: () => listNotifications({ limit: 20 }) as Promise<{ items: AlertEntryNote[] }>,
   });
-  const rows = recentAlerts(feed.data?.items ?? []);
+  const limits = useAlertLimitContext(open);
+  const rows = groupAlerts(feed.data?.items ?? []).slice(0, SHOWN);
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -106,22 +75,11 @@ export function AlertsMenu({ count, variant = "desktop" }: { count: number; vari
           ) : rows.length === 0 ? (
             <p className="px-4 py-3 text-body-13 text-02">No alerts yet. When something needs you, it shows here.</p>
           ) : (
-            rows.map((row) => {
-              const action = attentionAction(row);
-              const body = (
-                <span className="flex w-full items-start gap-2.5">
-                  <span className="mt-0.5 shrink-0">{ICON[row.severity] ?? ICON.INFO}</span>
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className={cn("text-body-13", row.readAt ? "text-02" : "font-medium text-01")}>{notificationTitle(row)}</span>
-                    <span className="text-body-xs text-03">
-                      <UtcTime value={row.createdAt} relative />
-                      {action ? ` · ${action.label}` : ""}
-                    </span>
-                  </span>
-                </span>
-              );
+            rows.map(({ note, unread }) => {
+              const action = attentionAction(note);
+              const body = <AlertEntry note={note} limits={limits} unread={unread} />;
               return (
-                <DropdownMenuItem key={row.id} asChild={Boolean(action)} className="cursor-pointer px-4 py-2.5">
+                <DropdownMenuItem key={note.id} asChild={Boolean(action)} className="cursor-pointer px-4 py-2.5">
                   {action ? <Link href={action.href}>{body}</Link> : body}
                 </DropdownMenuItem>
               );

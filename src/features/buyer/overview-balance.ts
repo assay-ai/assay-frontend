@@ -44,3 +44,20 @@ export function singleBalanceSub(balance: FullBalance): string {
   const money = { amount: inbound.toString(), asset: balance.asset, decimals: balance.decimals };
   return `available now · ${formatMoney(money)} confirming on chain`;
 }
+
+/**
+ * The tile when there is no balance row: an account that has never deposited
+ * has $0.00 — said as such, with the next step — while a balance that could
+ * not be read stays "—" (the two are different facts, and only one of them
+ * stops a call). On a free-calls-only chain there is nothing to add funds for.
+ */
+export function absentBalanceTile(
+  loaded: boolean,
+  freeOnly: { freeOnly: boolean; chainName: string | null },
+): { value: string; sub: string } {
+  if (!loaded) return { value: "—", sub: "not available" };
+  return {
+    value: formatMoney(null),
+    sub: freeOnly.freeOnly ? `free calls only on ${freeOnly.chainName ?? "this chain"}` : "add funds to make paid calls",
+  };
+}

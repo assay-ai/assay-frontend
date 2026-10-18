@@ -2116,61 +2116,28 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/notifications/unread-count",
-    body: () => ({ count: freshStage() ? 0 : 2 }),
+    body: () => ({ count: freshStage() ? 0 : demoNotifications().filter((n) => !n.readAt).length }),
   },
   {
     method: "GET",
     match: "/notifications",
-    // A fresh demo account has had no alerts.
-    body: () => (freshStage() ? { items: [], pageInfo: { nextCursor: null, hasMore: false } } : {
-      items: [
-        {
-          id: "ntf_4c17",
-          event: "velocity.anomaly",
-          severity: "WARNING",
-          title: "geocode_place ran at eight times its usual rate for 20 minutes",
-          body: "34 calls between 09:10 and 09:30 UTC against a 7-day median of 4 in that window. Nothing was refused — the per-minute ceiling is 30 and the burst stayed under it.",
-          subjectType: "tool",
-          subjectId: TOOLS.geocode.id,
-          readAt: null,
-          createdAt: minutesAgo(96),
-        },
-        {
-          id: "ntf_2fa9",
-          event: "spend.threshold_crossed",
-          severity: "INFO",
-          title: "This month's spend passed 10% of the monthly spending limit",
-          body: "$2.5094 charged of a $25.00 cap. This is a notice, not a refusal — a limit is what refuses.",
-          subjectType: "spend_policy",
-          subjectId: "sp_northwind",
-          readAt: minutesAgo(1300),
-          createdAt: minutesAgo(1440),
-        },
-        {
-          id: "ntf_8b30",
-          event: "payment_intent.refunded",
-          severity: "INFO",
-          title: "A deep_research call failed our checks — $1.20 was not charged",
-          body: "The result set was empty where the rules require at least two rows. The hold was released; your balance never moved.",
-          subjectType: "payment_intent",
-          subjectId: "b90f2c48-3a71-4e69-85d0-2f4a6c19e7b5",
-          readAt: null,
-          createdAt: minutesAgo(1558),
-        },
-        {
-          id: "ntf_7d65",
-          event: "deposit.credited",
-          severity: "INFO",
-          title: "$25.00 credited",
-          body: "Observed on Robinhood Chain testnet and credited in full. The credited amount is what we observed on chain.",
-          subjectType: "deposit",
-          subjectId: "dep_7f2a91c4",
-          readAt: minutesAgo(2870),
-          createdAt: minutesAgo(2878),
-        },
-      ],
-      pageInfo: { nextCursor: null, hasMore: false },
-    }),
+    // A fresh demo account has had no alerts. `unreadOnly` is honoured, as the server does.
+    body: (_path, query) => {
+      if (freshStage()) return { items: [], pageInfo: { nextCursor: null, hasMore: false } };
+      const unreadOnly = String(query?.unreadOnly) === "true";
+      return { items: demoNotifications().filter((n) => !unreadOnly || !n.readAt), pageInfo: { nextCursor: null, hasMore: false } };
+    },
+  },
+  {
+    method: "PATCH",
+    match: /^\/notifications\/[^/]+\/read$/,
+    body: (path) => {
+      // Any id: the demo feed also carries tool-set and contract notices made elsewhere.
+      const id = path.split("/")[2] ?? "";
+      demoReadIds.add(id);
+      const row = demoNotifications().find((n) => n.id === id);
+      return row ?? { id, readAt: new Date().toISOString() };
+    },
   },
   {
     method: "GET",
@@ -2236,3 +2203,61 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     ],
   },
 ];
+
+/** Alerts the demo visitor marked read (Dismiss, opening "See all alerts"), for this page load. */
+const demoReadIds = new Set<string>();
+
+/** Test hook: forget what was marked read. */
+export function resetDemoNotificationsRead(): void {
+  demoReadIds.clear();
+}
+
+function demoNotifications(): { id: string; readAt: string | null; [key: string]: unknown }[] {
+  const rows: { id: string; readAt: string | null; [key: string]: unknown }[] = [
+    {
+      id: "ntf_4c17",
+      event: "velocity.anomaly",
+      severity: "WARNING",
+      title: "geocode_place ran at eight times its usual rate for 20 minutes",
+      body: "34 calls between 09:10 and 09:30 UTC against a 7-day median of 4 in that window. Nothing was refused — the per-minute ceiling is 30 and the burst stayed under it.",
+      subjectType: "tool",
+      subjectId: TOOLS.geocode.id,
+      readAt: null,
+      createdAt: minutesAgo(96),
+    },
+    {
+      id: "ntf_2fa9",
+      event: "spend.threshold_crossed",
+      severity: "INFO",
+      title: "This month's spend passed 10% of the monthly spending limit",
+      body: "$2.5094 charged of a $25.00 cap. This is a notice, not a refusal — a limit is what refuses.",
+      subjectType: "spend_policy",
+      subjectId: "sp_northwind",
+      readAt: minutesAgo(1300),
+      createdAt: minutesAgo(1440),
+    },
+    {
+      id: "ntf_8b30",
+      event: "payment_intent.refunded",
+      severity: "INFO",
+      title: "A deep_research call failed our checks — $1.20 was not charged",
+      body: "The result set was empty where the rules require at least two rows. The hold was released; your balance never moved.",
+      subjectType: "payment_intent",
+      subjectId: "b90f2c48-3a71-4e69-85d0-2f4a6c19e7b5",
+      readAt: null,
+      createdAt: minutesAgo(1558),
+    },
+    {
+      id: "ntf_7d65",
+      event: "deposit.credited",
+      severity: "INFO",
+      title: "$25.00 credited",
+      body: "Observed on Robinhood Chain testnet and credited in full. The credited amount is what we observed on chain.",
+      subjectType: "deposit",
+      subjectId: "dep_7f2a91c4",
+      readAt: minutesAgo(2870),
+      createdAt: minutesAgo(2878),
+    },
+  ];
+  return rows.map((row) => (demoReadIds.has(row.id) ? { ...row, readAt: row.readAt ?? new Date().toISOString() } : row));
+}
