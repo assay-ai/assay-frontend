@@ -40,10 +40,10 @@ import { callPaymentNote, heldCallsText } from "@/features/buyer-debt/debt-copy"
 import { OwedRowAction } from "@/features/buyer-debt/owed-row-action";
 import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
-import { groupAlerts, isAlertResolved } from "@/features/buyer/alert-model";
+import { attentionRows } from "@/features/buyer/alert-model";
 import { callOutcome } from "@/features/buyer/call-outcome";
 import { absentBalanceTile, overviewBalance, singleBalanceSub } from "@/features/buyer/overview-balance";
-import { useOverview } from "@/features/buyer/use-overview";
+import { ATTENTION_SHOWN, useOverview } from "@/features/buyer/use-overview";
 import type { FullBalance } from "@/features/g30/balance";
 import { useChainName } from "@/hooks/useChainName";
 import { useEntityNames } from "@/hooks/useEntityNames";
@@ -66,9 +66,6 @@ import { toast } from "@/utils/toast";
  */
 
 const REFRESH_MS = 30_000;
-
-/** Needs attention shows this many; the rest are behind "See all alerts". */
-const ATTENTION_SHOWN = 5;
 
 function HoldFigure({ label, value }: { label: string; value: string }) {
   return (
@@ -125,29 +122,37 @@ export default function OverviewPage() {
 
   // Needs attention: unread alerts, the same alert raised twice in a minute
   // as one, and an alert whose cause has cleared (free calls reset, balance
-  // funded) left out. Leaving one out is display only: it stays unread and is
-  // still in the bell and "See all alerts". Dismiss marks it read.
+  // back above its line) left out. Leaving one out is display only: it stays
+  // unread and is still in the bell and "See all alerts". Dismiss marks every
+  // copy read; a copy whose request failed comes back.
   const limits = useAlertLimitContext();
   const markRead = useMarkAlertsRead();
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
-  const attention = useMemo(() => {
-    // The page's opening time: a reset after it shows the alert until the next visit (never the reverse).
-    const now = anchor.getTime();
-    const balances = data ? (data.balances as readonly FullBalance[]) : null;
-    return groupAlerts(data?.notifications ?? []).filter(
-      (group) => group.unread && !dismissed.has(group.note.id) && !isAlertResolved(group.note, { now, balances }),
-    );
-  }, [anchor, data, dismissed]);
-  const notifications = attention.slice(0, ATTENTION_SHOWN);
-  const dismiss = (group: (typeof attention)[number]) => {
-    setDismissed((prev) => new Set(prev).add(group.note.id));
+  const attention = useMemo(
+    () =>
+      attentionRows(data?.notifications ?? [], {
+        // The page's opening time: a reset after it shows the alert until the next visit (never the reverse).
+        now: anchor.getTime(),
+        balances: data ? (data.balances as readonly FullBalance[]) : null,
+        dismissed,
+        complete: data?.notificationsComplete ?? false,
+        shown: ATTENTION_SHOWN,
+      }),
+    [anchor, data, dismissed],
+  );
+  const notifications = attention.shown;
+  // "Nothing needs your attention" only when the unread list was read to its end and nothing is left.
+  const nothingNeedsYou = notifications.length === 0 && !attention.more;
+  const dismiss = (group: (typeof notifications)[number]) => {
+    setDismissed((prev) => new Set([...prev, ...group.ids]));
     markRead.mutate(group.ids, {
+      onSuccess: (failed) => {
+        if (failed.length === 0) return;
+        setDismissed((prev) => new Set([...prev].filter((id) => !failed.includes(id))));
+        toast.error("It could not be dismissed. Try again in a moment.");
+      },
       onError: () => {
-        setDismissed((prev) => {
-          const next = new Set(prev);
-          next.delete(group.note.id);
-          return next;
-        });
+        setDismissed((prev) => new Set([...prev].filter((id) => !group.ids.includes(id))));
         toast.error("It could not be dismissed. Try again in a moment.");
       },
     });
@@ -181,7 +186,9 @@ export default function OverviewPage() {
   // The three empty panels fold into one line instead of three "nothing yet"s.
   const nothingYet = Boolean(data) && scaleMax === 0 && openHolds.length === 0 && (data?.recentCalls.length ?? 0) === 0;
   // "Explore spend" waits for something to explore.
-  const hasSpend = Boolean(data) && (scaleMax > 0 || !isZeroMoney(data?.monthListed ?? null));
+  const hasSpend =
+    Boolean(data) &&
+    (scaleMax > 0 || !isZeroMoney(data?.monthListed ?? null) || (data?.recentCalls ?? []).some((call) => !isZeroMoney(call.charged)));
 
   const decimals = balance?.decimals ?? 6;
   const asset = balance?.asset ?? "";
@@ -343,7 +350,7 @@ export default function OverviewPage() {
           <PanelBody className="flex-row flex-wrap items-center gap-3 px-4 py-4 tablet:px-5">
             <p className="min-w-0 flex-1 text-body-13 text-02">
               <span className="text-label-13 text-01">No calls yet.</span> Spend, money on hold and recent calls appear here
-              after your agent&apos;s first call. {notifications.length === 0 ? "Nothing needs your attention." : null}
+              after your agent&apos;s first call. {nothingNeedsYou ? "Nothing needs your attention." : null}
             </p>
             {/* An empty call list helps nobody: the way to a first call is Get started's step 2. */}
             <Button variant="ghost" size="sm" asChild>
@@ -353,7 +360,7 @@ export default function OverviewPage() {
         </Panel>
       ) : null}
 
-      <section className={nothingYet && notifications.length === 0 ? "hidden" : "flex w-full flex-col gap-3.5 desktop:flex-row desktop:gap-4"}>
+      <section className={nothingYet && nothingNeedsYou ? "hidden" : "flex w-full flex-col gap-3.5 desktop:flex-row desktop:gap-4"}>
         <Panel className={nothingYet ? "hidden" : "order-2 min-w-0 flex-1 tablet:order-1"}>
           <PanelHeader>
             <PanelTitles>
@@ -385,7 +392,7 @@ export default function OverviewPage() {
             <PanelTitles>
               <PanelTitle>Needs attention</PanelTitle>
               <PanelDescription>
-                {attention.length === 1 ? "1 item" : `${formatCount(attention.length)} items`}
+                {attention.countLabel}
               </PanelDescription>
             </PanelTitles>
             <Button variant="ghost" size="sm" asChild>
@@ -393,8 +400,10 @@ export default function OverviewPage() {
             </Button>
           </PanelHeader>
           <PanelBody>
-            {notifications.length === 0 ? (
+            {nothingNeedsYou ? (
               <p className="px-5 py-4 text-body-sm text-02">Nothing needs your attention.</p>
+            ) : notifications.length === 0 ? (
+              <MoreAlerts />
             ) : (
               notifications.map((group, i) => {
                 const { note } = group;
@@ -433,6 +442,7 @@ export default function OverviewPage() {
                 );
               })
             )}
+            {notifications.length > 0 && attention.more ? <MoreAlerts /> : null}
           </PanelBody>
         </Panel>
       </section>
@@ -543,6 +553,18 @@ export default function OverviewPage() {
       </>
       )}
     </div>
+  );
+}
+
+/** Needs attention when there is more than it shows (or than one load read). */
+function MoreAlerts() {
+  return (
+    <p className="border-t border-01 px-4 py-3 text-body-13 text-02 first:border-t-0 tablet:px-5" data-testid="attention-more">
+      More unread alerts:{" "}
+      <Link href="/alerts?view=recent" className="font-semibold text-primary-600 hover:underline">
+        See all
+      </Link>
+    </p>
   );
 }
 

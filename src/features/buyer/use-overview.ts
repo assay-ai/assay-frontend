@@ -18,7 +18,11 @@ import {
 } from "@/services";
 import { toDecimal } from "@/utils/money";
 
+import { attentionRows } from "./alert-model";
 import { monthPeriod, recentDays, type Period } from "./period";
+
+/** Needs attention shows this many; the rest are behind "See all alerts". */
+export const ATTENTION_SHOWN = 5;
 import { readWithheld, type HoldRow, type SummaryWire, type WithheldForAsset } from "./wire";
 
 /** `GET /notifications` — `NotificationDto`, read off the running API. */
@@ -67,7 +71,10 @@ export interface OverviewData {
   /** Tool ids seen in the 7-day window, most-spent first. */
   chartTools: string[];
   recentCalls: ToolCall[];
+  /** Unread alerts, newest first: as many pages as Needs attention needed (see `readAttention`). */
   notifications: NotificationRow[];
+  /** The unread list was read to its end. When false, more unread alerts may exist. */
+  notificationsComplete: boolean;
 }
 
 export interface OverviewState {
@@ -114,6 +121,38 @@ async function loadChart(days: Period[]): Promise<{ chart: ChartDay[]; tools: st
   return { chart, tools };
 }
 
+/** Unread alerts per page, and the most pages one load reads. */
+const ATTENTION_PAGE = 50;
+const ATTENTION_PAGES = 5;
+
+/**
+ * Reads unread alerts page by page until Needs attention has its rows or the
+ * list ends. Cleared alerts stay unread (hiding is display only), so they can
+ * pile up above an open one; reading only the newest page would then say
+ * "Nothing needs your attention" while something does. The balances come
+ * from their own request, so "cleared" is judged here with balances unknown —
+ * never hiding more than the page will.
+ */
+async function readAttention(anchor: Date): Promise<{ items: NotificationRow[]; complete: boolean }> {
+  const items: NotificationRow[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < ATTENTION_PAGES; page += 1) {
+    const result = (await listNotifications({ limit: ATTENTION_PAGE, unreadOnly: true, cursor })) as CursorPage<NotificationRow>;
+    items.push(...(result.items ?? []));
+    cursor = result.pageInfo?.hasMore ? (result.pageInfo.nextCursor ?? undefined) : undefined;
+    if (!cursor) return { items, complete: true };
+    const open = attentionRows(items, {
+      now: anchor.getTime(),
+      balances: null,
+      dismissed: new Set(),
+      complete: false,
+      shown: ATTENTION_SHOWN,
+    });
+    if (open.shown.length >= ATTENTION_SHOWN) break;
+  }
+  return { items, complete: false };
+}
+
 /** `assetKey`: the display-asset pick; a change refetches without a reload. */
 export function useOverview(anchor: Date, assetKey: string | null = null): OverviewState {
   const [data, setData] = useState<OverviewData | null>(null);
@@ -149,8 +188,7 @@ export function useOverview(anchor: Date, assetKey: string | null = null): Overv
       loadChart(days),
       listToolCalls({ limit: 6, sort: "createdAt", order: "desc" }),
       // Needs attention: unread only, so a dismissed (read) alert stays gone.
-      // More than it shows, because cleared and repeated ones are left out.
-      listNotifications({ limit: 20, unreadOnly: true }) as Promise<CursorPage<NotificationRow>>,
+      readAttention(anchor),
     ])
       .then(([balances, holds, withheldRaw, monthSummary, todaySummary, yesterdaySummary, chart, calls, notes]) => {
         if (cancelled) return;
@@ -173,7 +211,8 @@ export function useOverview(anchor: Date, assetKey: string | null = null): Overv
           chart: chart.chart,
           chartTools: chart.tools,
           recentCalls: calls.items ?? [],
-          notifications: notes.items ?? [],
+          notifications: notes.items,
+          notificationsComplete: notes.complete,
         });
         setLoading(false);
       })
@@ -190,7 +229,7 @@ export function useOverview(anchor: Date, assetKey: string | null = null): Overv
     return () => {
       cancelled = true;
     };
-  }, [month, days, today, yesterday, nonce, assetKey]);
+  }, [anchor, month, days, today, yesterday, nonce, assetKey]);
 
   const reload = useCallback(() => setNonce((n) => n + 1), []);
 

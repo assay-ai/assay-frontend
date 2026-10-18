@@ -342,6 +342,8 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   // Free calls only: funding and paying do not apply, so they are not steps
   // (counted as done they made the bar read "2 of 4" before anything was done).
   const steps = facts.freeOnly ? allSteps.filter((step) => step.id === "key" || step.id === "call") : allSteps;
+  // The asked step opens only once it can be done; while it waits on an earlier one, the current step opens.
+  const askedOpen = askedStep !== null && steps.some((step) => step.id === askedStep && step.state !== "blocked");
 
   return (
     <>
@@ -356,7 +358,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
         }
         steps={steps}
         loading={loading}
-        expandedId={revealing ? "key" : expanded === undefined && askedStep && steps.some((step) => step.id === askedStep) ? askedStep : expanded}
+        expandedId={revealing ? "key" : expanded === undefined && askedOpen ? askedStep : expanded}
         onExpandedChange={setExpanded}
         doneTitle={facts.freeOnly || invitation ? "All set: your agent can make free calls" : "All set: your agent can call tools and pay for them"}
         doneDescription="Watch its calls under Activity. Change its spending limits under Controls."
