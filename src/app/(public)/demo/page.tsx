@@ -2,6 +2,7 @@
 
 import { Check, Minus, Play, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { UnavailablePage } from "@/components/explorer/unavailable-page";
@@ -59,6 +60,10 @@ import { formatMoney } from "@/utils/money";
  * turned away by a real protection working correctly. The page says so and
  * invites them to type their own question, rather than showing an error that
  * reads like the demo being broken.
+ *
+ * Where the deployment runs no demo (`GET /public/features`), the address goes
+ * straight to How it works; nothing links here then. Only when the status
+ * cannot be read at all does the page stay and say the demo is not running.
  */
 
 const DEFAULT_QUERY = "cargo ship";
@@ -75,7 +80,10 @@ interface ColumnState {
 const EMPTY: ColumnState = { running: false, run: null, verdict: null, error: null };
 
 export default function DemoPage() {
+  const router = useRouter();
   const [configured, setConfigured] = React.useState<boolean | null>(null);
+  // The deployment says the demo is off: the address is a dead end, so go to How it works.
+  const [off, setOff] = React.useState(false);
   const [compensation, setCompensation] = React.useState<DemoCompensation | null>(null);
   const [queries, setQueries] = React.useState({ pass: DEFAULT_QUERY, fail: DEFAULT_QUERY });
   const [columns, setColumns] = React.useState<{ pass: ColumnState; fail: ColumnState }>({
@@ -88,16 +96,22 @@ export default function DemoPage() {
     getDemoStatus()
       .then((status) => {
         if (cancelled) return;
-        setConfigured(status.configured);
+        if (!status.configured) {
+          setOff(true);
+          router.replace("/how-it-works");
+          return;
+        }
+        setConfigured(true);
         setCompensation(status.compensation);
       })
       .catch(() => {
+        // Could not ask (network, outage): not proof the demo is off, so say so here instead of leaving.
         if (!cancelled) setConfigured(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router]);
 
   const execute = React.useCallback(
     async (side: "pass" | "fail") => {
@@ -146,6 +160,8 @@ export default function DemoPage() {
     },
     [queries]
   );
+
+  if (off) return <Shell>{null}</Shell>;
 
   if (configured === false) {
     return (
