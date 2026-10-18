@@ -5,16 +5,23 @@ import { schemaFields, type SchemaField } from "../mapping-editor";
 /**
  * Starting points for a new listing, so stage 2 opens filled in rather than
  * blank: a request mapping that forwards every tool argument as a query
- * parameter of the same name, a response mapping that reads every output
+ * parameter of the same name (an argument the tool does not require "may be
+ * missing", so a call without it still works; no path, so the address is
+ * called exactly as typed, with no trailing "/"), a response mapping that reads every output
  * field from the same name, and test arguments taken from the schema's own
  * `examples` / `example` / `default` / first `enum` value.
  */
 
 export function seedRequestMapping(tool: CatalogueTool): ToolMapping {
   const fields = schemaFields(tool.inputSchema);
-  const seed: ToolMapping = { method: "GET", path: "/" };
+  const seed: ToolMapping = { method: "GET" };
   if (fields.length > 0) {
-    seed.query = Object.fromEntries(fields.map((field) => [field.name, { $path: `$.${field.name}` }]));
+    seed.query = Object.fromEntries(
+      fields.map((field) => [
+        field.name,
+        field.required ? { $path: `$.${field.name}` } : { $path: `$.${field.name}`, $optional: true },
+      ]),
+    );
   }
   return seed;
 }
