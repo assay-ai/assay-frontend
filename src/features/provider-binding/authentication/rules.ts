@@ -68,25 +68,44 @@ export function credentialQueryKeys(endpoint: string): string[] {
  * never carries them.
  */
 export function moveQueryKeys(endpoint: string): { endpoint: string; headers: CredentialHeaderInput[] } | null {
-  let url: URL;
+  const typed = endpoint.trim();
   try {
-    url = new URL(endpoint.trim());
+    new URL(typed);
   } catch {
     return null;
   }
+  // Pairs are split by hand, not through `URLSearchParams`, so the ones kept
+  // stay byte for byte as typed (no re-encoding of "," or "%20").
+  const hash = typed.indexOf("#");
+  const beforeHash = hash < 0 ? typed : typed.slice(0, hash);
+  const fragment = hash < 0 ? "" : typed.slice(hash);
+  const question = beforeHash.indexOf("?");
+  if (question < 0) return null;
+  const address = beforeHash.slice(0, question);
   const headers: CredentialHeaderInput[] = [];
-  for (const [key, value] of [...url.searchParams.entries()]) {
-    if (!isCredentialQueryKey(key)) continue;
-    if (!headers.some((header) => header.name === key)) headers.push({ name: key, value });
-    url.searchParams.delete(key);
+  const kept: string[] = [];
+  for (const pair of beforeHash.slice(question + 1).split("&")) {
+    if (pair === "") continue;
+    const at = pair.indexOf("=");
+    const rawKey = at < 0 ? pair : pair.slice(0, at);
+    const rawValue = at < 0 ? "" : pair.slice(at + 1);
+    const key = decodeQueryPart(rawKey);
+    if (!isCredentialQueryKey(key)) {
+      kept.push(pair);
+      continue;
+    }
+    if (!headers.some((header) => header.name === key)) headers.push({ name: key, value: decodeQueryPart(rawValue) });
   }
   if (headers.length === 0) return null;
-  // `URL` keeps a bare "?" once the last parameter is gone, and adds a "/" to
-  // a bare origin: give the address back as the provider typed it.
-  let text = url.href.replace(/\?$/, "");
-  const typedHadPath = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]+\//i.test(endpoint.trim());
-  if (!typedHadPath && url.pathname === "/") text = text.replace(/\/(?=$|[?#])/, "");
-  return { endpoint: text, headers };
+  return { endpoint: `${address}${kept.length > 0 ? `?${kept.join("&")}` : ""}${fragment}`, headers };
+}
+
+function decodeQueryPart(text: string): string {
+  try {
+    return decodeURIComponent(text.replace(/\+/g, " "));
+  } catch {
+    return text;
+  }
 }
 
 function headerProblem(header: CredentialHeaderInput): string | null {

@@ -146,6 +146,13 @@ describe("moveQueryKeys", () => {
     expect(moveQueryKeys("https://x.test?token=t")?.endpoint).toBe("https://x.test");
   });
 
+  it("keeps the other pairs byte for byte, re-encoding nothing", () => {
+    expect(moveQueryKeys("https://x.test/v1?ids=bitcoin,ethereum&api_key=k%2Fv&q=a%20b&flag")).toEqual({
+      endpoint: "https://x.test/v1?ids=bitcoin,ethereum&q=a%20b&flag",
+      headers: [{ name: "api_key", value: "k/v" }],
+    });
+  });
+
   it("returns null when there is nothing to move", () => {
     expect(moveQueryKeys("https://x.test/v1?units=metric")).toBeNull();
     expect(moveQueryKeys("not a url")).toBeNull();
