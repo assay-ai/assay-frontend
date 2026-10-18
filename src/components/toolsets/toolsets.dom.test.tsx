@@ -310,7 +310,10 @@ describe("the client tabs", () => {
     expect(out).toContain("assay_live_ab12…REST_OF_YOUR_KEY");
   });
 
-  it("snippets scroll sideways on a phone", () => {
-    expect(render(<McpConfigTabs token="k" url="https://mcp.example.com/" />)).toContain("overflow-x-auto");
+  it("snippets wrap on a phone, so the URL and the header stay visible (review F, 390px)", () => {
+    const html = render(<McpConfigTabs token="k" url="https://mcp.example.com/" />);
+    expect(html).toContain("whitespace-pre-wrap");
+    expect(html).toContain("break-all");
+    expect(html).not.toContain("overflow-x-auto");
   });
 });

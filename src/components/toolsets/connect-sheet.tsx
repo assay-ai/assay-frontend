@@ -5,7 +5,8 @@ import { Check, CircleCheck, Copy, Info, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { McpConfigTabs } from "@/components/buyer-money/mcp-config-tabs";
+import { createKeyErrorText, useCreateKey } from "@/components/buyer-money/create-key";
+import { McpConfigTabs, TEMPLATE_COPY_REASON } from "@/components/buyer-money/mcp-config-tabs";
 import { useAgentsAndKeys, type KeyRow } from "@/components/buyer-money/use-agents";
 import { useCatalogue } from "@/components/g31/use-catalogue";
 import { EntityPicker } from "@/components/patterns/entity-picker";
@@ -15,6 +16,7 @@ import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { isMcpClient, keyMode, mcpConfig, type McpClient } from "@/features/buyer-money/mcp-config";
+import { NEW_KEY_PAYS_NOTE } from "@/components/buyer-money/create-key";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
 import {
   buildMcpUrl,
@@ -33,7 +35,6 @@ import { defaultEntry } from "@/features/toolsets/entry-rules";
 import { ALWAYS_LATEST_LABEL, DISCOVERY_DETAILS, DISCOVERY_LABELS, DRAFT_NOTICE, HOW_AGENT_SEES_LABEL, lockLabel } from "@/features/toolsets/labels";
 import { badgeLabel } from "@/features/toolsets/public";
 import { cantRunReason, cantRunTools, copyBlocked, offersFreeOnly, overBudgetWith, previewSummary, previewWarnings, type PreviewWarning } from "@/features/toolsets/preview";
-import { createCredential } from "@/services/account.service";
 import type { PublicToolsetCard } from "@/services/public-toolsets.service";
 import { createToolset, recordConnectUrl, type McpUrlPreview } from "@/services/toolsets.service";
 import { cn } from "@/utils";
@@ -74,8 +75,13 @@ import {
  * loaded" and "Only free tools". Copy or Done records the URL
  * (`POST /agents/:id/connect-urls`) and the sheet waits for the first call.
  *
- * On a phone the result comes first and Copy sticks to the bottom; URLs
- * wrap (`break-all`) and snippets scroll sideways.
+ * The title names what is connected and to which agent ("Connect Research
+ * to My agent"). Copy is off while the snippet holds a placeholder: "Create a
+ * key and fill it in" comes first, and "Copy the URL only" stays for a person
+ * who has their key. The full key lives in this component's memory only.
+ *
+ * On a phone the result comes first and Copy sticks to the bottom; URLs and
+ * snippets wrap.
  */
 
 const CLIENT_KEY = "assay.connect.client.";
@@ -141,7 +147,8 @@ function kindOfInitial(choice: ConnectChoice | undefined): ChoiceKind {
   }
 }
 
-function ConnectBody({
+/** Exported for tests: the sheet's content, without the Radix portal. */
+export function ConnectBody({
   agentProp,
   initialUrl,
   changing,
@@ -233,17 +240,15 @@ function ConnectBody({
     (servers.data?.servers ?? []).filter((s) => s.canonicalUrl !== preview.data?.canonicalUrl && s.canonicalUrl !== url).map((s) => s.serverName),
   );
 
-  // The key: the full one only when it was created here; otherwise its prefix.
-  const liveKeys: KeyRow[] = (effectiveAgentId ? data.keys[effectiveAgentId] ?? [] : []).filter((k) => !k.revokedAt);
-  const [created, setCreated] = React.useState<{ token: string; prefix: string } | null>(null);
+  // The key: the full one only when it was created here (memory only); otherwise its prefix.
+  const agentKeys: KeyRow[] = effectiveAgentId ? (data.keys[effectiveAgentId] ?? []) : [];
+  const liveKeys = agentKeys.filter((k) => !k.revokedAt);
+  const [created, setCreated] = React.useState<{ token: string; prefix: string; name: string } | null>(null);
   const keyPrefix = created?.prefix ?? liveKeys[0]?.prefix ?? null;
-  const createKey = useMutation({
-    mutationFn: () => createCredential(effectiveAgentId!, { name: "My agent", scopes: ["tools:call"] }) as Promise<{ token: string; prefix: string }>,
-    onSuccess: (key) => {
-      setCreated({ token: key.token, prefix: key.prefix });
-      void queryClient.invalidateQueries({ queryKey: ["agent-keys"] });
-    },
-  });
+  const keyName = created?.name ?? liveKeys[0]?.name ?? null;
+  const createKey = useCreateKey(effectiveAgentId, agentKeys.length, (key) => setCreated({ token: key.token, prefix: key.prefix, name: key.name }));
+  // A key made for another agent is not this agent's.
+  React.useEffect(() => setCreated(null), [effectiveAgentId]);
 
   // The client tab, remembered per agent (this browser first, else the server's last hand-out).
   const [client, setClient] = React.useState<McpClient>("claude-code");
@@ -281,7 +286,7 @@ function ConnectBody({
     record.mutate();
   };
   const copy = async () => {
-    if (!url || blocked) return;
+    if (!url || blocked || !created) return;
     try {
       await navigator.clipboard.writeText(snippet);
       setCopied(true);
@@ -316,6 +321,31 @@ function ConnectBody({
   };
 
   const agentName = agent?.label ?? "your agent";
+  // What is being connected, named for the title.
+  const subject =
+    kind === "toolset" && mine
+      ? mine.name
+      : kind === "shared" && sharedInfo
+        ? sharedInfo.name
+        : kind === "topic" && category
+          ? topicLabel(category)
+          : kind === "tools" && tools.length === 1
+            ? tools[0]!
+            : kind === "tools" && tools.length > 1
+              ? `${tools.length} tools`
+              : kind === "everything"
+                ? "Everything"
+                : null;
+  const copyUrlOnly = async () => {
+    if (!url || blocked) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("URL copied. Your client also needs the header with your key.");
+    } catch {
+      toast.error("Copy did not work here: select the text and copy it.");
+    }
+    handOut();
+  };
   // `?tools=` takes each tool's MCP name (never its display name); tools no provider serves are shown, disabled.
   const toolOptions = catalogue.tools
     .map((t) => ({ tool: t, mcp: mcpToolName(t) }))
@@ -346,7 +376,7 @@ function ConnectBody({
   return (
     <>
       <SheetHeader>
-        <SheetTitle>Connect “{agentName}”</SheetTitle>
+        <SheetTitle className="[overflow-wrap:anywhere]">{subject ? `Connect ${subject} to ${agentName}` : `Connect ${agentName}`}</SheetTitle>
         <SheetDescription>{changing ? "Pick again; the result is a new URL. Replace the old URL in your app." : "One question, then copy."}</SheetDescription>
       </SheetHeader>
 
@@ -542,12 +572,8 @@ function ConnectBody({
 
         {url && !blocked ? (
           <div className="flex min-w-0 flex-col gap-2">
-            <KeyLine
-              prefix={keyPrefix}
-              full={Boolean(created)}
-              creating={createKey.isPending}
-              onCreate={effectiveAgentId ? () => createKey.mutate() : undefined}
-            />
+            <KeyLine prefix={keyPrefix} keyName={keyName} agentName={agent?.label ?? null} full={Boolean(created)} />
+            {created ? <p className="text-body-xs text-03">{NEW_KEY_PAYS_NOTE}</p> : null}
             <McpConfigTabs
               token={created?.token ?? null}
               keyPrefix={keyPrefix}
@@ -556,6 +582,9 @@ function ConnectBody({
               client={client}
               onClientChange={setClientRemembered}
               onCopy={() => handOut()}
+              onCreateKey={effectiveAgentId ? () => createKey.mutate() : undefined}
+              creatingKey={createKey.isPending}
+              createKeyError={createKey.isError ? createKeyErrorText(createKey.error) : null}
             />
           </div>
         ) : null}
@@ -640,7 +669,15 @@ function ConnectBody({
       </div>
 
       <div className="sticky bottom-0 z-10 flex w-full flex-wrap items-center gap-2 border-t border-01 bg-01 px-[18px] py-3">
-        <Button type="button" icon={copied ? <Check /> : <Copy />} onClick={() => void copy()} disabled={!url || blocked} data-testid="connect-copy" aria-live="polite">
+        <Button
+          type="button"
+          icon={copied ? <Check /> : <Copy />}
+          onClick={() => void copy()}
+          disabled={!url || blocked || !created}
+          title={!created && url && !blocked ? TEMPLATE_COPY_REASON : undefined}
+          data-testid="connect-copy"
+          aria-live="polite"
+        >
           {copied ? "Copied" : "Copy"}
         </Button>
         <Button
@@ -651,6 +688,11 @@ function ConnectBody({
         >
           Done
         </Button>
+        {url && !blocked && !created ? (
+          <button type="button" className="min-h-10 text-label-13 font-semibold text-primary-600 hover:underline" onClick={() => void copyUrlOnly()} data-testid="connect-copy-url">
+            Copy the URL only
+          </button>
+        ) : null}
         {blocked ? <span className="text-body-xs text-danger-700">Nothing to copy: this agent can use none of these tools.</span> : null}
       </div>
     </>
@@ -895,35 +937,18 @@ export function ResultLine({
   );
 }
 
-function KeyLine({ prefix, full, creating, onCreate }: { prefix: string | null; full: boolean; creating: boolean; onCreate?: () => void }) {
+function KeyLine({ prefix, keyName, agentName, full }: { prefix: string | null; keyName: string | null; agentName: string | null; full: boolean }) {
   if (!prefix) {
-    return (
-      <p className="flex flex-wrap items-center gap-2 text-body-13 text-02">
-        This agent has no key yet.
-        {onCreate ? (
-          <Button size="sm" type="button" loading={creating} onClick={onCreate}>
-            Create a key
-          </Button>
-        ) : null}
-      </p>
-    );
+    return <p className="text-body-13 text-02">{agentName ?? "This agent"} has no key yet. Create one below: the config then carries it.</p>;
   }
   const mode = keyMode(prefix);
-  const name = prefix.replace(/[.…]+$/, "");
+  const shown = prefix.replace(/[.…]+$/, "");
   return (
     <p className="text-body-xs text-03" data-testid="connect-key-line">
-      Uses {mode ?? "the"} key <span className="font-mono text-01">{name}…</span>
-      {full ? (
-        <span className="text-warning-700"> · shown in full once: copy it now.</span>
-      ) : onCreate ? (
-        <>
-          {" "}
-          · the full key was shown once, when it was made.{" "}
-          <button type="button" className="font-semibold text-primary-600 hover:underline" disabled={creating} onClick={onCreate}>
-            Create a new key
-          </button>
-        </>
-      ) : null}
+      Uses the {mode ? `${mode} ` : ""}key {keyName ? <>“{keyName}” </> : null}
+      <span className="font-mono text-01">{shown}…</span>
+      {agentName ? <> of {agentName}</> : null}
+      {full ? <span className="text-warning-700"> · shown in full once: copy it now.</span> : " · the full key was shown once, when it was made."}
     </p>
   );
 }

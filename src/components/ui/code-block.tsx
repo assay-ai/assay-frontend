@@ -14,6 +14,13 @@ export interface CodeBlockProps
   copyable?: boolean;
   /** Fired after the copy button successfully writes `code` to the clipboard. */
   onCopyCode?: (code: string) => void;
+  /**
+   * Shows the copy button disabled, with this as its reason (a template that
+   * still holds a placeholder must not be copied as if it were ready).
+   */
+  copyDisabledReason?: string | null;
+  /** Wrap long lines instead of scrolling sideways (commands and configs on a phone). */
+  wrap?: boolean;
 }
 
 /**
@@ -23,7 +30,7 @@ export interface CodeBlockProps
  * dark "Code Block" chrome.
  */
 export const CodeBlock = React.forwardRef<HTMLDivElement, CodeBlockProps>(
-  ({ title, code, copyable = true, onCopyCode, className, ...props }, ref) => {
+  ({ title, code, copyable = true, onCopyCode, copyDisabledReason, wrap = false, className, ...props }, ref) => {
     const [copied, setCopied] = React.useState(false);
     const resetTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -55,17 +62,25 @@ export const CodeBlock = React.forwardRef<HTMLDivElement, CodeBlockProps>(
           {copyable ? (
             <button
               type="button"
-              onClick={handleCopy}
-              aria-label={copied ? `Copied ${title} to clipboard` : `Copy ${title} to clipboard`}
-              className="flex items-center gap-1.5 rounded-sm bg-overlay-light px-2 py-1 text-label-xs text-01 dark:bg-overlay-dark"
+              onClick={copyDisabledReason ? undefined : handleCopy}
+              disabled={Boolean(copyDisabledReason)}
+              title={copyDisabledReason ?? undefined}
+              aria-label={
+                copyDisabledReason
+                  ? `Copy ${title}: ${copyDisabledReason}`
+                  : copied
+                    ? `Copied ${title} to clipboard`
+                    : `Copy ${title} to clipboard`
+              }
+              className="flex items-center gap-1.5 rounded-sm bg-overlay-light px-2 py-1 text-label-xs text-01 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-overlay-dark"
             >
               {copied ? <Check width={13} height={13} /> : <Copy width={13} height={13} />}
               <span>{copied ? "Copied" : "Copy"}</span>
             </button>
           ) : null}
         </div>
-        <div className="w-full overflow-x-auto px-3.5 pb-4">
-          <pre className="w-full whitespace-pre text-mono-12 font-mono text-01">{code}</pre>
+        <div className={cn("w-full px-3.5 pb-4", wrap ? null : "overflow-x-auto")}>
+          <pre className={cn("w-full text-mono-12 font-mono text-01", wrap ? "whitespace-pre-wrap break-all" : "whitespace-pre")}>{code}</pre>
         </div>
       </div>
     );
