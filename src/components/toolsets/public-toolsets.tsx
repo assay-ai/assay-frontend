@@ -5,9 +5,12 @@ import Link from "next/link";
 import * as React from "react";
 
 import { useSignedIn } from "@/components/explorer/start-free";
+import { PageHeader } from "@/components/g31/chrome";
+import { ExploreNav } from "@/components/g31/explore-nav";
 import { PageState, Skeleton } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
+import { Search } from "@/components/ui/search";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { usePublicTools } from "@/features/explorer/use-public-explorer";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
@@ -204,6 +207,40 @@ export function ToolsetCatalogue({ query, onClearQuery }: { query: string; onCle
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * Explore › Tool sets (`/explore/toolsets`): the shared tool sets inside the
+ * app, so a signed-in buyer does not have to leave for the public catalogue
+ * to find one (review F-P1). The same list and filters as the catalogue's tab;
+ * each card opens the tool set's page, where Connect adds it to an agent.
+ */
+export function ExploreToolsetsView() {
+  const [query, setQuery] = React.useState("");
+  return (
+    <div className="flex w-full flex-col gap-4 px-4 py-4 tablet:px-7 tablet:py-[18px]">
+      <ExploreNav />
+      <PageHeader
+        title="Tool sets"
+        subtitle="Ready-made groups of tools, each with its own server URL"
+        actions={
+          <>
+            <Search
+              wrapperClassName="w-full tablet:w-[300px]"
+              placeholder="Search tool sets"
+              aria-label="Search tool sets"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <Button asChild variant="secondary">
+              <Link href="/toolsets/mine">Your tool sets</Link>
+            </Button>
+          </>
+        }
+      />
+      <ToolsetCatalogue query={query} onClearQuery={() => setQuery("")} />
     </div>
   );
 }

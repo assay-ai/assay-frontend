@@ -164,6 +164,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/explore": "Explore",
   "/explore/providers": "Providers",
   "/explore/providers/view": "Provider",
+  "/explore/toolsets": "Tool sets",
   "/alerts": "Alerts",
   "/audit-log": "Account history",
   "/team": "Team",

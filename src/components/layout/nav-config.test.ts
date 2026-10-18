@@ -39,6 +39,7 @@ const UNLINKED: Record<string, string> = {
   "/explore/providers": "inside Explore",
   "/explore/providers/view": "a record page, opened from a row",
   "/explore/tools": "inside Explore",
+  "/explore/toolsets": "inside Explore",
   "/receipts/view": "a record page, opened from a call",
   "/spend/disputes/view": "a record page, opened from a report or a receipt",
   "/payments/view": "a record page, opened from a notification",
