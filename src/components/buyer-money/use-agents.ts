@@ -52,9 +52,10 @@ function nextBust(): string {
   return new Date(bust).toISOString();
 }
 
-export function useSpendPolicyQuery() {
+export function useSpendPolicyQuery(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ["spend-policy"],
+    enabled: options.enabled ?? true,
     retry: false,
     queryFn: async (): Promise<SpendPolicy | null> => {
       try {

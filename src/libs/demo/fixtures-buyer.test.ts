@@ -4,7 +4,7 @@ import { isReplaceable } from "@/features/buyer-debt/debt-copy";
 
 import { demoResponse } from "./demo-api";
 import { DEMO_FIXTURES } from "./fixtures";
-import { demoDebt, demoDebts, resetDemoAgentLabels } from "./fixtures-buyer";
+import { demoDebt, demoDebts, resetDemoAgentLabels, resetDemoNotificationsRead } from "./fixtures-buyer";
 import { demoOfferPriceMinor } from "./fixtures-explore";
 
 describe("the demo buyer debt", () => {
@@ -193,5 +193,31 @@ describe("the demo's money results (B7)", () => {
         expect(item.refundableIfReportedUntil).toBe(receipt.refundableIfReportedUntil);
       }
     });
+  });
+});
+
+describe("the demo's alerts (B8)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetDemoNotificationsRead();
+  });
+
+  it("keeps a dismissed alert read: the unread-only list and the badge drop it", () => {
+    vi.stubEnv("NEXT_PUBLIC_DEMO_CHAINS", "robinhood");
+    const unreadIds = () =>
+      (demoResponse("GET", "/notifications", { unreadOnly: true }) as { items: { id: string }[] }).items.map((n) => n.id);
+    const count = () => (demoResponse("GET", "/notifications/unread-count") as { count: number }).count;
+    expect(unreadIds()).toContain("ntf_4c17");
+    const before = count();
+
+    const read = demoResponse("PATCH", "/notifications/ntf_4c17/read") as { id: string; readAt: string | null };
+    expect(read).toMatchObject({ id: "ntf_4c17" });
+    expect(read.readAt).not.toBeNull();
+    expect(unreadIds()).not.toContain("ntf_4c17");
+    expect(count()).toBe(before - 1);
+
+    demoResponse("POST", "/notifications/read-all");
+    expect(unreadIds()).not.toContain("ntf_8b30");
+    expect(count()).toBe(0);
   });
 });
