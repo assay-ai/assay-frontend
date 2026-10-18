@@ -403,7 +403,15 @@ export interface PreviewTool {
   price: string | null;
   providerCount: number;
   noProviderFits: boolean;
+  /**
+   * Why no provider fits, when none does: the rules removed every provider,
+   * the providers left settle only on a chain this buyer cannot pay on, or
+   * they are not taking calls. `null` when a provider fits.
+   */
+  noFitReason?: NoFitReason | null;
 }
+
+export type NoFitReason = "RULES" | "OTHER_CHAIN" | "NOT_TAKING_CALLS";
 
 /** A tool a preview warning is about; `toolId` is null for an ignored `?tools=` name. */
 export interface PreviewWarningTool {

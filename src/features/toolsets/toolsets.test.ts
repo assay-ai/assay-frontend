@@ -21,7 +21,7 @@ import {
 } from "./access-result";
 import { defaultEntry, entryChipLabel, entryProblem, providersLeft, slugFrom } from "./entry-rules";
 import { ON_EMPTY_LABELS, PROVIDER_MODE_LABELS, REFUSAL_LAYER_LABELS } from "./labels";
-import { copyBlocked, offersFreeOnly, overBudgetWith, previewCounts, previewSummary, previewWarnings, tokensText } from "./preview";
+import { cantRunTools, copyBlocked, offersFreeOnly, overBudgetWith, previewCounts, previewSummary, previewWarnings, tokensText } from "./preview";
 import { providerReason, refusedCallView, viaText } from "./refused";
 
 const ASSET = "eip155:1/erc20:0xabc";
@@ -469,15 +469,42 @@ function server(over: Partial<ServerInUse> = {}): ServerInUse {
 }
 
 describe("search mode in the Connect sheet (T2)", () => {
-  it("reads like '4 tools (search) — about 0.9k tokens; 37 tools reachable'", () => {
+  it("reads 'Your agent can reach 1 of 8 tools (7 can't run: why) through search', never three bare counts", () => {
     expect(previewSummary(preview({ discovery: "SEARCH", listedCount: 4, estimatedTokens: 900, reachableCount: 37 }))).toBe(
-      "4 tools (search) — about 0.9k tokens; 37 tools reachable, 1 blocked for this agent",
+      "Your agent can reach 37 tools (1 can't run: 1 blocked for this agent) through search: 4 tools listed, about 0.9k tokens.",
     );
     const all = preview({ tools: [preview().tools[0]!] });
-    expect(previewSummary({ ...all, discovery: "SEARCH", listedCount: 4, estimatedTokens: 900, reachableCount: 37 })).toBe("4 tools (search) — about 0.9k tokens; 37 tools reachable");
-    expect(previewSummary(preview({ discovery: "SEARCH", listedCount: 3, estimatedTokens: 570, reachableCount: 1 }))).toBe(
-      "3 tools (search) — about 0.6k tokens; 1 of 2 tools reachable, 1 blocked for this agent",
+    expect(previewSummary({ ...all, discovery: "SEARCH", listedCount: 4, estimatedTokens: 900, reachableCount: 37 })).toBe(
+      "Your agent can reach 37 tools through search: 4 tools listed, about 0.9k tokens.",
     );
+    // The review's case: Everything, 1 of 8 reachable, the rest with no provider taking calls.
+    const base = preview().tools[0]!;
+    const eight = preview({
+      discovery: "SEARCH",
+      listedCount: 3,
+      estimatedTokens: 430,
+      reachableCount: 1,
+      tools: [base, ...Array.from({ length: 7 }, (_, i) => ({ ...base, toolId: `t${i + 10}`, name: `tool_${i}`, listed: false, price: null, providerCount: 0 }))],
+    });
+    expect(previewSummary(eight)).toBe(
+      "Your agent can reach 1 of 8 tools (7 can't run: 7 with no provider taking calls) through search: 3 tools listed, about 430 tokens.",
+    );
+  });
+
+  it("names a chain mismatch as the chain, not as the agent's limits (review F-P1)", () => {
+    const base = preview().tools[0]!;
+    const p = preview({
+      tools: [base, { ...base, toolId: "t9", name: "get_weather_om", noProviderFits: true, noFitReason: "OTHER_CHAIN", price: null, providerCount: 0 }],
+      listedCount: 2,
+      warnings: [{ code: "NO_PROVIDER_FITS", tools: [{ toolId: "t9", name: "get_weather_om" }] }],
+    });
+    expect(previewSummary(p)).toBe("2 tools here: 1 ready to use, 1 whose providers don't take payment on your chain (~2.8k tokens).");
+    expect(previewWarnings(p).map((w) => w.text)).toEqual([
+      "The providers left for get_weather_om don't take payment on your chain, so it can't run for this agent.",
+    ]);
+    expect(cantRunTools(p)).toEqual([
+      { toolId: "t9", name: "get_weather_om", reason: "OTHER_CHAIN", text: "its providers don't take payment on your chain" },
+    ]);
   });
 });
 
