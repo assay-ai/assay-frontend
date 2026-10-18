@@ -42,7 +42,7 @@ export const NOT_CHARGED_LINE_COPY: readonly NotChargedLineCopy[] = [
   {
     bucket: "NOT_COLLECTED",
     label: "Not collected (the provider could not be paid)",
-    note: "served, but the payment was never taken",
+    note: "served, but the payment was not taken",
     phrase: "not collected",
   },
 ];
@@ -52,7 +52,12 @@ export interface NotChargedLine extends NotChargedLineCopy {
   amount: Money | null;
 }
 
-/** The bucket a not-charged call falls in, from its status (the API's own rule). */
+/**
+ * The bucket a NOT-CHARGED call falls in, from its status (the API's own rule).
+ * Only for a call already known to be not charged: a `SETTLED` call is
+ * "not collected" only when it was never collected and is not owed, and a
+ * charged one is in no bucket at all.
+ */
 export function bucketOfStatus(status: string): string | null {
   if (status === "REFUNDED") return "FAILED_VERIFICATION";
   if (status === "VOIDED" || status === "EXPIRED")

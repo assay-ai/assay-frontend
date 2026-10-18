@@ -217,6 +217,7 @@ export function foldReasons(verdicts: VerdictRow[], calls: ToolCall[]): FailureR
 
 function reasonOf(call: ToolCall, reasonCode: string | null): { key: string; label: string } {
   if (call.status === "SETTLED") {
+    if (call.refundedByReport) return { key: "REFUNDED_BY_REPORT", label: "Refunded after your report was upheld" };
     return call.forfeited
       ? { key: "FORFEITED", label: "The provider forfeited the payment" }
       : { key: "DEBT_VOIDED", label: "The payment was cancelled after a late check result" };

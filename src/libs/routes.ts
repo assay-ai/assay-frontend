@@ -31,6 +31,8 @@ export const routes = {
     const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => Boolean(v))) as Record<string, string>;
     return Object.keys(params).length > 0 ? withQuery("/spend/calls", params) : "/spend/calls";
   },
+  /** Reports: every call this organization reported as a bad result (route keeps "disputes"). */
+  disputes: () => "/spend/disputes",
   operatorCase: (proposalId: string) => withQuery("/operator/cases/view", { id: proposalId }),
   operatorTool: (toolId: string, fromRequest?: string) =>
     withQuery("/operator/tools/view", fromRequest ? { id: toolId, from: fromRequest } : { id: toolId }),

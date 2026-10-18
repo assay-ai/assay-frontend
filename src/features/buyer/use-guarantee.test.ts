@@ -65,6 +65,17 @@ describe("foldReasons", () => {
     expect(rows.find((r) => r.reason === "DEBT_VOIDED")?.bucket).toBe("NOT_COLLECTED");
     expect(rows.some((r) => r.reason === "FAILED_CHECKS")).toBe(false);
   });
+
+  it("tells a refund won by a report as that, never as a late check result", () => {
+    const upheld = { ...call("SETTLED", "PASS"), charged: money("0"), debt: "VOIDED", refundedByReport: true } as ToolCall;
+    const [row] = foldReasons([], [upheld]);
+    expect(row).toMatchObject({
+      reason: "REFUNDED_BY_REPORT",
+      label: "Refunded after your report was upheld",
+      bucket: "NOT_COLLECTED",
+      calls: 1,
+    });
+  });
 });
 
 describe("reconcileState", () => {
