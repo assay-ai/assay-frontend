@@ -129,6 +129,16 @@ export interface ProviderEarningsQuery extends ProviderReportWindow {
   asset?: string;
 }
 
+/** The per-call export classes a provider reads as "not credited". */
+export type NotCreditedClass = "PAID_UNCREDITED" | "SYSTEM_ERROR" | "REQUEST_ERROR";
+
+/** One not-credited reason: its calls and their worth. */
+export interface NotCreditedClassFigure {
+  class: NotCreditedClass;
+  calls: number;
+  amount: Money | null;
+}
+
 /**
  * One group's figures.
  *
@@ -142,9 +152,18 @@ export interface ProviderEarningsFigures {
   earned: Money | null;
   /** Σ platform_fee over SETTLED intents. */
   platformFee: Money | null;
-  /** Σ provider_amount the provider would have earned had verification not withheld it. */
+  /**
+   * Not credited: Σ provider_amount over the calls that earned nothing because
+   * of their answer or request (a failed check, an endpoint error, a refused
+   * request), held or not. Exactly the sum of `withheldByClass`.
+   */
   withheld: Money | null;
   withheldCalls: number;
+  /**
+   * `withheld` by reason, one row per per-call export class, always all three.
+   * Optional: older backends do not send it.
+   */
+  withheldByClass?: NotCreditedClassFigure[];
   /**
    * The three ways a call that PASSED still paid the provider nothing (yet).
    * None of them is in `earned`, and none is ever paid by the platform: a

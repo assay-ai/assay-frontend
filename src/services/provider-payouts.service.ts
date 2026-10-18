@@ -3,11 +3,12 @@ import type { CursorPage, ListProviderPayoutsQuery, ProviderPayout } from "@/int
 import { api } from "./api";
 
 /**
- * `GET /providers/me/payouts` — payout batches, newest first.
+ * `GET /providers/me/payouts` — every payment to the provider's wallet, newest
+ * first: rail-B redemptions (`kind: "REDEMPTION"`, one per transaction, with
+ * its call count) and payout-run entries (`kind: "BATCH"`).
  *
- * One row per `PAYOUT` ledger entry, not per batch: there is no batch row to
- * paginate. A provider paid out in two assets in the same run gets two rows
- * sharing a `batchId`. Group client-side if the screen wants batches.
+ * A batch row is one `PAYOUT` ledger entry, not a batch: a provider paid out
+ * in two assets in the same run gets two rows sharing a `batchId`.
  *
  * Sortable field: `createdAt` only.
  */
