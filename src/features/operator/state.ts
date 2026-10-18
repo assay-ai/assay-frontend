@@ -175,7 +175,8 @@ export function disputedPartsNote(
  *
  * "Anyone can execute" only while something stands: with `chainRecord`
  * GONE (the brief's own reading) there is nothing to execute and nothing to
- * sign, whatever the dates say; EXECUTED means the stake was already taken.
+ * sign, whatever the dates say; EXECUTED means the stake was already taken;
+ * UNKNOWN (not confirmed) says so instead of a warning it cannot back.
  *
  * `null` for every other chain status — there is no cancel waiting.
  */
@@ -194,6 +195,16 @@ export function cancelDeadlineNotice(
     return { overdue: false, text: "Nothing is on chain: nothing can be executed, and there is nothing to sign." };
   }
   const signer = cancelSignerOf(chain);
+  // Not confirmed standing: never "anyone can execute" (V1-15).
+  if (chainRecord === "UNKNOWN") {
+    const at = chainExecutableAt ? Date.parse(chainExecutableAt) : Number.NaN;
+    return {
+      overdue: !Number.isNaN(at) && now.getTime() >= at,
+      text:
+        "We could not confirm what stands on chain for this penalty. Signing the cancel reads the chain first "
+        + `and says whether there is anything for ${signer} to sign.`,
+    };
+  }
 
   const at = chainExecutableAt ? new Date(chainExecutableAt).getTime() : Number.NaN;
   if (!chainExecutableAt || Number.isNaN(at)) {

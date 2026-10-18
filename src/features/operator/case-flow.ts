@@ -62,6 +62,13 @@ export interface CaseFacts {
    */
   nothingOnChain: boolean;
   /**
+   * The backend could not confirm what stands on chain (`chainRecord:
+   * UNKNOWN`: the live read failed, or found no record where one was
+   * written). Nothing may then say "anyone can execute": that is said only
+   * when the record STANDS (V1-15).
+   */
+  chainUnconfirmed: boolean;
+  /**
    * The record (or a part) was executed on chain while this platform's cancel
    * waited (`chainRecord: EXECUTED` under a `CANCEL_REQUESTED` mirror): the
    * stake was taken. Never read as "nothing was taken".
@@ -157,6 +164,7 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
     expired,
     cancel,
     nothingOnChain,
+    chainUnconfirmed: record === "UNKNOWN",
     executedWhileCancelWaited,
     closeOutstanding: nothingOnChain && chain === "CANCEL_REQUESTED",
     manual: {
@@ -736,6 +744,9 @@ export function cancelDeadlineSentence(facts: CaseFacts, format: (iso: string) =
   if (facts.cancel?.ifUnsigned === "expires") {
     return `Have it signed before ${when(deadline, format)}. The provider's dispute keeps the penalty frozen meanwhile: it cannot be executed, and unsigned by then anyone can expire it and the stake is released.`;
   }
+  if (facts.chainUnconfirmed) {
+    return `Have it signed before ${when(deadline, format)}. We could not confirm what stands on chain: signing reads the chain first and says whether there is anything to cancel.`;
+  }
   return `Have it signed before ${when(deadline, format)}; after that anyone can execute the penalty.`;
 }
 
@@ -744,6 +755,20 @@ function cancelNextStep(facts: CaseFacts, authority: CaseAuthority, format: (iso
   const executes = facts.cancel?.ifUnsigned !== "expires";
   const passed = deadline !== null && Date.parse(deadline) <= Date.now();
 
+  if (passed && executes && facts.chainUnconfirmed) {
+    // Past the deadline, but the chain read did not confirm a standing record:
+    // never "anyone can execute" (V1-15). The action reads the chain first.
+    return {
+      kind: authority.cancel ? "action" : "waiting",
+      title: authority.cancel ? "Check the chain and get the cancel signed" : "Waiting for the cancel signature",
+      description: authority.cancel
+        ? "The deadline has passed, and we could not confirm what stands on chain for this penalty. Get the cancel signed reads the chain first: it says whether there is anything to sign, and changes nothing if there is not."
+        : "The deadline for the cancel has passed, and we could not confirm what stands on chain for this penalty. A Lead adjudicator or Treasury can check it and get the cancel signed.",
+      action: authority.cancel ? "cancel" : null,
+      secondary: null,
+      until: null,
+    };
+  }
   if (passed && executes) {
     // Truly the on-chain state: a Pending record past its executable time.
     return {
