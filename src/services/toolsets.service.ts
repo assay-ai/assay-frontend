@@ -403,7 +403,16 @@ export interface PreviewTool {
   price: string | null;
   providerCount: number;
   noProviderFits: boolean;
+  /**
+   * Why this agent cannot run it here: the rules removed every provider
+   * (`RULES`), or it has a paid price but no provider settles on the agent's
+   * own chain (`OTHER_CHAIN`; a FREEMIUM tool still serves its free calls).
+   * `null` when it can run.
+   */
+  noFitReason?: NoFitReason | null;
 }
+
+export type NoFitReason = "RULES" | "OTHER_CHAIN";
 
 /** A tool a preview warning is about; `toolId` is null for an ignored `?tools=` name. */
 export interface PreviewWarningTool {

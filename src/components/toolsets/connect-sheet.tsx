@@ -32,7 +32,7 @@ import { allowToolsBody, restoreBody } from "@/features/toolsets/access-result";
 import { defaultEntry } from "@/features/toolsets/entry-rules";
 import { ALWAYS_LATEST_LABEL, DISCOVERY_DETAILS, DISCOVERY_LABELS, DRAFT_NOTICE, HOW_AGENT_SEES_LABEL, lockLabel } from "@/features/toolsets/labels";
 import { badgeLabel } from "@/features/toolsets/public";
-import { copyBlocked, offersFreeOnly, overBudgetWith, previewSummary, previewWarnings, type PreviewWarning } from "@/features/toolsets/preview";
+import { cantRunReason, cantRunTools, copyBlocked, offersFreeOnly, overBudgetWith, previewSummary, previewWarnings, type PreviewWarning } from "@/features/toolsets/preview";
 import { createCredential } from "@/services/account.service";
 import type { PublicToolsetCard } from "@/services/public-toolsets.service";
 import { createToolset, recordConnectUrl, type McpUrlPreview } from "@/services/toolsets.service";
@@ -66,9 +66,10 @@ import {
  *   Only these tools      /?tools=…
  *
  * Under the question: the summary line from `POST /mcp-urls/preview` ("Your
- * agent will see 4 tools (~0.9k tokens)", or in search mode "4 tools (search)
- * — about 0.9k tokens; 37 tools reachable"; a skeleton while it loads, never
- * 0), the warnings with their fixes, the client tabs (remembered per agent)
+ * agent will see 4 tools (~0.9k tokens)", or in search mode "Your agent can
+ * reach 1 of 8 tools (7 can't run: …) through search: 3 tools listed"; a
+ * skeleton while it loads, never 0), the tools that can't run with their
+ * reason, the warnings with their fixes, the client tabs (remembered per agent)
  * and More options: the version lock, "How the agent sees tools", "Always
  * loaded" and "Only free tools". Copy or Done records the URL
  * (`POST /agents/:id/connect-urls`) and the sheet waits for the first call.
@@ -497,9 +498,9 @@ function ConnectBody({
 
         {preview.data ? (
           <ul className="flex flex-col gap-1.5" data-testid="connect-warnings">
-            {previewWarnings(preview.data).map((warning) => (
+            {previewWarnings(preview.data).map((warning, index) => (
               <li
-                key={warning.code}
+                key={`${warning.code}-${index}`}
                 className={cn(
                   "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-body-13",
                   warning.tone === "danger" ? "bg-danger-10 text-danger-700" : warning.tone === "warning" ? "bg-warning-10 text-warning-700" : "bg-02 text-02",
@@ -865,7 +866,7 @@ export function ResultLine({
           <p className="mt-1 text-body-xs text-03">Tokens: what this tool list costs your agent&apos;s model on each request, estimated.</p>
           <ul className="mt-2 flex flex-col divide-y divide-01">
             {preview.tools
-              .filter((t) => t.listed)
+              .filter((t) => t.listed && cantRunReason(t) === null)
               .map((tool) => (
                 <li key={tool.toolId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-1.5">
                   <span className="break-all font-mono text-mono-12 text-01">{tool.name}</span>
@@ -875,6 +876,19 @@ export function ResultLine({
                 </li>
               ))}
           </ul>
+          {cantRunTools(preview).length > 0 ? (
+            <>
+              <p className="mt-2 text-label-13 text-01">Can&apos;t run for this agent</p>
+              <ul className="flex flex-col divide-y divide-01" data-testid="preview-cant-run">
+                {cantRunTools(preview).map((tool) => (
+                  <li key={tool.toolId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-1.5">
+                    <span className="break-all font-mono text-mono-12 text-02">{tool.name}</span>
+                    <span className="text-body-xs text-03">{tool.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
         </details>
       ) : null}
     </section>

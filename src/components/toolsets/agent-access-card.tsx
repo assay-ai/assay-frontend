@@ -24,6 +24,7 @@ import {
   restoreBody,
   toolResultLine,
   toolResultTone,
+  unusableTools,
   type AccessDraft,
 } from "@/features/toolsets/access-result";
 import { ACCESS_LABEL, PROVIDER_LIMITS_LABEL, VERIFIED_ONLY_LABEL } from "@/features/toolsets/labels";
@@ -172,12 +173,30 @@ export function AccessEditor({ access, agentName }: { access: AgentAccess; agent
   const restricted = draft.mode === "RESTRICTED";
   const excludeChanged = Boolean(body?.rules?.excludeProviderIds);
   const providers = catalogue.providers;
+  const unusable = unusableTools(access);
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <p className="text-body-13 text-02" data-testid="access-summary">
         {accessSummary(access)}
       </p>
+      {unusable.length > 0 ? (
+        <details className="rounded-lg border border-01 bg-02 px-3 py-2" data-testid="unusable-tools">
+          <summary className="cursor-pointer select-none text-label-13 text-01">
+            Which {unusable.length === 1 ? "tool can't" : `${unusable.length} tools can't`} run, and why
+          </summary>
+          <ul className="mt-2 flex flex-col gap-1">
+            {unusable.map((tool) => (
+              <li key={tool.toolId} className="flex min-w-0 items-start gap-1.5 text-body-13 text-02">
+                <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-warning-600" />
+                <span className="min-w-0 [overflow-wrap:anywhere]">
+                  <span className="font-mono text-mono-12 text-01">{toolDisplay(tool).name}</span>: {tool.text}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
 
       <div className="flex flex-col gap-2">
         <Segmented
@@ -538,7 +557,9 @@ function ResultText({ tool, access, withName = false }: { tool: AgentToolEffect;
       ) : (
         <CircleCheck aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-success-500" />
       )}
-      <span className="min-w-0 [overflow-wrap:anywhere]">{tool.providersTotal === 0 ? `${withName ? `${shown.name}: ` : ""}no provider yet` : text}</span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">
+        {tool.providersTotal === 0 && tool.access !== "BLOCKED" ? `${withName ? `${shown.name}: ` : ""}no provider taking calls now` : text}
+      </span>
     </span>
   );
 }

@@ -25,6 +25,8 @@ describe("routes", () => {
     expect(routes.exploreTool("t1")).toBe("/explore?tool=t1");
     expect(routes.calls()).toBe("/spend/calls");
     expect(routes.calls({ status: "not-charged", tool: "" })).toBe("/spend/calls?status=not-charged");
+    expect(routes.calls({ status: "refused", call: "c1" })).toBe("/spend/calls?status=refused&call=c1");
+    expect(routes.payment("c1")).toBe("/payments/view?id=c1");
   });
 
   it("gives the path a link points at, without its query", () => {

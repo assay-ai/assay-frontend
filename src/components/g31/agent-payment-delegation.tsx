@@ -73,6 +73,7 @@ import { getEscrow } from "@/services/escrow.service";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { formatDate } from "@/libs/utc-time";
 import { type BudgetBootstrap, BudgetFields, useBudgetDraft } from "@/components/buyer-money/budget-fields";
+import { DollarUnit } from "@/components/buyer-money/dollar-unit";
 import type { SpendPolicy } from "@/services/limits.service";
 import { toast } from "@/utils/toast";
 
@@ -1107,7 +1108,7 @@ function AuthorizeSheet({
               <Field
                 label="Most per call"
                 id="delegate-max-voucher"
-                suffix={unit}
+                suffix={<DollarUnit symbol={unit} />}
                 value={form.maxVoucherAmount}
                 error={errors.maxVoucherAmount}
                 inputMode="decimal"
@@ -1116,7 +1117,7 @@ function AuthorizeSheet({
               <Field
                 label="Most per 24 hours"
                 id="delegate-max-window"
-                suffix={unit}
+                suffix={<DollarUnit symbol={unit} />}
                 value={form.maxPerWindow}
                 error={errors.maxPerWindow}
                 hint="Counts the last 24 hours, not the calendar day."
