@@ -564,7 +564,7 @@ function BlockSheet({
         <div className="flex w-full flex-col gap-4 px-[18px] pt-3">
           <WhatHappens
             lines={[
-              { icon: Ban, text: "It stops paying and being paid through Assay within seconds" },
+              { icon: Ban, text: "Takes effect immediately; only you need to act. It stops paying and being paid through Assay within seconds" },
               { icon: Users, text: "Lifting the Assay block later needs two people" },
               ...(onChain && evm && chainId
                 ? [
@@ -599,7 +599,7 @@ function BlockSheet({
                   <p>
                     <span className="text-label-13 text-01">{provider.legalName}</span>: {provider.activeBindings} live tool
                     {provider.activeBindings === 1 ? "" : "s"}
-                    {provider.stake.length > 0 ? `, ${provider.stake.map((s) => formatMoney({ amount: s.amount, asset: s.asset, decimals: s.decimals })).join(" + ")} staked` : ""}.
+                    {provider.stake.length > 0 ? `, ${stakedPhrase(provider.stake)}` : ""}.
                     Its tools stop being paid and its agents stop paying.
                   </p>
                 ) : (
@@ -738,6 +738,16 @@ function ChainBlockPreview({ account, chainId }: { account: string; chainId: str
       <p className="text-body-xs text-03">The call is built once approved, and only offered for signing if it is exactly this.</p>
     </section>
   );
+}
+
+/**
+ * Its stake as "bonded", per chain: the same measure Home's "Stake locked"
+ * tile sums over every provider (its sub-line says "bonded by N providers"),
+ * so the two read as one figure, not two that disagree.
+ */
+function stakedPhrase(stake: readonly { chainId: string; amount: string; asset: string; decimals: number }[]): string {
+  const parts = stake.map((s) => `${formatMoney({ amount: s.amount, asset: s.asset, decimals: s.decimals })} on ${chainDisplayName(s.chainId)}`);
+  return `stake bonded: ${parts.join(" and ")}`;
 }
 
 /** An on-chain block request (A-11) queued for a second operator: who approves it, and that nothing is blocked on chain yet. */
