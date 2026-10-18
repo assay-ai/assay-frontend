@@ -57,6 +57,7 @@ export const REQUIREMENT_SENTENCE: Record<PublishRequirement, string> = {
   TESTER_RUN: "Run a test of your current connection.",
   TESTER_PASSED: "Get a passing test.",
   PAYOUT_ACCOUNT: "Add a payout wallet so you can be paid.",
+  API_KEY_CREDENTIALS: "Add your API key headers for this address under Authentication.",
   STAKE_AT_MINIMUM_ON_EVERY_CHAIN: "Add stake to cover paid calls.",
 };
 
@@ -301,6 +302,7 @@ export function LiveStage({
 
   const unmet = (check.data?.requirements ?? []).filter((requirement) => !requirement.met);
   const testMissing = unmet.find((r) => r.requirement === "TESTER_RUN" || r.requirement === "TESTER_PASSED");
+  const credentialsMissing = unmet.find((r) => r.requirement === "API_KEY_CREDENTIALS");
   const payoutMissing = unmet.find((r) => r.requirement === "PAYOUT_ACCOUNT");
   // T3: one tester row per contract major the listing serves.
   const versioned = (tool.versions?.length ?? 0) > 0;
@@ -320,6 +322,15 @@ export function LiveStage({
     blockReason = (
       <>
         {untested.length > 0 ? `Get a passing test for ${untested.join(" and ")}.` : REQUIREMENT_SENTENCE[testMissing.requirement]}{" "}
+        <button type="button" className="text-primary-600 underline" onClick={onBackToTest}>
+          Back to Connect &amp; test
+        </button>
+      </>
+    );
+  else if (credentialsMissing)
+    blockReason = (
+      <>
+        {REQUIREMENT_SENTENCE.API_KEY_CREDENTIALS}{" "}
         <button type="button" className="text-primary-600 underline" onClick={onBackToTest}>
           Back to Connect &amp; test
         </button>

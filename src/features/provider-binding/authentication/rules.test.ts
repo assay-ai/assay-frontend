@@ -16,9 +16,15 @@ describe("credential query keys", () => {
     expect(credentialQueryKeys("https://x.test/v1?max_tokens=5")).toEqual([]);
     expect(credentialQueryKeys("not a url")).toEqual([]);
   });
-  it("matches exactly", () => {
+  it("matches by word, like the server", () => {
     expect(isCredentialQueryKey("token")).toBe(true);
     expect(isCredentialQueryKey("tokens")).toBe(false);
+    expect(isCredentialQueryKey("apiKey")).toBe(true);
+    expect(isCredentialQueryKey("sig")).toBe(true);
+    expect(isCredentialQueryKey("config")).toBe(false);
+    expect(isCredentialQueryKey("sort_key")).toBe(false);
+    expect(isCredentialQueryKey("keyword")).toBe(false);
+    expect(isCredentialQueryKey("max_tokens")).toBe(false);
   });
 });
 
@@ -27,6 +33,13 @@ describe("isSecretConstantHeader", () => {
     expect(isSecretConstantHeader("Authorization")).toBe(true);
     expect(isSecretConstantHeader("x-sort-key")).toBe(false);
     expect(isSecretConstantHeader("idempotency-key")).toBe(false);
+    expect(isSecretConstantHeader("cache-key")).toBe(false);
+    expect(isSecretConstantHeader("Accept")).toBe(false);
+  });
+  it("flags names that merely contain a secret word", () => {
+    for (const name of ["x-goog-api-key", "Ocp-Apim-Subscription-Key", "X-RapidAPI-Key", "apiKey", "X-Auth-Token"]) {
+      expect(isSecretConstantHeader(name)).toBe(true);
+    }
   });
 });
 
@@ -34,6 +47,9 @@ describe("credentialHeaderProblems", () => {
   const h = (name: string, value = "v") => ({ name, value });
   it("accepts valid headers", () => {
     expect(credentialHeaderProblems([h("X-Key"), h("X-Other")]).size).toBe(0);
+  });
+  it("requires a value", () => {
+    expect(credentialHeaderProblems([h("X-A", "")]).get(0)).toBe("Header value is required.");
   });
   it("flags more than 10 rows", () => {
     const rows = Array.from({ length: 11 }, (_, i) => h(`X-H${i}`));

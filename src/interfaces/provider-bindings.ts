@@ -470,6 +470,7 @@ export type PublishRequirement =
   | "TESTER_RUN"
   | "TESTER_PASSED"
   | "PAYOUT_ACCOUNT"
+  | "API_KEY_CREDENTIALS"
   | "STAKE_AT_MINIMUM_ON_EVERY_CHAIN";
 
 export interface PublishRequirementResult {

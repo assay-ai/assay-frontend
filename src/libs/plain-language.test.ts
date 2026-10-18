@@ -56,6 +56,15 @@ describe("errors", () => {
     expect(plainError("OPERATOR_AUTHORITY_EXCEEDED")).toMatch(/above your approval limit/);
   });
 
+  it("knows the credential and mapping hardening codes", () => {
+    expect(plainError("PROVIDER_RESERVED_MAPPING_HEADER")).toBe(
+      "Headers starting with x-assay- are set by Assay. Remove this header from your mapping.",
+    );
+    expect(plainError("PROVIDER_CREDENTIAL_ORIGIN_LIVE")).toBe(
+      "Your live tool uses these headers. Publish a new address first, then remove them.",
+    );
+  });
+
   it("never shows an unknown code as the sentence", () => {
     const sentence = plainError("SOMETHING_NOBODY_KNOWS");
     expect(sentence).not.toContain("SOMETHING");
