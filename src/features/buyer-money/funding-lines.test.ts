@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import type { Withdrawal } from "@/services/funding.service";
 
-import { finishedWithdrawals, reconciliationLine, refundableLine, refundableSummary, withdrawalOutcome } from "./funding-lines";
+import {
+  finishedWithdrawals,
+  reconciliationLine,
+  REFUNDABLE_ROW,
+  refundableLine,
+  refundableSummary,
+  statementCheckSentence,
+  withdrawalOutcome,
+} from "./funding-lines";
 
 const ASSET = "eip155:46630/erc20:0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
 const m = (amount: string) => ({ amount, asset: ASSET, decimals: 6 });
@@ -28,7 +36,10 @@ describe("refundableSummary (B7)", () => {
       { charged: m("10000"), refundableIfReportedUntil: null },
     ])!;
     expect(summary).toEqual({ count: 3, total: m("260000"), soonestUntil: "2026-10-19T12:10:00Z" });
-    expect(refundableLine(summary)).toBe("$0.26 charged recently can still be reported for a full refund (3 calls).");
+    expect(refundableLine(summary)).toBe(
+      "$0.26 charged recently (3 calls) is still covered: a report accepted for any of them is refunded in full.",
+    );
+    expect(refundableLine(summary, true)).toMatch(/^At least \$0\.26/);
   });
   it("is nothing when the backend lists none", () => {
     expect(refundableSummary([])).toBeNull();
@@ -59,5 +70,57 @@ describe("withdrawal history (B7)", () => {
     expect(withdrawalOutcome(row({ received: m("13000000") })).label).toBe("Claimed, $13.00 of $13.24 asked");
     expect(withdrawalOutcome(row({ status: "CANCELLED", received: null })).label).toBe("Cancelled, nothing moved");
     expect(withdrawalOutcome(row({ status: "REPLACED", received: null })).label).toBe("Replaced by a newer request");
+  });
+});
+
+describe("refund copy carries its condition (B7 review M1)", () => {
+  it("every sentence that names a refund also says the report must be accepted", () => {
+    const summary = refundableSummary([{ charged: m("50000"), refundableIfReportedUntil: null }])!;
+    const texts = [
+      refundableLine(summary),
+      refundableLine(summary, true),
+      `${REFUNDABLE_ROW.beforeTime} 12:10 UTC ${REFUNDABLE_ROW.afterTime}`,
+      REFUNDABLE_ROW.noEnd,
+    ];
+    for (const text of texts) {
+      expect(text).toMatch(/refund/i);
+      expect(text, text).toMatch(/accepted/);
+      expect(text).not.toMatch(/can still be reported for a full refund|refundable if you report it/i);
+    }
+  });
+});
+
+describe("statementCheckSentence (B7 review M2)", () => {
+  const check = (escrow: string, settling: string, difference: string, matches: boolean) => ({
+    account: "a",
+    chainId: "eip155:46630",
+    opening: m("0"),
+    deposits: m("0"),
+    withdrawals: m("0"),
+    paid: m("0"),
+    closing: m("23500000"),
+    check: { escrowBalance: m(escrow), stillSettling: m(settling), difference: m(difference), matches, observedAt: "2026-10-19T12:00:00Z" },
+  });
+
+  it("a match with payments still settling walks escrow − settling = closing", () => {
+    expect(statementCheckSentence(check("24000000", "500000", "0", true))).toBe(
+      "Your escrow holds $24.00. $0.50 of it is already paid for calls and still being collected on chain, which leaves $23.50: this closing balance.",
+    );
+  });
+
+  it("a match with nothing settling", () => {
+    expect(statementCheckSentence(check("23500000", "0", "0", true))).toBe("Your escrow holds $23.50: this closing balance.");
+  });
+
+  it("a mismatch with payments settling names the gap after them", () => {
+    // escrow 23.00 − settling 0.50 = 22.50, which is 1.00 less than 23.50.
+    expect(statementCheckSentence(check("23000000", "500000", "-1000000", false))).toMatch(
+      /^Your escrow holds \$23\.00; less \$0\.50 still being collected on chain, that is \$22\.50, \$1\.00 less than this closing balance\./,
+    );
+    expect(statementCheckSentence(check("25000000", "500000", "1000000", false))).toMatch(/that is \$24\.50, \$1\.00 more than this closing balance/);
+  });
+
+  it("a mismatch with nothing settling", () => {
+    expect(statementCheckSentence(check("24500000", "0", "1000000", false))).toMatch(/^Your escrow holds \$24\.50, \$1\.00 more than this closing balance\./);
   });
 });

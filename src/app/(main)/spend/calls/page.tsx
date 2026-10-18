@@ -9,6 +9,7 @@ import * as React from "react";
 import { PageHeader } from "@/components/g31/chrome";
 import { EntityName } from "@/components/patterns/entity-name";
 import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
+import { REFUNDABLE_ROW } from "@/features/buyer-money/funding-lines";
 import { owedCallsFromDebts } from "@/features/buyer-debt/debt-summary";
 import { OwedRowAction } from "@/features/buyer-debt/owed-row-action";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
@@ -264,10 +265,10 @@ function CallsList() {
                         <span className="text-body-xs text-success-700" data-testid="call-refundable-until">
                           {call.refundableIfReportedUntil ? (
                             <>
-                              Refundable until <UtcTime value={call.refundableIfReportedUntil} midSentence /> if you report it
+                              {REFUNDABLE_ROW.beforeTime} <UtcTime value={call.refundableIfReportedUntil} midSentence /> {REFUNDABLE_ROW.afterTime}
                             </>
                           ) : (
-                            "Refundable if you report it: the 1-hour hold starts when the payment is collected"
+                            REFUNDABLE_ROW.noEnd
                           )}
                         </span>
                       ) : null}
