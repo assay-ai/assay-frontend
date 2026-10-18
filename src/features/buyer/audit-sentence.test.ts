@@ -120,3 +120,14 @@ describe("day grouping", () => {
     ]);
   });
 });
+
+describe("agent.renamed", () => {
+  it("says who renamed which agent, from and to", () => {
+    const line = auditSentence(
+      entry({ actorId: "cred_9f2c1a7b", action: "agent.renamed", before: { label: "My agent" }, after: { label: "Research bot" } }),
+      () => null,
+      "me@example.com",
+    ).line;
+    expect(line).toBe("You renamed the agent “My agent” to “Research bot”");
+  });
+});

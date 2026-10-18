@@ -25,6 +25,8 @@ export const routes = {
   exploreProvider: (providerId: string) => withQuery("/explore/providers/view", { id: providerId }),
   /** The signed-in tool list, opened at one tool. */
   exploreTool: (toolId: string) => withQuery("/explore", { tool: toolId }),
+  /** Connect with "Only these tools" chosen ("Use this tool"). Takes MCP tool names. */
+  connectTools: (toolNames: readonly string[]) => `/connect?tools=${toolNames.map(encodeURIComponent).join(",")}`,
   /** The public (signed-out) tool page. Takes a tool id, or a tool name for old links. */
   publicTool: (toolIdOrName: string) => withQuery("/catalogue/view", { tool: toolIdOrName }),
   /** The public (signed-out) provider page. */

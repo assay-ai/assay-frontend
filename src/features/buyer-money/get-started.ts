@@ -11,6 +11,11 @@ import type { SetupStepState } from "@/components/patterns/setup-checklist";
  *
  * Free calls need only steps 1–2, so 3 and 4 never block them; 4 is blocked
  * until 3 because caps are set on an escrow, which the first deposit opens.
+ *
+ * Step 4 needs the agent's payment key, made with `agent-cli`, which is not
+ * published: paid calls are by invitation during testnet (owner decision
+ * D14). Until a payment key is bound, step 4 says so and is not counted as
+ * unfinished ({@link payByInvitation}).
  */
 export interface GetStartedFacts {
   hasLiveKey: boolean;
@@ -46,10 +51,43 @@ export function getStartedStates(facts: GetStartedFacts): Record<GetStartedStepI
     funds: false,
     pay: !facts.escrowExists,
   };
-  const firstOpen = order.find((id) => !done[id] && !blocked[id]) ?? null;
+  // By invitation: paying, and the funds only paying needs, are neither
+  // blocked nor next, and never "current".
+  const invitation = payByInvitation(facts);
+  if (invitation) blocked.pay = false;
+  const firstOpen = order.find((id) => !done[id] && !blocked[id] && !(invitation && OPTIONAL_BY_INVITATION.has(id))) ?? null;
   return Object.fromEntries(
     order.map((id) => [id, done[id] ? "done" : blocked[id] ? "blocked" : id === firstOpen ? "current" : "todo"]),
   ) as Record<GetStartedStepId, SetupStepState>;
+}
+
+/**
+ * Paying needs a payment key and none is bound yet: step 4 reads "Paid calls:
+ * by invitation during testnet" and is not counted (D14). Once a key is bound
+ * (an invited buyer ran `agent-cli bind`), step 4 counts as before.
+ */
+export function payByInvitation(facts: GetStartedFacts): boolean {
+  return facts.freeOnly !== true && facts.needsDelegation && !facts.keyBound;
+}
+
+/**
+ * The steps that only paying needs. While paying is by invitation they are
+ * optional: a deposit then buys nothing, so the checklist must not ask for one.
+ */
+const OPTIONAL_BY_INVITATION: ReadonlySet<GetStartedStepId> = new Set(["funds", "pay"]);
+
+/** Whether a step is optional, not counted: funds and pay while paying is by invitation. */
+export function stepOptional(facts: GetStartedFacts, id: GetStartedStepId): boolean {
+  return payByInvitation(facts) && OPTIONAL_BY_INVITATION.has(id);
+}
+
+/** Every counted step is done: funds and pay by invitation do not hold the checklist open. */
+export function getStartedComplete(facts: GetStartedFacts): boolean {
+  const states = getStartedStates(facts);
+  const invitation = payByInvitation(facts);
+  return (Object.entries(states) as [GetStartedStepId, SetupStepState][]).every(
+    ([id, state]) => state === "done" || (invitation && OPTIONAL_BY_INVITATION.has(id)),
+  );
 }
 
 /** Which part of step 4 is next. */
@@ -64,8 +102,38 @@ export function payStage(facts: Pick<GetStartedFacts, "capsSet" | "keyBound" | "
 }
 
 /**
- * Where `agent-cli` comes from. It has no public install path yet (an open
- * owner question), so the screens say so plainly next to every command that
- * needs it, rather than leaving a buyer to search for a tool they cannot find.
+ * Paid calls during testnet (D14): by invitation, because the payment key is
+ * made with `agent-cli`, which has no public install path. Said plainly where
+ * paying would be set up, with "Ask for access" when `SUPPORT_URL` is set.
  */
-export const AGENT_CLI_SOURCE = "agent-cli is not published yet: get it from your Assay contact.";
+export const PAID_BY_INVITATION_TITLE = "Paid calls: by invitation during testnet";
+export const PAID_BY_INVITATION_TEXT =
+  "Paid calls are by invitation during testnet: paying needs a payment key made with agent-cli, which only invited testers have for now. Free calls work without it.";
+
+/** For an invited buyer, next to the command: where `agent-cli` comes from. */
+export const AGENT_CLI_SOURCE = "Invited already? Your Assay contact gives you agent-cli. Run this on the agent's machine:";
+
+/** A catalogue row, as much of it as the step 2 prompt needs. */
+export interface PromptTool {
+  name: string;
+  toolId?: string;
+  pricingMode: string | null;
+  routable: boolean;
+  freeCallsPerDay?: number | null;
+}
+
+/**
+ * Step 2's example: a tool this agent can reach now that has free calls (a
+ * FREE tool first, then one with free calls a day), named the way the agent
+ * sees it. No such tool: a prompt that names none, never a tool that would be
+ * refused or charged.
+ */
+export function firstCallPrompt(tools: readonly PromptTool[], mcpName: (tool: PromptTool) => string | null): string {
+  const reachable = tools.filter((tool) => tool.routable && mcpName(tool));
+  const free =
+    reachable.find((tool) => tool.pricingMode === "FREE") ??
+    reachable.find((tool) => tool.pricingMode === "FREEMIUM" && (tool.freeCallsPerDay ?? 0) > 0);
+  if (!free) return "Ask your agent to use one of the tools from Assay. This step ticks itself when the call arrives.";
+  const name = mcpName(free)!;
+  return `For example, ask it to “use the ${name} tool from Assay”. ${name} has free calls, so no money is needed. This step ticks itself when the call arrives.`;
+}

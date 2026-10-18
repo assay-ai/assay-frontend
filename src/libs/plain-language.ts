@@ -484,6 +484,7 @@ export function knowsError(code: string): boolean {
 const AUDIT_ACTIONS: Record<string, string> = {
   "credential.created": "Agent key created",
   "credential.revoked": "Agent key revoked",
+  "agent.renamed": "Agent renamed",
   "limit.updated": "Spending limits changed",
   "spend_policy.created": "Spending limits set",
   "spend_policy.updated": "Spending limits changed",

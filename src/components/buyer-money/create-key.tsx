@@ -8,6 +8,7 @@ import { CopyChip } from "@/components/patterns/copy-chip";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { nextKeyName } from "@/features/buyer-money/agent-label";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { createCredential } from "@/services/account.service";
@@ -27,9 +28,35 @@ export interface CreatedKey {
   token: string;
 }
 
+/** What a new key can do: it has no payment key, so it makes free calls only. */
+export const NEW_KEY_PAYS_NOTE = "This key makes free calls. To pay with it, run the payment-key step again for this key.";
+
+/** Plain words for a failed create. */
+export function createKeyErrorText(error: unknown): string {
+  return error instanceof ApiError ? plainError(error.code) : "The key could not be created. Try again.";
+}
+
+/**
+ * Create a key on a click and hand it back, kept in memory only (never stored
+ * or put in a URL): the one moment the full key exists on screen. Named "Key
+ * N" by default, counting every key the agent has had.
+ */
+export function useCreateKey(agentId: string | null, keyCount: number, onCreated: (key: CreatedKey) => void) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => createCredential(agentId!, { name: nextKeyName(keyCount), scopes: ["tools:call"] }) as Promise<CreatedKey>,
+    onSuccess: (key) => {
+      onCreated(key);
+      void queryClient.invalidateQueries({ queryKey: ["agent-keys"] });
+      void queryClient.invalidateQueries({ queryKey: ["credentials"] });
+      void queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+}
+
 export function CreateKeyForm({
   agentId,
-  defaultName = "My agent",
+  defaultName = "Key 1",
   onCreated,
   onDone,
   doneLabel = "I have copied it",
@@ -60,13 +87,14 @@ export function CreateKeyForm({
         <div className="flex w-full flex-col gap-1.5">
           <span className="text-label-13 text-01">Your key</span>
           <div className="flex w-full min-w-0 items-center gap-2 rounded-md border border-02 bg-02 px-3 py-2">
-            <code className="min-w-0 flex-1 truncate font-mono text-mono-13 text-01">{created.token}</code>
+            <code className="min-w-0 flex-1 break-all font-mono text-mono-13 text-01">{created.token}</code>
             <CopyChip value={created.token} label="Copy" />
           </div>
           <p className="flex items-start gap-1.5 text-body-xs text-warning-700">
             <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
             Shown once. We cannot show it again; if you lose it, create a new one and revoke this one.
           </p>
+          <p className="text-body-xs text-03" data-testid="key-free-calls">{NEW_KEY_PAYS_NOTE}</p>
         </div>
         <div className="flex w-full min-w-0 flex-col gap-1.5">
           <span className="text-label-13 text-01">Connect your MCP client</span>
@@ -95,7 +123,7 @@ export function CreateKeyForm({
         value={name}
         onChange={(e) => setName(e.target.value)}
         hint="So you can tell your keys apart, e.g. the machine it runs on."
-        error={create.isError ? (create.error instanceof ApiError ? plainError(create.error.code) : "The key could not be created. Try again.") : undefined}
+        error={create.isError ? createKeyErrorText(create.error) : undefined}
       />
       <Button type="submit" className="self-start" loading={create.isPending} disabled={!name.trim()}>
         Create key
@@ -107,11 +135,14 @@ export function CreateKeyForm({
 export function CreateKeySheet({
   agentId,
   agentName,
+  keyCount = 0,
   open,
   onOpenChange,
 }: {
   agentId: string | null;
   agentName?: string;
+  /** Keys the agent has had (revoked included), for the default name "Key N". */
+  keyCount?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -123,7 +154,7 @@ export function CreateKeySheet({
           <SheetDescription>Your agent uses it to call tools. You can revoke it at any time; that takes effect at once.</SheetDescription>
         </SheetHeader>
         <div className="flex w-full min-w-0 flex-col gap-4 px-[18px] pb-6 pt-4">
-          {agentId ? <CreateKeyForm key={String(open)} agentId={agentId} onDone={() => onOpenChange(false)} /> : null}
+          {agentId ? <CreateKeyForm key={String(open)} agentId={agentId} defaultName={nextKeyName(keyCount)} onDone={() => onOpenChange(false)} /> : null}
         </div>
       </SheetContent>
     </Sheet>

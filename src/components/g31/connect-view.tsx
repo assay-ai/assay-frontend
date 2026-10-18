@@ -1,19 +1,19 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CircleCheck, KeyRound, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { NEW_KEY_PAYS_NOTE, createKeyErrorText, useCreateKey } from "@/components/buyer-money/create-key";
 import { McpConfigTabs } from "@/components/buyer-money/mcp-config-tabs";
 import { useAgentsAndKeys } from "@/components/buyer-money/use-agents";
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { ConnectSheet } from "@/components/toolsets/connect-sheet";
-import { errorText, useAgentServers, useRecordConnect } from "@/components/toolsets/use-toolsets";
+import { useAgentServers, useRecordConnect } from "@/components/toolsets/use-toolsets";
 import { Button } from "@/components/ui/button";
+import { keyOfAgent } from "@/features/buyer-money/agent-label";
 import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
-import { parseMcpUrl } from "@/features/connect/mcp-url";
-import { createCredential } from "@/services/account.service";
+import { buildMcpUrl, parseMcpUrl } from "@/features/connect/mcp-url";
 
 import { relativeTime } from "./format";
 
@@ -29,33 +29,47 @@ import { relativeTime } from "./format";
  * "Is it working?" follows the URL this page hands out (Servers in use, so
  * `?connect=waiting` shows the wait), else the keys' last use. Anything
  * narrower (a tool set, only some tools) is the Connect sheet, one click away.
+ *
+ * `/connect?tools=a,b` ("Use this tool" on a tool page, also after sign-in)
+ * opens the sheet at once with "Only these tools" chosen.
  */
+
+/** `?tools=` as the sheet's prefill URL, or null when it names no readable tool. */
+export function toolsPrefillUrl(search: string): string | null {
+  const raw = new URLSearchParams(search).get("tools");
+  if (!raw) return null;
+  const tools = raw
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+  if (tools.length === 0) return null;
+  const url = buildMcpUrl({ kind: "tools", tools });
+  // Only names the sheet can read; anything else opens nothing.
+  return parseMcpUrl(url)?.choice.kind === "tools" ? url : null;
+}
 const POLL_MS = 5_000;
 
 export function ConnectView() {
-  const queryClient = useQueryClient();
   const [poll, setPoll] = React.useState<number | false>(POLL_MS);
   const data = useAgentsAndKeys({ pollMs: poll });
   const [narrowing, setNarrowing] = React.useState(false);
+  const [prefill, setPrefill] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const url = toolsPrefillUrl(window.location.search);
+    if (url) {
+      setPrefill(url);
+      setNarrowing(true);
+    }
+  }, []);
   const agent = data.agents[0] ?? null;
   const servers = useAgentServers(agent?.agentId, { pollMs: poll });
   const live = data.agents
     .flatMap((a) => data.keys[a.agentId] ?? [])
     .filter((k) => !k.revokedAt)
     .sort((a, b) => ((a.lastUsedAt ?? "") < (b.lastUsedAt ?? "") ? 1 : -1));
+  // The key made here, in memory only: never stored, never in the URL.
   const [created, setCreated] = React.useState<{ token: string; prefix: string; name: string } | null>(null);
-  const create = useMutation({
-    mutationFn: () =>
-      createCredential(agent!.agentId, { name: live.length === 0 ? "My agent" : "My agent (new)", scopes: ["tools:call"] }) as Promise<{
-        token: string;
-        prefix: string;
-        name: string;
-      }>,
-    onSuccess: (key) => {
-      setCreated(key);
-      void queryClient.invalidateQueries({ queryKey: ["agent-keys"] });
-    },
-  });
+  const create = useCreateKey(agent?.agentId ?? null, agent ? (data.keys[agent.agentId] ?? []).length : 0, setCreated);
 
   // The URL this page hands out: its own row under Servers in use, when it has one.
   const root = servers.data?.servers.find((s) => parseMcpUrl(s.canonicalUrl)?.choice.kind === "everything") ?? null;
@@ -87,7 +101,7 @@ export function ConnectView() {
             <Button className="self-start" loading={create.isPending} disabled={!agent} onClick={() => create.mutate()}>
               Create your first key
             </Button>
-            {create.isError ? <p className="text-body-13 text-danger-700">{errorText(create.error, "The key could not be created. Try again.")}</p> : null}
+            {create.isError ? <p className="text-body-13 text-danger-700">{createKeyErrorText(create.error)}</p> : null}
           </section>
         ) : null}
 
@@ -101,6 +115,7 @@ export function ConnectView() {
               <code className="min-w-0 flex-1 break-all font-mono text-mono-12 text-01">{created.token}</code>
               <CopyChip value={created.token} display="Copy" label="your key" />
             </div>
+            <p className="text-body-xs text-02">{NEW_KEY_PAYS_NOTE}</p>
           </div>
         ) : null}
 
@@ -111,19 +126,11 @@ export function ConnectView() {
             keyPrefix={created?.prefix ?? live[0]?.prefix ?? null}
             url={url}
             onCopy={(client) => agent && recordConnect.mutate({ url, serverName: "assay", client })}
+            onCreateKey={!firstTime && agent ? () => create.mutate() : undefined}
+            creatingKey={create.isPending}
+            createKeyError={!firstTime && create.isError ? createKeyErrorText(create.error) : null}
           />
         </div>
-
-        {!firstTime && !created ? (
-          <div className="flex flex-col gap-2 rounded-lg bg-02 px-3 py-2.5 tablet:flex-row tablet:items-center" data-testid="connect-fill-key">
-            <p className="min-w-0 flex-1 text-body-13 text-02">
-              A key is shown in full only once, when it is made. To paste a ready config, make a new key for it.
-            </p>
-            <Button size="sm" variant="secondary" className="min-h-10" loading={create.isPending} disabled={!agent} onClick={() => create.mutate()}>
-              Create a key and fill it in
-            </Button>
-          </div>
-        ) : null}
 
         <p className="text-body-13 text-02">
           This connects Everything: every tool on Assay, through one server.{" "}
@@ -143,7 +150,7 @@ export function ConnectView() {
               <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-success-500" />
               {rootCalled && root?.lastCallAt
                 ? `Yes: the first call arrived; the last one ${relativeTime(root.lastCallAt)}.`
-                : `Yes: “${used?.name}” made a call ${relativeTime(used?.lastUsedAt ?? null)}.`}
+                : `Yes: ${keyOfAgent(used?.name ?? "", agent?.label)} made a call ${relativeTime(used?.lastUsedAt ?? null)}.`}
             </p>
           ) : live.length === 0 && !created ? (
             <p className="text-body-13 text-02">Create a key and paste the config first.</p>
@@ -160,7 +167,22 @@ export function ConnectView() {
           </div>
         </section>
       </div>
-      <ConnectSheet open={narrowing} onOpenChange={setNarrowing} agentId={agent?.agentId ?? null} />
+      <ConnectSheet
+        open={narrowing}
+        onOpenChange={(open) => {
+          setNarrowing(open);
+          // Closed: the preselection was used once; a later "Connect a tool set" starts fresh.
+          if (!open && prefill) {
+            setPrefill(null);
+            // Only `tools` goes: other parameters and the hash stay.
+            const next = new URL(window.location.href);
+            next.searchParams.delete("tools");
+            window.history.replaceState(window.history.state, "", next);
+          }
+        }}
+        agentId={agent?.agentId ?? null}
+        initialUrl={prefill}
+      />
     </div>
   );
 }

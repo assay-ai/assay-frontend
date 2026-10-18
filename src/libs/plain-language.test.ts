@@ -120,6 +120,7 @@ describe("errors", () => {
 describe("actions and events", () => {
   it("reads audit actions as phrases", () => {
     expect(plainAuditAction("credential.revoked")).toBe("Agent key revoked");
+    expect(plainAuditAction("agent.renamed")).toBe("Agent renamed");
     expect(plainAuditAction("brand.new_thing")).toBe("Brand new thing");
   });
 
