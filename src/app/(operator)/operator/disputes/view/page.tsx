@@ -14,8 +14,8 @@ import { DisputeTimeline, EvidencePanes, useNow } from "@/features/call-disputes
 import { mayDecideCallDisputes } from "@/features/operator/provider-tool-review";
 import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
-import { approvalHref, queuedMessage } from "@/features/operator/two-person";
-import { useOperatorDirectory } from "@/features/operator/use-operator-lookups";
+import { approvalHref } from "@/features/operator/two-person";
+import { useOperatorDirectory, useOperatorToolNames, useProviderNames } from "@/features/operator/use-operator-lookups";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
 import { decideOperatorCallDispute, getOperatorCallDispute, type OperatorCallDisputeDetail } from "@/services/operator-call-disputes.service";
@@ -28,6 +28,20 @@ import { formatMoney } from "@/utils/money";
  * now (what upholding would do), the buyer's recent record, and the decision.
  * An upheld refund at or above the threshold waits for a second operator.
  */
+/** The intent's status and collection state in words (the API sends codes). */
+const INTENT_STATUS: Readonly<Record<string, string>> = {
+  SETTLED: "Settled (charged)",
+  REFUNDED: "Refunded",
+  VOIDED: "Voided (not charged)",
+  EXPIRED: "Expired (not charged)",
+};
+const COLLECTION_STATE: Readonly<Record<string, string>> = {
+  HELD: "Held: not the provider's until decided",
+  NORMAL: "Collected for the provider",
+  DEBT_OUTSTANDING: "Buyer owes it (debt)",
+  WRITTEN_OFF: "Written off (provider unpaid)",
+};
+
 function DisputeScreen() {
   const id = useSearchParam("id");
   const me = useOperatorSession();
@@ -35,6 +49,13 @@ function DisputeScreen() {
   const directory = useOperatorDirectory();
   const detail = useQuery({ queryKey: ["operator", "call-dispute", id], queryFn: () => getOperatorCallDispute(id), enabled: Boolean(id), retry: 0 });
   const [result, setResult] = React.useState<{ title: string; next: string; href?: string } | null>(null);
+  const toolName = useOperatorToolNames();
+  const providers = useProviderNames();
+  const resultRef = React.useRef<HTMLDivElement | null>(null);
+  // The confirmation lands where the button was, not at the top of the page.
+  React.useEffect(() => {
+    if (result) resultRef.current?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  }, [result]);
 
   const back = (
     <Link href="/operator/disputes" className="inline-flex min-h-10 items-center gap-1.5 self-start text-label-13 text-02 hover:text-01">
@@ -61,6 +82,9 @@ function DisputeScreen() {
       {back}
       <header className="flex flex-col gap-1.5">
         <h1 className="text-heading-md text-01">{d.reasonLabel}</h1>
+        <p className="text-body-13 text-02 [overflow-wrap:anywhere]">
+          On <span className="font-mono">{toolName(d.toolId)}</span>, served by {providers.lookup(d.providerId) ?? "its provider"}, for buyer …{d.buyerOrganizationId.slice(-4)}
+        </p>
         <div className="flex flex-wrap items-center gap-1.5 text-body-13 text-03">
           <Chip tone={d.state === "OPEN" ? "warning" : d.state === "UPHELD" ? "success" : "neutral"}>{d.state === "OPEN" ? "Open" : d.state === "UPHELD" ? "Upheld" : d.state === "REJECTED" ? "Rejected" : "Withdrawn"}</Chip>
           {marks.map((m) => (
@@ -76,11 +100,10 @@ function DisputeScreen() {
         </div>
       </header>
 
-      {result ? <ResultCard title={result.title} next={result.next} tone={result.href ? "queued" : "done"} link={result.href ? { href: result.href, label: "Open it in Approvals" } : undefined} onDismiss={() => setResult(null)} /> : null}
 
       <section aria-label="Timeline" className="flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 px-4 py-4">
         <DisputeTimeline dispute={d} side="buyer" now={now} onElapsed={() => void detail.refetch()} />
-        <p className="text-body-xs text-03">{d.refundGuaranteed ? "Filed inside the 1-hour hold: the payment is held; upholding refunds it in full." : "Filed after the hold: a quality signal; a refund only if the payment was not collected."} Times are in UTC.</p>
+        <p className="text-body-xs text-03">{d.refundGuaranteed ? "Filed inside the 1-hour hold: the payment is held; upholding refunds it in full." : "Filed after the hold: the payment was already collected. Upholding counts against quality; a refund is not guaranteed."} Times are in UTC.</p>
       </section>
 
       <div className="grid w-full grid-cols-1 gap-4 desktop:grid-cols-2">
@@ -108,10 +131,10 @@ function DisputeScreen() {
         {d.intent ? (
           <dl className="grid grid-cols-2 gap-3 tablet:grid-cols-4">
             {[
-              ["Call", d.intent.status],
+              ["Call", INTENT_STATUS[d.intent.status] ?? d.intent.status],
               ["Payment", d.intent.rail === "RAIL_B_VOUCHER" ? "Escrow voucher" : "Paid at call time"],
               ["Price", formatMoney(d.intent.price, { decimals: 4 })],
-              ["Collection", d.intent.collectionState],
+              ["Collection", COLLECTION_STATE[d.intent.collectionState] ?? d.intent.collectionState],
             ].map(([label, value]) => (
               <div key={label} className="flex min-w-0 flex-col gap-0.5">
                 <dt className="text-body-xs text-03">{label}</dt>
@@ -124,7 +147,7 @@ function DisputeScreen() {
         {d.refundState === "REFUNDED" && d.state === "OPEN" ? <p className="text-body-13 text-success-700">Already refunded: the provider was blocked and its held payment went back to the buyer. Decide for the quality record.</p> : null}
       </section>
 
-      <details className="group rounded-xl border border-01 bg-01">
+      <details open className="group rounded-xl border border-01 bg-01">
         <summary className="cursor-pointer select-none px-4 py-3.5 text-label-13 text-02 hover:text-01">Request and response, as captured at filing</summary>
         <div className="px-4 pb-4">
           <EvidencePanes evidence={d.evidence} />
@@ -147,6 +170,10 @@ function DisputeScreen() {
           </p>
         </section>
       ) : null}
+
+      <div ref={resultRef}>
+        {result ? <ResultCard title={result.title} next={result.next} tone={result.href ? "queued" : "done"} link={result.href ? { href: result.href, label: "Open it in Approvals" } : undefined} onDismiss={() => setResult(null)} /> : null}
+      </div>
 
       {d.state === "OPEN" && mayDecideCallDisputes(me.roles) ? (
         <DecideForm
@@ -176,7 +203,7 @@ function DecideForm({ dispute, onDone }: { dispute: OperatorCallDisputeDetail; o
     onSuccess: (answer) => {
       void queryClient.invalidateQueries({ queryKey: ["operator", "call-disputes"] });
       if (answer.kind === "queued") {
-        onDone({ title: "Sent for approval: upholding this refund needs a second operator", next: queuedMessage(answer.approval), href: approvalHref(answer.approval.approvalId) });
+        onDone({ title: "Sent for approval: upholding this refund needs a second operator", next: "Nothing has happened yet: it is upheld, and the buyer refunded, once a second operator approves it in Approvals.", href: approvalHref(answer.approval.approvalId) });
       } else {
         onDone({ title: decision === "UPHOLD" ? "Upheld" : "Rejected", next: "The buyer and the provider are told, with your note." });
       }

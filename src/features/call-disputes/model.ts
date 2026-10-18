@@ -4,7 +4,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import type { CallDispute, CallDisputeReason } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
-import { DECISION_HOURS, FILING_WINDOW_DAYS, HELD_TIMEOUT_DAYS, OPERATOR_PAGE_HOURS, PROVIDER_REPLY_HOURS } from "@/libs/dispute-deadlines";
+import { DECISION_HOURS, HELD_TIMEOUT_DAYS, PROVIDER_REPLY_HOURS, REPORTS_PER_DAY } from "@/libs/dispute-deadlines";
 
 /**
  * "Report a bad result" (backlog G3.B1, analysis of the dispute hold), the
@@ -22,7 +22,7 @@ import { DECISION_HOURS, FILING_WINDOW_DAYS, HELD_TIMEOUT_DAYS, OPERATOR_PAGE_HO
  */
 
 export const HOUR_MS = 3_600_000;
-export { DECISION_HOURS, FILING_WINDOW_DAYS, HELD_TIMEOUT_DAYS, OPERATOR_PAGE_HOURS, PROVIDER_REPLY_HOURS } from "@/libs/dispute-deadlines";
+export { DECISION_HOURS, HELD_TIMEOUT_DAYS, PROVIDER_REPLY_HOURS } from "@/libs/dispute-deadlines";
 export const NOTE_MAX = 1000;
 export const REPLY_MAX = 1000;
 /** The operator's note, shown to both sides verbatim. */
@@ -41,22 +41,38 @@ export function reasonLabel(reason: string, fallback?: string): string {
   return REASON_OPTIONS.find((r) => r.value === reason)?.label ?? fallback ?? reason;
 }
 
-function at(iso: string, hours: number): string {
-  return new Date(Date.parse(iso) + hours * HOUR_MS).toISOString();
+/** The provider's reply is accepted until then: the API states it. */
+export function replyDueAt(dispute: Pick<CallDispute, "replyDueAt">): string {
+  return dispute.replyDueAt;
 }
 
-export function replyDueAt(dispute: Pick<CallDispute, "createdAt">): string {
-  return at(dispute.createdAt, PROVIDER_REPLY_HOURS);
-}
-
-export function decisionDueAt(dispute: Pick<CallDispute, "createdAt">): string {
-  return at(dispute.createdAt, DECISION_HOURS);
+/** The decision SLA: the API states it. */
+export function decisionDueAt(dispute: Pick<CallDispute, "decisionDueAt">): string {
+  return dispute.decisionDueAt;
 }
 
 /** The provider's payment was refunded to the buyer because the provider was blocked, before any decision. */
 export function refundedBeforeDecision(dispute: Pick<CallDispute, "state" | "refundState">): boolean {
   return dispute.state === "OPEN" && dispute.refundState === "REFUNDED";
 }
+
+/**
+ * The dispute copy every screen uses, one clock per sentence (decided
+ * rules): the provider's reply window, the automatic uphold of a silent
+ * provider, the operator's decision, and what a report after the hold means.
+ * The 7-day chain timeout is a safety net for a platform that never acts,
+ * never the normal outcome: it appears only as secondary text.
+ */
+export const DISPUTE_COPY = {
+  reply: `The provider has ${PROVIDER_REPLY_HOURS} hours to reply.`,
+  silent: `If the provider stays silent, the report is upheld automatically at ${DECISION_HOURS} hours.`,
+  silentRefund: `If the provider stays silent, the report is upheld automatically at ${DECISION_HOURS} hours and you are refunded.`,
+  decides: `An operator decides within ${DECISION_HOURS} hours.`,
+  held: "The payment stays held until the report is decided.",
+  afterHold: "The payment has already been collected. If the report is upheld, it counts against the provider's quality, but a refund is not guaranteed.",
+  safetyNet: `Safety net: if the platform itself never acts, the chain releases a held payment to the provider after ${HELD_TIMEOUT_DAYS} days.`,
+  limit: `You can report up to ${REPORTS_PER_DAY} calls in 24 hours.`,
+} as const;
 
 function money(value: Money | null | undefined): string | null {
   return value ? formatMoney(value, { decimals: 4 }) : null;
@@ -77,9 +93,9 @@ export function buyerStatus(dispute: CallDispute, now: number): DisputeStatusVie
   if (dispute.state === "WITHDRAWN") return { label: "Withdrawn", tone: "neutral", detail: "You withdrew this report." };
   if (refundedBeforeDecision(dispute)) {
     return {
-      label: "Refunded",
+      label: "Refunded · decision pending",
       tone: "teal",
-      detail: `The provider was blocked, so the payment${refunded ? ` of ${refunded}` : ""} went back to your balance. The report stays open for a decision.`,
+      detail: `The provider was blocked, so the payment${refunded ? ` of ${refunded}` : ""} went back to your balance. ${DISPUTE_COPY.decides}`,
     };
   }
   if (dispute.state === "OPEN") {
@@ -88,9 +104,7 @@ export function buyerStatus(dispute: CallDispute, now: number): DisputeStatusVie
     return {
       label: replyOpen ? "Waiting for the provider" : "Waiting for a decision",
       tone: "primary",
-      detail: dispute.refundGuaranteed
-        ? `The payment is held. If the report is upheld, you are refunded in full; if nothing is decided within ${HELD_TIMEOUT_DAYS} days, the provider is paid.`
-        : "The 1-hour hold had ended, so this counts against the provider's quality; a refund is made only if the payment was not collected.",
+      detail: dispute.refundGuaranteed ? `${DISPUTE_COPY.held} If it is upheld, you are refunded in full.` : DISPUTE_COPY.afterHold,
     };
   }
   if (dispute.state === "UPHELD") {
@@ -120,12 +134,12 @@ export function providerStatus(dispute: CallDispute, now: number): DisputeStatus
   if (dispute.state === "WITHDRAWN") return { label: "Withdrawn", tone: "neutral", detail: "The buyer withdrew the report." };
   if (dispute.state === "OPEN") {
     if (dispute.canRespond) {
-      return { label: "Reply needed", tone: "warning", detail: "Reply once before the deadline. If you stay silent, the report is upheld automatically at 72 hours." };
+      return { label: "Reply needed", tone: "warning", detail: `Reply once, within ${PROVIDER_REPLY_HOURS} hours of the report. If you stay silent, it is upheld automatically at ${DECISION_HOURS} hours.` };
     }
     if (!dispute.providerRespondedAt && now >= Date.parse(replyDueAt(dispute))) {
-      return { label: "Reply window closed", tone: "danger", detail: "You did not reply within 24 hours. Unless an operator decides first, it is upheld automatically at 72 hours." };
+      return { label: "Reply window closed", tone: "danger", detail: `You did not reply within ${PROVIDER_REPLY_HOURS} hours. The report is upheld automatically at ${DECISION_HOURS} hours unless an operator decides first.` };
     }
-    return { label: "Waiting for a decision", tone: "primary", detail: "You replied. An operator decides; the payment stays held until then." };
+    return { label: "Waiting for a decision", tone: "primary", detail: `You replied. ${DISPUTE_COPY.decides}` };
   }
   if (dispute.state === "UPHELD") return { label: "Upheld", tone: "danger", detail: "It counts against this listing's quality." };
   if (dispute.state === "REJECTED") return { label: "Rejected", tone: "success", detail: "The payment is yours." };
@@ -151,18 +165,23 @@ export function disputeTimeline(dispute: CallDispute, now: number, side: "buyer"
     date: dispute.createdAt,
     description: dispute.refundGuaranteed
       ? `Inside the 1-hour hold: the payment${amount ? ` of ${amount}` : ""} is held, not paid out.`
-      : "After the 1-hour hold: it counts against quality; refunded only if the payment was not collected.",
+      : "After the 1-hour hold: the payment had already been collected.",
   });
 
+  const blocked = dispute.refundState === "REFUNDED" && !decided && !withdrawn;
   if (dispute.providerRespondedAt) {
-    steps.push({ id: "reply", label: "Provider replied", state: "done", date: dispute.providerRespondedAt });
+    const reply = dispute.providerResponse ?? "";
+    steps.push({ id: "reply", label: "Provider replied", state: "done", date: dispute.providerRespondedAt, description: reply ? `“${reply.length > 140 ? `${reply.slice(0, 139)}…` : reply}”` : undefined });
+  } else if (blocked) {
+    steps.push({ id: "reply", label: "No reply needed: provider blocked", state: "skipped" });
   } else if (withdrawn || decided || replyClosed) {
     steps.push({
       id: "reply",
       label: "No reply from the provider",
       state: "skipped",
       date: replyDue,
-      description: withdrawn ? undefined : "The 24-hour reply window closed.",
+      dateLabel: "Window closed",
+      description: withdrawn ? undefined : `The ${PROVIDER_REPLY_HOURS}-hour reply window closed.`,
     });
   } else {
     steps.push({
@@ -173,11 +192,11 @@ export function disputeTimeline(dispute: CallDispute, now: number, side: "buyer"
       dateLabel: "Due",
       countdown: true,
       urgent: side === "provider",
-      description: "Once, within 24 hours.",
+      description: DISPUTE_COPY.reply,
     });
   }
 
-  if (dispute.refundState === "REFUNDED" && !decided && !withdrawn) {
+  if (blocked) {
     steps.push({
       id: "refunded-early",
       label: "Refunded",
@@ -207,7 +226,7 @@ export function disputeTimeline(dispute: CallDispute, now: number, side: "buyer"
       state: dispute.providerRespondedAt || replyClosed ? "current" : "upcoming",
       date: decisionDueAt(dispute),
       dateLabel: "Decided by",
-      description: silent ? "If the provider stays silent, it is upheld automatically at 72 hours." : "An operator decides. The payment stays held until then.",
+      description: silent && dispute.autoUpholdAt ? (side === "buyer" ? DISPUTE_COPY.silentRefund : DISPUTE_COPY.silent) : DISPUTE_COPY.decides,
     });
   }
 
@@ -224,7 +243,7 @@ function refundStep(dispute: CallDispute, decided: boolean): StatusTimelineStep 
       id: "refund",
       label: "Refund",
       state: "upcoming",
-      description: dispute.refundGuaranteed ? "In full, if upheld." : "Only if the payment was not collected.",
+      description: dispute.refundGuaranteed ? "In full, if upheld." : "Not guaranteed: the payment was already collected.",
     };
   }
   if (dispute.state === "REJECTED") {
@@ -260,12 +279,11 @@ export interface ReportWindowView {
 
 /** What a report filed now would mean, from the receipt's hold fields. */
 export function reportWindow(
-  receipt: { status: string; createdAt: string; settledAt?: string | null; disputeWindowEndsAt?: string | null; chargedPrice: Money },
+  receipt: { status: string; disputeWindowEndsAt?: string | null; disputeFilingClosesAt?: string | null; chargedPrice: Money },
   now: number,
 ): ReportWindowView {
-  const settled = receipt.settledAt ?? null;
-  const from = Date.parse(settled ?? receipt.createdAt);
-  const open = receipt.status === "SETTLED" && now - from <= FILING_WINDOW_DAYS * 86_400_000;
+  const closes = receipt.disputeFilingClosesAt ?? null;
+  const open = closes !== null && now < Date.parse(closes);
   const holdEnds = receipt.disputeWindowEndsAt ?? null;
   const guaranteed = open && holdEnds !== null && now < Date.parse(holdEnds);
   if (!open) {
@@ -273,17 +291,12 @@ export function reportWindow(
       open: false,
       guaranteed: false,
       holdEndsAt: null,
-      text: receipt.status === "SETTLED" ? `Reports are accepted for ${FILING_WINDOW_DAYS} days after a call.` : "Only a finished, charged call can be reported.",
+      text: closes !== null ? "The time to report this call has passed." : "Only a finished, charged call can be reported.",
     };
   }
   return guaranteed
     ? { open, guaranteed, holdEndsAt: holdEnds, text: "The payment is still held. Report it now and, if upheld, you are refunded in full." }
-    : {
-        open,
-        guaranteed,
-        holdEndsAt: null,
-        text: "The 1-hour hold has ended. A report still counts against the provider's quality; it is refunded only if the payment was not collected.",
-      };
+    : { open, guaranteed, holdEndsAt: null, text: `The 1-hour hold has ended. ${DISPUTE_COPY.afterHold}` };
 }
 
 /* ---------------------------------------------------------- operator SLA */
@@ -300,19 +313,19 @@ export interface SlaMark {
  * 48-hour page, and the 72-hour auto-uphold (provider silent) or overdue
  * (provider replied: held, paged).
  */
-export function slaMarks(dispute: Pick<CallDispute, "state" | "createdAt" | "providerRespondedAt">, now: number): SlaMark[] {
+export function slaMarks(dispute: Pick<CallDispute, "state" | "providerRespondedAt" | "replyDueAt" | "pageAt" | "decisionDueAt" | "autoUpholdAt">, now: number): SlaMark[] {
   if (dispute.state !== "OPEN") return [];
-  const age = now - Date.parse(dispute.createdAt);
   const silent = !dispute.providerRespondedAt;
+  const auto = dispute.autoUpholdAt !== null;
   const marks: SlaMark[] = [];
-  if (silent && age < PROVIDER_REPLY_HOURS * HOUR_MS) marks.push({ label: "Provider may reply", tone: "neutral", dueAt: replyDueAt(dispute) });
-  if (silent && age >= PROVIDER_REPLY_HOURS * HOUR_MS) marks.push({ label: "Provider silent", tone: "warning", dueAt: null });
-  if (age >= DECISION_HOURS * HOUR_MS) {
-    marks.push(silent ? { label: "Auto-uphold due", tone: "danger", dueAt: decisionDueAt(dispute) } : { label: "Past 72 h", tone: "danger", dueAt: decisionDueAt(dispute) });
-  } else if (age >= OPERATOR_PAGE_HOURS * HOUR_MS) {
-    marks.push({ label: silent ? "Auto-uphold at 72 h" : "Decide by 72 h", tone: "danger", dueAt: decisionDueAt(dispute) });
+  if (silent && now < Date.parse(dispute.replyDueAt)) marks.push({ label: "Provider may reply", tone: "neutral", dueAt: dispute.replyDueAt });
+  if (silent && now >= Date.parse(dispute.replyDueAt)) marks.push({ label: "Provider silent", tone: "warning", dueAt: null });
+  if (now >= Date.parse(dispute.decisionDueAt)) {
+    marks.push(auto ? { label: "Auto-uphold due", tone: "danger", dueAt: dispute.decisionDueAt } : { label: "Overdue: decide now", tone: "danger", dueAt: dispute.decisionDueAt });
+  } else if (now >= Date.parse(dispute.pageAt)) {
+    marks.push({ label: auto ? "Paged · auto-uphold at 72 h" : "Paged · decide by 72 h", tone: "danger", dueAt: dispute.decisionDueAt });
   } else {
-    marks.push({ label: silent ? "Auto-uphold at 72 h" : "Decide by 72 h", tone: "neutral", dueAt: decisionDueAt(dispute) });
+    marks.push({ label: auto ? "Auto-uphold at 72 h" : "Decide by 72 h", tone: "neutral", dueAt: dispute.decisionDueAt });
   }
   return marks;
 }
@@ -322,10 +335,13 @@ export function slaMarks(dispute: Pick<CallDispute, "state" | "createdAt" | "pro
  * (the default is newest first, which would push the most urgent ones past
  * the first page), every dispute newest first.
  */
+/** The operator queue's page size. */
+export const QUEUE_PAGE = 20;
+
 export function disputeQueueQuery(show: "open" | "all", flaggedOnly: boolean, cursor?: string) {
   return show === "open"
-    ? { state: ["OPEN"] as const, order: "ASC" as const, flaggedOnly, cursor }
-    : { order: "DESC" as const, flaggedOnly, cursor };
+    ? { state: ["OPEN"] as const, order: "ASC" as const, flaggedOnly, cursor, limit: QUEUE_PAGE }
+    : { order: "DESC" as const, flaggedOnly, cursor, limit: QUEUE_PAGE };
 }
 
 /** Oldest first: the queue's order is the SLA's. */
@@ -339,7 +355,7 @@ export const REFUND_PLAN_TEXT: Readonly<Record<string, string>> = {
   VOID_DEBT: "Upholding voids the buyer's unpaid debt for this call.",
   NOT_CHARGED: "The buyer was not charged; upholding only counts against the provider.",
   COLLECTION_IN_PROGRESS: "The payment is moving right now. Wait a minute before deciding.",
-  COLLECTED: "The provider was already paid; upholding counts against quality but refunds nothing.",
+  COLLECTED: "The payment was already collected; upholding counts against quality, but a refund is not guaranteed.",
   ALREADY_REFUNDED: "The refund has already landed (a decision being retried); deciding again moves no money.",
 };
 
@@ -351,11 +367,11 @@ export function disputeErrorText(error: unknown): string {
     case "DISPUTE_CALL_NOT_DISPUTABLE":
       return "This call can't be reported: only a finished, paid call can.";
     case "DISPUTE_FILING_WINDOW_CLOSED":
-      return `Reports are accepted for ${FILING_WINDOW_DAYS} days after a call. This one is older.`;
+      return "The time to report this call has passed.";
     case "DISPUTE_ALREADY_OPEN":
       return "You already reported this call. Its status is below.";
     case "DISPUTE_RATE_LIMITED":
-      return "You have sent the most reports allowed in 24 hours. Try again later.";
+      return `${DISPUTE_COPY.limit} That limit is reached; try again later.`;
     case "DISPUTE_ALREADY_RESPONDED":
       return "A reply was already sent, or the report was decided.";
     case "DISPUTE_NOT_DECIDABLE":

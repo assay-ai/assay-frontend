@@ -13,10 +13,13 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
 import { deprecateProviderToolMajor, setProviderToolReplacement, type ProviderTool } from "@/services/provider-tools.service";
+import { formatDate } from "@/libs/utc-time";
 import { toast } from "@/utils/toast";
+import { UtcTime } from "@/components/patterns/utc-time";
+import { SUPPORT_URL } from "@/libs/support";
 
 import { ContractStep } from "./contract-step";
-import { doneSteps, earliestSunset, isPublishStep, providerToolErrorView, providerToolState, PUBLISH_STEPS, resumeStep, type PublishStepId, type VersionRow } from "./model";
+import { doneSteps, earliestSunsetDay, isPublishStep, providerToolErrorView, providerToolState, PUBLISH_STEPS, resumeStep, type PublishStepId, type VersionRow } from "./model";
 import { NameStep } from "./name-step";
 import { providerToolKeys, useProviderTool, useProviderToolGate } from "./queries";
 import { ConnectStep, ShareStep } from "./share-steps";
@@ -97,6 +100,12 @@ export function PublishApiFlow({ toolId }: { toolId: string | null }) {
             <h1 className="break-all font-mono text-heading-sm text-01 tablet:text-heading-md">{tool.name}</h1>
             <ProviderToolChips tool={tool} />
             {state ? <p className="text-body-13 text-02">{state.detail}</p> : null}
+            {tool.review.status === "PENDING" ? (
+              <p className="text-body-13 text-02" data-testid="in-review-line">
+                Reviewing {tool.review.reviewSemver ? `v${tool.review.reviewSemver}` : "it"} for “Listed in the catalogue”
+                {tool.review.kind === "CHANGE" && tool.draft?.changelog ? `: ${tool.draft.changelog}` : "."}
+              </p>
+            ) : null}
           </>
         ) : (
           <>
@@ -107,8 +116,21 @@ export function PublishApiFlow({ toolId }: { toolId: string | null }) {
       </header>
 
       {takenDown ? (
-        <div role="alert" className="rounded-lg border border-danger-20 bg-danger-10 px-3.5 py-3 text-body-13 text-danger-700">
-          Assay took this tool down. It is removed from every view, including pinned tool set versions, and calls to it get an error. It can&apos;t be edited.
+        <div role="alert" className="flex flex-col gap-1.5 rounded-lg border border-danger-20 bg-danger-10 px-3.5 py-3 text-body-13 text-danger-700" data-testid="taken-down">
+          <p>
+            Assay took this tool down{tool?.removedAt ? <> on <UtcTime value={tool.removedAt} alwaysDay /></> : null}. It is removed from every view, including pinned tool set versions, and calls to it get an error. It can&apos;t be edited.
+          </p>
+          <p>The reason is in the notice Assay sent to your Inbox.</p>
+          <p className="flex flex-wrap gap-x-4">
+            <Link href="/provider/inbox" className="inline-flex min-h-10 items-center text-primary-600 hover:underline">
+              Open your Inbox
+            </Link>
+            {SUPPORT_URL ? (
+              <a href={SUPPORT_URL} className="inline-flex min-h-10 items-center text-primary-600 hover:underline">
+                Contact support
+              </a>
+            ) : null}
+          </p>
         </div>
       ) : (
         <>
@@ -120,6 +142,11 @@ export function PublishApiFlow({ toolId }: { toolId: string | null }) {
               if (isPublishStep(id) && id !== step) go(id);
             }}
           />
+          {tool && tool.currentVersion === null ? (
+            <p className="text-body-13 text-03" data-testid="locked-steps">
+              Steps 3 and 4 open once you publish a first version in step 2: the endpoint is tested against it, and only a published version can be shared.
+            </p>
+          ) : null}
           {step === "name" ? <NameStep tool={tool} onContinue={() => go("contract")} /> : null}
           {step === "contract" && tool ? <ContractStep key={tool.id} tool={tool} onStep={go} /> : null}
           {step === "connect" && tool ? (
@@ -193,8 +220,7 @@ function ToolFacts({ tool, readOnly }: { tool: ProviderTool; readOnly: boolean }
 
 function DeprecateSheet({ tool, row, onClose }: { tool: ProviderTool; row: VersionRow | null; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const [now] = React.useState(() => Date.now());
-  const min = earliestSunset(now);
+  const min = earliestSunsetDay(tool.earliestSunsetAt);
   const [day, setDay] = React.useState(min);
   React.useEffect(() => setDay(min), [row, min]);
   const major = row?.semver.split(".")[0] ?? "";
@@ -207,6 +233,8 @@ function DeprecateSheet({ tool, row, onClose }: { tool: ProviderTool; row: Versi
     },
   });
   const tooSoon = day < min;
+  const current = tool.versions.find((v) => v.isCurrent) ?? null;
+  const inWords = /^\d{4}-\d{2}-\d{2}$/.test(day) ? formatDate(`${day}T00:00:00.000Z`) : null;
   return (
     <Sheet open={row !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <SheetContent className="tablet:max-w-[480px]">
@@ -215,10 +243,18 @@ function DeprecateSheet({ tool, row, onClose }: { tool: ProviderTool; row: Versi
           <SheetDescription>Agents locked to v{major} keep working until the date below, and get a notice now. After it, v{major} stops answering calls.</SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-3 px-[18px] pb-5 pt-3">
+          {current ? (
+            <p className="rounded-lg bg-02 px-3 py-2.5 text-body-13 text-01" data-testid="deprecate-replacement">
+              Replacement: <span className="font-mono text-mono-13">v{current.semver}</span>, the version agents get by default. Agents locked to v{major} should move to it before the date.
+            </p>
+          ) : null}
           <label className="flex flex-col gap-1.5">
             <span className="text-label-13 text-01">Stops on (UTC)</span>
             <input type="date" value={day} min={min} onChange={(e) => setDay(e.target.value)} className="min-h-10 rounded-md border border-02 bg-01 px-3 font-mono text-mono-sm text-01" />
-            <span className={tooSoon ? "text-body-xs text-danger-600" : "text-body-xs text-03"}>At least 90 days from today.</span>
+            <span className={tooSoon ? "text-body-xs text-danger-600" : "text-body-xs text-03"}>
+              {inWords ? `${inWords} (UTC). ` : ""}
+              {formatDate(`${min}T00:00:00.000Z`)} at the earliest: callers get at least 90 days&apos; notice.
+            </span>
           </label>
           {run.isError ? <p className="text-body-13 text-danger-700">{providerToolErrorView(run.error).text}</p> : null}
           <div className="flex flex-wrap gap-2">

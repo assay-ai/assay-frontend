@@ -99,6 +99,7 @@ const tool = (over: Partial<ProviderTool> = {}): ProviderTool => ({
     quality: null,
     maxTier: "VERIFIED",
   },
+  earliestSunsetAt: "2027-01-20T00:00:00.000Z",
   ...over,
 });
 
@@ -243,7 +244,7 @@ describe("the contract form", () => {
   });
 
   it("opens a draft against the version it changes", () => {
-    const form = contractFormFor(tool({ draft: { ...version({ version: 2, semver: "1.1.0", status: "DRAFT" }), baseSemver: "1.0.0", bump: "MINOR", changes: [], problems: [], screen: [], inReview: false } }));
+    const form = contractFormFor(tool({ draft: { ...version({ version: 2, semver: "1.1.0", status: "DRAFT" }), baseSemver: "1.0.0", bump: "MINOR", changes: [], problems: [], screen: [], inReview: false, updatedAt: "2026-10-02T00:00:00.000Z" } }));
     expect(form.baseVersion).toBe(1);
   });
 });

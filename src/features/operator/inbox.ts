@@ -22,6 +22,8 @@ import { approveBlockedBecause, approverRolesFor, isOwnRequest } from "./approva
 export interface ToolWork {
   reviews?: number;
   callDisputes?: number;
+  /** Provider-tool takedowns another operator took, waiting for this one to confirm. */
+  takedowns?: number;
 }
 
 /**
@@ -30,7 +32,7 @@ export interface ToolWork {
  * the pending provider tool reviews and open call disputes its roles decide.
  */
 export function needsYouCount(needsYouApprovals: number, openDisputes: number, canRule: boolean, toSign: number = 0, work: ToolWork = {}): number {
-  return needsYouApprovals + (canRule ? openDisputes + toSign : 0) + (work.reviews ?? 0) + (work.callDisputes ?? 0);
+  return needsYouApprovals + (canRule ? openDisputes + toSign : 0) + (work.reviews ?? 0) + (work.callDisputes ?? 0) + (work.takedowns ?? 0);
 }
 
 // ── Approvals ───────────────────────────────────────────────────────────────
@@ -81,6 +83,7 @@ export function needsYouBreakdown(approvals: number, disputes: number, canRule: 
     ...(canRule && toSign > 0 ? [`${toSign} to sign`] : []),
     ...(reviews > 0 ? [`${reviews} to review`] : []),
     ...(calls > 0 ? [`${calls} call ${calls === 1 ? "dispute" : "disputes"}`] : []),
+    ...((work.takedowns ?? 0) > 0 ? [`${work.takedowns} ${work.takedowns === 1 ? "takedown" : "takedowns"} to confirm`] : []),
   ];
   return parts.length < 2 ? null : parts.join(" · ");
 }

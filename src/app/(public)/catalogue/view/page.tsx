@@ -117,7 +117,7 @@ function ToolPage() {
         {tool.description ? <p className="max-w-[760px] text-body-md text-02">{tool.description}</p> : null}
         {tool.kind === "PROVIDER" ? (
           <p className="flex flex-wrap items-center gap-2 text-body-13 text-02" data-testid="maker-facts">
-            <span className="rounded-full bg-03 px-2 py-0.5 text-label-xs text-02">One maker&apos;s API</span>
+            <span className="rounded-full bg-03 px-2 py-0.5 text-label-xs text-02">One maker&apos;s API{tool.handle ? ` · @${tool.handle}` : ""}</span>
             {tool.notReviewed ? <span className="rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">Not reviewed</span> : null}
             <span>
               Only its maker serves it, so there is no backup provider.
@@ -181,6 +181,18 @@ function ToolPage() {
             description={publicErrorText(providers.error, "the providers")}
             onRetry={() => void providers.refetch()}
           />
+        ) : serving.length === 0 && tool.kind === "PROVIDER" ? (
+          <p className="rounded-xl border border-01 bg-01 px-4 py-3.5 text-body-13 text-02" data-testid="maker-serves">
+            Served by {tool.handle ? `@${tool.handle}` : "its maker"} only: it is one maker&apos;s own API, so there is no backup provider.
+            {tool.handle ? (
+              <>
+                {" "}
+                <Link href={`/toolsets/handle?handle=${encodeURIComponent(tool.handle)}`} className="inline-flex min-h-10 items-center text-primary-600 hover:underline">
+                  See @{tool.handle}
+                </Link>
+              </>
+            ) : null}
+          </p>
         ) : serving.length === 0 ? (
           <PageState
             kind="empty"

@@ -19,6 +19,9 @@ import {
 } from "@/services/provider-tools.service";
 import { toast } from "@/utils/toast";
 
+import { FieldsEditor, TryPanel, type TryOutcome } from "./fields-editor";
+import { fieldsFromSchema, optionalNames, schemaFromFields, starterCheck, starterExample, type FieldRow } from "./schema-fields";
+
 import { contractBody, contractFormFor, providerToolErrorView, rulesTextOf, type PublishStepId } from "./model";
 import { providerToolKeys } from "./queries";
 import { ScreenFindings } from "./ui";
@@ -33,6 +36,37 @@ import { ScreenFindings } from "./ui";
  */
 
 const SUMMARY_MAX = 200;
+
+/**
+ * One side of the contract: the field editor when the schema is a flat
+ * object, with "Edit as JSON" for anything else; `children` is the JSON block.
+ */
+function SchemaSide({ side, rows, onRows, disabled, children }: { side: "input" | "output"; rows: FieldRow[] | null; onRows: (rows: FieldRow[]) => void; disabled: boolean; children: React.ReactNode }) {
+  const [json, setJson] = React.useState(rows === null);
+  const editable = rows !== null;
+  return (
+    <div className="flex w-full flex-col gap-2">
+      {editable && !json ? (
+        <FieldsEditor
+          label={side === "input" ? "What agents send" : "What your API returns"}
+          rows={rows}
+          onChange={onRows}
+          disabled={disabled}
+          requiredHint={
+            side === "input"
+              ? "Required: every call sends it. Never ask for a key or password here: keep those in your endpoint's authentication."
+              : "Required: every answer has it; untick it if an answer may leave it out. An answer that breaks this is refunded."
+          }
+        />
+      ) : (
+        children
+      )}
+      <Button variant="ghost" size="sm" className="touch-target self-start" onClick={() => setJson((on) => !on)} disabled={!editable && !json}>
+        {json ? (editable ? "Edit as fields" : "This schema needs JSON (nested fields)") : "Edit as JSON (advanced)"}
+      </Button>
+    </div>
+  );
+}
 
 const RULES_HINT =
   'Optional. A JSON list of checks run on every answer, e.g. [{ "id": "has_posts", "type": "MIN_ARRAY_LENGTH", "path": "$.posts", "min": 1 }]. Types: MIN_ARRAY_LENGTH, REQUIRED_FIELDS, FRESHNESS, VALUE_RANGE, VALID_URL, NO_DUPLICATES. A failed check counts against quality; it does not refuse the call.';
@@ -86,7 +120,7 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
     onSuccess: (updated) => {
       store(updated);
       if (updated.review.status === "PENDING") toast.success("Sent for review. The approved version keeps serving until it is approved.");
-      else toast.success(`v${updated.currentSemver ?? ""} is published`);
+      else toast.success(updated.visibility === "PRIVATE" ? `v${updated.currentSemver ?? ""} is saved for your team` : `v${updated.currentSemver ?? ""} is published`);
       if (firstVersion) onStep("connect");
     },
     onError: (error) => {
@@ -109,6 +143,53 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
   const withdraw = useMutation({ mutationFn: () => withdrawProviderToolReview(tool.id), onSuccess: store });
 
   const set = <K extends keyof ContractForm>(field: K, value: ContractForm[K]) => setForm((f) => ({ ...f, [field]: value }));
+  // The field editor's rows (null: the schema needs the JSON editor). Kept as rows, so a field still being named is not lost.
+  const [inputRows, setInputRows] = React.useState<FieldRow[] | null>(() => fieldsFromSchema(initial.inputSchema));
+  const [outputRows, setOutputRows] = React.useState<FieldRow[] | null>(() => fieldsFromSchema(initial.outputSchema));
+  React.useEffect(() => {
+    setInputRows(fieldsFromSchema(initial.inputSchema));
+    setOutputRows(fieldsFromSchema(initial.outputSchema));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+  const setRows = (side: "input" | "output", rows: FieldRow[]) => {
+    (side === "input" ? setInputRows : setOutputRows)(rows);
+    setForm((f) =>
+      side === "input"
+        ? { ...f, inputSchema: schemaFromFields(rows), optionalInputFields: optionalNames(rows) }
+        : { ...f, outputSchema: schemaFromFields(rows), optionalOutputFields: optionalNames(rows) },
+    );
+  };
+  const applyTried = (outcome: TryOutcome) => {
+    const input = JSON.stringify(outcome.inputSchema, null, 2);
+    const output = outcome.outputSchema ? JSON.stringify(outcome.outputSchema, null, 2) : form.outputSchema;
+    setForm((f) => ({ ...f, inputSchema: input, outputSchema: output, examples: JSON.stringify(outcome.examples.slice(0, 10), null, 2) }));
+    setInputRows(fieldsFromSchema(input));
+    setOutputRows(fieldsFromSchema(output));
+    toast.success("Filled in from your endpoint's answer. Check the descriptions: agents read them.");
+  };
+  const addExample = () => {
+    if (!inputRows || !outputRows) return;
+    let list: unknown[] = [];
+    try {
+      const parsed: unknown = JSON.parse(form.examples || "[]");
+      list = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      list = [];
+    }
+    set("examples", JSON.stringify([...list, starterExample(inputRows, outputRows)], null, 2));
+  };
+  const addCheck = () => {
+    const check = outputRows ? starterCheck(outputRows) : null;
+    if (!check) return;
+    let list: unknown[] = [];
+    try {
+      const parsed: unknown = JSON.parse(rules || "[]");
+      list = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      list = [];
+    }
+    setRules(JSON.stringify([...list, check], null, 2));
+  };
   const toggle = (field: "optionalInputFields" | "optionalOutputFields", name: string, on: boolean) =>
     setForm((f) => ({ ...f, [field]: on ? [...new Set([...f[field], name])] : f[field].filter((n) => n !== name) }));
 
@@ -124,7 +205,12 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
         : nothingToPublish
           ? "Change something first."
           : null;
-  const publishLabel = listed ? `Submit v${preview.nextSemver} for review` : firstVersion ? "Publish v1.0.0" : `Publish v${preview.nextSemver}`;
+  // "Publish" reads as going public: a private tool's version is saved for the team only.
+  const publishLabel = listed
+    ? `Submit v${preview.nextSemver} for review`
+    : tool.visibility === "PRIVATE"
+      ? `Save as v${firstVersion ? "1.0.0" : preview.nextSemver} (only your team)`
+      : `Publish v${preview.nextSemver}`;
   const error = save.error ?? publish.error ?? discard.error ?? withdraw.error;
   const errorView = error ? providerToolErrorView(error) : null;
   const serverFindings = tool.draft?.screen ?? [];
@@ -183,6 +269,13 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
         className="font-sans"
       />
       <TextBlock label="Description" value={form.description} onChange={(v) => set("description", v)} disabled={frozen} rows={4} hint="The full documentation. Agents read it when they ask about the tool, and your public page shows it." />
+      <TryPanel disabled={frozen} onUse={applyTried} />
+      <SchemaSide
+        side="input"
+        rows={inputRows}
+        onRows={(rows) => setRows("input", rows)}
+        disabled={frozen}
+      >
       <SchemaBlock
         side="input"
         label="What agents send (input schema)"
@@ -195,6 +288,13 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
         optionalHint={OPTIONAL_INPUT_HINT}
         disabled={frozen}
       />
+      </SchemaSide>
+      <SchemaSide
+        side="output"
+        rows={outputRows}
+        onRows={(rows) => setRows("output", rows)}
+        disabled={frozen}
+      >
       <SchemaBlock
         side="output"
         label="What your API returns (output schema)"
@@ -207,6 +307,15 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
         optionalHint={OPTIONAL_OUTPUT_HINT}
         disabled={frozen}
       />
+      </SchemaSide>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" size="sm" className="touch-target" disabled={frozen || !inputRows || !outputRows} onClick={addExample}>
+          Add a starter example
+        </Button>
+        <Button variant="secondary" size="sm" className="touch-target" disabled={frozen || !outputRows || starterCheck(outputRows ?? []) === null} onClick={addCheck}>
+          Add a starter check
+        </Button>
+      </div>
       <TextBlock
         label="Examples (optional)"
         value={form.examples}
@@ -278,7 +387,7 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
             {publishLabel}
           </Button>
           {publishBlock ? <span className="max-w-[360px] text-body-xs text-03 tablet:text-right">{publishBlock}</span> : null}
-          {!publishBlock && firstVersion ? <span className="text-body-xs text-03">Only your team can call it until step 4.</span> : null}
+          {!publishBlock && tool.visibility === "PRIVATE" ? <span className="text-body-xs text-03">Nobody outside your team sees it until you share it in step 4.</span> : null}
         </div>
       </div>
       {!firstVersion && !tool.draft && !dirty ? (

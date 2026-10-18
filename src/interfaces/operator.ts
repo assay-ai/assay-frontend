@@ -154,6 +154,10 @@ export interface PlatformHealth {
   chainState?: ChainStateHealth[];
   /** Every provider on a slash hold, one row per provider and chain. Absent on an older backend. */
   slashHolds?: SlashHoldHealth[];
+  /** Provider tools waiting for review: the "Needs you" count for the review queue. Null when it could not be read. */
+  pendingToolReviews?: number | null;
+  /** Buyer call disputes still open. Null when it could not be read. */
+  openCallDisputes?: number | null;
 }
 
 /** `SlashHoldHealthDto` — a provider whose paid calls are not routed on one chain. */

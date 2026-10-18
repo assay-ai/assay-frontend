@@ -1128,6 +1128,8 @@ function receiptBody(call: DemoCall) {
     // The dispute hold: a charged call's payment is held for an hour after it settles.
     collectableAt: charged && settled ? minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES) : null,
     disputeWindowEndsAt: charged && settled ? minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES + 1) : null,
+    // "Report a bad result" is accepted for 7 days after the call settled; null when it can't be reported.
+    disputeFilingClosesAt: charged && settled ? minutesAgo(Math.max(callAge(call) - 1, 0) - 7 * 1440) : null,
   };
 }
 

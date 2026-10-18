@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -10,11 +10,12 @@ import { UtcTime } from "@/components/patterns/utc-time";
 import { Chip } from "@/components/toolsets/toolset-bits";
 import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
-import { bySlaUrgency, disputeQueueQuery, slaMarks } from "@/features/call-disputes/model";
+import { bySlaUrgency, DISPUTE_COPY, disputeQueueQuery, slaMarks } from "@/features/call-disputes/model";
 import { useNow } from "@/features/call-disputes/ui";
 import { mayDecideCallDisputes } from "@/features/operator/provider-tool-review";
 import { OperatorCasesTabs } from "@/features/operator/provider-tool-ui";
 import { useOperatorSession } from "@/features/operator/session-context";
+import { useOperatorToolNames, useProviderNames } from "@/features/operator/use-operator-lookups";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
 import { listOperatorCallDisputes } from "@/services/operator-call-disputes.service";
@@ -33,6 +34,8 @@ const MARK_TONE = { neutral: "neutral", warning: "warning", danger: "danger" } a
 
 function DisputesScreen() {
   const me = useOperatorSession();
+  const toolName = useOperatorToolNames();
+  const providers = useProviderNames();
   const now = useNow(30_000);
   const [show, setShow] = React.useState<"open" | "all">("open");
   const [flagged, setFlagged] = React.useState(false);
@@ -53,7 +56,7 @@ function DisputesScreen() {
       <header className="flex w-full flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-heading-md text-01">Call disputes</h1>
-          <p className="text-body-13 text-02">Buyers&apos; reports of bad results on paid calls. Decide within 72 hours of the filing.</p>
+          <p className="text-body-13 text-02">Buyers&apos; reports of bad results on paid calls. {DISPUTE_COPY.decides}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Segmented value={show} onValueChange={(v) => setShow(v as "open" | "all")} aria-label="Show" className="inline-flex rounded-md bg-03 p-0.5">
@@ -66,6 +69,7 @@ function DisputesScreen() {
             onClick={() => setFlagged((on) => !on)}
             className={cn("min-h-10 rounded-full border px-3 text-label-13", flagged ? "border-primary-500 bg-primary-10 text-primary-700" : "border-02 bg-01 text-02 hover:text-01")}
           >
+            {flagged ? <Check aria-hidden="true" className="mr-1 inline size-3.5" /> : null}
             Mostly-rejected buyers
           </button>
         </div>
@@ -83,9 +87,12 @@ function DisputesScreen() {
             <li key={d.id}>
               <Link href={routes.operatorCallDispute(d.id)} className="flex w-full items-center justify-between gap-3 px-4 py-3 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
                 <span className="flex min-w-0 flex-col gap-1">
-                  <span className="text-label-13 text-01">
+                  <span className="text-label-13 text-01 [overflow-wrap:anywhere]">
                     {d.reasonLabel}
                     {d.amount ? <span className="font-mono text-mono-12 text-02"> · {formatMoney(d.amount, { decimals: 4 })}</span> : null}
+                  </span>
+                  <span className="text-body-xs text-02 [overflow-wrap:anywhere]">
+                    <span className="font-mono">{toolName(d.toolId)}</span> · {providers.lookup(d.providerId) ?? "its provider"} · buyer …{d.buyerOrganizationId.slice(-4)}
                   </span>
                   <span className="flex flex-wrap items-center gap-1.5 text-body-xs text-03">
                     <span>

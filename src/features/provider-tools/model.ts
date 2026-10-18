@@ -2,7 +2,6 @@ import { problemText } from "@/features/contracts/text";
 import { formFor, parseForm, type ContractForm } from "@/features/operator/contract-editor";
 import type { OperatorTool } from "@/interfaces/contracts";
 import { ApiError } from "@/libs/ApiClient";
-import { SUNSET_MIN_DAYS } from "@/libs/dispute-deadlines";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import type {
@@ -11,6 +10,7 @@ import type {
   ProviderTool,
   ProviderToolContractBody,
   ProviderToolGate,
+  ProviderToolReview,
   ProviderToolSummary,
   ProviderToolVersion,
   ProviderToolVisibility,
@@ -185,8 +185,10 @@ export function providerToolState(tool: Pick<ProviderToolSummary, "status" | "vi
 }
 
 /** Whether the "Not reviewed" badge is shown: reachable by others, never approved. */
-export function showsNotReviewed(tool: Pick<ProviderToolSummary, "notReviewed" | "visibility" | "removedAt" | "status">): boolean {
-  return tool.notReviewed && tool.visibility !== "PRIVATE" && !tool.removedAt && tool.status !== "REMOVED";
+export function showsNotReviewed(tool: Pick<ProviderToolSummary, "notReviewed" | "visibility" | "removedAt" | "status"> & { review?: Pick<ProviderToolReview, "state"> }): boolean {
+  // In review or sent back, the state chip already says where the review stands.
+  const reviewing = tool.review ? ["IN_REVIEW", "CHANGES_IN_REVIEW", "REJECTED", "CHANGES_REJECTED"].includes(tool.review.state) : false;
+  return tool.notReviewed && tool.visibility !== "PRIVATE" && !tool.removedAt && tool.status !== "REMOVED" && !reviewing;
 }
 
 /* ------------------------------------------------------------ the 4 steps */
@@ -211,12 +213,14 @@ export function doneSteps(tool: ProviderTool | null, gate: ProviderToolGate | nu
   done.add("name");
   if (tool.currentVersion !== null) done.add("contract");
   if (gate?.passed) done.add("connect");
-  if (tool.visibility !== "PRIVATE" || tool.review.status === "PENDING" || tool.review.status === "APPROVED") done.add("share");
+  const sentBack = tool.review.status === "REJECTED";
+  if (!sentBack && (tool.visibility !== "PRIVATE" || tool.review.status === "PENDING" || tool.review.status === "APPROVED")) done.add("share");
   return done;
 }
 
-/** Where to resume a tool: the first step that is not done. */
+/** Where to resume a tool: the first step that is not done; a review sent back opens where the fix is. */
 export function resumeStep(tool: ProviderTool | null, gate: ProviderToolGate | null): PublishStepId {
+  if (tool?.review.status === "REJECTED") return "contract";
   const done = doneSteps(tool, gate);
   return PUBLISH_STEPS.find((step) => !done.has(step.id))?.id ?? "share";
 }
@@ -372,10 +376,8 @@ export function versionRows(tool: Pick<ProviderTool, "versions" | "currentVersio
     }));
 }
 
-/** The earliest sunset the API accepts: 90 days from now, as a UTC date (yyyy-mm-dd). */
-export function earliestSunset(now: number): string {
-  return new Date(now + (SUNSET_MIN_DAYS + 1) * 86_400_000).toISOString().slice(0, 10);
-}
+/** The earliest sunset day the API accepts, from the tool's `earliestSunsetAt` (the first whole UTC day at or after it). */
+export { sunsetDayFrom as earliestSunsetDay } from "@/features/contracts/text";
 
 /* --------------------------------------------------------------- the form */
 

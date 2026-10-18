@@ -121,14 +121,65 @@ export function shortHash(hash: string): string {
   return hash.length > 16 ? `${hash.slice(0, 8)}…${hash.slice(-4)}` : hash;
 }
 
+/** The reject reasons the API accepts: one per §7.6 checklist item (free text is refused). */
 export const REJECT_REASONS = [
   { value: "IMPERSONATION", label: "Impersonation" },
   { value: "MODEL_INSTRUCTIONS", label: "Instructions to models" },
   { value: "SECRET_INPUTS", label: "Asks for secrets" },
-  { value: "EXAMPLES_FAIL", label: "Examples don't match" },
+  { value: "EXAMPLES_MISMATCH", label: "Examples don't match" },
   { value: "PRICING_UNCLEAR", label: "Pricing unclear" },
-  { value: "OTHER", label: "Other" },
 ] as const;
+
+export type RejectReason = (typeof REJECT_REASONS)[number]["value"];
+
+/** The reject reason each checklist item stands for. */
+export const CHECKLIST_REASON: Readonly<Record<string, RejectReason>> = {
+  NO_IMPERSONATION: "IMPERSONATION",
+  NO_MODEL_INSTRUCTIONS: "MODEL_INSTRUCTIONS",
+  NO_SECRET_INPUTS: "SECRET_INPUTS",
+  EXAMPLES_MATCH_SCHEMA: "EXAMPLES_MISMATCH",
+  PRICING_CLEAR: "PRICING_UNCLEAR",
+};
+
+/** The reason a rejection starts with: the first item the screen failed, or the first you marked as a problem. */
+export function suggestedRejectReason(rows: readonly ChecklistRow[], problems: ReadonlySet<string>): RejectReason | "" {
+  const first = rows.find((r) => r.verdict === "FAIL") ?? rows.find((r) => problems.has(r.item));
+  return first ? (CHECKLIST_REASON[first.item] ?? "") : "";
+}
+
+/** "Looks fine" / "Problem" on each item the operator decides. */
+export type ManualCheck = "OK" | "PROBLEM";
+
+/**
+ * Why the decision button is disabled, in one sentence; null when it can be
+ * pressed. Approving needs every "You decide" item marked fine, nothing the
+ * screen failed, and the publish checks passing.
+ */
+export function decisionBlockedBy(input: {
+  decision: "APPROVE" | "REJECT" | null;
+  rows: readonly ChecklistRow[];
+  checks: Readonly<Record<string, ManualCheck>>;
+  gatePassed: boolean;
+  stale: boolean;
+}): string | null {
+  if (input.stale) return "The content changed: read the new content first (see the notice above).";
+  if (!input.decision) return "Pick Approve or Reject first.";
+  if (input.decision === "REJECT") return null;
+  const screen = approveBlockedBy(input.rows, input.gatePassed);
+  if (screen) return screen;
+  const manual = input.rows.filter((r) => r.verdict === "CHECK");
+  const problem = manual.find((r) => input.checks[r.item] === "PROBLEM");
+  if (problem) return `You marked “${problem.label}” as a problem. Reject it with what to fix.`;
+  const open = manual.filter((r) => input.checks[r.item] !== "OK");
+  if (open.length > 0) return `Check ${open.map((r) => `“${r.label}”`).join(" and ")} in the checklist above first.`;
+  return null;
+}
+
+/** What each tier tells an agent, in one line. */
+export const TIER_HINT = {
+  VERIFIED: "Verified: the reviewer vouches that it does what it says, and agents see a Verified badge.",
+  UNVERIFIED: "Unverified: listed in the catalogue without the badge, for a tool that passes but whose answers you could not judge well.",
+} as const;
 
 export const TAKEDOWN_REASONS = [
   { value: "IMPERSONATION", label: "Impersonation" },

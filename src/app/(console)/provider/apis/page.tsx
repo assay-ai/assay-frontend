@@ -15,7 +15,6 @@ import { providerToolState } from "@/features/provider-tools/model";
 import { providerToolKeys } from "@/features/provider-tools/queries";
 import { ProviderToolChips } from "@/features/provider-tools/ui";
 import { ApiError } from "@/libs/ApiClient";
-import { DEFAULT_SLA_FAILURE_RATE } from "@/libs/dispute-deadlines";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { createToolBinding } from "@/services/provider-tool-bindings.service";
@@ -84,12 +83,18 @@ function InvitationCard({ invitation }: { invitation: PromotionInvitation }) {
         priceAmount: prefill.priceAmount,
         assetId: prefill.assetId,
         settlementChains: prefill.settlementChains,
-        slaFailureRate: DEFAULT_SLA_FAILURE_RATE,
+        slaFailureRate: prefill.slaFailureRate,
+        authMode: prefill.authMode as "NONE" | "API_KEY" | "SIGNATURE" | "BOTH",
         timeoutMs: prefill.timeoutMs,
       });
     },
     onSuccess: (binding) => {
-      toast.success(`Listing of ${invitation.standardToolName} started from your endpoint. Run a test to continue.`);
+      const key = invitation.prefill?.authMode === "API_KEY" || invitation.prefill?.authMode === "BOTH";
+      toast.success(
+        key
+          ? `Listing of ${invitation.standardToolName} started from your endpoint. Add your API key under Authentication (it is never copied), then run a test.`
+          : `Listing of ${invitation.standardToolName} started from your endpoint. Run a test to continue.`,
+      );
       refresh();
       router.push(routes.bindingWizard(binding.id, "connect"));
     },
@@ -120,10 +125,10 @@ function InvitationCard({ invitation }: { invitation: PromotionInvitation }) {
           </p>
           <p className="text-body-13 text-02">
             {drafting
-              ? "It is still being written. When it is published, other providers can serve it too, and agents get a backup provider."
+              ? "It is still being written. Once it is published, other providers can serve it too, so agents get backup providers."
               : invitation.bound
-                ? "You already serve it. Point agents of your own tool to it, so they move to the tool with backups."
-                : "Serve it with the same endpoint: your listing starts prefilled with your endpoint, mappings and price. Then point agents of your own tool to it."}
+                ? "You serve it already. Switch your own tool's agents to it, so they get backup providers."
+                : "Serve it with the same endpoint: the listing starts with your endpoint, mappings and price filled in. Once it is live, switch your own tool's agents to it so they get backup providers."}
           </p>
           <p className="text-body-xs text-03">
             Invited <UtcTime value={invitation.invitedAt} midSentence />
@@ -138,7 +143,7 @@ function InvitationCard({ invitation }: { invitation: PromotionInvitation }) {
         ) : null}
         {invitation.bound ? (
           <Button loading={point.isPending} onClick={() => point.mutate()}>
-            Point agents to {invitation.standardToolName}
+            Switch agents to {invitation.standardToolName}
           </Button>
         ) : null}
         <Button variant="ghost" loading={dismiss.isPending} onClick={() => dismiss.mutate()}>

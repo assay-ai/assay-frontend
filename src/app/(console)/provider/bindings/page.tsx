@@ -52,7 +52,7 @@ export default function ProviderToolsPage() {
           <h1 className="text-heading-sm text-01 tablet:text-heading-md">Tools</h1>
           <p className="text-body-13 text-03">
             The tools you list for agents to call. One listing per tool. Your own API that no standard tool covers?{" "}
-            <Link href="/provider/apis" className="text-primary-600 hover:underline">
+            <Link href="/provider/apis" className="inline-flex min-h-10 items-center text-primary-600 hover:underline">
               Publish it under your name
             </Link>
             .
@@ -126,7 +126,7 @@ export default function ProviderToolsPage() {
 
       <p className="text-body-13 text-02">
         Can&apos;t find the tool your API provides?{" "}
-        <Link href="/provider/tool-requests" className="text-primary-600 hover:underline">
+        <Link href="/provider/tool-requests" className="inline-flex min-h-10 items-center text-primary-600 hover:underline">
           Request it
         </Link>
         . We reply within 2 working days in your Inbox.

@@ -410,7 +410,7 @@ function ReceiptPageContent() {
       </dl>
 
       {/* A charged call: "Report a bad result", or the report's status once filed. */}
-      {receipt.status === "SETTLED" && receipt.chargedPrice.amount !== "0" ? <ReceiptReport receipt={receipt} toolName={names.name("tool", receipt.toolId)} /> : null}
+      {receipt.status === "SETTLED" ? <ReceiptReport receipt={receipt} toolName={names.name("tool", receipt.toolId)} /> : null}
 
       {/* Only on a call that was not charged: what the other outcomes mean. */}
       {finalNotCharged ? (

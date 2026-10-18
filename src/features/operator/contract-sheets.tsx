@@ -11,7 +11,7 @@ import { Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { bumpEffect, changeText, earliestSunsetDay, publishLabel, sunsetDay, sunsetInstant, sunsetProblem } from "@/features/contracts/text";
+import { bumpEffect, changeText, earliestSunsetDay, publishLabel, sunsetDay, sunsetDayFrom, sunsetInstant, sunsetProblem } from "@/features/contracts/text";
 import type { ContractChange, OperatorTool, OperatorToolSummary, VersionBump } from "@/interfaces/contracts";
 import {
   answerOperatorToolRequest,
@@ -313,7 +313,7 @@ export function DeprecateSheet({
   onClose,
   onDone,
 }: {
-  tool: Pick<OperatorTool, "id" | "name" | "replacementToolId">;
+  tool: Pick<OperatorTool, "id" | "name" | "replacementToolId" | "earliestSunsetAt">;
   row: MajorRow | null;
   /** Other tools that could replace this one. */
   tools: readonly Pick<OperatorToolSummary, "id" | "name" | "status">[];
@@ -322,7 +322,8 @@ export function DeprecateSheet({
 }) {
   const queryClient = useQueryClient();
   const form = useReasonForm();
-  const earliest = earliestSunsetDay();
+  // The API states the earliest sunset; an older backend does not, and then the 90-day rule is worked out here.
+  const earliest = tool.earliestSunsetAt ? sunsetDayFrom(tool.earliestSunsetAt) : earliestSunsetDay();
   const [day, setDay] = React.useState(earliest);
   const [replacement, setReplacement] = React.useState(tool.replacementToolId ?? "");
   const [dayError, setDayError] = React.useState<string | null>(null);
@@ -359,7 +360,7 @@ export function DeprecateSheet({
     { icon: History, text: "It can't be undone", tone: "warning" },
   ];
   const submit = () => {
-    const problem = sunsetProblem(day);
+    const problem = sunsetProblem(day, Date.now(), tool.earliestSunsetAt);
     setDayError(problem);
     const ok = form.check();
     if (problem || !ok) return;

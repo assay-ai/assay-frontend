@@ -82,7 +82,10 @@ function ProviderReportContent() {
       <section aria-label="Status" className="flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 px-4 py-4">
         <DisputeTimeline dispute={d} side="provider" now={now} onElapsed={() => void report.refetch()} />
         <p className="text-body-xs text-03">
-          {d.refundGuaranteed ? "The buyer reported it while the payment was held: it is not yours until this is decided." : "Reported after the hold: the payment may already be yours; an upheld report still counts against quality."} Times are in UTC.
+          {d.refundGuaranteed
+            ? `The buyer reported it during the hold, so the payment is held until this is decided. If upheld, the buyer gets ${d.amount ? formatMoney(d.amount, { decimals: 4 }) : "it"} back and you are not paid for this call.`
+            : "Reported after the hold: the payment was already collected. If upheld, it counts against this listing's quality."}{" "}
+          Times are in UTC.
         </p>
       </section>
 

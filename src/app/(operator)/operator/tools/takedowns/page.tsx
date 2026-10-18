@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import * as React from "react";
 
@@ -15,11 +15,11 @@ import { confirmBlockedBy, cutoffView, mayConfirmCutoffs, MODERATION_NOTE_MIN, t
 import { OperatorToolsTabs } from "@/features/operator/provider-tool-ui";
 import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
-import { approvalHref, queuedMessage } from "@/features/operator/two-person";
+import { approvalHref } from "@/features/operator/two-person";
 import { useOperatorDirectory } from "@/features/operator/use-operator-lookups";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
-import { confirmCutoff, getProviderToolReview, listCutoffs, revertCutoff, type ModerationCutoff } from "@/services/operator-provider-tools.service";
+import { confirmCutoff, listCutoffs, revertCutoff, type ModerationCutoff } from "@/services/operator-provider-tools.service";
 import { toast } from "@/utils/toast";
 
 /**
@@ -29,19 +29,31 @@ import { toast } from "@/utils/toast";
  * one (two-person), is A-19.
  */
 
-const ACTION_REASONS = [
+/** Why a takedown is confirmed, or why it is rejected or lifted: never the same list. */
+const CONFIRM_REASONS = [
   { value: "CONFIRMED_ABUSE", label: "Abuse confirmed" },
+  { value: "OTHER", label: "Other" },
+] as const;
+const REVERT_REASONS = [
   { value: "NOT_ABUSE", label: "Not abuse" },
   { value: "FIXED_BY_OWNER", label: "Fixed by the owner" },
   { value: "OTHER", label: "Other" },
 ] as const;
 
-function ActionSheet({ cutoff, action, toolName, onClose, onDone }: { cutoff: ModerationCutoff | null; action: "confirm" | "revert"; toolName: string; onClose: () => void; onDone: (message: { title: string; next: string; href?: string }) => void }) {
+interface ActionResult {
+  title: string;
+  next: string;
+  href?: string;
+  /** A lift that now waits for a second operator. */
+  lifted?: string;
+}
+
+function ActionSheet({ cutoff, action, toolName, onClose, onDone }: { cutoff: ModerationCutoff | null; action: "confirm" | "revert"; toolName: string; onClose: () => void; onDone: (message: ActionResult) => void }) {
   const [reason, setReason] = React.useState("");
   const [note, setNote] = React.useState("");
   const [errors, setErrors] = React.useState<{ reason?: string; note?: string }>({});
   React.useEffect(() => {
-    setReason(action === "confirm" ? "CONFIRMED_ABUSE" : "");
+    setReason("");
     setNote("");
     setErrors({});
   }, [cutoff, action]);
@@ -53,7 +65,7 @@ function ActionSheet({ cutoff, action, toolName, onClose, onDone }: { cutoff: Mo
         return { title: `Takedown of ${toolName} confirmed`, next: "It stays down until an operator lifts it (two-person)." };
       }
       const answer = await revertCutoff(cutoff!.id, body);
-      if (answer.kind === "queued") return { title: "Sent for approval: lifting a confirmed takedown needs a second operator", next: queuedMessage(answer.approval), href: approvalHref(answer.approval.approvalId) };
+      if (answer.kind === "queued") return { title: "Sent for approval: lifting a confirmed takedown needs a second operator", next: "Nothing has happened yet: the tool stays down until a second operator approves the lift in Approvals.", href: approvalHref(answer.approval.approvalId), lifted: cutoff!.id };
       return { title: `${toolName} is back`, next: "It serves again as it did before the takedown." };
     },
     onSuccess: (message) => {
@@ -79,11 +91,11 @@ function ActionSheet({ cutoff, action, toolName, onClose, onDone }: { cutoff: Mo
               ? "It stays down for good, until an operator lifts it with a second person's approval."
               : lifting
                 ? "Two people agreed on it, so lifting it needs a second operator's approval."
-                : "It serves again at once, as it did before."}
+                : "Rejecting restores the tool at once: it serves again as it did before."}
           </SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-3 px-[18px] pb-5 pt-3">
-          <ReasonChips label="Why" options={ACTION_REASONS} value={reason} onChange={setReason} note={note} onNoteChange={setNote} noteMin={MODERATION_NOTE_MIN} noteMax={1000} errors={errors} />
+          <ReasonChips label="Why" options={action === "confirm" ? CONFIRM_REASONS : REVERT_REASONS} value={reason} onChange={setReason} note={note} onNoteChange={setNote} noteMin={MODERATION_NOTE_MIN} noteMax={1000} errors={errors} />
           {run.isError ? (
             <p role="alert" className="text-body-13 text-danger-700">
               {toolReviewErrorText(run.error)}
@@ -109,15 +121,13 @@ function TakedownsScreen() {
   const queryClient = useQueryClient();
   const [show, setShow] = React.useState<"pending" | "all">("pending");
   const [acting, setActing] = React.useState<{ cutoff: ModerationCutoff; action: "confirm" | "revert" } | null>(null);
-  const [result, setResult] = React.useState<{ title: string; next: string; href?: string } | null>(null);
+  const [result, setResult] = React.useState<ActionResult | null>(null);
+  // Lifts sent for approval on this page: the row says so instead of offering Lift again.
+  const [liftsWaiting, setLiftsWaiting] = React.useState<ReadonlySet<string>>(new Set());
   const [now] = React.useState(() => Date.now());
-  const cutoffs = useQuery({ queryKey: ["operator", "cutoffs", show], queryFn: () => listCutoffs(show === "pending" ? true : undefined), retry: 0 });
+  const cutoffs = useQuery({ queryKey: ["operator", "cutoffs", "TOOL", show], queryFn: () => listCutoffs({ pending: show === "pending" ? true : undefined, targetType: "TOOL" }), retry: 0 });
   const rows = (cutoffs.data ?? []).filter((c) => c.targetType === "TOOL");
-  // A cutoff names its tool by id only: read each one's name from its review record.
-  const names = useQueries({
-    queries: rows.map((c) => ({ queryKey: ["operator", "review", c.targetId], queryFn: () => getProviderToolReview(c.targetId), retry: 0, staleTime: 60_000 })),
-  });
-  const nameOf = (toolId: string) => names.find((q) => q.data?.tool.id === toolId)?.data?.tool.name ?? "A provider tool";
+  const nameOf = (c: ModerationCutoff) => c.targetName ?? "A removed provider tool";
   const canAct = mayConfirmCutoffs(me.roles);
 
   return (
@@ -127,6 +137,7 @@ function TakedownsScreen() {
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-heading-md text-01">Provider tool takedowns</h1>
           <p className="text-body-13 text-02">A takedown acts at once. A second operator confirms it within 72 hours, or it is reverted. Take a tool down from its review page.</p>
+          {!canAct ? <p className="text-body-13 text-03">You can see takedowns. Confirming, rejecting or lifting one needs an Adjudicator or a Lead adjudicator other than the one who took it down.</p> : null}
         </div>
         <Segmented value={show} onValueChange={(v) => setShow(v as "pending" | "all")} aria-label="Show" className="inline-flex rounded-md bg-03 p-0.5">
           <SegmentedItem value="pending">To confirm</SegmentedItem>
@@ -149,12 +160,12 @@ function TakedownsScreen() {
               <li key={c.id} className="flex flex-col gap-2 px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Link href={routes.operatorReview(c.targetId)} className="inline-flex min-h-10 items-center font-mono text-mono-13 text-01 hover:underline [overflow-wrap:anywhere]">
-                    {nameOf(c.targetId)}
+                    {nameOf(c)}
                   </Link>
                   <Chip tone={view.tone}>{view.label}</Chip>
                 </div>
                 <p className="text-body-xs text-03">
-                  By {directory.nameOf(c.actedBy)} <UtcTime value={c.actedAt} midSentence />
+                  By {directory.nameOf(c.actedBy)} <UtcTime value={c.actedAt} midSentence alwaysDay />
                   {view.pending ? (
                     <>
                       {" "}
@@ -171,9 +182,14 @@ function TakedownsScreen() {
                         Confirm
                       </Button>
                     ) : null}
-                    <Button variant="secondary" size="sm" className="touch-target" onClick={() => setActing({ cutoff: c, action: "revert" })}>
-                      {view.pending ? "Reject" : "Lift"}
-                    </Button>
+                    {liftsWaiting.has(c.id) ? (
+                      <span className="text-body-13 text-primary-700">Lift waiting for a second operator&apos;s approval</span>
+                    ) : (
+                      <Button variant="secondary" size="sm" className="touch-target" onClick={() => setActing({ cutoff: c, action: "revert" })}>
+                        {view.pending ? "Reject" : "Lift"}
+                      </Button>
+                    )}
+                    {view.pending ? <span className="text-body-xs text-03">Reject restores the tool at once.</span> : null}
                     {selfBlock && view.pending ? <span className="text-body-xs text-03">{selfBlock}</span> : null}
                   </div>
                 ) : null}
@@ -185,10 +201,11 @@ function TakedownsScreen() {
       <ActionSheet
         cutoff={acting?.cutoff ?? null}
         action={acting?.action ?? "confirm"}
-        toolName={acting ? nameOf(acting.cutoff.targetId) : ""}
+        toolName={acting ? nameOf(acting.cutoff) : ""}
         onClose={() => setActing(null)}
         onDone={(message) => {
           setResult(message);
+          if (message.lifted) setLiftsWaiting((set) => new Set([...set, message.lifted!]));
           toast.success(message.title);
           void queryClient.invalidateQueries({ queryKey: ["operator", "cutoffs"] });
         }}

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "@/libs/ApiClient";
 import type { CallDispute } from "@/services/call-disputes.service";
 
-import { buyerStatus, decisionDueAt, disputeQueueQuery, disputeErrorText, disputeTimeline, providerStatus, replyDueAt, reportWindow, slaMarks } from "./model";
+import { buyerStatus, decisionDueAt, DISPUTE_COPY, disputeQueueQuery, disputeErrorText, disputeTimeline, providerStatus, replyDueAt, reportWindow, slaMarks } from "./model";
 
 const FILED = "2026-10-18T10:00:00.000Z";
 const H = 3_600_000;
@@ -33,6 +33,12 @@ const dispute = (over: Partial<CallDispute> = {}): CallDispute => ({
   canRespond: true,
   refundGuaranteed: true,
   refundNotice: "Filed inside the dispute window",
+  replyDueAt: "2026-10-19T10:00:00.000Z",
+  pageAt: "2026-10-20T10:00:00.000Z",
+  decisionDueAt: "2026-10-21T10:00:00.000Z",
+  autoUpholdAt: "2026-10-21T10:00:00.000Z",
+  holdEndsAt: "2026-10-25T11:00:00.000Z",
+  filingClosesAt: "2026-10-25T10:00:00.000Z",
   createdAt: FILED,
   updatedAt: FILED,
   ...over,
@@ -72,7 +78,8 @@ describe("the timeline", () => {
 
   it("the blocked-provider refund lands before any decision", () => {
     const steps = disputeTimeline(dispute({ refundState: "REFUNDED" }), t0 + 2 * H);
-    expect(ids(steps)).toEqual(["reported:done", "reply:current", "refunded-early:done", "decision:upcoming"]);
+    expect(ids(steps)).toEqual(["reported:done", "reply:skipped", "refunded-early:done", "decision:upcoming"]);
+    expect(steps[1]!.label).toBe("No reply needed: provider blocked");
   });
 
   it("rejected, but refunded anyway because the provider was blocked", () => {
@@ -95,7 +102,7 @@ describe("one-line status", () => {
   it("for the buyer", () => {
     expect(buyerStatus(dispute(), t0 + H).label).toBe("Waiting for the provider");
     expect(buyerStatus(dispute(), t0 + 25 * H).label).toBe("Waiting for a decision");
-    expect(buyerStatus(dispute({ refundState: "REFUNDED" }), t0 + H)).toMatchObject({ label: "Refunded", tone: "teal" });
+    expect(buyerStatus(dispute({ refundState: "REFUNDED" }), t0 + H)).toMatchObject({ label: "Refunded · decision pending", tone: "teal" });
     expect(buyerStatus(dispute({ state: "UPHELD", refundState: "PENDING" }), t0).label).toBe("Upheld · refund on its way");
     expect(buyerStatus(dispute({ state: "REJECTED" }), t0).label).toBe("Rejected");
   });
@@ -112,15 +119,15 @@ describe("operator SLA marks", () => {
     expect(slaMarks(dispute(), t0 + H).map((m) => m.label)).toEqual(["Provider may reply", "Auto-uphold at 72 h"]);
     expect(slaMarks(dispute(), t0 + 49 * H).map((m) => [m.label, m.tone])).toEqual([
       ["Provider silent", "warning"],
-      ["Auto-uphold at 72 h", "danger"],
+      ["Paged · auto-uphold at 72 h", "danger"],
     ]);
-    expect(slaMarks(dispute({ providerRespondedAt: FILED }), t0 + 73 * H).map((m) => m.label)).toEqual(["Past 72 h"]);
+    expect(slaMarks(dispute({ providerRespondedAt: FILED, autoUpholdAt: null }), t0 + 73 * H).map((m) => m.label)).toEqual(["Overdue: decide now"]);
     expect(slaMarks(dispute({ state: "UPHELD" }), t0)).toEqual([]);
   });
 });
 
 describe("the report window on a receipt", () => {
-  const receipt = { status: "SETTLED", createdAt: FILED, settledAt: FILED, disputeWindowEndsAt: "2026-10-18T11:00:00.000Z", chargedPrice: usd("20000") };
+  const receipt = { status: "SETTLED", createdAt: FILED, settledAt: FILED, disputeWindowEndsAt: "2026-10-18T11:00:00.000Z", disputeFilingClosesAt: "2026-10-25T10:00:00.000Z", chargedPrice: usd("20000") };
   it("inside the hold: a full refund if upheld", () => {
     expect(reportWindow(receipt, t0 + 30 * 60_000)).toMatchObject({ open: true, guaranteed: true, holdEndsAt: "2026-10-18T11:00:00.000Z" });
   });
@@ -129,14 +136,14 @@ describe("the report window on a receipt", () => {
   });
   it("closed after 7 days, and for calls that did not settle", () => {
     expect(reportWindow(receipt, t0 + 8 * 24 * H).open).toBe(false);
-    expect(reportWindow({ ...receipt, status: "REFUNDED" }, t0).open).toBe(false);
+    expect(reportWindow({ ...receipt, disputeFilingClosesAt: null }, t0).open).toBe(false);
   });
 });
 
 describe("the operator queue's query", () => {
   it("reads open disputes oldest first, so the ones closest to auto-uphold load on the first page", () => {
     expect(disputeQueueQuery("open", false)).toMatchObject({ state: ["OPEN"], order: "ASC" });
-    expect(disputeQueueQuery("all", true, "c2")).toEqual({ order: "DESC", flaggedOnly: true, cursor: "c2" });
+    expect(disputeQueueQuery("all", true, "c2")).toEqual({ order: "DESC", flaggedOnly: true, cursor: "c2", limit: 20 });
   });
 });
 
@@ -144,5 +151,14 @@ describe("errors", () => {
   it("says what happened", () => {
     expect(disputeErrorText(new ApiError("DISPUTE_ALREADY_OPEN", "x", 409))).toMatch(/already reported/);
     expect(disputeErrorText(new ApiError("DISPUTE_RATE_LIMITED", "x", 429))).toMatch(/in 24 hours/);
+  });
+});
+
+describe("the decided dispute copy", () => {
+  it("keeps one clock per sentence and the 7-day timeout out of the status", () => {
+    for (const text of Object.values(DISPUTE_COPY)) expect((text.match(/\d+ (hours|days)/g) ?? []).length).toBeLessThanOrEqual(1);
+    const open = buyerStatus(dispute(), t0 + H).detail;
+    expect(open).not.toMatch(/7 days/);
+    expect(buyerStatus(dispute({ refundGuaranteed: false }), t0 + H).detail).toMatch(/already been collected.*a refund is not guaranteed/);
   });
 });

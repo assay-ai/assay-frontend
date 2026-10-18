@@ -220,16 +220,26 @@ export function earliestSunsetDay(now: number = Date.now()): string {
   return new Date(midnight < earliest ? midnight + DAY_MS : midnight).toISOString().slice(0, 10);
 }
 
+/** The first whole UTC day at or after the API's `earliestSunsetAt`. */
+export function sunsetDayFrom(earliestSunsetAt: string): string {
+  const at = Date.parse(earliestSunsetAt);
+  const day = new Date(at);
+  const midnight = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate());
+  return new Date(midnight < at ? midnight + DAY_MS : midnight).toISOString().slice(0, 10);
+}
+
 /** "2027-02-01" → "2027-02-01T00:00:00Z", the instant `sunsetAt` takes. */
 export function sunsetInstant(day: string): string {
   return `${day}T00:00:00Z`;
 }
 
 /** Why a sunset day can't be used, or null. */
-export function sunsetProblem(day: string, now: number = Date.now()): string | null {
+export function sunsetProblem(day: string, now: number = Date.now(), earliestSunsetAt?: string): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(sunsetInstant(day)))) return "Pick a date.";
-  if (Date.parse(sunsetInstant(day)) < now + MIN_SUNSET_DAYS * DAY_MS) {
-    return `Pick ${sunsetDay(sunsetInstant(earliestSunsetDay(now)))} or later: callers get at least ${MIN_SUNSET_DAYS} days' notice.`;
+  const earliest = earliestSunsetAt ? Date.parse(earliestSunsetAt) : now + MIN_SUNSET_DAYS * DAY_MS;
+  if (Date.parse(sunsetInstant(day)) < earliest) {
+    const first = earliestSunsetAt ? sunsetDayFrom(earliestSunsetAt) : earliestSunsetDay(now);
+    return `Pick ${sunsetDay(sunsetInstant(first))} or later: callers get at least ${MIN_SUNSET_DAYS} days' notice.`;
   }
   return null;
 }

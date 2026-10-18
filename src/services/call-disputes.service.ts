@@ -54,6 +54,18 @@ export interface CallDispute {
   refundGuaranteed: boolean;
   /** The sentence to show the buyer about `refundGuaranteed`. */
   refundNotice: string;
+  /** The provider's one reply is accepted until then (filing + 24 h). */
+  replyDueAt: string;
+  /** An operator is paged if it is still undecided then (filing + 48 h). */
+  pageAt: string;
+  /** The decision SLA (filing + 72 h). */
+  decisionDueAt: string;
+  /** When it is upheld automatically if the provider stays silent; null when it cannot be (replied, decided, after the hold, two-person amount). */
+  autoUpholdAt: string | null;
+  /** The on-chain safety timeout of the held payment (collectable + 7 d); null when nothing is held. */
+  holdEndsAt: string | null;
+  /** When the call's filing window closed or closes; null when unknown. */
+  filingClosesAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

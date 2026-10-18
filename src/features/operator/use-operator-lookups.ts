@@ -6,6 +6,7 @@ import * as React from "react";
 import { shortId } from "@/components/patterns/copy-chip";
 import type { OperatorCaseBrief, OperatorDirectoryEntry } from "@/interfaces/operator";
 import { listCatalogueProviders, type CatalogueProvider } from "@/services/catalogue.service";
+import { listOperatorTools } from "@/services/operator-contracts.service";
 import { getOperatorCase, listOperators } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
 
@@ -122,4 +123,22 @@ export function usePenaltyBriefs(ids: readonly string[]): ReadonlyMap<string, Op
     if (brief) map.set(id, brief);
   });
   return map;
+}
+
+/**
+ * A tool id as its name, for the operator's call-dispute queue: the standard
+ * tools of the contract editor's list. An id it does not know reads as a
+ * readable slug when it is one, else "A tool" (never a bare uuid).
+ */
+export function useOperatorToolNames(): (toolId: string | null | undefined) => string {
+  const query = useQuery({ queryKey: ["operator", "tools", "list"], queryFn: listOperatorTools, staleTime: 5 * 60_000, retry: 0 });
+  return React.useCallback(
+    (toolId) => {
+      if (!toolId) return "A tool";
+      const known = query.data?.tools.find((t) => t.id === toolId)?.name;
+      if (known) return known;
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(toolId) ? "A tool" : toolId;
+    },
+    [query.data],
+  );
 }

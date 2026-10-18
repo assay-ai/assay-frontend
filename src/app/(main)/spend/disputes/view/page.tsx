@@ -9,11 +9,11 @@ import * as React from "react";
 import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
-import { buyerStatus, disputeErrorText } from "@/features/call-disputes/model";
+import { buyerStatus, DISPUTE_COPY, disputeErrorText, refundedBeforeDecision } from "@/features/call-disputes/model";
 import { CallLink, callDisputeKeys, DisputeChip, DisputeTimeline, EvidencePanes, useNow } from "@/features/call-disputes/ui";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
-import { getCallDispute, withdrawCallDispute } from "@/services/call-disputes.service";
+import { getCallDispute, withdrawCallDispute, type CallDisputeDetail } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
 
@@ -30,15 +30,17 @@ function ReportContent() {
   const names = useEntityNames({ kinds: ["tool"] });
   const now = useNow(30_000);
   const report = useQuery({ queryKey: callDisputeKeys.one(id), queryFn: () => getCallDispute(id), enabled: Boolean(id), retry: 0 });
+  const [confirming, setConfirming] = React.useState(false);
   const withdraw = useMutation({
     mutationFn: () => withdrawCallDispute(id),
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      setConfirming(false);
+      queryClient.setQueryData(callDisputeKeys.one(id), (old: CallDisputeDetail | undefined) => (old ? { ...old, ...updated } : old));
       void queryClient.invalidateQueries({ queryKey: callDisputeKeys.all });
       toast.success("Report withdrawn");
     },
     onError: (error) => toast.error(disputeErrorText(error)),
   });
-  const [confirming, setConfirming] = React.useState(false);
 
   const frame = (children: React.ReactNode) => (
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
@@ -80,7 +82,17 @@ function ReportContent() {
 
       <section aria-label="Status" className="flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 px-5 py-4" data-testid="report-timeline">
         <DisputeTimeline dispute={d} side="buyer" now={now} onElapsed={() => void report.refetch()} />
-        <p className="text-body-xs text-03">{d.refundNotice} Times are in UTC.</p>
+        {d.state === "OPEN" && !refundedBeforeDecision(d) ? (
+          <ul className="flex flex-col gap-0.5 text-body-13 text-02" data-testid="what-happens">
+            <li>{d.refundGuaranteed ? DISPUTE_COPY.held : DISPUTE_COPY.afterHold}</li>
+            {!d.providerRespondedAt ? <li>{DISPUTE_COPY.reply}</li> : null}
+            {!d.providerRespondedAt ? <li>{d.refundGuaranteed ? DISPUTE_COPY.silentRefund : DISPUTE_COPY.silent}</li> : null}
+            <li>{DISPUTE_COPY.decides}</li>
+          </ul>
+        ) : null}
+        <p className="text-body-xs text-03">
+          Times are in UTC.{d.state === "OPEN" && d.refundGuaranteed ? ` ${DISPUTE_COPY.safetyNet}` : ""}
+        </p>
       </section>
 
       <dl className="grid w-full grid-cols-1 gap-4 rounded-xl border border-01 bg-01 px-5 py-4 tablet:grid-cols-2">
@@ -120,7 +132,9 @@ function ReportContent() {
         {d.state === "OPEN" ? (
           confirming ? (
             <span className="flex flex-wrap items-center gap-2" role="group" aria-label="Withdraw the report?">
-              <span className="text-body-13 text-02">Withdraw it? The call stays charged.</span>
+              <span className="text-body-13 text-02">
+                Withdraw it? The call stays charged{d.refundGuaranteed ? ", and the held payment goes to the provider" : ""}.
+              </span>
               <Button variant="danger" size="sm" className="touch-target" loading={withdraw.isPending} onClick={() => withdraw.mutate()}>
                 Withdraw
               </Button>

@@ -136,6 +136,14 @@ export const NOTIFICATION_CATALOGUE: Readonly<Record<NotificationEvent, Notifica
     nonSuppressible: false,
     hasProducer: true,
   },
+  "call.refused_repeatedly": {
+    // The fifth identical refusal in an hour; once per UTC day so a looping agent does not page all day.
+    severity: "WARNING",
+    channels: IN_APP_PUSH,
+    aggregation: "ONCE_PER_UTC_DAY",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
 
   // ── Credentials and signing ───────────────────────────────────────────────
   "session.expiring": {
@@ -237,6 +245,27 @@ export const NOTIFICATION_CATALOGUE: Readonly<Record<NotificationEvent, Notifica
     nonSuppressible: false,
     hasProducer: true,
   },
+  "provider.slash_decided": {
+    severity: "CRITICAL",
+    channels: EVERYTHING,
+    aggregation: "PER_EVENT",
+    nonSuppressible: true,
+    hasProducer: true,
+  },
+  "provider.slash_executed": {
+    severity: "CRITICAL",
+    channels: EVERYTHING,
+    aggregation: "PER_EVENT",
+    nonSuppressible: true,
+    hasProducer: true,
+  },
+  "provider.slash_reversed": {
+    severity: "INFO",
+    channels: EVERYTHING,
+    aggregation: "PER_EVENT",
+    nonSuppressible: true,
+    hasProducer: true,
+  },
   "provider.payout_sent": {
     severity: "INFO",
     channels: IN_APP_EMAIL,
@@ -303,6 +332,44 @@ export const NOTIFICATION_CATALOGUE: Readonly<Record<NotificationEvent, Notifica
     hasProducer: true,
   },
 
+  // ── Provider tools (T4; producers: the review, the takedown, promotion invites) ──
+  "provider_tool.approved": {
+    severity: "INFO",
+    channels: IN_APP_EMAIL,
+    aggregation: "PER_EVENT",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+  "provider_tool.rejected": {
+    severity: "WARNING",
+    channels: IN_APP_EMAIL,
+    aggregation: "PER_EVENT",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+  "provider_tool.taken_down": {
+    // It stopped serving everywhere at once: no preference can mute it.
+    severity: "CRITICAL",
+    channels: IN_APP_EMAIL_PUSH,
+    aggregation: "PER_EVENT",
+    nonSuppressible: true,
+    hasProducer: true,
+  },
+  "provider_tool.takedown_lifted": {
+    severity: "INFO",
+    channels: IN_APP_EMAIL,
+    aggregation: "PER_EVENT",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+  "provider_tool.promotion_invited": {
+    severity: "INFO",
+    channels: IN_APP_EMAIL,
+    aggregation: "ONCE",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+
   // ── Digest ────────────────────────────────────────────────────────────────
   "digest.daily": {
     severity: "INFO",
@@ -334,6 +401,7 @@ export const NOTIFICATION_EVENT_LABEL: Readonly<Record<NotificationEvent, string
   "spend.threshold_crossed": "Spend limit threshold reached",
   "velocity.anomaly": "Unusual spending speed",
   "agent.paused": "Agent paused",
+  "call.refused_repeatedly": "An agent keeps getting the same refusal",
   "session.expiring": "Agent credential expiring soon",
   "session.expired": "Agent credential expired",
   "free_quota.exhausted": "Free calls used up",
@@ -346,6 +414,9 @@ export const NOTIFICATION_EVENT_LABEL: Readonly<Record<NotificationEvent, string
   "provider.slash_proposed": "Penalty proposed against your stake",
   "provider.sla_breach_proposed": "SLA breach recorded",
   "provider.sla_window_warning": "SLA window at risk",
+  "provider.slash_decided": "Penalty decided",
+  "provider.slash_executed": "Penalty taken from your stake",
+  "provider.slash_reversed": "Penalty reversed, stake restored",
   "provider.payout_sent": "Payout sent",
   "toolset.update_available": "A tool set you use has a new version",
   "tool_version.deprecated": "A version of a tool you use is going away",
@@ -354,6 +425,11 @@ export const NOTIFICATION_EVENT_LABEL: Readonly<Record<NotificationEvent, string
   "call_dispute.responded": "The provider replied to your report",
   "call_dispute.decided": "A report about a bad result was decided",
   "call_dispute.refunded": "A call you reported was refunded",
+  "provider_tool.approved": "Your own API passed review",
+  "provider_tool.rejected": "Your own API needs changes before it is listed",
+  "provider_tool.taken_down": "Your own API was taken down",
+  "provider_tool.takedown_lifted": "The takedown of your own API was lifted",
+  "provider_tool.promotion_invited": "Invited to serve a standard tool",
   "digest.daily": "Daily summary",
 };
 

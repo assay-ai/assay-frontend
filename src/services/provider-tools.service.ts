@@ -118,6 +118,7 @@ export interface ProviderToolDraft extends ProviderToolVersion {
   screen: ScreenFinding[];
   /** Frozen: a review of this draft is pending. */
   inReview: boolean;
+  updatedAt: string;
 }
 
 export interface ProviderToolBindingRef {
@@ -153,6 +154,8 @@ export interface ProviderTool extends ProviderToolSummary {
   /** `https://mcp.assay.ai/@acme` once a tool is LISTED. */
   mcpUrls: { handle: string | null };
   quality: ProviderToolQuality;
+  /** The earliest `sunsetAt` a deprecation accepts if sent now (now + the 90-day minimum, UTC). */
+  earliestSunsetAt: string;
 }
 
 export type GateRequirementCode =
@@ -214,6 +217,10 @@ export interface BindingPrefill {
   assetId: string;
   settlementChains: string[];
   timeoutMs: number;
+  /** NONE, API_KEY, SIGNATURE or BOTH. API_KEY and BOTH: add the credential to the new listing before its test (it is never copied). */
+  authMode: "NONE" | "API_KEY" | "SIGNATURE" | "BOTH" | string;
+  /** The failure rate the provider tool's listing already declares for this endpoint. */
+  slaFailureRate: number;
 }
 
 export interface PromotionInvitation {
@@ -292,6 +299,47 @@ export function withdrawProviderToolReview(id: string): Promise<ProviderTool> {
 /** Point to the standard tool that replaces this one (after promotion), or clear it with `null`. */
 export function setProviderToolReplacement(id: string, replacementToolId: string | null): Promise<ProviderTool> {
   return api.put<ProviderTool>(`${base(id)}/replacement`, { replacementToolId });
+}
+
+/** Stop sharing: UNLISTED back to PRIVATE. 409 when LISTED or a review is pending. */
+export function unpublishProviderTool(id: string): Promise<ProviderTool> {
+  return api.post<ProviderTool>(`${base(id)}/unpublish`);
+}
+
+/** `POST /provider/tools/try`: exactly one of `curl` and `openapi`. */
+export interface TryProviderToolBody {
+  curl?: string;
+  openapi?: string;
+  operationId?: string;
+  input?: Record<string, unknown>;
+  headers?: Record<string, string>;
+  timeoutMs?: number;
+}
+
+export type TryWarningCode = "CREDENTIAL_DETECTED" | "OPTION_IGNORED" | "MISSING_TEST_VALUES" | "AUTH_REQUIRED" | "NOT_SUPPORTED" | "NO_JSON_RESPONSE" | "EXAMPLE_TOO_LARGE";
+
+export interface ProviderToolTryResult {
+  source: string;
+  ran: boolean;
+  passed: boolean;
+  ranAt: string;
+  request: { method: string; url: string; headerNames: string[] };
+  upstream: { status: number; latencyMs: number; contentType: string | null; bodyKind: string; body: unknown; transportError: { kind: string; detail: string | null } | null } | null;
+  inferred: {
+    endpoint: string;
+    inputSchema: Record<string, unknown>;
+    outputSchema: Record<string, unknown> | null;
+    examples: Record<string, unknown>[];
+    requestMapping: Record<string, unknown>;
+    responseMapping: Record<string, unknown> | null;
+    operationId: string | null;
+  };
+  warnings: { code: TryWarningCode | string; detail: string }[];
+}
+
+/** One real call from a curl command or an OpenAPI operation; nothing is stored. */
+export function tryProviderTool(body: TryProviderToolBody): Promise<ProviderToolTryResult> {
+  return api.post<ProviderToolTryResult>("/provider/tools/try", body);
 }
 
 export function listPromotionInvitations(): Promise<{ invitations: PromotionInvitation[] }> {

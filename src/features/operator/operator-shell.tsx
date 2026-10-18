@@ -59,6 +59,8 @@ export interface OperatorShellProps {
   identity: OperatorIdentity;
   pathname: string;
   needsYou: number;
+  /** A count on a section's own item (Tools: reviews and takedowns to act on; Penalties: call disputes to decide). Part of Home's count too. */
+  sectionCounts?: Partial<Record<OperatorNavId, number>>;
   expiresAt: string | null;
   onSignOut: () => void;
   /** Demo only: the role being shown, and how to switch it. */
@@ -73,12 +75,12 @@ const DEMO_ROLES: readonly { id: DemoOperatorPreset; label: string }[] = [
   { id: "admin", label: "Admin" },
 ];
 
-function Badge({ count }: { count: number }) {
+function Badge({ count, section = false }: { count: number; section?: boolean }) {
   if (count <= 0) return null;
   return (
     <span
-      title={`${needsYouBadgeText(count)}: approvals and disputes, as on Home`}
-      className="ml-1.5 rounded-full bg-danger-500 px-1.5 py-px text-[11px] font-semibold leading-4 tabular-nums text-on-color"
+      title={section ? `${needsYouBadgeText(count)} here (also counted on Home)` : `${needsYouBadgeText(count)}: everything on Home`}
+      className={cn("ml-1.5 rounded-full px-1.5 py-px text-[11px] font-semibold leading-4 tabular-nums", section ? "bg-03 text-01" : "bg-danger-500 text-on-color")}
     >
       <span aria-hidden="true">{count > 99 ? "99+" : count}</span>
       <span className="sr-only">, {needsYouBadgeText(count)}</span>
@@ -216,7 +218,7 @@ function Brand() {
   );
 }
 
-export function OperatorTopBar({ identity, pathname, needsYou, expiresAt, onSignOut, demo, onShortcuts }: OperatorShellProps) {
+export function OperatorTopBar({ identity, pathname, needsYou, sectionCounts, expiresAt, onSignOut, demo, onShortcuts }: OperatorShellProps) {
   const items = operatorNavFor(identity.roles);
   const active = activeOperatorNav(pathname);
   return (
@@ -236,7 +238,7 @@ export function OperatorTopBar({ identity, pathname, needsYou, expiresAt, onSign
             )}
           >
             {item.label}
-            {item.id === "home" ? <Badge count={needsYou} /> : null}
+            {item.id === "home" ? <Badge count={needsYou} /> : <Badge count={sectionCounts?.[item.id] ?? 0} section />}
           </Link>
         ))}
       </nav>
@@ -271,7 +273,7 @@ export function OperatorMobileTopBar({ identity, expiresAt, onSignOut, demo, onS
   );
 }
 
-export function OperatorBottomTabs({ identity, pathname, needsYou }: Pick<OperatorShellProps, "identity" | "pathname" | "needsYou">) {
+export function OperatorBottomTabs({ identity, pathname, needsYou, sectionCounts }: Pick<OperatorShellProps, "identity" | "pathname" | "needsYou" | "sectionCounts">) {
   const items = operatorNavFor(identity.roles);
   const active = activeOperatorNav(pathname);
   return (
@@ -292,8 +294,12 @@ export function OperatorBottomTabs({ identity, pathname, needsYou }: Pick<Operat
             <span className="relative flex size-5 items-center justify-center">
               <Icon aria-hidden="true" className={cn("size-5", isActive ? "text-primary-500" : "text-03")} />
               {item.id === "home" && needsYou > 0 ? (
-                <span aria-hidden="true" className="absolute -right-2 -top-1.5 rounded-full bg-danger-500 px-1 text-[10px] font-semibold leading-[14px] tabular-nums text-on-color">
-                  {needsYou > 9 ? "9+" : needsYou}
+                <span aria-hidden="true" className="absolute -right-2.5 -top-1.5 rounded-full bg-danger-500 px-1 text-[10px] font-semibold leading-[14px] tabular-nums text-on-color">
+                  {needsYou > 99 ? "99+" : needsYou}
+                </span>
+              ) : item.id !== "home" && (sectionCounts?.[item.id] ?? 0) > 0 ? (
+                <span aria-hidden="true" className="absolute -right-2.5 -top-1.5 rounded-full bg-03 px-1 text-[10px] font-semibold leading-[14px] tabular-nums text-01">
+                  {sectionCounts![item.id]! > 99 ? "99+" : sectionCounts![item.id]}
                 </span>
               ) : null}
             </span>

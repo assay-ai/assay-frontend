@@ -57,11 +57,11 @@ function ReviewsScreen() {
                   <span className="flex flex-wrap items-center gap-1.5 text-body-xs text-03">
                     <Chip tone={row.kind === "CHANGE" ? "primary" : "neutral"}>{REVIEW_KIND_LABEL[row.kind] ?? row.kind}</Chip>
                     {row.reviewSemver ? <span>v{row.reviewSemver}</span> : null}
-                    <span>· {row.category}</span>
+                    <span>{row.category}</span>
                     {row.status === "PENDING" ? (
                       row.submittedAt ? (
                         <span>
-                          · sent <UtcTime value={row.submittedAt} relative midSentence />
+                          sent <UtcTime value={row.submittedAt} relative midSentence />
                         </span>
                       ) : null
                     ) : (

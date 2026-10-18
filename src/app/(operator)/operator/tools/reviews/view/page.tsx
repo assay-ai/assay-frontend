@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, RefreshCw, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, Check, RefreshCw, X } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -11,17 +11,22 @@ import { UtcTime } from "@/components/patterns/utc-time";
 import { Chip } from "@/components/toolsets/toolset-bits";
 import { Button } from "@/components/ui/button";
 import {
-  approveBlockedBy,
   checklistRows,
+  decisionBlockedBy,
   isStaleReview,
   mayReviewTools,
   mayTakeDownTools,
   REJECT_REASONS,
   REVIEW_KIND_LABEL,
   shortHash,
+  suggestedRejectReason,
+  TIER_HINT,
   toolReviewErrorText,
+  type ChecklistRow,
+  type ManualCheck,
+  type RejectReason,
 } from "@/features/operator/provider-tool-review";
-import { ReviewChanges, ReviewedVersion, TakedownSheet } from "@/features/operator/provider-tool-ui";
+import { FieldDiff, ReviewChanges, ReviewedVersion, TakedownSheet } from "@/features/operator/provider-tool-ui";
 import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { gateRows } from "@/features/provider-tools/model";
@@ -34,9 +39,10 @@ import { toast } from "@/utils/toast";
 
 /**
  * One provider tool review — `/operator/tools/reviews/view?id=` (design spec
- * §7.6): every word a model will read in the versions it covers (or the diff
- * of a change), the §7.6 checklist with what the screen decided, the publish
- * gate as it stands, and the decision.
+ * §7.6): every word a model will read in the versions it covers (or, for a
+ * change, the fields that moved against the approved version), the §7.6
+ * checklist — what the screen decided, and a "Looks fine / Problem" answer
+ * on each item the operator decides — the publish gate, and the decision.
  *
  * The decision is bound to the content hash the operator read. If the
  * provider changes the content meanwhile — seen by polling, or refused by
@@ -44,21 +50,27 @@ import { toast } from "@/utils/toast";
  * read the new content first.
  */
 
-const APPROVE_REASON = "PROVIDER_TOOL_APPROVED";
-
 function ReviewScreen() {
   const id = useSearchParam("id");
   const me = useOperatorSession();
   const queryClient = useQueryClient();
   const detail = useQuery({ queryKey: ["operator", "review", id], queryFn: () => getProviderToolReview(id), enabled: Boolean(id), retry: 0, refetchInterval: 30_000 });
   const [readHash, setReadHash] = React.useState<string | null>(null);
-  // Another review opened in the same page: what was read was the other tool's content.
-  React.useEffect(() => setReadHash(null), [id]);
+  const [checks, setChecks] = React.useState<Record<string, ManualCheck>>({});
+  // Another review opened in the same page: what was read, and checked, was the other tool's content.
+  React.useEffect(() => {
+    setReadHash(null);
+    setChecks({});
+  }, [id]);
   React.useEffect(() => {
     if (detail.data && readHash === null) setReadHash(detail.data.contentHash);
   }, [detail.data, readHash]);
   const [takingDown, setTakingDown] = React.useState(false);
   const [done, setDone] = React.useState<string | null>(null);
+  const doneRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (done) doneRef.current?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  }, [done]);
 
   const back = (
     <Link href="/operator/tools/reviews" className="inline-flex min-h-10 items-center gap-1.5 self-start text-label-13 text-02 hover:text-01">
@@ -80,9 +92,14 @@ function ReviewScreen() {
   const changedSinceRead = readHash !== null && readHash !== review.contentHash;
   const reread = () => {
     setReadHash(review.contentHash);
+    setChecks({});
     window.scrollTo({ top: 0 });
   };
   const removed = Boolean(tool.removedAt) || tool.status === "REMOVED";
+  const canDecide = review.pending && mayReviewTools(me.roles) && !removed;
+  const approved = review.kind === "CHANGE" ? (tool.versions.find((v) => v.version === tool.review.approvedVersion) ?? null) : null;
+  const gate = gateRows(review.gate, tool);
+  const allPassed = gate.every((row) => row.met);
 
   return (
     <>
@@ -98,11 +115,17 @@ function ReviewScreen() {
             {tool.review.submittedAt ? (
               <>
                 {" "}
-                · sent <UtcTime value={tool.review.submittedAt} midSentence />
+                · sent <UtcTime value={tool.review.submittedAt} midSentence alwaysDay />
               </>
             ) : null}
           </span>
         </div>
+        {canDecide ? (
+          <a href="#decide" className="inline-flex min-h-10 items-center gap-1.5 self-start text-label-13 text-primary-600 hover:underline">
+            <ArrowDown aria-hidden="true" className="size-3.5" />
+            Jump to the decision
+          </a>
+        ) : null}
       </header>
 
       {changedSinceRead ? (
@@ -114,13 +137,16 @@ function ReviewScreen() {
         </div>
       ) : null}
 
-      {done ? <ResultCard title={done} next="The provider is told, with your note." onDismiss={() => setDone(null)} /> : null}
-
       <section aria-labelledby="covered-title" className="flex w-full flex-col gap-2">
         <h2 id="covered-title" className="text-label-md text-01">
           {review.kind === "CHANGE" ? "The change under review" : "Everything it serves"}
         </h2>
-        {review.kind === "CHANGE" ? <ReviewChanges changes={review.changes} /> : null}
+        {review.kind === "CHANGE" ? (
+          <>
+            <ReviewChanges changes={review.changes} />
+            {approved && review.covered[0] ? <FieldDiff before={approved} after={review.covered[0]} /> : null}
+          </>
+        ) : null}
         <div className="flex flex-col gap-2">
           {review.covered.map((v) => (
             <ReviewedVersion key={v.version} version={v} />
@@ -128,28 +154,31 @@ function ReviewScreen() {
         </div>
       </section>
 
-      <Checklist review={review} />
+      <Checklist rows={checklistRows(review.checklist)} checks={checks} onCheck={canDecide ? (item, value) => setChecks((c) => ({ ...c, [item]: value })) : undefined} />
 
       <section aria-labelledby="gate-title" className="flex w-full flex-col gap-2">
         <h2 id="gate-title" className="text-label-md text-01">
           Publish checks, now
         </h2>
-        <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01 bg-01">
-          {gateRows(review.gate, tool).map((row) => (
-            <li key={row.requirement} className="flex items-start gap-2 px-3.5 py-2.5 text-body-13">
-              {row.met ? <Check aria-hidden="true" className="mt-0.5 size-3.5 text-success-700" /> : <X aria-hidden="true" className="mt-0.5 size-3.5 text-danger-700" />}
-              <span className={row.met ? "text-02" : "text-01"}>
-                {row.label}
-                {!row.met && row.detail ? <span className="block text-body-xs text-03">{row.detail}</span> : null}
-              </span>
-            </li>
-          ))}
-        </ul>
+        {allPassed ? (
+          <details className="rounded-lg border border-01 bg-01">
+            <summary className="flex min-h-10 cursor-pointer items-center gap-2 px-3.5 text-body-13 text-02">
+              <Check aria-hidden="true" className="size-3.5 text-success-700" />
+              All {gate.length} publish checks pass (endpoint test, stake, payout, safety screen)
+            </summary>
+            <GateList rows={gate} />
+          </details>
+        ) : (
+          <GateList rows={gate} />
+        )}
       </section>
 
-      {review.pending && mayReviewTools(me.roles) && !removed ? (
+      <div ref={doneRef}>{done ? <ResultCard title={done} next="The provider is told, with your note." onDismiss={() => setDone(null)} /> : null}</div>
+
+      {canDecide ? (
         <DecisionPanel
           review={review}
+          checks={checks}
           readHash={readHash ?? review.contentHash}
           blocked={changedSinceRead}
           onStale={() => {
@@ -162,15 +191,23 @@ function ReviewScreen() {
           }}
         />
       ) : review.pending ? (
-        <p className="text-body-13 text-03">Deciding needs an Adjudicator, a Lead adjudicator or a Policy author.</p>
+        <p className="text-body-13 text-03">
+          Deciding needs an Adjudicator, a Lead adjudicator or a Policy author.
+          {mayTakeDownTools(me.roles) && !removed ? " You can still take it down if it is abuse." : ""}
+        </p>
       ) : null}
 
       {mayTakeDownTools(me.roles) && !removed && tool.visibility !== "PRIVATE" ? (
-        <section className="flex flex-col gap-2 rounded-xl border border-danger-20 bg-01 px-4 py-3.5 tablet:flex-row tablet:items-center tablet:justify-between">
-          <p className="text-body-13 text-02">Abuse that can&apos;t wait for a review decision? Take it down at once; a second operator confirms within 72 hours.</p>
-          <Button variant="danger" onClick={() => setTakingDown(true)}>
-            Take down
-          </Button>
+        <section aria-labelledby="abuse-title" className="mt-4 flex flex-col gap-2 rounded-xl border border-danger-20 bg-danger-10 px-4 py-3.5">
+          <h2 id="abuse-title" className="text-label-md text-01">
+            If it is abuse
+          </h2>
+          <div className="flex flex-col gap-2 tablet:flex-row tablet:items-center tablet:justify-between">
+            <p className="text-body-13 text-02">This is not a review decision. A takedown removes it from every view at once; a second operator confirms within 72 hours.</p>
+            <Button variant="danger" onClick={() => setTakingDown(true)}>
+              Take down
+            </Button>
+          </div>
         </section>
       ) : null}
       <TakedownSheet
@@ -187,8 +224,23 @@ function ReviewScreen() {
   );
 }
 
-function Checklist({ review }: { review: ReviewDetail }) {
-  const rows = checklistRows(review.checklist);
+function GateList({ rows }: { rows: ReturnType<typeof gateRows> }) {
+  return (
+    <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01 bg-01">
+      {rows.map((row) => (
+        <li key={row.requirement} className="flex items-start gap-2 px-3.5 py-2.5 text-body-13">
+          {row.met ? <Check aria-hidden="true" className="mt-0.5 size-3.5 text-success-700" /> : <X aria-hidden="true" className="mt-0.5 size-3.5 text-danger-700" />}
+          <span className={row.met ? "text-02" : "text-01"}>
+            {row.label}
+            {!row.met && row.detail ? <span className="block text-body-xs text-03">{row.detail}</span> : null}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Checklist({ rows, checks, onCheck }: { rows: ChecklistRow[]; checks: Record<string, ManualCheck>; onCheck?: (item: string, value: ManualCheck) => void }) {
   return (
     <section aria-labelledby="checklist-title" className="flex w-full flex-col gap-2">
       <h2 id="checklist-title" className="text-label-md text-01">
@@ -203,6 +255,23 @@ function Checklist({ review }: { review: ReviewDetail }) {
             </span>
             {row.detail ? <span className="text-body-13 text-02">{row.detail}</span> : null}
             <ScreenFindings findings={row.findings} />
+            {row.verdict === "CHECK" && onCheck ? (
+              <fieldset className="flex flex-wrap gap-2">
+                <legend className="sr-only">{row.label}: your check</legend>
+                {(["OK", "PROBLEM"] as const).map((value) => (
+                  <label
+                    key={value}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded-full border px-3.5 text-label-13",
+                      checks[row.item] === value ? (value === "OK" ? "border-success-500 bg-success-10 text-01" : "border-danger-500 bg-danger-10 text-01") : "border-02 text-02",
+                    )}
+                  >
+                    <input type="radio" name={`check-${row.item}`} className="accent-primary-500" checked={checks[row.item] === value} onChange={() => onCheck(row.item, value)} />
+                    {value === "OK" ? "Looks fine" : "Problem"}
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -212,25 +281,28 @@ function Checklist({ review }: { review: ReviewDetail }) {
 
 function DecisionPanel({
   review,
+  checks,
   readHash,
   blocked,
   onStale,
   onDecided,
 }: {
   review: ReviewDetail;
+  checks: Record<string, ManualCheck>;
   readHash: string;
   blocked: boolean;
   onStale: () => void;
   onDecided: (message: string) => void;
 }) {
+  const rows = checklistRows(review.checklist);
+  const problems = new Set(Object.entries(checks).filter(([, v]) => v === "PROBLEM").map(([k]) => k));
   const [decision, setDecision] = React.useState<"APPROVE" | "REJECT" | null>(null);
   const [tier, setTier] = React.useState<"VERIFIED" | "UNVERIFIED">("VERIFIED");
-  const [reason, setReason] = React.useState("");
+  const [reason, setReason] = React.useState<RejectReason | "">("");
   const [note, setNote] = React.useState("");
   const [ticket, setTicket] = React.useState("");
   const [errors, setErrors] = React.useState<{ reason?: string; note?: string }>({});
-  const rows = checklistRows(review.checklist);
-  const approveBlock = approveBlockedBy(rows, review.gate.passed);
+  const why = decisionBlockedBy({ decision, rows, checks, gatePassed: review.gate.passed, stale: blocked });
   const semver = review.covered.map((v) => `v${v.semver}`).join(", ");
 
   const decide = useMutation({
@@ -238,7 +310,7 @@ function DecisionPanel({
       decideProviderToolReview(review.tool.id, {
         decision: decision!,
         contentHash: readHash,
-        reasonCode: decision === "APPROVE" ? APPROVE_REASON : reason,
+        reasonCode: decision === "APPROVE" ? "APPROVED" : (reason as RejectReason),
         ...(decision === "APPROVE" ? { tier } : {}),
         ...(note.trim() ? { note: note.trim() } : {}),
         ...(ticket.trim() ? { ticketRef: ticket.trim() } : {}),
@@ -246,7 +318,7 @@ function DecisionPanel({
     onSuccess: (result) => {
       onDecided(
         result.decision === "APPROVE"
-          ? `Approved: ${review.tool.name} ${result.approvedVersion ? "now serves the approved version" : "is listed"} in the catalogue`
+          ? `Approved: ${review.tool.name} ${review.kind === "CHANGE" ? "now serves the reviewed version" : "is listed in the catalogue"}`
           : `Rejected: ${review.tool.name} goes back to its provider with your note`,
       );
     },
@@ -254,6 +326,11 @@ function DecisionPanel({
       if (isStaleReview(error)) onStale();
     },
   });
+
+  const pick = (d: "APPROVE" | "REJECT") => {
+    setDecision(d);
+    if (d === "REJECT" && !reason) setReason(suggestedRejectReason(rows, problems));
+  };
 
   const submit = () => {
     if (decision === "REJECT") {
@@ -267,7 +344,7 @@ function DecisionPanel({
   };
 
   return (
-    <section aria-labelledby="decide-title" className="flex w-full flex-col gap-3 rounded-xl border border-01 bg-01 px-4 py-4" data-testid="review-decision">
+    <section id="decide" aria-labelledby="decide-title" className="flex w-full scroll-mt-20 flex-col gap-3 rounded-xl border border-01 bg-01 px-4 py-4" data-testid="review-decision">
       <header className="flex flex-col gap-0.5">
         <h2 id="decide-title" className="text-label-md text-01">
           Decide
@@ -280,7 +357,7 @@ function DecisionPanel({
         <legend className="sr-only">Decision</legend>
         {(["APPROVE", "REJECT"] as const).map((d) => (
           <label key={d} className={cn("flex flex-1 cursor-pointer items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-label-13", decision === d ? "border-primary-500 bg-primary-10 text-01" : "border-02 text-02")}>
-            <input type="radio" name="review-decision" className="accent-primary-500" checked={decision === d} onChange={() => setDecision(d)} />
+            <input type="radio" name="review-decision" className="accent-primary-500" checked={decision === d} onChange={() => pick(d)} />
             {d === "APPROVE" ? "Approve for the catalogue" : "Reject: changes needed"}
           </label>
         ))}
@@ -288,7 +365,6 @@ function DecisionPanel({
 
       {decision === "APPROVE" ? (
         <>
-          {approveBlock ? <p className="text-body-13 text-danger-700">{approveBlock}</p> : null}
           <fieldset className="flex flex-col gap-1.5">
             <legend className="pb-1 text-label-13 text-01">Tier</legend>
             <div className="flex flex-wrap gap-2">
@@ -299,7 +375,7 @@ function DecisionPanel({
                 </label>
               ))}
             </div>
-            <p className="text-body-xs text-03">One maker&apos;s API is never Guaranteed.</p>
+            <p className="text-body-xs text-03">{TIER_HINT[tier]} One maker&apos;s API is never Guaranteed.</p>
           </fieldset>
           <label className="flex flex-col gap-1.5">
             <span className="text-label-13 text-01">Note to the provider (optional)</span>
@@ -308,7 +384,7 @@ function DecisionPanel({
         </>
       ) : null}
       {decision === "REJECT" ? (
-        <ReasonChips label="What is wrong" options={REJECT_REASONS} value={reason} onChange={setReason} note={note} onNoteChange={setNote} noteLabel="What the provider must fix (they read this)" noteMin={10} noteMax={1000} errors={errors} />
+        <ReasonChips label="What is wrong" options={REJECT_REASONS} value={reason} onChange={(v) => setReason(v as RejectReason)} note={note} onNoteChange={setNote} noteLabel="What the provider must fix (they read this)" noteMin={10} noteMax={1000} errors={errors} />
       ) : null}
       {decision ? (
         <label className="flex flex-col gap-1.5 tablet:max-w-[320px]">
@@ -322,16 +398,16 @@ function DecisionPanel({
           {toolReviewErrorText(decide.error)}
         </p>
       ) : null}
-      <Button
-        className="self-start"
-        variant={decision === "REJECT" ? "danger" : "primary"}
-        disabled={!decision || blocked || (decision === "APPROVE" && approveBlock !== null)}
-        loading={decide.isPending}
-        onClick={submit}
-      >
-        {decision === "REJECT" ? "Reject with this note" : `Approve ${semver}`}
-      </Button>
-      {blocked ? <p className="text-body-xs text-warning-700">Read the new content first (see above).</p> : null}
+      <div className="flex flex-col gap-1">
+        <Button className="self-start" variant={decision === "REJECT" ? "danger" : "primary"} disabled={why !== null} loading={decide.isPending} onClick={submit} aria-describedby="decide-why">
+          {decision === "REJECT" ? "Reject with this note" : `Approve ${semver}`}
+        </Button>
+        {why ? (
+          <p id="decide-why" className="text-body-xs text-03" data-testid="decide-why">
+            {why}
+          </p>
+        ) : null}
+      </div>
     </section>
   );
 }

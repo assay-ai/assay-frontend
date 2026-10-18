@@ -120,7 +120,7 @@ describe("operator: provider tool review and takedown", () => {
     await opTools.listProviderToolReviews();
     expect(opGet).toHaveBeenCalledWith("/operator/reviews", { pending: true });
     opPost.mockResolvedValue({});
-    const body = { decision: "APPROVE" as const, contentHash: "a".repeat(64), reasonCode: "PROVIDER_TOOL_REVIEW", tier: "VERIFIED" as const };
+    const body = { decision: "APPROVE" as const, contentHash: "a".repeat(64), reasonCode: "APPROVED" as const, tier: "VERIFIED" as const };
     await opTools.decideProviderToolReview("t1", body);
     expect(opPost).toHaveBeenCalledWith("/operator/reviews/t1", body);
   });

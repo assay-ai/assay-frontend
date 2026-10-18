@@ -104,7 +104,9 @@ export function notificationHref(item: Pick<NotificationItem, "subjectType" | "s
     case "tool_request":
       return { href: routes.toolRequest(id), label: "Open the request" };
     case "call_dispute":
-      return { href: routes.providerCallDispute(id), label: "Reply to the report" };
+      return { href: routes.providerCallDispute(id), label: "Open the report" };
+    case "provider_tool":
+      return { href: routes.providerApi(id), label: "Open your API" };
     default:
       return null;
   }
