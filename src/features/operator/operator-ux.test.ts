@@ -222,7 +222,7 @@ describe("the operator nav", () => {
     expect(activeOperatorNav("/operator")).toBe("home");
     expect(activeOperatorNav("/operator/approvals")).toBe("home");
     expect(activeOperatorNav("/operator/cases/view")).toBe("penalties");
-    expect(activeOperatorNav("/operator/override-log")).toBe("activity");
+    expect(activeOperatorNav("/operator/activity")).toBe("activity");
     expect(operatorTitleFor("/operator/cases/view")).toBe("Penalty");
     expect(operatorTitleFor("/operator/approvals")).toBe("Approvals");
   });

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { OperatorApproval, OperatorRole } from "@/interfaces/operator";
 
-import { actsOnMoney, ROLE_PRESETS, capabilitiesFor } from "./roles";
+import { actsOnMoney, ROLE_PRESETS, capabilitiesFor, zeroLimitText } from "./roles";
 import { roleName } from "./roles";
 import { firstNames, inviteLimit, invitesOf, limitCell, limitMoney, teamTabs } from "./team";
 import { approverPhrase } from "./two-person";
@@ -94,5 +94,33 @@ describe("round 4: Team counts, limits and names", () => {
     expect(approverPhrase("A-12", ["ADJL"])).toBe("an Admin");
     expect(approverPhrase("S-1", ["ADJ"])).toBe("a second Adjudicator or Lead adjudicator");
     expect(approverPhrase("X-99", ["ADJ"])).toBe("a second operator");
+  });
+});
+
+describe("role presets say which dispute each one decides (B12)", () => {
+  it("Adjudicators decide buyer call disputes; Treasury prepares arbiter rulings the arbiter key signs", () => {
+    const by = (id: string) => ROLE_PRESETS.find((p) => p.id === id)!;
+    expect(by("adjudicator").short).toMatch(/^Decides buyer call disputes/);
+    expect(by("treasury").short).toMatch(/^Prepares arbiter rulings \(arbiter key signs\)/);
+    expect(by("treasury").short).not.toMatch(/call disputes/i);
+    expect(by("lead").short).toMatch(/call disputes.*arbiter rulings/);
+    for (const preset of ROLE_PRESETS) {
+      expect(preset.short).not.toMatch(/rules disputes/i);
+      if (/call disputes/i.test(preset.short)) expect(preset.description).toMatch(/decides buyer call disputes/i);
+      if (/arbiter rulings/i.test(preset.short)) expect(capabilitiesFor(preset.roles).rule).toBe(true);
+    }
+    expect(by("treasury").description).toMatch(/prepares arbiter rulings on disputed penalties \(the arbiter key signs\)/i);
+    expect(by("treasury").description).not.toMatch(/call disputes/i);
+  });
+});
+
+describe("what $0 rules out (D25)", () => {
+  it("names the money actions the backend gates for these roles (S-1, S-5, S-14)", () => {
+    expect(zeroLimitText(["ADJL"])).toBe(
+      "At $0 they can't suspend a penalty, compensate a provider, or uphold a buyer's call-dispute refund, nor approve one. Everything else their role allows still works.",
+    );
+    expect(zeroLimitText(["TRE"])).toBe("At $0 they can't compensate a provider, nor approve one. Everything else their role allows still works.");
+    expect(zeroLimitText(["OPS_ADMIN"])).toBe("This role moves no money, so the limit changes nothing.");
+    expect(ROLE_PRESETS.filter((p) => /call disputes/.test(p.short)).every((p) => p.short.includes("buyer call disputes"))).toBe(true);
   });
 });

@@ -143,6 +143,15 @@ describe("how a row reads", () => {
       expect(JSON.stringify(d)).not.toContain(BLOCK_ID);
     });
 
+    it("names the organization a lift is for, never its uuid (B12)", () => {
+      const ORG = "7e3a94c1-0000-4000-8000-000000000001";
+      const blocked = new Map(context.blocks);
+      blocked.set(BLOCK_ID, { ...context.blocks.get(BLOCK_ID)!, subjectKind: "ORGANIZATION", subject: ORG, subjectName: "Unlisted Data Co" });
+      const d = describeApproval({ action: "account.unblock", target: `account_block:${BLOCK_ID}`, payload: { blockId: BLOCK_ID } }, { ...context, blocks: blocked });
+      expect(d.sentence).toMatch(/^Lift the block on Unlisted Data Co/);
+      expect(JSON.stringify(d)).not.toContain(ORG);
+    });
+
     it("names who blocked by display name, not by a truncated handle", () => {
       const blocked = new Map(context.blocks);
       blocked.set(BLOCK_ID, { ...context.blocks.get(BLOCK_ID)!, blockedBy: "test-op-b@" });
@@ -416,20 +425,27 @@ describe("the approve and reject refusals", () => {
       const row = approval({ status: "REJECTED", rejectedBy: "alice@", requestedBy: "alice@" });
       expect(isWithdrawn(row)).toBe(true);
       expect(statusWord(row)).toBe("withdrawn");
-      expect(decisionText(row)).toBe("Withdrawn by alice@");
+      expect(decisionText(row)).toBe("Asked and withdrawn by alice@");
     });
 
     it("reads another operator's reject as rejected", () => {
       const row = approval({ status: "REJECTED", rejectedBy: "bob@", requestedBy: "alice@" });
       expect(isWithdrawn(row)).toBe(false);
       expect(statusWord(row)).toBe("rejected");
-      expect(decisionText(row)).toBe("Rejected by bob@");
+      expect(decisionText(row)).toBe("Asked by alice@ · rejected by bob@");
     });
 
     it("words approved and expired rows", () => {
-      expect(decisionText(approval({ status: "APPROVED", approvedBy: "bob@" }))).toBe("Approved by bob@");
-      expect(decisionText(approval({ status: "EXPIRED" }))).toBe("Expired");
+      expect(decisionText(approval({ status: "APPROVED", requestedBy: "alice@", approvedBy: "bob@" }))).toBe("Asked by alice@ · approved by bob@");
+      expect(decisionText(approval({ status: "EXPIRED", requestedBy: "alice@" }))).toBe("Asked by alice@ · expired");
       expect(statusWord(approval({ status: "EXPIRED" }))).toBe("expired");
+    });
+
+    it("names who asked and who decided, through the console's names", () => {
+      const names: Record<string, string> = { "alice@": "Alice Ng", "bob@": "Bob Ruiz" };
+      const nameOf = (s: string) => names[s] ?? s;
+      expect(decisionText(approval({ status: "APPROVED", requestedBy: "alice@", approvedBy: "bob@" }), nameOf)).toBe("Asked by Alice Ng · approved by Bob Ruiz");
+      expect(decisionText(approval({ status: "REJECTED", requestedBy: "alice@", rejectedBy: "alice@" }), nameOf)).toBe("Asked and withdrawn by Alice Ng");
     });
   });
 });

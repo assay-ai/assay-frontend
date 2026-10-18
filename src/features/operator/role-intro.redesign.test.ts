@@ -51,3 +51,13 @@ describe("roleCapabilityLists", () => {
     expect(others).toContain("suspend a penalty (your limit is $0)");
   });
 });
+
+describe("tool requests in What can I do? (B12)", () => {
+  it("lists answering tool requests for the roles the server lets answer, and who else can", () => {
+    expect(roleCapabilityLists({ roles: ["SUP"], authorityLimit: null }).can).toContain(
+      "answer or decline tool requests, or accept one as a draft tool (its versions need Policy author)",
+    );
+    const others = roleCapabilityLists({ roles: ["POL"], authorityLimit: null }).others;
+    expect(others.some((item) => item.startsWith("answer or decline tool requests, or accept one as a draft tool ("))).toBe(true);
+  });
+});

@@ -231,12 +231,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
   const meta =
     mode === "history" ? (
       <>
-        {decisionText({
-          ...approval,
-          approvedBy: approval.approvedBy ? nameOf(approval.approvedBy) : null,
-          rejectedBy: approval.rejectedBy ? nameOf(approval.rejectedBy) : null,
-          requestedBy: approval.rejectedBy && isWithdrawn(approval) ? nameOf(approval.rejectedBy) : approval.requestedBy,
-        })}{" "}
+        {decisionText(approval, nameOf)}{" "}
         · <UtcTime value={approval.decidedAt ?? approval.expiresAt} /> ·{" "}
         <Link href={approvalActivityHref(approval)} className="hit-area text-primary-700 hover:underline">
           {/* Not "History": that is the tab this row sits under. */}

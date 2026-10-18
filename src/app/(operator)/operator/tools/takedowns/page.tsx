@@ -9,16 +9,18 @@ import { ReasonChips } from "@/components/patterns/reason-chips";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Chip } from "@/components/toolsets/toolset-bits";
 import { Button } from "@/components/ui/button";
+import { Search } from "@/components/ui/search";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { confirmBlockedBy, cutoffView, mayConfirmCutoffs, MODERATION_NOTE_MIN, toolReviewErrorText } from "@/features/operator/provider-tool-review";
-import { OperatorToolsTabs } from "@/features/operator/provider-tool-ui";
+import { confirmBlockedBy, cutoffView, mayConfirmCutoffs, mayTakeDownTools, MODERATION_NOTE_MIN, toolReviewErrorText } from "@/features/operator/provider-tool-review";
+import { OperatorToolsTabs, TakeDownButton, takedownSearch } from "@/features/operator/provider-tool-ui";
 import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { approvalHref } from "@/features/operator/two-person";
 import { useOperatorDirectory } from "@/features/operator/use-operator-lookups";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
+import { listOperatorTools } from "@/services/operator-contracts.service";
 import { confirmCutoff, listCutoffs, revertCutoff, type ModerationCutoff } from "@/services/operator-provider-tools.service";
 import { toast } from "@/utils/toast";
 
@@ -26,8 +28,56 @@ import { toast } from "@/utils/toast";
  * Provider tool takedowns — `/operator/tools/takedowns` (FR-18, A-25): a
  * takedown acts at once; a second operator confirms it within 72 hours
  * (A-18) or it is reverted. Rejecting a pending one, or lifting a confirmed
- * one (two-person), is A-19.
+ * one (two-person), is A-19. A live provider tool can be found here by name
+ * and taken down without a review (the same A-25 sheet); a standard tool
+ * never can (D24).
  */
+
+/** Find a live provider tool to take down. Only for a role that may (ADJ, ADJL, SRE). */
+function FindToTakeDown({ onDone }: { onDone: (name: string) => void }) {
+  const [q, setQ] = React.useState("");
+  const tools = useQuery({ queryKey: ["operator", "tools", "list"], queryFn: listOperatorTools, retry: 0, enabled: q.trim() !== "" });
+  const found = takedownSearch(tools.data?.tools ?? [], q);
+  return (
+    <section aria-labelledby="find-title" className="flex w-full flex-col gap-2">
+      <h2 id="find-title" className="text-label-md text-01">
+        Take a provider tool down
+      </h2>
+      <div className="w-full tablet:w-[360px]">
+        <Search value={q} onChange={(e) => setQ(e.target.value)} placeholder="Provider tool name" aria-label="Find a provider tool by name or topic" shortcut={null} autoComplete="off" spellCheck={false} />
+      </div>
+      {q.trim() === "" ? null : tools.isPending ? (
+        <p className="text-body-13 text-03">Searching…</p>
+      ) : tools.isError ? (
+        <p role="alert" className="text-body-13 text-danger-700">
+          The tools could not be loaded. Try again.
+        </p>
+      ) : (
+        <>
+          {found.matches.length > 0 ? (
+            <ul className="flex w-full flex-col divide-y divide-01 rounded-xl border border-01 bg-01">
+              {found.matches.map((tool) => (
+                <li key={tool.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+                  <Link href={routes.operatorReview(tool.id)} className="inline-flex min-h-10 items-center font-mono text-mono-13 text-01 hover:underline [overflow-wrap:anywhere]">
+                    {tool.name}
+                  </Link>
+                  <TakeDownButton tool={tool} size="sm" onDone={() => onDone(tool.name)} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-body-13 text-03">No live provider tool matches “{q.trim()}”.</p>
+          )}
+          {found.standard.length > 0 ? (
+            <p className="text-body-13 text-03">
+              {found.standard.map((t) => t.name).join(", ")} {found.standard.length === 1 ? "is a standard tool" : "are standard tools"}: those can&apos;t be taken down. Block the provider, or pause its binding, instead.
+            </p>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
 
 /** Why a takedown is confirmed, or why it is rejected or lifted: never the same list. */
 const CONFIRM_REASONS = [
@@ -136,7 +186,7 @@ function TakedownsScreen() {
       <header className="flex w-full flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-heading-md text-01">Provider tool takedowns</h1>
-          <p className="text-body-13 text-02">A takedown acts at once. A second operator confirms it within 72 hours, or it is reverted. Take a tool down from its review page.</p>
+          <p className="text-body-13 text-02">A takedown acts at once. A second operator confirms it within 72 hours, or it is reverted. Take a provider tool down from its page, or find it below.</p>
           {!canAct ? <p className="text-body-13 text-03">You can see takedowns. Confirming, rejecting or lifting one needs an Adjudicator or a Lead adjudicator other than the one who took it down.</p> : null}
         </div>
         <Segmented value={show} onValueChange={(v) => setShow(v as "pending" | "all")} aria-label="Show" className="inline-flex rounded-md bg-03 p-0.5">
@@ -144,6 +194,15 @@ function TakedownsScreen() {
           <SegmentedItem value="all">All</SegmentedItem>
         </Segmented>
       </header>
+      {mayTakeDownTools(me.roles) ? (
+        <FindToTakeDown
+          onDone={(name) => {
+            toast.success(`${name} is down. A second operator confirms it here.`);
+            void queryClient.invalidateQueries({ queryKey: ["operator", "cutoffs"] });
+            void queryClient.invalidateQueries({ queryKey: ["operator", "tools"] });
+          }}
+        />
+      ) : null}
       {result ? <ResultCard title={result.title} next={result.next} tone={result.href ? "queued" : "done"} link={result.href ? { href: result.href, label: "Open it in Approvals" } : undefined} onDismiss={() => setResult(null)} /> : null}
       {cutoffs.isPending ? (
         <PageState kind="loading" rows={3} label="Loading takedowns" />

@@ -18,7 +18,7 @@ import { capabilitiesFor } from "./roles";
  *                                        the first tab this operator can use
  *   Team       /operator/operators
  *   Contracts  /operator/contracts       the contracts' admin settings, only for Admin
- *   Activity   /operator/override-log    the override register, as sentences
+ *   Activity   /operator/activity        the override register, as sentences
  */
 /** Eight items at most: the phone tab bar holds eight at 390px (48px each). */
 export type OperatorNavId = "home" | "penalties" | "blocks" | "arbiter" | "tools" | "team" | "contracts" | "activity";
@@ -41,7 +41,7 @@ export const OPERATOR_NAV_ITEMS: readonly OperatorNavItem[] = Object.freeze([
   { id: "tools", label: "Tools", href: "/operator/tools", match: ["/operator/tools"] },
   { id: "team", label: "Team", href: "/operator/operators", match: ["/operator/operators"] },
   { id: "contracts", label: "Contracts", short: "Config", href: "/operator/contracts", match: ["/operator/contracts"] },
-  { id: "activity", label: "Activity", href: "/operator/override-log", match: ["/operator/override-log"] },
+  { id: "activity", label: "Activity", href: "/operator/activity", match: ["/operator/activity"] },
 ]);
 
 /**

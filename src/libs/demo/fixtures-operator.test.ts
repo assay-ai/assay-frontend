@@ -221,6 +221,15 @@ describe("B11 shapes: old-process count, chainStanding, cancels to sign", () => 
     expect(brief.chainStanding).toBe(false);
   });
 
+  it("names every blocked organization, as the server does; a wallet has no name", async () => {
+    const fixtures = await load();
+    const rows = (call(fixtures, "GET", "/operator/blocks") as { items: import("@/interfaces/operator").AccountBlock[] }).items;
+    for (const row of rows) {
+      if (row.subjectKind === "ORGANIZATION") expect(row.subjectName).toBeTruthy();
+      else expect(row.subjectName).toBeNull();
+    }
+  });
+
   it("says a closed record no longer stands", async () => {
     const fixtures = await load();
     const rows = (call(fixtures, "GET", "/operator/cases") as { items: OperatorCaseListRow[] }).items;

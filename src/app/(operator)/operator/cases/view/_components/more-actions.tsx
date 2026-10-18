@@ -146,7 +146,7 @@ export function MoreActions({
           {canSweep ? <MenuItem icon={<Layers />} label="Open a fleet sweep" why={null} onSelect={() => setOpen("sweep")} /> : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
-            <Link href={`/operator/override-log?targetId=${encodeURIComponent(proposalId)}`} className="cursor-pointer">
+            <Link href={`/operator/activity?targetId=${encodeURIComponent(proposalId)}`} className="cursor-pointer">
               <History aria-hidden="true" />
               History in Activity
             </Link>

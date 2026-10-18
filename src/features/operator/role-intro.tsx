@@ -9,6 +9,7 @@ import type { OperatorIdentity } from "@/interfaces/operator";
 import { formatMoney } from "@/utils/money";
 
 import { ACTION_WHAT, MONEY_ACTIONS, capabilitiesFor, checkAction, listPhrase, roleTitle, rolesPhrase, type ConsoleAction } from "./roles";
+import { mayAnswerToolRequests, TOOL_REQUEST_ROLES } from "./contract-editor";
 import { mayDecideCallDisputes, mayPromote, mayReviewTools, mayTakeDownTools } from "./provider-tool-review";
 
 /**
@@ -155,6 +156,7 @@ export function roleCapabilityLists(identity: Pick<OperatorIdentity, "roles" | "
     [mayTakeDownTools(identity.roles), "take a provider tool down (a second operator confirms)", "Adjudicator, Lead adjudicator or SRE"],
     [mayPromote(identity.roles), "draft standard tools from provider tools (publishing needs a second Policy person)", "Policy author or Policy approver"],
     [mayDecideCallDisputes(identity.roles), "decide buyers' call disputes (large refunds need a second operator)", "Adjudicator or Lead adjudicator"],
+    [mayAnswerToolRequests(identity.roles), "answer or decline tool requests, or accept one as a draft tool (its versions need Policy author)", rolesPhrase(TOOL_REQUEST_ROLES)],
   ];
   for (const [allowed, what, who] of t4) (allowed ? can : others).push(allowed ? what : `${what.replace(/ \(.*\)$/, "")} (${who})`);
   return { can, others };

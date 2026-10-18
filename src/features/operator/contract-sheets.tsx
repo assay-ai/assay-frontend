@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpCircle, Ban, Bell, CalendarClock, GitBranch, History, Users } from "lucide-react";
+import { ArrowUpCircle, Ban, Bell, CalendarClock, Eye, GitBranch, History, Lock, MessageSquare, Users } from "lucide-react";
 import * as React from "react";
 
 import { ApprovalFooter } from "@/components/patterns/approval-footer";
@@ -489,10 +489,13 @@ export function NewToolSheet({ open, onClose, onCreated }: { open: boolean; onCl
 /** Accept a tool request: it closes the ticket and creates the DRAFT tool in one step. */
 export function AcceptRequestSheet({
   request,
+  canWriteVersions = true,
   onClose,
   onAccepted,
 }: {
   request: OperatorToolRequestRow | null;
+  /** Policy author or approver: they write the first version next. Anyone else hands the draft over. */
+  canWriteVersions?: boolean;
   onClose: () => void;
   onAccepted: (toolId: string | null) => void;
 }) {
@@ -532,7 +535,10 @@ export function AcceptRequestSheet({
           <SheetTitle className="pr-8">Create a tool from “{request.title}”</SheetTitle>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pt-3">
-          <p className="text-body-13 text-02">This accepts the request (the person who asked is told) and creates a draft tool. You write its first version next.</p>
+          <p className="text-body-13 text-02">
+            This accepts the request (the person who asked is told) and creates a draft tool.{" "}
+            {canWriteVersions ? "You write its first version next." : ACCEPT_HANDOVER}
+          </p>
           <Field label="Tool name" value={name} onChange={(e) => setName(e.target.value)} hint="What agents call it. Lower case and _. It can't be changed later." error={errors.name} autoComplete="off" spellCheck={false} />
           <Field label="Topic (optional)" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="weather" hint="Groups it in the catalogue. Empty puts it under Other." error={errors.category} autoComplete="off" spellCheck={false} />
           <label className="flex w-full flex-col gap-1.5">
@@ -555,6 +561,109 @@ export function AcceptRequestSheet({
             </SheetClose>
             <Button loading={accept.isPending} onClick={submit}>
               Accept and create
+            </Button>
+          </div>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+/** What accepting means for a role that answers requests but does not write tools. */
+export const ACCEPT_HANDOVER = "Accepting creates a draft; writing its versions needs Policy author.";
+
+export type ToolRequestAnswer = "decline" | "acknowledge";
+
+/**
+ * The two other answers to a tool request, through the same `PATCH` as
+ * accepting (and the same server-side role check): decline, with a note the
+ * person reads, or mark it looked at. Declining is final; nothing is created.
+ */
+export function AnswerRequestSheet({
+  request,
+  answer,
+  onClose,
+  onAnswered,
+}: {
+  request: OperatorToolRequestRow | null;
+  answer: ToolRequestAnswer;
+  onClose: () => void;
+  onAnswered: () => void;
+}) {
+  const [note, setNote] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const send = useMutation({
+    mutationFn: (id: string) =>
+      answerOperatorToolRequest(id, answer === "decline" ? { status: "DECLINED", resolutionNote: note.trim() } : { status: "ACKNOWLEDGED" }),
+    onSuccess: () => onAnswered(),
+  });
+  const { reset } = send;
+  React.useEffect(() => {
+    if (!request) return;
+    setNote("");
+    setError(null);
+    reset();
+  }, [request, answer, reset]);
+  if (!request) return null;
+  const declining = answer === "decline";
+  const submit = () => {
+    if (declining && !note.trim()) {
+      setError("Say why, for the person who asked.");
+      return;
+    }
+    send.mutate(request.id);
+  };
+  const lines: WhatHappensLine[] = declining
+    ? [
+        { icon: MessageSquare, text: "The person who asked is told it is declined, with your answer" },
+        { icon: Ban, text: "No tool is created, and it leaves this list" },
+        { icon: Lock, text: "It can't be reopened: they can send a new request" },
+      ]
+    : [
+        { icon: Eye, text: "The person who asked sees “Being reviewed”" },
+        { icon: Bell, text: "It stays here until someone accepts or declines it" },
+        { icon: MessageSquare, text: "No message goes with it: to write to them, accept or decline" },
+      ];
+  return (
+    <Sheet open onOpenChange={(o) => (!o && !send.isPending ? onClose() : undefined)}>
+      <SheetContent showCloseButton={!send.isPending}>
+        <SheetHeader className="tablet:pt-5">
+          <SheetTitle className="pr-8">{declining ? `Decline “${request.title}”` : `Answer “${request.title}”`}</SheetTitle>
+        </SheetHeader>
+        <div className="flex w-full flex-col gap-4 px-[18px] pt-3">
+          <WhatHappens lines={lines} />
+          {declining ? (
+            <label className="flex w-full flex-col gap-1.5">
+              <span className="text-label-13 text-01">Answer to the person who asked</span>
+              <Textarea
+                value={note}
+                onChange={(e) => {
+                  setNote(e.target.value);
+                  if (e.target.value.trim()) setError(null);
+                }}
+                rows={3}
+                maxLength={4000}
+                placeholder="It overlaps get_weather, which already returns this."
+                aria-invalid={error ? true : undefined}
+              />
+              {error ? (
+                <span role="alert" className="text-body-xs text-danger-500">
+                  {error}
+                </span>
+              ) : null}
+            </label>
+          ) : null}
+        </div>
+        <SheetFooter className={OPERATOR_SHEET_FOOTER}>
+          <ErrorLine error={send.error} />
+          <div className={OPERATOR_SHEET_BUTTONS}>
+            <SheetClose asChild>
+              <Button variant="secondary" disabled={send.isPending}>
+                Cancel
+              </Button>
+            </SheetClose>
+            <Button variant={declining ? "danger" : "primary"} loading={send.isPending} onClick={submit}>
+              {declining ? "Decline request" : "Mark as being reviewed"}
             </Button>
           </div>
         </SheetFooter>

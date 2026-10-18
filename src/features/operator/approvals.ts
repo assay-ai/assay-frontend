@@ -112,7 +112,7 @@ export function rejectMode(
  * then falls back to the id, shortened.
  */
 export interface ApprovalContext {
-  readonly blocks: ReadonlyMap<string, Pick<AccountBlock, "subjectKind" | "subject" | "active" | "reasonCode" | "blockedBy">>;
+  readonly blocks: ReadonlyMap<string, Pick<AccountBlock, "subjectKind" | "subject" | "active" | "reasonCode" | "blockedBy"> & { subjectName?: string | null }>;
   readonly operators: ReadonlyMap<
     string,
     Pick<OperatorDirectoryEntry, "subject" | "displayName" | "walletAddress" | "roles" | "authorityLimit">
@@ -238,9 +238,9 @@ export function limitText(minor: unknown, asset: ApprovalContext["asset"]): stri
   return amount === "0" ? "$0" : `${amount} minor units`;
 }
 
-/** A block's subject in words: `wallet 0x0000…0abc` or `organization 1b2c3d4e…`. */
-function blockSubject(block: Pick<AccountBlock, "subjectKind" | "subject">): string {
-  if (block.subjectKind === "ORGANIZATION") return `organization ${block.subject}`;
+/** A block's subject in words: `wallet 0x0000…0abc`, the organization's public name, or `unnamed organization 1b2c3d4e…`. */
+function blockSubject(block: Pick<AccountBlock, "subjectKind" | "subject"> & { subjectName?: string | null }): string {
+  if (block.subjectKind === "ORGANIZATION") return block.subjectName ?? `unnamed organization ${shortId(block.subject)}`;
   const parts = block.subject.split(":");
   const address = parts.length >= 3 ? parts.slice(2).join(":") : block.subject;
   const chain = parts.length >= 3 ? `${parts[0]}:${parts[1]}` : "eip155:1";
@@ -719,16 +719,20 @@ export function statusWord(approval: Pick<OperatorApproval, "status" | "rejected
   return isWithdrawn(approval) ? "withdrawn" : approval.status.toLowerCase();
 }
 
-/** Who decided a row, in words: "Approved by x", "Withdrawn by x", "Rejected by x", "Expired". */
+/**
+ * Who asked and who decided, in one line: "Asked by A · approved by B",
+ * "Asked by A · rejected by B", "Asked and withdrawn by A", "Asked by A ·
+ * expired". `nameOf` turns a subject into the name the console shows.
+ */
 export function decisionText(
   approval: Pick<OperatorApproval, "status" | "approvedBy" | "rejectedBy" | "requestedBy">,
+  nameOf: (subject: string) => string = (subject) => subject,
 ): string {
-  if (approval.approvedBy) return `Approved by ${approval.approvedBy}`;
-  if (approval.rejectedBy) {
-    return isWithdrawn(approval) ? `Withdrawn by ${approval.rejectedBy}` : `Rejected by ${approval.rejectedBy}`;
-  }
-  const word = approval.status.toLowerCase();
-  return word.charAt(0).toUpperCase() + word.slice(1);
+  const asker = nameOf(approval.requestedBy);
+  if (isWithdrawn(approval)) return `Asked and withdrawn by ${asker}`;
+  if (approval.approvedBy) return `Asked by ${asker} · approved by ${nameOf(approval.approvedBy)}`;
+  if (approval.rejectedBy) return `Asked by ${asker} · rejected by ${nameOf(approval.rejectedBy)}`;
+  return `Asked by ${asker} · ${approval.status.toLowerCase()}`;
 }
 
 /**
@@ -890,7 +894,7 @@ export function approvalTargetId(approval: Pick<OperatorApproval, "target" | "pa
 
 /** The Activity log, filtered to what the request is about. */
 export function approvalActivityHref(approval: Pick<OperatorApproval, "target" | "payload">): string {
-  return `/operator/override-log?targetId=${encodeURIComponent(approvalTargetId(approval))}`;
+  return `/operator/activity?targetId=${encodeURIComponent(approvalTargetId(approval))}`;
 }
 
 /**

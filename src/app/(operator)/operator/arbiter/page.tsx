@@ -239,7 +239,7 @@ function ArbiterScreen() {
           title={result.title}
           next="The penalties move once the chain watcher sees the transaction, usually within a minute."
           txUrl={result.hash && stakeDeploymentFor(result.chainId) ? explorerTxLink(stakeDeploymentFor(result.chainId)!, result.hash) : null}
-          activityHref="/operator/override-log?kind=arbiter"
+          activityHref="/operator/activity?kind=arbiter"
           onDismiss={() => setResult(null)}
         />
       ) : null}

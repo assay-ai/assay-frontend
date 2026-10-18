@@ -96,8 +96,9 @@ function BlocksScreen() {
   const directory = useOperatorDirectory();
   const searchParams = useSearchParams();
 
-  const [filter, setFilter] = React.useState<Filter>("active");
-  const [search, setSearch] = React.useState("");
+  // Activity links to one block: `?q=` its id (or subject), `?show=lifted` once it was lifted.
+  const [filter, setFilter] = React.useState<Filter>(() => (searchParams.get("show") === "lifted" ? "lifted" : "active"));
+  const [search, setSearch] = React.useState(() => searchParams.get("q") ?? "");
   const [blockOpen, setBlockOpen] = React.useState(false);
   const [prefill, setPrefill] = React.useState<{ kind: BlockSubjectKind; subject: string } | null>(null);
   const [lifting, setLifting] = React.useState<AccountBlock | null>(null);
@@ -167,7 +168,7 @@ function BlocksScreen() {
     const q = search.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((row) =>
-      [label(row), row.subject, reasonLabel(row.reasonCode), row.blockedBy, directory.nameOf(row.blockedBy), row.ticketRef ?? "", row.note]
+      [row.id, label(row), row.subject, reasonLabel(row.reasonCode), row.blockedBy, directory.nameOf(row.blockedBy), row.ticketRef ?? "", row.note]
         .join(" ")
         .toLowerCase()
         .includes(q),
@@ -316,7 +317,7 @@ function BlocksScreen() {
                         <DropdownMenuContent align="end" className="min-w-[200px] border border-01">
                           <DropdownMenuItem onSelect={() => setOpenNote(noteOpen ? null : block.id)}>{noteOpen ? "Hide the note" : "Show the note"}</DropdownMenuItem>
                           <DropdownMenuItem asChild>
-                            <Link href={`/operator/override-log?targetId=${encodeURIComponent(block.id)}`}>History in Activity</Link>
+                            <Link href={`/operator/activity?targetId=${encodeURIComponent(block.id)}`}>History in Activity</Link>
                           </DropdownMenuItem>
                           {walletOnChain ? <DropdownMenuItem onSelect={() => setChainBlocking(block)}>Block on chain</DropdownMenuItem> : null}
                         </DropdownMenuContent>
@@ -491,7 +492,7 @@ function BlockSheet({
                   ? `It applies within seconds in Assay, but not on chain yet: the on-chain block could not be prepared. ${arbiterErrorMessage(chainError, "block").replace(/\s*\([A-Z_]+\)$/, "")} Use "Block on chain" on its row to try again.`
                   : "It applies within seconds on every instance. Lifting it needs two people."
             }
-            activityHref={`/operator/override-log?targetId=${encodeURIComponent(created.id)}`}
+            activityHref={`/operator/activity?targetId=${encodeURIComponent(created.id)}`}
             onDismiss={() => onDone(null)}
           />
           {queued ? (
@@ -564,13 +565,13 @@ function BlockSheet({
         <div className="flex w-full flex-col gap-4 px-[18px] pt-3">
           <WhatHappens
             lines={[
-              { icon: Ban, text: "It stops paying and being paid through Assay within seconds" },
+              { icon: Ban, text: "The Assay block needs only you: it stops paying and being paid through Assay within seconds, on every instance" },
               { icon: Users, text: "Lifting the Assay block later needs two people" },
               ...(onChain && evm && chainId
                 ? [
                     {
                       icon: Link2,
-                      text: `On ${chainDisplayName(chainId)}: ${chainNeeds} approves, then the arbiter signs. Only the contracts' admin key can lift it there`,
+                      text: `On ${chainDisplayName(chainId)} it needs a second person: ${chainNeeds} approves, then the arbiter signs. Nothing is blocked on chain until it lands, and only the contracts' admin key can lift it there`,
                     },
                   ]
                 : []),
@@ -599,7 +600,7 @@ function BlockSheet({
                   <p>
                     <span className="text-label-13 text-01">{provider.legalName}</span>: {provider.activeBindings} live tool
                     {provider.activeBindings === 1 ? "" : "s"}
-                    {provider.stake.length > 0 ? `, ${provider.stake.map((s) => formatMoney({ amount: s.amount, asset: s.asset, decimals: s.decimals })).join(" + ")} staked` : ""}.
+                    {provider.stake.length > 0 ? `, ${stakedPhrase(provider.stake)}` : ""}.
                     Its tools stop being paid and its agents stop paying.
                   </p>
                 ) : (
@@ -738,6 +739,16 @@ function ChainBlockPreview({ account, chainId }: { account: string; chainId: str
       <p className="text-body-xs text-03">The call is built once approved, and only offered for signing if it is exactly this.</p>
     </section>
   );
+}
+
+/**
+ * Its stake as "bonded", per chain: the same measure Home's "Stake bonded"
+ * tile sums over every provider, so the two read as one figure, not two that
+ * disagree.
+ */
+function stakedPhrase(stake: readonly { chainId: string; amount: string; asset: string; decimals: number }[]): string {
+  const parts = stake.map((s) => `${formatMoney({ amount: s.amount, asset: s.asset, decimals: s.decimals })} on ${chainDisplayName(s.chainId)}`);
+  return `stake bonded: ${parts.join(" and ")}`;
 }
 
 /** An on-chain block request (A-11) queued for a second operator: who approves it, and that nothing is blocked on chain yet. */
