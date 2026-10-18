@@ -24,6 +24,10 @@ describe("glossary", () => {
   it("states the stake rule with the provider screens' numbers", () => {
     expect(GLOSSARY["stake-rule"].definition).toContain("at least 400 checked calls");
     expect(GLOSSARY["stake-rule"].definition).toContain("never more than 10%");
+    // As the backend judges it (a statistical tolerance) and as /why-list-here says it (a per-penalty maximum).
+    expect(GLOSSARY["stake-rule"].definition).toContain("beyond a margin for chance");
+    expect(GLOSSARY["stake-rule"].definition).toContain("maximum set on chain");
+    expect(GLOSSARY["penalty-example"].definition).toContain("maximum set on chain");
   });
 
   it("works the penalty example with the same formula as the provider wizard", () => {

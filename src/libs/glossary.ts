@@ -106,11 +106,11 @@ export const GLOSSARY = {
   },
   "stake-rule": {
     term: "Stake rule",
-    definition: `A provider that fails more often than it promised, over at least ${MIN_CHECKED_CALLS} checked calls in a window, loses part of its stake (never more than ${DAILY_CAP_PERCENT}% of it in any 24 hours), and part of that goes to the buyers it served badly. Within its promise, or below ${MIN_CHECKED_CALLS} checked calls, nothing is taken.`,
+    definition: `A provider that fails clearly more often than it promised (beyond a margin for chance), over at least ${MIN_CHECKED_CALLS} checked calls in a window, loses part of its stake: never more than ${DAILY_CAP_PERCENT}% of it in any 24 hours, and each penalty is limited to a maximum set on chain. Part of it goes to the buyers it served badly. Within its promise, or below ${MIN_CHECKED_CALLS} checked calls, nothing is taken.`,
   },
   "penalty-example": {
     term: "Penalty example",
-    definition: `A tool priced $${EXAMPLE.price.toFixed(2)} that promised at most ${pct(EXAMPLE.promised)} failures fails ${pct(EXAMPLE.observed)} of ${EXAMPLE.calls.toLocaleString("en-US")} paid calls in a window: ${EXAMPLE.calls.toLocaleString("en-US")} × $${EXAMPLE.price.toFixed(2)} × (${pct(EXAMPLE.observed)} − ${pct(EXAMPLE.promised)}) × ${PENALTY_MULTIPLIER} = up to about $${EXAMPLE_PENALTY} of its stake, and never more than ${DAILY_CAP_PERCENT}% of the stake in any 24 hours.`,
+    definition: `A tool priced $${EXAMPLE.price.toFixed(2)} that promised at most ${pct(EXAMPLE.promised)} failures fails ${pct(EXAMPLE.observed)} of ${EXAMPLE.calls.toLocaleString("en-US")} paid calls in a window: ${EXAMPLE.calls.toLocaleString("en-US")} × $${EXAMPLE.price.toFixed(2)} × (${pct(EXAMPLE.observed)} − ${pct(EXAMPLE.promised)}) × ${PENALTY_MULTIPLIER} = up to about $${EXAMPLE_PENALTY} of its stake. 12% is clearly above 3% over that many calls, so the margin for chance does not save it; the penalty is still never more than ${DAILY_CAP_PERCENT}% of the stake in any 24 hours, nor more than the maximum set on chain.`,
   },
   spent: {
     term: "Spent",
