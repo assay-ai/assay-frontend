@@ -156,13 +156,17 @@ export function isAlertResolved(note: AlertNote, ctx: ResolvedContext): boolean 
 /**
  * Alerts about a risk that is still open until the person acts: a balance at
  * or near zero, a key expiring or expired, a withdrawal pending, a paused
- * agent, a failed deposit (and a spend limit reached in full, see `isOpenRisk`).
+ * agent, an unusual call pattern, a failed deposit (and a spend limit reached
+ * in full, see `isOpenRisk`).
  * Opening "See all alerts" does not mark these read while they may
  * still be open; they leave Needs attention by Dismiss, by "Mark read" in See
  * all, or once the condition has cleared.
  */
 export const OPEN_RISK_EVENTS: ReadonlySet<string> = new Set([
   "agent.paused",
+  // An agent throttled for repeating a request: it may be stuck in a loop or
+  // misused, and nothing here can tell when that is over (V1-3).
+  "velocity.anomaly",
   // A failed deposit has no condition to watch: it leaves only by hand.
   "deposit.failed",
   "balance.zero",

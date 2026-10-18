@@ -39,7 +39,10 @@ const KEY = {
   createdAt: "2026-10-17T00:00:00Z",
 };
 
-async function renderGetStarted(seed: (client: QueryClient) => void = () => undefined) {
+async function renderGetStarted(
+  seed: (client: QueryClient) => void = () => undefined,
+  placement: "overview" | "page" = "page",
+) {
   const { GetStarted } = await import("./get-started");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] });
@@ -64,7 +67,7 @@ async function renderGetStarted(seed: (client: QueryClient) => void = () => unde
   seed(client);
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
-      <GetStarted placement="page" />
+      <GetStarted placement={placement} />
     </QueryClientProvider>,
   );
 }
@@ -115,5 +118,57 @@ describe("Get started, step 4 by invitation (D14)", { timeout: 30_000 }, () => {
     vi.resetModules();
     const { PaidByInvitation } = await import("./get-started");
     expect(text(renderToStaticMarkup(<PaidByInvitation agentName="My agent" />))).not.toContain("Ask for access");
+  });
+});
+
+// V1-1: an agent that already pays must not flash "Let your agent pay" on Overview.
+describe("Get started on Overview, an agent that already pays", { timeout: 30_000 }, () => {
+  const DELEGATE = "eip155:46630:0x00000000000000000000000000000000000000d1";
+  const bound = (client: QueryClient) => {
+    client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [{ ...KEY, delegateAccount: DELEGATE }] });
+    client.setQueryData(["escrow", null], {
+      exists: true,
+      readable: true,
+      account: ACCOUNT,
+      maxVoucherAmount: usd("1000000"),
+      maxPerWindow: usd("5000000"),
+      withdrawRequested: usd("0"),
+      balance: usd("5000000"),
+      spendable: usd("5000000"),
+    });
+  };
+  const grant = {
+    delegate: DELEGATE,
+    maxVoucherAmount: usd("1000000"),
+    maxPerWindow: usd("5000000"),
+    spentInWindow: usd("0"),
+    validUntil: "2099-01-01T00:00:00Z",
+    status: "ACTIVE",
+  };
+
+  it("renders nothing while the pay permission is still being read", async () => {
+    const html = await renderGetStarted((client) => {
+      bound(client);
+      client.removeQueries({ queryKey: ["escrow-delegates", "live"] });
+    }, "overview");
+    expect(html).toBe("");
+  });
+
+  it("renders nothing once the permission is read and every step is done", async () => {
+    const html = await renderGetStarted((client) => {
+      bound(client);
+      client.setQueryData(["escrow-delegates", "live"], { delegates: [grant] });
+    }, "overview");
+    expect(html).toBe("");
+  });
+
+  it("still asks to let the agent pay when the read permission is not active", async () => {
+    const out = text(
+      await renderGetStarted((client) => {
+        bound(client);
+        client.setQueryData(["escrow-delegates", "live"], { delegates: [] });
+      }, "overview"),
+    );
+    expect(out).toContain("Let your agent pay");
   });
 });

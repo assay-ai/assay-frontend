@@ -158,14 +158,23 @@ describe("toolsLine", () => {
 
   it("names known tools and counts the rest once, never 'a tool' repeated", () => {
     const line = toolsLine(["a", "b", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8"], toolName);
-    expect(line).toBe("get_usd_eur_rate, geocode_place +8 other tools");
+    expect(line).toBe("get_usd_eur_rate, geocode_place +8 removed tools");
     expect(line).not.toMatch(/a tool/);
   });
 
   it("counts unnamed tools alone, and says nothing for none", () => {
-    expect(toolsLine(["x1"], toolName)).toBe("1 tool");
+    expect(toolsLine(["x1"], toolName)).toBe("1 removed tool");
     expect(toolsLine(["a"], toolName)).toBe("get_usd_eur_rate");
     expect(toolsLine([], toolName)).toBeNull();
+  });
+
+  it("says nothing while the catalogue loads, rather than call every tool removed", () => {
+    expect(toolsLine(["a", "x1"], () => null, true)).toBeNull();
+  });
+
+  it("never says removed when the catalogue failed to load (review I2)", () => {
+    expect(toolsLine(["a", "x1"], toolName, false, false)).toBe("get_usd_eur_rate +1 other tool");
+    expect(toolsLine(["x1", "x2"], () => null, false, false)).toBe("2 tools");
   });
 });
 

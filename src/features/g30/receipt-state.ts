@@ -73,6 +73,9 @@ const STAGE_FALLBACK_NOTE: Partial<Record<WireStageName, string>> = {
 /** The API's own note on a stage that did not run — true, but it said nothing about THIS call. */
 const GENERIC_NOT_REACHED = "checks stop at the first failure";
 
+/** A stage on a call that has no check result at all (not charged for another reason, or served unchecked). */
+const NO_CHECK_RESULT_NOTE = "no check result was recorded";
+
 /** The same sentence, ignoring case and a final full stop: the API sends it as note AND detail. */
 function sameSentence(a: string | undefined | null, b: string | undefined | null): boolean {
   const norm = (text: string) => text.trim().replace(/\.$/, "").toLowerCase();
@@ -102,6 +105,10 @@ export function toStageChecks(receipt: Receipt): StageCheck[] {
     return { stage, status, detail };
   });
   const anyFailed = rows.some((row) => row.status === "failed");
+  // Nothing ran, nothing failed, and no not-charged story explains it: the
+  // call has no check result. The API's "checks stop at the first failure"
+  // read there as if a check had failed (V1-8).
+  const noneRan = !rows.some((row) => row.status === "passed" || row.status === "failed");
 
   return rows.map(({ stage, status, detail }) => {
     const sampledNote =
@@ -110,7 +117,13 @@ export function toStageChecks(receipt: Receipt): StageCheck[] {
         : undefined;
     let note = sampledNote ?? stage.note ?? STAGE_FALLBACK_NOTE[stage.stage];
     if (status === "not-reached") {
-      note = anyFailed ? "not run: an earlier check failed" : story ? story.notRunNote : note;
+      note = anyFailed
+        ? "not run: an earlier check failed"
+        : story
+          ? story.notRunNote
+          : noneRan
+            ? NO_CHECK_RESULT_NOTE
+            : note;
       if (detail === GENERIC_NOT_REACHED) detail = undefined;
     }
     // "does not apply" says it all: the API's "this check does not apply to

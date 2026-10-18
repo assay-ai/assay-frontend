@@ -149,8 +149,11 @@ export default function ProviderHomePage() {
 
   return (
     <>
-      <header className="flex w-full flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      {/* Stacked below tablet: in a wrapping row, `flex-1` (basis 0) never
+          wrapped, so at 390px the name and status shrank to a ~60px column
+          beside the buttons (V1-10). */}
+      <header className="flex w-full flex-col gap-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:justify-between" data-testid="provider-home-header">
+        <div className="flex w-full min-w-0 flex-col gap-0.5 tablet:w-auto tablet:flex-1">
           <h1 className="truncate text-heading-sm text-01 desktop:text-heading-md">{title}</h1>
           {subtitle ? <p className="text-body-13 text-03 tablet:truncate">{subtitle}</p> : null}
           <Link href={PROVIDER_EXPLAINER.href} className="inline-flex min-h-10 items-center self-start text-body-13 text-primary-600 hover:underline">

@@ -365,7 +365,13 @@ function ReceiptPageContent() {
           <PanelHeader>
             <PanelTitles>
               <PanelTitle>Checks run on this call</PanelTitle>
-              <PanelDescription>{story ? story.checksSummary : "Checks stop at the first failure"}</PanelDescription>
+              <PanelDescription>
+                {story
+                  ? story.checksSummary
+                  : checks.some((check) => check.status === "passed" || check.status === "failed")
+                    ? "Checks stop at the first failure"
+                    : "No check result was recorded for this call"}
+              </PanelDescription>
             </PanelTitles>
           </PanelHeader>
           <PanelBody className="gap-3.5 px-5 pb-5 pt-2">

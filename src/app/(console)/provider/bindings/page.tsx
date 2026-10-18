@@ -13,7 +13,7 @@ import { StatusChip } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
 import { bindingStatusChip } from "@/features/provider-binding/binding-header";
 import { LISTING_KINDS_SENTENCE, listingKind, liveFirst, priceLine } from "@/features/provider-binding/listing-copy";
-import { useProviderToolNames } from "@/features/provider-binding/tool-name";
+import { REMOVED_TOOL_DRAFT, useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { REPLY_PROMISE } from "@/features/provider-tool-requests/request-sheet";
 import type { ToolBindingSummary } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
@@ -97,6 +97,8 @@ export default function ProviderToolsPage() {
         <ul className="flex w-full flex-col overflow-hidden rounded-lg border border-01 bg-01">
           {items.map((binding) => {
             const draft = binding.status === "DRAFT";
+            // A draft whose tool left the catalogue can't be finished, only discarded (V1-9).
+            const removed = draft && names.bindingLabel(binding) === REMOVED_TOOL_DRAFT;
             const href = draft ? routes.bindingWizard(binding.id) : routes.binding(binding.id);
             return (
               <li key={binding.id} className="flex flex-col border-t border-01 first:border-t-0 tablet:flex-row tablet:items-center">
@@ -113,7 +115,9 @@ export default function ProviderToolsPage() {
                   <span className="text-body-13 text-02 tablet:w-56 tablet:text-right">{priceLine(binding)}</span>
                   <span className="flex items-center gap-2 tablet:w-44 tablet:justify-end">
                     <StatusChip status={bindingStatusChip(binding.status)} />
-                    {draft ? (
+                    {removed ? (
+                      <span className="text-label-xs text-03">Its tool was removed</span>
+                    ) : draft ? (
                       <span className="flex items-center gap-1 text-label-xs text-primary-600">
                         Continue setup <ArrowRight aria-hidden="true" className="size-3" />
                       </span>
@@ -159,8 +163,16 @@ export default function ProviderToolsPage() {
       <ConfirmSheet
         open={discarding !== null}
         onOpenChange={(open) => (open ? null : setDiscarding(null))}
-        title={`Discard the ${discarding ? names.bindingLabel(discarding) : ""} draft?`}
-        description="It was never published, so no agent has called it. This deletes the draft, its test runs and any API key headers stored for it. It cannot be undone; you can list the tool again from the start."
+        title={
+          discarding && names.bindingLabel(discarding) === REMOVED_TOOL_DRAFT
+            ? "Discard this draft for a removed tool?"
+            : `Discard the ${discarding ? names.bindingLabel(discarding) : ""} draft?`
+        }
+        description={
+          discarding && names.bindingLabel(discarding) === REMOVED_TOOL_DRAFT
+            ? "It was never published, so no agent has called it, and its tool can no longer be listed. This deletes the draft, its test runs and any API key headers stored for it. It cannot be undone."
+            : "It was never published, so no agent has called it. This deletes the draft, its test runs and any API key headers stored for it. It cannot be undone; you can list the tool again from the start."
+        }
         confirmLabel="Discard draft"
         onConfirm={async () => {
           if (!discarding) return;
