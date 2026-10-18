@@ -123,7 +123,9 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
       map[agent.agentId] = agentReadiness({
         agentAccount: agent.agentAccount,
         credentials: keysQuery.data?.[agent.agentId],
+        credentialsUnreadable: keysQuery.isError,
         delegates,
+        delegatesUnreadable: delegatesQuery.isError,
         escrow: escrowQuery.data,
         escrowUnreadable: escrowQuery.isError,
         paused: policyQuery.data?.paused === true,
@@ -132,7 +134,7 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
       });
     }
     return map;
-  }, [agents, keysQuery.data, delegates, escrowQuery.data, escrowQuery.isError, policyQuery.data, freeOnlyChainName, debtOwed]);
+  }, [agents, keysQuery.data, keysQuery.isError, delegates, delegatesQuery.isError, escrowQuery.data, escrowQuery.isError, policyQuery.data, freeOnlyChainName, debtOwed]);
 
   return {
     agentsQuery,

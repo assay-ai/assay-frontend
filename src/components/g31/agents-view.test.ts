@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AgentReadiness } from "@/features/buyer-money/agent-readiness";
 
-import { revokeKeyText } from "./agents-view";
+import { revokeKeyText, withLabel } from "./agents-view";
 
 const agent = { agentId: "a", label: "prod" };
 const key = (delegateAccount: string | null) => ({
@@ -38,5 +38,19 @@ describe("Revoke key says whether paying stops too", () => {
     const { text, detail } = revokeKeyText(agent, key(null), undefined);
     expect(text).toContain("free or paid");
     expect(detail).toContain("Nothing about paying changes");
+  });
+});
+
+describe("withLabel — a rename patched into the agents cache", () => {
+  it("replaces one agent's label and leaves the rest", () => {
+    const page = { items: [{ agentId: "a", label: "My agent" }, { agentId: "b", label: "other" }], pageInfo: { hasMore: false } };
+    expect(withLabel(page, "a", "Research bot")).toEqual({
+      items: [{ agentId: "a", label: "Research bot" }, { agentId: "b", label: "other" }],
+      pageInfo: { hasMore: false },
+    });
+  });
+  it("leaves anything that is not a page alone", () => {
+    expect(withLabel(undefined, "a", "x")).toBeUndefined();
+    expect(withLabel({ chainId: "eip155:1" }, "a", "x")).toEqual({ chainId: "eip155:1" });
   });
 });

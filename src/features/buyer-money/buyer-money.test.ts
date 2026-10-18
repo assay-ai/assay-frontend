@@ -4,7 +4,7 @@ import type { EscrowDelegate, Money } from "@/interfaces";
 
 import { agentReadiness, type ReadinessCredential } from "./agent-readiness";
 import { capsAreSet, capsSentence, capsSuccessText, capsToForm, keyGroups, parseCaps, presetDescription, presetFor } from "./caps";
-import { getStartedStates, payStage, type GetStartedFacts } from "./get-started";
+import { firstCallPrompt, getStartedComplete, getStartedStates, payByInvitation, payStage, type GetStartedFacts } from "./get-started";
 import { KEY_PLACEHOLDER, keyPlaceholder, mcpConfig } from "./mcp-config";
 import { PENDING_TX_MAX_AGE_MS, parsePending, withPending, withoutPending, type PendingTx } from "./pending-tx";
 import { nextUtcMidnight, nextUtcMonth, windowRefillAt } from "./refill";
@@ -215,14 +215,18 @@ describe("get started", () => {
     grantActive: false,
     needsDelegation: true,
   };
-  it("starts at the key, with the call and pay steps blocked", () => {
-    expect(getStartedStates(none)).toEqual({ key: "current", call: "blocked", funds: "todo", pay: "blocked" });
+  it("starts at the key, with the call step blocked and paying by invitation (D14)", () => {
+    expect(getStartedStates(none)).toEqual({ key: "current", call: "blocked", funds: "todo", pay: "todo" });
+    expect(payByInvitation(none)).toBe(true);
+  });
+  it("blocks paying until the escrow exists once the payment key is bound", () => {
+    expect(getStartedStates({ ...none, keyBound: true })).toMatchObject({ pay: "blocked" });
   });
   it("moves on as the data arrives", () => {
     expect(getStartedStates({ ...none, hasLiveKey: true })).toMatchObject({ key: "done", call: "current" });
-    expect(getStartedStates({ ...none, hasLiveKey: true, firstCallSeen: true })).toMatchObject({ funds: "current", pay: "blocked" });
+    expect(getStartedStates({ ...none, hasLiveKey: true, firstCallSeen: true, keyBound: true })).toMatchObject({ funds: "current", pay: "blocked" });
     expect(
-      getStartedStates({ ...none, hasLiveKey: true, firstCallSeen: true, hasFunds: true, escrowExists: true }),
+      getStartedStates({ ...none, hasLiveKey: true, firstCallSeen: true, hasFunds: true, escrowExists: true, keyBound: true }),
     ).toMatchObject({ funds: "done", pay: "current" });
     expect(
       getStartedStates({
@@ -251,6 +255,23 @@ describe("get started", () => {
       funds: "done",
       pay: "done",
     });
+  });
+  it("does not count paying by invitation as unfinished (D14)", () => {
+    const freeDone = { ...none, hasLiveKey: true, firstCallSeen: true, hasFunds: true, escrowExists: true };
+    expect(payByInvitation(freeDone)).toBe(true);
+    expect(getStartedStates(freeDone).pay).toBe("todo");
+    expect(getStartedComplete(freeDone)).toBe(true);
+    expect(getStartedComplete({ ...freeDone, hasFunds: false, escrowExists: false })).toBe(false);
+  });
+  it("counts paying once the payment key is bound: the invited path", () => {
+    const bound = { ...none, hasLiveKey: true, firstCallSeen: true, hasFunds: true, escrowExists: true, keyBound: true };
+    expect(payByInvitation(bound)).toBe(false);
+    expect(getStartedComplete(bound)).toBe(false);
+    expect(getStartedComplete({ ...bound, capsSet: true, grantActive: true })).toBe(true);
+  });
+  it("never applies the invitation where no payment key is needed", () => {
+    expect(payByInvitation({ ...none, needsDelegation: false })).toBe(false);
+    expect(payByInvitation({ ...none, freeOnly: true })).toBe(false);
   });
   it("orders the parts of step 4", () => {
     expect(payStage({ capsSet: false, keyBound: true, grantActive: false, needsDelegation: true })).toBe("caps");
@@ -313,5 +334,27 @@ describe("capsSuccessText", () => {
     const delayed = capsSuccessText(now, lower, 3600);
     expect(delayed).not.toMatch(/30 seconds/);
     expect(delayed).toMatch(/keep the old ones for 1 hour/);
+  });
+});
+
+describe("step 2's example prompt", () => {
+  const mcp = (tool: { name: string }) => (/^[a-z][a-z0-9_-]+$/.test(tool.name) ? tool.name : null);
+  it("names a reachable free tool, FREE before free calls a day", () => {
+    const tools = [
+      { name: "search_web", pricingMode: "PAID", routable: true },
+      { name: "get_quote", pricingMode: "FREEMIUM", routable: true, freeCallsPerDay: 20 },
+      { name: "get_weather", pricingMode: "FREE", routable: true },
+    ];
+    expect(firstCallPrompt(tools, mcp)).toContain("“use the get_weather tool from Assay”");
+    expect(firstCallPrompt(tools.slice(0, 2), mcp)).toContain("get_quote");
+  });
+  it("never names a tool the agent cannot reach or would pay for", () => {
+    const tools = [
+      { name: "get_weather", pricingMode: "FREE", routable: false },
+      { name: "search_web", pricingMode: "PAID", routable: true },
+    ];
+    const prompt = firstCallPrompt(tools, mcp);
+    expect(prompt).not.toContain("get_weather");
+    expect(prompt).not.toContain("search_web");
   });
 });

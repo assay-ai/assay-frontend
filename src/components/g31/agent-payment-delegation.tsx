@@ -660,11 +660,12 @@ export function AgentPaymentDelegation({
       <MicroLabel>AGENT PAYMENTS</MicroLabel>
       {bound.length === 0 ? (
         <p className="text-body-13 text-02">
-          No credential of this agent has a key bound yet. The agent generates
-          its own key and proves it holds it with its credential (
+          No key of this agent has a payment key yet. Paid calls are by
+          invitation during testnet: an invited agent makes its payment key
+          and proves it holds it with its API key (
           <span className="font-mono">agent-cli keygen</span>, then{" "}
-          <span className="font-mono">agent-cli bind</span>); the key then
-          appears here to authorise.
+          <span className="font-mono">agent-cli bind</span>); the payment key
+          then appears here to authorise.
         </p>
       ) : (
         bound.map((credential) => {

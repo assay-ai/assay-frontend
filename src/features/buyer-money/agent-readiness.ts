@@ -30,8 +30,14 @@ export interface ReadinessEscrow {
 
 export interface ReadinessInput {
   agentAccount?: string | null;
+  /** `undefined` = not read yet: the answer is "loading", never "no key". */
   credentials: readonly ReadinessCredential[] | undefined;
+  /** The keys' read failed (so `credentials` stays `undefined`). */
+  credentialsUnreadable?: boolean;
+  /** `undefined` = not read yet. */
   delegates: readonly EscrowDelegate[] | undefined;
+  /** The pay permissions' read failed. */
+  delegatesUnreadable?: boolean;
   /** `undefined` = not read yet (or the read failed: say so with `escrowUnreadable`). */
   escrow: ReadinessEscrow | null | undefined;
   escrowUnreadable?: boolean;
@@ -66,16 +72,40 @@ export interface AgentReadiness {
   grant: EscrowDelegate | null;
   /** The chain serves free calls only: no pay permission, spend or renewal applies. */
   freeOnly: boolean;
+  /**
+   * The keys (or a bound key's pay permission) are not read yet: draw a
+   * skeleton. A card that said "No key" here sent people to make a key they
+   * already had.
+   */
+  loading: boolean;
 }
 
 const RECENT_MS = 24 * 3600 * 1000;
+
+/** The agent card's line while it has no payment key (owner decision D14). */
+export const PAID_BY_INVITATION_SENTENCE = "Free calls work. Paid calls are by invitation during testnet.";
 
 function positive(money: Money | null | undefined): boolean {
   return Boolean(money && BigInt(money.amount || "0") > 0n);
 }
 
 export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()): AgentReadiness {
-  const all = input.credentials ?? [];
+  if (input.credentials === undefined) {
+    return {
+      lastCallAt: null,
+      liveCredentials: [],
+      boundCredential: null,
+      grant: null,
+      freeOnly: Boolean(input.freeOnlyChain),
+      loading: !input.credentialsUnreadable,
+      status: "checking",
+      sentence: input.credentialsUnreadable
+        ? "We could not read its keys just now. This does not change what it can call."
+        : "Checking its keys…",
+      next: null,
+    };
+  }
+  const all = input.credentials;
   const live = all.filter((c) => !c.revokedAt);
   const lastCallAt =
     live
@@ -85,7 +115,13 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
       .at(-1) ?? null;
   const bound = live.find((c) => c.delegateAccount) ?? null;
   const grant = bound?.delegateAccount ? findDelegation(input.delegates, bound.delegateAccount) : null;
-  const base = { lastCallAt, liveCredentials: live, boundCredential: bound, grant, freeOnly: Boolean(input.freeOnlyChain) };
+  const base = { lastCallAt, liveCredentials: live, boundCredential: bound, grant, freeOnly: Boolean(input.freeOnlyChain), loading: false };
+
+  // A bound key's permission decides "can it pay": wait for it rather than
+  // flash "Let it pay" at an agent that already can.
+  if (bound && input.delegates === undefined && !input.delegatesUnreadable && supportsDelegation(input.agentAccount) && !input.freeOnlyChain) {
+    return { ...base, loading: true, status: "checking", sentence: "Checking whether it can pay…", next: null };
+  }
 
   if (live.length === 0) {
     return all.length > 0
@@ -137,7 +173,8 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
     return {
       ...base,
       status: "ready",
-      sentence: "Free calls work now. Add funds to let it pay for calls.",
+      // Without a payment key, funds alone do not let it pay (D14).
+      sentence: bound ? "Free calls work now. Add funds to let it pay for calls." : PAID_BY_INVITATION_SENTENCE,
       next: "funds",
     };
   }
@@ -150,10 +187,13 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
     };
   }
   if (!bound) {
+    // D14: the payment key needs agent-cli, which is not published; paying is
+    // by invitation during testnet. Not a warning: nothing here is the
+    // person's to fix.
     return {
       ...base,
-      status: "needs-authorisation",
-      sentence: "Free calls work. To pay, the agent needs its own payment key: run agent-cli bind on its machine.",
+      status: "ready",
+      sentence: PAID_BY_INVITATION_SENTENCE,
       next: "bind",
     };
   }
