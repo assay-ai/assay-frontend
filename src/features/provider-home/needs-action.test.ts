@@ -112,7 +112,10 @@ describe("needsActionItems", () => {
     expect(item!.kind).toBe("report");
     expect(item!.title).toBe("A buyer reported a bad result on Market quote: reply needed");
     expect(item!.deadline).toBe("2026-10-17T10:00:00Z");
-    expect(item!.detail).toContain("or the buyer wins");
+    expect(item!.detail).toBe(
+      "Reply before the deadline. With no reply, the report can be upheld automatically; otherwise an operator decides.",
+    );
+    expect(item!.detail).not.toMatch(/buyer wins|is upheld automatically/i);
     expect(item!.action).toEqual({ label: "Reply", href: "/provider/call-disputes/view?id=d1" });
     // Replied, or past the reply window: nothing left to do.
     expect(needsActionItems({ ...base, reports: [{ ...report, canRespond: false }] })).toEqual([]);

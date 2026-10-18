@@ -137,8 +137,9 @@ export function sanitizeStoredText(
       .replace(/^(\d{4,30})(?= (?:was|is|were) )/i, (_m, amount: string) => MINOR(amount))
       // "100.000000": a figure written at the asset's full scale (`MoneyUtil.format`).
       // Only a fraction exactly `decimals` long is taken for one.
-      .replace(new RegExp(`\\b(\\d{1,30})\\.(\\d{${decimals}})\\b`, "g"), (_m, whole: string, fraction: string) =>
-        MINOR(`${whole}${fraction}`),
+      .replace(
+        decimals >= 1 ? new RegExp(`\\b(\\d{1,30})\\.(\\d{${decimals}})\\b`, "g") : /(?!)/g,
+        (_m, whole: string, fraction: string) => MINOR(`${whole}${fraction}`),
       )
       // Ids: a binding or a tool is "one of your tools"; an agent is "an agent".
       .replace(new RegExp(`\\b(?:binding|tool) ${UUID}`, "gi"), "One of your tools")
@@ -337,10 +338,10 @@ export function noticeView(item: NoticeSource, ctx: NoticeContext): NoticeView {
       const autoUphold = p.autoUpholdAt === undefined ? undefined : when(text(p, "autoUpholdAt"), ctx);
       const consequence =
         autoUphold === undefined
-          ? "If you don't, it is decided without your side."
+          ? "If you stay silent, it is decided without your side."
           : autoUphold
-            ? `If you don't, the buyer wins: it can be upheld automatically from ${autoUphold}.`
-            : "If you don't, an operator decides it without your side.";
+            ? `If you stay silent, it can be upheld automatically from ${autoUphold}.`
+            : "If you stay silent, an operator decides it without your side.";
       return {
         title: "A buyer reported a bad result on a call you served",
         body:

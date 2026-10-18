@@ -84,9 +84,10 @@ export function needsActionItems(input: NeedsActionInput): NeedsActionItem[] {
       kind: "report",
       tone: "danger",
       title: `A buyer reported a bad result${name ? ` on ${name}` : ""}: reply needed`,
+      // Never a promised outcome: the auto-uphold cap can hand it to an operator.
       detail: report.autoUpholdAt
-        ? "Reply before the deadline, or the buyer wins: a report with no reply is upheld automatically."
-        : "Reply before the deadline, or an operator decides it without your side.",
+        ? "Reply before the deadline. With no reply, the report can be upheld automatically; otherwise an operator decides."
+        : "Reply before the deadline. With no reply, an operator decides it without your side.",
       deadline: report.replyDueAt,
       action: { label: "Reply", href: routes.providerCallDispute(report.id) },
     });
