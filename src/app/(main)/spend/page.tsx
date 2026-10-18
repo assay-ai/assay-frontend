@@ -23,7 +23,7 @@ import {
   windowIdFromQuery,
   windowRange,
 } from "@/features/g30/period";
-import { notChargedLines, notChargedSplitText } from "@/features/buyer/not-charged";
+import { NotChargedSplitLine } from "@/features/buyer/not-charged-split";
 import { readWithheld } from "@/features/buyer/wire";
 import { reconcileSentence, spendBreakdown } from "@/features/g30/spend-buckets";
 import { OwedSummaryAction } from "@/features/buyer-debt/owed-row-action";
@@ -157,9 +157,7 @@ export default function SpendPage() {
   });
 
   const summary = query.data;
-  const notChargedSplit = withheldQuery.data
-    ? notChargedSplitText(notChargedLines(readWithheld(withheldQuery.data, summary?.asset)))
-    : null;
+  const withheld = withheldQuery.data ? readWithheld(withheldQuery.data, summary?.asset) : null;
   const labelOf = React.useCallback(
     (key: string) => {
       if (dimension.id === "tool") return names.name("tool", key);
@@ -173,7 +171,8 @@ export default function SpendPage() {
   const rows = React.useMemo(() => rankRows(summary?.groups ?? [], labelOf), [summary, labelOf]);
   const previous = React.useMemo(() => previousTotal(summary?.groups ?? []), [summary]);
   const change = summary ? changePercent(summary.totals.chargedTotal, previous) : null;
-  const freeCalls = rows.filter((r) => r.free).reduce((n, r) => n + r.calls, 0);
+  // Counted per call by the API, so the figure is the same whichever "Group by" tab is open.
+  const freeCalls = summary?.totals.freeCalls ?? 0;
   const sparkValues = React.useMemo(
     () =>
       [...(daily.data?.groups ?? [])]
@@ -280,13 +279,9 @@ export default function SpendPage() {
                 {plural(summary.totals.calls, "call")} ·{" "}
                 {plural(summary.totals.notChargedCalls ?? summary.totals.refundedCalls, "call")} not charged
                 {hasOwed ? ` · ${plural(summary.totals.owedCalls, "call")} owed` : ""}
-                {` · ${plural(freeCalls, "free call")}`} · {win.label.toLowerCase()}
+                {freeCalls > 0 ? ` · ${plural(freeCalls, "free call")}` : ""} · {win.label.toLowerCase()}
               </p>
-              {notChargedSplit ? (
-                <p className="text-body-13 text-03" data-testid="spend-not-charged-split">
-                  Not charged: {notChargedSplit}.
-                </p>
-              ) : null}
+              <NotChargedSplitLine withheld={withheld} />
               {/* Owed stays in the line above; here, what it stops and the way out. */}
               {hasOwed ? (
                 <OwedSummaryAction owed={formatMoney(summary.totals.owedTotal)} calls={summary.totals.owedCalls} />
