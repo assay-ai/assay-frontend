@@ -5,11 +5,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Inbox as InboxIcon, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import type * as React from "react";
+import * as React from "react";
 import { Toaster } from "sonner";
 
 import { AlertFill, CheckCircle } from "@/components/icons";
-import { consoleShellReady } from "@/components/layout/console-gate";
+import { consoleShellReady, SHELL_GATE_TIMEOUT_MS } from "@/components/layout/console-gate";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
 import { PROVIDER_EXPLAINER, providerSectionFor, providerTitleFor } from "@/components/layout/provider-nav-config";
 import { ProviderTabBar } from "@/components/layout/provider-tab-bar";
@@ -113,6 +113,12 @@ function PhoneIconLink({
 export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
   const { themeType } = useTheme();
   const { ready, authenticated } = usePrivy();
+  // The gate's fallback: after a while the page renders as before the gate.
+  const [gateTimedOut, setGateTimedOut] = React.useState(false);
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => setGateTimedOut(true), SHELL_GATE_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
   const pathname = usePathname();
   const bindingParam = useSearchParams().get("binding");
 
@@ -165,6 +171,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
     ready,
     authenticated,
     storedToken: getSessionToken() !== null,
+    timedOut: gateTimedOut,
   });
   if (!shellReady) {
     return (
