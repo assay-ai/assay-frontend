@@ -1,3 +1,5 @@
+import Decimal from "decimal.js";
+
 import { reasonLabel } from "@/features/call-disputes/model";
 import { humanize, plainAuditAction } from "@/libs/plain-language";
 
@@ -115,7 +117,10 @@ function toolsetName(...values: unknown[]): string {
 }
 
 function dollars(value: unknown): string | null {
-  return typeof value === "string" && /^\d+(\.\d+)?$/.test(value) ? `$${value}` : null;
+  if (typeof value !== "string" || !/^\d+(\.\d+)?$/.test(value)) return null;
+  // "25.000000" (an amount at the asset's full scale) reads "$25.00"; a sub-cent price keeps its digits.
+  const amount = new Decimal(value);
+  return `$${amount.toFixed(Math.max(2, amount.decimalPlaces()))}`;
 }
 
 /**
@@ -163,6 +168,32 @@ function specific(
       return {
         title: "Agent renamed",
         line: to ? `${subject} renamed ${from ? `the agent “${from}”` : "an agent"} to “${to}”` : `${subject} renamed an agent`,
+      };
+    }
+    case "deposit.rejected": {
+      const amount = dollars(after.amount);
+      return {
+        title: amount ? `Deposit: ${amount} not credited` : "Deposit not credited",
+        line: "The chain dropped the deposit's transaction, so nothing was added to your balance",
+      };
+    }
+    case "withdrawal.requested": {
+      const amount = dollars(after.amount);
+      return {
+        title: amount ? `Withdrawal: ${amount} requested` : "Withdrawal requested",
+        line: `${subject} asked to withdraw ${amount ? `up to ${amount}` : "money"} from the escrow; paid calls on that chain pause until it is claimed or cancelled`,
+      };
+    }
+    case "withdrawal.cancelled":
+      return {
+        title: "Withdrawal cancelled",
+        line: `${subject} cancelled the withdrawal request; nothing left the escrow and paid calls can resume`,
+      };
+    case "withdrawal.claimed": {
+      const amount = dollars(after.amount);
+      return {
+        title: amount ? `Withdrawal: ${amount} claimed` : "Withdrawal claimed",
+        line: `${amount ?? "The money"} left the escrow for your wallet`,
       };
     }
     case "credential.created": {

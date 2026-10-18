@@ -937,6 +937,141 @@ export function demoBuyerLedger(): { balance: number; held: number; available: n
   return { balance: BALANCE_MINOR, held, available: BALANCE_MINOR - held };
 }
 
+/** The demo's deposits, newest first: 68.70 funded in four settled deposits, one expired. */
+function demoDeposits() {
+  return [
+        {
+          id: "dep_7f2a91c4",
+          status: "SETTLED",
+          statusReason: null,
+          agentId: PROD_AGENT,
+          agentAccount: DEMO_BUYER_ACCOUNT,
+          requestedAmount: money("25.00"),
+          settledAmount: money("25.00"),
+          chainId: DEMO_CHAIN_ID,
+          chainTxRef:
+            "0xf20b628bc89d1a3aff88340b307546e0d336e46de2371d76c8220f3c3cfcdd9c",
+          expiresAt: minutesAgo(2878),
+          createdAt: minutesAgo(2880),
+        },
+        {
+          id: "dep_1c08b5de",
+          status: "EXPIRED",
+          statusReason: "no transfer observed before the intent expired",
+          agentId: PROD_AGENT,
+          agentAccount: DEMO_BUYER_ACCOUNT,
+          requestedAmount: money("5.00"),
+          settledAmount: null,
+          chainId: DEMO_CHAIN_ID,
+          chainTxRef: null,
+          expiresAt: minutesAgo(7198),
+          createdAt: minutesAgo(7200),
+        },
+        {
+          id: "dep_4b6e2039",
+          status: "SETTLED",
+          statusReason: null,
+          agentId: PROD_AGENT,
+          agentAccount: DEMO_BUYER_ACCOUNT,
+          requestedAmount: money("15.00"),
+          settledAmount: money("15.00"),
+          chainId: DEMO_CHAIN_ID,
+          chainTxRef:
+            "0xeb5d904fe5ffc1f642f0dff25a94a2e865b86cfd18c55190be121e376e4691e0",
+          expiresAt: minutesAgo(12958),
+          createdAt: minutesAgo(12960),
+        },
+        {
+          /*
+            The two older deposits are what the earlier months were spent out of
+            — 68.70 funded against the 8.69 charged since August (mostly the
+            odd $1.20 deep_research call) leaves the 60.00 the ledger reports
+            today, give or take a cent.
+          */
+          id: "dep_a3d97f61",
+          status: "SETTLED",
+          statusReason: null,
+          agentId: PROD_AGENT,
+          agentAccount: DEMO_BUYER_ACCOUNT,
+          requestedAmount: money("12.00"),
+          settledAmount: money("12.00"),
+          chainId: DEMO_CHAIN_ID,
+          chainTxRef:
+            "0x4c1db62bcbe5d1408fdb6596b0cbe8fc94011c60341e6f14a1cc8514d468a40d",
+          expiresAt: minutesAgo(33118),
+          createdAt: minutesAgo(33120),
+        },
+        {
+          id: "dep_60e4c827",
+          status: "SETTLED",
+          statusReason: null,
+          agentId: PROD_AGENT,
+          agentAccount: DEMO_BUYER_ACCOUNT,
+          requestedAmount: money("16.70"),
+          settledAmount: money("16.70"),
+          chainId: DEMO_CHAIN_ID,
+          chainTxRef:
+            "0x5c38c68d25f54d688ef3980cdc1a944b475793cb15cd470bab412c0efa7c9c0e",
+          expiresAt: minutesAgo(66238),
+          createdAt: minutesAgo(66240),
+        },
+];
+}
+
+/** The demo's withdrawal history: one request, cancelled before it was claimed. */
+function demoWithdrawals() {
+  return [
+    {
+      id: "wdr_5e81c0a2",
+      chainId: DEMO_CHAIN_ID,
+      account: DEMO_BUYER_ACCOUNT,
+      status: "CANCELLED",
+      requested: money("10.00"),
+      received: null,
+      requestedAt: minutesAgo(14_460),
+      claimableAt: minutesAgo(14_400),
+      closedAt: minutesAgo(14_430),
+      requestTransactionHash: "0x8d0e5f7a1c2b3d4e5f60718293a4b5c6d7e8f9011a2b3c4d5e6f708192a3b4c5",
+      closeTransactionHash: "0x1f2e3d4c5b6a79880716253443526170899a8b7c6d5e4f3021e2d3c4b5a69788",
+    },
+  ];
+}
+
+/**
+ * `GET /statements/balance` for one month. The demo's call history is wider
+ * than its deposits, so the balances are walked back from today's escrow
+ * balance (closing at an instant = balance − deposits since + paid since):
+ * every month adds up and the current one matches the escrow.
+ */
+function demoStatementBalance(query: Record<string, unknown>) {
+  const { from, to } = windowOf(query);
+  const now = Date.now();
+  const deposited = (fromMs: number, toMs: number) =>
+    demoDeposits()
+      .filter((d) => d.status === "SETTLED" && Date.parse(d.createdAt) >= fromMs && Date.parse(d.createdAt) < toMs)
+      .reduce((sum, d) => sum + Number(d.settledAmount!.amount), 0);
+  const paid = (fromMs: number, toMs: number) =>
+    fromMs >= toMs
+      ? 0
+      : Number(summaryBody({ from: new Date(fromMs).toISOString(), to: new Date(toMs).toISOString(), groupBy: "tool" }).totals.chargedTotal.amount);
+  const closingAt = (at: number) => BALANCE_MINOR - deposited(at, now) + paid(at, now);
+  const end = Math.min(to, now);
+  const check =
+    to > now
+      ? { escrowBalance: demoMoneyMinor(BALANCE_MINOR), stillSettling: demoMoneyMinor(0), difference: demoMoneyMinor(0), matches: true, observedAt: minutesAgo(1) }
+      : null;
+  return {
+    account: DEMO_BUYER_ACCOUNT,
+    chainId: DEMO_CHAIN_ID,
+    opening: demoMoneyMinor(closingAt(from)),
+    deposits: demoMoneyMinor(deposited(from, end)),
+    withdrawals: demoMoneyMinor(0),
+    paid: demoMoneyMinor(paid(from, end)),
+    closing: demoMoneyMinor(closingAt(end)),
+    check,
+  };
+}
+
 /** Minor units as a wire amount in the demo asset (`money()` takes major ones). */
 export function demoMoneyMinor(minor: number) {
   return money((minor / 1e6).toFixed(6));
@@ -1456,6 +1591,17 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     match: "/tool-calls",
     body: (_path, query) => {
       const { from, to } = windowOf(query);
+      // `refundable=true`: the receipt's own flag, so the list and the receipt agree.
+      if (query.refundable === "true" || query.refundable === true) {
+        return {
+          items: freshStage()
+            ? []
+            : CALLS.map((call) => ({ call, receipt: receiptBody(call) }))
+                .filter(({ receipt }) => receipt.refundableIfReportedNow)
+                .map(({ call, receipt }) => ({ ...toolCallRow(call), refundableIfReportedUntil: receipt.refundableIfReportedUntil })),
+          pageInfo: { nextCursor: null, hasMore: false },
+        };
+      }
       return {
         // A fresh demo account has no calls in its history yet.
         items: freshStage() ? [] : CALLS.filter((call) => withinWindow(call, from, to)).map(toolCallRow),
@@ -1513,85 +1659,26 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     match: "/deposits",
     override: "always",
     body: () => freshDeposits() ?? ({
-      items: [
-        {
-          id: "dep_7f2a91c4",
-          status: "SETTLED",
-          statusReason: null,
-          agentId: PROD_AGENT,
-          agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("25.00"),
-          settledAmount: money("25.00"),
-          chainId: DEMO_CHAIN_ID,
-          chainTxRef:
-            "0xf20b628bc89d1a3aff88340b307546e0d336e46de2371d76c8220f3c3cfcdd9c",
-          expiresAt: minutesAgo(2878),
-          createdAt: minutesAgo(2880),
-        },
-        {
-          id: "dep_1c08b5de",
-          status: "EXPIRED",
-          statusReason: "no transfer observed before the intent expired",
-          agentId: PROD_AGENT,
-          agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("5.00"),
-          settledAmount: null,
-          chainId: DEMO_CHAIN_ID,
-          chainTxRef: null,
-          expiresAt: minutesAgo(7198),
-          createdAt: minutesAgo(7200),
-        },
-        {
-          id: "dep_4b6e2039",
-          status: "SETTLED",
-          statusReason: null,
-          agentId: PROD_AGENT,
-          agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("15.00"),
-          settledAmount: money("15.00"),
-          chainId: DEMO_CHAIN_ID,
-          chainTxRef:
-            "0xeb5d904fe5ffc1f642f0dff25a94a2e865b86cfd18c55190be121e376e4691e0",
-          expiresAt: minutesAgo(12958),
-          createdAt: minutesAgo(12960),
-        },
-        {
-          /*
-            The two older deposits are what the earlier months were spent out of
-            — 68.70 funded against the 8.69 charged since August (mostly the
-            odd $1.20 deep_research call) leaves the 60.00 the ledger reports
-            today, give or take a cent.
-          */
-          id: "dep_a3d97f61",
-          status: "SETTLED",
-          statusReason: null,
-          agentId: PROD_AGENT,
-          agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("12.00"),
-          settledAmount: money("12.00"),
-          chainId: DEMO_CHAIN_ID,
-          chainTxRef:
-            "0x4c1db62bcbe5d1408fdb6596b0cbe8fc94011c60341e6f14a1cc8514d468a40d",
-          expiresAt: minutesAgo(33118),
-          createdAt: minutesAgo(33120),
-        },
-        {
-          id: "dep_60e4c827",
-          status: "SETTLED",
-          statusReason: null,
-          agentId: PROD_AGENT,
-          agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("16.70"),
-          settledAmount: money("16.70"),
-          chainId: DEMO_CHAIN_ID,
-          chainTxRef:
-            "0x5c38c68d25f54d688ef3980cdc1a944b475793cb15cd470bab412c0efa7c9c0e",
-          expiresAt: minutesAgo(66238),
-          createdAt: minutesAgo(66240),
-        },
-      ],
+      items: demoDeposits(),
       pageInfo: { nextCursor: null, hasMore: false },
     }),
+  },
+
+  /* ---------------------------------------------------------- withdrawals */
+  {
+    // One request the buyer cancelled: no money moved, so `lifetime.withdrawn` stays 0.
+    method: "GET",
+    match: "/withdrawals",
+    override: "always",
+    body: () => ({ items: freshStage() ? [] : demoWithdrawals() }),
+  },
+
+  /* ----------------------------------------------------------- statements */
+  {
+    method: "GET",
+    match: "/statements/balance",
+    override: "always",
+    body: (_path, query) => ({ items: freshStage() ? [] : [demoStatementBalance(query)] }),
   },
 
   /* ----------------------------------------------------------- buyer debt */
@@ -1632,6 +1719,12 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       windowStartedAt: minutesAgo(540),
       windowSeconds: 86400,
       observedAt: minutesAgo(1),
+      // The chain's lifetime counters: 68.70 deposited (`/deposits`) − 8.70 spent − 0 withdrawn = the balance.
+      lifetime: {
+        deposited: money("68.70"),
+        spent: demoMoneyMinor(68_700_000 - BALANCE_MINOR),
+        withdrawn: money("0"),
+      },
       // A demo account ceiling change shows until reload.
       ...savedEscrowCaps(),
     }),

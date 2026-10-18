@@ -119,6 +119,21 @@ export interface BuyerEscrow {
    * have printed the word `null` to a buyer during an outage.
    */
   observedAt: string | null;
+  /**
+   * Lifetime money in and out of this escrow, read from the chain in the same
+   * call as `balance`: `deposited − spent − withdrawn = balance` by the
+   * contract's own invariant. `spent` includes payments still in their 1-hour
+   * hold. `null` where the chain keeps no such counters (Solana), with no
+   * escrow, or when the chain could not be read; absent from an older backend.
+   */
+  lifetime?: EscrowLifetime | null;
+}
+
+/** `BuyerEscrow.lifetime`. */
+export interface EscrowLifetime {
+  deposited: Money;
+  spent: Money;
+  withdrawn: Money;
 }
 
 /**
