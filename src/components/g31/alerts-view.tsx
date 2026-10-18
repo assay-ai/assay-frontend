@@ -235,7 +235,7 @@ export function AlertsView() {
   const alertGroups = React.useMemo(() => groupAlerts(feed.data?.items ?? []), [feed.data]);
 
   // Opening the list is reading it: what it shows is marked read — except
-  // open risks (balance, keys, a pending withdrawal), which stay on Overview
+  // open risks (balance, keys, a pending withdrawal, …), which stay on Overview
   // until dismissed there or cleared. `idsToMarkOnOpen` asks once per id and
   // retries a failure once, so a re-render never repeats a request.
   const markRead = useMarkAlertsRead();
@@ -566,7 +566,7 @@ export function AlertsView() {
             <SheetTitle>Recent alerts</SheetTitle>
             <SheetDescription>
               Newest first. Opening this list marks them read, except alerts about a risk that may still be open (balance,
-              keys, a pending withdrawal, a paused agent, a spend limit reached, a failed deposit): those stay in Needs attention on Overview until you dismiss them,
+              keys, a pending withdrawal, a paused agent, an unusual call pattern, a spend limit reached, a failed deposit): those stay in Needs attention on Overview until you dismiss them,
               mark them read here, or the condition clears. Open one to see where it was delivered.
             </SheetDescription>
           </SheetHeader>
