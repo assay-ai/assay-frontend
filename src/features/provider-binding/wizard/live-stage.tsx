@@ -7,12 +7,10 @@ import Link from "next/link";
 import Decimal from "decimal.js";
 import * as React from "react";
 
+import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
-import { DAILY_CAP_PERCENT } from "@/features/explorer/provider-economics";
-import { estimatePenalty, exampleFailureRate } from "@/features/provider-penalties/estimate";
-import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
 import { WINDOW_WORDS } from "@/features/provider-sla/window";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
@@ -39,6 +37,7 @@ import {
   DEFAULT_FREE_CALLS_PER_AGENT,
   failureRateFromPercent,
   freeCallsFromInput,
+  penaltyExample as penaltyExampleOf,
   modeOfChoice,
   percentText,
   PRICE_CHOICES,
@@ -60,9 +59,6 @@ export const REQUIREMENT_SENTENCE: Record<PublishRequirement, string> = {
   API_KEY_CREDENTIALS: "Add your API key headers for this address under Authentication.",
   STAKE_AT_MINIMUM_ON_EVERY_CHAIN: "Add stake to cover paid calls.",
 };
-
-/** The window volume the penalty example assumes; nothing is on the wire before a tool is live. */
-const EXAMPLE_WINDOW_CALLS = 1000;
 
 export interface LiveForm {
   choice: PriceChoice;
@@ -176,9 +172,15 @@ function PercentStepper({
       </div>
       <p className={cn("text-body-xs", error ? "text-danger-500" : "text-03")}>
         {error ??
-          (free
-            ? `Out of every 100 checked calls in a window (${WINDOW_WORDS}). A free tool has no stake, so going over it costs you no money; buyers see the promise and how you do against it.`
-            : `Out of every 100 checked calls in a window (${WINDOW_WORDS}). Go over it and part of your stake can be taken as a penalty. A higher number is safer for you but looks weaker to buyers.`)}
+          (free ? (
+            `Out of every 100 checked calls in a window (${WINDOW_WORDS}). A free tool has no stake, so going over it costs you no money; buyers see the promise and how you do against it.`
+          ) : (
+            <>
+              {`Out of every 100 checked calls in a window (${WINDOW_WORDS}). Go over it and part of your stake can be taken as a penalty, by the `}
+              <Term k="stake-rule">stake rule</Term>
+              {". A higher number is safer for you but looks weaker to buyers."}
+            </>
+          ))}
       </p>
       {!error && example ? <p className="text-body-xs text-02">{example}</p> : null}
     </div>
@@ -286,19 +288,7 @@ export function LiveStage({
           largestToolName: largestOther ? (names.tool(largestOther.toolId)?.name ?? null) : null,
         })
       : null;
-  const exampleRate = parsed.failureRate !== null ? exampleFailureRate(parsed.failureRate) : null;
-  const penaltyExample =
-    mode !== "FREE" && parsed.price && exampleRate !== null
-      ? (() => {
-          const estimate = estimatePenalty({
-            price: parsed.price,
-            calls: EXAMPLE_WINDOW_CALLS,
-            observedRate: exampleRate,
-            declaredRate: parsed.failureRate!,
-          });
-          return `Example: at ${percentText(exampleRate)}% failures in a window of ${EXAMPLE_WINDOW_CALLS.toLocaleString("en-US")} paid calls, up to about ${formatMoney(estimate.penalty)} of your stake could be taken. The chain never lets penalties take more than ${DAILY_CAP_PERCENT}% of your stake in any 24 hours. Within your promise, or below ${MIN_CHECKED_CALLS} checked calls in a window, nothing is taken.`;
-        })()
-      : null;
+  const penaltyExample = penaltyExampleOf(parsed.price, mode, parsed.failureRate);
 
   const unmet = (check.data?.requirements ?? []).filter((requirement) => !requirement.met);
   const testMissing = unmet.find((r) => r.requirement === "TESTER_RUN" || r.requirement === "TESTER_PASSED");
@@ -395,7 +385,7 @@ export function LiveStage({
             <Field
               label="Price per call"
               inputMode="decimal"
-              suffix={asset.symbol}
+              suffix="$ a call"
               value={form.price}
               disabled={readOnly}
               onChange={(event) => set({ price: event.target.value })}

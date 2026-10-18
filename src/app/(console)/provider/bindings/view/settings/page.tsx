@@ -20,6 +20,7 @@ import { noteSaved } from "@/features/provider-binding/after-publish";
 import { BindingHeader, bindingQueryKey, useBinding } from "@/features/provider-binding/binding-header";
 import { integerFromInput } from "@/features/provider-binding/chrome";
 import {
+  DEFAULT_FREE_DAILY_BUDGET,
   freeBudgetFromInput,
   freeBudgetHint,
   freeBudgetWarning,
@@ -27,6 +28,7 @@ import {
   freeTermsChangeRows,
   modeOfChoice,
   onlyChanged,
+  penaltyExample,
   percentText,
   PRICE_CHOICES,
   stakeEffectOf,
@@ -41,7 +43,6 @@ import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { updateToolBinding } from "@/services/provider-tool-bindings.service";
-import { labelForEndpoint } from "@/utils/provider-label";
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
 
@@ -200,7 +201,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
             <Field
               label="Price per call"
               inputMode="decimal"
-              suffix={asset.symbol}
+              suffix="$ a call"
               value={form.price}
               disabled={readOnly}
               onChange={(event) => set({ price: event.target.value })}
@@ -232,7 +233,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
               suffix="calls"
               value={extra.freeBudget}
               disabled={readOnly}
-              placeholder="Platform default"
+              placeholder={`${DEFAULT_FREE_DAILY_BUDGET.toLocaleString("en-US")} (platform default)`}
               onChange={(event) => setExtra((current) => ({ ...current, freeBudget: event.target.value }))}
               error={errors.freeBudget}
               hint={freeBudgetHint(mode)}
@@ -262,7 +263,12 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
             disabled={readOnly}
             onChange={(event) => set({ failurePercent: event.target.value })}
             error={parsed.errors.failurePercent}
-            hint="Out of every 100 checked calls. A new value applies from the next window."
+            hint={[
+              "Out of every 100 checked calls. A new value applies from the next window.",
+              penaltyExample(parsed.price, mode, parsed.failureRate),
+            ]
+              .filter(Boolean)
+              .join(" ")}
           />
           <Field
             label="Time we wait for your API"
@@ -314,7 +320,8 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="flex flex-col gap-3 p-4 tablet:flex-row tablet:items-center tablet:justify-between tablet:p-5">
-          <p className="min-w-0 break-all font-mono text-mono-13 text-01">{labelForEndpoint(binding.endpoint)}</p>
+          {/* The full address, here only: lists and headers show a short label (`labelForEndpoint`). */}
+          <p className="min-w-0 break-all font-mono text-mono-13 text-01">{binding.endpoint}</p>
           <Button variant="secondary" size="sm" asChild>
             <Link href={routes.bindingWizard(binding.id, "connect")}>
               Change and test again
