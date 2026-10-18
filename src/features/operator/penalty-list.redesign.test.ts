@@ -34,6 +34,7 @@ function row(partial: Partial<PenaltyRow>): PenaltyRow {
     proposedAt: "2026-09-21T08:09:00Z",
     disputedAt: "2026-09-23T10:00:00Z",
     nextDeadline: "2026-10-23T10:00:00Z",
+    onChain: true,
     ...partial,
   };
 }
@@ -61,7 +62,8 @@ describe("Penalties tabs", () => {
       row({ status: "PROPOSED" }),
       row({ status: "PROPOSED" }),
     ]);
-    expect(counts).toEqual({ "needs-ruling": 2, signature: 1, window: 2 });
+    // B11: an old-process DISPUTED row is not a ruling; it waits under "Old process".
+    expect(counts).toEqual({ "needs-ruling": 1, signature: 1, "old-process": 1, window: 2 });
     expect(OPEN_STATUSES).not.toContain("EXECUTED");
   });
 });
