@@ -117,13 +117,14 @@ function ProviderStake({ stake, chainName }: { stake: ChainStake[]; chainName: (
 
 /**
  * Whether this provider takes a call from YOUR agents now (B16): "Serves you",
- * "Doesn't take payment on your chain" or "Not taking calls now". Computed by
- * the backend from the router's own gates and your agents' chains; nothing
- * shows when it is not known.
+ * "Doesn't take payment on your chain", "Not taking calls now", or "Can't
+ * check right now" when the backend could not read it. Computed by the backend
+ * from the router's own gates and your agents' chains; nothing shows before
+ * it has loaded.
  */
 export function ServingChip({ fit }: { fit: { chains?: readonly string[] | null; servesYou?: boolean | null } }) {
   const status = servingStatus(fit);
-  if (status.kind === "unknown") return null;
+  if (status.kind === "not-loaded") return null;
   return (
     <span data-testid="serving-chip" data-kind={status.kind}>
       <StatusPill label={status.label} tone={status.tone} />
@@ -174,7 +175,7 @@ export function ProviderCard({
 
       <p className="text-body-13 text-02">
         {provider.toolIds.length} {provider.toolIds.length === 1 ? "tool" : "tools"} served
-        {chainsText(provider.chains, chainName) ? ` · ${chainsText(provider.chains, chainName)}` : ""}
+        {chainsText(provider, chainName) ? ` · ${chainsText(provider, chainName)}` : ""}
         {provider.yourCalls > 0
           ? ` · you have called them ${provider.yourCalls} ${provider.yourCalls === 1 ? "time" : "times"} (calls to all their tools)${callsWindow ? ` ${callsWindow}` : ""}`
           : ""}

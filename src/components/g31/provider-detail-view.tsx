@@ -117,7 +117,7 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
         </div>
         <p className="text-body-13 text-02">
           Serves {plural(provider.tools.length, "tool")} on Assay
-          {chainsText(provider.chains, chainName) ? ` · ${chainsText(provider.chains, chainName)}` : ""}.
+          {chainsText(provider, chainName) ? ` · ${chainsText(provider, chainName)}` : ""}.
         </p>
       </header>
 
@@ -164,8 +164,8 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
                       <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
                       <ServingChip fit={tool} />
                     </span>
-                    {chainsText(tool.chains, chainName) ? (
-                      <span className="text-body-xs text-03">{chainsText(tool.chains, chainName)}</span>
+                    {chainsText(tool, chainName) ? (
+                      <span className="text-body-xs text-03">{chainsText(tool, chainName)}</span>
                     ) : null}
                     {/* This provider's own listing: one price, its free calls first (as on the public page). */}
                     <OfferPrice

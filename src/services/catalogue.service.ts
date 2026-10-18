@@ -95,8 +95,8 @@ export interface CatalogueProvider {
    */
   stake: CatalogueChainStake[];
   quality: CatalogueQuality | null;
-  /** CAIP-2 chains a call to this provider can settle on now (the router's answer); [] when it takes no call. */
-  chains?: string[];
+  /** CAIP-2 chains a call to this provider can settle on now (the router's answer); [] when it takes no call; null when unknown. */
+  chains?: string[] | null;
   /** Per caller: one of your agents' chains is in `chains`. null when unknown. */
   servesYou?: boolean | null;
 }

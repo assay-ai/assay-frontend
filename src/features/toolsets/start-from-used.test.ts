@@ -25,7 +25,7 @@ describe("usedTools", () => {
       ["get_usd_eur_rate", "no-provider", false, true],
       ["removed", "gone", false, false],
     ]);
-    expect(tools[1].reason).toBe("no provider is taking calls for it now");
+    expect(tools[1].reason).toBe("no provider is taking calls for it");
     expect(tools[3].reason).toBe("no longer on Assay");
   });
 

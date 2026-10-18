@@ -63,6 +63,8 @@ describe("sharing needs a public name: why, and the final URL first (D19)", () =
     const preview = screen.getByTestId("share-url-preview");
     expect(preview.textContent).toMatch(/\/u\/<private code>@1/);
     expect(preview.textContent).toContain("does not contain your public name");
+    // The name is claimed only by this explicit button, which says so.
+    expect(screen.getByTestId("share-primary").textContent).toBe("Claim the name and share v1");
     expect(service.claimOrgHandle).not.toHaveBeenCalled();
   });
 

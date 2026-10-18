@@ -223,7 +223,7 @@ export function ExploreToolsetsView() {
     <div className="flex w-full flex-col gap-4 px-4 py-4 tablet:px-7 tablet:py-[18px]">
       <ExploreNav />
       <PageHeader
-        title="Tool sets"
+        title="Shared tool sets"
         subtitle="Ready-made groups of tools, each with its own server URL"
         actions={
           <>

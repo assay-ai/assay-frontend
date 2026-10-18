@@ -20,7 +20,7 @@ export interface UsedTool {
 }
 
 export const USED_TOOL_REASONS: Record<Exclude<UsedToolState, "ready">, string> = {
-  "no-provider": "no provider is taking calls for it now",
+  "no-provider": "no provider is taking calls for it",
   gone: "no longer on Assay",
 };
 

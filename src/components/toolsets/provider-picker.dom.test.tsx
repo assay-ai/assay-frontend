@@ -48,9 +48,11 @@ function detail(providerId: string, price: string, chains: string[], servesYou: 
   return { providerId, tools: [{ toolId: "weather", name: "get_weather", pricingMode: "PAID", price: USD(price), chains, servesYou }] };
 }
 
-function renderEditor(onApply = vi.fn()) {
+function renderEditor(onApply = vi.fn(), e2e: { chains: string[] | null; servesYou: boolean | null } = { chains: ["eip155:46630"], servesYou: true }) {
   catalogue.getCatalogueProvider.mockImplementation(async (id: string) =>
-    id === "meteo" ? detail("meteo", "250000", ["solana:devnet"], false) : detail("e2e", "100000", ["eip155:46630"], true),
+    id === "meteo"
+      ? detail("meteo", "250000", ["solana:devnet"], false)
+      : { providerId: "e2e", tools: [{ toolId: "weather", name: "get_weather", pricingMode: "PAID", price: USD("100000"), ...e2e }] },
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -113,6 +115,34 @@ describe("the provider picker", () => {
     await waitFor(() => expect(screen.getAllByTestId("serving-chip")).toHaveLength(2));
     fireEvent.click(within(screen.getAllByTestId("provider-option")[0]).getByRole("checkbox"));
 
+    expect(screen.queryByTestId("nothing-runs-warning")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(onApply).toHaveBeenCalledTimes(1);
+  });
+
+  it("warns in Any (Assay picks) mode too when no provider serves you", async () => {
+    const onApply = renderEditor(vi.fn(), { chains: [], servesYou: false });
+    await waitFor(() => expect(screen.getAllByTestId("serving-chip")).toHaveLength(2));
+    expect(screen.getAllByTestId("provider-option")[0].textContent).toContain("Not taking calls now");
+
+    const warning = screen.getByTestId("nothing-runs-warning");
+    expect(warning.textContent).toContain("E2E Weather Ltd isn't taking calls now");
+    expect(warning.textContent).toContain("Open-Meteo Demo BV doesn't take payment on your chain");
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(onApply).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Apply anyway" }));
+    expect(onApply.mock.calls[0][0]).toMatchObject({ providerMode: "BEST" });
+  });
+
+  it("a provider the backend could not check reads 'Can't check right now', and is never counted against the rule", async () => {
+    const onApply = renderEditor(vi.fn(), { chains: null, servesYou: null });
+    fireEvent.click(screen.getByRole("radio", { name: "Only these" }));
+    await waitFor(() => expect(screen.getAllByTestId("serving-chip")).toHaveLength(2));
+    const [e2e] = screen.getAllByTestId("provider-option");
+    expect(e2e.textContent).toContain("Can't check right now");
+    expect(e2e.textContent).not.toContain("Not taking calls");
+
+    fireEvent.click(within(e2e).getByRole("checkbox"));
     expect(screen.queryByTestId("nothing-runs-warning")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(onApply).toHaveBeenCalledTimes(1);
