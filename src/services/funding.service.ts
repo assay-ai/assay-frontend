@@ -15,13 +15,8 @@ import { api } from "./api";
  *   3. `POST /deposits/:id/settle` — the signed transaction goes back, and the
  *      backend submits and watches it.
  *
- * What is still NOT here, because the API has no route for it:
- *
- *   - reading or writing auto top-up (no route at all)
- *   - requesting a withdrawal        (no POST /withdrawals)
- *
- * Those two screens are therefore built against local state and the real
- * balance, and they stop at the point where the write would happen.
+ * Withdrawals are requested and claimed through `escrow.service.ts`; their
+ * history is `GET /withdrawals` here. There is no auto top-up route.
  */
 
 export interface Deposit {
@@ -47,6 +42,66 @@ export interface ListDepositsQuery extends ListQuery {
   from?: string;
   to?: string;
   search?: string;
+}
+
+/**
+ * One withdrawal from the escrow (`GET /withdrawals`): a request and what
+ * became of it. Read from the chain's withdrawal events past a confirmation
+ * depth, so it trails the chain by a few minutes; the live pending request is
+ * `GET /escrow`'s `withdrawRequested` / `withdrawAvailableAt`.
+ */
+export interface Withdrawal {
+  id: string;
+  /** CAIP-2. */
+  chainId: string;
+  /** CAIP-10: the escrow it came out of. */
+  account: string;
+  /** REPLACED: a newer request overwrote it before it was claimed. */
+  status: "PENDING" | "CLAIMED" | "CANCELLED" | "REPLACED";
+  /** Null for a claim whose request predates the history. */
+  requested: Money | null;
+  /** What the contract paid: below `requested` if a payment landed during the hour. */
+  received: Money | null;
+  requestedAt: string | null;
+  claimableAt: string | null;
+  /** Claimed, cancelled or replaced. */
+  closedAt: string | null;
+  requestTransactionHash: string | null;
+  closeTransactionHash: string | null;
+}
+
+/** GET /withdrawals — the "Withdrawals" list on the Funding screen, newest first. */
+export function listWithdrawals(): Promise<{ items: Withdrawal[] }> {
+  return api.get<{ items: Withdrawal[] }>("/withdrawals");
+}
+
+/** How a statement's closing balance compares with the escrow, read now. */
+export interface StatementBalanceCheck {
+  escrowBalance: Money;
+  /** Paid on the statement, not taken from the escrow yet (still being settled). */
+  stillSettling: Money;
+  /** `escrowBalance − stillSettling − closing`; may be negative. */
+  difference: Money;
+  matches: boolean;
+  observedAt: string;
+}
+
+/** One escrow's money for a statement period: opening + deposits − withdrawals − paid = closing. */
+export interface StatementBalance {
+  account: string;
+  chainId: string;
+  opening: Money;
+  deposits: Money;
+  withdrawals: Money;
+  paid: Money;
+  closing: Money;
+  /** Only for a period that has not ended; null otherwise or when the chain could not be read. */
+  check: StatementBalanceCheck | null;
+}
+
+/** GET /statements/balance — the money half of a monthly statement, per escrow. Derived; never stored. */
+export function getStatementBalance(query: { from: string; to: string }): Promise<{ items: StatementBalance[] }> {
+  return api.get<{ items: StatementBalance[] }>("/statements/balance", query);
 }
 
 /** GET /deposits — the "Deposits" table on the Funding screen. */

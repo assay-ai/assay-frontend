@@ -129,3 +129,19 @@ describe("withdraw copy", () => {
     );
   });
 });
+
+describe("Withdraw: Use all is preselected (B7)", () => {
+  it("opens with the whole available amount chosen, and still asks for the tick", () => {
+    open();
+    const button = screen.getByRole("button", { name: /Request \$13\.24 \(free\)/ }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(button.disabled).toBe(false);
+  });
+
+  it("lets the buyer pick a smaller amount instead", () => {
+    open();
+    enter("5");
+    expect(screen.getByRole("button", { name: /Request \$5\.00 \(free\)/ })).toBeTruthy();
+  });
+});

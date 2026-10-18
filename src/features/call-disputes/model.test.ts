@@ -3,7 +3,25 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "@/libs/ApiClient";
 import type { CallDispute } from "@/services/call-disputes.service";
 
-import { BUYER_COPY, buyerStatus, decisionDueAt, DISPUTE_COPY, shortRef, disputeQueueQuery, disputeErrorText, disputeTimeline, providerStatus, replyDueAt, reportWindow, slaMarks } from "./model";
+import {
+  BUYER_COPY,
+  buyerStatus,
+  DEADLINE_SENTENCE,
+  decisionDueAt,
+  DISPUTE_COPY,
+  disputeReasonLabel,
+  filedToast,
+  fullDateTime,
+  reportUntilText,
+  shortRef,
+  disputeQueueQuery,
+  disputeErrorText,
+  disputeTimeline,
+  providerStatus,
+  replyDueAt,
+  reportWindow,
+  slaMarks,
+} from "./model";
 
 const FILED = "2026-10-18T10:00:00.000Z";
 const H = 3_600_000;
@@ -58,7 +76,7 @@ describe("the timeline", () => {
     const steps = disputeTimeline(dispute(), t0 + H);
     expect(ids(steps)).toEqual(["reported:done", "reply:current", "decision:upcoming", "refund:upcoming"]);
     expect(steps[0]!.description).toMatch(/held, not paid out/);
-    expect(steps[2]!.description).toMatch(/accepted automatically at 72 hours/);
+    expect(steps[2]!.description).toMatch(/can be accepted automatically from 72 hours; if it is, you are refunded in full/);
   });
 
   it("the provider replied: an operator decides", () => {
@@ -116,10 +134,10 @@ describe("one-line status", () => {
 
 describe("operator SLA marks", () => {
   it("counts from the filing", () => {
-    expect(slaMarks(dispute(), t0 + H).map((m) => m.label)).toEqual(["Provider may reply", "Auto-uphold at 72 h"]);
+    expect(slaMarks(dispute(), t0 + H).map((m) => m.label)).toEqual(["Provider may reply", "Auto-uphold from 72 h"]);
     expect(slaMarks(dispute(), t0 + 49 * H).map((m) => [m.label, m.tone])).toEqual([
       ["Provider silent", "warning"],
-      ["Paged · auto-uphold at 72 h", "danger"],
+      ["Paged · auto-uphold from 72 h", "danger"],
     ]);
     expect(slaMarks(dispute({ providerRespondedAt: FILED, autoUpholdAt: null }), t0 + 73 * H).map((m) => m.label)).toEqual(["Overdue: decide now"]);
     expect(slaMarks(dispute({ state: "UPHELD" }), t0)).toEqual([]);
@@ -232,5 +250,48 @@ describe("buyer words", () => {
     expect(shortRef("3f9c2a71-5b08-4d6e-9a14-7c2e0b5d8f13")).not.toContain("3f9c2a71");
     expect(shortRef("org-buyer")).toBe(shortRef("org-buyer"));
     expect(shortRef("org-buyer")).not.toBe(shortRef("org-buyer-2"));
+  });
+});
+
+describe("B7 report copy", () => {
+  // Owner rule: the daily auto-uphold cap can defer it, so no copy says it happens at a time.
+  const FORBIDDEN = [/upheld automatically at/i, /accepted automatically at/i, /buyer wins/i];
+  const all = (texts: string[]) => texts.forEach((text) => FORBIDDEN.forEach((rule) => expect(text).not.toMatch(rule)));
+
+  it("never says a report is upheld or accepted automatically AT a time, on either side", () => {
+    all([
+      ...Object.values(DISPUTE_COPY),
+      ...Object.values(BUYER_COPY),
+      ...Object.values(DEADLINE_SENTENCE),
+      providerStatus(dispute(), t0 + H).detail,
+      providerStatus(dispute({ canRespond: false }), t0 + 25 * H).detail,
+      ...disputeTimeline(dispute(), t0 + H).map((step) => String(step.description ?? "")),
+      ...disputeTimeline(dispute(), t0 + H, "provider").map((step) => String(step.description ?? "")),
+    ]);
+    expect(DEADLINE_SENTENCE.provider).toBe("Reply within 24 h. If you don't, the report can be upheld automatically from 72 h.");
+    expect(DEADLINE_SENTENCE.buyer).toBe("The provider has 24 h to reply. If it doesn't, your report can be accepted automatically from 72 h.");
+    expect(providerStatus(dispute(), t0 + H).detail).toContain("can be upheld automatically from Oct 21, 10:00 UTC");
+  });
+
+  it("names a refund in the automatic acceptance only when the backend guarantees one", () => {
+    const guaranteed = disputeTimeline(dispute(), t0 + H).find((s) => s.id === "decision")!;
+    const notGuaranteed = disputeTimeline(dispute({ refundGuaranteed: false }), t0 + H).find((s) => s.id === "decision")!;
+    expect(guaranteed.description).toContain("you are refunded in full");
+    expect(notGuaranteed.description).not.toMatch(/refund/i);
+  });
+
+  it("the toast says when it is answered and decided, never the outcome", () => {
+    const text = filedToast(dispute(), t0);
+    expect(text).toBe("Reported. The provider has 24 h to reply; we decide by Oct 21, 10:00 UTC.");
+    expect(text).not.toMatch(/counts against|refunded|upheld/i);
+  });
+
+  it("full dates, one reason label, and the filing deadline", () => {
+    expect(fullDateTime(FILED, t0)).toBe("Oct 18, 10:00 UTC");
+    expect(disputeReasonLabel(dispute({ reason: "OTHER", reasonLabel: "Other" }))).toBe("Something else");
+    expect(disputeReasonLabel(dispute({ reason: "NEW_REASON", reasonLabel: "A new reason" }))).toBe("A new reason");
+    expect(reportUntilText("2026-10-25T10:00:00.000Z", t0)).toBe("You can report this call until Oct 25, 10:00 UTC.");
+    expect(reportUntilText("2026-10-25T10:00:00.000Z", Date.parse("2026-10-26T00:00:00.000Z"))).toBeNull();
+    expect(reportUntilText(null, t0)).toBeNull();
   });
 });

@@ -34,12 +34,18 @@ export function callOutcome(call: {
   return toDecimal(call.charged).gt(0) ? "charged" : "not-charged";
 }
 
-/** The Calls tab's status chips. */
-export type CallsFilter = "all" | "charged" | "not-charged" | "owed" | "free";
+/**
+ * The Calls tab's status chips. `refundable` ("Still refundable") is the
+ * calls a report filed now would refund in full: the backend decides it with
+ * the receipt's own predicate (`GET /tool-calls?refundable=true`), never a
+ * clock rule here.
+ */
+export type CallsFilter = "all" | "charged" | "not-charged" | "owed" | "free" | "refundable";
 
 export const CALLS_FILTERS: { value: CallsFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "charged", label: "Charged" },
+  { value: "refundable", label: "Still refundable" },
   { value: "not-charged", label: "Not charged" },
   { value: "owed", label: "Owed" },
   { value: "free", label: "Free" },
@@ -61,12 +67,20 @@ export function statusesFor(filter: CallsFilter): string[] | undefined {
   if (filter === "not-charged") return [...NOT_CHARGED_STATUSES, ...CHARGED_STATUSES];
   // Buyer debt (open or written off) is a SETTLED intent.
   if (filter === "owed") return [...CHARGED_STATUSES];
+  if (filter === "refundable") return [...CHARGED_STATUSES];
   return undefined;
+}
+
+/** Whether a chip asks the API for the refundable calls only (`refundable=true`). */
+export function refundableOnly(filter: CallsFilter): true | undefined {
+  return filter === "refundable" ? true : undefined;
 }
 
 export function matchesFilter(
   call: { status: string; price: Money; charged: Money; debt?: CallDebt | null },
   filter: CallsFilter): boolean {
   if (filter === "all") return true;
+  // The API already kept only the refundable ones; nothing to re-derive here.
+  if (filter === "refundable") return true;
   return callOutcome(call) === filter;
 }

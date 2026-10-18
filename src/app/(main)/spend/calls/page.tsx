@@ -9,6 +9,7 @@ import * as React from "react";
 import { PageHeader } from "@/components/g31/chrome";
 import { EntityName } from "@/components/patterns/entity-name";
 import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
+import { REFUNDABLE_ROW } from "@/features/buyer-money/funding-lines";
 import { owedCallsFromDebts } from "@/features/buyer-debt/debt-summary";
 import { OwedRowAction } from "@/features/buyer-debt/owed-row-action";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
@@ -24,6 +25,7 @@ import {
   callOutcome,
   matchesFilter,
   parseCallsFilter,
+  refundableOnly,
   statusesFor,
   type CallsFilter,
 } from "@/features/buyer/call-outcome";
@@ -86,6 +88,7 @@ function CallsList() {
       listToolCalls({
         limit: PAGE,
         status: statusesFor(filter),
+        refundable: refundableOnly(filter),
         toolId: toolId ?? undefined,
         cursor: pageParam ?? undefined,
       }),
@@ -192,7 +195,9 @@ function CallsList() {
             title={
               filter === "charged"
                 ? "No charged calls"
-                : filter === "owed"
+                : filter === "refundable"
+                  ? "No call is still refundable"
+                  : filter === "owed"
                   ? query.hasNextPage
                     ? "No owed calls among the latest"
                     : "Nothing owed"
@@ -203,7 +208,9 @@ function CallsList() {
                     : "No calls to this tool"
             }
             description={
-              filter === "owed"
+              filter === "refundable"
+                ? REFUNDABLE_ROW.empty
+                : filter === "owed"
                 ? query.hasNextPage
                   ? "None of the calls loaded so far is owed. Older calls may be: load more to look further back."
                   : "Every paid call's payment was collected. An owed call shows here until you settle it."
@@ -253,6 +260,17 @@ function CallsList() {
                       </span>
                       {paymentNote && outcome !== "owed" ? (
                         <span className="text-body-xs text-03">{paymentNote}</span>
+                      ) : null}
+                      {filter === "refundable" ? (
+                        <span className="text-body-xs text-success-700" data-testid="call-refundable-until">
+                          {call.refundableIfReportedUntil ? (
+                            <>
+                              {REFUNDABLE_ROW.beforeTime} <UtcTime value={call.refundableIfReportedUntil} midSentence /> {REFUNDABLE_ROW.afterTime}
+                            </>
+                          ) : (
+                            REFUNDABLE_ROW.noEnd
+                          )}
+                        </span>
                       ) : null}
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-0.5">

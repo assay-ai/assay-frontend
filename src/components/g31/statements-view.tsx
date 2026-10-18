@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { notChargedLines, type NotChargedLine } from "@/features/buyer/not-charged";
 import { recentMonths } from "@/features/buyer/period";
+import { statementCheckSentence, statementMoneyLines } from "@/features/buyer-money/funding-lines";
 import { MATCHES_SENTENCE, ReconcileNote, reconcileState } from "@/features/buyer/reconcile-note";
 import { readWithheld } from "@/features/buyer/wire";
 import { spendCsv } from "@/features/g30/spend-view";
@@ -24,6 +25,8 @@ import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { getWithheld } from "@/services/balances.service";
+import { chainDisplayName } from "@/services/chains.service";
+import { getStatementBalance, type StatementBalance } from "@/services/funding.service";
 import { getReceiptsSummary } from "@/services/receipts.service";
 import { formatMoney } from "@/utils/money";
 
@@ -36,8 +39,10 @@ import { formatCount } from "./format";
  * One statement card per UTC month (picked here, or `?month=2026-10` from Not
  * charged) with one primary action, Download CSV, built in the browser from
  * the same `GET /receipts/summary` rows the dashboard reads — so the two can
- * never disagree. Opening and closing balances, deposits and withdrawals have
- * no historical endpoint and are not drawn at all rather than shown as "—".
+ * never disagree. Above it, the money half (B7, `GET /statements/balance`):
+ * opening balance + deposits − withdrawals − paid = closing balance, per
+ * escrow, derived by the API from its records and, for the current month,
+ * checked against the escrow read from the chain.
  */
 
 const MONTHS_BACK = 6;
@@ -110,6 +115,29 @@ export function StatementFigures({ totals, lines }: { totals: SummaryFigures; li
   );
 }
 
+/** Opening + deposits − withdrawals − paid = closing, for one escrow; the check sentence under it. */
+export function StatementMoney({ balance, chainName }: { balance: StatementBalance; chainName: string | null }) {
+  const check = statementCheckSentence(balance);
+  return (
+    <div className="flex flex-col" data-testid="statement-money">
+      {chainName ? <p className="pb-1 text-body-xs text-03">Your escrow on {chainName}</p> : null}
+      {statementMoneyLines(balance).map((line) => (
+        <KeyValueRow
+          key={line.key}
+          label={line.label}
+          value={line.key === "closing" ? <span className="text-heading-sm">{line.value}</span> : line.value}
+          divider={line.key !== "closing"}
+        />
+      ))}
+      {check ? (
+        <p className={balance.check?.matches ? "pt-2 text-body-13 text-success-700" : "pt-2 text-body-13 text-warning-700"} data-testid="statement-check">
+          {check}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function plural(n: number, one: string): string {
   return `${formatCount(n)} ${n === 1 ? one : `${one}s`}`;
 }
@@ -140,6 +168,14 @@ function StatementsContent() {
   });
   const withheld = withheldQuery.data ? readWithheld(withheldQuery.data, summary.data?.asset) : null;
   const matches = reconcileState(withheld) === "matches";
+
+  // The money half: derived by the API from deposits, withdrawals and paid calls; never stored.
+  const balanceQuery = useQuery({
+    queryKey: ["statements", "balance", period.key],
+    retry: 0,
+    queryFn: () => getStatementBalance({ from: period.from, to: period.to }),
+  });
+  const balances = balanceQuery.data?.items ?? [];
 
   const totals = summary.data?.totals;
   // Why calls were not charged, from `GET /withheld`: the three lines add up to Not charged.
@@ -238,6 +274,30 @@ function StatementsContent() {
               )}
             </PanelBody>
           </Panel>
+
+          {balances.length > 0 ? (
+            <Panel>
+              <PanelHeader>
+                <PanelTitles>
+                  <PanelTitle>Money in and out</PanelTitle>
+                  <PanelDescription className="whitespace-normal">
+                    Opening balance + deposits − withdrawals − paid = closing balance
+                  </PanelDescription>
+                </PanelTitles>
+              </PanelHeader>
+              <PanelBody className="flex flex-col gap-4 px-5 pb-[18px] pt-2">
+                {balances.map((balance) => (
+                  <StatementMoney
+                    key={balance.account}
+                    balance={balance}
+                    chainName={balances.length > 1 ? chainDisplayName(chains, balance.chainId) : null}
+                  />
+                ))}
+              </PanelBody>
+            </Panel>
+          ) : balanceQuery.isError ? (
+            <p className="text-body-13 text-03">The opening and closing balances could not be loaded just now.</p>
+          ) : null}
 
           <ReconcileNote withheld={withheld} />
 
