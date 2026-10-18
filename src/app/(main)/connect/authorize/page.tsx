@@ -2,13 +2,13 @@
 
 import { usePrivy } from "@privy-io/react-auth";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { ConsentCard } from "@/components/oauth/consent-card";
 import { ConsentSetLimits } from "@/components/oauth/consent-set-limits";
 import { CONSENT_STRINGS, ContinueUrlRefused, consentFailure, isContinueUrl } from "@/features/oauth/consent";
 import { forgetRequestId, takeRequestId } from "@/features/oauth/request-id";
+import { loadPage, useFullLoadLinks } from "@/features/oauth/strict-pages";
 import { ApiError } from "@/libs/ApiClient";
 import { loginHref } from "@/libs/login-redirect";
 import { approveOAuthRequest, denyOAuthRequest, getOAuthRequest } from "@/services/oauth-consent.service";
@@ -32,7 +32,6 @@ import { approveOAuthRequest, denyOAuthRequest, getOAuthRequest } from "@/servic
  */
 export default function ConsentPage() {
   const { ready, authenticated, user, logout } = usePrivy();
-  const router = useRouter();
   // undefined: not read yet (before mount); null: there is none.
   const [rid, setRid] = React.useState<string | null | undefined>(undefined);
   const [now, setNow] = React.useState(() => new Date());
@@ -46,10 +45,17 @@ export default function ConsentPage() {
     return () => clearInterval(timer);
   }, []);
 
+  // Leaving this strict page is a full page load (`strict-pages.ts`).
+  useFullLoadLinks();
+
+  // Signed out: sign in on the normal login page, as a full page load (its
+  // captcha does not run under this page's policy). The rid is not in that
+  // URL: it waits in this tab's sessionStorage, and `takeRequestId` finds it
+  // when the login page loads this page again.
   const signedOut = ready && !authenticated;
   React.useEffect(() => {
-    if (signedOut && rid) router.replace(loginHref({ next: "/connect/authorize" }));
-  }, [signedOut, rid, router]);
+    if (signedOut && rid) loadPage(loginHref({ next: "/connect/authorize" }));
+  }, [signedOut, rid]);
 
   const query = useQuery({
     // The id is deliberately not in the key.
@@ -68,10 +74,28 @@ export default function ConsentPage() {
     if (loadFailure?.kind === "final") forgetRequestId();
   }, [loadFailure?.kind]);
 
+  /**
+   * After a decision whose answer was lost, the request reads as answered:
+   * the `continue` step on the MCP host (the URL the API returns, spec
+   * §6.3.5), which only works in the browser that started the sign-in.
+   */
+  const resume = React.useMemo(() => {
+    if (!rid) return undefined;
+    const mcp = process.env.NEXT_PUBLIC_MCP_URL?.trim();
+    if (!mcp) return undefined;
+    let url: string;
+    try {
+      url = `${new URL(mcp).origin}/oauth/authorize/continue?request=${encodeURIComponent(rid)}`;
+    } catch {
+      return undefined;
+    }
+    return isContinueUrl(url) ? () => loadPage(url) : undefined;
+  }, [rid]);
+
   const go = (redirectTo: string) => {
     if (!isContinueUrl(redirectTo)) throw new ContinueUrlRefused();
     forgetRequestId();
-    window.location.assign(redirectTo);
+    loadPage(redirectTo);
   };
 
   const signedInAs = user?.email?.address ?? user?.wallet?.address ?? null;
@@ -89,6 +113,11 @@ export default function ConsentPage() {
         onApprove={async (decision) => go((await approveOAuthRequest(rid, decision)).redirectTo)}
         onDeny={async () => go((await denyOAuthRequest(rid)).redirectTo)}
         onFinal={forgetRequestId}
+        fetchedAt={query.dataUpdatedAt}
+        recheck={async () => {
+          await getOAuthRequest(rid);
+        }}
+        onResume={resume}
         setLimits={(slot) => <ConsentSetLimits {...slot} />}
       />
     );

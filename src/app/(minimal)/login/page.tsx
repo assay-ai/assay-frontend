@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { Button } from "@/components/ui/button";
 import { GLOSSARY } from "@/libs/glossary";
+import { isStrictPagePath, loadPage } from "@/features/oauth/strict-pages";
 import { safeNextPath } from "@/libs/login-redirect";
 import { cn } from "@/utils";
 
@@ -229,7 +230,10 @@ export default function LoginPage() {
   const listing = next.startsWith("/provider");
 
   useEffect(() => {
-    if (ready && authenticated) router.replace(next);
+    if (!ready || !authenticated) return;
+    // Back to a strict page (the consent page): a full load, so it gets its own headers.
+    if (isStrictPagePath(next)) loadPage(next);
+    else router.replace(next);
   }, [ready, authenticated, router, next]);
 
   // Don't flash a sign-in form at someone who is already signed in.

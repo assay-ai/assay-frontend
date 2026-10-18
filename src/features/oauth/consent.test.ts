@@ -7,6 +7,8 @@ import {
   consentFailure,
   consentView,
   defaultAgentId,
+  displayClientName,
+  initialName,
   isContinueUrl,
   limitsLine,
   nameProblem,
@@ -51,7 +53,10 @@ function request(overrides: Partial<ConsentRequest> = {}): ConsentRequest {
   };
 }
 
-const view = (req: ConsentRequest, agentId: string | null = defaultAgentId(req)) => consentView(req, { agentId, now: NOW });
+/** Fetched the moment it was created; NOW is 12 s later. */
+const FETCHED_AT = Date.parse("2026-10-19T10:00:00.000Z");
+const view = (req: ConsentRequest, agentId: string | null = defaultAgentId(req)) =>
+  consentView(req, { agentId, now: NOW, fetchedAt: FETCHED_AT });
 
 describe("consent view: the client", () => {
   it('verified client → "Claude Code ✓ Verified"', () => {
@@ -80,9 +85,9 @@ describe("consent view: the client", () => {
     expect(v.client.title).toBe("Assay app (says it is) · an app on this computer");
     expect(v.cannotDo).toContain("make paid calls until you turn them on, on a separate page, with your wallet");
     expect(v.cannotDo.join(" ")).not.toContain("Only the Assay app on your computer can");
-    // Any local process can claim to be the Assay app: no "Verified", and no amber either.
+    // Any local process can claim to be the Assay app: no "Verified", and the amber line.
     expect(v.client.verified).toBe(false);
-    expect(v.notVerified).toBeNull();
+    expect(v.notVerified).toBe("Not verified by Assay. Only approve if you just started this from an app you trust.");
   });
 
   it("not verified → amber copy exactly §6.5, domain bold and the full host under it", () => {
@@ -252,9 +257,22 @@ describe("consent view: time", () => {
 
   it("past expiresAt → expired", () => {
     expect(view(request()).expired).toBe(false);
-    const late = consentView(request(), { agentId: "agt-1", now: new Date("2026-10-19T10:10:00.000Z") });
+    const late = consentView(request(), {
+      agentId: "agt-1",
+      now: new Date("2026-10-19T10:10:00.000Z"),
+      fetchedAt: FETCHED_AT,
+    });
     expect(late.expired).toBe(true);
     expect(late.approveDisabled).toBe(true);
+  });
+
+  it("a device clock far ahead does not expire the request early", () => {
+    // This clock reads an hour fast: it fetched "at 11:00" a request the server made at 10:00.
+    const fetchedAt = Date.parse("2026-10-19T11:00:00.000Z");
+    const soon = consentView(request(), { agentId: "agt-1", now: new Date(fetchedAt + 60_000), fetchedAt });
+    expect(soon.expired).toBe(false);
+    const later = consentView(request(), { agentId: "agt-1", now: new Date(fetchedAt + 600_000), fetchedAt });
+    expect(later.expired).toBe(true);
   });
 });
 
@@ -306,5 +324,82 @@ describe("authorize-error copy", () => {
     expect(authorizeErrorText("redirect_uri_mismatch")).toBe(AUTHORIZE_ERROR_COPY.redirect_uri_mismatch);
     expect(authorizeErrorText("toString")).toBe(AUTHORIZE_ERROR_FALLBACK);
     expect(authorizeErrorText(null)).toBe(AUTHORIZE_ERROR_FALLBACK);
+  });
+});
+
+describe("I3: a client cannot name itself verified", () => {
+  const unverified = (name: string, kind: "CIMD" | "DCR" = "CIMD") =>
+    request({
+      client: {
+        name,
+        kind,
+        registrableDomain: "example.com",
+        host: "example.com",
+        verified: false,
+        builtin: false,
+        paymentClient: false,
+      },
+      suggestedName: `${name} · 2026-10-19`,
+    });
+
+  it("strips check marks and the word verified from an unverified client's name, and keeps the amber line", () => {
+    for (const name of ["Claude Code ✓ Verified", "Claude Code ✔ verified", "✅ VERIFIED Claude Code", "Claude Code ☑", "Claude Code 🗸 Verified"]) {
+      const v = view(unverified(name));
+      expect(v.client.title).toBe("Claude Code");
+      expect(v.client.verified).toBe(false);
+      expect(v.notVerified).toBe("Not verified by Assay. Only approve if you just started this from an app you trust.");
+      expect(v.recencyLine).toBe("Only approve if you clicked Connect in Claude Code in the last few minutes.");
+    }
+  });
+
+  it("DCR too", () => {
+    expect(view(unverified("Code ✓ Verified", "DCR")).client.title).toBe("Code");
+  });
+
+  it("the badge comes only from the verified field, once", () => {
+    const v = view(request({ client: { ...request().client, name: "Claude Code ✓ Verified", verified: true } }));
+    expect(v.client.title).toBe("Claude Code ✓ Verified");
+    expect(v.client.title.match(/✓/g)).toHaveLength(1);
+  });
+
+  it("a name that is only marks becomes 'Unnamed app'", () => {
+    expect(displayClientName("✓ ✔ Verified")).toBe("Unnamed app");
+    expect(displayClientName("Verifiedness Tool")).toBe("Verifiedness Tool");
+  });
+
+  it("the suggested name and a replaced connection's name lose the marks too", () => {
+    expect(initialName({ suggestedName: "Claude Code ✓ Verified · 2026-10-19" })).toBe("Claude Code · 2026-10-19");
+    const v = view(request({ replaces: { id: "c", name: "Old ✓ Verified", agentId: "agt-1", narrowed: false } }));
+    expect(v.replaces?.text).toBe("Replaces Old.");
+  });
+});
+
+describe("will-not line follows paymentClient", () => {
+  it("a payment client that is not the built-in one is not told it can never pay", () => {
+    const v = view(request({ client: { ...request().client, paymentClient: true } }));
+    expect(v.cannotDo[1]).toBe("make paid calls until you turn them on, on a separate page, with your wallet");
+  });
+});
+
+describe("agent checks before approve", () => {
+  it("no agent → a reason, and Approve off", () => {
+    const v = view(request({ agents: [] }), null);
+    expect(v.agentNotes).toEqual(["You have no agent yet. Create one in Agents & keys first."]);
+    expect(v.approveDisabled).toBe(true);
+  });
+
+  it("50 live grants → Approve off, unless this approval replaces one of them", () => {
+    const full = { ...request().agents[0]!, liveOAuthCredentials: 50 };
+    const v = view(request({ agents: [full] }));
+    expect(v.approveDisabled).toBe(true);
+    expect(v.agentNotes[0]).toMatch(/^This agent already has 50 connected apps/);
+    const replacing = view(
+      request({ agents: [full], replaces: { id: "c", name: "Old", agentId: full.id, narrowed: false } }),
+    );
+    expect(replacing.approveDisabled).toBe(false);
+  });
+
+  it("an invisible-only name is empty", () => {
+    expect(nameProblem("\u200b\u200e \u2028")).toBe("Give this connection a name.");
   });
 });

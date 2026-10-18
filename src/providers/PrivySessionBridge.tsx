@@ -19,6 +19,7 @@ import {
 } from "@/libs/ApiClient";
 
 import { demoEnabled } from "@/libs/demo/demo-api";
+import { isStrictPagePath, loadPage } from "@/features/oauth/strict-pages";
 
 import {
   applyIdentityChange,
@@ -129,7 +130,9 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
           clearCache: () => queryClient.clear(),
           resetCache: () => void queryClient.resetQueries(),
           logout,
-          navigate: (href) => router.replace(href),
+          // A strict page (the consent page) leaves its document for sign-in:
+          // its policy would refuse the sign-in captcha (`strict-pages.ts`).
+          navigate: (href) => (isStrictPagePath(pathnameRef.current) ? loadPage(href) : router.replace(href)),
         },
       );
       stayedRef.current = outcome === "stay";

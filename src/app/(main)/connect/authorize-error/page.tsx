@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
 import { authorizeErrorText } from "@/features/oauth/authorize-error";
+import { useFullLoadLinks } from "@/features/oauth/strict-pages";
 
 /**
  * `{WEB}/connect/authorize-error?reason=…`: where the MCP host sends the
@@ -22,14 +22,16 @@ function AuthorizeErrorBody() {
         {authorizeErrorText(reason)}
       </p>
       <p className="text-body-13 text-03">You can close this page.</p>
-      <Link href="/connect" className="self-start text-label-13 font-semibold text-primary-600 hover:underline">
+      {/* A plain link: leaving a strict page is a full page load (`strict-pages.ts`). */}
+      <a href="/connect" className="self-start text-label-13 font-semibold text-primary-600 hover:underline">
         Connect your agent another way
-      </Link>
+      </a>
     </section>
   );
 }
 
 export default function AuthorizeErrorPage() {
+  useFullLoadLinks();
   return (
     <div className="flex w-full flex-1 justify-center px-4 py-8 tablet:py-12">
       <Suspense fallback={null}>
