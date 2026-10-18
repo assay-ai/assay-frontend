@@ -19,6 +19,7 @@ import { stakeActionChain, unreadableChains } from "@/features/provider-stake/ch
 import { missingRequirementNote, requiredText, stakeReason } from "@/features/provider-stake/derivation";
 import { ProviderPendingTxList } from "@/features/provider-stake/pending-chain-tx-list";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
+import { stakeStatus } from "@/features/provider-stake/stake-status";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import { WithdrawSheet } from "@/features/provider-stake/withdraw-sheet";
 import { waitingDuration, waitingPeriodOf, withdrawStateOf } from "@/features/provider-stake/withdraw-state";
@@ -145,6 +146,7 @@ export default function ProviderStakePage() {
   const hasStake = Boolean(status.staked && status.staked.amount !== "0");
   const waiting = waitingPeriodOf(withdraw.periodMs, registration.data?.terms);
 
+  const health = stakeStatus(status);
   let headline: React.ReactNode;
   if (unreadable && !status.staked) {
     headline = "We could not read your stake from the chain just now. It is safe; try again in a minute.";
@@ -153,17 +155,18 @@ export default function ProviderStakePage() {
       ? "None of your tools needs stake right now. Paid tools will use it when they go live."
       : "You need stake only for paid tools. Free tools can go live without it.";
   } else if (status.enough) {
-    headline = `Enough for every paid tool. The recommended ${formatMoney(status.recommended)} leaves room for a penalty without pausing anything.`;
+    // The same sentence as Home, the Inbox and the Add stake sheet (D21).
+    headline = health.sentence;
   } else {
     headline = (
       <>
-        Short by {formatMoney(status.shortfall)}. Add stake{" "}
+        {health.sentence}
         {grace ? (
           <>
-            before <UtcTime value={grace.earliestExpiresAt} className="font-semibold" />
+            {" "}Paid calls continue until <UtcTime value={grace.earliestExpiresAt} className="font-semibold" />, then
+            stop on tools above your stake.
           </>
-        ) : null}{" "}
-        or paid tools above your stake stop taking paid calls.
+        ) : null}
       </>
     );
   }
@@ -200,7 +203,17 @@ export default function ProviderStakePage() {
       <Panel className="w-full">
         <PanelBody className="flex flex-col gap-4 p-4 tablet:p-5">
           <StakeGauge staked={status.staked} needed={status.required} recommended={status.recommended} />
-          <p className={status.enough === false ? "text-body-13 text-danger-600" : "text-body-13 text-02"}>{headline}</p>
+          <p
+            className={
+              status.enough === false
+                ? "text-body-13 text-danger-600"
+                : health.health === "close"
+                  ? "text-body-13 text-warning-700"
+                  : "text-body-13 text-02"
+            }
+          >
+            {headline}
+          </p>
           {status.required ? (
             <dl className="grid grid-cols-1 gap-2 rounded-lg border border-01 bg-02 px-3.5 py-3 text-body-xs text-02 tablet:grid-cols-2 tablet:gap-4">
               <div className="flex flex-col gap-0.5">
