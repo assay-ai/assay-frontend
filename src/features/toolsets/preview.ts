@@ -1,4 +1,4 @@
-import type { McpUrlPreview, ServerInUse } from "@/services/toolsets.service";
+import type { McpUrlPreview, NoFitReason, PreviewTool, ServerInUse } from "@/services/toolsets.service";
 
 /**
  * The Connect sheet's summary line and warnings (design spec §7.11), from
@@ -42,13 +42,58 @@ export function previewCounts(preview: Pick<McpUrlPreview, "tools" | "listedCoun
   };
 }
 
+/** Why a tool here cannot run for this agent. */
+export type CantRunReason = "blocked" | NoFitReason | "no-provider";
+
+/** One tool's reason, from the preview's own fields. Null when it can run. */
+export function cantRunReason(tool: PreviewTool): CantRunReason | null {
+  if (!tool.allowed) return "blocked";
+  if (tool.noProviderFits) return tool.noFitReason ?? "RULES";
+  return tool.listed ? null : "no-provider";
+}
+
+const REASON_ONE: Record<CantRunReason, string> = {
+  blocked: "blocked for this agent",
+  RULES: "no provider fits this agent's limits",
+  OTHER_CHAIN: "its providers don't take payment on your chain",
+  NOT_TAKING_CALLS: "its providers aren't taking calls now",
+  "no-provider": "no provider is taking calls for it now",
+};
+
+const REASON_MANY: Record<CantRunReason, (n: number) => string> = {
+  blocked: (n) => `${n} blocked for this agent`,
+  RULES: (n) => `${n} with no provider that fits its limits`,
+  OTHER_CHAIN: (n) => `${n} whose providers don't take payment on your chain`,
+  NOT_TAKING_CALLS: (n) => `${n} whose providers aren't taking calls now`,
+  "no-provider": (n) => `${n} with no provider taking calls`,
+};
+
+const REASON_ORDER: readonly CantRunReason[] = ["blocked", "RULES", "OTHER_CHAIN", "NOT_TAKING_CALLS", "no-provider"];
+
+/** The tools here that cannot run for this agent, each with its reason in words. */
+export function cantRunTools(preview: Pick<McpUrlPreview, "tools">): { toolId: string; name: string; reason: CantRunReason; text: string }[] {
+  return preview.tools.flatMap((tool) => {
+    const reason = cantRunReason(tool);
+    return reason ? [{ toolId: tool.toolId, name: tool.name, reason, text: REASON_ONE[reason] }] : [];
+  });
+}
+
+/** "2 blocked for this agent, 5 with no provider taking calls": the reasons, counted. */
+function reasonCounts(reasons: readonly CantRunReason[]): string {
+  return REASON_ORDER.filter((r) => reasons.includes(r))
+    .map((r) => REASON_MANY[r](reasons.filter((x) => x === r).length))
+    .join(", ");
+}
+
 /**
  * The one summary line, with the same counts the warnings use:
  *
  *   all fine     "Your agent will see 3 tools (~690 tokens)."
  *   otherwise    "3 tools here: 1 ready to use, 2 blocked for this agent (~230 tokens)."
- *   search mode  "4 tools (search) — about 0.9k tokens; 3 of 14 tools reachable, 11 blocked for this agent"
+ *   search mode  "Your agent can reach 1 of 8 tools (7 can't run: 7 with no provider taking calls) through search: 3 tools listed, about 0.4k tokens."
  *
+ * In search mode the tools listed are the search helpers and any pinned ones,
+ * not the tools reached, so the two counts are never put side by side bare.
  * While the preview loads the caller shows a skeleton or "~"; this is never
  * asked for a number it does not have, so it never says 0 for "not known yet".
  */
@@ -56,20 +101,23 @@ export function previewSummary(
   preview: Pick<McpUrlPreview, "tools" | "listedCount" | "estimatedTokens"> & Partial<Pick<McpUrlPreview, "discovery" | "reachableCount">>,
 ): string {
   const c = previewCounts(preview);
-  const blockedText = c.blocked > 0 ? `${c.blocked} blocked for this agent` : null;
   if (preview.discovery === "SEARCH") {
     const reachable = preview.reachableCount ?? c.usable;
-    const of = reachable < c.inView ? `${reachable} of ${tools(c.inView)} reachable` : `${tools(reachable)} reachable`;
-    return `${tools(preview.listedCount)} (search) — about ${aboutTokens(preview.estimatedTokens)} tokens; ${[of, blockedText].filter(Boolean).join(", ")}`;
+    const of = reachable < c.inView ? `${reachable} of ${tools(c.inView)}` : tools(reachable);
+    const cant = cantRunTools(preview).map((t) => t.reason);
+    const why = cant.length > 0 ? ` (${cant.length} can't run: ${reasonCounts(cant)})` : "";
+    return `Your agent can reach ${of}${why} through search: ${tools(preview.listedCount)} listed, about ${aboutTokens(preview.estimatedTokens)} tokens.`;
   }
+  const blockedText = c.blocked > 0 ? `${c.blocked} blocked for this agent` : null;
   const noFit = c.listed - c.usable;
   if (c.blocked === 0 && noFit === 0) {
     return c.listed === 0 ? "Your agent will see no tools here." : `Your agent will see ${tools(c.listed)} (${tokensText(preview.estimatedTokens)} tokens).`;
   }
+  const noFitReasons = preview.tools.filter((t) => t.listed && t.noProviderFits).map((t) => t.noFitReason ?? "RULES");
   const parts = [
     c.usable > 0 ? `${c.usable} ready to use` : "none ready to use",
     blockedText,
-    noFit > 0 ? `${noFit} with no provider that fits its limits` : null,
+    noFitReasons.length > 0 ? reasonCounts(noFitReasons) : null,
   ].filter(Boolean);
   const cost = c.listed > 0 ? ` (${tokensText(preview.estimatedTokens)} tokens)` : "";
   return `${tools(c.inView)} here: ${parts.join(", ")}${cost}.`;
@@ -126,12 +174,24 @@ export function previewWarnings(preview: McpUrlPreview): PreviewWarning[] {
       fix: allowFix,
     });
   }
-  const noFit = of("NO_PROVIDER_FITS").map((t) => t.name);
-  if (noFit.length > 0) {
+  const noFitTools = of("NO_PROVIDER_FITS");
+  const noFit = noFitTools.map((t) => t.name);
+  // One line per reason: only the agent's own limits are blamed on its limits (review F-P1).
+  const reasonOf = (toolId: string | null) => preview.tools.find((t) => t.toolId === toolId)?.noFitReason ?? "RULES";
+  for (const reason of ["RULES", "OTHER_CHAIN", "NOT_TAKING_CALLS"] as const) {
+    const these = noFitTools.filter((t) => reasonOf(t.toolId) === reason).map((t) => t.name);
+    if (these.length === 0) continue;
+    const it = these.length === 1 ? "it" : "they";
     out.push({
       code: "NO_PROVIDER_FITS",
       tone: "warning",
-      text: `No provider fits this agent's provider limits for ${names(noFit)}, so ${noFit.length === 1 ? "it" : "they"} can't run now.`,
+      text:
+        reason === "RULES"
+          ? `No provider fits this agent's provider limits for ${names(these)}, so ${it} can't run now.`
+          : reason === "OTHER_CHAIN"
+            ? `The providers left for ${names(these)} don't take payment on your chain, so ${it} can't run for this agent.`
+            : `The providers left for ${names(these)} aren't taking calls now, so ${it} can't run now.`,
+      // The rules narrowed it to these providers in every case, so changing them is the fix.
       fix: { kind: "open-access" },
     });
   }
