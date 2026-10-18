@@ -119,13 +119,15 @@ describe("StatementMoney — the money half (B7)", () => {
         chainName={null}
       />,
     );
-    expect(matched).toContain("Matches your escrow balance of $24.00 (plus $0.50 paid but still being settled on chain).");
+    expect(matched).toContain(
+      "Your escrow holds $24.00. $0.50 of it is already paid for calls and still being collected on chain, which leaves $23.50: this closing balance.",
+    );
     const off = renderToStaticMarkup(
       <StatementMoney
         balance={{ ...balance, check: { escrowBalance: m("23000000"), stillSettling: m("500000"), difference: m("-1000000"), matches: false, observedAt: "2026-10-19T12:00:00Z" } }}
         chainName={null}
       />,
     );
-    expect(off).toContain("$1.00 less than this closing balance");
+    expect(off).toContain("that is $22.50, $1.00 less than this closing balance");
   });
 });

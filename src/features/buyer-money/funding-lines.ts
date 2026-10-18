@@ -56,11 +56,23 @@ export function refundableSummary(calls: readonly Pick<ToolCall, "charged" | "re
   };
 }
 
-/** "$0.25 charged recently can still be reported for a full refund (3 calls)". */
-export function refundableLine(summary: RefundableSummary): string {
+/**
+ * "$0.26 charged recently (3 calls) is still covered: a report accepted for
+ * any of them is refunded in full." The refund always carries its condition,
+ * an accepted report (B7 review M1); `atLeast` when the list was cut short.
+ */
+export function refundableLine(summary: RefundableSummary, atLeast = false): string {
   const calls = summary.count === 1 ? "1 call" : `${summary.count} calls`;
-  return `${money(summary.total)} charged recently can still be reported for a full refund (${calls}).`;
+  const amount = `${atLeast ? "At least " : ""}${money(summary.total)}`;
+  return `${amount} charged recently (${calls}) is still covered: a report accepted for any of them is refunded in full.`;
 }
+
+/** The Calls row under Still refundable: "Refunded in full if you report it by <time> and the report is accepted". */
+export const REFUNDABLE_ROW = {
+  beforeTime: "Refunded in full if you report it by",
+  afterTime: "and the report is accepted",
+  noEnd: "Refunded in full if you report it and the report is accepted; the 1-hour hold starts when the payment is collected",
+} as const;
 
 /**
  * The finished withdrawals to list under Funding. A pending one is left out:
@@ -111,16 +123,29 @@ export function statementMoneyLines(balance: StatementBalance): StatementMoneyLi
 /**
  * The sentence under a statement's closing balance. Only for a month that has
  * not ended (the API checks it against the escrow then); a difference is
- * stated, never explained away.
+ * stated, never explained away. The API's rule is
+ * `difference = escrow − still settling − closing`, and the sentence walks
+ * the same arithmetic (B7 review M2): payments still being collected are in
+ * the escrow but already in Paid.
  */
 export function statementCheckSentence(balance: StatementBalance): string | null {
   const check = balance.check;
   if (!check) return null;
-  const settling = toDecimal(check.stillSettling).gt(0)
-    ? ` (plus ${money(check.stillSettling)} paid but still being settled on chain)`
-    : "";
-  if (check.matches) return `Matches your escrow balance of ${money(check.escrowBalance)}${settling}.`;
+  const escrow = toDecimal(check.escrowBalance);
+  const settling = toDecimal(check.stillSettling);
+  const scale = new Decimal(10).pow(check.escrowBalance.decimals);
+  const asMoney = (value: Decimal): Money => ({ ...check.escrowBalance, amount: value.mul(scale).toFixed(0) });
+  const net = escrow.minus(settling);
+  const holds = `Your escrow holds ${money(check.escrowBalance)}`;
+  if (check.matches) {
+    return settling.gt(0)
+      ? `${holds}. ${money(check.stillSettling)} of it is already paid for calls and still being collected on chain, which leaves ${money(asMoney(net))}: this closing balance.`
+      : `${holds}: this closing balance.`;
+  }
   const difference = toDecimal(check.difference);
-  const abs = { ...check.difference, amount: difference.abs().mul(new Decimal(10).pow(check.difference.decimals)).toFixed(0) };
-  return `Your escrow holds ${money(check.escrowBalance)}${settling}, ${money(abs)} ${difference.isNegative() ? "less" : "more"} than this closing balance. Activity outside these records (from before they began, or made outside Assay) can explain it.`;
+  const gap = `${money(asMoney(difference.abs()))} ${difference.isNegative() ? "less" : "more"} than this closing balance`;
+  const lead = settling.gt(0)
+    ? `${holds}; less ${money(check.stillSettling)} still being collected on chain, that is ${money(asMoney(net))}, ${gap}.`
+    : `${holds}, ${gap}.`;
+  return `${lead} Activity outside these records (from before they began, or made outside Assay) can explain it.`;
 }
