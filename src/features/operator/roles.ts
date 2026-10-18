@@ -6,6 +6,7 @@ import { APPROVER_ROLES } from "./approvals";
 import { ARBITER_BLOCK_ROLES, ARBITER_RULING_ROLES } from "./arbiter";
 import { BLOCK_ROLES } from "./blocks";
 import { ROLE_OPTIONS } from "./directory";
+import { mayDecideCallDisputes } from "./provider-tool-review";
 
 /**
  * Operator roles in plain words: what each one is called, the presets an
@@ -287,7 +288,7 @@ function serialList(items: readonly string[], joiner: "and" | "or"): string {
 
 /** Each action in the third person, for a role card. */
 const ACTION_DOES: Readonly<Record<ConsoleAction, string>> = {
-  rule: "rules on disputes",
+  rule: "prepares arbiter rulings on disputed penalties (the arbiter key signs)",
   suspend: "suspends penalties",
   block: "blocks accounts",
   blockOnChain: "blocks wallets on chain",
@@ -322,6 +323,9 @@ export function roleDescription(roles: readonly OperatorRole[]): string {
   const plain = allowed.filter((action) => !MONEY_ACTIONS.has(action)).map((action) => ACTION_DOES[action]);
   const money = allowed.filter((action) => MONEY_ACTIONS.has(action)).map((action) => ACTION_DOES[action]);
   const approves = [...new Set(APPROVES.filter((row) => holds(roles, row.roles)).map((row) => APPROVAL_SHORT[row.code] ?? row.what))];
+  // Buyer call disputes are decided here, by an operator; penalty disputes are
+  // ruled by the arbiter key ("rule" above): two different "disputes".
+  if (mayDecideCallDisputes(roles)) plain.unshift("decides buyer call disputes (large refunds need a second operator)");
   const parts = [
     ...(plain.length > 0 ? [sentence(listPhrase(plain))] : []),
     ...(money.length > 0 ? [sentence(`${listPhrase(money)} up to its limit (none at $0)`)] : []),
@@ -340,10 +344,10 @@ export function roleDescription(roles: readonly OperatorRole[]): string {
 export const ROLE_PRESETS: readonly RolePreset[] = Object.freeze(
   (
     [
-      { id: "lead", label: "Lead adjudicator", short: "Rules disputes, blocks accounts, approves lifts", roles: ["ADJL"] },
-      { id: "adjudicator", label: "Adjudicator", short: "Suspends penalties, approves suspensions", roles: ["ADJ"] },
+      { id: "lead", label: "Lead adjudicator", short: "Decides call disputes, prepares arbiter rulings, blocks accounts", roles: ["ADJL"] },
+      { id: "adjudicator", label: "Adjudicator", short: "Decides buyer call disputes; suspends penalties", roles: ["ADJ"] },
       { id: "support", label: "Support / on-call", short: "Blocks accounts; suspends penalties within a limit", roles: ["SRE", "SUP"] },
-      { id: "treasury", label: "Treasury", short: "Rules disputes, compensates providers", roles: ["TRE"] },
+      { id: "treasury", label: "Treasury", short: "Prepares arbiter rulings (arbiter key signs); compensates providers", roles: ["TRE"] },
       { id: "admin", label: "Admin", short: "Adds and changes who is on the team", roles: ["OPS_ADMIN"] },
     ] as const
   ).map((preset) => ({ ...preset, roles: [...preset.roles] as OperatorRole[], description: roleDescription([...preset.roles]) })),

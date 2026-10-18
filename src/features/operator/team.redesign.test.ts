@@ -96,3 +96,20 @@ describe("round 4: Team counts, limits and names", () => {
     expect(approverPhrase("X-99", ["ADJ"])).toBe("a second operator");
   });
 });
+
+describe("role presets say which dispute each one decides (B12)", () => {
+  it("Adjudicators decide buyer call disputes; Treasury prepares arbiter rulings the arbiter key signs", () => {
+    const by = (id: string) => ROLE_PRESETS.find((p) => p.id === id)!;
+    expect(by("adjudicator").short).toMatch(/^Decides buyer call disputes/);
+    expect(by("treasury").short).toMatch(/^Prepares arbiter rulings \(arbiter key signs\)/);
+    expect(by("treasury").short).not.toMatch(/call disputes/i);
+    expect(by("lead").short).toMatch(/call disputes.*arbiter rulings/);
+    for (const preset of ROLE_PRESETS) {
+      expect(preset.short).not.toMatch(/rules disputes/i);
+      if (/call disputes/i.test(preset.short)) expect(preset.description).toMatch(/decides buyer call disputes/i);
+      if (/arbiter rulings/i.test(preset.short)) expect(capabilitiesFor(preset.roles).rule).toBe(true);
+    }
+    expect(by("treasury").description).toMatch(/prepares arbiter rulings on disputed penalties \(the arbiter key signs\)/i);
+    expect(by("treasury").description).not.toMatch(/call disputes/i);
+  });
+});

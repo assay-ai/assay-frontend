@@ -245,7 +245,12 @@ function TeamScreen() {
                   </span>
                   <span className="hidden text-right text-body-13 tabular-nums text-02 tablet:block">{limitCell(row)}</span>
                   <span className="flex min-w-0 items-center gap-2 text-body-xs text-03">
-                    {row.walletAddress ? <CopyChip value={toChecksumAddress(row.walletAddress)} label="wallet address" /> : <span>No wallet</span>}
+                    {row.walletAddress ? (
+                      <CopyChip value={toChecksumAddress(row.walletAddress)} label="wallet address" />
+                    ) : (
+                      // Sign-in is by wallet: without one this person cannot sign in, Active or not.
+                      <span className="rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">Can&apos;t sign in: no wallet</span>
+                    )}
                     <span className="tablet:hidden">· {row.lastSeenAt ? <>last seen <UtcTime value={row.lastSeenAt} /></> : "never signed in"}</span>
                   </span>
                   <span className="hidden text-body-13 text-02 tablet:block">
@@ -493,7 +498,7 @@ function LimitField({
         value={choice}
         onChange={onChange}
         error={error ?? undefined}
-        hint="Penalties and compensations above it need someone with a higher limit."
+        hint="Penalties and compensations above it need someone with a higher limit. At $0 they can do everything else their role allows, but can't suspend a penalty or compensate a provider of any size, nor approve one."
       />
     </div>
   );
@@ -597,7 +602,8 @@ function AddSheet({
   const [handle, setHandle] = React.useState<string | null>(null);
   const [wallet, setWallet] = React.useState("");
   const [roles, setRoles] = React.useState<OperatorRole[]>([]);
-  const limit = useLimit("0");
+  // No limit is preselected (D25): the admin picks one, knowing what $0 means.
+  const limit = useLimit("");
   const [reason, setReason] = React.useState("");
   const [note, setNote] = React.useState("");
   const { errors, setErrors, clear } = useFieldErrors();
@@ -623,7 +629,7 @@ function AddSheet({
       setHandle(null);
       setWallet("");
       setRoles([]);
-      limit.setChoice("0");
+      limit.setChoice("");
       setReason("");
       setNote("");
       setErrors({});
