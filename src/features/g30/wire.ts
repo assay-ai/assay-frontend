@@ -105,6 +105,10 @@ export interface Receipt {
   holdReleasedAt?: string | null;
   evaluatedAt?: string | null;
   settledAt?: string | null;
+  /** When the payment may be collected (the dispute hold ends). Null when the call has no hold. */
+  collectableAt?: string | null;
+  /** Report before this and an upheld dispute refunds the call in full; after it, a quality signal. */
+  disputeWindowEndsAt?: string | null;
 }
 
 /* ------------------------------------------------------------------- summary */

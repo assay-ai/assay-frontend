@@ -60,6 +60,12 @@ export interface PublicTool extends CatalogueToolVersionFields {
    * the screens then fall back to the smallest per-listing figure.
    */
   freeCallsPerDay?: number | null;
+  /** STANDARD: backed by several providers. PROVIDER: one maker's own API (`{handle}__{tool}`). */
+  kind?: "STANDARD" | "PROVIDER" | string;
+  /** The maker's public name, on a PROVIDER tool. */
+  handle?: string | null;
+  /** A provider tool no operator approved. The catalogue lists reviewed tools only, so normally false. */
+  notReviewed?: boolean;
 }
 
 export interface PublicProvider {

@@ -103,6 +103,8 @@ export function notificationHref(item: Pick<NotificationItem, "subjectType" | "s
       return { href: "/provider/policy-changes", label: "Review the change" };
     case "tool_request":
       return { href: routes.toolRequest(id), label: "Open the request" };
+    case "call_dispute":
+      return { href: routes.providerCallDispute(id), label: "Reply to the report" };
     default:
       return null;
   }

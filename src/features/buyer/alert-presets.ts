@@ -30,7 +30,7 @@ export function availableChannels(raw: string | undefined = process.env.NEXT_PUB
 }
 
 export interface AlertPreset {
-  id: "money-security" | "spend" | "toolsets" | "summary";
+  id: "money-security" | "spend" | "toolsets" | "disputes" | "summary";
   title: string;
   description: string;
   events: readonly NotificationEvent[];
@@ -70,6 +70,13 @@ export const ALERT_PRESETS: readonly AlertPreset[] = [
     title: "Tool set and tool updates",
     description: "A tool set your agents use has a new version, or a version of a tool they use is going away, with what to do.",
     events: ["toolset.update_available", "tool_version.deprecated", "tool_version.retired"],
+    alwaysOn: false,
+  },
+  {
+    id: "disputes",
+    title: "Reports about bad results",
+    description: "The provider replied to a call you reported, the report was decided, or the call was refunded.",
+    events: ["call_dispute.responded", "call_dispute.decided", "call_dispute.refunded"],
     alwaysOn: false,
   },
   {

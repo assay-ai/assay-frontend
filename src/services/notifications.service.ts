@@ -72,6 +72,10 @@ export type NotificationEvent =
   | "toolset.update_available"
   | "tool_version.deprecated"
   | "tool_version.retired"
+  | "call_dispute.opened"
+  | "call_dispute.responded"
+  | "call_dispute.decided"
+  | "call_dispute.refunded"
   | "digest.daily";
 
 /** `NotificationChannelDto`. One row per channel the organization has ever configured. */

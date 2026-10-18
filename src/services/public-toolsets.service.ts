@@ -118,13 +118,34 @@ export interface PublicToolsetVersionDetail extends PublicToolsetVersion {
   diff: PublicToolsetDiff | null;
 }
 
+/** One LISTED provider tool of a public name (`PublicHandleToolDto`). */
+export interface PublicHandleTool {
+  id: string;
+  /** `{handle}__{tool}`. */
+  name: string;
+  /** The 200-character summary an agent reads in tools/list. */
+  summary: string;
+  category: string;
+  tags: string[];
+  /** Never GUARANTEED for a provider tool. */
+  tier: "UNVERIFIED" | "VERIFIED" | string;
+  version: string | null;
+  kind: "PROVIDER" | string;
+  /** Always true on this page: only reviewed (LISTED) tools are shown. */
+  reviewed: boolean;
+  /** The standard tool it points to, once promoted. */
+  replacementName: string | null;
+}
+
 export interface PublicHandleProfile {
   handle: string;
   /** Set when the name asked for is an old one. */
   renamedTo: string | null;
   toolsets: PublicToolsetCard[];
-  /** Provider tools (`{handle}__{tool}`); arrive with provider tools. */
-  tools: string[];
+  /** Every LISTED provider tool of this public name. */
+  tools: PublicHandleTool[];
+  /** `/@{handle}` on the MCP host: serves every tool above; null when there is none. */
+  mcpUrl?: string | null;
 }
 
 export interface PublicCategory {
