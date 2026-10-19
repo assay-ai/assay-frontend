@@ -39,7 +39,7 @@ empty or failed reads from built-in fixtures.
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 22 or newer (`check:headers` needs it)
 - pnpm 10 (the version is pinned in `package.json` → `packageManager`). With
   Corepack: `corepack enable`. Without it: `npx -y pnpm@10 <command>`.
 - A [Privy](https://www.privy.io) app id for sign-in (any 25-character
@@ -75,6 +75,8 @@ changing them. See `.env.local.example` for the full list and comments.
 | `NEXT_PUBLIC_BASE_URL`     | yes      | Absolute URL this app is served from            |
 | `NEXT_PUBLIC_API_BASE_URL` | yes      | Backend API base URL                            |
 | `NEXT_PUBLIC_PRIVY_APP_ID` | yes      | Privy app id (must be 25 characters)            |
+| `NEXT_PUBLIC_MCP_URL`      | yes      | Public URL of the MCP host, e.g. `https://mcp.assay.ai/`; without it the Connect page shows no command |
+| `NEXT_PUBLIC_ASSAY_MCP_VERSION` | yes | Exact `@assay-ai/mcp` version every install command pins (no range, no tag); the build fails without it |
 | `NEXT_PUBLIC_DEMO_CHAINS`  | no       | `robinhood` enables demo fixture data (never on a live deployment) |
 
 ## Scripts
@@ -99,6 +101,8 @@ docker build \
   --build-arg NEXT_PUBLIC_BASE_URL=https://app.example.com \
   --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com/api/v1 \
   --build-arg NEXT_PUBLIC_PRIVY_APP_ID=<your-privy-app-id> \
+  --build-arg NEXT_PUBLIC_ASSAY_MCP_VERSION=<exact-version> \
+  --build-arg NEXT_PUBLIC_MCP_URL=<mcp-host-url> \
   -t assay-frontend .
 docker run -p 3000:3000 assay-frontend
 ```

@@ -126,7 +126,7 @@ describe("defaultServerName — assay, or assay-{slug} (spec 8.3.1)", () => {
     expect(defaultServerName({ kind: "toolset", slug: "crypto-research-kit" }, 20)).toBe("assay-crypto-research-kit");
     expect(defaultServerName({ kind: "topic", category: "weather" }, 20)).toBe("assay-weather");
     expect(defaultServerName({ kind: "shared", handle: "marketkit", slug: "crypto-research", version: 2 }, 20)).toBe("assay-crypto-research");
-    expect(defaultServerName({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz" }, 20)).toBe("assay-shared");
+    expect(defaultServerName({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz" }, 20)).toBe("assay");
     expect(defaultServerName({ kind: "tools", tools: ["get_weather"] }, 20)).toBe("assay-weather");
     expect(defaultServerName({ kind: "tools", tools: ["a_b", "c_d"] }, 20)).toBe("assay-tools");
     expect(defaultServerName({ kind: "url", url: "https://mcp.example.com/@acme/twitter-kit@3" }, 20)).toBe("assay-twitter-kit");
@@ -259,6 +259,10 @@ describe("one naming convention for tools, unique server names", () => {
     expect(toolDisplay({ name: "Market quote", toolId: "market-quote" })).toEqual({ name: "market-quote", title: "Market quote" });
   });
 
+  it("throws, like the proxy, when no unique name fits", () => {
+    expect(() => uniqueServerName("aaa", ["aaa"], 58)).toThrow(/no free server name/);
+  });
+
   it("never suggests a server name another server of the agent uses", () => {
     expect(uniqueServerName("weather", ["research"])).toBe("weather");
     expect(uniqueServerName("weather", ["weather", null])).toBe("weather-2");
@@ -329,7 +333,7 @@ describe("T2 forms: topics, shared sets, links, version locks", () => {
   it("names their servers and their web pages; the link token stays in the fragment", () => {
     expect(defaultServerName({ kind: "topic", category: "weather" }, 20)).toBe("assay-weather");
     expect(defaultServerName({ kind: "shared", handle: "marketkit", slug: "crypto-research", version: 2 }, 20)).toBe("assay-crypto-research");
-    expect(defaultServerName({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz" }, 20)).toBe("assay-shared");
+    expect(defaultServerName({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz" }, 20)).toBe("assay");
     expect(webPageOf({ kind: "shared", handle: "acme", slug: "kit", version: 3 })).toBe("/toolsets/view?handle=acme&slug=kit&v=3");
     expect(webPageOf({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz", version: 2 })).toBe("/toolsets/view#token=h3j8d2k9s6a1f4g7l0q5wz&v=2");
     expect(webPageOf({ kind: "maker", handle: "acme" })).toBe("/toolsets/handle?handle=acme");

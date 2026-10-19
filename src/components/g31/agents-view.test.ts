@@ -106,8 +106,16 @@ describe("Agents & keys rows (spec §9.2)", () => {
   it("reads the on-chain state from the chain list, never from the credential", () => {
     // Bound on the credential, but nothing authorised on chain.
     expect(view(key({ delegateAccount: DELEGATE }), []).paymentLine).toBe(
-      "Payment key B447 D10C · not turned on — free tools only",
+      "Payment key B447 D10C · not turned on, or stopped — free tools only",
     );
+    // A revoked row's key can only have been stopped (or never on): it reads "stopped".
+    expect(view(key({ delegateAccount: DELEGATE, revokedAt: "2026-10-10T00:00:00.000Z" }), []).paymentLine).toBe("Payment key B447 D10C · stopped — free tools only");
+    // A non-EVM account never reads the chain: paid calls are on EVM only, not "could not be read".
+    const solana = view(key({ delegateAccount: DELEGATE }), undefined, { delegatesUnreadable: true, evmAccount: false });
+    expect(solana.paymentLine).toBe("Payment key B447 D10C · paid calls are on EVM chains only — free tools only");
+    expect(solana.paymentLine).not.toMatch(/couldn't check|may still be active/);
+    expect(solana.keyState).toBe("none");
+    expect(solana.mayBeActive).toBe(false);
     expect(view(key({ delegateAccount: DELEGATE }), [grant({ status: "EXPIRED", validUntil: "2026-10-01T00:00:00.000Z" })]).paymentLine).toBe(
       "Payment key B447 D10C · expired Oct 1 — free tools only",
     );

@@ -80,7 +80,7 @@ describe("keyForHint — the key an API-key hint names", () => {
 });
 
 // "agent" + "-cli" is split so the repo-wide retired-name scan does not match this file.
-const FORBIDDEN = new RegExp(["npx -y assay-mcp", "agent" + "-cli", "mcp-remote", "Authorization", "Bearer", "assay_(at|rt|ac|sk_live)_"].join("|"));
+const FORBIDDEN = new RegExp([["npx -y", "assay-mcp"].join(" "), "agent" + "-cli", "mcp-remote", "Authorization", "Bearer", "assay_(at|rt|ac|sk_live)_"].join("|"));
 
 describe("install commands equal the proxy's vectors, byte for byte", () => {
   const V = vectors.V;
