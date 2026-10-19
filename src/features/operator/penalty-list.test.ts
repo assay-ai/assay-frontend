@@ -37,7 +37,7 @@ describe("the row's next step", () => {
   it("a penalty not on chain past its computed date says so", () => {
     expect(penaltyNext(row({}), NOW)).toEqual({
       kind: "text",
-      text: "Not on chain after 5 days · suspend it if it should not stand",
+      text: "Not on chain after 5 days",
       until: null,
       urgent: true,
     });

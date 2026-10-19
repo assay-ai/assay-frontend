@@ -69,8 +69,6 @@ export function roleTitle(roles: readonly OperatorRole[]): string {
 
 /** What approving each register code means, in words. The roles come from `APPROVER_ROLES`. */
 export const APPROVAL_WHAT: Readonly<Record<string, string>> = Object.freeze({
-  "S-1": "suspensions of upheld penalties",
-  "S-11": "bulk decisions",
   "S-5": "provider compensations",
   "S-16": "records of executions made while a cancel waited",
   "S-17": "re-proposals of upheld penalties",
@@ -89,7 +87,6 @@ const APPROVES = Object.entries(APPROVER_ROLES).map(([code, roles]) => ({
   what: APPROVAL_WHAT[code] ?? code,
 }));
 
-const SUSPEND_ROLES: readonly OperatorRole[] = ["ADJ", "ADJL", "SRE"];
 const COMPENSATE_ROLES: readonly OperatorRole[] = ["ADJL", "TRE"];
 const ADMIN_ROLES: readonly OperatorRole[] = ["OPS_ADMIN"];
 
@@ -98,12 +95,12 @@ function holds(roles: readonly OperatorRole[], allowed: readonly OperatorRole[])
 }
 
 /**
- * Whether these roles can take any action on money (suspend, compensate) —
- * the only ones an authority limit applies to. Team shows "—" as the limit
- * of everyone else: an admin's "$0 limit" says nothing.
+ * Whether these roles can take any action on money (compensate, uphold a
+ * call-dispute refund) — the only ones an authority limit applies to. Team
+ * shows "—" as the limit of everyone else: an admin's "$0 limit" says nothing.
  */
 export function actsOnMoney(roles: readonly OperatorRole[]): boolean {
-  return holds(roles, SUSPEND_ROLES) || holds(roles, COMPENSATE_ROLES);
+  return [...MONEY_ACTIONS].some((action) => holds(roles, ACTION_ROLES[action]));
 }
 
 // ── One capability check for every screen ───────────────────────────────────
@@ -113,14 +110,13 @@ export function actsOnMoney(roles: readonly OperatorRole[]): boolean {
  * screen and the "Why you can't, and who can" lines all read `checkAction`,
  * so the banner can never promise an action a screen then hides.
  */
-export type ConsoleAction = "rule" | "suspend" | "block" | "blockOnChain" | "compensate" | "manageTeam" | "upholdRefund";
+export type ConsoleAction = "rule" | "block" | "blockOnChain" | "compensate" | "manageTeam" | "upholdRefund";
 
 /** Who decides buyer call disputes (S-14); upholding one refunds the buyer, under the authority limit. */
 const CALL_DISPUTE_ROLES: readonly OperatorRole[] = ["ADJ", "ADJL"];
 
 const ACTION_ROLES: Readonly<Record<ConsoleAction, readonly OperatorRole[]>> = {
   rule: ARBITER_RULING_ROLES,
-  suspend: SUSPEND_ROLES,
   block: BLOCK_ROLES,
   blockOnChain: ARBITER_BLOCK_ROLES,
   compensate: COMPENSATE_ROLES,
@@ -128,10 +124,9 @@ const ACTION_ROLES: Readonly<Record<ConsoleAction, readonly OperatorRole[]>> = {
   upholdRefund: CALL_DISPUTE_ROLES,
 };
 
-/** What the action is, as a verb phrase: "suspend a penalty". */
+/** What the action is, as a verb phrase: "block an account". */
 export const ACTION_WHAT: Readonly<Record<ConsoleAction, string>> = {
   rule: "rule on disputed penalties",
-  suspend: "suspend a penalty",
   block: "block an account",
   blockOnChain: "block a wallet on chain",
   compensate: "compensate a provider",
@@ -142,7 +137,6 @@ export const ACTION_WHAT: Readonly<Record<ConsoleAction, string>> = {
 /** The action as a subject, for the one-line why-not: "Blocking accounts needs …". */
 export const ACTION_DOING: Readonly<Record<ConsoleAction, string>> = {
   rule: "Ruling on disputes",
-  suspend: "Suspending a penalty",
   block: "Blocking accounts",
   blockOnChain: "Blocking a wallet on chain",
   compensate: "Compensating a provider",
@@ -152,10 +146,10 @@ export const ACTION_DOING: Readonly<Record<ConsoleAction, string>> = {
 
 /**
  * Actions on money: the authority limit applies (the backend refuses above it,
- * for the actor and for the approver): S-1 suspend, S-5 compensate, S-14
+ * for the actor and for the approver): S-5 compensate, S-14
  * upholding a buyer's call dispute (its refund).
  */
-export const MONEY_ACTIONS: ReadonlySet<ConsoleAction> = new Set(["suspend", "compensate", "upholdRefund"]);
+export const MONEY_ACTIONS: ReadonlySet<ConsoleAction> = new Set(["compensate", "upholdRefund"]);
 
 /** The limit field's hint on Team: what it bounds, and what $0 means for these roles (D25). */
 export function limitHint(roles: readonly OperatorRole[]): string {
@@ -240,7 +234,7 @@ export function whoCan(
 export interface Capabilities {
   /** Register codes this operator may approve. */
   approveCodes: string[];
-  /** "lifting account blocks, suspensions of upheld penalties" */
+  /** "lifting account blocks, provider compensations" */
   approves: string[];
   /** Other things they may start, in words — only what `checkAction` allows. */
   can: string[];
@@ -250,7 +244,7 @@ export interface Capabilities {
   manageOperators: boolean;
 }
 
-const BANNER_ACTIONS: readonly ConsoleAction[] = ["rule", "suspend", "block", "compensate", "manageTeam"];
+const BANNER_ACTIONS: readonly ConsoleAction[] = ["rule", "block", "compensate", "manageTeam"];
 
 /**
  * What a set of roles (and, when given, an authority limit) lets someone do.
@@ -316,7 +310,6 @@ function serialList(items: readonly string[], joiner: "and" | "or"): string {
 /** Each action in the third person, for a role card. */
 const ACTION_DOES: Readonly<Record<ConsoleAction, string>> = {
   rule: "prepares arbiter rulings on disputed penalties (the arbiter key signs)",
-  suspend: "suspends penalties",
   block: "blocks accounts",
   blockOnChain: "blocks wallets on chain",
   compensate: "compensates providers",
@@ -326,8 +319,6 @@ const ACTION_DOES: Readonly<Record<ConsoleAction, string>> = {
 
 /** The approvals, short, for a role card. */
 const APPROVAL_SHORT: Readonly<Record<string, string>> = {
-  "S-1": "suspensions",
-  "S-11": "bulk decisions",
   "S-5": "compensations",
   "S-16": "execution records",
   "S-17": "re-proposals",
@@ -343,7 +334,7 @@ function sentence(text: string): string {
 }
 
 /**
- * A role set in a few short sentences — "Blocks accounts. Suspends penalties
+ * A role set in a few short sentences — "Blocks accounts. Compensates providers
  * up to its limit (none at $0)." — from the same role tables `checkAction` reads
  * and the approver table. The limit is picked separately, so actions on money
  * say "up to its limit (none at $0)", as the Home banner then says. Pure.
@@ -375,8 +366,8 @@ export const ROLE_PRESETS: readonly RolePreset[] = Object.freeze(
   (
     [
       { id: "lead", label: "Lead adjudicator", short: "Decides buyer call disputes, prepares arbiter rulings", roles: ["ADJL"] },
-      { id: "adjudicator", label: "Adjudicator", short: "Decides buyer call disputes; suspends penalties", roles: ["ADJ"] },
-      { id: "support", label: "Support / on-call", short: "Blocks accounts; suspends penalties within a limit", roles: ["SRE", "SUP"] },
+      { id: "adjudicator", label: "Adjudicator", short: "Decides buyer call disputes", roles: ["ADJ"] },
+      { id: "support", label: "Support / on-call", short: "Blocks accounts in an incident", roles: ["SRE", "SUP"] },
       { id: "treasury", label: "Treasury", short: "Prepares arbiter rulings (arbiter key signs); compensates providers", roles: ["TRE"] },
       { id: "admin", label: "Admin", short: "Adds and changes who is on the team", roles: ["OPS_ADMIN"] },
     ] as const

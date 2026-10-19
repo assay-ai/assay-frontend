@@ -1,10 +1,6 @@
 import { stampUtc } from "@/features/g34a/stats";
-import type { Money } from "@/interfaces/api";
 import type { OperatorRole, SlashProposalStatus } from "@/interfaces/operator";
 import { cancelSignerOf } from "@/libs/chains/status-labels";
-import { formatMoney } from "@/utils/money";
-
-import { SWEEPABLE_OUTCOMES } from "./reason-codes";
 
 /**
  * Status narrowing, status → badge, and roles → what the console offers.
@@ -49,11 +45,9 @@ export function asProposalStatus(status: string): SlashProposalStatus | null {
  *
  * Read off `GET /operator/me` rather than assumed, so the console never offers
  * an action the guard will refuse. Mirrors the `@RequireRoles` decorators on
- * the backend's operator cases controller; `suspend` really does include `SRE`.
+ * the backend's operator cases controller.
  */
 const ACTION_ROLES = {
-  suspend: ["ADJ", "ADJL", "SRE"],
-  sweep: ["ADJL"],
   /*
     `compensate` inherits `reverse`'s roles unchanged — the act it replaces is
     the same act, and `TRE` is here because the treasury is the account that
@@ -88,11 +82,10 @@ export function may(roles: readonly OperatorRole[], action: OperatorAction): boo
  * `cancel` is not here: it is gated on the on-chain record, see
  * {@link isCancelRequested}.
  */
-export type StatusGatedAction = Exclude<OperatorAction, "sweep" | "cancel" | "closeCancel" | "recordExecution" | "repropose">;
+export type StatusGatedAction = Exclude<OperatorAction, "cancel" | "closeCancel" | "recordExecution" | "repropose">;
 /* The B18 actions are gated on the brief's live chain read (`manualActions`), never on the status alone. */
 
 const ACTION_STATUSES: Record<StatusGatedAction, readonly SlashProposalStatus[]> = {
-  suspend: ["PROPOSED", "UPHELD"],
   compensate: ["EXECUTED"],
 };
 
@@ -203,69 +196,6 @@ export function cancelDeadlineNotice(
 }
 
 /**
- * What a successful Suspend tells the operator about the chain.
- *
- * `chainStatus` is the on-chain record's status **before** the suspension. The
- * backend closes the case and then requests the cancel of a standing record
- * (`PENDING` → `CANCEL_REQUESTED`); it signs nothing, so the suspension is not
- * finished until the cancel's signer has signed: the arbiter on EVM, the
- * program admin on Solana (`cancelSignerOf`).
- */
-export function suspendedNotice(chainStatus: string | null | undefined, chain?: string | null): string {
-  const signer = cancelSignerOf(chain);
-  switch (chainStatus) {
-    case "PENDING":
-    case "CANCEL_REQUESTED":
-      return (
-        "Proposal suspended. The on-chain cancel has been requested and still needs "
-        + `${signer}'s signature.`
-      );
-    case "PROPOSING":
-      return (
-        "Proposal suspended. A proposal was being written on chain; its cancel is requested when "
-        + `it lands and will need ${signer}'s signature.`
-      );
-    case "NONE":
-    case "REFUSED":
-    case "CANCELLED":
-      return "Proposal suspended. Nothing stands on chain for it, so there is nothing to cancel.";
-    default:
-      return (
-        "Proposal suspended. If a record stands on chain, its cancel has been requested and "
-        + `still needs ${signer}'s signature.`
-      );
-  }
-}
-
-/**
- * Whether a Suspend is two-person. From `UPHELD` the penalty has been
- * confirmed, so the backend raises `S-1` to two-person and answers
- * `202 { approvalId }`; from `PROPOSED` one operator suspends alone.
- */
-export function suspendIsTwoPerson(status: SlashProposalStatus): boolean {
-  return status === "UPHELD";
-}
-
-/**
- * `sweep` is the one action gated on the **outcome**, not the status.
- *
- * The backend's `openSweep` checks only
- * `OUTCOME_CONSEQUENCE[source.outcome].opensFleetSweep` and never looks at the
- * status. Gating it by status would be wrong in both directions:
- *
- *  - it would **offer `AWAITING_SECOND`**, where the proposal's `outcome` is
- *    still null — `decide` keeps the decision on the dispute until the second
- *    signature lands — so `openSweep` refuses there;
- *  - it would **offer `UPHELD`**, which is only ever produced by the two
- *    upholding outcomes, both of which have `opensFleetSweep: false`. The
- *    button would render and 422 every time.
- */
-export function isSweepable(outcome: string | null): boolean {
-  return outcome !== null
-    && (SWEEPABLE_OUTCOMES as readonly string[]).includes(outcome);
-}
-
-/**
  * The case actions that are two-person on the backend: answered
  * `202 { approvalId }` and run once a second operator approves them in the
  * approvals inbox. For `compensate` only the record half (`compensated`,
@@ -273,37 +203,7 @@ export function isSweepable(outcome: string | null): boolean {
  * change nothing.
  */
 export const TWO_PERSON_ACTIONS: readonly OperatorAction[] = Object.freeze([
-  "sweep",
   "compensate",
   "recordExecution",
   "repropose",
 ]);
-
-/**
- * Whether an action on `amountMinor` is above the operator's authority limit.
- *
- * `GET /operator/me` returns the limit and the backend refuses a `decide`,
- * `second` or `suspend` whose amount is above it with
- * `OPERATOR_AUTHORITY_EXCEEDED` — strictly above, so an amount equal to the
- * limit is allowed, and a null limit is unbounded. Compared as `BigInt` in
- * minor units, the way the backend compares it.
- *
- * An amount this cannot read is not blocked here: the backend still decides,
- * and a screen that guessed would withhold an action it had no grounds to.
- */
-export function exceedsAuthority(limit: Money | null, amountMinor: string): boolean {
-  if (limit === null) return false;
-  if (!/^\d+$/.test(limit.amount) || !/^\d+$/.test(amountMinor)) return false;
-  return BigInt(amountMinor) > BigInt(limit.amount);
-}
-
-/** Why an action above the authority limit is withheld — in money, not minor units. */
-export function authorityRefusal(limit: Money, amount: Money): string {
-  return `the penalty is ${formatMoney(amount)} and your authority limit is ${formatMoney(limit)}`;
-}
-
-/**
- * A recalculated penalty: minor units, digits only, positive, no leading zero.
- * The same pattern the backend's `DecideCaseBodyDto` enforces.
- */
-export const RECALCULATED_AMOUNT_PATTERN = /^[1-9]\d{0,39}$/;

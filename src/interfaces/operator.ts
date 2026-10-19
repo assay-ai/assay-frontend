@@ -106,7 +106,7 @@ export interface ApprovalQueued {
 /** `OperatorApprovalDto` — one row of `GET /operator/approvals`. */
 export interface OperatorApproval {
   id: string;
-  /** e.g. `slash.suspend`, `account.unblock`, `operator.add`. */
+  /** e.g. `slash.compensated`, `account.unblock`, `operator.add`. */
   action: string;
   /** The register row the action writes, e.g. `A-10`. */
   code: string;
@@ -270,54 +270,11 @@ export interface ListOperatorCasesQuery {
   limit?: number;
 }
 
-/**
- * The provider's objection, as the brief carries it.
- *
- * **This is the raw `DisputeEntity`, not a DTO** — `brief()` returns
- * `findOneBy()` unmapped. A different shape from the `Dispute` interface in
- * `provider-disputes.ts`, which models the `/disputes` DTO. Do not conflate.
- */
-export interface OperatorDisputeRecord {
-  id: string;
-  organizationId: string;
-  subjectType: string;
-  subjectId: string;
-  providerId: string | null;
-  state: string;
-  claimType: string;
-  reason: string;
-  evidence: unknown[];
-  openedBy: string;
-  acknowledgedAt: string | null;
-  deadlineAt: string | null;
-  resolvedAt: string | null;
-  resolvedBy: string | null;
-  resolutionNote: string | null;
-  restoredAmount: string | null;
-  assetId: string | null;
-  decimals: number | null;
-  assignedOperatorId: string | null;
-  assignedAt: string | null;
-  /** Our own decision deadline. */
-  platformDueAt: string | null;
-  outcome: string | null;
-  reasonCodes: string[];
-  rubricVersion: string | null;
-  resolutionKind: string | null;
-  secondedByOperatorId: string | null;
-  secondedAt: string | null;
-  secondKind: string | null;
-  secondNote: string | null;
-}
-
 /** `GET /operator/cases/:proposalId` — the full operator case brief. */
 export interface OperatorCaseBrief {
   case: SlashProposalCaseDetail;
-  dispute: OperatorDisputeRecord | null;
   timeline: SlashProposalEvent[];
   restoration: SlashRestorationRow[];
-  /** True exactly when the proposal is `AWAITING_SECOND`. */
-  requiresSecondSignature: boolean;
   /**
    * The on-chain record's status (`slash_proposals.chain_status`), read-only.
    * Not the case status: an overturned case waiting for the settlement admin's
@@ -391,8 +348,13 @@ export interface OperatorCaseManualActions {
   repropose: ManualActionOption;
 }
 
-/** The body of a B18 action: the same reason and note as a suspension. */
-export type ManualCaseActionBody = SuspendProposalBody;
+/** The body of a B18 action (`ManualCaseActionBodyDto`). */
+export interface ManualCaseActionBody {
+  /** At least 20 characters. */
+  note: string;
+  reasonCode: string;
+  ticketRef?: string;
+}
 
 /** What a B18 action answers once it ran (200). */
 export interface ManualCaseActionResult {
@@ -402,38 +364,6 @@ export interface ManualCaseActionResult {
   chainEpoch: number;
   /** A repeat of an action that already ran (a double submit): nothing more was written. */
   alreadyDone?: boolean;
-}
-
-/** `POST /operator/cases/:id/suspend`. */
-export interface SuspendProposalBody {
-  /** At least 20 characters. */
-  note: string;
-  reasonCode: string;
-  ticketRef?: string;
-}
-
-/** `POST /operator/cases/:id/sweep`. Two-person. */
-export interface OpenFleetSweepBody {
-  defectKey: string;
-  /** 1 to 2160. */
-  lookbackHours: number;
-  /** At least 120 characters. */
-  note: string;
-  reasonCode: string;
-}
-
-export interface FleetSweep {
-  id: string;
-  outcome: ArbitrationOutcome;
-  defectKey: string;
-  windowFrom: string;
-  windowTo: string;
-  status: "OPEN" | "COMPLETED" | "FAILED";
-  matchedCount: number;
-  /** Lower than `matchedCount` when a match was already decided the same way. */
-  appliedCount: number;
-  openedBySubject: string;
-  completedAt: string | null;
 }
 
 // ── The two transactions an operator gets built but cannot sign ────────────
