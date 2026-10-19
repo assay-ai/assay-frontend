@@ -24,7 +24,8 @@ import {
   isToolsetChoice,
   mcpToolName,
   parseMcpUrl,
-  suggestServerName,
+  defaultServerName,
+  longestToolLength,
   toolDisplay,
   uniqueServerName,
   type ConnectChoice,
@@ -235,9 +236,11 @@ export function ConnectBody({
   const url = choice ? buildMcpUrl(choice, { free, discovery }) : null;
   const preview = useMcpPreview(url, effectiveAgentId);
   // Unique among the agent's other servers, so two servers never share a name in one client.
+  const longestTool = longestToolLength(preview.data?.listedTools);
   const serverName = uniqueServerName(
-    choice ? suggestServerName(choice) : "assay",
+    choice ? defaultServerName(choice, longestTool) : "assay",
     (servers.data?.servers ?? []).filter((s) => s.canonicalUrl !== preview.data?.canonicalUrl && s.canonicalUrl !== url).map((s) => s.serverName),
+    longestTool,
   );
 
   // The key: the full one only when it was created here (memory only); otherwise its prefix.

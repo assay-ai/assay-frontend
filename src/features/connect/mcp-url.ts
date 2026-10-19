@@ -268,80 +268,165 @@ export function sameChoice(a: ConnectChoice, b: ConnectChoice): boolean {
 /** Leading verbs dropped from a tool name when it names a server: `get_weather` → `weather`. */
 const VERBS = new Set(["get", "search", "list", "find", "fetch", "lookup", "read", "run", "call"]);
 
-/** At most 9 characters (§7.1: a client prefix plus a 48-character tool name stays within 64). */
-export const MAX_SERVER_NAME = 9;
-
 /**
- * A name of at most 9 characters, never cut mid-word: the whole text, else
- * the whole text without its dashes ("tools-i-use" → "toolsiuse"), else whole
- * words from the start while they fit ("weather-and-places" → "weather"),
- * never ending on a one- or two-letter word ("tools-i" names nothing), else
- * the last word when that fits ("web-research" → "research"), and only a word
- * too long for any of that is cut.
+ * The server-name rule of spec 8.3.1 (O5), the same one `assay-mcp` computes
+ * (`vectors/server-names.json` is the shared source of truth): a name `s` fits
+ * a URL when `overhead + len(s) + L <= budget`, where `L` is the longest tool
+ * name the URL can expose to the agent.
  */
-function clip(text: string): string {
-  const cleaned = text.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
-  if (cleaned.length <= MAX_SERVER_NAME) return cleaned || "assay";
-  const words = cleaned.split("-").filter(Boolean);
-  const joined = words.join("");
-  if (joined.length <= MAX_SERVER_NAME) return joined;
-  const kept: string[] = [];
-  for (const word of words) {
-    if ([...kept, word].join("-").length > MAX_SERVER_NAME) break;
-    kept.push(word);
-  }
-  while (kept.length > 1 && kept.at(-1)!.length <= 2) kept.pop();
-  const head = kept.join("-");
-  if (head.length >= 4) return head;
-  const last = words.at(-1) ?? "";
-  if (last.length >= 4 && last.length <= MAX_SERVER_NAME) return last;
-  return (head || cleaned.slice(0, MAX_SERVER_NAME)).replace(/-+$/g, "") || "assay";
+export interface NameRule {
+  budget: number;
+  overhead: number;
 }
 
+export const DEFAULT_NAME_RULE: NameRule = { budget: 64, overhead: 7 };
+/** Longest tool name assumed when the URL has not been measured (toolsets spec NFR-7). */
+export const SIGNED_OUT_TOOL_LENGTH = 48;
+/** The tool shown before sign-in; always counted. */
+export const SIGN_IN_TOOL = "assay_sign_in";
+/** `agent_connect_urls.server_name` is varchar(56). */
+export const MAX_SERVER_NAME_LENGTH = 56;
+export const SIGN_IN_HINT = "Sign in first (`assay-mcp login`) to allow a longer name.";
+
+const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
+
+/** `_` is excluded so a name never blurs the `__` separator of a client's tool prefix. */
+export function isValidServerName(name: string): boolean {
+  return NAME_PATTERN.test(name) && name.length <= MAX_SERVER_NAME_LENGTH;
+}
+
+/** The longest name that fits a URL whose longest tool is `longestTool` characters (0 or less: none fits). */
+export function maxServerNameLength(longestTool: number, rule: NameRule = DEFAULT_NAME_RULE): number {
+  return rule.budget - rule.overhead - longestTool;
+}
+
+export function fitsServerName(name: string, longestTool: number, rule: NameRule = DEFAULT_NAME_RULE): boolean {
+  return isValidServerName(name) && rule.overhead + name.length + longestTool <= rule.budget;
+}
+
+const utf8Length = (text: string): number => new TextEncoder().encode(text).length;
+
 /**
- * The server name the snippet suggests for an answer, at most 9 characters:
- * `assay` for everything, the tool set's slug, the topic, the maker, the one
- * tool's noun, or `tools`.
+ * L: the longest name `tools/list` returns for this agent at the URL, with
+ * `assay_sign_in` always counted. Measured in UTF-8 bytes. `null` (not yet
+ * measured, or signed out) is the upper bound 48.
  */
-export function suggestServerName(choice: ConnectChoice): string {
+export function longestToolLength(listedTools: readonly string[] | null | undefined): number {
+  if (!listedTools) return SIGNED_OUT_TOOL_LENGTH;
+  return Math.max(SIGN_IN_TOOL.length, ...listedTools.map(utf8Length));
+}
+
+/** Drops trailing dash-separated words of `name` until it fits; `assay` if nothing else does; `null` if nothing fits. */
+function suggestFit(name: string, longestTool: number, rule: NameRule): string | null {
+  const words = name.split("-").filter(Boolean);
+  while (words.length > 0) {
+    const candidate = words.join("-");
+    if (fitsServerName(candidate, longestTool, rule)) return candidate;
+    words.pop();
+  }
+  return fitsServerName("assay", longestTool, rule) ? "assay" : null;
+}
+
+/** `assay` for the root; `assay-{slug}` otherwise, dropping trailing words, then `assay`. */
+export function defaultServerNameFor(
+  root: boolean,
+  slugWords: readonly string[],
+  longestTool: number = SIGNED_OUT_TOOL_LENGTH,
+  rule: NameRule = DEFAULT_NAME_RULE,
+): string {
+  if (root) return "assay";
+  const words = slugWords.map((w) => w.toLowerCase());
+  if (words.some((w) => !/^[a-z0-9]+$/.test(w))) return "assay";
+  while (words.length > 0) {
+    const candidate = `assay-${words.join("-")}`;
+    if (fitsServerName(candidate, longestTool, rule)) return candidate;
+    words.pop();
+  }
+  return "assay";
+}
+
+const words = (text: string): string[] => text.split(/[^A-Za-z0-9]+/).filter(Boolean);
+
+/** The slug words of an answer: the tool set slug, topic, maker, or the one tool's noun (`[]` for the root). */
+function slugWordsOf(choice: ConnectChoice): string[] | null {
   switch (choice.kind) {
     case "everything":
-      return "assay";
+      return null;
     case "toolset":
     case "shared":
-      return clip(choice.slug);
+      return words(choice.slug);
     case "topic":
-      return clip(choice.category);
+      return words(choice.category);
     case "maker":
-      return clip(choice.handle);
+      return words(choice.handle);
     case "link":
-      return "shared";
+      return ["shared"];
     case "tools": {
       const tools = canonicalTools(choice.tools);
-      if (tools.length !== 1) return "tools";
+      if (tools.length !== 1) return ["tools"];
       const segments = tools[0]!.split("@")[0]!.split(/[_-]/).filter(Boolean);
       const noun = segments.length > 1 && VERBS.has(segments[0]!) ? segments.slice(1) : segments;
-      return clip(noun[0] ?? "tools");
+      return noun[0] ? [noun[0]] : ["tools"];
     }
     default: {
       const path = choice.url.replace(/^[a-z]+:\/\/[^/]+/i, "").split("?")[0] ?? "";
       const last = path.split("/").filter(Boolean).at(-1)?.split("@")[0]?.replace(/^@/, "");
-      return last ? clip(last) : "assay";
+      return last ? words(last) : null;
     }
   }
 }
 
 /**
- * A suggested server name that no other server of the agent uses: two servers
- * named "weather" in one client would clash (their tools share a prefix).
- * `weather` → `weather2`, `weather3`… within the 9-character cap.
+ * The server name the snippet suggests for an answer: `assay` for everything,
+ * else `assay-{slug}` (`assay-weather`, `assay-twitter-kit`), dropping trailing
+ * slug words until it fits `longestTool`, then `assay`. Shown, never silent.
  */
-export function uniqueServerName(base: string, taken: readonly (string | null)[]): string {
+export function defaultServerName(choice: ConnectChoice, longestTool: number = SIGNED_OUT_TOOL_LENGTH, rule: NameRule = DEFAULT_NAME_RULE): string {
+  const slug = slugWordsOf(choice);
+  return slug === null || slug.length === 0 ? "assay" : defaultServerNameFor(false, slug, longestTool, rule);
+}
+
+export interface ServerNameRefusal {
+  kind: "invalid" | "tooLong";
+  message: string;
+}
+
+/**
+ * Why a typed name is refused (`null` when it is accepted): not a valid name,
+ * or valid but too long for this URL. Never truncates silently.
+ */
+export function serverNameRefusal(name: string, longestTool: number, rule: NameRule = DEFAULT_NAME_RULE): ServerNameRefusal | null {
+  if (!NAME_PATTERN.test(name)) {
+    return { kind: "invalid", message: `\`${name}\` is not a valid name: use lowercase letters, digits and \`-\`, starting with a letter.` };
+  }
+  const max = Math.min(maxServerNameLength(longestTool, rule), MAX_SERVER_NAME_LENGTH);
+  if (name.length <= max) return null;
+  const head = `\`${name}\` is too long for this server: its longest tool is ${longestTool} characters,`;
+  if (max <= 0) return { kind: "tooLong", message: `${head} so no name fits.` };
+  const suggestion = suggestFit(name, longestTool, rule);
+  const body = `${head} so the name can be at most ${max}.`;
+  return { kind: "tooLong", message: suggestion === null ? body : `${body} Try \`${suggestion}\`.` };
+}
+
+/**
+ * The first of `base`, `base-2`, `base-3`, … that no other server of the agent
+ * uses and that fits the budget (the base is trimmed, never the suffix): two
+ * servers with one name in one client would clash.
+ */
+export function uniqueServerName(
+  base: string,
+  taken: readonly (string | null)[],
+  longestTool: number = SIGNED_OUT_TOOL_LENGTH,
+  rule: NameRule = DEFAULT_NAME_RULE,
+): string {
   const used = new Set(taken.filter((t): t is string => Boolean(t)));
   if (!used.has(base)) return base;
-  for (let n = 2; n < 100; n += 1) {
-    const suffix = String(n);
-    const candidate = `${base.slice(0, MAX_SERVER_NAME - suffix.length).replace(/-+$/, "")}${suffix}`;
+  const room = Math.min(maxServerNameLength(longestTool, rule), MAX_SERVER_NAME_LENGTH);
+  for (let n = 2; n < 1000; n += 1) {
+    const suffix = `-${n}`;
+    const head = base.slice(0, Math.max(0, room - suffix.length)).replace(/-+$/, "");
+    if (head === "") break;
+    const candidate = `${head}${suffix}`;
     if (!used.has(candidate)) return candidate;
   }
   return base;
