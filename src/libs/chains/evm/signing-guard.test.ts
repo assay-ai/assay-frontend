@@ -7,8 +7,8 @@ import { assertContractCall, assertTypedData, decodePinnedCall, SIGNING_REFUSED 
 import { ROBINHOOD_TESTNET_STAKE as PINNED } from "./stake-slashes/deployments";
 
 const CHAIN = "eip155:46630";
-const BUYER = "0x7FD9A17dE9fd64b35081FbAbaa9f3bb85e59F8d1";
-const ATTACKER = "0x000000000000000000000000000000000000dEaD";
+const BUYER = "0x7FD9A17dE9fd64b35081FbAbaa9f3bb85e59F8d1" as const;
+const ATTACKER = "0x000000000000000000000000000000000000dEaD" as const;
 
 function requestWithdraw(overrides: Partial<Eip155TypedDataRequest> = {}): Eip155TypedDataRequest {
   return {
@@ -136,6 +136,37 @@ describe("assertContractCall", () => {
   it("refuses a function the pinned contract is never sent, like a token transfer", () => {
     const transfer = encodeFunctionData({ abi: APPROVE_ABI, functionName: "transfer", args: [ATTACKER, 1n] });
     expect(() => decodePinnedCall(call(transfer, PINNED.settlementToken))).toThrow(/no function this app sends/);
+  });
+
+  it("decodes only the one-argument updateConfig (0x33cea666), never the removed newAdmin one (0xd044590b)", () => {
+    const paramSet =
+      "struct ParamSet { address treasury; address redeemer; uint64 unbondingPeriodSeconds; uint64 minimumStake; uint64 penaltyAmount; uint64 verifierDailyCap; uint16 takeRateBps; uint16 slashAgentBps; uint16 slashPlatformBps; uint16 slashCapBps; }";
+    const params = {
+      treasury: BUYER,
+      redeemer: BUYER,
+      unbondingPeriodSeconds: 950_400n,
+      minimumStake: 100_000_000n,
+      penaltyAmount: 1_000_000n,
+      verifierDailyCap: 10_000_000n,
+      takeRateBps: 1000,
+      slashAgentBps: 5000,
+      slashPlatformBps: 5000,
+      slashCapBps: 2000,
+    };
+    const current = encodeFunctionData({
+      abi: parseAbi([paramSet, "function updateConfig(ParamSet p)"]),
+      functionName: "updateConfig",
+      args: [params],
+    });
+    const removed = encodeFunctionData({
+      abi: parseAbi([paramSet, "function updateConfig(ParamSet p, address newAdmin)"]),
+      functionName: "updateConfig",
+      args: [params, ATTACKER],
+    });
+    expect(current.slice(0, 10)).toBe("0x33cea666");
+    expect(removed.slice(0, 10)).toBe("0xd044590b");
+    expect(decodePinnedCall(call(current, PINNED.configContract)).functionName).toBe("updateConfig");
+    expect(() => decodePinnedCall(call(removed, PINNED.configContract))).toThrow(/no function this app sends/);
   });
 
   it("refuses an approve of another spender than the one expected", () => {

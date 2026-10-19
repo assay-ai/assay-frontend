@@ -26,7 +26,7 @@ import type { StakeDeployment } from "./stake-slashes/deployments";
 import { scanLogsChunked, type LogSource, type RawLog } from "./stake-slashes/scan";
 
 /**
- * The admin's settings on the X402Config contract: read from the pinned RPC,
+ * The admin's settings on the AssayConfig contract: read from the pinned RPC,
  * and the admin's calls built here, from what the operator typed.
  *
  * Nothing on this path goes through Assay's backend. The settings page exists
@@ -72,11 +72,11 @@ export type ConfigParamKey = (typeof CONFIG_PARAM_KEYS)[number];
 const PARAM_SET =
   "struct ParamSet { address treasury; address redeemer; uint64 unbondingPeriodSeconds; uint64 minimumStake; uint64 penaltyAmount; uint64 verifierDailyCap; uint16 takeRateBps; uint16 slashAgentBps; uint16 slashPlatformBps; uint16 slashCapBps; }";
 
-/** The admin's doors on X402Config — the only functions this page sends. */
+/** The admin's doors on AssayConfig — the only functions this page sends. */
 export const CONFIG_ADMIN_ABI = parseAbi([
   PARAM_SET,
   "function setPaused(bool value)",
-  "function updateConfig(ParamSet p, address newAdmin)",
+  "function updateConfig(ParamSet p)",
   "function registerVerifier(address verifier, bytes32 label, uint64 expiresAt)",
   "function revokeVerifier(address verifier)",
   "function setArbiter(address newArbiter)",
@@ -295,7 +295,7 @@ export function liveVerifiers(rows: readonly VerifierKeyRow[]): VerifierKeyRow[]
 
 export type ConfigAdminCall =
   | { readonly functionName: "setPaused"; readonly args: readonly [boolean] }
-  | { readonly functionName: "updateConfig"; readonly args: readonly [ConfigParams, Address] }
+  | { readonly functionName: "updateConfig"; readonly args: readonly [ConfigParams] }
   | { readonly functionName: "registerVerifier"; readonly args: readonly [Address, Hex, bigint] }
   | { readonly functionName: "revokeVerifier"; readonly args: readonly [Address] }
   | { readonly functionName: "setArbiter"; readonly args: readonly [Address] }

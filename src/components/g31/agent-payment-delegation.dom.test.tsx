@@ -35,7 +35,7 @@ function client(escrowMaxVoucher: string): QueryClient {
   const c = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   c.setQueryData(["chains"], { chains: CHAINS });
   c.setQueryData(["escrow", EVM], {
-    escrowPda: `${EVM}:0x1D2625efD87c2fc10b8563f3F0890072845Fcf41`,
+    escrowPda: `${EVM}:0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f`,
     serverTime: "2026-10-12T12:00:00.000Z",
     maxVoucherAmount: usdg(escrowMaxVoucher),
     maxPerWindow: usdg("10000000"),

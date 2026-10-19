@@ -103,7 +103,7 @@ describe("cancel the judgement on chain", () => {
  * its executable time anyone can execute the penalty, so the console has to
  * say when that is, and whose signature it waits for.
  */
-const EVM_ASSET = "eip155:46630/erc20:0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c";
+const EVM_ASSET = "eip155:46630/erc20:0x7242F853db478A28Ae76Ace808212d4B68aa73e7";
 const SIGNERS = [
   ["EVM", EVM_ASSET, "the arbiter"],
   ["Solana", ASSET, "the program admin"],
