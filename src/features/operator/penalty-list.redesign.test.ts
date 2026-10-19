@@ -108,9 +108,9 @@ describe("what a row says", () => {
   });
 
   it("tells one story in Status and Next while a request waits", () => {
-    expect(penaltyChip(row({ status: "PROPOSED", disputedAt: "2026-10-01T00:00:00Z" }), NOW, "slash.suspend")).toEqual({
+    expect(penaltyChip(row({ status: "PROPOSED", disputedAt: "2026-10-01T00:00:00Z" }), NOW, "slash.repropose")).toEqual({
       status: "upheld",
-      detail: "suspend pending",
+      detail: "re-proposal pending",
     });
     expect(penaltyChip(row({ status: "EXECUTED" }), NOW, "slash.compensated")).toEqual({ status: "executed", detail: "pay-back pending" });
     expect(penaltyChip(row({ status: "EXECUTED" }), NOW, null)).toEqual({ status: "executed" });

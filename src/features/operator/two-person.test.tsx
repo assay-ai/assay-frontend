@@ -9,10 +9,10 @@ import {
   addOperator,
   changeOperator,
   createArbiterBlockIntent,
-  openFleetSweep,
   recordCompensation,
+  recordStuckExecution,
   removeOperator,
-  suspendCase,
+  reproposeCase,
   unblockAccount,
 } from "@/services/operator.service";
 
@@ -23,7 +23,7 @@ import { approvalHref, queuedMessage, toTwoPersonAnswer } from "./two-person";
 const QUEUED: ApprovalQueued = {
   approvalId: "7d1c2b9e-1111-4222-8333-944455556666",
   status: "PENDING",
-  action: "slash.sweep",
+  action: "slash.repropose",
   expiresAt: "2026-10-16T10:00:00.000Z",
 };
 
@@ -42,9 +42,9 @@ describe("toTwoPersonAnswer", () => {
   });
 
   it("reads a 200 as the result", () => {
-    expect(toTwoPersonAnswer({ status: 200, data: { matchedCount: 3 } })).toEqual({
+    expect(toTwoPersonAnswer({ status: 200, data: { proposalId: "p1" } })).toEqual({
       kind: "done",
-      result: { matchedCount: 3 },
+      result: { proposalId: "p1" },
     });
   });
 });
@@ -52,8 +52,8 @@ describe("toTwoPersonAnswer", () => {
 describe("every two-person form's service call", () => {
   const body = { reasonCode: "R", note: "a note that is long enough" };
   const calls: [string, () => Promise<{ kind: string }>][] = [
-    ["suspend", () => suspendCase("p1", body)],
-    ["sweep", () => openFleetSweep("p1", { defectKey: "D", lookbackHours: 24, ...body })],
+    ["record execution", () => recordStuckExecution("p1", body)],
+    ["repropose", () => reproposeCase("p1", body)],
     ["compensated", () => recordCompensation("p1", { signature: "sig", ...body })],
     ["unblock", () => unblockAccount("b1", body)],
     [
@@ -102,7 +102,7 @@ describe("what a 202 shows", () => {
     const html = renderToStaticMarkup(
       <ResultCard
         tone="queued"
-        title="Fleet sweep sent for approval"
+        title="Pay-back sent for approval"
         next="Nothing has happened yet."
         link={{ label: "Open the request", href: approvalHref(QUEUED.approvalId) }}
       />,

@@ -108,7 +108,7 @@ export type SlashDisputeClaimType =
   | "DECLARED_INCIDENT"
   | "OTHER";
 
-export type SlashProposalRunningClock = "PROVIDER" | "PLATFORM" | "NONE";
+export type SlashProposalRunningClock = "PROVIDER" | "NONE";
 
 /** `OnChainDisputeState` (assay-backend `slash/domain/on-chain-dispute.ts`). */
 export type OnChainDisputeState =
@@ -135,10 +135,6 @@ export interface SlashProposalClocks {
   /** Null until a notification channel confirms delivery. */
   notifiedAt: string | null;
   acknowledgedAt: string | null;
-  /** The provider's deadline to object in the app (Solana only). Null on EVM. */
-  respondByAt: string | null;
-  /** OUR deadline to decide an in-app objection (Solana only). Null on EVM. */
-  platformDecisionDueAt: string | null;
   /**
    * Assay's own floor: Assay's executor does not execute before this. It binds
    * only while the record is not on chain; once it is, `chainExecutableAt`
@@ -150,7 +146,7 @@ export interface SlashProposalClocks {
    * Config.slash_delay_seconds`, mirrored onto the row by the backend.
    *
    * Not the same instant as `earliestExecutionAt`, and later than it: the
-   * backend proposes on chain once delivery stamps `respondByAt`, so the chain
+   * backend proposes on chain once delivery stamps `notifiedAt`, so the chain
    * clock starts at or after the off-chain one.
    *
    * This is the instant after which `execute_slash` is permissionless —
@@ -177,12 +173,6 @@ export interface SlashProposalClocks {
   chainDisputedAt: string | null;
   /** How many of the case's current parts are `Disputed` on chain. */
   chainDisputedParts: number;
-  /**
-   * True on EVM: the provider's dispute is `disputeSlash` from its own stake
-   * wallet, the arbiter rules on chain, and the in-app objection is refused.
-   * False on Solana, which keeps the in-app objection.
-   */
-  disputeOnChain: boolean;
   /** The state of the case's records, derived per record. Null off EVM or before a record stands. */
   chainState: OnChainDisputeState | null;
   /**

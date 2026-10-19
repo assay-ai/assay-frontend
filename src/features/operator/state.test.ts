@@ -1,71 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  authorityRefusal,
   cancelDeadlineNotice,
   disputedPartsNote,
-  exceedsAuthority,
   isCancelRequested,
   may,
-  RECALCULATED_AMOUNT_PATTERN,
-  suspendedNotice,
-  suspendIsTwoPerson,
   TWO_PERSON_ACTIONS,
 } from "./state";
 
-import type { Money } from "@/interfaces/api";
-
 const ASSET = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1/token:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
-const money = (amount: string): Money => ({ amount, asset: ASSET, decimals: 6 });
-
-/**
- * `GET /operator/me` returns the operator's per-action ceiling, and the
- * backend refuses any decide, second or suspend whose amount is above it with
- * `OPERATOR_AUTHORITY_EXCEEDED`. The console used to ignore the field, so an
- * SRE with a limit of 0 was offered a Suspend form that could never succeed.
- */
-describe("exceedsAuthority", () => {
-  it("is false when the operator has no limit", () => {
-    expect(exceedsAuthority(null, "28470000")).toBe(false);
-  });
-
-  it("is true when the amount is above the limit", () => {
-    expect(exceedsAuthority(money("0"), "28470000")).toBe(true);
-    expect(exceedsAuthority(money("28469999"), "28470000")).toBe(true);
-  });
-
-  it("is false at or below the limit — the backend refuses only above it", () => {
-    expect(exceedsAuthority(money("28470000"), "28470000")).toBe(false);
-    expect(exceedsAuthority(money("0"), "0")).toBe(false);
-  });
-
-  it("compares as integers, past 2^53", () => {
-    expect(exceedsAuthority(money("9007199254740993"), "9007199254740994")).toBe(true);
-    expect(exceedsAuthority(money("9007199254740994"), "9007199254740993")).toBe(false);
-  });
-
-  it("does not block on an amount it cannot read; the backend still decides", () => {
-    expect(exceedsAuthority(money("0"), "not-a-number")).toBe(false);
-  });
-});
-
-describe("authorityRefusal", () => {
-  it("states both amounts as money, not minor units", () => {
-    const sentence = authorityRefusal(money("0"), money("28470000"));
-    expect(sentence).toBe("the penalty is $28.47 and your authority limit is $0.00");
-    expect(sentence).not.toContain("28470000");
-  });
-});
-
-describe("RECALCULATED_AMOUNT_PATTERN", () => {
-  it.each(["1", "28470000"])("accepts %s", (value) => {
-    expect(RECALCULATED_AMOUNT_PATTERN.test(value)).toBe(true);
-  });
-
-  it.each(["", "0", "-5", "284.7", "abc", "028470000", " 1"])("refuses %j", (value) => {
-    expect(RECALCULATED_AMOUNT_PATTERN.test(value)).toBe(false);
-  });
-});
 
 /**
  * `POST /operator/cases/:id/cancel-intent` is guarded on the ON-CHAIN record's
@@ -163,45 +106,9 @@ describe("the deadline of a requested on-chain cancel", () => {
   });
 });
 
-describe("what a suspension tells the operator about the chain", () => {
-  describe.each(SIGNERS)("on %s", (_name, chain, signer) => {
-    it.each(["PENDING", "CANCEL_REQUESTED"])(
-      "says the cancel is requested and still needs a signature when the record is %s",
-      (chainStatus) => {
-        expect(suspendedNotice(chainStatus, chain)).toBe(
-          `Proposal suspended. The on-chain cancel has been requested and still needs ${signer}'s signature.`,
-        );
-      },
-    );
-
-    it("says the cancel follows when a proposal was being written on chain", () => {
-      expect(suspendedNotice("PROPOSING", chain)).toBe(
-        "Proposal suspended. A proposal was being written on chain; its cancel is requested when "
-        + `it lands and will need ${signer}'s signature.`,
-      );
-    });
-
-    it("does not claim either way when the brief carries no chain status", () => {
-      expect(suspendedNotice(undefined, chain)).toBe(
-        "Proposal suspended. If a record stands on chain, its cancel has been requested and "
-        + `still needs ${signer}'s signature.`,
-      );
-    });
-  });
-
-  it.each(["NONE", "REFUSED", "CANCELLED"])(
-    "says there is nothing to cancel when the record is %s",
-    (chainStatus) => {
-      expect(suspendedNotice(chainStatus, EVM_ASSET)).toBe(
-        "Proposal suspended. Nothing stands on chain for it, so there is nothing to cancel.",
-      );
-    },
-  );
-});
-
 describe("the two-person case actions", () => {
-  it("are the sweep, the record half of compensate, and the B18 record and re-propose", () => {
-    expect(TWO_PERSON_ACTIONS).toEqual(["sweep", "compensate", "recordExecution", "repropose"]);
+  it("are the record half of compensate, and the B18 record and re-propose", () => {
+    expect(TWO_PERSON_ACTIONS).toEqual(["compensate", "recordExecution", "repropose"]);
   });
 
   it("B18: the stuck-cancel actions are the cancel's pair, ADJL and TRE", () => {
@@ -210,17 +117,6 @@ describe("the two-person case actions", () => {
       expect(may(["TRE"], action)).toBe(true);
       expect(may(["ADJ", "SRE", "SUP"], action)).toBe(false);
     }
-  });
-});
-
-/** A suspension of a confirmed case is two-person on the backend (`S-1` raised from UPHELD). */
-describe("who may suspend alone", () => {
-  it("alone from PROPOSED", () => {
-    expect(suspendIsTwoPerson("PROPOSED")).toBe(false);
-  });
-
-  it("goes to the approvals inbox from UPHELD", () => {
-    expect(suspendIsTwoPerson("UPHELD")).toBe(true);
   });
 });
 

@@ -25,8 +25,6 @@ import { routes } from "@/libs/routes";
 
 /** What each queued action does, in plain words. */
 const ACTION_LABEL: Readonly<Record<string, string>> = {
-  "slash.suspend": "Suspend a penalty (cancels it)",
-  "slash.sweep": "Decide every penalty with the same defect",
   "slash.compensated": "Record a pay-back and close the penalty",
   "slash.record_execution": "Record an execution made on chain while the cancel waited",
   "slash.repropose": "Propose an upheld penalty on chain again",
@@ -45,8 +43,6 @@ export function actionLabel(action: string): string {
 
 /** The roles a second person must hold, per register code. At least one. */
 export const APPROVER_ROLES: Readonly<Record<string, readonly OperatorRole[]>> = {
-  "S-1": ["ADJ", "ADJL"],
-  "S-11": ["ADJ", "ADJL"],
   "S-5": ["ADJL", "TRE"],
   "S-16": ["ADJL", "TRE"],
   "S-17": ["ADJ", "ADJL"],
@@ -392,12 +388,6 @@ export function approvalTitle(
       if (limit) return `Raise ${possessive(who)} limit to ${limit.replace(/\.00$/, "")}`;
       return `Change ${possessive(who)} access`;
     }
-    case "slash.suspend":
-      return `Suspend ${penaltyName(text(payload.proposalId) ?? targetId, context)}`;
-    case "slash.sweep": {
-      const defect = text(body.defectKey);
-      return defect ? `Decide every penalty with defect ${defect}` : "Decide every penalty with the same defect";
-    }
     case "slash.compensated":
       return `Pay back ${penaltyName(text(payload.proposalId) ?? targetId, context)}`;
     case "slash.record_execution":
@@ -458,13 +448,6 @@ export function approvalOutcome(
       });
       lines.push({ kind: "record", text: "The penalty closes as paid back. It can't be undone" });
       break;
-    case "slash.suspend":
-      lines.push({
-        kind: "money",
-        text: parts ? `The penalty is cancelled: ${parts.provider} keeps its ${parts.amount}` : "The penalty is cancelled: the provider keeps the amount",
-      });
-      lines.push({ kind: "chain", text: "If it stands on chain, the arbiter must still sign the cancel. It can't be undone" });
-      break;
     case "slash.record_execution":
       // The money already moved on chain: approving records it, after a fresh read of the record.
       lines.push({
@@ -503,9 +486,6 @@ export function approvalOutcome(
       lines.push({ kind: "record", text: "It can't be undone: adding them back is a new request" });
       break;
     }
-    case "slash.sweep":
-      lines.push({ kind: "record", text: "Every matching penalty is decided like this one, in the background" });
-      break;
     case "tool_version.publish": {
       const toolId = text(payload.toolId) ?? targetId;
       const draft = context.tools?.get(toolId)?.draft;
@@ -692,29 +672,6 @@ function describeLong(
       };
     }
 
-    case "slash.suspend": {
-      const id = text(payload.proposalId) ?? targetId;
-      return {
-        sentence: `Suspend ${penaltyName(id, context)}, which cancels it${because}.`,
-        target: caseTarget(id, context),
-        fields: [...commonFields(body), ...extraFields(body)],
-      };
-    }
-
-    case "slash.sweep": {
-      const id = text(payload.proposalId) ?? targetId;
-      const defect = text(body.defectKey);
-      const hours = text(body.lookbackHours);
-      const fields: { label: string; value: string }[] = [];
-      if (defect) fields.push({ label: "Defect", value: defect });
-      if (hours) fields.push({ label: "Look back", value: `${hours} h` });
-      return {
-        sentence: `Sweep every penalty with defect ${defect ?? "?"} over the last ${hours ?? "?"} h, decided like ${penaltyName(id, context)}${because}.`,
-        target: caseTarget(id, context),
-        fields: [...fields, ...commonFields(body), ...extraFields(body)],
-      };
-    }
-
     case "slash.record_execution": {
       const id = text(payload.proposalId) ?? targetId;
       return {
@@ -790,10 +747,6 @@ export function decisionText(
 export function approvedResultSentence(action: string, result: unknown, target?: string): string {
   const r = (result && typeof result === "object" ? result : {}) as Record<string, unknown>;
   switch (action) {
-    case "slash.sweep":
-      return `Fleet sweep opened: ${String(r.matchedCount ?? "?")} matched, ${String(r.appliedCount ?? "?")} applied.`;
-    case "slash.suspend":
-      return `${target ? `${target.charAt(0).toUpperCase()}${target.slice(1)} suspended` : "Penalty suspended"}. If it stands on chain, its cancel is requested and still needs the arbiter's signature.`;
     case "slash.compensated":
       return `${target ? `${target.charAt(0).toUpperCase()}${target.slice(1)} recorded as paid back` : "Recorded as paid back"} into the provider's stake. Penalty closed.`;
     case "slash.record_execution":
@@ -923,16 +876,12 @@ export function approvalChanges(
       }
       return changes;
     }
-    case "slash.suspend":
-      return [{ label: "Penalty", before: "Stands", after: "Cancelled" }];
     case "slash.compensated":
       return [{ label: "Penalty", before: "Executed", after: "Paid back to the provider" }];
     case "slash.record_execution":
       return [{ label: "Penalty", before: "Cancel requested", after: "Executed (recorded)" }];
     case "slash.repropose":
       return [{ label: "On chain", before: "Cancelled record", after: "Proposed again" }];
-    case "slash.sweep":
-      return [{ label: "Cases with this defect", before: "Open", after: "Decided like this one" }];
     default:
       return [];
   }

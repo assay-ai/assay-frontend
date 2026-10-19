@@ -91,17 +91,15 @@ export function rowFromCase(row: OperatorCaseListRow): PenaltyRow {
 
 /** The chip's detail while a two-person request on the penalty waits: "Executed · pay-back pending". */
 const PENDING_DETAIL: Record<string, string> = {
-  "slash.suspend": "suspend pending",
   "slash.compensated": "pay-back pending",
-  "slash.sweep": "sweep pending",
   "slash.record_execution": "execution record pending",
   "slash.repropose": "re-proposal pending",
 };
 
 /**
  * The chip for a status, with the existing chip vocabulary. With a request
- * waiting on the penalty (`pendingAction`), the chip says so ("Penalty upheld ·
- * suspend pending"), so Status and Next tell one story.
+ * waiting on the penalty (`pendingAction`), the chip says so ("Executed ·
+ * pay-back pending"), so Status and Next tell one story.
  */
 export function penaltyChip(
   row: Pick<PenaltyRow, "status" | "disputedAt" | "nextDeadline">,
@@ -193,7 +191,7 @@ export function penaltyNext(
         urgent: known && left < 24 * 3_600_000,
       };
     case "PROPOSED":
-      if (stuck) return { kind: "text", text: `${stuck} · suspend it if it should not stand`, until: null, urgent: true };
+      if (stuck) return { kind: "text", text: stuck, until: null, urgent: true };
       return {
         kind: "text",
         text: row.onChain === false || !known ? "Waiting to go on chain" : left <= 0 ? "Executable now" : `Executable in ${durationLeft(left)}`,
@@ -214,16 +212,14 @@ export function rowMatches(row: Pick<PenaltyRow, "providerName" | "toolName">, q
 
 /** Register codes of the two-person actions on a penalty, by approval action. */
 export const PENALTY_APPROVAL_CODES: Record<string, string> = {
-  "slash.suspend": "S-1",
   "slash.compensated": "S-5",
-  "slash.sweep": "S-11",
   "slash.record_execution": "S-16",
   "slash.repropose": "S-17",
 };
 
 /** A two-person request on a penalty no one has decided yet: what it is, and the Next column's words. */
 export interface PenaltyWaiting {
-  /** The approval action (`slash.suspend`, …): the chip names it. */
+  /** The approval action (`slash.compensated`, …): the chip names it. */
   action: string;
   /** "Waiting for Riley or Iris to approve". */
   text: string;

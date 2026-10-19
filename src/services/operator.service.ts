@@ -8,10 +8,9 @@ import type {
   ChangeOperatorBody, CreateAccountBlockBody, ListAccountBlocksQuery, ListOverrideLogQuery,
   OperatorApproval, OperatorApprovalStatus, OperatorChallenge, OperatorDirectoryEntry,
   OperatorSignIn, OperatorStatus, OverrideLogEntry, RemoveOperatorBody, UnblockAccountBody,
-  CompensationIntent, FleetSweep,
-  OpenFleetSweepBody, OperatorCaseBrief, OperatorIdentity, PlatformHealth,
+  CompensationIntent, OperatorCaseBrief, OperatorIdentity, PlatformHealth,
   ListOperatorCasesQuery, OperatorCaseListRow,
-  RecordCompensationBody, SuspendProposalBody,
+  RecordCompensationBody,
   ManualCaseActionBody, ManualCaseActionResult,
 } from "@/interfaces/operator";
 
@@ -73,35 +72,6 @@ export function listOperatorCases(
 export function getOperatorCase(proposalId: string): Promise<OperatorCaseBrief> {
   return operatorApi.get<OperatorCaseBrief>(
     `/operator/cases/${encodeURIComponent(proposalId)}`,
-  );
-}
-
-/**
- * `POST /operator/cases/:id/suspend`. `ADJ`, `ADJL` or `SRE`. Legal wherever `CANCELLED` is reachable.
- * From `AWAITING_SECOND` and `UPHELD` it is two-person (`S-1`): answered 202
- * and run once a second operator approves it.
- */
-export async function suspendCase(
-  proposalId: string, body: SuspendProposalBody,
-): Promise<TwoPersonAnswer<unknown>> {
-  return toTwoPersonAnswer(
-    await operatorApi.postWithStatus<unknown>(
-      `/operator/cases/${encodeURIComponent(proposalId)}/suspend`, body,
-    ),
-  );
-}
-
-/**
- * `POST /operator/cases/:id/sweep`. `ADJL`, plus a second operator (`S-11`):
- * answered 202 and opened once an `ADJ` or `ADJL` operator approves it.
- */
-export async function openFleetSweep(
-  proposalId: string, body: OpenFleetSweepBody,
-): Promise<TwoPersonAnswer<FleetSweep>> {
-  return toTwoPersonAnswer(
-    await operatorApi.postWithStatus<FleetSweep | ApprovalQueued>(
-      `/operator/cases/${encodeURIComponent(proposalId)}/sweep`, body,
-    ),
   );
 }
 

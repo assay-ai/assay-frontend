@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Ban, Check, ChevronRight, CircleDot, CirclePause, Coins, Link2, LockOpen, Scale, Search, UserCog, X, type LucideIcon } from "lucide-react";
+import { Ban, Check, ChevronRight, CircleDot, Coins, Link2, LockOpen, Scale, Search, UserCog, X, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -50,7 +50,6 @@ const ICONS: Readonly<Record<ActivityIcon, LucideIcon>> = {
   block: Ban,
   unblock: LockOpen,
   chain: Link2,
-  suspend: CirclePause,
   ruling: Scale,
   money: Coins,
   team: UserCog,

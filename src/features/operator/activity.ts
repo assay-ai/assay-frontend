@@ -88,13 +88,8 @@ const VERBS: Readonly<Record<string, string>> = {
   "P-10": "published a version of",
   "P-11": "moved the default version of",
   "P-12": "deprecated a major of",
-  "S-1": "suspended",
   "S-2": "cancelled the attestation of",
-  "S-3": "decided the dispute on",
   "S-5": "recorded the pay-back of",
-  "S-8": "extended the dispute deadline of",
-  "S-11": "opened a bulk decision from",
-  "S-12": "countersigned the decision on",
   "S-13": "prepared a ruling on",
   "S-14": "decided the call dispute on",
   "V-3": "removed strikes from",
@@ -128,7 +123,7 @@ export function rulingOf(entry: Pick<OverrideLogEntry, "code" | "after" | "reaso
 }
 
 /** What kind of action an entry is, for its icon. */
-export type ActivityIcon = "block" | "unblock" | "chain" | "suspend" | "ruling" | "money" | "team" | "other";
+export type ActivityIcon = "block" | "unblock" | "chain" | "ruling" | "money" | "team" | "other";
 
 export function activityIcon(entry: Pick<OverrideLogEntry, "code">): ActivityIcon {
   switch (entry.code) {
@@ -142,9 +137,6 @@ export function activityIcon(entry: Pick<OverrideLogEntry, "code">): ActivityIco
       return "unblock";
     case "A-11":
       return "chain";
-    case "S-1":
-    case "S-11":
-      return "suspend";
     case "S-13":
       return "ruling";
     case "S-5":
@@ -266,7 +258,6 @@ function verbOf(entry: OverrideLogEntry): string {
   if (ruling === "UPHOLD") return "prepared an uphold of";
   if (ruling === "CANCEL") return "prepared a cancel of";
   const after = entry.after ?? {};
-  if (entry.code === "S-12" && String(after.secondKind ?? "").toUpperCase() === "OBJECTED") return "objected to the decision on";
   if (entry.code === "A-24" && typeof after.decision === "string") {
     return after.decision.toUpperCase().startsWith("APPROV") ? "approved for the catalogue" : "turned down for the catalogue";
   }

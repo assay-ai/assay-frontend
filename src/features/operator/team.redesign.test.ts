@@ -16,8 +16,9 @@ describe("Team limit column", () => {
     expect(limitCell({ roles: ["ADJL"], authorityLimit: usd("1000000000") })).toBe("$1,000");
     expect(limitCell({ roles: ["ADJ"], authorityLimit: usd("2500000") })).toBe("$2.50");
     expect(limitCell({ roles: ["TRE"], authorityLimit: null })).toBe("No limit");
-    expect(actsOnMoney(["SRE", "SUP"])).toBe(true);
-    expect(actsOnMoney(["SUP"])).toBe(false);
+    expect(actsOnMoney(["TRE"])).toBe(true);
+    expect(actsOnMoney(["ADJ"])).toBe(true);
+    expect(actsOnMoney(["SRE", "SUP"])).toBe(false);
   });
 });
 
@@ -63,8 +64,8 @@ describe("role picker lines", () => {
       if (/blocks accounts/i.test(preset.short)) expect(caps.block).toBe(true);
       if (/team/i.test(preset.short)) expect(caps.manageOperators).toBe(true);
     }
-    expect(ROLE_PRESETS.find((p) => p.id === "support")!.short).toBe("Blocks accounts; suspends penalties within a limit");
-    expect(ROLE_PRESETS.map((p) => p.description).join(" ")).not.toMatch(/fleet sweep/);
+    expect(ROLE_PRESETS.find((p) => p.id === "support")!.short).toBe("Blocks accounts in an incident");
+    expect(ROLE_PRESETS.map((p) => p.description).join(" ")).not.toMatch(/suspend|fleet sweep/i);
   });
 });
 
@@ -92,7 +93,7 @@ describe("round 4: Team counts, limits and names", () => {
     expect(approverPhrase("A-10", ["ADJL"])).toBe("a second Lead adjudicator");
     expect(approverPhrase("A-12", ["OPS_ADMIN"])).toBe("a second Admin");
     expect(approverPhrase("A-12", ["ADJL"])).toBe("an Admin");
-    expect(approverPhrase("S-1", ["ADJ"])).toBe("a second Adjudicator or Lead adjudicator");
+    expect(approverPhrase("S-17", ["ADJ"])).toBe("a second Adjudicator or Lead adjudicator");
     expect(approverPhrase("X-99", ["ADJ"])).toBe("a second operator");
   });
 });
@@ -115,9 +116,9 @@ describe("role presets say which dispute each one decides (B12)", () => {
 });
 
 describe("what $0 rules out (D25)", () => {
-  it("names the money actions the backend gates for these roles (S-1, S-5, S-14)", () => {
+  it("names the money actions the backend gates for these roles (S-5, S-14)", () => {
     expect(zeroLimitText(["ADJL"])).toBe(
-      "At $0 they can't suspend a penalty, compensate a provider, or uphold a buyer's call-dispute refund, nor approve one. Everything else their role allows still works.",
+      "At $0 they can't compensate a provider or uphold a buyer's call-dispute refund, nor approve one. Everything else their role allows still works.",
     );
     expect(zeroLimitText(["TRE"])).toBe("At $0 they can't compensate a provider, nor approve one. Everything else their role allows still works.");
     expect(zeroLimitText(["OPS_ADMIN"])).toBe("This role moves no money, so the limit changes nothing.");

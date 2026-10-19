@@ -45,7 +45,7 @@ export function OperatorPatternsGallery() {
             kind="waiting"
             title="Nothing needed from you"
             description="The provider can dispute on chain until 18 Oct, 14:00. Undisputed, it becomes executable then."
-            secondary={{ label: "Suspend penalty", onClick: () => undefined }}
+            secondary={{ label: "Open the history", onClick: () => undefined }}
           />
           <NextStepCard kind="done" title="Penalty executed" description="The stake was taken. Nothing is left to do on this penalty." />
         </div>

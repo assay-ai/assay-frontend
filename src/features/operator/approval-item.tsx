@@ -118,8 +118,6 @@ const NEXT: Readonly<Record<string, string>> = {
   "account.unblock": "The account can use Assay again within seconds.",
   "operator.add": "They can sign in with their wallet now.",
   "operator.change": "Their new access applies from their next request.",
-  "slash.suspend": "If the record stands on chain, its cancel still needs the arbiter's signature: see the penalty.",
-  "slash.sweep": "Matching cases are decided in the background.",
   "slash.repropose": "The proposal pass puts it on chain; the provider's dispute window opens then.",
   // No "arbiter.block": its result sentence already says nothing is blocked on
   // chain until the arbiter signs, and where; a second line said it again.

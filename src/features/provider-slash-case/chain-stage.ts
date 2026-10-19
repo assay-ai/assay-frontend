@@ -6,12 +6,11 @@ import { caseChainDisputePhase } from "@/libs/chains/status-labels";
  * Where a provider's case stands once the chain is involved, as the case
  * screen has to say it. Pure, so the screen and the tests read the same rules.
  *
- * The case's own clocks (`respondByAt`, `earliestExecutionAt`) are Assay's
- * promises; the on-chain record (`chainStatus`, `chainExecutableAt`,
- * `chainDisputedAt`, mirrored by the backend) is what actually decides when
- * stake can be taken. Once the provider disputed on chain, the off-chain
- * "respond by" and "what happens if you do nothing" no longer describe what
- * happens next, so the screen switches to this.
+ * The case's own clock (`earliestExecutionAt`) is Assay's promise; the
+ * on-chain record (`chainStatus`, `chainExecutableAt`, `chainDisputedAt`,
+ * mirrored by the backend) is what actually decides when stake can be taken.
+ * Once the provider disputed on chain, "what happens if you do nothing" no
+ * longer describes what happens next, so the screen switches to this.
  */
 
 export type CaseChainStage =
@@ -165,15 +164,6 @@ export function caseStageOf(proposal: SlashProposalSummary): CaseStage {
 }
 
 /**
- * Whether "Respond by" is still a deadline the provider is running against.
- * Not once the case is disputed (on chain or in the app) or decided: the
- * provider's response is in, or no longer matters.
- */
-export function respondByApplies(proposal: SlashProposalSummary, stage: CaseStage): boolean {
-  return stage.kind === "open" && proposal.status === "PROPOSED";
-}
-
-/**
  * Whether to offer "Acknowledge". It only records that the case was seen, so
  * it is not offered once the provider disputed on chain (they have plainly
  * seen the case) or once the case is closed: the button would read like a
@@ -184,15 +174,6 @@ export function mayAcknowledge(proposal: SlashProposalSummary, stage: CaseStage)
 }
 
 /**
- * Whether the case's dispute is the on-chain one (EVM): the provider sends
- * `disputeSlash` from its own stake wallet and Assay's arbiter rules on chain.
- * There is no in-app objection, extension or platform deadline for it.
- */
-export function disputesOnChain(clocks: SlashProposalClocks): boolean {
-  return clocks.disputeOnChain;
-}
-
-/**
  * Whether a record of the case can still be disputed on chain at `nowMs`.
  * Per record (review N-4): the backend's `disputeBy` is the earliest door of a
  * record still Pending and never disputed, so a sibling's dispute or a case
@@ -200,7 +181,6 @@ export function disputesOnChain(clocks: SlashProposalClocks): boolean {
  */
 export function disputeWindowOpen(proposal: SlashProposalSummary, nowMs: number): boolean {
   const { clocks } = proposal;
-  if (!disputesOnChain(clocks)) return false;
   const byMs = clocks.disputeBy ? new Date(clocks.disputeBy).getTime() : Number.NaN;
   return Number.isFinite(byMs) && byMs > nowMs;
 }

@@ -77,11 +77,10 @@ describe("Activity layout helpers", () => {
   });
 
   it("gives every kind an icon", () => {
-    expect(["A-9", "A-10", "A-11", "S-1", "S-13", "S-5", "A-12", "X"].map((code) => activityIcon({ code }))).toEqual([
+    expect(["A-9", "A-10", "A-11", "S-13", "S-5", "A-12", "X"].map((code) => activityIcon({ code }))).toEqual([
       "block",
       "unblock",
       "chain",
-      "suspend",
       "ruling",
       "money",
       "team",
@@ -92,7 +91,7 @@ describe("Activity layout helpers", () => {
 
 describe("every Activity row is a past-tense sentence (B12)", () => {
   // Every implemented register code (backend override-register.ts).
-  const CODES = ["S-1", "S-2", "S-3", "S-5", "S-8", "S-11", "S-12", "S-13", "S-14", "V-3", "V-5", "V-7", "P-10", "P-11", "P-12", "A-2", "A-9", "A-10", "A-11", "A-12", "A-13", "A-14", "A-15", "A-16", "A-17", "A-18", "A-19", "A-20", "A-21", "A-22", "A-23", "A-24", "A-25"];
+  const CODES = ["S-2", "S-5", "S-13", "S-14", "S-15", "S-16", "S-17", "V-3", "V-5", "V-7", "P-10", "P-11", "P-12", "A-2", "A-9", "A-10", "A-11", "A-12", "A-13", "A-14", "A-15", "A-16", "A-17", "A-18", "A-19", "A-20", "A-21", "A-22", "A-23", "A-24", "A-25"];
 
   it("never prints a register label or an imperative", () => {
     for (const code of CODES) {
@@ -102,10 +101,7 @@ describe("every Activity row is a past-tense sentence (B12)", () => {
     }
   });
 
-  it("words a countersignature and an objection apart, and a catalogue review by its decision", () => {
-    expect(activitySentence(entry({ code: "S-12", after: { secondKind: "SIGNED" } }), names).verb).toBe("countersigned the decision on");
-    expect(activitySentence(entry({ code: "S-12", after: { secondKind: "OBJECTED" } }), names).verb).toBe("objected to the decision on");
-    expect(activitySentence(entry({ code: "S-3" }), names).verb).toBe("decided the dispute on");
+  it("words a catalogue review by its decision", () => {
     const review = (decision: string) => activitySentence(entry({ code: "A-24", targetType: "tool", after: { decision } }), names).verb;
     expect(review("APPROVED")).toBe("approved for the catalogue");
     expect(review("REJECTED")).toBe("turned down for the catalogue");
