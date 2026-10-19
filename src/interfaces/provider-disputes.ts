@@ -232,8 +232,6 @@ export interface SlashProposalSummary {
   appliedAmount: Money | null;
   clocks: SlashProposalClocks;
   disputeId: string | null;
-  /** `ArbitrationOutcome`, one of six — null while unresolved or for an automatic resolution kind. */
-  outcome: string | null;
   /** `ResolutionKind` — null until resolved. */
   resolutionKind: string | null;
   resolvedAt: string | null;

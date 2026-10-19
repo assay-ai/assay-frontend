@@ -438,7 +438,6 @@ interface DemoCase {
   resolvedMinutesAgo?: number;
   /** Disputed on chain and left unruled for 30 days. */
   expired?: boolean;
-  outcome?: string | null;
   /** The window's measurement: calls posted and verified, failed, and the declared failure rate. */
   m: { posted: number; verified: number; failed: number; sla: number };
   /** What the chain shows (the brief's `chainRecord`), when it is not what the mirror implies. */
@@ -504,7 +503,6 @@ const CASES: DemoCase[] = [
     executableIn: 9 * HOUR,
     disputedMinutesAgo: null,
     requestId: `0x${"d4".repeat(32)}`,
-    outcome: "OVERTURNED_PLATFORM_DEFECT",
     m: { posted: 530, verified: 240, failed: 22, sla: 0.03 },
   },
   {
@@ -527,7 +525,6 @@ const CASES: DemoCase[] = [
     disputedMinutesAgo: 40 * HOUR,
     upheldMinutesAgo: 20 * HOUR,
     requestId: `0x${"e5".repeat(32)}`,
-    outcome: "UPHELD",
     m: { posted: 1210, verified: 402, failed: 58, sla: 0.05 },
   },
   {
@@ -544,7 +541,6 @@ const CASES: DemoCase[] = [
     disputedMinutesAgo: null,
     requestId: `0x${"f6".repeat(32)}`,
     executedMinutesAgo: 9 * DAY - 2 * HOUR,
-    outcome: "UPHELD",
     m: { posted: 350, verified: 206, failed: 11, sla: 0.01 },
   },
   {
@@ -595,7 +591,6 @@ const CASES: DemoCase[] = [
     requestId: `0x${"c9".repeat(32)}`,
     executedMinutesAgo: 27 * DAY,
     resolvedMinutesAgo: 20 * DAY,
-    outcome: "UPHELD",
     m: { posted: 300, verified: 208, failed: 14, sla: 0.02 },
   },
   // B11: an overturned case whose record a stranger executed while its cancel waited.
@@ -613,7 +608,6 @@ const CASES: DemoCase[] = [
     disputedMinutesAgo: null,
     requestId: `0x${"6a".repeat(32)}`,
     resolvedMinutesAgo: 3 * DAY,
-    outcome: "OVERTURNED_PLATFORM_DEFECT",
     chainRecord: "EXECUTED",
     m: { posted: 320, verified: 210, failed: 16, sla: 0.03 },
   },
@@ -679,7 +673,6 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
           runningClock: "NONE",
         },
         disputeId: null,
-        outcome: c.outcome ?? null,
         resolutionKind: c.expired ? "AUTO_CHAIN_VOIDED" : null,
         resolvedAt: paidBack
           ? paidBack.at
@@ -739,7 +732,6 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
     ],
     restoration: [
       { label: "Penalty", value: `$${c.penalty}`, status: executed ? "NOT_APPLICABLE" : "ON_DECISION" },
-      { label: "Routing", value: "unaffected throughout", status: "NOT_APPLICABLE" },
     ],
     chainStatus: c.chainStatus,
     chainExecutableAt: executableAt,

@@ -95,9 +95,6 @@ const on = (tool: string | null) => (tool ? ` on ${tool}` : "");
 function cancelReason(payload: Payload): { key: string; sentence: string } {
   const kind = text(payload, "resolutionKind");
   if (kind === "CHAIN_ARBITER") return { key: "arbiter", sentence: "The arbiter ruled for you on chain." };
-  if (kind === "AUTO_PLATFORM_MISS") {
-    return { key: "platform-miss", sentence: "Assay did not decide your case in time, so it counts for you, not against you." };
-  }
   if (payload.overturned === true) return { key: "overturned", sentence: "Your dispute was accepted." };
   return {
     key: "chain",
