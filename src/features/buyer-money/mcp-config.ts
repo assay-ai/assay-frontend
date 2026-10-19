@@ -269,6 +269,9 @@ export function hostedUrl(url: string): string {
   }
 }
 
+/** Under a remote-only install of a second URL (R-UI-11). */
+export const SECOND_URL_NOTE = "This signs in again and appears as another app in Agents & keys.";
+
 /** What the UI shows instead of a command when the input is refused: never a command. */
 export const NO_COMMAND_TEXT = "No command: the server URL or name is not valid. Check the MCP host setting and the server name.";
 

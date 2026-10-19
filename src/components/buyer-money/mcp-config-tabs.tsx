@@ -25,6 +25,7 @@ import {
   isLocalClient,
   keyPlaceholder,
   NO_COMMAND_TEXT,
+  SECOND_URL_NOTE,
   pasteHint,
   tryBuild,
   remoteInstall,
@@ -68,6 +69,8 @@ export function McpConfigTabs({
   serverName,
   client: clientProp,
   guide = false,
+  nameRefused = false,
+  secondUrl = false,
   onClientChange,
   onCopy,
   onCreateKey,
@@ -81,6 +84,10 @@ export function McpConfigTabs({
   client?: McpClient;
   /** Show "What happens next" and the free example prompt under the action (the Connect page). */
   guide?: boolean;
+  /** The typed server name is refused: no command, deeplink or config is shown. */
+  nameRefused?: boolean;
+  /** The agent already has another server: a remote-only install signs in again (R-UI-11). */
+  secondUrl?: boolean;
   onClientChange?: (client: McpClient) => void;
   onCopy?: (client: McpClient) => void;
   /** Creates a key here and fills it in; shown first while there is no full key. */
@@ -156,9 +163,9 @@ export function McpConfigTabs({
             </dl>
             <CodeBlock
               title="mcp.json"
-              code={apiKeyConfig({ url, token, keyPrefix, serverName })}
+              code={nameRefused ? NO_COMMAND_TEXT : apiKeyConfig({ url, token, keyPrefix, serverName })}
               onCopyCode={() => onCopy?.("other")}
-              copyDisabledReason={token ? null : TEMPLATE_COPY_REASON}
+              copyDisabledReason={nameRefused ? NO_COMMAND_TEXT : token ? null : TEMPLATE_COPY_REASON}
               wrap
               className="min-w-0"
             />
@@ -175,9 +182,9 @@ export function McpConfigTabs({
             </p>
           </>
         ) : isLocalClient(client) ? (
-          <LocalInstall client={client} file={MCP_CLIENTS.find((c) => c.id === client)?.file ?? "Terminal"} url={url} name={name} onCopy={() => onCopy?.(client)} />
+          <LocalInstall client={client} file={MCP_CLIENTS.find((c) => c.id === client)?.file ?? "Terminal"} url={url} name={name} refused={nameRefused} secondUrl={secondUrl} onCopy={() => onCopy?.(client)} />
         ) : (
-          <HostedConnector client={client} url={url} onCopy={() => onCopy?.(client)} />
+          <HostedConnector client={client} url={url} secondUrl={secondUrl} onCopy={() => onCopy?.(client)} />
         )}
         {guide && client !== "other" ? <NextSteps client={client} /> : null}
       </div>
@@ -186,13 +193,13 @@ export function McpConfigTabs({
 }
 
 /** The paid-capable install: a button for Cursor and VS Code (config under it), the command otherwise. */
-function LocalInstall({ client, file, url, name, onCopy }: { client: LocalMcpClient; file: string; url: string; name: string; onCopy: () => void }) {
+function LocalInstall({ client, file, url, name, refused, secondUrl, onCopy }: { client: LocalMcpClient; file: string; url: string; name: string; refused: boolean; secondUrl: boolean; onCopy: () => void }) {
   const input = { url, name };
   const app = appName(client);
-  const link = tryBuild(() => deeplink(client, input));
-  const remote = tryBuild(() => remoteInstall(client, input));
-  const command = tryBuild(() => installText(installCommand(client, input)));
-  const addLine = tryBuild(() => addOneLiner(url, client));
+  const link = refused ? null : tryBuild(() => deeplink(client, input));
+  const remote = refused ? null : tryBuild(() => remoteInstall(client, input));
+  const command = refused ? null : tryBuild(() => installText(installCommand(client, input)));
+  const addLine = refused ? null : tryBuild(() => addOneLiner(url, client));
   const [showConfig, setShowConfig] = React.useState(false);
   const root = (() => {
     try {
@@ -233,6 +240,7 @@ function LocalInstall({ client, file, url, name, onCopy }: { client: LocalMcpCli
         <div className="flex min-w-0 flex-col gap-1" data-testid="remote-alternative">
           <p className="text-body-xs text-03">Free tools only, with no install:</p>
           <CodeBlock title="Free only" code={installText(remote)} onCopyCode={onCopy} wrap className="min-w-0" />
+          {secondUrl ? <p className="text-body-xs text-03" data-testid="second-url-note">{SECOND_URL_NOTE}</p> : null}
         </div>
       ) : null}
     </div>

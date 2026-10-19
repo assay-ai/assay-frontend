@@ -259,6 +259,7 @@ export default function CataloguePage() {
       <ConnectPanel
         publicPage
         url={serverUrl}
+        connectLabel={topic ? "Use this topic" : "Connect"}
         title={
           `One MCP URL for ${topic ? `every ${topic} tool` : "everything below"}: connect your agent to it${
             toolsetsListed ? ", or open Tool sets for a smaller group's URL" : ""

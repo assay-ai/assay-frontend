@@ -25,6 +25,7 @@ import {
   mcpToolName,
   parseMcpUrl,
   defaultServerName,
+  serverNameRefusal,
   longestToolLength,
   toolDisplay,
   uniqueServerName,
@@ -240,11 +241,18 @@ export function ConnectBody({
   const preview = useMcpPreview(url, effectiveAgentId);
   // Unique among the agent's other servers, so two servers never share a name in one client.
   const longestTool = longestToolLength(preview.data?.listedTools);
-  const serverName = uniqueServerName(
+  const suggestedName = uniqueServerName(
     choice ? defaultServerName(choice, longestTool) : "assay",
     (servers.data?.servers ?? []).filter((s) => s.canonicalUrl !== preview.data?.canonicalUrl && s.canonicalUrl !== url).map((s) => s.serverName),
     longestTool,
   );
+  // The editable name (spec 9.3): checked live with the 3.2 rule; a refused name makes no command or deeplink.
+  const choiceKey = JSON.stringify(choice);
+  const [typedName, setTypedName] = React.useState<{ key: string; value: string } | null>(null);
+  const typed = typedName && typedName.key === choiceKey ? typedName.value : null;
+  const serverName = typed ?? suggestedName;
+  const nameRefusal = serverNameRefusal(serverName, longestTool);
+  const nameRefused = nameRefusal !== null;
 
   // The key: the full one only when it was created here (memory only); otherwise its prefix.
   const agentKeys: KeyRow[] = effectiveAgentId ? (data.keys[effectiveAgentId] ?? []) : [];
@@ -290,18 +298,20 @@ export function ConnectBody({
   const needsKey = client === "other";
   const snippet = !url
     ? ""
-    : isLocalClient(client)
+    : nameRefused
+      ? ""
+      : isLocalClient(client)
       ? (tryBuild(() => installText(installCommand(client, { url, name: serverName }))) ?? "")
       : needsKey
         ? apiKeyConfig({ url, token: created?.token ?? null, keyPrefix, serverName })
         : url;
 
   const handOut = () => {
-    if (!url || !effectiveAgentId || record.isPending || recorded) return;
+    if (!url || !effectiveAgentId || record.isPending || recorded || nameRefused) return;
     record.mutate();
   };
   // A refused install (InstallInputError) leaves no snippet: nothing to copy or record.
-  const nothingToCopy = !url || blocked || (needsKey && !created) || snippet === "";
+  const nothingToCopy = !url || blocked || nameRefused || (needsKey && !created) || snippet === "";
   const copy = async () => {
     if (nothingToCopy) return;
     try {
@@ -366,6 +376,8 @@ export function ConnectBody({
           : `${t.pricingMode === "FREE" ? "Free" : `from ${formatMoney(t.fromPrice, { decimals: 4 })}`} · ${t.providerCount} provider${t.providerCount === 1 ? "" : "s"}`;
       return { id: mcp, label: mcp, disabled: t.providerCount === 0, detail: title ? `${title} · ${price}` : price };
     });
+  // A remote-only install of a second URL signs in again (R-UI-11): the agent already has another server.
+  const secondUrl = (servers.data?.servers ?? []).some((s) => s.canonicalUrl !== preview.data?.canonicalUrl && s.canonicalUrl !== url);
   const others = servers.data && preview.data ? overBudgetWith(preview.data, servers.data.servers) : null;
   const searching = preview.data?.discovery === "SEARCH";
   const defaultMode = choice ? (defaultDiscovery(choice) ?? "auto") : "auto";
@@ -585,7 +597,28 @@ export function ConnectBody({
                 {newKeyPaysNote(effectiveAgentId ? payingKeyName(data.readiness[effectiveAgentId]) : null)}
               </p>
             ) : null}
+            <div className="flex flex-col gap-1" data-testid="connect-name">
+              <label className="flex flex-col gap-1">
+                <span className="text-label-13 text-01">Server name</span>
+                <input
+                  className="min-h-10 w-full rounded-md border border-02 bg-01 px-3 py-2 font-mono text-mono-sm text-01"
+                  value={serverName}
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  aria-invalid={nameRefused || undefined}
+                  aria-describedby="connect-name-hint"
+                  onChange={(e) => setTypedName({ key: choiceKey, value: e.target.value.trim() })}
+                />
+              </label>
+              <p id="connect-name-hint" role={nameRefused ? "alert" : undefined} className={cn("text-body-xs", nameRefused ? "text-danger-700" : "text-03")} data-testid="connect-name-hint">
+                {nameRefusal ? nameRefusal.message : "How the app lists this server. Lowercase letters, digits and -."}
+              </p>
+            </div>
             <McpConfigTabs
+              guide
+              nameRefused={nameRefused}
+              secondUrl={secondUrl}
               token={created?.token ?? null}
               keyPrefix={keyPrefix}
               url={url}
