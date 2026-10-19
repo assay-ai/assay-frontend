@@ -112,8 +112,8 @@ export type NotChargedBucket = "FAILED_VERIFICATION" | "PROVIDER_OR_PLATFORM_ERR
 
 /**
  * Why a paid call ended without a charge (`GET /public/not-charged`).
- * `NOT_COLLECTED`: the provider forfeited the payment (or an old call the
- * platform absorbed); the buyer was not charged and does not owe it. It rides
+ * `NOT_COLLECTED`: the provider forfeited the payment; the buyer was not
+ * charged and does not owe it. It rides
  * in the PROVIDER_OR_PLATFORM_ERROR bucket. Owed (buyer debt) calls never
  * appear in the feed.
  */

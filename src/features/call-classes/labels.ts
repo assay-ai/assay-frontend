@@ -90,14 +90,12 @@ const FORFEIT_CAUSE_LABEL: Record<string, string> = {
 
 /**
  * What a PAID_BUYER_DEBT row carries in `reason` (`buyer_debt:` and the lapse
- * cause), a PAID_UNCOLLECTED row (`uncollected:` and the cause, or
- * `uncollected:legacy_platform_absorbed:` and the old absorb reason), and a
+ * cause), a PAID_UNCOLLECTED row (`uncollected:` and the cause), and a
  * voided debt's PAID_UNCREDITED row (`voided:` and the late verdict).
  */
 const BUYER_DEBT_PREFIX = "buyer_debt:";
 const VOIDED_PREFIX = "voided:";
 const UNCOLLECTED_PREFIX = "uncollected:";
-const LEGACY_ABSORBED_PREFIX = "legacy_platform_absorbed:";
 
 export function reasonLabel(reason: string): string {
   if (reason.startsWith(BUYER_DEBT_PREFIX)) {
@@ -107,9 +105,6 @@ export function reasonLabel(reason: string): string {
   }
   if (reason.startsWith(UNCOLLECTED_PREFIX)) {
     const rest = reason.slice(UNCOLLECTED_PREFIX.length).trim();
-    if (rest.startsWith(LEGACY_ABSORBED_PREFIX)) {
-      return "Never collected from the buyer (an older call) — not paid, and nobody owes it";
-    }
     return `Never collected: the buyer did not settle it in time (${debtCauseText(rest)}) — written off, but the buyer still owes it; you are paid if they settle`;
   }
   if (reason.startsWith(VOIDED_PREFIX)) {

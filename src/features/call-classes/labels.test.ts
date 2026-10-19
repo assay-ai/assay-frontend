@@ -45,7 +45,6 @@ describe("call class labels (BUG-R5-03)", () => {
     expect(debt).toContain("once the buyer settles it");
     expect(reasonLabel("buyer_debt:unknown")).toContain("the reason was not recorded");
     expect(reasonLabel("uncollected:VoucherExpired")).toMatch(/^Never collected.*the buyer still owes it; you are paid if they settle$/);
-    expect(reasonLabel("uncollected:legacy_platform_absorbed:DelegateIsRevoked")).toMatch(/older call/);
     expect(reasonLabel("voided:FAIL")).toMatch(/did not pass our checks — voided: not paid, and nobody owes it$/);
     for (const reason of ["buyer_debt:X", "uncollected:X", "voided:X"]) {
       expect(reasonLabel(reason)).not.toMatch(/owed by the platform|platform owes/);

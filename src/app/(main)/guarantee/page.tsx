@@ -355,8 +355,7 @@ export default function GuaranteePage() {
                 <ul className="flex flex-col">
                   {reasonLines.map((line) => {
                     const nested = reasonsOf(line.bucket);
-                    // Not collected may hold calls no call row can show (a legacy absorb), so its
-                    // line's count comes from GET /withheld and the reasons below may be fewer.
+                    // The line's count comes from GET /withheld; the reasons below are the calls at hand.
                     const showNested = nested.length > 0;
                     return (
                       <Fragment key={line.bucket}>

@@ -16,11 +16,11 @@ import type { WithheldForAsset } from "./wire";
  * The API checks `Σ HOLD_RELEASE == withheld + settlement remainders + orphans`.
  * A POSITIVE difference means more money was released back to the buyer than
  * the not-charged calls explain (a written-off pay-later call: its hold was
- * released, but it is still owed, so it is not "not charged"). Forfeited,
- * voided-debt and absorbed calls used to land here too; they are the
- * `NOT_COLLECTED` line now (UX review 2026-10-18, P0-3). Money returned, never
- * money taken, so it is an info line, not an alarm. A NEGATIVE difference means less was released than the total
- * claims, and that one is a warning with support.
+ * released, but it is still owed, so it is not "not charged"). Forfeited and
+ * voided-debt calls are the `NOT_COLLECTED` line (UX review 2026-10-18,
+ * P0-3). Money returned, never money taken, so it is an info line, not an
+ * alarm. A NEGATIVE difference means less was released than the total claims,
+ * and that one is a warning with support.
  */
 export type ReconcileState = "matches" | "more-released" | "less-released" | "unknown";
 
