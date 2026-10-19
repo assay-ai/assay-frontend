@@ -4,7 +4,7 @@ import type { KeyRow } from "@/components/buyer-money/use-agents";
 import type { EscrowDelegate } from "@/interfaces";
 
 import { credentialRowView, withLabel } from "./agents-view";
-import { revokeDialogCopy, runRevokeCredential } from "./revoke-credential-dialog";
+import { revokeDialogCopy, revokedToast, runRevokeCredential, stopMode } from "./revoke-credential-dialog";
 
 const EVM = "eip155:46630";
 const ASSET = `${EVM}/erc20:0xDbbC`;
@@ -97,10 +97,10 @@ describe("Agents & keys rows (spec §9.2)", () => {
 
     const unread = view(bound, [], { delegates: undefined, delegatesUnreadable: true });
     expect(`${unread.source} ${unread.paymentLine}`).not.toContain("free tools only");
-    expect(unread.paymentLine).toBe("Payment key B447 D10C · could not be read from the chain");
+    expect(unread.paymentLine).toBe("Payment key: may still be active on chain (couldn't check)");
 
-    const builtinUnread = view(key({ delegateAccount: DELEGATE }), [], { delegates: undefined });
-    expect(builtinUnread.paymentLine).toBe("Payment key B447 D10C · checking the chain…");
+    const builtinPending = view(key({ delegateAccount: DELEGATE }), [], { delegates: undefined });
+    expect(builtinPending.paymentLine).toBe("Payment key: may still be active on chain (couldn't check)");
   });
 
   it("reads the on-chain state from the chain list, never from the credential", () => {
@@ -134,31 +134,68 @@ describe("Agents & keys rows (spec §9.2)", () => {
     expect(row.stopIt).toBeNull();
   });
 
-  it("Revoke offers the on-chain stop only for a key active on chain that no other live row holds", () => {
-    expect(view(key({ delegateAccount: DELEGATE }), [grant()]).offerStopOnRevoke).toBe(true);
-    expect(view(key({ delegateAccount: DELEGATE }), []).offerStopOnRevoke).toBe(false);
-    expect(view(key({ delegateAccount: DELEGATE }), [], { delegates: undefined }).offerStopOnRevoke).toBe(false);
+  it("Revoke's key state: active, unknown while the chain is pending or failed, none when proven or held by another live row", () => {
+    expect(view(key({ delegateAccount: DELEGATE }), [grant()]).keyState).toBe("active");
+    expect(view(key({ delegateAccount: DELEGATE }), []).keyState).toBe("none");
+    expect(view(key()).keyState).toBe("none");
+    expect(view(key({ delegateAccount: DELEGATE }), [], { delegates: undefined }).keyState).toBe("unknown");
+    expect(view(key({ delegateAccount: DELEGATE }), [], { delegates: undefined, delegatesUnreadable: true }).keyState).toBe("unknown");
     const a = key({ id: "a", delegateAccount: DELEGATE });
     const b = key({ id: "b", delegateAccount: DELEGATE });
-    expect(credentialRowView(a, { delegates: [grant()], delegatesUnreadable: false, keys: [a, b], nowMs: NOW }).offerStopOnRevoke).toBe(false);
+    expect(credentialRowView(a, { delegates: [grant()], delegatesUnreadable: false, keys: [a, b], nowMs: NOW }).keyState).toBe("none");
+  });
+
+  it("a revoked row with a bound key may still be active while the chain read is pending or failed", () => {
+    const revoked = key({ revokedAt: "2026-10-18T00:00:00.000Z", delegateAccount: DELEGATE });
+    for (const unreadable of [false, true]) {
+      const row = view(revoked, [], { delegates: undefined, delegatesUnreadable: unreadable });
+      expect(row.mayBeActive).toBe(true);
+      expect(row.stopIt).toBeNull();
+      expect(row.paymentLine).toBe("Payment key: may still be active on chain (couldn't check)");
+    }
+    // Once read: proven off, it is folded away like any ended row.
+    expect(view(revoked, []).mayBeActive).toBe(false);
   });
 });
 
 describe("the Revoke dialog (spec F3)", () => {
   it("dialog checkbox default on only when key active", () => {
-    const active = revokeDialogCopy({ name: "Assay app on this Mac", issuedVia: "OAUTH", keyActiveOnChain: true });
+    const active = revokeDialogCopy({ name: "Assay app on this Mac", issuedVia: "OAUTH", keyState: "active" });
     expect(active.title).toBe("Revoke Assay app on this Mac?");
     expect(active.description).toBe("The app stops working at once and must sign in again.");
     expect(active.alsoStop).toEqual({ label: "Also stop its payment key on chain (one signature)", defaultChecked: true });
+    expect(active.note).toBeNull();
 
-    const none = revokeDialogCopy({ name: "Assay app on this Mac", issuedVia: "OAUTH", keyActiveOnChain: false });
+    const none = revokeDialogCopy({ name: "Assay app on this Mac", issuedVia: "OAUTH", keyState: "none" });
     expect(none.alsoStop).toBeNull();
+
+    // Chain unread: the key may still be active, so the checkbox is offered, on, with the note.
+    const unknown = revokeDialogCopy({ name: "Assay app on this Mac", issuedVia: "OAUTH", keyState: "unknown" });
+    expect(unknown.alsoStop).toEqual({ label: "Also stop its payment key on chain (one signature)", defaultChecked: true });
+    expect(unknown.note).toContain("may still be active");
+  });
+
+  it("signs in the dialog only for a key active on chain with a known tighten delay; else hands off to the sheet", () => {
+    expect(stopMode({ keyState: "active", alsoStop: true, tightenDelaySeconds: 3600 })).toBe("inline");
+    expect(stopMode({ keyState: "active", alsoStop: true, tightenDelaySeconds: 0 })).toBe("sheet");
+    expect(stopMode({ keyState: "active", alsoStop: true, tightenDelaySeconds: undefined })).toBe("sheet");
+    expect(stopMode({ keyState: "unknown", alsoStop: true, tightenDelaySeconds: 3600 })).toBe("sheet");
+    expect(stopMode({ keyState: "active", alsoStop: false, tightenDelaySeconds: 3600 })).toBe("none");
+    expect(stopMode({ keyState: "none", alsoStop: true, tightenDelaySeconds: 3600 })).toBe("none");
+  });
+
+  it("the toast never says stopped alone while the key is, or may be, active", () => {
+    expect(revokedToast("none", "untouched")).toBe("Revoked. It stopped working at once.");
+    expect(revokedToast("active", "untouched")).toContain("still active on chain");
+    expect(revokedToast("unknown", "untouched")).toContain("may still be active on chain");
+    expect(revokedToast("unknown", "handoff")).toContain("sign to stop its payment key");
+    expect(revokedToast("active", "stopped")).toContain("stopped on chain");
   });
 
   it("revokes first, then revoke-intent → wallet → revoke when ticked", async () => {
     const calls: string[] = [];
     const outcome = await runRevokeCredential({
-      alsoStop: true,
+      mode: "inline",
       revoke: async () => void calls.push("delete"),
       stopOnChain: async () => void calls.push("on-chain"),
     });
@@ -169,7 +206,7 @@ describe("the Revoke dialog (spec F3)", () => {
   it("keeps the credential revoked when the wallet step is declined or fails", async () => {
     const declined = new Error("User rejected");
     const outcome = await runRevokeCredential({
-      alsoStop: true,
+      mode: "inline",
       revoke: async () => undefined,
       stopOnChain: async () => {
         throw declined;
@@ -180,14 +217,19 @@ describe("the Revoke dialog (spec F3)", () => {
 
   it("does not touch the chain when unticked, and never asks the wallet when the revoke fails", async () => {
     const stop = vi.fn(async () => undefined);
-    expect(await runRevokeCredential({ alsoStop: false, revoke: async () => undefined, stopOnChain: stop })).toEqual({
+    expect(await runRevokeCredential({ mode: "none", revoke: async () => undefined, stopOnChain: stop })).toEqual({
       revoked: true,
       chain: "untouched",
+    });
+    // The sheet signs, not the dialog.
+    expect(await runRevokeCredential({ mode: "sheet", revoke: async () => undefined, stopOnChain: stop })).toEqual({
+      revoked: true,
+      chain: "handoff",
     });
     const down = new Error("down");
     expect(
       await runRevokeCredential({
-        alsoStop: true,
+        mode: "inline",
         revoke: async () => {
           throw down;
         },
