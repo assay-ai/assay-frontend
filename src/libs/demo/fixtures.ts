@@ -23,14 +23,6 @@ export interface DemoFixture {
   readonly match: string | RegExp;
   /** `data` is the request body of a write (empty for a read), so a stand-in can echo it. */
   readonly body: (path: string, query: Record<string, unknown>, data?: Record<string, unknown>) => unknown;
-  /**
-   * Vestigial. It marked the routes whose real answer had to be overridden
-   * rather than merely filled; every fixture now answers before the network
-   * reaches the API at all, so the distinction no longer has anywhere to
-   * apply. Kept because three fixture files set it, and removing it is a
-   * rename across all of them for no behaviour change.
-   */
-  readonly override?: "empty" | "always";
 }
 
 /** The one chain this demo settles on — the same id `demo-chains.ts` serves. */
@@ -119,7 +111,6 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/balances",
-    override: "always",
     body: () => {
       // A fresh demo account (?fresh=) has nothing until its first deposit
       // (stage "bind" opens a $20 escrow), matching the escrow fixture.

@@ -49,8 +49,7 @@ import {
  * is what keeps the dashboard's thin-headroom warning off. Quality is healthy
  * (94.1% PASS over 25,449 calls in 30 days), with one FAIL that cost a single
  * call's 0.405 and one contested slash proposal on the FX binding's last
- * window. Three payout batches, all paid, summing to exactly the month's
- * earned figure.
+ * window. Five redemptions, all paid on chain.
  *
  * The arithmetic is deliberate and is checked in both directions:
  *
@@ -61,9 +60,8 @@ import {
  *  - earnings `totals` = Σ `groups`, and `earned` + `platformFee` = the gross
  *    the call counts imply at each binding's price.
  *  - the three payout amounts sum to the month's `earned`.
- *  - `quality.verdictMix` counts sum to `totalCalls`, which is the same
- *    25,449 the traffic buckets sum to and the same figure `/providers/me`
- *    reports as `callsServed`.
+ *  - `/providers/me` reports the 25,449 calls of `TRAFFIC_DAILY` as
+ *    `callsServed`.
  *
  * ## Two things the mechanism cannot do, so the rows work around them
  *
@@ -81,12 +79,6 @@ import {
  * Detail routes take their id off the path (`idIn`) and echo it back, so any
  * id a list screen links to resolves — a known one answers with its own row,
  * an unknown one with the lead row wearing the requested id.
- *
- * `override: "always"` is set on exactly the routes whose real answer would
- * name a chain, an account or an asset: on an unseeded dev backend those still
- * answer with Solana ids, and a Solana address on a Robinhood Chain demo is
- * the one substitution that has to win over a live response rather than only
- * fill an empty one. Everything else keeps the default and yields to the API.
  *
  * `GET /providers/me/calls/export` is **not** here and cannot be: it goes
  * through `api.raw()` to keep the CSV body unwrapped, which is the one path
@@ -125,11 +117,6 @@ function stakeAuthority(): string {
 /** `now + minutes`, for a deadline. Same clock as `minutesAgo`, other way. */
 function inMinutes(minutes: number): string {
   return minutesAgo(-minutes);
-}
-
-/** The UTC calendar day `days` ago, as `YYYY-MM-DD`. */
-function dayUtc(days: number): string {
-  return minutesAgo(days * 1440).slice(0, 10);
 }
 
 /** Every list on this API is one cursor page; the stage set never has a second. */
@@ -708,16 +695,6 @@ function rememberTerms(id: string, terms: KeptTerms): void {
   }
 }
 
-/** Forgets what this tab saved (tests). */
-export function resetDemoBindingTerms(): void {
-  savedTerms = {};
-  try {
-    window.sessionStorage.removeItem(TERMS_KEY);
-  } catch {
-    // No window or storage.
-  }
-}
-
 /** The listing's terms: what this tab saved, else the stage set's, else the tool's current major. */
 function termsFor(binding: DemoBinding): { range: string; provides: string[]; supports: string[] } {
   const kept = keptTerms()[binding.id] ?? {};
@@ -811,12 +788,12 @@ function withTerms(binding: DemoBinding, data: Record<string, unknown>, path: st
   rememberTerms(binding.id, { range: formatVersionRange(parseVersionRange(next.range)!), provides: next.provides, supports: next.supports, passed: [], changed: true });
 }
 
-// ── Traffic, quality and earnings ───────────────────────────────────────────
+// ── Traffic and earnings ────────────────────────────────────────────────────
 
 /**
  * Calls per UTC day over the trailing 30 days, oldest first. The 30-day total
- * is derived from this array rather than written twice — `/providers/me`'s
- * `callsServed` and `/quality`'s `totalCalls` read the same constant.
+ * is derived from this array rather than written twice: `/providers/me`'s
+ * `callsServed` reads it.
  */
 const TRAFFIC_DAILY = [
   742, 801, 869, 913, 884, 756, 690, 812, 905, 948, 921, 877, 734, 702, 826, 913, 967, 940, 902,
@@ -824,28 +801,6 @@ const TRAFFIC_DAILY = [
 ];
 
 const TRAFFIC_TOTAL = TRAFFIC_DAILY.reduce((total, calls) => total + calls, 0);
-
-/**
- * `PaymentIntentStatus`, every value, zero-filled — a status never disappears
- * between buckets. `REFUNDED` is the one attributable failure; the in-flight
- * states only carry anything on the day that is still running.
- */
-function byStatus(calls: number, inFlight = 0) {
-  const refunded = Math.round(calls * 0.012);
-  const voided = Math.round(calls * 0.008);
-  const expired = Math.round(calls * 0.005);
-  const settled = calls - refunded - voided - expired - inFlight;
-  return [
-    { status: "CREATED", calls: 0 },
-    { status: "FUNDS_SECURED", calls: 0 },
-    { status: "PROVIDER_EXECUTING", calls: Math.floor(inFlight / 2) },
-    { status: "VERIFYING", calls: inFlight - Math.floor(inFlight / 2) },
-    { status: "SETTLED", calls: settled },
-    { status: "REFUNDED", calls: refunded },
-    { status: "VOIDED", calls: voided },
-    { status: "EXPIRED", calls: expired },
-  ];
-}
 
 /** The top callers, calls descending. Everyone else folds into "other agents". */
 const AGENT_CALLS: { agentId: string; calls: number }[] = [
@@ -858,29 +813,6 @@ const AGENT_CALLS: { agentId: string; calls: number }[] = [
   { agentId: "e4517b0d-2f68-4c93-a851-3b6d9e0f27ca", calls: 1188 },
   { agentId: "7a0d63f2-5e94-4187-b3c6-08f1e5b2c4d7", calls: 902 },
 ];
-
-/** Verdict mix over the same 30-day window, as shares that sum to one. */
-const VERDICT_SHARES: { verdict: string; share: number }[] = [
-  { verdict: "PASS", share: 0.941 },
-  { verdict: "FAIL", share: 0.0125 },
-  { verdict: "EMPTY_CONFIRMED", share: 0.0223 },
-  { verdict: "SKIPPED", share: 0.0167 },
-  { verdict: "DEGRADED", share: 0.0075 },
-];
-
-/**
- * Counts derived from the shares, with the last row taking the remainder — so
- * the mix sums to `totalCalls` exactly rather than to 25,448 or 25,450.
- */
-function verdictMix() {
-  let assigned = 0;
-  return VERDICT_SHARES.map((entry, index) => {
-    const last = index === VERDICT_SHARES.length - 1;
-    const calls = last ? TRAFFIC_TOTAL - assigned : Math.round(TRAFFIC_TOTAL * entry.share);
-    assigned += calls;
-    return { verdict: entry.verdict, calls, share: calls / TRAFFIC_TOTAL };
-  });
-}
 
 /**
  * "Not credited" by reason, as the backend sends it: all three classes, in its
@@ -1365,13 +1297,6 @@ function evidenceRules(failed: boolean) {
 // ── Slash proposal and dispute ──────────────────────────────────────────────
 
 const PROPOSAL_ID = "a91c35e7-0b62-4d84-9f3a-6c81e740d2b5";
-const DISPUTE_ID = "f2a84c61-3d75-4e08-b19c-7a0e5d2f8c36";
-
-
-
-const DISPUTE_REASON =
-  "19 of the 27 failures in this window came from one caller, which re-sent the same stale-window query every 40 seconds for two hours. Excluding that caller the observed rate is 3.74%, inside the declared 5.00%.";
-
 function slashProposalSummary(proposalId: string) {
   /* Three demo cases — needs action, disputed on chain, executed — matching
      the on-chain rows in `demo-penalties.ts`. Any other id reads as the
@@ -1409,6 +1334,13 @@ function slashProposalSummary(proposalId: string) {
         earliestExecutionAt: demoPenaltyTime(3120),
         chainExecutableAt: demoPenaltyTime(3120),
         chainStatus: "PENDING",
+        chainDisputedAt: null,
+        chainDisputedParts: 0,
+        disputeOnChain: true,
+        chainRecords: 0,
+        cancelledRecords: 0,
+        chainState: "PENDING",
+        disputeBy: demoPenaltyTime(3120),
         secondsRemaining: 3120 * 60,
         runningClock: "PROVIDER",
       },
@@ -1430,6 +1362,13 @@ function slashProposalSummary(proposalId: string) {
         earliestExecutionAt: demoPenaltyTime(-10680),
         chainExecutableAt: demoPenaltyTime(-10680),
         chainStatus: "EXECUTED",
+        chainDisputedAt: null,
+        chainDisputedParts: 0,
+        disputeOnChain: true,
+        chainRecords: 0,
+        cancelledRecords: 0,
+        chainState: "EXECUTED",
+        disputeBy: null,
         secondsRemaining: null,
         runningClock: "NONE",
       },
@@ -1441,23 +1380,29 @@ function slashProposalSummary(proposalId: string) {
   }
   return {
     ...base,
-    status: "DISPUTED",
+    // Disputed on chain: the case stays PROPOSED while the arbiter rules.
+    status: "PROPOSED",
     appliedAmount: null,
     clocks: {
       proposedAt: demoPenaltyTime(-5700),
       notifiedAt: demoPenaltyTime(-5688),
       acknowledgedAt: null,
       respondByAt: null,
-      platformDecisionDueAt: demoPenaltyTime(5340),
+      platformDecisionDueAt: null,
       earliestExecutionAt: demoPenaltyTime(2520),
       chainExecutableAt: demoPenaltyTime(2880),
       chainStatus: "DISPUTED",
       chainDisputedAt: demoPenaltyTime(-4320),
       chainDisputedParts: 1,
+      disputeOnChain: true,
+      chainRecords: 0,
+      cancelledRecords: 0,
+      chainState: "DISPUTED",
+      disputeBy: null,
       secondsRemaining: null,
-      runningClock: "PLATFORM",
+      runningClock: "NONE",
     },
-    disputeId: DISPUTE_ID,
+    disputeId: null,
     executedAt: null,
   };
 }
@@ -1507,29 +1452,6 @@ function caseFacts(proposalId: string | null) {
   };
 }
 
-function disputeRow(id: string) {
-  return {
-    id,
-    /* Written directly by the arbitration service; the public enum omits it. */
-    subjectType: "SLASH_PROPOSAL",
-    subjectId: PROPOSAL_ID,
-    providerId: PROVIDER_ID,
-    state: "UNDER_REVIEW",
-    claimType: "AGENT_GRIEFING",
-    reason: DISPUTE_REASON,
-    evidence: [],
-    openedBy: CONSOLE_CREDENTIAL,
-    acknowledgedAt: minutesAgo(4380),
-    deadlineAt: inMinutes(2460),
-    resolvedAt: null,
-    resolvedBy: null,
-    resolutionNote: null,
-    restoredAmount: null,
-    createdAt: minutesAgo(4320),
-    updatedAt: minutesAgo(2880),
-  };
-}
-
 // ── The fixtures ────────────────────────────────────────────────────────────
 
 /**
@@ -1562,8 +1484,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/registration",
-    /* `payoutAccounts[]` names a chain and an account. Must win. */
-    override: "always",
     body: () => ({
       registration: {
         id: PROVIDER_ID,
@@ -1676,8 +1596,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/stake",
-    /* Names the chain and the stake authority on every entry. Must win. */
-    override: "always",
     body: () => ({
       /*
         One chain, because this provider serves one chain. `staked` and
@@ -1733,7 +1651,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/providers/me/tool-bindings/catalogue",
     /* `settlementAsset.assetId` is a CAIP-19 and must be the 46630 USDG. */
-    override: "always",
     body: () => ({
       tools: [
         {
@@ -1930,8 +1847,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     /*
       The tester calls the provider's endpoint for real, charges nobody and
       writes no payment intent — so a canned run is a report, not a ledger
-      entry. Left at the default override so a dev backend that can really run
-      one still wins.
+      entry.
     */
     method: "POST",
     match: /^\/providers\/me\/tool-bindings\/[^/]+\/test$/,
@@ -2166,48 +2082,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   // ── Reports ──────────────────────────────────────────────────────────────
   {
     method: "GET",
-    match: "/providers/me/traffic",
-    body: () => ({
-      from: minutesAgo(43200),
-      to: minutesAgo(0),
-      buckets: TRAFFIC_DAILY.map((calls, index) => ({
-        day: dayUtc(TRAFFIC_DAILY.length - 1 - index),
-        calls,
-        byStatus: byStatus(calls, index === TRAFFIC_DAILY.length - 1 ? 9 : 0),
-        /* No per-day latency source exists. Null, never a synthetic figure. */
-        p50LatencyMs: null,
-        p95LatencyMs: null,
-      })),
-      totalCalls: TRAFFIC_TOTAL,
-      agentBreakdown: AGENT_CALLS.map((agent) => ({
-        agentId: agent.agentId,
-        calls: agent.calls,
-        byStatus: byStatus(agent.calls),
-      })),
-    }),
-  },
-  {
-    method: "GET",
-    match: "/providers/me/quality",
-    body: () => ({
-      /*
-        The three rates carry the registry snapshot's own rolling windows (24h
-        for availability, 7d for quality) — they are NOT scoped by from/to.
-      */
-      paidQualityRate: 0.982,
-      freeQualityRate: 0.9705,
-      availabilityRate: 0.9991,
-      from: minutesAgo(43200),
-      to: minutesAgo(0),
-      verdictMix: verdictMix(),
-      totalCalls: TRAFFIC_TOTAL,
-    }),
-  },
-  {
-    method: "GET",
     match: "/providers/me/earnings",
-    /* `asset` is a CAIP-19 the money columns are denominated in. Must win. */
-    override: "always",
     body: () => ({
       groups: earningsGroups(),
       totals: earningsTotals(),
@@ -2219,7 +2094,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/reconciliation",
-    override: "always",
     body: () => {
       const totals = earningsTotals();
       const row = (cls: string, calls: number, credited: string | null, note: string) => ({
@@ -2253,7 +2127,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         platformTakeRatePercent: 10,
         platformTake: totals.platformFee,
         net: totals.earned,
-        batches: { count: 3, paid: totals.earned, reconciles: true },
       };
     },
   },
@@ -2264,16 +2137,13 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     match: "/providers/me/payouts",
     /*
       `chainTxRef` is an EVM transaction hash here, never a base58 signature.
-      Rail-B redemptions (one transaction each, with its calls) newest, then
-      the older payout runs: both are payments to the wallet.
+      Rail-B redemptions, one transaction each with its calls, newest first.
     */
-    override: "always",
     body: () =>
       page([
         {
           id: "ple_7a20c3e1",
           kind: "REDEMPTION",
-          batchId: null,
           amount: { ...money("0.405"), asset: DEMO_ASSET },
           chainTxRef: "0x9c3e0d8a51b47f26e8d1c0a3b5f7e9d2c4a6b8e0f1d3c5a7b9e1f3d5c7a9b1e3",
           calls: 1,
@@ -2282,7 +2152,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         {
           id: "ple_6b14d2f0",
           kind: "REDEMPTION",
-          batchId: null,
           amount: { ...money("1.215"), asset: DEMO_ASSET },
           chainTxRef: "0x2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3c5e7b9d1f3a",
           calls: 3,
@@ -2290,8 +2159,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         },
         {
           id: "ple_5c81a04f",
-          kind: "BATCH",
-          batchId: "pb_2026-09-16-08",
+          kind: "REDEMPTION",
           amount: { ...money("52.18"), asset: DEMO_ASSET },
           chainTxRef: "0x58f09cc907edec4fd5fda8cf1d3a0f9f04661d42150a744ce90f20cf4171a71f",
           calls: 129,
@@ -2299,8 +2167,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         },
         {
           id: "ple_3d07f9b2",
-          kind: "BATCH",
-          batchId: "pb_2026-09-15-19",
+          kind: "REDEMPTION",
           amount: { ...money("64.91"), asset: DEMO_ASSET },
           chainTxRef: "0x1ef5cc71b2166cbfe9971f4bff054dda0d3d2bcfb71eb18aec2a7b0e32469391",
           calls: 160,
@@ -2308,11 +2175,10 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         },
         {
           id: "ple_91e26cd7",
-          kind: "BATCH",
-          batchId: "pb_2026-09-12-11",
+          kind: "REDEMPTION",
           amount: { ...money("64.35"), asset: DEMO_ASSET },
           chainTxRef: "0x0555b7515f9639e142ee463706cefc42f8a8a9dad3b062c26b1675788ab5b2c2",
-          calls: null,
+          calls: 158,
           createdAt: minutesAgo(6000),
         },
       ]),
@@ -2322,7 +2188,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: /^\/providers\/me\/sla-windows\/[^/]+\/evidence$/,
-    override: "always",
     body: (path) => {
       const id = idIn(path, 3) ?? WINDOWS[0].windowId;
       const entry = windowFor(id);
@@ -2381,7 +2246,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: /^\/providers\/me\/sla-windows\/[^/]+$/,
-    override: "always",
     body: (path) => {
       const id = idIn(path, 3) ?? WINDOWS[0].windowId;
       const entry = windowFor(id);
@@ -2420,7 +2284,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/sla-windows",
-    override: "always",
     body: (_path, query) => {
       const bindingId = typeof query.bindingId === "string" ? query.bindingId : null;
       const status = typeof query.status === "string" ? query.status : null;
@@ -2433,50 +2296,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
           .slice(0, limit)
           .map((entry) => slaWindow(entry)),
       );
-    },
-  },
-  {
-    method: "GET",
-    match: /^\/providers\/me\/bindings\/[^/]+\/sla$/,
-    body: (path) => {
-      const binding = bindingFor(idIn(path, 3));
-      const open = WINDOWS.find(
-        (entry) => entry.status === "OPEN" && BINDINGS[entry.bindingIndex].id === binding.id,
-      );
-      const closed = WINDOWS.filter(
-        (entry) => entry.status === "CLOSED" && BINDINGS[entry.bindingIndex].id === binding.id,
-      );
-      const verifiedCalls = closed.reduce((total, entry) => total + entry.verifiedCalls, 0);
-      const failedCalls = closed.reduce((total, entry) => total + entry.failedCalls, 0);
-      const observed = verifiedCalls === 0 ? null : failedCalls / verifiedCalls;
-
-      return {
-        bindingId: binding.id,
-        toolId: binding.toolId,
-        currentDeclaredFailureRate: binding.slaFailureRate,
-        inFlightWindow: open
-          ? {
-              windowId: open.windowId,
-              label: open.label,
-              declaredFailureRate: binding.slaFailureRate,
-              openedAt: minutesAgo(open.openedMinutesAgo),
-              verifiedCalls: open.verifiedCalls,
-            }
-          : null,
-        measured:
-          verifiedCalls === 0
-            ? null
-            : {
-                verifiedCalls,
-                failedCalls,
-                observedFailureRate: observed,
-                confidenceInterval: interval(observed ?? 0, 0.0139),
-              },
-        effectiveThreshold: binding.slaFailureRate + 0.0181,
-        minVerifiedCalls: 200,
-        /* Cross-organization aggregates only — never another provider's name. */
-        peers: { median: 0.0241, p90: 0.0688, rank: 3, count: 17 },
-      };
     },
   },
 
@@ -2669,95 +2488,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   // ── Slash proposal and disputes ──────────────────────────────────────────
   {
     method: "GET",
-    match: /^\/providers\/me\/slash-proposals\/[^/]+\/timeline$/,
-    body: (path) => {
-      const facts = caseFacts(idIn(path, 3));
-      const { subject } = facts;
-      const pct = (value: number) => `${(value * 100).toFixed(2)}%`;
-      const events: { id: string; occurredAt: string; kind: string; actorType: string; actorId: string | null; summary: string; detail: object }[] = [
-        {
-          id: "ev_1",
-          occurredAt: minutesAgo(subject.closedMinutesAgo ?? 0),
-          kind: "WINDOW_CLOSED",
-          actorType: "system",
-          actorId: null,
-          summary: `${subject.label} closed · ${subject.failedCalls} failed of ${subject.verifiedCalls} verified · ${pct(facts.observed)} against your declared ${pct(facts.declared)}`,
-          detail: {},
-        },
-        {
-          id: "ev_2",
-          occurredAt: minutesAgo(facts.proposedMinutesAgo),
-          kind: "PROPOSED",
-          actorType: "system",
-          actorId: null,
-          summary: `penalty proposed · ${usd(facts.amount)}`,
-          detail: {},
-        },
-        {
-          id: "ev_3",
-          occurredAt: minutesAgo(facts.proposedMinutesAgo - 12),
-          kind: "NOTIFIED",
-          actorType: "system",
-          actorId: null,
-          summary: "delivery confirmed by email · your response clock started here",
-          detail: {},
-        },
-      ];
-      if (facts.which === 1) {
-        events.push(
-          {
-            id: "ev_4",
-            occurredAt: minutesAgo(4380),
-            kind: "ACKNOWLEDGED",
-            actorType: "provider",
-            actorId: CONSOLE_CREDENTIAL,
-            summary: "acknowledged · this moves no clock",
-            detail: {},
-          },
-          {
-            id: "ev_5",
-            occurredAt: minutesAgo(4320),
-            kind: "DISPUTE_FILED",
-            actorType: "provider",
-            actorId: CONSOLE_CREDENTIAL,
-            summary: "disputed on chain by your stake wallet",
-            detail: {},
-          },
-          {
-            id: "ev_6",
-            occurredAt: minutesAgo(2880),
-            kind: "REVIEW_ASSIGNED",
-            actorType: "operator",
-            actorId: "op_4d17",
-            summary: "reviewer assigned · we respond by the platform deadline on this case",
-            detail: {},
-          },
-        );
-      }
-      if (facts.which === 2) {
-        events.push({
-          id: "ev_4",
-          occurredAt: minutesAgo(10500),
-          kind: "EXECUTED",
-          actorType: "system",
-          actorId: null,
-          summary: `penalty taken from stake · ${usd(facts.amount)}`,
-          detail: {},
-        });
-      }
-      return {
-        events,
-        restoration: [
-          { label: "Penalty", value: usd(facts.amount), status: facts.which === 2 ? "NOT_APPLICABLE" : "ON_DECISION" },
-          { label: "Stake", value: facts.which === 2 ? `${usd(facts.amount)} taken` : "$600.00 untouched", status: "NOT_APPLICABLE" },
-          { label: "Routing", value: "unaffected throughout", status: "NOT_APPLICABLE" },
-          { label: "Window record", value: `${subject.label} annotated`, status: facts.which === 2 ? "NOT_APPLICABLE" : "ON_DECISION" },
-        ],
-      };
-    },
-  },
-  {
-    method: "GET",
     match: /^\/providers\/me\/slash-proposals\/[^/]+$/,
     body: (path) => {
       const proposalId = idIn(path, 3) ?? PROPOSAL_ID;
@@ -2837,39 +2567,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         })),
       };
     },
-  },
-  {
-    method: "GET",
-    match: /^\/disputes\/[^/]+$/,
-    body: (path) => disputeRow(idIn(path, 1) ?? DISPUTE_ID),
-  },
-  {
-    method: "GET",
-    match: "/disputes",
-    body: () =>
-      page([
-        disputeRow(DISPUTE_ID),
-        {
-          id: "8d3b61f0-27ac-4e95-b104-5f9c2e8a3d76",
-          subjectType: "VERDICT",
-          subjectId: VERDICTS[1].id,
-          providerId: PROVIDER_ID,
-          state: "UPHELD",
-          claimType: "POLICY_DEFECT",
-          reason:
-            "The freshness rule read an offset-less timestamp as local time. The upstream field is UTC.",
-          evidence: [],
-          openedBy: CONSOLE_CREDENTIAL,
-          acknowledgedAt: minutesAgo(20160),
-          deadlineAt: minutesAgo(15840),
-          resolvedAt: minutesAgo(14400),
-          resolvedBy: "op_4d17",
-          resolutionNote: "Upheld. The rule was corrected and the call was re-settled.",
-          restoredAmount: money("0.405"),
-          createdAt: minutesAgo(20220),
-          updatedAt: minutesAgo(14400),
-        },
-      ]),
   },
 
   // ── Tool requests ────────────────────────────────────────────────────────
@@ -2981,7 +2678,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/agents",
     /* `agentAccount` is a CAIP-10 and must name 46630, not a Solana cluster. */
-    override: "always",
     body: () =>
       page([
         {

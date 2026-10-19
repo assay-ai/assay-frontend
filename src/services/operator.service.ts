@@ -2,16 +2,16 @@ import type { CursorPage } from "@/interfaces/api";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { toTwoPersonAnswer, type TwoPersonAnswer } from "@/features/operator/two-person";
 import type {
-  AccountBlock, AddOperatorBody, AdjudicationQueueRow, ApprovalDecision, ApprovalQueued,
+  AccountBlock, AddOperatorBody, ApprovalDecision, ApprovalQueued,
   ArbiterBlockBody, ArbiterDispute, ArbiterRulingBody, ArbiterSupersededCancelBody,
   ArbiterSupersededRecord, ArbiterTerms, CancelIntent,
   ChangeOperatorBody, CreateAccountBlockBody, ListAccountBlocksQuery, ListOverrideLogQuery,
   OperatorApproval, OperatorApprovalStatus, OperatorChallenge, OperatorDirectoryEntry,
   OperatorSignIn, OperatorStatus, OverrideLogEntry, RemoveOperatorBody, UnblockAccountBody,
-  CompensationIntent, DecideCaseBody, ExtendDeadlineBody, FleetSweep, ListQueueQuery,
+  CompensationIntent, FleetSweep,
   OpenFleetSweepBody, OperatorCaseBrief, OperatorIdentity, PlatformHealth,
   ListOperatorCasesQuery, OperatorCaseListRow,
-  RecordCompensationBody, SecondSignatureBody, SuspendProposalBody,
+  RecordCompensationBody, SuspendProposalBody,
   ManualCaseActionBody, ManualCaseActionResult,
 } from "@/interfaces/operator";
 
@@ -57,28 +57,7 @@ export function getPlatformHealth(): Promise<PlatformHealth> {
 }
 
 /**
- * `GET /operator/queue`.
- *
- * Draws only from `DISPUTED`, `UNDER_REVIEW` and `AWAITING_SECOND`, and only
- * where a platform decision deadline is set — a `PROPOSED` proposal never
- * appears. `mine`/`unassigned`/`overdue` are applied by the server AFTER
- * pagination, so a filtered page can come back empty with `hasMore` true.
- */
-export function listAdjudicationQueue(
-  query: ListQueueQuery = {},
-): Promise<CursorPage<AdjudicationQueueRow>> {
-  return operatorApi.get<CursorPage<AdjudicationQueueRow>>(
-    "/operator/queue",
-    query as Record<string, unknown>,
-  );
-}
-
-/**
  * `GET /operator/cases` — every penalty, next deadline first. Any operator.
- *
- * Newer than some deployed backends: an older one has no such route and
- * answers 404, which the Penalties page reads as "no list here" and falls
- * back to the lists that do exist.
  */
 export function listOperatorCases(
   query: ListOperatorCasesQuery = {},
@@ -97,36 +76,6 @@ export function getOperatorCase(proposalId: string): Promise<OperatorCaseBrief> 
   );
 }
 
-/** `POST /operator/cases/:id/claim`. `ADJ` or `ADJL`. */
-export function claimCase(proposalId: string): Promise<unknown> {
-  return operatorApi.post<unknown>(`/operator/cases/${encodeURIComponent(proposalId)}/claim`);
-}
-
-/**
- * `POST /operator/cases/:id/decide`. `ADJ` or `ADJL`.
- *
- * Refused unless the case is `DISPUTED` or `UNDER_REVIEW`; 422 when a reason
- * code is not valid for the outcome; `invalidTransition` when an upholding
- * outcome is decided from `UNDER_REVIEW` and no second signature is required.
- */
-export function decideCase(proposalId: string, body: DecideCaseBody): Promise<unknown> {
-  return operatorApi.post<unknown>(
-    `/operator/cases/${encodeURIComponent(proposalId)}/decide`, body,
-  );
-}
-
-/**
- * `POST /operator/cases/:id/second`. `ADJ` or `ADJL`.
- *
- * `AWAITING_SECOND` only, and refused when you are the operator who decided.
- * An objection returns the case to `UNDER_REVIEW` undecided.
- */
-export function secondCase(proposalId: string, body: SecondSignatureBody): Promise<unknown> {
-  return operatorApi.post<unknown>(
-    `/operator/cases/${encodeURIComponent(proposalId)}/second`, body,
-  );
-}
-
 /**
  * `POST /operator/cases/:id/suspend`. `ADJ`, `ADJL` or `SRE`. Legal wherever `CANCELLED` is reachable.
  * From `AWAITING_SECOND` and `UPHELD` it is two-person (`S-1`): answered 202
@@ -139,15 +88,6 @@ export async function suspendCase(
     await operatorApi.postWithStatus<unknown>(
       `/operator/cases/${encodeURIComponent(proposalId)}/suspend`, body,
     ),
-  );
-}
-
-/** `POST /operator/cases/:id/extend-deadline`. `ADJL`. `PROPOSED` with a non-null `respondByAt` only. */
-export function extendCaseDeadline(
-  proposalId: string, body: ExtendDeadlineBody,
-): Promise<unknown> {
-  return operatorApi.post<unknown>(
-    `/operator/cases/${encodeURIComponent(proposalId)}/extend-deadline`, body,
   );
 }
 

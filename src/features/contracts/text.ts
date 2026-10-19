@@ -212,14 +212,6 @@ export function deprecationSentence(major: number, deprecation: Pick<ToolDepreca
 export const MIN_SUNSET_DAYS = 90;
 const DAY_MS = 86_400_000;
 
-/** The earliest allowed sunset day, "YYYY-MM-DD" UTC: 90 days from now, rounded up to the next whole day. */
-export function earliestSunsetDay(now: number = Date.now()): string {
-  const earliest = now + MIN_SUNSET_DAYS * DAY_MS;
-  const day = new Date(earliest);
-  const midnight = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate());
-  return new Date(midnight < earliest ? midnight + DAY_MS : midnight).toISOString().slice(0, 10);
-}
-
 /** The first whole UTC day at or after the API's `earliestSunsetAt`. */
 export function sunsetDayFrom(earliestSunsetAt: string): string {
   const at = Date.parse(earliestSunsetAt);
@@ -233,12 +225,11 @@ export function sunsetInstant(day: string): string {
   return `${day}T00:00:00Z`;
 }
 
-/** Why a sunset day can't be used, or null. */
-export function sunsetProblem(day: string, now: number = Date.now(), earliestSunsetAt?: string): string | null {
+/** Why a sunset day can't be used, or null. `earliestSunsetAt` is the API's. */
+export function sunsetProblem(day: string, earliestSunsetAt: string): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(sunsetInstant(day)))) return "Pick a date.";
-  const earliest = earliestSunsetAt ? Date.parse(earliestSunsetAt) : now + MIN_SUNSET_DAYS * DAY_MS;
-  if (Date.parse(sunsetInstant(day)) < earliest) {
-    const first = earliestSunsetAt ? sunsetDayFrom(earliestSunsetAt) : earliestSunsetDay(now);
+  if (Date.parse(sunsetInstant(day)) < Date.parse(earliestSunsetAt)) {
+    const first = sunsetDayFrom(earliestSunsetAt);
     return `Pick ${sunsetDay(sunsetInstant(first))} or later: callers get at least ${MIN_SUNSET_DAYS} days' notice.`;
   }
   return null;

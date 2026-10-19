@@ -125,6 +125,7 @@ describe("agent readiness", () => {
     spentInWindow: usd("2"),
     validUntil: "2026-11-16T00:00:00Z",
     status: "ACTIVE",
+    unsettled: { count: 0, amount: usd("0"), largest: usd("0"), windowNeeds: usd("0"), redeemableUntil: null },
     ...over,
   });
 
@@ -195,7 +196,7 @@ describe("agent readiness when the escrow is unknown or empty", () => {
     const r = agentReadiness({
       agentAccount: "eip155:1:0xa",
       credentials: [{ id: "c", name: "k", revokedAt: null, lastUsedAt: null, delegateAccount: "eip155:1:0xd" }],
-      delegates: [{ delegate: "eip155:1:0xd", maxVoucherAmount: usd("1"), maxPerWindow: usd("10"), spentInWindow: usd("0"), validUntil: "2099-01-01T00:00:00Z", status: "ACTIVE" }],
+      delegates: [{ delegate: "eip155:1:0xd", maxVoucherAmount: usd("1"), maxPerWindow: usd("10"), spentInWindow: usd("0"), validUntil: "2099-01-01T00:00:00Z", status: "ACTIVE", unsettled: { count: 0, amount: usd("0"), largest: usd("0"), windowNeeds: usd("0"), redeemableUntil: null }, }],
       escrow: { exists: true, maxVoucherAmount: usd("1"), maxPerWindow: usd("20"), withdrawRequested: usd("0"), balance: usd("0") },
       paused: false,
     });

@@ -7,10 +7,10 @@
  *
  * The brief's `case`, `timeline` and `restoration` are the SAME shapes the
  * provider console already renders, so they are imported rather than
- * redeclared. What is genuinely operator-only is the queue row, the identity,
+ * redeclared. What is genuinely operator-only is the identity,
  * the health tiles, the dispute record and the action bodies.
  */
-import type { ListQuery, Money } from "./api";
+import type { Money } from "./api";
 import type { SlashProposalEvent, SlashRestorationRow } from "./provider-disputes";
 import type { SlashProposalCaseDetail } from "./provider-slash-cases";
 
@@ -148,17 +148,10 @@ export interface PlatformHealth {
   policiesTotal: number;
   stakeLocked: Money;
   providersWithStake: number;
-  /**
-   * Non-EVM cases still in the retired in-app objection statuses (DISPUTED,
-   * UNDER_REVIEW, AWAITING_SECOND): the Penalties list's "Old process" tab.
-   * None of them is on chain or waiting for the arbiter.
-   */
-  oldProcessCases: number;
-  oldestOldProcessCaseAgeSeconds: number | null;
-  /** The EVM chain-state cache, one row per chain. Absent on an older backend. */
-  chainState?: ChainStateHealth[];
-  /** Every provider on a slash hold, one row per provider and chain. Absent on an older backend. */
-  slashHolds?: SlashHoldHealth[];
+  /** The EVM chain-state cache, one row per chain. */
+  chainState: ChainStateHealth[];
+  /** Every provider on a slash hold, one row per provider and chain. */
+  slashHolds: SlashHoldHealth[];
   /** Provider tools waiting for review: the "Needs you" count for the review queue. Null when it could not be read. */
   pendingToolReviews?: number | null;
   /** Buyer call disputes still open. Null when it could not be read. */
@@ -216,8 +209,7 @@ export interface ChainStateHealth {
  * to `CANCELLED`.
  */
 export type SlashProposalStatus =
-  | "PROPOSED" | "DISPUTED" | "UNDER_REVIEW" | "AWAITING_SECOND"
-  | "UPHELD" | "OVERTURNED" | "EXECUTING" | "EXECUTED"
+  | "PROPOSED" | "UPHELD" | "OVERTURNED" | "EXECUTING" | "EXECUTED"
   | "REVERSED" | "WAIVED" | "CANCEL_REQUESTED" | "CANCELLED";
 
 /** assay-backend `src/modules/slash/domain/chain-slash-outcome.ts` `ChainProposalStatus`. */
@@ -234,50 +226,13 @@ export type ArbitrationOutcome =
   | "OVERTURNED_GRIEFING"
   | "OVERTURNED_INSUFFICIENT_EVIDENCE";
 
-/** assay-backend `src/modules/slash/domain/arbitration.ts` `DisputeClaimType`. */
-export type OperatorDisputeClaimType =
-  | "PLATFORM_MAPPING_CHANGE" | "AGENT_GRIEFING" | "POLICY_DEFECT"
-  | "INSUFFICIENT_SAMPLE" | "UPSTREAM_INDUCED" | "DECLARED_INCIDENT" | "OTHER";
-
-/**
- * One row of `GET /operator/queue`.
- *
- * Ordered by time-to-deadline then penalty size, **not** FIFO, and fixed
- * server-side so a caller cannot ask for insertion order.
- */
-export interface AdjudicationQueueRow {
-  proposalId: string;
-  /** e.g. `w_4471 · bnd_7QK`. */
-  caseLabel: string;
-  disputeId: string | null;
-  providerId: string;
-  providerName: string;
-  penaltyAmount: Money;
-  claimType: OperatorDisputeClaimType | null;
-  status: SlashProposalStatus;
-  /** Our deadline. ISO-8601. */
-  dueAt: string | null;
-  secondsToDeadline: number | null;
-  /** True once our deadline has passed — the sweeper overturns these against us. */
-  overdue: boolean;
-  /** The named owner. Null is rendered in red on purpose. */
-  ownerSubject: string | null;
-  rootCauseKey: string | null;
-  /** How many open cases share this root cause, including this one. 1 when ungrouped. */
-  rootCauseGroupSize: number;
-  /** Other bindings on the same tool whose failure rate moved in the same period. */
-  coFailureCount: number;
-}
-
 /**
  * Where a penalty stands, as `GET /operator/cases` groups it: the case status
- * and the mirrored on-chain status read in the case screen's precedence.
- * `DISPUTED` is the retired off-chain objection process; a dispute on chain is
- * `CHAIN_DISPUTED`.
+ * and the mirrored on-chain status read in the case screen's precedence. A
+ * dispute is on chain: `CHAIN_DISPUTED`.
  */
 export type OperatorCaseStatus =
   | "PROPOSED"
-  | "DISPUTED"
   | "CHAIN_DISPUTED"
   | "CANCEL_REQUESTED"
   | "EXECUTED"
@@ -302,10 +257,9 @@ export interface OperatorCaseListRow {
   nextDeadline: string | null;
   /**
    * Whether a record of it was ever written on chain. False while it waits to
-   * go there: its dates are then computed, not the chain's. Absent from an
-   * older backend.
+   * go there: its dates are then computed, not the chain's.
    */
-  onChain?: boolean;
+  onChain: boolean;
 }
 
 export interface ListOperatorCasesQuery {
@@ -314,13 +268,6 @@ export interface ListOperatorCasesQuery {
   cursor?: string;
   /** 1 to 100. */
   limit?: number;
-}
-
-export interface ListQueueQuery extends ListQuery {
-  mine?: boolean;
-  unassigned?: boolean;
-  overdue?: boolean;
-  rootCauseKey?: string;
 }
 
 /**
@@ -380,33 +327,32 @@ export interface OperatorCaseBrief {
   /**
    * When the on-chain record becomes executable (`chain_executable_at`),
    * read-only. From this moment anyone can execute the penalty, so it is the
-   * deadline for a requested cancel. Null while nothing stands on chain;
-   * absent from a backend that predates the field.
+   * deadline for a requested cancel. Null while nothing stands on chain.
    */
-  chainExecutableAt?: string | null;
+  chainExecutableAt: string | null;
   /**
    * How many of the case's current parts are disputed on chain (audit E-4).
    * With `chainStatus: PENDING` and a non-zero count the case is partly
-   * disputed: the other parts keep executing. Absent from an older backend.
+   * disputed: the other parts keep executing.
    */
-  chainDisputedParts?: number;
+  chainDisputedParts: number;
   /**
    * What stands on chain for the case: STANDING (Pending or Disputed: anyone
    * could execute it once due, a cancel has something to act on), EXECUTED
    * (the stake was taken, even under a requested cancel), GONE (nothing
    * stands and nothing was taken), UNKNOWN (could not be told; read as
-   * standing). Absent from an older backend (read as STANDING).
+   * standing).
    */
-  chainRecord?: "STANDING" | "EXECUTED" | "GONE" | "UNKNOWN";
+  chainRecord: "STANDING" | "EXECUTED" | "GONE" | "UNKNOWN";
   /** STANDING or UNKNOWN; the same reading as `chainRecord`, kept for simple reads. */
-  chainStanding?: boolean;
+  chainStanding: boolean;
   /** The provider's penalties upheld or executed in the last 30 days (follow-up C4). Absent from an older backend. */
   upheldViolations30d?: number;
   /**
    * B18: the three operator actions for a case stuck behind a requested
    * cancel the backend's sweep cannot settle, each with whether its guard
    * holds on the brief's own live chain read. The action reads the chain
-   * again before it acts. Absent from an older backend (nothing offered).
+   * again before it acts. Absent: nothing offered.
    */
   manualActions?: OperatorCaseManualActions;
 }
@@ -458,40 +404,12 @@ export interface ManualCaseActionResult {
   alreadyDone?: boolean;
 }
 
-/** `POST /operator/cases/:id/decide`. */
-export interface DecideCaseBody {
-  outcome: ArbitrationOutcome;
-  /** All must be valid for the chosen outcome — the API 422s otherwise. */
-  reasonCodes: string[];
-  /** At least 120 characters. Enforced by the DTO and again by a CHECK constraint. */
-  note: string;
-  rootCauseKey?: string;
-  ticketRef?: string;
-  /** Only for `UPHELD_RECALCULATED`: minor units, and never above the original. */
-  recalculatedAmount?: string;
-}
-
-/** `POST /operator/cases/:id/second`. Note is at least 20 characters. */
-export interface SecondSignatureBody {
-  kind: "SIGNED" | "OBJECTED";
-  note: string;
-}
-
 /** `POST /operator/cases/:id/suspend`. */
 export interface SuspendProposalBody {
   /** At least 20 characters. */
   note: string;
   reasonCode: string;
   ticketRef?: string;
-}
-
-/** `POST /operator/cases/:id/extend-deadline`. */
-export interface ExtendDeadlineBody {
-  /** 1 to 336. */
-  additionalHours: number;
-  /** At least 20 characters. */
-  note: string;
-  reasonCode: string;
 }
 
 /** `POST /operator/cases/:id/sweep`. Two-person. */

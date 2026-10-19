@@ -213,17 +213,14 @@ describe("the two-person case actions", () => {
   });
 });
 
-/**
- * A suspension of a case a second person confirmed, or is confirming, is
- * two-person on the backend (`S-1` raised from AWAITING_SECOND and UPHELD).
- */
+/** A suspension of a confirmed case is two-person on the backend (`S-1` raised from UPHELD). */
 describe("who may suspend alone", () => {
-  it.each(["PROPOSED", "DISPUTED", "UNDER_REVIEW"] as const)("alone from %s", (status) => {
-    expect(suspendIsTwoPerson(status)).toBe(false);
+  it("alone from PROPOSED", () => {
+    expect(suspendIsTwoPerson("PROPOSED")).toBe(false);
   });
 
-  it.each(["AWAITING_SECOND", "UPHELD"] as const)("goes to the approvals inbox from %s", (status) => {
-    expect(suspendIsTwoPerson(status)).toBe(true);
+  it("goes to the approvals inbox from UPHELD", () => {
+    expect(suspendIsTwoPerson("UPHELD")).toBe(true);
   });
 });
 

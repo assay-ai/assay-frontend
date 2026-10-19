@@ -192,16 +192,7 @@ describe("the arbiter's calls in the demo pass the signing guard unchanged", () 
   });
 });
 
-describe("B11 shapes: old-process count, chainStanding, cancels to sign", () => {
-  it("health counts old-process cases, the same rows as the Old process tab", async () => {
-    const fixtures = await load();
-    const health = call(fixtures, "GET", "/operator/health") as import("@/interfaces/operator").PlatformHealth;
-    const oldTab = (call(fixtures, "GET", "/operator/cases", { status: "DISPUTED" }) as { items: OperatorCaseListRow[] }).items;
-    expect(health.oldProcessCases).toBe(1);
-    expect(oldTab).toHaveLength(1);
-    expect(oldTab[0]).toMatchObject({ onChain: false });
-  });
-
+describe("B11 shapes: chainStanding, cancels to sign", () => {
   it("lists the CANCEL_REQUESTED rows Home's 'Cancels to sign' reads: one standing, one executed while it waited", async () => {
     const fixtures = await load();
     const rows = (call(fixtures, "GET", "/operator/cases", { status: "CANCEL_REQUESTED" }) as { items: OperatorCaseListRow[] }).items;

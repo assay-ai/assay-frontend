@@ -29,7 +29,7 @@ export const routes = {
   exploreTool: (toolId: string) => withQuery("/explore", { tool: toolId }),
   /** Connect with "Only these tools" chosen ("Use this tool"). Takes MCP tool names. */
   connectTools: (toolNames: readonly string[]) => `/connect?tools=${toolNames.map(encodeURIComponent).join(",")}`,
-  /** The public (signed-out) tool page. Takes a tool id, or a tool name for old links. */
+  /** The public (signed-out) tool page. Takes a tool id. */
   publicTool: (toolIdOrName: string) => withQuery("/catalogue/view", { tool: toolIdOrName }),
   /** The public (signed-out) provider page. */
   publicProvider: (providerId: string) => withQuery("/catalogue/provider", { id: providerId }),
@@ -50,7 +50,7 @@ export const routes = {
   /** A provider's penalty case: the Penalties page with its "Why?" drawer open. */
   providerCase: (proposalId: string) => withQuery("/provider/penalties", { case: proposalId }),
   toolRequest: (requestId: string) => withQuery("/provider/tool-requests/view", { id: requestId }),
-  /** A binding screen: `sub` is the path below the binding, e.g. "configuration/pricing". */
+  /** A binding screen: `sub` is the path below the binding, e.g. "settings". */
   binding: (bindingId: string, sub?: string) =>
     withQuery(under("/provider/bindings/view", sub), { binding: bindingId }),
   /**

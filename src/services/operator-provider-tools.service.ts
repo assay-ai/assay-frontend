@@ -142,10 +142,6 @@ export interface PromotionGroup {
   tools: PromotionCandidate[];
 }
 
-export interface SimilarTool extends PromotionCandidate {
-  similarity: { score: number; name: number; inputs: number; outputs: number };
-}
-
 export interface PromotionInvite {
   standardToolId: string;
   sourceToolId: string;
@@ -220,18 +216,6 @@ export function listPromotionGroups(): Promise<{ groups: PromotionGroup[] }> {
   return operatorApi.get<{ groups: PromotionGroup[] }>("/operator/promotions");
 }
 
-export function listSimilarTools(toolId: string): Promise<{ tools: SimilarTool[] }> {
-  return operatorApi.get<{ tools: SimilarTool[] }>(`/operator/promotions/similar/${encodeURIComponent(toolId)}`);
-}
-
 export function draftPromotion(body: DraftPromotionBody): Promise<DraftPromotionResult> {
   return operatorApi.post<DraftPromotionResult>("/operator/promotions", body);
-}
-
-export function listPromotionInvites(standardToolId: string): Promise<{ invites: PromotionInvite[] }> {
-  return operatorApi.get<{ invites: PromotionInvite[] }>(`/operator/promotions/${encodeURIComponent(standardToolId)}/invites`);
-}
-
-export function invitePromotion(standardToolId: string, toolIds: string[]): Promise<{ invites: PromotionInvite[] }> {
-  return operatorApi.post<{ invites: PromotionInvite[] }>(`/operator/promotions/${encodeURIComponent(standardToolId)}/invites`, { toolIds });
 }

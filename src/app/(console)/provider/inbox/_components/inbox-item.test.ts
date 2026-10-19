@@ -249,9 +249,9 @@ describe("inboxView: stored rows read from event + payload", () => {
   });
 
   it("keeps the stored text of events it does not know", () => {
-    const view = inboxView(row({ event: "provider.payout_sent", title: "Payout sent", body: "Your payout of $4.00 was sent." }), names);
-    expect(view.title).toBe("Payout sent");
-    expect(view.body).toBe("Your payout of $4.00 was sent.");
+    const view = inboxView(row({ event: "provider.something_new", title: "Something new", body: "A notice of $4.00 this build has no words for." }), names);
+    expect(view.title).toBe("Something new");
+    expect(view.body).toBe("A notice of $4.00 this build has no words for.");
   });
 });
 

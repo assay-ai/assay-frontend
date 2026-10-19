@@ -239,7 +239,7 @@ describe("withProvedStakeAuthority — the cache seed after a proof", () => {
     BUG-J-PROV-01: the prove sheet's success path wrote `stakeAuthority` at the
     TOP level of the cached response, which no reader looks at — every reader
     goes through `stakeActionChain`, i.e. the per-chain entries — so
-    /provider/exit kept "no authority has been proved" until a hard reload.
+    the Stake page kept "no authority has been proved" until a hard reload.
   */
   it("sets the authority on the chain it was proved on, so stakeActionChain sees it", () => {
     const before = response([chain({ chainId: EVM, stakeAuthority: null })]);

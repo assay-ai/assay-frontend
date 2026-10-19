@@ -22,103 +22,6 @@ export interface ProviderReportWindow {
   to: string;
 }
 
-// ── Traffic ────────────────────────────────────────────────────────────────
-
-/**
- * `agentId` is `payment_intents.agent_id` — the only per-call agent
- * identifier that exists; there is no `mcp_sessions` table to join against.
- * When present it narrows both `buckets` and `agentBreakdown` to that one
- * caller; when absent `agentBreakdown` still ships, covering every agent that
- * called this provider in the window.
- */
-export interface ProviderTrafficQuery extends ProviderReportWindow {
-  agentId?: string;
-}
-
-export interface ProviderStatusCount {
-  /** One of `PaymentIntentStatus`. */
-  status: string;
-  calls: number;
-}
-
-/**
- * One calling agent's volume over the whole window, not bucketed by
- * day — unlike {@link ProviderTrafficBucket}. `agentBreakdown` on
- * {@link ProviderTraffic} is grouped by `agentId` and ordered by `calls` desc,
- * server-truncated to the top 10 callers rather than zero-filled like the day
- * buckets: there is no fixed universe of agent ids to zero-fill against, and a
- * provider with more than 10 distinct callers in the window has no way to see
- * the rest through this field alone.
- */
-export interface ProviderAgentTraffic {
-  /** `payment_intents.agent_id` — an opaque UUID, not a design-style short handle. */
-  agentId: string;
-  calls: number;
-  /** Every `PaymentIntentStatus`, zero-filled, for this agent alone. */
-  byStatus: ProviderStatusCount[];
-}
-
-export interface ProviderTrafficBucket {
-  /** UTC calendar day, `YYYY-MM-DD`. */
-  day: string;
-  calls: number;
-  /** Every status, zero-filled — a status never disappears between buckets. */
-  byStatus: ProviderStatusCount[];
-  /**
-   * Always `null` today. There is no per-day latency source: `payment_intents`
-   * records no latency column, and `ProviderStats.p50LatencyMs` is a single
-   * rolling snapshot rather than a daily bucket. Typed nullable so the screen
-   * that eventually gets numbers does not change shape.
-   */
-  p50LatencyMs: number | null;
-  /** See `p50LatencyMs` — always `null` today. */
-  p95LatencyMs: number | null;
-}
-
-export interface ProviderTraffic {
-  from: string;
-  to: string;
-  buckets: ProviderTrafficBucket[];
-  totalCalls: number;
-  /**
-   * Calls per agent over the whole period, status split, ordered by `calls`
-   * desc — top 10 callers. Narrowed to one agent when `agentId` is passed on
-   * the request. See {@link ProviderAgentTraffic}.
-   */
-  agentBreakdown: ProviderAgentTraffic[];
-}
-
-// ── Quality ────────────────────────────────────────────────────────────────
-
-export type ProviderQualityQuery = ProviderReportWindow;
-
-export interface ProviderVerdictMixEntry {
-  /** One of `VerdictStatus`, or `PENDING` for a call not yet judged. */
-  verdict: string;
-  calls: number;
-  /** calls / total calls in the window. */
-  share: number;
-}
-
-/**
- * `GET /providers/me/quality`.
- *
- * The three rates are **not** scoped by `from`/`to`. They are read off the
- * registry snapshot and carry its own rolling window (24h for availability,
- * 7d for quality). Only `verdictMix` and `totalCalls` answer the requested
- * window. A screen that labels all five with one date range is lying about
- * three of them.
- */
-export interface ProviderQuality {
-  paidQualityRate: number | null;
-  freeQualityRate: number | null;
-  availabilityRate: number | null;
-  from: string;
-  to: string;
-  verdictMix: ProviderVerdictMixEntry[];
-  totalCalls: number;
-}
-
 // ── Earnings ───────────────────────────────────────────────────────────────
 
 export type ProviderEarningsGroupBy = "day" | "tool";
@@ -161,9 +64,8 @@ export interface ProviderEarningsFigures {
   withheldCalls: number;
   /**
    * `withheld` by reason, one row per per-call export class, always all three.
-   * Optional: older backends do not send it.
    */
-  withheldByClass?: NotCreditedClassFigure[];
+  withheldByClass: NotCreditedClassFigure[];
   /**
    * The three ways a call that PASSED still paid the provider nothing (yet).
    * None of them is in `earned`, and none is ever paid by the platform: a
@@ -176,8 +78,7 @@ export interface ProviderEarningsFigures {
    *   the price is still held in the buyer's escrow, and it is paid once the
    *   buyer signs a replacement voucher.
    * - `uncollected` — a buyer debt written off after 30 days: not paid, but the
-   *   buyer still owes it and the provider is paid if it settles later (or an
-   *   older call absorbed before buyer debt existed, which nobody owes).
+   *   buyer still owes it and the provider is paid if it settles later.
    */
   forfeited?: Money | null;
   forfeitedCalls?: number;
@@ -294,5 +195,4 @@ export interface ProviderReconciliation {
   platformTakeRatePercent: number;
   platformTake: Money | null;
   net: Money | null;
-  batches: { count: number; paid: Money | null; reconciles: boolean };
 }

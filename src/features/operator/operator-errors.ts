@@ -14,7 +14,6 @@ const SENTENCES: Readonly<Record<string, string>> = {
   OPERATOR_AUTHORITY_EXCEEDED: "The amount is above your authority limit. An operator with a higher limit has to do this.",
   OPERATOR_ROLE_REQUIRED: "Your roles do not allow this action.",
   OPERATOR_CREDENTIAL_INVALID: "Your operator session has ended. Sign in again.",
-  OPERATOR_SUSPENDED: "Your operator account is suspended.",
   OPERATOR_NOT_AUTHORIZED: "This wallet is no longer an active operator.",
   OPERATOR_SECOND_APPROVER_REQUIRED: "This needs a second operator, who approves it from their Home.",
   OPERATOR_OVERRIDE_NOT_IMPLEMENTED: "The backend does not have this action switched on yet.",

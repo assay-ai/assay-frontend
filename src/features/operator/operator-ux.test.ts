@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { OnChainDisputeState } from "@/interfaces/provider-disputes";
 
 import type {
   ArbiterDispute,
@@ -156,8 +157,8 @@ describe("the health strip", () => {
     policiesTotal: 0,
     stakeLocked: { amount: "0", asset: "x", decimals: 6 },
     providersWithStake: 0,
-    oldProcessCases: 0,
-    oldestOldProcessCaseAgeSeconds: null,
+    chainState: [],
+    slashHolds: [],
   };
   it("is all normal below the gate", () => {
     expect(healthIssues(base)).toEqual([]);
@@ -232,13 +233,24 @@ describe("the operator nav", () => {
 
 const USD = (amount: string) => ({ amount, asset: "eip155:46630/erc20:0xabc", decimals: 6 });
 
+/** The backend's per-record state for one record (`onChainDisputeState`). */
+function chainStateOf(o: { chainStatus?: string; disputedAt?: string | null; parts?: number }): OnChainDisputeState | null {
+  const chain = o.chainStatus ?? "PENDING";
+  if (chain === "EXECUTED") return "EXECUTED";
+  if (chain === "CANCELLED") return "CANCELLED";
+  if (chain === "DISPUTED") return "DISPUTED";
+  if (chain !== "PENDING" && chain !== "CANCEL_REQUESTED") return null;
+  if ((o.parts ?? 0) > 0) return "DISPUTED";
+  return o.disputedAt ? "UPHELD" : "PENDING";
+}
+
 function brief(overrides: {
   status?: string;
   chainStatus?: OperatorCaseBrief["chainStatus"];
   executableAt?: string | null;
   disputedAt?: string | null;
   parts?: number;
-  /** False for a Solana case; absent (or true) is an EVM case, ruled on chain only. */
+  /** False for a Solana case; absent is an EVM case, ruled on chain only. */
   disputeOnChain?: boolean;
 }): OperatorCaseBrief {
   const proposedAt = iso(NOW - 2 * DAY);
@@ -266,7 +278,14 @@ function brief(overrides: {
           chainDisputedAt: overrides.disputedAt ?? null,
           secondsRemaining: null,
           runningClock: "NONE",
-          ...(overrides.disputeOnChain === undefined ? {} : { disputeOnChain: overrides.disputeOnChain }),
+          disputeOnChain: overrides.disputeOnChain ?? true,
+          disputeBy: null,
+          chainExecutableAt: null,
+          chainStatus: "NONE",
+          chainDisputedParts: 0,
+          chainState: chainStateOf(overrides),
+          chainRecords: 0,
+          cancelledRecords: 0,
         },
         disputeId: null,
         outcome: null,
@@ -290,6 +309,8 @@ function brief(overrides: {
     chainStatus: overrides.chainStatus ?? "PENDING",
     chainExecutableAt: overrides.executableAt === undefined ? iso(NOW + DAY) : overrides.executableAt,
     chainDisputedParts: overrides.parts ?? 0,
+    chainRecord: "STANDING",
+    chainStanding: true,
   } as OperatorCaseBrief;
 }
 
@@ -308,7 +329,6 @@ describe("where a penalty stands", () => {
     expect(caseFacts(brief({ status: "EXECUTED", chainStatus: "EXECUTED" }), NOW).stage).toBe("executed");
     expect(caseFacts(brief({ status: "CANCELLED", chainStatus: "CANCELLED" }), NOW).stage).toBe("cancelled");
     expect(caseFacts(brief({ chainStatus: "NONE" }), NOW).stage).toBe("not-on-chain");
-    expect(caseFacts(brief({ status: "UNDER_REVIEW" }), NOW).legacyStatus).toBe(true);
   });
 
   it("draws the timeline with the window as the current step", () => {

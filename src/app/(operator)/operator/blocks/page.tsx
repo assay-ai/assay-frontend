@@ -692,7 +692,7 @@ function useBlockChains(enabled: boolean) {
   const health = useQuery({ queryKey: ["operator", "health"], queryFn: getPlatformHealth, enabled, retry: 0 });
   const ids = React.useMemo(() => {
     if (!health.data) return [];
-    const reported = (health.data.chainState ?? []).map((state) => state.chainId).filter((id) => stakeDeploymentFor(id) !== null);
+    const reported = health.data.chainState.map((state) => state.chainId).filter((id) => stakeDeploymentFor(id) !== null);
     return reported.length > 0 ? [...new Set(reported)] : [ROBINHOOD_TESTNET_STAKE.chainId];
   }, [health.data]);
   return { ids, isError: health.isError, isLoading: health.isLoading, refetch: health.refetch };

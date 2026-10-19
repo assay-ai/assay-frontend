@@ -131,8 +131,8 @@ describe("per-chain prices", () => {
   const evm = { amount: "100000", asset: "eip155:46630/erc20:0xusdg", decimals: 6 };
   const sol = { amount: "250000", asset: "solana:devnet/token:usdg", decimals: 6 };
   const prices = [
-    { chainId: "solana:devnet", price: sol, providerId: "open-meteo" },
-    { chainId: "eip155:46630", price: evm, providerId: "e2e" },
+    { chainId: "solana:devnet", price: sol, providerId: "open-meteo", listings: 1 },
+    { chainId: "eip155:46630", price: evm, providerId: "e2e", listings: 1 },
   ];
   const names: Record<string, string> = { "eip155:46630": "Robinhood Chain testnet", "solana:devnet": "Solana devnet" };
   const chainName = (id: string) => names[id] ?? id;
@@ -172,8 +172,6 @@ describe("per-chain prices", () => {
     expect(chainProviderName({ ...prices[1], listings: 1 }, nameOf)).toBe("E2E Weather Ltd");
     expect(chainProviderName({ ...prices[1], listings: 2 }, nameOf)).toBeNull();
     expect(chainProviderName({ ...prices[1], providerId: null, listings: 1 }, nameOf)).toBeNull();
-    // An older API without the count names nobody rather than guessing.
-    expect(chainProviderName(prices[1], nameOf)).toBeNull();
   });
   it("draws the seed's two lines: Robinhood leads with its provider, Solana on its own line", () => {
     const nameOf = (id: string) => ({ e2e: "E2E Weather Ltd", "open-meteo": "Open-Meteo Demo BV" })[id];
@@ -575,17 +573,12 @@ describe("notChargedSplit (public not-charged totals)", () => {
     expect(lines[1]).toMatchObject({ label: "Another reason", calls: 7 });
   });
 
-  it("shows one merged line, worded as a group, when the server sends no split or named nothing", () => {
-    for (const totals of [
-      { callsNotCharged: 312, callsFailedCheck: 241 },
-      { callsNotCharged: 312, callsFailedCheck: 241, notChargedByReason: [], callsNotChargedOther: 71 },
-    ]) {
-      const lines = notChargedSplit(totals);
-      expect(lines).toHaveLength(2);
-      expect(lines[1]).toMatchObject({ key: "OTHER", calls: 71 });
-      expect(lines[1]!.label).toMatch(/^Not charged for another reason/);
-      expect(lines[1]!.label).toMatch(/rejected or out-of-scope request, expired/);
-    }
+  it("shows one merged line, worded as a group, when the server named nothing", () => {
+    const lines = notChargedSplit({ callsNotCharged: 312, callsFailedCheck: 241, notChargedByReason: [], callsNotChargedOther: 71 });
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toMatchObject({ key: "OTHER", calls: 71 });
+    expect(lines[1]!.label).toMatch(/^Not charged for another reason/);
+    expect(lines[1]!.label).toMatch(/rejected or out-of-scope request, expired/);
   });
 
   it("is only the failed-check line when nothing else went uncharged", () => {

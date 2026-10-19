@@ -1,4 +1,5 @@
 import type { CursorPage } from "@/interfaces/api";
+import type { OnChainDisputeState } from "@/interfaces/provider-disputes";
 import type {
   AccountBlock,
   ArbiterDispute,
@@ -475,8 +476,6 @@ interface DemoCase {
   m: { posted: number; verified: number; failed: number; sla: number };
   /** What the chain shows (the brief's `chainRecord`), when it is not what the mirror implies. */
   chainRecord?: "STANDING" | "EXECUTED" | "GONE" | "UNKNOWN";
-  /** A case still in the retired in-app objection process (the list's `DISPUTED`, "Old process"). */
-  oldProcess?: boolean;
 }
 
 const CASES: DemoCase[] = [
@@ -651,26 +650,26 @@ const CASES: DemoCase[] = [
     chainRecord: "EXECUTED",
     m: { posted: 320, verified: 210, failed: 16, sla: 0.03 },
   },
-  // B11 / D15: a case still in the retired objection process, never written on chain.
-  {
-    id: "e1d2c3b4-a596-4870-8f9e-0a1b2c3d4e5f",
-    providerId: TIDEWATER,
-    tool: "fx_rates",
-    binding: "Tidewater FX",
-    window: "w_29",
-    penalty: "3.60",
-    status: "AWAITING_SECOND",
-    chainStatus: "PROPOSING",
-    proposedMinutesAgo: 5 * DAY,
-    executableIn: 2 * DAY,
-    disputedMinutesAgo: null,
-    requestId: `0x${"e1".repeat(32)}`,
-    oldProcess: true,
-    m: { posted: 280, verified: 190, failed: 11, sla: 0.03 },
-  },
 ];
 
 const CASE_BY_ID = new Map(CASES.map((c) => [c.id, c]));
+
+/** The case's on-chain state as the backend derives it from one record (`onChainDisputeState`). */
+function demoChainState(c: DemoCase, disputedAt: string | null): OnChainDisputeState | null {
+  switch (c.chainStatus) {
+    case "EXECUTED":
+      return "EXECUTED";
+    case "CANCELLED":
+      return c.expired ? "EXPIRED" : "CANCELLED";
+    case "DISPUTED":
+      return "DISPUTED";
+    case "PENDING":
+    case "CANCEL_REQUESTED":
+      return disputedAt ? "UPHELD" : "PENDING";
+    default:
+      return null;
+  }
+}
 
 function caseBrief(original: DemoCase): OperatorCaseBrief {
   const c = caseNow(original);
@@ -707,6 +706,12 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
           chainStatus: c.chainStatus,
           chainDisputedAt: disputedAt,
           chainDisputedParts: original.chainStatus === "DISPUTED" ? 1 : 0,
+          disputeOnChain: true,
+          chainState: demoChainState(c, disputedAt),
+          chainRecords: 0,
+          cancelledRecords: 0,
+          // The earliest door of a record still Pending and never disputed, as the backend computes it.
+          disputeBy: c.status === "PROPOSED" && c.chainStatus === "PENDING" && disputedAt === null ? executableAt : null,
           secondsRemaining: null,
           runningClock: "NONE",
         },
@@ -905,7 +910,6 @@ function arbiterDispute(original: DemoCase): ArbiterDispute {
 }
 
 const DISPUTED = CASES.filter((c) => c.chainStatus === "DISPUTED");
-const OLD_PROCESS = CASES.filter((c) => c.oldProcess);
 
 const PROVIDER_NAMES: Record<string, string> = {
   [HELIOS]: "Helios Data Labs",
@@ -933,7 +937,6 @@ function listStatus(c: DemoCase): OperatorCaseStatus {
   if (c.expired) return "EXPIRED";
   if (c.chainStatus === "CANCELLED" || CLOSED_WITHOUT_PENALTY.includes(c.status)) return "CANCELLED";
   if (c.chainStatus === "DISPUTED") return "CHAIN_DISPUTED";
-  if (c.oldProcess) return "DISPUTED";
   return "PROPOSED";
 }
 
@@ -1244,8 +1247,6 @@ function health(): PlatformHealth {
     stakeLocked: usd("48210.00"),
     providersWithStake: 8,
     // The retired objection process (D15).
-    oldProcessCases: OLD_PROCESS.length,
-    oldestOldProcessCaseAgeSeconds: OLD_PROCESS.length > 0 ? 5 * 86_400 : null,
     chainState: [
       {
         chainId: DEMO_CHAIN_ID,
@@ -1347,8 +1348,6 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
   { method: "GET", match: "/operator/me", body: () => me() },
   { method: "POST", match: "/operator/auth/logout", body: () => ({}) },
   { method: "GET", match: "/operator/health", body: () => health() },
-  // The retired off-chain queue: empty, as it is once the objection process is gone.
-  { method: "GET", match: "/operator/queue", body: () => page([]) },
   { method: "GET", match: "/operator/cases", body: (_path, query) => caseList(query) },
   {
     method: "GET",

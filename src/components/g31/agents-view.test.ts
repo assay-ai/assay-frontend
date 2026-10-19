@@ -9,7 +9,7 @@ const key = (delegateAccount: string | null) => ({
   id: "k1",
   agentId: "a",
   name: "orchestrator",
-  prefix: "x402",
+  prefix: "assay",
   scopes: [],
   lastUsedAt: null,
   expiresAt: null,

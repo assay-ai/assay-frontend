@@ -24,7 +24,7 @@ import { demoVersionFields, demoVersionList, registerDemoCatalogueTools, type De
  * DEMO ONLY — see `demo-api.ts` for the rules. **The marketplace surface.**
  *
  * What a visitor is shown when they open `/explore/providers`,
- * `/explore/providers/view?id=`, `/explore/tools` and `/connect` on a deployment
+ * `/explore/providers/view?id=`, `/explore` and `/connect` on a deployment
  * whose catalogue tables are empty: a market with depth, priced in a single
  * settlement asset on Robinhood Chain testnet (`eip155:46630`).
  *

@@ -115,8 +115,3 @@ export function withRate(presentation: VerdictPresentation, rate?: string | null
   if (!rate) return presentation.shownAs;
   return `${presentation.shownAs} (${rate})`;
 }
-
-/** Every wording that is ours rather than the design's. For review surfaces. */
-export function provisionalVerdicts(): string[] {
-  return [...Object.keys(PROVISIONAL), "null"];
-}

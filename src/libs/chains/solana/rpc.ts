@@ -6,7 +6,7 @@ import { SOLANA_DEVNET_RPC_URL, SOLANA_DEVNET_WS_URL } from "./chains";
  * The Solana RPC clients Privy needs in order to sign, built HERE rather than
  * in `providers/index.tsx`.
  *
- * The chain-SDK boundary (`eslint.config.mjs`, `x402/chain-sdk-boundary`) says
+ * The chain-SDK boundary (`eslint.config.mjs`, `assay/chain-sdk-boundary`) says
  * `@solana/*` may be imported only under the chain library. `providers/index.tsx`
  * was the one non-library file importing `@solana/kit`, and the cheapest way to
  * make the boundary hold was an exemption for that file — which is exactly the

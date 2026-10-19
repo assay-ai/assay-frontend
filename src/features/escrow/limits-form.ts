@@ -5,7 +5,7 @@ import { exceedsScale, toAtomic } from "@/utils/money";
 
 /**
  * The buyer's two on-chain escrow limits, and the validation the
- * `/funding/escrow/limits` screen submits through.
+ * Funding page's limits drawer (`?action=caps`) submits through.
  *
  * **`"0"` is never produced by an empty field.** `POST /escrow/limits-intent`
  * treats `"0"` as a deliberate "refuse every redemption" — not "no limit", not

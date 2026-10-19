@@ -92,11 +92,11 @@ describe("strandReasons (BUG-D1-07)", () => {
 
 describe("unsettledLine / strandWarning", () => {
   it("says how many and how much, in full precision", () => {
-    expect(unsettledLine(RETEST, "USDG")).toBe("1 payment ($0.10) still being settled");
-    expect(unsettledLine({ ...RETEST, count: 3, amount: usdg("600000") }, "USDG")).toBe(
+    expect(unsettledLine(RETEST)).toBe("1 payment ($0.10) still being settled");
+    expect(unsettledLine({ ...RETEST, count: 3, amount: usdg("600000") })).toBe(
       "3 payments ($0.60) still being settled",
     );
-    expect(unsettledLine({ ...RETEST, count: 0 }, "USDG")).toBeNull();
+    expect(unsettledLine({ ...RETEST, count: 0 })).toBeNull();
   });
 
   it("says why, and what it costs", () => {
@@ -216,7 +216,7 @@ describe("liveDelegation (BUG-D1-08)", () => {
     });
     expect(ready).toBe(true);
     expect(live?.unsettled?.count).toBe(1);
-    expect(unsettledLine(live?.unsettled, "USDG")).toBe(
+    expect(unsettledLine(live?.unsettled)).toBe(
       "1 payment ($0.10) still being settled",
     );
     const caps = { maxVoucherAmount: "500000", maxPerWindow: "5000000" };

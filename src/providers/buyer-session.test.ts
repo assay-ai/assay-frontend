@@ -169,7 +169,6 @@ describe("isPublicPath", () => {
     for (const path of [
       "/how-it-works",
       "/why-list-here",
-      "/calculator",
       "/catalogue",
       "/catalogue/view",
       "/catalogue/provider",

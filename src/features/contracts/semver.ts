@@ -23,10 +23,6 @@ export function parseSemver(text: string | null | undefined): Semver | null {
   return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) };
 }
 
-export function formatSemver(version: Semver): string {
-  return `${version.major}.${version.minor}.${version.patch}`;
-}
-
 /** Negative when `a` is older than `b`; an unparsable string sorts first. */
 export function compareSemverText(a: string, b: string): number {
   const left = parseSemver(a);

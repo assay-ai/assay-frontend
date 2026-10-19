@@ -52,6 +52,14 @@ function brief(input: {
           chainDisputedAt: null,
           secondsRemaining: null,
           runningClock: "NONE",
+          disputeOnChain: true,
+          disputeBy: null,
+          chainExecutableAt: null,
+          chainStatus: "NONE",
+          chainDisputedParts: 0,
+          chainState: "PENDING",
+          chainRecords: 0,
+          cancelledRecords: 0,
         },
         disputeId: null,
         outcome: null,
@@ -76,6 +84,7 @@ function brief(input: {
     chainExecutableAt: iso(NOW - DAY),
     chainDisputedParts: 0,
     chainRecord: input.chainRecord,
+    chainStanding: input.chainRecord === "STANDING" || input.chainRecord === "UNKNOWN",
     ...(input.withManual === false
       ? {}
       : {

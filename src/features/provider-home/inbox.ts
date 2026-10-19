@@ -20,7 +20,6 @@ export const PROVIDER_NOTIFICATION_EVENTS = [
   "provider.slash_decided",
   "provider.slash_executed",
   "provider.slash_reversed",
-  "provider.payout_sent",
   // T3: a contract major a binding serves is going away. Filed per organization for buyers too; the payload's role says whose.
   "tool_version.deprecated",
   "tool_version.retired",

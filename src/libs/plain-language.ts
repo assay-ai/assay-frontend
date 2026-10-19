@@ -325,7 +325,6 @@ const ERRORS: Record<string, string> = {
   UNSUPPORTED_INPUT_FIELD: "No provider this agent may use accepts one of the inputs it sent.",
   QUOTA_EXCEEDED: "The free calls are used up.",
   CREDENTIAL_INVALID: "This agent key is not valid.",
-  CREDENTIAL_REVOKED: "This agent key was revoked.",
   INSUFFICIENT_FUNDS: "Not enough balance for this call.",
   VOUCHER_ADMISSION_PAUSED: "Paid calls are paused for a moment. Try again shortly.",
   VOUCHER_ESCROW_LIMIT_EXCEEDED: "This is over your escrow's safety cap.",
@@ -336,7 +335,6 @@ const ERRORS: Record<string, string> = {
   WITHDRAWAL_PENDING: "A withdrawal is in progress, so paid calls are paused.",
   NO_SETTLEABLE_CHAIN: "You and this provider share no chain to pay on.",
   PROVIDER_SLASH_HOLD: "This provider is on hold during a penalty case.",
-  INTENT_EXPIRED: "The payment timed out. Nothing was charged.",
   DEPOSIT_BELOW_MINIMUM: "The deposit is below the minimum.",
   DEPOSIT_TRANSACTION_ALREADY_CLAIMED: "This deposit was already credited.",
   DEPOSIT_ACCOUNT_NOT_LINKED: "The wallet you deposited from is not linked to your account.",
@@ -344,12 +342,10 @@ const ERRORS: Record<string, string> = {
   UNSETTLED_VOUCHERS_AT_RISK: "This change would leave recent payments unable to settle.",
   WITHDRAWALS_FROZEN: "Withdrawals are frozen for now.",
   WITHDRAWAL_NOT_YET_AVAILABLE: "The withdrawal is not available yet.",
-  WITHDRAWAL_EXCEEDS_RESERVES: "That is more than is available to withdraw.",
   WITHDRAWAL_DESTINATION_INVALID: "The destination address is not valid.",
   DELEGATION_NOT_ACTIVE: "The payment permission is not active.",
   UNBONDING_NOT_MATURED: "The stake is still unlocking. You can withdraw it once the waiting period ends.",
   STAKE_BELOW_MINIMUM: "The stake is below the required minimum.",
-  PAYOUT_ADDRESS_UNPROVEN: "Prove you control the payout address first.",
   CHAIN_NOT_ENROLLED: "Set up this chain first.",
   BINDING_NOT_EDITABLE: "This listing cannot be edited right now.",
   BINDING_TOOL_UNKNOWN: "This tool is not in the catalogue any more. Pick another one.",
@@ -369,9 +365,7 @@ const ERRORS: Record<string, string> = {
   PAYOUT_SIGNATURE_INVALID: "The signature did not match. Sign with the right wallet.",
   NO_ELIGIBLE_BINDING: "No provider can serve this tool right now.",
   ALL_BINDINGS_FAILED: "Every provider failed this call. Nothing was charged.",
-  UPSTREAM_TIMEOUT: "The provider took too long. Nothing was charged.",
   ARGUMENTS_INVALID: "The tool's inputs are not valid.",
-  TOOL_DISABLED: "This tool is turned off.",
   INTERNAL_ERROR: "Something went wrong on our side. Try again in a moment; if it keeps happening, contact support.",
   DISPUTE_NOT_WITHDRAWABLE: "This dispute can no longer be withdrawn.",
   DISPUTE_ALREADY_ACKNOWLEDGED: "This dispute was already acknowledged.",
@@ -391,7 +385,6 @@ const ERRORS: Record<string, string> = {
   OPERATOR_BLOCK_ALREADY_ACTIVE: "This is already blocked.",
   OPERATOR_BLOCK_ALREADY_LIFTED: "This is already unblocked.",
   OPERATOR_APPROVAL_NOT_PENDING: "This request was already decided.",
-  VERIFICATION_KILL_SWITCH_ENGAGED: "Checking is paused for now.",
   VERIFICATION_EVIDENCE_PACK_TAMPERED: "The evidence failed its integrity check.",
   CHAIN_PROGRAM_PAUSED: "The contracts are paused. Try again after they resume.",
   CHAIN_ADDRESS_BLOCKED: "This address is blocked on chain.",
@@ -578,10 +571,4 @@ function isRuleType(key: string): boolean {
 }
 
 export const plainRuleCode = (code: string): string => RULE_CODES[code] ?? humanize(code);
-export const plainTerm = (key: string): string => TERMS[key] ?? (/^w_\d+$/i.test(key) ? windowLabel(key) : humanize(key));
-export const plainOutcome = (key: string): string => OUTCOMES[key] ?? humanize(key);
-export const plainResponseClass = (key: string): string => RESPONSE_CLASSES[key] ?? humanize(key);
-export const plainClassification = (key: string): string =>
-  CLASSIFICATION_REASONS[key] ?? (/^POLICY_\w+_STATUS$/.test(key) ? "The tool's own policy reclassified this reply" : humanize(key));
 export const plainStatus = (key: string): string => STATUSES[key] ?? humanize(key);
-export const plainIneligibility = (key: string): string => INELIGIBILITY[key] ?? humanize(key);

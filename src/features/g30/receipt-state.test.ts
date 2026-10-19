@@ -206,6 +206,7 @@ function settledReceipt(overrides: Partial<Receipt> = {}): Receipt {
     listedPrice: usd("2500000"),
     chargedPrice: usd("2500000"),
     withheld: usd("0"),
+    forfeited: false,
     verdict: { status: "PASS" },
     stages: [],
     policy: {},

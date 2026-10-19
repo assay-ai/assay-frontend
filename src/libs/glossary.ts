@@ -204,7 +204,3 @@ export type GlossaryKey = keyof typeof GLOSSARY;
 
 /** Every key, for tests and for a "glossary" listing. */
 export const GLOSSARY_KEYS = Object.keys(GLOSSARY) as GlossaryKey[];
-
-export function glossaryEntry(key: GlossaryKey): { term: string; definition: string } {
-  return GLOSSARY[key];
-}

@@ -7,23 +7,7 @@ import type { DisputeSlashRequestsBody, SlashContractCall } from "@/interfaces/s
 import { api } from "./api";
 
 /**
- * The slash case screen's two reads and its one non-destructive write.
- *
- * `getSlashProposalTimeline` and `fileSlashDispute` are **not** repeated here
- * — they already exist in `provider-disputes.service.ts` and this screen
- * imports them from there. What is here is what that file does not have: the
- * full case shape (it types a deliberate subset) and `acknowledge`, which no
- * other screen calls.
- */
-
-/**
  * `GET /providers/me/slash-proposals/:id` — the whole case.
- *
- * The same endpoint `getSlashProposalCase` reads, typed as the full DTO
- * rather than the dispute form's subset. Deliberately shares the cache key
- * `["provider", "slash-proposal-case", proposalId]` with that function, so
- * mounting the filing form inline on this screen reuses the response already
- * in hand instead of asking for it again.
  *
  * A proposal in another organization and one that does not exist both answer
  * 404 `SLASH_PROPOSAL_NOT_FOUND` — "not yours" and "not found" are the same
@@ -34,7 +18,6 @@ export function getSlashProposalCaseDetail(proposalId: string): Promise<SlashPro
     `/providers/me/slash-proposals/${encodeURIComponent(proposalId)}`
   );
 }
-
 
 /** The most ids `POST /providers/me/slash-requests/lookup` takes in one call. */
 export const SLASH_REQUEST_LOOKUP_MAX = 200;

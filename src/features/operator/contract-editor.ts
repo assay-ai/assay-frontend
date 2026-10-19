@@ -3,7 +3,6 @@ import { bumpSemver, compareSemverText } from "@/features/contracts/semver";
 import { problemText, STATUS_LABEL, sunsetDay } from "@/features/contracts/text";
 import type {
   ContractChange,
-  ContractDraft,
   ContractMajor,
   ContractSchema,
   OperatorTool,
@@ -276,11 +275,6 @@ function sameForm(a: ContractForm, b: ContractForm): boolean {
     [...a.optionalOutputFields].sort().join() === [...b.optionalOutputFields].sort().join() &&
     (a.baseVersion ?? null) === (b.baseVersion ?? null)
   );
-}
-
-/** Whether the saved draft can be published as it stands (no problems, something changed). */
-export function draftPublishable(draft: ContractDraft | null): boolean {
-  return draft !== null && draft.problems.length === 0;
 }
 
 /* ------------------------------------------------------------------ majors */

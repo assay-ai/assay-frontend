@@ -64,12 +64,6 @@ export interface KnownPenalty {
   source: KnownPenaltySource;
 }
 
-export const KNOWN_SOURCE_TEXT: Record<KnownPenaltySource, string> = {
-  disputed: "disputed on chain",
-  activity: "acted on, in Activity",
-  recent: "opened in this browser",
-};
-
 /**
  * Every penalty the console can name, from the lists that exist —
  * disputed on chain, acted on by an operator (Activity), opened in this

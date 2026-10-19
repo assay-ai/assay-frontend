@@ -19,6 +19,16 @@ function tool(id: string, patch: Partial<PublicTool> = {}): PublicTool {
     pricingMode: "PAID",
     routable: true,
     settlementChains: null,
+    paidBindings: 2,
+    freeCallsPerDay: null,
+    summary: "",
+    version: null,
+    versions: [],
+    deprecatedMajors: [],
+    replacementToolId: null,
+    replacementName: null,
+    replacementMajor: null,
+    replacementVersion: null,
     ...patch,
   };
 }

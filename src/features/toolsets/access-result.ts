@@ -139,10 +139,6 @@ export function allowToolsBody(access: AgentAccess, toolIds: readonly string[], 
   return { allowedToolIds: next, changeReason: `Allowed ${named}` };
 }
 
-export function removeToolBody(access: AgentAccess, toolId: string, toolName: string): UpdateAgentAccessBody {
-  return { allowedToolIds: access.allowedToolIds.filter((id) => id !== toolId), changeReason: `Stopped allowing ${toolName}` };
-}
-
 /**
  * Allows a tool set. Another organization's must be locked to a version
  * (`version`); "always latest" (null) only for your own and Official ones.
@@ -191,20 +187,6 @@ export function updateAvailableFor(t: Pick<AllowedToolset, "version" | "latestVe
   if (t.version === null || t.latestVersion === null || t.latestVersion === undefined) return null;
   if (t.status === "REMOVED" || t.status === "DELETED") return null;
   return t.latestVersion > t.version ? t.latestVersion : null;
-}
-
-export function removeToolsetBody(access: AgentAccess, toolsetId: string, name: string): UpdateAgentAccessBody {
-  return {
-    allowedToolsets: toolsetRefs(access).filter((t) => t.toolsetId !== toolsetId),
-    changeReason: `Stopped allowing the tool set ${name}`,
-  };
-}
-
-export function viaUrlOnlyBody(access: AgentAccess, toolsetId: string, viaUrlOnly: boolean): UpdateAgentAccessBody {
-  return {
-    allowedToolsets: toolsetRefs(access).map((t) => (t.toolsetId === toolsetId ? { ...t, viaUrlOnly } : t)),
-    changeReason: viaUrlOnly ? "Tool set allowed only through its own URL" : "Tool set allowed through any URL",
-  };
 }
 
 /**

@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { ApiError } from "@/libs/ApiClient";
 import { exportProviderCalls } from "@/services/provider-reports.service";
 import { toast } from "@/utils/toast";
 
@@ -82,8 +81,4 @@ export function downloadCallsCsv(
   } else if (!meta) {
     toast.info("Export downloaded. Whether it was capped is not visible from the browser.");
   }
-}
-
-export function exportErrorMessage(error: unknown): string {
-  return error instanceof ApiError ? `${error.code} · ${error.message}` : "The export failed.";
 }

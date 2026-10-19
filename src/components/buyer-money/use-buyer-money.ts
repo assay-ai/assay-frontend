@@ -77,8 +77,6 @@ export function useBuyerMoney(options: { refetchInterval?: number | false } = {}
   };
 }
 
-export type BuyerMoney = ReturnType<typeof useBuyerMoney>;
-
 /**
  * The signer, or a sentence the person can act on. Thrown from inside a wallet
  * step, so the message lands in SignAction's failure line (via

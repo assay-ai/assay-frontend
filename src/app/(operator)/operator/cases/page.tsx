@@ -16,19 +16,14 @@ import { mayRule } from "@/features/operator/arbiter";
 import { OperatorCasesTabs } from "@/features/operator/provider-tool-ui";
 import { eligibleApprovers, isLiveApproval } from "@/features/operator/inbox";
 import {
-  FALLBACK_TABS,
   OPEN_STATUSES,
   PENALTY_APPROVAL_CODES,
   STATUS_TABS,
-  rowFromBrief,
   rowFromCase,
-  rowFromDispute,
-  rowFromQueue,
   rowMatches,
   tabById,
   defaultTab,
   tabCounts,
-  uniqueRows,
   waitingText,
   type PenaltyRow,
   type PenaltyWaiting,
@@ -38,17 +33,11 @@ import {
 import { listLoadError } from "@/features/operator/operator-errors";
 import { penaltyIdFrom, readRecentPenalties, type RecentPenalty } from "@/features/operator/recent-penalties";
 import { useOperatorSession } from "@/features/operator/session-context";
-import { useOperatorDirectory, usePenaltyBriefs, useProviderNames } from "@/features/operator/use-operator-lookups";
+import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-operator-lookups";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
-import {
-  listAdjudicationQueue,
-  listApprovals,
-  listArbiterDisputes,
-  listOperatorCases,
-  listOverrideLog,
-} from "@/services/operator.service";
+import { listApprovals, listOperatorCases } from "@/services/operator.service";
 import { cn } from "@/utils";
 
 import { PenaltyTable } from "./_components/penalty-table";
@@ -61,14 +50,8 @@ import { PenaltyTable } from "./_components/penalty-table";
  * typed text filters by provider (and asks the server for that provider when
  * the name is unambiguous). Row click opens the penalty; nothing is done from
  * the list — ruling lives on the penalty page and the Arbiter.
- *
- * A backend older than the list answers 404, and the page then builds its
- * tabs from the lists that do exist (disputed on chain, acted on in Activity,
- * opened here), showing only those.
  */
 
-/** Activity entries read for penalties acted on; their penalties are read whole to name them. */
-const ACTIVITY_LOOKBACK = 50;
 const PAGE_SIZE = 50;
 
 export default function PenaltiesPage() {
@@ -104,10 +87,8 @@ export default function PenaltiesPage() {
     refetchInterval: 60_000,
     retry: 0,
   });
-  const listMissing = open.error instanceof ApiError && open.error.status === 404;
-  const tabs = listMissing ? FALLBACK_TABS : STATUS_TABS;
   // Who can rule lands on what needs ruling; everyone else on every penalty.
-  const tab = tabById(tabs, tabId ?? (tabParam || defaultTab(mayRule(me.roles), listMissing)));
+  const tab = tabById(STATUS_TABS, tabId ?? (tabParam || defaultTab(mayRule(me.roles))));
 
   const list = useInfiniteQuery({
     queryKey: ["operator", "cases", "list", tab.id, providerId ?? null],
@@ -115,35 +96,9 @@ export default function PenaltiesPage() {
     queryFn: ({ pageParam }) =>
       listOperatorCases({ status: tab.statuses ?? undefined, providerId, cursor: pageParam, limit: PAGE_SIZE }),
     getNextPageParam: (last) => last.pageInfo.nextCursor ?? undefined,
-    enabled: !listMissing && open.isSuccess,
+    enabled: open.isSuccess,
     retry: 0,
   });
-
-  // ── The fallback: only when the list is missing ──
-  const disputes = useQuery({
-    queryKey: ["operator", "arbiter", "disputes"],
-    queryFn: listArbiterDisputes,
-    enabled: listMissing,
-    refetchInterval: 60_000,
-    retry: 0,
-  });
-  const legacy = useQuery({
-    queryKey: ["operator", "queue", "list"],
-    queryFn: () => listAdjudicationQueue({ limit: 100 }),
-    enabled: listMissing,
-    retry: 0,
-  });
-  const activity = useQuery({
-    queryKey: ["operator", "override-log", "penalties-acted-on"],
-    queryFn: () => listOverrideLog({ targetType: "slash_proposal", limit: ACTIVITY_LOOKBACK }),
-    enabled: listMissing,
-    staleTime: 60_000,
-    retry: 0,
-  });
-  const actedIds = React.useMemo(() => [...new Set((activity.data?.items ?? []).map((row) => row.targetId))], [activity.data]);
-  const recentIds = React.useMemo(() => recent.map((item) => item.id), [recent]);
-  const briefIds = React.useMemo(() => (listMissing ? [...actedIds, ...recentIds] : []), [listMissing, actedIds, recentIds]);
-  const briefs = usePenaltyBriefs(briefIds);
 
   // A two-person request waiting on a penalty is what happens next to it.
   const pending = useQuery({
@@ -168,50 +123,19 @@ export default function PenaltiesPage() {
     return map;
   }, [pending.data, directory, me.id, now]);
 
-  let rows: PenaltyRow[];
-  let loading: boolean;
-  let failed: unknown = null;
-  if (!listMissing) {
-    // The list names each provider; a row whose name did not resolve shows the console's own name for it, never the id.
-    rows = (list.data?.pages ?? []).flatMap((page) =>
-      page.items.map((item) => {
-        const row = rowFromCase(item);
-        return row.providerName === row.providerId ? { ...row, providerName: providers.name(row.providerId) } : row;
-      }),
-    );
-    loading = open.isLoading || list.isLoading;
-    failed = open.isError ? open.error : list.isError ? list.error : null;
-  } else if (tab.id === "needs-ruling") {
-    rows = uniqueRows([
-      ...(disputes.data ?? []).map((d) => rowFromDispute(d, providers.name(d.providerId))),
-      ...(legacy.data?.items ?? []).map(rowFromQueue),
-    ]);
-    loading = disputes.isLoading;
-    failed = disputes.isError ? disputes.error : null;
-  } else {
-    const ids = tab.id === "acted" ? actedIds : recentIds;
-    rows = ids.flatMap((id) => {
-      const brief = briefs.get(id);
-      return brief ? [rowFromBrief(brief, providers.name(brief.case.proposal.providerId), now)] : [];
-    });
-    loading = tab.id === "acted" ? activity.isLoading : false;
-    failed = tab.id === "acted" && activity.isError ? activity.error : null;
-  }
+  // The list names each provider; a row whose name did not resolve shows the console's own name for it, never the id.
+  const rows: PenaltyRow[] = (list.data?.pages ?? []).flatMap((page) =>
+    page.items.map((item) => {
+      const row = rowFromCase(item);
+      return row.providerName === row.providerId ? { ...row, providerName: providers.name(row.providerId) } : row;
+    }),
+  );
+  const loading = open.isLoading || list.isLoading;
+  const failed: unknown = open.isError ? open.error : list.isError ? list.error : null;
   const shown = providerId ? rows : rows.filter((row) => rowMatches(row, q));
 
-  const counts: Partial<Record<PenaltyTabId, number>> = listMissing
-    ? {
-        "needs-ruling": uniqueRows([
-          ...(disputes.data ?? []).map((d) => rowFromDispute(d, "")),
-          ...(legacy.data?.items ?? []).map(rowFromQueue),
-        ]).length,
-        acted: actedIds.length,
-        recent: recentIds.length,
-      }
-    : tabCounts((open.data?.items ?? []).map(rowFromCase));
+  const counts = tabCounts((open.data?.items ?? []).map(rowFromCase));
   const openMore = Boolean(open.data?.pageInfo.nextCursor);
-  // Without the list, a source with nothing in it is not drawn at all.
-  const visibleTabs = listMissing ? tabs.filter((t) => t.id === "needs-ruling" || (counts[t.id] ?? 0) > 0) : tabs;
 
   const tabRow = useScrollFade<HTMLDivElement>();
 
@@ -266,7 +190,7 @@ export default function PenaltiesPage() {
       </header>
 
       <div ref={tabRow} role="tablist" aria-label="Penalties by status" className="scroll-fade-x -mx-4 flex w-[calc(100%+2rem)] gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] tablet:mx-0 tablet:w-full tablet:flex-wrap tablet:px-0 [&::-webkit-scrollbar]:hidden">
-        {visibleTabs.map((t) => {
+        {STATUS_TABS.map((t) => {
           const selected = t.id === tab.id;
           const count = counts[t.id];
           return (
@@ -318,19 +242,14 @@ export default function PenaltiesPage() {
         ) : (
           <PenaltyTable rows={shown} waitingBy={waitingBy} now={now} />
         )}
-        {!listMissing && list.hasNextPage ? (
+        {list.hasNextPage ? (
           <Button variant="secondary" className="self-start" loading={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
             Load more
           </Button>
         ) : null}
-        {listMissing ? (
-          <p className="text-body-xs text-03">
-            This server does not list every penalty yet. One nobody disputed or acted on opens from its link, pasted above.
-          </p>
-        ) : null}
       </section>
 
-      {!listMissing && recentLine.length > 0 ? (
+      {recentLine.length > 0 ? (
         <p className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 text-body-13 text-03">
           <span>Recently opened here:</span>
           {recentLine.map((item, index) => (
@@ -373,24 +292,17 @@ function labelOf(item: RecentPenalty, name: string | null): string {
 const EMPTY_TITLE: Record<PenaltyTabId, string> = {
   "needs-ruling": "Nothing to rule on",
   signature: "No cancel waiting for a signature",
-  "old-process": "No old-process case",
   window: "No penalty in its dispute window",
   executed: "No executed penalty",
   cancelled: "No cancelled penalty",
   all: "No penalties yet",
-  acted: "Nothing acted on lately",
-  recent: "Nothing opened here yet",
 };
 
 const EMPTY_TEXT: Record<PenaltyTabId, string> = {
-  "needs-ruling": "When a provider disputes a penalty on chain, it shows here with its 30 days to rule. Old-process cases wait under Old process.",
+  "needs-ruling": "When a provider disputes a penalty on chain, it shows here with its 30 days to rule.",
   signature: "A penalty suspended after it went on chain waits here until the arbiter key signs its cancel.",
-  "old-process":
-    "Cases opened under the retired in-app objection process wait here. None is on chain or with the arbiter; suspend one from its page if it should not stand.",
   window: "New penalties wait here while the provider can still dispute them.",
   executed: "Penalties whose stake was taken show here.",
   cancelled: "Cancelled, suspended and expired penalties show here.",
   all: "Penalties show here once Assay proposes one.",
-  acted: "Penalties an operator suspended, ruled on or paid back show here, from Activity.",
-  recent: "A penalty you open from its link shows here, so you can come back to it.",
 };

@@ -66,7 +66,7 @@ import { api } from "./api";
  * ## `chainId` is sent and the backend does not read it yet
  *
  * Withdrawal is per chain — two withdrawals, never one — so the
- * screen is `/funding/escrow?chain=<caip2>` and the chain travels on the
+ * escrow drawer is opened per chain (`?chain=<caip2>`) and the chain travels on the
  * request. **The controller takes the account from the session and accepts no
  * account or chain field**, and it answers for the session's single account
  * until the backend supports several accounts per session. An unknown query

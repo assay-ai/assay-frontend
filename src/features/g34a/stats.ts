@@ -25,10 +25,9 @@
  * threshold** it feeds (`declared + 2.58·√(p(1−p)/400)`) used to be refused
  * outright here, because no endpoint published either. Now
  * `SlaWindow.minVerifiedCalls` is a real per-window field,
- * `SlaWindowPosition.effectiveThresholdAtClose` (the SLA window screen) and
- * `BindingSla.effectiveThreshold` (the SLA workbench) are both pre-computed server-side.
- * Neither 400 nor 2.58 is hard-coded anywhere in this codebase — the SLA workbench and
- * The SLA window screen read both numbers off the wire.
+ * `SlaWindowPosition.effectiveThresholdAtClose` (the SLA window screen) is
+ * pre-computed server-side. Neither 400 nor 2.58 is hard-coded anywhere in
+ * this codebase — the SLA window screen reads both numbers off the wire.
  */
 
 /** The one glyph for "no honest source", as the design's own cells use it. */
@@ -78,14 +77,6 @@ export function stampUtc(iso: string): string {
     `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}` +
     ` ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
   );
-}
-
-/** `12:41:02` — the verdict table Time column, in UTC because every other stamp is. */
-export function clockUtc(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return DASH;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
 
 /** `51h 12m`, as the SLA window screen sub line writes elapsed time. */

@@ -138,11 +138,6 @@ export async function readGasPrice(chainId: string): Promise<bigint> {
   return clientFor(chainId).getGasPrice();
 }
 
-/** Native balance alone — the check that can run before a deposit intent exists. */
-export async function readNativeBalance(chainId: string, owner: string): Promise<bigint> {
-  return clientFor(chainId).getBalance({ address: getAddress(owner) });
-}
-
 /**
  * A complete EIP-1559 transaction for the wallet to sign: nonce at `pending`,
  * padded gas estimate, and the node's fee suggestion.

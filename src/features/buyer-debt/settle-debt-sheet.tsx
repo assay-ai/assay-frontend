@@ -56,8 +56,8 @@ export const BUYER_DEBTS_KEY = ["escrow", "debts"] as const;
 
 /**
  * `GET /escrow/debts`, shared by the banner, the settle sheet, call rows and
- * the receipt (one query key, so one request). Nothing is owed while the read
- * fails: an older backend has no such route.
+ * the receipt (one query key, so one request). A failed read shows nothing
+ * owed rather than a wrong figure.
  */
 export function useBuyerDebtsQuery() {
   const { ready, authenticated } = usePrivy();

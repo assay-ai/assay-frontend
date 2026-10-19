@@ -37,7 +37,6 @@ function ledger(overrides: Partial<ProviderReconciliation> = {}): ProviderReconc
     platformTakeRatePercent: 10,
     platformTake: usd("1560000"),
     net: usd("6240000"),
-    batches: { count: 0, paid: usd("0"), reconciles: false },
     ...overrides,
   };
 }

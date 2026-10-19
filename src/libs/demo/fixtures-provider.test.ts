@@ -209,20 +209,17 @@ describe("demo Money: not credited and payments", () => {
     }
   });
 
-  it("lists rail-B redemptions as payments, with their calls, beside the payout runs", async () => {
+  it("lists rail-B redemptions as payments, with their calls", async () => {
     const fixtures = await load();
     const body = call(fixtures, "GET", "/providers/me/payouts") as unknown as {
-      items: { kind: string; batchId: string | null; calls: number | null; chainTxRef: string | null }[];
+      items: { kind: string; calls: number | null; chainTxRef: string | null }[];
     };
-    const redemptions = body.items.filter((item) => item.kind === "REDEMPTION");
-    expect(redemptions.length).toBeGreaterThan(0);
-    for (const item of redemptions) {
-      expect(item.batchId).toBeNull();
+    expect(body.items.length).toBeGreaterThan(0);
+    for (const item of body.items) {
+      expect(item.kind).toBe("REDEMPTION");
       expect(item.calls).toBeGreaterThan(0);
       expect(item.chainTxRef).toMatch(/^0x[0-9a-f]{64}$/);
     }
-    expect(body.items.some((item) => item.kind === "BATCH")).toBe(true);
-    for (const item of body.items) expect(["BATCH", "REDEMPTION"]).toContain(item.kind);
   });
 });
 

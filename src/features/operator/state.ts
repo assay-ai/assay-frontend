@@ -1,4 +1,3 @@
-import type { BadgeVariant } from "@/components/ui/badge";
 import { stampUtc } from "@/features/g34a/stats";
 import type { Money } from "@/interfaces/api";
 import type { OperatorRole, SlashProposalStatus } from "@/interfaces/operator";
@@ -27,8 +26,7 @@ import { SWEEPABLE_OUTCOMES } from "./reason-codes";
  */
 
 const SLASH_PROPOSAL_STATUSES: readonly SlashProposalStatus[] = Object.freeze([
-  "PROPOSED", "DISPUTED", "UNDER_REVIEW", "AWAITING_SECOND",
-  "UPHELD", "OVERTURNED", "EXECUTING", "EXECUTED",
+  "PROPOSED", "UPHELD", "OVERTURNED", "EXECUTING", "EXECUTED",
   "REVERSED", "WAIVED", "CANCEL_REQUESTED", "CANCELLED",
 ]);
 
@@ -46,27 +44,6 @@ export function asProposalStatus(status: string): SlashProposalStatus | null {
     : null;
 }
 
-export function caseBadgeVariant(status: SlashProposalStatus): BadgeVariant {
-  switch (status) {
-    case "PROPOSED": return "case-proposed";
-    case "DISPUTED": return "case-disputed";
-    case "UNDER_REVIEW": return "case-under-review";
-    case "AWAITING_SECOND": return "case-awaiting-second";
-    case "UPHELD": return "case-upheld";
-    case "OVERTURNED": return "case-overturned";
-    case "EXECUTING": return "case-executing";
-    case "EXECUTED": return "case-executed";
-    case "REVERSED": return "case-reversed";
-    case "WAIVED": return "case-waived";
-    case "CANCEL_REQUESTED": return "case-cancel-requested";
-    case "CANCELLED": return "case-cancelled";
-  }
-}
-
-export function caseStatusLabel(status: SlashProposalStatus): string {
-  return status.toLowerCase().replace(/_/g, " ");
-}
-
 /**
  * What this operator may do.
  *
@@ -75,11 +52,7 @@ export function caseStatusLabel(status: SlashProposalStatus): string {
  * the backend's operator cases controller; `suspend` really does include `SRE`.
  */
 const ACTION_ROLES = {
-  claim: ["ADJ", "ADJL"],
-  decide: ["ADJ", "ADJL"],
-  second: ["ADJ", "ADJL"],
   suspend: ["ADJ", "ADJL", "SRE"],
-  extendDeadline: ["ADJL"],
   sweep: ["ADJL"],
   /*
     `compensate` inherits `reverse`'s roles unchanged — the act it replaces is
@@ -119,11 +92,7 @@ export type StatusGatedAction = Exclude<OperatorAction, "sweep" | "cancel" | "cl
 /* The B18 actions are gated on the brief's live chain read (`manualActions`), never on the status alone. */
 
 const ACTION_STATUSES: Record<StatusGatedAction, readonly SlashProposalStatus[]> = {
-  claim: ["DISPUTED", "UNDER_REVIEW", "AWAITING_SECOND"],
-  decide: ["DISPUTED", "UNDER_REVIEW"],
-  second: ["AWAITING_SECOND"],
-  suspend: ["PROPOSED", "DISPUTED", "UNDER_REVIEW", "AWAITING_SECOND", "UPHELD"],
-  extendDeadline: ["PROPOSED"],
+  suspend: ["PROPOSED", "UPHELD"],
   compensate: ["EXECUTED"],
 };
 
@@ -170,8 +139,8 @@ export function disputedPartsNote(
  * on EVM, the program admin on Solana (`cancelSignerOf`; `chain` is the case
  * penalty's CAIP-19 asset or a CAIP-2 chain id) — and
  * from its executable time **anyone** can execute the penalty. The brief
- * carries that time (`chainExecutableAt`); an older backend does not, and the
- * warning is then given without it rather than dropped.
+ * carries that time (`chainExecutableAt`); when it is null the warning is
+ * given without it rather than dropped.
  *
  * "Anyone can execute" only while something stands: with `chainRecord`
  * GONE (the brief's own reading) there is nothing to execute and nothing to
@@ -269,13 +238,12 @@ export function suspendedNotice(chainStatus: string | null | undefined, chain?: 
 }
 
 /**
- * Whether a Suspend is two-person. From `AWAITING_SECOND` and `UPHELD` a
- * second person has confirmed the penalty or is confirming it, so the backend
- * raises `S-1` to two-person and answers `202 { approvalId }`; in the earlier
- * statuses one operator suspends alone.
+ * Whether a Suspend is two-person. From `UPHELD` the penalty has been
+ * confirmed, so the backend raises `S-1` to two-person and answers
+ * `202 { approvalId }`; from `PROPOSED` one operator suspends alone.
  */
 export function suspendIsTwoPerson(status: SlashProposalStatus): boolean {
-  return status === "AWAITING_SECOND" || status === "UPHELD";
+  return status === "UPHELD";
 }
 
 /**

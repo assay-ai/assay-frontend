@@ -39,12 +39,6 @@ export function NotReviewedChip() {
   );
 }
 
-/** The tier a reviewer gave: "Verified" (never "Guaranteed" for one maker's API). */
-export function TierChip({ tier }: { tier: string }) {
-  if (tier === "VERIFIED") return <Chip tone="success">Verified</Chip>;
-  return <Chip>Unverified</Chip>;
-}
-
 export function ScreenFindings({ findings, className }: { findings: readonly ScreenFinding[]; className?: string }) {
   if (findings.length === 0) return null;
   return (
