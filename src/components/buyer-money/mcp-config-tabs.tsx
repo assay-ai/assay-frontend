@@ -10,7 +10,22 @@ import { CodeBlock } from "@/components/ui/code-block";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/utils/toast";
 import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
-import { MCP_CLIENTS, keyPlaceholder, mcpConfig, pasteHint, type McpClient } from "@/features/buyer-money/mcp-config";
+import {
+  MCP_CLIENTS,
+  addOneLiner,
+  apiKeyConfig,
+  deeplink,
+  hostedUrl,
+  installCommand,
+  installText,
+  isLocalClient,
+  keyPlaceholder,
+  NO_COMMAND_TEXT,
+  pasteHint,
+  tryBuild,
+  remoteInstall,
+  type McpClient,
+} from "@/features/buyer-money/mcp-config";
 
 /** Docs for wiring a remote MCP server into code, shown under "Other". */
 const OTHER_CLIENT_DOCS = [
@@ -69,6 +84,9 @@ export function McpConfigTabs({
   const [own, setOwn] = React.useState<McpClient>(clientProp ?? "claude-code");
   const client = clientProp ?? own;
   const url = urlProp ?? mcpEndpointUrl();
+  const name = serverName?.trim() || "assay";
+  // Only "My own code" carries a key; the proxy signs in and signs payments itself.
+  const needsKey = client === "other";
   const copyUrlOnly = async () => {
     try {
       await navigator.clipboard.writeText(url);
@@ -85,7 +103,7 @@ export function McpConfigTabs({
   };
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
-      {!token && onCreateKey ? (
+      {needsKey && !token && onCreateKey ? (
         <div className="flex flex-col gap-1.5" data-testid="create-and-fill">
           <Button type="button" icon={<KeyRound />} className="self-start" loading={creatingKey} onClick={onCreateKey}>
             Create a key and fill it in
@@ -94,7 +112,7 @@ export function McpConfigTabs({
           {createKeyError ? <p className="text-body-xs text-danger-700">{createKeyError}</p> : null}
         </div>
       ) : null}
-      {!token ? (
+      {needsKey && !token ? (
         <button
           type="button"
           className="min-h-10 self-start text-label-13 font-semibold text-primary-600 hover:underline"
@@ -116,7 +134,7 @@ export function McpConfigTabs({
           <TabsContent key={c.id} value={c.id} className="flex min-w-0 flex-col gap-2">
             <p className="text-body-xs text-03">
               {pasteHint(c.id)}
-              {token
+              {c.id !== "other" || token
                 ? null
                 : keyPrefix
                   ? ` Replace ${placeholder} with your full key (it starts ${keyPrefix.replace(/[.…]+$/, "")}).`
@@ -136,14 +154,20 @@ export function McpConfigTabs({
                 </div>
               </dl>
             ) : null}
-            <CodeBlock
-              title={c.file}
-              code={mcpConfig(c.id, { url, token, keyPrefix, serverName })}
-              onCopyCode={() => onCopy?.(c.id)}
-              copyDisabledReason={token ? null : TEMPLATE_COPY_REASON}
-              wrap
-              className="min-w-0"
-            />
+            {isLocalClient(c.id) ? (
+              <LocalInstall client={c.id} file={c.file} url={url} name={name} onCopy={() => onCopy?.(c.id)} />
+            ) : c.id === "other" ? (
+              <CodeBlock
+                title={c.file}
+                code={apiKeyConfig({ url, token, keyPrefix, serverName })}
+                onCopyCode={() => onCopy?.(c.id)}
+                copyDisabledReason={token ? null : TEMPLATE_COPY_REASON}
+                wrap
+                className="min-w-0"
+              />
+            ) : (
+              <CopyChip value={hostedUrl(url)} display={hostedUrl(url)} label="the URL" className="max-w-full break-all text-left" />
+            )}
             {c.id === "other" ? (
               <p className="text-body-xs text-03">
                 In code:{" "}
@@ -160,6 +184,44 @@ export function McpConfigTabs({
           </TabsContent>
         ))}
       </Tabs>
+    </div>
+  );
+}
+
+/** The paid-capable install, its one-click link where there is one, and the free-only remote alternative. */
+function LocalInstall({ client, file, url, name, onCopy }: { client: Exclude<McpClient, "claude-ai" | "chatgpt" | "other">; file: string; url: string; name: string; onCopy: () => void }) {
+  const input = { url, name };
+  const link = tryBuild(() => deeplink(client, input));
+  const remote = tryBuild(() => remoteInstall(client, input));
+  const command = tryBuild(() => installText(installCommand(client, input)));
+  const addLine = tryBuild(() => addOneLiner(url, client));
+  const root = (() => {
+    try {
+      return new URL(url).pathname === "/" && !new URL(url).search;
+    } catch {
+      return true;
+    }
+  })();
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      {link ? (
+        <a href={link} className="min-h-10 self-start text-label-13 font-semibold text-primary-600 hover:underline" data-testid="install-deeplink" onClick={onCopy}>
+          Install in {client === "cursor" ? "Cursor" : "VS Code"}
+        </a>
+      ) : null}
+      <CodeBlock title={file} code={command ?? NO_COMMAND_TEXT} copyDisabledReason={command ? null : NO_COMMAND_TEXT} onCopyCode={onCopy} wrap className="min-w-0" />
+      {root || !addLine ? null : (
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="text-body-xs text-03">Or let it also allow this URL for paid calls:</p>
+          <CodeBlock title="Terminal" code={addLine} onCopyCode={onCopy} wrap className="min-w-0" />
+        </div>
+      )}
+      {remote ? (
+        <div className="flex min-w-0 flex-col gap-1" data-testid="remote-alternative">
+          <p className="text-body-xs text-03">Free tools only, with no install:</p>
+          <CodeBlock title="Free only" code={installText(remote)} onCopyCode={onCopy} wrap className="min-w-0" />
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { isMcpClient, keyForHint, keyMode, mcpConfig, type McpClient } from "@/features/buyer-money/mcp-config";
+import { apiKeyConfig, installCommand, tryBuild, installText, isLocalClient, isMcpClient, keyForHint, keyMode, urlForClient, type McpClient } from "@/features/buyer-money/mcp-config";
 import { newKeyPaysNote, payingKeyName } from "@/components/buyer-money/create-key";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
 import {
@@ -233,7 +233,10 @@ export function ConnectBody({
               : fixedUrl
                 ? { kind: "url", url: fixedUrl }
                 : null;
-  const url = choice ? buildMcpUrl(choice, { free, discovery }) : null;
+  // The client tab comes first: hosted connectors are free only, so the URL previewed, recorded and copied is one string.
+  const [client, setClient] = React.useState<McpClient>("claude-code");
+  const builtUrl = choice ? buildMcpUrl(choice, { free, discovery }) : null;
+  const url = builtUrl ? urlForClient(client, builtUrl) : null;
   const preview = useMcpPreview(url, effectiveAgentId);
   // Unique among the agent's other servers, so two servers never share a name in one client.
   const longestTool = longestToolLength(preview.data?.listedTools);
@@ -256,7 +259,6 @@ export function ConnectBody({
   React.useEffect(() => setCreated(null), [effectiveAgentId]);
 
   // The client tab, remembered per agent (this browser first, else the server's last hand-out).
-  const [client, setClient] = React.useState<McpClient>("claude-code");
   React.useEffect(() => {
     if (!effectiveAgentId) return;
     const remembered = readClient(effectiveAgentId) ?? (servers.data?.servers.map((s) => s.client).find(isMcpClient) ?? null);
@@ -284,14 +286,24 @@ export function ConnectBody({
   React.useEffect(() => setRecorded(null), [url]);
 
   const blocked = copyBlocked(preview.data);
-  const snippet = url ? mcpConfig(client, { url, token: created?.token ?? null, keyPrefix, serverName }) : "";
+  // The proxy install carries no key; only "My own code" does.
+  const needsKey = client === "other";
+  const snippet = !url
+    ? ""
+    : isLocalClient(client)
+      ? (tryBuild(() => installText(installCommand(client, { url, name: serverName }))) ?? "")
+      : needsKey
+        ? apiKeyConfig({ url, token: created?.token ?? null, keyPrefix, serverName })
+        : url;
 
   const handOut = () => {
     if (!url || !effectiveAgentId || record.isPending || recorded) return;
     record.mutate();
   };
+  // A refused install (InstallInputError) leaves no snippet: nothing to copy or record.
+  const nothingToCopy = !url || blocked || (needsKey && !created) || snippet === "";
   const copy = async () => {
-    if (!url || blocked || !created) return;
+    if (nothingToCopy) return;
     try {
       await navigator.clipboard.writeText(snippet);
       setCopied(true);
@@ -672,8 +684,8 @@ export function ConnectBody({
           type="button"
           icon={copied ? <Check /> : <Copy />}
           onClick={() => void copy()}
-          disabled={!url || blocked || !created}
-          title={!created && url && !blocked ? TEMPLATE_COPY_REASON : undefined}
+          disabled={nothingToCopy}
+          title={needsKey && !created && url && !blocked ? TEMPLATE_COPY_REASON : undefined}
           data-testid="connect-copy"
           aria-live="polite"
         >

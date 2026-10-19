@@ -51,17 +51,21 @@ const GRANT = { ...KEY, id: "g1", name: "Claude Code · 2026-10-18", prefix: nul
 
 describe("the key hint skips an app sign-in (OAuth grant, null prefix)", () => {
   it("names the API key even when a grant comes first", () => {
+    vi.stubEnv("NEXT_PUBLIC_MCP_URL", "https://mcp.example.com/");
     const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} /></Sheet>, [GRANT, KEY]);
     const out = text(html);
     expect(out).toContain("Uses the live key “laptop” assay_sk_live_ab12… of My agent");
-    expect(out).toContain("assay_sk_live_ab12…REST_OF_YOUR_KEY");
+    // The default tab is the proxy install: no key in it. The key goes under "My own code".
+    expect(out).not.toContain("REST_OF_YOUR_KEY");
+    expect(out).toContain("@assay-ai/mcp@1.2.3");
     expect(out).not.toContain("null");
+    const own = text(render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" client="other" />));
+    expect(own).toContain("assay_sk_live_ab12…REST_OF_YOUR_KEY");
   });
 
   it("with only a grant, says there is no key for the config, never 'null…'", () => {
     const out = text(render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} /></Sheet>, [GRANT]));
     expect(out).toContain("My agent has no key yet");
-    expect(out).toContain("PASTE_YOUR_KEY_HERE");
     expect(out).not.toContain("null");
     expect(out).not.toContain("Claude Code · 2026-10-18");
   });
@@ -89,29 +93,50 @@ describe("Use this tool: /connect?tools= preselects Only these tools", () => {
   });
 
   it("puts Create a key and fill it in first, keeps Copy off while the snippet has a placeholder, and offers the URL alone", () => {
+    vi.stubEnv("NEXT_PUBLIC_MCP_URL", "https://mcp.example.com/");
     const url = toolsPrefillUrl("?tools=get_weather")!;
     const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={url} changing={false} onDone={() => undefined} /></Sheet>, [KEY]);
     const out = text(html);
-    expect(out).toContain("Create a key and fill it in");
-    expect(html).toMatch(/<button[^>]*data-testid="connect-copy"[^>]*disabled=""|<button[^>]*disabled=""[^>]*data-testid="connect-copy"/);
-    expect(out).toContain("Copy the URL only");
+    // The default tab is the proxy install: ready to copy, no key needed.
+    expect(out).toContain("npx -y @assay-ai/mcp@1.2.3 --url");
+    expect(html).toMatch(/<button[^>]*data-testid="connect-copy"/);
     // Keys are named with their agent.
     expect(out).toContain("Uses the live key “laptop” assay_sk_live_ab12… of My agent");
   });
 });
 
+describe("a refused install leaves nothing to copy (review N-1)", () => {
+  const copyButton = (html: string) => html.match(/<button[^>]*data-testid="connect-copy"[^>]*>/)?.[0] ?? "";
+
+  it("keeps Copy off when the MCP host is not a usable URL, so nothing is copied or recorded", () => {
+    vi.stubEnv("NEXT_PUBLIC_MCP_URL", "");
+    const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} /></Sheet>, [KEY]);
+    expect(html).not.toContain("npx -y @assay-ai/mcp@");
+    expect(copyButton(html)).toMatch(/disabled=""/);
+  });
+
+  it("turns Copy on once the install command is shown", () => {
+    vi.stubEnv("NEXT_PUBLIC_MCP_URL", "https://mcp.example.com/");
+    const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} /></Sheet>, [KEY]);
+    expect(text(html)).toContain("npx -y @assay-ai/mcp@1.2.3");
+    expect(copyButton(html)).not.toMatch(/disabled=""/);
+  });
+});
+
 describe("the config tabs", () => {
   it("disable Copy while the snippet holds a placeholder, and enable it with the full key", () => {
-    const template = render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" />);
+    const template = render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" client="other" />);
     expect(template).toContain(TEMPLATE_COPY_REASON);
     expect(template).toMatch(/<button[^>]*disabled=""[^>]*title=/);
-    const ready = render(<McpConfigTabs token="assay_sk_live_full" url="https://mcp.example.com/" />);
+    const ready = render(<McpConfigTabs token="assay_sk_live_full" url="https://mcp.example.com/" client="other" />);
     expect(ready).not.toContain(TEMPLATE_COPY_REASON);
   });
 
-  it("offer Create a key and fill it in when given a way to create one", () => {
-    const out = text(render(<McpConfigTabs token={null} keyPrefix={null} url="https://mcp.example.com/" onCreateKey={() => undefined} />));
-    expect(out).toContain("Create a key and fill it in");
+  it("offer Create a key and fill it in under My own code only", () => {
+    const own = text(render(<McpConfigTabs token={null} keyPrefix={null} url="https://mcp.example.com/" client="other" onCreateKey={() => undefined} />));
+    expect(own).toContain("Create a key and fill it in");
+    const proxy = text(render(<McpConfigTabs token={null} keyPrefix={null} url="https://mcp.example.com/" onCreateKey={() => undefined} />));
+    expect(proxy).not.toContain("Create a key and fill it in");
   });
 
   it("say Claude Desktop requires Node.js", () => {
