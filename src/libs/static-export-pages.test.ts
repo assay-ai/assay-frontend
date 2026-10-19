@@ -19,9 +19,6 @@ describe("record pages in the static export", () => {
   it("read record ids from the query string, not from route params", () => {
     const offenders = pages(APP)
       .filter((file) => {
-        const rel = relative(APP, file);
-        // A real `[segment]` with generateStaticParams is the one place params exist.
-        if (/\[[^\]]+\]/.test(rel)) return false;
         const source = readFileSync(file, "utf8");
         return /\bparams\s*:\s*Promise</.test(source) || /\buseParams\s*\(/.test(source);
       })

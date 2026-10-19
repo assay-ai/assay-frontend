@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -34,21 +34,14 @@ function routesUnder(dir: string, segments: string[] = [], out: string[] = []): 
 
 /** Buyer pages that are deliberately not linked from the chrome, with the reason. */
 const UNLINKED: Record<string, string> = {
-  "/overview": "redirects to /",
-  "/calls": "redirects to /spend/calls",
   "/explore/providers": "inside Explore",
   "/explore/providers/view": "a record page, opened from a row",
-  "/explore/tools": "inside Explore",
   "/explore/toolsets": "inside Explore",
   "/receipts/view": "a record page, opened from a call",
   "/spend/disputes/view": "a record page, opened from a report or a receipt",
   "/payments/view": "a record page, opened from a notification",
   "/team": "says an account is one person for now; not a menu entry",
   "/settings/close": "linked from Settings",
-  "/funding/deposit": "opened from Funding",
-  "/funding/withdraw": "opened from Funding",
-  "/funding/escrow": "opened from Funding",
-  "/funding/escrow/limits": "opened from Funding",
   "/funding/auto-top-up": "says there is no auto top-up and points at the alerts",
   "/connect/preview": "where the MCP host sends a browser that opens a filtered MCP URL",
 };
@@ -95,7 +88,7 @@ describe("active section and tab", () => {
     ["/spend/calls", "activity"],
     ["/guarantee", "activity"],
     ["/receipts/view", "activity"],
-    ["/funding/deposit", "money"],
+    ["/funding", "money"],
     ["/statements", "money"],
     ["/limits", "controls"],
     ["/connect", "controls"],
@@ -113,7 +106,7 @@ describe("active section and tab", () => {
     expect(activeTabFor(tabs, "/receipts/view")).toBe("calls");
     expect(activeTabFor(tabs, "/guarantee")).toBe("not-charged");
     expect(activeTabFor(tabs, "/spend/disputes/view")).toBe("reports");
-    expect(activeTabFor(BUYER_SECTION_TABS.money!, "/funding/withdraw")).toBe("funding");
+    expect(activeTabFor(BUYER_SECTION_TABS.money!, "/funding/auto-top-up")).toBe("funding");
   });
 
   it("does not treat a shared prefix as a match", () => {
@@ -121,17 +114,11 @@ describe("active section and tab", () => {
   });
 });
 
-/** A page that only sends the browser on (`ClientRedirect` or `redirect()`), so it never shows a title. */
-function isRedirectPage(route: string): boolean {
-  const file = join(MAIN_DIR, route === "/" ? "" : route, "page.tsx");
-  return /ClientRedirect|redirect\(/.test(readFileSync(file, "utf8"));
-}
-
 describe("page titles", () => {
   const buyerRoutes = routesUnder(MAIN_DIR);
 
   it("gives every buyer page that renders its own title", () => {
-    const untitled = buyerRoutes.filter((route) => !isRedirectPage(route) && pageTitleFor(route) === null);
+    const untitled = buyerRoutes.filter((route) => pageTitleFor(route) === null);
     expect(untitled).toEqual([]);
   });
 

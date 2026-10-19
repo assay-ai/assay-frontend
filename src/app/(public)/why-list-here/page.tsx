@@ -24,7 +24,7 @@ import { GLOSSARY, REPORT_WINDOW } from "@/libs/glossary";
 
 /**
  * For providers — route `/why-list-here`, with the earnings calculator
- * embedded (`/calculator` redirects here). One page answers "what would I
+ * embedded (`#calculator`). One page answers "what would I
  * earn, what do I put at risk, and what am I agreeing to", and one button,
  * "Start listing", carries the visitor's price and volume into setup.
  *
@@ -269,8 +269,7 @@ export default function WhyListHerePage() {
   const [price, setPrice] = React.useState("0.001");
   const [calls, setCalls] = React.useState("100000");
 
-  // A direct load of `/why-list-here#calculator` (or the `/calculator`
-  // redirect) lands on the calculator. The browser's own jump runs before
+  // A direct load of `/why-list-here#calculator` lands on the calculator. The browser's own jump runs before
   // this client page has laid out, so it is repeated once it has.
   React.useEffect(() => {
     if (window.location.hash !== "#calculator") return;
