@@ -71,7 +71,6 @@ const earnings: ProviderEarnings = {
 const redemption = (id: string, amount: string, calls: number, minutes: number): ProviderPayout => ({
   id,
   kind: "REDEMPTION",
-  batchId: null,
   amount: usd(amount),
   chainTxRef: `0x${id.padStart(64, "0")}`,
   calls,

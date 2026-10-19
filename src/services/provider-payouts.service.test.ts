@@ -10,8 +10,7 @@ const USDG = "eip155:46630/erc20:0xDbbC";
 function payout(id: string, asset: string, amount: string): ProviderPayout {
   return {
     id,
-    kind: "BATCH",
-    batchId: `batch-${id}`,
+    kind: "REDEMPTION",
     amount: { amount, asset, decimals: 6 },
     chainTxRef: null,
     calls: null,
