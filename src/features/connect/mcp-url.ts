@@ -360,7 +360,8 @@ function slugWordsOf(choice: ConnectChoice): string[] | null {
     case "maker":
       return words(choice.handle);
     case "link":
-      return ["shared"];
+      // The URL carries only the token; the sheet passes the set's slug once the page is known (spec 9.3).
+      return null;
     case "tools": {
       const tools = canonicalTools(choice.tools);
       if (tools.length !== 1) return ["tools"];
@@ -429,7 +430,7 @@ export function uniqueServerName(
     const candidate = `${head}${suffix}`;
     if (!used.has(candidate)) return candidate;
   }
-  return base;
+  throw new Error(`no free server name for "${base}" within the budget`);
 }
 
 /**

@@ -1,4 +1,5 @@
 import { problemText } from "@/features/contracts/text";
+import { defaultServerNameFor } from "@/features/connect/mcp-url";
 import { formFor, parseForm, type ContractForm } from "@/features/operator/contract-editor";
 import type { OperatorTool } from "@/interfaces/contracts";
 import { ApiError } from "@/libs/ApiClient";
@@ -37,16 +38,14 @@ export const LOCAL_NAME_MAX = 40;
 export const FULL_NAME_MAX = 48;
 /** What most clients allow a model to see: `mcp__{server}__{name}`. */
 export const MODEL_NAME_MAX = 64;
-/** The Connect sheet suggests `assay-{slug}` server names within the per-URL budget (§8.3.1). */
-export const SERVER_NAME_MAX = 9;
-
 export function fullToolName(handle: string, localName: string): string {
   return `${handle}__${localName}`;
 }
 
-/** The name as a model sees it behind the client prefix, with the suggested server name (the handle, cut to 9). */
+/** The name as a model sees it behind the client prefix, with the server name the Connect sheet suggests (`assay-{handle}`, §8.3.1 rule). */
 export function modelSeenName(handle: string, localName: string): string {
-  return `mcp__${handle.slice(0, SERVER_NAME_MAX)}__${fullToolName(handle, localName)}`;
+  const full = fullToolName(handle, localName);
+  return `mcp__${defaultServerNameFor(false, handle.split("-"), full.length)}__${full}`;
 }
 
 /** Why `{tool}` cannot be saved, in plain words; null when it can. */

@@ -134,3 +134,41 @@ describe("a typed name that does not fit", () => {
     }
   });
 });
+
+describe("link-only sets, hosted apps and duplicate names (spec 9.3, 9.4)", () => {
+  it("a link-only set's name is assay-shared only while its slug is unknown", () => {
+    const token = "abcdefghijklmnopqrstuv";
+    const html = render(`${HOST}/u/${token}@2`);
+    expect(nameValue(html)).toBe("assay");
+  });
+
+  it("hosted apps take no name: a name field is not shown and nothing is refused", async () => {
+    const { McpConfigTabs } = await import("@/components/buyer-money/mcp-config-tabs");
+    for (const id of ["claude-ai", "chatgpt"] as const) {
+      const html = renderToStaticMarkup(<McpConfigTabs guide token={null} url={`${HOST}/c/weather`} client={id} serverName="Bad Name" nameRefused={false} />);
+      expect(html, id).toContain(`${HOST}/c/weather?free=1`);
+    }
+  });
+
+  it("step 1 is claude.ai's wording only for claude.ai", async () => {
+    const { McpConfigTabs } = await import("@/components/buyer-money/mcp-config-tabs");
+    const claude = text(renderToStaticMarkup(<McpConfigTabs guide token={null} url={`${HOST}/`} client="claude-ai" serverName="assay" />));
+    const chatgpt = text(renderToStaticMarkup(<McpConfigTabs guide token={null} url={`${HOST}/`} client="chatgpt" serverName="assay" />));
+    expect(claude).toContain("Open Settings › Connectors › Add custom connector.");
+    expect(chatgpt).not.toContain("Settings › Connectors › Add custom connector");
+    expect(chatgpt).toContain("ChatGPT");
+  });
+
+  it("flags a typed name another server of the agent already uses", () => {
+    const taken = { canonicalUrl: `${HOST}/c/news`, endpointKind: "TOPIC", toolsetId: null, name: "News", serverName: "assay-weather", client: "claude-code", toolCount: 1, estimatedTokens: 10, discovery: "FULL", lastCallAt: null, handedOutAt: null, firstCallAt: null, waitingForFirstCall: false, available: true, updateAvailable: false };
+    // The suggestion is made unique, so it is never flagged; only a typed duplicate is (see the sheet's hint).
+    const html = render(`${HOST}/c/weather`, [taken]);
+    expect(nameValue(html)).toBe("assay-weather-2");
+    expect(text(html)).not.toContain("already has a server named");
+  });
+
+  it("the Free-only switch is on whenever the URL carries free=1", () => {
+    const html = render(`${HOST}/c/weather?free=1`);
+    expect(/<input[^>]*type="checkbox"[^>]*checked=""[^>]*>/.test(html) || html.includes('checked=""')).toBe(true);
+  });
+});

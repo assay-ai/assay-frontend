@@ -31,6 +31,7 @@ import {
   uniqueServerName,
   type ConnectChoice,
   type DiscoveryChoice,
+  type ServerNameRefusal,
 } from "@/features/connect/mcp-url";
 import { allowToolsBody, restoreBody } from "@/features/toolsets/access-result";
 import { defaultEntry } from "@/features/toolsets/entry-rules";
@@ -241,18 +242,20 @@ export function ConnectBody({
   const preview = useMcpPreview(url, effectiveAgentId);
   // Unique among the agent's other servers, so two servers never share a name in one client.
   const longestTool = longestToolLength(preview.data?.listedTools);
-  const suggestedName = uniqueServerName(
-    choice ? defaultServerName(choice, longestTool) : "assay",
-    (servers.data?.servers ?? []).filter((s) => s.canonicalUrl !== preview.data?.canonicalUrl && s.canonicalUrl !== url).map((s) => s.serverName),
-    longestTool,
-  );
+  // A link-only set's name follows its slug (spec 9.3); the URL carries only the token, so the slug comes from the page.
+  const nameChoice: ConnectChoice | null = choice?.kind === "link" && sharedInfo?.slug ? { kind: "toolset", slug: sharedInfo.slug } : choice;
+  const otherNames = (servers.data?.servers ?? []).filter((s) => s.canonicalUrl !== preview.data?.canonicalUrl && s.canonicalUrl !== url).map((s) => s.serverName);
+  const suggestedName = suggestUniqueName(nameChoice ? defaultServerName(nameChoice, longestTool) : "assay", otherNames, longestTool);
   // The editable name (spec 9.3): checked live with the 3.2 rule; a refused name makes no command or deeplink.
   const choiceKey = JSON.stringify(choice);
   const [typedName, setTypedName] = React.useState<{ key: string; value: string } | null>(null);
   const typed = typedName && typedName.key === choiceKey ? typedName.value : null;
-  const serverName = typed ?? suggestedName;
-  const nameRefusal = serverNameRefusal(serverName, longestTool);
+  const serverName = typed ?? suggestedName ?? "";
+  // Hosted connectors take no name, so a refused name never blocks them. The name is checked as typed: a space is refused, never dropped.
+  const nameUsed = client !== "claude-ai" && client !== "chatgpt";
+  const nameRefusal = !nameUsed ? null : typed === null && suggestedName === null ? NO_FREE_NAME : serverNameRefusal(serverName, longestTool);
   const nameRefused = nameRefusal !== null;
+  const nameTaken = nameUsed && !nameRefused && otherNames.includes(serverName);
 
   // The key: the full one only when it was created here (memory only); otherwise its prefix.
   const agentKeys: KeyRow[] = effectiveAgentId ? (data.keys[effectiveAgentId] ?? []) : [];
@@ -281,7 +284,7 @@ export function ConnectBody({
     return () => window.clearTimeout(t);
   }, [copied]);
   const record = useMutation({
-    mutationFn: () => recordConnectUrl(effectiveAgentId!, { url: url!, serverName, client }),
+    mutationFn: () => recordConnectUrl(effectiveAgentId!, { url: url!, serverName: serverName && serverNameRefusal(serverName, longestTool) === null ? serverName : undefined, client }),
     onSuccess: (row) => {
       setRecorded(row?.canonicalUrl ?? preview.data?.canonicalUrl ?? url);
       void queryClient.invalidateQueries({ queryKey: toolsetKeys.servers(effectiveAgentId!) });
@@ -293,6 +296,8 @@ export function ConnectBody({
   // A new answer is a new URL: it has not been handed out yet.
   React.useEffect(() => setRecorded(null), [url]);
 
+  // A hosted connector's URL carries free=1 whatever the switch says: the switch shows it on.
+  const urlIsFree = Boolean(url) && hasFreeParam(url!);
   const blocked = copyBlocked(preview.data);
   // The proxy install carries no key; only "My own code" does.
   const needsKey = client === "other";
@@ -303,7 +308,7 @@ export function ConnectBody({
       : isLocalClient(client)
       ? (tryBuild(() => installText(installCommand(client, { url, name: serverName }))) ?? "")
       : needsKey
-        ? apiKeyConfig({ url, token: created?.token ?? null, keyPrefix, serverName })
+        ? (tryBuild(() => apiKeyConfig({ url, token: created?.token ?? null, keyPrefix, serverName })) ?? "")
         : url;
 
   const handOut = () => {
@@ -597,6 +602,7 @@ export function ConnectBody({
                 {newKeyPaysNote(effectiveAgentId ? payingKeyName(data.readiness[effectiveAgentId]) : null)}
               </p>
             ) : null}
+            {nameUsed ? (
             <div className="flex flex-col gap-1" data-testid="connect-name">
               <label className="flex flex-col gap-1">
                 <span className="text-label-13 text-01">Server name</span>
@@ -608,13 +614,14 @@ export function ConnectBody({
                   autoComplete="off"
                   aria-invalid={nameRefused || undefined}
                   aria-describedby="connect-name-hint"
-                  onChange={(e) => setTypedName({ key: choiceKey, value: e.target.value.trim() })}
+                  onChange={(e) => setTypedName({ key: choiceKey, value: e.target.value })}
                 />
               </label>
-              <p id="connect-name-hint" role={nameRefused ? "alert" : undefined} className={cn("text-body-xs", nameRefused ? "text-danger-700" : "text-03")} data-testid="connect-name-hint">
-                {nameRefusal ? nameRefusal.message : "How the app lists this server. Lowercase letters, digits and -."}
+              <p id="connect-name-hint" role={nameRefused || nameTaken ? "alert" : undefined} className={cn("text-body-xs", nameRefused ? "text-danger-700" : nameTaken ? "text-warning-700" : "text-03")} data-testid="connect-name-hint">
+                {nameRefusal ? nameRefusal.message : nameTaken ? `${agentName} already has a server named ${serverName}. Two servers with one name clash in one app: pick another name.` : "How the app lists this server. Lowercase letters, digits and -."}
               </p>
             </div>
+            ) : null}
             <McpConfigTabs
               guide
               nameRefused={nameRefused}
@@ -683,13 +690,13 @@ export function ConnectBody({
             <div className="flex flex-col gap-1">
               <Switch
                 className="min-h-10"
-                checked={free}
-                disabled={!free && !offersFreeOnly(preview.data)}
+                checked={free || urlIsFree}
+                disabled={urlIsFree || (!free && !offersFreeOnly(preview.data))}
                 onChange={(e) => setFree(e.target.checked)}
                 label="Only free tools"
               />
               <p className="text-body-xs text-03">
-                {free || offersFreeOnly(preview.data)
+                {free || urlIsFree || offersFreeOnly(preview.data)
                   ? "Lists only tools with free calls. Calls through this URL are never charged; past the free calls they are refused."
                   : "Not available here: none of these tools has free calls."}
               </p>
@@ -736,6 +743,25 @@ export function ConnectBody({
       </div>
     </>
   );
+}
+
+const NO_FREE_NAME: ServerNameRefusal = { kind: "tooLong", message: "No name is free and fits this server's tool names. Type a name." };
+
+/** A name no other server of the agent uses, or `null` when none fits (the proxy throws in the same case). */
+function suggestUniqueName(base: string, taken: readonly (string | null)[], longestTool: number): string | null {
+  try {
+    return uniqueServerName(base, taken, longestTool);
+  } catch {
+    return null;
+  }
+}
+
+function hasFreeParam(url: string): boolean {
+  try {
+    return new URL(url).searchParams.get("free") === "1";
+  } catch {
+    return false;
+  }
 }
 
 /** "weather" → "Weather". */

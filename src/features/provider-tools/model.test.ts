@@ -64,7 +64,7 @@ const tool = (over: Partial<ProviderTool> = {}): ProviderTool => ({
   name: "acme__search_posts",
   localName: "search_posts",
   handle: "acme",
-  preview: "mcp__acme__acme__search_posts",
+  preview: "mcp__assay-acme__acme__search_posts",
   category: "social",
   tags: [],
   visibility: "PRIVATE",
@@ -106,8 +106,8 @@ const tool = (over: Partial<ProviderTool> = {}): ProviderTool => ({
 
 describe("tool names", () => {
   it("previews the name exactly as a model sees it", () => {
-    expect(modelSeenName("acme", "search_posts")).toBe("mcp__acme__acme__search_posts");
-    expect(modelSeenName("marketkit-labs", "x1")).toBe("mcp__marketkit__marketkit-labs__x1");
+    expect(modelSeenName("acme", "search_posts")).toBe("mcp__assay-acme__acme__search_posts");
+    expect(modelSeenName("marketkit-labs", "x1")).toBe("mcp__assay-marketkit-labs__marketkit-labs__x1");
   });
 
   it("refuses names the backend refuses, in plain words", () => {
