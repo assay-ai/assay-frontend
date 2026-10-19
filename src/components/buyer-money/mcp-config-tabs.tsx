@@ -15,6 +15,7 @@ import {
   FREE_EXAMPLE_PROMPT,
   MCP_CLIENTS,
   appName,
+  assistantName,
   restartNote,
   addOneLiner,
   apiKeyConfig,
@@ -241,6 +242,7 @@ function LocalInstall({ client, file, url, name, onCopy }: { client: LocalMcpCli
 /** "What happens next" and the free example prompt (spec 9.2): nothing here asks for money. */
 function NextSteps({ client }: { client: McpClient }) {
   const app = appName(client);
+  const assistant = assistantName(client);
   const restart = restartNote(client);
   const hosted = client === "claude-ai" || client === "chatgpt";
   return (
@@ -250,14 +252,14 @@ function NextSteps({ client }: { client: McpClient }) {
           <h3 className="text-label-sm text-01">What happens next</h3>
           <ol className="flex list-decimal flex-col gap-1 pl-5 text-body-13 text-02">
             <li>
-              Start {app}. In the tool list you&apos;ll see &quot;assay_sign_in&quot;. Ask {app} to &quot;sign in to Assay&quot;, approve in the browser, and Assay&apos;s tools appear.
+              Start {app}. In the tool list you&apos;ll see &quot;assay_sign_in&quot;. Ask {assistant} to &quot;sign in to Assay&quot;, approve in the browser, and Assay&apos;s tools appear.
               {restart ? ` ${restart}` : null}
             </li>
             <li>Paid tools ask once to turn on paid calls. That takes a minute.</li>
           </ol>
         </>
       )}
-      <p className="text-label-13 text-01">Try it, ask {app}:</p>
+      <p className="text-label-13 text-01">Try it — ask {assistant}:</p>
       <p className="rounded-lg border border-01 bg-02 px-3 py-2 text-body-13 text-01" data-testid="free-example-prompt">
         &quot;{FREE_EXAMPLE_PROMPT}&quot;
       </p>

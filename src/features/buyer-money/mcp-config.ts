@@ -22,7 +22,7 @@ export type HostedMcpClient = "claude-ai" | "chatgpt";
 
 export const MCP_CLIENTS: readonly { id: McpClient; label: string; file: string }[] = [
   { id: "claude-code", label: "Claude Code", file: "Terminal" },
-  { id: "codex", label: "Codex CLI", file: "Terminal" },
+  { id: "codex", label: "Codex", file: "Terminal" },
   { id: "cursor", label: "Cursor", file: "~/.cursor/mcp.json" },
   { id: "vscode", label: "VS Code", file: "Terminal" },
   { id: "windsurf", label: "Windsurf", file: "~/.config/devin/mcp_config.json" },
@@ -346,9 +346,14 @@ export function pasteHint(client: McpClient): string {
  */
 export const HOSTS_IGNORING_LIST_CHANGED: readonly McpClient[] = [];
 
-/** The name of the app as a sentence uses it ("Codex CLI" is "Codex"). */
+/** The name of the app as a sentence uses it ("Gemini CLI" is "Gemini"). */
 export function appName(client: McpClient): string {
   return MCP_CLIENTS.find((c) => c.id === client)?.label.replace(/ CLI$/, "") ?? "your app";
+}
+
+/** Who the person talks to inside the app (spec 9.2: "Start Claude Code… Ask Claude to…"). */
+export function assistantName(client: McpClient): string {
+  return client === "claude-code" || client === "claude-desktop" || client === "claude-ai" ? "Claude" : appName(client);
 }
 
 /** "Restart {app} after approving." for a host that ignores `list_changed`, else null. */
