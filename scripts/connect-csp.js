@@ -11,8 +11,11 @@
  * API origin the pages call, and nothing more.
  *
  * It fails the build when a strict block, its policy or its pages are missing,
- * or when the line would pass Cloudflare Pages' 2,000-character limit, rather
- * than ship a page that cannot start or a policy that was cut short.
+ * when `/connect/*` lacks `Cross-Origin-Opener-Policy: same-origin` (so a
+ * cross-site opener cannot hold or close the consent window between approve
+ * and continue), or when the line would pass Cloudflare Pages' 2,000-character
+ * limit, rather than ship a page that cannot start, a consent window an opener
+ * controls, or a policy that was cut short.
  *
  * Run: node scripts/connect-csp.js   (part of `pnpm build`)
  */
@@ -24,6 +27,13 @@ const { STRICT_PATHS, fallbackPolicy, strictPolicy } = require("./csp-policy");
 
 /** Cloudflare Pages' limit on one `_headers` line. */
 const MAX_LINE = 2000;
+
+/**
+ * Headers each strict splat must carry, exactly once, in its own block. Not
+ * repeated in the per-page blocks: Cloudflare Pages joins a repeated header
+ * by comma, and "same-origin, same-origin" is not a valid opener policy.
+ */
+const SPLAT_HEADERS = { "/connect/*": { "Cross-Origin-Opener-Policy": "same-origin" } };
 
 /** Inline scripts: a `<script>` element with no `src`. */
 const INLINE_SCRIPT = /<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/gi;
@@ -95,7 +105,8 @@ function originOf(value) {
  *   full policy and every page's hashes would pass the line limit. So each
  *   page gets its own block with the full policy and only its own hashes,
  *   and the splat keeps `fallbackPolicy()` with every page's hashes (plus its
- *   X-Frame-Options and Referrer-Policy) for any response under it with no
+ *   X-Frame-Options, Referrer-Policy and, once, Cross-Origin-Opener-Policy,
+ *   none of them repeated in the per-page blocks) for any response under it with no
  *   block of its own. A request matches both blocks; Cloudflare Pages joins
  *   the two policies, and a browser enforces both.
  * A pattern with no pages built yet keeps the bare policy.
@@ -113,6 +124,8 @@ function completeHeaders(headersText, pages, connectOrigins) {
   }
   const out = [];
   const done = new Set();
+  /** Every header of the input, by block: `block → header → [values]`. */
+  const seen = {};
   // Per-page blocks of a splat, written once the splat's own block has ended.
   let pending = [];
   let block = null;
@@ -122,6 +135,8 @@ function completeHeaders(headersText, pages, connectOrigins) {
       pending = [];
     }
     if (/^\S/.test(line)) block = line.trim();
+    const header = /^\s+([A-Za-z-]+):\s*(.*)$/.exec(line);
+    if (header) ((seen[block] ??= {})[header[1]] ??= []).push(header[2].trim());
     const match = STRICT_PATHS.includes(block) ? /^(\s+Content-Security-Policy:\s*)(.*)$/.exec(line) : null;
     if (!match) {
       out.push(line);
@@ -144,6 +159,17 @@ function completeHeaders(headersText, pages, connectOrigins) {
   out.push(...pending);
   for (const pattern of STRICT_PATHS) {
     if (!done.has(pattern)) throw new Error(`${pattern}: no Content-Security-Policy block in _headers`);
+  }
+  for (const [pattern, required] of Object.entries(SPLAT_HEADERS)) {
+    for (const [name, value] of Object.entries(required)) {
+      const values = seen[pattern]?.[name] ?? [];
+      if (values.length !== 1 || values[0] !== value) {
+        throw new Error(`${pattern}: needs exactly one "${name}: ${value}" in _headers`);
+      }
+      // Anywhere else, a block that also matches would repeat it.
+      const elsewhere = Object.keys(seen).filter((other) => other !== pattern && seen[other][name]);
+      if (elsewhere.length) throw new Error(`${name}: only ${pattern} may set it, not ${elsewhere.join(", ")}`);
+    }
   }
   for (const line of out) {
     if (line.length > MAX_LINE) throw new Error(`a _headers line is ${line.length} characters, over ${MAX_LINE}`);
@@ -186,4 +212,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { completeHeaders, inlineScriptHashes, assertOwnScriptsOnly };
+module.exports = { completeHeaders, inlineScriptHashes, assertOwnScriptsOnly, SPLAT_HEADERS };
