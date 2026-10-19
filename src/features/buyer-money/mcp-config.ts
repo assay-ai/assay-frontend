@@ -88,7 +88,7 @@ export interface McpConfigInput {
   url: string;
   token: string | null;
   keyPrefix?: string | null;
-  /** The server's name in the client, at most 9 characters. Default `assay`. */
+  /** The server's name in the client, free-form within a per-URL budget (§8.3.1). Default `assay`. */
   serverName?: string;
 }
 
