@@ -195,5 +195,4 @@ export interface ProviderReconciliation {
   platformTakeRatePercent: number;
   platformTake: Money | null;
   net: Money | null;
-  batches: { count: number; paid: Money | null; reconciles: boolean };
 }

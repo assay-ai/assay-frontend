@@ -397,27 +397,13 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
   return (
     <li className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-md px-3 py-3 hover:bg-02">
       <span className="flex min-w-0 flex-1 flex-col">
-        {payout.kind === "REDEMPTION" ? (
-          <>
-            {/* Rail B: the buyer's escrow paid this transaction on chain, for these calls. */}
-            <span className="text-body-13 text-01">
-              Paid for {payout.calls != null ? callCount(payout.calls) : "calls"} from the buyer&apos;s escrow
-            </span>
-            <span className="text-body-xs text-03">
-              Sent to your wallet · <UtcTime value={payout.createdAt} />
-            </span>
-          </>
-        ) : (
-          <>
-            {/* A payout run: the day of the run is what it is for. */}
-            <span className="text-body-13 text-01">
-              Payout for {payout.calls != null ? callCount(payout.calls) : "calls"} settled on <UtcTime value={payout.createdAt} dateOnly />
-            </span>
-            <span className="text-body-xs text-03">
-              Sent to your wallet · <UtcTime value={payout.createdAt} />
-            </span>
-          </>
-        )}
+        {/* Rail B: the buyer's escrow paid this transaction on chain, for these calls. */}
+        <span className="text-body-13 text-01">
+          Paid for {payout.calls != null ? callCount(payout.calls) : "calls"} from the buyer&apos;s escrow
+        </span>
+        <span className="text-body-xs text-03">
+          Sent to your wallet · <UtcTime value={payout.createdAt} />
+        </span>
       </span>
       <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(payout.amount, { decimals: 2 })}</span>
       {href ? (
@@ -431,7 +417,7 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
         </a>
       ) : (
         <span className="w-36 text-right text-body-xs text-03">
-          {payout.kind === "REDEMPTION" || payout.chainTxRef ? "Sent on chain" : "Being sent"}
+          Sent on chain
         </span>
       )}
     </li>

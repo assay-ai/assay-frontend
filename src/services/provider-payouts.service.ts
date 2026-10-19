@@ -5,10 +5,7 @@ import { api } from "./api";
 /**
  * `GET /providers/me/payouts` — every payment to the provider's wallet, newest
  * first: rail-B redemptions (`kind: "REDEMPTION"`, one per transaction, with
- * its call count) and payout-run entries (`kind: "BATCH"`).
- *
- * A batch row is one `PAYOUT` ledger entry, not a batch: a provider paid out
- * in two assets in the same run gets two rows sharing a `batchId`.
+ * its call count).
  *
  * Sortable field: `createdAt` only.
  */

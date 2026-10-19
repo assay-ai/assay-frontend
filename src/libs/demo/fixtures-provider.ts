@@ -49,8 +49,7 @@ import {
  * is what keeps the dashboard's thin-headroom warning off. Quality is healthy
  * (94.1% PASS over 25,449 calls in 30 days), with one FAIL that cost a single
  * call's 0.405 and one contested slash proposal on the FX binding's last
- * window. Three payout batches, all paid, summing to exactly the month's
- * earned figure.
+ * window. Five redemptions, all paid on chain.
  *
  * The arithmetic is deliberate and is checked in both directions:
  *
@@ -2143,7 +2142,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         platformTakeRatePercent: 10,
         platformTake: totals.platformFee,
         net: totals.earned,
-        batches: { count: 3, paid: totals.earned, reconciles: true },
       };
     },
   },
@@ -2154,8 +2152,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     match: "/providers/me/payouts",
     /*
       `chainTxRef` is an EVM transaction hash here, never a base58 signature.
-      Rail-B redemptions (one transaction each, with its calls) newest, then
-      the older payout runs: both are payments to the wallet.
+      Rail-B redemptions, one transaction each with its calls, newest first.
     */
     override: "always",
     body: () =>
@@ -2163,7 +2160,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         {
           id: "ple_7a20c3e1",
           kind: "REDEMPTION",
-          batchId: null,
           amount: { ...money("0.405"), asset: DEMO_ASSET },
           chainTxRef: "0x9c3e0d8a51b47f26e8d1c0a3b5f7e9d2c4a6b8e0f1d3c5a7b9e1f3d5c7a9b1e3",
           calls: 1,
@@ -2172,7 +2168,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         {
           id: "ple_6b14d2f0",
           kind: "REDEMPTION",
-          batchId: null,
           amount: { ...money("1.215"), asset: DEMO_ASSET },
           chainTxRef: "0x2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3c5e7b9d1f3a",
           calls: 3,
@@ -2180,8 +2175,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         },
         {
           id: "ple_5c81a04f",
-          kind: "BATCH",
-          batchId: "pb_2026-09-16-08",
+          kind: "REDEMPTION",
           amount: { ...money("52.18"), asset: DEMO_ASSET },
           chainTxRef: "0x58f09cc907edec4fd5fda8cf1d3a0f9f04661d42150a744ce90f20cf4171a71f",
           calls: 129,
@@ -2189,8 +2183,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         },
         {
           id: "ple_3d07f9b2",
-          kind: "BATCH",
-          batchId: "pb_2026-09-15-19",
+          kind: "REDEMPTION",
           amount: { ...money("64.91"), asset: DEMO_ASSET },
           chainTxRef: "0x1ef5cc71b2166cbfe9971f4bff054dda0d3d2bcfb71eb18aec2a7b0e32469391",
           calls: 160,
@@ -2198,11 +2191,10 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         },
         {
           id: "ple_91e26cd7",
-          kind: "BATCH",
-          batchId: "pb_2026-09-12-11",
+          kind: "REDEMPTION",
           amount: { ...money("64.35"), asset: DEMO_ASSET },
           chainTxRef: "0x0555b7515f9639e142ee463706cefc42f8a8a9dad3b062c26b1675788ab5b2c2",
-          calls: null,
+          calls: 158,
           createdAt: minutesAgo(6000),
         },
       ]),
