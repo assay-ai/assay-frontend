@@ -17,11 +17,18 @@
 # out/_headers with the hashes of each page's inline scripts and the API
 # origin: under /connect/* each page gets its own block with the full policy,
 # and /connect/* keeps fallbackPolicy() with every page's hashes for anything
-# under it without a block of its own.
+# under it without a block of its own. Cross-Origin-Opener-Policy
+# same-origin-allow-popups cuts a cross-site opener off the consent window, so
+# a page that opened it cannot navigate or close it between approve and
+# continue, while popups the page opens itself (Privy, wallets) keep working;
+# it is set on
+# /connect/* only, once (Cloudflare Pages joins repeats by comma, which makes
+# the header invalid), and the build checks it is there.
 /connect/*
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
   X-Frame-Options: DENY
   Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
 
 /agents/enable-paid
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
