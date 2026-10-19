@@ -181,7 +181,7 @@ export interface CatalogueTool extends CatalogueToolVersionFields {
    * CAIP-2, the chains any ACTIVE binding for this tool settles on.
    *
    * **Optional because nothing serves it yet.** The backend publishes
-   * `X402_SETTLEMENT_CHAINS` on the MCP `tools/list` annotations; the buyer
+   * `assay/settlementChains` on the MCP `tools/list` annotations; the buyer
    * catalogue DTO has no such field, so every row arrives without one today
    * and every row renders exactly as it always has. The seam is one field on
    * the backend's `CatalogueToolDto`.

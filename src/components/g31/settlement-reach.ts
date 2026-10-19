@@ -11,7 +11,7 @@
  * every row is a caveat nobody reads.
  *
  * **Nothing populates the tool's chains today.** `GET /catalogue/tools` has no
- * `settlementChains` field — the backend publishes `X402_SETTLEMENT_CHAINS` on
+ * `settlementChains` field — the backend publishes `assay/settlementChains` on
  * the MCP `tools/list` surface, which is a different surface with a different
  * consumer. So every row is `unknown` on this deployment and the caveat is
  * never drawn. That is the honest state of it, and it is recorded rather than
