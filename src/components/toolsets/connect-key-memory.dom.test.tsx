@@ -44,6 +44,8 @@ afterEach(() => {
 describe("the full key stays in memory (owner rule)", () => {
   it("fills the snippet, and never reaches storage, the URL or the history", async () => {
     account.createCredential.mockResolvedValue({ id: "k1", agentId: AGENT, name: "Key 1", prefix: "assay_sk_live_a1b2", token: TOKEN });
+    // The key is made under "My own code": the proxy install carries none.
+    window.localStorage.setItem(`assay.connect.client.${AGENT}`, "other");
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     const replaceState = vi.spyOn(window.history, "replaceState");
     const pushState = vi.spyOn(window.history, "pushState");
@@ -78,16 +80,16 @@ describe("Copy the URL only (review m4)", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     const onCopy = vi.fn();
-    render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" onCopy={onCopy} />);
+    render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" client="other" onCopy={onCopy} />);
 
     fireEvent.click(screen.getByTestId("copy-url-only"));
 
-    await waitFor(() => expect(onCopy).toHaveBeenCalledWith("claude-code"));
+    await waitFor(() => expect(onCopy).toHaveBeenCalledWith("other"));
     expect(writeText).toHaveBeenCalledWith("https://mcp.example.com/");
   });
 
   it("is not offered once the snippet has the full key", () => {
-    render(<McpConfigTabs token={TOKEN} url="https://mcp.example.com/" />);
+    render(<McpConfigTabs token={TOKEN} url="https://mcp.example.com/" client="other" />);
     expect(screen.queryByTestId("copy-url-only")).toBeNull();
   });
 });

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { KEY_PLACEHOLDER, keyMode, mcpConfig, MCP_CLIENTS } from "@/features/buyer-money/mcp-config";
+import { apiKeyConfig, installCommand, KEY_PLACEHOLDER, keyMode, MCP_CLIENTS } from "@/features/buyer-money/mcp-config";
 
 import {
   buildMcpUrl,
@@ -218,38 +218,25 @@ describe("the server-name rule agrees with assay-mcp on every shared vector (R-M
   });
 });
 
-describe("the snippet for each of the four clients", () => {
+describe("the snippet for each client", () => {
   const url = "https://mcp.example.com/";
-  it("has the four tabs in order, Claude Code first", () => {
-    expect(MCP_CLIENTS.map((c) => c.label)).toEqual(["Claude Code", "Claude Desktop", "Cursor", "Other"]);
+  it("lists the clients in CONNECT_CLIENTS order, Claude Code first, My own code last", () => {
+    expect(MCP_CLIENTS.map((c) => c.id)).toEqual(["claude-code", "codex", "cursor", "vscode", "windsurf", "gemini", "claude-desktop", "claude-ai", "chatgpt", "other"]);
+    expect(MCP_CLIENTS.at(-1)?.label).toBe("My own code");
   });
 
-  it("Claude Code: one `claude mcp add` line with the full key", () => {
-    expect(mcpConfig("claude-code", { url, token: "assay_sk_live_sk1" })).toBe(
-      'claude mcp add --transport http assay https://mcp.example.com/ --header "Authorization: Bearer assay_sk_live_sk1"',
-    );
+  it("Claude Code: the pinned proxy, no key and no header", () => {
+    expect(installCommand("claude-code", { V: "1.2.3", url, name: "assay" })).toBe("claude mcp add --scope user assay -- npx -y @assay-ai/mcp@1.2.3 --name assay");
   });
 
-  it("Claude Code quotes a URL with a query, so a shell does not eat `?` or `&`", () => {
-    const line = mcpConfig("claude-code", { url: `${url}?tools=a_b,c_d&free=1`, token: null, serverName: "tools" });
-    expect(line).toContain('claude mcp add --transport http tools "https://mcp.example.com/?tools=a_b,c_d&free=1"');
-    expect(line).toContain(KEY_PLACEHOLDER);
+  it("a URL with a query is quoted, so a shell does not eat `?` or `&`", () => {
+    const line = installCommand("claude-code", { V: "1.2.3", url: `${url}?tools=a_b,c_d&free=1`, name: "tools" }) as string;
+    expect(line).toContain("--url 'https://mcp.example.com/?tools=a_b,c_d&free=1'");
   });
 
-  it("Claude Desktop goes through mcp-remote, under the suggested server name", () => {
-    const parsed = JSON.parse(mcpConfig("claude-desktop", { url, token: "k", serverName: "weather" }));
-    expect(Object.keys(parsed.mcpServers)).toEqual(["weather"]);
-    expect(parsed.mcpServers.weather.args).toContain(url);
-    expect(parsed.mcpServers.weather.env.ASSAY_AUTH).toBe("Bearer k");
-  });
-
-  it("Cursor and Other take the URL and the header", () => {
-    expect(JSON.parse(mcpConfig("cursor", { url, token: "k" })).mcpServers.assay).toEqual({ url, headers: { Authorization: "Bearer k" } });
-    expect(JSON.parse(mcpConfig("other", { url, token: "k" })).mcpServers.assay).toEqual({
-      type: "http",
-      url,
-      headers: { Authorization: "Bearer k" },
-    });
+  it("My own code takes the URL and the header", () => {
+    expect(JSON.parse(apiKeyConfig({ url, token: "k" })).mcpServers.assay).toEqual({ type: "http", url, headers: { Authorization: "Bearer k" } });
+    expect(apiKeyConfig({ url, token: null })).toContain(KEY_PLACEHOLDER);
   });
 
   it("names an API key live by its prefix", () => {

@@ -1,26 +1,44 @@
 /**
- * The MCP config to paste, per client. One tab per client because each reads
- * a different file (or command) in a different shape; one generic block made
- * people translate it themselves.
+ * What the Connect UI shows for each AI client (spec 7.10 item 5, 7.12).
  *
- * - Claude Code takes a one-line `claude mcp add` command.
- * - Claude Desktop only starts local (stdio) servers from its config file, so a
- *   remote URL goes through `mcp-remote`, with the key passed as an env var.
- * - Cursor and most other clients take the URL and headers directly.
+ * - The paid-capable path runs the local `@assay-ai/mcp` proxy, pinned to an
+ *   exact version `V`. It carries no key and no header: the proxy signs in and
+ *   signs payments on the user's own machine.
+ * - The free-only path is the remote URL, for clients that can reach it.
+ * - A key in a header is for code the user writes themselves, under "My own
+ *   code" (`apiKeyConfig`), and nowhere else.
  *
- * The client ids are the ones `POST /agents/:id/connect-urls` remembers.
+ * The byte-exact strings live in `commands.vectors.json`, synced from the
+ * proxy's own builder (`assay-mcp/vectors/commands.json`); the tests compare
+ * against it.
  */
-export type McpClient = "claude-code" | "claude-desktop" | "cursor" | "other";
+export type McpClient = "claude-code" | "codex" | "cursor" | "vscode" | "windsurf" | "gemini" | "claude-desktop" | "claude-ai" | "chatgpt" | "other";
+
+/** Clients the proxy installs into (paid-capable). */
+export type LocalMcpClient = "claude-code" | "codex" | "cursor" | "vscode" | "windsurf" | "gemini" | "claude-desktop";
+
+/** Hosted connectors: free only, never the proxy (H2). */
+export type HostedMcpClient = "claude-ai" | "chatgpt";
 
 export const MCP_CLIENTS: readonly { id: McpClient; label: string; file: string }[] = [
   { id: "claude-code", label: "Claude Code", file: "Terminal" },
-  { id: "claude-desktop", label: "Claude Desktop", file: "claude_desktop_config.json" },
+  { id: "codex", label: "Codex CLI", file: "Terminal" },
   { id: "cursor", label: "Cursor", file: "~/.cursor/mcp.json" },
-  { id: "other", label: "Other", file: "mcp.json" },
+  { id: "vscode", label: "VS Code", file: "Terminal" },
+  { id: "windsurf", label: "Windsurf", file: "~/.config/devin/mcp_config.json" },
+  { id: "gemini", label: "Gemini CLI", file: "Terminal" },
+  { id: "claude-desktop", label: "Claude Desktop", file: "claude_desktop_config.json" },
+  { id: "claude-ai", label: "claude.ai", file: "Settings" },
+  { id: "chatgpt", label: "ChatGPT", file: "Settings" },
+  { id: "other", label: "My own code", file: "mcp.json" },
 ];
 
 export function isMcpClient(value: unknown): value is McpClient {
   return typeof value === "string" && MCP_CLIENTS.some((client) => client.id === value);
+}
+
+export function isLocalClient(client: McpClient): client is LocalMcpClient {
+  return client !== "claude-ai" && client !== "chatgpt" && client !== "other";
 }
 
 /** Placeholder shown when the key itself is not on screen (it is shown once, at creation). */
@@ -79,60 +97,191 @@ export function keyForHint<T extends { prefix: string | null }>(keys: readonly T
   return (keys.find((key) => key.prefix) as (T & { prefix: string }) | undefined) ?? null;
 }
 
-/** A shell word: bare when it is plainly safe, else in double quotes (`?` and `&` mean something to a shell). */
-function shellWord(text: string): string {
-  return /^[A-Za-z0-9:/._@%+=,-]+$/.test(text) && !text.includes("?") ? text : `"${text.replace(/(["\\$`])/g, "\\$1")}"`;
+/** An exact version: no range, no tag (R-MCP-14). Same rule as the proxy. */
+const EXACT_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$/;
+const PACKAGE_NAME = "@assay-ai/mcp";
+/** Words a POSIX shell (and zsh) passes through unquoted. */
+const SHELL_SAFE = /^[A-Za-z0-9_\-./:@,=+%]+$/;
+
+export function isExactVersion(value: unknown): value is string {
+  return typeof value === "string" && EXACT_VERSION.test(value);
 }
 
-export interface McpConfigInput {
+/**
+ * The pinned proxy version, from `NEXT_PUBLIC_ASSAY_MCP_VERSION` (inlined at
+ * build time; `next.config.js` fails the build when it is unset or not exact).
+ * Throws rather than print an unpinned command.
+ */
+export function assayMcpVersion(): string {
+  const value = process.env.NEXT_PUBLIC_ASSAY_MCP_VERSION;
+  if (!isExactVersion(value)) throw new Error("NEXT_PUBLIC_ASSAY_MCP_VERSION must be an exact version such as 1.0.0");
+  return value;
+}
+
+function shellQuote(word: string): string {
+  return SHELL_SAFE.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`;
+}
+
+function shellLine(words: readonly string[]): string {
+  return words.map(shellQuote).join(" ");
+}
+
+export interface InstallInput {
+  /** The proxy version, pinned exactly. Defaults to the build's `NEXT_PUBLIC_ASSAY_MCP_VERSION`. */
+  V?: string;
+  /** The canonical MCP URL. */
+  url: string;
+  /** The server name in the client (spec 8.3.1). */
+  name: string;
+}
+
+/** True for `{MCP}/` with no query: `{url-args}` is then `--name {name}` only. */
+function isRootUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.pathname === "/" && u.search === "" && !url.endsWith("?");
+  } catch {
+    return false;
+  }
+}
+
+function pinned(input: InstallInput): string {
+  const V = input.V ?? assayMcpVersion();
+  if (!isExactVersion(V)) throw new Error(`"${V}" is not an exact version`);
+  return `${PACKAGE_NAME}@${V}`;
+}
+
+function serverArgs(input: InstallInput): string[] {
+  const args = ["-y", pinned(input)];
+  if (!isRootUrl(input.url)) args.push("--url", input.url);
+  args.push("--name", input.name);
+  return args;
+}
+
+/** A command (shell line) or a config object, as the proxy's builder returns it. */
+export type InstallOutput = string | object;
+
+/** The paid-capable install (user scope): a shell line for CLI clients and VS Code, a config object for file clients. */
+export function installCommand(client: LocalMcpClient, input: InstallInput): InstallOutput {
+  const args = serverArgs(input);
+  switch (client) {
+    case "claude-code":
+      return shellLine(["claude", "mcp", "add", "--scope", "user", input.name, "--", "npx", ...args]);
+    case "codex":
+      return shellLine(["codex", "mcp", "add", input.name, "--", "npx", ...args]);
+    case "gemini":
+      return shellLine(["gemini", "mcp", "add", "--scope", "user", input.name, "npx", ...args]);
+    case "vscode":
+      return `code --add-mcp ${shellQuote(JSON.stringify({ name: input.name, type: "stdio", command: "npx", args }))}`;
+    case "cursor":
+    case "windsurf":
+    case "claude-desktop":
+      return { mcpServers: { [input.name]: { command: "npx", args } } };
+  }
+}
+
+/** The free-only remote alternative, or null where it is a settings screen. */
+export function remoteInstall(client: LocalMcpClient, input: { url: string; name: string }): InstallOutput | null {
+  switch (client) {
+    case "claude-code":
+      return shellLine(["claude", "mcp", "add", "--transport", "http", "--scope", "user", input.name, input.url]);
+    case "codex":
+      return shellLine(["codex", "mcp", "add", input.name, "--url", input.url]);
+    case "gemini":
+      return shellLine(["gemini", "mcp", "add", "--transport", "http", "--scope", "user", input.name, input.url]);
+    case "cursor":
+      return { mcpServers: { [input.name]: { url: input.url } } };
+    case "vscode":
+      return { name: input.name, type: "http", url: input.url };
+    case "windsurf":
+      return { mcpServers: { [input.name]: { serverUrl: input.url } } };
+    case "claude-desktop":
+      return null;
+  }
+}
+
+function utf8Base64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+/** The Cursor one-click install link. */
+export function cursorDeeplink(input: InstallInput): string {
+  const config = utf8Base64(JSON.stringify({ command: "npx", args: serverArgs(input) }));
+  return `cursor://anysphere.cursor-deeplink/mcp/install?name=${input.name}&config=${encodeURIComponent(config)}`;
+}
+
+/** The VS Code one-click install link. */
+export function vscodeDeeplink(input: InstallInput): string {
+  return `vscode:mcp/install?${encodeURIComponent(JSON.stringify({ name: input.name, type: "stdio", command: "npx", args: serverArgs(input) }))}`;
+}
+
+/** `npx -y @assay-ai/mcp@V add {url} --client {id}`: also allows the URL for paid calls on a terminal. */
+export function addOneLiner(url: string, client: LocalMcpClient, V?: string): string {
+  return shellLine(["npx", "-y", pinned({ V, url, name: "" }), "add", url, "--client", client]);
+}
+
+/** The URL a hosted connector (claude.ai, ChatGPT) is given: free tools only, so `free=1` is always set (H2). */
+export function hostedUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    if (u.searchParams.get("free") !== "1") u.searchParams.set("free", "1");
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** The deep link for a client that has one, else null. */
+export function deeplink(client: McpClient, input: InstallInput): string | null {
+  if (client === "cursor") return cursorDeeplink(input);
+  if (client === "vscode") return vscodeDeeplink(input);
+  return null;
+}
+
+/** Text to show for an install output: a shell line as is, a config as indented JSON. */
+export function installText(output: InstallOutput): string {
+  return typeof output === "string" ? output : JSON.stringify(output, null, 2);
+}
+
+export interface ApiKeyConfigInput {
   url: string;
   token: string | null;
   keyPrefix?: string | null;
-  /** The server's name in the client, free-form within a per-URL budget (§8.3.1). Default `assay`. */
   serverName?: string;
 }
 
-export function mcpConfig(client: McpClient, input: McpConfigInput): string {
+/**
+ * "My own code": a remote HTTP server entry with the API key in a header. This
+ * is the only place a key goes in a config (R-UI-8).
+ */
+export function apiKeyConfig(input: ApiKeyConfigInput): string {
   const token = input.token ?? keyPlaceholder(input.keyPrefix);
   const name = input.serverName?.trim() || "assay";
-  if (client === "claude-code") {
-    return `claude mcp add --transport http ${shellWord(name)} ${shellWord(input.url)} --header "Authorization: Bearer ${token}"`;
-  }
-  if (client === "claude-desktop") {
-    return JSON.stringify(
-      {
-        mcpServers: {
-          [name]: {
-            command: "npx",
-            args: ["-y", "mcp-remote", input.url, "--header", "Authorization:${ASSAY_AUTH}"],
-            env: { ASSAY_AUTH: `Bearer ${token}` },
-          },
-        },
-      },
-      null,
-      2,
-    );
-  }
-  if (client === "cursor") {
-    return JSON.stringify({ mcpServers: { [name]: { url: input.url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2);
-  }
-  return JSON.stringify(
-    { mcpServers: { [name]: { type: "http", url: input.url, headers: { Authorization: `Bearer ${token}` } } } },
-    null,
-    2,
-  );
+  return JSON.stringify({ mcpServers: { [name]: { type: "http", url: input.url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2);
 }
 
 /** Where to paste it, per client: one short sentence under the tab. */
 export function pasteHint(client: McpClient): string {
   switch (client) {
     case "claude-code":
-      return "Run this in a terminal. Claude Code adds the server for this project.";
+    case "codex":
+    case "gemini":
+      return "Requires Node.js. Run this in a terminal. It signs in on first use and signs payments on your own computer.";
+    case "vscode":
+      return "Requires Node.js. Run this in a terminal, or use the button to install in VS Code.";
+    case "cursor":
+      return "Requires Node.js. Use the button, or paste this into ~/.cursor/mcp.json, then reload Cursor.";
+    case "windsurf":
+      return "Requires Node.js. Paste this into ~/.config/devin/mcp_config.json, then restart Windsurf.";
     case "claude-desktop":
       return "Requires Node.js: Claude Desktop starts this server with npx. Paste this into claude_desktop_config.json (Settings › Developer › Edit config), then restart Claude Desktop.";
-    case "cursor":
-      return "Paste this into ~/.cursor/mcp.json, then reload Cursor.";
+    case "claude-ai":
+    case "chatgpt":
+      return "Free tools only. Add the URL as a custom connector in settings, then sign in.";
     case "other":
-      return "Any MCP client that speaks Streamable HTTP: give it the URL and the header, or this config.";
+      return "Code you write yourself: give your MCP client the URL and the header, or this config.";
   }
 }

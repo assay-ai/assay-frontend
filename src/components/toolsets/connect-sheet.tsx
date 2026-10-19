@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { isMcpClient, keyForHint, keyMode, mcpConfig, type McpClient } from "@/features/buyer-money/mcp-config";
+import { apiKeyConfig, hostedUrl, installCommand, installText, isLocalClient, isMcpClient, keyForHint, keyMode, type McpClient } from "@/features/buyer-money/mcp-config";
 import { newKeyPaysNote, payingKeyName } from "@/components/buyer-money/create-key";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
 import {
@@ -284,14 +284,22 @@ export function ConnectBody({
   React.useEffect(() => setRecorded(null), [url]);
 
   const blocked = copyBlocked(preview.data);
-  const snippet = url ? mcpConfig(client, { url, token: created?.token ?? null, keyPrefix, serverName }) : "";
+  // The proxy install carries no key; only "My own code" does.
+  const needsKey = client === "other";
+  const snippet = !url
+    ? ""
+    : isLocalClient(client)
+      ? installText(installCommand(client, { url, name: serverName }))
+      : needsKey
+        ? apiKeyConfig({ url, token: created?.token ?? null, keyPrefix, serverName })
+        : hostedUrl(url);
 
   const handOut = () => {
     if (!url || !effectiveAgentId || record.isPending || recorded) return;
     record.mutate();
   };
   const copy = async () => {
-    if (!url || blocked || !created) return;
+    if (!url || blocked || (needsKey && !created)) return;
     try {
       await navigator.clipboard.writeText(snippet);
       setCopied(true);
@@ -672,8 +680,8 @@ export function ConnectBody({
           type="button"
           icon={copied ? <Check /> : <Copy />}
           onClick={() => void copy()}
-          disabled={!url || blocked || !created}
-          title={!created && url && !blocked ? TEMPLATE_COPY_REASON : undefined}
+          disabled={!url || blocked || (needsKey && !created)}
+          title={needsKey && !created && url && !blocked ? TEMPLATE_COPY_REASON : undefined}
           data-testid="connect-copy"
           aria-live="polite"
         >
