@@ -88,6 +88,8 @@ export type PaymentKeyOnChain =
   | { kind: "checking" }
   | { kind: "unreadable" }
   | { kind: "off" }
+  /** The agent's account is not an EVM account: paid calls are on EVM only, so nothing is to be read. */
+  | { kind: "not-evm" }
   | { kind: "expired"; delegation: EscrowDelegate }
   | { kind: "active"; delegation: EscrowDelegate };
 
@@ -118,6 +120,8 @@ export interface CredentialRowContext {
   /** `GET /escrow/delegates`; undefined while it loads or when it failed. */
   delegates: readonly EscrowDelegate[] | undefined;
   delegatesUnreadable: boolean;
+  /** False when the agent's account is not an EVM account (paid calls are on EVM only); the default is true. */
+  evmAccount?: boolean;
   /** Every credential of the agent, to see whether a live one holds the same key. */
   keys: readonly KeyRow[];
   nowMs: number;
@@ -138,6 +142,7 @@ function delegatesUnknown(query: { isError: boolean; isPending: boolean; fetchSt
 
 function paymentKeyOnChain(key: KeyRow, ctx: CredentialRowContext): PaymentKeyOnChain {
   if (!key.delegateAccount) return { kind: "no-key" };
+  if (ctx.evmAccount === false) return { kind: "not-evm" };
   if (ctx.delegates === undefined) return ctx.delegatesUnreadable ? { kind: "unreadable" } : { kind: "checking" };
   const delegation = findDelegation(ctx.delegates, key.delegateAccount);
   if (!delegation) return { kind: "off" };
@@ -155,7 +160,7 @@ export function credentialRowView(key: KeyRow, ctx: CredentialRowContext): Crede
   const activeOnChain = chain.kind === "active";
   // "Free tools only" only when no key of this row can pay: none bound, or the
   // chain says it is not (or no longer) authorised. Unknown is never "free".
-  const provenFree = chain.kind === "no-key" || chain.kind === "off" || chain.kind === "expired";
+  const provenFree = chain.kind === "no-key" || chain.kind === "off" || chain.kind === "not-evm" || chain.kind === "expired";
   const client = key.issuedVia === "OAUTH" ? key.oauthClient ?? null : null;
   const paymentClient = key.issuedVia === "API_KEY" || client?.paymentClient === true;
 
@@ -185,7 +190,11 @@ export function credentialRowView(key: KeyRow, ctx: CredentialRowContext): Crede
         paymentLine = `${fp} · expired ${formatDate(chain.delegation.validUntil, { now: ctx.nowMs })} — free tools only`;
         break;
       case "off":
-        paymentLine = `${fp} · not turned on — free tools only`;
+        // The chain list cannot tell a key that was stopped from one never turned on; a revoked row can only have been stopped or never on.
+        paymentLine = live ? `${fp} · not turned on, or stopped — free tools only` : `${fp} · stopped — free tools only`;
+        break;
+      case "not-evm":
+        paymentLine = `${fp} · paid calls are on EVM chains only — free tools only`;
         break;
       case "checking":
       case "unreadable":
@@ -275,6 +284,7 @@ export function AgentsView() {
     ? credentialRowView(revokeKeys.find((k) => k.id === lastRevoke.key.id) ?? lastRevoke.key, {
         delegates: data.delegates,
         delegatesUnreadable: delegatesUnknown(data.delegatesQuery),
+        evmAccount: supportsDelegation(lastRevoke.agent.agentAccount),
         keys: revokeKeys,
         nowMs: revokeNow,
       })
@@ -675,6 +685,7 @@ function AgentCard({
     delegates: ctx.delegates,
     // A read that failed, or that never runs (no eip155 account): unknown, never "none".
     delegatesUnreadable: delegatesUnknown(ctx.delegatesQuery),
+    evmAccount: supportsDelegation(agent.agentAccount),
     keys: keys ?? [],
     nowMs: now,
   };

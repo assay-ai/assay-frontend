@@ -27,7 +27,7 @@ const base: ProviderTool = {
   name: "acme__search_posts",
   localName: "search_posts",
   handle: "acme",
-  preview: "mcp__acme__acme__search_posts",
+  preview: "mcp__assay-acme__acme__search_posts",
   category: "social",
   tags: ["posts"],
   visibility: "UNLISTED",
@@ -115,7 +115,7 @@ describe("step 1 on a saved tool", () => {
   it("previews the name as a model sees it", () => {
     const words = text(render(<NameStep tool={base} onContinue={() => undefined} />));
     expect(words).toContain("acme__search_posts");
-    expect(words).toContain("mcp__acme__acme__search_posts");
+    expect(words).toContain("mcp__assay-acme__acme__search_posts");
     expect(words).toContain("Agents call it (18 of 48 characters)");
     expect(words).toContain("How an agent app shows it");
   });

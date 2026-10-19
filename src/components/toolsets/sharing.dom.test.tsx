@@ -216,6 +216,26 @@ describe("public tool sets", () => {
     expect(out).toContain("Change rules. Doesn't get updates.");
   });
 
+  it("hands out another person's set pinned, never the always-latest URL (spec 9.3)", () => {
+    const page: PublicToolsetPage = {
+      ...CARD,
+      changelog: "",
+      publishedAt: "2026-10-13T00:00:00.000Z",
+      entries: [],
+      stats: { weekStart: null, activeUsers: null, agents: null, calls30d: null, copies: null, trend: null, onLatestVersionPercent: null },
+      forkedFrom: null,
+      sharingEndsAt: null,
+      notReviewed: false,
+    };
+    const panel = (html: string) => /data-testid="connect-panel"[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
+    const seed = (c: QueryClient) => c.setQueryData(["public", "tools"], { tools: CATALOGUE });
+    const pinned = panel(render(<ToolsetPublicBody page={page} token={null} v={null} from={null} />, seed));
+    expect(pinned).toContain("/@geodesk/travel-planner@1<");
+    expect(pinned).not.toContain("/@geodesk/travel-planner<");
+    // An explicit version is the latest URL plus that version.
+    expect(panel(render(<ToolsetPublicBody page={page} token={null} v={3} from={null} />, seed))).toContain("/@geodesk/travel-planner@3<");
+  });
+
   it("opened from the update alert: what changed, Copy v3 URL, and that the app keeps v2", () => {
     const page: PublicToolsetPage = {
       ...CARD,
