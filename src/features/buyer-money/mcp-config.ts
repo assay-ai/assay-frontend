@@ -22,7 +22,7 @@ export type HostedMcpClient = "claude-ai" | "chatgpt";
 
 export const MCP_CLIENTS: readonly { id: McpClient; label: string; file: string }[] = [
   { id: "claude-code", label: "Claude Code", file: "Terminal" },
-  { id: "codex", label: "Codex CLI", file: "Terminal" },
+  { id: "codex", label: "Codex", file: "Terminal" },
   { id: "cursor", label: "Cursor", file: "~/.cursor/mcp.json" },
   { id: "vscode", label: "VS Code", file: "Terminal" },
   { id: "windsurf", label: "Windsurf", file: "~/.config/devin/mcp_config.json" },
@@ -338,3 +338,28 @@ export function pasteHint(client: McpClient): string {
       return "Code you write yourself: give your MCP client the URL and the header, or this config.";
   }
 }
+
+/**
+ * Hosts recorded as ignoring `notifications/tools/list_changed` (spec 12.3, the
+ * e2e results table): after approving, their tool list only refreshes on a
+ * restart. Empty until a host is recorded as ignoring it; add the id then.
+ */
+export const HOSTS_IGNORING_LIST_CHANGED: readonly McpClient[] = [];
+
+/** The name of the app as a sentence uses it ("Gemini CLI" is "Gemini"). */
+export function appName(client: McpClient): string {
+  return MCP_CLIENTS.find((c) => c.id === client)?.label.replace(/ CLI$/, "") ?? "your app";
+}
+
+/** Who the person talks to inside the app (spec 9.2: "Start Claude Code… Ask Claude to…"). */
+export function assistantName(client: McpClient): string {
+  return client === "claude-code" || client === "claude-desktop" || client === "claude-ai" ? "Claude" : appName(client);
+}
+
+/** "Restart {app} after approving." for a host that ignores `list_changed`, else null. */
+export function restartNote(client: McpClient, hosts: readonly McpClient[] = HOSTS_IGNORING_LIST_CHANGED): string | null {
+  return hosts.includes(client) ? `Restart ${appName(client)} after approving.` : null;
+}
+
+/** The free example prompt that makes the first call (spec 9.2). */
+export const FREE_EXAMPLE_PROMPT = "Use Assay to find a free tool for the weather, then get the weather in Lisbon.";
