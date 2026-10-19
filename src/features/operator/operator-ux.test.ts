@@ -157,8 +157,6 @@ describe("the health strip", () => {
     policiesTotal: 0,
     stakeLocked: { amount: "0", asset: "x", decimals: 6 },
     providersWithStake: 0,
-    oldProcessCases: 0,
-    oldestOldProcessCaseAgeSeconds: null,
     chainState: [],
     slashHolds: [],
   };
@@ -331,7 +329,6 @@ describe("where a penalty stands", () => {
     expect(caseFacts(brief({ status: "EXECUTED", chainStatus: "EXECUTED" }), NOW).stage).toBe("executed");
     expect(caseFacts(brief({ status: "CANCELLED", chainStatus: "CANCELLED" }), NOW).stage).toBe("cancelled");
     expect(caseFacts(brief({ chainStatus: "NONE" }), NOW).stage).toBe("not-on-chain");
-    expect(caseFacts(brief({ status: "UNDER_REVIEW" }), NOW).legacyStatus).toBe(true);
   });
 
   it("draws the timeline with the window as the current step", () => {

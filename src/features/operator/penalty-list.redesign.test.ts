@@ -42,7 +42,7 @@ describe("Penalties tabs", () => {
     const named = STATUS_TABS.flatMap((tab) => tab.statuses ?? []);
     expect(new Set(named).size).toBe(named.length);
     expect(named.sort()).toEqual(
-      ["CANCELLED", "CANCEL_REQUESTED", "CHAIN_DISPUTED", "COMPENSATED", "DISPUTED", "EXECUTED", "EXPIRED", "PROPOSED"].sort(),
+      ["CANCELLED", "CANCEL_REQUESTED", "CHAIN_DISPUTED", "COMPENSATED", "EXECUTED", "EXPIRED", "PROPOSED"].sort(),
     );
     expect(tabById(STATUS_TABS, "all").statuses).toBeNull();
   });
@@ -55,13 +55,11 @@ describe("Penalties tabs", () => {
   it("counts only the open tabs", () => {
     const counts = tabCounts([
       row({ status: "CHAIN_DISPUTED" }),
-      row({ status: "DISPUTED" }),
       row({ status: "CANCEL_REQUESTED" }),
       row({ status: "PROPOSED" }),
       row({ status: "PROPOSED" }),
     ]);
-    // B11: an old-process DISPUTED row is not a ruling; it waits under "Old process".
-    expect(counts).toEqual({ "needs-ruling": 1, signature: 1, "old-process": 1, window: 2 });
+    expect(counts).toEqual({ "needs-ruling": 1, signature: 1, window: 2 });
     expect(OPEN_STATUSES).not.toContain("EXECUTED");
   });
 });

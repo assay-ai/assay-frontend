@@ -1304,8 +1304,6 @@ function evidenceRules(failed: boolean) {
 // ── Slash proposal and dispute ──────────────────────────────────────────────
 
 const PROPOSAL_ID = "a91c35e7-0b62-4d84-9f3a-6c81e740d2b5";
-const DISPUTE_ID = "f2a84c61-3d75-4e08-b19c-7a0e5d2f8c36";
-
 function slashProposalSummary(proposalId: string) {
   /* Three demo cases — needs action, disputed on chain, executed — matching
      the on-chain rows in `demo-penalties.ts`. Any other id reads as the
@@ -1389,14 +1387,15 @@ function slashProposalSummary(proposalId: string) {
   }
   return {
     ...base,
-    status: "DISPUTED",
+    // Disputed on chain: the case stays PROPOSED while the arbiter rules.
+    status: "PROPOSED",
     appliedAmount: null,
     clocks: {
       proposedAt: demoPenaltyTime(-5700),
       notifiedAt: demoPenaltyTime(-5688),
       acknowledgedAt: null,
       respondByAt: null,
-      platformDecisionDueAt: demoPenaltyTime(5340),
+      platformDecisionDueAt: null,
       earliestExecutionAt: demoPenaltyTime(2520),
       chainExecutableAt: demoPenaltyTime(2880),
       chainStatus: "DISPUTED",
@@ -1408,9 +1407,9 @@ function slashProposalSummary(proposalId: string) {
       chainState: "DISPUTED",
       disputeBy: null,
       secondsRemaining: null,
-      runningClock: "PLATFORM",
+      runningClock: "NONE",
     },
-    disputeId: DISPUTE_ID,
+    disputeId: null,
     executedAt: null,
   };
 }

@@ -70,9 +70,6 @@ import { formatMoney } from "@/utils/money";
  * While the chain indexer is stale, Home never says "Nothing needs you": it
  * cannot confirm that (D16).
  *
- * Not here, on purpose: the retired off-chain objection queue (claim / decide
- * / second); its cases wait under Penalties, "Old process".
- *
  * j / k move between rows and Enter takes a row's main action (`?` lists the keys).
  */
 

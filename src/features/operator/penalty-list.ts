@@ -24,7 +24,7 @@ export interface PenaltyRow {
   onChain: boolean | null;
 }
 
-export type PenaltyTabId = "needs-ruling" | "signature" | "old-process" | "window" | "executed" | "cancelled" | "all";
+export type PenaltyTabId = "needs-ruling" | "signature" | "window" | "executed" | "cancelled" | "all";
 
 export interface PenaltyTab {
   id: PenaltyTabId;
@@ -38,8 +38,6 @@ export const STATUS_TABS: readonly PenaltyTab[] = [
   // Only what the arbiter can rule on: disputed on chain. The same count as Home and Arbiter.
   { id: "needs-ruling", label: "Needs ruling", statuses: ["CHAIN_DISPUTED"] },
   { id: "signature", label: "Waiting for signature", statuses: ["CANCEL_REQUESTED"] },
-  // The retired in-app objection process (D15): nobody rules these on chain, so they wait apart.
-  { id: "old-process", label: "Old process", statuses: ["DISPUTED"] },
   { id: "window", label: "In dispute window", statuses: ["PROPOSED"] },
   { id: "executed", label: "Executed", statuses: ["EXECUTED", "COMPENSATED"] },
   { id: "cancelled", label: "Cancelled", statuses: ["CANCELLED", "EXPIRED"] },
@@ -47,7 +45,7 @@ export const STATUS_TABS: readonly PenaltyTab[] = [
 ];
 
 /** Everything still moving: small enough to read whole, so these tabs carry counts. */
-export const OPEN_STATUSES: readonly OperatorCaseStatus[] = ["CHAIN_DISPUTED", "DISPUTED", "CANCEL_REQUESTED", "PROPOSED"];
+export const OPEN_STATUSES: readonly OperatorCaseStatus[] = ["CHAIN_DISPUTED", "CANCEL_REQUESTED", "PROPOSED"];
 
 export function tabById(tabs: readonly PenaltyTab[], id: string | null | undefined): PenaltyTab {
   return tabs.find((tab) => tab.id === id) ?? tabs[0]!;
@@ -121,8 +119,6 @@ function statusChip(row: Pick<PenaltyRow, "status" | "disputedAt" | "nextDeadlin
   switch (row.status) {
     case "CHAIN_DISPUTED":
       return { status: "disputed" };
-    case "DISPUTED":
-      return { status: "waiting", detail: "old process" };
     case "CANCEL_REQUESTED":
       // The chip stays short; Next says what is signed ("Arbiter signs the cancel · 9h left").
       return { status: "waiting-signature" };
@@ -203,15 +199,6 @@ export function penaltyNext(
         text: row.onChain === false || !known ? "Waiting to go on chain" : left <= 0 ? "Executable now" : `Executable in ${durationLeft(left)}`,
         until,
         urgent: false,
-      };
-    case "DISPUTED":
-      // The retired objection process: an operator suspends it from its page; nothing rules it on chain.
-      if (stuck) return { kind: "text", text: `Old process · ${stuck.charAt(0).toLowerCase()}${stuck.slice(1)} · suspend it from its page`, until: null, urgent: true };
-      return {
-        kind: "text",
-        text: !known ? "Old process · suspend it from its page" : left <= 0 ? "Old process · decision overdue" : `Old process · decide within ${durationLeft(left)}`,
-        until,
-        urgent: known && left <= 0,
       };
     default:
       return { kind: "none" };

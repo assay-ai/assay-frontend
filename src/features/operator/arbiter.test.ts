@@ -27,7 +27,7 @@ function dispute(n: number, opts: Partial<ArbiterDispute> = {}): ArbiterDispute 
     proposalId: `p-${n}`,
     providerId: "prov",
     chainId: "eip155:46630",
-    caseStatus: "UNDER_REVIEW",
+    caseStatus: "PROPOSED",
     caseChainStatus: "DISPUTED",
     penaltyAmount: "1000000",
     reservedAmount: "1000000",
