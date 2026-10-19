@@ -485,14 +485,35 @@ export function enablePaidPlan(input: {
   };
 }
 
+/** A credential id as it may appear in the way back: a plain id, nothing else. */
+const CREDENTIAL_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** The way back from the Funding page: `/agents/enable-paid?credential={id}`, never the key. */
+export function enablePaidReturnHref(credentialId: string): string | null {
+  return CREDENTIAL_ID.test(credentialId) ? `/agents/enable-paid?credential=${credentialId}` : null;
+}
+
 /**
- * Where the Funding page may send the person back to: this page only, as a
- * same-origin path (with its query and `#key`). Anything else is null.
+ * Where the Funding page may send the person back to: exactly
+ * `/agents/enable-paid?credential={id}`, a same-origin path. Any other path,
+ * any other query parameter, a fragment (the key never travels in a URL the
+ * page builds) or a malformed id: null. The page finds the key again from
+ * this tab's own storage for that credential.
  */
 export function enablePaidReturnTo(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const next = safeNextPath(raw);
-  if (next === "/") return null;
-  const path = next.split(/[?#]/)[0]!.replace(/\/+$/, "");
-  return path === "/agents/enable-paid" ? next : null;
+  if (next !== raw) return null;
+  let url: URL;
+  try {
+    url = new URL(next, "https://assay.invalid");
+  } catch {
+    return null;
+  }
+  if (url.pathname !== "/agents/enable-paid" || url.hash || raw.includes("#")) return null;
+  const keys = [...url.searchParams.keys()];
+  if (keys.length !== 1 || keys[0] !== "credential") return null;
+  const id = url.searchParams.get("credential") ?? "";
+  const back = enablePaidReturnHref(id);
+  return back === raw ? back : null;
 }

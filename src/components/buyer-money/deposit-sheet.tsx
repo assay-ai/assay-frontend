@@ -11,7 +11,7 @@ import { runApproveStep, runDepositStep, type DepositAttempt, type DepositRun } 
 import { testTokenHelp } from "@/features/buyer-money/gas-help";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { DEPOSIT_MINIMUM_USD } from "@/features/explorer/buyer-costs";
-import { depositChoice } from "@/features/funding/deposit-chain";
+import { depositChoiceFor } from "@/features/funding/deposit-chain";
 import { depositWalletView, useDepositWallet } from "@/features/funding/deposit-wallet";
 import { depositUnavailableOn, depositableChains, offeredChains } from "@/features/funding/depositable-chains";
 import { chainBalances } from "@/features/g30/balance";
@@ -69,9 +69,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
     status: money.escrowQuery.isPending ? "loading" : money.escrowQuery.isError ? "error" : "ready",
     chainId: money.chainId,
   });
-  const choice = depositChoice(
-    offeredChains(depositable).filter((chain) => onlyChainId === null || chain.chainId === onlyChainId),
-  );
+  const choice = depositChoiceFor(offeredChains(depositable), onlyChainId);
   const chainId = choice.kind === "fixed" ? choice.chain.chainId : picked;
   const chain = chainId ? findChain(money.chains, chainId) : null;
   const chainName = chainId ? chainDisplayName(money.chains, chainId) : null;

@@ -17,6 +17,7 @@ import {
   enablePaidFailure,
   enablePaidState,
   enablePaidPlan,
+  enablePaidReturnHref,
   initialDraft,
   parseEnablePaidCaps,
   planSignatures,
@@ -189,6 +190,7 @@ export default function EnablePaidPage() {
         )
       : null;
   const rpc = money.chainId ? evmRpcUrl(money.chainId) : null;
+  const returnHref = enablePaidReturnHref(credentialId);
   const spendable = escrow?.spendable ?? escrow?.balance ?? null;
   const fundsShort =
     !escrow?.exists || !spendable || (chosen !== null && BigInt(spendable.amount || "0") < BigInt(chosen.maxPerWindow));
@@ -220,11 +222,11 @@ export default function EnablePaidPage() {
             ? { kind: "inline", onClick: () => setDepositOpen(true) }
             : {
                 kind: "link",
-                // Back here afterwards, `#key` included (the Funding page checks it is this page's path).
-                href:
-                  typeof window === "undefined"
-                    ? "/funding?action=deposit"
-                    : `/funding?action=deposit&returnTo=${encodeURIComponent(thisPageHref())}`,
+                // Back here afterwards: the credential only, never the key. This tab's storage
+                // still holds the key for this credential (takePaymentKey).
+                href: returnHref
+                  ? `/funding?action=deposit&returnTo=${encodeURIComponent(returnHref)}`
+                  : "/funding?action=deposit",
               }
         }
         signatures={signatures}
