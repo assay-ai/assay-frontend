@@ -201,6 +201,16 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
     expect(out.match(/Signed in from Assay app \(assay-mcp\)/g)).toHaveLength(2);
   });
 
+  it("Payment limits is off for a bound key not yet on chain: the enable-paid page checks it (final review I-2)", () => {
+    const row = grantRow("g-new", "Assay app on laptop-a", DELEGATE_A);
+    const html = render((client) => {
+      client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [row] });
+      client.setQueryData(["escrow-delegates", "live"], { account: ACCOUNT, delegates: [], tightenDelaySeconds: 3600 });
+    });
+    expect(html).toMatch(/<button[^>]*data-testid="payment-limits"[^>]*disabled=""|<button[^>]*disabled=""[^>]*data-testid="payment-limits"/);
+    expect(text(html)).not.toContain("Let your agent pay");
+  });
+
   it("a third-party grant gets no Payment limits button", () => {
     const row = grantRow("g-c", "Claude Code · Oct 19", null, { oauthClient: THIRD_PARTY });
     const html = render((client) => client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [row] }));
