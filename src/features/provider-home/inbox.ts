@@ -96,6 +96,22 @@ export function inboxBreakdown(input: {
   return { penalties: input.urgent.length, reports: reports.length, notices };
 }
 
+/**
+ * The notices listed under Notices: a "buyer reported a bad result" notice
+ * whose report is already in Needs action (the same report, by id) is left
+ * out, so the report is shown once (V1-12). Once the reply window closes the
+ * report leaves Needs action and its notice is listed again.
+ */
+export function noticesBesideActions<T extends { event: string; subjectId?: string | null }>(
+  items: readonly T[],
+  reportIds: readonly string[],
+): T[] {
+  const open = new Set(reportIds.map((id) => id.toLowerCase()));
+  return items.filter(
+    (item) => !(item.event === "call_dispute.opened" && item.subjectId && open.has(item.subjectId.toLowerCase())),
+  );
+}
+
 export function inboxCount(input: Parameters<typeof inboxBreakdown>[0]): number {
   const { penalties, reports, notices } = inboxBreakdown(input);
   return penalties + reports + notices;

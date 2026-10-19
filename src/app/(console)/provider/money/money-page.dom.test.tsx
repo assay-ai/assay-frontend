@@ -125,7 +125,7 @@ describe("provider Money", () => {
 
   it("names the tools a reason happened on and counts the unlisted ones, never 'a tool' repeated", () => {
     const words = render();
-    expect(words).toMatch(/On get_usd_eur_rate, geocode_place \+2 other tools/);
+    expect(words).toMatch(/On get_usd_eur_rate, geocode_place \+2 removed tools/);
     expect(words).not.toMatch(/a tool, a tool/);
   });
 

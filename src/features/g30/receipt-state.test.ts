@@ -554,3 +554,35 @@ describe("toStageChecks — a check that does not apply", () => {
     expect(relevanceReached(receipt)).toBe(false);
   });
 });
+
+describe("toStageChecks — a call with no check result (V1-8)", () => {
+  it("says no check result was recorded, never that checks stop at the first failure", () => {
+    const generic = "checks stop at the first failure";
+    const receipt = settledReceipt({
+      verdict: { status: null } as never,
+      stages: ["SCHEMA", "DETERMINISTIC_RULES", "CROSS_CHECK", "SEMANTIC"].map((stage) => ({
+        stage,
+        status: "NOT_REACHED",
+        passed: false,
+        note: generic,
+        detail: generic,
+      })) as unknown as Receipt["stages"],
+    });
+    const checks = toStageChecks(receipt);
+    expect(checks).toHaveLength(4);
+    for (const check of checks) {
+      expect(check).toMatchObject({ status: "not-reached", note: "no check result was recorded" });
+      expect(check.detail).toBeUndefined();
+    }
+  });
+
+  it("keeps the API's note on a stage not reached after one passed", () => {
+    const receipt = settledReceipt({
+      stages: [
+        { stage: "SCHEMA", status: "PASSED", passed: true, note: "runs on every call" },
+        { stage: "SEMANTIC", status: "NOT_REACHED", passed: false, note: "not sampled for this call" },
+      ] as unknown as Receipt["stages"],
+    });
+    expect(toStageChecks(receipt)[1]?.note).toBe("not sampled for this call");
+  });
+});

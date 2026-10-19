@@ -89,7 +89,7 @@ describe("failRateLabel", () => {
   });
   it("shows the share that failed, the sample size and its 30-day, all-tools scope", () => {
     expect(failRateLabel({ measuredCalls: 400, failedCalls: 8 })).toBe(
-      "2.0% failed · 400 checked calls to all their tools, last 30 days",
+      "2% failed · 400 checked calls to all their tools, last 30 days",
     );
     expect(failRateLabel({ measuredCalls: 1, failedCalls: 0 })).toBe(
       "0% failed · 1 checked call to all their tools, last 30 days",
@@ -97,7 +97,7 @@ describe("failRateLabel", () => {
   });
   it("puts the promised rate beside the observed one", () => {
     expect(failRateLabel({ measuredCalls: 95, failedCalls: 10 }, 0.05)).toBe(
-      "11% failed · promised at most 5% · 95 checked calls to all their tools, last 30 days",
+      "10.5% failed · promised at most 5% · 95 checked calls to all their tools, last 30 days",
     );
     expect(failRateLabel({ measuredCalls: 95, failedCalls: 3 }, 0.025)).toBe(
       "3.2% failed · promised at most 2.5% · 95 checked calls to all their tools, last 30 days",
@@ -106,12 +106,18 @@ describe("failRateLabel", () => {
   });
   it("says what a single listing's promise covers when the rate is provider-wide", () => {
     expect(failRateLabel({ measuredCalls: 95, failedCalls: 10 }, 0.02, "this tool")).toBe(
-      "11% failed · promised at most 2% for this tool · 95 checked calls to all their tools, last 30 days",
+      "10.5% failed · promised at most 2% for this tool · 95 checked calls to all their tools, last 30 days",
     );
   });
   it("has one compact framing, the share that failed", () => {
-    expect(failRateShort({ measuredCalls: 95, failedCalls: 10 })).toBe("11% failed");
-    expect(failRateShort({ measuredCalls: 1000, failedCalls: 50 })).toBe("5.0% failed");
+    // One rule at every size (V1-7): one decimal, a trailing ".0" dropped.
+    expect(failRateShort({ measuredCalls: 95, failedCalls: 10 })).toBe("10.5% failed");
+    expect(failRateShort({ measuredCalls: 1000, failedCalls: 50 })).toBe("5% failed");
+    expect(failRateShort({ measuredCalls: 100, failedCalls: 11 })).toBe("11% failed");
+    expect(failRateShort({ measuredCalls: 1000, failedCalls: 5 })).toBe("0.5% failed");
+    // Below 1%, two decimals, as a promise reads (review m6).
+    expect(failRateShort({ measuredCalls: 10000, failedCalls: 25 })).toBe("0.25% failed");
+    expect(failRateLabel({ measuredCalls: 10000, failedCalls: 25 }, 0.0025)).toMatch(/^0\.25% failed · promised at most 0\.25%/);
     expect(failRateShort(null)).toBe("Not measured yet");
   });
   it("names one promise only when every listing makes the same one", () => {

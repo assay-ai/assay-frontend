@@ -4,7 +4,7 @@ import { CircleCheck, KeyRound, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { NEW_KEY_PAYS_NOTE, createKeyErrorText, useCreateKey } from "@/components/buyer-money/create-key";
+import { createKeyErrorText, newKeyPaysNote, payingKeyName, useCreateKey } from "@/components/buyer-money/create-key";
 import { McpConfigTabs } from "@/components/buyer-money/mcp-config-tabs";
 import { useAgentsAndKeys } from "@/components/buyer-money/use-agents";
 import { CopyChip } from "@/components/patterns/copy-chip";
@@ -116,7 +116,9 @@ export function ConnectView() {
               <code className="min-w-0 flex-1 break-all font-mono text-mono-12 text-01">{created.token}</code>
               <CopyChip value={created.token} display="Copy" label="your key" />
             </div>
-            <p className="text-body-xs text-02">{NEW_KEY_PAYS_NOTE}</p>
+            <p className="text-body-xs text-02" data-testid="connect-key-free-calls">
+              {newKeyPaysNote(agent ? payingKeyName(data.readiness[agent.agentId]) : null)}
+            </p>
           </div>
         ) : null}
 
