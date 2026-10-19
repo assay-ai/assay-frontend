@@ -185,6 +185,21 @@ describe("EnablePaidView", () => {
     expect(page).toMatch(/setDraft\(initialDraft\(state\)\)/);
   });
 
+  it("the page signs only what enablePaidPlan built from what it shows (R1-I1)", () => {
+    const page = readFileSync(resolve(__dirname, "../../app/(main)/agents/enable-paid/page.tsx"), "utf8");
+    // One plan, from the form and this device's clock; the server time only refuses.
+    expect(page).toMatch(/enablePaidPlan\(\{\s*parsed,\s*serverTime: escrow\?\.serverTime,\s*receivedAtMs: money\.escrowQuery\.dataUpdatedAt,\s*localNowMs: nowMs,\s*\}\)/);
+    // The steps come from the plan only: its ceiling and its expiry, both required by type.
+    expect(page).toMatch(/enablePaidSteps\(\{/);
+    expect(page).toMatch(/ceiling: plan\.ceiling,/);
+    expect(page).toMatch(/expiry: plan\.expiry,/);
+    expect(page).not.toMatch(/agentPaySteps|serverNowSeconds|pageExpiry|nowSeconds/);
+    // The view shows the same expiry, and its refusal.
+    expect(page).toMatch(/validUntil=\{plan\.ok \? plan\.validUntil : null\}/);
+    expect(page).toMatch(/expiryProblem=\{plan\.ok \? null : plan\.problem\}/);
+    expect(page).toMatch(/boundDays=\{plan\.ok \? plan\.boundDays : null\}/);
+  });
+
   it("the route files import no analytics", () => {
     for (const file of ["../../app/(main)/agents/enable-paid/page.tsx", "./enable-paid-view.tsx"]) {
       const imports = readFileSync(resolve(__dirname, file), "utf8").match(/^import[^;]+;/gm) ?? [];

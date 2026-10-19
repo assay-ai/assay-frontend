@@ -26,6 +26,7 @@ import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 import { chainBalances, type Hold } from "@/features/g30/balance";
 import { chargedFromTotals } from "@/features/g30/spend-buckets";
 import { useCountdown } from "@/hooks/useCountdown";
+import { enablePaidReturnTo } from "@/features/delegation/enable-paid";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import type { Money } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
@@ -106,6 +107,11 @@ export function FundingView() {
   const needPerDay = useSearchParam("perDay");
   // Statements is its own page; an old `?tab=statements` link goes there.
   const tab = useSearchParam("tab");
+  // Sent here from "Turn on paid calls": the way back, kept after the drawer closes and
+  // only ever that page's own path (enablePaidReturnTo), loaded as a full page.
+  const returnParam = enablePaidReturnTo(useSearchParam("returnTo"));
+  const [returnTo, setReturnTo] = React.useState<string | null>(null);
+  if (returnParam && returnParam !== returnTo) setReturnTo(returnParam);
   React.useEffect(() => {
     if (tab === "statements") router.replace("/statements");
   }, [tab, router]);
@@ -156,6 +162,14 @@ export function FundingView() {
   return (
     <div className="flex w-full flex-col gap-4 bg-02 px-4 py-5 tablet:gap-5 tablet:px-7 tablet:py-[22px]">
       <h1 className="sr-only">Funding</h1>
+      {returnTo ? (
+        <p className="rounded-lg bg-primary-10 px-4 py-3 text-body-13 text-01" data-testid="enable-paid-return">
+          Funds added?{" "}
+          <a href={returnTo} className="font-semibold text-primary-600 hover:underline">
+            Back to turning on paid calls
+          </a>
+        </p>
+      ) : null}
       <PendingTxList />
 
       {unreadable ? (

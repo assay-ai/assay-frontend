@@ -9,7 +9,7 @@ import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { CAP_PRESETS, capsToForm, keyGroups, parseCaps } from "@/features/buyer-money/caps";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { DEFAULT_DELEGATION_DAYS, parseDelegationForm, serverNowSeconds } from "@/features/delegation/delegation-form";
-import { planSignatures } from "@/features/delegation/enable-paid";
+import { planSignatures, type AtomicCapPair } from "@/features/delegation/enable-paid";
 import { submitRelayedDelegation } from "@/features/delegation/relayed-delegation";
 import {
   hasTightenDelay,
@@ -366,4 +366,30 @@ export function agentPaySteps(input: AgentPayStepsInput): WalletStep[] {
       },
     },
   ];
+}
+
+/** The enable-paid page's input: `ceiling` and `expiry` are required, so leaving one out does not compile. */
+export interface EnablePaidStepsInput
+  extends Omit<AgentPayStepsInput, "chosen" | "ceiling" | "expiry" | "nowSeconds" | "form"> {
+  /** `enablePaidPlan(...).ceiling`: the caps the page shows. */
+  ceiling: AtomicCapPair;
+  /** `enablePaidPlan(...).expiry`: the `validUntil` the page shows. */
+  expiry: { validUntil: number; maxDays: number };
+  /** The form as typed (major units), for the request's own checks. */
+  form: { perCall: string; perDay: string; days: number };
+}
+
+/**
+ * The enable-paid page's wallet steps: `SetLimits` with exactly the shown
+ * ceiling, then `AuthorizeDelegate` with exactly the shown caps and expiry.
+ * The grant's caps are the ceiling's values; nothing comes from the API.
+ */
+export function enablePaidSteps(input: EnablePaidStepsInput): WalletStep[] {
+  return agentPaySteps({
+    ...input,
+    chosen: input.ceiling,
+    ceiling: input.ceiling,
+    expiry: input.expiry,
+    nowSeconds: input.expiry.validUntil - input.form.days * 86_400,
+  });
 }

@@ -53,9 +53,11 @@ export interface DepositSheetProps {
   onOpenChange: (open: boolean) => void;
   /** Offered after success when the escrow has no account ceiling yet. */
   onSetCaps?: () => void;
+  /** Offer only this chain (the enable-paid page: the only RPC its policy reaches). */
+  onlyChainId?: string | null;
 }
 
-export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProps) {
+export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null }: DepositSheetProps) {
   const queryClient = useQueryClient();
   const readOnly = useAccountReadOnly();
   const money = useBuyerMoney();
@@ -67,7 +69,9 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
     status: money.escrowQuery.isPending ? "loading" : money.escrowQuery.isError ? "error" : "ready",
     chainId: money.chainId,
   });
-  const choice = depositChoice(offeredChains(depositable));
+  const choice = depositChoice(
+    offeredChains(depositable).filter((chain) => onlyChainId === null || chain.chainId === onlyChainId),
+  );
   const chainId = choice.kind === "fixed" ? choice.chain.chainId : picked;
   const chain = chainId ? findChain(money.chains, chainId) : null;
   const chainName = chainId ? chainDisplayName(money.chains, chainId) : null;

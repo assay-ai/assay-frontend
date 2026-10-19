@@ -5,20 +5,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
 import { DepositSheet } from "@/components/buyer-money/deposit-sheet";
-import { agentPaySteps } from "@/components/buyer-money/let-agent-pay-sheet";
+import { enablePaidSteps } from "@/components/buyer-money/let-agent-pay-sheet";
 import { useBuyerMoney, useWalletBlocker } from "@/components/buyer-money/use-buyer-money";
 import { EnablePaidView } from "@/components/delegation/enable-paid-view";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { capsToForm } from "@/features/buyer-money/caps";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import {
-  ENABLE_PAID_MAX_DAYS,
   collectPages,
   depositRunsHere,
   enablePaidFailure,
   enablePaidState,
+  enablePaidPlan,
   initialDraft,
-  pageExpiry,
   parseEnablePaidCaps,
   planSignatures,
   takePaymentKey,
@@ -158,31 +157,28 @@ export default function EnablePaidPage() {
   if (!draft) return <Notice text="Loading…" busy />;
 
   const parsed = parseEnablePaidCaps(draft, money.decimals);
-  const chosen = parsed.ok ? { maxVoucherAmount: parsed.maxVoucherAmount, maxPerWindow: parsed.maxPerWindow } : null;
-  // The expiry shown is the expiry signed: this device's clock, checked against the server's.
-  const expiry = parsed.ok
-    ? pageExpiry({
-        localNowMs: nowMs,
-        serverTime: escrow?.serverTime,
-        receivedAtMs: money.escrowQuery.dataUpdatedAt,
-        days: parsed.days,
-      })
-    : null;
-  const validUntil = expiry?.ok ? new Date(expiry.validUntil * 1000).toISOString() : null;
-  const signatures = chosen ? planSignatures(openingCaps, chosen).length : 1;
-  const steps = agentPaySteps({
-    money,
-    queryClient,
-    agentName: state.agentLabel,
-    delegateAccount: state.delegateAccount,
-    chosen,
-    form: { perCall: draft.perCall, perDay: draft.perDay, days: parsed.ok ? parsed.days : 0 },
-    openingCaps,
-    nowSeconds: Math.floor(nowMs / 1000),
-    // SetLimits signs the ceiling the page shows: the person's caps, never values from the API.
-    ceiling: chosen ?? undefined,
-    expiry: expiry?.ok ? { validUntil: expiry.validUntil, maxDays: ENABLE_PAID_MAX_DAYS } : undefined,
+  // What is signed is what is shown: the caps on the form (the grant and the ceiling) and
+  // an expiry from this device's clock, checked against the server's (enablePaidPlan).
+  const plan = enablePaidPlan({
+    parsed,
+    serverTime: escrow?.serverTime,
+    receivedAtMs: money.escrowQuery.dataUpdatedAt,
+    localNowMs: nowMs,
   });
+  const chosen = plan.ok ? plan.chosen : null;
+  const signatures = plan.ok ? planSignatures(openingCaps, plan.chosen).length : 1;
+  const steps = plan.ok
+    ? enablePaidSteps({
+        money,
+        queryClient,
+        agentName: state.agentLabel,
+        delegateAccount: state.delegateAccount,
+        form: { perCall: draft.perCall, perDay: draft.perDay, days: parsed.ok ? parsed.days : 0 },
+        openingCaps,
+        ceiling: plan.ceiling,
+        expiry: plan.expiry,
+      })
+    : [];
   const current = state.grant.kind === "none" ? null : state.grant.delegation;
   const lowerNote =
     current && chosen
@@ -211,16 +207,25 @@ export default function EnablePaidPage() {
         onDraftChange={setDraft}
         parsed={parsed}
         chainName={money.chainName ?? state.chainId}
-        validUntil={validUntil}
-        expiryProblem={expiry && !expiry.ok ? expiry.text : null}
-        boundDays={expiry?.ok ? expiry.boundDays : null}
+        validUntil={plan.ok ? plan.validUntil : null}
+        expiryProblem={plan.ok ? null : plan.problem}
+        boundDays={plan.ok ? plan.boundDays : null}
         escrowAddress={escrow?.escrowPda ? addressOfAccount(escrow.escrowPda) : null}
         currentCeiling={capsToForm(escrow)}
         lowerNote={lowerNote}
         balance={escrow?.balance ? formatMoney(escrow.balance) : null}
         fundsShort={fundsShort}
         addFunds={
-          depositRunsHere(rpc) ? { kind: "inline", onClick: () => setDepositOpen(true) } : { kind: "link", href: "/funding" }
+          depositRunsHere(rpc)
+            ? { kind: "inline", onClick: () => setDepositOpen(true) }
+            : {
+                kind: "link",
+                // Back here afterwards, `#key` included (the Funding page checks it is this page's path).
+                href:
+                  typeof window === "undefined"
+                    ? "/funding?action=deposit"
+                    : `/funding?action=deposit&returnTo=${encodeURIComponent(thisPageHref())}`,
+              }
         }
         signatures={signatures}
         blocked={blocked}
@@ -228,7 +233,8 @@ export default function EnablePaidPage() {
         steps={steps}
         describeError={(error) => enablePaidFailure(error) ?? describeMoneyError(error)}
       />
-      <DepositSheet open={depositOpen} onOpenChange={setDepositOpen} />
+      {/* Only the escrow's own chain: the page's policy reaches only its RPC. */}
+      <DepositSheet open={depositOpen} onOpenChange={setDepositOpen} onlyChainId={state.chainId} />
     </div>
   );
 }

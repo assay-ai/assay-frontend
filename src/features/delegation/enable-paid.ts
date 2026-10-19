@@ -5,8 +5,11 @@ import { relayRetryAt } from "@/features/escrow/relayed-refusal";
 import { displayClientName } from "@/features/oauth/consent";
 import type { EscrowDelegate } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
+import { safeNextPath } from "@/libs/login-redirect";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { formatDecimal, toDecimal } from "@/utils/money";
+
+import strictRpcOrigins from "@/config/strict-rpc-origins.json";
 
 import { findDelegation } from "./delegation-form";
 
@@ -384,11 +387,12 @@ export function pageExpiry(input: {
 }
 
 /**
- * The RPC origins this page's `connect-src` allows (`scripts/csp-policy.js`
- * `CONNECT_ORIGINS`, exact origins only; a test keeps the two in step). Add
- * funds runs in place only when the chain's RPC is one of them.
+ * The chain RPC origins this page's `connect-src` allows: one list,
+ * `src/config/strict-rpc-origins.json`, which `scripts/csp-policy.js` adds to
+ * `CONNECT_ORIGINS`. Exact origins only. Add funds runs in place only when the
+ * chain's RPC is one of them.
  */
-export const STRICT_PAGE_RPC_ORIGINS: readonly string[] = ["https://rpc.testnet.chain.robinhood.com"];
+export const STRICT_PAGE_RPC_ORIGINS: readonly string[] = strictRpcOrigins;
 
 export function depositRunsHere(rpcUrl: string | null | undefined): boolean {
   if (!rpcUrl) return false;
@@ -419,4 +423,76 @@ export async function collectPages<T>(
     cursor = next;
   }
   return items;
+}
+
+/** The two caps in atomic units, as `SetLimits` and `AuthorizeDelegate` carry them. */
+export interface AtomicCapPair {
+  maxVoucherAmount: string;
+  maxPerWindow: string;
+}
+
+export type EnablePaidPlan =
+  | {
+      ok: true;
+      /** The account ceiling `SetLimits` signs: the person's caps as the page shows them. */
+      ceiling: AtomicCapPair;
+      /** The grant's caps: the same values. */
+      chosen: AtomicCapPair;
+      /** The `validUntil` signed (unix seconds), at most `maxDays` from this device's clock. */
+      expiry: { validUntil: number; maxDays: number };
+      /** The same instant, as the page shows it. */
+      validUntil: string;
+      boundDays: number;
+      nowSeconds: number;
+    }
+  | {
+      ok: false;
+      /** Why nothing can be signed; null when the caps are invalid (the form says why). */
+      problem: string | null;
+    };
+
+/**
+ * Everything the page signs, from what it shows: the caps parsed from the
+ * form (the ceiling and the grant), and the expiry from this device's clock,
+ * checked against the server's ({@link pageExpiry}). Nothing here is read from
+ * the API but the server time, which can only refuse. The page builds its
+ * wallet steps from this and nothing else (`enablePaidSteps`).
+ */
+export function enablePaidPlan(input: {
+  parsed: ParsedEnablePaidCaps;
+  serverTime: string | null | undefined;
+  receivedAtMs: number;
+  localNowMs: number;
+}): EnablePaidPlan {
+  const { parsed } = input;
+  if (!parsed.ok) return { ok: false, problem: null };
+  const expiry = pageExpiry({
+    localNowMs: input.localNowMs,
+    serverTime: input.serverTime,
+    receivedAtMs: input.receivedAtMs,
+    days: parsed.days,
+  });
+  if (!expiry.ok) return { ok: false, problem: expiry.text };
+  const caps = { maxVoucherAmount: parsed.maxVoucherAmount, maxPerWindow: parsed.maxPerWindow };
+  return {
+    ok: true,
+    ceiling: { ...caps },
+    chosen: { ...caps },
+    expiry: { validUntil: expiry.validUntil, maxDays: ENABLE_PAID_MAX_DAYS },
+    validUntil: new Date(expiry.validUntil * 1000).toISOString(),
+    boundDays: expiry.boundDays,
+    nowSeconds: Math.floor(input.localNowMs / 1000),
+  };
+}
+
+/**
+ * Where the Funding page may send the person back to: this page only, as a
+ * same-origin path (with its query and `#key`). Anything else is null.
+ */
+export function enablePaidReturnTo(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const next = safeNextPath(raw);
+  if (next === "/") return null;
+  const path = next.split(/[?#]/)[0]!.replace(/\/+$/, "");
+  return path === "/agents/enable-paid" ? next : null;
 }
