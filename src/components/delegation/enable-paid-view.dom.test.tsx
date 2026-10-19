@@ -166,6 +166,27 @@ describe("EnablePaidView", () => {
     expect(screen.getByTestId("ceiling-row").textContent).toBe("$0.50 a call · $7 per 24 hours");
   });
 
+  it("a deposit still confirming on chain is shown apart from what paid calls can use (BUG-A-06)", () => {
+    render(
+      <Harness
+        run={vi.fn(async () => undefined)}
+        balance="$0.00"
+        confirming="$20.00 still confirming on chain (usually within 30 minutes)"
+      />,
+    );
+    expect(screen.getByTestId("funds-ready").textContent).toBe("Ready for paid calls: $0.00");
+    expect(screen.getByTestId("funds-confirming").textContent).toBe(
+      "$20.00 still confirming on chain (usually within 30 minutes). Paid calls can use it once the chain finalises it.",
+    );
+    expect(screen.queryByText(/Escrow balance/)).toBeNull();
+  });
+
+  it("nothing confirming: the escrow balance line as before", () => {
+    render(<Harness run={vi.fn(async () => undefined)} />);
+    expect(screen.getByText("Escrow balance: $20.00")).toBeTruthy();
+    expect(screen.queryByTestId("funds-confirming")).toBeNull();
+  });
+
   it("one signature: no ceiling row", () => {
     render(<Harness run={vi.fn(async () => undefined)} />);
     expect(screen.queryByTestId("ceiling-row")).toBeNull();
