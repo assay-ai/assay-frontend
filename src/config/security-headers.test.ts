@@ -179,7 +179,7 @@ describe("scripts/connect-csp.js", () => {
       "Content-Security-Policy": csp.fallbackPolicy({ scriptHashes: [sha("one()"), sha("two()")].sort() }),
       "X-Frame-Options": "DENY",
       "Referrer-Policy": "no-referrer",
-      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
     });
     const fallback = directives(block(out, "/connect/*")["Content-Security-Policy"]);
     expect(fallback["frame-ancestors"]).toBe("'none'");
@@ -204,30 +204,34 @@ describe("scripts/connect-csp.js", () => {
     expect(block(out, "/*")).toEqual(block(text, "/*"));
   });
 
-  it("keeps Cross-Origin-Opener-Policy same-origin on /connect/*, once, never in a per-page block (R1-m4)", async () => {
+  it("keeps Cross-Origin-Opener-Policy same-origin-allow-popups on /connect/*, once, never in a per-page block (R1-m4)", async () => {
     const text = await headersFile();
-    expect(block(text, "/connect/*")["Cross-Origin-Opener-Policy"]).toBe("same-origin");
-    expect(connectCsp.SPLAT_HEADERS).toEqual({ "/connect/*": { "Cross-Origin-Opener-Policy": "same-origin" } });
+    expect(block(text, "/connect/*")["Cross-Origin-Opener-Policy"]).toBe("same-origin-allow-popups");
+    expect(connectCsp.SPLAT_HEADERS).toEqual({ "/connect/*": { "Cross-Origin-Opener-Policy": "same-origin-allow-popups" } });
     const out = connectCsp.completeHeaders(
       text,
       { "/connect/*": { "/connect/authorize": page("one()"), "/connect/authorize-error": page("two()") } },
       [],
     );
     // Every /connect page matches the splat's block too, so it gets the header from there, once:
-    // Cloudflare Pages would join a repeat into "same-origin, same-origin", which browsers ignore.
-    expect(out.match(/^\s+Cross-Origin-Opener-Policy:.*$/gm)).toEqual(["  Cross-Origin-Opener-Policy: same-origin"]);
-    expect(block(out, "/connect/*")["Cross-Origin-Opener-Policy"]).toBe("same-origin");
+    // Cloudflare Pages would join a repeat by comma, a value browsers ignore.
+    expect(out.match(/^\s+Cross-Origin-Opener-Policy:.*$/gm)).toEqual(["  Cross-Origin-Opener-Policy: same-origin-allow-popups"]);
+    expect(block(out, "/connect/*")["Cross-Origin-Opener-Policy"]).toBe("same-origin-allow-popups");
     expect(block(out, "/connect/authorize")["Cross-Origin-Opener-Policy"]).toBeUndefined();
     expect(block(out, "/*")["Cross-Origin-Opener-Policy"]).toBeUndefined();
   });
 
   it("fails the build when /connect/* lacks that header, weakens it, or another block repeats it", async () => {
     const text = await headersFile();
-    const line = "  Cross-Origin-Opener-Policy: same-origin\n";
+    const line = "  Cross-Origin-Opener-Policy: same-origin-allow-popups\n";
     expect(text).toContain(line);
     expect(() => connectCsp.completeHeaders(text.replace(line, ""), {}, [])).toThrow(/needs exactly one "Cross-Origin-Opener-Policy/);
     expect(() =>
       connectCsp.completeHeaders(text.replace(line, "  Cross-Origin-Opener-Policy: unsafe-none\n"), {}, []),
+    ).toThrow(/needs exactly one/);
+    // Plain same-origin would sever the page's own Privy and wallet popups.
+    expect(() =>
+      connectCsp.completeHeaders(text.replace(line, "  Cross-Origin-Opener-Policy: same-origin\n"), {}, []),
     ).toThrow(/needs exactly one/);
     expect(() => connectCsp.completeHeaders(text.replace(line, line + line), {}, [])).toThrow(/needs exactly one/);
     expect(() =>
