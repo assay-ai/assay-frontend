@@ -175,7 +175,7 @@ describe("the server-name rule agrees with assay-mcp on every shared vector (R-M
   });
 
   it("the sign-in hint is the vector text with the pinned scoped command", () => {
-    expect(signInHint()).toBe(vectors.signedOutHint.replace("{run}", "npx -y @assay-ai/mcp@1.2.3"));
+    expect(signInHint()).toBe(vectors.rule.signedOutHint.replace("{run}", "npx -y @assay-ai/mcp@1.2.3"));
   });
 
   it("maximum name length", () => {
