@@ -8,13 +8,20 @@ import {
   consentView,
   defaultAgentId,
   displayClientName,
+  foldForMatch,
   initialName,
   isContinueUrl,
   limitsLine,
+  mixesScripts,
+  nameIsFlagged,
   nameProblem,
   startedAgo,
   type ConsentRequest,
 } from "./consent";
+import VECTORS from "./client-name-fold.vectors.json";
+
+/** A shown name folded as for matching, to check no "verified" is left in any spelling. */
+const foldedText = (shown: string) => [...shown.normalize("NFKC")].map(foldForMatch).join("");
 
 const usd = (amount: string) => ({ amount, asset: "eip155:46630/erc20:0x0", decimals: 6 });
 const NOW = new Date("2026-10-19T10:00:12.000Z");
@@ -408,7 +415,8 @@ describe("agent checks before approve", () => {
 describe("fix round 2, R1: Unicode spoofs of a verified name", () => {
   // The reviewer's table, plus zero-width and bidi cases.
   const ROWS: [string, string][] = [
-    ["Claude Code Vеrified", "Claude Code"], // Cyrillic е
+    // Follow-up F1: a word mixing Latin with Cyrillic or Greek is flagged; the domain, or "Unnamed app", shows.
+    ["Claude Code Vеrified", "Unnamed app"], // Cyrillic е
     ["Claude Code Ｖｅｒｉｆｉｅｄ", "Claude Code"], // fullwidth
     ["Claude Code \u{1D415}\u{1D41E}\u{1D42B}\u{1D422}\u{1D41F}\u{1D422}\u{1D41E}\u{1D41D}", "Claude Code"], // mathematical bold
     ["Claude_Code_Verified", "Claude_Code"],
@@ -420,7 +428,7 @@ describe("fix round 2, R1: Unicode spoofs of a verified name", () => {
     ["Claude Code ‮deifirev", "Claude Code deifirev"], // the override is gone, so it reads as written
     ["ClaudeVerified", "Claude"],
     ["Claude Code V̲erified", "Claude Code"], // a combining mark inside the word
-    ["Claude Code νεrιfiεd", "Claude Code"], // Greek ν ε ι
+    ["Claude Code νεrιfiεd", "Unnamed app"], // Greek ν ε ι, flagged as above
     ["Claude Code VERIFIED2", "Claude Code 2"],
     ["Claude Code ✓️", "Claude Code"],
   ];
@@ -521,5 +529,89 @@ describe("fix round 3: no app but the built-in one wears its title", () => {
 
   it("another app's suggested name loses the phrases too", () => {
     expect(initialName({ suggestedName: "Assay app · 2026-10-19", client: { builtin: false } })).toBe("2026-10-19");
+  });
+});
+
+describe("follow-up F1 (R1-m1): fold vectors shared with the backend", () => {
+  // The same file as assay-backend test/unit/oauth/client-name-fold.vectors.json.
+  it.each(VECTORS.fold.map((v) => [v.group, v.input, v.folded]))("%s: %j folds to %j", (_group, input, folded) => {
+    expect(foldForMatch(input)).toBe(folded);
+  });
+
+  it.each(VECTORS.mixesScripts.map((v) => [v.name, v.mixed] as const))("%j mixes Latin with another script: %s", (name, mixed) => {
+    expect(mixesScripts(name)).toBe(mixed);
+  });
+
+  it.each(VECTORS.caught)("%j is never shown as it is", (name) => {
+    const shown = displayClientName(name, { registrableDomain: "example.com" });
+    expect(shown).not.toBe(name);
+    expect(foldedText(shown)).not.toContain("verified");
+  });
+
+  it.each(VECTORS.legitimate)("%j is shown unchanged, not flagged", (name) => {
+    expect(nameIsFlagged(name)).toBe(false);
+    expect(displayClientName(name, { registrableDomain: "example.com" })).toBe(name);
+  });
+});
+
+describe("follow-up F1 (R1-m1): separator letters and lookalikes outside the old table", () => {
+  it.each([
+    ["Claude Verifiedʼ", "Claude"],
+    ["Claude ʼVerified", "Claude"],
+    ["Claude Verifiedـ", "Claude"],
+    ["Claude Veriـfied", "Claude"],
+    ["Claude Veriʼfied", "Claude"],
+    ["Claude Verifieds", "Claude s"],
+    ["Claude Verified2026", "Claude 2026"],
+    ["Claude ᴠᴇʀɪꜰɪᴇᴅ", "Claude"],
+    ["Claude ꓦꓰꓣꓲꓝꓲꓰꓓ", "Claude"],
+  ])("%j shows as %j", (input, shown) => {
+    expect(displayClientName(input)).toBe(shown);
+  });
+
+  it("Verifone and Verifiable keep their names", () => {
+    expect(displayClientName("Verifone")).toBe("Verifone");
+    expect(displayClientName("Verifiable Tool")).toBe("Verifiable Tool");
+  });
+});
+
+describe("follow-up F1 (R1-m1): a name mixing Latin with another script shows the domain and the pill", () => {
+  const mixed = (name: string, verified = false, registrableDomain: string | null = "example.com") =>
+    request({
+      client: { name, kind: "CIMD", registrableDomain, host: registrableDomain, verified, builtin: false, paymentClient: false },
+      returnTo: { kind: "WEB", display: "example.com" },
+      suggestedName: `${name} · 2026-10-19`,
+    });
+
+  it.each(["Ꮩerified Tools", "ꓦerified", "ᐯerified", "Claude Cоde", "Νode helper"])("%j", (name) => {
+    const v = view(mixed(name));
+    expect(v.client.title).toBe("example.com");
+    expect(v.client.verified).toBe(false);
+    expect(v.notVerified).toBe(CONSENT_STRINGS.notVerified);
+    expect(v.recencyLine).toBe("Only approve if you clicked Connect in example.com in the last few minutes.");
+    expect(initialName(mixed(name))).toBe("example.com");
+  });
+
+  it("never wears the badge, even when the API says verified", () => {
+    const v = view(mixed("Claude Cоde", true));
+    expect(v.client.title).toBe("example.com");
+    expect(v.client.title).not.toContain("✓");
+    expect(v.client.verified).toBe(false);
+    expect(v.notVerified).not.toBeNull();
+  });
+
+  it("with no domain it is 'Unnamed app', and the name field starts empty", () => {
+    expect(view(mixed("Claude Cоde", false, null)).client.title).toBe("Unnamed app");
+    expect(initialName(mixed("Claude Cоde", false, null))).toBe("");
+  });
+
+  it("a name wholly in one script, or Latin with Japanese, is shown as it is", () => {
+    for (const name of ["Ассистент", "日本語ツール", "Gitクライアント", "Claude Ассистент"]) {
+      expect(view(mixed(name)).client.title).toBe(name);
+    }
+  });
+
+  it("the built-in app is never flagged", () => {
+    expect(nameIsFlagged("Assay app on МакБук", { builtin: true })).toBe(false);
   });
 });

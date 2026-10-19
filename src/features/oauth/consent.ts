@@ -150,20 +150,42 @@ const INVISIBLE = /[\p{Cf}\p{Cc}\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/gu;
 const SYMBOLS = /[\p{Co}\p{Zl}\p{Zp}\p{So}\p{Sk}\u221A]/gu;
 
 /**
- * Cyrillic and Greek letters that look like Latin ones, folded for matching
- * only (never in what is shown). Covers every letter of "verified" and the
- * common confusables around them.
+ * Letters of other scripts, and Latin variants, that look like plain Latin
+ * ones, folded for matching only (never in what is shown). Keys are lower
+ * case, as `foldForMatch` looks them up after lower casing. The backend's
+ * table (`client-name.ts`) is the same, entry for entry; both repos test
+ * against the same `client-name-fold.vectors.json`.
  */
+// prettier-ignore
 const LATIN_LOOKALIKES: Readonly<Record<string, string>> = {
   // Cyrillic
   "\u0430": "a", "\u0435": "e", "\u0451": "e", "\u043e": "o", "\u0440": "p", "\u0441": "c", "\u0445": "x",
   "\u0443": "y", "\u0456": "i", "\u0457": "i", "\u0458": "j", "\u0455": "s", "\u0501": "d", "\u0475": "v",
   "\u04cf": "i", "\u04bd": "e", "\u0433": "r", "\u0493": "f", "\u051b": "q", "\u051d": "w", "\u0261": "g",
-  // Greek
+  // Greek (ς: the lunate sigma ϲ decomposes to it)
   "\u03bf": "o", "\u03bd": "v", "\u03b9": "i", "\u03b5": "e", "\u03f5": "e", "\u03c1": "p", "\u03ba": "k",
-  "\u03c5": "u", "\u03c4": "t", "\u03b1": "a", "\u03dd": "f", "\u03f2": "c", "\u03b3": "y", "\u03c7": "x",
+  "\u03c5": "u", "\u03c4": "t", "\u03b1": "a", "\u03dd": "f", "\u03c2": "c", "\u03b3": "y", "\u03c7": "x",
   // Latin variants
-  "\u0131": "i", "\u0269": "i", "\u0280": "r", "\u1d20": "v", "\u1d07": "e", "\u0257": "d", "\u0192": "f",
+  "\u0131": "i", "\u0269": "i", "\u0257": "d", "\u0192": "f", "\u0111": "d",
+  // Latin small capitals
+  "\u1d00": "a", "\u0299": "b", "\u1d04": "c", "\u1d05": "d", "\u1d07": "e", "\ua730": "f", "\u0262": "g",
+  "\u029c": "h", "\u026a": "i", "\u1d0a": "j", "\u1d0b": "k", "\u029f": "l", "\u1d0d": "m", "\u0274": "n",
+  "\u1d0f": "o", "\u1d18": "p", "\ua7af": "q", "\u0280": "r", "\ua731": "s", "\u1d1b": "t", "\u1d1c": "u",
+  "\u1d20": "v", "\u1d21": "w", "\u028f": "y", "\u1d22": "z",
+  // Cherokee, by the lower case form of each capital (Ꭺ U+13AA → U+AB7A)
+  "\uab7a": "a", "\u13fc": "b", "\uab9f": "b", "\uabaf": "c", "\uab70": "d", "\uab7c": "e", "\uab90": "g",
+  "\uab8b": "h", "\uab92": "h", "\uab75": "i", "\uab7b": "j", "\uabb6": "k", "\uabae": "l", "\uab87": "m",
+  "\uabb2": "p", "\uaba2": "r", "\uab71": "r", "\uabaa": "s", "\uab72": "t", "\uaba9": "v", "\uab83": "w",
+  "\uaba4": "w", "\uab79": "y", "\uab93": "z",
+  // Lisu
+  "\ua4ee": "a", "\ua4d0": "b", "\ua4da": "c", "\ua4d3": "d", "\ua4f0": "e", "\ua4dd": "f", "\ua4d6": "g",
+  "\ua4e7": "h", "\ua4f2": "i", "\ua4d9": "j", "\ua4d7": "k", "\ua4e1": "l", "\ua4df": "m", "\ua4e0": "n",
+  "\ua4f3": "o", "\ua4d1": "p", "\ua4e3": "r", "\ua4e2": "s", "\ua4d4": "t", "\ua4f4": "u", "\ua4e6": "v",
+  "\ua4ea": "w", "\ua4eb": "x", "\ua4ec": "y", "\ua4dc": "z",
+  // Canadian syllabics
+  "\u15c5": "a", "\u15f7": "b", "\u1455": "c", "\u15ea": "d", "\u15f4": "e", "\u15b4": "f", "\u157c": "h",
+  "\u148d": "j", "\u14aa": "l", "\u15f0": "m", "\u144e": "n", "\u146d": "p", "\u146b": "q", "\u1587": "r",
+  "\u1515": "s", "\u144c": "u", "\u142f": "v", "\u15ef": "w", "\u1614": "z",
 };
 
 /** Digits and signs that stand in for letters. */
@@ -171,18 +193,60 @@ const LETTER_STANDINS: Readonly<Record<string, string>> = { "1": "i", l: "i", "|
 
 /** Ignored between letters when matching: whitespace, `_`, `-` (any dash), `.`. Zero-width characters are already gone. */
 const MATCH_SEPARATOR = /^[\s_.\p{Pd}]$/u;
+/**
+ * Separator letters: modifier letters (Lm, e.g. `ʼ`), the Arabic tatweel, and
+ * enclosed, circled and parenthesised letters and digits. They fold to the
+ * plain letter or digit they stand for, or to nothing, and split words for
+ * the script check.
+ */
+const SEPARATOR_LETTER = /^[\p{Lm}\u0640\u2460-\u24FF\u2776-\u2793\u3200-\u32FF\u{1F100}-\u{1F1FF}]$/u;
+/** What a separator letter keeps of its fold: plain letters and digits, never a modifier letter. */
+const NOT_PLAIN_LETTER = /[^\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{N}]/gu;
 
 /**
- * One character, folded for matching: separators to nothing; otherwise NFKD
- * with combining marks dropped (so `é`, `e` + U+0301 and `e` all read `e`),
- * lower case, Cyrillic and Greek lookalikes to Latin, and digit stand-ins
- * (`1 l |`→i, `3`→e, `0`→o, `5`→s, `4`→a) to letters.
+ * One character, folded for matching (the backend's `foldForMatch`):
+ * separators to nothing; otherwise NFKD with combining marks dropped (so `é`,
+ * `e` + U+0301 and `e` all read `e`), lower case, lookalike letters to Latin,
+ * and digit stand-ins (`1 l |`→i, `3`→e, `0`→o, `5`→s, `4`→a) to letters. A
+ * separator letter keeps only the plain letters and digits of that (`ⓡ`→r,
+ * `⑴`→i, `ʼ` and the tatweel → nothing).
  */
-function foldForMatch(char: string): string {
+export function foldForMatch(char: string): string {
   if (MATCH_SEPARATOR.test(char)) return "";
-  return [...char.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase()]
+  const folded = [...char.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase()]
     .map((c) => LATIN_LOOKALIKES[c] ?? LETTER_STANDINS[c] ?? c)
     .join("");
+  return SEPARATOR_LETTER.test(char) ? folded.replace(NOT_PLAIN_LETTER, "") : folded;
+}
+
+/** Splits a name into words for the script check. */
+const WORD_SPLIT = /[^\p{L}\p{M}\p{N}]|[\p{Lm}\u0640\u2460-\u24FF\u2776-\u2793\u3200-\u32FF\u{1F100}-\u{1F1FF}]/u;
+const LATIN_LETTER = /^\p{sc=Latin}$/u;
+/** Scripts a word may mix with Latin: none of theirs, plus the CJK set of UTS #39. */
+const LATIN_COMPANION = /^[\p{sc=Common}\p{sc=Inherited}\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}\p{sc=Hangul}\p{sc=Bopomofo}]$/u;
+
+/**
+ * Whether a word of the name mixes Latin letters with letters of another
+ * script (UTS #39 "highly restrictive", per word), the shape of a lookalike
+ * spelling: `Ꮩerified` (Cherokee), `ꓦerified` (Lisu), `Vеrified`
+ * (Cyrillic). The backend's `mixesScripts`, which refuses such a name; here
+ * the page shows the domain instead, with the "Not verified" pill. Each word
+ * is compared after NFKC. Digits and marks belong to no script; Latin may
+ * join Han, Hiragana, Katakana, Hangul and Bopomofo. A name wholly in one
+ * script passes.
+ */
+export function mixesScripts(name: string): boolean {
+  for (const part of name.replace(INVISIBLE, "").split(WORD_SPLIT)) {
+    let latin = false;
+    let other = false;
+    for (const c of part.normalize("NFKC")) {
+      if (!/^\p{L}$/u.test(c)) continue;
+      if (LATIN_LETTER.test(c)) latin = true;
+      else if (!LATIN_COMPANION.test(c)) other = true;
+    }
+    if (latin && other) return true;
+  }
+  return false;
 }
 
 /** Never shown in any app's name: a trust claim. */
@@ -236,8 +300,11 @@ function stripTrustText(raw: string, phrases: readonly string[] = TRUST_PHRASES)
       }
       offset = next;
     }
-    // Marks that followed the last letter go with it.
+    // Marks that followed the last letter go with it, and so do separator
+    // letters that fold to nothing (`ʼ`, the tatweel) on either side.
     while (to + 1 < chars.length && folded[to + 1] === "" && /\p{M}/u.test(chars[to + 1]!)) to += 1;
+    while (to + 1 < chars.length && folded[to + 1] === "" && SEPARATOR_LETTER.test(chars[to + 1]!)) to += 1;
+    while (from > 0 && folded[from - 1] === "" && SEPARATOR_LETTER.test(chars[from - 1]!)) from -= 1;
     chars.splice(from, to - from + 1, " ");
     changed = true;
   }
@@ -252,23 +319,33 @@ function stripTrustText(raw: string, phrases: readonly string[] = TRUST_PHRASES)
  * A name the client supplied, fit to show: no check mark or symbol of any
  * kind, and no "verified" in any spelling, so an app cannot name itself
  * "Claude Code ✓ Verified". Whether an app is verified comes only from the
- * API's `verified` field (§6.3.6), never from text. The backend should refuse
- * such names too (carried to a later backend task); this is the page's own
- * defence.
+ * API's `verified` field (§6.3.6), never from text. The backend refuses such
+ * names too; this is the page's own defence.
+ *
+ * A name with a word that mixes Latin with another script
+ * ({@link nameIsFlagged}) is not shown at all: the domain stands in for it,
+ * and the page shows the "Not verified" pill.
  */
 export function displayClientName(
   name: string,
   options: { builtin?: boolean; registrableDomain?: string | null } = {},
 ): string {
+  const fallback = options.registrableDomain || "Unnamed app";
+  if (nameIsFlagged(name, options)) return fallback;
   const phrases = options.builtin ? TRUST_PHRASES : [...TRUST_PHRASES, ...BUILTIN_TITLE_PHRASES];
-  return stripTrustText(name, phrases) || options.registrableDomain || "Unnamed app";
+  return stripTrustText(name, phrases) || fallback;
 }
 
-function clientTitle(request: ConsentRequest, name: string): string {
+/** Whether an app's own name is replaced by its domain: a word of it mixes scripts. Never the built-in app's. */
+export function nameIsFlagged(name: string, options: { builtin?: boolean } = {}): boolean {
+  return !options.builtin && mixesScripts(name);
+}
+
+function clientTitle(request: ConsentRequest, name: string, verified: boolean): string {
   const { client, returnTo } = request;
   if (client.builtin) return "Assay app (says it is) · an app on this computer";
   // The badge, from the structured field only.
-  if (client.verified) return `${name} ✓ Verified`;
+  if (verified) return `${name} ✓ Verified`;
   if (returnTo.kind === "LOCAL_APP") {
     return `${name} (says it is) · an app on this computer · Assay can't confirm which app`;
   }
@@ -294,6 +371,8 @@ export function consentView(
   const agent = request.agents.find((a) => a.id === options.agentId) ?? null;
   const expired = options.now.getTime() >= localDeadline(request, options.fetchedAt);
   const name = displayClientName(client.name, { builtin: client.builtin, registrableDomain: client.registrableDomain });
+  // A flagged name never wears the badge, whatever the API says.
+  const verified = client.verified && !nameIsFlagged(client.name, { builtin: client.builtin });
 
   const agentNotes: string[] = [];
   if (request.agents.length === 0) agentNotes.push(CONSENT_STRINGS.noAgents);
@@ -327,15 +406,15 @@ export function consentView(
 
   return {
     client: {
-      title: clientTitle(request, name),
-      verified: client.verified && !client.builtin,
+      title: clientTitle(request, name, verified),
+      verified: verified && !client.builtin,
       kindLabel: client.kind === "DCR" ? CONSENT_STRINGS.selfRegistered : null,
       domain: client.registrableDomain,
-      host: !client.verified && client.host && client.host !== client.registrableDomain ? client.host : null,
+      host: !verified && client.host && client.host !== client.registrableDomain ? client.host : null,
     },
     // Every client the API does not mark verified, the built-in one included:
     // any process on the computer can claim to be it.
-    notVerified: client.verified ? null : CONSENT_STRINGS.notVerified,
+    notVerified: verified ? null : CONSENT_STRINGS.notVerified,
     startedAgo: startedAgo(request.createdAt, options.now),
     showAgentPicker: request.agents.length > 1,
     agent,
@@ -393,12 +472,21 @@ export function visibleName(name: string): string {
   return name.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, "").trim();
 }
 
-/** The name field's starting value: the API's suggestion, without trust marks. */
+/**
+ * The name field's starting value: the API's suggestion, without trust marks.
+ * For an app whose name is flagged, the suggestion (its name and a date) is
+ * not used: the field starts at the app's domain, or empty.
+ */
 export function initialName(
-  request: Pick<ConsentRequest, "suggestedName"> & { client?: Pick<ConsentRequest["client"], "builtin"> },
+  request: Pick<ConsentRequest, "suggestedName"> & {
+    client?: Pick<ConsentRequest["client"], "builtin"> & Partial<Pick<ConsentRequest["client"], "name" | "registrableDomain">>;
+  },
 ): string {
   // The built-in app's suggestion is "Assay app on {device}"; any other app's is its own name and a date.
   const builtin = request.client?.builtin ?? false;
+  if (nameIsFlagged(request.client?.name ?? request.suggestedName, { builtin })) {
+    return request.client?.registrableDomain ?? "";
+  }
   return stripTrustText(request.suggestedName, builtin ? TRUST_PHRASES : [...TRUST_PHRASES, ...BUILTIN_TITLE_PHRASES]);
 }
 
