@@ -140,6 +140,8 @@ function checkOut(outDir) {
     // The splat's own block, then the block named for this page when there is one.
     const own = blocks.filter((block) => block.pattern === pattern || block.pattern === urlPath);
     if (!own.some((block) => block.pattern === pattern)) problems.push(`${urlPath}: no ${pattern} block in _headers`);
+    // Each page needs a block named for it (the build writes one per page), so a page whose block is gone is not left on the splat fallback.
+    if (!own.some((block) => block.pattern === urlPath)) problems.push(`${urlPath}: no block named for this page in _headers`);
     for (const block of own) problems.push(...checkPolicy(urlPath, block, html));
     // Framing and referrer headers: Cloudflare joins every matching block, so read their union.
     const union = (name) => own.flatMap((block) => block.headers[name] ?? []).join(",");

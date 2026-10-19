@@ -92,6 +92,11 @@ jobs:
         run: |
           printf '\n/*\n  X-Robots-Tag: noindex, nofollow\n' >> out/_headers
 
+      # Spec R-WEB-2/3/4: the exact out/ that is deployed must carry integrity
+      # on every script and the strict headers, whichever branch was pushed.
+      - name: Check the built headers
+        run: pnpm check:headers
+
       # Each environment has its own Pages project, so every deploy is that
       # project's production deployment: deploy under the project's own
       # production branch, whatever it is named, never as a preview.

@@ -95,6 +95,14 @@ describe("check-built-headers", () => {
     expect(checkOut(dir).join("\n")).toMatch(/\/connect\/authorize.*frame-ancestors/);
   });
 
+  it("fails when a page's own block is deleted", () => {
+    const dir = build();
+    const file = join(dir, "_headers");
+    const blocks = readFileSync(file, "utf8").split("\n\n");
+    writeFileSync(file, blocks.filter((block) => !block.startsWith("/connect/authorize\n")).join("\n\n"));
+    expect(checkOut(dir).join("\n")).toMatch(/\/connect\/authorize: no block named for this page/);
+  });
+
   it("fails a widened script-src, a missing X-Frame-Options and a missing referrer policy", () => {
     const dir = build();
     const file = join(dir, "_headers");
