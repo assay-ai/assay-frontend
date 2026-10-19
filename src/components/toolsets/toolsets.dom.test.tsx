@@ -296,17 +296,19 @@ describe("Servers in use", () => {
 });
 
 describe("the client tabs", () => {
-  it("has the four clients, Claude Code first with its one-liner and the full key at creation", () => {
+  it("has the ten clients, Claude Code first with the pinned proxy install and no key", () => {
     const html = render(<McpConfigTabs token="assay_sk_live_full_key" url="https://mcp.example.com/" />);
     const out = text(html);
-    expect(out).toContain("Claude Code Claude Desktop Cursor Other");
-    // Phone: the tab row wraps rather than clipping "Other".
+    expect(out).toContain("Claude Code Codex CLI Cursor VS Code Windsurf Gemini CLI Claude Desktop claude.ai ChatGPT My own code");
+    // Phone: the tab row wraps rather than clipping the last tab.
     expect(html).toContain("flex-wrap");
-    expect(out).toContain('claude mcp add --transport http assay https://mcp.example.com/ --header "Authorization: Bearer assay_sk_live_full_key"');
+    expect(out).toContain("claude mcp add --scope user assay -- npx -y @assay-ai/mcp@1.2.3 --name assay");
+    expect(out).not.toContain("assay_sk_live_full_key");
+    expect(out).not.toContain("mcp-remote");
   });
 
-  it("without the key, names it by its prefix", () => {
-    const out = text(render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" />));
+  it("My own code, without the key, names it by its prefix", () => {
+    const out = text(render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" client="other" />));
     expect(out).toContain("assay_sk_live_ab12…REST_OF_YOUR_KEY");
   });
 

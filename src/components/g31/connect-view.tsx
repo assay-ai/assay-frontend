@@ -12,7 +12,7 @@ import { ConnectSheet } from "@/components/toolsets/connect-sheet";
 import { useAgentServers, useRecordConnect } from "@/components/toolsets/use-toolsets";
 import { Button } from "@/components/ui/button";
 import { keyOfAgent } from "@/features/buyer-money/agent-label";
-import { keyForHint } from "@/features/buyer-money/mcp-config";
+import { keyForHint, urlForClient } from "@/features/buyer-money/mcp-config";
 import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
 import { buildMcpUrl, parseMcpUrl } from "@/features/connect/mcp-url";
 
@@ -128,7 +128,7 @@ export function ConnectView() {
             token={created?.token ?? null}
             keyPrefix={created?.prefix ?? keyForHint(live)?.prefix ?? null}
             url={url}
-            onCopy={(client) => agent && recordConnect.mutate({ url, serverName: "assay", client })}
+            onCopy={(client) => agent && recordConnect.mutate({ url: urlForClient(client, url), serverName: "assay", client })}
             onCreateKey={!firstTime && agent ? () => create.mutate() : undefined}
             creatingKey={create.isPending}
             createKeyError={!firstTime && create.isError ? createKeyErrorText(create.error) : null}

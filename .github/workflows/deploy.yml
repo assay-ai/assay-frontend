@@ -16,6 +16,7 @@ name: Deploy
 #     NEXT_PUBLIC_BASE_URL       e.g. https://app.example.com
 #     NEXT_PUBLIC_API_BASE_URL   e.g. https://api.example.com/api/v1
 #     NEXT_PUBLIC_PRIVY_APP_ID   the Privy app id (25 characters)
+#     NEXT_PUBLIC_ASSAY_MCP_VERSION  the exact @assay-ai/mcp version install commands pin
 #     NEXT_PUBLIC_MCP_URL        optional, shown in the /connect snippet
 #     NEXT_PUBLIC_DEMO_CHAINS    demo only: "robinhood" turns the demo data on
 #     NEXT_PUBLIC_SHOW_KITCHEN_SINK  optional: "1" keeps /kitchen-sink
@@ -49,6 +50,7 @@ jobs:
       NEXT_PUBLIC_BASE_URL: ${{ vars.NEXT_PUBLIC_BASE_URL || secrets.NEXT_PUBLIC_BASE_URL }}
       NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL || secrets.NEXT_PUBLIC_API_BASE_URL }}
       NEXT_PUBLIC_PRIVY_APP_ID: ${{ vars.NEXT_PUBLIC_PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+      NEXT_PUBLIC_ASSAY_MCP_VERSION: ${{ vars.NEXT_PUBLIC_ASSAY_MCP_VERSION || secrets.NEXT_PUBLIC_ASSAY_MCP_VERSION }}
       NEXT_PUBLIC_MCP_URL: ${{ vars.NEXT_PUBLIC_MCP_URL || secrets.NEXT_PUBLIC_MCP_URL }}
       NEXT_PUBLIC_DEMO_CHAINS: ${{ vars.NEXT_PUBLIC_DEMO_CHAINS || secrets.NEXT_PUBLIC_DEMO_CHAINS }}
       NEXT_PUBLIC_SHOW_KITCHEN_SINK: ${{ vars.NEXT_PUBLIC_SHOW_KITCHEN_SINK || secrets.NEXT_PUBLIC_SHOW_KITCHEN_SINK }}
@@ -68,7 +70,7 @@ jobs:
           HAS_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
           missing=0
-          for name in NEXT_PUBLIC_BASE_URL NEXT_PUBLIC_API_BASE_URL NEXT_PUBLIC_PRIVY_APP_ID CLOUDFLARE_PAGES_PROJECT; do
+          for name in NEXT_PUBLIC_BASE_URL NEXT_PUBLIC_API_BASE_URL NEXT_PUBLIC_PRIVY_APP_ID NEXT_PUBLIC_ASSAY_MCP_VERSION CLOUDFLARE_PAGES_PROJECT; do
             if [ -z "${!name}" ]; then echo "::error::$name is not set in this environment (neither as a Variable nor as a Secret)"; missing=1; fi
           done
           [ "$HAS_TOKEN" = true ] || { echo "::error::Secret CLOUDFLARE_API_TOKEN is not set"; missing=1; }

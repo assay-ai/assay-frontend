@@ -32,6 +32,16 @@ const originOf = (value) => {
 };
 
 /**
+ * The pinned `@assay-ai/mcp` version every install command carries (R-MCP-14).
+ * Inlined at build time; the build fails when it is unset or not an exact
+ * version, so an unpinned command can never ship.
+ */
+const EXACT_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$/;
+if (!EXACT_VERSION.test(process.env.NEXT_PUBLIC_ASSAY_MCP_VERSION || "")) {
+  throw new Error("NEXT_PUBLIC_ASSAY_MCP_VERSION must be an exact version such as 1.0.0 (no range, no tag).");
+}
+
+/**
  * Security headers (frontend review 2026-10-15, F2).
  *
  * Enforced: no framing by any other origin (the signing pages could otherwise

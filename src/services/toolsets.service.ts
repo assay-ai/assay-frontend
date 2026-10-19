@@ -19,7 +19,7 @@ export type AccessMode = "ALL" | "RESTRICTED";
 export type ToolAccessStanding = "ALLOWED" | "VIA_TOOLSET_URL" | "BLOCKED";
 export type RefusalLayer = "SERVER" | "AGENT_LIMITS" | "TOOLSET_RULES";
 export type EndpointKind = "ROOT" | "HANDLE" | "CATEGORY" | "TOOLSET";
-export type ConnectClient = "claude-code" | "claude-desktop" | "cursor" | "other";
+export type ConnectClient = "claude-code" | "codex" | "cursor" | "vscode" | "windsurf" | "gemini" | "claude-desktop" | "claude-ai" | "chatgpt" | "other";
 export type ToolsetVisibility = "PRIVATE" | "UNLISTED" | "PUBLIC";
 export type ToolsetDiscovery = "AUTO" | "FULL" | "SEARCH";
 
