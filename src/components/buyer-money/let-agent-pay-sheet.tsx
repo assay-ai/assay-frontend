@@ -58,6 +58,11 @@ export interface LetAgentPaySheetProps {
    * limits (major units) and grants them again for the full period.
    */
   renew?: { perCall: string; perDay: string } | null;
+  /**
+   * With `renew`: "renew" (it expires soon) or "limits" ("Payment limits" on a
+   * permission that is not near its end, BUG-M3-03). The default is "renew".
+   */
+  purpose?: "renew" | "limits";
 }
 
 export function KeyMatch({ account }: { account: string }) {
@@ -99,7 +104,20 @@ export function agentDefault(ceiling: { perCall: string; perDay: string } | null
   return { perCall: lower(ceiling.perCall, light.perCall), perDay: lower(ceiling.perDay, light.perDay) };
 }
 
-export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccount, renew = null }: LetAgentPaySheetProps) {
+/** The sheet's title for the state it was opened in: a first grant, its limits, or a renewal (BUG-M3-03). */
+export function letAgentPayTitle(agentName: string, renewing: boolean, purpose: "renew" | "limits" = "renew"): string {
+  if (!renewing) return `Let ${agentName} pay`;
+  return purpose === "limits" ? `${agentName}'s payment limits` : `Renew ${agentName}'s permission to pay`;
+}
+
+export function LetAgentPaySheet({
+  open,
+  onOpenChange,
+  agentName,
+  delegateAccount,
+  renew = null,
+  purpose = "renew",
+}: LetAgentPaySheetProps) {
   const queryClient = useQueryClient();
   const readOnly = useAccountReadOnly();
   const money = useBuyerMoney();
@@ -188,9 +206,11 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
       open={open}
       onOpenChange={onOpenChange}
       chain={money.chain}
-      title={renew ? `Renew ${agentName}'s permission to pay` : `Let ${agentName} pay`}
+      title={letAgentPayTitle(agentName, Boolean(renew), purpose)}
       description={
-        renew
+        renew && purpose === "limits"
+          ? `Its current spending limits. Change them and sign: they apply for ${DEFAULT_DELEGATION_DAYS} days from now. It still cannot withdraw, change your limits or let anyone else pay. Free, no gas.`
+          : renew
           ? `The same spending limits, valid for another ${DEFAULT_DELEGATION_DAYS} days from now. It still cannot withdraw, change your limits or let anyone else pay. Free, no gas.`
           : "Your agent pays for calls from your escrow, within these spending limits. It cannot withdraw, change your limits or let anyone else pay. Free, no gas."
       }

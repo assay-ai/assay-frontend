@@ -54,11 +54,25 @@ const HEADING = "Turn on paid calls";
 export default function EnablePaidPage() {
   const { ready, authenticated } = usePrivy();
   const credentialId = useSearchParam("credential");
+  const queryClient = useQueryClient();
   // undefined: not read yet (before mount).
   const [fragmentKey, setFragmentKey] = React.useState<string | null | undefined>(undefined);
   React.useEffect(() => {
-    setFragmentKey(credentialId ? takePaymentKey(credentialId) : null);
-  }, [credentialId]);
+    if (!credentialId) {
+      setFragmentKey(null);
+      return;
+    }
+    setFragmentKey(takePaymentKey(credentialId));
+    // A new link pasted in this tab changes only the fragment: read the key again, and the
+    // credential and its on-chain state with it, so every check runs on the new key (BUG-M3-02).
+    const onHashChange = () => {
+      setFragmentKey(takePaymentKey(credentialId));
+      void queryClient.invalidateQueries({ queryKey: ["agent-keys", "enable-paid"] });
+      void queryClient.invalidateQueries({ queryKey: ["escrow-delegates", "live"] });
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [credentialId, queryClient]);
 
   useFullLoadLinks();
 
@@ -102,7 +116,6 @@ export default function EnablePaidPage() {
     queryFn: () => listDelegates(Date.now()),
   });
   const money = useBuyerMoney();
-  const queryClient = useQueryClient();
   const blocked = useAccountReadOnly();
   const walletBlocker = useWalletBlocker(money.signerState, money.ownerShort);
 
@@ -122,6 +135,12 @@ export default function EnablePaidPage() {
 
   // The form starts on Light (a renewal: the grant's caps, never above Light), once. Never from the URL.
   const [draft, setDraft] = React.useState<CapsDraft | null>(null);
+  // Another key: the form starts again from that key's state.
+  const [draftFor, setDraftFor] = React.useState(fragmentKey);
+  if (draftFor !== fragmentKey) {
+    setDraftFor(fragmentKey);
+    setDraft(null);
+  }
   if (state?.kind === "ready" && draft === null) setDraft(initialDraft(state));
   // The escrow ceiling when the page first read it, frozen so a retry resumes the same steps.
   const [openingCaps, setOpeningCaps] = React.useState<{ perCall: string; perWindow: string } | null | undefined>(
@@ -201,7 +220,9 @@ export default function EnablePaidPage() {
 
   return (
     <div className="flex w-full flex-1 justify-center px-4 py-8 tablet:py-12">
+      {/* Keyed by the key: a new one is ticked and signed afresh, never on the old one's progress. */}
       <EnablePaidView
+        key={fragmentKey ?? ""}
         state={state}
         draft={draft}
         onDraftChange={setDraft}
