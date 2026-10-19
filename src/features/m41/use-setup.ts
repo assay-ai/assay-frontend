@@ -30,10 +30,7 @@ import { justProvedAccountId, payoutStepIsDone, provedChainIsNew } from "./payou
 import { resolveTerms } from "./terms";
 
 /**
- * The state behind provider setup (`pM65r`, `/provider/setup`) and provider registration (`lWSNd`,
- * `/provider/register`). One hook, two routes — the designs draw the same
- * account and payout-wallet steps and must not become two implementations
- * that drift.
+ * The state behind provider setup (`pM65r`, `/provider/setup`).
  *
  * ## Why "Save and continue" writes steps 1 and 4 together
  *

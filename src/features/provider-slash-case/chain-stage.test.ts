@@ -8,7 +8,6 @@ import {
   executionFloorOf,
   mayAcknowledge,
   mayDisputeOnChain,
-  onChainDisputeHref,
   onChainDisputeSentence,
   respondByApplies,
 } from "./chain-stage";
@@ -187,10 +186,6 @@ describe("the on-chain dispute, the only dispute on EVM", () => {
 
     const none = caseOf("PROPOSED", { disputeBy: null, chainState: "UPHELD" });
     expect(mayDisputeOnChain(none.proposal, caseStageOf(none.proposal), before)).toBe(false);
-  });
-
-  it("links to the penalties on chain page with the case selected", () => {
-    expect(onChainDisputeHref("p 1")).toBe("/provider/capital/penalties?case=p%201");
   });
 
   it("says plainly that disputing freezes the penalty, and by when", () => {

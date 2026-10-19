@@ -50,7 +50,7 @@ export const routes = {
   /** A provider's penalty case: the Penalties page with its "Why?" drawer open. */
   providerCase: (proposalId: string) => withQuery("/provider/penalties", { case: proposalId }),
   toolRequest: (requestId: string) => withQuery("/provider/tool-requests/view", { id: requestId }),
-  /** A binding screen: `sub` is the path below the binding, e.g. "configuration/pricing". */
+  /** A binding screen: `sub` is the path below the binding, e.g. "settings". */
   binding: (bindingId: string, sub?: string) =>
     withQuery(under("/provider/bindings/view", sub), { binding: bindingId }),
   /**
