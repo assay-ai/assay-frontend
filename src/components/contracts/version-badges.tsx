@@ -1,7 +1,7 @@
 import { Clock, Ban } from "lucide-react";
 import * as React from "react";
 
-import { deprecatedBadge, newerVersion, replacementLabel, retiredBadge, sunsetDay } from "@/features/contracts/text";
+import { deprecatedBadge, newerVersion, replacementLabel, retiredBadge } from "@/features/contracts/text";
 import type { ToolVersionBrief } from "@/interfaces/contracts";
 import { cn } from "@/utils";
 
@@ -112,9 +112,4 @@ export function ToolVersionBadges({
       ))}
     </span>
   );
-}
-
-/** "Stops on Feb 1, 2027 (UTC)" — for a sentence that already says which version. */
-export function SunsetText({ sunsetAt }: { sunsetAt: string | null | undefined }) {
-  return <span className="tabular-nums">{sunsetDay(sunsetAt)} (UTC)</span>;
 }

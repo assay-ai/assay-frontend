@@ -75,11 +75,6 @@ export function optionalOutputsFor(versions: readonly ToolContractVersion[], maj
   return [...new Set(newestIn(versions, majors).flatMap((v) => v.optionalOutputFields))];
 }
 
-/** The optional input fields offered by the majors in range. */
-export function optionalInputsFor(versions: readonly ToolContractVersion[], majors: readonly number[]): string[] {
-  return [...new Set(newestIn(versions, majors).flatMap((v) => v.optionalInputFields))];
-}
-
 /** "v1 only", "v1 or v2", "v1, v2 or v3". */
 export function majorsChipText(majors: readonly number[]): string {
   const names = [...new Set(majors)].sort((a, b) => a - b).map((m) => `v${m}`);

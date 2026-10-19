@@ -164,11 +164,6 @@ export function caseStageOf(proposal: SlashProposalSummary): CaseStage {
   };
 }
 
-/** The closed headline, with an execution in part said as such (review R2-3). */
-export function closedHeadlineOf(stage: ClosedStage): string {
-  return stage.partly ? "Executed in part" : CLOSED_HEADLINE[stage.outcome];
-}
-
 /**
  * Whether "Respond by" is still a deadline the provider is running against.
  * Not once the case is disputed (on chain or in the app) or decided: the
@@ -186,46 +181,6 @@ export function respondByApplies(proposal: SlashProposalSummary, stage: CaseStag
  */
 export function mayAcknowledge(proposal: SlashProposalSummary, stage: CaseStage): boolean {
   return proposal.clocks.acknowledgedAt === null && stage.kind === "open";
-}
-
-/** The one word for a closed case, as the header's figure shows it. */
-export const CLOSED_HEADLINE: Readonly<Record<ClosedOutcome, string>> = {
-  executed: "Executed",
-  compensated: "Compensated",
-  overturned: "Overturned",
-  waived: "Waived",
-  released: "Released",
-  cancelled: "Closed",
-};
-
-/**
- * What happened, in a sentence, and that nothing more will. `when` formats a
- * timestamp (the screen's `stampUtc`), so this stays free of the screen's
- * formatting module.
- */
-export function closedSentence(stage: ClosedStage, when: (iso: string) => string): string {
-  const executedOn = stage.executedAt ? ` on ${when(stage.executedAt)} UTC` : "";
-  const base: Record<ClosedOutcome, string> = {
-    executed: `This case is closed. The penalty was executed on chain${executedOn} and taken from your stake.`,
-    compensated: `This case is closed. The penalty was executed on chain${executedOn}, and Assay has since deposited it back into your stake.`,
-    overturned: "This case is closed. Assay overturned the penalty in your favour, so nothing is taken from your stake.",
-    waived: "This case is closed. The penalty was below the minimum Assay levies, so it was waived and nothing is taken.",
-    released:
-      "This case is closed. Its on-chain record was cancelled or expired, the reserved stake is released, and nothing is taken.",
-    cancelled: "This case is closed without a penalty. Nothing is taken from your stake.",
-  };
-  if (stage.partly) {
-    const { cancelledRecords, records } = stage.partly;
-    const counted =
-      cancelledRecords > 0 && records > 0
-        ? ` ${cancelledRecords} of its ${records} on-chain records ${cancelledRecords === 1 ? "was" : "were"} cancelled or expired in your favour, and nothing was taken for ${cancelledRecords === 1 ? "it" : "them"}.`
-        : " Some of its on-chain records were cancelled or expired in your favour, and nothing was taken for them.";
-    base.executed = `This case is closed. The penalty was executed on chain in part${executedOn} and that part taken from your stake.${counted}`;
-  }
-  const standing = stage.recordStanding
-    ? " Its on-chain record still stands until its cancellation lands; the penalties on chain page shows it."
-    : "";
-  return `${base[stage.outcome]}${standing} There is no deadline and nothing for you to do.`;
 }
 
 /**

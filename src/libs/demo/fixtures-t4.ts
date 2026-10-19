@@ -135,15 +135,6 @@ function remember(change: (m: T4Memory) => void): void {
   }
 }
 
-/** Tests and the demo's own reset. */
-export function resetDemoT4(): void {
-  try {
-    storage()?.removeItem(MEMORY_KEY);
-  } catch {
-    /* nothing to reset */
-  }
-}
-
 /* ======================================================= provider tools */
 
 const STARTER_IN = { type: "object", properties: { query: { type: "string", description: "What to look up." } }, required: ["query"] };

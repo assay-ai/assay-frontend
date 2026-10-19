@@ -29,11 +29,6 @@ export function entryInput(entry: ToolsetEntry | ToolsetEntryInput): ToolsetEntr
   };
 }
 
-/** Whether the row has any rule beyond "Assay picks". */
-export function hasRule(entry: Pick<ToolsetEntryInput, "providerMode" | "minTier" | "maxPrice">): boolean {
-  return entry.providerMode !== "BEST" || entry.minTier !== null || entry.maxPrice !== null;
-}
-
 /** An entry as the editor holds it: the price may carry its decimals (read) or not (being written). */
 export type EntryLike = Pick<ToolsetEntryInput, "providerMode" | "providerIds" | "minTier" | "onEmpty"> & {
   maxPrice: { amount: string; asset: string; decimals?: number } | null;

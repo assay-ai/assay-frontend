@@ -52,13 +52,6 @@ export const UNREADABLE_TEXT = "Unknown";
 /** The chain answered and there is nothing there — not a figure, and not "Unknown". */
 export const ABSENT_TEXT = "None";
 
-/**
- * The sentence that goes beside an unreadable figure. One string, so three
- * screens cannot each invent a softer version of it.
- */
-export const UNREADABLE_NOTE =
-  "We could not read this chain just now, so this is unknown — not zero.";
-
 export interface ChainFigure {
   readonly state: ChainReadState;
   /** Ready to print. Never a number, never a bare `null`. */

@@ -28,12 +28,6 @@ export function normalisedMode(mode: string | null | undefined): "FREE" | "FREEM
   return upper === "FREE" || upper === "FREEMIUM" || upper === "PAID" ? upper : null;
 }
 
-/** Whether calls to this tool can cost nothing for a while. */
-export function hasFreeTier(mode: string | null | undefined): boolean {
-  const m = normalisedMode(mode);
-  return m === "FREE" || m === "FREEMIUM";
-}
-
 /**
  * The free-tier badge text: "Free · 100 calls/day per agent" (the backend
  * counts free calls per agent, per listing, per UTC day). With no number known yet

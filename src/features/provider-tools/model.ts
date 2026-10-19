@@ -127,10 +127,6 @@ export const VISIBILITY_LABEL: Readonly<Record<ProviderToolVisibility, string>> 
   LISTED: "Listed in the catalogue",
 };
 
-export function visibilityLabel(visibility: string): string {
-  return VISIBILITY_LABEL[visibility as ProviderToolVisibility] ?? visibility;
-}
-
 /**
  * The one state a tool shows in the list and on its page. A takedown wins,
  * then the tool's lifecycle, then its review, then who can use it.

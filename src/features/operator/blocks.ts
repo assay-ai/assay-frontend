@@ -27,14 +27,6 @@ export const REASON_CODE_MAX = 64;
 export const TICKET_REF_MAX = 128;
 export const SUBJECT_MAX = 256;
 
-/** Suggestions only: the backend takes any reason code up to 64 characters. */
-export const BLOCK_REASON_SUGGESTIONS: readonly string[] = Object.freeze([
-  "LEAKED_KEY", "FRAUD", "LEGAL_HOLD",
-]);
-export const UNBLOCK_REASON_SUGGESTIONS: readonly string[] = Object.freeze([
-  "KEY_ROTATED", "RESOLVED", "BLOCKED_IN_ERROR",
-]);
-
 /**
  * The chain a bare `0x` address is sent on. Any EVM chain would do: a wallet
  * block is matched on `eip155:<address>` with no chain reference, so it covers

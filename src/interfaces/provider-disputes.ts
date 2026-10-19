@@ -42,7 +42,7 @@
  * inventing a platform deadline.
  */
 
-import type { ListQuery, Money } from "./api";
+import type { Money } from "./api";
 
 /** `chk_disputes_subject_type` names three; `SLASH_PROPOSAL` is a fourth the column actually holds. See file header. */
 export type DisputeSubjectType = "SLA_WINDOW" | "VERDICT" | "PAYMENT_INTENT" | "SLASH_PROPOSAL";
@@ -55,13 +55,6 @@ export type DisputeState =
   | "PARTIALLY_UPHELD"
   | "REJECTED"
   | "WITHDRAWN";
-
-export const TERMINAL_DISPUTE_STATES: readonly DisputeState[] = [
-  "UPHELD",
-  "PARTIALLY_UPHELD",
-  "REJECTED",
-  "WITHDRAWN",
-];
 
 /**
  * One dispute, as `GET /disputes` / `GET /disputes/:id` actually return it —
@@ -99,26 +92,6 @@ export interface Dispute {
 }
 
 /**
- * `GET /disputes`. `state`/`subjectType`/`claimType`/`providerId` all narrow
- * — see assay-backend `src/modules/dispute/dto/list-disputes.dto.ts`.
- */
-export interface ListDisputesQuery extends ListQuery {
-  state?: DisputeState[];
-  subjectType?: DisputeSubjectType;
-  claimType?: string;
-  providerId?: string;
-}
-
-/** `POST /disputes`'s body — the general path, used for anything not reached from a slash proposal. */
-export interface CreateDisputeBody {
-  subjectType: Exclude<DisputeSubjectType, "SLASH_PROPOSAL">;
-  subjectId: string;
-  claimType: string;
-  reason: string;
-  evidence?: unknown[];
-}
-
-/**
  * The dispute form's closed claim vocabulary. Mirrors
  * assay-backend `src/modules/slash/domain/arbitration.ts`'s `DisputeClaimType`
  * exactly — the seven values and their order. This enum is enforced ONLY on
@@ -134,15 +107,6 @@ export type SlashDisputeClaimType =
   | "UPSTREAM_INDUCED"
   | "DECLARED_INCIDENT"
   | "OTHER";
-
-/** `POST /providers/me/slash-proposals/:id/dispute`'s body. */
-export interface FileSlashDisputeBody {
-  claimType: SlashDisputeClaimType;
-  /** Optional in the UI's own copy; the wire requires 1–2048 chars. See the filing form for how the gap is closed. */
-  reason: string;
-  /** Ids of the calls the provider selected as supporting the claim. Defaults to `[]` server-side. */
-  selectedCallIds?: string[];
-}
 
 export type SlashProposalRunningClock = "PROVIDER" | "PLATFORM" | "NONE";
 
@@ -315,9 +279,4 @@ export interface SlashRestorationRow {
   label: string;
   value: string;
   status: "ON_DECISION" | "RESTORED" | "NOT_APPLICABLE";
-}
-
-export interface SlashProposalTimeline {
-  events: SlashProposalEvent[];
-  restoration: SlashRestorationRow[];
 }

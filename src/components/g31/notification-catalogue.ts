@@ -380,11 +380,6 @@ export const NOTIFICATION_CATALOGUE: Readonly<Record<NotificationEvent, Notifica
   },
 };
 
-/** Stable render order — the backend's own grouping, not alphabetical. */
-export const NOTIFICATION_EVENT_ORDER: readonly NotificationEvent[] = Object.keys(
-  NOTIFICATION_CATALOGUE
-) as NotificationEvent[];
-
 /**
  * What each event is, in words. The id beside it on the Alerts screen stays
  * the value a webhook payload and the API carry, so it is shown as a code and

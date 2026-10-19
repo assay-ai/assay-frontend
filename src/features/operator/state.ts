@@ -1,4 +1,3 @@
-import type { BadgeVariant } from "@/components/ui/badge";
 import { stampUtc } from "@/features/g34a/stats";
 import type { Money } from "@/interfaces/api";
 import type { OperatorRole, SlashProposalStatus } from "@/interfaces/operator";
@@ -44,27 +43,6 @@ export function asProposalStatus(status: string): SlashProposalStatus | null {
   return (SLASH_PROPOSAL_STATUSES as readonly string[]).includes(status)
     ? (status as SlashProposalStatus)
     : null;
-}
-
-export function caseBadgeVariant(status: SlashProposalStatus): BadgeVariant {
-  switch (status) {
-    case "PROPOSED": return "case-proposed";
-    case "DISPUTED": return "case-disputed";
-    case "UNDER_REVIEW": return "case-under-review";
-    case "AWAITING_SECOND": return "case-awaiting-second";
-    case "UPHELD": return "case-upheld";
-    case "OVERTURNED": return "case-overturned";
-    case "EXECUTING": return "case-executing";
-    case "EXECUTED": return "case-executed";
-    case "REVERSED": return "case-reversed";
-    case "WAIVED": return "case-waived";
-    case "CANCEL_REQUESTED": return "case-cancel-requested";
-    case "CANCELLED": return "case-cancelled";
-  }
-}
-
-export function caseStatusLabel(status: SlashProposalStatus): string {
-  return status.toLowerCase().replace(/_/g, " ");
 }
 
 /**
