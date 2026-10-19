@@ -368,15 +368,19 @@ export function agentPaySteps(input: AgentPayStepsInput): WalletStep[] {
   ];
 }
 
-/** The enable-paid page's input: `ceiling` and `expiry` are required, so leaving one out does not compile. */
+/**
+ * The enable-paid page's input: `plan` is the ok `enablePaidPlan(...)` result,
+ * the only source of the signed ceiling, caps and expiry. Any `ceiling`,
+ * `chosen` or `expiry` beside it is refused by type and overridden at runtime.
+ */
 export interface EnablePaidStepsInput
   extends Omit<AgentPayStepsInput, "chosen" | "ceiling" | "expiry" | "nowSeconds" | "form"> {
-  /** `enablePaidPlan(...).ceiling`: the caps the page shows. */
-  ceiling: AtomicCapPair;
-  /** `enablePaidPlan(...).expiry`: the `validUntil` the page shows. */
-  expiry: { validUntil: number; maxDays: number };
+  plan: { ceiling: AtomicCapPair; expiry: { validUntil: number; maxDays: number } };
   /** The form as typed (major units), for the request's own checks. */
   form: { perCall: string; perDay: string; days: number };
+  ceiling?: never;
+  chosen?: never;
+  expiry?: never;
 }
 
 /**
@@ -385,11 +389,12 @@ export interface EnablePaidStepsInput
  * The grant's caps are the ceiling's values; nothing comes from the API.
  */
 export function enablePaidSteps(input: EnablePaidStepsInput): WalletStep[] {
+  const { plan, ...rest } = input;
   return agentPaySteps({
-    ...input,
-    chosen: input.ceiling,
-    ceiling: input.ceiling,
-    expiry: input.expiry,
-    nowSeconds: input.expiry.validUntil - input.form.days * 86_400,
+    ...rest,
+    chosen: plan.ceiling,
+    ceiling: plan.ceiling,
+    expiry: plan.expiry,
+    nowSeconds: plan.expiry.validUntil - input.form.days * 86_400,
   });
 }

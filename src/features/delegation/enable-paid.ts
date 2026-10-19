@@ -403,11 +403,6 @@ export function depositRunsHere(rpcUrl: string | null | undefined): boolean {
   }
 }
 
-/** This page's own path, query and fragment: the `next` of a sign-in round trip. */
-export function thisPageHref(win: Window = window): string {
-  return `${win.location.pathname}${win.location.search}${win.location.hash}`;
-}
-
 /** Every item of a cursor-paged list, up to `maxPages` pages. */
 export async function collectPages<T>(
   fetchPage: (cursor: string | undefined) => Promise<{ items: T[]; pageInfo?: { nextCursor: string | null; hasMore: boolean } }>,

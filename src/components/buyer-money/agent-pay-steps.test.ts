@@ -91,8 +91,7 @@ describe("enablePaidSteps: the page's own path, from enablePaidPlan", () => {
       form: { perCall: DEFAULT_CAPS.perCall, perDay: DEFAULT_CAPS.perDay, days: 30 },
       // An API escrow that would pull the ceiling up: {0.1 a call, 10^12 per window}.
       openingCaps: { perCall: "100000", perWindow: "1000000000000000000" },
-      ceiling: plan.ceiling,
-      expiry: plan.expiry,
+      plan,
     });
   }
 
