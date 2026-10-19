@@ -112,6 +112,7 @@ export async function submitRelayedDelegation(
     );
   }
 
-  const signature = await signer.signTypedData(tx);
+  // AuthorizeDelegate: Privy's confirmation is always shown (spec R-WEB-5).
+  const signature = await signer.signTypedData(tx, { showWalletUIs: true });
   return submit(relayedSubmitBody(tx, signature));
 }

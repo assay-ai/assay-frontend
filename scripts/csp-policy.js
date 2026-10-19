@@ -7,6 +7,9 @@
  * Privy's list: https://docs.privy.io/security/implementation-guide/content-security-policy
  */
 
+/** Chain RPC origins (exact): `src/config/strict-rpc-origins.json`, also read by `src/features/delegation/enable-paid.ts`. */
+const STRICT_RPC_ORIGINS = require("../src/config/strict-rpc-origins.json");
+
 /** Frames Privy opens: its auth iframe, WalletConnect verification, Turnstile. */
 const PRIVY_FRAMES = [
   "https://auth.privy.io",
@@ -25,7 +28,8 @@ const CONNECT_ORIGINS = [
   "https://explorer-api.walletconnect.com",
   "https://pulse.walletconnect.org",
   "https://api.web3modal.org",
-  "https://rpc.testnet.chain.robinhood.com",
+  // The chains' RPCs, exact origins: one list, shared with the enable-paid page's "Add funds".
+  ...STRICT_RPC_ORIGINS,
   "https://*.solana.com",
 ];
 
@@ -93,4 +97,4 @@ function fallbackPolicy({ scriptHashes = [] } = {}) {
   ].join("; ");
 }
 
-module.exports = { PRIVY_FRAMES, CONNECT_ORIGINS, STRICT_PATHS, strictPolicy, fallbackPolicy };
+module.exports = { PRIVY_FRAMES, CONNECT_ORIGINS, STRICT_RPC_ORIGINS, STRICT_PATHS, strictPolicy, fallbackPolicy };

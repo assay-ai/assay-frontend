@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { depositChoice } from "@/features/funding/deposit-chain";
+import { depositChoice, depositChoiceFor } from "@/features/funding/deposit-chain";
 import type { Chain } from "@/interfaces/chain";
 
 import { DepositChainChoice } from "./deposit-chain-choice";
@@ -89,5 +92,33 @@ describe("DepositChainChoice — the DOM, not the class string", () => {
       nowhere. The page renders its own blocking note instead.
     */
     expect(markup([])).toBe("");
+  });
+});
+
+describe("the deposit drawer's onlyChainId (depositChoiceFor)", () => {
+  const sheet = readFileSync(resolve(__dirname, "../buyer-money/deposit-sheet.tsx"), "utf8");
+
+  it("the drawer builds its choice through depositChoiceFor with onlyChainId", () => {
+    expect(sheet).toMatch(/const choice = depositChoiceFor\(offeredChains\(depositable\), onlyChainId\);/);
+  });
+
+  it("offers only that chain: one radio, fixed, for that chain", () => {
+    const choice = depositChoiceFor([SOLANA, EVM], EVM.chainId);
+    expect(choice).toEqual({ kind: "fixed", chain: EVM });
+    const html = renderToStaticMarkup(<DepositChainChoice choice={choice} picked={null} onPick={() => undefined} />);
+    expect(radioFor(html, EVM.chainId)).toMatch(/disabled/);
+    expect(html).not.toContain(`data-chain-id="${SOLANA.chainId}"`);
+    expect(html.match(/<input/g)).toHaveLength(1);
+  });
+
+  it("a chain that is not offered: nothing selectable", () => {
+    const choice = depositChoiceFor([SOLANA, EVM], "eip155:1");
+    expect(choice).toEqual({ kind: "none-offered" });
+    const html = renderToStaticMarkup(<DepositChainChoice choice={choice} picked={null} onPick={() => undefined} />);
+    expect(html).not.toContain("<input");
+  });
+
+  it("null keeps every chain on offer, as before", () => {
+    expect(depositChoiceFor([SOLANA, EVM], null)).toEqual({ kind: "choose", options: [SOLANA, EVM] });
   });
 });

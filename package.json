@@ -15,12 +15,13 @@
     "prepare": "husky",
     "check:tokens": "node scripts/check-token-parity.js",
     "check:refusals": "node scripts/check-gas-grant-refusals.js",
+    "check:wallet-ui": "node scripts/check-wallet-ui.js",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@dicebear/core": "9.4.2",
     "@dicebear/notionists": "9.4.2",
-    "@privy-io/react-auth": "^3.37.4",
+    "@privy-io/react-auth": "3.37.4",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-slot": "^1.2.4",

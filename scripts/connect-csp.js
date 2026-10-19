@@ -11,9 +11,9 @@
  * API origin the pages call, and nothing more.
  *
  * It fails the build when a strict block, its policy or its pages are missing,
- * when `/connect/*` lacks `Cross-Origin-Opener-Policy: same-origin-allow-popups` (so a
- * cross-site opener cannot hold or close the consent window between approve
- * and continue), or when the line would pass Cloudflare Pages' 2,000-character
+ * when `/connect/*` or `/agents/enable-paid` lacks `Cross-Origin-Opener-Policy:
+ * same-origin-allow-popups` (so a cross-site opener cannot hold or close the
+ * consent or enable-paid window), or when the line would pass Cloudflare Pages' 2,000-character
  * limit, rather than ship a page that cannot start, a consent window an opener
  * controls, or a policy that was cut short.
  *
@@ -38,7 +38,13 @@ const MAX_LINE = 2000;
  * opener, and this one keeps the popups the page opens itself (Privy login,
  * wallets) able to reach it.
  */
-const SPLAT_HEADERS = { "/connect/*": { "Cross-Origin-Opener-Policy": "same-origin-allow-popups" } };
+const COOP = { "Cross-Origin-Opener-Policy": "same-origin-allow-popups" };
+/*
+ * `/agents/enable-paid` too: a cross-site page that opened it cannot navigate
+ * or close it between the two wallet signatures. No other block matches that
+ * exact path but `/*`, which never sets it, so it is still sent once.
+ */
+const SPLAT_HEADERS = { "/connect/*": COOP, "/agents/enable-paid": COOP };
 
 /** Inline scripts: a `<script>` element with no `src`. */
 const INLINE_SCRIPT = /<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/gi;
@@ -172,8 +178,9 @@ function completeHeaders(headersText, pages, connectOrigins) {
         throw new Error(`${pattern}: needs exactly one "${name}: ${value}" in _headers`);
       }
       // Anywhere else, a block that also matches would repeat it.
-      const elsewhere = Object.keys(seen).filter((other) => other !== pattern && seen[other][name]);
-      if (elsewhere.length) throw new Error(`${name}: only ${pattern} may set it, not ${elsewhere.join(", ")}`);
+      const owners = Object.keys(SPLAT_HEADERS).filter((owner) => SPLAT_HEADERS[owner][name]);
+      const elsewhere = Object.keys(seen).filter((other) => !owners.includes(other) && seen[other][name]);
+      if (elsewhere.length) throw new Error(`${name}: only ${owners.join(", ")} may set it, not ${elsewhere.join(", ")}`);
     }
   }
   for (const line of out) {
