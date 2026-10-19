@@ -300,8 +300,10 @@ export function ConnectBody({
     if (!url || !effectiveAgentId || record.isPending || recorded) return;
     record.mutate();
   };
+  // A refused install (InstallInputError) leaves no snippet: nothing to copy or record.
+  const nothingToCopy = !url || blocked || (needsKey && !created) || snippet === "";
   const copy = async () => {
-    if (!url || blocked || (needsKey && !created)) return;
+    if (nothingToCopy) return;
     try {
       await navigator.clipboard.writeText(snippet);
       setCopied(true);
@@ -682,7 +684,7 @@ export function ConnectBody({
           type="button"
           icon={copied ? <Check /> : <Copy />}
           onClick={() => void copy()}
-          disabled={!url || blocked || (needsKey && !created)}
+          disabled={nothingToCopy}
           title={needsKey && !created && url && !blocked ? TEMPLATE_COPY_REASON : undefined}
           data-testid="connect-copy"
           aria-live="polite"
