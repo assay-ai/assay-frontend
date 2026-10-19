@@ -209,12 +209,8 @@ export function editedToast(
 /**
  * "2 payments ($0.60) still being settled", or null when there are none.
  * Money in dollars at two decimals (sub-cent amounts keep their digits).
- * `_unit` is kept for callers that still pass the token symbol.
  */
-export function unsettledLine(
-  unsettled: UnsettledVouchers | null | undefined,
-  _unit?: string,
-): string | null {
+export function unsettledLine(unsettled: UnsettledVouchers | null | undefined): string | null {
   if (!unsettled || unsettled.count === 0) return null;
   const value = toDecimal(unsettled.amount);
   const amount = formatMoney(unsettled.amount, { decimals: !value.isZero() && value.lt("0.01") ? 4 : 2 });

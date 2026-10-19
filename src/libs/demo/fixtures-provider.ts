@@ -80,12 +80,6 @@ import {
  * id a list screen links to resolves — a known one answers with its own row,
  * an unknown one with the lead row wearing the requested id.
  *
- * `override: "always"` is set on exactly the routes whose real answer would
- * name a chain, an account or an asset: on an unseeded dev backend those still
- * answer with Solana ids, and a Solana address on a Robinhood Chain demo is
- * the one substitution that has to win over a live response rather than only
- * fill an empty one. Everything else keeps the default and yields to the API.
- *
  * `GET /providers/me/calls/export` is **not** here and cannot be: it goes
  * through `api.raw()` to keep the CSV body unwrapped, which is the one path
  * that never reaches the demo layer.
@@ -1490,8 +1484,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/registration",
-    /* `payoutAccounts[]` names a chain and an account. Must win. */
-    override: "always",
     body: () => ({
       registration: {
         id: PROVIDER_ID,
@@ -1604,8 +1596,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/stake",
-    /* Names the chain and the stake authority on every entry. Must win. */
-    override: "always",
     body: () => ({
       /*
         One chain, because this provider serves one chain. `staked` and
@@ -1661,7 +1651,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/providers/me/tool-bindings/catalogue",
     /* `settlementAsset.assetId` is a CAIP-19 and must be the 46630 USDG. */
-    override: "always",
     body: () => ({
       tools: [
         {
@@ -1858,8 +1847,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     /*
       The tester calls the provider's endpoint for real, charges nobody and
       writes no payment intent — so a canned run is a report, not a ledger
-      entry. Left at the default override so a dev backend that can really run
-      one still wins.
+      entry.
     */
     method: "POST",
     match: /^\/providers\/me\/tool-bindings\/[^/]+\/test$/,
@@ -2095,8 +2083,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/earnings",
-    /* `asset` is a CAIP-19 the money columns are denominated in. Must win. */
-    override: "always",
     body: () => ({
       groups: earningsGroups(),
       totals: earningsTotals(),
@@ -2108,7 +2094,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/reconciliation",
-    override: "always",
     body: () => {
       const totals = earningsTotals();
       const row = (cls: string, calls: number, credited: string | null, note: string) => ({
@@ -2154,7 +2139,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
       `chainTxRef` is an EVM transaction hash here, never a base58 signature.
       Rail-B redemptions, one transaction each with its calls, newest first.
     */
-    override: "always",
     body: () =>
       page([
         {
@@ -2204,7 +2188,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: /^\/providers\/me\/sla-windows\/[^/]+\/evidence$/,
-    override: "always",
     body: (path) => {
       const id = idIn(path, 3) ?? WINDOWS[0].windowId;
       const entry = windowFor(id);
@@ -2263,7 +2246,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: /^\/providers\/me\/sla-windows\/[^/]+$/,
-    override: "always",
     body: (path) => {
       const id = idIn(path, 3) ?? WINDOWS[0].windowId;
       const entry = windowFor(id);
@@ -2302,7 +2284,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/sla-windows",
-    override: "always",
     body: (_path, query) => {
       const bindingId = typeof query.bindingId === "string" ? query.bindingId : null;
       const status = typeof query.status === "string" ? query.status : null;
@@ -2697,7 +2678,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/agents",
     /* `agentAccount` is a CAIP-10 and must name 46630, not a Solana cluster. */
-    override: "always",
     body: () =>
       page([
         {

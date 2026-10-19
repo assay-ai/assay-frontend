@@ -1660,7 +1660,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/deposits",
-    override: "always",
     body: () => freshDeposits() ?? ({
       items: demoDeposits(),
       pageInfo: { nextCursor: null, hasMore: false },
@@ -1672,7 +1671,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     // One request the buyer cancelled: no money moved, so `lifetime.withdrawn` stays 0.
     method: "GET",
     match: "/withdrawals",
-    override: "always",
     body: () => ({ items: freshStage() ? [] : demoWithdrawals() }),
   },
 
@@ -1680,7 +1678,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/statements/balance",
-    override: "always",
     body: (_path, query) => ({ items: freshStage() ? [] : [demoStatementBalance(query)] }),
   },
 
@@ -1695,7 +1692,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/escrow",
-    override: "always",
     body: () => freshEscrow() ?? debtEscrow() ?? ({
       exists: true,
       chainReadable: true,
@@ -1908,7 +1904,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       keeps the agent ids stable, which is what the credentials fixture below
       reads back out of its own path.
     */
-    override: "always",
     body: () => ({
       items: demoAgents(),
       pageInfo: { nextCursor: null, hasMore: false },
@@ -1968,7 +1963,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     // no payment key yet, so it shows the bind step.
     method: "GET",
     match: "/escrow/delegates",
-    override: "always",
     body: () => (freshStage() ? { account: DEMO_BUYER_ACCOUNT, delegates: [], tightenDelaySeconds: demoTightenDelaySeconds() } : ({
       account: DEMO_BUYER_ACCOUNT,
       // `?tighten=1h` shows an escrow that delays a tightening (D-21); 0 by default.
@@ -2014,7 +2008,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/escrow/unsettled",
-    override: "always",
     body: () => ({ account: DEMO_BUYER_ACCOUNT, unsettled: null, tightenDelaySeconds: demoTightenDelaySeconds() }),
   },
 
