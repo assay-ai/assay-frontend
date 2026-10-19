@@ -8,6 +8,7 @@ import { apiKeyConfig, installCommand, KEY_PLACEHOLDER, keyMode, MCP_CLIENTS } f
 
 import {
   buildMcpUrl,
+  signInHint,
   canonicalTools,
   defaultDiscovery,
   mcpToolName,
@@ -171,6 +172,10 @@ describe("the server-name rule agrees with assay-mcp on every shared vector (R-M
     expect(MAX_SERVER_NAME_LENGTH).toBe(vectors.rule.maxLength);
     expect(new RegExp(vectors.rule.pattern).source).toBe(/^[a-z][a-z0-9-]*$/.source);
     expect(longestToolLength(null)).toBe(vectors.rule.signedOutL);
+  });
+
+  it("the sign-in hint is the vector text with the pinned scoped command", () => {
+    expect(signInHint()).toBe(vectors.rule.signedOutHint.replace("{run}", "npx -y @assay-ai/mcp@1.2.3"));
   });
 
   it("maximum name length", () => {

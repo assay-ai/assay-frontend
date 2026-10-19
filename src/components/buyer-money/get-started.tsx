@@ -39,7 +39,7 @@ import { LetAgentPaySheet } from "./let-agent-pay-sheet";
 import { McpConfigTabs } from "./mcp-config-tabs";
 import { useRecordConnect } from "@/components/toolsets/use-toolsets";
 import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
-import { keyForHint, urlForClient, type McpClient } from "@/features/buyer-money/mcp-config";
+import { assayMcpRun, keyForHint, urlForClient, type McpClient } from "@/features/buyer-money/mcp-config";
 import { GasHelpNote } from "./gas-help-note";
 import { useAgentsAndKeys } from "./use-agents";
 
@@ -63,7 +63,6 @@ import { useAgentsAndKeys } from "./use-agents";
  */
 const DISMISS_KEY = "assay.get-started.dismissed";
 const LIVE_POLL_MS = 5_000;
-const BIND_COMMAND = "assay-mcp enable-paid";
 
 function readDismissed(): boolean {
   try {
@@ -426,7 +425,7 @@ export function PaidByInvitation({ agentName, onSetCaps }: { agentName: string; 
           <p className="text-body-xs text-03" data-testid="assay-mcp-source">
             {ASSAY_MCP_SOURCE.replace("the agent's machine", `${agentName}'s machine`)}
           </p>
-          <CodeBlock title="Terminal" code={BIND_COMMAND} wrap />
+          <CodeBlock title="Terminal" code={`${assayMcpRun()} enable-paid`} wrap />
           <Listening>Waiting for the payment key. This updates by itself.</Listening>
           {onSetCaps ? (
             <Button type="button" variant="secondary" className="self-start" onClick={onSetCaps}>
