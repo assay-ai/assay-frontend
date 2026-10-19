@@ -6,14 +6,13 @@ import { approvalNeeds } from "./approvals";
 /**
  * A two-person route's answer.
  *
- * Called by one operator, a two-person route (suspend from `UPHELD` or
- * `AWAITING_SECOND`, sweep, compensated, unblock, add operator, raise an
- * operator's roles or limit, remove or demote an `OPS_ADMIN`, the arbiter's
- * on-chain block) runs nothing: it answers `202 { approvalId }` and
- * the action waits in the approvals inbox for a different operator. Only a
- * `200` carries the action's result. A screen that read a 202 body as the
- * result would report a suspension, a sweep or a lifted block that has not
- * happened.
+ * Called by one operator, a two-person route (compensated, record an
+ * execution, re-propose, unblock, add operator, raise an operator's roles or
+ * limit, remove or demote an `OPS_ADMIN`, the arbiter's on-chain block) runs
+ * nothing: it answers `202 { approvalId }` and the action waits in the
+ * approvals inbox for a different operator. Only a `200` carries the action's
+ * result. A screen that read a 202 body as the result would report a pay-back
+ * or a lifted block that has not happened.
  */
 export type TwoPersonAnswer<T> =
   | { readonly kind: "done"; readonly result: T }

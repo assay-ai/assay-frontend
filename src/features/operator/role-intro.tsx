@@ -103,7 +103,7 @@ export function rolePillText(identity: Pick<OperatorIdentity, "roles" | "authori
 }
 
 // "block" and "blockOnChain" are one line, written by `blockLine`.
-const LIST_ACTIONS: readonly ConsoleAction[] = ["rule", "suspend", "compensate", "block", "manageTeam"];
+const LIST_ACTIONS: readonly ConsoleAction[] = ["rule", "compensate", "block", "manageTeam"];
 
 /**
  * Blocking is one line, not two: a block stops an account in Assay; for a
@@ -126,7 +126,7 @@ function blockLine(identity: Pick<OperatorIdentity, "roles" | "authorityLimit">)
 
 /**
  * The two short lists of the popover. Pure.
- *   can:    ["rule on disputed penalties", "suspend a penalty up to $1,000", "approve block lifts and suspensions"]
+ *   can:    ["rule on disputed penalties", "compensate a provider up to $1,000", "approve block lifts and compensations"]
  *   others: ["add and change operators (Admin)"]
  */
 export function roleCapabilityLists(identity: Pick<OperatorIdentity, "roles" | "authorityLimit">): { can: string[]; others: string[] } {

@@ -228,7 +228,7 @@ describe("approvedArbiterBlocks", () => {
       approvedArbiterBlocks([
         row({}),
         row({ id: "appr-2", status: "PENDING" }),
-        row({ id: "appr-3", action: "slash.suspend" }),
+        row({ id: "appr-3", action: "slash.compensated" }),
         row({ id: "appr-4", payload: { chainId: "eip155:46630" } }),
       ]),
     ).toEqual([

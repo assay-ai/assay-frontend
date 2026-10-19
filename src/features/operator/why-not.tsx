@@ -18,9 +18,9 @@ import { useOperatorDirectory } from "./use-operator-lookups";
  * "Ask …" link that copies a message with a link to this page, ready to paste
  * into chat.
  *
- *   <WhyNot action="suspend" me={identity} amount={penalty}
- *           ask="Can you suspend Northwind Geo's $28.47 penalty?" />
- *     → [lock] Suspending a penalty needs Adjudicator, Lead adjudicator or Support / on-call · Ask Riley or Iris
+ *   <WhyNot action="compensate" me={identity} amount={penalty}
+ *           ask="Can you pay back Northwind Geo's $28.47 penalty?" />
+ *     → [lock] Compensating a provider needs Lead adjudicator or Treasury · Ask Riley or Iris
  *
  * One line by default (two at most on a phone); the full "who can" sentence is
  * its tooltip. `variant="box"` is the older panel with a title and both
@@ -100,13 +100,13 @@ export interface WhyNotProps {
   me: Pick<OperatorIdentity, "id" | "roles" | "authorityLimit">;
   /** The amount the action is on, for the limit check. */
   amount?: Money | null;
-  /** What to ask for, as a sentence: "Can you suspend Northwind Geo's $28.47 penalty?" */
+  /** What to ask for, as a sentence: "Can you pay back Northwind Geo's $28.47 penalty?" */
   ask: string;
   /** Where the asked person should go. Default: this page. */
   link?: string;
   /** Overrides the "why" sentence. */
   why?: string;
-  /** Lead-in, e.g. "Suspend this penalty" (the box only). */
+  /** Lead-in, e.g. "Pay this penalty back" (the box only). */
   title?: string;
   /** "inline" (default): one line. "box": a panel, for a page that is read-only for you. */
   variant?: "inline" | "box";

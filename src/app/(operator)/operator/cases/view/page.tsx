@@ -33,12 +33,10 @@ import { eligibleApprovers, isLiveApproval } from "@/features/operator/inbox";
 import { OperatorMeasurement } from "@/features/operator/operator-measurement";
 import { PENALTY_APPROVAL_CODES } from "@/features/operator/penalty-list";
 import { PenaltyMoney, reductionHint, stakeReduction } from "@/features/operator/penalty-money";
-import { reasonLabel } from "@/features/operator/reasons";
 import { rememberRecentPenalty } from "@/features/operator/recent-penalties";
 import { rulingHref } from "@/features/operator/ruling-link";
 import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
-import { suspendedNotice } from "@/features/operator/state";
 import { approvalHref, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
 import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-operator-lookups";
 import { CaseContext } from "@/features/provider-slash-case/context";
@@ -56,7 +54,6 @@ import { nothingStandingOutcome } from "@/features/operator/operator-errors";
 import { CancelSheet } from "./_components/cancel-sheet";
 import { ManualActionSheet } from "./_components/manual-action-sheet";
 import { MoreActions } from "./_components/more-actions";
-import { SuspendSheet } from "./_components/suspend-sheet";
 import { WhyNotLine } from "./_components/why-not-line";
 
 /**
@@ -73,7 +70,7 @@ import { WhyNotLine } from "./_components/why-not-line";
  * the next step and the key facts in a sticky side column, so the action
  * stays in view while the tabs are read. The one primary action lives in that
  * next-step card only (never repeated in the header, at any width); the rare
- * actions (suspend, block, pay back, sweep, history) sit in the header's ⋯
+ * actions (block, pay back, history) sit in the header's ⋯
  * menu, never at the bottom. A two-person request already waiting on the
  * penalty becomes the next step: approve it, or who it waits for.
  */
@@ -91,9 +88,7 @@ const STAGE_CHIP: Record<CaseStage, { status: StatusChipKey; detail?: string }> 
 };
 
 const WAITING_WHAT: Record<string, string> = {
-  "slash.suspend": "A suspension of this penalty",
   "slash.compensated": "A pay-back of this penalty",
-  "slash.sweep": "A fleet sweep from this penalty",
   "slash.record_execution": "Recording this penalty's on-chain execution",
   "slash.repropose": "Proposing this penalty again",
 };
@@ -132,7 +127,7 @@ export default function OperatorCasePage() {
   const queryClient = useQueryClient();
   const providers = useProviderNames();
   const directory = useOperatorDirectory();
-  const [sheet, setSheet] = React.useState<"suspend" | "cancel" | ManualActionKind | null>(null);
+  const [sheet, setSheet] = React.useState<"cancel" | ManualActionKind | null>(null);
   const opened = React.useRef(false);
   const [result, setResult] = React.useState<Result | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
@@ -163,7 +158,7 @@ export default function OperatorCasePage() {
     retry: 0,
   });
 
-  // A suspension of this penalty already waiting for approval — the same query as the badge.
+  // A two-person request on this penalty already waiting for approval — the same query as the badge.
   const pending = useQuery({
     queryKey: ["operator", "approvals", "pending-count"],
     queryFn: () => listApprovals({ status: "PENDING", limit: 100 }),
@@ -172,9 +167,8 @@ export default function OperatorCasePage() {
   });
   // Waiting means what Approvals means by it: pending and not past its deadline (`isLiveApproval`).
   const live = (pending.data?.items ?? []).filter((a) => isLiveApproval(a, now) && approvalTargetId(a) === proposalId);
-  const waitingSuspend = live.find((a) => a.action === "slash.suspend") ?? null;
-  // Any two-person request on this penalty (suspend, pay back, sweep) is said once, above the columns.
-  const waitingAny = waitingSuspend ?? live.find((a) => a.action in PENALTY_APPROVAL_CODES) ?? null;
+  // Any two-person request on this penalty (pay back, record, re-propose) is said once, above the columns.
+  const waitingAny = live.find((a) => a.action in PENALTY_APPROVAL_CODES) ?? null;
 
   // Home's row asked for the action: open it once, and only if the brief's read offers it to this operator.
   React.useEffect(() => {
@@ -264,13 +258,10 @@ export default function OperatorCasePage() {
   const providerName = providers.name(proposal.providerId);
   const penaltyText = formatMoney(proposal.penaltyAmount);
   const penaltyName = penaltyPhrase(providerName, penaltyText);
-  const suspendApprovers = directory.isPending ? undefined : eligibleApprovers("S-1", directory.operators, identity.id);
   const chip = facts.expired ? { status: "expired" as const } : STAGE_CHIP[facts.stage];
 
   const actionFor = (id: CaseActionId | null, primary: boolean): NextStepAction | undefined => {
     switch (id) {
-      case "suspend":
-        return { label: authority.suspend.twoPerson ? "Suspend (needs approval)" : "Suspend penalty", onClick: () => setSheet("suspend"), tone: primary ? "danger" : undefined };
       case "cancel":
         return { label: "Get the cancel signed", onClick: () => setSheet("cancel") };
       case "approve":
@@ -286,24 +277,6 @@ export default function OperatorCasePage() {
       default:
         return undefined;
     }
-  };
-
-  const onSuspended = (answer: TwoPersonAnswer<unknown>, reasonCode: string) => {
-    if (answer.kind === "queued") {
-      const sent = sentForApproval(`Suspending ${penaltyName}`, suspendApprovers, approvalNeeds("S-1", identity.roles), answer.approval.expiresAt);
-      setResult({
-        ...sent,
-        approvalId: answer.approval.approvalId,
-        approvers: suspendApprovers,
-        expiresAt: answer.approval.expiresAt,
-      });
-    } else {
-      setResult({
-        title: `${penaltyName.charAt(0).toUpperCase()}${penaltyName.slice(1)} is suspended (${reasonLabel(reasonCode)})`,
-        next: suspendedNotice(brief.chainStatus, proposal.penaltyAmount.asset),
-      });
-    }
-    refetch();
   };
 
   const onManualDone = (kind: ManualActionKind) => (answer: TwoPersonAnswer<ManualCaseActionResult>) => {
@@ -371,7 +344,6 @@ export default function OperatorCasePage() {
             authority={authority}
             penaltyName={penaltyName}
             pendingActions={pendingActions}
-            onSuspend={authority.suspend.allowed ? () => setSheet("suspend") : null}
           />
         </div>
       </header>
@@ -566,18 +538,6 @@ export default function OperatorCasePage() {
         </Tabs>
       </div>
 
-      {authority.suspend.allowed ? (
-        <SuspendSheet
-          open={sheet === "suspend"}
-          onOpenChange={(open) => setSheet(open ? "suspend" : null)}
-          proposalId={proposalId}
-          penaltyText={penaltyText}
-          twoPerson={authority.suspend.twoPerson}
-          me={identity}
-          waiting={waitingSuspend}
-          onDone={onSuspended}
-        />
-      ) : null}
       {(["close", "record", "repropose"] as const).map((kind) =>
         (kind === "close" ? authority.closeCancel : kind === "record" ? authority.recordExecution : authority.repropose) ? (
           <ManualActionSheet

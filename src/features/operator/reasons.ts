@@ -24,13 +24,6 @@ export const UNBLOCK_REASONS: readonly ReasonOption[] = Object.freeze([
   OTHER,
 ]);
 
-export const SUSPEND_REASONS: readonly ReasonOption[] = Object.freeze([
-  { value: "PROPOSED_IN_ERROR", label: "Proposed in error", hint: "The measurement or the window was wrong." },
-  { value: "PLATFORM_DEFECT", label: "Our defect", hint: "Our mapping, checks or routing caused the failures." },
-  { value: "DUPLICATE_PROPOSAL", label: "Duplicate", hint: "Another penalty already covers this window." },
-  OTHER,
-]);
-
 export const OPERATOR_ADD_REASONS: readonly ReasonOption[] = Object.freeze([
   { value: "NEW_HIRE", label: "Joining the team" },
   { value: "ROLE_CHANGE", label: "Role change" },
@@ -72,7 +65,7 @@ export const DEPRECATE_REASONS: readonly ReasonOption[] = Object.freeze([
 /** A reason code in words, from any vocabulary above; unknown codes are humanised. */
 export function reasonLabel(code: string | null | undefined): string {
   if (!code) return "";
-  for (const list of [BLOCK_REASONS, UNBLOCK_REASONS, SUSPEND_REASONS, OPERATOR_ADD_REASONS, OPERATOR_CHANGE_REASONS, OPERATOR_REMOVE_REASONS, CONTRACT_REASONS, DEPRECATE_REASONS]) {
+  for (const list of [BLOCK_REASONS, UNBLOCK_REASONS, OPERATOR_ADD_REASONS, OPERATOR_CHANGE_REASONS, OPERATOR_REMOVE_REASONS, CONTRACT_REASONS, DEPRECATE_REASONS]) {
     const found = list.find((option) => option.value === code);
     if (found && found.value !== "OTHER") return found.label;
   }

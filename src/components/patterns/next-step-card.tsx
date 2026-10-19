@@ -12,10 +12,10 @@ import { cn } from "@/utils";
  *
  *   <NextStepCard
  *     kind="action"
- *     title="Suspend this penalty"
- *     description="Cancels the penalty before it executes. Only you can do this now."
+ *     title="Get the cancel signed"
+ *     description="The arbiter key signs the cancel before the record becomes executable."
  *     meta="Executable in 2d 4h"
- *     action={{ label: "Suspend penalty", onClick: openSheet, tone: "danger" }}
+ *     action={{ label: "Get the cancel signed", onClick: openSheet }}
  *   />
  *
  *   <NextStepCard

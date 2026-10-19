@@ -126,17 +126,8 @@ const EVENT_LABEL: Record<string, string> = {
   NOTIFIED: "Notice delivered",
   ACKNOWLEDGED: "Acknowledged",
   DISPUTE_FILED: "Dispute filed",
-  ASSIGNED: "Reviewer assigned",
-  DECIDED: "Decision made",
-  SIGNED: "Decision confirmed",
-  SECOND_SIGNED: "Decision confirmed",
-  SECONDED: "Decision confirmed",
-  SECOND_OBJECTED: "Decision sent back to review",
-  DEADLINE_EXTENDED: "Deadline extended",
   AUTO_CLOSED: "Closed without a dispute",
-  AUTO_OVERTURNED_PLATFORM_MISS: "Cancelled — we missed our deadline",
   CANCELLED: "Cancelled",
-  SWEEP_APPLIED: "Cancelled after a wider review",
   CHAIN_PROPOSED: "Stake reserved",
   CHAIN_PROPOSAL_ADOPTED: "Stake reserved",
   CHAIN_CANCEL_REQUESTED: "Cancel requested — arbiter/admin to sign",
@@ -151,7 +142,7 @@ const EVENT_LABEL: Record<string, string> = {
   REVERSED: "Stake restored",
 };
 
-/** "DEADLINE_EXTENDED" → "Deadline extended", for a kind the table above does not name. */
+/** "REPROPOSAL_REQUESTED" → "Reproposal requested", for a kind the table above does not name. */
 function sentenceCase(kind: string): string {
   const words = kind.toLowerCase().replace(/_/g, " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
