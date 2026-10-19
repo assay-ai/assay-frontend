@@ -284,7 +284,6 @@ function brief(overrides: {
           cancelledRecords: 0,
         },
         disputeId: null,
-        outcome: null,
         resolutionKind: null,
         resolvedAt: null,
         executedAt: null,
