@@ -260,7 +260,8 @@ function NextSteps({ client }: { client: McpClient }) {
           <h3 className="text-label-sm text-01">What happens next</h3>
           <ol className="flex list-decimal flex-col gap-1 pl-5 text-body-13 text-02">
             <li>
-              Start {app}. In the tool list you&apos;ll see &quot;assay_sign_in&quot;. Ask {assistant} to &quot;sign in to Assay&quot;, approve in the browser, and Assay&apos;s tools appear.
+              {/* `{" "}`: the dev compiler drops the space after `{assistant}` in a text run with entities. */}
+              Start {app}. In the tool list you&apos;ll see &quot;assay_sign_in&quot;. Ask {assistant}{" "}to &quot;sign in to Assay&quot;, approve in the browser, and Assay&apos;s tools appear.
               {restart ? ` ${restart}` : null}
             </li>
             <li>Paid tools ask once to turn on paid calls. That takes a minute.</li>

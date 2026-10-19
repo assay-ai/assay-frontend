@@ -40,7 +40,8 @@ export function HostedConnector({ client, url, secondUrl = false, onCopy }: { cl
         <li>Click Connect and approve in the window that opens.</li>
       </ol>
       <p className="text-body-xs text-03">
-        Free tools only. {app} runs connectors from its own servers, so it can&apos;t hold a payment key. For paid tools, use Claude Code or Claude Desktop with the Assay app.
+        {/* `{" "}`: the dev compiler drops the space after `{app}` in a text run with entities. */}
+        Free tools only. {app}{" "}runs connectors from its own servers, so it can&apos;t hold a payment key. For paid tools, use Claude Code or Claude Desktop with the Assay app.
       </p>
       {secondUrl ? <p className="text-body-xs text-03" data-testid="second-url-note">{SECOND_URL_NOTE}</p> : null}
       <Checkbox checked={paid} onChange={(event) => setPaid(event.target.checked)} label="Show paid tools too (they will explain how to pay)" />
