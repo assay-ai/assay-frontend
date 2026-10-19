@@ -252,11 +252,17 @@ export function AgentsView() {
   // The last target, so the sheet's title does not go blank while it animates out.
   const [lastRevoke, setLastRevoke] = React.useState<RevokeTarget | null>(null);
   if (revoking && revoking !== lastRevoke) setLastRevoke(revoking);
-  const [stopping, setStopping] = React.useState<{ delegateAccount: string; delegation: EscrowDelegate | null } | null>(null);
+  // `account` is the payer that signs: the account of the agent that owns the key (BUG-M3-01).
+  type StopTarget = { account: string | undefined; delegateAccount: string; delegation: EscrowDelegate | null };
+  const [stopping, setStopping] = React.useState<StopTarget | null>(null);
+  // The last target, so the sheet keeps its payer while it animates out.
+  const [lastStopping, setLastStopping] = React.useState<StopTarget | null>(null);
+  if (stopping && stopping !== lastStopping) setLastStopping(stopping);
   const [payFor, setPayFor] = React.useState<{
     agent: AgentRow;
     delegate: string;
     renew?: { perCall: string; perDay: string } | null;
+    purpose?: "renew" | "limits";
   } | null>(null);
 
   const refresh = () => {
@@ -293,7 +299,9 @@ export function AgentsView() {
   const revokeKeyState: RevokeKeyState = revokeView?.keyState ?? "none";
 
   const payerAccount = data.agents.find((a) => supportsDelegation(a.agentAccount))?.agentAccount;
-  const stopPaymentKey = useStopPaymentKey(payerAccount);
+  // The key is stopped by the wallet of the agent that owns the credential, never another agent's (BUG-M3-01).
+  const revokeAccount = lastRevoke?.agent.agentAccount;
+  const stopPaymentKey = useStopPaymentKey(revokeAccount);
   const bindings: DelegateBinding[] = data.agents.flatMap((agent) =>
     (data.keys[agent.agentId] ?? [])
       .filter((k) => k.delegateAccount)
@@ -348,10 +356,10 @@ export function AgentsView() {
             escrowReady={Boolean(data.escrowQuery.data?.exists)}
             onNewKey={() => setNewKeyFor(agent)}
             onRevokeKey={(key) => setRevoking({ agent, key })}
-            onStopIt={setStopping}
+            onStopIt={(target) => setStopping({ ...target, account: agent.agentAccount })}
             onRetryChain={data.refetchDelegates}
             onEditAccess={() => editAccess(agent)}
-            onLetPay={(delegate, renew) => setPayFor({ agent, delegate, renew })}
+            onLetPay={(delegate, renew, purpose) => setPayFor({ agent, delegate, renew, purpose })}
             onChanged={refresh}
           />
         ))
@@ -389,7 +397,7 @@ export function AgentsView() {
           if (outcome.chain === "handoff") {
             const delegateAccount = lastRevoke!.key.delegateAccount!;
             setRevoking(null);
-            setStopping({ delegateAccount, delegation: findDelegation(data.delegates, delegateAccount) });
+            setStopping({ account: revokeAccount, delegateAccount, delegation: findDelegation(data.delegates, delegateAccount) });
             toast.info(text);
           } else if (keyState === "none" || outcome.chain === "stopped") {
             toast.success(text);
@@ -400,7 +408,7 @@ export function AgentsView() {
       />
 
       <StopPaymentKeySheet
-        account={payerAccount}
+        account={lastStopping?.account}
         target={stopping}
         onClose={() => setStopping(null)}
         onFinished={() => {
@@ -420,6 +428,7 @@ export function AgentsView() {
         agentName={payFor?.agent.label ?? "your agent"}
         delegateAccount={payFor?.delegate ?? null}
         renew={payFor?.renew ?? null}
+        purpose={payFor?.purpose}
       />
     </div>
   );
@@ -580,7 +589,7 @@ function SpendingBlock({
   readiness: AgentReadiness;
   escrowReady: boolean;
   now: number;
-  onLetPay: (delegate: string, renew?: { perCall: string; perDay: string } | null) => void;
+  onLetPay: (delegate: string, renew?: { perCall: string; perDay: string } | null, purpose?: "renew" | "limits") => void;
   onChanged: () => void;
 }) {
   const bound = readiness.boundCredential as KeyRow | null;
@@ -685,7 +694,7 @@ function AgentCard({
   /** Read the chain list again (a failed read). */
   onRetryChain: () => void;
   onEditAccess: () => void;
-  onLetPay: (delegate: string, renew?: { perCall: string; perDay: string } | null) => void;
+  onLetPay: (delegate: string, renew?: { perCall: string; perDay: string } | null, purpose?: "renew" | "limits") => void;
   onChanged: () => void;
 }) {
   const [showRevoked, setShowRevoked] = React.useState(false);
@@ -770,7 +779,13 @@ function AgentCard({
                 onEditAccess={onEditAccess}
                 onPaymentLimits={() => {
                   if (!key.delegateAccount) return;
-                  onLetPay(key.delegateAccount, view.chain.kind === "active" ? capsToForm(view.chain.delegation) : null);
+                  if (view.chain.kind !== "active") {
+                    onLetPay(key.delegateAccount, null);
+                    return;
+                  }
+                  // Renew wording only near the end of the permission; otherwise it is about its limits (BUG-M3-03).
+                  const purpose = permissionExpiry(view.chain.delegation, now) ? "renew" : "limits";
+                  onLetPay(key.delegateAccount, capsToForm(view.chain.delegation), purpose);
                 }}
                 onRevoke={() => onRevokeKey(key)}
               />
