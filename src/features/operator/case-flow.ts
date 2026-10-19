@@ -104,19 +104,18 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
   const status = asProposalStatus(proposal.status);
   const clocks = {
     ...proposal.clocks,
-    chainStatus: brief.chainStatus ?? proposal.clocks.chainStatus,
-    chainExecutableAt: brief.chainExecutableAt ?? proposal.clocks.chainExecutableAt ?? null,
-    chainDisputedParts: brief.chainDisputedParts ?? proposal.clocks.chainDisputedParts,
+    chainStatus: brief.chainStatus,
+    chainExecutableAt: brief.chainExecutableAt,
+    chainDisputedParts: brief.chainDisputedParts,
   };
   const chain = clocks.chainStatus;
   const chainStage = caseChainStageOf(clocks);
-  const disputedAt = clocks.chainDisputedAt ?? (chainStage.kind === "disputed" ? chainStage.disputedAt : null) ?? null;
-  const executableAt = clocks.chainExecutableAt ?? clocks.earliestExecutionAt ?? null;
+  const disputedAt = clocks.chainDisputedAt;
+  const executableAt = clocks.chainExecutableAt ?? clocks.earliestExecutionAt;
   const legacyStatus = status === "DISPUTED" || status === "UNDER_REVIEW" || status === "AWAITING_SECOND";
 
-  // Only GONE means nothing stands and nothing was taken. EXECUTED is money moved; UNKNOWN (and a
-  // backend without the field) reads as standing.
-  const record = brief.chainRecord ?? "STANDING";
+  // Only GONE means nothing stands and nothing was taken. EXECUTED is money moved; UNKNOWN reads as standing.
+  const record = brief.chainRecord;
   const nothingOnChain = record === "GONE";
   const executedWhileCancelWaited = record === "EXECUTED" && chain === "CANCEL_REQUESTED";
 
@@ -137,7 +136,7 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
 
   const disputeExpiresAt = plusSeconds(disputedAt, DISPUTE_TIMEOUT_SECONDS);
   // The record under the cancel is still disputed when the chain still counts disputed parts.
-  const recordDisputed = disputedAt !== null && (clocks.chainDisputedParts ?? 0) > 0;
+  const recordDisputed = disputedAt !== null && clocks.chainDisputedParts > 0;
   const cancel =
     stage !== "cancel-requested"
       ? null

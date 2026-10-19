@@ -695,6 +695,8 @@ export function demoOperatorTool(
   return {
     ...summaryOf({ ...tool, status: tool.status === "DRAFT" && published ? "ACTIVE" : tool.status }, versions, draft !== null),
     replacementToolId,
+    // As the backend states it: 90 days from the real clock, which is what a deprecation is checked against.
+    earliestSunsetAt: new Date(Date.now() + 90 * DAY_MS + 60_000).toISOString(),
     versions,
     draft,
     // A major published here (or a first version) has no bindings yet.

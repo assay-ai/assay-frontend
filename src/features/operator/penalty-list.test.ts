@@ -85,7 +85,7 @@ describe("the row's next step", () => {
       nextDeadline: null,
     };
     expect(rowFromCase({ ...base, onChain: false }).onChain).toBe(false);
-    expect(rowFromCase(base).onChain).toBeNull();
+    expect(rowFromCase({ ...base, onChain: true }).onChain).toBe(true);
   });
 
   it("a cancel past due never claims what stands: the page reads it", () => {

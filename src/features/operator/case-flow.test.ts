@@ -48,6 +48,14 @@ function brief(overrides: {
           chainDisputedAt: null,
           secondsRemaining: null,
           runningClock: "NONE",
+          disputeOnChain: true,
+          disputeBy: null,
+          chainExecutableAt: null,
+          chainStatus: "NONE",
+          chainDisputedParts: 0,
+          chainState: "PENDING",
+          chainRecords: 0,
+          cancelledRecords: 0,
         },
         disputeId: null,
         outcome: null,
@@ -71,7 +79,8 @@ function brief(overrides: {
     chainStatus: overrides.chainStatus ?? "CANCEL_REQUESTED",
     chainExecutableAt: overrides.executableAt === undefined ? iso(NOW - DAY) : overrides.executableAt,
     chainDisputedParts: 0,
-    ...(overrides.chainRecord === undefined ? {} : { chainRecord: overrides.chainRecord }),
+    chainRecord: overrides.chainRecord ?? "STANDING",
+    chainStanding: (overrides.chainRecord ?? "STANDING") === "STANDING" || overrides.chainRecord === "UNKNOWN",
   } as OperatorCaseBrief;
 }
 

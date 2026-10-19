@@ -61,7 +61,7 @@ function plusSeconds(iso: string, seconds: number): string | null {
 
 export function caseChainStageOf(clocks: SlashProposalClocks): CaseChainStage {
   const phase = caseChainDisputePhase(clocks);
-  const disputedAt = clocks.chainDisputedAt ?? null;
+  const disputedAt = clocks.chainDisputedAt;
   if (phase === "disputed") {
     return {
       kind: "disputed",
@@ -75,7 +75,7 @@ export function caseChainStageOf(clocks: SlashProposalClocks): CaseChainStage {
   return {
     kind: "open",
     executableAt: executionFloorOf(clocks),
-    disputedParts: phase === "partly-disputed" ? (clocks.chainDisputedParts ?? 0) : 0,
+    disputedParts: phase === "partly-disputed" ? clocks.chainDisputedParts : 0,
   };
 }
 
@@ -153,7 +153,7 @@ export function caseStageOf(proposal: SlashProposalSummary): CaseStage {
               : "cancelled";
   const partly =
     outcome === "executed" && clocks.chainState === "PARTIALLY_EXECUTED"
-      ? { cancelledRecords: clocks.cancelledRecords ?? 0, records: clocks.chainRecords ?? 0 }
+      ? { cancelledRecords: clocks.cancelledRecords, records: clocks.chainRecords }
       : null;
   return {
     kind: "closed",
@@ -186,36 +186,22 @@ export function mayAcknowledge(proposal: SlashProposalSummary, stage: CaseStage)
 /**
  * Whether the case's dispute is the on-chain one (EVM): the provider sends
  * `disputeSlash` from its own stake wallet and Assay's arbiter rules on chain.
- * There is no in-app objection, extension or platform deadline for it. An
- * older backend that does not say is read as on chain.
+ * There is no in-app objection, extension or platform deadline for it.
  */
 export function disputesOnChain(clocks: SlashProposalClocks): boolean {
-  return clocks.disputeOnChain !== false;
-}
-
-/** The one deadline to dispute on chain: the record's `executableAt`. Null when none stands. */
-export function disputeDeadlineOf(clocks: SlashProposalClocks): string | null {
-  return clocks.disputeBy ?? clocks.chainExecutableAt ?? null;
+  return clocks.disputeOnChain;
 }
 
 /**
  * Whether a record of the case can still be disputed on chain at `nowMs`.
  * Per record (review N-4): the backend's `disputeBy` is the earliest door of a
  * record still Pending and never disputed, so a sibling's dispute or a case
- * that moved on does not close it. An older backend that sends no `disputeBy`
- * keeps the case-level rule: `PROPOSED`, record `PENDING`, never disputed.
+ * that moved on does not close it.
  */
 export function disputeWindowOpen(proposal: SlashProposalSummary, nowMs: number): boolean {
   const { clocks } = proposal;
   if (!disputesOnChain(clocks)) return false;
-  if (clocks.disputeBy !== undefined) {
-    const byMs = clocks.disputeBy ? new Date(clocks.disputeBy).getTime() : Number.NaN;
-    return Number.isFinite(byMs) && byMs > nowMs;
-  }
-  if (proposal.status !== "PROPOSED") return false;
-  if (clocks.chainStatus !== "PENDING" || clocks.chainDisputedAt) return false;
-  const by = disputeDeadlineOf(clocks);
-  const byMs = by ? new Date(by).getTime() : Number.NaN;
+  const byMs = clocks.disputeBy ? new Date(clocks.disputeBy).getTime() : Number.NaN;
   return Number.isFinite(byMs) && byMs > nowMs;
 }
 
