@@ -41,7 +41,7 @@ const OTHER_CLIENT_DOCS = [
 ];
 
 /** Why Copy is off while the block holds a placeholder instead of a key. */
-export const TEMPLATE_COPY_REASON = "This config has a placeholder, not your key. Create a key and fill it in first.";
+export const TEMPLATE_COPY_REASON = "This config has a placeholder, not your key. Create a key above first.";
 
 /**
  * The config to paste, one tab per client. With `token` the block is ready to
@@ -90,7 +90,7 @@ export function McpConfigTabs({
   secondUrl?: boolean;
   onClientChange?: (client: McpClient) => void;
   onCopy?: (client: McpClient) => void;
-  /** Creates a key here and fills it in; shown first while there is no full key. */
+  /** Creates a key here and fills it in ("Use an API key instead", R-UI-8); shown first under My own code while there is no full key. */
   onCreateKey?: () => void;
   creatingKey?: boolean;
   createKeyError?: string | null;
@@ -121,7 +121,7 @@ export function McpConfigTabs({
       {needsKey && !token && onCreateKey ? (
         <div className="flex flex-col gap-1.5" data-testid="create-and-fill">
           <Button type="button" icon={<KeyRound />} className="self-start" loading={creatingKey} onClick={onCreateKey}>
-            Create a key and fill it in
+            Use an API key instead
           </Button>
           <p className="text-body-xs text-03">A key is shown in full only once, when it is made. This makes a new one and puts it in the config below.</p>
           {createKeyError ? <p className="text-body-xs text-danger-700">{createKeyError}</p> : null}

@@ -58,7 +58,7 @@ describe("the full key stays in memory (owner rule)", () => {
       </QueryClientProvider>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Create a key and fill it in" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Use an API key instead" }));
     await waitFor(() => expect(document.body.textContent).toContain(TOKEN));
     expect(account.createCredential).toHaveBeenCalledWith(AGENT, { name: "Key 1", scopes: ["tools:call"] });
 

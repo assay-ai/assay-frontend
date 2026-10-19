@@ -92,7 +92,7 @@ describe("Use this tool: /connect?tools= preselects Only these tools", () => {
     expect(html).toMatch(/aria-label="Chosen tools"[\s\S]*get_weather/);
   });
 
-  it("puts Create a key and fill it in first, keeps Copy off while the snippet has a placeholder, and offers the URL alone", () => {
+  it("puts Use an API key instead first, keeps Copy off while the snippet has a placeholder, and offers the URL alone", () => {
     vi.stubEnv("NEXT_PUBLIC_MCP_URL", "https://mcp.example.com/");
     const url = toolsPrefillUrl("?tools=get_weather")!;
     const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={url} changing={false} onDone={() => undefined} /></Sheet>, [KEY]);
@@ -132,11 +132,11 @@ describe("the config tabs", () => {
     expect(ready).not.toContain(TEMPLATE_COPY_REASON);
   });
 
-  it("offer Create a key and fill it in under My own code only", () => {
+  it("offer Use an API key instead under My own code only (R-UI-8)", () => {
     const own = text(render(<McpConfigTabs token={null} keyPrefix={null} url="https://mcp.example.com/" client="other" onCreateKey={() => undefined} />));
-    expect(own).toContain("Create a key and fill it in");
+    expect(own).toContain("Use an API key instead");
     const proxy = text(render(<McpConfigTabs token={null} keyPrefix={null} url="https://mcp.example.com/" onCreateKey={() => undefined} />));
-    expect(proxy).not.toContain("Create a key and fill it in");
+    expect(proxy).not.toContain("Use an API key instead");
   });
 
   it("say Claude Desktop requires Node.js", () => {

@@ -817,7 +817,8 @@ function AgentCard({
         ) : null}
         <div className="flex flex-wrap items-center gap-3">
           <Button size="sm" variant={liveRows.length === 0 ? "primary" : "secondary"} icon={<Plus />} type="button" data-testid="new-credential" onClick={onNewKey}>
-            New key
+            {/* R-UI-8: an agent that only signs in through an app gets the API key as the alternative. */}
+            {liveRows.some((row) => row.key.issuedVia === "API_KEY") ? "New key" : "Use an API key instead"}
           </Button>
           {ended.length > 0 ? (
             <button type="button" className="text-label-13 text-02 hover:underline" onClick={() => setShowRevoked((v) => !v)} aria-expanded={showRevoked}>
