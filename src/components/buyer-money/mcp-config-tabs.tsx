@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { KeyRound } from "lucide-react";
 
+import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
@@ -76,6 +77,7 @@ export function McpConfigTabs({
   onCreateKey,
   creatingKey = false,
   createKeyError,
+  agentName,
 }: {
   token: string | null;
   keyPrefix?: string | null;
@@ -94,7 +96,11 @@ export function McpConfigTabs({
   onCreateKey?: () => void;
   creatingKey?: boolean;
   createKeyError?: string | null;
+  /** Named in the confirm before a key is created. */
+  agentName?: string | null;
 }) {
+  // A live key is made only after the confirm says so; Cancel makes nothing.
+  const [confirmCreate, setConfirmCreate] = React.useState(false);
   const placeholder = keyPlaceholder(keyPrefix);
   const [own, setOwn] = React.useState<McpClient>(clientProp ?? "claude-code");
   const client = clientProp ?? own;
@@ -120,11 +126,17 @@ export function McpConfigTabs({
     <div className="flex w-full min-w-0 flex-col gap-3">
       {needsKey && !token && onCreateKey ? (
         <div className="flex flex-col gap-1.5" data-testid="create-and-fill">
-          <Button type="button" icon={<KeyRound />} className="self-start" loading={creatingKey} onClick={onCreateKey}>
+          <Button type="button" icon={<KeyRound />} className="self-start" loading={creatingKey} onClick={() => setConfirmCreate(true)}>
             Use an API key instead
           </Button>
           <p className="text-body-xs text-03">A key is shown in full only once, when it is made. This makes a new one and puts it in the config below.</p>
           {createKeyError ? <p className="text-body-xs text-danger-700">{createKeyError}</p> : null}
+          <CreateKeyConfirm
+            open={confirmCreate}
+            onOpenChange={setConfirmCreate}
+            agentName={agentName}
+            onCreate={onCreateKey}
+          />
         </div>
       ) : null}
       {needsKey && !token ? (
@@ -273,5 +285,35 @@ function NextSteps({ client }: { client: McpClient }) {
         &quot;{FREE_EXAMPLE_PROMPT}&quot;
       </p>
     </div>
+  );
+}
+
+/** The confirm before "Use an API key instead" creates a live key. */
+export function createKeyConfirmTitle(agentName?: string | null): string {
+  return `Create an API key for ${agentName?.trim() || "this agent"}?`;
+}
+export const CREATE_KEY_CONFIRM_TEXT = "It can call tools with this agent's limits; you see it once.";
+
+function CreateKeyConfirm({
+  open,
+  onOpenChange,
+  agentName,
+  onCreate,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  agentName?: string | null;
+  onCreate: () => void;
+}) {
+  return (
+    <ConfirmSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      tone="primary"
+      title={createKeyConfirmTitle(agentName)}
+      description={CREATE_KEY_CONFIRM_TEXT}
+      confirmLabel="Create"
+      onConfirm={onCreate}
+    />
   );
 }

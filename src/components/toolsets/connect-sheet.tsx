@@ -634,6 +634,7 @@ export function ConnectBody({
               onClientChange={setClientRemembered}
               onCopy={() => handOut()}
               onCreateKey={effectiveAgentId ? () => createKey.mutate() : undefined}
+              agentName={agent?.label ?? null}
               creatingKey={createKey.isPending}
               createKeyError={createKey.isError ? createKeyErrorText(createKey.error) : null}
             />

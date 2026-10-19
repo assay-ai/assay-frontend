@@ -118,6 +118,7 @@ export function ConnectView() {
           onClientChange={setClient}
           onCopy={(c) => agent && recordConnect.mutate({ url: urlForClient(c, url), serverName: "assay", client: c })}
           onCreateKey={agent ? () => create.mutate() : undefined}
+          agentName={agent?.label ?? null}
           creatingKey={create.isPending}
           createKeyError={create.isError ? createKeyErrorText(create.error) : null}
         />
