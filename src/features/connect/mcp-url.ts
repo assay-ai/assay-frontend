@@ -1,3 +1,5 @@
+import { assayMcpRun } from "@/features/buyer-money/mcp-config";
+
 import { mcpHost } from "./mcp-endpoint";
 
 /**
@@ -286,7 +288,10 @@ export const SIGNED_OUT_TOOL_LENGTH = 48;
 export const SIGN_IN_TOOL = "assay_sign_in";
 /** `agent_connect_urls.server_name` is varchar(56). */
 export const MAX_SERVER_NAME_LENGTH = 56;
-export const SIGN_IN_HINT = "Sign in first (`assay-mcp login`) to allow a longer name.";
+/** The shared vector text with `{run}` filled in by the pinned scoped command. */
+export function signInHint(): string {
+  return "Sign in first (`{run} login`) to allow a longer name.".replace("{run}", assayMcpRun());
+}
 
 const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
 

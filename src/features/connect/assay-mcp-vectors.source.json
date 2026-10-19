@@ -1,10 +1,10 @@
 {
-  "ref": "1953650f5c9c2b32f4ad655e33946bb53cfa68df",
-  "commit": "1953650f5c9c2b32f4ad655e33946bb53cfa68df",
+  "ref": "d30beb6a31e394c72ce4787cc55ae3d337c1b961",
+  "commit": "d30beb6a31e394c72ce4787cc55ae3d337c1b961",
   "files": {
     "src/features/connect/server-name.vectors.json": {
       "from": "vectors/server-names.json",
-      "sha256": "061ba07be7e7fe8a75d0a47e881a5c059ea5b3feb8a3d612cb8f7e682757d79b"
+      "sha256": "aca2ed0234bcf7fc338c00b0f343a41bc26f8867aad7ba42ba12261774c7ddd8"
     },
     "src/features/connect/commands.vectors.json": {
       "from": "vectors/commands.json",
