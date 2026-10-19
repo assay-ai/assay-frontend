@@ -302,7 +302,7 @@ describe("the client tabs", () => {
     expect(out).toContain("Claude Code Codex Cursor VS Code Windsurf Gemini CLI Claude Desktop claude.ai ChatGPT My own code");
     // Phone: the tab row wraps rather than clipping the last tab.
     expect(html).toContain("flex-wrap");
-    expect(out).toContain("claude mcp add --scope user assay -- npx -y @assay-ai/mcp@1.2.3 --name assay");
+    expect(out).toContain("claude mcp add --scope user assay -- npx -y @goassay-ai/mcp@1.2.3 --name assay");
     expect(out).not.toContain("assay_sk_live_full_key");
     expect(out).not.toContain("mcp-remote");
   });

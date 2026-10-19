@@ -32,7 +32,7 @@ const originOf = (value) => {
 };
 
 /**
- * The pinned `@assay-ai/mcp` version every install command carries (R-MCP-14).
+ * The pinned `@goassay-ai/mcp` version every install command carries (R-MCP-14).
  * Inlined at build time; the build fails when it is unset or not an exact
  * version, so an unpinned command can never ship.
  */

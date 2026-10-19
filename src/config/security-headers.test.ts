@@ -5,6 +5,9 @@ import { describe, expect, it } from "vitest";
 
 /* Frontend review 2026-10-15, F2: the headers `next.config.js` serves on every route. */
 const require = createRequire(import.meta.url);
+// next.config.js refuses to load without the MCP host (and the pinned version).
+process.env.NEXT_PUBLIC_MCP_URL ??= "https://mcp.example.com/";
+process.env.NEXT_PUBLIC_ASSAY_MCP_VERSION ??= "1.2.3";
 
 async function headersFor(nodeEnv: string): Promise<Record<string, string>> {
   const previous = process.env.NODE_ENV;

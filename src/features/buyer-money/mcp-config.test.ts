@@ -118,7 +118,7 @@ describe("install commands equal the proxy's vectors, byte for byte", () => {
       for (const text of outputs) {
         expect(text).not.toMatch(FORBIDDEN);
       }
-      expect(installText(installCommand(client, input))).toContain(`@assay-ai/mcp@${V}`);
+      expect(installText(installCommand(client, input))).toContain(`@goassay-ai/mcp@${V}`);
     }
   });
 
@@ -127,13 +127,13 @@ describe("install commands equal the proxy's vectors, byte for byte", () => {
     const link = new URL(cursorDeeplink(input));
     expect(link.searchParams.get("name")).toBe("assay-weather");
     const config = JSON.parse(Buffer.from(link.searchParams.get("config")!, "base64").toString("utf8"));
-    expect(config).toEqual({ command: "npx", args: ["-y", "@assay-ai/mcp@1.2.3", "--url", input.url, "--name", "assay-weather"] });
+    expect(config).toEqual({ command: "npx", args: ["-y", "@goassay-ai/mcp@1.2.3", "--url", input.url, "--name", "assay-weather"] });
   });
 
   it("the VS Code link decodes to name, type, command and args", () => {
     const input = { V: "1.2.3", url: "https://mcp.assay.ai/", name: "assay" };
     const decoded = JSON.parse(decodeURIComponent(vscodeDeeplink(input).slice("vscode:mcp/install?".length)));
-    expect(decoded).toEqual({ name: "assay", type: "stdio", command: "npx", args: ["-y", "@assay-ai/mcp@1.2.3", "--name", "assay"] });
+    expect(decoded).toEqual({ name: "assay", type: "stdio", command: "npx", args: ["-y", "@goassay-ai/mcp@1.2.3", "--name", "assay"] });
   });
 
   it("refuses a version that is not exact", () => {
@@ -147,7 +147,7 @@ describe("the pinned version comes from the build environment", () => {
   it("reads NEXT_PUBLIC_ASSAY_MCP_VERSION", () => {
     vi.stubEnv("NEXT_PUBLIC_ASSAY_MCP_VERSION", "2.0.1");
     expect(assayMcpVersion()).toBe("2.0.1");
-    expect(installCommand("codex", { url: "https://mcp.assay.ai/", name: "assay" })).toContain("@assay-ai/mcp@2.0.1");
+    expect(installCommand("codex", { url: "https://mcp.assay.ai/", name: "assay" })).toContain("@goassay-ai/mcp@2.0.1");
     vi.unstubAllEnvs();
   });
 
@@ -211,7 +211,7 @@ describe("hostile input produces no command and no deeplink", () => {
 
   it("quotes the hostile-but-allowed words as the vectors say", () => {
     for (const q of vectors.quoting.cases) {
-      expect(addOneLiner(q.word, "claude-code", "1.2.3")).toBe(`npx -y @assay-ai/mcp@1.2.3 add ${q.quoted} --client claude-code`);
+      expect(addOneLiner(q.word, "claude-code", "1.2.3")).toBe(`npx -y @goassay-ai/mcp@1.2.3 add ${q.quoted} --client claude-code`);
     }
   });
 });

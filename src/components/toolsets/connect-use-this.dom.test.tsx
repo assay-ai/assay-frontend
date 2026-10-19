@@ -77,7 +77,7 @@ describe("Use this ...: the URL and the name (spec 9.3)", () => {
 
   it("shows the add one-liner for a URL other than /, and not for /", () => {
     expect(text(render(`${HOST}/c/weather`))).toContain(`add ${HOST}/c/weather --client claude-code`);
-    expect(text(render(`${HOST}/`))).not.toContain("@assay-ai/mcp@1.2.3 add");
+    expect(text(render(`${HOST}/`))).not.toContain("@goassay-ai/mcp@1.2.3 add");
   });
 });
 
@@ -125,7 +125,7 @@ describe("a typed name that does not fit", () => {
         <McpConfigTabs guide token={null} url={`${HOST}/c/weather`} client={id} serverName="assay-weather-forecast-and-alerts-for-everyone" nameRefused />,
       );
       expect(html, id).toContain(NO_COMMAND_TEXT);
-      expect(html, id).not.toMatch(/npx -y @assay-ai\/mcp@|cursor:\/\/|vscode:|mcpServers|REST_OF_YOUR_KEY/);
+      expect(html, id).not.toMatch(/npx -y @goassay-ai\/mcp@|cursor:\/\/|vscode:|mcpServers|REST_OF_YOUR_KEY/);
       // Every Copy of a command or config is off; copying the bare URL ("Copy the URL only", the URL chip) carries no name.
       const enabledCopies = [...html.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)].filter(
         ([, attrs, inner]) => !attrs!.includes('disabled=""') && !attrs!.includes('data-testid="copy-url-only"') && !attrs!.includes(`title="${HOST}/c/weather"`) && /Copy/.test(inner!),
