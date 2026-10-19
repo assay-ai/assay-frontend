@@ -28,13 +28,19 @@ if (!checkout || !ref) {
   process.exit(2);
 }
 
+// A ref is a tag or a commit: never an option (a leading "-") and never a character git treats specially.
+if (!/^[A-Za-z0-9._/-]+$/.test(ref) || ref.startsWith("-")) {
+  console.error(`refusing the ref "${ref}": use a tag or commit made of letters, digits, ".", "_", "/" and "-", not starting with "-"`);
+  process.exit(2);
+}
+
 const git = (...args) => execFileSync("git", ["-C", path.resolve(checkout), ...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 const root = path.resolve(__dirname, "..");
-const commit = git("rev-parse", "--verify", `${ref}^{commit}`).trim();
+const commit = git("rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`).trim();
 
 const files = {};
 for (const [from, to] of Object.entries(FILES)) {
-  const text = git("show", `${ref}:${from}`);
+  const text = git("show", "--end-of-options", `${ref}:${from}`);
   JSON.parse(text);
   fs.writeFileSync(path.join(root, to), text);
   files[to] = { from, sha256: crypto.createHash("sha256").update(text, "utf8").digest("hex") };

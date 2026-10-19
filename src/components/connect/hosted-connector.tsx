@@ -30,7 +30,7 @@ export function HostedConnector({ client, url, secondUrl = false, onCopy }: { cl
     <div className="flex min-w-0 flex-col gap-2" data-testid="hosted-connector">
       <h3 className="text-label-sm text-01">Add Assay to {app}</h3>
       <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-body-13 text-02">
-        <li>Open Settings › Connectors › Add custom connector.</li>
+        <li>{client === "claude-ai" ? "Open Settings › Connectors › Add custom connector." : `Open ${app}'s settings, find Connectors, and add a custom connector.`}</li>
         <li className="min-w-0">
           <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <span>Paste:</span>

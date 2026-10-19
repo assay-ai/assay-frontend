@@ -17,7 +17,8 @@
  * Chrome must refuse every one. The same load reports scripts added at run
  * time without integrity, and fails on a CSP or integrity violation. It needs
  * Chrome (`CHROME_BIN`, or a standard install): without it the step is skipped
- * with a message, unless `CI` is set, where a missing Chrome fails.
+ * with a message, unless `CI` is set, where a missing Chrome fails. Needs
+ * Node.js 22+ (the global `WebSocket`).
  *
  * Run: node scripts/check-built-headers.js [outDir]   (after `pnpm build`)
  */
@@ -277,9 +278,14 @@ async function browserCheck(outDir, chrome) {
       const children = frameTree.childFrames ?? [];
       for (const target of [...strict, "/frame-control"]) {
         const child = children.find((c) => c.frame.name === target);
-        const blocked = !child || child.frame.url.startsWith("chrome-error:") || child.frame.unreachableUrl;
+        // A frame that is missing is a failure, not a refusal: only a browser error page counts as refused.
+        if (!child) {
+          problems.push(`${label}: the frame for ${target} is missing, so nothing was tested`);
+          continue;
+        }
+        const blocked = child.frame.url.startsWith("chrome-error:") || Boolean(child.frame.unreachableUrl);
         if (target === "/frame-control") {
-          if (blocked && label.startsWith("other")) problems.push(`iframe test: the control page was refused too, so the test proves nothing (${label})`);
+          if (blocked) problems.push(`iframe test: the control page was refused too, so the test proves nothing (${label})`);
         } else if (!blocked) problems.push(`${label}: ${target} loaded in an iframe`);
       }
     };
