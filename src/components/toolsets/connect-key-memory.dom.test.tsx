@@ -75,6 +75,24 @@ describe("the full key stays in memory (owner rule)", () => {
   });
 });
 
+describe("the no-key line (BUG-M1-04)", () => {
+  it("shows under My own code only", async () => {
+    window.localStorage.setItem(`assay.connect.client.${AGENT}`, "other");
+    render(
+      <QueryClientProvider client={client()}>
+        <Sheet open>
+          <ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} />
+        </Sheet>
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("button", { name: "Use an API key instead" });
+    expect(document.body.textContent).toContain("My agent has no key yet. Create one below");
+    fireEvent.click(screen.getByRole("radio", { name: "Claude Code" }));
+    await waitFor(() => expect(document.body.textContent).not.toContain("has no key yet"));
+    window.localStorage.clear();
+  });
+});
+
 describe("Copy the URL only (review m4)", () => {
   it("copies the URL without a key and counts as handing it out", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);

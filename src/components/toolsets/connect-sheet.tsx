@@ -596,7 +596,7 @@ export function ConnectBody({
 
         {url && !blocked ? (
           <div className="flex min-w-0 flex-col gap-2">
-            <KeyLine prefix={keyPrefix} keyName={keyName} agentName={agent?.label ?? null} full={Boolean(created)} />
+            <KeyLine prefix={keyPrefix} keyName={keyName} agentName={agent?.label ?? null} full={Boolean(created)} client={client} />
             {created ? (
               <p className="text-body-xs text-03">
                 {newKeyPaysNote(effectiveAgentId ? payingKeyName(data.readiness[effectiveAgentId]) : null)}
@@ -1002,8 +1002,10 @@ export function ResultLine({
   );
 }
 
-function KeyLine({ prefix, keyName, agentName, full }: { prefix: string | null; keyName: string | null; agentName: string | null; full: boolean }) {
+function KeyLine({ prefix, keyName, agentName, full, client }: { prefix: string | null; keyName: string | null; agentName: string | null; full: boolean; client: McpClient }) {
   if (!prefix) {
+    // Only My own code carries a key; the other clients sign in, so "no key" says nothing about them.
+    if (client !== "other") return null;
     return <p className="text-body-13 text-02">{agentName ?? "This agent"} has no key yet. Create one below: the config then carries it.</p>;
   }
   const mode = keyMode(prefix);
