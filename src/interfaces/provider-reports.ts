@@ -78,8 +78,7 @@ export interface ProviderEarningsFigures {
    *   the price is still held in the buyer's escrow, and it is paid once the
    *   buyer signs a replacement voucher.
    * - `uncollected` — a buyer debt written off after 30 days: not paid, but the
-   *   buyer still owes it and the provider is paid if it settles later (or an
-   *   older call absorbed before buyer debt existed, which nobody owes).
+   *   buyer still owes it and the provider is paid if it settles later.
    */
   forfeited?: Money | null;
   forfeitedCalls?: number;
