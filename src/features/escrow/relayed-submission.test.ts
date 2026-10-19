@@ -182,7 +182,8 @@ submitters,
     );
 
     // The wallet is handed the server's own request object, not a rebuild.
-    expect(signTypedData).toHaveBeenCalledWith(transaction);
+    // …with the Privy confirmation always shown for SetLimits (R-WEB-5).
+    expect(signTypedData).toHaveBeenCalledWith(transaction, { showWalletUIs: true });
     const [body] = SET_LIMITS.mock.calls[0];
     expect(body.signature).toBe(SIGNATURE);
     expect(body.nonce).toBe("0");
