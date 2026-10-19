@@ -17,7 +17,7 @@ describe("client picker", () => {
     render(<ClientPicker value="claude-code" onChange={() => undefined} />);
     expect(screen.getByText("Which app do you use?")).toBeTruthy();
     expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual([
-      "Claude Code", "Codex CLI", "Cursor", "VS Code", "Windsurf", "Gemini CLI", "Claude Desktop", "claude.ai", "ChatGPT", "My own code",
+      "Claude Code", "Codex", "Cursor", "VS Code", "Windsurf", "Gemini CLI", "Claude Desktop", "claude.ai", "ChatGPT", "My own code",
     ]);
   });
 });
@@ -31,6 +31,9 @@ describe("one action per client", () => {
     expect(body()).toContain("Needs Node.js 20 or later.");
     expect(body()).toContain("Use Assay to find a free tool for the weather, then get the weather in Lisbon.");
     expect(body()).not.toContain("assay_sk_live_");
+    // Spec 9.2 step 2 copy, word for word.
+    expect(body()).toContain("Start Claude Code. In the tool list you'll see \"assay_sign_in\". Ask Claude to \"sign in to Assay\"");
+    expect(body()).toContain("Try it — ask Claude:");
   });
 
   it("claude.ai shows https://…/?free=1 and the toggle", () => {
