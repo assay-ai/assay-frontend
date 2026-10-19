@@ -90,8 +90,8 @@ describe("the demo clock: one session stays coherent", () => {
     const fixtures = await load();
     const base = fixtures.demoSessionBase();
     const approvals = (call(fixtures, "GET", "/operator/approvals", { status: "PENDING" }) as { items: OperatorApproval[] }).items;
-    const lattice = approvals.find((a) => a.action === "slash.suspend");
-    expect(lattice && isLiveApproval(lattice, base + 6 * 3_600_000)).toBe(true);
+    const payBack = approvals.find((a) => a.action === "slash.compensated");
+    expect(payBack && isLiveApproval(payBack, base + 6 * 3_600_000)).toBe(true);
   });
 
   it("answers a pending request past its deadline as expired, as the API does", async () => {
@@ -100,7 +100,7 @@ describe("the demo clock: one session stays coherent", () => {
     try {
       const approvals = (call(fixtures, "GET", "/operator/approvals") as { items: OperatorApproval[] }).items;
       expect(approvals.filter((a) => a.status === "PENDING")).toEqual([]);
-      expect(approvals.find((a) => a.id === "apr-suspend-1")?.status).toBe("EXPIRED");
+      expect(approvals.find((a) => a.id === "apr-comp-1")?.status).toBe("EXPIRED");
     } finally {
       vi.useRealTimers();
     }

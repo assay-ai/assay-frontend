@@ -1,5 +1,5 @@
 import type { StatusTimelineStep } from "@/components/patterns/status-timeline";
-import { caseChainStageOf, disputesOnChain } from "@/features/provider-slash-case/chain-stage";
+import { caseChainStageOf } from "@/features/provider-slash-case/chain-stage";
 import type { Money } from "@/interfaces/api";
 import type { OperatorCaseBrief, OperatorIdentity, SlashProposalStatus } from "@/interfaces/operator";
 import { formatMoney } from "@/utils/money";
@@ -7,7 +7,7 @@ import { DISPUTE_TIMEOUT_SECONDS } from "@/libs/chains/evm/stake-slashes/abi";
 
 import { DISPUTE_RED_FROM_DAY, disputeUrgency } from "./inbox";
 import { capabilitiesFor, checkAction, rolesPhrase, type ConsoleAction } from "./roles";
-import { asProposalStatus, isLegalInStatus, may, suspendIsTwoPerson } from "./state";
+import { asProposalStatus, isLegalInStatus, may } from "./state";
 import { askLabel } from "./why-not";
 
 /**
@@ -324,11 +324,9 @@ export function caseTimelineSteps(
 // ── The next step ───────────────────────────────────────────────────────────
 
 export type CaseActionId =
-  | "suspend"
   | "rule"
   | "cancel"
   | "compensate"
-  | "sweep"
   | "block"
   | "approve"
   | "open-request"
@@ -343,7 +341,7 @@ export interface CaseNextStep {
   description: string;
   /** The primary action, when `kind` is "action". */
   action: CaseActionId | null;
-  /** A quiet action next to a waiting card (e.g. Suspend while the window is open). */
+  /** A quiet action next to a waiting card. */
   secondary: CaseActionId | null;
   /** Money moved that should not have: drawn as an alert, never a calm card. */
   alert?: boolean;
@@ -354,12 +352,6 @@ export interface CaseNextStep {
 }
 
 export interface CaseAuthority {
-  /**
-   * May suspend: role, status and authority limit all allow it. `open` is the
-   * status half alone — the penalty can still be suspended by someone — which
-   * is when a "who can" line is worth drawing.
-   */
-  suspend: { allowed: boolean; open: boolean; twoPerson: boolean; reason: string | null };
   rule: boolean;
   cancel: boolean;
   compensate: boolean;
@@ -378,29 +370,9 @@ export function caseAuthority(
   facts: CaseFacts,
 ): CaseAuthority {
   const caps = capabilitiesFor(identity.roles);
-  const penalty: Money = brief.case.proposal.penaltyAmount;
   const status = facts.status;
-  // Role and authority limit: the same check the Home banner reads.
-  const check = checkAction(identity, "suspend", penalty);
-  /*
-    EVM: the backend refuses an S-1 suspension (SLASH_ARBITER_RULES_ON_CHAIN,
-    review N-2). Only the arbiter's cancelSlash stops an on-chain penalty, so
-    suspend is never offered there.
-  */
-  const ruledOnChain = disputesOnChain(brief.case.proposal.clocks);
-  const legal =
-    !ruledOnChain &&
-    Boolean(status && isLegalInStatus("suspend", status)) &&
-    facts.stage !== "executed" &&
-    facts.stage !== "cancelled";
-  const suspendReason = ruledOnChain
-    ? "This penalty is on chain: only the arbiter's cancel stops it, so it cannot be suspended."
-    : !legal
-      ? "This penalty can no longer be suspended."
-      : check.why;
 
   return {
-    suspend: { allowed: legal && check.allowed, open: legal, twoPerson: status ? suspendIsTwoPerson(status) : false, reason: suspendReason },
     rule: caps.rule,
     cancel: may(identity.roles, "cancel") && facts.stage === "cancel-requested" && !facts.nothingOnChain && !facts.executedWhileCancelWaited,
     compensate: may(identity.roles, "compensate") && status !== null && isLegalInStatus("compensate", status),
@@ -429,7 +401,6 @@ export function caseNextStep(
   authority: CaseAuthority,
   format: (iso: string) => string,
 ): CaseNextStep {
-  const suspendSecondary = authority.suspend.allowed ? ("suspend" as const) : null;
   if (facts.executedWhileCancelWaited && authority.recordExecution) {
     return {
       kind: "action",
@@ -547,7 +518,7 @@ export function caseNextStep(
         title: "Dispute window open",
         description: `The provider can dispute until ${when(facts.executableAt, format)}; undisputed, it becomes executable then.`,
         action: null,
-        secondary: suspendSecondary,
+        secondary: null,
         until: facts.executableAt,
       };
     case "upheld":
@@ -556,7 +527,7 @@ export function caseNextStep(
         title: "Upheld by the arbiter",
         description: `Anyone can execute it from ${when(facts.executableAt, format)}.`,
         action: null,
-        secondary: suspendSecondary,
+        secondary: null,
         until: facts.executableAt,
       };
     case "executable":
@@ -575,7 +546,7 @@ export function caseNextStep(
           title: `Not on chain after ${daysText(facts.notOnChainForDays)}`,
           description: "Its dates were computed for when it lands, and they have passed: nothing can be executed until it is on chain.",
           action: null,
-          secondary: suspendSecondary,
+          secondary: null,
           until: null,
         };
       }
@@ -584,7 +555,7 @@ export function caseNextStep(
         title: "Going on chain",
         description: "The provider's dispute window starts once it lands.",
         action: null,
-        secondary: suspendSecondary,
+        secondary: null,
         until: null,
       };
     case "executed":
@@ -636,8 +607,6 @@ export function caseNextStep(
 /** What each two-person request on a penalty is called, and what it does. */
 const REQUEST_WORDS: Record<string, { noun: string; does: string }> = {
   "slash.compensated": { noun: "pay-back", does: "pay the penalty back into the provider's stake" },
-  "slash.suspend": { noun: "suspension", does: "suspend this penalty" },
-  "slash.sweep": { noun: "fleet sweep", does: "decide every case with the same defect the way this one was decided" },
   "slash.record_execution": { noun: "execution record", does: "record the execution the chain made while the cancel waited" },
   "slash.repropose": { noun: "re-proposal", does: "propose this upheld penalty on chain again" },
 };
@@ -789,7 +758,7 @@ function cancelNextStep(facts: CaseFacts, authority: CaseAuthority, format: (iso
     ? {
         kind: "action",
         title: "Get the cancel signed",
-        description: `Suspended here; on chain it stands until the arbiter key signs the cancel. ${cancelDeadlineSentence(facts, format)}`,
+        description: `Cancelled here; on chain it stands until the arbiter key signs the cancel. ${cancelDeadlineSentence(facts, format)}`,
         action: "cancel",
         secondary: null,
         until: deadline,
@@ -856,7 +825,7 @@ export interface ManualActionCopy {
 export function manualActionCopy(
   kind: ManualActionKind,
   amounts: { penalty: string; applied: string | null },
-  /** Closed here with no penalty (overturned, suspended, waived): the stake was owed nothing. */
+  /** Closed here with no penalty (overturned, cancelled, waived): the stake was owed nothing. */
   closed = true,
 ): ManualActionCopy {
   switch (kind) {

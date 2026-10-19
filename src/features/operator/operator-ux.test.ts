@@ -118,9 +118,9 @@ describe("the Needs-you groups", () => {
   it("says who must approve and what changes", () => {
     expect(approvalNeeds("A-10")).toBe("a second Lead adjudicator");
     expect(approvalNeeds("A-12")).toBe("a second Admin");
-    expect(approvalNeeds("S-1")).toBe("a second Adjudicator or Lead adjudicator");
+    expect(approvalNeeds("S-17")).toBe("a second Adjudicator or Lead adjudicator");
     expect(approvalChanges(approval())).toEqual([{ label: "Account", before: "Blocked", after: "Can use Assay again" }]);
-    expect(approvalChanges(approval({ action: "slash.suspend", code: "S-1" }))).toEqual([{ label: "Penalty", before: "Stands", after: "Cancelled" }]);
+    expect(approvalChanges(approval({ action: "slash.repropose", code: "S-17" }))).toEqual([{ label: "On chain", before: "Cancelled record", after: "Proposed again" }]);
     expect(approvalTargetId(approval())).toBe("blk-1");
   });
 });
@@ -202,8 +202,8 @@ describe("roles in plain words", () => {
   it("warns when a removal leaves a two-person action without approvers", () => {
     const team = [operator("jordan", ["ADJL"]), operator("riley", ["ADJL"]), operator("dan", ["OPS_ADMIN"])];
     expect(removalWarnings(team, "jordan")).toEqual([
-      "Only one other Adjudicator or Lead adjudicator would be left, so their own requests for suspensions of upheld penalties, bulk decisions, and re-proposals of upheld penalties could not be approved.",
       "Only one other Lead adjudicator or Treasury would be left, so their own requests for provider compensations and records of executions made while a cancel waited could not be approved.",
+      "Only one other Adjudicator or Lead adjudicator would be left, so their own requests for re-proposals of upheld penalties could not be approved.",
       "Only one other Lead adjudicator would be left, so their own requests for lifting account blocks and on-chain blocks could not be approved.",
     ]);
     // A serial comma, so "raised roles and limits" reads as one item (merge audit 2026-10-16, finding 5).
@@ -251,7 +251,6 @@ function brief(overrides: {
   disputedAt?: string | null;
   parts?: number;
   /** False for a Solana case; absent is an EVM case, ruled on chain only. */
-  disputeOnChain?: boolean;
 }): OperatorCaseBrief {
   const proposedAt = iso(NOW - 2 * DAY);
   return {
@@ -272,13 +271,10 @@ function brief(overrides: {
           proposedAt,
           notifiedAt: proposedAt,
           acknowledgedAt: null,
-          respondByAt: null,
-          platformDecisionDueAt: null,
           earliestExecutionAt: overrides.executableAt ?? iso(NOW + DAY),
           chainDisputedAt: overrides.disputedAt ?? null,
           secondsRemaining: null,
           runningClock: "NONE",
-          disputeOnChain: overrides.disputeOnChain ?? true,
           disputeBy: null,
           chainExecutableAt: null,
           chainStatus: "NONE",
@@ -302,10 +298,8 @@ function brief(overrides: {
       priorWindows: [],
       failuresByRule: [],
     },
-    dispute: null,
     timeline: [],
     restoration: [],
-    requiresSecondSignature: false,
     chainStatus: overrides.chainStatus ?? "PENDING",
     chainExecutableAt: overrides.executableAt === undefined ? iso(NOW + DAY) : overrides.executableAt,
     chainDisputedParts: overrides.parts ?? 0,
@@ -367,30 +361,10 @@ describe("the next step for this operator", () => {
     });
   });
 
-  it("offers Suspend quietly while the window is open, and hides it above the authority limit", () => {
-    // A Solana case: an EVM one is never suspended (below).
-    const b = brief({ disputeOnChain: false });
-    const facts = caseFacts(b, NOW);
-    expect(caseNextStep(facts, caseAuthority(b, lead, facts), fmt)).toMatchObject({ kind: "waiting", secondary: "suspend" });
-    const sreAuthority = caseAuthority(b, sre, facts);
-    expect(sreAuthority.suspend.allowed).toBe(false);
-    expect(sreAuthority.suspend.reason).toMatch(/authority/);
-    expect(caseNextStep(facts, sreAuthority, fmt).secondary).toBeNull();
-  });
-
-  it("makes a suspension of an upheld penalty two-person", () => {
-    const b = brief({ status: "UPHELD", disputedAt: iso(NOW - 5 * DAY), disputeOnChain: false });
-    expect(caseAuthority(b, lead, caseFacts(b, NOW)).suspend).toMatchObject({ allowed: true, twoPerson: true });
-  });
-
-  // Review N-2: the backend refuses an S-1 suspension of an EVM case; only the arbiter's cancel stops it.
-  it("never offers Suspend on an EVM case", () => {
+  it("offers no quiet action while the window is open: only the arbiter's cancel stops a penalty", () => {
     const b = brief({});
     const facts = caseFacts(b, NOW);
-    const authority = caseAuthority(b, lead, facts);
-    expect(authority.suspend.allowed).toBe(false);
-    expect(authority.suspend.reason).toMatch(/arbiter's cancel/);
-    expect(caseNextStep(facts, authority, fmt).secondary).toBeNull();
+    expect(caseNextStep(facts, caseAuthority(b, lead, facts), fmt)).toMatchObject({ kind: "waiting", secondary: null });
   });
 
   it("asks for the cancel signature when one is waiting", () => {
@@ -514,15 +488,15 @@ describe("activity sentences", () => {
     expect(
       activityText(activitySentence(entry({ code: "A-10", approverSubject: "dan@", reasonCode: "KEY_ROTATED" }), names)),
     ).toBe("Jordan lifted the block on Wallet 0x9f3C…F36c (Key rotated), approved by Dan.");
-    const penalty = activitySentence(entry({ code: "S-1", targetType: "slash_proposal", targetId: "p1" }), { ...names, target: () => null });
+    const penalty = activitySentence(entry({ code: "S-5", targetType: "slash_proposal", targetId: "p1" }), { ...names, target: () => null });
     // Not yet read: a short id, never the vague "a penalty".
     expect(penalty.target).toBe("penalty p1");
     expect(penalty.href).toBe("/operator/cases/view?id=p1");
-    const named = activitySentence(entry({ code: "S-1", targetType: "slash_proposal", targetId: "p1" }), {
+    const named = activitySentence(entry({ code: "S-5", targetType: "slash_proposal", targetId: "p1" }), {
       ...names,
       target: () => "Northwind Geo's $28.47 penalty",
     });
-    expect(activityText(named)).toBe("Jordan suspended Northwind Geo's $28.47 penalty (Leaked key).");
+    expect(activityText(named)).toBe("Jordan recorded the pay-back of Northwind Geo's $28.47 penalty (Leaked key).");
   });
 
   it("filters by kind", () => {

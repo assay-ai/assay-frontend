@@ -54,20 +54,22 @@ describe("two-person results tell the truth (top fix 1)", () => {
 
 describe("capability is explicit (top fix 2)", () => {
   const support = { roles: ["SRE", "SUP"] as OperatorRole[], authorityLimit: USD("0") };
+  const treasury = { roles: ["TRE"] as OperatorRole[], authorityLimit: USD("0") };
   const lead = { roles: ["ADJL"] as OperatorRole[], authorityLimit: USD("1000000000") };
   const admin = { roles: ["OPS_ADMIN"] as OperatorRole[], authorityLimit: USD("0") };
 
-  it("rules out money actions on a $0 limit, so the banner never promises Suspend to Support", () => {
-    expect(checkAction(support, "suspend")).toMatchObject({ allowed: false, limitOnly: true });
-    expect(checkAction(support, "suspend").why).toMatch(/authority limit is \$0/);
+  it("rules out money actions on a $0 limit, so the banner never promises a pay-back to Treasury", () => {
+    expect(checkAction(treasury, "compensate")).toMatchObject({ allowed: false, limitOnly: true });
+    expect(checkAction(treasury, "compensate").why).toMatch(/authority limit is \$0/);
+    expect(capabilitiesFor(treasury.roles, treasury.authorityLimit).can).not.toContain("compensate a provider");
+    // Without a limit given, the role alone decides (older callers).
+    expect(capabilitiesFor(treasury.roles).can).toContain("compensate a provider");
     expect(capabilitiesFor(support.roles, support.authorityLimit).can).toEqual(["block an account"]);
     expect(roleCanSentence(support)).toBe("You can block an account.");
-    // Without a limit given, the role alone decides (older callers).
-    expect(capabilitiesFor(support.roles).can).toContain("suspend a penalty");
   });
 
   it("names the amount when a penalty is above the limit", () => {
-    expect(checkAction({ roles: ["ADJ"], authorityLimit: USD("10000000") }, "suspend", USD("28470000")).why).toBe(
+    expect(checkAction({ roles: ["ADJ"], authorityLimit: USD("10000000") }, "upholdRefund", USD("28470000")).why).toBe(
       "It is $28.47, above your authority limit of $10.00.",
     );
   });
@@ -80,7 +82,7 @@ describe("capability is explicit (top fix 2)", () => {
 
   it("finds who can instead, with the same check", () => {
     const team = [op("jordan", "Jordan Blake", ["ADJL"]), op("sam", "Sam Reyes", ["SRE"], USD("0")), op("iris", "Iris Park", ["ADJ"], USD("10000000"))];
-    expect(whoCan("suspend", team, { amount: USD("28470000"), exceptId: "sam" })).toEqual(["Jordan Blake"]);
+    expect(whoCan("compensate", team, { amount: USD("28470000"), exceptId: "sam" })).toEqual(["Jordan Blake"]);
     expect(whoCan("block", team, { exceptId: "jordan" })).toEqual(["Sam Reyes"]);
   });
 
@@ -162,15 +164,6 @@ describe("the demo stage set follows what was done", () => {
     expect(pending.items.some((a) => a.id === answer.approvalId)).toBe(true);
   });
 
-  it("moves a suspended penalty on, and logs the reason that was picked", () => {
-    fixture("POST", `/operator/cases/${NORTHWIND_CASE}/suspend`)({}, { reasonCode: "PROPOSED_IN_ERROR", note: "The window overlapped our outage." });
-    const brief = fixture("GET", `/operator/cases/${NORTHWIND_CASE}`)() as { chainStatus: string; case: { proposal: { status: string } } };
-    expect(brief.case.proposal.status).toBe("OVERTURNED");
-    expect(brief.chainStatus).toBe("CANCEL_REQUESTED");
-    const log = fixture("GET", "/operator/override-log")({ targetId: NORTHWIND_CASE }) as { items: { reasonCode: string }[] };
-    expect(log.items[0]?.reasonCode).toBe("PROPOSED_IN_ERROR");
-  });
-
   it("takes an approved request off the waiting list and lifts its block", () => {
     fixture("POST", "/operator/approvals/apr-unblock-1/approve")();
     const pending = fixture("GET", "/operator/approvals")({ status: "PENDING" }) as { items: { id: string }[] };
@@ -212,23 +205,23 @@ describe("finding a penalty (round 2, top 2)", () => {
 });
 
 describe("roles described by what they can do (round 2, top 3)", () => {
-  it("never says Support suspends penalties outright: money actions carry the limit", () => {
-    const support = ROLE_PRESETS.find((p) => p.id === "support")!;
-    expect(support.description).toBe(roleDescription(["SRE", "SUP"]));
-    expect(support.description).toMatch(/suspends penalties up to its limit \(none at \$0\)/i);
-    expect(support.description).not.toMatch(/suspends penalties[,.]/i);
+  it("never says Treasury compensates providers outright: money actions carry the limit", () => {
+    const treasury = ROLE_PRESETS.find((p) => p.id === "treasury")!;
+    expect(treasury.description).toBe(roleDescription(["TRE"]));
+    expect(treasury.description).toMatch(/compensates providers up to its limit \(none at \$0\)/i);
+    expect(treasury.description).not.toMatch(/compensates providers[,.]/i);
     expect(roleDescription(["OPS_ADMIN"])).toMatch(/^Adds, changes and removes operators\. Approves/);
-    expect(support.description).toBe("Blocks accounts. Suspends penalties up to its limit (none at $0).");
+    expect(ROLE_PRESETS.find((p) => p.id === "support")!.description).toBe("Blocks accounts.");
   });
 
-  it("lists who can suspend only among those whose limit covers the penalty, and says so", () => {
+  it("lists who can uphold a refund only among those whose limit covers it, and says so", () => {
     const team = [
       { id: "a", roles: ["ADJ"] as OperatorRole[], status: "ACTIVE" as const, displayName: "Iris Park", subject: "iris@", authorityLimit: USD("250000000") },
       { id: "b", roles: ["ADJL"] as OperatorRole[], status: "ACTIVE" as const, displayName: "Jordan Blake", subject: "jordan@", authorityLimit: USD("1000000000") },
       { id: "c", roles: ["SRE", "SUP"] as OperatorRole[], status: "ACTIVE" as const, displayName: "Sam Reyes", subject: "sam@", authorityLimit: USD("0") },
     ];
-    expect(whoCan("suspend", team, { amount: USD("28470000") })).toEqual(["Iris Park", "Jordan Blake"]);
-    expect(whoCan("suspend", team, { amount: USD("300000000") })).toEqual(["Jordan Blake"]);
+    expect(whoCan("upholdRefund", team, { amount: USD("28470000") })).toEqual(["Iris Park", "Jordan Blake"]);
+    expect(whoCan("upholdRefund", team, { amount: USD("300000000") })).toEqual(["Jordan Blake"]);
     expect(whoCanSentence(["Jordan Blake"], "Lead adjudicator", "$300.00")).toBe(
       "Jordan Blake (Lead adjudicator, with an authority limit of at least $300.00).",
     );

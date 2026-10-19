@@ -58,7 +58,7 @@ describe("adding an operator: the authority limit (D25)", () => {
     expect(within(limits).queryAllByRole("radio", { checked: true })).toHaveLength(0);
 
     fireEvent.click(screen.getByRole("radio", { name: /^Adjudicator/ }));
-    expect(screen.getByText(/At \$0 they can't suspend a penalty or uphold a buyer's call-dispute refund, nor approve one\./)).toBeTruthy();
+    expect(screen.getByText(/At \$0 they can't uphold a buyer's call-dispute refund, nor approve one\./)).toBeTruthy();
     // Still nothing chosen after picking a role.
     expect(within(screen.getByRole("radiogroup", { name: "Authority limit" })).queryAllByRole("radio", { checked: true })).toHaveLength(0);
 
