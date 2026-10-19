@@ -26,7 +26,7 @@ import type { StakeDeployment } from "./stake-slashes/deployments";
 import { scanLogsChunked, type LogSource, type RawLog } from "./stake-slashes/scan";
 
 /**
- * The admin's settings on the X402Config contract: read from the pinned RPC,
+ * The admin's settings on the AssayConfig contract: read from the pinned RPC,
  * and the admin's calls built here, from what the operator typed.
  *
  * Nothing on this path goes through Assay's backend. The settings page exists
@@ -72,7 +72,7 @@ export type ConfigParamKey = (typeof CONFIG_PARAM_KEYS)[number];
 const PARAM_SET =
   "struct ParamSet { address treasury; address redeemer; uint64 unbondingPeriodSeconds; uint64 minimumStake; uint64 penaltyAmount; uint64 verifierDailyCap; uint16 takeRateBps; uint16 slashAgentBps; uint16 slashPlatformBps; uint16 slashCapBps; }";
 
-/** The admin's doors on X402Config — the only functions this page sends. */
+/** The admin's doors on AssayConfig — the only functions this page sends. */
 export const CONFIG_ADMIN_ABI = parseAbi([
   PARAM_SET,
   "function setPaused(bool value)",
