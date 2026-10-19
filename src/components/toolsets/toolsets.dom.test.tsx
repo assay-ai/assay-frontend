@@ -299,7 +299,7 @@ describe("the client tabs", () => {
   it("has the ten clients, Claude Code first with the pinned proxy install and no key", () => {
     const html = render(<McpConfigTabs token="assay_sk_live_full_key" url="https://mcp.example.com/" />);
     const out = text(html);
-    expect(out).toContain("Claude Code Codex CLI Cursor VS Code Windsurf Gemini CLI Claude Desktop claude.ai ChatGPT My own code");
+    expect(out).toContain("Claude Code Codex Cursor VS Code Windsurf Gemini CLI Claude Desktop claude.ai ChatGPT My own code");
     // Phone: the tab row wraps rather than clipping the last tab.
     expect(html).toContain("flex-wrap");
     expect(out).toContain("claude mcp add --scope user assay -- npx -y @assay-ai/mcp@1.2.3 --name assay");
