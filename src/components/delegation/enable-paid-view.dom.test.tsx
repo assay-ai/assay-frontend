@@ -190,9 +190,10 @@ describe("EnablePaidView", () => {
     // One plan, from the form and this device's clock; the server time only refuses.
     expect(page).toMatch(/enablePaidPlan\(\{\s*parsed,\s*serverTime: escrow\?\.serverTime,\s*receivedAtMs: money\.escrowQuery\.dataUpdatedAt,\s*localNowMs: nowMs,\s*\}\)/);
     // The steps come from the plan only: its ceiling and its expiry, both required by type.
-    expect(page).toMatch(/enablePaidSteps\(\{/);
-    expect(page).toMatch(/ceiling: plan\.ceiling,/);
-    expect(page).toMatch(/expiry: plan\.expiry,/);
+    // The whole call: nothing beside the plan can carry a ceiling, caps or expiry.
+    expect(page).toMatch(
+      /enablePaidSteps\(\{\s*money,\s*queryClient,\s*agentName: state\.agentLabel,\s*delegateAccount: state\.delegateAccount,\s*form: \{[^}]*\},\s*openingCaps,\s*plan,\s*\}\)/,
+    );
     expect(page).not.toMatch(/agentPaySteps|serverNowSeconds|pageExpiry|nowSeconds/);
     // The view shows the same expiry, and its refusal.
     expect(page).toMatch(/validUntil=\{plan\.ok \? plan\.validUntil : null\}/);
@@ -204,9 +205,9 @@ describe("EnablePaidView", () => {
     const page = readFileSync(resolve(__dirname, "../../app/(main)/agents/enable-paid/page.tsx"), "utf8");
     expect(page).toMatch(/const returnHref = enablePaidReturnHref\(credentialId\);/);
     expect(page).toMatch(/returnTo=\$\{encodeURIComponent\(returnHref\)\}/);
-    // thisPageHref (with its #key) only feeds the sign-in round trip.
-    expect([...page.matchAll(/thisPageHref\(\)/g)]).toHaveLength(1);
-    expect(page).toMatch(/loginHref\(\{ next: thisPageHref\(\) \}\)/);
+    // The sign-in round trip comes back the same way: the credential id, never the key.
+    expect(page).not.toMatch(/thisPageHref|location\.hash/);
+    expect(page).toMatch(/loginHref\(\{ next: \(credentialId && enablePaidReturnHref\(credentialId\)\) \|\| "\/agents\/enable-paid" \}\)/);
   });
 
   it("the route files import no analytics", () => {

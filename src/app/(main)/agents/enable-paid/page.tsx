@@ -22,7 +22,6 @@ import {
   parseEnablePaidCaps,
   planSignatures,
   takePaymentKey,
-  thisPageHref,
   type CapsDraft,
   type EnablePaidCredential,
 } from "@/features/delegation/enable-paid";
@@ -65,8 +64,8 @@ export default function EnablePaidPage() {
 
   const signedOut = ready && !authenticated;
   React.useEffect(() => {
-    if (signedOut) loadPage(loginHref({ next: thisPageHref() }));
-  }, [signedOut]);
+    if (signedOut) loadPage(loginHref({ next: (credentialId && enablePaidReturnHref(credentialId)) || "/agents/enable-paid" }));
+  }, [signedOut, credentialId]);
 
   const signedIn = ready && authenticated;
   const agentsQuery = useQuery({
@@ -176,8 +175,7 @@ export default function EnablePaidPage() {
         delegateAccount: state.delegateAccount,
         form: { perCall: draft.perCall, perDay: draft.perDay, days: parsed.ok ? parsed.days : 0 },
         openingCaps,
-        ceiling: plan.ceiling,
-        expiry: plan.expiry,
+        plan,
       })
     : [];
   const current = state.grant.kind === "none" ? null : state.grant.delegation;
