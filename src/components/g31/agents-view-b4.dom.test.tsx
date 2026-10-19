@@ -208,4 +208,106 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
     expect(html).toContain('data-testid="edit-access"');
     expect(html).not.toContain('data-testid="payment-limits"');
   });
+
+  it("a revoked row with a bound key while the chain read is pending: in view, may still be active, never stopped", () => {
+    const revoked = grantRow("g-old", "Assay app on the old laptop", DELEGATE_A, { revokedAt: "2026-10-18T00:00:00Z" });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, refetchOnMount: false } } });
+    client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] });
+    client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT });
+    client.setQueryData(["escrow", "debts"], { account: ACCOUNT, debts: [] });
+    client.setQueryData(["spend-policy"], null);
+    client.setQueryData(["chains"], { chains: [] });
+    client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [revoked] });
+    // No ["escrow-delegates", "live"]: the chain read has not answered.
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <AgentsView />
+      </QueryClientProvider>,
+    );
+    const out = text(html);
+    expect(html).toContain('data-testid="stranded-credential-row"');
+    expect(out).toContain("Assay app on the old laptop");
+    expect(out).toContain("Payment key: may still be active on chain (couldn't check)");
+    expect(out).not.toMatch(/Show \d+ revoked/);
+    expect(out).not.toContain("free tools only");
+  });
+
+  it("a revoked row with a bound key when the chain read failed: in view, may still be active, Check again", async () => {
+    const revoked = grantRow("g-old", "Assay app on the old laptop", DELEGATE_A, { revokedAt: "2026-10-18T00:00:00Z" });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, refetchOnMount: false } } });
+    client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] });
+    client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT });
+    client.setQueryData(["escrow", "debts"], { account: ACCOUNT, debts: [] });
+    client.setQueryData(["spend-policy"], null);
+    client.setQueryData(["chains"], { chains: [] });
+    client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [revoked] });
+    await client.prefetchQuery({ queryKey: ["escrow-delegates", "live"], queryFn: () => Promise.reject(new Error("rpc down")), retry: false });
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <AgentsView />
+      </QueryClientProvider>,
+    );
+    const out = text(html);
+    expect(html).toContain('data-testid="stranded-credential-row"');
+    expect(out).toContain("Payment key: may still be active on chain (couldn't check)");
+    expect(html).toContain('data-testid="check-chain-again"');
+    expect(out).not.toMatch(/Show \d+ revoked/);
+  });
+
+  it("two machine profiles, key A expired and key B active: the agent can pay, and each key has its own section", () => {
+    const a = grantRow("g-a", "Assay app on laptop-a", DELEGATE_A);
+    const b = grantRow("g-b", "Assay app on laptop-b", DELEGATE_B);
+    const html = render((client) => {
+      client.setQueryData(["escrow", null], {
+        exists: true,
+        readable: true,
+        account: ACCOUNT,
+        maxVoucherAmount: usdg("1000000"),
+        maxPerWindow: usdg("10000000"),
+        withdrawRequested: usdg("0"),
+        balance: usdg("20000000"),
+      });
+      client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [a, b] });
+      client.setQueryData(["escrow-delegates", "live"], {
+        account: ACCOUNT,
+        delegates: [
+          { ...onChain(DELEGATE_A), status: "EXPIRED", validUntil: "2026-10-01T00:00:00.000Z" },
+          { ...onChain(DELEGATE_B), spentInWindow: usdg("1250000") },
+        ],
+        tightenDelaySeconds: 3600,
+      });
+    });
+    const out = text(html);
+    // The agent pays through B: nothing says paid calls are refused for the agent.
+    expect(out).not.toContain("Its permission to pay has expired");
+    expect(out).not.toContain("so paid calls are refused");
+    expect(out).toMatch(/Ready to pay|Working: it is calling tools/);
+    // One block per key, each with its own fingerprint.
+    expect(html.match(/data-testid="spending-block"/g)).toHaveLength(2);
+    expect(out).toContain("Key “Assay app on laptop-a” · B447 D10C");
+    expect(out).toContain("Key “Assay app on laptop-b” · 5555 1234");
+    expect(out).toContain("This key's permission to pay expired, so it cannot pay.");
+    // B's own spend and its own Stop it paying.
+    expect(out).toContain("Spent by this key in the last 24 hours");
+    expect(out).toContain("$1.25");
+    expect(out.match(/Stop it paying/g)?.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("an expired grant is never the agent's paying key", () => {
+    const a = grantRow("g-a", "Assay app on laptop-a", DELEGATE_A, { expiresAt: "2026-10-01T00:00:00Z" });
+    const b = grantRow("g-b", "Assay app on laptop-b", DELEGATE_B);
+    const html = render((client) => {
+      client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [a, b] });
+      client.setQueryData(["escrow-delegates", "live"], {
+        account: ACCOUNT,
+        delegates: [onChain(DELEGATE_A), onChain(DELEGATE_B)],
+        tightenDelaySeconds: 3600,
+      });
+    });
+    const out = text(html);
+    // A is signed out: its key, still active on chain, is offered Stop it; B's section is the only one.
+    expect(html).toContain('data-testid="stop-payment-key"');
+    expect(html.match(/data-testid="spending-block"/g)).toHaveLength(1);
+    expect(out).toContain("on key “Assay app on laptop-b”");
+  });
 });

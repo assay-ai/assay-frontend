@@ -20,7 +20,7 @@ import { StatusChip } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { AGENT_LABEL_MAX, agentLabelError } from "@/features/buyer-money/agent-label";
-import type { AgentReadiness } from "@/features/buyer-money/agent-readiness";
+import { type AgentReadiness, credentialIsLive } from "@/features/buyer-money/agent-readiness";
 import { capsToForm } from "@/features/buyer-money/caps";
 import { credentialLabel } from "@/features/buyer-money/mcp-config";
 import { permissionExpiry } from "@/features/buyer-money/permission-expiry";
@@ -44,7 +44,13 @@ import { UpdateFromAlert } from "@/components/toolsets/update-sheet";
 
 import { explainStopFailure, PayerDelegationsPanel, StopPaymentKeySheet, useStopPaymentKey } from "./agent-payment-delegation";
 import { relativeTime } from "./format";
-import { RevokeCredentialDialog, STILL_ACTIVE_TEXT } from "./revoke-credential-dialog";
+import {
+  MAY_BE_ACTIVE_TEXT,
+  RevokeCredentialDialog,
+  type RevokeKeyState,
+  revokedToast,
+  STILL_ACTIVE_TEXT,
+} from "./revoke-credential-dialog";
 
 /**
  * Controls › Agents & keys: one card per agent, answering "is it working?"
@@ -98,8 +104,14 @@ export interface CredentialRowView {
   activeOnChain: boolean;
   /** A revoked or expired row whose key is active on chain and held by no live row: offer Stop it. */
   stopIt: EscrowDelegate | null;
-  /** Revoke offers "Also stop its payment key on chain": active on chain, and no other live row holds the same key. */
-  offerStopOnRevoke: boolean;
+  /**
+   * The key as Revoke treats it: "active" (on chain), "unknown" (the chain
+   * read is pending or failed: it may still be active), or "none" (no key,
+   * the chain proves it cannot pay, or another live row holds the same key).
+   */
+  keyState: RevokeKeyState;
+  /** A revoked or expired row whose key may still be active (chain unknown): kept in view, never folded away. */
+  mayBeActive: boolean;
 }
 
 export interface CredentialRowContext {
@@ -114,8 +126,14 @@ export interface CredentialRowContext {
 export const NO_PAYMENT_KEY = "Payment key: none — free tools only";
 const FREE_ONLY = " · free tools only";
 
-function isLive(key: KeyRow, nowMs: number): boolean {
-  return !key.revokedAt && (!key.expiresAt || Date.parse(key.expiresAt) > nowMs);
+const isLive = credentialIsLive;
+
+/**
+ * The chain list's state is unknown: its read failed, or never runs (no eip155
+ * account). A read still pending is `checking`, also unknown.
+ */
+function delegatesUnknown(query: { isError: boolean; isPending: boolean; fetchStatus: string }): boolean {
+  return query.isError || (query.isPending && query.fetchStatus === "idle");
 }
 
 function paymentKeyOnChain(key: KeyRow, ctx: CredentialRowContext): PaymentKeyOnChain {
@@ -170,10 +188,9 @@ export function credentialRowView(key: KeyRow, ctx: CredentialRowContext): Crede
         paymentLine = `${fp} · not turned on — free tools only`;
         break;
       case "checking":
-        paymentLine = `${fp} · checking the chain…`;
-        break;
       case "unreadable":
-        paymentLine = `${fp} · could not be read from the chain`;
+        // Unknown is never "stopped" and never "free" (IM-11).
+        paymentLine = MAY_BE_ACTIVE_TEXT;
         break;
     }
   }
@@ -183,9 +200,11 @@ export function credentialRowView(key: KeyRow, ctx: CredentialRowContext): Crede
     key.delegateAccount !== undefined &&
     ctx.keys.some((other) => other.id !== key.id && other.delegateAccount && isLive(other, ctx.nowMs) && sameKey(other.delegateAccount, key.delegateAccount!));
   const stopIt = !live && chain.kind === "active" && !heldByLive ? chain.delegation : null;
-  const offerStopOnRevoke = activeOnChain && !heldByLive;
+  const unknown = chain.kind === "checking" || chain.kind === "unreadable";
+  const keyState: RevokeKeyState = heldByLive ? "none" : activeOnChain ? "active" : unknown ? "unknown" : "none";
+  const mayBeActive = !live && unknown && !heldByLive;
 
-  return { live, source, paymentLine, paymentClient, chain, activeOnChain, stopIt, offerStopOnRevoke };
+  return { live, source, paymentLine, paymentClient, chain, activeOnChain, stopIt, keyState, mayBeActive };
 }
 
 /**
@@ -219,12 +238,12 @@ export function AgentsView() {
   }, []);
 
   const [newKeyFor, setNewKeyFor] = React.useState<AgentRow | null>(null);
-  type RevokeTarget = { agent: AgentRow; key: KeyRow; activeOnChain: boolean };
+  type RevokeTarget = { agent: AgentRow; key: KeyRow };
   const [revoking, setRevoking] = React.useState<RevokeTarget | null>(null);
   // The last target, so the sheet's title does not go blank while it animates out.
   const [lastRevoke, setLastRevoke] = React.useState<RevokeTarget | null>(null);
   if (revoking && revoking !== lastRevoke) setLastRevoke(revoking);
-  const [stopping, setStopping] = React.useState<EscrowDelegate | null>(null);
+  const [stopping, setStopping] = React.useState<{ delegateAccount: string; delegation: EscrowDelegate | null } | null>(null);
   const [payFor, setPayFor] = React.useState<{
     agent: AgentRow;
     delegate: string;
@@ -248,6 +267,20 @@ export function AgentsView() {
     // Scroll again on a second click: the section is already highlighted then.
     window.requestAnimationFrame(() => document.getElementById("access")?.scrollIntoView({ block: "start" }));
   };
+
+  // The Revoke dialog's key state, from the current chain read: it updates while the dialog is open.
+  const [revokeNow] = React.useState(() => Date.now());
+  const revokeKeys = lastRevoke ? (data.keys[lastRevoke.agent.agentId] ?? []) : [];
+  const revokeView = lastRevoke
+    ? credentialRowView(revokeKeys.find((k) => k.id === lastRevoke.key.id) ?? lastRevoke.key, {
+        delegates: data.delegates,
+        delegatesUnreadable: delegatesUnknown(data.delegatesQuery),
+        keys: revokeKeys,
+        nowMs: revokeNow,
+      })
+    : null;
+  // Once revoked the row is no longer live; the dialog keeps the state it was confirmed with.
+  const revokeKeyState: RevokeKeyState = revokeView?.keyState ?? "none";
 
   const payerAccount = data.agents.find((a) => supportsDelegation(a.agentAccount))?.agentAccount;
   const stopPaymentKey = useStopPaymentKey(payerAccount);
@@ -304,8 +337,9 @@ export function AgentsView() {
             readiness={data.readiness[agent.agentId]!}
             escrowReady={Boolean(data.escrowQuery.data?.exists)}
             onNewKey={() => setNewKeyFor(agent)}
-            onRevokeKey={(key, activeOnChain) => setRevoking({ agent, key, activeOnChain })}
+            onRevokeKey={(key) => setRevoking({ agent, key })}
             onStopIt={setStopping}
+            onRetryChain={data.refetchDelegates}
             onEditAccess={() => editAccess(agent)}
             onLetPay={(delegate, renew) => setPayFor({ agent, delegate, renew })}
             onChanged={refresh}
@@ -331,17 +365,27 @@ export function AgentsView() {
         onOpenChange={(open) => !open && setRevoking(null)}
         name={lastRevoke?.key.name ?? ""}
         issuedVia={lastRevoke?.key.issuedVia ?? "API_KEY"}
-        keyActiveOnChain={Boolean(lastRevoke?.activeOnChain && lastRevoke.key.delegateAccount)}
+        keyState={revokeKeyState}
         tightenDelaySeconds={data.delegatesQuery.data?.tightenDelaySeconds}
         onRevoke={() => revokeCredential(lastRevoke!.agent.agentId, lastRevoke!.key.id)}
         onStopOnChain={() => stopPaymentKey(lastRevoke!.key.delegateAccount!)}
         describeRevokeError={(error) => (error instanceof ApiError ? plainError(error.code) : "It could not be revoked. Nothing changed; try again.")}
         describeStopError={explainStopFailure}
-        onDone={(outcome) => {
+        onDone={(outcome, keyState) => {
           refresh();
           void queryClient.invalidateQueries({ queryKey: ["credentials"] });
-          if (outcome.chain === "stopped") toast.success("Revoked, and its payment key was stopped on chain.");
-          else if (outcome.chain === "untouched") toast.success("Revoked. It stopped working at once.");
+          if (outcome.chain === "failed") return;
+          const text = revokedToast(keyState, outcome.chain);
+          if (outcome.chain === "handoff") {
+            const delegateAccount = lastRevoke!.key.delegateAccount!;
+            setRevoking(null);
+            setStopping({ delegateAccount, delegation: findDelegation(data.delegates, delegateAccount) });
+            toast.info(text);
+          } else if (keyState === "none" || outcome.chain === "stopped") {
+            toast.success(text);
+          } else {
+            toast.warning(text);
+          }
         }}
       />
 
@@ -454,6 +498,133 @@ function CredentialRowItem({
   );
 }
 
+interface PaymentScope {
+  key: string;
+  /** "Key “{name}” · 1A2B 9F3C" when the agent has several bound keys; else null. */
+  label: string | null;
+  /** The agent's readiness with this key as its bound key and grant. */
+  readiness: AgentReadiness;
+  /** The limits context with that readiness, so the effective limit reads this key's caps. */
+  ctx: LimitsContext;
+}
+
+/** The payment sections' subjects: the agent as a whole with one bound key or none, else each bound key. */
+export function paymentScopes(ctx: LimitsContext, agent: AgentRow, readiness: AgentReadiness): PaymentScope[] {
+  const bound = readiness.boundCredentials ?? [];
+  if (bound.length <= 1) return [{ key: "agent", label: null, readiness, ctx }];
+  return bound.map(({ credential, grant }) => {
+    const scoped: AgentReadiness = { ...readiness, boundCredential: credential, grant };
+    return {
+      key: credential.id,
+      label: `Key “${credential.name}” · ${fingerprint(credential.delegateAccount!)}`,
+      readiness: scoped,
+      ctx: { ...ctx, readiness: { ...ctx.readiness, [agent.agentId]: scoped } },
+    };
+  });
+}
+
+function ScopeLabel({ label }: { label: string | null }) {
+  return label ? <span className="text-label-13 text-01" data-testid="payment-scope">{label}</span> : null;
+}
+
+/** Section 3 for one bound key. */
+function PaymentKeyBlock({ label, readiness }: { label: string | null; readiness: AgentReadiness }) {
+  const bound = readiness.boundCredential as KeyRow | null;
+  const chainId = chainIdOfAccount(bound?.delegateAccount);
+  if (!bound?.delegateAccount || !chainId) return null;
+  return (
+    <div className="flex flex-col gap-0.5" data-testid="payment-key-block">
+      <ScopeLabel label={label} />
+      <p className="text-body-13 text-02">
+        <span className="font-mono text-01">{shortAddress(chainId, addressOfAccount(bound.delegateAccount))}</span>
+        {bound.delegateBoundAt ? <> · set up {relativeTime(bound.delegateBoundAt)}</> : null} · on key “{bound.name}”
+      </p>
+    </div>
+  );
+}
+
+/** Section 4 for one bound key (or the agent, with one key or none). */
+function SpendingBlock({
+  label,
+  ctx,
+  agent,
+  readiness,
+  escrowReady,
+  now,
+  onLetPay,
+  onChanged,
+}: {
+  label: string | null;
+  ctx: LimitsContext;
+  agent: AgentRow;
+  readiness: AgentReadiness;
+  escrowReady: boolean;
+  now: number;
+  onLetPay: (delegate: string, renew?: { perCall: string; perDay: string } | null) => void;
+  onChanged: () => void;
+}) {
+  const bound = readiness.boundCredential as KeyRow | null;
+  const grant = readiness.grant;
+  const expiry = readiness.freeOnly ? null : permissionExpiry(grant, now);
+  const subject = label ? "this key" : "this agent";
+  if (grant && grant.status === "ACTIVE") {
+    return (
+      <div className="flex flex-col gap-2" data-testid="spending-block">
+        <ScopeLabel label={label} />
+        <EffectiveLimitLines lines={limitLines(rowsFor(ctx, agent))} />
+        <CapMeter label={`Spent by ${subject} in the last 24 hours`} used={grant.spentInWindow} limit={grant.maxPerWindow} />
+        {expiry ? (
+          <div className="flex flex-wrap items-center gap-2" data-testid="permission-expiry">
+            <StatusChip status="expires-soon" detail={expiry.label} />
+            <span className="text-body-13 text-02">After that, paid calls are refused until you renew it.</span>
+            <Button
+              size="sm"
+              type="button"
+              disabled={!bound?.delegateAccount || !escrowReady}
+              onClick={() => bound?.delegateAccount && onLetPay(bound.delegateAccount, capsToForm(grant) ?? null)}
+            >
+              Renew
+            </Button>
+          </div>
+        ) : null}
+        <p className="text-body-xs text-03">
+          Allowed to pay until <UtcTime value={grant.validUntil} dateOnly />. Stop it paying removes that permission; its API key
+          keeps working for free calls.
+        </p>
+        <SpendingLimitsActions ctx={ctx} agent={agent} readiness={readiness} onChanged={onChanged} />
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2" data-testid="spending-block">
+      <ScopeLabel label={label} />
+      <p className="text-body-13 text-02">
+        {label
+          ? grant?.status === "EXPIRED"
+            ? "This key's permission to pay expired, so it cannot pay. Free calls still work."
+            : "This key is not allowed to pay. Free calls still work."
+          : grant?.status === "EXPIRED"
+            ? "Its permission to pay expired, so paid calls are refused. Free calls still work."
+            : "Not allowed to pay yet. Free calls still work."}
+      </p>
+      <Button
+        size="sm"
+        type="button"
+        className="self-start"
+        disabled={!bound?.delegateAccount || !escrowReady}
+        onClick={() => bound?.delegateAccount && onLetPay(bound.delegateAccount)}
+      >
+        {grant?.status === "EXPIRED" ? "Let it pay again" : "Let it pay"}
+      </Button>
+      {!bound?.delegateAccount ? (
+        <p className="text-body-xs text-03">Needs the payment key above first.</p>
+      ) : !escrowReady ? (
+        <p className="text-body-xs text-03">Add funds first: your first deposit opens your escrow.</p>
+      ) : null}
+    </div>
+  );
+}
+
 /** The latest call by any of an agent's keys, revoked ones included. */
 function latestUse(keys: readonly KeyRow[] | undefined): string | null {
   const used = (keys ?? []).map((key) => key.lastUsedAt).filter((at): at is string => Boolean(at));
@@ -473,6 +644,7 @@ function AgentCard({
   onNewKey,
   onRevokeKey,
   onStopIt,
+  onRetryChain,
   onEditAccess,
   onLetPay,
   onChanged,
@@ -488,8 +660,10 @@ function AgentCard({
   readiness: AgentReadiness;
   escrowReady: boolean;
   onNewKey: () => void;
-  onRevokeKey: (key: KeyRow, activeOnChain: boolean) => void;
-  onStopIt: (delegation: EscrowDelegate) => void;
+  onRevokeKey: (key: KeyRow) => void;
+  onStopIt: (target: { delegateAccount: string; delegation: EscrowDelegate | null }) => void;
+  /** Read the chain list again (a failed read). */
+  onRetryChain: () => void;
   onEditAccess: () => void;
   onLetPay: (delegate: string, renew?: { perCall: string; perDay: string } | null) => void;
   onChanged: () => void;
@@ -500,23 +674,23 @@ function AgentCard({
   const rowContext: CredentialRowContext = {
     delegates: ctx.delegates,
     // A read that failed, or that never runs (no eip155 account): unknown, never "none".
-    delegatesUnreadable: ctx.delegatesQuery.isError || (ctx.delegatesQuery.isPending && ctx.delegatesQuery.fetchStatus === "idle"),
+    delegatesUnreadable: delegatesUnknown(ctx.delegatesQuery),
     keys: keys ?? [],
     nowMs: now,
   };
   const rows = (keys ?? []).map((key) => ({ key, view: credentialRowView(key, rowContext) }));
   const liveRows = rows.filter((row) => row.view.live);
   // A revoked or expired row whose key can still pay stays in view with Stop it (IM-11).
-  const stranded = rows.filter((row) => !row.view.live && row.view.stopIt);
-  const ended = rows.filter((row) => !row.view.live && !row.view.stopIt);
+  // So does one whose key may still be active while the chain is unread.
+  const stranded = rows.filter((row) => !row.view.live && (row.view.stopIt || row.view.mayBeActive));
+  const ended = rows.filter((row) => !row.view.live && !row.view.stopIt && !row.view.mayBeActive);
   const live = readiness.liveCredentials as KeyRow[];
-  const bound = readiness.boundCredential as KeyRow | null;
-  const grant = readiness.grant;
   // On a free-calls-only chain no paying step applies: no payment key, spend
   // meter or renewal is shown (the readiness line says why).
   const delegation = supportsDelegation(agent.agentAccount) && !readiness.freeOnly;
-  const chainId = chainIdOfAccount(bound?.delegateAccount);
-  const expiry = readiness.freeOnly ? null : permissionExpiry(grant, now);
+  // One block per bound key when there are several (one per machine,
+  // R-MU-11): each with its own fingerprint, caps, spend and Stop it paying.
+  const scopes = paymentScopes(ctx, agent, readiness);
 
   if (keysPending || readiness.loading) {
     return (
@@ -577,7 +751,7 @@ function AgentCard({
                   if (!key.delegateAccount) return;
                   onLetPay(key.delegateAccount, view.chain.kind === "active" ? capsToForm(view.chain.delegation) : null);
                 }}
-                onRevoke={() => onRevokeKey(key, view.offerStopOnRevoke)}
+                onRevoke={() => onRevokeKey(key)}
               />
             ))}
           </ul>
@@ -595,20 +769,26 @@ function AgentCard({
                   {view.source} · {key.revokedAt ? `revoked ${relativeTime(key.revokedAt)}` : `signed out ${relativeTime(key.expiresAt)}`}
                 </span>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="flex items-center gap-1 text-body-13 text-warning-700">
+                  <span className="flex items-center gap-1 text-body-13 text-warning-700" data-testid="stranded-key-state">
                     <TriangleAlert aria-hidden="true" className="size-3.5" />
-                    {STILL_ACTIVE_TEXT} · {fingerprint(key.delegateAccount!)}
+                    {view.stopIt ? STILL_ACTIVE_TEXT : MAY_BE_ACTIVE_TEXT} · {fingerprint(key.delegateAccount!)}
                   </span>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    type="button"
-                    className="text-danger-600"
-                    data-testid="stop-payment-key"
-                    onClick={() => onStopIt(view.stopIt!)}
-                  >
-                    Stop it
-                  </Button>
+                  {view.stopIt ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      type="button"
+                      className="text-danger-600"
+                      data-testid="stop-payment-key"
+                      onClick={() => onStopIt({ delegateAccount: key.delegateAccount!, delegation: view.stopIt })}
+                    >
+                      Stop it
+                    </Button>
+                  ) : view.chain.kind === "unreadable" ? (
+                    <Button size="sm" variant="secondary" type="button" data-testid="check-chain-again" onClick={onRetryChain}>
+                      Check again
+                    </Button>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -640,72 +820,31 @@ function AgentCard({
       </SubRow>
 
       {delegation && !keysFailed ? (
-        <SubRow n={3} title="Payment key">
-          {bound?.delegateAccount && chainId ? (
-            <p className="text-body-13 text-02">
-              <span className="font-mono text-01">{shortAddress(chainId, addressOfAccount(bound.delegateAccount))}</span>
-              {bound.delegateBoundAt ? <> · set up {relativeTime(bound.delegateBoundAt)}</> : null} · on key “{bound.name}”
-            </p>
-          ) : live.length === 0 ? (
-            <p className="text-body-13 text-03">Create a key first.</p>
-          ) : (
-            <PaidByInvitation agentName={name} />
-          )}
+        <SubRow n={3} title={scopes.length > 1 ? "Payment keys" : "Payment key"}>
+          {scopes.map((scope) => (
+            <PaymentKeyBlock key={scope.key} label={scope.label} readiness={scope.readiness} />
+          ))}
+          {scopes.length === 1 && !scopes[0]!.readiness.boundCredential ? (
+            live.length === 0 ? <p className="text-body-13 text-03">Create a key first.</p> : <PaidByInvitation agentName={name} />
+          ) : null}
         </SubRow>
       ) : null}
 
       {delegation ? (
         <SubRow n={4} title="Spending limits">
-          {grant && grant.status === "ACTIVE" ? (
-            <>
-              <EffectiveLimitLines lines={limitLines(rowsFor(ctx, agent))} />
-              <CapMeter label="Spent by this agent in the last 24 hours" used={grant.spentInWindow} limit={grant.maxPerWindow} />
-              {expiry ? (
-                <div className="flex flex-wrap items-center gap-2" data-testid="permission-expiry">
-                  <StatusChip status="expires-soon" detail={expiry.label} />
-                  <span className="text-body-13 text-02">After that, paid calls are refused until you renew it.</span>
-                  <Button
-                    size="sm"
-                    type="button"
-                    disabled={!bound?.delegateAccount || !escrowReady}
-                    onClick={() =>
-                      bound?.delegateAccount &&
-                      onLetPay(bound.delegateAccount, capsToForm(grant) ?? null)
-                    }
-                  >
-                    Renew
-                  </Button>
-                </div>
-              ) : null}
-              <p className="text-body-xs text-03">
-                Allowed to pay until <UtcTime value={grant.validUntil} dateOnly />. Stop it paying removes that permission; its API key
-                keeps working for free calls.
-              </p>
-              <SpendingLimitsActions ctx={ctx} agent={agent} readiness={readiness} onChanged={onChanged} />
-            </>
-          ) : (
-            <>
-              <p className="text-body-13 text-02">
-                {grant?.status === "EXPIRED"
-                  ? "Its permission to pay expired, so paid calls are refused. Free calls still work."
-                  : "Not allowed to pay yet. Free calls still work."}
-              </p>
-              <Button
-                size="sm"
-                type="button"
-                className="self-start"
-                disabled={!bound?.delegateAccount || !escrowReady}
-                onClick={() => bound?.delegateAccount && onLetPay(bound.delegateAccount)}
-              >
-                {grant?.status === "EXPIRED" ? "Let it pay again" : "Let it pay"}
-              </Button>
-              {!bound?.delegateAccount ? (
-                <p className="text-body-xs text-03">Needs the payment key above first.</p>
-              ) : !escrowReady ? (
-                <p className="text-body-xs text-03">Add funds first: your first deposit opens your escrow.</p>
-              ) : null}
-            </>
-          )}
+          {scopes.map((scope) => (
+            <SpendingBlock
+              key={scope.key}
+              label={scope.label}
+              ctx={scope.ctx}
+              agent={agent}
+              readiness={scope.readiness}
+              escrowReady={escrowReady}
+              now={now}
+              onLetPay={onLetPay}
+              onChanged={onChanged}
+            />
+          ))}
         </SubRow>
       ) : null}
 
