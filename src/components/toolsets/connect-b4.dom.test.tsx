@@ -63,9 +63,10 @@ describe("the key hint skips an app sign-in (OAuth grant, null prefix)", () => {
     expect(own).toContain("assay_sk_live_ab12…REST_OF_YOUR_KEY");
   });
 
-  it("with only a grant, says there is no key for the config, never 'null…'", () => {
+  it("with only a grant, the sign-in tab says nothing about a missing key, never 'null…' (BUG-M1-04)", () => {
     const out = text(render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} /></Sheet>, [GRANT]));
-    expect(out).toContain("My agent has no key yet");
+    // The default tab is the proxy install, which signs in: it needs no key.
+    expect(out).not.toContain("has no key yet");
     expect(out).not.toContain("null");
     expect(out).not.toContain("Claude Code · 2026-10-18");
   });
