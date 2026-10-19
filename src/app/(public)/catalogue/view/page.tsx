@@ -43,7 +43,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
 
 /**
- * One tool, public — route `/catalogue/view?tool=<id or name>`.
+ * One tool, public — route `/catalogue/view?tool=<id>`.
  *
  * Answers a newcomer's questions in order: what it does, what a call costs and
  * when you pay, what is checked, who serves it (with their failure record and
@@ -57,7 +57,7 @@ function ToolPage() {
   const chainName = useChainName();
 
   const tool = React.useMemo(
-    () => tools.data?.tools.find((t) => t.id === key) ?? tools.data?.tools.find((t) => t.name === key) ?? null,
+    () => tools.data?.tools.find((t) => t.id === key) ?? null,
     [tools.data, key],
   );
   const serving = React.useMemo(

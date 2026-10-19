@@ -7,7 +7,7 @@
  *                      Solana does today): `servesPaidCalls` is false for it.
  *                      `?rails=paid` (or `?rails=all`) goes back.
  *                      (Not `?chain=`: that already picks the escrow's chain
- *                      on `/funding/escrow`.)
+ *                      in the Funding escrow drawer.)
  *   ?tighten=1h      — the demo escrow delays a tightening (assay-evm D-21):
  *                      `tightenDelaySeconds` is 3600. Also `30m`, `90s` or a
  *                      plain number of seconds; `?tighten=0` goes back to an

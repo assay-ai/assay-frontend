@@ -98,7 +98,6 @@ export function applyIdentityChange(
 const PUBLIC_PAGES = new Set([
   "/how-it-works",
   "/why-list-here",
-  "/calculator",
   "/catalogue",
   "/demo",
   "/reserves",

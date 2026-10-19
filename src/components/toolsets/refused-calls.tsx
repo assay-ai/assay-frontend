@@ -26,7 +26,7 @@ import { toolsetKeys, useAgentAccess, useToolsets, useUpdateAccess } from "./use
  * Calls › Refused (design spec §7.10, sketch B). A refused call was never
  * charged; each one names the layer that refused it (the server it called,
  * the agent's limits, or the tool set's rules), every provider with its
- * reason, and the one-click fix. `/calls?call={id}` — the link an agent's
+ * reason, and the one-click fix. `/spend/calls?call={id}` — the link an agent's
  * error carries — opens one.
  */
 
@@ -120,7 +120,7 @@ function RefusedChip() {
   );
 }
 
-/** One refused call, loaded by id — the page `/calls?call={id}` opens. */
+/** One refused call, loaded by id — the page `/spend/calls?call={id}` opens. */
 export function RefusedCallPanel({ callId, onClose }: { callId: string; onClose?: () => void }) {
   const query = useQuery({ queryKey: ["refused-call", callId], retry: false, queryFn: () => getRefusedCall(callId) });
   if (query.isPending) return <PageState kind="loading" rows={3} label="Loading the refused call" />;

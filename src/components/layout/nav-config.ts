@@ -34,7 +34,7 @@ export interface BuyerNavItem {
 }
 
 export const BUYER_NAV_ITEMS: BuyerNavItem[] = [
-  { id: "overview", label: "Overview", href: "/", match: ["/", "/overview", "/onboarding"] },
+  { id: "overview", label: "Overview", href: "/", match: ["/", "/onboarding"] },
   {
     id: "activity",
     label: "Activity",
