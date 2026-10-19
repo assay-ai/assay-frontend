@@ -1,7 +1,13 @@
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CLOCK_SKEW_TEXT, pageExpiry } from "@/features/delegation/enable-paid";
+import {
+  CLOCK_SKEW_TEXT,
+  DEFAULT_CAPS,
+  enablePaidPlan,
+  pageExpiry,
+  parseEnablePaidCaps,
+} from "@/features/delegation/enable-paid";
 
 const spies = vi.hoisted(() => ({
   createDelegateIntent: vi.fn(async (body: unknown) => ({ kind: "AUTHORIZE_DELEGATE", body })),
@@ -23,7 +29,7 @@ vi.mock("@/services/escrow.service", () => ({ createEscrowLimitsIntent: spies.cr
 vi.mock("@/features/escrow/relayed-submission", () => ({ runEscrowAction: spies.runEscrowAction }));
 vi.mock("@/features/escrow/after-set-limits", () => ({ applyLimitsSubmitted: vi.fn(async () => undefined) }));
 
-import { agentPaySteps, type AgentPayStepsInput } from "./let-agent-pay-sheet";
+import { agentPaySteps, enablePaidSteps, type AgentPayStepsInput } from "./let-agent-pay-sheet";
 
 const NOW = Date.parse("2026-10-19T10:00:00.000Z");
 const DAY = 86_400;
@@ -63,6 +69,55 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
+describe("enablePaidSteps: the page's own path, from enablePaidPlan", () => {
+  function pagePlan() {
+    const plan = enablePaidPlan({
+      parsed: parseEnablePaidCaps({ ...DEFAULT_CAPS }, 6),
+      serverTime: new Date(NOW + 30_000).toISOString(),
+      receivedAtMs: NOW,
+      localNowMs: NOW,
+    });
+    if (!plan.ok) throw new Error(String(plan.problem));
+    return plan;
+  }
+
+  function pageSteps() {
+    const plan = pagePlan();
+    return enablePaidSteps({
+      money: money(),
+      queryClient: new QueryClient(),
+      agentName: "research-bot",
+      delegateAccount: KEY,
+      form: { perCall: DEFAULT_CAPS.perCall, perDay: DEFAULT_CAPS.perDay, days: 30 },
+      // An API escrow that would pull the ceiling up: {0.1 a call, 10^12 per window}.
+      openingCaps: { perCall: "100000", perWindow: "1000000000000000000" },
+      ceiling: plan.ceiling,
+      expiry: plan.expiry,
+    });
+  }
+
+  it("SetLimits signs the caps shown on the page, whatever the API's escrow says", async () => {
+    const [caps] = pageSteps();
+    expect(caps!.skip).toBe(false);
+    await caps!.run({ report } as never);
+    const shown = { maxVoucherAmount: "500000", maxPerWindow: "5000000" };
+    expect(spies.createEscrowLimitsIntent).toHaveBeenCalledWith(shown);
+    expect(spies.runEscrowAction).toHaveBeenCalledWith(expect.anything(), expect.anything(), { kind: "SET_LIMITS", ...shown });
+  });
+
+  it("AuthorizeDelegate signs the shown caps and the shown expiry, after the clock moved on", async () => {
+    const steps = pageSteps();
+    vi.setSystemTime(NOW + 90_000);
+    await steps[1]!.run({ report } as never);
+    expect(spies.createDelegateIntent).toHaveBeenCalledWith({
+      delegate: `0x${"1".repeat(32)}1a2b9f3c`,
+      maxVoucherAmount: "500000",
+      maxPerWindow: "5000000",
+      validUntil: String(NOW / 1000 + 30 * DAY),
+    });
+  });
+});
+
 describe("agentPaySteps on the enable-paid page", () => {
   it("a server time 335 days ahead never signs 365 days: the page refuses, and the step refuses such an expiry", async () => {
     const skewed = pageExpiry({
@@ -79,11 +134,13 @@ describe("agentPaySteps on the enable-paid page", () => {
     expect(spies.submitRelayedDelegation).not.toHaveBeenCalled();
   });
 
-  it("signs exactly the shown expiry: 30 days from this device's clock", async () => {
+  it("signs exactly the shown expiry, even when the clock has moved on before the click", async () => {
     const expiry = pageExpiry({ localNowMs: NOW, serverTime: new Date(NOW + 60_000).toISOString(), receivedAtMs: NOW, days: 30 });
     if (!expiry.ok) throw new Error(expiry.text);
     expect(expiry.validUntil).toBe(NOW / 1000 + 30 * DAY);
     const grant = steps({ expiry: { validUntil: expiry.validUntil, maxDays: 30 } })[1]!;
+    // The person reads the page, then clicks: a step that recomputed "now + days" would sign a later expiry.
+    vi.setSystemTime(NOW + 47_000);
     await grant.run({ report } as never);
     expect(spies.createDelegateIntent).toHaveBeenCalledWith({
       delegate: `0x${"1".repeat(32)}1a2b9f3c`,

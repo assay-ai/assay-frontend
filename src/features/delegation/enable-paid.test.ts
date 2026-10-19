@@ -13,6 +13,8 @@ import {
   actionLabelFor,
   collectPages,
   depositRunsHere,
+  enablePaidPlan,
+  enablePaidReturnTo,
   initialDraft,
   pageExpiry,
   boundLine,
@@ -26,6 +28,7 @@ import {
   takePaymentKey,
   walletCheckCopy,
   type EnablePaidCredential,
+  type CapsDraft,
   type EnablePaidInput,
 } from "./enable-paid";
 
@@ -362,5 +365,71 @@ describe("fix round 1", () => {
       b: { items: [3], pageInfo: { nextCursor: null, hasMore: false } },
     };
     await expect(collectPages(async (cursor) => pages[cursor ?? "start"]!)).resolves.toEqual([1, 2, 3]);
+  });
+});
+
+describe("fix round 2", () => {
+  const plan = (serverOffsetMs: number, draft: CapsDraft = { ...DEFAULT_CAPS }) =>
+    enablePaidPlan({
+      parsed: parseEnablePaidCaps(draft, 6),
+      serverTime: new Date(NOW + serverOffsetMs).toISOString(),
+      receivedAtMs: NOW,
+      localNowMs: NOW,
+    });
+
+  it("enablePaidPlan: the ceiling and the grant are the caps on the form; the expiry is local now + days", () => {
+    expect(plan(30_000)).toEqual({
+      ok: true,
+      ceiling: { maxVoucherAmount: "500000", maxPerWindow: "5000000" },
+      chosen: { maxVoucherAmount: "500000", maxPerWindow: "5000000" },
+      expiry: { validUntil: NOW / 1000 + 30 * 86_400, maxDays: 30 },
+      validUntil: new Date(NOW + 30 * DAY).toISOString(),
+      boundDays: 30,
+      nowSeconds: NOW / 1000,
+    });
+    expect(plan(0, { perCall: "1", perDay: "20", days: "7" })).toMatchObject({
+      ok: true,
+      ceiling: { maxVoucherAmount: "1000000", maxPerWindow: "20000000" },
+      expiry: { validUntil: NOW / 1000 + 7 * 86_400 },
+    });
+  });
+
+  it("enablePaidPlan: a server time 335 days ahead (or 121 s) signs nothing", () => {
+    expect(plan(335 * DAY)).toEqual({ ok: false, problem: CLOCK_SKEW_TEXT });
+    expect(plan(121_000)).toEqual({ ok: false, problem: CLOCK_SKEW_TEXT });
+  });
+
+  it("enablePaidPlan: invalid caps sign nothing, and the form says why", () => {
+    expect(plan(0, { perCall: "6", perDay: "5", days: "30" })).toEqual({ ok: false, problem: null });
+    expect(plan(0, { perCall: "0.5", perDay: "5", days: "31" })).toEqual({ ok: false, problem: null });
+  });
+
+  it("enablePaidReturnTo: only this page's own path, same origin", () => {
+    const back = `/agents/enable-paid?credential=cred-1#key=${KEY}`;
+    expect(enablePaidReturnTo(back)).toBe(back);
+    for (const bad of [
+      null,
+      "",
+      "/funding",
+      "/agents",
+      "//evil.example/agents/enable-paid",
+      "https://evil.example/agents/enable-paid",
+      "/agents/enable-paid/../../evil",
+      "/%2F%2Fevil.example/agents/enable-paid",
+      "javascript:alert(1)",
+    ]) {
+      expect(enablePaidReturnTo(bad)).toBeNull();
+    }
+  });
+
+  it("the RPC list is one source, exact origins, inside the page's connect-src", () => {
+    const require = createRequire(import.meta.url);
+    const csp = require("../../../scripts/csp-policy.js") as { CONNECT_ORIGINS: string[]; STRICT_RPC_ORIGINS: string[] };
+    expect(csp.STRICT_RPC_ORIGINS).toEqual([...STRICT_PAGE_RPC_ORIGINS]);
+    for (const origin of STRICT_PAGE_RPC_ORIGINS) {
+      expect(new URL(origin).origin).toBe(origin);
+      expect(origin.startsWith("https://")).toBe(true);
+      expect(csp.CONNECT_ORIGINS).toContain(origin);
+    }
   });
 });
