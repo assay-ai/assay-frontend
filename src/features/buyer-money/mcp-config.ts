@@ -118,6 +118,11 @@ export function assayMcpVersion(): string {
   return value;
 }
 
+/** The command prefix every user-facing instruction starts with: the scoped, pinned package (never the bare name, which belongs to someone else). */
+export function assayMcpRun(): string {
+  return `npx -y @assay-ai/mcp@${assayMcpVersion()}`;
+}
+
 /** Characters a canonical MCP URL can hold; anything else is refused before it reaches a command (same as the proxy). */
 const URL_CHARS = /^[A-Za-z0-9\-._~:/?#@!$&()*+,;=%]+$/;
 const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;

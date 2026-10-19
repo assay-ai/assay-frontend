@@ -1436,7 +1436,7 @@ function demoAgents(): { agentId: string; label: string; agentAccount: string; c
 }
 const STAGING_ADDRESS = "0x2F5d8B17aC93e04f6b1D7c8A05E2f9B34cD61a70";
 /**
- * The prod agent's own payment key (made by `assay-mcp enable-paid`), authorised to
+ * The prod agent's own payment key (made by `npx -y @assay-ai/mcp@<V> enable-paid`), authorised to
  * pay below. A function, not a constant: `fixtures.ts` imports this file, so
  * `DEMO_CHAIN_ID` is not initialised yet while this module evaluates.
  */

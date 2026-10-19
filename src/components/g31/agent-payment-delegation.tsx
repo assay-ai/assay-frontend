@@ -53,6 +53,7 @@ import {
   editedToast,
 } from "@/features/delegation/unsettled";
 import { isRelayedRefusal, relayedRefusal } from "@/features/escrow/relayed-refusal";
+import { assayMcpRun } from "@/features/buyer-money/mcp-config";
 import { useChains } from "@/hooks/useChains";
 import { isRailNotOffered, railNotOfferedText, servesPaidCalls } from "@/libs/chains/paid-rails";
 import { isUserRejection, type Signer, useSigner } from "@/hooks/useSigner";
@@ -753,7 +754,7 @@ export function AgentPaymentDelegation({
           No key of this agent has a payment key yet. Paid calls are by
           invitation during testnet: an invited agent makes its payment key
           and proves it holds it with its API key (
-          <span className="font-mono">assay-mcp enable-paid</span>); the payment key
+          <span className="font-mono">{assayMcpRun()} enable-paid</span>); the payment key
           then appears here to authorise.
         </p>
       ) : (
@@ -1245,7 +1246,7 @@ function AuthorizeSheet({
                   label="Last 4 characters of the agent’s key"
                   id="delegate-confirm-key"
                   value={confirm}
-                  hint="As `assay-mcp status` prints it on the agent’s machine. This is what proves the key is yours."
+                  hint={`As \`${assayMcpRun()} status\` prints it on the agent’s machine. This is what proves the key is yours.`}
                   error={
                     confirm.length >= 4 && !confirmsDelegateKey(confirm, delegate)
                       ? "That is not this key."

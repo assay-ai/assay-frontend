@@ -249,7 +249,7 @@ export function delegationRows(
   });
 }
 
-/** The last four hex characters of an address — what `assay-mcp status` shows the person. */
+/** The last four hex characters of an address — what `npx -y @assay-ai/mcp@<V> status` shows the person. */
 export function keyFingerprint(account: string | null | undefined): string {
   if (!account) return "";
   const address = addressOf(account);
@@ -258,7 +258,7 @@ export function keyFingerprint(account: string | null | undefined): string {
 
 /**
  * The person confirms the key they authorise is THEIR machine's, by typing its
- * last four characters as `assay-mcp status` printed them on that machine.
+ * last four characters as `npx -y @assay-ai/mcp@<V> status` printed them on that machine.
  * Anyone holding the agent's token can bind a key of their own; this is what
  * keeps a stolen token from becoming a grant the person signs blind (review S3-9).
  */

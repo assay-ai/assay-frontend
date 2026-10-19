@@ -64,7 +64,7 @@ export function getStartedStates(facts: GetStartedFacts): Record<GetStartedStepI
 /**
  * Paying needs a payment key and none is bound yet: step 4 reads "Paid calls:
  * by invitation during testnet" and is not counted (D14). Once a key is bound
- * (an invited buyer ran `assay-mcp enable-paid`), step 4 counts as before.
+ * (an invited buyer ran `npx -y @assay-ai/mcp@<V> enable-paid`), step 4 counts as before.
  */
 export function payByInvitation(facts: GetStartedFacts): boolean {
   return facts.freeOnly !== true && facts.needsDelegation && !facts.keyBound;
