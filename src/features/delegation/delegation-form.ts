@@ -11,7 +11,7 @@ import { exceedsScale, toAtomic, toDecimal } from "@/utils/money";
 /**
  * The "Authorize agent to pay" form, as pure logic: no React, no network.
  *
- * Every rule here is one `X402Escrow.authorizeDelegate` applies on chain, so a
+ * Every rule here is one `AssayEscrow.authorizeDelegate` applies on chain, so a
  * person is never asked to sign something the chain will refuse:
  *
  * - both caps above zero, the per-payment cap no higher than the per-window cap;

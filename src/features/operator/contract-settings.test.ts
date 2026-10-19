@@ -79,7 +79,7 @@ describe("units", () => {
   });
 });
 
-describe("formToParams mirrors X402Config._validate", () => {
+describe("formToParams mirrors AssayConfig._validate", () => {
   const form = paramsToForm(PARAMS, 6);
   const errorsOf = (patch: Partial<typeof form>) => {
     const checked = formToParams({ ...form, ...patch }, context);

@@ -10,7 +10,7 @@ import { formatDecimal } from "@/utils/money";
  *  - stake per paid listing: max($50, 1000 × price);
  *  - most taken per 24 h: 10% of the stake. This is the one limit on what a
  *    penalty takes that the chain enforces (`slashCapBps`, a rolling 24 h
- *    window in X402Stake), next to a fixed maximum per penalty
+ *    window in AssayStake), next to a fixed maximum per penalty
  *    (`penaltyAmount`). No per-window cap such as max($5, 100 × price) is
  *    enforced anywhere, so none is shown (provider review 2026-10-16b, P0).
  * A free listing earns nothing, posts no stake and cannot be penalised.

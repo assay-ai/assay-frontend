@@ -16,7 +16,7 @@
  * that shows whatever the forger wants.
  *
  * The values come from the EVM deployment record
- * (`assay-evm/deployments/46630.json`, `contracts.X402Stake.proxy`) and its
+ * (`assay-evm/deployments/46630.json`, `contracts.AssayStake.proxy`) and its
  * broadcast (`broadcast/Deploy.s.sol/46630/run-latest.json`: the proxy's
  * CREATE2 landed in block `0x7e49e9f` = 132,423,327). The RPC and explorer are
  * the ones `providers/index.tsx` already writes out for the same chain.
@@ -41,17 +41,17 @@ export interface StakeDeployment {
   readonly rpcUrl: string;
   /** Block explorer base; links are built with `URL`, see `explorerTxUrl`. */
   readonly explorerBaseUrl: string | null;
-  /** The X402Stake proxy. */
+  /** The AssayStake proxy. */
   readonly stakeContract: `0x${string}`;
-  /** The X402Escrow proxy: the EIP-712 verifying contract for buyer requests and payout proofs. */
+  /** The AssayEscrow proxy: the EIP-712 verifying contract for buyer requests and payout proofs. */
   readonly escrowContract: `0x${string}`;
-  /** The X402Config proxy (the arbiter's `setBlocked`). */
+  /** The AssayConfig proxy (the arbiter's `setBlocked`). */
   readonly configContract: `0x${string}`;
   /** The settlement token (USDG) that deposits approve and stake. */
   readonly settlementToken: `0x${string}`;
   /** The proxy's deployment block — no slash can be older than this. */
   readonly deployBlock: bigint;
-  /** The X402Config proxy's deployment block — no verifier key event is older than this. */
+  /** The AssayConfig proxy's deployment block — no verifier key event is older than this. */
   readonly configDeployBlock: bigint;
   /** Only if `ASSET().decimals()` cannot be read. */
   readonly fallbackAssetDecimals: number;
