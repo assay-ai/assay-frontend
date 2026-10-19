@@ -7,10 +7,10 @@ describe("keyMode — read off the key's visible prefix", () => {
     expect(keyMode("assay_sk_live_ab12")).toBe("live");
   });
 
-  it("says nothing for any other prefix: there is no test key, and no old prefix", () => {
+  it("says nothing for any other prefix: there is no test key", () => {
     expect(keyMode("assay_live_ab12")).toBeNull();
     expect(keyMode("assay_test_ab12")).toBeNull();
-    expect(keyMode("x402_sk_live_ab12")).toBeNull();
+    expect(keyMode("other_sk_live_ab12")).toBeNull();
     expect(keyMode(null)).toBeNull();
     expect(keyMode(undefined)).toBeNull();
   });
