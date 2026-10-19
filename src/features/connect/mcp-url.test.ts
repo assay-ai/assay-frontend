@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { KEY_PLACEHOLDER, keyMode, mcpConfig, MCP_CLIENTS } from "@/features/buyer-money/mcp-config";
@@ -12,7 +16,15 @@ import {
   parseMcpUrl,
   RESERVED_FIRST_SEGMENTS,
   sameChoice,
-  suggestServerName,
+  defaultServerName,
+  defaultServerNameFor,
+  fitsServerName,
+  isValidServerName,
+  longestToolLength,
+  maxServerNameLength,
+  serverNameRefusal,
+  DEFAULT_NAME_RULE,
+  MAX_SERVER_NAME_LENGTH,
   webPageOf,
   type ConnectChoice,
 } from "./mcp-url";
@@ -107,37 +119,102 @@ describe("parseMcpUrl — a URL back into the question (Change, browser redirect
   });
 });
 
-describe("suggestServerName — at most 9 characters", () => {
+describe("defaultServerName — assay, or assay-{slug} (spec 8.3.1)", () => {
   it("names each answer", () => {
-    expect(suggestServerName({ kind: "everything" })).toBe("assay");
-    expect(suggestServerName({ kind: "toolset", slug: "research" })).toBe("research");
-    expect(suggestServerName({ kind: "toolset", slug: "crypto-research-kit" })).toBe("crypto");
-    expect(suggestServerName({ kind: "toolset", slug: "web-research" })).toBe("research");
-    expect(suggestServerName({ kind: "toolset", slug: "supercalifragilistic" })).toBe("supercali");
-    expect(suggestServerName({ kind: "tools", tools: ["get_weather"] })).toBe("weather");
-    expect(suggestServerName({ kind: "tools", tools: ["a_b", "c_d"] })).toBe("tools");
-    expect(suggestServerName({ kind: "url", url: "https://mcp.example.com/@acme/twitter-kit@3" })).toBe("twitter");
+    expect(defaultServerName({ kind: "everything" })).toBe("assay");
+    expect(defaultServerName({ kind: "toolset", slug: "research" }, 20)).toBe("assay-research");
+    expect(defaultServerName({ kind: "toolset", slug: "crypto-research-kit" }, 20)).toBe("assay-crypto-research-kit");
+    expect(defaultServerName({ kind: "topic", category: "weather" }, 20)).toBe("assay-weather");
+    expect(defaultServerName({ kind: "shared", handle: "marketkit", slug: "crypto-research", version: 2 }, 20)).toBe("assay-crypto-research");
+    expect(defaultServerName({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz" }, 20)).toBe("assay-shared");
+    expect(defaultServerName({ kind: "tools", tools: ["get_weather"] }, 20)).toBe("assay-weather");
+    expect(defaultServerName({ kind: "tools", tools: ["a_b", "c_d"] }, 20)).toBe("assay-tools");
+    expect(defaultServerName({ kind: "url", url: "https://mcp.example.com/@acme/twitter-kit@3" }, 20)).toBe("assay-twitter-kit");
   });
 
-  it("keeps the whole slug when it fits without its dashes, never a fragment (review F)", () => {
-    expect(suggestServerName({ kind: "toolset", slug: "tools-i-use" })).toBe("toolsiuse");
-    expect(suggestServerName({ kind: "toolset", slug: "my-tools" })).toBe("my-tools");
-    expect(suggestServerName({ kind: "toolset", slug: "geo-x-lookups" })).toBe("lookups");
+  it("drops trailing words until it fits, then falls back to assay", () => {
+    const choice: ConnectChoice = { kind: "toolset", slug: "twitter-kit-pro" };
+    expect(defaultServerName(choice, 40)).toBe("assay-twitter-kit");
+    expect(defaultServerName(choice, 44)).toBe("assay-twitter");
+    expect(defaultServerName(choice, 46)).toBe("assay");
   });
 
-  it("never ends on a one- or two-letter word cut from a longer slug", () => {
-    for (const slug of ["tools-i-use-daily", "geo-x-lookups", "maps-of-the-world"]) {
-      const name = suggestServerName({ kind: "toolset", slug });
-      expect(name, slug).not.toMatch(/-[a-z0-9]{1,2}$/);
+  it("unmeasured (signed out, L 48) falls back to assay", () => {
+    expect(defaultServerName({ kind: "toolset", slug: "research" })).toBe("assay");
+  });
+
+  it("always yields a valid name that fits", () => {
+    for (const slug of ["a-very-long-slug-indeed-with-many-words-in-it-to-overflow", "x1", "my_kit"]) {
+      const name = defaultServerName({ kind: "toolset", slug }, 20);
+      expect(isValidServerName(name)).toBe(true);
+      expect(fitsServerName(name, 20)).toBe(true);
+    }
+  });
+});
+
+describe("the server-name rule agrees with assay-mcp on every shared vector (R-MU-9)", () => {
+  const here = join(process.cwd(), "src/features/connect");
+  const read = (file: string) => readFileSync(join(here, file), "utf8");
+  const vectors = JSON.parse(read("server-name.vectors.json"));
+  const source = JSON.parse(read("assay-mcp-vectors.source.json"));
+
+  it("the vector copies are the ones recorded from the assay-mcp ref", () => {
+    expect(source.ref).toMatch(/^[0-9a-f]{40}$|^v?\d+\.\d+\.\d+/);
+    for (const [file, info] of Object.entries(source.files as Record<string, { sha256: string }>)) {
+      const text = readFileSync(join(process.cwd(), file), "utf8");
+      expect(createHash("sha256").update(text, "utf8").digest("hex"), file).toBe(info.sha256);
     }
   });
 
-  it("never goes over 9 characters or ends on a dash", () => {
-    for (const slug of ["abcdefgh-ijk", "a-very-long-slug-indeed", "x1"]) {
-      const name = suggestServerName({ kind: "toolset", slug });
-      expect(name.length).toBeLessThanOrEqual(9);
-      expect(name.endsWith("-")).toBe(false);
+  it("the rule values match", () => {
+    expect(DEFAULT_NAME_RULE).toEqual({ budget: vectors.rule.budget, overhead: vectors.rule.overhead });
+    expect(MAX_SERVER_NAME_LENGTH).toBe(vectors.rule.maxLength);
+    expect(new RegExp(vectors.rule.pattern).source).toBe(/^[a-z][a-z0-9-]*$/.source);
+    expect(longestToolLength(null)).toBe(vectors.rule.signedOutL);
+  });
+
+  it("maximum name length", () => {
+    for (const c of vectors.maxLength) {
+      expect(Math.max(0, maxServerNameLength(c.L)), c.name).toBe(c.max);
     }
+  });
+
+  it("valid names", () => {
+    for (const c of vectors.valid) expect(isValidServerName(c.name), JSON.stringify(c.name)).toBe(c.ok);
+  });
+
+  it("fits", () => {
+    for (const c of vectors.fits) expect(fitsServerName(c.name, c.L), `${c.name} ${c.L}`).toBe(c.fits);
+  });
+
+  it("longest tool", () => {
+    for (const c of vectors.longestTool) {
+      const listed =
+        c.mode === "signedOut" ? null : c.mode === "search" ? [...vectors.searchMetaTools, ...c.pinned] : c.tools;
+      expect(longestToolLength(listed), c.name).toBe(c.L);
+    }
+  });
+
+  it("default names", () => {
+    for (const c of vectors.defaultName) {
+      expect(defaultServerNameFor(c.urlKind === "ROOT", c.slugWords, c.L), c.name).toBe(c.expect);
+    }
+  });
+
+  it("uniqueness within the budget", () => {
+    for (const c of vectors.unique) expect(uniqueServerName(c.base, c.taken, c.L), c.name).toBe(c.expect);
+  });
+
+  it("refusals, with the exact message", () => {
+    for (const c of vectors.refusal) {
+      const r = serverNameRefusal(c.typed, c.L);
+      expect(r?.kind, c.name).toBe(c.kind);
+      expect(r?.message, c.name).toBe(c.message);
+    }
+  });
+
+  it("accepts a name that fits", () => {
+    expect(serverNameRefusal("assay-weather", 20)).toBeNull();
   });
 });
 
@@ -197,8 +274,8 @@ describe("one naming convention for tools, unique server names", () => {
 
   it("never suggests a server name another server of the agent uses", () => {
     expect(uniqueServerName("weather", ["research"])).toBe("weather");
-    expect(uniqueServerName("weather", ["weather", null])).toBe("weather2");
-    expect(uniqueServerName("crypto-re", ["crypto-re", "crypto-r2"])).toBe("crypto-r3");
+    expect(uniqueServerName("weather", ["weather", null])).toBe("weather-2");
+    expect(uniqueServerName("assay-weather", ["assay-weather", "assay-weather-2"], 20)).toBe("assay-weather-3");
   });
 });
 
@@ -263,9 +340,9 @@ describe("T2 forms: topics, shared sets, links, version locks", () => {
   });
 
   it("names their servers and their web pages; the link token stays in the fragment", () => {
-    expect(suggestServerName({ kind: "topic", category: "weather" })).toBe("weather");
-    expect(suggestServerName({ kind: "shared", handle: "marketkit", slug: "crypto-research", version: 2 })).toBe("crypto");
-    expect(suggestServerName({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz" })).toBe("shared");
+    expect(defaultServerName({ kind: "topic", category: "weather" }, 20)).toBe("assay-weather");
+    expect(defaultServerName({ kind: "shared", handle: "marketkit", slug: "crypto-research", version: 2 }, 20)).toBe("assay-crypto-research");
+    expect(defaultServerName({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz" }, 20)).toBe("assay-shared");
     expect(webPageOf({ kind: "shared", handle: "acme", slug: "kit", version: 3 })).toBe("/toolsets/view?handle=acme&slug=kit&v=3");
     expect(webPageOf({ kind: "link", token: "h3j8d2k9s6a1f4g7l0q5wz", version: 2 })).toBe("/toolsets/view#token=h3j8d2k9s6a1f4g7l0q5wz&v=2");
     expect(webPageOf({ kind: "maker", handle: "acme" })).toBe("/toolsets/handle?handle=acme");
