@@ -200,6 +200,15 @@ describe("EnablePaidView", () => {
     expect(page).toMatch(/boundDays=\{plan\.ok \? plan\.boundDays : null\}/);
   });
 
+  it("the Funding link carries the credential id only, never the key", () => {
+    const page = readFileSync(resolve(__dirname, "../../app/(main)/agents/enable-paid/page.tsx"), "utf8");
+    expect(page).toMatch(/const returnHref = enablePaidReturnHref\(credentialId\);/);
+    expect(page).toMatch(/returnTo=\$\{encodeURIComponent\(returnHref\)\}/);
+    // thisPageHref (with its #key) only feeds the sign-in round trip.
+    expect([...page.matchAll(/thisPageHref\(\)/g)]).toHaveLength(1);
+    expect(page).toMatch(/loginHref\(\{ next: thisPageHref\(\) \}\)/);
+  });
+
   it("the route files import no analytics", () => {
     for (const file of ["../../app/(main)/agents/enable-paid/page.tsx", "./enable-paid-view.tsx"]) {
       const imports = readFileSync(resolve(__dirname, file), "utf8").match(/^import[^;]+;/gm) ?? [];

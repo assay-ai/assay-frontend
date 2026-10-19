@@ -26,6 +26,15 @@ export type DepositChoice =
   | { readonly kind: "fixed"; readonly chain: Chain }
   | { readonly kind: "choose"; readonly options: readonly Chain[] };
 
+/**
+ * The choice when a screen allows only one chain (`onlyChainId`, the
+ * enable-paid page): that chain if it is offered, else nothing to pick.
+ * `null` offers every chain, as `depositChoice` does.
+ */
+export function depositChoiceFor(chains: readonly Chain[], onlyChainId: string | null): DepositChoice {
+  return depositChoice(onlyChainId === null ? chains : chains.filter((chain) => chain.chainId === onlyChainId));
+}
+
 export function depositChoice(chains: readonly Chain[]): DepositChoice {
   if (chains.length === 0) return { kind: "none-offered" };
   if (chains.length === 1) return { kind: "fixed", chain: chains[0] };

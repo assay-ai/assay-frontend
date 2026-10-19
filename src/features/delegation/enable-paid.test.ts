@@ -14,6 +14,7 @@ import {
   collectPages,
   depositRunsHere,
   enablePaidPlan,
+  enablePaidReturnHref,
   enablePaidReturnTo,
   initialDraft,
   pageExpiry,
@@ -404,18 +405,27 @@ describe("fix round 2", () => {
     expect(plan(0, { perCall: "0.5", perDay: "5", days: "31" })).toEqual({ ok: false, problem: null });
   });
 
-  it("enablePaidReturnTo: only this page's own path, same origin", () => {
-    const back = `/agents/enable-paid?credential=cred-1#key=${KEY}`;
+  it("enablePaidReturnTo: exactly this page with its credential id, nothing else (no key in any URL)", () => {
+    const back = "/agents/enable-paid?credential=00000000-0000-4000-8000-000000000001";
     expect(enablePaidReturnTo(back)).toBe(back);
+    expect(enablePaidReturnHref("00000000-0000-4000-8000-000000000001")).toBe(back);
+    expect(enablePaidReturnHref("a&b=c")).toBeNull();
     for (const bad of [
       null,
       "",
+      `${back}#key=${KEY}`,
+      `${back}&key=${KEY}`,
+      `${back}&perDay=1000`,
+      `/agents/enable-paid?key=${KEY}&credential=cred-1`,
+      "/agents/enable-paid",
+      "/agents/enable-paid?credential=",
+      "/agents/enable-paid?credential=a%26b",
+      "/agents/enable-paid/?credential=cred-1",
       "/funding",
-      "/agents",
-      "//evil.example/agents/enable-paid",
-      "https://evil.example/agents/enable-paid",
-      "/agents/enable-paid/../../evil",
-      "/%2F%2Fevil.example/agents/enable-paid",
+      "//evil.example/agents/enable-paid?credential=cred-1",
+      "https://evil.example/agents/enable-paid?credential=cred-1",
+      "/agents/enable-paid/../../evil?credential=cred-1",
+      "/%2F%2Fevil.example/agents/enable-paid?credential=cred-1",
       "javascript:alert(1)",
     ]) {
       expect(enablePaidReturnTo(bad)).toBeNull();
