@@ -236,6 +236,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
               keyPrefix={keyForHint(liveKeys)?.prefix ?? null}
               onCopy={onCopyConfig}
               onCreateKey={() => createInPlace.mutate()}
+              agentName={agent?.label ?? null}
               creatingKey={createInPlace.isPending}
               createKeyError={createInPlace.isError ? createKeyErrorText(createInPlace.error) : null}
             />

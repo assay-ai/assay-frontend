@@ -59,6 +59,10 @@ describe("the full key stays in memory (owner rule)", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Use an API key instead" }));
+    // Nothing is made until the confirm says so.
+    expect(account.createCredential).not.toHaveBeenCalled();
+    expect(screen.getByText("Create an API key for My agent?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(document.body.textContent).toContain(TOKEN));
     expect(account.createCredential).toHaveBeenCalledWith(AGENT, { name: "Key 1", scopes: ["tools:call"] });
 
