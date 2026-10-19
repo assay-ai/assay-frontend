@@ -115,7 +115,6 @@ export interface UpdateSpendPolicyBody {
   requireApprovalAbove?: string | null;
   paused?: boolean;
   changeReason?: string;
-  changedBy?: string;
 }
 
 /** GET /spend-policy — typed. Throws `ApiError` with code `SPEND_POLICY_NOT_FOUND`. */
