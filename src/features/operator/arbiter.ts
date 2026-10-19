@@ -363,7 +363,6 @@ const MESSAGES: Readonly<Record<string, string | ((action: ArbiterAction, e: Api
       : "Preparing a ruling needs ADJL or TRE, and you hold neither.",
   OPERATOR_AUTHORITY_EXCEEDED: "This action is above your authority.",
   OPERATOR_CREDENTIAL_INVALID: "Your operator session has ended. Sign in again.",
-  OPERATOR_SUSPENDED: "Your operator account is suspended.",
   OPERATOR_AUTH_RATE_LIMITED: "Too many sign-in attempts. Wait a few minutes and try again.",
   OPERATOR_OVERRIDE_NOT_IMPLEMENTED: "The backend does not have this action switched on yet.",
   OPERATOR_UNKNOWN_OVERRIDE_CODE: "The backend does not know this override. Report it to engineering.",

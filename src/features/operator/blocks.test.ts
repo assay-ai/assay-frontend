@@ -149,7 +149,6 @@ describe("blockErrorMessage", () => {
     ["OPERATOR_ROLE_REQUIRED", "unblock", /Lifting a block needs the ADJL or SRE/],
     ["OPERATOR_CREDENTIAL_INVALID", "block", /session has ended/],
     ["OPERATOR_NOT_AUTHORIZED", "block", /no longer an active operator/],
-    ["OPERATOR_SUSPENDED", "unblock", /suspended/],
     ["OPERATOR_AUTH_RATE_LIMITED", "block", /Too many sign-in attempts/],
     ["OPERATOR_OVERRIDE_NOT_IMPLEMENTED", "block", /not have this action/],
     ["VALIDATION_FAILED", "block", /not accepted: backend says/],
