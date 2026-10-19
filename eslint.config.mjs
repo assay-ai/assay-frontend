@@ -99,11 +99,11 @@ export default [
   },
   ...nextCoreWebVitals,
   {
-    name: "x402/pre-existing",
+    name: "assay/pre-existing",
     rules: PRE_EXISTING_ERRORS_DOWNGRADED,
   },
   {
-    name: "x402/chain-sdk-boundary",
+    name: "assay/chain-sdk-boundary",
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/libs/chains/**"],
     rules: {

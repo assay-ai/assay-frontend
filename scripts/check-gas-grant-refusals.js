@@ -29,13 +29,13 @@
  * gate somebody deletes. Run it by hand whenever you touch this vocabulary or
  * update to a new backend version.
  *
- * It reads ONLY the directory named by `X402_BACKEND_SRC`; it never guesses a
+ * It reads ONLY the directory named by `ASSAY_BACKEND_SRC`; it never guesses a
  * sibling path. Without it, it exits **2**, not 0: "could not compare" is not
  * "they agree".
  *
  * Run:
- *   X402_BACKEND_SRC=/path/to/assay-backend/src node scripts/check-gas-grant-refusals.js
- *   X402_BACKEND_SRC=… node scripts/check-gas-grant-refusals.js --write  # refresh the snapshot too
+ *   ASSAY_BACKEND_SRC=/path/to/assay-backend/src node scripts/check-gas-grant-refusals.js
+ *   ASSAY_BACKEND_SRC=… node scripts/check-gas-grant-refusals.js --write  # refresh the snapshot too
  */
 const fs = require("fs");
 const path = require("path");
@@ -47,7 +47,7 @@ const SNAPSHOT = path.join(root, "src/interfaces/gas-grant-refusal.backend.json"
 const PORT_FILE = "modules/settlement/ports/withdraw-gas-grant.port.ts";
 
 /** The backend `src/` root, supplied explicitly by whoever runs the check. */
-const CANDIDATES = [process.env.X402_BACKEND_SRC].filter(Boolean);
+const CANDIDATES = [process.env.ASSAY_BACKEND_SRC].filter(Boolean);
 
 function findPortFile() {
   const tried = [];
@@ -127,12 +127,12 @@ function main() {
   const { file, tried } = findPortFile();
   if (!file) {
     console.error("NOT A PASS — the backend enum could not be read, so nothing was compared.");
-    if (tried.length === 0) console.error("X402_BACKEND_SRC is not set.");
+    if (tried.length === 0) console.error("ASSAY_BACKEND_SRC is not set.");
     else {
       console.error("Tried:");
       for (const p of tried) console.error(`  ${p}`);
     }
-    console.error("Set X402_BACKEND_SRC to the backend's src/ directory and run again.");
+    console.error("Set ASSAY_BACKEND_SRC to the backend's src/ directory and run again.");
     process.exit(2);
   }
 

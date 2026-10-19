@@ -87,7 +87,7 @@ changing them. See `.env.local.example` for the full list and comments.
 | `pnpm typecheck`       | `next typegen` + `tsc --noEmit` (covers test files, which `next build` does not) |
 | `pnpm test`            | Unit tests (Vitest)                                 |
 | `pnpm check:tokens`    | Checks design tokens against the `cn()` merge config |
-| `pnpm check:refusals`  | Compares gas-grant refusal reasons with a backend checkout (needs `X402_BACKEND_SRC`) |
+| `pnpm check:refusals`  | Compares gas-grant refusal reasons with a backend checkout (needs `ASSAY_BACKEND_SRC`) |
 
 ## Docker
 
