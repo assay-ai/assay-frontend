@@ -72,7 +72,6 @@ export type NotificationEvent =
   | "provider.slash_decided"
   | "provider.slash_executed"
   | "provider.slash_reversed"
-  | "provider.payout_sent"
   | "toolset.update_available"
   | "tool_version.deprecated"
   | "tool_version.retired"
