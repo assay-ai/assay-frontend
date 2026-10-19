@@ -25,8 +25,8 @@ import { relativeTime } from "./format";
  *
  *   - no key yet: step 1 is "Create your first key", and the config then
  *     carries the full key (the only moment it exists);
- *   - a key already: the config names it by its prefix, with "Create a key
- *     and fill it in" one click away instead of editing a placeholder.
+ *   - a key already: the config names it by its prefix, with "Use an API key
+ *     instead" (R-UI-8) under My own code one click away instead of editing a placeholder.
  *
  * "Is it working?" follows the URL this page hands out (Servers in use, so
  * `?connect=waiting` shows the wait), else the keys' last use. Anything

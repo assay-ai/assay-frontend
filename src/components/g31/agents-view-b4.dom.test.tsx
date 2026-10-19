@@ -102,6 +102,17 @@ describe("the agent card while its keys load", () => {
     expect(out).toContain("Signed in from Claude Code (claude.ai) · free tools only");
     expect(out).not.toContain("null");
   });
+
+  it("offers Use an API key instead while the agent only signs in through an app, New key once it has one (R-UI-8)", () => {
+    const base = { agentId: AGENT, scopes: [], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
+    const grant = { ...base, id: "g1", name: "Claude Code · 2026-10-17", issuedVia: "OAUTH", prefix: null, oauthClient: THIRD_PARTY };
+    const key = { ...base, id: "k1", name: "Key 1", issuedVia: "API_KEY", oauthClient: null, prefix: "assay_sk_live_ab12" };
+    const button = (keys: unknown[]) =>
+      text(render((client) => client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: keys })).match(/<button[^>]*data-testid="new-credential"[\s\S]*?<\/button>/)?.[0] ?? "").trim();
+    expect(button([])).toBe("Use an API key instead");
+    expect(button([grant])).toBe("Use an API key instead");
+    expect(button([grant, key])).toBe("New key");
+  });
 });
 
 const DELEGATE_A = "eip155:46630:0x76B98fD03eE16e2673532769891f1400b447d10C";
