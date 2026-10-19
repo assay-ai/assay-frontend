@@ -5,7 +5,7 @@ import { KeyRound, Pencil, Plus } from "lucide-react";
 import * as React from "react";
 
 import { AgentHealthLine, ReadinessChip } from "@/components/buyer-money/agent-health";
-import { CreateKeySheet } from "@/components/buyer-money/create-key";
+import { CreateKeySheet, payingKeyName } from "@/components/buyer-money/create-key";
 import { PaidByInvitation } from "@/components/buyer-money/get-started";
 import { LetAgentPaySheet } from "@/components/buyer-money/let-agent-pay-sheet";
 import { EffectiveLimitLines, type LimitsContext, rowsFor, SpendingLimitsActions, useLimitsContext } from "@/components/buyer-money/agent-limits";
@@ -239,6 +239,7 @@ export function AgentsView() {
         agentId={newKeyFor?.agentId ?? null}
         agentName={newKeyFor?.label}
         keyCount={newKeyFor ? (data.keys[newKeyFor.agentId] ?? []).length : 0}
+        payingKey={newKeyFor ? payingKeyName(data.readiness[newKeyFor.agentId]) : null}
         open={newKeyFor !== null}
         onOpenChange={(open) => !open && setNewKeyFor(null)}
       />

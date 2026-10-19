@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { OperatorCaseBrief, OperatorIdentity } from "@/interfaces/operator";
 
-import { caseAuthority, caseFacts, caseNextStep, caseTimelineSteps } from "./case-flow";
+import { caseAuthority, caseFacts, caseNextStep, caseTimelineSteps, cancelDeadlineSentence } from "./case-flow";
 import { cancelDeadlineNotice } from "./state";
 
 /**
@@ -151,10 +151,30 @@ describe("C1: an executed record is never \"nothing was taken\"", () => {
     expect(cancelDeadlineNotice("CANCEL_REQUESTED", iso(NOW - DAY), new Date(NOW), "eip155:46630", "EXECUTED")?.text).toContain("stake was taken");
   });
 
-  it("UNKNOWN reads as standing: the usual cancel step", () => {
-    const facts = caseFacts(brief({ chainRecord: "UNKNOWN" }), NOW);
+  it("UNKNOWN keeps the cancel step and its action", () => {
+    const b = brief({ chainRecord: "UNKNOWN" });
+    const facts = caseFacts(b, NOW);
     expect(facts.stage).toBe("cancel-requested");
     expect(facts.nothingOnChain).toBe(false);
+    expect(caseAuthority(b, ADMIN, facts).cancel).toBe(true);
+  });
+
+  // V1-15: legacy case 34ccdb62, past its deadline, whose live read found no record.
+  it("UNKNOWN past the deadline never says anyone can execute it", () => {
+    const b = brief({ chainRecord: "UNKNOWN" });
+    const facts = caseFacts(b, NOW);
+    expect(facts.chainUnconfirmed).toBe(true);
+    const next = caseNextStep(facts, caseAuthority(b, ADMIN, facts), fmt);
+    expect(next).toMatchObject({ kind: "action", action: "cancel", title: "Check the chain and get the cancel signed now" });
+    expect(next.description).toContain("We could not confirm what stands there");
+    expect(allText(b)).not.toMatch(/anyone can execute/i);
+    expect(cancelDeadlineSentence(facts, fmt)).not.toMatch(/anyone can execute/i);
+    const notice = cancelDeadlineNotice("CANCEL_REQUESTED", iso(NOW - DAY), new Date(NOW), "eip155:46630", "UNKNOWN");
+    expect(notice?.overdue).toBe(true);
+    expect(notice?.text).not.toMatch(/anyone can execute/i);
+    // Still urgent (review m2): a failed read may hide a record that stands.
+    expect(next.description).toContain("its deadline has passed");
+    expect(notice?.text).toContain("its deadline has passed");
   });
 });
 

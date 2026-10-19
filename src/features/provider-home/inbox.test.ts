@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { inboxBreakdown, inboxCount, inboxHeadline, isProviderEvent } from "./inbox";
+import { inboxBreakdown, inboxCount, inboxHeadline, isProviderEvent, noticesBesideActions } from "./inbox";
 
 describe("provider inbox audience", () => {
   it("keeps provider events only", () => {
@@ -66,5 +66,17 @@ describe("open reports and folded notices in the badge", () => {
     });
     expect(breakdown).toEqual({ penalties: 0, reports: 1, notices: 1 });
     expect(inboxHeadline(breakdown)).toBe("2 new: 1 report to reply to, 1 unread notice (marked with a dot).");
+  });
+});
+
+describe("an open report is shown once (V1-12)", () => {
+  const opened = { event: "call_dispute.opened", subjectId: "D1", payload: { role: "provider" } };
+  const decided = { event: "call_dispute.decided", subjectId: "d1", payload: { role: "provider" } };
+  const other = { event: "call_dispute.opened", subjectId: "d2", payload: { role: "provider" } };
+  it("leaves out the opened notice of a report in Needs action, and nothing else", () => {
+    expect(noticesBesideActions([opened, decided, other], ["d1"])).toEqual([decided, other]);
+  });
+  it("lists it again once the report leaves Needs action", () => {
+    expect(noticesBesideActions([opened], [])).toEqual([opened]);
   });
 });

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { nextKeyName } from "@/features/buyer-money/agent-label";
+import type { AgentReadiness } from "@/features/buyer-money/agent-readiness";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { createCredential } from "@/services/account.service";
@@ -28,8 +29,23 @@ export interface CreatedKey {
   token: string;
 }
 
-/** What a new key can do: it has no payment key, so it makes free calls only. */
-export const NEW_KEY_PAYS_NOTE = "This key makes free calls. To pay with it, run the payment-key step again for this key.";
+/**
+ * What a new key can do: it has no payment key, so it makes free calls only.
+ * `payingKey` names the agent's key that already pays, when it has one: the
+ * agent keeps paying through that key, and moving it to the new one would
+ * stop its paid calls (V1-6). "Run the payment-key step again" read to an
+ * agent that already pays as if something were broken.
+ */
+/** The name of the agent's live key that pays now (bound, permission active), or null. */
+export function payingKeyName(readiness: Pick<AgentReadiness, "boundCredential" | "grant"> | undefined): string | null {
+  return readiness?.boundCredential && readiness.grant?.status === "ACTIVE" ? readiness.boundCredential.name : null;
+}
+
+export function newKeyPaysNote(payingKey?: string | null): string {
+  return payingKey
+    ? `This key makes free calls only. Your agent pays through its key “${payingKey}”. If you switch the agent to this key, it can make paid calls only once a payment key is bound to this key as well.`
+    : "This key makes free calls only: no payment key is bound to it.";
+}
 
 /** Plain words for a failed create. */
 export function createKeyErrorText(error: unknown): string {
@@ -60,9 +76,12 @@ export function CreateKeyForm({
   onCreated,
   onDone,
   doneLabel = "I have copied it",
+  payingKey = null,
 }: {
   agentId: string;
   defaultName?: string;
+  /** The agent's key that already pays, if any (see {@link newKeyPaysNote}). */
+  payingKey?: string | null;
   onCreated?: (key: CreatedKey) => void;
   onDone?: () => void;
   doneLabel?: string;
@@ -94,7 +113,7 @@ export function CreateKeyForm({
             <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
             Shown once. We cannot show it again; if you lose it, create a new one and revoke this one.
           </p>
-          <p className="text-body-xs text-03" data-testid="key-free-calls">{NEW_KEY_PAYS_NOTE}</p>
+          <p className="text-body-xs text-03" data-testid="key-free-calls">{newKeyPaysNote(payingKey)}</p>
         </div>
         <div className="flex w-full min-w-0 flex-col gap-1.5">
           <span className="text-label-13 text-01">Connect your MCP client</span>
@@ -136,11 +155,14 @@ export function CreateKeySheet({
   agentId,
   agentName,
   keyCount = 0,
+  payingKey = null,
   open,
   onOpenChange,
 }: {
   agentId: string | null;
   agentName?: string;
+  /** The agent's key that already pays, if any. */
+  payingKey?: string | null;
   /** Keys the agent has had (revoked included), for the default name "Key N". */
   keyCount?: number;
   open: boolean;
@@ -154,7 +176,7 @@ export function CreateKeySheet({
           <SheetDescription>Your agent uses it to call tools. You can revoke it at any time; that takes effect at once.</SheetDescription>
         </SheetHeader>
         <div className="flex w-full min-w-0 flex-col gap-4 px-[18px] pb-6 pt-4">
-          {agentId ? <CreateKeyForm key={String(open)} agentId={agentId} defaultName={nextKeyName(keyCount)} onDone={() => onOpenChange(false)} /> : null}
+          {agentId ? <CreateKeyForm key={String(open)} agentId={agentId} defaultName={nextKeyName(keyCount)} payingKey={payingKey} onDone={() => onOpenChange(false)} /> : null}
         </div>
       </SheetContent>
     </Sheet>

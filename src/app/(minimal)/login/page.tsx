@@ -229,11 +229,18 @@ export default function LoginPage() {
   // Sent here from a provider page (List a tool, Start listing): say so.
   const listing = next.startsWith("/provider");
 
+  // Already signed in: go where `next` says (validated, same origin only).
+  // Read from the address bar at that moment as well as from the hook, so a
+  // first render before the query string is known never sends a signed-in
+  // person to `/` instead (V1-13).
   useEffect(() => {
     if (!ready || !authenticated) return;
+    const fromAddress = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("next");
+    // Always validated first; only then can it pick the kind of navigation.
+    const target = fromAddress !== null ? safeNextPath(fromAddress) : next;
     // Back to a strict page (the consent page): a full load, so it gets its own headers.
-    if (isStrictPagePath(next)) loadPage(next);
-    else router.replace(next);
+    if (isStrictPagePath(target)) loadPage(target);
+    else router.replace(target);
   }, [ready, authenticated, router, next]);
 
   // Don't flash a sign-in form at someone who is already signed in.

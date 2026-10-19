@@ -30,9 +30,10 @@ import { errorText, toolsetKeys, useToolsets } from "./use-toolsets";
 /**
  * Controls › Tool sets (`/toolsets/mine`): the account's own tool sets. Each
  * one is its own MCP server at `/my/{slug}`, serving its Draft live. Create
- * names one and shows the address it will get; an account with none starts
- * from the tools its agents already used (every one listed, the ones that
- * can't run now tagged with why). A row opens `/toolsets/mine?id=`.
+ * names one and shows the address it will get. "Start from tools you've used"
+ * (offered on the empty state, and next to New tool set once sets exist)
+ * lists every tool the agents already used, the ones that can't run now
+ * tagged with why. A row opens `/toolsets/mine?id=`.
  */
 export function toolsetHref(id: string): string {
   return `/toolsets/mine?id=${encodeURIComponent(id)}`;
@@ -165,9 +166,17 @@ export function ToolsetsView() {
           </p>
         </div>
         {sets.length > 0 && !creating ? (
-          <Button icon={<Plus />} onClick={() => open("empty")}>
-            New tool set
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {/* Not only on the empty state: an account with a set can still start one from its agents' calls (V1-2). */}
+            {used.length > 0 ? (
+              <Button variant="secondary" onClick={() => open("used")}>
+                Start from tools you&apos;ve used
+              </Button>
+            ) : null}
+            <Button icon={<Plus />} onClick={() => open("empty")}>
+              New tool set
+            </Button>
+          </div>
         ) : null}
       </header>
 

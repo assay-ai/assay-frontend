@@ -98,6 +98,11 @@ describe("the receipt page tells one story", () => {
     expect(words).toContain("Served (not checked)");
     expect(words).not.toContain("Check passed");
     expect(words).not.toContain("No result recorded");
+    // V1-8: its four checks say why they did not run, not that one failed.
+    expect(words.replace(/Raw data[\s\S]*$/, "")).not.toMatch(/checks stop at the first failure/i);
+    expect(words).toContain("No check result was recorded for this call");
+    // Four stages, drawn once per layout (table and list).
+    expect(words.match(/not reached · no check result was recorded/g)?.length).toBe(4);
     const timeline = timelineOf(words);
     expect(timeline).toContain("Charged");
     expect(timeline).not.toContain("not charged");
