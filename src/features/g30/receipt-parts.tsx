@@ -311,33 +311,6 @@ export function MobileStageList({ checks }: MobileStageListProps) {
 
 /* ----------------------------------------------------------------- metabar */
 
-export interface MetaItem {
-  label: string;
-  value: string;
-  /** Renders the value as a link colour, as the design does for Transaction. */
-  accent?: boolean;
-}
-
-export function MetaBar({ items }: { items: MetaItem[] }) {
-  return (
-    <section className="grid w-full grid-cols-2 gap-5 rounded-xl border border-01 bg-01 px-5 py-[15px] tablet:grid-cols-6">
-      {items.map((item) => (
-        <div key={item.label} className="flex min-w-0 flex-col gap-[3px]">
-          <span className="text-body-xs text-03">{item.label}</span>
-          <span
-            className={cn(
-              "truncate font-mono text-mono-13",
-              item.accent ? "text-primary-500" : "text-01",
-            )}
-          >
-            {item.value}
-          </span>
-        </div>
-      ))}
-    </section>
-  );
-}
-
 /* ---------------------------------------------------------------- io panel */
 
 export function CodePane({ label, body }: { label: string; body: string }) {

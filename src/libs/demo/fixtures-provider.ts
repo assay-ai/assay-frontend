@@ -702,16 +702,6 @@ function rememberTerms(id: string, terms: KeptTerms): void {
   }
 }
 
-/** Forgets what this tab saved (tests). */
-export function resetDemoBindingTerms(): void {
-  savedTerms = {};
-  try {
-    window.sessionStorage.removeItem(TERMS_KEY);
-  } catch {
-    // No window or storage.
-  }
-}
-
 /** The listing's terms: what this tab saved, else the stage set's, else the tool's current major. */
 function termsFor(binding: DemoBinding): { range: string; provides: string[]; supports: string[] } {
   const kept = keptTerms()[binding.id] ?? {};

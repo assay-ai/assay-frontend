@@ -239,10 +239,6 @@ export function pendingNote(rows: CallRow[]): string {
 export const PENDING_PAYMENT_NOTE =
   "the payment is still being checked: settled, no credit recorded for you yet · not paid to you yet";
 
-/** PENDING, when the rows are not at hand to say which kind it is. */
-export const PENDING_NOTE =
-  "not resolved yet: the response or its payment is still being checked · not paid to you yet";
-
 // ── Call classes ───────────────────────────────────────────────────────────
 
 /**
@@ -479,35 +475,6 @@ export function foldNotCredited(rows: CallRow[]): {
 }
 
 // ── Traffic, by day and tool ───────────────────────────────────────────────
-
-export interface DayToolCount {
-  /** `YYYY-MM-DD`, UTC. */
-  day: string;
-  /** Calls per `toolId`. */
-  byTool: Record<string, number>;
-}
-
-/**
- * Call volume per UTC day per tool, for the last `days` days ending on
- * `anchor` — zero-filled, so a quiet day is a gap in the bars and not a
- * missing column.
- */
-export function foldTraffic(rows: CallRow[], anchor: Date, days: number): DayToolCount[] {
-  const end = Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate());
-  const out: DayToolCount[] = [];
-  for (let i = days - 1; i >= 0; i--) {
-    out.push({ day: new Date(end - i * 86_400_000).toISOString().slice(0, 10), byTool: {} });
-  }
-  const index = new Map(out.map((d) => [d.day, d]));
-
-  for (const row of rows) {
-    const day = row.createdAt.slice(0, 10);
-    const bucket = index.get(day);
-    if (!bucket) continue;
-    bucket.byTool[row.toolId] = (bucket.byTool[row.toolId] ?? 0) + 1;
-  }
-  return out;
-}
 
 /** Calls made on one UTC day. */
 export function callsOnDay(rows: CallRow[], day: string): number {

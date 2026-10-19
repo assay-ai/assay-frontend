@@ -49,20 +49,6 @@ export function mayBlockOnChain(roles: readonly OperatorRole[]): boolean {
   return roles.some((role) => ARBITER_BLOCK_ROLES.includes(role));
 }
 
-/** Suggestions only: the backend takes any reason code up to 64 characters. */
-export const RULING_REASON_SUGGESTIONS: Readonly<Record<ArbiterRuling, readonly string[]>> = Object.freeze({
-  UPHOLD: ["EVIDENCE_HOLDS", "PROVIDER_CONFIRMED", "RATE_GENUINELY_EXCEEDED"],
-  CANCEL: ["OVERTURNED", "PLATFORM_DEFECT", "INSUFFICIENT_EVIDENCE"],
-});
-export const CHAIN_BLOCK_REASON_SUGGESTIONS: readonly string[] = Object.freeze([
-  "LEAKED_KEY", "FRAUD", "LEGAL_HOLD",
-]);
-
-export const RULING_LABEL: Readonly<Record<ArbiterRuling, string>> = Object.freeze({
-  UPHOLD: "Uphold — rule against the provider (upholdSlashBatch)",
-  CANCEL: "Cancel — rule for the provider, release the stake (cancelSlashBatch)",
-});
-
 // ── Selection ───────────────────────────────────────────────────────────────
 
 export type ArbiterToggle =
@@ -256,12 +242,6 @@ export interface SupersededCancelFormInput {
   note: string;
   ticketRef: string;
 }
-
-/** The reason code the superseded-record cancel suggests. */
-export const SUPERSEDED_REASON_SUGGESTIONS: readonly string[] = Object.freeze([
-  "SUPERSEDED_EPOCH",
-  "DOUBLE_CHARGE_RISK",
-]);
 
 /** The superseded-record cancel's reasons, as chips; the codes are what the override register records. */
 export const SUPERSEDED_REASONS: readonly { value: string; label: string; hint: string }[] = Object.freeze([

@@ -578,10 +578,4 @@ function isRuleType(key: string): boolean {
 }
 
 export const plainRuleCode = (code: string): string => RULE_CODES[code] ?? humanize(code);
-export const plainTerm = (key: string): string => TERMS[key] ?? (/^w_\d+$/i.test(key) ? windowLabel(key) : humanize(key));
-export const plainOutcome = (key: string): string => OUTCOMES[key] ?? humanize(key);
-export const plainResponseClass = (key: string): string => RESPONSE_CLASSES[key] ?? humanize(key);
-export const plainClassification = (key: string): string =>
-  CLASSIFICATION_REASONS[key] ?? (/^POLICY_\w+_STATUS$/.test(key) ? "The tool's own policy reclassified this reply" : humanize(key));
 export const plainStatus = (key: string): string => STATUSES[key] ?? humanize(key);
-export const plainIneligibility = (key: string): string => INELIGIBILITY[key] ?? humanize(key);
