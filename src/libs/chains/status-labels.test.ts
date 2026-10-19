@@ -22,7 +22,7 @@ describe("chainStatusLabel", () => {
 
   it("names who signs a requested cancel, by chain", () => {
     expect(chainStatusLabel("CANCEL_REQUESTED", "eip155:46630")).toBe("Cancel requested — arbiter to sign");
-    expect(chainStatusLabel("CANCEL_REQUESTED", "eip155:46630/erc20:0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c")).toBe(
+    expect(chainStatusLabel("CANCEL_REQUESTED", "eip155:46630/erc20:0x7242F853db478A28Ae76Ace808212d4B68aa73e7")).toBe(
       "Cancel requested — arbiter to sign",
     );
     expect(chainStatusLabel("CANCEL_REQUESTED", SOLANA_ASSET)).toBe("Cancel requested — program admin to sign");

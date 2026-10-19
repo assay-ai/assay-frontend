@@ -12,7 +12,7 @@ import { stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments"
  * hidden (RESEARCH-standards §1.6, §4.5).
  *
  *   Action    Block wallet 0x9F3c…F36c on chain
- *   Contract  Config contract 0xCf65…6a43
+ *   Contract  Config contract 0xBF2D…b0e5
  *   Chain     Robinhood Chain testnet
  *   Signed by Arbiter key 0x5B38…ddC4
  *   Funds     None sent. The signer's wallet pays the network fee.
