@@ -21,6 +21,7 @@ const grant = (call: string, day: string, spent = "0", status: EscrowDelegate["s
   spentInWindow: usd(spent),
   validUntil: "2027-01-01T00:00:00Z",
   status,
+  unsettled: { count: 0, amount: usd("0"), largest: usd("0"), windowNeeds: usd("0"), redeemableUntil: null },
 });
 const ceiling = { maxVoucherAmount: usd("10"), maxPerWindow: usd("120"), spentInWindow: usd("15.75") };
 const policy = (over: Partial<Record<"perCallMax" | "dailyCap" | "monthlyCap" | "requireApprovalAbove", Money | null>> = {}) => ({

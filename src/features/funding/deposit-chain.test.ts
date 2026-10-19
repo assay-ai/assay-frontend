@@ -78,10 +78,4 @@ describe("assertRequirementsChain", () => {
       /created on solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1, not the eip155:46630/,
     );
   });
-
-  it("has nothing to check against the older response, and says so by passing", () => {
-    // Not a silent success for a wrong chain — a response that carries no
-    // chain makes no claim to disagree with. The seam is this line.
-    expect(() => assertRequirementsChain("eip155:46630", undefined)).not.toThrow();
-  });
 });

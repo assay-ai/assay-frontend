@@ -1478,6 +1478,8 @@ function freshEscrow() {
     windowStartedAt: null,
     windowSeconds: 86400,
     observedAt: minutesAgo(1),
+    // No lifetime line on a first-run escrow.
+    lifetime: null,
   };
 }
 
@@ -1510,6 +1512,7 @@ function debtEscrow() {
     windowStartedAt: readable ? minutesAgo(540) : null,
     windowSeconds: 86400,
     observedAt: readable ? minutesAgo(1) : null,
+    lifetime: null,
     ...(readable ? savedEscrowCaps() : {}),
   };
 }
@@ -1979,6 +1982,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           // Five days left, so the demo shows the "permission ends soon" chip and Renew.
           validUntil: new Date(DEMO_NOW_MS + 5 * 86_400_000 + 3_600_000).toISOString(),
           status: "ACTIVE",
+          // Nothing signed is waiting to be collected; the 24-hour cap holds what was spent.
+          unsettled: { count: 0, amount: money("0"), largest: money("0"), windowNeeds: money(SPENT_IN_WINDOW), redeemableUntil: null },
           // A demo "Sign and save" shows its new limits until reload.
           ...savedDelegateCaps(prodDelegate()),
         },

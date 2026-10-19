@@ -362,7 +362,7 @@ export interface OperatorCaseBrief {
    * B18: the three operator actions for a case stuck behind a requested
    * cancel the backend's sweep cannot settle, each with whether its guard
    * holds on the brief's own live chain read. The action reads the chain
-   * again before it acts. Absent from an older backend (nothing offered).
+   * again before it acts. Absent: nothing offered.
    */
   manualActions?: OperatorCaseManualActions;
 }

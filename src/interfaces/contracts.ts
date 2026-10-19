@@ -81,25 +81,25 @@ export interface ToolVersionList {
   currentVersion: string | null;
   /** Newest first. */
   versions: ToolContractVersion[];
-  /** Per listed provider, sorted by name. Absent on an older backend. */
-  providers?: ToolVersionProvider[];
+  /** Per listed provider, sorted by name. */
+  providers: ToolVersionProvider[];
 }
 
-/** The contract-version half of a catalogue tool card (T3). Optional: an older backend omits it. */
+/** The contract-version half of a catalogue tool card (T3). */
 export interface CatalogueToolVersionFields {
   /** The current version's one-line summary (at most 200 characters). */
-  summary?: string;
+  summary: string;
   /** The current semver, e.g. "2.0.0"; null on a tool with no published version. */
-  version?: string | null;
+  version: string | null;
   /** Newest first. */
-  versions?: ToolVersionBrief[];
+  versions: ToolVersionBrief[];
   /** Majors still serving until their sunset. */
-  deprecatedMajors?: number[];
+  deprecatedMajors: number[];
   /** What replaces the deprecated majors: this tool at a newer major, or another listed tool. */
-  replacementToolId?: string | null;
-  replacementName?: string | null;
-  replacementMajor?: number | null;
-  replacementVersion?: string | null;
+  replacementToolId: string | null;
+  replacementName: string | null;
+  replacementMajor: number | null;
+  replacementVersion: string | null;
 }
 
 /** One listed provider of a tool: the majors and optional fields it declares (`ToolVersionProviderDto`). */

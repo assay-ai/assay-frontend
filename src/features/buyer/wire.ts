@@ -73,8 +73,8 @@ export interface SummaryTotals {
   /** Calls not finished yet, at their listed price. */
   inProgressTotal: Money;
   inProgressCalls: number;
-  /** Calls listed at zero (free tier), counted in `calls`. Optional: older backends do not send it. */
-  freeCalls?: number;
+  /** Calls listed at zero (free tier), counted in `calls`. */
+  freeCalls: number;
   failRate: number;
 }
 

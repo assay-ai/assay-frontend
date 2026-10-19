@@ -152,8 +152,8 @@ describe("the Share dialog", () => {
 });
 
 const CATALOGUE: PublicTool[] = [
-  { id: "t1", name: "get_token_market", description: "", tier: "VERIFIED", providerCount: 3, fromPrice: usd("2200"), price: usd("3000"), pricingMode: "PAID", routable: true, settlementChains: null },
-  { id: "t2", name: "Market quote", description: "", tier: "VERIFIED", providerCount: 1, fromPrice: usd("450000"), price: usd("450000"), pricingMode: "PAID", routable: true, settlementChains: null },
+  { id: "t1", name: "get_token_market", description: "", tier: "VERIFIED", providerCount: 3, fromPrice: usd("2200"), price: usd("3000"), pricingMode: "PAID", routable: true, settlementChains: null, paidBindings: 1, freeCallsPerDay: null, summary: "", version: null, versions: [], deprecatedMajors: [], replacementToolId: null, replacementName: null, replacementMajor: null, replacementVersion: null },
+  { id: "t2", name: "Market quote", description: "", tier: "VERIFIED", providerCount: 1, fromPrice: usd("450000"), price: usd("450000"), pricingMode: "PAID", routable: true, settlementChains: null, paidBindings: 1, freeCallsPerDay: null, summary: "", version: null, versions: [], deprecatedMajors: [], replacementToolId: null, replacementName: null, replacementMajor: null, replacementVersion: null },
 ];
 
 const CARD = {

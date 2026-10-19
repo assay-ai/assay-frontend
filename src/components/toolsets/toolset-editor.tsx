@@ -360,7 +360,7 @@ export function EntryRow({
   decimals: number;
   asset: string;
   providers: ProviderRow[];
-  /** The tool's published versions, from the catalogue card (T3); empty on an older backend. */
+  /** The tool's published versions, from the catalogue card (T3); empty when the card is not at hand. */
   versions: readonly ToolVersionBrief[];
   open: boolean;
   onToggle: () => void;
@@ -478,7 +478,7 @@ export function RuleEditor({
   const known = full.length > 0 ? full : versions;
   const [majors, setMajors] = React.useState<number[]>(() => entryMajors(row.toolVersionRange, versions));
   const [required, setRequired] = React.useState<string[]>(row.requireOutputFields ?? []);
-  // The catalogue card may be missing (an older backend): take the range from the full list once it lands.
+  // Without the catalogue card's versions, take the range from the full list once it lands.
   React.useEffect(() => {
     if (majors.length === 0 && full.length > 0) setMajors(entryMajors(row.toolVersionRange, full));
   }, [full, majors.length, row.toolVersionRange]);

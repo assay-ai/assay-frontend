@@ -58,7 +58,7 @@ export interface CaseFacts {
   /**
    * The backend read that nothing of the case is Pending or Disputed on chain
    * (`chainRecord: GONE`): nobody can execute it and a cancel has nothing
-   * to act on. False when the brief does not say (an older backend).
+   * to act on.
    */
   nothingOnChain: boolean;
   /**
@@ -83,7 +83,7 @@ export interface CaseFacts {
   /**
    * B18: which stuck-cancel action the brief's live chain read allows
    * (`manualActions`). The backend reads the chain again before it acts and
-   * refuses if the guard no longer holds. All false on an older backend.
+   * refuses if the guard no longer holds. All false when the brief offers none.
    */
   manual: { close: boolean; record: boolean; repropose: boolean; appliedMinor: string | null };
   /**

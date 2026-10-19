@@ -17,8 +17,7 @@ import { api } from "./api";
  * **The route exists.** `ChainsController` at
  * `src/modules/chains/controllers/chains.controller.ts` in assay-backend
  * declares `@Controller('chains')` and returns `GetChainsResponseDto`, built by
- * `ChainDirectoryService` from the `ENABLED_CHAINS` token alone. Older backend
- * versions do not have it.
+ * `ChainDirectoryService` from the `ENABLED_CHAINS` token alone.
  *
  * So `useChains` reaches **ready**, and `error` is a failure path rather than
  * the state this deployment lives in. It still carries an EMPTY list in both

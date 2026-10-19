@@ -15,9 +15,9 @@ export interface ToolCall {
   charged: Money;
   /**
    * SETTLED, but the provider caused the payment to fail and forfeited it:
-   * not charged, nobody paid. Optional: older backends do not send it.
+   * not charged, nobody paid.
    */
-  forfeited?: boolean;
+  forfeited: boolean;
   /**
    * Buyer debt: `OUTSTANDING` — the payment could not be collected, the price
    * stays held and the payer must sign a replacement voucher before paid calls
@@ -26,12 +26,12 @@ export interface ToolCall {
    * calls stay refused until it is signed; `VOIDED` — the call failed
    * verification after it had become debt: not charged, provider not paid.
    */
-  debt?: CallDebt | null;
+  debt: CallDebt | null;
   /**
    * SETTLED, and refunded because the buyer's report of a bad result was
-   * upheld (`debt` is `VOIDED`). Optional: older backends do not send it.
+   * upheld (`debt` is `VOIDED`).
    */
-  refundedByReport?: boolean;
+  refundedByReport: boolean;
   /** Wider than the OpenAPI enum, and nullable. See @/utils/verdict. */
   verdict: WireVerdict;
   createdAt: string;

@@ -110,8 +110,8 @@ export interface CatalogueProviderTool {
   price: CatalogueMoney;
   /** The failure rate this listing promises, 0..1 — what its penalties are measured against. */
   promisedFailureRate?: number;
-  /** Free calls one agent gets per UTC day on this listing; null for a PAID one. Absent on older APIs. */
-  freeCallsPerAgentPerDay?: number | null;
+  /** Free calls one agent gets per UTC day on this listing; null for a PAID one. */
+  freeCallsPerAgentPerDay: number | null;
   /** CAIP-2 chains a call to this listing can settle on now; [] when it takes no call; null when unknown. */
   chains?: string[] | null;
   /** Per caller: one of your agents' chains is in `chains`. null when unknown. */
@@ -160,24 +160,22 @@ export interface CatalogueTool extends CatalogueToolVersionFields {
   /**
    * Free first, then paid: the free calls a day one agent gets before a call
    * is charged — set for FREE and FREEMIUM tools, `null` for a PAID one. A
-   * FREEMIUM tool reads "N free per day, then up to {price}". Optional for a
-   * backend that predates the field.
+   * FREEMIUM tool reads "N free per day, then up to {price}".
    */
-  freeCallsPerDay?: number | null;
+  freeCallsPerDay: number | null;
   routable: boolean;
   /**
    * Bindings the router could serve this tool from right now — the set `price`
    * is the dearest of. Not `providerCount`: a listed provider the router cannot
    * use (stake on another asset, a ceiling hit) counts there and not here.
-   * Optional for a backend that predates the field.
    */
-  routableBindings?: number;
+  routableBindings: number;
   /**
    * How many of `routableBindings` can be charged (PAID or FREEMIUM). "up to
    * $X" is about these only: a FREE binding beside one paid binding does not
-   * make the paid price a range. Optional for a backend that predates the field.
+   * make the paid price a range.
    */
-  paidBindings?: number;
+  paidBindings: number;
   unroutableReason: string | null;
   /**
    * CAIP-2, the chains any ACTIVE binding for this tool settles on.

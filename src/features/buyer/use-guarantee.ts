@@ -138,7 +138,7 @@ const NOT_CHARGED_STATUSES = new Set(["REFUNDED", "VOIDED", "EXPIRED"]);
  * figure comes from `GET /withheld`, never from this fold.
  */
 function notCollected(call: ToolCall): boolean {
-  return call.status === "SETTLED" && (call.forfeited === true || call.debt === "VOIDED");
+  return call.status === "SETTLED" && (call.forfeited || call.debt === "VOIDED");
 }
 
 /**

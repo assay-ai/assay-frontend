@@ -51,9 +51,9 @@ function hasMoney(money: Money | null | undefined): boolean {
   return Boolean(money) && BigInt(money!.amount || "0") > 0n;
 }
 
-/** The summary's not-charged bucket; an older API sends only `withheldTotal`. */
+/** The summary's not-charged bucket. */
 function notChargedOf(figures: SummaryFigures): Money {
-  return figures.notChargedTotal ?? figures.withheldTotal;
+  return figures.notChargedTotal;
 }
 
 /**

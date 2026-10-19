@@ -15,6 +15,7 @@ function totals(overrides: Partial<ProviderEarningsFigures> = {}): ProviderEarni
     platformFee: usdg("470000"),
     withheld: usdg("0"),
     withheldCalls: 0,
+    withheldByClass: [],
     ...overrides,
   };
 }
@@ -83,6 +84,7 @@ describe("earningsSplit", () => {
       platformFee: usd("500000"),
       withheld: usd("0"),
       withheldCalls: 0,
+      withheldByClass: [],
       debtOutstanding: usd("1000000"),
       debtOutstandingCalls: 2,
       uncollected: usd("300000"),
@@ -96,7 +98,7 @@ describe("earningsSplit", () => {
 
   it("rounds the wallet figure and the fee once, from cents, for Home and Money alike", () => {
     // $6.084 + $0.676 = $6.76: $6.08 + $0.68, never $6.08 beside $0.67.
-    const split = earningsSplit({ calls: 81, earned: usd("6084000"), platformFee: usd("676000"), withheld: null, withheldCalls: 0 });
+    const split = earningsSplit({ calls: 81, earned: usd("6084000"), platformFee: usd("676000"), withheld: null, withheldCalls: 0, withheldByClass: [] });
     expect(split.inWallet?.amount).toBe("6080000");
     expect(split.fee?.amount).toBe("680000");
   });
