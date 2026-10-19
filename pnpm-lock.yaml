@@ -98,6 +98,9 @@ importers:
       tailwindcss-animate:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.19)
+      tldts:
+        specifier: 6.1.86
+        version: 6.1.86
       viem:
         specifier: 2.55.15
         version: 2.55.15(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
