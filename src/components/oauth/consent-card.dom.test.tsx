@@ -42,7 +42,7 @@ function request(overrides: Partial<ConsentRequest> = {}): ConsentRequest {
     returnTo: { kind: "WEB", display: "claude.ai" },
     scope: ["assay:agent"],
     agents: [agent("agt-1", "research-bot"), agent("agt-2", "ops-bot")],
-    replaces: { id: "c-old", name: "Assay app on this Mac", agentId: "agt-2", narrowed: true },
+    replaces: { id: "c-old", name: "Assay app on this Mac", agentId: "agt-2", narrowed: true, live: true },
     suggestedName: "Claude Code · 2026-10-19",
     ...overrides,
   };

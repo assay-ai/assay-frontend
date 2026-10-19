@@ -29,7 +29,8 @@ export interface ConsentRequest {
   scope: string[];
   agents: ConsentAgent[];
   /** Only for a sign-in of the Assay app replacing its own earlier one. */
-  replaces?: { id: string; name: string; agentId: string; narrowed: boolean };
+  /** `live`: not revoked or expired. A dead one is still replaced (its limits are kept) but frees no place under the cap. */
+  replaces?: { id: string; name: string; agentId: string; narrowed: boolean; live: boolean };
   suggestedName: string;
 }
 
@@ -377,9 +378,9 @@ export function consentView(
   const agentNotes: string[] = [];
   if (request.agents.length === 0) agentNotes.push(CONSENT_STRINGS.noAgents);
   if (agent && !agent.active) agentNotes.push(CONSENT_STRINGS.paused);
-  // The backend's cap leaves out a live grant this approval replaces.
+  // The backend's cap leaves out a live grant this approval replaces (a dead one is not counted anyway).
   const atLimit =
-    !!agent && agent.liveOAuthCredentials >= GRANT_LIMIT && !(replaces && replaces.agentId === agent.id);
+    !!agent && agent.liveOAuthCredentials >= GRANT_LIMIT && !(replaces?.live && replaces.agentId === agent.id);
   if (atLimit) agentNotes.push(CONSENT_STRINGS.grantLimit);
   else if (agent && agent.liveOAuthCredentials >= GRANT_WARN_AT) {
     agentNotes.push(
@@ -399,7 +400,9 @@ export function consentView(
               ? `Replaces ${old}. Its tool limits are kept.`
               : `Replaces ${old}.`,
           }
-        : { tone: "warning", text: `This keeps ${old} connected. It will not be replaced.` };
+        : replaces.live
+          ? { tone: "warning", text: `This keeps ${old} connected. It will not be replaced.` }
+          : null;
   }
 
   const appName = client.builtin ? "the Assay app" : name;

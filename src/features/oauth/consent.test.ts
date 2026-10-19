@@ -217,7 +217,7 @@ describe("consent view: replaces", () => {
   const replacing = (narrowed: boolean) =>
     request({
       agents: [agent({ id: "a" }), agent({ id: "b", label: "ops" })],
-      replaces: { id: "c-old", name: "Assay app on this Mac", agentId: "b", narrowed },
+      replaces: { id: "c-old", name: "Assay app on this Mac", agentId: "b", narrowed, live: true },
     });
 
   it("pre-selects the replaced grant's agent", () => {
@@ -247,7 +247,7 @@ describe("consent view: replaces", () => {
   });
 
   it("a replaced agent that is not in the list is not pre-selected", () => {
-    const req = request({ replaces: { id: "c", name: "Old", agentId: "gone", narrowed: false } });
+    const req = request({ replaces: { id: "c", name: "Old", agentId: "gone", narrowed: false, live: true } });
     expect(defaultAgentId(req)).toBe("agt-1");
   });
 });
@@ -377,7 +377,7 @@ describe("I3: a client cannot name itself verified", () => {
 
   it("the suggested name and a replaced connection's name lose the marks too", () => {
     expect(initialName({ suggestedName: "Claude Code ✓ Verified · 2026-10-19" })).toBe("Claude Code · 2026-10-19");
-    const v = view(request({ replaces: { id: "c", name: "Old ✓ Verified", agentId: "agt-1", narrowed: false } }));
+    const v = view(request({ replaces: { id: "c", name: "Old ✓ Verified", agentId: "agt-1", narrowed: false, live: true } }));
     expect(v.replaces?.text).toBe("Replaces Old.");
   });
 });
@@ -402,9 +402,25 @@ describe("agent checks before approve", () => {
     expect(v.approveDisabled).toBe(true);
     expect(v.agentNotes[0]).toMatch(/^This agent already has 50 connected apps/);
     const replacing = view(
-      request({ agents: [full], replaces: { id: "c", name: "Old", agentId: full.id, narrowed: false } }),
+      request({ agents: [full], replaces: { id: "c", name: "Old", agentId: full.id, narrowed: false, live: true } }),
     );
     expect(replacing.approveDisabled).toBe(false);
+    // A dead grant frees no place: the backend still refuses at 50 (final review I-1).
+    const dead = view(
+      request({ agents: [full], replaces: { id: "c", name: "Old", agentId: full.id, narrowed: true, live: false } }),
+    );
+    expect(dead.approveDisabled).toBe(true);
+    expect(dead.replaces?.text).toBe("Replaces Old. Its tool limits are kept.");
+  });
+
+  it("a dead grant of another agent: no 'keeps it connected' warning", () => {
+    const v = view(
+      request({
+        agents: [agent({ id: "a" })],
+        replaces: { id: "c", name: "Old", agentId: "b", narrowed: true, live: false },
+      }),
+    );
+    expect(v.replaces).toBeNull();
   });
 
   it("an invisible-only name is empty", () => {
