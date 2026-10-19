@@ -316,9 +316,9 @@ describe("continue URL", () => {
     expect(isContinueUrl("https://mcp.example.com/other", mcp)).toBe(false);
     expect(isContinueUrl("javascript:alert(1)", mcp)).toBe(false);
     expect(isContinueUrl("not a url", mcp)).toBe(false);
-    // No configured MCP host: an http(s) URL with the continue path.
-    expect(isContinueUrl("http://localhost:3002/oauth/authorize/continue?request=abc", undefined)).toBe(true);
-    expect(isContinueUrl("https://mcp.example.com/oauth/authorize/continue?request=abc", undefined)).toBe(true);
+    // No MCP host configured: nothing is a continue URL (fail closed).
+    expect(isContinueUrl("http://localhost:3002/oauth/authorize/continue?request=abc", undefined)).toBe(false);
+    expect(isContinueUrl("https://mcp.example.com/oauth/authorize/continue?request=abc", undefined)).toBe(false);
     expect(isContinueUrl("http://mcp.example.com/oauth/authorize/continue?request=abc", undefined)).toBe(false);
     expect(isContinueUrl("ftp://x/oauth/authorize/continue", undefined)).toBe(false);
   });

@@ -498,13 +498,10 @@ export class ContinueUrlRefused extends Error {
   }
 }
 
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
-
 /**
  * Whether `redirectTo` is the MCP host's `continue` step, the only place the
- * page ever navigates to after a decision. With the MCP host configured the
- * origin must be it; without, an `https` URL (or `http` on loopback, for a
- * local stack) with that path.
+ * page ever navigates to after a decision. The origin must be the configured
+ * MCP host; without one (the build requires it) every URL is refused.
  */
 export function isContinueUrl(raw: string, mcpUrl: string | undefined = process.env.NEXT_PUBLIC_MCP_URL): boolean {
   let url: URL;
@@ -515,13 +512,10 @@ export function isContinueUrl(raw: string, mcpUrl: string | undefined = process.
   }
   if (url.pathname !== "/oauth/authorize/continue" || url.username || url.password) return false;
   const configured = mcpUrl?.trim();
-  if (configured) {
-    try {
-      return url.origin === new URL(configured).origin;
-    } catch {
-      return false;
-    }
+  if (!configured) return false;
+  try {
+    return url.origin === new URL(configured).origin;
+  } catch {
+    return false;
   }
-  if (url.protocol === "https:") return true;
-  return url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname);
 }
