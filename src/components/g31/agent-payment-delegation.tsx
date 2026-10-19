@@ -662,8 +662,7 @@ export function AgentPaymentDelegation({
           No key of this agent has a payment key yet. Paid calls are by
           invitation during testnet: an invited agent makes its payment key
           and proves it holds it with its API key (
-          <span className="font-mono">agent-cli keygen</span>, then{" "}
-          <span className="font-mono">agent-cli bind</span>); the payment key
+          <span className="font-mono">assay-mcp enable-paid</span>); the payment key
           then appears here to authorise.
         </p>
       ) : (
@@ -1155,7 +1154,7 @@ function AuthorizeSheet({
                   label="Last 4 characters of the agent’s key"
                   id="delegate-confirm-key"
                   value={confirm}
-                  hint="As `agent-cli address` prints it on the agent’s machine. This is what proves the key is yours."
+                  hint="As `assay-mcp status` prints it on the agent’s machine. This is what proves the key is yours."
                   error={
                     confirm.length >= 4 && !confirmsDelegateKey(confirm, delegate)
                       ? "That is not this key."

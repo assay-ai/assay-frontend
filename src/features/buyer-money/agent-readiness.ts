@@ -187,7 +187,7 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
     };
   }
   if (!bound) {
-    // D14: the payment key needs agent-cli, which is not published; paying is
+    // D14: the payment key needs assay-mcp, which is not published; paying is
     // by invitation during testnet. Not a warning: nothing here is the
     // person's to fix.
     return {
