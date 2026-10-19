@@ -464,6 +464,10 @@ function CredentialRowItem({
   onPaymentLimits: () => void;
   onRevoke: () => void;
 }) {
+  // Only a key the buyer already authorised on chain (active or expired) is changed here. A new
+  // key goes through the enable-paid page, which checks it against the one on the agent's
+  // computer (`#key`); this sheet cannot.
+  const onChainBefore = view.chain.kind === "active" || view.chain.kind === "expired";
   return (
     <li data-testid="credential-row" className="flex w-full flex-col gap-1.5 rounded-lg border border-01 bg-02 p-3">
       <div className="flex w-full flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
@@ -493,8 +497,14 @@ function CredentialRowItem({
             variant="secondary"
             type="button"
             data-testid="payment-limits"
-            disabled={!credential.delegateAccount || !canChangeLimits}
-            title={!credential.delegateAccount ? "This app has no payment key yet." : undefined}
+            disabled={!credential.delegateAccount || !canChangeLimits || !onChainBefore}
+            title={
+              !credential.delegateAccount
+                ? "This app has no payment key yet."
+                : !onChainBefore
+                  ? "Turn on paid calls from the agent's app first: it opens a page that checks the key on your computer."
+                  : undefined
+            }
             onClick={onPaymentLimits}
           >
             Payment limits
