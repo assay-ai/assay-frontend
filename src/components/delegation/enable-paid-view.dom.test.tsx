@@ -45,7 +45,11 @@ function ready(): Extract<EnablePaidState, { kind: "ready" }> {
   return state;
 }
 
-function Harness({ topLevel = true, run }: { topLevel?: boolean; run: () => Promise<undefined> }) {
+function Harness({
+  topLevel = true,
+  run,
+  ...overrides
+}: { topLevel?: boolean; run: () => Promise<undefined> } & Partial<React.ComponentProps<typeof EnablePaidView>>) {
   const [draft, setDraft] = React.useState<CapsDraft>({ ...DEFAULT_CAPS });
   return (
     <EnablePaidView
@@ -63,6 +67,7 @@ function Harness({ topLevel = true, run }: { topLevel?: boolean; run: () => Prom
       steps={[{ id: "grant", label: "Let research-bot pay", cost: "free", run }]}
       describeError={() => "failed"}
       isTopLevel={() => topLevel}
+      {...overrides}
     />
   );
 }
@@ -121,6 +126,63 @@ describe("EnablePaidView", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Days" }), { target: { value: "7" } });
     expect(screen.getByTestId("loss-bound").textContent).toMatch(/\$160\./);
     expect(screen.getByTestId("wallet-copy").textContent).toContain("$1 a call and $20 per 24 hours");
+  });
+
+  it("blocked, or a wallet that cannot sign: Approve stays off even ticked (m-9)", () => {
+    const run = vi.fn(async () => undefined);
+    render(<Harness run={run} blocked />);
+    fireEvent.click(tick());
+    expect(approve().disabled).toBe(true);
+    expect(screen.getAllByText("Your account is blocked, so paid calls can't be turned on now.").length).toBeGreaterThan(0);
+    cleanup();
+    render(<Harness run={run} walletBlocker="Connect a wallet to sign." />);
+    fireEvent.click(tick());
+    expect(approve().disabled).toBe(true);
+    expect(screen.getByText("Connect a wallet to sign.")).toBeTruthy();
+  });
+
+  it("clocks that disagree: no expiry, Approve off", () => {
+    render(<Harness run={vi.fn(async () => undefined)} validUntil={null} expiryProblem="Clocks differ." />);
+    fireEvent.click(tick());
+    expect(approve().disabled).toBe(true);
+    expect(screen.getByText("Clocks differ.")).toBeTruthy();
+  });
+
+  it("two signatures: the account ceiling it sets is shown, from the caps on the page", () => {
+    render(
+      <Harness
+        run={vi.fn(async () => undefined)}
+        signatures={2}
+        currentCeiling={{ perCall: "0.25", perDay: "100" }}
+      />,
+    );
+    expect(screen.getByTestId("ceiling-row").textContent).toBe("$0.50 a call · $5 per 24 hours");
+    expect(screen.getByTestId("will-sign").textContent).toContain("raises your ceiling from $0.25 to $0.50 a call");
+    expect(screen.getByTestId("will-sign").textContent).toContain("lowers");
+    expect(screen.getByTestId("wallet-copy-ceiling").textContent).toBe(
+      "The first wallet window sets your account ceiling to $0.50 a call and $5 per 24 hours.",
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Per 24 hours" }), { target: { value: "7" } });
+    expect(screen.getByTestId("ceiling-row").textContent).toBe("$0.50 a call · $7 per 24 hours");
+  });
+
+  it("one signature: no ceiling row", () => {
+    render(<Harness run={vi.fn(async () => undefined)} />);
+    expect(screen.queryByTestId("ceiling-row")).toBeNull();
+  });
+
+  it("Add funds is a link to the Funding page when the deposit cannot run here", () => {
+    render(<Harness run={vi.fn(async () => undefined)} fundsShort addFunds={{ kind: "link", href: "/funding" }} />);
+    expect(screen.getByRole("link", { name: "Add funds on the Funding page" }).getAttribute("href")).toBe("/funding");
+  });
+
+  it("the page takes nothing from the URL but the credential id and the #key (I-5)", () => {
+    const page = readFileSync(resolve(__dirname, "../../app/(main)/agents/enable-paid/page.tsx"), "utf8");
+    const reads = [...page.matchAll(/useSearchParam\(\s*([^)]*)\)/g)].map((m) => m[1]);
+    expect(reads).toEqual(['"credential"']);
+    expect(page).not.toMatch(/useSearchParams|URLSearchParams|searchParams|location\.(search|hash|href)|window\.location/);
+    // The form's first values come from the API state only.
+    expect(page).toMatch(/setDraft\(initialDraft\(state\)\)/);
   });
 
   it("the route files import no analytics", () => {

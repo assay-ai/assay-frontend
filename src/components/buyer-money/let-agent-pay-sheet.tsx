@@ -269,6 +269,17 @@ export interface AgentPayStepsInput {
   /** The escrow ceiling (atomic) when the flow opened, frozen so a retry resumes the same steps. */
   openingCaps: { perCall: string; perWindow: string } | null;
   nowSeconds: number;
+  /**
+   * The exact account ceiling (atomic) `SetLimits` signs, as the page shows it.
+   * Left out (the sheet): each cap is raised to fit, never lowered.
+   */
+  ceiling?: { maxVoucherAmount: string; maxPerWindow: string };
+  /**
+   * The exact `validUntil` (unix seconds) the page shows, signed as it is. The
+   * grant step refuses it when it is more than `maxDays` from this device's
+   * clock. Left out (the sheet): `form.days` from `nowSeconds`.
+   */
+  expiry?: { validUntil: number; maxDays: number };
 }
 
 /**
@@ -278,7 +289,7 @@ export interface AgentPayStepsInput {
  * these values; the signer always shows Privy's confirmation (R-WEB-5).
  */
 export function agentPaySteps(input: AgentPayStepsInput): WalletStep[] {
-  const { money, queryClient, agentName, delegateAccount, chosen, form, openingCaps, nowSeconds } = input;
+  const { money, queryClient, agentName, delegateAccount, chosen, form, openingCaps, nowSeconds, ceiling, expiry } = input;
   const escrow = money.escrow;
   const domain = () => {
     const contract = escrow?.escrowPda ? addressOfAccount(escrow.escrowPda) : "";
@@ -296,9 +307,9 @@ export function agentPaySteps(input: AgentPayStepsInput): WalletStep[] {
       run: async ({ report }) => {
         const signer = requireSigner(money.signerState, money.ownerShort);
         report({ stage: "preparing" });
-        // Raise the escrow caps to cover the agent; never lower one the buyer set higher.
+        // The page's shown ceiling; else raise the escrow caps to cover the agent, never lowering one set higher.
         const max = (a: string, b: string | undefined) => (b && BigInt(b) > BigInt(a) ? b : a);
-        const escrowCaps = {
+        const escrowCaps = ceiling ?? {
           maxVoucherAmount: max(chosen!.maxVoucherAmount, openingCaps?.perCall),
           maxPerWindow: max(chosen!.maxPerWindow, openingCaps?.perWindow),
         };
@@ -322,11 +333,23 @@ export function agentPaySteps(input: AgentPayStepsInput): WalletStep[] {
           maxVoucherAmount: { amount: chosen!.maxVoucherAmount, asset: "", decimals: money.decimals },
           maxPerWindow: { amount: chosen!.maxPerWindow, asset: "", decimals: money.decimals },
         };
+        if (expiry) {
+          const localNow = Math.floor(Date.now() / 1000);
+          if (!(expiry.validUntil <= localNow + expiry.maxDays * 86_400)) {
+            throw new Error(`The expiry is more than ${expiry.maxDays} days away. Nothing was signed; reload the page.`);
+          }
+        }
         const parsed = parseDelegationForm(
-          { maxVoucherAmount: form.perCall, maxPerWindow: form.perDay, validDays: String(form.days) },
+          {
+            maxVoucherAmount: form.perCall,
+            maxPerWindow: form.perDay,
+            validDays: String(form.days),
+            keepExpiry: expiry !== undefined,
+          },
           caps,
           addressOfAccount(delegateAccount!),
-          nowSeconds,
+          expiry ? Math.floor(Date.now() / 1000) : nowSeconds,
+          expiry?.validUntil,
         );
         if (!parsed.ok) throw new Error(Object.values(parsed.errors)[0] ?? "These limits cannot be used.");
         const intent = await createDelegateIntent(parsed.body);
