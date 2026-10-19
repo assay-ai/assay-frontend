@@ -39,7 +39,7 @@ import { LetAgentPaySheet } from "./let-agent-pay-sheet";
 import { McpConfigTabs } from "./mcp-config-tabs";
 import { useRecordConnect } from "@/components/toolsets/use-toolsets";
 import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
-import { keyForHint, type McpClient } from "@/features/buyer-money/mcp-config";
+import { keyForHint, urlForClient, type McpClient } from "@/features/buyer-money/mcp-config";
 import { GasHelpNote } from "./gas-help-note";
 import { useAgentsAndKeys } from "./use-agents";
 
@@ -172,7 +172,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   // Copying the config hands out `/`: Servers in use then waits for its first call.
   const recordConnect = useRecordConnect(agent?.agentId);
   const onCopyConfig = (client: McpClient) => {
-    if (agent) recordConnect.mutate({ url: mcpEndpointUrl(), serverName: "assay", client });
+    if (agent) recordConnect.mutate({ url: urlForClient(client, mcpEndpointUrl()), serverName: "assay", client });
   };
   const states = getStartedStates(facts);
   const firstCallAt = liveKeys.map((k) => k.lastUsedAt).filter((v): v is string => Boolean(v)).sort()[0] ?? null;

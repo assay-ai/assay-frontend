@@ -51,6 +51,7 @@ const GRANT = { ...KEY, id: "g1", name: "Claude Code · 2026-10-18", prefix: nul
 
 describe("the key hint skips an app sign-in (OAuth grant, null prefix)", () => {
   it("names the API key even when a grant comes first", () => {
+    vi.stubEnv("NEXT_PUBLIC_MCP_URL", "https://mcp.example.com/");
     const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} /></Sheet>, [GRANT, KEY]);
     const out = text(html);
     expect(out).toContain("Uses the live key “laptop” assay_sk_live_ab12… of My agent");
@@ -92,6 +93,7 @@ describe("Use this tool: /connect?tools= preselects Only these tools", () => {
   });
 
   it("puts Create a key and fill it in first, keeps Copy off while the snippet has a placeholder, and offers the URL alone", () => {
+    vi.stubEnv("NEXT_PUBLIC_MCP_URL", "https://mcp.example.com/");
     const url = toolsPrefillUrl("?tools=get_weather")!;
     const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={url} changing={false} onDone={() => undefined} /></Sheet>, [KEY]);
     const out = text(html);

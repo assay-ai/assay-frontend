@@ -20,7 +20,9 @@ import {
   installText,
   isLocalClient,
   keyPlaceholder,
+  NO_COMMAND_TEXT,
   pasteHint,
+  tryBuild,
   remoteInstall,
   type McpClient,
 } from "@/features/buyer-money/mcp-config";
@@ -189,8 +191,10 @@ export function McpConfigTabs({
 /** The paid-capable install, its one-click link where there is one, and the free-only remote alternative. */
 function LocalInstall({ client, file, url, name, onCopy }: { client: Exclude<McpClient, "claude-ai" | "chatgpt" | "other">; file: string; url: string; name: string; onCopy: () => void }) {
   const input = { url, name };
-  const link = deeplink(client, input);
-  const remote = remoteInstall(client, input);
+  const link = tryBuild(() => deeplink(client, input));
+  const remote = tryBuild(() => remoteInstall(client, input));
+  const command = tryBuild(() => installText(installCommand(client, input)));
+  const addLine = tryBuild(() => addOneLiner(url, client));
   const root = (() => {
     try {
       return new URL(url).pathname === "/" && !new URL(url).search;
@@ -205,11 +209,11 @@ function LocalInstall({ client, file, url, name, onCopy }: { client: Exclude<Mcp
           Install in {client === "cursor" ? "Cursor" : "VS Code"}
         </a>
       ) : null}
-      <CodeBlock title={file} code={installText(installCommand(client, input))} onCopyCode={onCopy} wrap className="min-w-0" />
-      {root ? null : (
+      <CodeBlock title={file} code={command ?? NO_COMMAND_TEXT} copyDisabledReason={command ? null : NO_COMMAND_TEXT} onCopyCode={onCopy} wrap className="min-w-0" />
+      {root || !addLine ? null : (
         <div className="flex min-w-0 flex-col gap-1">
           <p className="text-body-xs text-03">Or let it also allow this URL for paid calls:</p>
-          <CodeBlock title="Terminal" code={addOneLiner(url, client)} onCopyCode={onCopy} wrap className="min-w-0" />
+          <CodeBlock title="Terminal" code={addLine} onCopyCode={onCopy} wrap className="min-w-0" />
         </div>
       )}
       {remote ? (
