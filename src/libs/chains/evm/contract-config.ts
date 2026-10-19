@@ -76,7 +76,7 @@ const PARAM_SET =
 export const CONFIG_ADMIN_ABI = parseAbi([
   PARAM_SET,
   "function setPaused(bool value)",
-  "function updateConfig(ParamSet p, address newAdmin)",
+  "function updateConfig(ParamSet p)",
   "function registerVerifier(address verifier, bytes32 label, uint64 expiresAt)",
   "function revokeVerifier(address verifier)",
   "function setArbiter(address newArbiter)",
@@ -295,7 +295,7 @@ export function liveVerifiers(rows: readonly VerifierKeyRow[]): VerifierKeyRow[]
 
 export type ConfigAdminCall =
   | { readonly functionName: "setPaused"; readonly args: readonly [boolean] }
-  | { readonly functionName: "updateConfig"; readonly args: readonly [ConfigParams, Address] }
+  | { readonly functionName: "updateConfig"; readonly args: readonly [ConfigParams] }
   | { readonly functionName: "registerVerifier"; readonly args: readonly [Address, Hex, bigint] }
   | { readonly functionName: "revokeVerifier"; readonly args: readonly [Address] }
   | { readonly functionName: "setArbiter"; readonly args: readonly [Address] }
