@@ -9,7 +9,7 @@ import { describeChainRefusal } from "@/libs/chains/status-labels";
  * and what the dispute's refusals say. Pure, so the page and the tests run
  * the same rules.
  *
- * The contract's own rule (`X402Stake._dispute`): the record is `Pending`, the
+ * The contract's own rule (`AssayStake._dispute`): the record is `Pending`, the
  * sender is its provider, and `block.timestamp < executableAt`. So a row is
  * selectable only when:
  *

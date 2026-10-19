@@ -5,7 +5,7 @@
  *
  * ## Why this exists at all
  *
- * `setEscrowLimits` and `requestWithdraw` on `X402Escrow` are `msg.sender`-only.
+ * `setEscrowLimits` and `requestWithdraw` on `AssayEscrow` are `msg.sender`-only.
  * A buyer holding USDG and **no ETH** therefore cannot arm their own escrow and
  * cannot start their own exit — the two things they most need to be able to do
  * without asking anyone. The answer is `setLimitsBySig` / `requestWithdrawBySig`:

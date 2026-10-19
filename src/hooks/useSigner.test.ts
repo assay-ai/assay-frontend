@@ -449,8 +449,8 @@ const TYPED_DATA: Eip155TypedDataRequest = {
   chainId: EVM_TESTNET,
   kind: "typed-data",
   domain: {
-    name: "X402Escrow",
-    version: "1",
+    name: "Assay Settlement",
+    version: "2",
     chainId: "46630",
     verifyingContract: "0x3333333333333333333333333333333333333333",
   },
@@ -847,8 +847,8 @@ describe("the eip155 branch", () => {
     */
     expect(privyEvm.typedDataCalls[0].params).toEqual({
       domain: {
-        name: "X402Escrow",
-        version: "1",
+        name: "Assay Settlement",
+        version: "2",
         chainId: 46630,
         verifyingContract: "0x3333333333333333333333333333333333333333",
       },
