@@ -155,10 +155,10 @@ export interface PlatformHealth {
    */
   oldProcessCases: number;
   oldestOldProcessCaseAgeSeconds: number | null;
-  /** The EVM chain-state cache, one row per chain. Absent on an older backend. */
-  chainState?: ChainStateHealth[];
-  /** Every provider on a slash hold, one row per provider and chain. Absent on an older backend. */
-  slashHolds?: SlashHoldHealth[];
+  /** The EVM chain-state cache, one row per chain. */
+  chainState: ChainStateHealth[];
+  /** Every provider on a slash hold, one row per provider and chain. */
+  slashHolds: SlashHoldHealth[];
   /** Provider tools waiting for review: the "Needs you" count for the review queue. Null when it could not be read. */
   pendingToolReviews?: number | null;
   /** Buyer call disputes still open. Null when it could not be read. */
@@ -267,10 +267,9 @@ export interface OperatorCaseListRow {
   nextDeadline: string | null;
   /**
    * Whether a record of it was ever written on chain. False while it waits to
-   * go there: its dates are then computed, not the chain's. Absent from an
-   * older backend.
+   * go there: its dates are then computed, not the chain's.
    */
-  onChain?: boolean;
+  onChain: boolean;
 }
 
 export interface ListOperatorCasesQuery {
@@ -338,26 +337,25 @@ export interface OperatorCaseBrief {
   /**
    * When the on-chain record becomes executable (`chain_executable_at`),
    * read-only. From this moment anyone can execute the penalty, so it is the
-   * deadline for a requested cancel. Null while nothing stands on chain;
-   * absent from a backend that predates the field.
+   * deadline for a requested cancel. Null while nothing stands on chain.
    */
-  chainExecutableAt?: string | null;
+  chainExecutableAt: string | null;
   /**
    * How many of the case's current parts are disputed on chain (audit E-4).
    * With `chainStatus: PENDING` and a non-zero count the case is partly
-   * disputed: the other parts keep executing. Absent from an older backend.
+   * disputed: the other parts keep executing.
    */
-  chainDisputedParts?: number;
+  chainDisputedParts: number;
   /**
    * What stands on chain for the case: STANDING (Pending or Disputed: anyone
    * could execute it once due, a cancel has something to act on), EXECUTED
    * (the stake was taken, even under a requested cancel), GONE (nothing
    * stands and nothing was taken), UNKNOWN (could not be told; read as
-   * standing). Absent from an older backend (read as STANDING).
+   * standing).
    */
-  chainRecord?: "STANDING" | "EXECUTED" | "GONE" | "UNKNOWN";
+  chainRecord: "STANDING" | "EXECUTED" | "GONE" | "UNKNOWN";
   /** STANDING or UNKNOWN; the same reading as `chainRecord`, kept for simple reads. */
-  chainStanding?: boolean;
+  chainStanding: boolean;
   /** The provider's penalties upheld or executed in the last 30 days (follow-up C4). Absent from an older backend. */
   upheldViolations30d?: number;
   /**

@@ -151,17 +151,16 @@ export interface SlashProposalClocks {
    *
    * Not the same instant as `earliestExecutionAt`, and later than it: the
    * backend proposes on chain once delivery stamps `respondByAt`, so the chain
-   * clock starts at or after the off-chain one. Optional because older backends do not
-   * send it; a screen that requires it would break the case brief there.
+   * clock starts at or after the off-chain one.
    *
    * This is the instant after which `execute_slash` is permissionless —
    * `execute_slash`'s `payer` is a bare `Signer` and is consulted about
    * nothing. It is therefore the operator's real deadline to cancel, and it is
    * the one clock the operator cannot afford to read off the wrong row.
    */
-  chainExecutableAt?: string | null;
-  /** The mirrored on-chain lifecycle. `undefined` on older backends. */
-  chainStatus?:
+  chainExecutableAt: string | null;
+  /** The mirrored on-chain lifecycle. */
+  chainStatus:
     | "NONE"
     | "PROPOSING"
     | "PENDING"
@@ -173,31 +172,29 @@ export interface SlashProposalClocks {
   /**
    * The chain's `disputedAt`, mirrored: when the provider disputed the record
    * on chain. A record is disputed at most once, so it stays set after an
-   * uphold — `PENDING` with this set is an upheld dispute. `undefined` on
-   * older backends.
+   * uphold — `PENDING` with this set is an upheld dispute.
    */
-  chainDisputedAt?: string | null;
-  /** How many of the case's current parts are `Disputed` on chain. `undefined` on older backends. */
-  chainDisputedParts?: number;
+  chainDisputedAt: string | null;
+  /** How many of the case's current parts are `Disputed` on chain. */
+  chainDisputedParts: number;
   /**
    * True on EVM: the provider's dispute is `disputeSlash` from its own stake
    * wallet, the arbiter rules on chain, and the in-app objection is refused.
-   * False on Solana, which keeps the in-app objection. `undefined` on older
-   * backends, read as on chain (the console's stake is on EVM).
+   * False on Solana, which keeps the in-app objection.
    */
-  disputeOnChain?: boolean;
+  disputeOnChain: boolean;
   /** The state of the case's records, derived per record. Null off EVM or before a record stands. */
-  chainState?: OnChainDisputeState | null;
+  chainState: OnChainDisputeState | null;
   /**
    * The deadline to dispute on chain: the earliest `executableAt` of a record
    * still Pending and never disputed, whatever its siblings or the case status
    * say. Null when no record can be disputed.
    */
-  disputeBy?: string | null;
-  /** Review R2-3: how many on-chain records (current parts) the case has. `undefined` on older backends. */
-  chainRecords?: number;
+  disputeBy: string | null;
+  /** Review R2-3: how many on-chain records (current parts) the case has. */
+  chainRecords: number;
   /** Of those, how many were cancelled or expired on chain with nothing taken. */
-  cancelledRecords?: number;
+  cancelledRecords: number;
   secondsRemaining: number | null;
   runningClock: SlashProposalRunningClock;
 }

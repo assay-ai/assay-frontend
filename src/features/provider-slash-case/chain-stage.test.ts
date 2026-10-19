@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   caseChainStageOf,
   caseStageOf,
-  disputeDeadlineOf,
   disputesOnChain,
   executionFloorOf,
   mayAcknowledge,
@@ -92,15 +91,13 @@ describe("caseChainStageOf", () => {
 
   it("stays open, counting the disputed parts, when only some parts are disputed", () => {
     expect(
-      caseChainStageOf(clocksOf({ chainStatus: "PENDING", chainDisputedAt: R13.chainDisputedAt, chainDisputedParts: 2 })),
+      caseChainStageOf(clocksOf({ chainStatus: "PENDING", chainDisputedAt: R13.chainDisputedAt, chainDisputedParts: 2, chainState: "DISPUTED" })),
     ).toMatchObject({ kind: "open", disputedParts: 2 });
   });
 
-  it("is open on an older backend that mirrors nothing", () => {
+  it("is open before anything is on chain", () => {
     expect(
-      caseChainStageOf(
-        clocksOf({ chainStatus: undefined, chainDisputedAt: undefined, chainDisputedParts: undefined, chainExecutableAt: undefined }),
-      ),
+      caseChainStageOf(clocksOf({ chainStatus: "NONE", chainState: null, chainExecutableAt: null })),
     ).toEqual({ kind: "open", executableAt: R13.earliestExecutionAt, disputedParts: 0 });
   });
 
@@ -144,15 +141,8 @@ describe("the on-chain dispute, the only dispute on EVM", () => {
   const after = new Date(R13.chainExecutableAt).getTime() + 60_000;
 
   it("is the dispute unless the backend says the case is Solana", () => {
-    expect(disputesOnChain(clocksOf())).toBe(true);
     expect(disputesOnChain(clocksOf({ disputeOnChain: true }))).toBe(true);
     expect(disputesOnChain(clocksOf({ disputeOnChain: false }))).toBe(false);
-  });
-
-  it("has one deadline: disputeBy, else the record's executableAt", () => {
-    expect(disputeDeadlineOf(clocksOf({ disputeBy: "2026-10-15T10:00:00.000Z" }))).toBe("2026-10-15T10:00:00.000Z");
-    expect(disputeDeadlineOf(clocksOf())).toBe(R13.chainExecutableAt);
-    expect(disputeDeadlineOf(clocksOf({ chainExecutableAt: null }))).toBeNull();
   });
 
   it("can be sent while the case is PROPOSED and its record Pending, before the door", () => {
@@ -166,7 +156,7 @@ describe("the on-chain dispute, the only dispute on EVM", () => {
     for (const data of [
       caseOf("DISPUTED", DISPUTED_CLOCKS, { disputeId: "d1" }),
       caseOf("PROPOSED", UPHELD_CLOCKS),
-      caseOf("PROPOSED", { chainStatus: "NONE", chainExecutableAt: null }),
+      caseOf("PROPOSED", { chainStatus: "NONE", chainExecutableAt: null, disputeBy: null }),
       caseOf("PROPOSED", { disputeOnChain: false }),
     ]) {
       expect(mayDisputeOnChain(data.proposal, caseStageOf(data.proposal), before)).toBe(false);

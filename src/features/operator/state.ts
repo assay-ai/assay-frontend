@@ -148,8 +148,8 @@ export function disputedPartsNote(
  * on EVM, the program admin on Solana (`cancelSignerOf`; `chain` is the case
  * penalty's CAIP-19 asset or a CAIP-2 chain id) — and
  * from its executable time **anyone** can execute the penalty. The brief
- * carries that time (`chainExecutableAt`); an older backend does not, and the
- * warning is then given without it rather than dropped.
+ * carries that time (`chainExecutableAt`); when it is null the warning is
+ * given without it rather than dropped.
  *
  * "Anyone can execute" only while something stands: with `chainRecord`
  * GONE (the brief's own reading) there is nothing to execute and nothing to

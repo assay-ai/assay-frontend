@@ -1,4 +1,5 @@
 import type { CursorPage } from "@/interfaces/api";
+import type { OnChainDisputeState } from "@/interfaces/provider-disputes";
 import type {
   AccountBlock,
   ArbiterDispute,
@@ -672,6 +673,23 @@ const CASES: DemoCase[] = [
 
 const CASE_BY_ID = new Map(CASES.map((c) => [c.id, c]));
 
+/** The case's on-chain state as the backend derives it from one record (`onChainDisputeState`). */
+function demoChainState(c: DemoCase, disputedAt: string | null): OnChainDisputeState | null {
+  switch (c.chainStatus) {
+    case "EXECUTED":
+      return "EXECUTED";
+    case "CANCELLED":
+      return c.expired ? "EXPIRED" : "CANCELLED";
+    case "DISPUTED":
+      return "DISPUTED";
+    case "PENDING":
+    case "CANCEL_REQUESTED":
+      return disputedAt ? "UPHELD" : "PENDING";
+    default:
+      return null;
+  }
+}
+
 function caseBrief(original: DemoCase): OperatorCaseBrief {
   const c = caseNow(original);
   const suspended = memory.suspended.get(c.id);
@@ -707,6 +725,12 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
           chainStatus: c.chainStatus,
           chainDisputedAt: disputedAt,
           chainDisputedParts: original.chainStatus === "DISPUTED" ? 1 : 0,
+          disputeOnChain: true,
+          chainState: demoChainState(c, disputedAt),
+          chainRecords: 0,
+          cancelledRecords: 0,
+          // The earliest door of a record still Pending and never disputed, as the backend computes it.
+          disputeBy: c.status === "PROPOSED" && c.chainStatus === "PENDING" && disputedAt === null ? executableAt : null,
           secondsRemaining: null,
           runningClock: "NONE",
         },
@@ -1347,7 +1371,6 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
   { method: "GET", match: "/operator/me", body: () => me() },
   { method: "POST", match: "/operator/auth/logout", body: () => ({}) },
   { method: "GET", match: "/operator/health", body: () => health() },
-  // The retired off-chain queue: empty, as it is once the objection process is gone.
   { method: "GET", match: "/operator/cases", body: (_path, query) => caseList(query) },
   {
     method: "GET",

@@ -85,7 +85,7 @@ export function rowFromCase(row: OperatorCaseListRow): PenaltyRow {
     proposedAt: row.proposedAt,
     disputedAt: row.disputedAt,
     nextDeadline: row.nextDeadline,
-    onChain: row.onChain ?? null,
+    onChain: row.onChain,
   };
 }
 

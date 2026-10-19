@@ -30,6 +30,11 @@ export function clocksOf(overrides: Partial<SlashProposalClocks> = {}): SlashPro
     chainStatus: "PENDING",
     chainDisputedAt: null,
     chainDisputedParts: 0,
+    disputeOnChain: true,
+    chainState: "PENDING",
+    chainRecords: 0,
+    cancelledRecords: 0,
+    disputeBy: R13.chainExecutableAt,
     secondsRemaining: 3_600,
     runningClock: "PROVIDER",
     ...overrides,
@@ -41,6 +46,8 @@ export const DISPUTED_CLOCKS: Partial<SlashProposalClocks> = {
   chainStatus: "DISPUTED",
   chainDisputedAt: R13.chainDisputedAt,
   chainDisputedParts: 1,
+  chainState: "DISPUTED",
+  disputeBy: null,
   platformDecisionDueAt: "2026-10-16T07:58:00.000Z",
   secondsRemaining: 82_740,
   runningClock: "PLATFORM",
@@ -51,6 +58,7 @@ export const UPHELD_CLOCKS: Partial<SlashProposalClocks> = {
   ...DISPUTED_CLOCKS,
   chainStatus: "PENDING",
   chainDisputedParts: 0,
+  chainState: "UPHELD",
 };
 
 export function caseOf(

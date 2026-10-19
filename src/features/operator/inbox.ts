@@ -250,7 +250,7 @@ export function healthIssues(health: PlatformHealth): HealthIssue[] {
       text: `False-positive rate ${pct(health.falsePositiveRate)}, gate ${pct(health.falsePositiveGate)}`,
     });
   }
-  for (const chain of health.chainState ?? []) {
+  for (const chain of health.chainState) {
     if (chain.paused) issues.push({ id: `paused:${chain.chainId}`, text: "Contracts paused" });
     if (chain.stale) {
       issues.push({
