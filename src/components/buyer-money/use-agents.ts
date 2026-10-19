@@ -27,10 +27,27 @@ export interface AgentRow {
   agentAccount?: string;
 }
 
+/** `AgentCredentialDto.oauthClient` (spec §7.10 item 4). */
+export interface KeyOAuthClient {
+  /** The public `client_id`: a CIMD URL, `dcr_…`, or the built-in client's URL. */
+  clientId: string;
+  /** Its own name, or its listed name when verified. Self-declared otherwise. */
+  name: string;
+  /** eTLD+1 of a CIMD client's host; null when no domain is proven (DCR, built-in). */
+  registrableDomain: string | null;
+  verified: boolean;
+  /** May hold a payment key (`OAUTH_PAYMENT_CLIENTS`: the built-in `assay-mcp` only). Every other app is free-only. */
+  paymentClient: boolean;
+}
+
 export interface KeyRow extends CredentialLike {
   id: string;
   agentId: string;
   name: string;
+  /** How the credential was obtained; everything else about it is the same. */
+  issuedVia: "API_KEY" | "OAUTH";
+  /** The app an OAuth grant was issued to; null for an API key. */
+  oauthClient?: KeyOAuthClient | null;
   scopes: string[];
   lastUsedAt: string | null;
   expiresAt: string | null;
