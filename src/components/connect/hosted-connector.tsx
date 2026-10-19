@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { Checkbox } from "@/components/ui/checkbox";
-import { appName, hostedUrl, type HostedMcpClient } from "@/features/buyer-money/mcp-config";
+import { appName, hostedUrl, SECOND_URL_NOTE, type HostedMcpClient } from "@/features/buyer-money/mcp-config";
 
 /** The URL without `free=1`, for "Show paid tools too". */
 function paidUrl(url: string): string {
@@ -22,7 +22,7 @@ function paidUrl(url: string): string {
  * URL carries `?free=1` unless the person asks to see paid tools too (they
  * only explain how to pay; a hosted connector never holds a payment key).
  */
-export function HostedConnector({ client, url, onCopy }: { client: HostedMcpClient; url: string; onCopy?: (url: string) => void }) {
+export function HostedConnector({ client, url, secondUrl = false, onCopy }: { client: HostedMcpClient; url: string; secondUrl?: boolean; onCopy?: (url: string) => void }) {
   const app = appName(client);
   const [paid, setPaid] = React.useState(false);
   const shown = paid ? paidUrl(url) : hostedUrl(url);
@@ -42,6 +42,7 @@ export function HostedConnector({ client, url, onCopy }: { client: HostedMcpClie
       <p className="text-body-xs text-03">
         Free tools only. {app} runs connectors from its own servers, so it can&apos;t hold a payment key. For paid tools, use Claude Code or Claude Desktop with the Assay app.
       </p>
+      {secondUrl ? <p className="text-body-xs text-03" data-testid="second-url-note">{SECOND_URL_NOTE}</p> : null}
       <Checkbox checked={paid} onChange={(event) => setPaid(event.target.checked)} label="Show paid tools too (they will explain how to pay)" />
     </div>
   );
