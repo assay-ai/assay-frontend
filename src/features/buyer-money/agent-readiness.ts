@@ -15,8 +15,17 @@ export interface ReadinessCredential {
   id: string;
   name: string;
   revokedAt: string | null;
+  /** An OAuth grant's rolling expiry: past it, the credential is signed out. */
+  expiresAt?: string | null;
   lastUsedAt: string | null;
   delegateAccount?: string | null;
+}
+
+/** A live credential with a payment key, and that key's pay permission as the chain lists it. */
+export interface BoundKey {
+  credential: ReadinessCredential;
+  /** `null` when the chain lists no permission for the key (or was not read). */
+  grant: EscrowDelegate | null;
 }
 
 export interface ReadinessEscrow {
@@ -67,9 +76,15 @@ export interface AgentReadiness {
   /** Latest `lastUsedAt` over the agent's live keys. */
   lastCallAt: string | null;
   liveCredentials: ReadinessCredential[];
-  /** The live key bound to a payment key, if any. */
+  /**
+   * The live key bound to a payment key that the agent pays through: of every
+   * bound key (one per machine, R-MU-11), the first one allowed to pay with
+   * room left, else the first allowed to pay, else the first bound.
+   */
   boundCredential: ReadinessCredential | null;
   grant: EscrowDelegate | null;
+  /** Every live credential with a payment key, in list order. */
+  boundCredentials: BoundKey[];
   /** The chain serves free calls only: no pay permission, spend or renewal applies. */
   freeOnly: boolean;
   /**
@@ -96,6 +111,7 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
       liveCredentials: [],
       boundCredential: null,
       grant: null,
+      boundCredentials: [],
       freeOnly: Boolean(input.freeOnlyChain),
       loading: !input.credentialsUnreadable,
       status: "checking",
@@ -106,16 +122,31 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
     };
   }
   const all = input.credentials;
-  const live = all.filter((c) => !c.revokedAt);
+  const live = all.filter((c) => credentialIsLive(c, nowMs));
   const lastCallAt =
     live
       .map((c) => c.lastUsedAt)
       .filter((v): v is string => Boolean(v))
       .sort()
       .at(-1) ?? null;
-  const bound = live.find((c) => c.delegateAccount) ?? null;
-  const grant = bound?.delegateAccount ? findDelegation(input.delegates, bound.delegateAccount) : null;
-  const base = { lastCallAt, liveCredentials: live, boundCredential: bound, grant, freeOnly: Boolean(input.freeOnlyChain), loading: false };
+  const boundCredentials: BoundKey[] = live
+    .filter((c) => c.delegateAccount)
+    .map((credential) => ({ credential, grant: findDelegation(input.delegates, credential.delegateAccount!) }));
+  // "Paid calls are refused" only when no bound key may pay (R-MU-11).
+  const paying = (b: BoundKey) => b.grant?.status === "ACTIVE";
+  const chosen =
+    boundCredentials.find((b) => paying(b) && !capReached(b.grant!)) ?? boundCredentials.find(paying) ?? boundCredentials[0] ?? null;
+  const bound = chosen?.credential ?? null;
+  const grant = chosen?.grant ?? null;
+  const base = {
+    lastCallAt,
+    liveCredentials: live,
+    boundCredential: bound,
+    grant,
+    boundCredentials,
+    freeOnly: Boolean(input.freeOnlyChain),
+    loading: false,
+  };
 
   // A bound key's permission decides "can it pay": wait for it rather than
   // flash "Let it pay" at an agent that already can.
@@ -125,7 +156,7 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
 
   if (live.length === 0) {
     return all.length > 0
-      ? { ...base, status: "revoked", sentence: "Every key of this agent is revoked, so it cannot call tools. Create a new key to use it again.", next: "key" }
+      ? { ...base, status: "revoked", sentence: "Every key of this agent is revoked or signed out, so it cannot call tools. Create a new key to use it again.", next: "key" }
       : { ...base, status: "no-key", sentence: "This agent has no key yet, so it cannot call tools. Create one to connect it.", next: "key" };
   }
   if (input.freeOnlyChain) {
@@ -207,7 +238,7 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
       next: "authorise",
     };
   }
-  if (positive(grant.maxPerWindow) && BigInt(grant.spentInWindow.amount || "0") >= BigInt(grant.maxPerWindow.amount)) {
+  if (capReached(grant)) {
     return {
       ...base,
       status: "cap-reached",
@@ -224,6 +255,15 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
     };
   }
   return { ...base, status: recent(lastCallAt, nowMs) ? "paying" : "ready", sentence: readySentence(lastCallAt, nowMs), next: null };
+}
+
+/** Not revoked, and not past an OAuth grant's expiry. */
+export function credentialIsLive(credential: Pick<ReadinessCredential, "revokedAt" | "expiresAt">, nowMs: number): boolean {
+  return !credential.revokedAt && (!credential.expiresAt || Date.parse(credential.expiresAt) > nowMs);
+}
+
+function capReached(grant: EscrowDelegate): boolean {
+  return positive(grant.maxPerWindow) && BigInt(grant.spentInWindow.amount || "0") >= BigInt(grant.maxPerWindow.amount);
 }
 
 function recent(lastCallAt: string | null, nowMs: number): boolean {

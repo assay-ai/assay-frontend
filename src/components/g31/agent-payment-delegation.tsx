@@ -189,6 +189,72 @@ function explain(error: unknown, fallback: string): string {
   return fallback;
 }
 
+/** A failure of the on-chain stop, in words (declined, relay refusal, signed out). */
+export function explainStopFailure(error: unknown): string {
+  return explain(error, "Its payment key could not be stopped on chain.");
+}
+
+/**
+ * Stops a payment key on chain: `revoke-intent`, then one `RevokeDelegate`
+ * signature with the payer's wallet (Privy's confirmation shown, checked
+ * against this app's escrow domain before the wallet is asked), then
+ * `revoke`, which relays it. Throws when any step fails; nothing is relayed
+ * unless the wallet signed.
+ */
+export async function stopPaymentKeyOnChain(
+  delegateAccount: string,
+  signer: Signer,
+  domain: ExpectedDomain,
+): Promise<void> {
+  const intent = await createRevokeDelegateIntent(addressOfAccount(delegateAccount));
+  await submitRelayedDelegation(intent, signer, { domain, delegate: delegateAccount }, submitRevokeDelegate);
+}
+
+/**
+ * {@link stopPaymentKeyOnChain} for the payer `account`, with its wallet and
+ * escrow: what the Revoke dialog's "Also stop its payment key on chain" runs.
+ */
+export function useStopPaymentKey(account: string | undefined): (delegateAccount: string) => Promise<void> {
+  const ctx = useDelegationContext(account, 0);
+  const { signer, domain, escrowQuery } = ctx;
+  return async (delegateAccount: string) => {
+    await stopPaymentKeyOnChain(delegateAccount, signer(), domain(escrowQuery.data));
+  };
+}
+
+/**
+ * "Stop it" on a revoked or expired credential whose payment key is still
+ * active on chain (spec F3 step 5): the same sheet as "Stop it paying", with
+ * its check for payments still being settled, and the same calls.
+ */
+export function StopPaymentKeySheet({
+  account,
+  target,
+  onClose,
+  onFinished,
+}: {
+  account: string | undefined;
+  /** The key, and its permission when the page's chain read listed it (null: not known yet). */
+  target: { delegateAccount: string; delegation: EscrowDelegate | null } | null;
+  onClose: () => void;
+  onFinished: () => void;
+}) {
+  const ctx = useDelegationContext(account, 0);
+  return (
+    <RevokeSheet
+      target={target?.delegation ?? null}
+      pendingDelegate={target && !target.delegation ? target.delegateAccount : null}
+      escrow={ctx.escrowQuery.data}
+      unit={ctx.unit}
+      tightenDelaySeconds={ctx.delegatesQuery.data?.tightenDelaySeconds}
+      onClose={onClose}
+      onFinished={onFinished}
+      signer={ctx.signer}
+      domain={ctx.domain}
+    />
+  );
+}
+
 /** Who the authorise / edit sheet is for. `current` set means editing that standing grant. */
 interface SheetTarget {
   delegateAccount: string;
@@ -429,17 +495,19 @@ function useLiveDelegation(
     void refetch({ cancelRefetch: false });
   }, [refetch]);
   const openedAt = opening.open ? opening.baseline : read.dataUpdatedAt;
+  // Only this opening's failure: an earlier one says nothing about now.
+  const failed = read.isError && read.errorUpdatedAt > openedAt;
   const state = liveDelegation({
     opened,
     delegate,
     list: read.data?.delegates,
     readAt: read.dataUpdatedAt,
     openedAt,
-    // Only this opening's failure: an earlier one says nothing about now.
-    failed: read.isError && read.errorUpdatedAt > openedAt,
+    failed,
   });
   return {
     ...state,
+    failed,
     readAt: read.dataUpdatedAt,
     refresh,
     tightenDelaySeconds: read.data?.tightenDelaySeconds,
@@ -488,6 +556,7 @@ function LiveReadNote({ ready, gone }: { ready: boolean; gone: boolean }) {
  */
 function RevokeSheet({
   target,
+  pendingDelegate = null,
   agentName,
   escrow,
   unit,
@@ -498,6 +567,13 @@ function RevokeSheet({
   domain,
 }: {
   target: EscrowDelegate | null;
+  /**
+   * A key whose permission is not known yet (the page's chain read was
+   * pending or failed): the sheet opens on it and signs only once its own
+   * fresh read finds the permission, so the check for payments still being
+   * settled always runs on what the chain says now.
+   */
+  pendingDelegate?: string | null;
   /** Whose permission this is, for the title; unbound keys have none. */
   agentName?: string;
   escrow: BuyerEscrow | undefined;
@@ -509,10 +585,20 @@ function RevokeSheet({
   signer: () => Signer;
   domain: (escrow: BuyerEscrow | undefined) => ExpectedDomain;
 }) {
-  const open = target !== null;
-  const delegate = target?.delegate ?? "";
-  const { live, ready, gone, readAt, refresh, tightenDelaySeconds: liveDelay } =
-    useLiveDelegation(delegate, target, open);
+  const open = target !== null || Boolean(pendingDelegate);
+  const delegate = target?.delegate ?? pendingDelegate ?? "";
+  const {
+    live,
+    ready: readDone,
+    gone,
+    failed,
+    readAt,
+    refresh,
+    tightenDelaySeconds: liveDelay,
+  } = useLiveDelegation(delegate, target, open);
+  // Opened on an unknown permission: only a fresh read that found it may sign.
+  const ready = readDone && (target !== null || live !== null);
+  const unreadable = target === null && failed && live === null;
   const delay = liveDelay ?? listedDelay;
   const delayNote = revokeDelayNote(delay);
   const unsettled = live?.unsettled;
@@ -535,17 +621,11 @@ function RevokeSheet({
   }, [open]);
 
   const revoke = async () => {
-    if (!target) return;
+    if (!delegate || !ready) return;
     setBusy(true);
     setRevokeNote(null);
     try {
-      const intent = await createRevokeDelegateIntent(addressOfAccount(target.delegate));
-      await submitRelayedDelegation(
-        intent,
-        signer(),
-        { domain: domain(escrow), delegate: target.delegate },
-        submitRevokeDelegate,
-      );
+      await stopPaymentKeyOnChain(delegate, signer(), domain(escrow));
       toast.success(
         `${agentName ?? "That key"} can no longer pay. ${agentName ? "Its API key still works for free calls." : ""}`.trim(),
       );
@@ -578,7 +658,18 @@ function RevokeSheet({
           <p className="rounded-lg bg-02 px-3 py-2 text-body-13 text-02" data-testid="revoke-debt-note">
             Calls already made are still settled and paid for.
           </p>
-          <LiveReadNote ready={ready} gone={gone} />
+          {unreadable ? (
+            <div className="flex flex-wrap items-center gap-2" data-testid="delegate-unreadable">
+              <p className="text-body-13 text-warning-700">
+                The chain could not be read, so its payment key may still be active and nothing can be signed yet.
+              </p>
+              <Button size="sm" variant="secondary" type="button" onClick={refresh}>
+                Read again
+              </Button>
+            </div>
+          ) : (
+            <LiveReadNote ready={ready} gone={gone} />
+          )}
           {delayNote ? (
             <p className="text-body-13 text-02" data-testid="revoke-tighten-delay">
               {delayNote}
