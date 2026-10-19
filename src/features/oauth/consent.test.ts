@@ -156,6 +156,52 @@ describe("consent view: the client", () => {
     expect(v.notVerified).not.toBeNull();
   });
 
+  describe("DCR domain line, from the HTTPS return host (§6.5)", () => {
+    const dcr = (returnTo: ConsentRequest["returnTo"]) =>
+      view(
+        request({
+          client: {
+            name: "E2E Web App",
+            kind: "DCR",
+            registrableDomain: null,
+            host: null,
+            verified: false,
+            builtin: false,
+            paymentClient: false,
+          },
+          returnTo,
+        }),
+      );
+
+    it("a subdomain: registrable domain bold, the full host under it, still Self-registered", () => {
+      const v = dcr({ kind: "WEB", display: "app.tools.example.co.uk" });
+      expect(v.client.domain).toBe("example.co.uk");
+      expect(v.client.host).toBe("app.tools.example.co.uk");
+      expect(v.client.kindLabel).toBe("Self-registered app");
+    });
+
+    it("the registrable domain itself: no second line", () => {
+      const v = dcr({ kind: "WEB", display: "chatgpt.com" });
+      expect(v.client.domain).toBe("chatgpt.com");
+      expect(v.client.host).toBeNull();
+    });
+
+    it("a private suffix stays its own site (foo.github.io, not github.io)", () => {
+      expect(dcr({ kind: "WEB", display: "foo.github.io" }).client.domain).toBe("foo.github.io");
+    });
+
+    it("loopback / private scheme: nothing extra", () => {
+      const v = dcr({ kind: "LOCAL_APP", display: "an app on this computer" });
+      expect(v.client.domain).toBeNull();
+      expect(v.client.host).toBeNull();
+    });
+
+    it("an IP or a host with no public suffix: nothing extra", () => {
+      expect(dcr({ kind: "WEB", display: "203.0.113.7" }).client.domain).toBeNull();
+      expect(dcr({ kind: "WEB", display: "intranet" }).client.domain).toBeNull();
+    });
+  });
+
   it("third-party will-not line names the Assay app as the only payer", () => {
     expect(view(request()).cannotDo).toEqual([
       "change limits, move funds or add people",

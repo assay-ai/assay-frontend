@@ -1,6 +1,8 @@
 import type { Money } from "@/interfaces";
 import { formatMoney } from "@/utils/money";
 
+import { registrableDomain } from "./registrable-domain";
+
 /**
  * The consent page's view model (spec §6.5): the §6.3.5 JSON in, the page's
  * sentences out. Pure, so every line of copy is tested here and the card only
@@ -364,6 +366,26 @@ export function localDeadline(request: Pick<ConsentRequest, "createdAt" | "expir
   return fetchedAt + (Number.isFinite(lifetime) && lifetime > 0 ? lifetime : 0);
 }
 
+/**
+ * The bold domain and, for a client that is not verified, the full host under
+ * it. A URL client's comes from its metadata host (the API's
+ * `registrableDomain`/`host`). A self-registered (DCR) client has none proven,
+ * so it shows where the browser goes back to when that is an HTTPS host; a
+ * loopback or private-scheme return shows nothing here, "an app on this
+ * computer" already says it.
+ */
+function domainLine(request: ConsentRequest, verified: boolean): Pick<ConsentView["client"], "domain" | "host"> {
+  const { client, returnTo } = request;
+  let domain = client.registrableDomain;
+  let host = client.host;
+  if (!domain && client.kind === "DCR" && returnTo.kind === "WEB") {
+    const parsed = registrableDomain(returnTo.display);
+    domain = parsed?.registrable ?? null;
+    host = parsed?.host ?? null;
+  }
+  return { domain, host: !verified && host && host !== domain ? host : null };
+}
+
 export function consentView(
   request: ConsentRequest,
   options: { agentId: string | null; now: Date; fetchedAt: number },
@@ -412,8 +434,7 @@ export function consentView(
       title: clientTitle(request, name, verified),
       verified: verified && !client.builtin,
       kindLabel: client.kind === "DCR" ? CONSENT_STRINGS.selfRegistered : null,
-      domain: client.registrableDomain,
-      host: !verified && client.host && client.host !== client.registrableDomain ? client.host : null,
+      ...domainLine(request, verified),
     },
     // Every client the API does not mark verified, the built-in one included:
     // any process on the computer can claim to be it.

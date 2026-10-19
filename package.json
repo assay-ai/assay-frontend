@@ -50,6 +50,7 @@
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "3",
     "tailwindcss-animate": "^1.0.7",
+    "tldts": "6.1.86",
     "viem": "2.55.15",
     "zustand": "^5.0.12"
   },
