@@ -8,6 +8,7 @@ import { PresetChips } from "@/components/patterns/preset-chips";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { runApproveStep, runDepositStep, type DepositAttempt, type DepositRun } from "@/features/buyer-money/deposit-flow";
+import { DEPOSIT_CREDIT_TEXT } from "@/features/buyer-money/confirming";
 import { testTokenHelp } from "@/features/buyer-money/gas-help";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { DEPOSIT_MINIMUM_USD } from "@/features/explorer/buyer-costs";
@@ -227,8 +228,8 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
       successTitle="Deposit confirmed on chain"
       successDescription={
         needsCaps
-          ? "It shows in your balance within about a minute. Next: set your account ceiling, so your agents can pay."
-          : "It shows in your balance within about a minute. Your agents can spend it within their spending limits."
+          ? `${DEPOSIT_CREDIT_TEXT} Next: set your account ceiling, so your agents can pay.`
+          : `${DEPOSIT_CREDIT_TEXT} Your agents can then spend it within their spending limits.`
       }
       onSuccess={() => {
         void queryClient.invalidateQueries({ queryKey: ["balances"] });

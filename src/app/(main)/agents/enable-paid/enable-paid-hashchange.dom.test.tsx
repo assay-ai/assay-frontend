@@ -20,6 +20,7 @@ vi.mock("@/components/buyer-money/use-buyer-money", () => ({
   useBuyerMoney: () => ({
     escrow: { exists: true, escrowPda: `${EVM}:0x${"3".repeat(40)}` },
     escrowQuery: { isSuccess: true, error: null, dataUpdatedAt: Date.now(), refetch: () => undefined },
+    balancesQuery: { data: undefined },
     decimals: 6,
     chainId: EVM,
     chainName: "Testnet",

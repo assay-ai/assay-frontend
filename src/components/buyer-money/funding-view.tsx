@@ -16,6 +16,7 @@ import { StatusTimeline } from "@/components/patterns/status-timeline";
 import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
+import { confirmingLine, confirmingOnChain, escrowLedgerRow, readyForPaidCalls } from "@/features/buyer-money/confirming";
 import { windowRefillAt } from "@/features/buyer-money/refill";
 import { isLowBalance, runwayDays, runwayLine } from "@/features/buyer-money/runway";
 import { escrowHeldText, heldSegmentLabel } from "@/features/buyer-debt/debt-copy";
@@ -144,9 +145,13 @@ export function FundingView() {
   // No escrow yet means nothing to spend: never fall back to a ledger figure,
   // or a brand-new account reads as funded.
   const noEscrow = escrow !== null && escrow.exists === false;
+  // A deposit the chain has not finalised is counted by the chain but not by the ledger
+  // that holds a call's price: shown apart, never as available (BUG-A-06).
+  const ledgerRow = escrowLedgerRow(balances, money.chainId);
+  const confirming = noEscrow ? null : confirmingLine(ledgerRow);
   const spendable = noEscrow
     ? null
-    : (escrow?.spendable ?? (balances.length === 1 ? balances[0]!.available : null));
+    : readyForPaidCalls(escrow?.spendable ?? (balances.length === 1 ? balances[0]!.available : null), ledgerRow);
   const runway = noEscrow ? null : runwayLine(runwayDays(spendable, charged7d));
   const withdrawalPending = positive(escrow?.withdrawRequested);
   const { hasPassed: matured } = useCountdown(escrow?.withdrawAvailableAt);
@@ -216,6 +221,7 @@ export function FundingView() {
                 : ""}
             </span>
           )}
+          {confirming ? <ConfirmingNote line={confirming} /> : null}
           {/* No runway on a free-only chain: nothing is spent from the escrow there. */}
           {runway && !freeOnly ? <span className="text-body-13 text-02">{runway}</span> : null}
         </div>
@@ -249,7 +255,7 @@ export function FundingView() {
         </div>
       ) : null}
 
-      {spendable && isLowBalance(spendable) && !withdrawalPending && !freeOnly ? (
+      {spendable && isLowBalance(spendable) && !withdrawalPending && !freeOnly && !confirming ? (
         <div className="flex w-full flex-wrap items-center gap-3 rounded-lg border border-warning-20 bg-warning-10 px-4 py-3">
           <p className="min-w-0 flex-1 text-body-13 text-warning-700">
             Your balance is below $5.00. Paid calls are refused once it runs out; free calls keep working.
@@ -278,6 +284,7 @@ export function FundingView() {
           withdrawalPending={withdrawalPending}
           freeOnly={freeOnly}
           heldLabel={heldSegmentLabel(openHoldIds, owedIntentIds)}
+          ready={confirmingOnChain(ledgerRow) ? spendable : null}
           onAction={onAction}
         />
       ) : null}
@@ -299,6 +306,7 @@ function EscrowCard({
   withdrawalPending,
   freeOnly,
   heldLabel,
+  ready = null,
   onAction,
 }: {
   money: ReturnType<typeof useBuyerMoney>;
@@ -308,6 +316,8 @@ function EscrowCard({
   freeOnly: boolean;
   /** The held segment's label: calls being checked, unpaid calls (held until collected), or both. */
   heldLabel: string;
+  /** While a deposit is confirming: what paid calls can use; the rest of `spendable` is shown as confirming. */
+  ready?: Money | null;
   onAction: (next: MoneyAction) => void;
 }) {
   const escrow = money.escrow!;
@@ -323,7 +333,12 @@ function EscrowCard({
   const balance = escrow.balance;
   const held = escrow.openHolds;
   const requested = escrow.withdrawRequested;
-  const free = escrow.spendable;
+  const chainFree = escrow.spendable;
+  const free = ready && chainFree ? ready : chainFree;
+  const notFinal =
+    ready && chainFree && BigInt(chainFree.amount || "0") > BigInt(ready.amount || "0")
+      ? { ...chainFree, amount: (BigInt(chainFree.amount) - BigInt(ready.amount || "0")).toString() }
+      : null;
   const refillsAt = windowRefillAt(escrow.windowStartedAt, escrow.windowSeconds);
 
   return (
@@ -350,6 +365,9 @@ function EscrowCard({
         <MoneySplit
           segments={[
             { label: "Available", value: free ? toDecimal(free).toNumber() : 0, amount: formatLimit(free), tone: "primary" },
+            ...(notFinal
+              ? [{ label: "Confirming on chain", value: toDecimal(notFinal).toNumber(), amount: formatLimit(notFinal), tone: "neutral" as const }]
+              : []),
             { label: heldLabel, value: held ? toDecimal(held).toNumber() : 0, amount: formatLimit(held), tone: "warning" },
             ...(withdrawalPending && requested
               ? [{ label: "Asked to withdraw", value: toDecimal(requested).toNumber(), amount: formatLimit(requested), tone: "neutral" as const }]
@@ -442,6 +460,15 @@ function EscrowCard({
         </p>
       ) : null}
     </section>
+  );
+}
+
+/** Under the hero figure: the deposit the chain has not finalised yet (BUG-A-06). */
+export function ConfirmingNote({ line }: { line: string }) {
+  return (
+    <span className="text-body-13 text-warning-700" data-testid="funding-confirming">
+      {line}. Paid calls can use it once the chain finalises it.
+    </span>
   );
 }
 

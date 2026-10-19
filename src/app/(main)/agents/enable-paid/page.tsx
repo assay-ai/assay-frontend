@@ -10,6 +10,7 @@ import { useBuyerMoney, useWalletBlocker } from "@/components/buyer-money/use-bu
 import { EnablePaidView } from "@/components/delegation/enable-paid-view";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { capsToForm } from "@/features/buyer-money/caps";
+import { confirmingLine, escrowLedgerRow, readyForPaidCalls } from "@/features/buyer-money/confirming";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import {
   collectPages,
@@ -211,6 +212,9 @@ export default function EnablePaidPage() {
   const spendable = escrow?.spendable ?? escrow?.balance ?? null;
   const fundsShort =
     !escrow?.exists || !spendable || (chosen !== null && BigInt(spendable.amount || "0") < BigInt(chosen.maxPerWindow));
+  // Shown, not used for the caps: a deposit the chain has not finalised is not spendable yet (BUG-A-06).
+  const ledgerRow = escrowLedgerRow(money.balancesQuery.data?.balances, money.chainId);
+  const shownBalance = readyForPaidCalls(escrow?.balance ?? null, ledgerRow);
   const blocker: React.ReactNode | null =
     money.chainId && money.chainId !== state.chainId
       ? "This payment key is for another network than your escrow."
@@ -234,7 +238,8 @@ export default function EnablePaidPage() {
         escrowAddress={escrow?.escrowPda ? addressOfAccount(escrow.escrowPda) : null}
         currentCeiling={capsToForm(escrow)}
         lowerNote={lowerNote}
-        balance={escrow?.balance ? formatMoney(escrow.balance) : null}
+        balance={shownBalance ? formatMoney(shownBalance) : null}
+        confirming={confirmingLine(ledgerRow)}
         fundsShort={fundsShort}
         addFunds={
           depositRunsHere(rpc)

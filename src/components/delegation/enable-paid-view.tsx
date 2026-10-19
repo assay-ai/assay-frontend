@@ -42,8 +42,13 @@ export interface EnablePaidViewProps {
   currentCeiling?: { perCall: string; perDay: string } | null;
   /** On a renewal that lowers the caps: when the lower caps bind. */
   lowerNote?: string | null;
-  /** The escrow's balance, formatted, or null when unknown. */
+  /** What paid calls can use now, formatted, or null when unknown. */
   balance: string | null;
+  /**
+   * Money a paid call cannot use yet, as a line ("$20.00 still confirming on
+   * chain …"), or null when nothing is confirming (BUG-A-06).
+   */
+  confirming?: string | null;
   /** The balance is below the per-24-hours cap (or there is no escrow yet). */
   fundsShort: boolean;
   /** Add funds here (the deposit drawer), or on the Funding page when this page's policy cannot reach the chain. */
@@ -73,6 +78,7 @@ export function EnablePaidView({
   chainName,
   validUntil,
   balance,
+  confirming = null,
   fundsShort,
   addFunds = null,
   signatures,
@@ -160,7 +166,18 @@ export function EnablePaidView({
 
       <div className="flex flex-col gap-2">
         <span className="text-label-13 text-01">Funds</span>
-        <span className="text-body-sm text-02">Escrow balance: {balance ?? "unknown"}</span>
+        {confirming ? (
+          <>
+            <span className="text-body-sm text-02" data-testid="funds-ready">
+              Ready for paid calls: {balance ?? "unknown"}
+            </span>
+            <span className="text-body-sm text-warning-700" data-testid="funds-confirming">
+              {confirming}. Paid calls can use it once the chain finalises it.
+            </span>
+          </>
+        ) : (
+          <span className="text-body-sm text-02">Escrow balance: {balance ?? "unknown"}</span>
+        )}
         {fundsShort ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-body-xs text-03">Below what this key may spend in 24 hours.</span>
