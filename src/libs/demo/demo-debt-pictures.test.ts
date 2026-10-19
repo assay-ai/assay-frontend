@@ -93,16 +93,17 @@ describe("demo debt pictures and the settle sheet's escrow check", () => {
         }) as { totals: Totals }
       ).totals;
     const day = 86_400_000;
-    const now = new Date();
-    const utcToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    // The 24 hours up to the demo clock, not the UTC calendar day: just after
+    // midnight UTC the owed call (made minutes before the demo clock) is yesterday's.
+    const windowStart = DEMO_NOW_MS + 1 - day;
 
     vi.stubGlobal("window", tabAt("?debt=open"));
-    const openToday = summary(utcToday, utcToday + day);
+    const openToday = summary(windowStart, windowStart + day);
     expect(openToday.owedCalls).toBe(1);
 
     vi.stubGlobal("window", tabAt("?debt=written-off"));
     const { debts } = sheetCheck();
-    const writtenOffToday = summary(utcToday, utcToday + day);
+    const writtenOffToday = summary(windowStart, windowStart + day);
     // The same charged calls today, minus the owed one, which is not today's.
     expect(writtenOffToday.owedCalls).toBe(0);
     expect(writtenOffToday.calls).toBe(openToday.calls - 1);
