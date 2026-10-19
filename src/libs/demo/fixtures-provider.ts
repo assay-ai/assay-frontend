@@ -1316,7 +1316,6 @@ function slashProposalSummary(proposalId: string) {
     windowId: subject.windowId,
     windowLabel: subject.label,
     penaltyAmount: penalty,
-    outcome: null,
     resolutionKind: null,
     resolvedAt: null,
   };
@@ -1367,7 +1366,6 @@ function slashProposalSummary(proposalId: string) {
         runningClock: "NONE",
       },
       disputeId: null,
-      outcome: "EXECUTED",
       resolvedAt: demoPenaltyTime(-10500),
       executedAt: demoPenaltyTime(-10500),
     };
