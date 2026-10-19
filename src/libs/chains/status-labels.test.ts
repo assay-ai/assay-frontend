@@ -66,7 +66,7 @@ describe("chain refusals", () => {
   it("labels a pause and an on-chain block", () => {
     expect(chainErrorLabel("CHAIN_PROGRAM_PAUSED")).toBe("Contracts paused — try after unpause");
     expect(chainErrorLabel("CHAIN_ADDRESS_BLOCKED")).toBe("Blocked on chain");
-    expect(chainErrorLabel("OPERATOR_SUSPENDED")).toBeNull();
+    expect(chainErrorLabel("OPERATOR_NOT_AUTHORIZED")).toBeNull();
   });
 
   it("leads code · message with the label when there is one", () => {
