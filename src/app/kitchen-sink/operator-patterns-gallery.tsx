@@ -95,7 +95,7 @@ export function OperatorPatternsGallery() {
             steps={[{ id: "rule", label: "Cancel 2 penalties", cost: "gas", run: () => wait(900) }]}
             functionName="cancelSlashBatch"
             chainId="eip155:46630"
-            transactions={[{ to: "0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c", value: "0", data: CALLDATA }]}
+            transactions={[{ to: "0x7242F853db478A28Ae76Ace808212d4B68aa73e7", value: "0", data: CALLDATA }]}
             afterExport="Import it in the arbiter's multi-signer wallet."
           />
           <SignOrExport
@@ -105,7 +105,7 @@ export function OperatorPatternsGallery() {
             steps={[]}
             functionName="cancelSlashBatch"
             chainId="eip155:46630"
-            transactions={[{ to: "0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c", value: "0", data: CALLDATA }]}
+            transactions={[{ to: "0x7242F853db478A28Ae76Ace808212d4B68aa73e7", value: "0", data: CALLDATA }]}
             afterExport="Import the file in the arbiter's multi-signer wallet and sign it there."
           />
         </div>
