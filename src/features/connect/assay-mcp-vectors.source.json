@@ -1,0 +1,14 @@
+{
+  "ref": "1953650f5c9c2b32f4ad655e33946bb53cfa68df",
+  "commit": "1953650f5c9c2b32f4ad655e33946bb53cfa68df",
+  "files": {
+    "src/features/connect/server-name.vectors.json": {
+      "from": "vectors/server-names.json",
+      "sha256": "061ba07be7e7fe8a75d0a47e881a5c059ea5b3feb8a3d612cb8f7e682757d79b"
+    },
+    "src/features/connect/commands.vectors.json": {
+      "from": "vectors/commands.json",
+      "sha256": "23c72598378a47394884d4c403266eee669941b1c6994da44aa5f006631fc0a4"
+    }
+  }
+}

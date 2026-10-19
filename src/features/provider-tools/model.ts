@@ -37,7 +37,7 @@ export const LOCAL_NAME_MAX = 40;
 export const FULL_NAME_MAX = 48;
 /** What most clients allow a model to see: `mcp__{server}__{name}`. */
 export const MODEL_NAME_MAX = 64;
-/** The Connect sheet suggests server names of at most 9 characters (§7.11). */
+/** The Connect sheet suggests `assay-{slug}` server names within the per-URL budget (§8.3.1). */
 export const SERVER_NAME_MAX = 9;
 
 export function fullToolName(handle: string, localName: string): string {
