@@ -13,9 +13,6 @@
  */
 export const OPERATOR_SESSION_KEY = "operatorSession";
 
-/** The pasted-token key of the console's first version. Removed on sight. */
-const LEGACY_TOKEN_KEY = "operatorAccessToken";
-
 export interface OperatorSessionRecord {
   readonly token: string;
   /** ISO 8601, as the verify answered it. */
@@ -59,7 +56,6 @@ export function readOperatorSession(now: number = Date.now()): OperatorSessionRe
   const store = storage();
   if (!store) return null;
   try {
-    store.removeItem(LEGACY_TOKEN_KEY);
     const raw = store.getItem(OPERATOR_SESSION_KEY);
     const record = parse(raw);
     if (raw !== null && (!record || Date.parse(record.expiresAt) <= now)) {
@@ -95,7 +91,6 @@ export function clearOperatorSession(end: OperatorSessionEnd = "signed-out"): vo
   if (store) {
     try {
       store.removeItem(OPERATOR_SESSION_KEY);
-      store.removeItem(LEGACY_TOKEN_KEY);
     } catch {
       /* nothing to do */
     }

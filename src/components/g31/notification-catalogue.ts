@@ -27,7 +27,7 @@ import type {
  * `hasProducer: false` marks the events the backend's own enum comments say
  * have no producer yet (`withdrawal.initiated`, `withdrawal.completed`,
  * `withdrawal_destination.added`, `slash.compensation_received`,
- * `provider.slash_proposed`, `provider.payout_sent`, `digest.daily`). The UI
+ * `provider.slash_proposed`, `digest.daily`). The UI
  * must say so rather than implying they fire today — they are in the table
  * only because the backend's catalogue is `Record`-exhaustive over the enum,
  * not `Partial`, so an event with no producer still has a decided severity
@@ -274,13 +274,6 @@ export const NOTIFICATION_CATALOGUE: Readonly<Record<NotificationEvent, Notifica
     nonSuppressible: true,
     hasProducer: true,
   },
-  "provider.payout_sent": {
-    severity: "INFO",
-    channels: IN_APP_EMAIL,
-    aggregation: "PER_EVENT",
-    nonSuppressible: false,
-    hasProducer: false,
-  },
 
   // ── Tool sets ─────────────────────────────────────────────────────────────
   "toolset.update_available": {
@@ -388,11 +381,6 @@ export const NOTIFICATION_CATALOGUE: Readonly<Record<NotificationEvent, Notifica
   },
 };
 
-/** Stable render order — the backend's own grouping, not alphabetical. */
-export const NOTIFICATION_EVENT_ORDER: readonly NotificationEvent[] = Object.keys(
-  NOTIFICATION_CATALOGUE
-) as NotificationEvent[];
-
 /**
  * What each event is, in words. The id beside it on the Alerts screen stays
  * the value a webhook payload and the API carry, so it is shown as a code and
@@ -426,7 +414,6 @@ export const NOTIFICATION_EVENT_LABEL: Readonly<Record<NotificationEvent, string
   "provider.slash_decided": "Penalty decided",
   "provider.slash_executed": "Penalty taken from your stake",
   "provider.slash_reversed": "Penalty reversed, stake restored",
-  "provider.payout_sent": "Payout sent",
   "toolset.update_available": "A tool set you use has a new version",
   "tool_version.deprecated": "A version of a tool you use is going away",
   "tool_version.retired": "A version of a tool you use stopped working",

@@ -48,6 +48,14 @@ function brief(overrides: {
           chainDisputedAt: null,
           secondsRemaining: null,
           runningClock: "NONE",
+          disputeOnChain: true,
+          disputeBy: null,
+          chainExecutableAt: null,
+          chainStatus: "NONE",
+          chainDisputedParts: 0,
+          chainState: "PENDING",
+          chainRecords: 0,
+          cancelledRecords: 0,
         },
         disputeId: null,
         outcome: null,
@@ -71,7 +79,8 @@ function brief(overrides: {
     chainStatus: overrides.chainStatus ?? "CANCEL_REQUESTED",
     chainExecutableAt: overrides.executableAt === undefined ? iso(NOW - DAY) : overrides.executableAt,
     chainDisputedParts: 0,
-    ...(overrides.chainRecord === undefined ? {} : { chainRecord: overrides.chainRecord }),
+    chainRecord: overrides.chainRecord ?? "STANDING",
+    chainStanding: (overrides.chainRecord ?? "STANDING") === "STANDING" || overrides.chainRecord === "UNKNOWN",
   } as OperatorCaseBrief;
 }
 
@@ -200,7 +209,7 @@ describe("a cancel-requested side with nothing on chain (owner rule: the console
 
 describe("not on chain past its computed dates", () => {
   it("says how long, and shows no date already gone", () => {
-    const b = brief({ status: "AWAITING_SECOND", chainStatus: "PROPOSING", executableAt: iso(NOW - 2 * DAY) });
+    const b = brief({ status: "PROPOSED", chainStatus: "PROPOSING", executableAt: iso(NOW - 2 * DAY) });
     const facts = caseFacts(b, NOW);
     expect(facts.stage).toBe("not-on-chain");
     expect(facts.notOnChainForDays).toBe(5);

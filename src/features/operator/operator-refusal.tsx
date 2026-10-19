@@ -9,8 +9,8 @@ import { ApiError } from "@/libs/ApiClient";
  * than a 401 (a 401 ends the session and returns to sign-in).
  *
  * An operator removed or suspended since signing in lands here: the backend
- * re-reads the row on every request and answers `403 OPERATOR_NOT_AUTHORIZED`
- * (older builds: `OPERATOR_SUSPENDED`). The session is still in storage, so
+ * re-reads the row on every request and answers `403 OPERATOR_NOT_AUTHORIZED`.
+ * The session is still in storage, so
  * Sign out is always offered.
  */
 export function OperatorRefusal({
@@ -20,9 +20,6 @@ export function OperatorRefusal({
   error: unknown;
   onSignOut: () => void;
 }) {
-  if (error instanceof ApiError && error.code === "OPERATOR_SUSPENDED") {
-    return <SuspendedBanner detail={error.message} onSignOut={onSignOut} />;
-  }
   if (error instanceof ApiError && error.code === "OPERATOR_NOT_AUTHORIZED") {
     return (
       <div className="flex flex-col items-start gap-3">

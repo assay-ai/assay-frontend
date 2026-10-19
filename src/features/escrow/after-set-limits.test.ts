@@ -28,7 +28,7 @@ const before = escrowWith("1000000", "10000000");
 const after = escrowWith("1000000", "9000000");
 
 describe("escrowQueryKey", () => {
-  it("is the key the limits screen and /funding/escrow both read", () => {
+  it("is the key the limits drawer and the escrow drawer both read", () => {
     expect(escrowQueryKey(CHAIN)).toEqual(["escrow", CHAIN]);
     expect(escrowQueryKey(null)).toEqual(["escrow", null]);
   });

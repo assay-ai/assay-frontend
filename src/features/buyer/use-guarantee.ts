@@ -133,12 +133,11 @@ const NOT_CHARGED_STATUSES = new Set(["REFUNDED", "VOIDED", "EXPIRED"]);
 
 /**
  * A served call that was never collected and is not owed: the provider
- * forfeited it, or its debt was voided. A legacy platform absorb is not
- * visible on a call row (it reads as charged), so the Not collected line's
- * figure comes from `GET /withheld`, never from this fold.
+ * forfeited it, or its debt was voided. The Not collected line's figure comes
+ * from `GET /withheld`, never from this fold.
  */
 function notCollected(call: ToolCall): boolean {
-  return call.status === "SETTLED" && (call.forfeited === true || call.debt === "VOIDED");
+  return call.status === "SETTLED" && (call.forfeited || call.debt === "VOIDED");
 }
 
 /**

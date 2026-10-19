@@ -26,7 +26,7 @@ export interface AuditEntryLike {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Values that are identifiers or secrets, never body text: ids, chain ids, key prefixes, hashes. */
-const RAW_VALUE = /^(eip155:|solana:|assay_|x402_|sk_|pk_|cred_|ses_|aud_|dep_|sp_|hld_)|^0x[0-9a-f]{6,}$/i;
+const RAW_VALUE = /^(eip155:|solana:|assay_|sk_|pk_|cred_|ses_|aud_|dep_|sp_|hld_)|^0x[0-9a-f]{6,}$/i;
 
 /** An email address: said only as the actor's name, never inside a change. */
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

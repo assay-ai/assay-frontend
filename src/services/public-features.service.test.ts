@@ -8,7 +8,6 @@ vi.mock("@/services/api", () => ({
 }));
 
 const { getDemoStatus } = await import("./demo.service");
-const { getPublicFeatures } = await import("./public-features.service");
 const { getPublicReserves } = await import("./reserves.service");
 
 const paths = () => get.mock.calls.map(([path]) => path);
@@ -41,11 +40,6 @@ describe("optional public pages (BUG-R5-02)", () => {
 
     expect(await getPublicReserves()).toEqual({ state: "OK" });
     expect(await getDemoStatus()).toEqual({ configured: true, compensation: null });
-  });
-
-  it("treats an API that cannot say as offering neither", async () => {
-    get.mockRejectedValue(new ApiError("NOT_FOUND", "Cannot GET", 404));
-    expect(await getPublicFeatures()).toEqual({ reserves: false, demo: false });
   });
 
   it("does not hide a real failure behind 'not available'", async () => {

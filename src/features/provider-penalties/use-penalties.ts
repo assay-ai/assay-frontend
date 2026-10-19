@@ -196,5 +196,3 @@ export function usePenalties(options: { withCases?: "open" | "all" | "none" } = 
     refetch: () => (demo ? Promise.resolve() : chain.refetch()),
   };
 }
-
-export type PenaltiesData = ReturnType<typeof usePenalties>;

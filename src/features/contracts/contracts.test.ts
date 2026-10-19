@@ -9,7 +9,6 @@ import {
   changeText,
   deprecatedBadge,
   deprecationSentence,
-  earliestSunsetDay,
   mustReturnLabel,
   newerVersion,
   problemText,
@@ -152,12 +151,11 @@ describe("deprecation in words (UTC)", () => {
     expect(newerVersion(versions, 2)).toBeNull();
   });
 
-  it("allows a sunset 90 days out or later, at midnight UTC", () => {
-    const now = Date.parse("2026-10-17T15:30:00Z");
-    expect(earliestSunsetDay(now)).toBe("2027-01-16");
-    expect(sunsetProblem("2027-01-16", now)).toBeNull();
-    expect(sunsetProblem("2027-01-14", now)).toMatch(/Pick Jan 16, 2027 or later/);
-    expect(sunsetProblem("", now)).toBe("Pick a date.");
+  it("allows a sunset from the server's earliest sunset on, at midnight UTC", () => {
+    const earliest = "2027-01-15T15:30:00.000Z";
+    expect(sunsetProblem("2027-01-16", earliest)).toBeNull();
+    expect(sunsetProblem("2027-01-14", earliest)).toMatch(/Pick Jan 16, 2027 or later/);
+    expect(sunsetProblem("", earliest)).toBe("Pick a date.");
   });
 
   it("starts the date picker at the first whole UTC day of the server's earliest sunset", () => {

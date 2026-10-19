@@ -48,7 +48,7 @@ import { formatMoney, notCharged, toDecimal } from "@/utils/money";
  *
  * Refused (`?status=refused`) lists the calls refused before anything was
  * charged (`GET /refused-calls`), and `?call={id}` opens one with its fix —
- * the `/calls?call={id}` link an agent's error carries lands here.
+ * the `/spend/calls?call={id}` link an agent's error carries lands here.
  */
 
 const PAGE = 50;

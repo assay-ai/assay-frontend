@@ -145,9 +145,7 @@ describe("notCreditedBreakdown", () => {
     ]);
   });
 
-  it("falls back to withheld, with no reasons, for a backend that sends no breakdown", () => {
-    const breakdown = notCreditedBreakdown({ calls: 3, earned: null, platformFee: null, withheld: usd("9"), withheldCalls: 3 });
-    expect(breakdown).toEqual({ calls: 3, amount: usd("9"), reasons: [] });
+  it("is nothing without a report", () => {
     expect(notCreditedBreakdown(null)).toEqual({ calls: 0, amount: null, reasons: [] });
   });
 });

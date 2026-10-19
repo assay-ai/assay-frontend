@@ -38,8 +38,8 @@ import { formatMoney } from "@/utils/money";
  * plain words why it needs what it needs, and two sheets that do everything:
  * Add stake (proves the wallet inside it when needed, then approve + deposit)
  * and Withdraw stake (unbond an amount, then withdraw it). `?sheet=stake` or
- * `?sheet=withdraw` opens one on arrival, so Home, the listing wizard and
- * old `/provider/exit` links land on the action itself.
+ * `?sheet=withdraw` opens one on arrival, so links from Home and the listing
+ * wizard land on the action itself.
  */
 
 interface ToolRow {

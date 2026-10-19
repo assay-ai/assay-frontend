@@ -20,8 +20,6 @@ export const SIGNATURE_PACKAGE_NOTE: string | null =
 
 export const SIGNATURE_GUIDE_URL = "https://github.com/assay-ai/assay-provider-verify#readme";
 
-export const SIGNATURE_HEADERS = ["Signature", "Signature-Input", "Content-Digest"] as const;
-
 const KEYS_PATH = "/.well-known/assay-request-keys.json";
 
 /**

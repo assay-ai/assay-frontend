@@ -1,7 +1,6 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, ChevronDown } from "lucide-react";
-import Link from "next/link";
 import * as React from "react";
 
 import { MetricTile } from "@/components/ui/metric-tile";
@@ -96,20 +95,6 @@ export function HealthStrip({ health, error }: { health: PlatformHealth | undefi
             value={formatMoney(health.stakeLocked)}
             sub={`bonded by ${count(health.providersWithStake)} ${health.providersWithStake === 1 ? "provider" : "providers"}`}
           />
-          {/* The retired in-app objection process, not on chain (D15): the Penalties list's "Old process" tab. */}
-          <Link
-            href="/operator/cases?tab=old-process"
-            className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-            aria-label="Old-process cases: open the Old process tab"
-          >
-            <MetricTile
-              label="Old-process cases"
-              value={count(health.oldProcessCases)}
-              sub="not on chain · open the tab"
-              meta={health.oldestOldProcessCaseAgeSeconds === null ? DASH : `oldest ${age(health.oldestOldProcessCaseAgeSeconds)}`}
-              className="h-full hover:border-02"
-            />
-          </Link>
         </div>
       ) : null}
     </section>

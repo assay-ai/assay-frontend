@@ -17,7 +17,7 @@ describe("provider inbox audience", () => {
         notifications: [
           { event: "provider.slash_proposed", readAt: null, subjectId: "CASE-1" },
           { event: "provider.sla_window_warning", readAt: null, subjectId: "w1" },
-          { event: "provider.payout_sent", readAt: "2026-10-01T00:00:00Z" },
+          { event: "provider.slash_reversed", readAt: "2026-10-01T00:00:00Z" },
           { event: "velocity.anomaly", readAt: null },
         ],
       }),

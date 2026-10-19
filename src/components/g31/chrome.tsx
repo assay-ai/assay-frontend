@@ -109,38 +109,6 @@ export function KeyValueRow({
   );
 }
 
-/**
- * The bordered stat card the explorer screens use (provider card stats, the
- * provider detail six-across strip). Distinct from `MetricTile`, which is the 32px money
- * headline on the Money bench — these are 20px and sit six to a row.
- */
-export function StatCard({
-  label,
-  value,
-  sub,
-  tone = "default",
-}: {
-  label: string;
-  value: React.ReactNode;
-  sub?: React.ReactNode;
-  tone?: "default" | "teal";
-}) {
-  return (
-    <div className="flex min-w-0 flex-1 flex-col gap-[3px] rounded-lg border border-01 bg-01 p-4">
-      <span className="text-body-xs text-03">{label}</span>
-      <span
-        className={cn(
-          "font-mono text-heading-sm",
-          tone === "teal" ? "text-teal-600" : "text-01"
-        )}
-      >
-        {value}
-      </span>
-      {sub ? <span className="text-mono-xs font-sans text-03">{sub}</span> : null}
-    </div>
-  );
-}
-
 /** The 10px mono column header / section label the design uses everywhere. */
 export function MicroLabel({ children, className }: { children: React.ReactNode; className?: string }) {
   return <span className={cn("font-mono text-mono-2xs text-03", className)}>{children}</span>;

@@ -106,14 +106,10 @@ export interface ToolRow {
   fromPrice: Money | null;
   /** What a call would be held for — the dearest eligible binding, not the floor. */
   price: Money | null;
-  /**
-   * Routable bindings that can be charged (PAID or FREEMIUM); above one, the
-   * quote reads "up to". Falls back to `routableBindings` for a backend that
-   * predates the field, the same fallback MCP `tools/list` uses.
-   */
-  paidBindings: number | undefined;
+  /** Routable bindings that can be charged (PAID or FREEMIUM); above one, the quote reads "up to". */
+  paidBindings: number;
   /** Free calls per agent per day before a FREEMIUM tool's quote applies (the backend's total, capped). */
-  freeCallsPerDay?: number | null;
+  freeCallsPerDay: number | null;
   routable: boolean;
   unroutableReason: string | null;
   /**
@@ -127,14 +123,14 @@ export interface ToolRow {
   prices?: ChainPrice[];
   /** Your own traffic on this tool. */
   yourCalls: number;
-  /** T3: the version unpinned URLs serve, e.g. "2.0.0"; absent on an older backend. */
-  version?: string | null;
+  /** T3: the version unpinned URLs serve, e.g. "2.0.0". */
+  version: string | null;
   /** T3: every published version, newest first, with status and sunset. */
-  versions?: ToolVersionBrief[];
+  versions: ToolVersionBrief[];
   /** T3: majors still serving until their sunset. */
-  deprecatedMajors?: number[];
-  replacementName?: string | null;
-  replacementVersion?: string | null;
+  deprecatedMajors: number[];
+  replacementName: string | null;
+  replacementVersion: string | null;
   listed: Money | null;
   charged: Money | null;
 }
@@ -238,7 +234,7 @@ export function useCatalogue() {
         providerCount: row.providerCount,
         fromPrice: row.fromPrice,
         price: row.price,
-        paidBindings: row.paidBindings ?? row.routableBindings,
+        paidBindings: row.paidBindings,
         freeCallsPerDay: row.freeCallsPerDay,
         routable: row.routable,
         unroutableReason: row.unroutableReason,
@@ -248,8 +244,8 @@ export function useCatalogue() {
         version: row.version,
         versions: row.versions,
         deprecatedMajors: row.deprecatedMajors,
-        replacementName: row.replacementName ?? null,
-        replacementVersion: row.replacementVersion ?? null,
+        replacementName: row.replacementName,
+        replacementVersion: row.replacementVersion,
         listed,
         charged,
       };

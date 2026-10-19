@@ -42,6 +42,7 @@ const debt = (overrides: Partial<BuyerDebt> = {}): BuyerDebt => ({
   writeOffAt: "2026-11-15T00:00:00.000Z",
   replacedAt: null,
   createdAt: "2026-10-15T23:59:00.000Z",
+  replaceableAt: "2026-10-16T00:00:00.000Z",
   ...overrides,
 });
 
@@ -161,8 +162,8 @@ describe("BuyerDebtBanner", () => {
       expect(html).toContain(`id="${describedBy}" data-testid="buyer-debt-not-yet"`);
     });
 
-    it("offers it once replaceableAt has passed, or when the backend sends none", () => {
-      for (const replaceableAt of [new Date(Date.now() - 60_000).toISOString(), null, undefined]) {
+    it("offers it once replaceableAt has passed", () => {
+      for (const replaceableAt of [new Date(Date.now() - 60_000).toISOString()]) {
         const html = render({ account: ACCOUNT, debts: [debt({ replaceableAt })] });
         expect(signButton(html)).not.toBe("");
         expect(signButton(html)).not.toMatch(/disabled=""/);

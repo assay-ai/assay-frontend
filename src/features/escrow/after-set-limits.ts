@@ -5,7 +5,7 @@ import { getEscrow, revalidateEscrow } from "@/services/escrow.service";
 
 import { limitsLanded } from "./limits-form";
 
-/** The escrow query's key — one entry per `?chain=`, shared with `/funding/escrow`. */
+/** The escrow query's key — one entry per `?chain=`, shared with the Funding page's escrow drawer. */
 export function escrowQueryKey(chainId: string | null) {
   return ["escrow", chainId] as const;
 }

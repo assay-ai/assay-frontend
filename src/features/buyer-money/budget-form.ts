@@ -21,19 +21,6 @@ export interface BudgetForm {
 
 export type BudgetField = "perCall" | "perDay" | "perMonth" | "callsPerMinute" | "callsPerHour" | "spendPerHour";
 
-export interface BudgetPreset {
-  id: string;
-  label: string;
-  perCall: string;
-  perDay: string;
-  perMonth: string;
-}
-
-export const BUDGET_PRESETS: readonly BudgetPreset[] = [
-  { id: "try", label: "Trying it out", perCall: "0.50", perDay: "5", perMonth: "50" },
-  { id: "steady", label: "Steady use", perCall: "2", perDay: "25", perMonth: "300" },
-];
-
 type PolicyFields = Pick<
   SpendPolicy,
   "perCallMax" | "dailyCap" | "monthlyCap" | "maxCallsPerMinute" | "maxCallsPerHour" | "maxSpendPerHour" | "requireApprovalAbove"

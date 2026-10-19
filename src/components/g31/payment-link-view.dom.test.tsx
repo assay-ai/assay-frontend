@@ -43,6 +43,9 @@ const CALL: ToolCall = {
   status: "PENDING",
   price: money("2500000"),
   charged: money("0"),
+  forfeited: false,
+  debt: null,
+  refundedByReport: false,
   verdict: null,
   createdAt: "2026-09-10T09:15:00.000Z",
 };

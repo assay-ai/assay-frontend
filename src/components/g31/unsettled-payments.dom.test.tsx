@@ -21,7 +21,6 @@ function render(props: Partial<React.ComponentProps<typeof UnsettledPayments>> =
   return renderToStaticMarkup(
     <UnsettledPayments
       unsettled={IN_FLIGHT}
-      unit="USDG"
       atRisk={false}
       reasons={[]}
       waiting={false}

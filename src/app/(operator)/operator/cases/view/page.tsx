@@ -76,11 +76,6 @@ import { WhyNotLine } from "./_components/why-not-line";
  * actions (suspend, block, pay back, sweep, history) sit in the header's ⋯
  * menu, never at the bottom. A two-person request already waiting on the
  * penalty becomes the next step: approve it, or who it waits for.
- *
- * The off-chain objection controls (claim, decide, second signature, extend
- * the deadline) are gone from the UI: the owner removed that process
- * (business.md #3/#4/#12). [backend] Retiring their endpoints and the sweeper
- * is separate work.
  */
 
 const STAGE_CHIP: Record<CaseStage, { status: StatusChipKey; detail?: string }> = {
@@ -367,9 +362,6 @@ export default function OperatorCasePage() {
             <span aria-hidden="true" className="text-03">·</span>
             <CopyChip value={proposalId} label="penalty id" />
           </p>
-          {facts.legacyStatus ? (
-            <p className="text-body-xs text-03">Opened under the retired objection process; it now follows the on-chain steps below.</p>
-          ) : null}
         </div>
         <div className="flex shrink-0 items-center">
           <MoreActions

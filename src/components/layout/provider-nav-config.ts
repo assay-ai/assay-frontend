@@ -14,10 +14,6 @@ import type { SectionTab } from "./nav-config";
  *   Stake       /provider/capital             withdraw stake is a sheet here
  *   Account     /provider/account             policy changes sit under it
  *
- * Retired URLs (listing-path, register, exit, disputes, capital/penalties,
- * the minimal-shell duplicates, a binding's old tabs) are client redirects to
- * the page that replaced them, so old links and bookmarks still land.
- *
  * Words: a **listing** is a provider's endpoint serving a catalogue tool (the
  * routes say "bindings"; no screen does), **your APIs** are the tools only
  * this provider serves (`/provider/apis`), and a **tool request** asks Assay
@@ -44,23 +40,23 @@ export const PROVIDER_NAV_ITEMS: ProviderNavItem[] = [
     id: "tools",
     label: "Listings",
     href: "/provider/bindings",
-    match: ["/provider/bindings", "/provider/apis", "/provider/tool-requests", "/provider/portfolio", "/provider/agent-traffic"],
+    match: ["/provider/bindings", "/provider/apis", "/provider/tool-requests", "/provider/portfolio"],
     phoneTab: true,
   },
   {
     id: "penalties",
     label: "Penalties",
     href: "/provider/penalties",
-    match: ["/provider/penalties", "/provider/capital/penalties", "/provider/cases", "/provider/disputes", "/provider/call-disputes"],
+    match: ["/provider/penalties", "/provider/call-disputes"],
     phoneTab: true,
   },
   { id: "money", label: "Money", href: "/provider/money", match: ["/provider/money"], phoneTab: true },
-  { id: "stake", label: "Stake", href: "/provider/capital", match: ["/provider/capital", "/provider/stake", "/provider/exit"], phoneTab: true },
+  { id: "stake", label: "Stake", href: "/provider/capital", match: ["/provider/capital"], phoneTab: true },
   {
     id: "account",
     label: "Account",
     href: "/provider/account",
-    match: ["/provider/account", "/provider/policy-changes", "/provider/register"],
+    match: ["/provider/account", "/provider/policy-changes"],
     phoneTab: false,
   },
 ];
@@ -99,7 +95,6 @@ const PROVIDER_TITLES: Record<string, string> = {
   "/provider/portfolio": "Portfolio",
   "/provider/penalties": "Penalties",
   "/provider/money": "Money",
-  "/provider/money/reconciliation": "Reconciliation",
   "/provider/capital": "Stake",
   "/provider/account": "Account",
   "/provider/policy-changes": "Policy changes",

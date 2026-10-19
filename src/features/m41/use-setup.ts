@@ -30,10 +30,7 @@ import { justProvedAccountId, payoutStepIsDone, provedChainIsNew } from "./payou
 import { resolveTerms } from "./terms";
 
 /**
- * The state behind provider setup (`pM65r`, `/provider/setup`) and provider registration (`lWSNd`,
- * `/provider/register`). One hook, two routes — the designs draw the same
- * account and payout-wallet steps and must not become two implementations
- * that drift.
+ * The state behind provider setup (`pM65r`, `/provider/setup`).
  *
  * ## Why "Save and continue" writes steps 1 and 4 together
  *
@@ -140,8 +137,7 @@ export function useProviderSetup() {
     served Solana chain — so nobody types or picks a CAIP id. When the
     session's agent row names a chain of that family it wins (it is the chain
     this organisation already pays on); otherwise the first served chain of
-    that family. `GET /chains` is the registry; the agent row is the fallback
-    for a backend that predates it.
+    that family, from `GET /chains`.
   */
   const agentsQuery = useQuery({
     queryKey: ["agents", "chain-id"],

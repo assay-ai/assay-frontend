@@ -16,9 +16,7 @@ import { askLabel } from "./why-not";
  *   Proposed → dispute window (72 h) → [Disputed → Arbiter rules, 30 days] → Executed | Cancelled
  *
  * and the single next step THIS operator can take on it. Pure, so the rules
- * are tested without the screen. The off-chain objection process (claim,
- * decide, second signature, extend) is gone from the product; a case still in
- * one of its statuses is read by where its on-chain record stands.
+ * are tested without the screen.
  */
 
 export type CaseStage =
@@ -42,8 +40,6 @@ export interface CaseFacts {
   disputedAt: string | null;
   /** disputedAt + 30 days: unruled by then, it can be expired and the stake is released. */
   disputeExpiresAt: string | null;
-  /** True when the case still carries a status of the retired off-chain objection process. */
-  legacyStatus: boolean;
   /** Cancelled because the dispute went unruled for 30 days and lapsed (`AUTO_CHAIN_VOIDED` after a dispute). */
   expired: boolean;
   /**
@@ -58,7 +54,7 @@ export interface CaseFacts {
   /**
    * The backend read that nothing of the case is Pending or Disputed on chain
    * (`chainRecord: GONE`): nobody can execute it and a cancel has nothing
-   * to act on. False when the brief does not say (an older backend).
+   * to act on.
    */
   nothingOnChain: boolean;
   /**
@@ -83,7 +79,7 @@ export interface CaseFacts {
   /**
    * B18: which stuck-cancel action the brief's live chain read allows
    * (`manualActions`). The backend reads the chain again before it acts and
-   * refuses if the guard no longer holds. All false on an older backend.
+   * refuses if the guard no longer holds. All false when the brief offers none.
    */
   manual: { close: boolean; record: boolean; repropose: boolean; appliedMinor: string | null };
   /**
@@ -104,19 +100,17 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
   const status = asProposalStatus(proposal.status);
   const clocks = {
     ...proposal.clocks,
-    chainStatus: brief.chainStatus ?? proposal.clocks.chainStatus,
-    chainExecutableAt: brief.chainExecutableAt ?? proposal.clocks.chainExecutableAt ?? null,
-    chainDisputedParts: brief.chainDisputedParts ?? proposal.clocks.chainDisputedParts,
+    chainStatus: brief.chainStatus,
+    chainExecutableAt: brief.chainExecutableAt,
+    chainDisputedParts: brief.chainDisputedParts,
   };
   const chain = clocks.chainStatus;
   const chainStage = caseChainStageOf(clocks);
-  const disputedAt = clocks.chainDisputedAt ?? (chainStage.kind === "disputed" ? chainStage.disputedAt : null) ?? null;
-  const executableAt = clocks.chainExecutableAt ?? clocks.earliestExecutionAt ?? null;
-  const legacyStatus = status === "DISPUTED" || status === "UNDER_REVIEW" || status === "AWAITING_SECOND";
+  const disputedAt = clocks.chainDisputedAt;
+  const executableAt = clocks.chainExecutableAt ?? clocks.earliestExecutionAt;
 
-  // Only GONE means nothing stands and nothing was taken. EXECUTED is money moved; UNKNOWN (and a
-  // backend without the field) reads as standing.
-  const record = brief.chainRecord ?? "STANDING";
+  // Only GONE means nothing stands and nothing was taken. EXECUTED is money moved; UNKNOWN reads as standing.
+  const record = brief.chainRecord;
   const nothingOnChain = record === "GONE";
   const executedWhileCancelWaited = record === "EXECUTED" && chain === "CANCEL_REQUESTED";
 
@@ -137,7 +131,7 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
 
   const disputeExpiresAt = plusSeconds(disputedAt, DISPUTE_TIMEOUT_SECONDS);
   // The record under the cancel is still disputed when the chain still counts disputed parts.
-  const recordDisputed = disputedAt !== null && (clocks.chainDisputedParts ?? 0) > 0;
+  const recordDisputed = disputedAt !== null && clocks.chainDisputedParts > 0;
   const cancel =
     stage !== "cancel-requested"
       ? null
@@ -160,7 +154,6 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
     executableAt,
     disputedAt,
     disputeExpiresAt,
-    legacyStatus,
     expired,
     cancel,
     nothingOnChain,

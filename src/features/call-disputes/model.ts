@@ -24,7 +24,6 @@ import { refundPromiseLive } from "@/features/g30/refund-promise";
  * held payment, or from a debt that is voided.
  */
 
-export const HOUR_MS = 3_600_000;
 export { DECISION_HOURS, HELD_TIMEOUT_DAYS, PROVIDER_REPLY_HOURS } from "@/libs/dispute-deadlines";
 export const NOTE_MAX = 1000;
 export const REPLY_MAX = 1000;

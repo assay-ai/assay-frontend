@@ -80,9 +80,9 @@ export interface Receipt {
   withheld: Money;
   /**
    * SETTLED, but the provider caused the payment to fail and forfeited it: not
-   * charged, nobody paid. Optional: older backends do not send it.
+   * charged, nobody paid.
    */
-  forfeited?: boolean;
+  forfeited: boolean;
   /**
    * Buyer debt. `OUTSTANDING`: the payment could not be collected; the price
    * stays held and is charged once the payer signs a replacement voucher — paid
@@ -150,8 +150,8 @@ export interface SummaryFigures {
   /** Calls not finished yet, at their listed price. */
   inProgressTotal: Money;
   inProgressCalls: number;
-  /** Calls listed at zero (free tier), counted in `calls`. Optional: older backends do not send it. */
-  freeCalls?: number;
+  /** Calls listed at zero (free tier), counted in `calls`. */
+  freeCalls: number;
   failRate: number | null;
 }
 

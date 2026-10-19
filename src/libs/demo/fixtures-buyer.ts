@@ -24,9 +24,9 @@ import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
  * were not charged, five of which are still in flight, against a $25 deposit
  * two days ago. The prices are the catalogue's (see {@link TOOLS}), so most
  * calls cost a fraction of a cent and one `deep_research` costs $1.20. Every
- * screen from `/overview` to `/funding/escrow` draws from the tables below, so
+ * screen from `/` to the Funding escrow drawer draws from the tables below, so
  * a figure a viewer reads twice reads the same twice — the held total on
- * `/overview` is the sum of the holds on `/funding`, which is the sum of the
+ * `/` is the sum of the holds on `/funding`, which is the sum of the
  * five in-flight calls in `/tool-calls`, which is the `held` on the
  * `/balances` fixture in `fixtures.ts` (58.7823 available, 1.2177 held, 60.00
  * total; see {@link demoBuyerLedger}) — plus, under a `?debt=` picture with an
@@ -44,7 +44,7 @@ import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
  *
  *  - the rows in a response always sum to that response's own totals, whatever
  *    the grouping, because both come from the same fold;
- *  - a day, a week and a month are three different answers — the `/overview`
+ *  - a day, a week and a month are three different answers — the `/`
  *    chart draws seven different bars and `/guarantee` prints three different
  *    months;
  *  - `/withheld` for a window equals that window's `withheldTotal`, so the
@@ -136,7 +136,7 @@ interface DemoCall {
  * The next six are today's finished calls and are **the same six calls as
  * today's row in the day model**: one `deep_search` (the owed one, $1.20), one
  * `geocode`, one `ocr_extract`, three `price_quote` — 1.2077 listed, 0.0077
- * charged and 1.20 owed. Counting the rows on `/overview` and reading the
+ * charged and 1.20 owed. Counting the rows on `/` and reading the
  * "Today" tile above them has to give the same answer.
  *
  * The last three are the three that were not charged — 1.20 + 0.0012 + 0.012 =
@@ -397,7 +397,7 @@ const NO_ACTIVITY: DayShape = { counts: {} };
  * head the finished half of {@link CALLS}, and the figure `/spend-policy`'s
  * usage block reports as spent today.
  *
- * Changing a number here moves `/overview`, `/spend`, `/guarantee`,
+ * Changing a number here moves `/`, `/spend`, `/guarantee`,
  * `/statements` and `/limits` together, which is the point of there being one
  * table rather than five.
  */
@@ -1478,6 +1478,8 @@ function freshEscrow() {
     windowStartedAt: null,
     windowSeconds: 86400,
     observedAt: minutesAgo(1),
+    // No lifetime line on a first-run escrow.
+    lifetime: null,
   };
 }
 
@@ -1510,6 +1512,7 @@ function debtEscrow() {
     windowStartedAt: readable ? minutesAgo(540) : null,
     windowSeconds: 86400,
     observedAt: readable ? minutesAgo(1) : null,
+    lifetime: null,
     ...(readable ? savedEscrowCaps() : {}),
   };
 }
@@ -1657,7 +1660,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/deposits",
-    override: "always",
     body: () => freshDeposits() ?? ({
       items: demoDeposits(),
       pageInfo: { nextCursor: null, hasMore: false },
@@ -1669,7 +1671,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     // One request the buyer cancelled: no money moved, so `lifetime.withdrawn` stays 0.
     method: "GET",
     match: "/withdrawals",
-    override: "always",
     body: () => ({ items: freshStage() ? [] : demoWithdrawals() }),
   },
 
@@ -1677,7 +1678,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/statements/balance",
-    override: "always",
     body: (_path, query) => ({ items: freshStage() ? [] : [demoStatementBalance(query)] }),
   },
 
@@ -1692,7 +1692,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/escrow",
-    override: "always",
     body: () => freshEscrow() ?? debtEscrow() ?? ({
       exists: true,
       chainReadable: true,
@@ -1836,7 +1835,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       /*
         The enforcement side's own counters, which the Limits screen prefers
         over `/receipts/summary`. Both are folded out of the SAME day model the
-        summary is, so "spent today" here and today's bar on `/overview` cannot
+        summary is, so "spent today" here and today's bar on `/` cannot
         drift apart: 0.0077 today, 2.5094 this month.
       */
       const todayStart = utcDayStart(Date.now());
@@ -1905,7 +1904,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       keeps the agent ids stable, which is what the credentials fixture below
       reads back out of its own path.
     */
-    override: "always",
     body: () => ({
       items: demoAgents(),
       pageInfo: { nextCursor: null, hasMore: false },
@@ -1965,7 +1963,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     // no payment key yet, so it shows the bind step.
     method: "GET",
     match: "/escrow/delegates",
-    override: "always",
     body: () => (freshStage() ? { account: DEMO_BUYER_ACCOUNT, delegates: [], tightenDelaySeconds: demoTightenDelaySeconds() } : ({
       account: DEMO_BUYER_ACCOUNT,
       // `?tighten=1h` shows an escrow that delays a tightening (D-21); 0 by default.
@@ -1979,6 +1976,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           // Five days left, so the demo shows the "permission ends soon" chip and Renew.
           validUntil: new Date(DEMO_NOW_MS + 5 * 86_400_000 + 3_600_000).toISOString(),
           status: "ACTIVE",
+          // Nothing signed is waiting to be collected; the 24-hour cap holds what was spent.
+          unsettled: { count: 0, amount: money("0"), largest: money("0"), windowNeeds: money(SPENT_IN_WINDOW), redeemableUntil: null },
           // A demo "Sign and save" shows its new limits until reload.
           ...savedDelegateCaps(prodDelegate()),
         },
@@ -2009,7 +2008,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/escrow/unsettled",
-    override: "always",
     body: () => ({ account: DEMO_BUYER_ACCOUNT, unsettled: null, tightenDelaySeconds: demoTightenDelaySeconds() }),
   },
 

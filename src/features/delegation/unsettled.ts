@@ -47,7 +47,7 @@ const atomic = (value: Money | string): bigint =>
  * True when the payer's escrow keeps signed payments collectable for a while
  * after a tightening (assay-evm D-21): `tightenDelaySeconds` above 0 on
  * `GET /escrow/unsettled` or `GET /escrow/delegates`. Nothing can be stranded
- * there, so the backend refuses nothing for it. Absent (an older API) is 0.
+ * there, so the backend refuses nothing for it. Not known yet reads as 0.
  */
 export function hasTightenDelay(tightenDelaySeconds: number | null | undefined): boolean {
   return typeof tightenDelaySeconds === "number" && tightenDelaySeconds > 0;
@@ -209,12 +209,8 @@ export function editedToast(
 /**
  * "2 payments ($0.60) still being settled", or null when there are none.
  * Money in dollars at two decimals (sub-cent amounts keep their digits).
- * `_unit` is kept for callers that still pass the token symbol.
  */
-export function unsettledLine(
-  unsettled: UnsettledVouchers | null | undefined,
-  _unit?: string,
-): string | null {
+export function unsettledLine(unsettled: UnsettledVouchers | null | undefined): string | null {
   if (!unsettled || unsettled.count === 0) return null;
   const value = toDecimal(unsettled.amount);
   const amount = formatMoney(unsettled.amount, { decimals: !value.isZero() && value.lt("0.01") ? 4 : 2 });

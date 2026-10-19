@@ -1,28 +1,14 @@
 import type { StatusChipKey } from "@/components/patterns/status-chip";
 import type { Money } from "@/interfaces/api";
-import type {
-  AdjudicationQueueRow,
-  ArbiterDispute,
-  OperatorCaseBrief,
-  OperatorCaseListRow,
-  OperatorCaseStatus,
-} from "@/interfaces/operator";
-
-import { disputeAmount } from "./arbiter";
-import { caseFacts, type CaseStage } from "./case-flow";
+import type { OperatorCaseListRow, OperatorCaseStatus } from "@/interfaces/operator";
 
 /**
- * The Penalties list (`/operator/cases`), as data. Pure, so the tabs, the
- * "Next" column and the fallback are tested without the screen.
- *
- * Two sources:
- *  - `GET /operator/cases` (every penalty, by status) when the backend has it;
- *  - otherwise the lists that already exist — disputed on chain, the retired
- *    objection queue, acted on in Activity, and opened in this browser — each
- *    read into the same row, under tabs named for where they came from.
+ * The Penalties list (`/operator/cases`), as data, read from
+ * `GET /operator/cases`. Pure, so the tabs and the "Next" column are tested
+ * without the screen.
  */
 
-/** One row of the table, whichever source it came from. */
+/** One row of the table. */
 export interface PenaltyRow {
   id: string;
   providerId: string;
@@ -38,7 +24,7 @@ export interface PenaltyRow {
   onChain: boolean | null;
 }
 
-export type PenaltyTabId = "needs-ruling" | "signature" | "old-process" | "window" | "executed" | "cancelled" | "all" | "acted" | "recent";
+export type PenaltyTabId = "needs-ruling" | "signature" | "window" | "executed" | "cancelled" | "all";
 
 export interface PenaltyTab {
   id: PenaltyTabId;
@@ -47,13 +33,11 @@ export interface PenaltyTab {
   statuses: OperatorCaseStatus[] | null;
 }
 
-/** The tabs when the backend lists every penalty. */
+/** The tabs, one per group of statuses. */
 export const STATUS_TABS: readonly PenaltyTab[] = [
   // Only what the arbiter can rule on: disputed on chain. The same count as Home and Arbiter.
   { id: "needs-ruling", label: "Needs ruling", statuses: ["CHAIN_DISPUTED"] },
   { id: "signature", label: "Waiting for signature", statuses: ["CANCEL_REQUESTED"] },
-  // The retired in-app objection process (D15): nobody rules these on chain, so they wait apart.
-  { id: "old-process", label: "Old process", statuses: ["DISPUTED"] },
   { id: "window", label: "In dispute window", statuses: ["PROPOSED"] },
   { id: "executed", label: "Executed", statuses: ["EXECUTED", "COMPENSATED"] },
   { id: "cancelled", label: "Cancelled", statuses: ["CANCELLED", "EXPIRED"] },
@@ -61,14 +45,7 @@ export const STATUS_TABS: readonly PenaltyTab[] = [
 ];
 
 /** Everything still moving: small enough to read whole, so these tabs carry counts. */
-export const OPEN_STATUSES: readonly OperatorCaseStatus[] = ["CHAIN_DISPUTED", "DISPUTED", "CANCEL_REQUESTED", "PROPOSED"];
-
-/** The tabs when it does not: named for the source, and only those that have one. */
-export const FALLBACK_TABS: readonly PenaltyTab[] = [
-  { id: "needs-ruling", label: "Needs ruling", statuses: null },
-  { id: "acted", label: "Acted on lately", statuses: null },
-  { id: "recent", label: "Opened here", statuses: null },
-];
+export const OPEN_STATUSES: readonly OperatorCaseStatus[] = ["CHAIN_DISPUTED", "CANCEL_REQUESTED", "PROPOSED"];
 
 export function tabById(tabs: readonly PenaltyTab[], id: string | null | undefined): PenaltyTab {
   return tabs.find((tab) => tab.id === id) ?? tabs[0]!;
@@ -77,10 +54,10 @@ export function tabById(tabs: readonly PenaltyTab[], id: string | null | undefin
 /**
  * The tab the page opens on when the link names none: Needs ruling for whoever
  * can rule, All for everyone else (Support, Admin) — a tab they cannot act on
- * is an odd place to land. Without the list there is no All tab. Pure.
+ * is an odd place to land. Pure.
  */
-export function defaultTab(canRule: boolean, listMissing: boolean): PenaltyTabId {
-  return canRule || listMissing ? "needs-ruling" : "all";
+export function defaultTab(canRule: boolean): PenaltyTabId {
+  return canRule ? "needs-ruling" : "all";
 }
 
 /** How many open rows each status tab holds; null for the closed tabs (not counted). */
@@ -93,7 +70,7 @@ export function tabCounts(openRows: readonly Pick<PenaltyRow, "status">[]): Part
   return counts;
 }
 
-// ── Reading each source into a row ──────────────────────────────────────────
+// ── Reading a list row ──────────────────────────────────────────────────────
 
 export function rowFromCase(row: OperatorCaseListRow): PenaltyRow {
   return {
@@ -106,88 +83,8 @@ export function rowFromCase(row: OperatorCaseListRow): PenaltyRow {
     proposedAt: row.proposedAt,
     disputedAt: row.disputedAt,
     nextDeadline: row.nextDeadline,
-    onChain: row.onChain ?? null,
+    onChain: row.onChain,
   };
-}
-
-export function rowFromDispute(dispute: ArbiterDispute, providerName: string): PenaltyRow {
-  return {
-    id: dispute.proposalId,
-    providerId: dispute.providerId,
-    providerName,
-    toolName: null,
-    amount: disputeAmount(dispute.chainId, dispute.penaltyAmount),
-    status: "CHAIN_DISPUTED",
-    proposedAt: null,
-    disputedAt: dispute.disputedAt,
-    nextDeadline: dispute.expiresAt,
-    onChain: true,
-  };
-}
-
-export function rowFromQueue(row: AdjudicationQueueRow): PenaltyRow {
-  return {
-    id: row.proposalId,
-    providerId: row.providerId,
-    providerName: row.providerName,
-    toolName: null,
-    amount: row.penaltyAmount,
-    status: "DISPUTED",
-    proposedAt: null,
-    disputedAt: null,
-    nextDeadline: row.dueAt,
-    onChain: null,
-  };
-}
-
-/** The list's status for the case screen's stage: the same precedence the backend applies. */
-export function statusOfStage(stage: CaseStage): OperatorCaseStatus {
-  switch (stage) {
-    case "disputed":
-      return "CHAIN_DISPUTED";
-    case "cancel-requested":
-      return "CANCEL_REQUESTED";
-    case "executed":
-      return "EXECUTED";
-    case "compensated":
-      return "COMPENSATED";
-    case "cancelled":
-      return "CANCELLED";
-    default:
-      return "PROPOSED";
-  }
-}
-
-export function rowFromBrief(brief: OperatorCaseBrief, providerName: string, now: number = Date.now()): PenaltyRow {
-  const proposal = brief.case.proposal;
-  const facts = caseFacts(brief, now);
-  const status = facts.expired ? "EXPIRED" : statusOfStage(facts.stage);
-  const nextDeadline =
-    status === "CHAIN_DISPUTED"
-      ? facts.disputeExpiresAt
-      : status === "CANCEL_REQUESTED"
-        ? (facts.cancel?.deadline ?? null)
-        : status === "PROPOSED"
-          ? facts.executableAt
-          : null;
-  return {
-    id: proposal.id,
-    providerId: proposal.providerId,
-    providerName,
-    toolName: proposal.toolName ?? null,
-    amount: proposal.penaltyAmount,
-    status,
-    proposedAt: proposal.clocks.proposedAt,
-    disputedAt: facts.disputedAt,
-    nextDeadline,
-    onChain: facts.stage !== "not-on-chain",
-  };
-}
-
-/** First occurrence wins: a penalty shows once, under the most specific source. */
-export function uniqueRows(rows: readonly PenaltyRow[]): PenaltyRow[] {
-  const seen = new Set<string>();
-  return rows.filter((row) => (seen.has(row.id) ? false : (seen.add(row.id), true)));
 }
 
 // ── What the row says ───────────────────────────────────────────────────────
@@ -222,8 +119,6 @@ function statusChip(row: Pick<PenaltyRow, "status" | "disputedAt" | "nextDeadlin
   switch (row.status) {
     case "CHAIN_DISPUTED":
       return { status: "disputed" };
-    case "DISPUTED":
-      return { status: "waiting", detail: "old process" };
     case "CANCEL_REQUESTED":
       // The chip stays short; Next says what is signed ("Arbiter signs the cancel · 9h left").
       return { status: "waiting-signature" };
@@ -304,15 +199,6 @@ export function penaltyNext(
         text: row.onChain === false || !known ? "Waiting to go on chain" : left <= 0 ? "Executable now" : `Executable in ${durationLeft(left)}`,
         until,
         urgent: false,
-      };
-    case "DISPUTED":
-      // The retired objection process: an operator suspends it from its page; nothing rules it on chain.
-      if (stuck) return { kind: "text", text: `Old process · ${stuck.charAt(0).toLowerCase()}${stuck.slice(1)} · suspend it from its page`, until: null, urgent: true };
-      return {
-        kind: "text",
-        text: !known ? "Old process · suspend it from its page" : left <= 0 ? "Old process · decision overdue" : `Old process · decide within ${durationLeft(left)}`,
-        until,
-        urgent: known && left <= 0,
       };
     default:
       return { kind: "none" };

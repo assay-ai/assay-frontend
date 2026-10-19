@@ -1,4 +1,4 @@
-import { BadgeCheck, Gift, TriangleAlert } from "lucide-react";
+import { BadgeCheck, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
 import { Term } from "@/components/patterns/term";
@@ -56,22 +56,6 @@ export function OfferPrice({
       </span>
       {offer.cap ? <span className="text-02">{offer.cap}</span> : null}
     </p>
-  );
-}
-
-/** "Free · 100 calls/day per agent" — a free tier is the way in for a newcomer. */
-export function FreeTierBadge({ label, className }: { label: string | null; className?: string }) {
-  if (!label) return null;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-teal-10 px-2 py-0.5 text-label-xs text-teal-600",
-        className,
-      )}
-    >
-      <Gift aria-hidden="true" className="size-3" />
-      {label}
-    </span>
   );
 }
 

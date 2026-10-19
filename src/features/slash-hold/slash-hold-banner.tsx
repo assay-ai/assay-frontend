@@ -4,9 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
 import { Banner } from "@/components/ui/banner";
+import { routes } from "@/libs/routes";
 import { getProviderMe } from "@/services/provider-profile.service";
 
-import { HOLD_RESUMES, HOLD_WHAT_TO_DO, PENALTIES_ON_CHAIN_HREF, slashHoldBanner } from "./model";
+import { HOLD_RESUMES, HOLD_WHAT_TO_DO, slashHoldBanner } from "./model";
 
 /**
  * The slash-hold banner, mounted once in the provider console shell.
@@ -39,7 +40,7 @@ export function SlashHoldBanner({ wrapperClassName }: { wrapperClassName?: strin
             ))}
             <span>
               {HOLD_WHAT_TO_DO}{" "}
-              <Link href={PENALTIES_ON_CHAIN_HREF} className="font-semibold underline">
+              <Link href={routes.penalties()} className="font-semibold underline">
                 Penalties on chain
               </Link>
               . {HOLD_RESUMES}

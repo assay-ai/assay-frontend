@@ -27,7 +27,7 @@ import { routes } from "@/libs/routes";
  * traffic**, the **stake currently bonded**, and — via the header — a filter
  * that shows only verified providers.
  *
- * **There is no first-party tier.** x402 is a card like any other here,
+ * **There is no first-party tier.** Assay is a card like any other here,
  * distinguished by nothing except whether the verified label is on it. No
  * card is pinned, ordered first, coloured differently or given a badge the
  * others cannot earn. The design's own launch note says why: the verified

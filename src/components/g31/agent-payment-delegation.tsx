@@ -308,9 +308,9 @@ export function PayerDelegationsPanel({
                     </span>
                   ))
                 : null}
-              {unsettledLine(delegation.unsettled, ctx.unit) ? (
+              {unsettledLine(delegation.unsettled) ? (
                 <span className="text-body-xs text-03" data-testid="delegate-unsettled">
-                  {unsettledLine(delegation.unsettled, ctx.unit)}
+                  {unsettledLine(delegation.unsettled)}
                 </span>
               ) : null}
               <EscrowLimitWarning
@@ -586,7 +586,6 @@ function RevokeSheet({
           ) : null}
           <UnsettledPayments
             unsettled={unsettled}
-            unit={unit}
             atRisk={atRisk}
             reasons={reasons}
             waiting={settle.waiting}
@@ -1174,7 +1173,6 @@ function AuthorizeSheet({
               {editing ? (
                 <UnsettledPayments
                   unsettled={unsettled}
-                  unit={unit}
                   atRisk={atRisk}
                   reasons={reasons}
                   waiting={settle.waiting}

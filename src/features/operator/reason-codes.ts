@@ -94,25 +94,11 @@ export const DECISION_NOTE_MIN_LENGTH = 120;
 /** The shorter actions — suspend, extend, second, reverse. */
 export const SHORT_NOTE_MIN_LENGTH = 20;
 
-export const OUTCOME_LABEL: Readonly<Record<ArbitrationOutcome, string>> = Object.freeze({
-  UPHELD: "Upheld — the provider served below its published rate",
-  UPHELD_RECALCULATED: "Upheld, recalculated — genuine, but our arithmetic was wrong",
-  OVERTURNED_PLATFORM_DEFECT: "Overturned — our mapping, classifier or routing caused it",
-  OVERTURNED_POLICY_DEFECT: "Overturned — the policy is wrong for this class of input",
-  OVERTURNED_GRIEFING: "Overturned — a few agents manufactured the failures",
-  OVERTURNED_INSUFFICIENT_EVIDENCE: "Overturned — the sample cannot support the conclusion",
-});
-
 export const ALL_OUTCOMES: readonly ArbitrationOutcome[] = Object.freeze([
   "UPHELD", "UPHELD_RECALCULATED",
   "OVERTURNED_PLATFORM_DEFECT", "OVERTURNED_POLICY_DEFECT",
   "OVERTURNED_GRIEFING", "OVERTURNED_INSUFFICIENT_EVIDENCE",
 ]);
-
-/** True for the four outcomes that cancel the penalty. Derived, not a third mirror. */
-export function isOverturn(outcome: ArbitrationOutcome): boolean {
-  return !OUTCOME_CONSEQUENCE[outcome].penaltyStands;
-}
 
 /**
  * The two outcomes that are findings about **us**, and so the only two that may

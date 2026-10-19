@@ -56,9 +56,7 @@ export const UNPAID_COPY: Record<UnpaidLine["key"], { reason: string; action: st
     action: "Nothing to do: it is the buyer's debt. Paid to you when they settle. After 30 days it shows as overdue.",
     actionable: false,
   },
-  // The `uncollected` figure also holds legacy platform absorbs (seed and
-  // pre-launch rows only: nothing writes one any more), which owe nothing and
-  // block nobody. Every row production can write is a 30-day overdue debt.
+  // Every `uncollected` row is a 30-day overdue debt.
   uncollected: {
     reason: "Overdue: the buyer has not paid for 30 days. They are blocked from paid calls until they do.",
     action: "Nothing to do. You will be paid when the buyer pays.",

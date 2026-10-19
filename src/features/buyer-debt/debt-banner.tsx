@@ -55,7 +55,7 @@ const ROW_STATE = { OPEN: null, REPLACING: "being collected", WRITTEN_OFF: "writ
  * button opens the settle sheet (`settle-debt-sheet.tsx`), where the person
  * sees what they sign, what it costs and the balance after. Which call, which
  * tool and why sit under Details. Nothing shows while nothing is owed or the
- * list cannot be read (an older backend has no such route).
+ * list cannot be read.
  */
 /**
  * `compact`: one line (the title) and the action, for pages whose own content

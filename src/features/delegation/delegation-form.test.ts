@@ -120,6 +120,7 @@ describe("findDelegation / supportsDelegation", () => {
     spentInWindow: usdg("0"),
     validUntil: "2027-01-01T00:00:00.000Z",
     status: "ACTIVE",
+    unsettled: { count: 0, amount: usdg("0"), largest: usdg("0"), windowNeeds: usdg("0"), redeemableUntil: null },
   });
 
   it("matches a delegate by address, whatever the case", () => {
@@ -158,6 +159,7 @@ describe("delegationRows (review S2-5)", () => {
     spentInWindow: usdg("0"),
     validUntil: "2027-01-01T00:00:00.000Z",
     status: "ACTIVE",
+    unsettled: { count: 0, amount: usdg("0"), largest: usdg("0"), windowNeeds: usdg("0"), redeemableUntil: null },
   });
   const binding = (
     delegate: string,

@@ -11,7 +11,7 @@ import { cn } from "@/utils";
  * (`/explore/toolsets`). Real links, so each can be deep-linked.
  */
 const TABS = [
-  { href: "/explore", label: "Tools", match: (p: string) => p === "/explore" || p === "/explore/tools" || p.startsWith("/explore/tools/") },
+  { href: "/explore", label: "Tools", match: (p: string) => p === "/explore" },
   { href: "/explore/providers", label: "Providers", match: (p: string) => p.startsWith("/explore/providers") },
   { href: "/explore/toolsets", label: "Tool sets", match: (p: string) => p.startsWith("/explore/toolsets") },
 ];

@@ -28,12 +28,6 @@ export function normalisedMode(mode: string | null | undefined): "FREE" | "FREEM
   return upper === "FREE" || upper === "FREEMIUM" || upper === "PAID" ? upper : null;
 }
 
-/** Whether calls to this tool can cost nothing for a while. */
-export function hasFreeTier(mode: string | null | undefined): boolean {
-  const m = normalisedMode(mode);
-  return m === "FREE" || m === "FREEMIUM";
-}
-
 /**
  * The free-tier badge text: "Free · 100 calls/day per agent" (the backend
  * counts free calls per agent, per listing, per UTC day). With no number known yet
@@ -178,8 +172,8 @@ export interface ChainPrice {
   price: Money;
   /** The one provider at that price, from the router's own priced set; null when several share it. */
   providerId: string | null;
-  /** Eligible listings on that chain the price was taken over. Optional for an older API. */
-  listings?: number;
+  /** Eligible listings on that chain the price was taken over. */
+  listings: number;
 }
 
 /**
@@ -645,16 +639,16 @@ export interface NotChargedSplitLine {
 /**
  * The lines of the "not charged" split on the public proof: the guarantee
  * firing first, then each reason the server named (only when every reason
- * clears the k rule, rounded down to tens), then one line for the rest. A
- * backend without the split (or one that named nothing) gets a single merged
- * line, worded so it does not read as one reason. Lines with no calls are left
- * out, except the failed-check line, which is the claim itself.
+ * clears the k rule, rounded down to tens), then one line for the rest. When
+ * the server named nothing, the rest is a single merged line, worded so it
+ * does not read as one reason. Lines with no calls are left out, except the
+ * failed-check line, which is the claim itself.
  */
 export function notChargedSplit(totals: {
   callsNotCharged: number;
   callsFailedCheck: number;
-  notChargedByReason?: { reason: string; calls: number }[];
-  callsNotChargedOther?: number;
+  notChargedByReason: { reason: string; calls: number }[];
+  callsNotChargedOther: number;
 }): NotChargedSplitLine[] {
   const failed: NotChargedSplitLine = {
     key: "FAILED_CHECK",
@@ -663,8 +657,8 @@ export function notChargedSplit(totals: {
     tone: reasonTone("FAILED_CHECK"),
   };
   const rest = Math.max(0, totals.callsNotCharged - totals.callsFailedCheck);
-  const named = (totals.notChargedByReason ?? []).filter((r) => r.calls > 0);
-  if (totals.notChargedByReason === undefined || named.length === 0) {
+  const named = totals.notChargedByReason.filter((r) => r.calls > 0);
+  if (named.length === 0) {
     if (rest === 0) return [failed];
     return [
       failed,
@@ -686,7 +680,7 @@ export function notChargedSplit(totals: {
       tone: reasonTone(r.reason),
     })),
   ];
-  const other = totals.callsNotChargedOther ?? Math.max(0, rest - named.reduce((sum, r) => sum + r.calls, 0));
+  const other = totals.callsNotChargedOther;
   if (other > 0) {
     lines.push({ key: "OTHER", label: "The rest, incl. rounding remainders, grouped for privacy", calls: other, tone: "neutral" });
   }

@@ -69,15 +69,13 @@ export function chainStatusLabel(status: string | null | undefined, chain?: stri
 
 /** The backend's mirror of a case's on-chain record, as the case clocks carry it. */
 export interface CaseChainMirror {
-  readonly chainStatus?: string | null;
-  readonly chainDisputedAt?: string | null;
-  readonly chainDisputedParts?: number | null;
+  readonly chainStatus: string | null;
   /**
-   * The backend's state derived per record (review N-4), when it sends one:
-   * it outranks the case-level `chainDisputedAt`, which stays set after the
-   * arbiter cancels one part while the others stand undisputed.
+   * The backend's state derived per record (review N-4): it outranks the
+   * case-level `chainDisputedAt`, which stays set after the arbiter cancels
+   * one part while the others stand undisputed. Null off EVM.
    */
-  readonly chainState?: string | null;
+  readonly chainState: string | null;
 }
 
 /**
@@ -88,21 +86,15 @@ export interface CaseChainMirror {
  * - `upheld` — `PENDING` again with a `disputedAt` and no part disputed: the
  *   arbiter upheld the dispute (`upholdSlash`), and since a record is disputed
  *   at most once (`SlashAlreadyDisputed`) it can now only be executed;
- * - `none` — anything else, including an older backend that does not mirror it.
+ * - `none` — anything else, including a chain the backend does not mirror (`chainState` null).
  */
 export type CaseChainDisputePhase = "disputed" | "partly-disputed" | "upheld" | "none";
 
 export function caseChainDisputePhase(mirror: CaseChainMirror): CaseChainDisputePhase {
-  const parts = mirror.chainDisputedParts ?? 0;
   if (mirror.chainStatus === "DISPUTED") return "disputed";
-  if (mirror.chainState) {
-    if (mirror.chainStatus !== "PENDING") return "none";
-    if (mirror.chainState === "DISPUTED") return "partly-disputed";
-    return mirror.chainState === "UPHELD" ? "upheld" : "none";
-  }
-  if (mirror.chainStatus === "PENDING" && parts > 0) return "partly-disputed";
-  if (mirror.chainStatus === "PENDING" && mirror.chainDisputedAt) return "upheld";
-  return "none";
+  if (mirror.chainStatus !== "PENDING") return "none";
+  if (mirror.chainState === "DISPUTED") return "partly-disputed";
+  return mirror.chainState === "UPHELD" ? "upheld" : "none";
 }
 
 /**

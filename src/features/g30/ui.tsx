@@ -175,18 +175,6 @@ export function Chip({ label, children, className }: ChipProps) {
 
 /* ------------------------------------------------------------------ states */
 
-/** A one-line "still loading" placeholder that never spins forever. */
-export function PendingBlock({ label }: { label: string }) {
-  return (
-    <div
-      role="status"
-      className="flex w-full items-center justify-center rounded-xl border border-01 bg-01 px-5 py-10 text-body-13 text-03"
-    >
-      {label}
-    </div>
-  );
-}
-
 /**
  * The error surface. `ApiError.code` is shown because it is what support asks
  * for.

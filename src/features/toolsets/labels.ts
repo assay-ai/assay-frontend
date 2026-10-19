@@ -7,8 +7,6 @@ import type { OnEmpty, ProviderMode, RefusalLayer } from "@/services/toolsets.se
  * access policy).
  */
 
-export const TOOL_SET = "Tool set";
-
 export const PROVIDER_MODE_LABELS: Record<ProviderMode, string> = {
   BEST: "Any (Assay picks)",
   ONLY: "Only these",
