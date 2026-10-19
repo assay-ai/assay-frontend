@@ -6,9 +6,10 @@ import { SignAction, type WalletStep } from "@/components/patterns/sign-action";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CAP_PRESETS } from "@/features/buyer-money/caps";
+import { CAP_PRESETS, ceilingChange } from "@/features/buyer-money/caps";
 import {
   ENABLE_PAID_STRINGS,
+  actionLabelFor,
   amountLabel,
   boundLine,
   walletCheckCopy,
@@ -29,13 +30,24 @@ export interface EnablePaidViewProps {
   parsed: ParsedEnablePaidCaps;
   /** The chain the wallet signs for: its name and CAIP-2 id. */
   chainName: string;
-  /** ISO: when the grant would end, on the chain's clock. */
+  /** ISO: the grant's end as signed, from this device's clock; null when it cannot be set. */
   validUntil: string | null;
+  /** Whole days from now to the signed `validUntil`: what the bound line counts. */
+  boundDays?: number | null;
+  /** Why no expiry can be signed (the clocks disagree), or null. */
+  expiryProblem?: string | null;
+  /** The escrow contract the wallet signs for (address). */
+  escrowAddress?: string | null;
+  /** The account ceiling in force (form strings), or null when none is set. */
+  currentCeiling?: { perCall: string; perDay: string } | null;
+  /** On a renewal that lowers the caps: when the lower caps bind. */
+  lowerNote?: string | null;
   /** The escrow's balance, formatted, or null when unknown. */
   balance: string | null;
   /** The balance is below the per-24-hours cap (or there is no escrow yet). */
   fundsShort: boolean;
-  onAddFunds?: () => void;
+  /** Add funds here (the deposit drawer), or on the Funding page when this page's policy cannot reach the chain. */
+  addFunds?: { kind: "inline"; onClick: () => void } | { kind: "link"; href: string } | null;
   /** How many wallet signatures Approve asks for (1 or 2). */
   signatures: number;
   blocked: boolean;
@@ -62,8 +74,13 @@ export function EnablePaidView({
   validUntil,
   balance,
   fundsShort,
-  onAddFunds,
+  addFunds = null,
   signatures,
+  expiryProblem = null,
+  boundDays = null,
+  escrowAddress = null,
+  currentCeiling = null,
+  lowerNote = null,
   blocked,
   walletBlocker,
   steps,
@@ -75,7 +92,8 @@ export function EnablePaidView({
   React.useEffect(() => setFramed(!isTopLevel()), [isTopLevel]);
   const [ticked, setTicked] = React.useState(false);
 
-  const bound = boundLine(draft.perDay, draft.days);
+  // Counted from the expiry actually signed when the page has one.
+  const bound = boundLine(draft.perDay, boundDays !== null ? String(boundDays) : draft.days);
   const set = (patch: Partial<CapsDraft>) => onDraftChange({ ...draft, ...patch });
   const fieldError = parsed.ok ? null : (parsed.perCall ?? parsed.perDay ?? parsed.days);
 
@@ -85,9 +103,15 @@ export function EnablePaidView({
       ? ENABLE_PAID_STRINGS.blocked
       : fieldError
         ? fieldError
-        : !ticked
-          ? TICK_FIRST_TEXT
-          : walletBlocker;
+        : expiryProblem
+          ? expiryProblem
+          : !validUntil
+            ? "The expiry could not be set."
+            : !ticked
+              ? TICK_FIRST_TEXT
+              : walletBlocker;
+  const twoSignatures = signatures > 1;
+  const ceilingNote = twoSignatures ? ceilingChange(currentCeiling, { perCall: draft.perCall, perDay: draft.perDay }) : null;
 
   return (
     <section className="flex w-full max-w-[600px] flex-col gap-5 rounded-xl border border-01 bg-01 p-5 tablet:p-6">
@@ -140,10 +164,14 @@ export function EnablePaidView({
         {fundsShort ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-body-xs text-03">Below what this key may spend in 24 hours.</span>
-            {onAddFunds ? (
-              <Button type="button" variant="secondary" size="sm" onClick={onAddFunds}>
+            {addFunds?.kind === "inline" ? (
+              <Button type="button" variant="secondary" size="sm" onClick={addFunds.onClick}>
                 Add funds
               </Button>
+            ) : addFunds?.kind === "link" ? (
+              <a href={addFunds.href} className="text-label-13 font-semibold text-primary-600 hover:underline">
+                Add funds on the Funding page
+              </a>
             ) : null}
           </div>
         ) : null}
@@ -174,6 +202,11 @@ export function EnablePaidView({
           days.
         </p>
         {fieldError ? <p className="text-body-xs text-danger-600">{fieldError}</p> : null}
+        {lowerNote ? (
+          <p className="rounded-lg bg-02 px-3 py-2 text-body-13 text-02" data-testid="lower-note">
+            Lower than now. {lowerNote}
+          </p>
+        ) : null}
         {bound ? (
           <p className="text-body-xs text-02" data-testid="loss-bound">
             {bound}
@@ -193,9 +226,24 @@ export function EnablePaidView({
         <SignRow label="Chain">
           {chainName} ({state.chainId})
         </SignRow>
+        {escrowAddress ? (
+          <SignRow label="Escrow">
+            <span className="break-all font-mono text-mono-sm" title={escrowAddress}>
+              {escrowAddress}
+            </span>
+          </SignRow>
+        ) : null}
+        {twoSignatures ? (
+          <SignRow label="Account ceiling (signature 1)">
+            <span data-testid="ceiling-row">
+              {amountLabel(draft.perCall)} a call · {amountLabel(draft.perDay)} per 24 hours
+            </span>
+            {ceilingNote ? <span className="block text-body-xs text-03">This {ceilingNote}.</span> : null}
+          </SignRow>
+        ) : null}
         <span className="text-body-xs text-03">
-          {signatures > 1
-            ? "Two signatures: your account ceiling is raised to fit, then this key's limits."
+          {twoSignatures
+            ? "Two signatures: your account ceiling is set to these limits, then this key's limits."
             : "One signature."}
         </span>
       </div>
@@ -203,10 +251,16 @@ export function EnablePaidView({
       <p className="text-body-sm text-01" data-testid="wallet-copy">
         {walletCheckCopy(state.delegateAccount, draft.perCall, draft.perDay)}
       </p>
+      {twoSignatures ? (
+        <p className="text-body-sm text-01" data-testid="wallet-copy-ceiling">
+          The first wallet window sets your account ceiling to {amountLabel(draft.perCall)} a call and{" "}
+          {amountLabel(draft.perDay)} per 24 hours.
+        </p>
+      ) : null}
 
       <SignAction
         steps={steps}
-        label={state.actionLabel}
+        label={actionLabelFor(state.grant, draft.days)}
         disabled={Boolean(disabledReason)}
         disabledReason={disabledReason}
         resetKey={`${draft.perCall}|${draft.perDay}|${draft.days}`}

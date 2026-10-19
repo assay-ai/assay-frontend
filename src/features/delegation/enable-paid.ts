@@ -8,7 +8,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { formatDecimal, toDecimal } from "@/utils/money";
 
-import { MAX_DELEGATION_DAYS, findDelegation } from "./delegation-form";
+import { findDelegation } from "./delegation-form";
 
 /**
  * `{WEB}/agents/enable-paid?credential={id}#key={address}` (spec F4 step 5,
@@ -26,7 +26,8 @@ import { MAX_DELEGATION_DAYS, findDelegation } from "./delegation-form";
 
 export const ENABLE_PAID_STRINGS = {
   keyMismatch: "This link doesn't match the payment key bound to this app. Don't approve.",
-  missingKey: "This link is missing its payment key. Open the link your app showed again.",
+  missingKey:
+    "This link is missing its payment key. Open the link your app showed again: it must end with #key=… as printed by your app.",
   notPaymentClient: "This app can't hold a payment key.",
   signedOut: "This app was signed out. Sign in again from the app.",
   notFound: "This app isn't on the account you are signed in with. Sign in with the account your app uses.",
@@ -42,6 +43,10 @@ export const ENABLE_PAID_STRINGS = {
 
 /** Light: $0.50 a call, $5 per 24 hours, for 30 days (spec G7, O2). */
 export const DEFAULT_CAPS = { perCall: "0.50", perDay: "5", days: "30" } as const;
+/** The longest grant this page signs: 30 days from the page's own clock (O2). */
+export const ENABLE_PAID_MAX_DAYS = 30;
+/** How far `GET /escrow`'s `serverTime` may be from this device's clock before the page refuses to sign. */
+export const CLOCK_SKEW_LIMIT_SECONDS = 120;
 /** A grant with this many days left or fewer is offered "Renew for 30 days". */
 export const RENEW_WITHIN_DAYS = 7;
 
@@ -69,7 +74,7 @@ export interface EnablePaidCredential {
   id: string;
   agentId: string;
   name: string;
-  issuedVia?: "API_KEY" | "OAUTH";
+  issuedVia: "API_KEY" | "OAUTH";
   oauthClient?: { name: string; paymentClient: boolean } | null;
   expiresAt: string | null;
   revokedAt: string | null;
@@ -130,7 +135,14 @@ function live(credential: EnablePaidCredential, nowMs: number): boolean {
 /** The OAuth grant of a payment client (`assay-mcp`), or an API key. Never a hosted or third-party grant (H2). */
 function mayHoldPaymentKey(credential: EnablePaidCredential): boolean {
   if (credential.issuedVia === "OAUTH") return credential.oauthClient?.paymentClient === true;
-  return credential.issuedVia === "API_KEY" || (credential.issuedVia === undefined && !credential.oauthClient);
+  return credential.issuedVia === "API_KEY";
+}
+
+/** Approve; Renew for an active grant; "Renew for {days} days" when it ends within a week. */
+export function actionLabelFor(grant: GrantState, days: string): string {
+  if (grant.kind === "active") return ENABLE_PAID_STRINGS.renew;
+  if (grant.kind === "expiring") return `Renew for ${days.trim() || DEFAULT_CAPS.days} days`;
+  return ENABLE_PAID_STRINGS.approve;
 }
 
 export function grantState(delegation: EscrowDelegate | null, nowMs: number): GrantState {
@@ -182,12 +194,7 @@ export function enablePaidState(input: EnablePaidInput): EnablePaidState {
     keyCheck: `Check this matches what your app showed: ${fp}`,
     grant,
     notice: grant.kind === "active" ? ENABLE_PAID_STRINGS.alreadyOn : null,
-    actionLabel:
-      grant.kind === "active"
-        ? ENABLE_PAID_STRINGS.renew
-        : grant.kind === "expiring"
-          ? `Renew for ${DEFAULT_CAPS.days} days`
-          : ENABLE_PAID_STRINGS.approve,
+    actionLabel: actionLabelFor(grant, DEFAULT_CAPS.days),
     renewCaps:
       grant.kind === "none"
         ? null
@@ -250,7 +257,7 @@ export type ParsedEnablePaidCaps =
   | { ok: true; maxVoucherAmount: string; maxPerWindow: string; days: number }
   | { ok: false; perCall: string | null; perDay: string | null; days: string | null };
 
-/** The caps in atomic units, or why not. A call never above the day; 1 to 365 days, as the chain allows. */
+/** The caps in atomic units, or why not. A call never above the day; 1 to 30 days on this page (O2). */
 export function parseEnablePaidCaps(draft: CapsDraft, decimals: number): ParsedEnablePaidCaps {
   const caps = parseCaps(draft.perCall, draft.perDay, decimals);
   const zero = (atomic: string | null) => atomic !== null && BigInt(atomic) === 0n;
@@ -258,7 +265,7 @@ export function parseEnablePaidCaps(draft: CapsDraft, decimals: number): ParsedE
   const perDay = caps.perDay.error ?? (zero(caps.perDay.atomic) ? "Must be above zero." : null);
   const n = draft.days.trim();
   const days =
-    /^\d+$/.test(n) && Number(n) >= 1 && Number(n) <= MAX_DELEGATION_DAYS ? null : `Between 1 and ${MAX_DELEGATION_DAYS} days.`;
+    /^\d+$/.test(n) && Number(n) >= 1 && Number(n) <= ENABLE_PAID_MAX_DAYS ? null : `Between 1 and ${ENABLE_PAID_MAX_DAYS} days.`;
   if (perCall || perDay || days || !caps.perCall.atomic || !caps.perDay.atomic) {
     return { ok: false, perCall, perDay, days };
   }
@@ -325,4 +332,91 @@ export function takePaymentKey(credentialId: string, win: Window = window): stri
   } catch {
     return null;
   }
+}
+
+/**
+ * The form's starting values: Light, or on a renewal the grant's own caps,
+ * each never above Light (the grant's caps come from the API; a larger value
+ * only by the person's own edit on this page). Never from the URL.
+ */
+export function initialDraft(state: Extract<EnablePaidState, { kind: "ready" }>): CapsDraft {
+  if (!state.renewCaps) return { ...DEFAULT_CAPS };
+  const lower = (a: string, b: string) => {
+    const x = decimalOf(a);
+    return x && x.lt(new Decimal(b)) ? x.toString() : b;
+  };
+  return {
+    perCall: lower(state.renewCaps.perCall, DEFAULT_CAPS.perCall),
+    perDay: lower(state.renewCaps.perDay, DEFAULT_CAPS.perDay),
+    days: DEFAULT_CAPS.days,
+  };
+}
+
+export type PageExpiry = { ok: true; validUntil: number; boundDays: number } | { ok: false; text: string };
+
+export const CLOCK_SKEW_TEXT =
+  "This computer's clock and Assay's differ by more than 2 minutes, so the expiry can't be checked. Set the clock right and reload.";
+
+/**
+ * The `validUntil` (unix seconds) this page shows and signs: `days` from this
+ * device's clock, at most {@link ENABLE_PAID_MAX_DAYS}. The server's clock
+ * (`GET /escrow`'s `serverTime`, carried forward from when it was read) only
+ * checks it: more than {@link CLOCK_SKEW_LIMIT_SECONDS} apart, or unreadable,
+ * and the page refuses, so a server answer can never move the expiry the
+ * wallet signs away from the one on the page.
+ */
+export function pageExpiry(input: {
+  localNowMs: number;
+  serverTime: string | null | undefined;
+  receivedAtMs: number;
+  days: number;
+}): PageExpiry {
+  const server = input.serverTime ? Date.parse(input.serverTime) : Number.NaN;
+  if (!Number.isFinite(server) || !input.receivedAtMs) return { ok: false, text: CLOCK_SKEW_TEXT };
+  const serverNow = server + Math.max(0, input.localNowMs - input.receivedAtMs);
+  if (Math.abs(serverNow - input.localNowMs) > CLOCK_SKEW_LIMIT_SECONDS * 1000) return { ok: false, text: CLOCK_SKEW_TEXT };
+  if (!Number.isInteger(input.days) || input.days < 1 || input.days > ENABLE_PAID_MAX_DAYS) {
+    return { ok: false, text: `Between 1 and ${ENABLE_PAID_MAX_DAYS} days.` };
+  }
+  const now = Math.floor(input.localNowMs / 1000);
+  const validUntil = now + input.days * 86_400;
+  return { ok: true, validUntil, boundDays: Math.ceil((validUntil - now) / 86_400) };
+}
+
+/**
+ * The RPC origins this page's `connect-src` allows (`scripts/csp-policy.js`
+ * `CONNECT_ORIGINS`, exact origins only; a test keeps the two in step). Add
+ * funds runs in place only when the chain's RPC is one of them.
+ */
+export const STRICT_PAGE_RPC_ORIGINS: readonly string[] = ["https://rpc.testnet.chain.robinhood.com"];
+
+export function depositRunsHere(rpcUrl: string | null | undefined): boolean {
+  if (!rpcUrl) return false;
+  try {
+    return STRICT_PAGE_RPC_ORIGINS.includes(new URL(rpcUrl).origin);
+  } catch {
+    return false;
+  }
+}
+
+/** This page's own path, query and fragment: the `next` of a sign-in round trip. */
+export function thisPageHref(win: Window = window): string {
+  return `${win.location.pathname}${win.location.search}${win.location.hash}`;
+}
+
+/** Every item of a cursor-paged list, up to `maxPages` pages. */
+export async function collectPages<T>(
+  fetchPage: (cursor: string | undefined) => Promise<{ items: T[]; pageInfo?: { nextCursor: string | null; hasMore: boolean } }>,
+  maxPages = 20,
+): Promise<T[]> {
+  const items: T[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < maxPages; page += 1) {
+    const result = await fetchPage(cursor);
+    items.push(...result.items);
+    const next = result.pageInfo?.hasMore ? result.pageInfo.nextCursor : null;
+    if (!next) break;
+    cursor = next;
+  }
+  return items;
 }

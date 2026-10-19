@@ -1,11 +1,20 @@
+import { createRequire } from "node:module";
+
 import { describe, expect, it } from "vitest";
 
 import type { EscrowDelegate } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 
 import {
+  CLOCK_SKEW_TEXT,
   DEFAULT_CAPS,
   ENABLE_PAID_STRINGS,
+  STRICT_PAGE_RPC_ORIGINS,
+  actionLabelFor,
+  collectPages,
+  depositRunsHere,
+  initialDraft,
+  pageExpiry,
   boundLine,
   enablePaidState,
   enablePaidFailure,
@@ -213,7 +222,8 @@ describe("caps", () => {
     });
     expect(parseEnablePaidCaps({ perCall: "6", perDay: "5", days: "30" }, 6)).toMatchObject({ ok: false });
     expect(parseEnablePaidCaps({ perCall: "0.5", perDay: "5", days: "0" }, 6)).toMatchObject({ ok: false });
-    expect(parseEnablePaidCaps({ perCall: "0.5", perDay: "5", days: "366" }, 6)).toMatchObject({ ok: false });
+    expect(parseEnablePaidCaps({ perCall: "0.5", perDay: "5", days: "31" }, 6)).toMatchObject({ ok: false });
+    expect(parseEnablePaidCaps({ perCall: "0.5", perDay: "5", days: "30" }, 6)).toMatchObject({ ok: true, days: 30 });
   });
 
   it("the wallet copy names the fingerprint and the limits", () => {
@@ -288,5 +298,69 @@ describe("takePaymentKey", () => {
     const store = new Map<string, string>();
     expect(takePaymentKey("cred-1", fakeWindow("#key=0x12", store))).toBe("0x12");
     expect(store.size).toBe(0);
+  });
+});
+
+describe("fix round 1", () => {
+  it("a credential without issuedVia is not taken for an API key", () => {
+    const legacy = { ...credential({ oauthClient: null }), issuedVia: undefined } as unknown as EnablePaidCredential;
+    expect(enablePaidState(input({ credentials: { "agt-1": [legacy] } }))).toMatchObject({ reason: "not-payment-client" });
+  });
+
+  it("a renewal starts on the grant's caps, never above Light", () => {
+    const big = delegation({ maxVoucherAmount: usd("100000000"), maxPerWindow: usd("1000000000") });
+    const state = enablePaidState(input({ delegates: [big] }));
+    if (state.kind !== "ready") throw new Error("not ready");
+    expect(initialDraft(state)).toEqual({ perCall: "0.50", perDay: "5", days: "30" });
+    const small = enablePaidState(input({ delegates: [delegation({ maxVoucherAmount: usd("200000"), maxPerWindow: usd("2000000") })] }));
+    if (small.kind !== "ready") throw new Error("not ready");
+    expect(initialDraft(small)).toEqual({ perCall: "0.2", perDay: "2", days: "30" });
+    const fresh = enablePaidState(input());
+    if (fresh.kind !== "ready") throw new Error("not ready");
+    expect(initialDraft(fresh)).toEqual(DEFAULT_CAPS);
+  });
+
+  it("the expiry comes from this device's clock; the server's only checks it (±120 s)", () => {
+    const at = (offsetMs: number) => new Date(NOW + offsetMs).toISOString();
+    expect(pageExpiry({ localNowMs: NOW, serverTime: at(119_000), receivedAtMs: NOW, days: 30 })).toEqual({
+      ok: true,
+      validUntil: NOW / 1000 + 30 * 86_400,
+      boundDays: 30,
+    });
+    for (const skew of [121_000, -121_000, 335 * DAY]) {
+      expect(pageExpiry({ localNowMs: NOW, serverTime: at(skew), receivedAtMs: NOW, days: 30 })).toEqual({
+        ok: false,
+        text: CLOCK_SKEW_TEXT,
+      });
+    }
+    expect(pageExpiry({ localNowMs: NOW, serverTime: null, receivedAtMs: NOW, days: 30 }).ok).toBe(false);
+    expect(pageExpiry({ localNowMs: NOW, serverTime: at(0), receivedAtMs: NOW, days: 31 }).ok).toBe(false);
+  });
+
+  it("the renew label follows the typed days", () => {
+    const grant = { kind: "expiring" as const, delegation: delegation(), daysLeft: 3 };
+    expect(actionLabelFor(grant, "10")).toBe("Renew for 10 days");
+    expect(actionLabelFor({ kind: "none" }, "10")).toBe("Approve");
+  });
+
+  it("Add funds runs here only for an RPC origin the page's connect-src allows, exactly", () => {
+    const require = createRequire(import.meta.url);
+    const { CONNECT_ORIGINS } = require("../../../scripts/csp-policy.js") as { CONNECT_ORIGINS: string[] };
+    for (const origin of STRICT_PAGE_RPC_ORIGINS) {
+      expect(CONNECT_ORIGINS).toContain(origin);
+      expect(origin).not.toContain("*");
+    }
+    expect(depositRunsHere("https://rpc.testnet.chain.robinhood.com/")).toBe(true);
+    expect(depositRunsHere("https://rpc.testnet.chain.robinhood.com.evil.example/")).toBe(false);
+    expect(depositRunsHere("https://mainnet.example/rpc")).toBe(false);
+    expect(depositRunsHere(null)).toBe(false);
+  });
+
+  it("collectPages follows the cursor", async () => {
+    const pages: Record<string, { items: number[]; pageInfo: { nextCursor: string | null; hasMore: boolean } }> = {
+      start: { items: [1, 2], pageInfo: { nextCursor: "b", hasMore: true } },
+      b: { items: [3], pageInfo: { nextCursor: null, hasMore: false } },
+    };
+    await expect(collectPages(async (cursor) => pages[cursor ?? "start"]!)).resolves.toEqual([1, 2, 3]);
   });
 });

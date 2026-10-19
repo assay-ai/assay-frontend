@@ -1051,6 +1051,16 @@ describe("the eip155 branch", () => {
     });
   });
 
+  it("forwards { showWalletUIs: true } on an eip155 transaction to Privy's uiOptions (R-WEB-5)", async () => {
+    privyEvm.transactionCalls = [];
+    const state = evmSignerFor({ chainId: EVM_TESTNET, wallets: [evmEmbedded] });
+    await state.signer!.signTransaction({ ...EVM_TX, from: EVM_EMBEDDED }, { showWalletUIs: true });
+    expect(privyEvm.transactionCalls[0]!.options).toEqual({
+      address: EVM_EMBEDDED,
+      uiOptions: { showWalletUIs: true },
+    });
+  });
+
   it("refuses an external wallet by name — it cannot sign without sending", async () => {
     const state = evmSignerFor({ chainId: EVM_TESTNET, wallets: [evmExternal] });
     await expect(state.signer!.signTransaction(EVM_TX)).rejects.toThrow(

@@ -9,24 +9,32 @@ import { agentPaySteps } from "@/components/buyer-money/let-agent-pay-sheet";
 import { useBuyerMoney, useWalletBlocker } from "@/components/buyer-money/use-buyer-money";
 import { EnablePaidView } from "@/components/delegation/enable-paid-view";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
+import { capsToForm } from "@/features/buyer-money/caps";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
-import { serverNowSeconds } from "@/features/delegation/delegation-form";
 import {
-  DEFAULT_CAPS,
+  ENABLE_PAID_MAX_DAYS,
+  collectPages,
+  depositRunsHere,
   enablePaidFailure,
   enablePaidState,
+  initialDraft,
+  pageExpiry,
   parseEnablePaidCaps,
   planSignatures,
   takePaymentKey,
+  thisPageHref,
   type CapsDraft,
   type EnablePaidCredential,
 } from "@/features/delegation/enable-paid";
+import { loweredDelayNote } from "@/features/delegation/unsettled";
 import { loadPage, useFullLoadLinks } from "@/features/oauth/strict-pages";
 import { useSearchParam } from "@/hooks/useSearchParam";
+import { evmRpcUrl } from "@/libs/chains/evm/chains";
 import { servesPaidCalls } from "@/libs/chains/paid-rails";
 import { loginHref } from "@/libs/login-redirect";
 import { listAgents, listCredentials } from "@/services/account.service";
 import { listDelegates } from "@/services/delegation.service";
+import { addressOfAccount } from "@/utils/chain";
 import { formatMoney } from "@/utils/money";
 
 const HEADING = "Turn on paid calls";
@@ -57,9 +65,7 @@ export default function EnablePaidPage() {
 
   const signedOut = ready && !authenticated;
   React.useEffect(() => {
-    if (!signedOut) return;
-    const { pathname, search, hash } = window.location;
-    loadPage(loginHref({ next: `${pathname}${search}${hash}` }));
+    if (signedOut) loadPage(loginHref({ next: thisPageHref() }));
   }, [signedOut]);
 
   const signedIn = ready && authenticated;
@@ -67,9 +73,9 @@ export default function EnablePaidPage() {
     queryKey: ["agents", "enable-paid"],
     enabled: signedIn,
     retry: false,
-    queryFn: () => listAgents({ limit: 50 }),
+    queryFn: () => collectPages((cursor) => listAgents({ limit: 50, cursor })),
   });
-  const agents = React.useMemo(() => agentsQuery.data?.items ?? [], [agentsQuery.data]);
+  const agents = React.useMemo(() => agentsQuery.data ?? [], [agentsQuery.data]);
   const credentialsQuery = useQuery({
     queryKey: ["agent-keys", "enable-paid", agents.map((a) => a.agentId)],
     enabled: signedIn && agentsQuery.isSuccess,
@@ -77,9 +83,17 @@ export default function EnablePaidPage() {
     staleTime: 0,
     queryFn: async () => {
       const lists = await Promise.all(
-        agents.map((a) => listCredentials(a.agentId, { limit: 50 }) as Promise<{ items: EnablePaidCredential[] }>),
+        agents.map((a) =>
+          collectPages(
+            (cursor) =>
+              listCredentials(a.agentId, { limit: 50, cursor }) as unknown as Promise<{
+                items: EnablePaidCredential[];
+                pageInfo: { nextCursor: string | null; hasMore: boolean };
+              }>,
+          ),
+        ),
       );
-      return Object.fromEntries(agents.map((a, i) => [a.agentId, lists[i]!.items]));
+      return Object.fromEntries(agents.map((a, i) => [a.agentId, lists[i]!]));
     },
   });
   const delegatesQuery = useQuery({
@@ -107,11 +121,9 @@ export default function EnablePaidPage() {
         })
       : null;
 
-  // The form starts on Light, or on the grant's own caps for a renewal, once.
+  // The form starts on Light (a renewal: the grant's caps, never above Light), once. Never from the URL.
   const [draft, setDraft] = React.useState<CapsDraft | null>(null);
-  if (state?.kind === "ready" && draft === null) {
-    setDraft(state.renewCaps ? { ...state.renewCaps, days: DEFAULT_CAPS.days } : { ...DEFAULT_CAPS });
-  }
+  if (state?.kind === "ready" && draft === null) setDraft(initialDraft(state));
   // The escrow ceiling when the page first read it, frozen so a retry resumes the same steps.
   const [openingCaps, setOpeningCaps] = React.useState<{ perCall: string; perWindow: string } | null | undefined>(
     undefined,
@@ -147,8 +159,17 @@ export default function EnablePaidPage() {
 
   const parsed = parseEnablePaidCaps(draft, money.decimals);
   const chosen = parsed.ok ? { maxVoucherAmount: parsed.maxVoucherAmount, maxPerWindow: parsed.maxPerWindow } : null;
-  const nowSeconds = serverNowSeconds(escrow?.serverTime, money.escrowQuery.dataUpdatedAt, nowMs);
-  const validUntil = parsed.ok ? new Date((nowSeconds + parsed.days * 86_400) * 1000).toISOString() : null;
+  // The expiry shown is the expiry signed: this device's clock, checked against the server's.
+  const expiry = parsed.ok
+    ? pageExpiry({
+        localNowMs: nowMs,
+        serverTime: escrow?.serverTime,
+        receivedAtMs: money.escrowQuery.dataUpdatedAt,
+        days: parsed.days,
+      })
+    : null;
+  const validUntil = expiry?.ok ? new Date(expiry.validUntil * 1000).toISOString() : null;
+  const signatures = chosen ? planSignatures(openingCaps, chosen).length : 1;
   const steps = agentPaySteps({
     money,
     queryClient,
@@ -157,8 +178,21 @@ export default function EnablePaidPage() {
     chosen,
     form: { perCall: draft.perCall, perDay: draft.perDay, days: parsed.ok ? parsed.days : 0 },
     openingCaps,
-    nowSeconds,
+    nowSeconds: Math.floor(nowMs / 1000),
+    // SetLimits signs the ceiling the page shows: the person's caps, never values from the API.
+    ceiling: chosen ?? undefined,
+    expiry: expiry?.ok ? { validUntil: expiry.validUntil, maxDays: ENABLE_PAID_MAX_DAYS } : undefined,
   });
+  const current = state.grant.kind === "none" ? null : state.grant.delegation;
+  const lowerNote =
+    current && chosen
+      ? loweredDelayNote(
+          delegatesQuery.data?.tightenDelaySeconds,
+          { maxVoucherAmount: current.maxVoucherAmount.amount, maxPerWindow: current.maxPerWindow.amount },
+          chosen,
+        )
+      : null;
+  const rpc = money.chainId ? evmRpcUrl(money.chainId) : null;
   const spendable = escrow?.spendable ?? escrow?.balance ?? null;
   const fundsShort =
     !escrow?.exists || !spendable || (chosen !== null && BigInt(spendable.amount || "0") < BigInt(chosen.maxPerWindow));
@@ -178,10 +212,17 @@ export default function EnablePaidPage() {
         parsed={parsed}
         chainName={money.chainName ?? state.chainId}
         validUntil={validUntil}
+        expiryProblem={expiry && !expiry.ok ? expiry.text : null}
+        boundDays={expiry?.ok ? expiry.boundDays : null}
+        escrowAddress={escrow?.escrowPda ? addressOfAccount(escrow.escrowPda) : null}
+        currentCeiling={capsToForm(escrow)}
+        lowerNote={lowerNote}
         balance={escrow?.balance ? formatMoney(escrow.balance) : null}
         fundsShort={fundsShort}
-        onAddFunds={() => setDepositOpen(true)}
-        signatures={chosen ? planSignatures(openingCaps, chosen).length : 1}
+        addFunds={
+          depositRunsHere(rpc) ? { kind: "inline", onClick: () => setDepositOpen(true) } : { kind: "link", href: "/funding" }
+        }
+        signatures={signatures}
         blocked={blocked}
         walletBlocker={blocker}
         steps={steps}
