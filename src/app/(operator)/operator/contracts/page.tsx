@@ -803,7 +803,7 @@ function ParamsSheet({ open, settings, deployment, onClose, onDone }: SheetProps
           return null;
         }
         return {
-          call: { functionName: "updateConfig", args: [checked.params, "0x0000000000000000000000000000000000000000"] },
+          call: { functionName: "updateConfig", args: [checked.params] },
           changes: changes.map((change) => ({
             label: change.critical ? <span className="text-danger-700">{change.label}</span> : change.label,
             before: change.before,
@@ -812,7 +812,7 @@ function ParamsSheet({ open, settings, deployment, onClose, onDone }: SheetProps
         };
       }}
       confirmation={(prepared) => {
-        const [params] = prepared.call.args as [ContractSettings["params"], string];
+        const [params] = prepared.call.args as [ContractSettings["params"]];
         const moved = (["treasury", "redeemer"] as const).filter((key) => params[key].toLowerCase() !== settings.params[key].toLowerCase());
         return moved.length > 0
           ? { acknowledge: `I checked the new ${moved.join(" and ")} address on a second screen, character by character` }
