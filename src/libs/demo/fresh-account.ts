@@ -8,7 +8,7 @@
  *   new   — no key yet                       (step 1 current)
  *   call  — a key, never used                (step 2 current)
  *   funds — first call made, no escrow       (step 3 current)
- *   bind  — escrow with a ceiling, no payment key bound (step 4: run agent-cli bind)
+ *   bind  — escrow with a ceiling, no payment key bound (step 4: run assay-mcp enable-paid)
  *   pay   — payment key bound, not allowed to pay yet   (step 4: Let it pay)
  *
  * Read only in the browser; a server render (static export) sees no stage.

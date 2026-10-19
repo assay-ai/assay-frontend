@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import { capsAreSet } from "@/features/buyer-money/caps";
 import {
-  AGENT_CLI_SOURCE,
+  ASSAY_MCP_SOURCE,
   PAID_BY_INVITATION_TEXT,
   PAID_BY_INVITATION_TITLE,
   firstCallPrompt,
@@ -63,7 +63,7 @@ import { useAgentsAndKeys } from "./use-agents";
  */
 const DISMISS_KEY = "assay.get-started.dismissed";
 const LIVE_POLL_MS = 5_000;
-const BIND_COMMAND = "agent-cli keygen && agent-cli bind";
+const BIND_COMMAND = "assay-mcp enable-paid";
 
 function readDismissed(): boolean {
   try {
@@ -423,8 +423,8 @@ export function PaidByInvitation({ agentName, onSetCaps }: { agentName: string; 
       <details className="text-body-13 text-02">
         <summary className="min-h-10 cursor-pointer select-none content-center text-label-13 text-01">Invited already?</summary>
         <div className="mt-2 flex min-w-0 flex-col gap-2.5">
-          <p className="text-body-xs text-03" data-testid="agent-cli-source">
-            {AGENT_CLI_SOURCE.replace("the agent's machine", `${agentName}'s machine`)}
+          <p className="text-body-xs text-03" data-testid="assay-mcp-source">
+            {ASSAY_MCP_SOURCE.replace("the agent's machine", `${agentName}'s machine`)}
           </p>
           <CodeBlock title="Terminal" code={BIND_COMMAND} wrap />
           <Listening>Waiting for the payment key. This updates by itself.</Listening>

@@ -39,7 +39,7 @@ import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-mone
  * on the ceiling itself: an agent's limit is meant to sit under it.
  *
  * The key check is by eye: the key is shown in 4-character groups next to
- * what `agent-cli` printed, and a tick confirms they match. It keeps the
+ * what `assay-mcp status` printed, and a tick confirms they match. It keeps the
  * point of the old "type the last 4 characters" (you only authorise a key you
  * actually ran) without switching to a terminal to copy them.
  */
@@ -47,7 +47,7 @@ export interface LetAgentPaySheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   agentName: string;
-  /** CAIP-10 of the agent's payment key (bound with `agent-cli bind`). */
+  /** CAIP-10 of the agent's payment key (made by `assay-mcp enable-paid`). */
   delegateAccount: string | null;
   /**
    * Renewing a permission that ends soon: the drawer opens on its current
@@ -80,12 +80,12 @@ export function KeyMatch({ account }: { account: string }) {
       </div>
       <span className="text-body-xs text-03">
         Compare it with what{" "}
-        <code className="rounded bg-03 px-1 font-mono text-mono-xs text-02">agent-cli address</code>{" "}
+        <code className="rounded bg-03 px-1 font-mono text-mono-xs text-02">assay-mcp status</code>{" "}
         prints on the agent&apos;s machine.
       </span>
       <span className="text-body-xs text-03" data-testid="key-mismatch-help">
         They don&apos;t match? Don&apos;t sign. Someone else may hold this agent&apos;s API key: revoke that key under
-        Controls, create a new one, and run <code className="font-mono">agent-cli bind</code> again.
+        Controls, create a new one, and run <code className="font-mono">assay-mcp enable-paid</code> again.
       </span>
     </div>
   );
@@ -257,7 +257,7 @@ export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccoun
       disabled={Boolean(disabledReason)}
       disabledReason={disabledReason}
       describeError={describeMoneyError}
-      acknowledge={delegateAccount ? "These characters match the key agent-cli printed." : undefined}
+      acknowledge={delegateAccount ? "These characters match the key assay-mcp printed." : undefined}
       successTitle={`${agentName} can pay now`}
       successDescription={
         lowering && delayNote ? (
