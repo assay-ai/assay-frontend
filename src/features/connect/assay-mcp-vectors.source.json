@@ -1,6 +1,6 @@
 {
-  "ref": "dad6823b6e338d7dfcce7162567472cf697c3666",
-  "commit": "dad6823b6e338d7dfcce7162567472cf697c3666",
+  "ref": "b92b4f59ae561e898380d9bd8221769d28a05de7",
+  "commit": "b92b4f59ae561e898380d9bd8221769d28a05de7",
   "files": {
     "src/features/connect/server-name.vectors.json": {
       "from": "vectors/server-names.json",
