@@ -135,6 +135,7 @@ export interface Signer {
   */
   readonly signTypedData: (
     request: Omit<Eip155TypedDataRequest, "relayed">,
+    options?: SignTypedDataOptions,
   ) => Promise<`0x${string}`>;
   /**
    * Signs **and broadcasts**. The platform has no submit endpoint and must not
@@ -149,6 +150,20 @@ export interface Signer {
    * never resolve. Converting once, here, is what stops that.
    */
   readonly signAndSend: (tx: UnsignedChainTransaction) => Promise<string>;
+}
+
+/**
+ * Options of {@link Signer.signTypedData}.
+ *
+ * `showWalletUIs` forces Privy's own confirmation screen for an embedded
+ * wallet (spec R-WEB-5), whatever the dashboard's default. It is typed as the
+ * literal `true`: no call site can hide the confirmation through this door,
+ * and `scripts/check-wallet-ui.js` refuses `showWalletUIs: false` anywhere.
+ * The `AuthorizeDelegate` and `SetLimits` call sites pass it explicitly. An
+ * injected wallet (MetaMask, …) always shows its own prompt.
+ */
+export interface SignTypedDataOptions {
+  showWalletUIs: true;
 }
 
 export const CHAIN_OPERATION_UNSUPPORTED = "CHAIN_OPERATION_UNSUPPORTED";
@@ -605,7 +620,7 @@ export function useSigner(options: { chainId: string | null; address?: string })
               };
             },
 
-            signTypedData: async (request) => {
+            signTypedData: async (request, options) => {
               assertChainMatches(boundChainId, request);
               /*
                 The wrapper's `chainId` is not what is signed; the domain's is.
@@ -646,8 +661,14 @@ export function useSigner(options: { chainId: string | null; address?: string })
                   specific address (`X402Escrow`'s `authNonce` is per buyer).
                   Signing as the wrong wallet produces a signature that reverts
                   BadSignature after the user approved it.
+
+                  `uiOptions.showWalletUIs: true` when the caller asks for it
+                  (R-WEB-5): Privy then always shows its confirmation, with the
+                  typed data, before the embedded wallet signs.
                 */
-                { address: wallet.address },
+                options?.showWalletUIs === true
+                  ? { address: wallet.address, uiOptions: { showWalletUIs: true } }
+                  : { address: wallet.address },
               );
               return signature as `0x${string}`;
             },

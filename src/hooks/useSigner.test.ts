@@ -868,6 +868,22 @@ describe("the eip155 branch", () => {
     expect(privyEvm.typedDataCalls).toHaveLength(0);
   });
 
+  it("forwards { showWalletUIs: true } to Privy's uiOptions, next to the address (R-WEB-5)", async () => {
+    const state = evmSignerFor({ chainId: EVM_TESTNET, wallets: [evmEmbedded] });
+    await state.signer!.signTypedData(TYPED_DATA, { showWalletUIs: true });
+    expect(privyEvm.typedDataCalls).toHaveLength(1);
+    expect(privyEvm.typedDataCalls[0].options).toEqual({
+      address: evmEmbedded.address,
+      uiOptions: { showWalletUIs: true },
+    });
+  });
+
+  it("without the option, passes no uiOptions (Privy's own default applies)", async () => {
+    const state = evmSignerFor({ chainId: EVM_TESTNET, wallets: [evmEmbedded] });
+    await state.signer!.signTypedData(TYPED_DATA);
+    expect(privyEvm.typedDataCalls[0].options).toEqual({ address: evmEmbedded.address });
+  });
+
   it("refuses a typed-data request whose DOMAIN names another chain than the signer's", async () => {
     // Frontend review 2026-10-15, F1: the wrapper said 46630 and the domain
     // said 1, and the embedded wallet signed for chain 1.
