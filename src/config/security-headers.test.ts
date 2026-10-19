@@ -199,6 +199,7 @@ describe("scripts/connect-csp.js", () => {
       "Content-Security-Policy": csp.strictPolicy({ scriptHashes: [sha("three()")], connectOrigins: ["https://api.example.com"] }),
       "X-Frame-Options": "DENY",
       "Referrer-Policy": "no-referrer",
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
     });
     // The site-wide block is untouched.
     expect(block(out, "/*")).toEqual(block(text, "/*"));
@@ -207,7 +208,10 @@ describe("scripts/connect-csp.js", () => {
   it("keeps Cross-Origin-Opener-Policy same-origin-allow-popups on /connect/*, once, never in a per-page block (R1-m4)", async () => {
     const text = await headersFile();
     expect(block(text, "/connect/*")["Cross-Origin-Opener-Policy"]).toBe("same-origin-allow-popups");
-    expect(connectCsp.SPLAT_HEADERS).toEqual({ "/connect/*": { "Cross-Origin-Opener-Policy": "same-origin-allow-popups" } });
+    expect(connectCsp.SPLAT_HEADERS).toEqual({
+      "/connect/*": { "Cross-Origin-Opener-Policy": "same-origin-allow-popups" },
+      "/agents/enable-paid": { "Cross-Origin-Opener-Policy": "same-origin-allow-popups" },
+    });
     const out = connectCsp.completeHeaders(
       text,
       { "/connect/*": { "/connect/authorize": page("one()"), "/connect/authorize-error": page("two()") } },
@@ -215,7 +219,11 @@ describe("scripts/connect-csp.js", () => {
     );
     // Every /connect page matches the splat's block too, so it gets the header from there, once:
     // Cloudflare Pages would join a repeat by comma, a value browsers ignore.
-    expect(out.match(/^\s+Cross-Origin-Opener-Policy:.*$/gm)).toEqual(["  Cross-Origin-Opener-Policy: same-origin-allow-popups"]);
+    expect(out.match(/^\s+Cross-Origin-Opener-Policy:.*$/gm)).toEqual([
+      "  Cross-Origin-Opener-Policy: same-origin-allow-popups",
+      "  Cross-Origin-Opener-Policy: same-origin-allow-popups",
+    ]);
+    expect(block(out, "/agents/enable-paid")["Cross-Origin-Opener-Policy"]).toBe("same-origin-allow-popups");
     expect(block(out, "/connect/*")["Cross-Origin-Opener-Policy"]).toBe("same-origin-allow-popups");
     expect(block(out, "/connect/authorize")["Cross-Origin-Opener-Policy"]).toBeUndefined();
     expect(block(out, "/*")["Cross-Origin-Opener-Policy"]).toBeUndefined();
@@ -236,7 +244,11 @@ describe("scripts/connect-csp.js", () => {
     expect(() => connectCsp.completeHeaders(text.replace(line, line + line), {}, [])).toThrow(/needs exactly one/);
     expect(() =>
       connectCsp.completeHeaders(text.replace("  X-Content-Type-Options: nosniff\n", `  X-Content-Type-Options: nosniff\n${line}`), {}, []),
-    ).toThrow(/only \/connect\/\* may set it, not \/\*/);
+    ).toThrow(/only \/connect\/\*, \/agents\/enable-paid may set it, not \/\*/);
+    // …and the enable-paid block needs its own.
+    const paid = text.indexOf("/agents/enable-paid\n");
+    const withoutPaid = text.slice(0, paid) + text.slice(paid).replace(line, "");
+    expect(() => connectCsp.completeHeaders(withoutPaid, {}, [])).toThrow(/\/agents\/enable-paid: needs exactly one/);
   });
 
   it("refuses a strict page that loads a script from another origin", async () => {

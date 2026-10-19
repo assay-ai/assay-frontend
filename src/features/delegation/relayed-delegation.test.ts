@@ -84,6 +84,8 @@ describe("submitRelayedDelegation", () => {
       submitRelayedDelegation(authorizeIntent(), signer, EXPECTED, submit),
     ).resolves.toBe(RELAYED);
     expect(signer.signTypedData).toHaveBeenCalledTimes(1);
+    // The Privy confirmation is always shown for AuthorizeDelegate (R-WEB-5).
+    expect(signer.signTypedData.mock.calls[0][1]).toEqual({ showWalletUIs: true });
     expect(submit.mock.calls[0][0]).toEqual({
       payer: PAYER,
       delegate: DELEGATE,
