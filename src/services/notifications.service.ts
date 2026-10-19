@@ -60,6 +60,8 @@ export type NotificationEvent =
   | "session.expiring"
   | "session.expired"
   | "oauth.grant_stopped_reuse"
+  | "payment_key.first_spend"
+  | "payment_key.daily_summary"
   | "free_quota.exhausted"
   | "payment_intent.refunded"
   | "slash.compensation_received"
