@@ -224,4 +224,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { completeHeaders, inlineScriptHashes, assertOwnScriptsOnly, SPLAT_HEADERS };
+module.exports = { pagesFor, urlPathOf, completeHeaders, inlineScriptHashes, assertOwnScriptsOnly, SPLAT_HEADERS };
