@@ -39,8 +39,8 @@ export interface EscrowDelegate {
   /** ISO-8601. */
   validUntil: string;
   status: EscrowDelegateStatus;
-  /** Payments this key signed that are still being settled; absent from an older API. */
-  unsettled?: UnsettledVouchers;
+  /** Payments this key signed that are still being settled. */
+  unsettled: UnsettledVouchers;
 }
 
 export interface ListEscrowDelegates {
@@ -50,9 +50,9 @@ export interface ListEscrowDelegates {
    * How long a tightening (a revoke, a shorter expiry, lower caps) waits before
    * it binds a payment already signed: 3600 on an escrow that keeps signed
    * payments collectable (assay-evm D-21), 0 where it binds at once (BUG-D1-07
-   * applies). Absent from an older API, which means 0.
+   * applies).
    */
-  tightenDelaySeconds?: number;
+  tightenDelaySeconds: number;
 }
 
 /** `GET /escrow/unsettled`: every signer's unsettled payments, beside the escrow's own window. */
@@ -64,9 +64,9 @@ export interface EscrowUnsettled {
    * How long a tightening (a revoke, a shorter expiry, lower caps) waits before
    * it binds a payment already signed: 3600 on an escrow that keeps signed
    * payments collectable (assay-evm D-21), 0 where it binds at once (BUG-D1-07
-   * applies). Absent from an older API, which means 0.
+   * applies).
    */
-  tightenDelaySeconds?: number;
+  tightenDelaySeconds: number;
 }
 
 export type DelegationKind = "AUTHORIZE_DELEGATE" | "REVOKE_DELEGATE";

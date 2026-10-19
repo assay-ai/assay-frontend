@@ -37,10 +37,9 @@ export interface BuyerDebt {
   /**
    * From when it can be settled (ISO 8601): the original voucher must be past
    * its on-chain deadline first, or both could be collected. Before it, the
-   * settle routes answer `PAYMENT_DEBT_NOT_YET_REPLACEABLE`. An older backend
-   * sends none (settle at once).
+   * settle routes answer `PAYMENT_DEBT_NOT_YET_REPLACEABLE`.
    */
-  replaceableAt?: string | null;
+  replaceableAt: string;
 }
 
 /**

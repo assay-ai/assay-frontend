@@ -47,7 +47,7 @@ const atomic = (value: Money | string): bigint =>
  * True when the payer's escrow keeps signed payments collectable for a while
  * after a tightening (assay-evm D-21): `tightenDelaySeconds` above 0 on
  * `GET /escrow/unsettled` or `GET /escrow/delegates`. Nothing can be stranded
- * there, so the backend refuses nothing for it. Absent (an older API) is 0.
+ * there, so the backend refuses nothing for it. Not known yet reads as 0.
  */
 export function hasTightenDelay(tightenDelaySeconds: number | null | undefined): boolean {
   return typeof tightenDelaySeconds === "number" && tightenDelaySeconds > 0;

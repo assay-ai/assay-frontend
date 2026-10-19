@@ -165,18 +165,10 @@ export interface SolanaDepositRequirements {
   /**
    * The discriminant. Every reader of this type has to say which member it
    * handles instead of assuming SPL.
-   *
-   * **Optional, because older backend deployments omit it.** The current
-   * backend's `SolanaDepositRequirementsDto` declares `namespace` and `chainId`
-   * as required, but earlier versions serve a flat shape with neither. Typing
-   * them as required here would assert a field that can arrive `undefined`.
-   * Narrow at the boundary — `assertRequirementsChain` — rather than accepting
-   * both shapes forever; once every deployment serves the new shape, both
-   * fields become required and that guard becomes total.
    */
-  namespace?: "solana";
-  /** CAIP-2. Optional for the same reason as `namespace`. */
-  chainId?: string;
+  namespace: "solana";
+  /** CAIP-2. */
+  chainId: string;
   /**
    * The buyer's own escrow associated token account — chain-native, not
    * CAIP-10.

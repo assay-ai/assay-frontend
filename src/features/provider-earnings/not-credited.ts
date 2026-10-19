@@ -141,18 +141,14 @@ export interface NotCreditedBreakdown {
  * drawer and the provider home all read the same calls (UX review 2026-10-18,
  * D-P0-1: 14 calls in the summary beside 22 in its reasons).
  *
- * The tools per reason come from `groups` when they are per tool. An older
- * backend sends no breakdown: the summary is then `withheld` and there are no
- * reasons to list.
+ * The tools per reason come from `groups` when they are per tool.
  */
 export function notCreditedBreakdown(
   totals: ProviderEarningsFigures | null | undefined,
   groups: readonly ProviderEarningsGroup[] = [],
 ): NotCreditedBreakdown {
-  const byClass = totals?.withheldByClass;
-  if (!byClass) {
-    return { calls: totals?.withheldCalls ?? 0, amount: totals?.withheld ?? null, reasons: [] };
-  }
+  if (!totals) return { calls: 0, amount: null, reasons: [] };
+  const byClass = totals.withheldByClass;
   const reasons = byClass
     .filter((row) => row.calls > 0)
     .map((row, index) => ({
@@ -161,12 +157,12 @@ export function notCreditedBreakdown(
       calls: row.calls,
       amount: row.amount,
       toolIds: groups
-        .filter((group) => group.withheldByClass?.some((g) => g.class === row.class && g.calls > 0))
+        .filter((group) => group.withheldByClass.some((g) => g.class === row.class && g.calls > 0))
         .map((group) => group.key),
     }))
     .sort((a, b) => b.calls - a.calls || a.index - b.index)
     .map(({ index: _index, ...reason }) => reason);
-  const denom = byClass.find((row) => row.amount)?.amount ?? totals?.withheld ?? null;
+  const denom = byClass.find((row) => row.amount)?.amount ?? totals.withheld;
   const amount = denom
     ? { ...denom, amount: byClass.reduce((sum, row) => sum + BigInt(row.amount?.amount || "0"), 0n).toString() }
     : null;

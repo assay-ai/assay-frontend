@@ -20,6 +20,7 @@ function group(key: string, listed: string, charged: string, calls = 10, prevCha
     owedCalls: 0,
     inProgressTotal: m("0"),
     inProgressCalls: 0,
+    freeCalls: 0,
     failRate: null,
     comparison: prevCharged
       ? {
@@ -34,6 +35,7 @@ function group(key: string, listed: string, charged: string, calls = 10, prevCha
           owedCalls: 0,
           inProgressTotal: m("0"),
           inProgressCalls: 0,
+          freeCalls: 0,
           failRate: null,
           deltaCalls: calls - 5,
           deltaListedTotal: m("0"),

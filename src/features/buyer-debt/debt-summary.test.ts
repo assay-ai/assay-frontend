@@ -50,6 +50,7 @@ const debt = (overrides: Partial<BuyerDebt> = {}): BuyerDebt => ({
   writeOffAt: "2026-11-15T00:00:00.000Z",
   replacedAt: null,
   createdAt: "2026-10-15T23:59:00.000Z",
+  replaceableAt: "2026-10-16T00:00:00.000Z",
   ...overrides,
 });
 
@@ -475,8 +476,8 @@ describe("waiting for replaceableAt (main b6ca73a)", () => {
     expect(someMany.waitingNote).toMatch(/^2 of them are not ready to sign yet: you can settle the first from /);
   });
 
-  it("waits for nothing once replaceableAt has passed or when the backend sends none", () => {
-    for (const replaceableAt of ["2026-10-16T23:00:00.000Z", null, undefined]) {
+  it("waits for nothing once replaceableAt has passed", () => {
+    for (const replaceableAt of ["2026-10-16T23:00:00.000Z"]) {
       const summary = debtBannerSummary({ account: ACCOUNT, debts: [debt({ replaceableAt })] }, { now })!;
       expect(summary.actionDisabled).toBe(false);
       expect(summary.waitingNote).toBeNull();

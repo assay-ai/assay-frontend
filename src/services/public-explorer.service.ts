@@ -64,16 +64,14 @@ export interface PublicTool extends CatalogueToolVersionFields {
   prices?: PublicChainPrice[];
   /**
    * Routable listings that can be charged (PAID or FREEMIUM). "from" is printed
-   * only over more than one. Optional: a backend before 716a7c0 does not send
-   * it, and then `priceRange` still ignores free listings.
+   * only over more than one.
    */
-  paidBindings?: number;
+  paidBindings: number;
   /**
    * The backend's free calls per agent per day for a FREEMIUM tool (its total
-   * over every free-capable listing, capped). Optional for the same reason;
-   * the screens then fall back to the smallest per-listing figure.
+   * over every free-capable listing, capped). Null for a PAID one.
    */
-  freeCallsPerDay?: number | null;
+  freeCallsPerDay: number | null;
   /** STANDARD: backed by several providers. PROVIDER: one maker's own API (`{handle}__{tool}`). */
   kind?: "STANDARD" | "PROVIDER" | string;
   /** The maker's public name, on a PROVIDER tool. */
@@ -157,13 +155,11 @@ export interface PublicNotCharged {
     /**
      * The not-charged calls that did not fail the check, by reason, largest
      * first (never `FAILED_CHECK`). A reason is listed only when every part of
-     * its figure comes from at least `minBuyers` buyers. Optional: a backend
-     * before the split does not send it, and the screens then show one merged
-     * line.
+     * its figure comes from at least `minBuyers` buyers.
      */
-    notChargedByReason?: { reason: NotChargedReason | (string & {}); calls: number }[];
+    notChargedByReason: { reason: NotChargedReason | (string & {}); calls: number }[];
     /** The rest of those calls: reasons too rare to list on their own. */
-    callsNotChargedOther?: number;
+    callsNotChargedOther: number;
   };
   recent: PublicNotChargedCall[];
 }

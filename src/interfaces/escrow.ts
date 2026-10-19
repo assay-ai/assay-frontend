@@ -124,9 +124,9 @@ export interface BuyerEscrow {
    * call as `balance`: `deposited − spent − withdrawn = balance` by the
    * contract's own invariant. `spent` includes payments still in their 1-hour
    * hold. `null` where the chain keeps no such counters (Solana), with no
-   * escrow, or when the chain could not be read; absent from an older backend.
+   * escrow, or when the chain could not be read.
    */
-  lifetime?: EscrowLifetime | null;
+  lifetime: EscrowLifetime | null;
 }
 
 /** `BuyerEscrow.lifetime`. */

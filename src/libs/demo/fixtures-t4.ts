@@ -1,5 +1,6 @@
 import { mcpHost } from "@/features/connect/mcp-endpoint";
 import { ApiError } from "@/libs/ApiClient";
+import type { ToolVersionBrief } from "@/interfaces/contracts";
 import type { CallDispute, CallDisputeDetail } from "@/services/call-disputes.service";
 import type { OperatorCallDisputeDetail, OperatorCallDisputeRow } from "@/services/operator-call-disputes.service";
 import type { ModerationCutoff, PromotionGroup, ReviewDetail, ReviewQueueItem } from "@/services/operator-provider-tools.service";
@@ -1089,6 +1090,16 @@ function publicToolOf(spec: ToolSpec): PublicTool {
     name: tool.name,
     description: current.description,
     summary: current.summary,
+    // Its published versions as the public card lists them; a maker's own API has no replacement.
+    version: current.semver,
+    versions: tool.versions
+      .filter((v) => v.publishedAt !== null)
+      .map((v) => ({ version: v.version, semver: v.semver, major: v.major, status: v.status as ToolVersionBrief["status"], sunsetAt: v.sunsetAt, changelog: v.changelog, publishedAt: v.publishedAt, isCurrent: v.isCurrent })),
+    deprecatedMajors: [...new Set(tool.versions.filter((v) => v.status === "DEPRECATED").map((v) => v.major))].sort((a, b) => a - b),
+    replacementToolId: null,
+    replacementName: null,
+    replacementMajor: null,
+    replacementVersion: null,
     category: tool.category,
     tier: current.tier,
     providerCount: 1,
@@ -1104,7 +1115,7 @@ function publicToolOf(spec: ToolSpec): PublicTool {
     kind: "PROVIDER",
     handle: tool.handle,
     notReviewed: false,
-  } as PublicTool;
+  };
 }
 
 function listedSpecs(handle?: string): ToolSpec[] {

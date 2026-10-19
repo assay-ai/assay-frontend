@@ -27,6 +27,7 @@ const FIGURES: SummaryFigures = {
   owedCalls: 1,
   inProgressTotal: m("750000"),
   inProgressCalls: 1,
+  freeCalls: 0,
   failRate: 0.2,
 };
 

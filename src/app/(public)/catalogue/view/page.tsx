@@ -26,7 +26,6 @@ import {
   routingNotes,
   offerLine,
   costSentence,
-  smallestFreeAllowance,
   stakeSummary,
 } from "@/features/explorer/explorer-text";
 import {
@@ -74,9 +73,8 @@ function ToolPage() {
   const mcpName = tool ? mcpToolName(tool) : null;
   // A static export cannot set per-tool metadata; name the tool in the tab.
   useDocumentTitle(tool ? `${tool.name}: price and record — Assay` : null);
-  // The backend's own figure when the public API sends it; otherwise the smallest per-listing allowance.
-  const freeAllowance =
-    tool?.freeCallsPerDay ?? smallestFreeAllowance(serving.map((p) => listingOf(p.providerId)?.freeCallsPerAgentPerDay));
+  // The backend's own figure: free calls a day over every free-capable listing.
+  const freeAllowance = tool?.freeCallsPerDay ?? null;
 
   if (tools.isPending) {
     return <PageState kind="loading" rows={4} label="Loading the tool" />;
@@ -112,10 +110,10 @@ function ToolPage() {
   const nameOf = (providerId: string) => serving.find((p) => p.providerId === providerId)?.name;
   // What the providers charge, against what a call is held for (the dearest
   // provider that can take it now). See `priceRange`.
-  // "from" only over more than one listing that can be charged (`paidBindings`, when the API sends it).
+  // "from" only over more than one listing that can be charged (`paidBindings`).
   const range = priceRange(
     held,
-    (tool.paidBindings ?? 2) > 1 ? [tool.fromPrice, ...serving.map((p) => listingOf(p.providerId)?.price)] : [],
+    tool.paidBindings > 1 ? [tool.fromPrice, ...serving.map((p) => listingOf(p.providerId)?.price)] : [],
   );
   // The provider is named only when exactly one eligible listing serves that chain (`listings`).
   const lines = chainPriceLines(chainPrices, { chainName, nameOf, leadIsRange: range?.differs });

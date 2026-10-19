@@ -64,9 +64,8 @@ export interface ProviderEarningsFigures {
   withheldCalls: number;
   /**
    * `withheld` by reason, one row per per-call export class, always all three.
-   * Optional: older backends do not send it.
    */
-  withheldByClass?: NotCreditedClassFigure[];
+  withheldByClass: NotCreditedClassFigure[];
   /**
    * The three ways a call that PASSED still paid the provider nothing (yet).
    * None of them is in `earned`, and none is ever paid by the platform: a

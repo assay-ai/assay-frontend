@@ -137,8 +137,7 @@ export function useProviderSetup() {
     served Solana chain — so nobody types or picks a CAIP id. When the
     session's agent row names a chain of that family it wins (it is the chain
     this organisation already pays on); otherwise the first served chain of
-    that family. `GET /chains` is the registry; the agent row is the fallback
-    for a backend that predates it.
+    that family, from `GET /chains`.
   */
   const agentsQuery = useQuery({
     queryKey: ["agents", "chain-id"],

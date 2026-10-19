@@ -497,8 +497,7 @@ class ApiClient {
    * not opt in with `@CacheHeader` as `private, no-cache`, so a plain `get`
    * already revalidates and is never served stale. This helper (and
    * `revalidateEscrow` / `revalidateProviderStake`, which go through it) is
-   * kept because it is harmless and still protects against an older backend
-   * or a route that later opts in to a freshness window.
+   * kept for a route that later opts in to a freshness window.
    */
   getRevalidated<T>(url: string, params?: Record<string, unknown>): Promise<T> {
     return this.request<T>({ method: "GET", url, params, headers: { "Cache-Control": "no-cache" } });
