@@ -1,6 +1,6 @@
 /**
- * Pure helpers for the traffic-by-agent view (per-agent traffic), shared by
- * `src/app/(console)/provider/agent-traffic/page.tsx`.
+ * Pure helpers for the traffic-by-agent view (per-agent traffic), used by a
+ * listing's Quality tab ("Who calls this tool").
  *
  * ## Why "Settled" / "Refunded" / "Other", not "Failures" / "Fail rate"
  *
