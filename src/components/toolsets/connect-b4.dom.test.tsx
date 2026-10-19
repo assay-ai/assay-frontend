@@ -57,7 +57,7 @@ describe("the key hint skips an app sign-in (OAuth grant, null prefix)", () => {
     expect(out).toContain("Uses the live key “laptop” assay_sk_live_ab12… of My agent");
     // The default tab is the proxy install: no key in it. The key goes under "My own code".
     expect(out).not.toContain("REST_OF_YOUR_KEY");
-    expect(out).toContain("@assay-ai/mcp@1.2.3");
+    expect(out).toContain("@goassay-ai/mcp@1.2.3");
     expect(out).not.toContain("null");
     const own = text(render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" client="other" />));
     expect(own).toContain("assay_sk_live_ab12…REST_OF_YOUR_KEY");
@@ -98,7 +98,7 @@ describe("Use this tool: /connect?tools= preselects Only these tools", () => {
     const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={url} changing={false} onDone={() => undefined} /></Sheet>, [KEY]);
     const out = text(html);
     // The default tab is the proxy install: ready to copy, no key needed.
-    expect(out).toContain("npx -y @assay-ai/mcp@1.2.3 --url");
+    expect(out).toContain("npx -y @goassay-ai/mcp@1.2.3 --url");
     expect(html).toMatch(/<button[^>]*data-testid="connect-copy"/);
     // Keys are named with their agent.
     expect(out).toContain("Uses the live key “laptop” assay_sk_live_ab12… of My agent");
@@ -111,14 +111,14 @@ describe("a refused install leaves nothing to copy (review N-1)", () => {
   it("keeps Copy off when the MCP host is not a usable URL, so nothing is copied or recorded", () => {
     vi.stubEnv("NEXT_PUBLIC_MCP_URL", "");
     const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} /></Sheet>, [KEY]);
-    expect(html).not.toContain("npx -y @assay-ai/mcp@");
+    expect(html).not.toContain("npx -y @goassay-ai/mcp@");
     expect(copyButton(html)).toMatch(/disabled=""/);
   });
 
   it("turns Copy on once the install command is shown", () => {
     vi.stubEnv("NEXT_PUBLIC_MCP_URL", "https://mcp.example.com/");
     const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} /></Sheet>, [KEY]);
-    expect(text(html)).toContain("npx -y @assay-ai/mcp@1.2.3");
+    expect(text(html)).toContain("npx -y @goassay-ai/mcp@1.2.3");
     expect(copyButton(html)).not.toMatch(/disabled=""/);
   });
 });

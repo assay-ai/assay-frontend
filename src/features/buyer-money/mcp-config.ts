@@ -1,7 +1,7 @@
 /**
  * What the Connect UI shows for each AI client (spec 7.10 item 5, 7.12).
  *
- * - The paid-capable path runs the local `@assay-ai/mcp` proxy, pinned to an
+ * - The paid-capable path runs the local `@goassay-ai/mcp` proxy, pinned to an
  *   exact version `V`. It carries no key and no header: the proxy signs in and
  *   signs payments on the user's own machine.
  * - The free-only path is the remote URL, for clients that can reach it.
@@ -99,7 +99,7 @@ export function keyForHint<T extends { prefix: string | null }>(keys: readonly T
 
 /** An exact version: no range, no tag (R-MCP-14). Same rule as the proxy. */
 const EXACT_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$/;
-const PACKAGE_NAME = "@assay-ai/mcp";
+const PACKAGE_NAME = "@goassay-ai/mcp";
 /** Words a POSIX shell (and zsh) passes through unquoted. */
 const SHELL_SAFE = /^[A-Za-z0-9_\-./:@,=+%]+$/;
 
@@ -120,7 +120,7 @@ export function assayMcpVersion(): string {
 
 /** The command prefix every user-facing instruction starts with: the scoped, pinned package (never the bare name, which belongs to someone else). */
 export function assayMcpRun(): string {
-  return `npx -y @assay-ai/mcp@${assayMcpVersion()}`;
+  return `npx -y @goassay-ai/mcp@${assayMcpVersion()}`;
 }
 
 /** Characters a canonical MCP URL can hold; anything else is refused before it reaches a command (same as the proxy). */
@@ -253,7 +253,7 @@ export function vscodeDeeplink(input: InstallInput): string {
   return `vscode:mcp/install?${encodeURIComponent(JSON.stringify({ name: input.name, type: "stdio", command: "npx", args: serverArgs(input) }))}`;
 }
 
-/** `npx -y @assay-ai/mcp@V add {url} --client {id}`: also allows the URL for paid calls on a terminal. */
+/** `npx -y @goassay-ai/mcp@V add {url} --client {id}`: also allows the URL for paid calls on a terminal. */
 export function addOneLiner(url: string, client: LocalMcpClient, V?: string): string {
   if (url.startsWith("/")) {
     if (!URL_CHARS.test(url)) throw new InstallInputError("invalid path");

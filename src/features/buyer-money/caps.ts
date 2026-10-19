@@ -160,7 +160,7 @@ function sameNumber(a: string, b: string): boolean {
 
 /**
  * A key as 4-character groups, for checking it by eye against what
- * `npx -y @assay-ai/mcp@<V> status` printed: "0x18ab cd34 …". The `0x` stays on the first group.
+ * `npx -y @goassay-ai/mcp@<V> status` printed: "0x18ab cd34 …". The `0x` stays on the first group.
  */
 export function keyGroups(address: string): string[] {
   const raw = address.includes(":") ? address.slice(address.lastIndexOf(":") + 1) : address;

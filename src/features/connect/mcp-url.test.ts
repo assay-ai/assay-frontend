@@ -175,7 +175,7 @@ describe("the server-name rule agrees with assay-mcp on every shared vector (R-M
   });
 
   it("the sign-in hint is the vector text with the pinned scoped command", () => {
-    expect(signInHint()).toBe(vectors.rule.signedOutHint.replace("{run}", "npx -y @assay-ai/mcp@1.2.3"));
+    expect(signInHint()).toBe(vectors.rule.signedOutHint.replace("{run}", "npx -y @goassay-ai/mcp@1.2.3"));
   });
 
   it("maximum name length", () => {
@@ -231,7 +231,7 @@ describe("the snippet for each client", () => {
   });
 
   it("Claude Code: the pinned proxy, no key and no header", () => {
-    expect(installCommand("claude-code", { V: "1.2.3", url, name: "assay" })).toBe("claude mcp add --scope user assay -- npx -y @assay-ai/mcp@1.2.3 --name assay");
+    expect(installCommand("claude-code", { V: "1.2.3", url, name: "assay" })).toBe("claude mcp add --scope user assay -- npx -y @goassay-ai/mcp@1.2.3 --name assay");
   });
 
   it("a URL with a query is quoted, so a shell does not eat `?` or `&`", () => {

@@ -16,7 +16,7 @@ name: Deploy
 #     NEXT_PUBLIC_BASE_URL       e.g. https://app.example.com
 #     NEXT_PUBLIC_API_BASE_URL   e.g. https://api.example.com/api/v1
 #     NEXT_PUBLIC_PRIVY_APP_ID   the Privy app id (25 characters)
-#     NEXT_PUBLIC_ASSAY_MCP_VERSION  the exact @assay-ai/mcp version install commands pin
+#     NEXT_PUBLIC_ASSAY_MCP_VERSION  the exact @goassay-ai/mcp version install commands pin
 #     NEXT_PUBLIC_MCP_URL        required: the MCP host, shown in the /connect snippet
 #     NEXT_PUBLIC_DEMO_CHAINS    demo only: "robinhood" turns the demo data on
 #     NEXT_PUBLIC_SHOW_KITCHEN_SINK  optional: "1" keeps /kitchen-sink
