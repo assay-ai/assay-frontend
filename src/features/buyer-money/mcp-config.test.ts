@@ -16,6 +16,8 @@ import {
   keyForHint,
   remoteInstall,
   vscodeDeeplink,
+  urlForClient,
+  InstallInputError,
   type LocalMcpClient,
 } from "@/features/buyer-money/mcp-config";
 
@@ -164,5 +166,69 @@ describe("the API-key snippet", () => {
     const out = JSON.parse(apiKeyConfig({ url: "https://mcp.assay.ai/", token: "assay_sk_live_k1" }));
     expect(out.mcpServers.assay).toEqual({ type: "http", url: "https://mcp.assay.ai/", headers: { Authorization: "Bearer assay_sk_live_k1" } });
     expect(apiKeyConfig({ url: "https://mcp.assay.ai/", token: null })).toContain(KEY_PLACEHOLDER);
+  });
+});
+
+describe("hostile input produces no command and no deeplink", () => {
+  const good = { V: "1.2.3", url: "https://mcp.assay.ai/", name: "assay" };
+  const names = ["x&config=AAAA", "a b", "A", "1a", "a_b", "a'b", "$(id)", "assay;rm", "n\u00e4me", "", "a".repeat(57)];
+  const urls = [
+    "https://user:secret@mcp.assay.ai/my/x",
+    "https://mcp.assay.ai/#tok",
+    "https://mcp.assay.ai/a b",
+    'https://mcp.assay.ai/a"b',
+    "https://mcp.assay.ai/a'b",
+    "javascript:alert(1)",
+    "ftp://mcp.assay.ai/",
+    "https://mcp.assay.ai/caf\u00e9",
+    "not a url",
+    "",
+  ];
+  const clients: LocalMcpClient[] = ["claude-code", "codex", "cursor", "vscode", "windsurf", "gemini", "claude-desktop"];
+
+  it("refuses every bad name everywhere", () => {
+    for (const name of names) {
+      expect(() => cursorDeeplink({ ...good, name }), name).toThrow(InstallInputError);
+      expect(() => vscodeDeeplink({ ...good, name }), name).toThrow(InstallInputError);
+      for (const c of clients) {
+        expect(() => installCommand(c, { ...good, name }), `${c} ${name}`).toThrow(InstallInputError);
+        expect(() => remoteInstall(c, { url: good.url, name }), `${c} ${name}`).toThrow(InstallInputError);
+      }
+    }
+  });
+
+  it("refuses every bad URL everywhere", () => {
+    for (const url of urls) {
+      expect(() => cursorDeeplink({ ...good, url }), url).toThrow(InstallInputError);
+      expect(() => vscodeDeeplink({ ...good, url }), url).toThrow(InstallInputError);
+      expect(() => addOneLiner(url, "claude-code", "1.2.3"), url).toThrow(InstallInputError);
+      for (const c of clients) {
+        expect(() => installCommand(c, { ...good, url }), `${c} ${url}`).toThrow(InstallInputError);
+        expect(() => remoteInstall(c, { url, name: "assay" }), `${c} ${url}`).toThrow(InstallInputError);
+      }
+    }
+  });
+
+  it("quotes the hostile-but-allowed words as the vectors say", () => {
+    for (const q of vectors.quoting.cases) {
+      expect(addOneLiner(q.word, "claude-code", "1.2.3")).toBe(`npx -y @assay-ai/mcp@1.2.3 add ${q.quoted} --client claude-code`);
+    }
+  });
+});
+
+describe("a hosted connector gets one URL: copied, recorded and previewed", () => {
+  it("carries free=1 for claude.ai and ChatGPT, from the single source", () => {
+    for (const client of ["claude-ai", "chatgpt"] as const) {
+      for (const base of ["https://mcp.assay.ai/", "https://mcp.assay.ai/my/weather", "https://mcp.assay.ai/?tools=a_b&free=1"]) {
+        const u = urlForClient(client, base);
+        expect(new URL(u).searchParams.get("free")).toBe("1");
+        expect(urlForClient(client, u)).toBe(u);
+        // The sheet previews, records and copies this same string.
+        const [previewed, recorded, copied] = [u, u, urlForClient(client, base)];
+        expect(previewed).toBe(recorded);
+        expect(recorded).toBe(copied);
+      }
+    }
+    expect(urlForClient("claude-code", "https://mcp.assay.ai/")).toBe("https://mcp.assay.ai/");
   });
 });

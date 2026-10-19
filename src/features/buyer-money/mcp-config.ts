@@ -118,6 +118,32 @@ export function assayMcpVersion(): string {
   return value;
 }
 
+/** Characters a canonical MCP URL can hold; anything else is refused before it reaches a command (same as the proxy). */
+const URL_CHARS = /^[A-Za-z0-9\-._~:/?#@!$&()*+,;=%]+$/;
+const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
+const MAX_NAME_LENGTH = 56;
+
+/** Thrown for input the proxy's own builder would refuse; never turned into a command. */
+export class InstallInputError extends Error {
+  override readonly name = "InstallInputError";
+}
+
+function checkName(name: string): void {
+  if (!NAME_PATTERN.test(name) || name.length > MAX_NAME_LENGTH) throw new InstallInputError("invalid server name");
+}
+
+function checkUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new InstallInputError("the URL is not absolute");
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new InstallInputError("the URL is not http(s)");
+  if (parsed.username || parsed.password || parsed.hash) throw new InstallInputError("the URL has credentials or a fragment");
+  if (!URL_CHARS.test(url)) throw new InstallInputError("the URL has characters a canonical URL never has");
+}
+
 function shellQuote(word: string): string {
   return SHELL_SAFE.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`;
 }
@@ -152,6 +178,8 @@ function pinned(input: InstallInput): string {
 }
 
 function serverArgs(input: InstallInput): string[] {
+  checkName(input.name);
+  checkUrl(input.url);
   const args = ["-y", pinned(input)];
   if (!isRootUrl(input.url)) args.push("--url", input.url);
   args.push("--name", input.name);
@@ -182,6 +210,8 @@ export function installCommand(client: LocalMcpClient, input: InstallInput): Ins
 
 /** The free-only remote alternative, or null where it is a settings screen. */
 export function remoteInstall(client: LocalMcpClient, input: { url: string; name: string }): InstallOutput | null {
+  checkUrl(input.url);
+  checkName(input.name);
   switch (client) {
     case "claude-code":
       return shellLine(["claude", "mcp", "add", "--transport", "http", "--scope", "user", input.name, input.url]);
@@ -220,6 +250,11 @@ export function vscodeDeeplink(input: InstallInput): string {
 
 /** `npx -y @assay-ai/mcp@V add {url} --client {id}`: also allows the URL for paid calls on a terminal. */
 export function addOneLiner(url: string, client: LocalMcpClient, V?: string): string {
+  if (url.startsWith("/")) {
+    if (!URL_CHARS.test(url)) throw new InstallInputError("invalid path");
+  } else {
+    checkUrl(url);
+  }
   return shellLine(["npx", "-y", pinned({ V, url, name: "" }), "add", url, "--client", client]);
 }
 
@@ -232,6 +267,24 @@ export function hostedUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+/** What the UI shows instead of a command when the input is refused: never a command. */
+export const NO_COMMAND_TEXT = "No command: the server URL or name is not valid. Check the MCP host setting and the server name.";
+
+/** Runs a builder for display: a refusal gives `null`, never a command. */
+export function tryBuild<T>(build: () => T): T | null {
+  try {
+    return build();
+  } catch (error) {
+    if (error instanceof InstallInputError) return null;
+    throw error;
+  }
+}
+
+/** The URL a client is given, previewed, recorded and copied: one string. Hosted connectors always get `free=1`. */
+export function urlForClient(client: McpClient, url: string): string {
+  return client === "claude-ai" || client === "chatgpt" ? hostedUrl(url) : url;
 }
 
 /** The deep link for a client that has one, else null. */

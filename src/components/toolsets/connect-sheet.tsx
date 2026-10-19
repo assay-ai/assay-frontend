@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { apiKeyConfig, hostedUrl, installCommand, installText, isLocalClient, isMcpClient, keyForHint, keyMode, type McpClient } from "@/features/buyer-money/mcp-config";
+import { apiKeyConfig, installCommand, tryBuild, installText, isLocalClient, isMcpClient, keyForHint, keyMode, urlForClient, type McpClient } from "@/features/buyer-money/mcp-config";
 import { newKeyPaysNote, payingKeyName } from "@/components/buyer-money/create-key";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
 import {
@@ -233,7 +233,10 @@ export function ConnectBody({
               : fixedUrl
                 ? { kind: "url", url: fixedUrl }
                 : null;
-  const url = choice ? buildMcpUrl(choice, { free, discovery }) : null;
+  // The client tab comes first: hosted connectors are free only, so the URL previewed, recorded and copied is one string.
+  const [client, setClient] = React.useState<McpClient>("claude-code");
+  const builtUrl = choice ? buildMcpUrl(choice, { free, discovery }) : null;
+  const url = builtUrl ? urlForClient(client, builtUrl) : null;
   const preview = useMcpPreview(url, effectiveAgentId);
   // Unique among the agent's other servers, so two servers never share a name in one client.
   const longestTool = longestToolLength(preview.data?.listedTools);
@@ -256,7 +259,6 @@ export function ConnectBody({
   React.useEffect(() => setCreated(null), [effectiveAgentId]);
 
   // The client tab, remembered per agent (this browser first, else the server's last hand-out).
-  const [client, setClient] = React.useState<McpClient>("claude-code");
   React.useEffect(() => {
     if (!effectiveAgentId) return;
     const remembered = readClient(effectiveAgentId) ?? (servers.data?.servers.map((s) => s.client).find(isMcpClient) ?? null);
@@ -289,10 +291,10 @@ export function ConnectBody({
   const snippet = !url
     ? ""
     : isLocalClient(client)
-      ? installText(installCommand(client, { url, name: serverName }))
+      ? (tryBuild(() => installText(installCommand(client, { url, name: serverName }))) ?? "")
       : needsKey
         ? apiKeyConfig({ url, token: created?.token ?? null, keyPrefix, serverName })
-        : hostedUrl(url);
+        : url;
 
   const handOut = () => {
     if (!url || !effectiveAgentId || record.isPending || recorded) return;
