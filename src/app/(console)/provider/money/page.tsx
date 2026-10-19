@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Download, ExternalLink, HelpCircle, Info, TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { DisplayAssetSelect, displayAssetLabel, useDisplayAsset } from "@/components/display-asset-select";
@@ -57,7 +56,6 @@ import { toast } from "@/utils/toast";
  *    summary is the sum of its reasons), with the tools it happened on.
  *  - Check against your logs: download the per-call CSV, and an "Explain a
  *    difference" drawer (what each outcome means, how to join on the call id).
- *    `/provider/money/reconciliation` opens that drawer.
  */
 
 function monthWindow(now: Date) {
@@ -76,8 +74,7 @@ const MONTH = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" 
 export default function ProviderMoneyPage() {
   const now = React.useMemo(() => new Date(), []);
   const month = React.useMemo(() => monthWindow(now), [now]);
-  const params = useSearchParams();
-  const [explainOpen, setExplainOpen] = React.useState(params.get("explain") === "1");
+  const [explainOpen, setExplainOpen] = React.useState(false);
 
   const earnings = useQuery({
     queryKey: ["provider", "earnings", "tool", month.from, month.to],

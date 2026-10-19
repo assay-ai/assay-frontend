@@ -269,11 +269,6 @@ export function mayDisputeOnChain(proposal: SlashProposalSummary, stage: CaseSta
   return stage.kind === "open" && disputeWindowOpen(proposal, nowMs);
 }
 
-/** The penalties-on-chain page, with this case's records selected for the dispute. */
-export function onChainDisputeHref(proposalId: string): string {
-  return `/provider/capital/penalties?case=${encodeURIComponent(proposalId)}`;
-}
-
 /** The plain rule, said everywhere a provider can dispute. `when` formats a timestamp. */
 export function onChainDisputeSentence(deadline: string | null, when: (iso: string) => string): string {
   return deadline

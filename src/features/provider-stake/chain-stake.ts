@@ -71,7 +71,7 @@ export function unbondingFigure(entry: ProviderChainStake): ChainFigure {
  * not choose, and it would look correct on every screen until it was signed.
  * A blocked action that says why is the safe direction — the cost of this
  * ruling, stated: a provider with proved authorities on two chains cannot open
- * or fund from this header and must use `/provider/exit`, which builds the
+ * or fund from this header and must use the Stake page, which builds the
  * same intents. That is a visible dead end with a reason, not a wrong
  * transaction.
  */

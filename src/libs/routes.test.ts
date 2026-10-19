@@ -11,9 +11,7 @@ describe("routes", () => {
     expect(routes.disputes()).toBe("/spend/disputes");
     expect(routes.operatorCase("p 1/2")).toBe("/operator/cases/view?id=p+1%2F2");
     expect(routes.binding("b1")).toBe("/provider/bindings/view?binding=b1");
-    expect(routes.binding("b1", "configuration/pricing")).toBe(
-      "/provider/bindings/view/configuration/pricing?binding=b1",
-    );
+    expect(routes.binding("b1", "settings")).toBe("/provider/bindings/view/settings?binding=b1");
     expect(routes.verdict("b1", "v2", "evidence")).toBe(
       "/provider/bindings/view/verdicts/view/evidence?binding=b1&verdict=v2",
     );
@@ -30,7 +28,7 @@ describe("routes", () => {
   });
 
   it("gives the path a link points at, without its query", () => {
-    expect(pathOf(routes.binding("b1", "test"))).toBe("/provider/bindings/view/test");
+    expect(pathOf(routes.binding("b1", "quality"))).toBe("/provider/bindings/view/quality");
   });
 
   // A page outside a `[segment]` folder gets no route params in a static
