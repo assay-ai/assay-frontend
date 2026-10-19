@@ -91,12 +91,12 @@ export function KeyMatch({ account }: { account: string }) {
   );
 }
 
-/** Standard, unless the account ceiling is lower: then the ceiling. */
+/** Light (spec §9.6), unless the account ceiling is lower: then the ceiling. */
 export function agentDefault(ceiling: { perCall: string; perDay: string } | null): { perCall: string; perDay: string } {
-  const standard = CAP_PRESETS.find((p) => p.id === "standard")!;
-  if (!ceiling) return { perCall: standard.perCall, perDay: standard.perDay };
+  const light = CAP_PRESETS.find((p) => p.id === "light")!;
+  if (!ceiling) return { perCall: light.perCall, perDay: light.perDay };
   const lower = (a: string, b: string) => (Number(a) < Number(b) ? a : b);
-  return { perCall: lower(ceiling.perCall, standard.perCall), perDay: lower(ceiling.perDay, standard.perDay) };
+  return { perCall: lower(ceiling.perCall, light.perCall), perDay: lower(ceiling.perDay, light.perDay) };
 }
 
 export function LetAgentPaySheet({ open, onOpenChange, agentName, delegateAccount, renew = null }: LetAgentPaySheetProps) {
