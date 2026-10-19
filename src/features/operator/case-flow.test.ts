@@ -209,7 +209,7 @@ describe("a cancel-requested side with nothing on chain (owner rule: the console
 
 describe("not on chain past its computed dates", () => {
   it("says how long, and shows no date already gone", () => {
-    const b = brief({ status: "AWAITING_SECOND", chainStatus: "PROPOSING", executableAt: iso(NOW - 2 * DAY) });
+    const b = brief({ status: "PROPOSED", chainStatus: "PROPOSING", executableAt: iso(NOW - 2 * DAY) });
     const facts = caseFacts(b, NOW);
     expect(facts.stage).toBe("not-on-chain");
     expect(facts.notOnChainForDays).toBe(5);

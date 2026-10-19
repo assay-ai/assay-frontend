@@ -148,13 +148,6 @@ export interface PlatformHealth {
   policiesTotal: number;
   stakeLocked: Money;
   providersWithStake: number;
-  /**
-   * Non-EVM cases still in the retired in-app objection statuses (DISPUTED,
-   * UNDER_REVIEW, AWAITING_SECOND): the Penalties list's "Old process" tab.
-   * None of them is on chain or waiting for the arbiter.
-   */
-  oldProcessCases: number;
-  oldestOldProcessCaseAgeSeconds: number | null;
   /** The EVM chain-state cache, one row per chain. */
   chainState: ChainStateHealth[];
   /** Every provider on a slash hold, one row per provider and chain. */
@@ -216,8 +209,7 @@ export interface ChainStateHealth {
  * to `CANCELLED`.
  */
 export type SlashProposalStatus =
-  | "PROPOSED" | "DISPUTED" | "UNDER_REVIEW" | "AWAITING_SECOND"
-  | "UPHELD" | "OVERTURNED" | "EXECUTING" | "EXECUTED"
+  | "PROPOSED" | "UPHELD" | "OVERTURNED" | "EXECUTING" | "EXECUTED"
   | "REVERSED" | "WAIVED" | "CANCEL_REQUESTED" | "CANCELLED";
 
 /** assay-backend `src/modules/slash/domain/chain-slash-outcome.ts` `ChainProposalStatus`. */
@@ -236,13 +228,11 @@ export type ArbitrationOutcome =
 
 /**
  * Where a penalty stands, as `GET /operator/cases` groups it: the case status
- * and the mirrored on-chain status read in the case screen's precedence.
- * `DISPUTED` is the retired off-chain objection process; a dispute on chain is
- * `CHAIN_DISPUTED`.
+ * and the mirrored on-chain status read in the case screen's precedence. A
+ * dispute is on chain: `CHAIN_DISPUTED`.
  */
 export type OperatorCaseStatus =
   | "PROPOSED"
-  | "DISPUTED"
   | "CHAIN_DISPUTED"
   | "CANCEL_REQUESTED"
   | "EXECUTED"

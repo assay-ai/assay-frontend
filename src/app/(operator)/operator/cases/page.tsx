@@ -292,7 +292,6 @@ function labelOf(item: RecentPenalty, name: string | null): string {
 const EMPTY_TITLE: Record<PenaltyTabId, string> = {
   "needs-ruling": "Nothing to rule on",
   signature: "No cancel waiting for a signature",
-  "old-process": "No old-process case",
   window: "No penalty in its dispute window",
   executed: "No executed penalty",
   cancelled: "No cancelled penalty",
@@ -300,10 +299,8 @@ const EMPTY_TITLE: Record<PenaltyTabId, string> = {
 };
 
 const EMPTY_TEXT: Record<PenaltyTabId, string> = {
-  "needs-ruling": "When a provider disputes a penalty on chain, it shows here with its 30 days to rule. Old-process cases wait under Old process.",
+  "needs-ruling": "When a provider disputes a penalty on chain, it shows here with its 30 days to rule.",
   signature: "A penalty suspended after it went on chain waits here until the arbiter key signs its cancel.",
-  "old-process":
-    "Cases opened under the retired in-app objection process wait here. None is on chain or with the arbiter; suspend one from its page if it should not stand.",
   window: "New penalties wait here while the provider can still dispute them.",
   executed: "Penalties whose stake was taken show here.",
   cancelled: "Cancelled, suspended and expired penalties show here.",

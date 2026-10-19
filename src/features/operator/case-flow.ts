@@ -16,9 +16,7 @@ import { askLabel } from "./why-not";
  *   Proposed → dispute window (72 h) → [Disputed → Arbiter rules, 30 days] → Executed | Cancelled
  *
  * and the single next step THIS operator can take on it. Pure, so the rules
- * are tested without the screen. The off-chain objection process (claim,
- * decide, second signature, extend) is gone from the product; a case still in
- * one of its statuses is read by where its on-chain record stands.
+ * are tested without the screen.
  */
 
 export type CaseStage =
@@ -42,8 +40,6 @@ export interface CaseFacts {
   disputedAt: string | null;
   /** disputedAt + 30 days: unruled by then, it can be expired and the stake is released. */
   disputeExpiresAt: string | null;
-  /** True when the case still carries a status of the retired off-chain objection process. */
-  legacyStatus: boolean;
   /** Cancelled because the dispute went unruled for 30 days and lapsed (`AUTO_CHAIN_VOIDED` after a dispute). */
   expired: boolean;
   /**
@@ -112,7 +108,6 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
   const chainStage = caseChainStageOf(clocks);
   const disputedAt = clocks.chainDisputedAt;
   const executableAt = clocks.chainExecutableAt ?? clocks.earliestExecutionAt;
-  const legacyStatus = status === "DISPUTED" || status === "UNDER_REVIEW" || status === "AWAITING_SECOND";
 
   // Only GONE means nothing stands and nothing was taken. EXECUTED is money moved; UNKNOWN reads as standing.
   const record = brief.chainRecord;
@@ -159,7 +154,6 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
     executableAt,
     disputedAt,
     disputeExpiresAt,
-    legacyStatus,
     expired,
     cancel,
     nothingOnChain,
