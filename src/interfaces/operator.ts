@@ -172,13 +172,13 @@ export interface SlashHoldHealth {
 
 /**
  * `ChainStateHealthDto` — what the EVM chain-state indexer last read of one
- * chain's `X402Config`. `stale` when the indexer never caught up or lags more
+ * chain's `AssayConfig`. `stale` when the indexer never caught up or lags more
  * than `EVM_CHAIN_STATE_MAX_LAG_MS` (five minutes by default).
  */
 export interface ChainStateHealth {
   chainId: string;
   paused: boolean;
-  /** `X402Config.arbiter()`, lower-case, or `null`. */
+  /** `AssayConfig.arbiter()`, lower-case, or `null`. */
   arbiter: string | null;
   /** The live slash delay — the dispute window. */
   slashDelaySeconds: number | null;
@@ -507,13 +507,13 @@ export interface CancelIntent {
   transaction: string;
   /**
    * The only key that can sign this. Solana: `Config.admin`, **bare base58**.
-   * EVM: always `X402Config.arbiter()` (D-19); without an arbiter the build is
+   * EVM: always `AssayConfig.arbiter()` (D-19); without an arbiter the build is
    * refused with `409 CHAIN_ARBITER_NOT_SET`.
    */
   admin: string;
   /** EVM: always `ARBITER`. Absent on Solana, where `admin` is `Config.admin`. */
   signerRole?: "ARBITER";
-  /** EVM only: the X402Stake proxy the calldata is sent to. */
+  /** EVM only: the AssayStake proxy the calldata is sent to. */
   to?: string;
   /** The slash request id the record PDA is seeded by. 32 bytes, lower-case hex. */
   requestId: string;
@@ -627,9 +627,9 @@ export interface ListOverrideLogQuery {
 export interface ArbiterTerms {
   chainId: string;
   paused: boolean;
-  /** `X402Config.arbiter()`, checksummed, or `null` for none appointed. */
+  /** `AssayConfig.arbiter()`, checksummed, or `null` for none appointed. */
   arbiter: string | null;
-  /** `X402Config.admin()`, checksummed. */
+  /** `AssayConfig.admin()`, checksummed. */
   admin: string;
   /** The delay a proposal made now would freeze into its `executableAt`. */
   slashDelaySeconds: number;

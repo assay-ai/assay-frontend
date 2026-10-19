@@ -18,7 +18,7 @@ import { durationWords } from "./call-summary";
  * is typed (percent, days, dollars — never basis points or raw units), and the
  * contract's own rules checked BEFORE the wallet opens, in words.
  *
- * Every check here mirrors a revert in assay-evm `X402Config.sol`
+ * Every check here mirrors a revert in assay-evm `AssayConfig.sol`
  * (`_validate`, `_assertRolesDistinct`, `registerVerifier`, `setSlashDelay`),
  * so a change the chain would refuse is stopped on the form, next to the field
  * it is about, instead of as a failed gas estimate.

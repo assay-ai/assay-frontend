@@ -1,9 +1,9 @@
 import { parseAbi, toEventSelector } from "viem";
 
 /**
- * The slice of the X402Stake ABI this page reads, copied from
- * `assay-evm/out/X402Stake.sol/X402Stake.json` (the source of truth; see
- * `src/X402Stake.sol` for the comments).
+ * The slice of the AssayStake ABI this page reads, copied from
+ * `assay-evm/out/AssayStake.sol/AssayStake.json` (the source of truth; see
+ * `src/AssayStake.sol` for the comments).
  *
  * ## The dispute upgrade (assay-evm D-19)
  *
