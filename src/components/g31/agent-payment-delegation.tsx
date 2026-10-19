@@ -189,6 +189,70 @@ function explain(error: unknown, fallback: string): string {
   return fallback;
 }
 
+/** A failure of the on-chain stop, in words (declined, relay refusal, signed out). */
+export function explainStopFailure(error: unknown): string {
+  return explain(error, "Its payment key could not be stopped on chain.");
+}
+
+/**
+ * Stops a payment key on chain: `revoke-intent`, then one `RevokeDelegate`
+ * signature with the payer's wallet (Privy's confirmation shown, checked
+ * against this app's escrow domain before the wallet is asked), then
+ * `revoke`, which relays it. Throws when any step fails; nothing is relayed
+ * unless the wallet signed.
+ */
+export async function stopPaymentKeyOnChain(
+  delegateAccount: string,
+  signer: Signer,
+  domain: ExpectedDomain,
+): Promise<void> {
+  const intent = await createRevokeDelegateIntent(addressOfAccount(delegateAccount));
+  await submitRelayedDelegation(intent, signer, { domain, delegate: delegateAccount }, submitRevokeDelegate);
+}
+
+/**
+ * {@link stopPaymentKeyOnChain} for the payer `account`, with its wallet and
+ * escrow: what the Revoke dialog's "Also stop its payment key on chain" runs.
+ */
+export function useStopPaymentKey(account: string | undefined): (delegateAccount: string) => Promise<void> {
+  const ctx = useDelegationContext(account, 0);
+  const { signer, domain, escrowQuery } = ctx;
+  return async (delegateAccount: string) => {
+    await stopPaymentKeyOnChain(delegateAccount, signer(), domain(escrowQuery.data));
+  };
+}
+
+/**
+ * "Stop it" on a revoked or expired credential whose payment key is still
+ * active on chain (spec F3 step 5): the same sheet as "Stop it paying", with
+ * its check for payments still being settled, and the same calls.
+ */
+export function StopPaymentKeySheet({
+  account,
+  target,
+  onClose,
+  onFinished,
+}: {
+  account: string | undefined;
+  target: EscrowDelegate | null;
+  onClose: () => void;
+  onFinished: () => void;
+}) {
+  const ctx = useDelegationContext(account, 0);
+  return (
+    <RevokeSheet
+      target={target}
+      escrow={ctx.escrowQuery.data}
+      unit={ctx.unit}
+      tightenDelaySeconds={ctx.delegatesQuery.data?.tightenDelaySeconds}
+      onClose={onClose}
+      onFinished={onFinished}
+      signer={ctx.signer}
+      domain={ctx.domain}
+    />
+  );
+}
+
 /** Who the authorise / edit sheet is for. `current` set means editing that standing grant. */
 interface SheetTarget {
   delegateAccount: string;
@@ -539,13 +603,7 @@ function RevokeSheet({
     setBusy(true);
     setRevokeNote(null);
     try {
-      const intent = await createRevokeDelegateIntent(addressOfAccount(target.delegate));
-      await submitRelayedDelegation(
-        intent,
-        signer(),
-        { domain: domain(escrow), delegate: target.delegate },
-        submitRevokeDelegate,
-      );
+      await stopPaymentKeyOnChain(target.delegate, signer(), domain(escrow));
       toast.success(
         `${agentName ?? "That key"} can no longer pay. ${agentName ? "Its API key still works for free calls." : ""}`.trim(),
       );
