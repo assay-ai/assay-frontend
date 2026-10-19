@@ -338,3 +338,23 @@ export function pasteHint(client: McpClient): string {
       return "Code you write yourself: give your MCP client the URL and the header, or this config.";
   }
 }
+
+/**
+ * Hosts recorded as ignoring `notifications/tools/list_changed` (spec 12.3, the
+ * e2e results table): after approving, their tool list only refreshes on a
+ * restart. Empty until a host is recorded as ignoring it; add the id then.
+ */
+export const HOSTS_IGNORING_LIST_CHANGED: readonly McpClient[] = [];
+
+/** The name of the app as a sentence uses it ("Codex CLI" is "Codex"). */
+export function appName(client: McpClient): string {
+  return MCP_CLIENTS.find((c) => c.id === client)?.label.replace(/ CLI$/, "") ?? "your app";
+}
+
+/** "Restart {app} after approving." for a host that ignores `list_changed`, else null. */
+export function restartNote(client: McpClient, hosts: readonly McpClient[] = HOSTS_IGNORING_LIST_CHANGED): string | null {
+  return hosts.includes(client) ? `Restart ${appName(client)} after approving.` : null;
+}
+
+/** The free example prompt that makes the first call (spec 9.2). */
+export const FREE_EXAMPLE_PROMPT = "Use Assay to find a free tool for the weather, then get the weather in Lisbon.";

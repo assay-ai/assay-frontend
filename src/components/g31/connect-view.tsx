@@ -1,18 +1,19 @@
 "use client";
 
-import { CircleCheck, KeyRound, TriangleAlert } from "lucide-react";
+import { CircleCheck, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
 import { createKeyErrorText, newKeyPaysNote, payingKeyName, useCreateKey } from "@/components/buyer-money/create-key";
 import { McpConfigTabs } from "@/components/buyer-money/mcp-config-tabs";
 import { useAgentsAndKeys } from "@/components/buyer-money/use-agents";
+import { AdvancedUrlKinds } from "@/components/connect/advanced-url-kinds";
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { ConnectSheet } from "@/components/toolsets/connect-sheet";
 import { useAgentServers, useRecordConnect } from "@/components/toolsets/use-toolsets";
 import { Button } from "@/components/ui/button";
 import { keyOfAgent } from "@/features/buyer-money/agent-label";
-import { keyForHint, urlForClient } from "@/features/buyer-money/mcp-config";
+import { keyForHint, urlForClient, type McpClient } from "@/features/buyer-money/mcp-config";
 import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
 import { buildMcpUrl, parseMcpUrl } from "@/features/connect/mcp-url";
 
@@ -53,6 +54,7 @@ const POLL_MS = 5_000;
 export function ConnectView() {
   const [poll, setPoll] = React.useState<number | false>(POLL_MS);
   const data = useAgentsAndKeys({ pollMs: poll });
+  const [client, setClient] = React.useState<McpClient>("claude-code");
   const [narrowing, setNarrowing] = React.useState(false);
   const [prefill, setPrefill] = React.useState<string | null>(null);
   React.useEffect(() => {
@@ -81,30 +83,15 @@ export function ConnectView() {
   React.useEffect(() => setPoll(done ? false : POLL_MS), [done]);
   const failed = data.agentsQuery.isError || data.keysQuery.isError;
   const recordConnect = useRecordConnect(agent?.agentId);
-  const firstTime = !data.keysQuery.isPending && live.length === 0 && !created;
-  const url = mcpEndpointUrl();
+    const url = mcpEndpointUrl();
 
   return (
     <div className="flex w-full justify-center px-4 py-4 tablet:px-7 tablet:py-[34px]">
       <div className="flex w-full min-w-0 max-w-[820px] flex-col gap-5 rounded-xl border border-01 bg-01 p-4 tablet:p-8">
         <header className="flex flex-col gap-1">
           <h1 className="text-heading-md text-01">Connect your agent</h1>
-          <p className="text-body-md text-02">One MCP address and one key. Your agent lists the tools and sees each price.</p>
+          <p className="text-body-md text-02">Pick your app, add Assay, and your first call is free. Paid tools come later.</p>
         </header>
-
-        {firstTime ? (
-          <section className="flex flex-col gap-3 rounded-lg border border-primary-20 bg-primary-10 p-4" data-testid="connect-first-key">
-            <h2 className="flex items-center gap-2 text-label-sm text-01">
-              <KeyRound aria-hidden="true" className="size-4" />
-              Step 1: create your first key
-            </h2>
-            <p className="text-body-13 text-02">Your agent uses it to call tools. The config below then carries it, ready to paste.</p>
-            <Button className="self-start" loading={create.isPending} disabled={!agent} onClick={() => create.mutate()}>
-              Create your first key
-            </Button>
-            {create.isError ? <p className="text-body-13 text-danger-700">{createKeyErrorText(create.error)}</p> : null}
-          </section>
-        ) : null}
 
         {created ? (
           <div className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-warning-20 bg-warning-10 p-3" data-testid="connect-key-created">
@@ -122,18 +109,18 @@ export function ConnectView() {
           </div>
         ) : null}
 
-        <div className={firstTime ? "pointer-events-none opacity-50" : undefined} aria-hidden={firstTime || undefined}>
-          {firstTime ? <p className="pb-2 text-label-13 text-01">Step 2: paste this into your client</p> : null}
-          <McpConfigTabs
-            token={created?.token ?? null}
-            keyPrefix={created?.prefix ?? keyForHint(live)?.prefix ?? null}
-            url={url}
-            onCopy={(client) => agent && recordConnect.mutate({ url: urlForClient(client, url), serverName: "assay", client })}
-            onCreateKey={!firstTime && agent ? () => create.mutate() : undefined}
-            creatingKey={create.isPending}
-            createKeyError={!firstTime && create.isError ? createKeyErrorText(create.error) : null}
-          />
-        </div>
+        <McpConfigTabs
+          guide
+          token={created?.token ?? null}
+          keyPrefix={created?.prefix ?? keyForHint(live)?.prefix ?? null}
+          url={url}
+          client={client}
+          onClientChange={setClient}
+          onCopy={(c) => agent && recordConnect.mutate({ url: urlForClient(c, url), serverName: "assay", client: c })}
+          onCreateKey={agent ? () => create.mutate() : undefined}
+          creatingKey={create.isPending}
+          createKeyError={create.isError ? createKeyErrorText(create.error) : null}
+        />
 
         <p className="text-body-13 text-02">
           This connects Everything: every tool on Assay, through one server.{" "}
@@ -144,6 +131,8 @@ export function ConnectView() {
           ) : null}
         </p>
 
+        <AdvancedUrlKinds />
+
         <section aria-label="Connection check" className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-02 p-4">
           <h2 className="text-label-sm text-01">Is it working?</h2>
           {failed ? (
@@ -151,16 +140,15 @@ export function ConnectView() {
           ) : done ? (
             <p className="flex items-center gap-2 text-body-13 text-success-700" data-testid="connect-working">
               <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-success-500" />
+              Connected. Your agent made its first call through {root?.serverName ?? "assay"}.{" "}
               {rootCalled && root?.lastCallAt
-                ? `Yes: the first call arrived; the last one ${relativeTime(root.lastCallAt)}.`
-                : `Yes: ${keyOfAgent(used?.name ?? "", agent?.label)} made a call ${relativeTime(used?.lastUsedAt ?? null)}.`}
+                ? `The last call was ${relativeTime(root.lastCallAt)}.`
+                : `${keyOfAgent(used?.name ?? "", agent?.label)} called ${relativeTime(used?.lastUsedAt ?? null)}.`}
             </p>
-          ) : live.length === 0 && !created ? (
-            <p className="text-body-13 text-02">Create a key and paste the config first.</p>
           ) : (
             <p className="flex items-center gap-2 text-body-13 text-02" aria-live="polite" data-testid="connect-waiting">
               <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-primary-500 motion-reduce:animate-none" />
-              Waiting for your agent&apos;s first call. Paste the config, restart your client and ask it to use a tool. This updates by itself.
+              Waiting for the first call… (updates by itself)
             </p>
           )}
           <div className="flex flex-wrap gap-2 pt-1">

@@ -7,15 +7,18 @@ import { KeyRound } from "lucide-react";
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ClientPicker } from "@/components/connect/client-picker";
+import { HostedConnector } from "@/components/connect/hosted-connector";
 import { toast } from "@/utils/toast";
 import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
 import {
+  FREE_EXAMPLE_PROMPT,
   MCP_CLIENTS,
+  appName,
+  restartNote,
   addOneLiner,
   apiKeyConfig,
   deeplink,
-  hostedUrl,
   installCommand,
   installText,
   isLocalClient,
@@ -24,6 +27,7 @@ import {
   pasteHint,
   tryBuild,
   remoteInstall,
+  type LocalMcpClient,
   type McpClient,
 } from "@/features/buyer-money/mcp-config";
 
@@ -62,6 +66,7 @@ export function McpConfigTabs({
   url: urlProp,
   serverName,
   client: clientProp,
+  guide = false,
   onClientChange,
   onCopy,
   onCreateKey,
@@ -73,6 +78,8 @@ export function McpConfigTabs({
   url?: string;
   serverName?: string;
   client?: McpClient;
+  /** Show "What happens next" and the free example prompt under the action (the Connect page). */
+  guide?: boolean;
   onClientChange?: (client: McpClient) => void;
   onCopy?: (client: McpClient) => void;
   /** Creates a key here and fills it in; shown first while there is no full key. */
@@ -122,79 +129,70 @@ export function McpConfigTabs({
           Have your key? Copy the URL only
         </button>
       ) : null}
-      <Tabs value={client} onValueChange={(v) => setClient(v as McpClient)} className="flex w-full min-w-0 flex-col gap-3">
-        <TabsList className="flex-wrap gap-x-4 gap-y-1">
-          {MCP_CLIENTS.map((c) => (
-            <TabsTrigger key={c.id} value={c.id} className="min-h-10 whitespace-nowrap">
-              {c.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        {MCP_CLIENTS.map((c) => (
-          <TabsContent key={c.id} value={c.id} className="flex min-w-0 flex-col gap-2">
+      <ClientPicker value={client} onChange={setClient} />
+      <div className="flex min-w-0 flex-col gap-2" data-testid={`client-panel-${client}`}>
+        {client === "other" ? (
+          <>
             <p className="text-body-xs text-03">
-              {pasteHint(c.id)}
-              {c.id !== "other" || token
+              {pasteHint("other")}
+              {token
                 ? null
                 : keyPrefix
                   ? ` Replace ${placeholder} with your full key (it starts ${keyPrefix.replace(/[.…]+$/, "")}).`
                   : ` Replace ${placeholder} with your key.`}
             </p>
-            {c.id === "other" ? (
-              <dl className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-01 bg-02 px-3 py-2.5 text-body-xs">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <dt className="text-03">URL</dt>
-                  <dd className="min-w-0 flex-1">
-                    <CopyChip value={url} display={url} label="the URL" className="max-w-full break-all text-left" />
-                  </dd>
-                </div>
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <dt className="text-03">Header</dt>
-                  <dd className="min-w-0 flex-1 break-all font-mono text-mono-12 text-01">Authorization: Bearer {token ?? placeholder}</dd>
-                </div>
-              </dl>
-            ) : null}
-            {isLocalClient(c.id) ? (
-              <LocalInstall client={c.id} file={c.file} url={url} name={name} onCopy={() => onCopy?.(c.id)} />
-            ) : c.id === "other" ? (
-              <CodeBlock
-                title={c.file}
-                code={apiKeyConfig({ url, token, keyPrefix, serverName })}
-                onCopyCode={() => onCopy?.(c.id)}
-                copyDisabledReason={token ? null : TEMPLATE_COPY_REASON}
-                wrap
-                className="min-w-0"
-              />
-            ) : (
-              <CopyChip value={hostedUrl(url)} display={hostedUrl(url)} label="the URL" className="max-w-full break-all text-left" />
-            )}
-            {c.id === "other" ? (
-              <p className="text-body-xs text-03">
-                In code:{" "}
-                {OTHER_CLIENT_DOCS.map((doc, i) => (
-                  <React.Fragment key={doc.href}>
-                    {i > 0 ? " · " : null}
-                    <a href={doc.href} target="_blank" rel="noreferrer" className="text-primary-600 hover:underline">
-                      {doc.label}
-                    </a>
-                  </React.Fragment>
-                ))}
-              </p>
-            ) : null}
-          </TabsContent>
-        ))}
-      </Tabs>
+            <dl className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-01 bg-02 px-3 py-2.5 text-body-xs">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <dt className="text-03">URL</dt>
+                <dd className="min-w-0 flex-1">
+                  <CopyChip value={url} display={url} label="the URL" className="max-w-full break-all text-left" />
+                </dd>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <dt className="text-03">Header</dt>
+                <dd className="min-w-0 flex-1 break-all font-mono text-mono-12 text-01">Authorization: Bearer {token ?? placeholder}</dd>
+              </div>
+            </dl>
+            <CodeBlock
+              title="mcp.json"
+              code={apiKeyConfig({ url, token, keyPrefix, serverName })}
+              onCopyCode={() => onCopy?.("other")}
+              copyDisabledReason={token ? null : TEMPLATE_COPY_REASON}
+              wrap
+              className="min-w-0"
+            />
+            <p className="text-body-xs text-03">
+              In code:{" "}
+              {OTHER_CLIENT_DOCS.map((doc, i) => (
+                <React.Fragment key={doc.href}>
+                  {i > 0 ? " · " : null}
+                  <a href={doc.href} target="_blank" rel="noreferrer" className="text-primary-600 hover:underline">
+                    {doc.label}
+                  </a>
+                </React.Fragment>
+              ))}
+            </p>
+          </>
+        ) : isLocalClient(client) ? (
+          <LocalInstall client={client} file={MCP_CLIENTS.find((c) => c.id === client)?.file ?? "Terminal"} url={url} name={name} onCopy={() => onCopy?.(client)} />
+        ) : (
+          <HostedConnector client={client} url={url} onCopy={() => onCopy?.(client)} />
+        )}
+        {guide && client !== "other" ? <NextSteps client={client} /> : null}
+      </div>
     </div>
   );
 }
 
-/** The paid-capable install, its one-click link where there is one, and the free-only remote alternative. */
-function LocalInstall({ client, file, url, name, onCopy }: { client: Exclude<McpClient, "claude-ai" | "chatgpt" | "other">; file: string; url: string; name: string; onCopy: () => void }) {
+/** The paid-capable install: a button for Cursor and VS Code (config under it), the command otherwise. */
+function LocalInstall({ client, file, url, name, onCopy }: { client: LocalMcpClient; file: string; url: string; name: string; onCopy: () => void }) {
   const input = { url, name };
+  const app = appName(client);
   const link = tryBuild(() => deeplink(client, input));
   const remote = tryBuild(() => remoteInstall(client, input));
   const command = tryBuild(() => installText(installCommand(client, input)));
   const addLine = tryBuild(() => addOneLiner(url, client));
+  const [showConfig, setShowConfig] = React.useState(false);
   const root = (() => {
     try {
       return new URL(url).pathname === "/" && !new URL(url).search;
@@ -202,14 +200,28 @@ function LocalInstall({ client, file, url, name, onCopy }: { client: Exclude<Mcp
       return true;
     }
   })();
+  const button = client === "cursor" || client === "vscode";
+  const intro = button ? null : client === "claude-desktop" ? "Paste into claude_desktop_config.json (Settings › Developer › Edit config), then restart." : "Run this in a terminal:";
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      {link ? (
-        <a href={link} className="min-h-10 self-start text-label-13 font-semibold text-primary-600 hover:underline" data-testid="install-deeplink" onClick={onCopy}>
-          Install in {client === "cursor" ? "Cursor" : "VS Code"}
-        </a>
+      <h3 className="text-label-sm text-01">Add Assay to {app}</h3>
+      {button && link ? (
+        <div className="flex flex-col items-start gap-1">
+          <Button asChild className="min-h-10">
+            <a href={link} data-testid="install-deeplink" onClick={onCopy}>
+              Add to {app}
+            </a>
+          </Button>
+          <button type="button" className="min-h-10 text-label-13 font-semibold text-primary-600 hover:underline" data-testid="copy-config-instead" onClick={() => setShowConfig((v) => !v)}>
+            Copy the config instead
+          </button>
+        </div>
       ) : null}
-      <CodeBlock title={file} code={command ?? NO_COMMAND_TEXT} copyDisabledReason={command ? null : NO_COMMAND_TEXT} onCopyCode={onCopy} wrap className="min-w-0" />
+      {intro ? <p className="text-body-13 text-02">{intro}</p> : null}
+      {!button || showConfig || !link ? (
+        <CodeBlock title={file} code={command ?? NO_COMMAND_TEXT} copyDisabledReason={command ? null : NO_COMMAND_TEXT} onCopyCode={onCopy} wrap className="min-w-0" />
+      ) : null}
+      <p className="text-body-xs text-03">Needs Node.js 20 or later.</p>
       {root || !addLine ? null : (
         <div className="flex min-w-0 flex-col gap-1">
           <p className="text-body-xs text-03">Or let it also allow this URL for paid calls:</p>
@@ -222,6 +234,33 @@ function LocalInstall({ client, file, url, name, onCopy }: { client: Exclude<Mcp
           <CodeBlock title="Free only" code={installText(remote)} onCopyCode={onCopy} wrap className="min-w-0" />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** "What happens next" and the free example prompt (spec 9.2): nothing here asks for money. */
+function NextSteps({ client }: { client: McpClient }) {
+  const app = appName(client);
+  const restart = restartNote(client);
+  const hosted = client === "claude-ai" || client === "chatgpt";
+  return (
+    <div className="flex min-w-0 flex-col gap-2" data-testid="next-steps">
+      {hosted ? null : (
+        <>
+          <h3 className="text-label-sm text-01">What happens next</h3>
+          <ol className="flex list-decimal flex-col gap-1 pl-5 text-body-13 text-02">
+            <li>
+              Start {app}. In the tool list you&apos;ll see &quot;assay_sign_in&quot;. Ask {app} to &quot;sign in to Assay&quot;, approve in the browser, and Assay&apos;s tools appear.
+              {restart ? ` ${restart}` : null}
+            </li>
+            <li>Paid tools ask once to turn on paid calls. That takes a minute.</li>
+          </ol>
+        </>
+      )}
+      <p className="text-label-13 text-01">Try it, ask {app}:</p>
+      <p className="rounded-lg border border-01 bg-02 px-3 py-2 text-body-13 text-01" data-testid="free-example-prompt">
+        &quot;{FREE_EXAMPLE_PROMPT}&quot;
+      </p>
     </div>
   );
 }
