@@ -70,7 +70,7 @@ jobs:
           HAS_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
           missing=0
-          for name in NEXT_PUBLIC_BASE_URL NEXT_PUBLIC_API_BASE_URL NEXT_PUBLIC_PRIVY_APP_ID NEXT_PUBLIC_ASSAY_MCP_VERSION CLOUDFLARE_PAGES_PROJECT; do
+          for name in NEXT_PUBLIC_BASE_URL NEXT_PUBLIC_API_BASE_URL NEXT_PUBLIC_PRIVY_APP_ID NEXT_PUBLIC_ASSAY_MCP_VERSION NEXT_PUBLIC_MCP_URL CLOUDFLARE_PAGES_PROJECT; do
             if [ -z "${!name}" ]; then echo "::error::$name is not set in this environment (neither as a Variable nor as a Secret)"; missing=1; fi
           done
           [ "$HAS_TOKEN" = true ] || { echo "::error::Secret CLOUDFLARE_API_TOKEN is not set"; missing=1; }

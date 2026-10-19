@@ -42,6 +42,25 @@ if (!EXACT_VERSION.test(process.env.NEXT_PUBLIC_ASSAY_MCP_VERSION || "")) {
 }
 
 /**
+ * The MCP host every Connect snippet, connector URL and consent redirect is
+ * built from. The build fails without it: a placeholder URL must never be
+ * copyable, and the consent page only redirects to this origin. `https` is
+ * required except on loopback (a local stack).
+ */
+const mcpUrlProblem = (() => {
+  let url;
+  try {
+    url = new URL(process.env.NEXT_PUBLIC_MCP_URL || "");
+  } catch {
+    return "is not set or not a URL";
+  }
+  if (url.protocol === "https:") return null;
+  if (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return null;
+  return "must be https (http only on localhost)";
+})();
+if (mcpUrlProblem) throw new Error(`NEXT_PUBLIC_MCP_URL ${mcpUrlProblem}, e.g. https://mcp.assay.ai/`);
+
+/**
  * Security headers (frontend review 2026-10-15, F2).
  *
  * Enforced: no framing by any other origin (the signing pages could otherwise
