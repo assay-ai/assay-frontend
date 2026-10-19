@@ -22,8 +22,8 @@
 # a page that opened it cannot navigate or close it between approve and
 # continue, while popups the page opens itself (Privy, wallets) keep working;
 # it is set on
-# /connect/* only, once (Cloudflare Pages joins repeats by comma, which makes
-# the header invalid), and the build checks it is there.
+# /connect/* and /agents/enable-paid only, once each (Cloudflare Pages joins
+# repeats by comma, which makes the header invalid), and the build checks it.
 /connect/*
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
   X-Frame-Options: DENY
@@ -34,6 +34,7 @@
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
   X-Frame-Options: DENY
   Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
 
 # Content-hashed build assets never change under the same name.
 /_next/static/*

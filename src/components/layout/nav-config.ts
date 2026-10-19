@@ -161,6 +161,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/connect/preview": "MCP server",
   "/connect/authorize": "Connect an app",
   "/connect/authorize-error": "Connect an app",
+  "/agents/enable-paid": "Turn on paid calls",
   "/limits": "Spending limits",
   "/toolsets/mine": "Tool sets",
   "/explore": "Explore",
