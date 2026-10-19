@@ -105,6 +105,24 @@ describe("Use this tool: /connect?tools= preselects Only these tools", () => {
   });
 });
 
+describe("a refused install leaves nothing to copy (review N-1)", () => {
+  const copyButton = (html: string) => html.match(/<button[^>]*data-testid="connect-copy"[^>]*>/)?.[0] ?? "";
+
+  it("keeps Copy off when the MCP host is not a usable URL, so nothing is copied or recorded", () => {
+    vi.stubEnv("NEXT_PUBLIC_MCP_URL", "");
+    const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} /></Sheet>, [KEY]);
+    expect(html).not.toContain("npx -y @assay-ai/mcp@");
+    expect(copyButton(html)).toMatch(/disabled=""/);
+  });
+
+  it("turns Copy on once the install command is shown", () => {
+    vi.stubEnv("NEXT_PUBLIC_MCP_URL", "https://mcp.example.com/");
+    const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} /></Sheet>, [KEY]);
+    expect(text(html)).toContain("npx -y @assay-ai/mcp@1.2.3");
+    expect(copyButton(html)).not.toMatch(/disabled=""/);
+  });
+});
+
 describe("the config tabs", () => {
   it("disable Copy while the snippet holds a placeholder, and enable it with the full key", () => {
     const template = render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" client="other" />);
