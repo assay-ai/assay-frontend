@@ -11,7 +11,7 @@
  * API origin the pages call, and nothing more.
  *
  * It fails the build when a strict block, its policy or its pages are missing,
- * when `/connect/*` lacks `Cross-Origin-Opener-Policy: same-origin` (so a
+ * when `/connect/*` lacks `Cross-Origin-Opener-Policy: same-origin-allow-popups` (so a
  * cross-site opener cannot hold or close the consent window between approve
  * and continue), or when the line would pass Cloudflare Pages' 2,000-character
  * limit, rather than ship a page that cannot start, a consent window an opener
@@ -31,9 +31,14 @@ const MAX_LINE = 2000;
 /**
  * Headers each strict splat must carry, exactly once, in its own block. Not
  * repeated in the per-page blocks: Cloudflare Pages joins a repeated header
- * by comma, and "same-origin, same-origin" is not a valid opener policy.
+ * by comma, and a comma-joined value is not a valid opener policy.
  */
-const SPLAT_HEADERS = { "/connect/*": { "Cross-Origin-Opener-Policy": "same-origin" } };
+/*
+ * `same-origin-allow-popups`, not `same-origin`: either severs a cross-origin
+ * opener, and this one keeps the popups the page opens itself (Privy login,
+ * wallets) able to reach it.
+ */
+const SPLAT_HEADERS = { "/connect/*": { "Cross-Origin-Opener-Policy": "same-origin-allow-popups" } };
 
 /** Inline scripts: a `<script>` element with no `src`. */
 const INLINE_SCRIPT = /<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/gi;
