@@ -643,7 +643,7 @@ export function useSigner(options: { chainId: string | null; address?: string })
                   `{ address }` is not optional in spirit. Privy defaults to the
                   first wallet, which is the embedded one, and every EIP-712
                   request this platform makes is verified on chain against a
-                  specific address (`X402Escrow`'s `authNonce` is per buyer).
+                  specific address (`AssayEscrow`'s `authNonce` is per buyer).
                   Signing as the wrong wallet produces a signature that reverts
                   BadSignature after the user approved it.
                 */

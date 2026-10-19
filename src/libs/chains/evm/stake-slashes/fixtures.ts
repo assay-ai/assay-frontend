@@ -9,7 +9,7 @@ import type { RawLog } from "./scan";
  * the page does rather than a hand-shaped object.
  */
 
-export const CONTRACT: Address = getAddress("0x0af4d08f97b4fa8ba3e47cb025ae8cad509bc73c");
+export const CONTRACT: Address = getAddress("0x7242f853db478a28ae76ace808212d4b68aa73e7");
 export const PROVIDER: Address = getAddress("0xa271a3407d3302f4b4fbe469b9188487cedd7d45");
 export const OTHER_PROVIDER: Address = getAddress("0x1111111111111111111111111111111111111111");
 export const VERIFIER: Address = getAddress("0x18a508c9af1c6fc512015276f6ca2e9aabd74680");

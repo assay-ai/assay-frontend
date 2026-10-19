@@ -43,7 +43,7 @@ export function chainExecutableOf(clocks: SlashProposalClocks): string | null {
  * screen (`case-flow.ts`) and the backend's listing use:
  * `chainExecutableAt ?? earliestExecutionAt`.
  *
- * Once the record is on chain, `X402Stake.executeSlash` is open to ANY caller
+ * Once the record is on chain, `AssayStake.executeSlash` is open to ANY caller
  * from the record's `executableAt`; Assay's own later floor
  * (`earliestExecutionAt`) only binds Assay's executor, not anyone else. So the
  * chain date wins even when it is earlier, and a provider is never told they

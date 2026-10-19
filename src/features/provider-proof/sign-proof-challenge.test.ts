@@ -18,7 +18,7 @@ const TYPED = {
     name: "Assay Settlement",
     version: "2",
     chainId: "46630",
-    verifyingContract: "0x1D2625efD87c2fc10b8563f3F0890072845Fcf41",
+    verifyingContract: "0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f",
   },
   types: {
     PayoutProof: [
