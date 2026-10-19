@@ -59,9 +59,17 @@ export function useLimitsContext(options: { pollMs?: number | false } = {}) {
   const data = useAgentsAndKeys(options);
   const policy = data.policyQuery.data ?? null;
   const { chains } = useChains();
-  const bootstrapState = data.agentsQuery.isError
-    ? ({ kind: "unknown", reason: "your agents could not be read" } as const)
-    : policyBootstrapAsset(data.agentsQuery.data?.items as never, chains);
+  const agentsError = data.agentsQuery.isError;
+  const agentItems = data.agentsQuery.data?.items;
+  // Stable across re-renders (BUG-R2-01): a fresh object each render made
+  // anything keyed on it (the consent page's limits sheet) start over.
+  const bootstrapState = React.useMemo(
+    () =>
+      agentsError
+        ? ({ kind: "unknown", reason: "your agents could not be read" } as const)
+        : policyBootstrapAsset(agentItems as never, chains),
+    [agentsError, agentItems, chains],
+  );
   const bootstrap: BudgetBootstrap | null = bootstrapState.kind === "ready" ? bootstrapState : null;
   const editableFor = budgetAgentId(data.agents, policy, data.escrowQuery.data?.account);
 

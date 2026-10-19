@@ -3,7 +3,9 @@
 import * as React from "react";
 
 import { BudgetOnlySheet, useLimitsContext } from "@/components/buyer-money/agent-limits";
+import type { BudgetBootstrap } from "@/components/buyer-money/budget-fields";
 import { Button } from "@/components/ui/button";
+import type { SpendPolicy } from "@/services/limits.service";
 
 import type { SetLimitsSlotProps } from "./consent-card";
 
@@ -71,6 +73,23 @@ export function ConsentSetLimitsControl({
   );
 }
 
+/** What the consent page's limits sheet reads: the policy and its bootstrap asset. */
+const LimitsDataContext = React.createContext<{
+  policy: SpendPolicy | null;
+  bootstrap: BudgetBootstrap | null;
+}>({ policy: null, bootstrap: null });
+
+/**
+ * One component type for the life of the page (BUG-R2-01). A sheet type made
+ * per render (e.g. `useMemo` on a `bootstrap` that is a fresh object each
+ * render) remounts the sheet and drops what the person typed; the data comes
+ * from context instead, so a re-render or a re-fetch only updates props.
+ */
+function ConsentLimitsSheet(props: LimitsSheetProps) {
+  const { policy, bootstrap } = React.useContext(LimitsDataContext);
+  return <BudgetOnlySheet {...props} policy={policy} bootstrap={bootstrap} />;
+}
+
 /**
  * Offered only where the web app can edit the chosen agent's Assay-checked
  * limits today (`useLimitsContext().editableFor`, the same rule as the
@@ -79,15 +98,12 @@ export function ConsentSetLimitsControl({
  */
 export function ConsentSetLimits(slot: SetLimitsSlotProps) {
   const ctx = useLimitsContext({ pollMs: false });
-  const policy = ctx.policy;
-  const bootstrap = ctx.bootstrap;
-  const Sheet = React.useMemo(
-    () =>
-      function LimitsSheet(props: LimitsSheetProps) {
-        return <BudgetOnlySheet {...props} policy={policy} bootstrap={bootstrap} />;
-      },
-    [policy, bootstrap],
-  );
+  const { policy, bootstrap } = ctx;
+  const data = React.useMemo(() => ({ policy, bootstrap }), [policy, bootstrap]);
   if (ctx.editableFor !== slot.agentId || !bootstrap) return null;
-  return <ConsentSetLimitsControl slot={slot} Sheet={Sheet} />;
+  return (
+    <LimitsDataContext.Provider value={data}>
+      <ConsentSetLimitsControl slot={slot} Sheet={ConsentLimitsSheet} />
+    </LimitsDataContext.Provider>
+  );
 }
