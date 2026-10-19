@@ -147,12 +147,10 @@ describe("operator: provider tool review and takedown", () => {
     expect(answer.kind).toBe("queued");
   });
 
-  it("drafts a promotion and invites", async () => {
+  it("drafts a promotion with its invites", async () => {
     opPost.mockResolvedValue({ tool: { id: "s1", name: "search_posts" }, invites: [] });
     await opTools.draftPromotion({ sourceToolId: "t1", name: "search_posts", inviteToolIds: ["t2"] });
     expect(opPost).toHaveBeenCalledWith("/operator/promotions", { sourceToolId: "t1", name: "search_posts", inviteToolIds: ["t2"] });
-    await opTools.invitePromotion("s1", ["t3"]);
-    expect(opPost).toHaveBeenLastCalledWith("/operator/promotions/s1/invites", { toolIds: ["t3"] });
   });
 });
 

@@ -1348,7 +1348,6 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
   { method: "POST", match: "/operator/auth/logout", body: () => ({}) },
   { method: "GET", match: "/operator/health", body: () => health() },
   // The retired off-chain queue: empty, as it is once the objection process is gone.
-  { method: "GET", match: "/operator/queue", body: () => page([]) },
   { method: "GET", match: "/operator/cases", body: (_path, query) => caseList(query) },
   {
     method: "GET",

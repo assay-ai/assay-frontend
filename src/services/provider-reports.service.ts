@@ -4,12 +4,8 @@ import type {
   ProviderCallsExportQuery,
   ProviderEarnings,
   ProviderEarningsQuery,
-  ProviderQuality,
-  ProviderQualityQuery,
   ProviderReconciliation,
   ProviderReconciliationQuery,
-  ProviderTraffic,
-  ProviderTrafficQuery,
 } from "@/interfaces";
 
 import { ApiError } from "@/libs/ApiClient";
@@ -28,40 +24,6 @@ import { pickDisplayAsset, storedDisplayAsset } from "./display-asset";
  * wants every bucket in one response. `from` and `to` are required on all
  * four, ISO-8601, `from` inclusive and `to` exclusive.
  */
-
-/**
- * `GET /providers/me/traffic` — call volume bucketed by UTC calendar day.
- *
- * Every status is zero-filled in every bucket, so a series never gains or
- * loses a line mid-chart. Both latency fields are always `null` today: there
- * is no per-day latency source, and the rolling snapshot on the profile is a
- * different quantity.
- *
- * The traffic report also takes an optional `agentId` filter and the response's
- * `agentBreakdown` — see `ProviderTrafficQuery`/`ProviderAgentTraffic`. Both
- * ride the same request; there is no second endpoint.
- */
-export function getProviderTraffic(query: ProviderTrafficQuery): Promise<ProviderTraffic> {
-  return api.get<ProviderTraffic>(
-    "/providers/me/traffic",
-    query as unknown as Record<string, unknown>
-  );
-}
-
-/**
- * `GET /providers/me/quality`.
- *
- * `from`/`to` scope **only** `verdictMix` and `totalCalls`. The three rates
- * come off the registry snapshot and carry its own rolling window — 24h for
- * availability, 7d for quality. Labelling all five with one date range would
- * be wrong about three of them.
- */
-export function getProviderQuality(query: ProviderQualityQuery): Promise<ProviderQuality> {
-  return api.get<ProviderQuality>(
-    "/providers/me/quality",
-    query as unknown as Record<string, unknown>
-  );
-}
 
 /**
  * `GET /providers/me/earnings` — earned vs platform fee vs withheld, grouped

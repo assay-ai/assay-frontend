@@ -12,10 +12,8 @@ import {
   rowFromCase,
   rowMatches,
   STATUS_TABS,
-  statusOfStage,
   tabById,
   tabCounts,
-  uniqueRows,
   waitingText,
   type PenaltyRow,
 } from "./penalty-list";
@@ -99,23 +97,11 @@ describe("what a row says", () => {
     expect(penaltyChip(row({ status: "COMPENSATED" }), NOW)).toEqual({ status: "closed", detail: "paid back" });
   });
 
-  it("maps every case-screen stage to the list status the backend would give", () => {
-    expect(statusOfStage("disputed")).toBe("CHAIN_DISPUTED");
-    expect(statusOfStage("upheld")).toBe("PROPOSED");
-    expect(statusOfStage("executable")).toBe("PROPOSED");
-    expect(statusOfStage("compensated")).toBe("COMPENSATED");
-    expect(statusOfStage("cancel-requested")).toBe("CANCEL_REQUESTED");
-  });
-
   it("filters by provider or tool, case-insensitively", () => {
     expect(rowMatches(row({}), "north")).toBe(true);
     expect(rowMatches(row({}), "GEOCODE")).toBe(true);
     expect(rowMatches(row({}), "tidewater")).toBe(false);
     expect(rowMatches(row({}), "  ")).toBe(true);
-  });
-
-  it("keeps the first of a penalty seen twice", () => {
-    expect(uniqueRows([row({ status: "CHAIN_DISPUTED" }), row({ status: "PROPOSED" })]).map((r) => r.status)).toEqual(["CHAIN_DISPUTED"]);
   });
 
   it("names who a waiting request needs", () => {
@@ -133,9 +119,8 @@ describe("what a row says", () => {
   });
 
   it("opens on Needs ruling for who can rule, on All for everyone else", () => {
-    expect(defaultTab(true, false)).toBe("needs-ruling");
-    expect(defaultTab(false, false)).toBe("all");
-    expect(defaultTab(false, true)).toBe("needs-ruling");
+    expect(defaultTab(true)).toBe("needs-ruling");
+    expect(defaultTab(false)).toBe("all");
   });
 
   it("rounds time left up, in whole units", () => {

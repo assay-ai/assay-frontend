@@ -1,5 +1,4 @@
 import type {
-  BindingSla,
   CursorPage,
   ListSlaWindowsQuery,
   SlaWindow,
@@ -53,15 +52,4 @@ export function getSlaWindowEvidence(windowId: string): Promise<SlaWindowEvidenc
   return api.get<SlaWindowEvidence>(
     `/providers/me/sla-windows/${encodeURIComponent(windowId)}/evidence`
   );
-}
-
-/**
- * `GET /providers/me/bindings/{bindingId}/sla` — the SLA workbench:
- * The measured rate (aggregated over every CLOSED window for this binding)
- * with its own Wilson 99% interval, the in-flight window if one is open, the
- * effective threshold evaluated at the volume actually measured, and the
- * cross-organization peer distribution on this binding's tool.
- */
-export function getBindingSla(bindingId: string): Promise<BindingSla> {
-  return api.get<BindingSla>(`/providers/me/bindings/${encodeURIComponent(bindingId)}/sla`);
 }

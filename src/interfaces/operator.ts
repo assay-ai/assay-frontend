@@ -7,10 +7,10 @@
  *
  * The brief's `case`, `timeline` and `restoration` are the SAME shapes the
  * provider console already renders, so they are imported rather than
- * redeclared. What is genuinely operator-only is the queue row, the identity,
+ * redeclared. What is genuinely operator-only is the identity,
  * the health tiles, the dispute record and the action bodies.
  */
-import type { ListQuery, Money } from "./api";
+import type { Money } from "./api";
 import type { SlashProposalEvent, SlashRestorationRow } from "./provider-disputes";
 import type { SlashProposalCaseDetail } from "./provider-slash-cases";
 
@@ -234,41 +234,6 @@ export type ArbitrationOutcome =
   | "OVERTURNED_GRIEFING"
   | "OVERTURNED_INSUFFICIENT_EVIDENCE";
 
-/** assay-backend `src/modules/slash/domain/arbitration.ts` `DisputeClaimType`. */
-export type OperatorDisputeClaimType =
-  | "PLATFORM_MAPPING_CHANGE" | "AGENT_GRIEFING" | "POLICY_DEFECT"
-  | "INSUFFICIENT_SAMPLE" | "UPSTREAM_INDUCED" | "DECLARED_INCIDENT" | "OTHER";
-
-/**
- * One row of `GET /operator/queue`.
- *
- * Ordered by time-to-deadline then penalty size, **not** FIFO, and fixed
- * server-side so a caller cannot ask for insertion order.
- */
-export interface AdjudicationQueueRow {
-  proposalId: string;
-  /** e.g. `w_4471 · bnd_7QK`. */
-  caseLabel: string;
-  disputeId: string | null;
-  providerId: string;
-  providerName: string;
-  penaltyAmount: Money;
-  claimType: OperatorDisputeClaimType | null;
-  status: SlashProposalStatus;
-  /** Our deadline. ISO-8601. */
-  dueAt: string | null;
-  secondsToDeadline: number | null;
-  /** True once our deadline has passed — the sweeper overturns these against us. */
-  overdue: boolean;
-  /** The named owner. Null is rendered in red on purpose. */
-  ownerSubject: string | null;
-  rootCauseKey: string | null;
-  /** How many open cases share this root cause, including this one. 1 when ungrouped. */
-  rootCauseGroupSize: number;
-  /** Other bindings on the same tool whose failure rate moved in the same period. */
-  coFailureCount: number;
-}
-
 /**
  * Where a penalty stands, as `GET /operator/cases` groups it: the case status
  * and the mirrored on-chain status read in the case screen's precedence.
@@ -314,13 +279,6 @@ export interface ListOperatorCasesQuery {
   cursor?: string;
   /** 1 to 100. */
   limit?: number;
-}
-
-export interface ListQueueQuery extends ListQuery {
-  mine?: boolean;
-  unassigned?: boolean;
-  overdue?: boolean;
-  rootCauseKey?: string;
 }
 
 /**
@@ -458,40 +416,12 @@ export interface ManualCaseActionResult {
   alreadyDone?: boolean;
 }
 
-/** `POST /operator/cases/:id/decide`. */
-export interface DecideCaseBody {
-  outcome: ArbitrationOutcome;
-  /** All must be valid for the chosen outcome — the API 422s otherwise. */
-  reasonCodes: string[];
-  /** At least 120 characters. Enforced by the DTO and again by a CHECK constraint. */
-  note: string;
-  rootCauseKey?: string;
-  ticketRef?: string;
-  /** Only for `UPHELD_RECALCULATED`: minor units, and never above the original. */
-  recalculatedAmount?: string;
-}
-
-/** `POST /operator/cases/:id/second`. Note is at least 20 characters. */
-export interface SecondSignatureBody {
-  kind: "SIGNED" | "OBJECTED";
-  note: string;
-}
-
 /** `POST /operator/cases/:id/suspend`. */
 export interface SuspendProposalBody {
   /** At least 20 characters. */
   note: string;
   reasonCode: string;
   ticketRef?: string;
-}
-
-/** `POST /operator/cases/:id/extend-deadline`. */
-export interface ExtendDeadlineBody {
-  /** 1 to 336. */
-  additionalHours: number;
-  /** At least 20 characters. */
-  note: string;
-  reasonCode: string;
 }
 
 /** `POST /operator/cases/:id/sweep`. Two-person. */
