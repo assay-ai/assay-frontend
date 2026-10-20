@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -239,6 +239,49 @@ describe("useOverview on GET /overview", () => {
     api.overview.mockRejectedValue(new TypeError("boom"));
     mount();
     await waitFor(() => expect(state?.error?.code).toBe("UNKNOWN"));
+  });
+
+  it("reads Needs attention afresh after a sign-in as someone else, not capped by the last user's pages", async () => {
+    // The first user's list ends on its first page, so their refreshes read one page.
+    api.overview.mockResolvedValue(wire());
+    const { client } = mount();
+    await waitFor(() => expect(state?.data).toBeTruthy());
+    // The next user's first page is not enough: their first load reads on.
+    api.overview.mockResolvedValue(wire({ notifications: page([alert("x")], "c-2") }));
+    api.notifications.mockResolvedValue(page([alert("y")]));
+    await act(async () => {
+      await client.resetQueries();
+    });
+    await waitFor(() => expect(state?.data?.notifications.map((n) => n.id)).toEqual(["x", "y"]));
+    expect(api.notifications).toHaveBeenCalledTimes(1);
+  });
+
+  it("caps a refresh at the pages the last load needed", async () => {
+    api.overview.mockResolvedValue(wire());
+    const { client } = mount();
+    await waitFor(() => expect(state?.data).toBeTruthy());
+    api.overview.mockResolvedValue(wire({ notifications: page([alert("x")], "c-2") }));
+    await act(async () => {
+      await client.refetchQueries();
+    });
+    await waitFor(() => expect(state?.data?.notifications.map((n) => n.id)).toEqual(["x"]));
+    expect(api.notifications).not.toHaveBeenCalled();
+  });
+
+  it("refetches when the tab comes back after the figures went stale", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    api.overview.mockResolvedValue(wire());
+    mount();
+    await waitFor(() => expect(api.overview).toHaveBeenCalledTimes(1));
+    // Hidden: the 30-second refresh does not run.
+    focusManager.setFocused(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(OVERVIEW_REFRESH_MS + 1_000);
+    });
+    expect(api.overview).toHaveBeenCalledTimes(1);
+    act(() => focusManager.setFocused(true));
+    await waitFor(() => expect(api.overview).toHaveBeenCalledTimes(2));
+    focusManager.setFocused(undefined);
   });
 
   it("starts empty after a sign-in as someone else: the cache reset drops the last user's overview", async () => {

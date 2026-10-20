@@ -20,6 +20,7 @@ import {
 } from "@/features/delegation/unsettled";
 import { applyLimitsSubmitted } from "@/features/escrow/after-set-limits";
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
+import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { servesPaidCalls } from "@/libs/chains/paid-rails";
 import { firstDepositOpensEscrow } from "@/libs/chains/registry";
@@ -383,6 +384,8 @@ export function agentPaySteps(input: AgentPayStepsInput): WalletStep[] {
         );
         void queryClient.invalidateQueries({ queryKey: ["escrow-delegates"] });
         void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+        // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
+        void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
         return { explorerUrl: money.chain ? explorerTxUrl(money.chain, relayed.transactionHash) : undefined };
       },
     },

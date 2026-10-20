@@ -12,6 +12,8 @@ vi.mock("@/services/escrow.service", () => ({
 
 import { getEscrow, revalidateEscrow } from "@/services/escrow.service";
 
+import { ME_STATUS_KEY } from "@/features/me-status/keys";
+
 import { applyLimitsSubmitted, escrowQueryKey, readEscrow, stopLimitsRereads } from "./after-set-limits";
 import { LIMITS_LANDING_POLL_MS, LIMITS_LANDING_TIMEOUT_MS } from "./limits-form";
 
@@ -71,6 +73,12 @@ describe("applyLimitsSubmitted", () => {
     expect(queryClient.getQueryState(escrowQueryKey(CHAIN))?.isInvalidated).toBe(false);
     expect(revalidateEscrow).not.toHaveBeenCalled();
     expect(getEscrow).not.toHaveBeenCalled();
+  });
+
+  it("marks the debts stale with the other escrow reads (they are on GET /me/status now)", async () => {
+    queryClient.setQueryData(ME_STATUS_KEY, { blockStatus: null, unreadCount: null, debts: null });
+    await applyLimitsSubmitted(queryClient, CHAIN, signed, after);
+    expect(queryClient.getQueryState(ME_STATUS_KEY)?.isInvalidated).toBe(true);
   });
 
   it("re-reads past the HTTP cache when the relayer's read is behind", async () => {

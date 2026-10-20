@@ -16,6 +16,7 @@ import { depositChoiceFor } from "@/features/funding/deposit-chain";
 import { depositWalletView, useDepositWallet } from "@/features/funding/deposit-wallet";
 import { depositUnavailableOn, depositableChains, offeredChains } from "@/features/funding/depositable-chains";
 import { chainBalances } from "@/features/g30/balance";
+import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import { usePendingTransactions } from "@/hooks/usePendingTransactions";
 import { useSigner } from "@/hooks/useSigner";
 import { demoEnabled } from "@/libs/demo/demo-api";
@@ -235,6 +236,8 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
         void queryClient.invalidateQueries({ queryKey: ["balances"] });
         void queryClient.invalidateQueries({ queryKey: ["deposits"] });
         void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+        // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
+        void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
       }}
       doneAction={
         needsCaps && onSetCaps

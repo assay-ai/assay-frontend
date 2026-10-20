@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 import type { BuyerEscrow, EscrowLimitsBody } from "@/interfaces";
+import { ME_STATUS_KEY } from "@/features/me-status/keys";
 import { getEscrow, revalidateEscrow } from "@/services/escrow.service";
 
 import { limitsLanded, limitsLandingInterval } from "./limits-form";
@@ -53,6 +54,7 @@ export async function applyLimitsSubmitted(
 ): Promise<void> {
   const key = escrowQueryKey(chainId);
   void queryClient.invalidateQueries({ queryKey: ["escrow"], refetchType: "none" });
+  void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY, refetchType: "none" });
   if (relayedEscrow && limitsLanded(relayedEscrow, signed)) {
     queryClient.setQueryData(key, relayedEscrow);
     refreshOtherEscrowReads(queryClient, key);
@@ -110,4 +112,6 @@ function refreshOtherEscrowReads(queryClient: QueryClient, seeded: ReturnType<ty
     queryKey: ["escrow"],
     predicate: (query) => !(query.queryKey.length === seeded.length && query.queryKey.every((part, i) => part === seeded[i])),
   });
+  // The debts ride on `GET /me/status` now; they refreshed with the other escrow reads before.
+  void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
 }
