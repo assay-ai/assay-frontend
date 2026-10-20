@@ -125,3 +125,27 @@ describe("consent page", () => {
     expect(screen.getByText("Assay could not send you back to the app. Go back to your app and try again.")).toBeTruthy();
   });
 });
+
+describe("consent page: a second sign-in in the same tab", () => {
+  it("reads the new #request on hashchange and shows and decides that request", async () => {
+    const SECOND = "C".repeat(43);
+    service.getOAuthRequest.mockImplementation(async (rid: string) =>
+      rid === RID ? REQUEST : { ...REQUEST, client: { ...REQUEST.client, name: "Cursor" }, suggestedName: "Cursor · 2026-10-19" },
+    );
+    service.approveOAuthRequest.mockResolvedValue({ redirectTo: `https://mcp.example.com/oauth/authorize/continue?request=${SECOND}` });
+    mount();
+    await screen.findByText("Claude Code ✓ Verified");
+
+    window.history.replaceState(null, "", `/connect/authorize#request=${SECOND}`);
+    act(() => {
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    await screen.findByText("Cursor ✓ Verified");
+    expect(service.getOAuthRequest).toHaveBeenLastCalledWith(SECOND);
+    expect(window.location.href).not.toContain(SECOND);
+    expect(window.sessionStorage.getItem(RID_STORAGE_KEY)).toBe(SECOND);
+
+    await armAndApprove();
+    expect(service.approveOAuthRequest).toHaveBeenCalledWith(SECOND, { agentId: "agt-1", name: "Cursor · 2026-10-19" });
+  });
+});

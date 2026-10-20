@@ -34,10 +34,21 @@ export default function ConsentPage() {
   const { ready, authenticated, user, logout } = usePrivy();
   // undefined: not read yet (before mount); null: there is none.
   const [rid, setRid] = React.useState<string | null | undefined>(undefined);
+  // Bumped when a new fragment lands in this tab: a fresh read of the request
+  // and a fresh card, without putting the id itself in the query key.
+  const [generation, setGeneration] = React.useState(0);
   const [now, setNow] = React.useState(() => new Date());
 
   React.useEffect(() => {
     setRid(takeRequestId());
+    // A second sign-in opened in this tab changes only the fragment: read the
+    // id again so the page never shows or decides the first request.
+    const onHashChange = () => {
+      setRid(takeRequestId());
+      setGeneration((g) => g + 1);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
   React.useEffect(() => {
@@ -58,8 +69,8 @@ export default function ConsentPage() {
   }, [signedOut, rid]);
 
   const query = useQuery({
-    // The id is deliberately not in the key.
-    queryKey: ["oauth", "consent-request"],
+    // The id is deliberately not in the key; the generation is.
+    queryKey: ["oauth", "consent-request", generation],
     enabled: Boolean(rid) && ready && authenticated,
     queryFn: () => getOAuthRequest(rid!),
     retry: false,
@@ -106,6 +117,7 @@ export default function ConsentPage() {
   } else if (rid !== undefined && ready && !signedOut && query.data) {
     body = (
       <ConsentCard
+        key={generation}
         request={query.data}
         now={now}
         signedInAs={signedInAs}
