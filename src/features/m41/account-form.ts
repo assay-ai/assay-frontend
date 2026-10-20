@@ -20,3 +20,15 @@ export function accountDiffers(form: AccountForm, saved: AccountForm | null): bo
     (key) => form[key].trim() !== saved[key].trim()
   );
 }
+
+/** Whether this runtime knows `value` as a time zone ("Europe/Oslo", "UTC"); "Mars/Base" is refused. */
+export function isTimezone(value: string): boolean {
+  const zone = value.trim();
+  if (zone === "") return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
