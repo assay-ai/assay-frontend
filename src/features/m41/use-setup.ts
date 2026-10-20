@@ -25,7 +25,7 @@ import {
   updateProviderRegistration,
 } from "@/services";
 
-import { accountDiffers, type AccountForm } from "./account-form";
+import { accountDiffers, isTimezone, type AccountForm } from "./account-form";
 import { justProvedAccountId, payoutStepIsDone, provedChainIsNew } from "./payout-accounts";
 import { resolveTerms } from "./terms";
 
@@ -211,7 +211,7 @@ export function useProviderSetup() {
   )
     accountErrors.ownerEmail =
       "The technical and owner contacts must be different people — this is the same inbox.";
-  if (account.timezone.trim() === "")
+  if (!isTimezone(account.timezone))
     accountErrors.timezone = "Enter an IANA zone name, e.g. Europe/Oslo.";
 
   const accountComplete = Object.keys(accountErrors).length === 0;

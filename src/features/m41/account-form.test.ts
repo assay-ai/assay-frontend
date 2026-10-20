@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { accountDiffers, type AccountForm } from "./account-form";
+import { accountDiffers, isTimezone, type AccountForm } from "./account-form";
 
 const saved: AccountForm = {
   legalName: "Open Meteo",
@@ -22,5 +22,15 @@ describe("accountDiffers (BUG-R2-V1-01)", () => {
 
   it("is dirty before any registration exists", () => {
     expect(accountDiffers(saved, null)).toBe(true);
+  });
+});
+
+describe("isTimezone: the IANA check the error text asks for", () => {
+  it("accepts real zones and refuses made-up ones and blanks", () => {
+    expect(isTimezone("Europe/Oslo")).toBe(true);
+    expect(isTimezone(" UTC ")).toBe(true);
+    expect(isTimezone("Mars/Base")).toBe(false);
+    expect(isTimezone("hello")).toBe(false);
+    expect(isTimezone("  ")).toBe(false);
   });
 });
