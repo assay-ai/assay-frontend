@@ -21,7 +21,7 @@ import { demoEnabled } from "@/libs/demo/demo-api";
  * The values are the ones in the EVM deployment record; the
  * token is the USDG the 46630 faucet mints.
  */
-const ROBINHOOD_TESTNET: Chain = {
+export const ROBINHOOD_TESTNET: Chain = {
   chainId: "eip155:46630",
   namespace: "eip155",
   displayName: "Robinhood Chain testnet",

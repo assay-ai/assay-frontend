@@ -13,6 +13,7 @@ import { demoEnabled } from "@/libs/demo/demo-api";
 import { demoCallsCsv } from "@/libs/demo/fixtures-provider-calls";
 
 import { api } from "./api";
+import { sharedRead } from "./shared-reads";
 import { getChains } from "./chains.service";
 import { pickDisplayAsset, storedDisplayAsset } from "./display-asset";
 
@@ -49,7 +50,7 @@ export async function getProviderEarnings(query: ProviderEarningsQuery): Promise
     // with an error page.
     const multiple = error instanceof ApiError && error.code === "PROVIDER_MULTIPLE_ASSETS";
     if (!multiple || asset) throw error;
-    const { chains } = await getChains();
+    const { chains } = await sharedRead(["chains"], getChains, 60_000);
     const fallback = pickDisplayAsset(
       chains.map((chain) => chain.settlementAsset),
       storedDisplayAsset()
@@ -79,7 +80,7 @@ export function providerEarningAssets(): Promise<string[]> {
 }
 
 async function lookUpEarningAssets(now: Date): Promise<string[]> {
-  const { chains } = await getChains();
+  const { chains } = await sharedRead(["chains"], getChains, 60_000);
   const candidates = [...new Set(chains.map((chain) => chain.settlementAsset))];
   if (candidates.length < 2) return [];
   const window = {

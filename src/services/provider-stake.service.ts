@@ -28,16 +28,6 @@ export function getProviderStake(): Promise<ProviderStake> {
 }
 
 /**
- * `GET /providers/me/stake` for the read right after a write that moves the
- * requirement (a publish). A plain GET, for the reason `revalidateEscrow`
- * gives: the route is served `private, no-cache`, so the browser revalidates
- * it and never answers with the pre-write body.
- */
-export function revalidateProviderStake(): Promise<ProviderStake> {
-  return api.get<ProviderStake>("/providers/me/stake");
-}
-
-/**
  * `POST /providers/me/stake/open-stake-intent` — open the on-chain stake
  * account. Takes no body: the instruction carries no amount and moves no
  * tokens.

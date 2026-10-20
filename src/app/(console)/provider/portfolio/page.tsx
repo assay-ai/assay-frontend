@@ -29,11 +29,10 @@ import type {
 } from "@/interfaces";
 import { getProviderEarnings } from "@/services/provider-reports.service";
 import { requirementChain } from "@/features/provider-stake/chain-stake";
-import { getProviderStake } from "@/services/provider-stake.service";
-import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { formatMoney } from "@/utils/money";
 
 import { wholePercents } from "./_lib/shares";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * Binding portfolio.
@@ -149,15 +148,9 @@ export default function ProviderPortfolioPage() {
     under the same key on purpose: it is the same request, and sharing the key
     means opening this screen costs no second round trip.
   */
-  const bindings = useQuery({
-    queryKey: ["provider", "tool-bindings", "sidebar"],
-    queryFn: () => listToolBindings({ limit: 50 }),
-  });
+  const bindings = useQuery(providerQueries.bindings());
 
-  const stake = useQuery({
-    queryKey: ["provider", "stake"],
-    queryFn: getProviderStake,
-  });
+  const stake = useQuery(providerQueries.stake());
 
   const earnings = useQuery({
     queryKey: ["provider", "earnings", "tool", window30d.from, window30d.to],

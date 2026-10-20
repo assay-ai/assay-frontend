@@ -5,9 +5,9 @@ import Link from "next/link";
 
 import { Banner } from "@/components/ui/banner";
 import { routes } from "@/libs/routes";
-import { getProviderMe } from "@/services/provider-profile.service";
 
 import { HOLD_RESUMES, HOLD_WHAT_TO_DO, slashHoldBanner } from "./model";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * The slash-hold banner, mounted once in the provider console shell.
@@ -18,9 +18,7 @@ import { HOLD_RESUMES, HOLD_WHAT_TO_DO, slashHoldBanner } from "./model";
  */
 export function SlashHoldBanner({ wrapperClassName }: { wrapperClassName?: string }) {
   const me = useQuery({
-    queryKey: ["provider", "me"],
-    queryFn: getProviderMe,
-    retry: 0,
+    ...providerQueries.me(),
     // A hold starts and lifts on the chain's schedule, so re-read it; not after a refusal (an unregistered org).
     refetchInterval: (query) => (query.state.error ? false : 60_000),
   });

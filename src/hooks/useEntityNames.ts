@@ -4,9 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
 import { shortId } from "@/components/patterns/copy-chip";
-import { listAgents, listCredentials } from "@/services/account.service";
 import { listCatalogueProviders } from "@/services/catalogue.service";
 import { listTools } from "@/services/tools.service";
+import { AGENTS_WITH_KEYS_KEY, readAgentsWithKeys, useAgentList } from "@/features/agents/agent-list";
+import type { AgentsWithKeysPage } from "@/components/buyer-money/use-agents";
 
 /**
  * Ids → the names people recognise, for tools, providers, agents and agent
@@ -81,6 +82,10 @@ export interface UseEntityNamesResult {
   index: EntityIndex;
 }
 
+function credentialNamesByAgent(page: AgentsWithKeysPage): Record<string, { id: string; name?: string | null }[]> {
+  return Object.fromEntries(page.items.map((agent) => [agent.agentId, agent.credentials.items]));
+}
+
 export function useEntityNames(options: { kinds?: readonly EntityKind[] } = {}): UseEntityNamesResult {
   const kinds = options.kinds ?? ALL_KINDS;
   const wants = (kind: EntityKind) => kinds.includes(kind);
@@ -100,28 +105,14 @@ export function useEntityNames(options: { kinds?: readonly EntityKind[] } = {}):
     retry: false,
     staleTime: 60_000,
   });
-  const agents = useQuery({
-    queryKey: ["agents"],
-    queryFn: () => listAgents({ limit: 50 }),
-    enabled: wantsAgents,
-    retry: false,
-  });
-  const agentIds = React.useMemo(() => (agents.data?.items ?? []).map((agent) => agent.agentId), [agents.data]);
+  const agents = useAgentList({ enabled: wantsAgents });
+  // Key names: the keys every agent row already carries (`GET /agents?include=`), not one read per agent.
   const credentials = useQuery({
-    queryKey: ["entity-names", "credentials", agentIds],
-    enabled: wants("credential") && agentIds.length > 0,
+    queryKey: AGENTS_WITH_KEYS_KEY,
+    queryFn: readAgentsWithKeys,
+    enabled: wants("credential"),
     retry: false,
-    staleTime: 60_000,
-    queryFn: async () => {
-      const pages = await Promise.all(
-        agentIds.map((id) =>
-          (listCredentials(id, { limit: 50 }) as Promise<{ items: { id: string; name?: string | null }[] }>).catch(
-            () => ({ items: [] }),
-          ),
-        ),
-      );
-      return Object.fromEntries(agentIds.map((id, i) => [id, pages[i]!.items]));
-    },
+    select: credentialNamesByAgent,
   });
 
   const index = React.useMemo(
@@ -145,7 +136,7 @@ export function useEntityNames(options: { kinds?: readonly EntityKind[] } = {}):
     (wants("tool") && tools.isPending) ||
     (wants("provider") && providers.isPending) ||
     (wantsAgents && agents.isPending) ||
-    (wants("credential") && agentIds.length > 0 && credentials.isPending);
+    (wants("credential") && credentials.isPending);
 
   return { name, lookup, isPending, index };
 }

@@ -372,7 +372,7 @@ export function AgentsView() {
       )}
 
       {payerAccount ? (
-        <PayerDelegationsPanel account={payerAccount} bindings={bindings} version={0} onChanged={refresh} onlyUnbound />
+        <PayerDelegationsPanel account={payerAccount} bindings={bindings} onChanged={refresh} onlyUnbound />
       ) : null}
 
       <CreateKeySheet

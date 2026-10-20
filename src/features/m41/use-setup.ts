@@ -1,6 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { useAgentList } from "@/features/agents/agent-list";
 import * as React from "react";
 
 import { useChains } from "@/hooks/useChains";
@@ -18,8 +20,6 @@ import {
   checkProviderConnectivity,
   createPayoutAddressChallenge,
   declareProviderEndpoint,
-  getProviderRegistration,
-  listAgents,
   provePayoutAddress,
   registerProvider,
   updateProviderRegistration,
@@ -28,6 +28,7 @@ import {
 import { accountDiffers, isTimezone, type AccountForm } from "./account-form";
 import { justProvedAccountId, payoutStepIsDone, provedChainIsNew } from "./payout-accounts";
 import { resolveTerms } from "./terms";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * The state behind provider setup (`pM65r`, `/provider/setup`).
@@ -118,12 +119,7 @@ export function useProviderSetup() {
     `networkMode: "always"` so an API that is down fails instead of parking in
     `fetchStatus: "paused"` behind a spinner that never resolves.
   */
-  const registrationQuery = useQuery<ProviderRegistrationState, ApiError>({
-    queryKey: ["provider", "registration"],
-    queryFn: getProviderRegistration,
-    retry: 0,
-    networkMode: "always" as const,
-  });
+  const registrationQuery = useQuery(providerQueries.registration());
 
   const notFound = registrationQuery.error?.code === "PROVIDER_NOT_FOUND";
   const state = registrationQuery.data;
@@ -139,12 +135,8 @@ export function useProviderSetup() {
     this organisation already pays on); otherwise the first served chain of
     that family, from `GET /chains`.
   */
-  const agentsQuery = useQuery({
-    queryKey: ["agents", "chain-id"],
-    queryFn: () => listAgents({ limit: 1 }),
-    retry: 0,
-    networkMode: "always" as const,
-  });
+  // The first agent of the shared list (`GET /agents`), not a one-row read of its own.
+  const agentsQuery = useAgentList();
   const chains = useChains();
   const first = agentsQuery.data?.items?.[0];
   const agentChainId = typeof first?.chainId === "string" ? first.chainId : null;

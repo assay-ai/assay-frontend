@@ -7,6 +7,8 @@ import * as React from "react";
 import { DepositSheet } from "@/components/buyer-money/deposit-sheet";
 import { enablePaidSteps } from "@/components/buyer-money/let-agent-pay-sheet";
 import { useBuyerMoney, useWalletBlocker } from "@/components/buyer-money/use-buyer-money";
+import { useDelegatesQuery } from "@/components/buyer-money/use-delegates";
+import { escrowKeys } from "@/features/escrow/query-keys";
 import { EnablePaidView } from "@/components/delegation/enable-paid-view";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { capsToForm } from "@/features/buyer-money/caps";
@@ -34,7 +36,6 @@ import { servesPaidCalls } from "@/libs/chains/paid-rails";
 import { firstDepositOpensEscrow } from "@/libs/chains/registry";
 import { loginHref } from "@/libs/login-redirect";
 import { listAgents, listCredentials, type Agent } from "@/services/account.service";
-import { listDelegates } from "@/services/delegation.service";
 import { addressOfAccount } from "@/utils/chain";
 import { formatMoney } from "@/utils/money";
 
@@ -105,7 +106,7 @@ export default function EnablePaidPage() {
     const onHashChange = () => {
       setFragmentKey(takePaymentKey(credentialId));
       void queryClient.invalidateQueries({ queryKey: ["agents", "enable-paid"] });
-      void queryClient.invalidateQueries({ queryKey: ["escrow-delegates", "live"] });
+      void queryClient.invalidateQueries({ queryKey: escrowKeys.delegates });
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
@@ -129,12 +130,7 @@ export default function EnablePaidPage() {
     queryFn: readAgentsAndKeys,
   });
   const agents = React.useMemo(() => keysQuery.data?.agents ?? [], [keysQuery.data]);
-  const delegatesQuery = useQuery({
-    queryKey: ["escrow-delegates", "live"],
-    enabled: signedIn,
-    retry: false,
-    queryFn: () => listDelegates(Date.now()),
-  });
+  const delegatesQuery = useDelegatesQuery({ enabled: signedIn });
   const money = useBuyerMoney();
   const blocked = useAccountReadOnly();
   const walletBlocker = useWalletBlocker(money.signerState, money.ownerShort);

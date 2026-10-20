@@ -8,7 +8,7 @@ import type {
 } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { demoEnabled } from "@/libs/demo/demo-api";
-import { revalidateProviderStake } from "@/services/provider-stake.service";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * What a successful publish has to do to the cache, in one place.
@@ -58,7 +58,7 @@ export async function applyPublished(
     refetchType: "none",
   });
   await queryClient
-    .fetchQuery({ queryKey: ["provider", "stake"], queryFn: revalidateProviderStake, staleTime: 0 })
+    .fetchQuery({ ...providerQueries.stake(), staleTime: 0 })
     .catch(() => undefined);
 }
 

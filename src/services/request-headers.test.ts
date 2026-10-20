@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { api } from "./api";
 import { revalidateEscrow } from "./escrow.service";
 import { operatorApi } from "./operator-api";
-import { revalidateProviderStake } from "./provider-stake.service";
+import { getProviderStake } from "./provider-stake.service";
 
 /**
  * The API answers every authenticated GET `private, no-cache` (BUG-SYS-01), so
@@ -38,7 +38,7 @@ describe("request headers", () => {
     api.raw().defaults.adapter = adapter;
 
     await revalidateEscrow(null);
-    await revalidateProviderStake();
+    await getProviderStake();
 
     expect(headers).toHaveLength(2);
     for (const sent of headers) expect(cacheControl(sent)).toEqual([]);

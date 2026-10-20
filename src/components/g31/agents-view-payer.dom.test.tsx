@@ -109,7 +109,7 @@ function renderView(liveValidUntil?: string) {
       grantRow("g-old", "Assay app on the old laptop", OLD_KEY, { revokedAt: "2026-10-18T00:00:00Z" }),
     ],
   }));
-  client.setQueryData(["escrow-delegates", "live"], {
+  client.setQueryData(["escrow-delegates"], {
     account: OWNER_ACCOUNT,
     delegates: [onChain(LIVE_KEY, liveValidUntil), onChain(OLD_KEY)],
     tightenDelaySeconds: 3600,

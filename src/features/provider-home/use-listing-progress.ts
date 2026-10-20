@@ -3,29 +3,22 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { ApiError } from "@/libs/ApiClient";
-import { getProviderRegistration } from "@/services/provider-registration.service";
-import { getPublishCheck, listToolBindings } from "@/services/provider-tool-bindings.service";
+import { getPublishCheck } from "@/services/provider-tool-bindings.service";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 
 import { listingProgress, type ListingProgress } from "./progress";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /** Same keys as the shell rail and the setup page, so this costs no extra request there. */
 export const PROVIDER_REGISTRATION_KEY = ["provider", "registration"] as const;
 export const PROVIDER_BINDINGS_KEY = ["provider", "tool-bindings", "sidebar"] as const;
 
 export function useProviderRegistration() {
-  return useQuery({
-    queryKey: PROVIDER_REGISTRATION_KEY,
-    queryFn: getProviderRegistration,
-    retry: false,
-  });
+  return useQuery(providerQueries.registration());
 }
 
 export function useProviderBindings() {
-  return useQuery({
-    queryKey: PROVIDER_BINDINGS_KEY,
-    queryFn: () => listToolBindings({ limit: 50 }),
-  });
+  return useQuery(providerQueries.bindings());
 }
 
 /** The "Get listed" progress for Home and the header pill. */

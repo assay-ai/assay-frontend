@@ -32,16 +32,15 @@ import type {
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
-import { getProviderRegistration } from "@/services/provider-registration.service";
 import {
   createToolBinding,
   getPublishCheck,
-  listToolBindings,
   publishToolBinding,
   updateToolBinding,
 } from "@/services/provider-tool-bindings.service";
 import { chainIdOfAsset } from "@/utils/chain";
 import { toast } from "@/utils/toast";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * List a tool — one wizard, one URL, three stages:
@@ -98,16 +97,8 @@ function WizardContent() {
   const back = backParam && /^\/provider\/apis\/view\?id=[^&]+(&step=[a-z]+)?$/.test(backParam) ? backParam : null;
 
   const catalogue = useProviderCatalogue();
-  const existing = useQuery({
-    queryKey: ["provider", "tool-bindings", "sidebar"],
-    queryFn: () => listToolBindings({ limit: 50 }),
-    retry: 0,
-  });
-  const registration = useQuery({
-    queryKey: ["provider", "registration"],
-    queryFn: getProviderRegistration,
-    retry: 0,
-  });
+  const existing = useQuery(providerQueries.bindings());
+  const registration = useQuery(providerQueries.registration());
   const bindingQuery = useBinding(bindingId);
   const binding = bindingQuery.data ?? null;
   const check = useQuery({

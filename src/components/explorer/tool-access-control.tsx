@@ -1,6 +1,5 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { Ban, Check } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
@@ -10,7 +9,7 @@ import { useAgentAccess, useUpdateAccess } from "@/components/toolsets/use-tools
 import { accessSummary, blockSwitchesToList, nextAccessBody, toolAccess } from "@/features/explorer/tool-access";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
-import { listAgents } from "@/services/account.service";
+import { useAgentList } from "@/features/agents/agent-list";
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
 
@@ -38,11 +37,7 @@ function usePickedAgent(): string | null {
  * is per agent, so every control names it.
  */
 export function useExploreAgent() {
-  const agents = useQuery({
-    queryKey: ["agents"],
-    retry: false,
-    queryFn: () => listAgents({ limit: 50 }) as unknown as Promise<{ items: { agentId: string; label?: string }[] }>,
-  });
+  const agents = useAgentList();
   const picked = usePickedAgent();
   const items = agents.data?.items ?? [];
   const agent = items.find((a) => a.agentId === picked) ?? items[0] ?? null;

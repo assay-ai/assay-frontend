@@ -40,7 +40,7 @@ vi.mock("@/services/provider-tool-bindings.service", () => ({
 }));
 vi.mock("@/services/provider-reports.service", () => ({ getProviderEarnings: vi.fn(async () => ({ groups: [] })) }));
 vi.mock("@/services/provider-sla-windows.service", () => ({ listSlaWindows: vi.fn(async () => ({ items: [] })) }));
-vi.mock("@/services/provider-stake.service", () => ({ revalidateProviderStake: vi.fn(async () => null) }));
+vi.mock("@/services/provider-stake.service", () => ({ getProviderStake: vi.fn(async () => null) }));
 vi.mock("@/hooks/useChains", () => ({ useChains: () => ({ chains: [] }) }));
 
 import BindingOverviewPage from "./page";

@@ -21,6 +21,7 @@ import type { OperatorApprovalStatus } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { listApprovals } from "@/services/operator.service";
 import { cn } from "@/utils";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Approvals, route `/operator/approvals` (reached from Home).
@@ -43,7 +44,6 @@ import { cn } from "@/utils";
 type Tab = "waiting" | "history";
 type HistoryFilter = "" | Exclude<OperatorApprovalStatus, "PENDING">;
 
-const PENDING_PAGE = 100;
 const HISTORY_PAGE = 50;
 
 function ApprovalsInbox() {
@@ -67,8 +67,7 @@ function ApprovalsInbox() {
 
   // Same key as the shell's badge and Home.
   const pending = useQuery({
-    queryKey: ["operator", "approvals", "pending-count"],
-    queryFn: () => listApprovals({ status: "PENDING", limit: PENDING_PAGE }),
+    ...operatorQueries.pendingApprovals(),
     refetchInterval: 30_000,
     retry: 0,
   });

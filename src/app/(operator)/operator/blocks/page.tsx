@@ -51,13 +51,12 @@ import { ROBINHOOD_TESTNET_STAKE, stakeDeploymentFor } from "@/libs/chains/evm/s
 import {
   createAccountBlock,
   createArbiterBlockIntent,
-  getPlatformHealth,
   listAccountBlocks,
-  listApprovals,
   unblockAccount,
 } from "@/services/operator.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Blocks, route `/operator/blocks`.
@@ -109,8 +108,7 @@ function BlocksScreen() {
 
   // Lifts already waiting for approval, by block id — the same query as the badge.
   const pendingQuery = useQuery({
-    queryKey: ["operator", "approvals", "pending-count"],
-    queryFn: () => listApprovals({ status: "PENDING", limit: 100 }),
+    ...operatorQueries.pendingApprovals(),
     refetchInterval: 30_000,
     retry: 0,
   });
@@ -690,7 +688,7 @@ function BlockSheet({
  * one used is always named (operator review 2026-10-16b, P1-5).
  */
 function useBlockChains(enabled: boolean) {
-  const health = useQuery({ queryKey: ["operator", "health"], queryFn: getPlatformHealth, enabled, retry: 0 });
+  const health = useQuery({ ...operatorQueries.health(), enabled, retry: 0 });
   const ids = React.useMemo(() => {
     if (!health.data) return [];
     const reported = health.data.chainState.map((state) => state.chainId).filter((id) => stakeDeploymentFor(id) !== null);
@@ -955,7 +953,6 @@ function LiftSheet({
     setErrors({});
     resetLift();
   }, [block?.id, resetLift]);
-
 
   const submit = () => {
     if (!block || waiting) return;

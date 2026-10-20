@@ -30,9 +30,9 @@ import { routes } from "@/libs/routes";
 import { getPublishCheck, pauseToolBinding, resumeToolBinding } from "@/services/provider-tool-bindings.service";
 import { getProviderEarnings } from "@/services/provider-reports.service";
 import { listSlaWindows } from "@/services/provider-sla-windows.service";
-import { revalidateProviderStake } from "@/services/provider-stake.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * A listing's Overview: where it stands (one timeline), the one thing to do
@@ -235,8 +235,7 @@ function OverviewContent() {
   // An ACTIVE paid binding priced in another asset than the stake floor is
   // live and still takes no paid traffic; say so here, not only on Capital.
   const stakeQuery = useQuery({
-    queryKey: ["provider", "stake"],
-    queryFn: revalidateProviderStake,
+    ...providerQueries.stake(),
     enabled: binding?.status === "ACTIVE",
     retry: 0,
   });

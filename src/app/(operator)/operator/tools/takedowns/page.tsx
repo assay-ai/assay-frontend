@@ -20,9 +20,9 @@ import { approvalHref } from "@/features/operator/two-person";
 import { useOperatorDirectory } from "@/features/operator/use-operator-lookups";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
-import { listOperatorTools } from "@/services/operator-contracts.service";
 import { confirmCutoff, listCutoffs, revertCutoff, type ModerationCutoff } from "@/services/operator-provider-tools.service";
 import { toast } from "@/utils/toast";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Provider tool takedowns — `/operator/tools/takedowns` (FR-18, A-25): a
@@ -36,7 +36,7 @@ import { toast } from "@/utils/toast";
 /** Find a live provider tool to take down. Only for a role that may (ADJ, ADJL, SRE). */
 function FindToTakeDown({ onDone }: { onDone: (name: string) => void }) {
   const [q, setQ] = React.useState("");
-  const tools = useQuery({ queryKey: ["operator", "tools", "list"], queryFn: listOperatorTools, retry: 0, enabled: q.trim() !== "" });
+  const tools = useQuery({ ...operatorQueries.tools(), enabled: q.trim() !== "" });
   const found = takedownSearch(tools.data?.tools ?? [], q);
   return (
     <section aria-labelledby="find-title" className="flex w-full flex-col gap-2">

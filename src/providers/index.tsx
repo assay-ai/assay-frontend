@@ -12,7 +12,8 @@ import { demoEnabled } from "@/libs/demo/demo-api";
 import { AccountBlockBridge } from "@/features/account-block/account-block-bridge";
 import { PrivySessionBridge } from "@/providers/PrivySessionBridge";
 import { ThemeProvider } from "@/providers/ThemeProvider";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createAppQueryClient } from "@/providers/query-client";
 import { useChains } from "@/hooks/useChains";
 
 interface PrivyShellProps {
@@ -74,32 +75,7 @@ const ROBINHOOD_CHAIN = {
   testnet: true,
 } as unknown as ViemChain;
 
-/**
- * `networkMode: "always"` is the important one, and it is not a preference.
- *
- * React Query's default is "online": when a fetch fails at the transport layer
- * it PAUSES the query instead of failing it. The observed result is
- * `status:"pending", fetchStatus:"paused"` forever, while the underlying
- * request has already rejected — so a screen whose data never arrives sits on
- * "Loading…" indefinitely and never reaches its error branch. That is the worst
- * possible failure for this product: a person waiting on a spinner cannot tell
- * whether they were charged.
- *
- * "always" makes a failed request an error the UI can render. `retry: 0` keeps
- * a dead API from being retried three times before the screen admits it.
- */
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      networkMode: "always",
-      retry: 0,
-    },
-    mutations: {
-      networkMode: "always",
-    },
-  },
-});
+const queryClient = createAppQueryClient();
 
 function PrivyShell({ children, chains }: PrivyShellProps) {
   /*
