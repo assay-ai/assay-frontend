@@ -9,6 +9,7 @@ import type { FullBalance } from "@/features/g30/balance";
 import {
   CONFIRMING_TEXT,
   DEPOSIT_CREDIT_TEXT,
+  anyConfirming,
   confirmingLine,
   confirmingOnChain,
   escrowLedgerRow,
@@ -62,7 +63,7 @@ describe("money still confirming on chain (BUG-A-06)", () => {
 
   it("names the amount and the wait", () => {
     expect(confirmingLine(row())).toBe(`$20.00 ${CONFIRMING_TEXT}`);
-    expect(CONFIRMING_TEXT).toBe("still confirming on chain (usually within 30 minutes)");
+    expect(CONFIRMING_TEXT).toBe("still confirming on chain (usually a few seconds)");
     expect(confirmingLine(row({ pending: m("0") }))).toBeNull();
   });
 
@@ -70,7 +71,7 @@ describe("money still confirming on chain (BUG-A-06)", () => {
     const sheet = readFileSync(resolve(__dirname, "../../components/buyer-money/deposit-sheet.tsx"), "utf8");
     expect(sheet).not.toMatch(/within about a minute/);
     expect(sheet).toMatch(/DEPOSIT_CREDIT_TEXT/);
-    expect(DEPOSIT_CREDIT_TEXT).toMatch(/usually within 30 minutes/);
+    expect(DEPOSIT_CREDIT_TEXT).toMatch(/usually within a few seconds/);
   });
 
   it("the Funding page uses the ledger-capped figure and shows the confirming line", () => {
@@ -84,6 +85,14 @@ describe("ConfirmingNote", () => {
   it("renders the line with when paid calls can use it", async () => {
     const { ConfirmingNote } = await import("@/components/buyer-money/funding-view");
     const html = renderToStaticMarkup(React.createElement(ConfirmingNote, { line: confirmingLine(row())! }));
-    expect(html).toContain("$20.00 still confirming on chain (usually within 30 minutes). Paid calls can use it once the chain finalises it.");
+    expect(html).toContain("$20.00 still confirming on chain (usually a few seconds). Paid calls can use it once the chain confirms it.");
+  });
+});
+
+describe("anyConfirming (the balances query polls while it is true)", () => {
+  it("true while any row has money confirming, false once it is credited", () => {
+    expect(anyConfirming([row({ pending: m("5000000") })])).toBe(true);
+    expect(anyConfirming([row({ pending: m("0") })])).toBe(false);
+    expect(anyConfirming(undefined)).toBe(false);
   });
 });

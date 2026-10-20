@@ -172,7 +172,7 @@ export function EnablePaidView({
               Ready for paid calls: {balance ?? "unknown"}
             </span>
             <span className="text-body-sm text-warning-700" data-testid="funds-confirming">
-              {confirming}. Paid calls can use it once the chain finalises it.
+              {confirming}. Paid calls can use it once the chain confirms it.
             </span>
           </>
         ) : (
