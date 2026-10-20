@@ -8,6 +8,7 @@ import {
   applyIdentityChange,
   cacheChangeFor,
   handleUnauthorized,
+  UNRESOLVED_IDENTITY,
   isOperatorConsolePath,
   needsEmbeddedEvmWallet,
   isPublicPath,
@@ -405,5 +406,21 @@ describe("cacheChangeFor", () => {
     expect(cacheChangeFor("did:privy:a", undefined, other)).toBe("switch");
     expect(cacheChangeFor("did:privy:a", undefined, unknown)).toBe("boot");
     expect(cacheChangeFor("did:privy:a", undefined, undefined)).toBe("boot");
+  });
+
+  /* Review minor 6: Privy signed in, its `user` not loaded yet. */
+  it("a signed-in session whose user has not loaded is never taken for someone else", () => {
+    const sentAs = vi.fn(other);
+    expect(cacheChangeFor(UNRESOLVED_IDENTITY, undefined, sentAs)).toBe("boot");
+    expect(sentAs).not.toHaveBeenCalled();
+    expect(cacheChangeFor(UNRESOLVED_IDENTITY, "did:privy:a", only)).toBe("switch");
+  });
+
+  it("the identity that replaces it: served only when every request carried its token, otherwise reset", () => {
+    expect(cacheChangeFor("did:privy:a", UNRESOLVED_IDENTITY, only)).toBe("served");
+    expect(cacheChangeFor("did:privy:a", UNRESOLVED_IDENTITY, other)).toBe("switch");
+    expect(cacheChangeFor("did:privy:a", UNRESOLVED_IDENTITY, unknown)).toBe("switch");
+    expect(cacheChangeFor("did:privy:a", UNRESOLVED_IDENTITY, undefined)).toBe("switch");
+    expect(cacheChangeFor(null, UNRESOLVED_IDENTITY, only)).toBe("switch");
   });
 });

@@ -25,6 +25,7 @@ import {
   needsEmbeddedEvmWallet,
   onPublicShell,
   signedOutLanding,
+  UNRESOLVED_IDENTITY,
 } from "./buyer-session";
 
 /**
@@ -170,7 +171,7 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
       {
         onOperatorConsole,
         authenticated,
-        identity: authenticated ? (user?.id ?? "authenticated") : null,
+        identity: authenticated ? (user?.id ?? UNRESOLVED_IDENTITY) : null,
         previous: lastIdentityRef.current,
       },
       {
