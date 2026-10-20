@@ -162,6 +162,7 @@ async function attempt(): Promise<void> {
   // ask for a retry while one is already out. One request at a time.
   if (inFlight) return;
   inFlight = true;
+  let delay = POLL_INTERVAL_MS;
 
   try {
     const result = await linkWallet();
@@ -173,25 +174,30 @@ async function attempt(): Promise<void> {
     }
     emit("provisioning");
   } catch (error) {
-    // 401 is a dead session: `ApiClient`'s own handler is already signing this
-    // browser out, and another attempt would only add a second redirect.
-    // Anything else with a status is the API refusing on purpose (403 for a
-    // suspended tenant) — terminal, because polling cannot change it.
-    if (error instanceof ApiError && error.status !== 0 && error.status !== 424) {
+    // A rate limit is "not now", not "never": ask again once the API's wait is
+    // over (never sooner than the usual interval), inside the same deadline.
+    if (error instanceof ApiError && error.status === 429) {
+      delay = Math.max(POLL_INTERVAL_MS, (error.retryAfterSeconds ?? 0) * 1000);
+    } else if (error instanceof ApiError && error.status !== 0 && error.status !== 424) {
+      // 401 is a dead session: `ApiClient`'s own handler is already signing
+      // this browser out, and another attempt would only add a second
+      // redirect. Anything else with a status is the API refusing on purpose
+      // (403 for a suspended tenant) — terminal, because polling cannot
+      // change it.
       clearTimer();
       emit(error.status === 401 ? "idle" : "unavailable");
       return;
     }
-    // A transport failure: keep the schedule below and try again.
+    // A transport failure or a rate limit: keep the schedule below and try again.
     emit("provisioning");
   } finally {
     inFlight = false;
   }
 
-  schedule();
+  schedule(delay);
 }
 
-function schedule(): void {
+function schedule(delay: number = POLL_INTERVAL_MS): void {
   clearTimer();
   if (status === "linked") return;
 
@@ -202,7 +208,7 @@ function schedule(): void {
 
   timer = setTimeout(() => {
     void attempt();
-  }, POLL_INTERVAL_MS);
+  }, delay);
 }
 
 /**
