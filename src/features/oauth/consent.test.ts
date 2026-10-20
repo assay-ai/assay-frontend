@@ -298,6 +298,43 @@ describe("consent view: replaces", () => {
   });
 });
 
+describe("consent view: signing in again (replacesAgent)", () => {
+  const two = [agent({ id: "a", label: "research-bot" }), agent({ id: "b", label: "ops" })];
+
+  it("pre-selects that agent, hides the picker and says so", () => {
+    const req = request({ agents: two, replacesAgent: { id: "b", name: "ops" } });
+    expect(defaultAgentId(req)).toBe("b");
+    const v = view(req);
+    expect(v.showAgentPicker).toBe(false);
+    expect(v.relogin).toBe("Signing in again for ops.");
+    expect(v.agent?.id).toBe("b");
+  });
+
+  it("wins over a replaced grant's agent", () => {
+    const req = request({
+      agents: two,
+      replaces: { id: "c", name: "Assay app on this Mac", agentId: "a", narrowed: false, live: true },
+      replacesAgent: { id: "b", name: "ops" },
+    });
+    expect(defaultAgentId(req)).toBe("b");
+  });
+
+  it("absent (older API) or null → the picker as before", () => {
+    for (const req of [request({ agents: two }), request({ agents: two, replacesAgent: null })]) {
+      expect(defaultAgentId(req)).toBe("a");
+      expect(view(req).showAgentPicker).toBe(true);
+      expect(view(req).relogin).toBeNull();
+    }
+  });
+
+  it("an agent not in the list locks nothing", () => {
+    const req = request({ agents: two, replacesAgent: { id: "gone", name: "old" } });
+    expect(defaultAgentId(req)).toBe("a");
+    expect(view(req).showAgentPicker).toBe(true);
+    expect(view(req).relogin).toBeNull();
+  });
+});
+
 describe("consent view: time", () => {
   it("startedAgo", () => {
     const at = (s: number) => new Date(Date.parse("2026-10-19T10:00:00.000Z") + s * 1000);

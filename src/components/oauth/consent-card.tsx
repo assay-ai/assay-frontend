@@ -303,6 +303,11 @@ export function ConsentCard({
                 <span className="font-semibold text-01">{agentName}</span>
               </p>
             )}
+            {view.relogin ? (
+              <p data-testid="consent-relogin" className="text-body-13 text-02">
+                {view.relogin}
+              </p>
+            ) : null}
             <Field
               id="consent-name"
               label="Name"

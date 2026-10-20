@@ -33,6 +33,12 @@ export interface ConsentRequest {
   /** Only for a sign-in of the Assay app replacing its own earlier one. */
   /** `live`: not revoked or expired. A dead one is still replaced (its limits are kept) but frees no place under the cap. */
   replaces?: { id: string; name: string; agentId: string; narrowed: boolean; live: boolean };
+  /**
+   * The app is signing in again: the agent its earlier sign-in was for. The
+   * API refuses an approval for any other agent (409), so the page approves
+   * as this one with no picker. Absent from an older API, or `null`.
+   */
+  replacesAgent?: { id: string; name: string } | null;
   suggestedName: string;
 }
 
@@ -91,6 +97,8 @@ export interface ConsentView {
   notVerified: string | null;
   startedAgo: string;
   showAgentPicker: boolean;
+  /** "Signing in again for research-bot." when the agent is fixed by an earlier sign-in, else null. */
+  relogin: string | null;
   agent: ConsentAgent | null;
   limitsLine: string | null;
   cannotDo: string[];
@@ -135,8 +143,19 @@ export function startedAgo(createdAt: string, now: Date): string {
  */
 export function defaultAgentId(request: ConsentRequest): string | null {
   const { agents, replaces } = request;
+  const locked = lockedAgentId(request);
+  if (locked) return locked;
   if (replaces && agents.some((a) => a.id === replaces.agentId)) return replaces.agentId;
   return (agents.find((a) => a.active) ?? agents[0])?.id ?? null;
+}
+
+/**
+ * The agent a sign-in again is bound to (`replacesAgent`), when it is one of
+ * the list; else null and the person picks as usual.
+ */
+export function lockedAgentId(request: Pick<ConsentRequest, "agents" | "replacesAgent">): string | null {
+  const id = request.replacesAgent?.id;
+  return id && request.agents.some((a) => a.id === id) ? id : null;
 }
 
 /**
@@ -440,7 +459,10 @@ export function consentView(
     // any process on the computer can claim to be it.
     notVerified: verified ? null : CONSENT_STRINGS.notVerified,
     startedAgo: startedAgo(request.createdAt, options.now),
-    showAgentPicker: request.agents.length > 1,
+    showAgentPicker: request.agents.length > 1 && !lockedAgentId(request),
+    relogin: lockedAgentId(request)
+      ? `Signing in again for ${request.replacesAgent!.name.trim() || agent?.label || "this agent"}.`
+      : null,
     agent,
     limitsLine: agent ? limitsLine(agent) : null,
     cannotDo: [
