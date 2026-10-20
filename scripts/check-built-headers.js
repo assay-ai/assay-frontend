@@ -301,7 +301,19 @@ async function browserCheck(outDir, chrome) {
         .filter((e) => e.method === "Log.entryAdded" || e.method === "Runtime.consoleAPICalled")
         .map((e) => JSON.stringify(e.params).slice(0, 400))
         .filter((text) => /Content Security Policy|integrity|Refused to/i.test(text));
-      for (const text of violations) problems.push(`${target}: ${text}`);
+      for (const text of violations) {
+        // A third-party frame (Privy's auth iframe) enforces ITS OWN
+        // frame-ancestors list, which names the app's real origins and never
+        // this throwaway 127.0.0.1 server. That refusal is about the test
+        // origin, not about our policy, so it is a note; our own pages being
+        // refused framing, or any other violation, still fails.
+        const framed = /Framing '([^']+)' violates the following Content Security Policy directive: \\?"frame-ancestors/.exec(text);
+        if (framed && new URL(framed[1]).origin !== origin) {
+          notes.push(`${target}: ${new URL(framed[1]).origin} refuses to be framed by the test origin (its own frame-ancestors)`);
+          continue;
+        }
+        problems.push(`${target}: ${text}`);
+      }
       const runtime = await client.send("Runtime.evaluate", {
         expression: "JSON.stringify([...document.scripts].filter(s => s.src && !s.integrity).map(s => new URL(s.src).pathname))",
         returnByValue: true,
