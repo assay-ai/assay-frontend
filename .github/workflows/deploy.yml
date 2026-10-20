@@ -49,9 +49,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Pinned, not ubuntu-latest: the header check drives the runner's preinstalled
+  # Chrome, and the ubuntu-latest move to Ubuntu 26 (October 2026) is gradual.
   build:
     if: github.ref_name == 'main' || github.ref_name == 'develop' || github.ref_name == 'demo'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     # The environment is bound only to read its NEXT_PUBLIC_* values. This job
@@ -121,7 +123,7 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     environment:
