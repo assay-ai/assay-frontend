@@ -32,6 +32,7 @@ import { formatDate } from "@/libs/utc-time";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { shortAddress } from "@/libs/chains/format";
+import { firstDepositOpensEscrow } from "@/libs/chains/registry";
 import { renameAgent, revokeCredential } from "@/services/account.service";
 import { cn } from "@/utils";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
@@ -353,7 +354,9 @@ export function AgentsView() {
             keysFailed={data.keysQuery.isError}
             onRetryKeys={data.refetchKeys}
             readiness={data.readiness[agent.agentId]!}
-            escrowReady={Boolean(data.escrowQuery.data?.exists)}
+            escrowReady={
+              Boolean(data.escrowQuery.data?.exists) || !firstDepositOpensEscrow(chainIdOfAccount(agent.agentAccount))
+            }
             onNewKey={() => setNewKeyFor(agent)}
             onRevokeKey={(key) => setRevoking({ agent, key })}
             onStopIt={(target) => setStopping({ ...target, account: agent.agentAccount })}
