@@ -96,13 +96,15 @@ function getStartedFactsFrom(data: AgentsAndKeys) {
   const agent = data.agents[0] ?? null;
   const allKeys = data.agents.flatMap((a) => data.keys[a.agentId] ?? []);
   const agentKeyCount = agent ? (data.keys[agent.agentId] ?? []).length : 0;
+  // Get started's "live" is not revoked, expiry aside: the health's `unrevokedKeyCount`.
   const liveKeys = allKeys.filter((k) => !k.revokedAt);
+  const health = data.agents.map((a) => data.health[a.agentId]).filter((h) => h !== undefined);
   const escrow = data.escrowQuery.data;
   const readiness = agent ? data.readiness[agent.agentId] : undefined;
   const bound = readiness?.boundCredential ?? null;
   const facts: GetStartedFacts = {
-    hasLiveKey: liveKeys.length > 0,
-    firstCallSeen: liveKeys.some((k) => k.lastUsedAt),
+    hasLiveKey: health.some((h) => h.unrevokedKeyCount > 0),
+    firstCallSeen: health.some((h) => h.firstCallSeen),
     // "Has ever deposited": the first deposit opens the escrow. A balance
     // spent down to zero later must not bring the checklist back.
     hasFunds: escrow?.exists === true,
@@ -113,7 +115,13 @@ function getStartedFactsFrom(data: AgentsAndKeys) {
     needsDelegation: supportsDelegation(agent?.agentAccount),
     freeOnly: freeOnlyChain(chainIdOfAccount(escrow?.account ?? agent?.agentAccount)),
   };
-  return { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts };
+  // When the first call arrived: the earliest use of a key that is not revoked.
+  const firstCallAt =
+    health
+      .map((h) => h.earliestLastUsedAt)
+      .filter((at): at is string => at !== null)
+      .sort()[0] ?? null;
+  return { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts, firstCallAt };
 }
 
 /**
@@ -164,7 +172,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   const [createdToken, setCreatedToken] = React.useState<string | null>(null);
   const [expanded, setExpanded] = React.useState<string | null | undefined>(undefined);
 
-  const { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts } = getStartedFactsFrom(data);
+  const { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts, firstCallAt } = getStartedFactsFrom(data);
   // Step 1 done, but the full key is gone: make a new one here and fill it in.
   const createInPlace = useCreateKey(agent?.agentId ?? null, agentKeyCount, (key) => setCreatedToken(key.token));
   const catalogue = useCatalogue();
@@ -174,7 +182,6 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
     if (agent) recordConnect.mutate({ url: copied ?? urlForClient(client, mcpEndpointUrl()), serverName: "assay", client });
   };
   const states = getStartedStates(facts);
-  const firstCallAt = liveKeys.map((k) => k.lastUsedAt).filter((v): v is string => Boolean(v)).sort()[0] ?? null;
   const { chains } = useChains();
   const chainId = chainIdOfAccount(escrow?.account ?? agent?.agentAccount);
   const chain = chainId ? findChain(chains, chainId) : null;

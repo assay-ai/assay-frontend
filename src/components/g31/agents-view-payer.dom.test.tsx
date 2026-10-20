@@ -50,6 +50,8 @@ vi.mock("@/components/buyer-money/let-agent-pay-sheet", () => ({
 }));
 
 import { AgentsView } from "./agents-view";
+import { AGENTS_WITH_KEYS_KEY } from "@/components/buyer-money/use-agents";
+import { demoAgentsWithKeys, withDemoKeys } from "@/libs/demo/demo-agent-health";
 
 const FIRST = "11111111-1111-1111-1111-111111111111";
 const OWNER = "22222222-2222-2222-2222-222222222222";
@@ -94,19 +96,19 @@ function onChain(delegate: string, validUntil = "2099-11-18T12:00:00.000Z") {
 function renderView(liveValidUntil?: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   // The other agent is listed first: its account must never sign for this agent's keys.
-  client.setQueryData(["agents"], {
+  client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({
     items: [
       { agentId: FIRST, label: "E2E-M2 agent", agentAccount: FIRST_ACCOUNT },
       { agentId: OWNER, label: "My agent", agentAccount: OWNER_ACCOUNT },
     ],
-  });
-  client.setQueryData(["agent-keys", [FIRST, OWNER]], {
+  }));
+  client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({
     [FIRST]: [],
     [OWNER]: [
       grantRow("g-live", "Assay app on laptop", LIVE_KEY),
       grantRow("g-old", "Assay app on the old laptop", OLD_KEY, { revokedAt: "2026-10-18T00:00:00Z" }),
     ],
-  });
+  }));
   client.setQueryData(["escrow-delegates", "live"], {
     account: OWNER_ACCOUNT,
     delegates: [onChain(LIVE_KEY, liveValidUntil), onChain(OLD_KEY)],

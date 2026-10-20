@@ -5,7 +5,7 @@ import { KeyRound, Pencil, Plus, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
 import { AgentHealthLine, ReadinessChip } from "@/components/buyer-money/agent-health";
-import { CreateKeySheet, payingKeyName } from "@/components/buyer-money/create-key";
+import { CreateKeySheet, invalidateAfterKeyWrite, payingKeyName } from "@/components/buyer-money/create-key";
 import { PaidByInvitation } from "@/components/buyer-money/get-started";
 import { LetAgentPaySheet } from "@/components/buyer-money/let-agent-pay-sheet";
 import { EffectiveLimitLines, type LimitsContext, rowsFor, SpendingLimitsActions, useLimitsContext } from "@/components/buyer-money/agent-limits";
@@ -394,7 +394,7 @@ export function AgentsView() {
         describeStopError={explainStopFailure}
         onDone={(outcome, keyState) => {
           refresh();
-          void queryClient.invalidateQueries({ queryKey: ["credentials"] });
+          invalidateAfterKeyWrite(queryClient);
           if (outcome.chain === "failed") return;
           const text = revokedToast(keyState, outcome.chain);
           if (outcome.chain === "handoff") {
@@ -657,12 +657,6 @@ function SpendingBlock({
   );
 }
 
-/** The latest call by any of an agent's keys, revoked ones included. */
-function latestUse(keys: readonly KeyRow[] | undefined): string | null {
-  const used = (keys ?? []).map((key) => key.lastUsedAt).filter((at): at is string => Boolean(at));
-  return used.length === 0 ? null : used.reduce((a, b) => (Date.parse(a) >= Date.parse(b) ? a : b));
-}
-
 function AgentCard({
   focusAccess,
   ctx,
@@ -856,7 +850,8 @@ function AgentCard({
       </SubRow>
 
       <SubRow n={2} title="Servers in use">
-        <ServersInUse agentId={agent.agentId} agentName={name} lastCallAt={latestUse(keys)} />
+        {/* The latest call by any of its keys, revoked ones included (the keys' health). */}
+        <ServersInUse agentId={agent.agentId} agentName={name} lastCallAt={ctx.health[agent.agentId]?.lastUsedAtAnyKey ?? null} />
       </SubRow>
 
       {delegation && !keysFailed ? (

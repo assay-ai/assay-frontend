@@ -10,6 +10,8 @@ import { pasteHint } from "@/features/buyer-money/mcp-config";
 
 import { ConnectBody } from "./connect-sheet";
 import { toolsetKeys } from "./use-toolsets";
+import { AGENTS_WITH_KEYS_KEY } from "@/components/buyer-money/use-agents";
+import { demoAgentsWithKeys, withDemoKeys } from "@/libs/demo/demo-agent-health";
 
 vi.mock("@privy-io/react-auth", () => ({
   usePrivy: () => ({ ready: true, authenticated: true }),
@@ -24,8 +26,8 @@ function render(node: React.ReactNode, keys: unknown[] = []): string {
   client.setQueryData(["catalogue", "providers"], { providers: [] });
   client.setQueryData(["catalogue", "tools"], { tools: [] });
   client.setQueryData(["tool-calls", "catalogue"], { items: [], pageInfo: { nextCursor: null, hasMore: false } });
-  client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent" }], pageInfo: { nextCursor: null, hasMore: false } });
-  client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: keys });
+  client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: [{ agentId: AGENT, label: "My agent" }], pageInfo: { nextCursor: null, hasMore: false } }));
+  client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: keys }));
   client.setQueryData(toolsetKeys.all, { items: [], pageInfo: { nextCursor: null, hasMore: false } });
   client.setQueryData(["spend-policy"], null);
   return renderToStaticMarkup(<QueryClientProvider client={client}>{node}</QueryClientProvider>);

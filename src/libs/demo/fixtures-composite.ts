@@ -1,13 +1,14 @@
 import { monthPeriod, recentDays } from "@/features/buyer/period";
 import { utcDayBounds } from "@/libs/utc-time";
 
+import { demoAgentsWithKeys } from "./demo-agent-health";
 import type { DemoFixture } from "./fixtures";
 
 /**
- * DEMO ONLY. The composite reads (`GET /overview`, `GET /me/status`) built
- * from the demo's own single-route fixtures, so every part is exactly what
- * that route's fixture answers — the same rule the API keeps for the real
- * routes. `answer` reads one of those fixtures.
+ * DEMO ONLY. The composite reads (`GET /overview`, `GET /me/status`, `GET
+ * /agents?include=`) built from the demo's own single-route fixtures, so every
+ * part is exactly what that route's fixture answers — the same rule the API
+ * keeps for the real routes. `answer` reads one of those fixtures.
  */
 type Answer = (path: string, query?: Record<string, unknown>) => unknown;
 
@@ -53,6 +54,21 @@ export function compositeFixtures(answer: Answer): DemoFixture[] {
           recentCalls: answer("/tool-calls", { limit: Number(query.callsLimit ?? 6), sort: "createdAt", order: "desc" }),
           notifications: answer("/notifications", { limit: Number(query.alertsLimit ?? 50), unreadOnly: true }),
         };
+      },
+    },
+    {
+      method: "GET",
+      match: "/agents",
+      body: (_path, query) => {
+        const page = answer("/agents", query) as { items: { agentId: string }[]; pageInfo?: unknown };
+        if (!query.include) return page;
+        const keys = Object.fromEntries(
+          page.items.map((agent) => [
+            agent.agentId,
+            (answer(`/agents/${agent.agentId}/credentials`, { limit: 50 }) as { items: unknown[] }).items,
+          ]),
+        );
+        return { ...demoAgentsWithKeys(page, keys), pageInfo: page.pageInfo };
       },
     },
   ];

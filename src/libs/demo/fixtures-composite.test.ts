@@ -41,4 +41,18 @@ describe("the demo's composite reads, made of its single-route answers", () => {
       get("/receipts/summary", { from: "2026-10-20T00:00:00.000Z", to: "2026-10-21T00:00:00.000Z", groupBy: "tool" }),
     );
   });
+
+  it("GET /agents?include=: each agent with its credentials route's keys and their health; plain /agents unchanged", () => {
+    const plain = get("/agents") as { items: { agentId: string }[] };
+    const page = get("/agents", { include: "credentials,health" }) as {
+      items: { agentId: string; credentials: { items: unknown[]; hasMore: boolean }; health: { unrevokedKeyCount: number } }[];
+    };
+    expect(page.items.map((a) => a.agentId)).toEqual(plain.items.map((a) => a.agentId));
+    expect(plain.items.every((a) => !("credentials" in a))).toBe(true);
+    for (const agent of page.items) {
+      const own = get(`/agents/${agent.agentId}/credentials`, { limit: 50 }) as { items: { revokedAt: string | null }[] };
+      expect(agent.credentials).toEqual({ items: own.items, hasMore: false });
+      expect(agent.health.unrevokedKeyCount).toBe(own.items.filter((k) => !k.revokedAt).length);
+    }
+  });
 });
