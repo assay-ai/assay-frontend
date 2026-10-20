@@ -45,10 +45,6 @@ export function listNotifications(
   return api.get<CursorPage<unknown>>("/notifications", query as Record<string, unknown>);
 }
 
-export function getUnreadCount(): Promise<{ count: number }> {
-  return api.get<{ count: number }>("/notifications/unread-count");
-}
-
 /** PATCH /notifications/:id/read — the person's session only; idempotent; 404 outside the organization. */
 export function markNotificationRead(id: string): Promise<unknown> {
   return api.patch(`/notifications/${encodeURIComponent(id)}/read`);

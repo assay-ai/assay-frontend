@@ -1,3 +1,5 @@
+import type { AccountBlockStatus } from "@/interfaces/account-block";
+import type { BuyerDebts } from "@/interfaces/buyer-debt";
 import type { CursorPage } from "@/interfaces";
 
 import { withDemoChain } from "@/libs/chains/demo-chains";
@@ -61,4 +63,23 @@ export async function getOverview(query: OverviewQuery): Promise<OverviewRespons
   const response = await api.get<OverviewResponse>("/overview", query as unknown as Record<string, unknown>);
   // The same no-op-unless-demo naming `getBalances` applies to its rows.
   return { ...response, balances: { ...response.balances, balances: withDemoChain(response.balances?.balances ?? []) } };
+}
+
+/**
+ * `GET /me/status` — the signed-in shell's three polls in one request.
+ *
+ * Each part is read on its own: one that failed is `null` and the others are
+ * still answered, so a `null` part is that part's error, never "nothing".
+ */
+export interface MeStatusResponse {
+  /** `GET /account/block-status`. */
+  blockStatus: AccountBlockStatus | null;
+  /** `GET /notifications/unread-count`. */
+  unreadCount: { count: number } | null;
+  /** `GET /escrow/debts`. */
+  debts: BuyerDebts | null;
+}
+
+export function getMeStatus(): Promise<MeStatusResponse> {
+  return api.get<MeStatusResponse>("/me/status");
 }

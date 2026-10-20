@@ -8,7 +8,9 @@ import { UtcTime } from "@/components/patterns/utc-time";
 import { useSpendPolicyQuery } from "@/components/buyer-money/use-agents";
 import { alertTitle, isOldLimitAlert, type AlertNote, type LimitContext } from "@/features/buyer/alert-model";
 import { attentionAction, type AttentionAction } from "@/features/buyer/attention-action";
+import { OVERVIEW_KEY } from "@/features/buyer/use-overview";
 import { supportsDelegation } from "@/features/delegation/delegation-form";
+import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import { notificationTitle } from "@/features/toolsets/contract-notices";
 import { ApiError } from "@/libs/ApiClient";
 import { listAgents, markNotificationRead } from "@/services/account.service";
@@ -116,6 +118,9 @@ export function useMarkAlertsRead() {
     mutationFn: (ids: readonly string[]) => markAlertsRead(ids),
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      // The bell's count (`GET /me/status`) and Overview's Needs attention.
+      void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
+      void queryClient.invalidateQueries({ queryKey: OVERVIEW_KEY });
     },
   });
 }

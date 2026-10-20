@@ -4,15 +4,30 @@ import { utcDayBounds } from "@/libs/utc-time";
 import type { DemoFixture } from "./fixtures";
 
 /**
- * DEMO ONLY. The composite reads (`GET /overview`) built from the demo's
- * own single-route fixtures, so every part is exactly what that route's
- * fixture answers — the same rule the API keeps for the real routes. `answer`
- * reads one of those fixtures.
+ * DEMO ONLY. The composite reads (`GET /overview`, `GET /me/status`) built
+ * from the demo's own single-route fixtures, so every part is exactly what
+ * that route's fixture answers — the same rule the API keeps for the real
+ * routes. `answer` reads one of those fixtures.
  */
 type Answer = (path: string, query?: Record<string, unknown>) => unknown;
 
+/** A part that has no fixture is `null`, as a part the API could not read. */
+function part(answer: Answer, path: string, query?: Record<string, unknown>): unknown {
+  return answer(path, query) ?? null;
+}
+
 export function compositeFixtures(answer: Answer): DemoFixture[] {
   return [
+    {
+      method: "GET",
+      match: "/me/status",
+      body: () => ({
+        // The demo account is not blocked.
+        blockStatus: answer("/account/block-status") ?? { blocked: false, blocks: [] },
+        unreadCount: part(answer, "/notifications/unread-count"),
+        debts: part(answer, "/escrow/debts"),
+      }),
+    },
     {
       method: "GET",
       match: "/overview",

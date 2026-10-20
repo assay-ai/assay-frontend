@@ -41,7 +41,6 @@
  */
 
 import type {
-  BuyerDebts,
   BuyerEscrow,
   DebtVoucherIntent,
   SettleDebtBody,
@@ -177,19 +176,6 @@ export function submitEscrowWithdrawRequest(
   body: SubmitRequestWithdrawBody,
 ): Promise<RelayedEscrowIntent> {
   return api.post<RelayedEscrowIntent>("/escrow/withdrawals/request", body);
-}
-
-/**
- * `GET /escrow/debts` — the payer's BUYER DEBTS: served paid calls whose
- * payment could not be collected, in every state (`OPEN`, `REPLACING`,
- * `WRITTEN_OFF`). Paid calls are refused (`PAYMENT_DEBT_OUTSTANDING`) until
- * each is collected; free calls work. Lists
- * the session account's debts and the organization's, so a console sees every
- * debt that blocks its agents — but only the session account's own can be
- * settled from here (`account` on the answer).
- */
-export function getBuyerDebts(): Promise<BuyerDebts> {
-  return api.get<BuyerDebts>("/escrow/debts");
 }
 
 /**

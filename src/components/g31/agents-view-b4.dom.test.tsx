@@ -36,7 +36,7 @@ function render(seed: (client: QueryClient) => void = () => undefined): string {
   client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] });
   client.setQueryData(["escrow-delegates", "live"], { delegates: [] });
   client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT });
-  client.setQueryData(["escrow", "debts"], { account: ACCOUNT, debts: [] });
+  client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
   client.setQueryData(["spend-policy"], null);
   client.setQueryData(["chains"], { chains: [] });
   seed(client);
@@ -71,7 +71,7 @@ describe("the agent card while its keys load", () => {
     client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] });
     client.setQueryData(["escrow-delegates", "live"], { delegates: [] });
     client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT });
-    client.setQueryData(["escrow", "debts"], { account: ACCOUNT, debts: [] });
+    client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
     client.setQueryData(["spend-policy"], null);
     client.setQueryData(["chains"], { chains: [] });
     // A keys read that failed: the query's cache entry is in error.
@@ -235,7 +235,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, refetchOnMount: false } } });
     client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] });
     client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT });
-    client.setQueryData(["escrow", "debts"], { account: ACCOUNT, debts: [] });
+    client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
     client.setQueryData(["spend-policy"], null);
     client.setQueryData(["chains"], { chains: [] });
     client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [revoked] });
@@ -258,7 +258,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, refetchOnMount: false } } });
     client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] });
     client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT });
-    client.setQueryData(["escrow", "debts"], { account: ACCOUNT, debts: [] });
+    client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
     client.setQueryData(["spend-policy"], null);
     client.setQueryData(["chains"], { chains: [] });
     client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [revoked] });

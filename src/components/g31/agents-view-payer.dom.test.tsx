@@ -121,7 +121,7 @@ function renderView(liveValidUntil?: string) {
     withdrawRequested: usdg("0"),
     balance: usdg("20000000"),
   });
-  client.setQueryData(["escrow", "debts"], { account: OWNER_ACCOUNT, debts: [] });
+  client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: OWNER_ACCOUNT, debts: [] } });
   client.setQueryData(["spend-policy"], null);
   client.setQueryData(["chains"], { chains: [] });
   return render(

@@ -110,7 +110,7 @@ describe("CloseAccountView — the close request (review B P1)", () => {
   it("ticks the keys step from data: no agent means no key that works", () => {
     const html = markup([EMPTY_EVM_ROW], (client) => {
       client.setQueryData(["holds"], { items: [] });
-      client.setQueryData(["escrow", "debts"], { account: EVM_ROW.accountId, debts: [] });
+      client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: EVM_ROW.accountId, debts: [] } });
       client.setQueryData(["agents"], { items: [] });
     });
     const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
@@ -124,7 +124,7 @@ describe("CloseAccountView — the close request (review B P1)", () => {
 describe("CloseAccountView — unknown or owed is never withdrawn (review m2)", () => {
   const seedAllBut = (skip: "holds" | "debts") => (client: QueryClient) => {
     if (skip !== "holds") client.setQueryData(["holds"], { items: [] });
-    if (skip !== "debts") client.setQueryData(["escrow", "debts"], { account: EVM_ROW.accountId, debts: [] });
+    if (skip !== "debts") client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: EVM_ROW.accountId, debts: [] } });
     client.setQueryData(["agents"], { items: [] });
   };
   const stripped = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
@@ -143,10 +143,10 @@ describe("CloseAccountView — unknown or owed is never withdrawn (review m2)", 
     const text = stripped(
       markup([EMPTY_EVM_ROW], (client) => {
         seedAllBut("debts")(client);
-        client.setQueryData(["escrow", "debts"], {
+        client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: {
           account: EVM_ROW.accountId,
           debts: [{ intentId: "int-1", payer: EVM_ROW.accountId, amount: EVM_ROW.available, state: "OUTSTANDING" }],
-        });
+        } });
       }),
     );
     expect(text).not.toContain("Withdraw your money , done");
