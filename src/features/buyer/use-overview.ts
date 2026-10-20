@@ -2,7 +2,7 @@
 
 import { chargedCallsFromTotals, chargedFromTotals, owedFromTotals } from "@/features/g30/spend-buckets";
 import { keepPreviousData, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 
 import type { CursorPage, Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
@@ -64,6 +64,8 @@ export interface OverviewData {
   /** Tool ids seen in the 7-day window, most-spent first. */
   chartTools: string[];
   recentCalls: ToolCall[];
+  /** How many unread pages this load read: the next refresh reads no more than that. */
+  attentionPages: number;
   /** Unread alerts, newest first: as many pages as Needs attention needed (see `readAttention`). */
   notifications: NotificationRow[];
   /** The unread list was read to its end. When false, more unread alerts may exist. */
@@ -155,14 +157,18 @@ function assetsOf(balances: readonly AccountBalance[]): string[] {
   return [...new Set(balances.map((row) => row.asset))];
 }
 
-/** The balances of the newest Overview answer in the cache, if any. */
-function latestOverviewBalances(queryClient: QueryClient): readonly AccountBalance[] | undefined {
+/**
+ * The newest Overview answer in the cache, if any. Read from the cache, not
+ * kept beside it, so the identity reset (`resetQueries`) forgets it with the
+ * rest, and a load that was cancelled or overtaken never writes it.
+ */
+function latestOverview(queryClient: QueryClient): OverviewData | undefined {
   const latest = queryClient
     .getQueryCache()
     .findAll({ queryKey: OVERVIEW_KEY })
     .filter((query) => query.state.data !== undefined)
     .sort((a, b) => b.state.dataUpdatedAt - a.state.dataUpdatedAt)[0];
-  return (latest?.state.data as OverviewData | undefined)?.balances;
+  return latest?.state.data as OverviewData | undefined;
 }
 
 /**
@@ -211,6 +217,7 @@ function toOverviewData(month: Period, wire: OverviewResponse, notes: Awaited<Re
     holds: (wire.holds as CursorPage<HoldRow>).items ?? [],
     withheld: readWithheld(wire.withheld, monthSummary.asset),
     monthListed: monthSummary.totals?.listedTotal ?? null,
+    attentionPages: Math.max(1, notes.pages),
     // "Spent" is charged only (one meaning on every screen); owed sits beside it.
     todayCharged: chargedFromTotals(todayGroup),
     todayOwed: owedFromTotals(todayGroup),
@@ -235,23 +242,21 @@ function toOverviewData(month: Period, wire: OverviewResponse, notes: Awaited<Re
  */
 export function useOverview(anchor: Date, assetKey: string | null = null): OverviewState {
   const queryClient = useQueryClient();
-  // The first load reads up to ATTENTION_PAGES pages; each 30-second refresh
-  // reads only as many as that load needed, so a refresh is not five reads.
-  const attentionPages = useRef<number | null>(null);
   const month = useMemo(() => monthPeriod(anchor), [anchor]);
 
   const query = useQuery<OverviewData, unknown>({
     queryKey: [...OVERVIEW_KEY, anchor.toISOString(), assetKey],
     queryFn: async () => {
-      const { wire, notes } = await loadOverview(
-        anchor,
-        attentionPages.current ?? ATTENTION_PAGES,
-        latestOverviewBalances(queryClient),
-      );
-      attentionPages.current = Math.max(1, notes.pages);
+      const previous = latestOverview(queryClient);
+      // The first load reads up to ATTENTION_PAGES pages; each refresh reads
+      // only as many as the last load needed, so a refresh is not five reads.
+      const { wire, notes } = await loadOverview(anchor, previous?.attentionPages ?? ATTENTION_PAGES, previous?.balances);
       return toOverviewData(month, wire, notes);
     },
     refetchInterval: OVERVIEW_REFRESH_MS,
+    // Back on the tab after a while (the interval pauses while it is hidden): fresh figures at once.
+    staleTime: OVERVIEW_REFRESH_MS,
+    refetchOnWindowFocus: true,
     // A new asset pick keeps the figures on screen until the new ones land.
     placeholderData: keepPreviousData,
     retry: 0,

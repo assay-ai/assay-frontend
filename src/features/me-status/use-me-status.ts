@@ -9,15 +9,9 @@ import { ApiError, getSessionToken } from "@/libs/ApiClient";
 import { demoEnabled } from "@/libs/demo/demo-api";
 import { getMeStatus, type MeStatusResponse } from "@/services/dashboard.service";
 
-/**
- * `GET /me/status`: the block status, the bell's unread count and the buyer
- * debts in one request, for the whole app under one key. It replaced three
- * polls of their own (`GET /account/block-status`, `GET
- * /notifications/unread-count`, `GET /escrow/debts`), every minute each.
- *
- * A write that changes any of the three invalidates this key.
- */
-export const ME_STATUS_KEY = ["me", "status"] as const;
+import { ME_STATUS_KEY } from "./keys";
+
+export { ME_STATUS_KEY };
 
 /** Refetched this often (and on focus) so a lifted block lifts the banner without a reload. */
 export const ME_STATUS_POLL_MS = 60_000;

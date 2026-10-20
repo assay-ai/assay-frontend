@@ -8,6 +8,7 @@ import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
 import { settleByHash } from "@/features/buyer-money/deposit-flow";
 import type { PendingTx } from "@/features/buyer-money/pending-tx";
+import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import { usePendingTransactions } from "@/hooks/usePendingTransactions";
 import { readReceiptStatus } from "@/libs/chains/evm/deposit-transaction";
 import { isEvmChain } from "@/libs/chains/registry";
@@ -55,6 +56,8 @@ function PendingRow({ tx, onDone }: { tx: PendingTx; onDone: () => void }) {
             await settleByHash({ chainId: tx.chainId, amountAtomic: tx.resume.amountAtomic }, tx.resume.depositId, tx.hash);
           }
           void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+          // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
+          void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
           void queryClient.invalidateQueries({ queryKey: ["balances"] });
           void queryClient.invalidateQueries({ queryKey: ["deposits"] });
           doneRef.current();

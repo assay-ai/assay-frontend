@@ -17,6 +17,7 @@ import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
 import { withdrawGasGrantNote } from "@/features/escrow/withdraw-gas-grant-note";
+import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import { useCountdown } from "@/hooks/useCountdown";
 import { usePendingTransactions } from "@/hooks/usePendingTransactions";
 import type { Money } from "@/interfaces/api";
@@ -180,6 +181,8 @@ export function WithdrawSheet({
         const hash = result.kind === "relayed" ? result.relayed.transactionHash : result.signature;
         if (result.kind === "relayed") queryClient.setQueryData(["escrow", null], result.relayed.escrow);
         void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+        // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
+        void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
         void queryClient.invalidateQueries({ queryKey: ["balances"] });
         return { explorerUrl: money.chain ? explorerTxUrl(money.chain, hash) : undefined };
       },
@@ -339,6 +342,8 @@ export function ClaimSheet({ open, onOpenChange }: { open: boolean; onOpenChange
         }
         pending.resolve(`claim:${hash}`);
         void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+        // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
+        void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
         void queryClient.invalidateQueries({ queryKey: ["balances"] });
         return { explorerUrl: money.chain ? explorerTxUrl(money.chain, hash) : undefined };
       },

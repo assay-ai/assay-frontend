@@ -5,7 +5,7 @@ import { Gauge, Info, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
 import { UtcTime } from "@/components/patterns/utc-time";
-import { AGENTS_WITH_KEYS_KEY, readAgentsWithKeys, useSpendPolicyQuery } from "@/components/buyer-money/use-agents";
+import { useSpendPolicyQuery } from "@/components/buyer-money/use-agents";
 import { alertTitle, isOldLimitAlert, type AlertNote, type LimitContext } from "@/features/buyer/alert-model";
 import { attentionAction, type AttentionAction } from "@/features/buyer/attention-action";
 import { OVERVIEW_KEY } from "@/features/buyer/use-overview";
@@ -13,7 +13,7 @@ import { supportsDelegation } from "@/features/delegation/delegation-form";
 import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import { notificationTitle } from "@/features/toolsets/contract-notices";
 import { ApiError } from "@/libs/ApiClient";
-import { markNotificationRead } from "@/services/account.service";
+import { listAgents, markNotificationRead } from "@/services/account.service";
 import { cn } from "@/utils";
 
 /**
@@ -68,12 +68,11 @@ export function AlertEntry({ note, limits, unread }: { note: AlertEntryNote; lim
  * marked.
  */
 export function useAlertLimitContext(enabled = true): LimitContext {
-  // The agents list the Overview's agent rows already read (one request for both).
   const agentsQuery = useQuery({
-    queryKey: AGENTS_WITH_KEYS_KEY,
+    queryKey: ["agents"],
     enabled,
     retry: false,
-    queryFn: readAgentsWithKeys,
+    queryFn: () => listAgents({ limit: 50 }) as unknown as Promise<{ items: { agentId: string; agentAccount?: string }[] }>,
   });
   const policyQuery = useSpendPolicyQuery({ enabled });
   return React.useMemo(() => {

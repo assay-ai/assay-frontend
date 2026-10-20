@@ -27,6 +27,7 @@ import { permissionExpiry } from "@/features/buyer-money/permission-expiry";
 import { type DelegateBinding, findDelegation, supportsDelegation } from "@/features/delegation/delegation-form";
 import { dollars, fingerprint } from "@/features/delegation/enable-paid";
 import { displayClientName } from "@/features/oauth/consent";
+import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import type { EscrowDelegate } from "@/interfaces";
 import { formatDate } from "@/libs/utc-time";
 import { ApiError } from "@/libs/ApiClient";
@@ -270,6 +271,8 @@ export function AgentsView() {
     data.refetchKeys();
     data.refetchDelegates();
     void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+    // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
+    void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
     void queryClient.invalidateQueries({ queryKey: ["escrow-delegates"] });
   };
 

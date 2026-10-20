@@ -16,6 +16,7 @@ import {
 } from "@/features/delegation/unsettled";
 import { applyLimitsSubmitted } from "@/features/escrow/after-set-limits";
 import { ESCROW_SUBMITTERS, runEscrowAction } from "@/features/escrow/relayed-submission";
+import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import type { EscrowLimitsBody } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { demoEnabled } from "@/libs/demo/demo-api";
@@ -170,6 +171,8 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
         if (demoEnabled() && body) {
           rememberDemoEscrowCaps(body);
           void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+          // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
+          void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
         }
       }}
       successTitle="Account ceiling set"
