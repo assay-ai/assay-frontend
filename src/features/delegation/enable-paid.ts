@@ -11,7 +11,7 @@ import { formatDecimal, toDecimal } from "@/utils/money";
 
 import strictRpcOrigins from "@/config/strict-rpc-origins.json";
 
-import { findDelegation } from "./delegation-form";
+import { expiryFromDays, findDelegation, MAX_DELEGATION_DAYS } from "./delegation-form";
 
 /**
  * `{WEB}/agents/enable-paid?credential={id}#key={address}` (spec F4 step 5,
@@ -46,8 +46,8 @@ export const ENABLE_PAID_STRINGS = {
 
 /** Light: $0.50 a call, $5 per 24 hours, for 30 days (spec G7, O2). */
 export const DEFAULT_CAPS = { perCall: "0.50", perDay: "5", days: "30" } as const;
-/** The longest grant this page signs: 30 days from the page's own clock (O2). */
-export const ENABLE_PAID_MAX_DAYS = 30;
+/** The longest grant this page signs: a year, the chain's limit (default 30 days, O2). */
+export const ENABLE_PAID_MAX_DAYS = MAX_DELEGATION_DAYS;
 /** How far `GET /escrow`'s `serverTime` may be from this device's clock before the page refuses to sign. */
 export const CLOCK_SKEW_LIMIT_SECONDS = 120;
 /** A grant with this many days left or fewer is offered "Renew for 30 days". */
@@ -260,7 +260,7 @@ export type ParsedEnablePaidCaps =
   | { ok: true; maxVoucherAmount: string; maxPerWindow: string; days: number }
   | { ok: false; perCall: string | null; perDay: string | null; days: string | null };
 
-/** The caps in atomic units, or why not. A call never above the day; 1 to 30 days on this page (O2). */
+/** The caps in atomic units, or why not. A call never above the day; 1 to 365 days on this page (30 by default, O2). */
 export function parseEnablePaidCaps(draft: CapsDraft, decimals: number): ParsedEnablePaidCaps {
   const caps = parseCaps(draft.perCall, draft.perDay, decimals);
   const zero = (atomic: string | null) => atomic !== null && BigInt(atomic) === 0n;
@@ -382,7 +382,7 @@ export function pageExpiry(input: {
     return { ok: false, text: `Between 1 and ${ENABLE_PAID_MAX_DAYS} days.` };
   }
   const now = Math.floor(input.localNowMs / 1000);
-  const validUntil = now + input.days * 86_400;
+  const validUntil = expiryFromDays(now, input.days);
   return { ok: true, validUntil, boundDays: Math.ceil((validUntil - now) / 86_400) };
 }
 

@@ -17,13 +17,24 @@ import { exceedsScale, toAtomic, toDecimal } from "@/utils/money";
  * - both caps above zero, the per-payment cap no higher than the per-window cap;
  * - neither cap above the escrow's OWN current limit (the escrow limits keep
  *   applying to the agent too — these caps can only narrow them);
- * - an expiry between 1 and 30 days out. The chain allows up to 365, but a
- *   grant signed from the web lasts at most 30 days (owner decision O2, the
- *   same cap enable-paid applies).
+ * - an expiry between 1 and 365 days out: 30 by default (owner decision O2),
+ *   at most the chain's one-year limit (the same rule enable-paid applies).
  */
 export const DEFAULT_DELEGATION_DAYS = 30;
-export const MAX_DELEGATION_DAYS = 30;
+/** The chain's `MAX_DELEGATION_LIFETIME_SECONDS` (365 days), in days. */
+export const MAX_DELEGATION_DAYS = 365;
+/**
+ * Taken off a full-year expiry so clock skew (up to 2 minutes) and block time
+ * never push it past the chain's limit, which the chain would refuse.
+ */
+export const MAX_EXPIRY_MARGIN_SECONDS = 600;
 const SECONDS_PER_DAY = 86_400;
+
+/** `days` whole days from `nowSeconds`; a full year keeps {@link MAX_EXPIRY_MARGIN_SECONDS} under the chain's limit. */
+export function expiryFromDays(nowSeconds: number, days: number): number {
+  const end = Math.floor(nowSeconds) + days * SECONDS_PER_DAY;
+  return days >= MAX_DELEGATION_DAYS ? end - MAX_EXPIRY_MARGIN_SECONDS : end;
+}
 
 export interface DelegationFormInput {
   maxVoucherAmount: string;
@@ -180,7 +191,7 @@ export function parseDelegationForm(
       maxPerWindow: toAtomic(perWindow.value, decimals),
       validUntil: keep
         ? String(currentValidUntil)
-        : String(Math.floor(nowSeconds) + Number(days) * SECONDS_PER_DAY),
+        : String(expiryFromDays(nowSeconds, Number(days))),
     },
   };
 }

@@ -226,7 +226,8 @@ describe("caps", () => {
     });
     expect(parseEnablePaidCaps({ perCall: "6", perDay: "5", days: "30" }, 6)).toMatchObject({ ok: false });
     expect(parseEnablePaidCaps({ perCall: "0.5", perDay: "5", days: "0" }, 6)).toMatchObject({ ok: false });
-    expect(parseEnablePaidCaps({ perCall: "0.5", perDay: "5", days: "31" }, 6)).toMatchObject({ ok: false });
+    expect(parseEnablePaidCaps({ perCall: "0.5", perDay: "5", days: "366" }, 6)).toMatchObject({ ok: false });
+    expect(parseEnablePaidCaps({ perCall: "0.5", perDay: "5", days: "365" }, 6)).toMatchObject({ ok: true, days: 365 });
     expect(parseEnablePaidCaps({ perCall: "0.5", perDay: "5", days: "30" }, 6)).toMatchObject({ ok: true, days: 30 });
   });
 
@@ -338,7 +339,7 @@ describe("fix round 1", () => {
       });
     }
     expect(pageExpiry({ localNowMs: NOW, serverTime: null, receivedAtMs: NOW, days: 30 }).ok).toBe(false);
-    expect(pageExpiry({ localNowMs: NOW, serverTime: at(0), receivedAtMs: NOW, days: 31 }).ok).toBe(false);
+    expect(pageExpiry({ localNowMs: NOW, serverTime: at(0), receivedAtMs: NOW, days: 366 }).ok).toBe(false);
   });
 
   it("the renew label follows the typed days", () => {
@@ -383,7 +384,7 @@ describe("fix round 2", () => {
       ok: true,
       ceiling: { maxVoucherAmount: "500000", maxPerWindow: "5000000" },
       chosen: { maxVoucherAmount: "500000", maxPerWindow: "5000000" },
-      expiry: { validUntil: NOW / 1000 + 30 * 86_400, maxDays: 30 },
+      expiry: { validUntil: NOW / 1000 + 30 * 86_400, maxDays: 365 },
       validUntil: new Date(NOW + 30 * DAY).toISOString(),
       boundDays: 30,
       nowSeconds: NOW / 1000,
@@ -402,7 +403,7 @@ describe("fix round 2", () => {
 
   it("enablePaidPlan: invalid caps sign nothing, and the form says why", () => {
     expect(plan(0, { perCall: "6", perDay: "5", days: "30" })).toEqual({ ok: false, problem: null });
-    expect(plan(0, { perCall: "0.5", perDay: "5", days: "31" })).toEqual({ ok: false, problem: null });
+    expect(plan(0, { perCall: "0.5", perDay: "5", days: "366" })).toEqual({ ok: false, problem: null });
   });
 
   it("enablePaidReturnTo: exactly this page with its credential id, nothing else (no key in any URL)", () => {
