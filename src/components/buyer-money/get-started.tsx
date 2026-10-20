@@ -91,9 +91,27 @@ function freeOnlyChain(chainId: string | null): boolean {
   return chainId !== null && !servesPaidCalls(chainId);
 }
 
+/**
+ * The agent Get started is about: the one furthest along — paying, else
+ * holding a bound key, else holding a key that is not revoked — and the first
+ * agent only when none is. Always the first one read a second agent that
+ * already pays as "Let your agent pay" whenever the first had only revoked
+ * keys, and kept the 5-second listener on for a bind nobody was making.
+ */
+function getStartedAgent(data: AgentsAndKeys): AgentsAndKeys["agents"][number] | null {
+  const agents = data.agents;
+  return (
+    agents.find((a) => data.readiness[a.agentId]?.grant?.status === "ACTIVE") ??
+    agents.find((a) => Boolean(data.readiness[a.agentId]?.boundCredential?.delegateAccount)) ??
+    agents.find((a) => (data.health[a.agentId]?.unrevokedKeyCount ?? 0) > 0) ??
+    agents[0] ??
+    null
+  );
+}
+
 /** The facts Get started ticks from, read off the agents, keys and escrow. */
 function getStartedFactsFrom(data: AgentsAndKeys) {
-  const agent = data.agents[0] ?? null;
+  const agent = getStartedAgent(data);
   const allKeys = data.agents.flatMap((a) => data.keys[a.agentId] ?? []);
   const agentKeyCount = agent ? (data.keys[agent.agentId] ?? []).length : 0;
   // Get started's "live" is not revoked, expiry aside: the health's `unrevokedKeyCount`.
@@ -121,7 +139,9 @@ function getStartedFactsFrom(data: AgentsAndKeys) {
       .map((h) => h.earliestLastUsedAt)
       .filter((at): at is string => at !== null)
       .sort()[0] ?? null;
-  return { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts, firstCallAt };
+  // A bind can only be awaited for a key that is not revoked: the payment key is bound to one.
+  const agentHasKey = agent ? (data.health[agent.agentId]?.unrevokedKeyCount ?? 0) > 0 : false;
+  return { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts, firstCallAt, agentHasKey };
 }
 
 /**
@@ -130,12 +150,12 @@ function getStartedFactsFrom(data: AgentsAndKeys) {
  * Overview load, then the card vanished (V1-1).
  */
 function dataLoading(data: AgentsAndKeys): boolean {
-  const agent = data.agents[0];
   return (
     data.agentsQuery.isPending ||
     (data.agents.length > 0 && data.keysQuery.isPending) ||
     data.escrowQuery.isPending ||
-    (agent !== undefined && data.readiness[agent.agentId]?.loading === true)
+    // Every agent's: which one Get started is about depends on all of them (`getStartedAgent`).
+    data.agents.some((agent) => data.readiness[agent.agentId]?.loading === true)
   );
 }
 
@@ -172,7 +192,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   const [createdToken, setCreatedToken] = React.useState<string | null>(null);
   const [expanded, setExpanded] = React.useState<string | null | undefined>(undefined);
 
-  const { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts, firstCallAt } = getStartedFactsFrom(data);
+  const { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts, firstCallAt, agentHasKey } = getStartedFactsFrom(data);
   // Step 1 done, but the full key is gone: make a new one here and fill it in.
   const createInPlace = useCreateKey(agent?.agentId ?? null, agentKeyCount, (key) => setCreatedToken(key.token));
   const catalogue = useCatalogue();
@@ -193,7 +213,20 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   const invitation = payByInvitation(facts);
 
   // The live listener: on while the first call or the payment key is awaited.
-  const listen = (states.call === "current" || (states.pay !== "done" && stage === "bind")) && !revealing;
+  const loading = dataLoading(data);
+  // On Overview, render nothing until the data says it is needed: a set-up
+  // account should not see a checklist skeleton flash on every visit.
+  const hidden = placement === "overview" && (loading || complete || dismissed);
+  // The live listener, only while there is something to wait for on screen: the
+  // first call of a key that exists, or the bind of a key that is not revoked.
+  // Never while the checklist is hidden, loading or complete: then the agent
+  // rows' 30-second read is enough.
+  const listen =
+    !hidden &&
+    !loading &&
+    !complete &&
+    (states.call === "current" || (states.pay !== "done" && stage === "bind" && agentHasKey)) &&
+    !revealing;
   React.useEffect(() => setPoll(listen ? LIVE_POLL_MS : false), [listen]);
 
   // When the data moves the current step on, let the checklist follow it again.
@@ -207,10 +240,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
     if (step) setAskedStep(step);
   }, []);
 
-  const loading = dataLoading(data);
-  // On Overview, render nothing until the data says it is needed: a set-up
-  // account should not see a checklist skeleton flash on every visit.
-  if (placement === "overview" && (loading || complete || dismissed)) return null;
+  if (hidden) return null;
 
   const agentName = agent?.label ?? "your agent";
   // Free calls only on this chain: steps 3 and 4 do not apply, said up front.

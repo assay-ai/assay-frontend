@@ -185,6 +185,31 @@ describe("Get started on Overview, an agent that already pays", { timeout: 30_00
     expect(html).toBe("");
   });
 
+  it("is about the agent that pays, not a first agent whose keys are all revoked", async () => {
+    const OTHER = "22222222-2222-2222-2222-222222222222";
+    const html = await renderGetStarted((client) => {
+      bound(client);
+      client.setQueryData(
+        AGENTS_WITH_KEYS_KEY,
+        demoAgentsWithKeys(
+          {
+            items: [
+              { agentId: OTHER, label: "E2E-M2 agent", agentAccount: ACCOUNT },
+              { agentId: AGENT, label: "My agent", agentAccount: ACCOUNT },
+            ],
+          },
+          {
+            [OTHER]: [{ ...KEY, id: "k0", agentId: OTHER, revokedAt: "2026-10-18T00:00:00Z" }],
+            [AGENT]: [{ ...KEY, delegateAccount: DELEGATE }],
+          },
+        ),
+      );
+      client.setQueryData(["escrow-delegates"], { delegates: [grant] });
+    }, "page");
+    // Read off the first agent it said "free calls" only, as if nothing could pay.
+    expect(text(html)).toContain("All set: your agent can call tools and pay for them");
+  });
+
   it("still asks to let the agent pay when the read permission is not active", async () => {
     const out = text(
       await renderGetStarted((client) => {

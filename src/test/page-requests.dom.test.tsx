@@ -19,7 +19,9 @@ import { createAppQueryClient } from "@/providers/query-client";
 import { setSharedReader } from "@/services/shared-reads";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 
-import { countsByPath, countsByRequest, recorded, resetRecorded } from "./request-recorder";
+import { demoAgentsWithKeys } from "@/libs/demo/demo-agent-health";
+
+import { answerWith, countsByPath, countsByRequest, recorded, resetRecorded } from "./request-recorder";
 
 async function settle() {
   for (let i = 0; i < 10; i += 1) {
@@ -212,5 +214,47 @@ describe("requests in the minute after a heavy page mounted", { timeout: 60_000 
       "GET /notifications": 1,
       "GET /providers/me/call-disputes": 1,
     });
+  });
+});
+
+describe("Overview with one agent whose keys are all revoked and one that pays", { timeout: 60_000 }, () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("reads the agents and the pay permissions every 30 s, never in the 5-second listener", async () => {
+    // As seen on testnet: "E2E-M2 agent" first, every key revoked; "My agent" paying, last call 4 h ago.
+    answerWith("GET /agents", (params, fixture) => {
+      const page = fixture() as { items: { agentId: string; label?: string; credentials?: { items: Record<string, unknown>[] } }[] };
+      if (!params.include) return page;
+      const paying = page.items.find((agent) => agent.credentials?.items.some((key) => key.delegateAccount && !key.revokedAt))!;
+      const revoked = page.items.find((agent) => agent !== paying)!;
+      const at = new Date(Date.now() - 4 * 3_600_000).toISOString();
+      const keys = {
+        [revoked.agentId]: (revoked.credentials?.items ?? []).map((key) => ({ ...key, revokedAt: key.revokedAt ?? at })),
+        [paying.agentId]: (paying.credentials?.items ?? []).map((key) => (key.delegateAccount ? { ...key, lastUsedAt: at } : key)),
+      };
+      const strip = ({ credentials: _c, health: _h, ...agent }: Record<string, unknown>) => agent;
+      return demoAgentsWithKeys(
+        { items: [{ ...strip(revoked), label: "E2E-M2 agent" }, { ...strip(paying), label: "My agent" }] as never },
+        keys,
+      );
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    nav.pathname = "/";
+    const { default: Layout } = await import("@/app/(main)/layout");
+    const { default: Overview } = await import("@/app/(main)/page");
+    await mount(
+      <Layout>
+        <Overview />
+      </Layout>,
+    );
+    const before = recorded.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    const minute = countsByPath(recorded.slice(before));
+    report("TWO AGENTS / MIN", minute);
+    expect(minute["GET /agents"]).toBeLessThanOrEqual(2);
+    expect(minute["GET /escrow/delegates"]).toBeLessThanOrEqual(2);
+    for (const [endpoint, count] of Object.entries(minute)) expect([endpoint, count <= 2]).toEqual([endpoint, true]);
   });
 });
