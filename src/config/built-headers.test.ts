@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /* Spec R-WEB-2/3/4, T18: scripts/add-sri.js and scripts/check-built-headers.js on a small built tree. */
 const require = createRequire(import.meta.url);
@@ -21,13 +21,21 @@ const page = (extra = "") =>
   `<link rel="preload" as="script" fetchPriority="low" href="/_next/static/chunks/a.js"/>${extra}</head>` +
   `<body><script>self.__x=1</script></body></html>`;
 
+/* The checker expects the API origin of NEXT_PUBLIC_API_BASE_URL in `connect-src`; pin it so the result does not depend on the shell or CI env. */
+const API_BASE_URL = "https://api.example.com/api/v1";
+const API_ORIGIN = "https://api.example.com";
+
 const dirs: string[] = [];
+beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", API_BASE_URL);
+});
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-/** A built tree: the strict pages, a chunk, and `_headers` completed the way the build does. */
-function build(): string {
+/** A built tree: the strict pages, a chunk, and `_headers` completed the way the build does (with the API origin). */
+function build(connectOrigins: string[] = [API_ORIGIN]): string {
   const dir = mkdtempSync(join(tmpdir(), "built-"));
   dirs.push(dir);
   execFileSync("mkdir", ["-p", join(dir, "connect"), join(dir, "agents"), join(dir, "_next/static/chunks")]);
@@ -38,7 +46,7 @@ function build(): string {
     "/connect/*": { "/connect/authorize": readFileSync(join(dir, "connect/authorize.html"), "utf8") },
     "/agents/enable-paid": { "/agents/enable-paid": readFileSync(join(dir, "agents/enable-paid.html"), "utf8") },
   };
-  writeFileSync(join(dir, "_headers"), completeHeaders(HEADERS, pages, []));
+  writeFileSync(join(dir, "_headers"), completeHeaders(HEADERS, pages, connectOrigins));
   return dir;
 }
 
@@ -70,6 +78,10 @@ describe("add-sri", () => {
 describe("check-built-headers", () => {
   it("passes a correctly built tree", () => {
     expect(checkOut(build())).toEqual([]);
+  });
+
+  it("fails a page policy whose connect-src lacks the API origin", () => {
+    expect(checkOut(build([])).join("\n")).toMatch(/\/connect\/authorize.*connect-src is not the strict policy's/);
   });
 
   it("fails a script without integrity", () => {
