@@ -239,9 +239,11 @@ export const LIMITS_LANDING_POLL_MS = 2_000;
 export const LIMITS_LANDING_TIMEOUT_MS = 30_000;
 
 /**
- * The escrow query's `refetchInterval` after a successful write: poll until the
- * read shows the signed limits, then stop — and stop anyway after a bounded
- * wait, so a read that never catches up costs a few requests, not a loop.
+ * How long to wait before reading the escrow again after a successful write:
+ * keep reading until a read shows the signed limits, then stop — and stop
+ * anyway after a bounded wait, so a read that never catches up costs a few
+ * requests, not a loop. Used by `applyLimitsSubmitted` only when neither the
+ * relayer's read nor the first re-read shows them yet.
  */
 export function limitsLandingInterval(
   escrow: Parameters<typeof limitsLanded>[0],
