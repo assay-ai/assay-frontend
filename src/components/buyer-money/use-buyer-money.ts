@@ -5,7 +5,7 @@ import * as React from "react";
 
 import { ConnectWalletNote } from "@/components/buyer-money/connect-wallet";
 import { capsAreSet } from "@/features/buyer-money/caps";
-import { anyConfirming } from "@/features/buyer-money/confirming";
+import { anyConfirming, confirmingPollMs } from "@/features/buyer-money/confirming";
 import { WalletNotReady } from "@/features/buyer-money/money-errors";
 import type { FullBalance } from "@/features/g30/balance";
 import { useChains } from "@/hooks/useChains";
@@ -41,15 +41,24 @@ export function useEscrowQuery(options: { refetchInterval?: number | false; enab
   });
 }
 
-const CONFIRMING_POLL_MS = 3_000;
-
 export function useBalancesQuery() {
+  // When this view first saw a deposit confirming; null while none is.
+  const confirmingSince = React.useRef<number | null>(null);
   return useQuery<{ balances: FullBalance[] }, ApiError>({
     queryKey: ["balances"],
     queryFn: () => getBalances() as Promise<{ balances: FullBalance[] }>,
     // While a deposit is confirming, look again every few seconds: the API
     // credits it within seconds, and "still confirming" must not outlive it.
-    refetchInterval: (query) => (anyConfirming(query.state.data?.balances) ? CONFIRMING_POLL_MS : false),
+    // A deposit stuck confirming is then checked every 30 s, not every 3 s forever.
+    refetchInterval: (query) => {
+      if (!anyConfirming(query.state.data?.balances)) {
+        confirmingSince.current = null;
+        return false;
+      }
+      const now = Date.now();
+      confirmingSince.current ??= now;
+      return confirmingPollMs(now - confirmingSince.current);
+    },
     retry: 0,
     networkMode: "always" as const,
   });

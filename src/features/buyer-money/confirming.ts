@@ -33,6 +33,18 @@ export function confirmingOnChain(row: FullBalance | null | undefined): Money | 
   return { amount: sum.toString(), asset: row.asset, decimals: row.decimals };
 }
 
+/** Poll `/balances` this often while a deposit has been confirming for less than {@link CONFIRMING_FAST_FOR_MS}. */
+export const CONFIRMING_POLL_MS = 3_000;
+/** How long the fast poll lasts: a deposit normally confirms within seconds. */
+export const CONFIRMING_FAST_FOR_MS = 120_000;
+/** After that, a deposit stuck confirming (say, a settlement the backend never finishes) is checked this often. */
+export const CONFIRMING_SLOW_POLL_MS = 30_000;
+
+/** The `/balances` poll for a deposit that has been confirming for `elapsedMs`: fast at first, then slow. */
+export function confirmingPollMs(elapsedMs: number): number {
+  return elapsedMs < CONFIRMING_FAST_FOR_MS ? CONFIRMING_POLL_MS : CONFIRMING_SLOW_POLL_MS;
+}
+
 /** Whether any ledger row still has a deposit confirming on chain. */
 export function anyConfirming(balances: readonly FullBalance[] | undefined): boolean {
   return (balances ?? []).some((row) => confirmingOnChain(row) !== null);

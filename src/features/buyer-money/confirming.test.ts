@@ -12,6 +12,7 @@ import {
   anyConfirming,
   confirmingLine,
   confirmingOnChain,
+  confirmingPollMs,
   escrowLedgerRow,
   readyForPaidCalls,
 } from "./confirming";
@@ -94,5 +95,14 @@ describe("anyConfirming (the balances query polls while it is true)", () => {
     expect(anyConfirming([row({ pending: m("5000000") })])).toBe(true);
     expect(anyConfirming([row({ pending: m("0") })])).toBe(false);
     expect(anyConfirming(undefined)).toBe(false);
+  });
+});
+
+describe("the /balances poll backs off for a deposit stuck confirming", () => {
+  it("3 s for the first two minutes, then 30 s", () => {
+    expect(confirmingPollMs(0)).toBe(3_000);
+    expect(confirmingPollMs(119_999)).toBe(3_000);
+    expect(confirmingPollMs(120_000)).toBe(30_000);
+    expect(confirmingPollMs(3_600_000)).toBe(30_000);
   });
 });
