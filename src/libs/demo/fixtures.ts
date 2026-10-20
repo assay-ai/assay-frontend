@@ -1,5 +1,6 @@
 import { demoMinutesAgo } from "./demo-clock";
 import { BUYER_FIXTURES, demoBuyerLedger, demoMoneyMinor } from "./fixtures-buyer";
+import { compositeFixtures } from "./fixtures-composite";
 import { freshAtLeast, freshStage } from "./fresh-account";
 import { EXPLORE_FIXTURES } from "./fixtures-explore";
 import { OPERATOR_FIXTURES } from "./fixtures-operator";
@@ -66,7 +67,7 @@ export function justNow(): string {
  * Order matters only where two entries could match one path: the first match
  * wins, so a specific path must be listed before a regex that also covers it.
  */
-export const DEMO_FIXTURES: readonly DemoFixture[] = [
+const SINGLE_ROUTE_FIXTURES: readonly DemoFixture[] = [
   {
     /*
       One organization's notifications serve two consoles. The provider Inbox
@@ -140,3 +141,14 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
     },
   },
 ];
+
+/** One single-route fixture's answer, or `undefined` when none matches (first match wins, as in `demo-api.ts`). */
+function singleRouteAnswer(path: string, query: Record<string, unknown> = {}): unknown {
+  const fixture = SINGLE_ROUTE_FIXTURES.find(
+    (f) => f.method === "GET" && (f.match instanceof RegExp ? f.match.test(path) : f.match === path),
+  );
+  return fixture?.body(path, query);
+}
+
+/** The composite reads first: each is made of the single-route answers below it. */
+export const DEMO_FIXTURES: readonly DemoFixture[] = [...compositeFixtures(singleRouteAnswer), ...SINGLE_ROUTE_FIXTURES];
