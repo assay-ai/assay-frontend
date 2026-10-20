@@ -58,7 +58,7 @@ async function renderGetStarted(
     balance: usd("5000000"),
     spendable: usd("5000000"),
   });
-  client.setQueryData(["escrow", "debts"], { account: ACCOUNT, debts: [] });
+  client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
   client.setQueryData(["spend-policy"], null);
   client.setQueryData(["chains"], { chains: [] });
   client.setQueryData(["catalogue", "providers"], { providers: [] });

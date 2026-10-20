@@ -8,6 +8,13 @@ describe("the demo's composite reads, made of its single-route answers", () => {
   beforeEach(() => vi.stubEnv("NEXT_PUBLIC_DEMO_CHAINS", "robinhood"));
   afterEach(() => vi.unstubAllEnvs());
 
+  it("GET /me/status: the unread count and the debts as their own routes answer them, and no block", () => {
+    const status = get("/me/status");
+    expect(status.unreadCount).toEqual(get("/notifications/unread-count"));
+    expect(status.debts).toEqual(get("/escrow/debts"));
+    expect(status.blockStatus).toEqual({ blocked: false, blocks: [] });
+  });
+
   it("GET /overview: every part is its route's answer for the windows of `at`", () => {
     const at = "2026-10-20T12:00:00.000Z";
     const overview = get("/overview", { at, callsLimit: 6, alertsLimit: 50 }) as {
