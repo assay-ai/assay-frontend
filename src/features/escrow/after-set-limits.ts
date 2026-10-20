@@ -34,7 +34,8 @@ export function readEscrow(chainId: string | null, awaiting: unknown): Promise<B
  * - Otherwise this chain's entry is re-read once, awaited. If that read is
  *   still behind (an RPC a block behind the receipt), it keeps being re-read
  *   every `LIMITS_LANDING_POLL_MS` until it shows the signed limits, for at
- *   most `LIMITS_LANDING_TIMEOUT_MS`, without holding up the caller.
+ *   most `LIMITS_LANDING_TIMEOUT_MS`, without holding up the caller, and
+ *   never past a change of signed-in identity (`stopLimitsRereads`).
  * - Once this chain's entry shows them (or the wait ran out), the other escrow
  *   reads on screen (the same escrow under its chain id, say) are refetched
  *   once.
@@ -66,6 +67,18 @@ export async function applyLimitsSubmitted(
   void keepRereading(queryClient, chainId, awaiting, read, now);
 }
 
+/** Bumped by `stopLimitsRereads`; a re-read loop started under another value stops. */
+let generation = 0;
+
+/**
+ * Ends every background re-read `applyLimitsSubmitted` started. Called when
+ * the signed-in identity changes: the limits it waits for are the previous
+ * person's, and nothing the next person sees should keep it reading.
+ */
+export function stopLimitsRereads(): void {
+  generation += 1;
+}
+
 async function reread(queryClient: QueryClient, chainId: string | null): Promise<BuyerEscrow | undefined> {
   return queryClient
     .fetchQuery({ queryKey: escrowQueryKey(chainId), queryFn: () => revalidateEscrow(chainId), staleTime: 0 })
@@ -79,13 +92,16 @@ async function keepRereading(
   last: BuyerEscrow | undefined,
   now: () => number,
 ): Promise<void> {
+  const started = generation;
   let read = last;
   for (;;) {
     const wait = limitsLandingInterval(read, awaiting, now());
     if (wait === false) break;
     await new Promise((resolve) => setTimeout(resolve, wait));
+    if (generation !== started) return;
     read = await reread(queryClient, chainId);
   }
+  if (generation !== started) return;
   refreshOtherEscrowReads(queryClient, escrowQueryKey(chainId));
 }
 
