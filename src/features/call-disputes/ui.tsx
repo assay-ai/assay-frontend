@@ -15,6 +15,8 @@ import { CodePane } from "@/features/g30/receipt-parts";
 import { routes } from "@/libs/routes";
 import { fileCallDispute, type CallDispute, type CallDisputeEvidence, type CallDisputeReason } from "@/services/call-disputes.service";
 import { cn } from "@/utils";
+
+import { callDisputeKeys } from "./keys";
 import { toast } from "@/utils/toast";
 
 import {
@@ -36,14 +38,7 @@ import {
  * sheet.
  */
 
-export const callDisputeKeys = {
-  all: ["call-disputes"] as const,
-  buyer: ["call-disputes", "buyer"] as const,
-  forIntent: (intentId: string) => ["call-disputes", "buyer", "intent", intentId] as const,
-  one: (id: string) => ["call-disputes", "buyer", "one", id] as const,
-  provider: ["call-disputes", "provider"] as const,
-  providerOne: (id: string) => ["call-disputes", "provider", "one", id] as const,
-};
+export { callDisputeKeys };
 
 export function DisputeChip({ view }: { view: DisputeStatusView }) {
   const tone = view.tone === "teal" ? "success" : view.tone;

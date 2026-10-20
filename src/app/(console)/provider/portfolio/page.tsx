@@ -33,6 +33,7 @@ import { formatMoney } from "@/utils/money";
 
 import { wholePercents } from "./_lib/shares";
 import { providerQueries } from "@/features/provider-home/queries";
+import { earningsKey, last30DaysWindow } from "@/features/provider-home/report-windows";
 
 /**
  * Binding portfolio.
@@ -84,13 +85,6 @@ import { providerQueries } from "@/features/provider-home/queries";
  */
 
 /** The 30 days the two "30d" columns are actually measured over, `[from, to)`. */
-function last30Days(now: Date): { from: string; to: string } {
-  const to = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
-  );
-  const from = new Date(to.getTime() - 30 * 86_400_000);
-  return { from: from.toISOString(), to: to.toISOString() };
-}
 
 const DASH = "—";
 
@@ -141,7 +135,7 @@ function netCell(
 
 export default function ProviderPortfolioPage() {
   const names = useProviderToolNames();
-  const window30d = useMemo(() => last30Days(new Date()), []);
+  const window30d = useMemo(() => last30DaysWindow(new Date()), []);
 
   /*
     The same query the `(console)` layout runs for the sidebar's binding rows,
@@ -153,7 +147,7 @@ export default function ProviderPortfolioPage() {
   const stake = useQuery(providerQueries.stake());
 
   const earnings = useQuery({
-    queryKey: ["provider", "earnings", "tool", window30d.from, window30d.to],
+    queryKey: earningsKey(window30d),
     queryFn: () => getProviderEarnings({ ...window30d, groupBy: "tool" }),
   });
 
