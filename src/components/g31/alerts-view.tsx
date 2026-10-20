@@ -46,6 +46,7 @@ import { useSearchParam } from "@/hooks/useSearchParam";
 import { plainError } from "@/libs/plain-language";
 import { ApiError } from "@/libs/ApiClient";
 import { listNotifications } from "@/services/account.service";
+import { getProviderMe } from "@/services/provider-profile.service";
 import {
   listNotificationChannels,
   listNotificationDeliveries,
@@ -300,6 +301,11 @@ export function AlertsView() {
     return map;
   }, [preferencesQuery.data]);
 
+  // A provider organization also sees its provider-side alerts under Customise. Same
+  // signal and key as the provider console: `GET /providers/me` answers (404 = not a provider).
+  const providerMe = useQuery({ queryKey: ["provider", "me"], queryFn: getProviderMe, retry: 0 });
+  const isProvider = providerMe.isSuccess;
+
   const isEnabled = React.useCallback(
     (event: NotificationEvent, channel: NotificationChannel) => preferenceOverride.get(`${event}|${channel}`) ?? true,
     [preferenceOverride],
@@ -487,7 +493,7 @@ export function AlertsView() {
               Customise: every alert, how urgent and how often
             </summary>
             <ul className="flex flex-col px-4 pb-3 tablet:px-5">
-              {customiseEvents(Object.keys(NOTIFICATION_CATALOGUE) as NotificationEvent[]).filter((event) => NOTIFICATION_CATALOGUE[event].hasProducer).map((event) => {
+              {customiseEvents(Object.keys(NOTIFICATION_CATALOGUE) as NotificationEvent[], { provider: isProvider }).filter((event) => NOTIFICATION_CATALOGUE[event].hasProducer).map((event) => {
                 const def = NOTIFICATION_CATALOGUE[event];
                 return (
                   <li key={event} className="flex flex-col gap-1 border-t border-01 py-2.5 first:border-t-0 tablet:flex-row tablet:items-center tablet:gap-3">
