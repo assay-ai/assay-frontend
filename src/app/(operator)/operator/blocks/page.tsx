@@ -35,6 +35,7 @@ import { callSummary, chainDisplayName } from "@/features/operator/call-summary"
 import { ContractCallAction } from "@/features/operator/contract-call-action";
 import { eligibleApprovers } from "@/features/operator/inbox";
 import { BLOCK_REASONS, UNBLOCK_REASONS, reasonLabel } from "@/features/operator/reasons";
+import { AFTER_BLOCK_LIFT, refreshAfter } from "@/features/operator/refresh-after";
 import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { approvalHref, approverPhrase, sentForApproval } from "@/features/operator/two-person";
@@ -925,7 +926,7 @@ function LiftSheet({
     mutationFn: (input: { id: string; reasonCode: string; note: string }) =>
       unblockAccount(input.id, { reasonCode: input.reasonCode, note: input.note }),
     onSuccess: (answer) => {
-      void queryClient.invalidateQueries({ queryKey: ["operator"] });
+      refreshAfter(queryClient, AFTER_BLOCK_LIFT);
       const sent = answer.kind === "queued" ? sentForApproval(`Lifting the block on ${label}`, approvers, needs, answer.approval.expiresAt) : null;
       onDone(
         answer.kind === "queued" && sent ? (
