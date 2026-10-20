@@ -42,16 +42,21 @@ export async function readAgentsWithKeys(): Promise<AgentsWithKeysPage> {
  * The plain list, unless the screen is reading the richer one anyway: then it
  * is that answer without the keys, so a screen with both (Overview: the agent
  * rows and the bell's limit context) asks once. Joining it reads with the
- * same function as the screen that asked for it.
+ * same function as the screen that asked for it; if that read fails, the
+ * plain list is read on its own.
  */
 async function readAgentList(context: QueryFunctionContext): Promise<CursorPage<Agent>> {
   const rich = context.client.getQueryCache().find({ queryKey: AGENTS_WITH_KEYS_KEY, exact: true });
   if (rich) {
-    const page = (await context.client.fetchQuery({ queryKey: AGENTS_WITH_KEYS_KEY, queryFn: readAgentsWithKeys })) as unknown as CursorPage<Agent>;
-    return {
-      ...page,
-      items: page.items.map(({ credentials: _credentials, health: _health, ...agent }) => agent as Agent),
-    };
+    try {
+      const page = (await context.client.fetchQuery({ queryKey: AGENTS_WITH_KEYS_KEY, queryFn: readAgentsWithKeys })) as unknown as CursorPage<Agent>;
+      return {
+        ...page,
+        items: page.items.map(({ credentials: _credentials, health: _health, ...agent }) => agent as Agent),
+      };
+    } catch {
+      // The richer read failed (its keys missing, say): the plain list does not depend on them.
+    }
   }
   return listAgents({ limit: AGENTS_PAGE });
 }

@@ -50,7 +50,7 @@ import { ResultCard } from "./result-card";
 import { useOperatorSession } from "./session-context";
 import { approvalHref, approverPhrase, sentForApproval, type TwoPersonAnswer } from "./two-person";
 import { useOperatorDirectory } from "./use-operator-lookups";
-import { operatorQueries } from "@/features/operator/queries";
+import { OPERATOR_TOOLS_LIST_KEY, operatorQueries } from "@/features/operator/queries";
 
 /**
  * One standard tool in the operator console (design spec §7.5 "Editor"):
@@ -86,7 +86,8 @@ export function ContractEditorScreen({ toolId, fromRequest = "" }: { toolId: str
   const queryClient = useQueryClient();
 
   const toolQuery = useQuery({ queryKey: ["operator", "tools", toolId], queryFn: () => getOperatorTool(toolId), retry: 0, enabled: toolId !== "" });
-  const listQuery = useQuery(operatorQueries.tools());
+  // Read again on every visit: the editor names and checks against the current list.
+  const listQuery = useQuery({ ...operatorQueries.tools(), refetchOnMount: "always" });
   const pendingQuery = useQuery({
     ...operatorQueries.pendingApprovals(),
     refetchInterval: 30_000,
@@ -449,11 +450,17 @@ function DraftEditor({
 
   const save = useMutation({
     mutationFn: () => saveContractDraft(tool.id, parsed.body!),
-    onSuccess: (updated) => queryClient.setQueryData(["operator", "tools", tool.id], updated),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["operator", "tools", tool.id], updated);
+      void queryClient.invalidateQueries({ queryKey: OPERATOR_TOOLS_LIST_KEY });
+    },
   });
   const discard = useMutation({
     mutationFn: () => discardContractDraft(tool.id),
-    onSuccess: (updated) => queryClient.setQueryData(["operator", "tools", tool.id], updated),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["operator", "tools", tool.id], updated);
+      void queryClient.invalidateQueries({ queryKey: OPERATOR_TOOLS_LIST_KEY });
+    },
   });
 
   const set = <K extends keyof ContractForm>(field: K, value: ContractForm[K]) => setForm((f) => ({ ...f, [field]: value }));

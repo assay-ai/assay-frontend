@@ -62,6 +62,8 @@ export function useMeStatusPart<P extends MeStatusPart>(
     enabled:
       options.enabled !== false &&
       (demoEnabled() || hasBlockStatusSession({ ready, authenticated, hasStoredToken })),
+    // Just under the API's 5 s cache: a refetch on every focus would only re-read it.
+    staleTime: 4_000,
     refetchInterval: options.poll ? ME_STATUS_POLL_MS : false,
     refetchOnWindowFocus: true,
     retry: 0,

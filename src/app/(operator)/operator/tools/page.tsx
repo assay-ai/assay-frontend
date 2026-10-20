@@ -60,7 +60,7 @@ function ToolsScreen() {
   // "Overdue" is read against the moment the page opened; the list refreshes on every visit.
   const [now] = React.useState(() => Date.now());
 
-  const tools = useQuery(operatorQueries.tools());
+  const tools = useQuery({ ...operatorQueries.tools(), refetchOnMount: "always" });
   const requests = useQuery(operatorQueries.toolRequests());
   const pending = useQuery({
     ...operatorQueries.pendingApprovals(),
