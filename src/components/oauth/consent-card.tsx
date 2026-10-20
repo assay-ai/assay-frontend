@@ -13,6 +13,7 @@ import {
   consentView,
   defaultAgentId,
   initialName,
+  lockedAgentName,
   nameProblem,
   visibleName,
   type ConsentRequest,
@@ -153,7 +154,10 @@ export function ConsentCard({
         setError(`${prefix}${caught.message}`);
       } else {
         const code = caught instanceof ApiError ? caught.code : undefined;
-        const failure = consentFailure(code);
+        const failure = consentFailure(code, {
+          message: caught instanceof ApiError ? caught.message : undefined,
+          lockedAgent: lockedAgentName(request),
+        });
         if (!(caught instanceof ApiError)) setUnanswered(true);
         if (failure.kind === "final") {
           // An earlier decision from this tab got no answer, and now the request
@@ -198,7 +202,10 @@ export function ConsentCard({
       try {
         await recheck();
       } catch (caught) {
-        const failure = consentFailure(caught instanceof ApiError ? caught.code : undefined);
+        const failure = consentFailure(caught instanceof ApiError ? caught.code : undefined, {
+          message: caught instanceof ApiError ? caught.message : undefined,
+          lockedAgent: lockedAgentName(request),
+        });
         if (failure.kind === "final") finish(failure.text);
         else setError(failure.text);
         return failure.text;

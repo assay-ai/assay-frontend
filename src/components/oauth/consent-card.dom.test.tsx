@@ -307,6 +307,31 @@ describe("signing in again for the same agent (replacesAgent)", () => {
     expect(onApprove).toHaveBeenCalledWith({ agentId: "agt-1", name: "Claude Code · 2026-10-19" });
   });
 
+  it("a 409 OAUTH_REPLACE_AGENT_MISMATCH ends the request with the API's words (review m3)", async () => {
+    const onApprove = vi.fn().mockRejectedValue(new ApiError("OAUTH_REPLACE_AGENT_MISMATCH", "Sign out in the app first, then connect again.", 409));
+    const onFinal = vi.fn();
+    mount({ onApprove, onFinal, request: request({ replacesAgent: { id: "agt-1", name: "research-bot" } }) });
+    arm();
+    await act(async () => {
+      press(approve());
+    });
+    expect(screen.getByTestId("consent-final").textContent).toBe("Sign out in the app first, then connect again.");
+    expect(onFinal).toHaveBeenCalled();
+  });
+
+  it("a paused locked agent refused by the API says resume it or sign out (review m4)", async () => {
+    const onApprove = vi.fn().mockRejectedValue(new ApiError("OAUTH_AGENT_NOT_ACTIVE", "x", 409));
+    mount({ onApprove, request: request({ replacesAgent: { id: "agt-1", name: "research-bot" } }) });
+    arm();
+    await act(async () => {
+      press(approve());
+    });
+    expect(screen.getByRole("alert").textContent).toBe(
+      "research-bot is paused. Resume it in Agents & keys, or sign out in the app to connect another agent.",
+    );
+    expect(document.body.textContent).not.toContain("Pick another");
+  });
+
   it("without the field the picker stays", () => {
     mount();
     expect(screen.getByRole("combobox")).toBeTruthy();

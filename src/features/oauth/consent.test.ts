@@ -11,6 +11,7 @@ import {
   foldForMatch,
   initialName,
   isContinueUrl,
+  lockedAgentName,
   limitsLine,
   mixesScripts,
   nameIsFlagged,
@@ -332,6 +333,32 @@ describe("consent view: signing in again (replacesAgent)", () => {
     expect(defaultAgentId(req)).toBe("a");
     expect(view(req).showAgentPicker).toBe(true);
     expect(view(req).relogin).toBeNull();
+  });
+});
+
+describe("signing in again: refusals that the picker cannot fix (review m3, m4)", () => {
+  it("OAUTH_REPLACE_AGENT_MISMATCH is final, in the API's words or ours", () => {
+    expect(consentFailure("OAUTH_REPLACE_AGENT_MISMATCH", { message: "Sign out in the app first." })).toEqual({
+      kind: "final",
+      text: "Sign out in the app first.",
+    });
+    expect(consentFailure("OAUTH_REPLACE_AGENT_MISMATCH", { message: "  " })).toEqual({
+      kind: "final",
+      text: "This sign-in replaces another agent's connection. Sign out in the app first, then connect again.",
+    });
+  });
+
+  it("a paused locked agent: resume it or sign out in the app, never pick another", () => {
+    const text = "ops is paused. Resume it in Agents & keys, or sign out in the app to connect another agent.";
+    expect(consentFailure("OAUTH_AGENT_NOT_ACTIVE", { lockedAgent: "ops" })).toEqual({ kind: "agent", text });
+    expect(consentFailure("OAUTH_AGENT_NOT_ACTIVE").text).toBe(CONSENT_STRINGS.paused);
+    const req = request({
+      agents: [agent({ id: "a" }), agent({ id: "b", label: "ops", active: false })],
+      replacesAgent: { id: "b", name: "ops" },
+    });
+    expect(lockedAgentName(req)).toBe("ops");
+    expect(view(req).agentNotes).toEqual([text]);
+    expect(view(req).approveDisabled).toBe(true);
   });
 });
 

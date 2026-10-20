@@ -79,7 +79,13 @@ export const CONSENT_STRINGS = {
   tapAgain: "Tap again to confirm.",
   retry: "That did not go through. Try again.",
   badRedirect: "Assay could not send you back to the app. Go back to your app and try again.",
+  replaceMismatch: "This sign-in replaces another agent's connection. Sign out in the app first, then connect again.",
 } as const;
+
+/** The paused note when the agent is fixed by an earlier sign-in: there is no other agent to pick here. */
+export function lockedPausedText(name: string): string {
+  return `${name} is paused. Resume it in Agents & keys, or sign out in the app to connect another agent.`;
+}
 
 export interface ConsentView {
   client: {
@@ -156,6 +162,13 @@ export function defaultAgentId(request: ConsentRequest): string | null {
 export function lockedAgentId(request: Pick<ConsentRequest, "agents" | "replacesAgent">): string | null {
   const id = request.replacesAgent?.id;
   return id && request.agents.some((a) => a.id === id) ? id : null;
+}
+
+/** The locked agent's name as shown ("research-bot"), or null when no agent is locked. */
+export function lockedAgentName(request: Pick<ConsentRequest, "agents" | "replacesAgent">): string | null {
+  const id = lockedAgentId(request);
+  if (!id) return null;
+  return request.replacesAgent!.name.trim() || request.agents.find((a) => a.id === id)?.label || "This agent";
 }
 
 /**
@@ -418,7 +431,8 @@ export function consentView(
 
   const agentNotes: string[] = [];
   if (request.agents.length === 0) agentNotes.push(CONSENT_STRINGS.noAgents);
-  if (agent && !agent.active) agentNotes.push(CONSENT_STRINGS.paused);
+  const lockedName = lockedAgentName(request);
+  if (agent && !agent.active) agentNotes.push(lockedName ? lockedPausedText(lockedName) : CONSENT_STRINGS.paused);
   // The backend's cap leaves out a live grant this approval replaces (a dead one is not counted anyway).
   const atLimit =
     !!agent && agent.liveOAuthCredentials >= GRANT_LIMIT && !(replaces?.live && replaces.agentId === agent.id);
@@ -460,9 +474,7 @@ export function consentView(
     notVerified: verified ? null : CONSENT_STRINGS.notVerified,
     startedAgo: startedAgo(request.createdAt, options.now),
     showAgentPicker: request.agents.length > 1 && !lockedAgentId(request),
-    relogin: lockedAgentId(request)
-      ? `Signing in again for ${request.replacesAgent!.name.trim() || agent?.label || "this agent"}.`
-      : null,
+    relogin: lockedName ? `Signing in again for ${lockedName}.` : null,
     agent,
     limitsLine: agent ? limitsLine(agent) : null,
     cannotDo: [
@@ -489,14 +501,25 @@ export function consentView(
  * - `name`: shown on the name field;
  * - `retry`: anything else.
  */
-export function consentFailure(code: string | undefined): { kind: "final" | "agent" | "name" | "retry"; text: string } {
+export function consentFailure(
+  code: string | undefined,
+  options: {
+    /** The API's own message, used where the code has no sentence of ours that fits better. */
+    message?: string;
+    /** The agent fixed by an earlier sign-in (`lockedAgentName`): a paused one cannot be swapped here. */
+    lockedAgent?: string | null;
+  } = {},
+): { kind: "final" | "agent" | "name" | "retry"; text: string } {
   switch (code) {
+    case "OAUTH_REPLACE_AGENT_MISMATCH":
+      // Approving as another agent than the one being replaced never works: retrying cannot help.
+      return { kind: "final", text: options.message?.trim() || CONSENT_STRINGS.replaceMismatch };
     case "OAUTH_REQUEST_NOT_FOUND":
       return { kind: "final", text: CONSENT_STRINGS.expired };
     case "OAUTH_REQUEST_ALREADY_DECIDED":
       return { kind: "final", text: CONSENT_STRINGS.decided };
     case "OAUTH_AGENT_NOT_ACTIVE":
-      return { kind: "agent", text: CONSENT_STRINGS.paused };
+      return { kind: "agent", text: options.lockedAgent ? lockedPausedText(options.lockedAgent) : CONSENT_STRINGS.paused };
     case "OAUTH_GRANT_LIMIT_REACHED":
       return { kind: "agent", text: CONSENT_STRINGS.grantLimit };
     case "ACCOUNT_AGENT_NOT_FOUND":
