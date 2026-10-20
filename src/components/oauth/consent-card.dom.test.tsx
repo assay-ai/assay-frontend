@@ -295,6 +295,25 @@ describe("ConsentCard decisions", () => {
   });
 });
 
+describe("signing in again for the same agent (replacesAgent)", () => {
+  it("approves as that agent with no picker and says so", async () => {
+    const { onApprove } = mount({ request: request({ replacesAgent: { id: "agt-1", name: "research-bot" } }) });
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getByTestId("consent-relogin").textContent).toBe("Signing in again for research-bot.");
+    arm();
+    await act(async () => {
+      press(approve());
+    });
+    expect(onApprove).toHaveBeenCalledWith({ agentId: "agt-1", name: "Claude Code · 2026-10-19" });
+  });
+
+  it("without the field the picker stays", () => {
+    mount();
+    expect(screen.getByRole("combobox")).toBeTruthy();
+    expect(screen.queryByTestId("consent-relogin")).toBeNull();
+  });
+});
+
 describe("request id", () => {
   afterEach(() => {
     forgetRequestId();
