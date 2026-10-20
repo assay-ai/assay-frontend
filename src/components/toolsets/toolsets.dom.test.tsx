@@ -235,7 +235,7 @@ describe("Servers in use", () => {
   it("one row per URL — name, tools, tokens, last call — a waiting row, and the over-budget warning", () => {
     const out = text(render(<ServersInUse agentId="a1" agentName="research-bot" />, (c) => c.setQueryData(toolsetKeys.servers("a1"), SERVERS)));
     expect(out).toContain("Name Tools Tokens (est.) Last call Change");
-    expect(out).toContain("Read-only: to change one, make a new URL");
+    expect(out).toContain("Change makes a new URL for a server; replace the old one in your app.");
     expect(out).toContain("Research kit");
     expect(out).toContain("22");
     expect(out).toContain("~5.1k");
@@ -262,6 +262,9 @@ describe("Servers in use", () => {
     expect(html).toMatch(/class="hidden w-full rounded-lg border border-01 tablet:block"/);
     expect(html).not.toContain("min-w-[520px]");
     expect(text(html)).toContain("Change makes a new URL for a server");
+    // Said once, in the intro, not again above the phone cards.
+    expect(text(html).split("Change makes a new URL").length - 1).toBe(1);
+    expect(text(html)).not.toContain("Read-only: to change one");
     expect(text(html)).toContain("Change…");
   });
 
