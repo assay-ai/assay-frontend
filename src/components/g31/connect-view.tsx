@@ -116,7 +116,7 @@ export function ConnectView() {
           url={url}
           client={client}
           onClientChange={setClient}
-          onCopy={(c) => agent && recordConnect.mutate({ url: urlForClient(c, url), serverName: "assay", client: c })}
+          onCopy={(c, copied) => agent && recordConnect.mutate({ url: copied ?? urlForClient(c, url), serverName: "assay", client: c })}
           onCreateKey={agent ? () => create.mutate() : undefined}
           agentName={agent?.label ?? null}
           creatingKey={create.isPending}

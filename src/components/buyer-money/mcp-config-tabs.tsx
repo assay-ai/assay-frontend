@@ -91,7 +91,12 @@ export function McpConfigTabs({
   /** The agent already has another server: a remote-only install signs in again (R-UI-11). */
   secondUrl?: boolean;
   onClientChange?: (client: McpClient) => void;
-  onCopy?: (client: McpClient) => void;
+  /**
+   * A URL or config was copied for `client`. `copiedUrl` is the exact URL
+   * when it differs from what `url` gives that client (a hosted connector's
+   * "Show paid tools too" drops `free=1`): record that one, not a rebuilt one.
+   */
+  onCopy?: (client: McpClient, copiedUrl?: string) => void;
   /** Creates a key here and fills it in ("Use an API key instead", R-UI-8); shown first under My own code while there is no full key. */
   onCreateKey?: () => void;
   creatingKey?: boolean;
@@ -196,7 +201,7 @@ export function McpConfigTabs({
         ) : isLocalClient(client) ? (
           <LocalInstall client={client} file={MCP_CLIENTS.find((c) => c.id === client)?.file ?? "Terminal"} url={url} name={name} refused={nameRefused} secondUrl={secondUrl} onCopy={() => onCopy?.(client)} />
         ) : (
-          <HostedConnector client={client} url={url} secondUrl={secondUrl} onCopy={() => onCopy?.(client)} />
+          <HostedConnector client={client} url={url} secondUrl={secondUrl} onCopy={(shown) => onCopy?.(client, shown)} />
         )}
         {guide && client !== "other" ? <NextSteps client={client} /> : null}
       </div>

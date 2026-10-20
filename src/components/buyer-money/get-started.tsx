@@ -170,8 +170,8 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   const catalogue = useCatalogue();
   // Copying the config hands out `/`: Servers in use then waits for its first call.
   const recordConnect = useRecordConnect(agent?.agentId);
-  const onCopyConfig = (client: McpClient) => {
-    if (agent) recordConnect.mutate({ url: urlForClient(client, mcpEndpointUrl()), serverName: "assay", client });
+  const onCopyConfig = (client: McpClient, copied?: string) => {
+    if (agent) recordConnect.mutate({ url: copied ?? urlForClient(client, mcpEndpointUrl()), serverName: "assay", client });
   };
   const states = getStartedStates(facts);
   const firstCallAt = liveKeys.map((k) => k.lastUsedAt).filter((v): v is string => Boolean(v)).sort()[0] ?? null;
