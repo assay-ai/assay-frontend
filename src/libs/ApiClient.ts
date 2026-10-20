@@ -484,25 +484,6 @@ class ApiClient {
     return this.request<T>({ method: "GET", url, params });
   }
 
-  /**
-   * A GET that revalidates past the browser's HTTP cache.
-   *
-   * Provider GETs are served `private, max-age=10, stale-while-revalidate=3600`,
-   * so a plain refetch straight after a write is answered with the pre-write
-   * body. `no-cache` means "revalidate before serving", and the ETag turns an
-   * unchanged body into a 304. Only `Cache-Control` is sent — this is not a
-   * per-call header escape hatch.
-   *
-   * Belt and braces since BUG-SYS-01: the backend now sends every GET that does
-   * not opt in with `@CacheHeader` as `private, no-cache`, so a plain `get`
-   * already revalidates and is never served stale. This helper (and
-   * `revalidateEscrow` / `revalidateProviderStake`, which go through it) is
-   * kept for a route that later opts in to a freshness window.
-   */
-  getRevalidated<T>(url: string, params?: Record<string, unknown>): Promise<T> {
-    return this.request<T>({ method: "GET", url, params, headers: { "Cache-Control": "no-cache" } });
-  }
-
   post<T>(url: string, data?: unknown): Promise<T> {
     return this.request<T>({ method: "POST", url, data });
   }
