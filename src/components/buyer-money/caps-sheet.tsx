@@ -143,8 +143,8 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
               }
             : ESCROW_SUBMITTERS,
         );
+        // Seeds or re-reads the escrow itself; another invalidation would refetch it again.
         await applyLimitsSubmitted(queryClient, null, signed, result.kind === "relayed" ? result.relayed.escrow : null);
-        void queryClient.invalidateQueries({ queryKey: ["escrow"] });
         const hash = result.kind === "relayed" ? result.relayed.transactionHash : result.signature;
         return { explorerUrl: money.chain ? explorerTxUrl(money.chain, hash) : undefined };
       },

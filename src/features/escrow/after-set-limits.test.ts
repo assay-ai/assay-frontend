@@ -1,5 +1,5 @@
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BuyerEscrow } from "@/interfaces";
 
@@ -13,6 +13,7 @@ vi.mock("@/services/escrow.service", () => ({
 import { getEscrow, revalidateEscrow } from "@/services/escrow.service";
 
 import { applyLimitsSubmitted, escrowQueryKey, readEscrow } from "./after-set-limits";
+import { LIMITS_LANDING_POLL_MS, LIMITS_LANDING_TIMEOUT_MS } from "./limits-form";
 
 const CHAIN = "eip155:46630";
 const signed = { maxVoucherAmount: "1000000", maxPerWindow: "9000000" };
@@ -119,3 +120,93 @@ describe("applyLimitsSubmitted", () => {
     expect(queryClient.getQueryData(escrowQueryKey(CHAIN))).toEqual(before);
   });
 });
+
+/*
+  O7: the SetLimits answer usually carries the escrow as the relayer read it
+  after the transaction. Then nothing is fetched for it; the escrow is only
+  re-read, and only polled, while no read shows the signed limits yet.
+*/
+describe("applyLimitsSubmitted — reads only while the limits have not shown", () => {
+  let queryClient: QueryClient;
+  let clock = 0;
+  const now = () => clock;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    clock = 0;
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(escrowQueryKey(null), before);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Advances the fake clock and timers together. */
+  async function advance(ms: number) {
+    clock += ms;
+    await vi.advanceTimersByTimeAsync(ms);
+  }
+
+  it("does not fetch the seeded entry, and refetches the other escrow reads on screen once", async () => {
+    const other = new QueryObserver(queryClient, { queryKey: escrowQueryKey(CHAIN), queryFn: () => getEscrow(CHAIN) });
+    const stop = other.subscribe(() => undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    vi.mocked(getEscrow).mockClear();
+    reads.cached = after;
+
+    await applyLimitsSubmitted(queryClient, null, signed, after, now);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(revalidateEscrow).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(escrowQueryKey(null))).toEqual(after);
+    expect(getEscrow).toHaveBeenCalledTimes(1);
+    expect(getEscrow).toHaveBeenCalledWith(CHAIN);
+
+    await advance(LIMITS_LANDING_TIMEOUT_MS);
+    expect(revalidateEscrow).not.toHaveBeenCalled();
+    expect(getEscrow).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it("reads once when the relayer's read is behind and the next read shows the limits", async () => {
+    reads.revalidated = after;
+    await applyLimitsSubmitted(queryClient, null, signed, before, now);
+    await advance(LIMITS_LANDING_TIMEOUT_MS);
+
+    expect(revalidateEscrow).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryData(escrowQueryKey(null))).toEqual(after);
+  });
+
+  it("keeps reading every poll interval while the reads are behind, and stops on the one that shows the limits", async () => {
+    vi.mocked(revalidateEscrow)
+      .mockResolvedValueOnce(before)
+      .mockResolvedValueOnce(before)
+      .mockResolvedValueOnce(after);
+
+    await applyLimitsSubmitted(queryClient, null, signed, null, now);
+    expect(revalidateEscrow).toHaveBeenCalledTimes(1);
+
+    await advance(LIMITS_LANDING_POLL_MS);
+    expect(revalidateEscrow).toHaveBeenCalledTimes(2);
+    await advance(LIMITS_LANDING_POLL_MS);
+    expect(revalidateEscrow).toHaveBeenCalledTimes(3);
+    expect(queryClient.getQueryData(escrowQueryKey(null))).toEqual(after);
+
+    await advance(LIMITS_LANDING_TIMEOUT_MS);
+    expect(revalidateEscrow).toHaveBeenCalledTimes(3);
+  });
+
+  it("gives up after the bounded wait when no read ever shows the limits", async () => {
+    reads.revalidated = before;
+    await applyLimitsSubmitted(queryClient, null, signed, null, now);
+    await advance(LIMITS_LANDING_TIMEOUT_MS + 5 * LIMITS_LANDING_POLL_MS);
+    const asked = vi.mocked(revalidateEscrow).mock.calls.length;
+    expect(asked).toBeLessThanOrEqual(2 + LIMITS_LANDING_TIMEOUT_MS / LIMITS_LANDING_POLL_MS);
+
+    await advance(LIMITS_LANDING_TIMEOUT_MS);
+    expect(revalidateEscrow).toHaveBeenCalledTimes(asked);
+  });
+});
+
