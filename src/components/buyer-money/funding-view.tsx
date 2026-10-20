@@ -394,7 +394,7 @@ function EscrowCard({
           {money.capsSet ? (
             <>
               <p className="text-body-xs text-03">
-                Up to {formatLimit(escrow.maxVoucherAmount)} a call, for all your agents together. Each agent&apos;s own
+                Up to {formatLimit(escrow.maxVoucherAmount)}{" "}a call, for all your agents together. Each agent&apos;s own
                 spending limits sit under it:{" "}
                 <Link href="/limits" className="font-semibold text-primary-600 hover:underline">
                   Spending limits

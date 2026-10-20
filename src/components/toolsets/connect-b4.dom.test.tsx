@@ -54,8 +54,9 @@ describe("the key hint skips an app sign-in (OAuth grant, null prefix)", () => {
     vi.stubEnv("NEXT_PUBLIC_MCP_URL", "https://mcp.example.com/");
     const html = render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} /></Sheet>, [GRANT, KEY]);
     const out = text(html);
-    expect(out).toContain("Uses the live key “laptop” assay_sk_live_ab12… of My agent");
-    // The default tab is the proxy install: no key in it. The key goes under "My own code".
+    // The default tab is the proxy install: it signs in, so no key line and no key in it (M1-04 follow-up).
+    // The key goes under "My own code".
+    expect(out).not.toContain("Uses the live key");
     expect(out).not.toContain("REST_OF_YOUR_KEY");
     expect(out).toContain("@goassay-ai/mcp@1.2.3");
     expect(out).not.toContain("null");
@@ -101,8 +102,8 @@ describe("Use this tool: /connect?tools= preselects Only these tools", () => {
     // The default tab is the proxy install: ready to copy, no key needed.
     expect(out).toContain("npx -y @goassay-ai/mcp@1.2.3 --url");
     expect(html).toMatch(/<button[^>]*data-testid="connect-copy"/);
-    // Keys are named with their agent.
-    expect(out).toContain("Uses the live key “laptop” assay_sk_live_ab12… of My agent");
+    // The proxy install signs in: no key line under it (M1-04 follow-up).
+    expect(out).not.toContain("Uses the live key");
   });
 });
 

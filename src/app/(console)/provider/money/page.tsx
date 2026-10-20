@@ -399,7 +399,7 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
       <span className="flex min-w-0 flex-1 flex-col">
         {/* Rail B: the buyer's escrow paid this transaction on chain, for these calls. */}
         <span className="text-body-13 text-01">
-          Paid for {payout.calls != null ? callCount(payout.calls) : "calls"} from the buyer&apos;s escrow
+          Paid for {payout.calls != null ? callCount(payout.calls) : "calls"}{" "}from the buyer&apos;s escrow
         </span>
         <span className="text-body-xs text-03">
           Sent to your wallet · <UtcTime value={payout.createdAt} />

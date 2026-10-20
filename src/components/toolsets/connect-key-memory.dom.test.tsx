@@ -95,6 +95,24 @@ describe("the no-key line (BUG-M1-04)", () => {
     await waitFor(() => expect(document.body.textContent).not.toContain("has no key yet"));
     window.localStorage.clear();
   });
+
+  it("hides the key line for a sign-in client once a key exists (M1-04 follow-up)", async () => {
+    account.createCredential.mockResolvedValue({ id: "k1", agentId: AGENT, name: "Key 1", prefix: "assay_sk_live_a1b2", token: TOKEN });
+    window.localStorage.setItem(`assay.connect.client.${AGENT}`, "other");
+    render(
+      <QueryClientProvider client={client()}>
+        <Sheet open>
+          <ConnectBody agentProp={AGENT} initialUrl={null} changing={false} onDone={() => undefined} />
+        </Sheet>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Use an API key instead" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await screen.findByTestId("connect-key-line");
+    fireEvent.click(screen.getByRole("radio", { name: "Claude Code" }));
+    await waitFor(() => expect(screen.queryByTestId("connect-key-line")).toBeNull());
+    window.localStorage.clear();
+  });
 });
 
 describe("Copy the URL only (review m4)", () => {
