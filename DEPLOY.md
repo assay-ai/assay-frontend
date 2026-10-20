@@ -70,7 +70,15 @@ next deploy, not before: re-run the workflow (it has a manual
 `workflow_dispatch` trigger) after editing them.
 
 Optionally, protect `production` with required reviewers so a push to `main`
-waits for approval before it deploys.
+waits for approval before it deploys. The workflow has two jobs bound to the
+environment, `build` (reads the `NEXT_PUBLIC_*` values, never the Cloudflare
+credentials) and `deploy` (the only job that reads `CLOUDFLARE_API_TOKEN`), so
+a reviewer approves each of them in turn.
+
+`deploy` runs the wrangler pinned in `deploy/wrangler` (`package.json` and
+`package-lock.json`, installed with `npm ci --ignore-scripts`). To bump it,
+change the version there and regenerate the lockfile with
+`npm install --package-lock-only --ignore-scripts` in that folder.
 
 ### 4. Privy allowed origins
 
