@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 
 import { PrivyProvider } from "@privy-io/react-auth";
 import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
@@ -229,10 +229,22 @@ function PrivyShell({ children, chains }: PrivyShellProps) {
  * guarantee that mattered — Privy never mounts with a partial chain list —
  * and the query it waits on is the same `["chains"]` every screen reads, so
  * nothing asks twice. A failed read mounts with an empty list, as before.
+ *
+ * **It holds only the first load.** Once the read has answered — ready or
+ * failed — the app stays mounted whatever the query does next. Gating on every
+ * `loading` turned an unreachable API into a loop: the read failed, the app
+ * mounted, a screen's own `useChains()` refetched the failed query on mount,
+ * the query went back to pending, the gate unmounted the app for the splash,
+ * and the read failed again — hundreds of `/chains` (and each page's own
+ * reads) a second, against an API that was already down.
  */
 function ChainsGate({ children }: { children: React.ReactNode }) {
   const result = useChains();
-  if (result.status === "loading") {
+  const [answered, setAnswered] = useState(false);
+  // State derived during render, not in an effect: the splash must not paint
+  // for one frame after the answer, and this is React's documented pattern.
+  if (!answered && result.status !== "loading") setAnswered(true);
+  if (!answered && result.status === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-01" role="status" aria-label="Loading">
         {/* eslint-disable-next-line @next/next/no-img-element */}
