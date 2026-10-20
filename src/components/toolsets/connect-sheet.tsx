@@ -75,8 +75,9 @@ import {
  * skeleton while it loads, never 0), the tools that can't run with their
  * reason, the warnings with their fixes, the client tabs (remembered per agent)
  * and More options: the version lock, "How the agent sees tools", "Always
- * loaded" and "Only free tools". Copy or Done records the URL
- * (`POST /agents/:id/connect-urls`) and the sheet waits for the first call.
+ * loaded" and "Only free tools". Copy records the URL actually copied
+ * (`POST /agents/:id/connect-urls`) and the sheet waits for the first call;
+ * Done only closes.
  *
  * The title names what is connected and to which agent ("Connect Research
  * to My agent"). Copy is off while the snippet holds a placeholder: "Create a
@@ -277,6 +278,8 @@ export function ConnectBody({
   }, [effectiveAgentId, servers.data]);
 
   const [recorded, setRecorded] = React.useState<string | null>(null);
+  // The URL last handed out, as copied: a hosted connector's "Show paid tools too" copies it without free=1.
+  const [handedOut, setHandedOut] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
   React.useEffect(() => {
     if (!copied) return;
@@ -284,9 +287,9 @@ export function ConnectBody({
     return () => window.clearTimeout(t);
   }, [copied]);
   const record = useMutation({
-    mutationFn: () => recordConnectUrl(effectiveAgentId!, { url: url!, serverName: serverName && serverNameRefusal(serverName, longestTool) === null ? serverName : undefined, client }),
-    onSuccess: (row) => {
-      setRecorded(row?.canonicalUrl ?? preview.data?.canonicalUrl ?? url);
+    mutationFn: (target: string) => recordConnectUrl(effectiveAgentId!, { url: target, serverName: serverName && serverNameRefusal(serverName, longestTool) === null ? serverName : undefined, client }),
+    onSuccess: (row, target) => {
+      setRecorded(row?.canonicalUrl ?? (target === url ? preview.data?.canonicalUrl : null) ?? target);
       void queryClient.invalidateQueries({ queryKey: toolsetKeys.servers(effectiveAgentId!) });
     },
   });
@@ -294,7 +297,10 @@ export function ConnectBody({
   const firstCallSeen = Boolean(recordedRow && (recordedRow.firstCallAt || recordedRow.lastCallAt));
   React.useEffect(() => setWaitPoll(recorded && !firstCallSeen ? POLL_MS : false), [recorded, firstCallSeen]);
   // A new answer is a new URL: it has not been handed out yet.
-  React.useEffect(() => setRecorded(null), [url]);
+  React.useEffect(() => {
+    setRecorded(null);
+    setHandedOut(null);
+  }, [url]);
 
   // A hosted connector's URL carries free=1 whatever the switch says: the switch shows it on.
   const urlIsFree = Boolean(url) && hasFreeParam(url!);
@@ -311,9 +317,11 @@ export function ConnectBody({
         ? (tryBuild(() => apiKeyConfig({ url, token: created?.token ?? null, keyPrefix, serverName })) ?? "")
         : url;
 
-  const handOut = () => {
-    if (!url || !effectiveAgentId || record.isPending || recorded || nameRefused) return;
-    record.mutate();
+  const handOut = (copiedUrl?: string) => {
+    const target = copiedUrl ?? url;
+    if (!target || !effectiveAgentId || record.isPending || handedOut === target || nameRefused) return;
+    setHandedOut(target);
+    record.mutate(target, { onError: () => setHandedOut(null) });
   };
   // A refused install (InstallInputError) leaves no snippet: nothing to copy or record.
   const nothingToCopy = !url || blocked || nameRefused || (needsKey && !created) || snippet === "";
@@ -632,7 +640,7 @@ export function ConnectBody({
               serverName={serverName}
               client={client}
               onClientChange={setClientRemembered}
-              onCopy={() => handOut()}
+              onCopy={(_client, copiedUrl) => handOut(copiedUrl)}
               onCreateKey={effectiveAgentId ? () => createKey.mutate() : undefined}
               agentName={agent?.label ?? null}
               creatingKey={createKey.isPending}
@@ -735,7 +743,8 @@ export function ConnectBody({
         <Button
           type="button"
           variant="secondary"
-          // Done records nothing: a URL is handed out only when it is copied.
+          // Done records nothing: a URL is handed out only when it is copied (on purpose: Done
+          // without a copy hands nothing out, so nothing should wait for a first call).
           onClick={onDone}
         >
           Done
