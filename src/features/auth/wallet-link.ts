@@ -89,11 +89,18 @@ const listeners = new Set<() => void>();
  *   across `resetWalletLink`, which also runs when Privy first resolves the
  *   identity, after the burst that may have been refused. A refusal kept from
  *   an earlier identity costs one extra refetch, nothing more.
- * - `lateRefusalArmed`: the link landed with nothing refused, but a request
- *   sent before it may still come back refused (the API decided it before the
- *   link was written). The first such refusal refetches once; later ones are
- *   the cancelled requests of that refetch and change nothing, so a 424 can
- *   never start a loop.
+ * - `lateRefusalArmed`: a request sent before the link landed may still come
+ *   back refused after it (the API decided it before the link was written).
+ *   That holds whether or not something was refused before: a refetch at the
+ *   moment the link lands does not restart a query still fetching with no
+ *   data, it waits on the same request, and so ends with the same late 424.
+ *   The first late refusal refetches once; later ones change nothing, so a
+ *   424 can never start a loop.
+ *
+ * A late refusal is reported from inside `ApiClient`'s response handler,
+ * while its query is still fetching: a refetch started there would join that
+ * request and settle with the 424 too. So it is started on the next task,
+ * once the refused request has settled.
  */
 let refusedBeforeLink = false;
 let lateRefusalArmed = false;
@@ -104,13 +111,11 @@ function refetchScreens(): void {
 }
 
 function landed(): void {
+  lateRefusalArmed = true;
   if (refusedBeforeLink) {
     refusedBeforeLink = false;
-    lateRefusalArmed = false;
     refetchScreens();
-    return;
   }
-  lateRefusalArmed = true;
 }
 
 /** `ApiClient` saw an `AUTH_WALLET_NOT_LINKED`. */
@@ -121,7 +126,7 @@ export function noteWalletNotLinked(): void {
   }
   if (!lateRefusalArmed) return;
   lateRefusalArmed = false;
-  refetchScreens();
+  setTimeout(refetchScreens, 0);
 }
 
 onWalletNotLinked(noteWalletNotLinked);
