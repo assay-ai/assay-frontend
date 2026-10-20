@@ -13,6 +13,7 @@ import { cn } from "@/utils";
 
 import {
   PROVIDER_PENDING_TX_STORAGE_KEY,
+  REFRESH_AFTER_CONFIRMED,
   parseProviderPending,
   type ProviderPendingKind,
   type ProviderPendingTx,
@@ -60,8 +61,7 @@ function PendingRow({ tx, onDone }: { tx: ProviderPendingTx; onDone: () => void 
         }
         if (status === "success") {
           stopped = true;
-          void queryClient.invalidateQueries({ queryKey: ["provider"] });
-          void queryClient.invalidateQueries({ queryKey: ["chain-slashes"] });
+          for (const queryKey of REFRESH_AFTER_CONFIRMED[tx.kind]) void queryClient.invalidateQueries({ queryKey });
           doneRef.current();
         }
       } catch {

@@ -190,6 +190,10 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
   const requesterRoles = approval.requestedById ? context.operators.get(approval.requestedById)?.roles : undefined;
   const needs = `Needs ${approvalNeeds(approval.code, requesterRoles)}${names ? `: ${names}` : ""}`;
 
+  // The whole console, deliberately: approving runs whatever action was
+  // queued (a block, a contract change, an operator change, a slash record…),
+  // and a rejection clears the "waiting for approval" line on that action's
+  // own screen. See `refresh-after.ts`.
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["operator"] });
   };

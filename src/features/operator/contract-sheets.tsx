@@ -27,6 +27,7 @@ import type { TwoPersonAnswer } from "./two-person";
 import { approverPhrase } from "./two-person";
 import { categoryProblem, contractErrorMessage, suggestToolName, toolNameProblem, type MajorRow } from "./contract-editor";
 import { CONTRACT_REASONS, DEPRECATE_REASONS } from "./reasons";
+import { AFTER_CONTRACT_WRITE, refreshAfter } from "./refresh-after";
 import { useOperatorSession } from "./session-context";
 import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "./sheet-footer";
 import { WhatHappens, type WhatHappensLine } from "./what-happens";
@@ -126,7 +127,7 @@ export function PublishSheet({
       return { kind: "sent" as const, answer: await publishContractVersion(tool.id, version, input.body) };
     },
     onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: ["operator"] });
+      refreshAfter(queryClient, AFTER_CONTRACT_WRITE);
       if (result.kind === "renumbered") {
         setMoved(result.semver);
         return;
@@ -240,7 +241,7 @@ export function MakeCurrentSheet({
   const move = useMutation({
     mutationFn: (input: { version: number; body: { reasonCode: string; note: string } }) => moveCurrentVersion(tool.id, { version: input.version, ...input.body }),
     onSuccess: (answer) => {
-      void queryClient.invalidateQueries({ queryKey: ["operator"] });
+      refreshAfter(queryClient, AFTER_CONTRACT_WRITE);
       onQueued(answer, target ? `Making ${tool.name} v${target.semver} the default` : "Changing the default version");
       form.reset();
       onClose();
@@ -336,7 +337,7 @@ export function DeprecateSheet({
       }),
     onSuccess: (updated, input) => {
       queryClient.setQueryData(["operator", "tools", tool.id], updated);
-      void queryClient.invalidateQueries({ queryKey: ["operator"] });
+      refreshAfter(queryClient, AFTER_CONTRACT_WRITE);
       onDone(`v${row?.major ?? "?"} is deprecated. It stops on ${sunsetDay(input.sunsetAt)} (UTC); everyone who uses it is told now.`);
       form.reset();
       onClose();
