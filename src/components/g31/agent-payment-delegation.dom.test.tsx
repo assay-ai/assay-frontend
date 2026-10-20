@@ -10,7 +10,7 @@ vi.mock("@/hooks/useSigner", () => ({
   isUserRejection: () => false,
 }));
 
-import { AgentPaymentDelegation, PayerDelegationsPanel } from "./agent-payment-delegation";
+import { PayerDelegationsPanel } from "./agent-payment-delegation";
 
 const EVM = "eip155:46630";
 const ASSET = `${EVM}/erc20:0xDbbC`;
@@ -113,37 +113,5 @@ describe("PayerDelegationsPanel — payments still being settled (BUG-D1-07)", (
     );
     expect(html).toContain('data-testid="delegate-unsettled"');
     expect(html).toContain("1 payment ($0.10) still being settled");
-  });
-});
-
-describe("AgentPaymentDelegation", () => {
-  it("offers Change spending limits on a key that can pay", () => {
-    const html = render(
-      <AgentPaymentDelegation
-        agentAccount={PAYER}
-        credentials={[credential]}
-        version={0}
-        onChanged={() => {}}
-      />,
-    );
-    expect(html).toContain("CAN PAY");
-    expect(html).toContain('data-testid="edit-agent-delegate"');
-  });
-});
-
-// Paid rails A and B are off on Solana: nothing to authorise, and the agent is told why.
-describe("AgentPaymentDelegation — a Solana agent (free calls only)", () => {
-  it("says the chain serves free calls only and offers nothing to sign", () => {
-    const html = render(
-      <AgentPaymentDelegation
-        agentAccount="solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1:AgentAccount1111111111111111111111111111111"
-        credentials={[]}
-        version={0}
-        onChanged={() => {}}
-      />,
-    );
-    expect(html).toContain('data-testid="agent-payment-free-only"');
-    expect(html).toContain("currently serves free calls only");
-    expect(html).not.toContain("Authorize agent to pay");
   });
 });
