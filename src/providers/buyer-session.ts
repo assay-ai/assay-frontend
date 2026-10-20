@@ -47,6 +47,12 @@ export interface IdentityChange {
 }
 
 /**
+ * The identity of a session Privy reports signed in before its `user` has
+ * loaded. It names nobody, so no token's subject ever matches it.
+ */
+export const UNRESOLVED_IDENTITY = "authenticated";
+
+/**
  * What the cache does for an identity change (`settleCacheForIdentity`).
  *
  * A change after the first is a switch. The first identity of the page load
@@ -54,12 +60,21 @@ export interface IdentityChange {
  * the cache is already its data (`"served"`); any with another identity's
  * token, that data is someone else's and is dropped like a switch; anything
  * else, refetched in place (`"boot"`).
+ *
+ * `UNRESOLVED_IDENTITY` is not checked against the requests — it would always
+ * count as someone else — and the identity that replaces it gets the same
+ * check as a first one, except that only `"only"` spares the reset: the
+ * placeholder proved nothing about who the earlier requests were for.
  */
 export function cacheChangeFor(
   identity: string | null,
   previous: string | null | undefined,
   sentAs: ((identity: string) => SentAs) | undefined,
 ): "boot" | "served" | "switch" {
+  if (identity === UNRESOLVED_IDENTITY) return previous === undefined ? "boot" : "switch";
+  if (previous === UNRESOLVED_IDENTITY && identity !== null) {
+    return sentAs?.(identity) === "only" ? "served" : "switch";
+  }
   if (previous !== undefined) return "switch";
   if (identity === null) return "boot";
   const sent = sentAs?.(identity) ?? "unknown";
