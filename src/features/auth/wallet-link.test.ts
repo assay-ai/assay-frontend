@@ -1,3 +1,4 @@
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /*
@@ -219,9 +220,16 @@ describe("wallet-link — refetching the screens once the link lands", () => {
     expect(getWalletLinkStatus()).toBe("linked");
     expect(refetches).toBe(1);
 
-    // The refetch cancelled the refused requests; their late answers change nothing.
+    // A request still in flight then may come back refused late: one more
+    // refetch, on the next task; any later refusal changes nothing.
+    noteWalletNotLinked();
     noteWalletNotLinked();
     expect(refetches).toBe(1);
+    await settle();
+    expect(refetches).toBe(2);
+    noteWalletNotLinked();
+    await settle();
+    expect(refetches).toBe(2);
   });
 
   it("keeps a refusal from before Privy resolved the identity (the reset at boot)", async () => {
@@ -239,6 +247,11 @@ describe("wallet-link — refetching the screens once the link lands", () => {
 
     noteWalletNotLinked();
     noteWalletNotLinked();
+    // Not from inside the refused response: once it has settled.
+    expect(refetches).toBe(0);
+    await settle();
+    expect(refetches).toBe(1);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(refetches).toBe(1);
   });
 
@@ -248,7 +261,94 @@ describe("wallet-link — refetching the screens once the link lands", () => {
     resetWalletLink();
 
     noteWalletNotLinked();
+    await settle();
     expect(refetches).toBe(0);
+  });
+});
+
+/*
+  Review I1: a refetch of a query still fetching with no data joins that
+  request instead of starting a new one. Started from inside the refused
+  response, it settled with the same 424 and spent the one late refetch, and
+  a new account's screen stayed on "wallet not linked" until a reload.
+*/
+describe("wallet-link — a late refusal leaves the screen with data", () => {
+  let stop: () => void = () => undefined;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    backend.calls = 0;
+    resetWalletLink();
+    forgetWalletRefusals();
+  });
+
+  afterEach(() => {
+    stop();
+    resetWalletLink();
+    forgetWalletRefusals();
+    vi.useRealTimers();
+  });
+
+  /** A mounted query whose first request is refused only when the test says so, the way ApiClient reports it. */
+  function screen(queryClient: QueryClient) {
+    let refuse: () => void = () => undefined;
+    let calls = 0;
+    const observer = new QueryObserver(queryClient, {
+      queryKey: ["escrow", null],
+      queryFn: () => {
+        calls += 1;
+        if (calls > 1) return Promise.resolve("escrow");
+        return new Promise<string>((_, reject) => {
+          refuse = () => {
+            // ApiClient reports the 424 from its response handler, then rejects.
+            noteWalletNotLinked();
+            reject(new ApiError("AUTH_WALLET_NOT_LINKED", "no wallet", 424));
+          };
+        });
+      },
+    });
+    const unsubscribe = observer.subscribe(() => undefined);
+    return { observer, refuse: () => refuse(), calls: () => calls, unsubscribe };
+  }
+
+  function wire(queryClient: QueryClient) {
+    stop = subscribeLinkedRefetch(() => void queryClient.invalidateQueries());
+  }
+
+  it("refused after the link landed with nothing refused before", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 0 } } });
+    wire(queryClient);
+    const view = screen(queryClient);
+    backend.answers = [() => Promise.resolve(LINKED)];
+    startWalletLink();
+    await settle();
+    expect(getWalletLinkStatus()).toBe("linked");
+
+    view.refuse();
+    await settle();
+
+    expect(view.observer.getCurrentResult().data).toBe("escrow");
+    expect(view.calls()).toBe(2);
+    view.unsubscribe();
+  });
+
+  it("still in flight when the link landed after an earlier refusal, refused after it", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 0 } } });
+    wire(queryClient);
+    noteWalletNotLinked(); // an earlier screen's refusal
+    const view = screen(queryClient);
+    backend.answers = [() => Promise.resolve(LINKED)];
+    startWalletLink();
+    await settle();
+    // The link landed and refetched, but this query joined its own in-flight request.
+    expect(view.calls()).toBe(1);
+
+    view.refuse();
+    await settle();
+
+    expect(view.observer.getCurrentResult().data).toBe("escrow");
+    expect(view.calls()).toBe(2);
+    view.unsubscribe();
   });
 });
 
