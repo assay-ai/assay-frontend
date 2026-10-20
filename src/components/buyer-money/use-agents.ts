@@ -58,15 +58,21 @@ export interface KeyRow extends CredentialLike {
 }
 
 /**
- * The browser caches GETs for 10 s (`Cache-Control: max-age=10`), so a poll
- * that reuses the URL sees nothing new. Each read gets its own `from` (an
- * instant in 1970, which filters nothing out) to reach the server. See the
- * same trick in the old agents screen.
+ * Every agent's keys, one `GET /agents/:id/credentials` each.
+ *
+ * The same URL on every read, polls included. The list used to carry a
+ * `from` cache-buster (an instant in 1970, which filters nothing out) from
+ * when GETs were served `max-age=10` and a poll that reused the URL was
+ * answered from the browser's cache. The API now answers it
+ * `private, no-cache` (BUG-SYS-01), so the browser revalidates every read and
+ * an unchanged list costs a 304. A fresh URL per read also cost a fresh CORS
+ * preflight per read, and keeps a server-side cache from ever matching.
  */
-let bust = 0;
-function nextBust(): string {
-  bust += 1;
-  return new Date(bust).toISOString();
+export async function readAgentKeys(agentIds: readonly string[]): Promise<Record<string, KeyRow[]>> {
+  const lists = await Promise.all(
+    agentIds.map((id) => listCredentials(id, { limit: 50 }) as Promise<{ items: KeyRow[] }>),
+  );
+  return Object.fromEntries(agentIds.map((id, i) => [id, lists[i]!.items])) as Record<string, KeyRow[]>;
 }
 
 export function useSpendPolicyQuery(options: { enabled?: boolean } = {}) {
@@ -105,12 +111,7 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
     enabled: agentIds.length > 0,
     retry: 0,
     refetchInterval: poll,
-    queryFn: async () => {
-      const lists = await Promise.all(
-        agentIds.map((id) => listCredentials(id, { limit: 50, from: nextBust() } as never) as Promise<{ items: KeyRow[] }>),
-      );
-      return Object.fromEntries(agentIds.map((id, i) => [id, lists[i]!.items])) as Record<string, KeyRow[]>;
-    },
+    queryFn: () => readAgentKeys(agentIds),
   });
 
   const delegationOn = agents.some((a) => supportsDelegation(a.agentAccount));
