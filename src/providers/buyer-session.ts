@@ -90,6 +90,24 @@ export function applyIdentityChange(
 }
 
 /**
+ * Whether a signed-in buyer still needs an embedded EVM wallet created.
+ *
+ * `createOnLogin: "users-without-wallets"` is not enough on its own: Privy
+ * left new accounts with only their email (seen on the local stack for every
+ * account made through the agent connect link), and the API links the
+ * account's EVM wallet as its spending account, so such an account is refused
+ * with AUTH_WALLET_NOT_LINKED everywhere and has no way out. An account that
+ * signed in with an external wallet still gets an embedded one, as on login.
+ */
+export function needsEmbeddedEvmWallet(
+  linkedAccounts: readonly { type: string; walletClientType?: string; chainType?: string }[],
+): boolean {
+  return !linkedAccounts.some(
+    (account) => account.type === "wallet" && account.walletClientType === "privy" && account.chainType === "ethereum",
+  );
+}
+
+/**
  * The pages anyone may read without signing in: the `(public)` route group.
  * Exact paths, plus everything under `/catalogue/`. `/toolsets/view` and
  * `/toolsets/handle` are public, while `/toolsets/mine` is the signed-in list,

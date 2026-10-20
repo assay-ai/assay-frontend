@@ -1,6 +1,6 @@
 "use client";
 
-import { usePrivy } from "@privy-io/react-auth";
+import { useCreateWallet, usePrivy } from "@privy-io/react-auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
@@ -25,13 +25,14 @@ import {
   applyIdentityChange,
   handleUnauthorized,
   isOperatorConsolePath,
+  needsEmbeddedEvmWallet,
   onPublicShell,
   signedOutLanding,
 } from "./buyer-session";
 
 /**
  * Bridges Privy's client-side auth state onto the axios session used by
- * `ApiClient`. Five jobs, no more:
+ * `ApiClient`. Six jobs, no more:
  *
  *  1. Register Privy's `getAccessToken` as `ApiClient`'s session token
  *     provider, so every request asks for the token as it goes out and
@@ -66,13 +67,26 @@ import {
  *     signup with no wallet yet must not be signed out over a condition
  *     that resolves itself within about a minute.
  *
- * None of (2)–(5) runs on the operator console (`/operator…`), which has its
+ *  6. Create the embedded EVM wallet when Privy signed someone in without
+ *     one (`needsEmbeddedEvmWallet`): the wallet link in (4) waits for it.
+ *
+ * None of (2)–(6) runs on the operator console (`/operator…`), which has its
  * own session and must never touch the buyer one — see `buyer-session.ts`.
  *
  * Pure side effect: it always renders `children` unchanged.
  */
+/** How long Privy's own `createOnLogin` gets before (6) creates the wallet itself. */
+const EMBEDDED_WALLET_GRACE_MS = 5_000;
+
 export function PrivySessionBridge({ children }: { children: React.ReactNode }) {
   const { ready, authenticated, user, getAccessToken, logout } = usePrivy();
+  // Privy v3 registers these callbacks on the provider; calling the hook with no
+  // argument crashes PrivyProvider ("Cannot destructure property 'onSuccess'").
+  const { createWallet } = useCreateWallet({ onSuccess: () => {}, onError: () => {} });
+  // The identity a wallet was last asked for, so a re-render never asks twice.
+  const walletRequestedForRef = useRef<string | null>(null);
+  const userRef = useRef(user);
+  userRef.current = user;
   const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
@@ -178,6 +192,27 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
     lastIdentityRef.current = reacted;
     return cancel;
   }, [ready, authenticated, user?.id, getAccessToken, queryClient, onOperatorConsole]);
+
+  // (6) Never a second wallet: asked at most once per identity, only after
+  // Privy's own `createOnLogin` had its chance (re-checked on the latest user
+  // when the delay ends), and `createWallet()` without `createAdditional`
+  // refuses outright when the user already has an embedded wallet. A failure
+  // is left to the wallet link, whose deadline turns it into the "could not
+  // set up your wallet" state.
+  useEffect(() => {
+    if (!ready || !authenticated || !user || onOperatorConsole || demoEnabled()) return;
+    if (!needsEmbeddedEvmWallet(user.linkedAccounts)) return;
+    if (walletRequestedForRef.current === user.id) return;
+    const id = user.id;
+    const timer = setTimeout(() => {
+      const latest = userRef.current;
+      if (!latest || latest.id !== id || walletRequestedForRef.current === id) return;
+      if (!needsEmbeddedEvmWallet(latest.linkedAccounts)) return;
+      walletRequestedForRef.current = id;
+      createWallet().catch(() => undefined);
+    }, EMBEDDED_WALLET_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [ready, authenticated, user, onOperatorConsole, createWallet]);
 
   /*
     A screen that mounted before the wallet linked is holding a failed request

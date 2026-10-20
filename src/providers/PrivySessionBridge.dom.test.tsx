@@ -3,8 +3,15 @@ import { act, cleanup, render } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+type TestUser = { id: string; linkedAccounts: { type: string; walletClientType?: string; chainType?: string }[] };
+const EMBEDDED_EVM = { type: "wallet", walletClientType: "privy", chainType: "ethereum" };
 const privy = vi.hoisted(() => ({
-  state: { ready: true, authenticated: true, user: { id: "did:privy:1" } as { id: string } | null },
+  state: {
+    ready: true,
+    authenticated: true,
+    user: { id: "did:privy:1", linkedAccounts: [] } as TestUser | null,
+  },
+  createWallet: vi.fn(() => Promise.resolve({})),
   logout: vi.fn(() => Promise.resolve()),
   getAccessToken: vi.fn(() => Promise.resolve("token")),
 }));
@@ -21,6 +28,7 @@ const client = vi.hoisted(() => ({
 
 vi.mock("@privy-io/react-auth", () => ({
   usePrivy: () => ({ ...privy.state, getAccessToken: privy.getAccessToken, logout: privy.logout }),
+  useCreateWallet: () => ({ createWallet: privy.createWallet }),
 }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => client }));
 vi.mock("next/navigation", () => ({
@@ -71,7 +79,7 @@ function fire401() {
 }
 
 beforeEach(() => {
-  privy.state = { ready: true, authenticated: true, user: { id: "did:privy:1" } };
+  privy.state = { ready: true, authenticated: true, user: { id: "did:privy:1", linkedAccounts: [{ type: "email" }, EMBEDDED_EVM] } };
   nav.pathname = "/how-it-works";
 });
 
@@ -114,7 +122,7 @@ describe("PrivySessionBridge on a 401", () => {
         <p>page</p>
       </PrivySessionBridge>,
     );
-    privy.state = { ready: true, authenticated: true, user: { id: "did:privy:1" } };
+    privy.state = { ready: true, authenticated: true, user: { id: "did:privy:1", linkedAccounts: [{ type: "email" }, EMBEDDED_EVM] } };
     view.rerender(
       <PrivySessionBridge>
         <p>page</p>
@@ -146,5 +154,56 @@ describe("PrivySessionBridge on a 401, on a strict page", () => {
     fire401();
     expect(nav.replace).toHaveBeenCalledWith("/login?next=%2Fagents&reason=expired");
     expect(strict.loadPage).not.toHaveBeenCalled();
+  });
+});
+
+/* A new account Privy signed in with only its email: the bridge creates the embedded EVM wallet, once. */
+describe("PrivySessionBridge, embedded EVM wallet", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const emailOnly = (): TestUser => ({ id: "did:privy:new", linkedAccounts: [{ type: "email" }] });
+  const rerender = (view: ReturnType<typeof mount>) =>
+    view.rerender(
+      <PrivySessionBridge>
+        <p>page</p>
+      </PrivySessionBridge>,
+    );
+
+  it("creates it once, after Privy's own createOnLogin had its chance", () => {
+    privy.state = { ready: true, authenticated: true, user: emailOnly() };
+    const view = mount();
+    act(() => vi.advanceTimersByTime(4_999));
+    expect(privy.createWallet).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+    expect(privy.createWallet).toHaveBeenCalledTimes(1);
+    privy.state = { ...privy.state, user: emailOnly() };
+    rerender(view);
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(privy.createWallet).toHaveBeenCalledTimes(1);
+  });
+
+  it("never when the account already has one", () => {
+    mount();
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(privy.createWallet).not.toHaveBeenCalled();
+  });
+
+  it("not when createOnLogin made it during the wait", () => {
+    privy.state = { ready: true, authenticated: true, user: emailOnly() };
+    const view = mount();
+    act(() => vi.advanceTimersByTime(2_000));
+    privy.state = { ...privy.state, user: { id: "did:privy:new", linkedAccounts: [{ type: "email" }, EMBEDDED_EVM] } };
+    rerender(view);
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(privy.createWallet).not.toHaveBeenCalled();
+  });
+
+  it("not on the operator console", () => {
+    nav.pathname = "/operator";
+    privy.state = { ready: true, authenticated: true, user: emailOnly() };
+    mount();
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(privy.createWallet).not.toHaveBeenCalled();
   });
 });
