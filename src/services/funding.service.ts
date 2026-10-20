@@ -35,6 +35,13 @@ export interface Deposit {
   chainTxRef: string | null;
   expiresAt: string;
   createdAt: string;
+  /**
+   * `SETTLED` only, else `null`: `PENDING` while the credit waits in the
+   * ledger's pending bucket for chain finality, then `CONFIRMED` (available)
+   * or `REJECTED` (a reorg dropped it; nothing was added). Absent from an API
+   * that predates it.
+   */
+  finality?: "PENDING" | "CONFIRMED" | "REJECTED" | null;
 }
 
 export interface ListDepositsQuery extends ListQuery {
@@ -102,6 +109,11 @@ export interface StatementBalance {
 /** GET /statements/balance — the money half of a monthly statement, per escrow. Derived; never stored. */
 export function getStatementBalance(query: { from: string; to: string }): Promise<{ items: StatementBalance[] }> {
   return api.get<{ items: StatementBalance[] }>("/statements/balance", query);
+}
+
+/** GET /deposits/:depositId — one deposit of this organization (404 for anyone else's). */
+export function getDeposit(depositId: string): Promise<Deposit> {
+  return api.get<Deposit>(`/deposits/${encodeURIComponent(depositId)}`);
 }
 
 /** GET /deposits — the "Deposits" table on the Funding screen. */

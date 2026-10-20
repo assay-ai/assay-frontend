@@ -4,9 +4,18 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-/* A deposit stuck confirming: /balances is read every 3 s for about 2 minutes, then every 30 s, not every 3 s forever. */
+/*
+  Against an API without deposit finality (its deposits carry no `finality`),
+  the balances themselves are polled, as before: a deposit stuck confirming is
+  read every 3 s for about 2 minutes, then every 30 s, not every 3 s forever.
+  With finality the deposits are polled instead (`deposit-finality.dom.test.tsx`).
+*/
 const services = vi.hoisted(() => ({ getBalances: vi.fn() }));
 vi.mock("@/services", () => services);
+vi.mock("@/services/funding.service", () => ({
+  listDeposits: vi.fn(async () => ({ items: [{ id: "d1", status: "SETTLED", expiresAt: "2099-01-01T00:00:00Z" }] })),
+  getDeposit: vi.fn(),
+}));
 vi.mock("@privy-io/react-auth", () => ({ usePrivy: () => ({ ready: true, authenticated: true }), useWallets: () => ({ ready: true, wallets: [] }) }));
 
 import { useBalancesQuery } from "./use-buyer-money";
@@ -41,7 +50,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("/balances poll while a deposit is confirming", () => {
+describe("/balances poll while a deposit is confirming, on an API without finality", () => {
   it("backs off from 3 s to 30 s after about 2 minutes", async () => {
     services.getBalances.mockResolvedValue(balances("20000000"));
     mount();

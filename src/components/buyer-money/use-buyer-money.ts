@@ -1,11 +1,12 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
 import { ConnectWalletNote } from "@/components/buyer-money/connect-wallet";
 import { capsAreSet } from "@/features/buyer-money/caps";
 import { anyConfirming, confirmingPollMs } from "@/features/buyer-money/confirming";
+import { DEPOSIT_FINALITY_KEY, depositFinalityTick, type DepositFinalityWait } from "@/features/buyer-money/deposit-finality";
 import { WalletNotReady } from "@/features/buyer-money/money-errors";
 import type { FullBalance } from "@/features/g30/balance";
 import { useChains } from "@/hooks/useChains";
@@ -42,26 +43,55 @@ export function useEscrowQuery(options: { refetchInterval?: number | false; enab
 }
 
 export function useBalancesQuery() {
+  const queryClient = useQueryClient();
   // When this view first saw a deposit confirming; null while none is.
   const confirmingSince = React.useRef<number | null>(null);
-  return useQuery<{ balances: FullBalance[] }, ApiError>({
+  /*
+    While a deposit is confirming, look again every few seconds: the API
+    credits it within seconds, and "still confirming" must not outlive it. A
+    deposit stuck confirming is then checked every 30 s, not every 3 s forever.
+  */
+  const schedule = (confirming: boolean): number | false => {
+    if (!confirming) {
+      confirmingSince.current = null;
+      return false;
+    }
+    const now = Date.now();
+    confirmingSince.current ??= now;
+    return confirmingPollMs(now - confirmingSince.current);
+  };
+  const balances = useQuery<{ balances: FullBalance[] }, ApiError>({
     queryKey: ["balances"],
     queryFn: () => getBalances() as Promise<{ balances: FullBalance[] }>,
-    // While a deposit is confirming, look again every few seconds: the API
-    // credits it within seconds, and "still confirming" must not outlive it.
-    // A deposit stuck confirming is then checked every 30 s, not every 3 s forever.
-    refetchInterval: (query) => {
-      if (!anyConfirming(query.state.data?.balances)) {
-        confirmingSince.current = null;
-        return false;
-      }
-      const now = Date.now();
-      confirmingSince.current ??= now;
-      return confirmingPollMs(now - confirmingSince.current);
-    },
+    // Only against an API without deposit finality: then the balances
+    // themselves are what is polled, as before. Otherwise the wait below
+    // reads the deposits and refreshes the balances once.
+    refetchInterval: (query) =>
+      queryClient.getQueryData<DepositFinalityWait>(DEPOSIT_FINALITY_KEY)?.legacy === true
+        ? schedule(anyConfirming(query.state.data?.balances))
+        : false,
     retry: 0,
     networkMode: "always" as const,
   });
+  const confirming = anyConfirming(balances.data?.balances);
+  const wait = useQuery<DepositFinalityWait, ApiError>({
+    queryKey: DEPOSIT_FINALITY_KEY,
+    queryFn: () => depositFinalityTick(queryClient),
+    enabled: confirming,
+    refetchInterval: (query) => (query.state.data?.legacy ? false : schedule(confirming)),
+    retry: 0,
+    networkMode: "always" as const,
+  });
+  // An API without finality found out: start the balances poll it falls back to.
+  const legacy = wait.data?.legacy === true;
+  React.useEffect(() => {
+    if (legacy && confirming) void queryClient.refetchQueries({ queryKey: ["balances"], type: "active" });
+  }, [legacy, confirming, queryClient]);
+  // Nothing confirming any more: the next deposit's wait starts from a clean slate.
+  React.useEffect(() => {
+    if (!confirming) queryClient.removeQueries({ queryKey: DEPOSIT_FINALITY_KEY, exact: true });
+  }, [confirming, queryClient]);
+  return balances;
 }
 
 export function useBuyerMoney(options: { refetchInterval?: number | false } = {}) {
