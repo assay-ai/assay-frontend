@@ -17,10 +17,12 @@ import { exceedsScale, toAtomic, toDecimal } from "@/utils/money";
  * - both caps above zero, the per-payment cap no higher than the per-window cap;
  * - neither cap above the escrow's OWN current limit (the escrow limits keep
  *   applying to the agent too — these caps can only narrow them);
- * - an expiry between 1 and 365 days out.
+ * - an expiry between 1 and 30 days out. The chain allows up to 365, but a
+ *   grant signed from the web lasts at most 30 days (owner decision O2, the
+ *   same cap enable-paid applies).
  */
 export const DEFAULT_DELEGATION_DAYS = 30;
-export const MAX_DELEGATION_DAYS = 365;
+export const MAX_DELEGATION_DAYS = 30;
 const SECONDS_PER_DAY = 86_400;
 
 export interface DelegationFormInput {
@@ -371,7 +373,7 @@ export function delegationInvalidText(error: unknown): string | null {
   if (/ValidUntil/i.test(reason)) {
     return (
       "The expiry is too soon. An agent’s authorisation must last at least about " +
-      "1 hour 5 minutes from now (and at most 365 days). Choose a later expiry and sign again."
+      `1 hour 5 minutes from now (and at most ${MAX_DELEGATION_DAYS} days). Choose a later expiry and sign again.`
     );
   }
   return (
