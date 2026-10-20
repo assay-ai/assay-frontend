@@ -1,3 +1,4 @@
+import { PROVIDER_NOTIFICATION_EVENTS } from "@/features/provider-home/inbox";
 import type { NotificationChannel, NotificationEvent } from "@/services/notifications.service";
 
 /**
@@ -94,13 +95,17 @@ export const ALERT_PRESETS: readonly AlertPreset[] = [
 export const BUYER_EVENTS: readonly NotificationEvent[] = [...new Set(ALERT_PRESETS.flatMap((p) => p.events))];
 
 /**
- * What "Customise" lists: every event in the catalogue, buyer events first in
- * preset order, then the rest (provider-side events, which no preset holds) in
- * catalogue order. An event missing from every preset still shows here.
+ * What "Customise" lists: every buyer event in preset order, then the
+ * catalogue's other events in catalogue order (an event missing from every
+ * preset still shows). Provider-side events (`PROVIDER_NOTIFICATION_EVENTS`)
+ * are listed only for an organization that is a provider; an event shared
+ * by both sides is a buyer one too and always shows.
  */
-export function customiseEvents(catalogue: readonly NotificationEvent[]): NotificationEvent[] {
-  const buyer = new Set(BUYER_EVENTS);
-  return [...BUYER_EVENTS.filter((e) => catalogue.includes(e)), ...catalogue.filter((e) => !buyer.has(e))];
+export function customiseEvents(catalogue: readonly NotificationEvent[], options: { provider: boolean }): NotificationEvent[] {
+  const buyer = new Set<NotificationEvent>(BUYER_EVENTS);
+  const providerOnly = new Set<string>(PROVIDER_NOTIFICATION_EVENTS);
+  const rest = catalogue.filter((e) => !buyer.has(e) && (options.provider || !providerOnly.has(e)));
+  return [...BUYER_EVENTS.filter((e) => catalogue.includes(e)), ...rest];
 }
 
 /** Whether a preset is on for a channel: on, off, or mixed (some events customised). */

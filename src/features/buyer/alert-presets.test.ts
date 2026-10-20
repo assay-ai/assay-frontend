@@ -53,13 +53,24 @@ describe("alert presets cover the newer events", () => {
     expect(preset("summary").events).toContain("payment_key.daily_summary");
   });
 
-  it("Customise lists every catalogue event, buyer events first, each once", () => {
+  it("Customise lists every catalogue event for a provider, buyer events first, each once", () => {
     const all = Object.keys(NOTIFICATION_CATALOGUE) as NotificationEvent[];
-    const listed = customiseEvents(all);
+    const listed = customiseEvents(all, { provider: true });
     expect([...listed].sort()).toEqual([...all].sort());
     expect(new Set(listed).size).toBe(listed.length);
     expect(listed.slice(0, BUYER_EVENTS.length)).toEqual(BUYER_EVENTS);
     expect(listed).toContain("oauth.grant_stopped_reuse");
     expect(listed).toContain("provider.stake_grace_opened");
+  });
+
+  it("a buyer-only organization gets no provider-side events, but keeps buyer ones outside presets (review m9)", () => {
+    const all = Object.keys(NOTIFICATION_CATALOGUE) as NotificationEvent[];
+    const listed = customiseEvents(all, { provider: false });
+    expect(listed.filter((e) => e.startsWith("provider"))).toEqual([]);
+    expect(listed).not.toContain("call_dispute.opened");
+    expect(listed).toContain("call.refused_repeatedly");
+    expect(listed).toContain("call_dispute.decided");
+    expect(listed).toContain("tool_version.retired");
+    expect(listed).toContain("oauth.grant_stopped_reuse");
   });
 });
