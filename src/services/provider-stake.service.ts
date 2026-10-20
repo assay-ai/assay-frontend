@@ -28,12 +28,13 @@ export function getProviderStake(): Promise<ProviderStake> {
 }
 
 /**
- * `GET /providers/me/stake`, revalidated past the browser's HTTP cache — for
- * the read right after a write that moves the requirement (a publish), where a
- * plain refetch would be served the pre-write body.
+ * `GET /providers/me/stake` for the read right after a write that moves the
+ * requirement (a publish). A plain GET, for the reason `revalidateEscrow`
+ * gives: the route is served `private, no-cache`, so the browser revalidates
+ * it and never answers with the pre-write body.
  */
 export function revalidateProviderStake(): Promise<ProviderStake> {
-  return api.getRevalidated<ProviderStake>("/providers/me/stake");
+  return api.get<ProviderStake>("/providers/me/stake");
 }
 
 /**
