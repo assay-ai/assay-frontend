@@ -36,9 +36,9 @@ export const recorded: RecordedRequest[] = [];
 function answer(method: string, url: string, params: Record<string, unknown> = {}, data?: unknown): unknown {
   const path = url.split("?")[0]!.startsWith("/") ? url.split("?")[0]! : `/${url.split("?")[0]}`;
   recorded.push({ method, path, params });
-  const override = OVERRIDES[`${method} ${path}`];
-  if (override) return override();
   const fromFixture = () => {
+    const override = OVERRIDES[`${method} ${path}`];
+    if (override) return override();
     const fixture = DEMO_FIXTURES.find(
       (f) => f.method === method && (f.match instanceof RegExp ? f.match.test(path) : f.match === path),
     );
@@ -55,6 +55,13 @@ const recordingClient = {
   put: async (url: string, data?: unknown) => answer("PUT", url, {}, data),
   patch: async (url: string, data?: unknown) => answer("PATCH", url, {}, data),
   delete: async (url: string) => answer("DELETE", url),
+  /** `api.raw().request(...)`: the CSV export reads its headers. Answered with an empty file. */
+  raw: () => ({
+    request: async (config: { method?: string; url: string; params?: Record<string, unknown> }) => {
+      answer((config.method ?? "GET").toUpperCase(), config.url, config.params ?? {});
+      return { data: "", headers: {} };
+    },
+  }),
 };
 
 export function recordedApiModule() {

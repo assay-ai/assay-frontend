@@ -24,7 +24,6 @@ export const STALE_TIMES: ReadonlyArray<readonly [readonly unknown[], number]> =
   [["notification-deliveries"], 7_500],
   // Call disputes: server 10 s.
   [["call-disputes"], 5_000],
-  [["provider", "call-disputes"], 5_000],
   // A provider's bindings, verdicts and tools: server 15 s.
   [["provider", "tool-bindings"], 7_500],
   [["provider", "tool-binding"], 7_500],

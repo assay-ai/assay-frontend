@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { appendFileSync } from "node:fs";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,6 +19,7 @@ import { createAppQueryClient } from "@/providers/query-client";
 import { setSharedReader } from "@/services/shared-reads";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 
+import { ROBINHOOD_TESTNET } from "@/libs/chains/demo-chains";
 import { demoAgentsWithKeys } from "@/libs/demo/demo-agent-health";
 
 import { answerWith, countsByPath, countsByRequest, recorded, resetRecorded } from "./request-recorder";
@@ -31,8 +32,7 @@ async function settle() {
   }
 }
 
-async function mount(node: React.ReactNode) {
-  const client = createAppQueryClient();
+async function mount(node: React.ReactNode, client = createAppQueryClient()) {
   render(
     <QueryClientProvider client={client}>
       <ThemeProvider>{node}</ThemeProvider>
@@ -256,5 +256,120 @@ describe("Overview with one agent whose keys are all revoked and one that pays",
     expect(minute["GET /agents"]).toBeLessThanOrEqual(2);
     expect(minute["GET /escrow/delegates"]).toBeLessThanOrEqual(2);
     for (const [endpoint, count] of Object.entries(minute)) expect([endpoint, count <= 2]).toEqual([endpoint, true]);
+  });
+});
+
+/** A provider who settles on two chains, as on testnet: the earnings are asked about per settlement asset. */
+const SOLANA = {
+  ...ROBINHOOD_TESTNET,
+  chainId: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+  displayName: "Solana devnet",
+  settlementAsset: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1/token:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+};
+
+describe("provider console pages, each endpoint once on mount", { timeout: 60_000 }, () => {
+  async function mountProviderPage(pathname: string, load: () => Promise<{ default: React.ComponentType }>, search = "") {
+    answerWith("GET /chains", () => ({ chains: [ROBINHOOD_TESTNET, SOLANA] }));
+    nav.pathname = pathname;
+    nav.search = search;
+    const { default: Layout } = await import("@/app/(console)/layout");
+    const { default: Page } = await load();
+    await mount(
+      <Layout>
+        <Page />
+      </Layout>,
+    );
+    report(pathname.toUpperCase(), countsByRequest());
+    return countsByPath();
+  }
+
+  // Each exact request once (two different report windows are two requests).
+  const once = (_counts: Record<string, number>) => Object.entries(countsByRequest()).filter(([, n]) => n > 1);
+
+  it("Home: this month's earnings and the last 30 days', each once", async () => {
+    const counts = await mountProviderPage("/provider", () => import("@/app/(console)/provider/page"));
+    expect(once(counts)).toEqual([]);
+    // The screen's own windows (whole days); the asset look-up's 31 days end on the minute.
+    const windows = new Set(
+      recorded
+        .filter((r) => r.path === "/providers/me/earnings" && String(r.params.to).endsWith("T00:00:00.000Z"))
+        .map((r) => `${String(r.params.from)}..${String(r.params.to)}`),
+    );
+    expect(windows.size).toBe(2);
+  });
+
+  it("Money: no call export until the download is asked for", async () => {
+    const counts = await mountProviderPage("/provider/money", () => import("@/app/(console)/provider/money/page"));
+    expect(counts["GET /providers/me/calls/export"]).toBeUndefined();
+    expect(once(counts)).toEqual([]);
+  });
+
+  it("Money: the download reads the export once, and a second download re-uses it", async () => {
+    URL.createObjectURL = vi.fn(() => "blob:csv");
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    await mountProviderPage("/provider/money", () => import("@/app/(console)/provider/money/page"));
+    const exports = () => recorded.filter((r) => r.path === "/providers/me/calls/export").length;
+    expect(exports()).toBe(0);
+    const button = screen.getByRole("button", { name: /Download .* CSV/ });
+    fireEvent.click(button);
+    await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
+    expect(exports()).toBe(1);
+    fireEvent.click(button);
+    await waitFor(() => expect(click).toHaveBeenCalledTimes(2));
+    expect(exports()).toBe(1);
+    click.mockRestore();
+  });
+
+  it("Listings", async () => {
+    expect(once(await mountProviderPage("/provider/bindings", () => import("@/app/(console)/provider/bindings/page")))).toEqual([]);
+  });
+
+  it("Bad-result reports", async () => {
+    expect(once(await mountProviderPage("/provider/call-disputes", () => import("@/app/(console)/provider/call-disputes/page")))).toEqual([]);
+  });
+
+  it("moving from Home to Money asks which assets were earned in once, not per page", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // Past the services' own few-second memo, so only the app's cache can answer.
+      await vi.advanceTimersByTimeAsync(11_000);
+      answerWith("GET /chains", () => ({ chains: [ROBINHOOD_TESTNET, SOLANA] }));
+      nav.pathname = "/provider";
+      const { default: Layout } = await import("@/app/(console)/layout");
+      const { default: Home } = await import("@/app/(console)/provider/page");
+      const { default: Money } = await import("@/app/(console)/provider/money/page");
+      const client = await mount(
+        <Layout>
+          <Home />
+        </Layout>,
+      );
+      const lookups = () => recorded.filter((r) => r.path === "/providers/me/earnings" && !String(r.params.to).endsWith("T00:00:00.000Z")).length;
+      expect(lookups()).toBe(2);
+      cleanup();
+      await vi.advanceTimersByTimeAsync(11_000);
+      nav.pathname = "/provider/money";
+      await mount(
+        <Layout>
+          <Money />
+        </Layout>,
+        client,
+      );
+      expect(lookups()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a binding's view", async () => {
+    expect(
+      once(
+        await mountProviderPage(
+          "/provider/bindings/view",
+          () => import("@/app/(console)/provider/bindings/view/page"),
+          `binding=${BINDING}`,
+        ),
+      ),
+    ).toEqual([]);
   });
 });

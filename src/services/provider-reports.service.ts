@@ -68,13 +68,20 @@ let earningAssets: { at: number; value: Promise<string[]> } | null = null;
  * one, else `[]` (one asset, nothing to choose).
  *
  * Each settlement asset is asked about by name, because the unnamed question
- * is the one the API refuses. Memoised for a few seconds: one screen fires
- * several earnings requests at once and they must all name the same asset.
+ * is the one the API refuses: one request per settlement asset. Kept a minute
+ * in the app's query cache (`sharedRead`), so moving between the provider
+ * screens does not ask again; without the app's cache, a few seconds here.
+ * The window ends on the minute, so reads within it are the same request.
  */
 export function providerEarningAssets(): Promise<string[]> {
+  return sharedRead(["provider", "earning-assets"], memoisedEarningAssets, 60_000);
+}
+
+function memoisedEarningAssets(): Promise<string[]> {
   const now = Date.now();
   if (!earningAssets || now - earningAssets.at > 10_000) {
-    earningAssets = { at: now, value: lookUpEarningAssets(new Date(now)).catch(() => []) };
+    const minute = new Date(Math.floor(now / 60_000) * 60_000);
+    earningAssets = { at: now, value: lookUpEarningAssets(minute).catch(() => []) };
   }
   return earningAssets.value;
 }

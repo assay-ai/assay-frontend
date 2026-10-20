@@ -31,6 +31,7 @@ import { routes } from "@/libs/routes";
 import { getProviderEarnings } from "@/services/provider-reports.service";
 import { getToolBinding } from "@/services/provider-tool-bindings.service";
 import { formatMoney, toDecimal } from "@/utils/money";
+import { earningsKey, last30DaysWindow, monthWindow } from "@/features/provider-home/report-windows";
 
 /**
  * Provider home — "what do I do next?" in five seconds.
@@ -53,17 +54,6 @@ const BINDING_CHIP: Record<BindingStatus, StatusChipKey> = {
   SUSPENDED: "blocked",
 };
 
-function monthWindow(now: Date) {
-  return {
-    from: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
-    to: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString(),
-  };
-}
-
-function lastDays(now: Date, days: number) {
-  return { from: new Date(now.getTime() - days * 86_400_000).toISOString(), to: new Date(now.getTime() + 60_000).toISOString() };
-}
-
 function byTool(earnings: ProviderEarnings | undefined) {
   return new Map((earnings?.groups ?? []).map((group) => [group.key, group]));
 }
@@ -71,7 +61,8 @@ function byTool(earnings: ProviderEarnings | undefined) {
 export default function ProviderHomePage() {
   const now = React.useMemo(() => new Date(), []);
   const month = React.useMemo(() => monthWindow(now), [now]);
-  const recent = React.useMemo(() => lastDays(now, 30), [now]);
+  // The same 30-day window Portfolio asks about, so the two share one request.
+  const recent = React.useMemo(() => last30DaysWindow(now), [now]);
   const [stakeOpen, setStakeOpen] = React.useState(false);
 
   const registration = useProviderRegistration();
@@ -84,7 +75,7 @@ export default function ProviderHomePage() {
   const live = items.filter((binding) => binding.status === "ACTIVE");
 
   const earningsMonth = useQuery({
-    queryKey: ["provider", "earnings", "tool", month.from, month.to],
+    queryKey: earningsKey(month),
     queryFn: () => getProviderEarnings({ ...month, groupBy: "tool" }),
     enabled: items.length > 0,
     retry: false,
@@ -92,7 +83,7 @@ export default function ProviderHomePage() {
 
   // The first-run listener: polls while a live tool has not served a call yet.
   const recentEarnings = useQuery({
-    queryKey: ["provider", "earnings", "tool", "first-call", recent.from],
+    queryKey: earningsKey(recent),
     queryFn: () => getProviderEarnings({ ...recent, groupBy: "tool" }),
     enabled: live.length > 0,
     retry: false,

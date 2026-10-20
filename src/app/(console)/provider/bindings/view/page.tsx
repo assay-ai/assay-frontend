@@ -33,6 +33,7 @@ import { listSlaWindows } from "@/services/provider-sla-windows.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 import { providerQueries } from "@/features/provider-home/queries";
+import { earningsKey } from "@/features/provider-home/report-windows";
 
 /**
  * A listing's Overview: where it stands (one timeline), the one thing to do
@@ -225,7 +226,7 @@ function OverviewContent() {
     setRange({ from: new Date(to - 86_400_000).toISOString(), to: new Date(to).toISOString() });
   }, []);
   const earnings = useQuery({
-    queryKey: ["provider", "earnings", "tool", range?.from, range?.to],
+    queryKey: earningsKey(range ?? { from: "", to: "" }),
     queryFn: () => getProviderEarnings({ from: range!.from, to: range!.to, groupBy: "tool" }),
     enabled: Boolean(range) && binding?.status !== "DRAFT",
     retry: 0,
