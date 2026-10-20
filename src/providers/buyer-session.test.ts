@@ -8,6 +8,7 @@ import {
   applyIdentityChange,
   handleUnauthorized,
   isOperatorConsolePath,
+  needsEmbeddedEvmWallet,
   isPublicPath,
   markPublicShell,
   onPublicShell,
@@ -33,6 +34,21 @@ function effects() {
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe("needsEmbeddedEvmWallet", () => {
+  it("an email-only account needs one", () => {
+    expect(needsEmbeddedEvmWallet([{ type: "email" }])).toBe(true);
+  });
+  it("an account with only an embedded Solana wallet or an external EVM wallet still needs one", () => {
+    expect(needsEmbeddedEvmWallet([{ type: "wallet", walletClientType: "privy", chainType: "solana" }])).toBe(true);
+    expect(needsEmbeddedEvmWallet([{ type: "wallet", walletClientType: "metamask", chainType: "ethereum" }])).toBe(true);
+  });
+  it("an account with an embedded EVM wallet does not", () => {
+    expect(
+      needsEmbeddedEvmWallet([{ type: "email" }, { type: "wallet", walletClientType: "privy", chainType: "ethereum" }]),
+    ).toBe(false);
+  });
+});
 
 describe("isOperatorConsolePath", () => {
   it("matches the console and every page under it", () => {
