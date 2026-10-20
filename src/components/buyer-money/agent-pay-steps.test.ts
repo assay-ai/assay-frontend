@@ -127,8 +127,8 @@ describe("agentPaySteps on the enable-paid page", () => {
     });
     expect(skewed).toEqual({ ok: false, text: CLOCK_SKEW_TEXT });
 
-    const grant = steps({ expiry: { validUntil: NOW / 1000 + 365 * DAY, maxDays: 30 } })[1]!;
-    await expect(grant.run({ report } as never)).rejects.toThrow(/more than 30 days/);
+    const grant = steps({ expiry: { validUntil: NOW / 1000 + 400 * DAY, maxDays: 365 } })[1]!;
+    await expect(grant.run({ report } as never)).rejects.toThrow(/more than 365 days/);
     expect(spies.createDelegateIntent).not.toHaveBeenCalled();
     expect(spies.submitRelayedDelegation).not.toHaveBeenCalled();
   });

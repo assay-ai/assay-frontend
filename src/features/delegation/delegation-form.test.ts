@@ -106,8 +106,6 @@ describe("parseDelegationForm", () => {
     ],
     ["zero days", { validDays: "0" }, "validDays"],
     ["more than a year", { validDays: "366" }, "validDays"],
-    // O2: a grant signed from the web lasts at most 30 days, as on enable-paid.
-    ["more than 30 days", { validDays: "31" }, "validDays"],
     ["fractional days", { validDays: "1.5" }, "validDays"],
   ])("refuses %s", (_name, patch, field) => {
     const parsed = parseDelegationForm(input(patch), ESCROW, DELEGATE, NOW);
@@ -115,11 +113,17 @@ describe("parseDelegationForm", () => {
     expect(parsed.ok ? {} : parsed.errors).toHaveProperty(field);
   });
 
-  it("caps a new expiry at 30 days, the same as enable-paid (O2)", () => {
+  it("allows up to a year, the chain's limit, the same as enable-paid (30 days by default, O2)", () => {
+    expect(MAX_DELEGATION_DAYS).toBe(365);
     expect(MAX_DELEGATION_DAYS).toBe(ENABLE_PAID_MAX_DAYS);
-    expect(parseDelegationForm(input({ validDays: "30" }), ESCROW, DELEGATE, NOW).ok).toBe(true);
-    const parsed = parseDelegationForm(input({ validDays: "365" }), ESCROW, DELEGATE, NOW);
-    expect(parsed.ok ? {} : parsed.errors).toEqual({ validDays: "Between 1 and 30 days." });
+    expect(parseDelegationForm(input({ validDays: "31" }), ESCROW, DELEGATE, NOW).ok).toBe(true);
+    const year = parseDelegationForm(input({ validDays: "365" }), ESCROW, DELEGATE, NOW);
+    expect(year.ok).toBe(true);
+    // A full year stays under the chain's 365-day limit even with 2 minutes of clock skew.
+    const until = Number(year.ok ? year.body.validUntil : 0);
+    expect(until - Math.floor(NOW)).toBeLessThanOrEqual(365 * 86_400 - 120);
+    const parsed = parseDelegationForm(input({ validDays: "366" }), ESCROW, DELEGATE, NOW);
+    expect(parsed.ok ? {} : parsed.errors).toEqual({ validDays: "Between 1 and 365 days." });
   });
 });
 
