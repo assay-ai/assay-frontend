@@ -46,7 +46,6 @@ import { useSearchParam } from "@/hooks/useSearchParam";
 import { plainError } from "@/libs/plain-language";
 import { ApiError } from "@/libs/ApiClient";
 import { listNotifications } from "@/services/account.service";
-import { getProviderMe } from "@/services/provider-profile.service";
 import {
   listNotificationChannels,
   listNotificationDeliveries,
@@ -65,6 +64,7 @@ import { presentAlert, useAlertLimitContext, useMarkAlertsRead } from "@/compone
 
 import { AGGREGATION_LABEL, NOTIFICATION_CATALOGUE, NOTIFICATION_EVENT_LABEL } from "./notification-catalogue";
 import { PageHeader, StatusPill } from "./chrome";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * Alert settings (`/alerts`): where alerts go and what you are told about.
@@ -303,7 +303,7 @@ export function AlertsView() {
 
   // A provider organization also sees its provider-side alerts under Customise. Same
   // signal and key as the provider console: `GET /providers/me` answers (404 = not a provider).
-  const providerMe = useQuery({ queryKey: ["provider", "me"], queryFn: getProviderMe, retry: 0 });
+  const providerMe = useQuery(providerQueries.me());
   const isProvider = providerMe.isSuccess;
 
   const isEnabled = React.useCallback(

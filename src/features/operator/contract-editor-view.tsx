@@ -22,8 +22,7 @@ import {
 } from "@/features/contracts/text";
 import type { OperatorTool } from "@/interfaces/contracts";
 import { ApiError } from "@/libs/ApiClient";
-import { discardContractDraft, getOperatorTool, getOperatorToolRequest, listOperatorTools, saveContractDraft } from "@/services/operator-contracts.service";
-import { listApprovals } from "@/services/operator.service";
+import { discardContractDraft, getOperatorTool, getOperatorToolRequest, saveContractDraft } from "@/services/operator-contracts.service";
 import { cn } from "@/utils";
 import { routes } from "@/libs/routes";
 import { toast } from "@/utils/toast";
@@ -51,6 +50,7 @@ import { ResultCard } from "./result-card";
 import { useOperatorSession } from "./session-context";
 import { approvalHref, approverPhrase, sentForApproval, type TwoPersonAnswer } from "./two-person";
 import { useOperatorDirectory } from "./use-operator-lookups";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * One standard tool in the operator console (design spec §7.5 "Editor"):
@@ -86,10 +86,9 @@ export function ContractEditorScreen({ toolId, fromRequest = "" }: { toolId: str
   const queryClient = useQueryClient();
 
   const toolQuery = useQuery({ queryKey: ["operator", "tools", toolId], queryFn: () => getOperatorTool(toolId), retry: 0, enabled: toolId !== "" });
-  const listQuery = useQuery({ queryKey: ["operator", "tools", "list"], queryFn: listOperatorTools, retry: 0 });
+  const listQuery = useQuery(operatorQueries.tools());
   const pendingQuery = useQuery({
-    queryKey: ["operator", "approvals", "pending-count"],
-    queryFn: () => listApprovals({ status: "PENDING", limit: 100 }),
+    ...operatorQueries.pendingApprovals(),
     refetchInterval: 30_000,
     retry: 0,
   });

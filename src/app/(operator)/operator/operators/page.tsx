@@ -45,9 +45,10 @@ import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operat
 import type { OperatorApproval, OperatorDirectoryEntry, OperatorRole } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { checkEvmAddress, toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
-import { addOperator, changeOperator, listApprovals, listOperators, removeOperator } from "@/services/operator.service";
+import { addOperator, changeOperator, listOperators, removeOperator } from "@/services/operator.service";
 import { cn } from "@/utils";
 import { formatMoney, parseAmountInput } from "@/utils/money";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Team, route `/operator/operators`.
@@ -118,8 +119,7 @@ function TeamScreen() {
   });
   // Additions and raises waiting for a second admin — the same query as the badge.
   const pending = useQuery({
-    queryKey: ["operator", "approvals", "pending-count"],
-    queryFn: () => listApprovals({ status: "PENDING", limit: 100 }),
+    ...operatorQueries.pendingApprovals(),
     refetchInterval: 30_000,
     retry: 0,
   });
@@ -786,7 +786,6 @@ function AddSheet({
 function onlyYouAndThem(name: string): string {
   return `the only Admins are you and ${name}. You asked for this and it is about ${name}, so neither of you can approve it. Add a third Admin first.`;
 }
-
 
 function ChangeSheet({
   row,

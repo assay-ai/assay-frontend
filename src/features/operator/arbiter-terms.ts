@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
 import type { ArbiterTerms } from "@/interfaces/operator";
-import { getArbiterTerms } from "@/services/operator.service";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * The chain's arbiter terms (`GET /operator/arbiter/terms`), under the same
@@ -75,11 +75,8 @@ export function splitTerms(live: { data?: Pick<ArbiterTerms, "slashAgentBps">; d
 
 export function useArbiterTerms(chainId: string | null) {
   const query = useQuery({
-    queryKey: ["operator", "arbiter", "terms", chainId],
-    queryFn: () => getArbiterTerms(chainId!),
+    ...operatorQueries.arbiterTerms(chainId ?? ""),
     enabled: chainId !== null,
-    staleTime: 5 * 60_000,
-    retry: 0,
   });
   React.useEffect(() => {
     if (chainId && query.data) rememberSplit(chainId, query.data, query.dataUpdatedAt);

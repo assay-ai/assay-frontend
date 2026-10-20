@@ -4,10 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { OperatorIdentity } from "@/interfaces/operator";
 import { listCutoffs } from "@/services/operator-provider-tools.service";
-import { getPlatformHealth } from "@/services/operator.service";
 
 import type { ToolWork } from "./inbox";
 import { mayConfirmCutoffs, mayDecideCallDisputes, mayReviewTools } from "./provider-tool-review";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * The provider tool reviews, open call disputes and provider-tool takedowns
@@ -19,8 +19,7 @@ import { mayConfirmCutoffs, mayDecideCallDisputes, mayReviewTools } from "./prov
  */
 export function useToolWork(identity: Pick<OperatorIdentity, "roles" | "id"> | null | undefined, enabled = true) {
   const health = useQuery({
-    queryKey: ["operator", "health"],
-    queryFn: getPlatformHealth,
+    ...operatorQueries.health(),
     enabled: enabled && Boolean(identity),
     refetchInterval: 60_000,
     retry: 0,

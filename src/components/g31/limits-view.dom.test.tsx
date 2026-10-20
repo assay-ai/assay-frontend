@@ -92,7 +92,7 @@ function markup(policy: Record<string, unknown> | null, { granted = true }: { gr
     windowSeconds: 86400,
     observedAt: new Date().toISOString(),
   });
-  client.setQueryData(["escrow-delegates", "live"], {
+  client.setQueryData(["escrow-delegates"], {
     account: ACCOUNT,
     delegates: !granted ? [] : [
       {

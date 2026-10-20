@@ -60,11 +60,13 @@ import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import { ApiError } from "@/libs/ApiClient";
 import { demoEnabled } from "@/libs/demo/demo-api";
 import { rememberDemoDelegateCaps } from "@/libs/demo/demo-stage";
+import { useEscrowQuery } from "@/components/buyer-money/use-buyer-money";
+import { useDelegatesQuery } from "@/components/buyer-money/use-delegates";
+import { escrowKeys } from "@/features/escrow/query-keys";
 import { settlementSymbol } from "@/services/chains.service";
 import {
   createDelegateIntent,
   createRevokeDelegateIntent,
-  listDelegates,
   submitDelegate,
   submitRevokeDelegate,
 } from "@/services/delegation.service";
@@ -111,7 +113,7 @@ export interface DelegationCredential {
  */
 
 /** Everything both pieces need to read and sign, for one payer account. */
-function useDelegationContext(account: string | undefined, version: number) {
+function useDelegationContext(account: string | undefined) {
   const chainId = chainIdOfAccount(account);
   const enabled = supportsDelegation(account);
   const signerState = useSigner({
@@ -121,18 +123,19 @@ function useDelegationContext(account: string | undefined, version: number) {
   const { chains } = useChains();
   const unit = (chainId && settlementSymbol(chains, chainId)) || "";
 
-  const escrowQuery = useQuery({
-    queryKey: ["escrow", chainId],
-    enabled,
+  // The session's escrow (`GET /escrow`, the key every money screen and the
+  // limits write share) when the payer is on its chain — the usual case — and
+  // the payer's chain read only otherwise, so the page does not ask twice.
+  const sessionEscrow = useEscrowQuery({ enabled });
+  const sameChain = chainId !== null && chainIdOfAccount(sessionEscrow.data?.account) === chainId;
+  const chainEscrow = useQuery({
+    queryKey: escrowKeys.escrow(chainId),
+    enabled: enabled && sessionEscrow.isFetched && !sameChain,
     retry: 0,
     queryFn: () => getEscrow(chainId),
   });
-  const delegatesQuery = useQuery({
-    queryKey: ["escrow-delegates", version],
-    enabled,
-    retry: 0,
-    queryFn: () => listDelegates(version),
-  });
+  const escrowQuery = sameChain || !sessionEscrow.isFetched ? sessionEscrow : chainEscrow;
+  const delegatesQuery = useDelegatesQuery({ enabled });
 
   const signer = (): Signer => {
     if (signerState.status === "ready") return signerState.signer;
@@ -214,7 +217,7 @@ export async function stopPaymentKeyOnChain(
  * escrow: what the Revoke dialog's "Also stop its payment key on chain" runs.
  */
 export function useStopPaymentKey(account: string | undefined): (delegateAccount: string) => Promise<void> {
-  const ctx = useDelegationContext(account, 0);
+  const ctx = useDelegationContext(account);
   const { signer, domain, escrowQuery } = ctx;
   return async (delegateAccount: string) => {
     await stopPaymentKeyOnChain(delegateAccount, signer(), domain(escrowQuery.data));
@@ -238,7 +241,7 @@ export function StopPaymentKeySheet({
   onClose: () => void;
   onFinished: () => void;
 }) {
-  const ctx = useDelegationContext(account, 0);
+  const ctx = useDelegationContext(account);
   return (
     <RevokeSheet
       target={target?.delegation ?? null}
@@ -303,18 +306,16 @@ function exact(
 export function PayerDelegationsPanel({
   account,
   bindings,
-  version,
   onChanged,
   onlyUnbound = false,
 }: {
   account: string | undefined;
   bindings: readonly DelegateBinding[];
-  version: number;
   onChanged: () => void;
   /** Only keys not bound to a live credential (the per-agent cards show the rest). Hidden when there are none. */
   onlyUnbound?: boolean;
 }) {
-  const ctx = useDelegationContext(account, version);
+  const ctx = useDelegationContext(account);
   const [revoking, setRevoking] = React.useState<EscrowDelegate | null>(null);
   const [editing, setEditing] = React.useState<SheetTarget | null>(null);
   if (!ctx.enabled) return null;
@@ -468,7 +469,7 @@ export function PayerDelegationsPanel({
  * The delegate's grant as the chain shows it NOW, for a sheet about to change
  * it (BUG-D1-07, BUG-D1-08): the list is read again, past the browser's cache,
  * every time the sheet opens — the page's list can predate a payment made
- * since — and on every `refresh` while waiting. One query key per delegate, so
+ * since — and on every `refresh` while waiting. The app's one delegates key, so
  * polling adds no cache entries, and a refetch already in flight is joined
  * rather than restarted (review finding 10). See `liveDelegation`.
  */
@@ -477,14 +478,7 @@ function useLiveDelegation(
   opened: EscrowDelegate | null,
   open: boolean,
 ) {
-  const read = useQuery({
-    queryKey: ["escrow-delegates-live", delegate],
-    enabled: open && delegate !== "",
-    retry: 0,
-    staleTime: 0,
-    refetchOnMount: "always",
-    queryFn: () => listDelegates(Date.now()),
-  });
+  const read = useDelegatesQuery({ enabled: open && delegate !== "", fresh: true });
   // What the cache held when this opening began: only a read answered after it
   // counts (a previous opening's read can predate a payment made since).
   const [opening, setOpening] = React.useState({ open: false, baseline: 0 });
@@ -1218,7 +1212,7 @@ export function GrantActions({
   /** False on a free-calls-only chain: limits count no call there, so there is nothing to change. */
   showChange?: boolean;
 }) {
-  const ctx = useDelegationContext(account, 0);
+  const ctx = useDelegationContext(account);
   const [editing, setEditing] = React.useState<SheetTarget | null>(null);
   const [revoking, setRevoking] = React.useState<EscrowDelegate | null>(null);
   const draft = useBudgetDraft({

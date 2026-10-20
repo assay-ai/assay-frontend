@@ -36,7 +36,7 @@ function text(html: string): string {
 function render(seed: (client: QueryClient) => void = () => undefined): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] }));
-  client.setQueryData(["escrow-delegates", "live"], { delegates: [] });
+  client.setQueryData(["escrow-delegates"], { delegates: [] });
   client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT });
   client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
   client.setQueryData(["spend-policy"], null);
@@ -71,7 +71,7 @@ describe("the agent card while its keys load", () => {
     // No refetch on mount: the render shows the failed read as it stands.
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, refetchOnMount: false } } });
     client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] }));
-    client.setQueryData(["escrow-delegates", "live"], { delegates: [] });
+    client.setQueryData(["escrow-delegates"], { delegates: [] });
     client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT });
     client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
     client.setQueryData(["spend-policy"], null);
@@ -192,7 +192,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
     const revoked = grantRow("g-old", "Assay app on the old laptop", DELEGATE_A, { revokedAt: "2026-10-18T00:00:00Z" });
     const html = render((client) => {
       client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [revoked] }));
-      client.setQueryData(["escrow-delegates", "live"], { account: ACCOUNT, delegates: [onChain(DELEGATE_A)], tightenDelaySeconds: 3600 });
+      client.setQueryData(["escrow-delegates"], { account: ACCOUNT, delegates: [onChain(DELEGATE_A)], tightenDelaySeconds: 3600 });
     });
     const out = text(html);
     // Never folded away under "Show revoked": a key is never stranded (IM-11).
@@ -206,7 +206,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
     const revoked = grantRow("g-old", "Assay app on the old laptop", DELEGATE_A, { revokedAt: "2026-10-18T00:00:00Z" });
     const html = render((client) => {
       client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [revoked] }));
-      client.setQueryData(["escrow-delegates", "live"], { account: ACCOUNT, delegates: [], tightenDelaySeconds: 3600 });
+      client.setQueryData(["escrow-delegates"], { account: ACCOUNT, delegates: [], tightenDelaySeconds: 3600 });
     });
     expect(html).not.toContain('data-testid="stop-payment-key"');
     expect(text(html)).not.toContain("still active on chain");
@@ -217,7 +217,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
     const b = grantRow("g-b", "Assay app on laptop-b", DELEGATE_B);
     const html = render((client) => {
       client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [a, b] }));
-      client.setQueryData(["escrow-delegates", "live"], {
+      client.setQueryData(["escrow-delegates"], {
         account: ACCOUNT,
         delegates: [onChain(DELEGATE_A), onChain(DELEGATE_B)],
         tightenDelaySeconds: 3600,
@@ -240,7 +240,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
     const row = grantRow("g-new", "Assay app on laptop-a", DELEGATE_A);
     const html = render((client) => {
       client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [row] }));
-      client.setQueryData(["escrow-delegates", "live"], { account: ACCOUNT, delegates: [], tightenDelaySeconds: 3600 });
+      client.setQueryData(["escrow-delegates"], { account: ACCOUNT, delegates: [], tightenDelaySeconds: 3600 });
     });
     expect(html).toMatch(/<button[^>]*data-testid="payment-limits"[^>]*disabled=""|<button[^>]*disabled=""[^>]*data-testid="payment-limits"/);
     expect(text(html)).not.toContain("Let your agent pay");
@@ -263,7 +263,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
     client.setQueryData(["spend-policy"], null);
     client.setQueryData(["chains"], { chains: [] });
     client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [revoked] }));
-    // No ["escrow-delegates", "live"]: the chain read has not answered.
+    // No ["escrow-delegates"]: the chain read has not answered.
     const html = renderToStaticMarkup(
       <QueryClientProvider client={client}>
         <AgentsView />
@@ -286,7 +286,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
     client.setQueryData(["spend-policy"], null);
     client.setQueryData(["chains"], { chains: [] });
     client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [revoked] }));
-    await client.prefetchQuery({ queryKey: ["escrow-delegates", "live"], queryFn: () => Promise.reject(new Error("rpc down")), retry: false });
+    await client.prefetchQuery({ queryKey: ["escrow-delegates"], queryFn: () => Promise.reject(new Error("rpc down")), retry: false });
     const html = renderToStaticMarkup(
       <QueryClientProvider client={client}>
         <AgentsView />
@@ -313,7 +313,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
         balance: usdg("20000000"),
       });
       client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [a, b] }));
-      client.setQueryData(["escrow-delegates", "live"], {
+      client.setQueryData(["escrow-delegates"], {
         account: ACCOUNT,
         delegates: [
           { ...onChain(DELEGATE_A), status: "EXPIRED", validUntil: "2026-10-01T00:00:00.000Z" },
@@ -343,7 +343,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
     const b = grantRow("g-b", "Assay app on laptop-b", DELEGATE_B);
     const html = render((client) => {
       client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [a, b] }));
-      client.setQueryData(["escrow-delegates", "live"], {
+      client.setQueryData(["escrow-delegates"], {
         account: ACCOUNT,
         delegates: [onChain(DELEGATE_A), onChain(DELEGATE_B)],
         tightenDelaySeconds: 3600,

@@ -49,7 +49,7 @@ async function renderGetStarted(
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] }));
   client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [KEY] }));
-  client.setQueryData(["escrow-delegates", "live"], { delegates: [] });
+  client.setQueryData(["escrow-delegates"], { delegates: [] });
   client.setQueryData(["escrow", null], {
     exists: true,
     readable: true,
@@ -172,7 +172,7 @@ describe("Get started on Overview, an agent that already pays", { timeout: 30_00
   it("renders nothing while the pay permission is still being read", async () => {
     const html = await renderGetStarted((client) => {
       bound(client);
-      client.removeQueries({ queryKey: ["escrow-delegates", "live"] });
+      client.removeQueries({ queryKey: ["escrow-delegates"] });
     }, "overview");
     expect(html).toBe("");
   });
@@ -180,7 +180,7 @@ describe("Get started on Overview, an agent that already pays", { timeout: 30_00
   it("renders nothing once the permission is read and every step is done", async () => {
     const html = await renderGetStarted((client) => {
       bound(client);
-      client.setQueryData(["escrow-delegates", "live"], { delegates: [grant] });
+      client.setQueryData(["escrow-delegates"], { delegates: [grant] });
     }, "overview");
     expect(html).toBe("");
   });
@@ -189,7 +189,7 @@ describe("Get started on Overview, an agent that already pays", { timeout: 30_00
     const out = text(
       await renderGetStarted((client) => {
         bound(client);
-        client.setQueryData(["escrow-delegates", "live"], { delegates: [] });
+        client.setQueryData(["escrow-delegates"], { delegates: [] });
       }, "overview"),
     );
     expect(out).toContain("Let your agent pay");

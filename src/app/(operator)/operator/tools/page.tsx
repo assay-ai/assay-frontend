@@ -17,9 +17,9 @@ import { useOperatorSession } from "@/features/operator/session-context";
 import type { OperatorToolSummary } from "@/interfaces/contracts";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
-import { listOperatorToolRequests, listOperatorTools, type OperatorToolRequestRow } from "@/services/operator-contracts.service";
-import { listApprovals } from "@/services/operator.service";
+import { type OperatorToolRequestRow } from "@/services/operator-contracts.service";
 import { cn } from "@/utils";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Tools, route `/operator/tools`: the standard tools every provider serves
@@ -60,11 +60,10 @@ function ToolsScreen() {
   // "Overdue" is read against the moment the page opened; the list refreshes on every visit.
   const [now] = React.useState(() => Date.now());
 
-  const tools = useQuery({ queryKey: ["operator", "tools", "list"], queryFn: listOperatorTools, retry: 0 });
-  const requests = useQuery({ queryKey: ["operator", "tool-requests"], queryFn: () => listOperatorToolRequests(), retry: 0 });
+  const tools = useQuery(operatorQueries.tools());
+  const requests = useQuery(operatorQueries.toolRequests());
   const pending = useQuery({
-    queryKey: ["operator", "approvals", "pending-count"],
-    queryFn: () => listApprovals({ status: "PENDING", limit: 100 }),
+    ...operatorQueries.pendingApprovals(),
     refetchInterval: 30_000,
     retry: 0,
   });

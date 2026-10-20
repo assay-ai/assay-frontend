@@ -34,13 +34,15 @@ const CHAINS: Chain[] = [
 function client(escrowMaxVoucher: string): QueryClient {
   const c = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   c.setQueryData(["chains"], { chains: CHAINS });
-  c.setQueryData(["escrow", EVM], {
+  // The session's escrow, on the payer's chain: the panel reads it rather than asking for that chain again.
+  c.setQueryData(["escrow", null], {
+    account: PAYER,
     escrowPda: `${EVM}:0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f`,
     serverTime: "2026-10-12T12:00:00.000Z",
     maxVoucherAmount: usdg(escrowMaxVoucher),
     maxPerWindow: usdg("10000000"),
   });
-  c.setQueryData(["escrow-delegates", 0], {
+  c.setQueryData(["escrow-delegates"], {
     account: PAYER,
     delegates: [
       {
@@ -82,7 +84,7 @@ describe("PayerDelegationsPanel", () => {
   // revoke and a new grant (two signatures, no authority in between).
   it("offers Change spending limits beside Stop it paying on a standing grant", () => {
     const html = render(
-      <PayerDelegationsPanel account={PAYER} bindings={[]} version={0} onChanged={() => {}} />,
+      <PayerDelegationsPanel account={PAYER} bindings={[]} onChanged={() => {}} />,
     );
     expect(html).toContain('data-testid="edit-delegate"');
     expect(html).toContain("Change spending limits");
@@ -93,14 +95,14 @@ describe("PayerDelegationsPanel", () => {
   // "up to 0.500000 USDG a payment" and nothing said payments above 0.05 fail.
   it("warns when the escrow's own limit is now below the grant's cap", () => {
     const lowered = render(
-      <PayerDelegationsPanel account={PAYER} bindings={[]} version={0} onChanged={() => {}} />,
+      <PayerDelegationsPanel account={PAYER} bindings={[]} onChanged={() => {}} />,
       "50000",
     );
     expect(lowered).toContain('data-testid="delegate-above-escrow-limits"');
     expect(lowered).toContain("$0.05 a payment");
 
     const fine = render(
-      <PayerDelegationsPanel account={PAYER} bindings={[]} version={0} onChanged={() => {}} />,
+      <PayerDelegationsPanel account={PAYER} bindings={[]} onChanged={() => {}} />,
     );
     expect(fine).not.toContain("delegate-above-escrow-limits");
   });
@@ -109,7 +111,7 @@ describe("PayerDelegationsPanel", () => {
 describe("PayerDelegationsPanel — payments still being settled (BUG-D1-07)", () => {
   it("lists them on the grant they will be redeemed under", () => {
     const html = render(
-      <PayerDelegationsPanel account={PAYER} bindings={[]} version={0} onChanged={() => {}} />,
+      <PayerDelegationsPanel account={PAYER} bindings={[]} onChanged={() => {}} />,
     );
     expect(html).toContain('data-testid="delegate-unsettled"');
     expect(html).toContain("1 payment ($0.10) still being settled");

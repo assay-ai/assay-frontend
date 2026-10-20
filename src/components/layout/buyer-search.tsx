@@ -91,7 +91,6 @@ export function BuyerSearch() {
     queryKey: ["tool-calls", "search-recent"],
     enabled: open,
     retry: 0,
-    staleTime: 30_000,
     queryFn: () => listToolCalls({ limit: 100 }),
   });
 

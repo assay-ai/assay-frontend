@@ -79,12 +79,13 @@ import { sameEvmAddress } from "@/libs/chains/evm/contract-call";
 import { assertContractCall, formatCallArg, type DecodedCall, type ExpectedCall } from "@/libs/chains/evm/signing-guard";
 import { ROBINHOOD_TESTNET_STAKE, explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { routes } from "@/libs/routes";
-import { createArbiterRulingIntent, getArbiterTerms, getPlatformHealth, listArbiterDisputes } from "@/services/operator.service";
+import { createArbiterRulingIntent } from "@/services/operator.service";
 import { cn } from "@/utils";
 import { formatClock } from "@/libs/utc-time";
 import { formatMoney } from "@/utils/money";
 
 import { Deadline } from "@/features/operator/deadline";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Arbiter, route `/operator/arbiter` (assay-evm D-19).
@@ -129,7 +130,7 @@ function ArbiterScreen() {
     return () => clearInterval(timer);
   }, []);
 
-  const health = useQuery({ queryKey: ["operator", "health"], queryFn: getPlatformHealth, retry: 0 });
+  const health = useQuery(operatorQueries.health());
   const chainStates: readonly ChainStateHealth[] = React.useMemo(() => health.data?.chainState ?? [], [health.data]);
   const chainIds = React.useMemo(() => {
     const ids = chainStates.map((state) => state.chainId);
@@ -139,8 +140,8 @@ function ArbiterScreen() {
   const chainId = chosenChain && chainIds.includes(chosenChain) ? chosenChain : chainIds[0]!;
   const chainState = chainStates.find((state) => state.chainId === chainId) ?? null;
 
-  const terms = useQuery({ queryKey: ["operator", "arbiter", "terms", chainId], queryFn: () => getArbiterTerms(chainId), retry: 0 });
-  const disputes = useQuery({ queryKey: ["operator", "arbiter", "disputes"], queryFn: listArbiterDisputes, refetchInterval: 60_000, retry: 0 });
+  const terms = useQuery(operatorQueries.arbiterTerms(chainId));
+  const disputes = useQuery({ ...operatorQueries.arbiterDisputes(), refetchInterval: 60_000, retry: 0 });
   const rows = React.useMemo(() => sortDisputesByDaysLeft(disputes.data ?? []), [disputes.data]);
 
   const connected = useConnectedAddresses();
@@ -657,8 +658,7 @@ function RulingSheet({
   const chainId = chainForSelection ?? FALLBACK_CHAIN;
   // The arbiter of the chain these penalties are on, not of the chain picked in the header.
   const terms = useQuery({
-    queryKey: ["operator", "arbiter", "terms", chainId],
-    queryFn: () => getArbiterTerms(chainId),
+    ...operatorQueries.arbiterTerms(chainId),
     enabled: ruling !== null,
     retry: 0,
   });

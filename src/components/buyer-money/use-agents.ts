@@ -13,13 +13,14 @@ import { useChains } from "@/hooks/useChains";
 import type { EscrowDelegate } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { servesPaidCalls } from "@/libs/chains/paid-rails";
-import { listAgents } from "@/services/account.service";
 import { chainDisplayName } from "@/services/chains.service";
-import { listDelegates } from "@/services/delegation.service";
 import { getSpendPolicyTyped, type SpendPolicy } from "@/services/limits.service";
 import { chainIdOfAccount } from "@/utils/chain";
 
+import { AGENTS_WITH_KEYS_KEY, readAgentsWithKeys } from "@/features/agents/agent-list";
+
 import { useEscrowQuery } from "./use-buyer-money";
+import { useDelegatesQuery } from "./use-delegates";
 
 export interface AgentRow {
   agentId: string;
@@ -89,25 +90,7 @@ export interface AgentsWithKeysPage {
   items: AgentWithKeys[];
 }
 
-/** Every `useAgentsAndKeys` reads this one query; a key or agent write invalidates `["agents"]`. */
-export const AGENTS_WITH_KEYS_KEY = ["agents", "with-keys"] as const;
-
-/**
- * Every agent with its keys and their health, in ONE request. It replaced one
- * `GET /agents/:id/credentials` per agent on every poll. The first 50 keys
- * per agent, as each of those reads asked for.
- *
- * The same URL on every read, polls included: the API answers it
- * `private, no-cache`, so an unchanged list costs a 304.
- */
-export async function readAgentsWithKeys(): Promise<AgentsWithKeysPage> {
-  const page = (await listAgents({ limit: 50, include: "credentials,health" })) as unknown as AgentsWithKeysPage;
-  // A row without its keys would read as "No key": refuse it as a failed read instead.
-  if ((page.items ?? []).some((agent) => !agent.credentials || !agent.health)) {
-    throw new ApiError("AGENT_KEYS_MISSING", "The agents came back without their keys", 0);
-  }
-  return page;
-}
+export { AGENTS_WITH_KEYS_KEY, readAgentsWithKeys };
 
 /** The keys map the screens read, by agent id. */
 export function keysByAgent(page: AgentsWithKeysPage): Record<string, KeyRow[]> {
@@ -183,13 +166,7 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
   };
 
   const delegationOn = agents.some((a) => supportsDelegation(a.agentAccount));
-  const delegatesQuery = useQuery({
-    queryKey: ["escrow-delegates", "live"],
-    enabled: delegationOn,
-    retry: 0,
-    refetchInterval: poll,
-    queryFn: () => listDelegates(Date.now()),
-  });
+  const delegatesQuery = useDelegatesQuery({ enabled: delegationOn, pollMs: poll });
   const escrowQuery = useEscrowQuery();
   const policyQuery = useSpendPolicyQuery();
   const debtsQuery = useBuyerDebtsQuery();

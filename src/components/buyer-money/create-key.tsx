@@ -53,13 +53,12 @@ export function createKeyErrorText(error: unknown): string {
 }
 
 /**
- * After a key is made or revoked: every read of the agents' keys (they all sit
- * under `["agents"]`, `AGENTS_WITH_KEYS_KEY` included) and the key names. A
- * read already on its way (a Retry, a poll) is kept rather than sent twice.
+ * After a key is made or revoked: every read of the agents and their keys
+ * (they all sit under `["agents"]`, the key names included). A read already on
+ * its way (a Retry, a poll) is kept rather than sent twice.
  */
 export function invalidateAfterKeyWrite(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: ["agents"] }, { cancelRefetch: false });
-  void queryClient.invalidateQueries({ queryKey: ["entity-names", "credentials"] }, { cancelRefetch: false });
 }
 
 /**

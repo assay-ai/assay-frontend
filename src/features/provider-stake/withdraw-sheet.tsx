@@ -15,7 +15,6 @@ import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { openPenaltyHold, openPenaltyPhrase } from "@/features/provider-penalties/model";
 import { usePenalties } from "@/features/provider-penalties/use-penalties";
 import { routes } from "@/libs/routes";
-import { getProviderRegistration } from "@/services/provider-registration.service";
 import { formatDecimal, formatMoney, parseAmountInput, toDecimal } from "@/utils/money";
 
 import { stakeActionChain } from "./chain-stake";
@@ -34,6 +33,7 @@ import {
   withdrawPlan,
   withdrawStateOf,
 } from "./withdraw-state";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * "Withdraw stake": one sheet for both halves of getting stake back.
@@ -52,7 +52,7 @@ import {
  */
 export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const status = useStakeStatus();
-  const registration = useQuery({ queryKey: ["provider", "registration"], queryFn: getProviderRegistration, retry: 0 });
+  const registration = useQuery(providerQueries.registration());
   const wallet = useStakeWallet(status);
   const penalties = usePenalties({ withCases: "none" });
   const names = useProviderToolNames();

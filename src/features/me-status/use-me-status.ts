@@ -62,7 +62,6 @@ export function useMeStatusPart<P extends MeStatusPart>(
     enabled:
       options.enabled !== false &&
       (demoEnabled() || hasBlockStatusSession({ ready, authenticated, hasStoredToken })),
-    staleTime: 30_000,
     refetchInterval: options.poll ? ME_STATUS_POLL_MS : false,
     refetchOnWindowFocus: true,
     retry: 0,

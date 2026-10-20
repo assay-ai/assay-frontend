@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const get = vi.fn();
 const getBalances = vi.fn();
 vi.mock("./api", () => ({ api: { get: (...args: unknown[]) => get(...args) } }));
-vi.mock("./balances.service", () => ({ getBalances: () => getBalances() }));
+vi.mock("./balances.service", () => ({ BALANCES_KEY: ["balances"], getBalances: () => getBalances() }));
 
 const SOL = "solana:EtWT/token:4zMM";
 const EVM = "eip155:46630/erc20:0xDbbC";

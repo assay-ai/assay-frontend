@@ -35,8 +35,9 @@ import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { credentialLabel, type CredentialLike } from "@/features/buyer-money/mcp-config";
 import { termsVersionLabel } from "@/features/m41/terms";
-import { createCredential, listAgents, listCredentials } from "@/services/account.service";
-import { getProviderRegistration } from "@/services/provider-registration.service";
+import { useAgentList } from "@/features/agents/agent-list";
+import { createCredential, listCredentials } from "@/services/account.service";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * Account, seats and credentials.
@@ -269,17 +270,9 @@ export default function ProviderAccountPage() {
   const [cacheEpoch] = React.useState(() => Date.now() % 86_400_000);
   const [writeCount, setWriteCount] = React.useState(0);
 
-  const registration = useQuery({
-    queryKey: ["provider", "registration"],
-    queryFn: getProviderRegistration,
-    retry: false,
-  });
+  const registration = useQuery(providerQueries.registration());
 
-  const agents = useQuery({
-    queryKey: ["agents"],
-    retry: false,
-    queryFn: () => listAgents({ limit: 50 }),
-  });
+  const agents = useAgentList();
 
   const agentIds = React.useMemo(
     () => (agents.data?.items ?? []).map((agent) => agent.agentId),
