@@ -171,12 +171,12 @@ describe("EnablePaidView", () => {
       <Harness
         run={vi.fn(async () => undefined)}
         balance="$0.00"
-        confirming="$20.00 still confirming on chain (usually within 30 minutes)"
+        confirming="$20.00 still confirming on chain (usually a few seconds)"
       />,
     );
     expect(screen.getByTestId("funds-ready").textContent).toBe("Ready for paid calls: $0.00");
     expect(screen.getByTestId("funds-confirming").textContent).toBe(
-      "$20.00 still confirming on chain (usually within 30 minutes). Paid calls can use it once the chain finalises it.",
+      "$20.00 still confirming on chain (usually a few seconds). Paid calls can use it once the chain confirms it.",
     );
     expect(screen.queryByText(/Escrow balance/)).toBeNull();
   });

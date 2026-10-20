@@ -4,19 +4,19 @@ import { formatMoney } from "@/utils/money";
 
 /**
  * Money that is in (or on its way to) the escrow but that paid calls cannot use
- * yet (BUG-A-06). The ledger credits a deposit only once the chain has
- * finalised it — about 17 to 27 minutes on eip155:46630 — so between the
- * transfer and finality the chain's escrow balance already counts it while a
- * paid call is refused with `PAYMENT_INSUFFICIENT_FUNDS`.
+ * yet (BUG-A-06). The ledger credits a deposit once the chain confirms it
+ * (on eip155 the sequencer's soft confirmation, swept every 5 seconds), so for
+ * those few seconds the chain's escrow balance already counts it while a paid
+ * call is refused with `PAYMENT_INSUFFICIENT_FUNDS`.
  *
  * `pending` (seen on chain, not final) and `pendingDeposits` (sent, not yet
  * seen) are the two ledger buckets for it, the same two the Overview tile adds.
  */
-export const CONFIRMING_TEXT = "still confirming on chain (usually within 30 minutes)";
+export const CONFIRMING_TEXT = "still confirming on chain (usually a few seconds)";
 
 /** The deposit sheet's success line, matching what the ledger actually does. */
 export const DEPOSIT_CREDIT_TEXT =
-  "Paid calls can use it once the chain finalises it, usually within 30 minutes; until then it shows as still confirming on chain.";
+  "Paid calls can use it once the chain confirms it, usually within a few seconds; until then it shows as still confirming on chain.";
 
 /** The ledger row for the escrow's chain, or null when there is none or more than one. */
 export function escrowLedgerRow(balances: readonly FullBalance[] | undefined, chainId: string | null): FullBalance | null {
@@ -33,6 +33,11 @@ export function confirmingOnChain(row: FullBalance | null | undefined): Money | 
   return { amount: sum.toString(), asset: row.asset, decimals: row.decimals };
 }
 
+/** Whether any ledger row still has a deposit confirming on chain. */
+export function anyConfirming(balances: readonly FullBalance[] | undefined): boolean {
+  return (balances ?? []).some((row) => confirmingOnChain(row) !== null);
+}
+
 /**
  * What paid calls can use now. Unchanged (`chainSpendable`) while nothing is
  * confirming; while a deposit is, the ledger's `available` caps it, because the
@@ -44,7 +49,7 @@ export function readyForPaidCalls(chainSpendable: Money | null, row: FullBalance
   return BigInt(row.available.amount || "0") < BigInt(chainSpendable.amount || "0") ? row.available : chainSpendable;
 }
 
-/** "$20.00 still confirming on chain (usually within 30 minutes)", or null. */
+/** "$20.00 still confirming on chain (usually a few seconds)", or null. */
 export function confirmingLine(row: FullBalance | null | undefined): string | null {
   const confirming = confirmingOnChain(row);
   return confirming ? `${formatMoney(confirming)} ${CONFIRMING_TEXT}` : null;

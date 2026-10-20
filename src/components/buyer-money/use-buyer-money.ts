@@ -5,6 +5,7 @@ import * as React from "react";
 
 import { ConnectWalletNote } from "@/components/buyer-money/connect-wallet";
 import { capsAreSet } from "@/features/buyer-money/caps";
+import { anyConfirming } from "@/features/buyer-money/confirming";
 import { WalletNotReady } from "@/features/buyer-money/money-errors";
 import type { FullBalance } from "@/features/g30/balance";
 import { useChains } from "@/hooks/useChains";
@@ -40,10 +41,15 @@ export function useEscrowQuery(options: { refetchInterval?: number | false; enab
   });
 }
 
+const CONFIRMING_POLL_MS = 3_000;
+
 export function useBalancesQuery() {
   return useQuery<{ balances: FullBalance[] }, ApiError>({
     queryKey: ["balances"],
     queryFn: () => getBalances() as Promise<{ balances: FullBalance[] }>,
+    // While a deposit is confirming, look again every few seconds: the API
+    // credits it within seconds, and "still confirming" must not outlive it.
+    refetchInterval: (query) => (anyConfirming(query.state.data?.balances) ? CONFIRMING_POLL_MS : false),
     retry: 0,
     networkMode: "always" as const,
   });
