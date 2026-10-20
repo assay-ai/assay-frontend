@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addressStyleOf, isEvmChain, namespaceOf } from "./registry";
+import { addressStyleOf, firstDepositOpensEscrow, isEvmChain, namespaceOf } from "./registry";
 
 const SOLANA_DEVNET = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
 const EVM_TESTNET = "eip155:46630";
@@ -38,6 +38,19 @@ describe("isEvmChain", () => {
     expect(isEvmChain(SOLANA_DEVNET)).toBe(false);
     expect(isEvmChain("mainnet")).toBe(false);
     expect(isEvmChain("")).toBe(false);
+  });
+});
+
+describe("firstDepositOpensEscrow", () => {
+  it("Solana: the first deposit opens the escrow, so nothing is signed before it", () => {
+    expect(firstDepositOpensEscrow("solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1")).toBe(true);
+  });
+  it("eip155: the escrow is there from the start, so limits and a delegate can come first", () => {
+    expect(firstDepositOpensEscrow("eip155:46630")).toBe(false);
+  });
+  it("no chain known yet: the stricter answer", () => {
+    expect(firstDepositOpensEscrow(null)).toBe(true);
+    expect(firstDepositOpensEscrow(undefined)).toBe(true);
   });
 });
 

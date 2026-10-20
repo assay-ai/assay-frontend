@@ -22,6 +22,7 @@ import { applyLimitsSubmitted } from "@/features/escrow/after-set-limits";
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { servesPaidCalls } from "@/libs/chains/paid-rails";
+import { firstDepositOpensEscrow } from "@/libs/chains/registry";
 import { createDelegateIntent, getEscrowUnsettled, submitDelegate } from "@/services/delegation.service";
 import { createEscrowLimitsIntent } from "@/services/escrow.service";
 import { cn } from "@/utils";
@@ -184,7 +185,7 @@ export function LetAgentPaySheet({
       ? `${money.chainName ?? "This chain"} currently serves free calls only, so this agent makes free calls there and pays for none.`
       : !delegateAccount
         ? "The agent has no payment key yet. Paid calls are by invitation during testnet."
-        : !escrow?.exists
+        : !escrow?.exists && firstDepositOpensEscrow(money.chainId)
         ? "Add funds first: your first deposit opens your escrow."
         : !chosen
           ? (parsed.perCall.error ?? parsed.perDay.error ?? "Choose its limits.")

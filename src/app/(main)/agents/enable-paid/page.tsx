@@ -31,6 +31,7 @@ import { loadPage, useFullLoadLinks } from "@/features/oauth/strict-pages";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { evmRpcUrl } from "@/libs/chains/evm/chains";
 import { servesPaidCalls } from "@/libs/chains/paid-rails";
+import { firstDepositOpensEscrow } from "@/libs/chains/registry";
 import { loginHref } from "@/libs/login-redirect";
 import { listAgents, listCredentials } from "@/services/account.service";
 import { listDelegates } from "@/services/delegation.service";
@@ -218,7 +219,7 @@ export default function EnablePaidPage() {
   const blocker: React.ReactNode | null =
     money.chainId && money.chainId !== state.chainId
       ? "This payment key is for another network than your escrow."
-      : !escrow?.exists
+      : !escrow?.exists && firstDepositOpensEscrow(money.chainId ?? state.chainId)
         ? "Add funds first: your first deposit opens your escrow."
         : walletBlocker;
 
@@ -238,7 +239,7 @@ export default function EnablePaidPage() {
         escrowAddress={escrow?.escrowPda ? addressOfAccount(escrow.escrowPda) : null}
         currentCeiling={capsToForm(escrow)}
         lowerNote={lowerNote}
-        balance={shownBalance ? formatMoney(shownBalance) : null}
+        balance={shownBalance ? formatMoney(shownBalance) : escrow && !escrow.exists ? "$0.00" : null}
         confirming={confirmingLine(ledgerRow)}
         fundsShort={fundsShort}
         addFunds={
