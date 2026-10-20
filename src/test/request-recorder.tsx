@@ -17,6 +17,14 @@ const OVERRIDES: Record<string, () => unknown> = {
   "GET /chains": () => ({ chains: [ROBINHOOD_TESTNET] }),
 };
 
+type Answer = (params: Record<string, unknown>, fixture: () => unknown) => unknown;
+const answers = new Map<string, Answer>();
+
+/** This test's own answer for `GET /path`; `fixture()` is what the demo would have said. Cleared by `resetRecorded`. */
+export function answerWith(endpoint: string, answer: Answer): void {
+  answers.set(endpoint, answer);
+}
+
 export interface RecordedRequest {
   method: string;
   path: string;
@@ -30,11 +38,15 @@ function answer(method: string, url: string, params: Record<string, unknown> = {
   recorded.push({ method, path, params });
   const override = OVERRIDES[`${method} ${path}`];
   if (override) return override();
-  const fixture = DEMO_FIXTURES.find(
-    (f) => f.method === method && (f.match instanceof RegExp ? f.match.test(path) : f.match === path),
-  );
-  if (!fixture) return { items: [], pageInfo: { nextCursor: null, hasMore: false } };
-  return fixture.body(path, params, (data ?? {}) as Record<string, unknown>);
+  const fromFixture = () => {
+    const fixture = DEMO_FIXTURES.find(
+      (f) => f.method === method && (f.match instanceof RegExp ? f.match.test(path) : f.match === path),
+    );
+    if (!fixture) return { items: [], pageInfo: { nextCursor: null, hasMore: false } };
+    return fixture.body(path, params, (data ?? {}) as Record<string, unknown>);
+  };
+  const own = answers.get(`${method} ${path}`);
+  return own ? own(params, fromFixture) : fromFixture();
 }
 
 const recordingClient = {
@@ -76,6 +88,7 @@ export function countsByRequest(requests: readonly RecordedRequest[] = recorded)
 
 export function resetRecorded(): void {
   recorded.length = 0;
+  answers.clear();
 }
 
 /** Privy, stubbed for a signed-in buyer with no wallet connected. */
