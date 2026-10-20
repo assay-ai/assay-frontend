@@ -43,7 +43,7 @@ export const ALERT_PRESETS: readonly AlertPreset[] = [
     id: "money-security",
     title: "Money & security",
     description:
-      "Balance low or empty, deposits, withdrawals, a new withdrawal address, an agent paused or its key expiring.",
+      "Balance low or empty, deposits, withdrawals, a new withdrawal address, an agent paused or its key expiring, an app stopped because its sign-in was used twice, a payment key's first paid call.",
     events: [
       "balance.low",
       "balance.zero",
@@ -55,6 +55,8 @@ export const ALERT_PRESETS: readonly AlertPreset[] = [
       "agent.paused",
       "session.expiring",
       "session.expired",
+      "oauth.grant_stopped_reuse",
+      "payment_key.first_spend",
     ],
     alwaysOn: true,
   },
@@ -82,14 +84,24 @@ export const ALERT_PRESETS: readonly AlertPreset[] = [
   {
     id: "summary",
     title: "Daily summary",
-    description: "One message a day with what you spent and anything not charged.",
-    events: ["digest.daily"],
+    description: "One message a day with what you spent and anything not charged, and what each payment key spent yesterday.",
+    events: ["payment_key.daily_summary", "digest.daily"],
     alwaysOn: false,
   },
 ];
 
 /** Every buyer event, in preset order (provider events are not a buyer's). */
-export const BUYER_EVENTS: readonly NotificationEvent[] = ALERT_PRESETS.flatMap((p) => p.events);
+export const BUYER_EVENTS: readonly NotificationEvent[] = [...new Set(ALERT_PRESETS.flatMap((p) => p.events))];
+
+/**
+ * What "Customise" lists: every event in the catalogue, buyer events first in
+ * preset order, then the rest (provider-side events, which no preset holds) in
+ * catalogue order. An event missing from every preset still shows here.
+ */
+export function customiseEvents(catalogue: readonly NotificationEvent[]): NotificationEvent[] {
+  const buyer = new Set(BUYER_EVENTS);
+  return [...BUYER_EVENTS.filter((e) => catalogue.includes(e)), ...catalogue.filter((e) => !buyer.has(e))];
+}
 
 /** Whether a preset is on for a channel: on, off, or mixed (some events customised). */
 export function presetState(

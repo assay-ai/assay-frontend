@@ -28,7 +28,7 @@ import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import {
   ALERT_PRESETS,
-  BUYER_EVENTS,
+  customiseEvents,
   CHANNEL_NAME,
   availableChannels,
   destinationError,
@@ -487,7 +487,7 @@ export function AlertsView() {
               Customise: every alert, how urgent and how often
             </summary>
             <ul className="flex flex-col px-4 pb-3 tablet:px-5">
-              {BUYER_EVENTS.filter((event) => NOTIFICATION_CATALOGUE[event].hasProducer).map((event) => {
+              {customiseEvents(Object.keys(NOTIFICATION_CATALOGUE) as NotificationEvent[]).filter((event) => NOTIFICATION_CATALOGUE[event].hasProducer).map((event) => {
                 const def = NOTIFICATION_CATALOGUE[event];
                 return (
                   <li key={event} className="flex flex-col gap-1 border-t border-01 py-2.5 first:border-t-0 tablet:flex-row tablet:items-center tablet:gap-3">
