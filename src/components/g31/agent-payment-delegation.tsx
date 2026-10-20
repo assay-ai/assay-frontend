@@ -27,8 +27,6 @@ import {
   editDelegationForm,
   errorsAfterEdit,
   escrowCanDelegate,
-  findDelegation,
-  keyFingerprint,
   parseDelegationForm,
   serverNowSeconds,
   supportsDelegation,
@@ -55,14 +53,14 @@ import {
 import { isRelayedRefusal, relayedRefusal } from "@/features/escrow/relayed-refusal";
 import { assayMcpRun } from "@/features/buyer-money/mcp-config";
 import { useChains } from "@/hooks/useChains";
-import { isRailNotOffered, railNotOfferedText, servesPaidCalls } from "@/libs/chains/paid-rails";
+import { isRailNotOffered, railNotOfferedText } from "@/libs/chains/paid-rails";
 import { isUserRejection, type Signer, useSigner } from "@/hooks/useSigner";
 import type { BuyerEscrow, DelegateIntent, EscrowDelegate } from "@/interfaces";
 import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import { ApiError } from "@/libs/ApiClient";
 import { demoEnabled } from "@/libs/demo/demo-api";
 import { rememberDemoDelegateCaps } from "@/libs/demo/demo-stage";
-import { chainDisplayName, settlementSymbol } from "@/services/chains.service";
+import { settlementSymbol } from "@/services/chains.service";
 import {
   createDelegateIntent,
   createRevokeDelegateIntent,
@@ -707,153 +705,6 @@ function RevokeSheet({
         </div>
       </SheetContent>
     </Sheet>
-  );
-}
-
-/** Per agent: its credentials' bound keys, and "Authorize agent to pay" for those not yet authorised. */
-export function AgentPaymentDelegation({
-  agentAccount,
-  credentials,
-  version,
-  onChanged,
-}: {
-  agentAccount: string | undefined;
-  credentials: readonly DelegationCredential[];
-  version: number;
-  onChanged: () => void;
-}) {
-  const ctx = useDelegationContext(agentAccount, version);
-  const [authorizing, setAuthorizing] = React.useState<SheetTarget | null>(null);
-  if (!ctx.enabled) {
-    // Solana serves free calls only (paid rails A and B are off): say so, offer nothing to sign.
-    if (ctx.chainId && !servesPaidCalls(ctx.chainId)) {
-      return (
-        <div className="flex w-full flex-col gap-2.5 pt-2" data-testid="agent-payment-free-only">
-          <MicroLabel>AGENT PAYMENTS</MicroLabel>
-          <p className="text-body-13 text-02">
-            {chainDisplayName(ctx.chains, ctx.chainId)} currently serves free calls only, so this
-            agent makes free calls there and pays for none. Paid calls are not offered on it.
-          </p>
-        </div>
-      );
-    }
-    return null;
-  }
-
-  const bound = credentials.filter((c) => !c.revokedAt && c.delegateAccount);
-  const delegates = ctx.delegatesQuery.data?.delegates;
-
-  return (
-    <div
-      className="flex w-full flex-col gap-2.5 pt-2"
-      data-testid="agent-payment-delegation"
-    >
-      <MicroLabel>AGENT PAYMENTS</MicroLabel>
-      {bound.length === 0 ? (
-        <p className="text-body-13 text-02">
-          No key of this agent has a payment key yet. Paid calls are by
-          invitation during testnet: an invited agent makes its payment key
-          and proves it holds it with its API key (
-          <span className="font-mono">{assayMcpRun()} enable-paid</span>); the payment key
-          then appears here to authorise.
-        </p>
-      ) : (
-        bound.map((credential) => {
-          const delegation = findDelegation(
-            delegates,
-            credential.delegateAccount as string,
-          );
-          return (
-            <div
-              key={credential.id}
-              data-testid="delegate-row"
-              className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-02 p-3.5 tablet:flex-row tablet:items-center"
-            >
-              <Wallet aria-hidden="true" className="size-4 shrink-0 text-02" />
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="break-all font-mono text-mono-xs text-01">
-                  {addressOfAccount(credential.delegateAccount)}
-                </span>
-                <span className="text-body-xs text-03">
-                  {credential.name} · key …
-                  {keyFingerprint(credential.delegateAccount)}
-                  {credential.delegateBoundAt
-                    ? ` · bound ${relativeTime(credential.delegateBoundAt)}`
-                    : ""}{" "}
-                  ·{" "}
-                  {delegation
-                    ? delegation.status === "EXPIRED"
-                      ? "authorisation expired"
-                      : "authorised to pay"
-                    : ctx.delegatesQuery.isPending
-                      ? "reading the chain…"
-                      : "not authorised to pay"}
-                </span>
-              </div>
-              {!delegation || delegation.status === "EXPIRED" ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  type="button"
-                  data-testid="authorize-delegate"
-                  disabled={!escrowCanDelegate(ctx.escrowQuery.data)}
-                  onClick={() =>
-                    setAuthorizing({
-                      delegateAccount: credential.delegateAccount as string,
-                      boundAt: credential.delegateBoundAt ?? null,
-                    })
-                  }
-                >
-                  Authorize agent to pay
-                </Button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <StatusPill label="CAN PAY" tone="teal" />
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    type="button"
-                    data-testid="edit-agent-delegate"
-                    disabled={!escrowCanDelegate(ctx.escrowQuery.data)}
-                    onClick={() =>
-                      setAuthorizing({
-                        delegateAccount: credential.delegateAccount as string,
-                        boundAt: credential.delegateBoundAt ?? null,
-                        current: delegation,
-                      })
-                    }
-                  >
-                    Change spending limits
-                  </Button>
-                </div>
-              )}
-            </div>
-          );
-        })
-      )}
-      {bound.length > 0 &&
-      ctx.escrowQuery.data &&
-      !escrowCanDelegate(ctx.escrowQuery.data) ? (
-        <p className="text-body-xs text-03">
-          Set your account ceiling first — an agent’s spending limits sit under it.
-        </p>
-      ) : null}
-
-      <AuthorizeSheet
-        target={authorizing}
-        escrow={ctx.escrowQuery.data}
-        escrowReceivedAt={ctx.escrowQuery.dataUpdatedAt}
-        unit={ctx.unit}
-        tightenDelaySeconds={ctx.delegatesQuery.data?.tightenDelaySeconds}
-        onClose={() => setAuthorizing(null)}
-        onFinished={() => {
-          setAuthorizing(null);
-          onChanged();
-        }}
-        signer={ctx.signer}
-        domain={ctx.domain}
-      />
-    </div>
   );
 }
 
