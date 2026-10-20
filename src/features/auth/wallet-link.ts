@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
-import { ApiError } from "@/libs/ApiClient";
+import { ApiError, onWalletNotLinked } from "@/libs/ApiClient";
 import { linkWallet } from "@/services/auth.service";
 
 /**
@@ -72,6 +72,78 @@ let inFlight = false;
 
 const listeners = new Set<() => void>();
 
+/**
+ * ## When the link landing refetches the screens
+ *
+ * Only when a screen was actually refused for want of a wallet. A screen that
+ * mounted before the wallet linked is holding a failed request, so the link
+ * landing has to refetch it (`PrivySessionBridge`). But every session-guarded
+ * route refuses an unlinked account with `AUTH_WALLET_NOT_LINKED`; none
+ * answers successfully with "no wallet yet" data. So when no request got that
+ * refusal, nothing on screen depends on the link, and refetching the whole
+ * cache once it lands is the same data fetched again. That is every reload of
+ * an account linked long ago: the link answers `linked` at once, and used to
+ * refetch every query a second time for it.
+ *
+ * - `refusedBeforeLink`: a refusal arrived while the link had not landed. Kept
+ *   across `resetWalletLink`, which also runs when Privy first resolves the
+ *   identity, after the burst that may have been refused. A refusal kept from
+ *   an earlier identity costs one extra refetch, nothing more.
+ * - `lateRefusalArmed`: the link landed with nothing refused, but a request
+ *   sent before it may still come back refused (the API decided it before the
+ *   link was written). The first such refusal refetches once; later ones are
+ *   the cancelled requests of that refetch and change nothing, so a 424 can
+ *   never start a loop.
+ */
+let refusedBeforeLink = false;
+let lateRefusalArmed = false;
+const refetchListeners = new Set<() => void>();
+
+function refetchScreens(): void {
+  for (const listener of refetchListeners) listener();
+}
+
+function landed(): void {
+  if (refusedBeforeLink) {
+    refusedBeforeLink = false;
+    lateRefusalArmed = false;
+    refetchScreens();
+    return;
+  }
+  lateRefusalArmed = true;
+}
+
+/** `ApiClient` saw an `AUTH_WALLET_NOT_LINKED`. */
+export function noteWalletNotLinked(): void {
+  if (status !== "linked") {
+    refusedBeforeLink = true;
+    return;
+  }
+  if (!lateRefusalArmed) return;
+  lateRefusalArmed = false;
+  refetchScreens();
+}
+
+onWalletNotLinked(noteWalletNotLinked);
+
+/** Forgets every refusal seen so far. For tests. */
+export function forgetWalletRefusals(): void {
+  refusedBeforeLink = false;
+  lateRefusalArmed = false;
+}
+
+/**
+ * Called when the screens must be refetched because the link landed after
+ * something was refused for want of it. See "When the link landing refetches
+ * the screens" above.
+ */
+export function subscribeLinkedRefetch(listener: () => void): () => void {
+  refetchListeners.add(listener);
+  return () => {
+    refetchListeners.delete(listener);
+  };
+}
+
 function emit(next: WalletLinkStatus): void {
   if (status === next) return;
   status = next;
@@ -96,6 +168,7 @@ async function attempt(): Promise<void> {
     if (result.linked) {
       clearTimer();
       emit("linked");
+      landed();
       return;
     }
     emit("provisioning");
@@ -154,6 +227,7 @@ export function startWalletLink(): void {
 export function resetWalletLink(): void {
   clearTimer();
   deadlineAt = 0;
+  lateRefusalArmed = false;
   emit("idle");
 }
 

@@ -19,7 +19,9 @@ const nav = vi.hoisted(() => ({ pathname: "/how-it-works", replace: vi.fn() }));
 const api = vi.hoisted(() => ({
   handler: null as null | (() => void),
   clearSessionToken: vi.fn(),
+  sentOnlyAs: false,
 }));
+const link = vi.hoisted(() => ({ refetch: null as null | (() => void) }));
 const client = vi.hoisted(() => ({
   clear: vi.fn(),
   resetQueries: vi.fn(() => Promise.resolve()),
@@ -39,6 +41,7 @@ vi.mock("@/libs/ApiClient", () => ({
   clearSessionToken: api.clearSessionToken,
   setSessionToken: vi.fn(),
   registerSessionTokenProvider: vi.fn(),
+  sessionRequestsSentAs: () => (api.sentOnlyAs ? "only" : "unknown"),
   onUnauthorized: (handler: () => void) => {
     api.handler = handler;
   },
@@ -48,6 +51,12 @@ vi.mock("@/features/auth/wallet-link", () => ({
   resetWalletLink: vi.fn(),
   startWalletLink: vi.fn(),
   subscribeWalletLink: () => () => undefined,
+  subscribeLinkedRefetch: (listener: () => void) => {
+    link.refetch = listener;
+    return () => {
+      link.refetch = null;
+    };
+  },
 }));
 vi.mock("@/libs/demo/demo-api", () => ({ demoEnabled: () => false }));
 const strict = vi.hoisted(() => ({ loadPage: vi.fn() }));
@@ -79,6 +88,7 @@ function fire401() {
 }
 
 beforeEach(() => {
+  api.sentOnlyAs = false;
   privy.state = { ready: true, authenticated: true, user: { id: "did:privy:1", linkedAccounts: [{ type: "email" }, EMBEDDED_EVM] } };
   nav.pathname = "/how-it-works";
 });
@@ -135,6 +145,35 @@ describe("PrivySessionBridge on a 401", () => {
     expect(api.clearSessionToken).toHaveBeenCalled();
     expect(privy.logout).toHaveBeenCalledTimes(1);
     expect(nav.replace).not.toHaveBeenCalled();
+  });
+});
+
+/* F3: one fetch per query on a signed-in reload, not three. */
+describe("PrivySessionBridge, signed-in reload", () => {
+  it("refetches the cache when Privy resolves; only the failures when every request already carried this identity's token", () => {
+    mount();
+    expect(client.invalidateQueries).toHaveBeenCalledTimes(1);
+    cleanup();
+    vi.clearAllMocks();
+
+    api.sentOnlyAs = true;
+    mount();
+    expect(client.invalidateQueries).toHaveBeenCalledTimes(1);
+    expect(client.invalidateQueries).toHaveBeenCalledWith({ predicate: expect.any(Function) });
+    expect(client.resetQueries).not.toHaveBeenCalled();
+  });
+
+  it("refetches when the wallet link says the screens need it, and stops listening on unmount", () => {
+    api.sentOnlyAs = true;
+    const view = mount();
+    vi.clearAllMocks();
+
+    act(() => link.refetch?.());
+    expect(client.invalidateQueries).toHaveBeenCalledTimes(1);
+    expect(client.invalidateQueries).toHaveBeenCalledWith();
+
+    view.unmount();
+    expect(link.refetch).toBeNull();
   });
 });
 

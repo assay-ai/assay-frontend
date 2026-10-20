@@ -1,7 +1,15 @@
 import { AxiosError, type AxiosAdapter, type AxiosResponse, type InternalAxiosRequestConfig } from "axios";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import ApiClient, { ApiError, onUnauthorized, registerSessionTokenProvider } from "@/libs/ApiClient";
+import ApiClient, {
+  ApiError,
+  forgetSessionRequests,
+  onUnauthorized,
+  onWalletNotLinked,
+  registerSessionTokenProvider,
+  sessionRequestsSentAs,
+  sessionTokenSubject,
+} from "@/libs/ApiClient";
 
 /**
  * A fake transport: the server accepts exactly the tokens in `valid` and
@@ -166,5 +174,133 @@ describe("ApiClient session token", () => {
 
     expect(provider).toHaveBeenCalledTimes(1);
     expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+/** A Privy-shaped access token for `sub` (unsigned: only the payload is read). */
+function jwtFor(sub: string): string {
+  const part = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${part({ alg: "ES256", typ: "JWT" })}.${part({ sub, iss: "privy.io" })}.sig`;
+}
+
+function okServer(): AxiosAdapter {
+  return async (config) => ({ data: { data: { ok: true } }, status: 200, statusText: "OK", headers: {}, config });
+}
+
+/*
+  F3: on a reload the screens fetch before Privy is ready, with the token it
+  already holds. When every one of those carried the token of the identity
+  Privy then resolves to, the cache is that identity's data and the bridge
+  does not refetch it.
+*/
+describe("who the shared client's requests went out as", () => {
+  beforeEach(() => forgetSessionRequests());
+  afterEach(() => {
+    registerSessionTokenProvider(null);
+    forgetSessionRequests();
+  });
+
+  it("reads the subject of a Privy access token, and nothing from anything else", () => {
+    expect(sessionTokenSubject(jwtFor("did:privy:a"))).toBe("did:privy:a");
+    expect(sessionTokenSubject("not-a-jwt")).toBeNull();
+    expect(sessionTokenSubject("a.%%%.c")).toBeNull();
+    expect(sessionTokenSubject(`x.${Buffer.from(JSON.stringify({ sub: 7 })).toString("base64url")}.y`)).toBeNull();
+  });
+
+  it("is \"only\" when every request carried the identity's token, \"other\" against anyone else", async () => {
+    registerSessionTokenProvider(async () => jwtFor("did:privy:a"));
+    const api = client(okServer());
+    await Promise.all([api.get("/a"), api.get("/b")]);
+
+    expect(sessionRequestsSentAs("did:privy:a")).toBe("only");
+    expect(sessionRequestsSentAs("did:privy:b")).toBe("other");
+  });
+
+  it("is \"only\" before any request went out", () => {
+    expect(sessionRequestsSentAs("did:privy:a")).toBe("only");
+  });
+
+  it("is \"unknown\" once a request went out with no token or an unreadable one", async () => {
+    const provider = vi
+      .fn<() => Promise<string | null>>()
+      .mockResolvedValueOnce(jwtFor("did:privy:a"))
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce("opaque");
+    registerSessionTokenProvider(provider);
+    const api = client(okServer());
+    await api.get("/a");
+    await api.get("/b");
+    expect(sessionRequestsSentAs("did:privy:a")).toBe("unknown");
+    await api.get("/c");
+    expect(sessionRequestsSentAs("did:privy:a")).toBe("unknown");
+  });
+
+  it("is \"other\" once a request went out with someone else's token, whatever else went out", async () => {
+    const provider = vi
+      .fn<() => Promise<string | null>>()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(jwtFor("did:privy:other"))
+      .mockResolvedValueOnce(jwtFor("did:privy:a"));
+    registerSessionTokenProvider(provider);
+    const api = client(okServer());
+    await api.get("/a");
+    await api.get("/b");
+    await api.get("/c");
+    expect(sessionRequestsSentAs("did:privy:a")).toBe("other");
+  });
+
+  it("is \"unknown\" while a request is still waiting for its token", async () => {
+    let release: (token: string) => void = () => undefined;
+    registerSessionTokenProvider(() => new Promise<string>((resolve) => (release = resolve)));
+    const pending = client(okServer()).get("/a");
+    await Promise.resolve();
+    expect(sessionRequestsSentAs("did:privy:a")).toBe("unknown");
+
+    release(jwtFor("did:privy:a"));
+    await pending;
+    expect(sessionRequestsSentAs("did:privy:a")).toBe("only");
+  });
+
+  it("ignores a client with its own token (the operator console)", async () => {
+    const operator = new ApiClient("http://api.test", { getToken: () => "operator-token" });
+    operator.raw().defaults.adapter = okServer();
+    await operator.get("/operator/me");
+    expect(sessionRequestsSentAs("did:privy:a")).toBe("only");
+  });
+});
+
+describe("AUTH_WALLET_NOT_LINKED is reported, and still reaches the caller", () => {
+  afterEach(() => onWalletNotLinked(null));
+
+  function refusing(code: string, status: number): AxiosAdapter {
+    return async (config) => {
+      const response: AxiosResponse = {
+        data: { success: false, error: { code, message: "x", statusCode: status } },
+        status,
+        statusText: "Refused",
+        headers: {},
+        config,
+      };
+      throw new AxiosError("Refused", "ERR_BAD_REQUEST", config, null, response);
+    };
+  }
+
+  it("calls the handler for a 424 on the shared client", async () => {
+    const seen = vi.fn();
+    onWalletNotLinked(seen);
+    await expect(client(refusing("AUTH_WALLET_NOT_LINKED", 424)).get("/a")).rejects.toMatchObject({
+      code: "AUTH_WALLET_NOT_LINKED",
+    });
+    expect(seen).toHaveBeenCalledTimes(1);
+  });
+
+  it("not for another refusal, and not on a client with its own token", async () => {
+    const seen = vi.fn();
+    onWalletNotLinked(seen);
+    await expect(client(refusing("NOT_FOUND", 404)).get("/a")).rejects.toBeInstanceOf(ApiError);
+    const operator = new ApiClient("http://api.test", { getToken: () => "operator-token" });
+    operator.raw().defaults.adapter = refusing("AUTH_WALLET_NOT_LINKED", 424);
+    await expect(operator.get("/a")).rejects.toBeInstanceOf(ApiError);
+    expect(seen).not.toHaveBeenCalled();
   });
 });

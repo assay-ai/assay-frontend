@@ -131,6 +131,84 @@ function refreshSessionToken(): Promise<string | null> {
   return refreshInFlight;
 }
 
+/**
+ * The Privy DID a session token names (its `sub` claim), or `null` when the
+ * token cannot be read as a JWT.
+ *
+ * Read, never verified: the answer only decides whether this page's data has
+ * to be fetched again (`sessionRequestsSentAs`), never what anybody may
+ * see. The API verifies every token it is sent.
+ */
+export function sessionTokenSubject(token: string): string | null {
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+  try {
+    const json = globalThis.atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const sub = (JSON.parse(json) as { sub?: unknown }).sub;
+    return typeof sub === "string" && sub !== "" ? sub : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Who the shared client's requests went out as since this page loaded: the
+ * token subject of each, `""` for a request with no token or an unreadable
+ * one. Plus the requests still waiting for their token, whose subject is not
+ * known yet.
+ */
+const sentAs = new Set<string>();
+let tokenReadsPending = 0;
+
+/**
+ * Who the requests the shared client sent on this page load went out as,
+ * against `subject`:
+ *
+ * - `"only"`: every one carried a token for `subject`, none is still waiting
+ *   for its token;
+ * - `"other"`: at least one carried a token for another identity;
+ * - `"unknown"`: otherwise (a request with no token or an unreadable one, or
+ *   one still resolving).
+ *
+ * `PrivySessionBridge` asks this when Privy first settles on an identity. A
+ * screen fetches as soon as it mounts, a second or two before Privy is ready,
+ * with whatever token Privy already holds. `"only"` means everything in the
+ * cache is already this identity's data, and refetching it changes nothing;
+ * `"other"` means some of it is someone else's and must go.
+ */
+export type SentAs = "only" | "other" | "unknown";
+
+export function sessionRequestsSentAs(subject: string): SentAs {
+  let answer: SentAs = tokenReadsPending > 0 ? "unknown" : "only";
+  for (const sent of sentAs) {
+    if (sent === subject) continue;
+    if (sent !== "") return "other";
+    answer = "unknown";
+  }
+  return answer;
+}
+
+/** Forgets who the requests went out as. For tests. */
+export function forgetSessionRequests(): void {
+  sentAs.clear();
+  tokenReadsPending = 0;
+}
+
+type WalletNotLinkedHandler = () => void;
+
+let walletNotLinkedHandler: WalletNotLinkedHandler | null = null;
+
+/**
+ * Called for every `AUTH_WALLET_NOT_LINKED` (424) on the shared client.
+ * Registered by `features/auth/wallet-link.ts`, which uses it only to know
+ * whether a screen was refused for want of a wallet before the link landed,
+ * so the cache is refetched once the link lands only when something was.
+ * It changes nothing about the request: the caller still gets the 424.
+ */
+export function onWalletNotLinked(handler: WalletNotLinkedHandler | null): void {
+  walletNotLinkedHandler = handler;
+}
+
 type UnauthorizedHandler = () => void;
 
 let unauthorizedHandler: UnauthorizedHandler | null = null;
@@ -377,7 +455,19 @@ class ApiClient {
     });
 
     this.instance.interceptors.request.use(async (config) => {
-      const token = await this.getToken();
+      if (!this.usesSessionToken) {
+        const token = await this.getToken();
+        if (token) config.headers.Authorization = `Bearer ${token}`;
+        return config;
+      }
+      tokenReadsPending += 1;
+      let token: string | null;
+      try {
+        token = await this.getToken();
+      } finally {
+        tokenReadsPending -= 1;
+      }
+      sentAs.add(token ? (sessionTokenSubject(token) ?? "") : "");
       if (token) config.headers.Authorization = `Bearer ${token}`;
       return config;
     });
@@ -417,11 +507,11 @@ class ApiClient {
         // caller with no linked wallet yet, not an invalid session, and must
         // fall straight through to the caller as an ApiError untouched.
         //
-        // A 424 is now observed by nothing at all. It used to notify
-        // `WalletProvisioningGate`, which was verified in a browser against an
-        // agent whose wallet was genuinely unlinked and never activated once;
-        // it is gone, and so is the handler slot it registered into. Each
-        // screen sees the 424 itself again.
+        // A 424 is only counted (`onWalletNotLinked`), never acted on here. It
+        // used to notify `WalletProvisioningGate`, which was verified in a
+        // browser against an agent whose wallet was genuinely unlinked and
+        // never activated once; it is gone. Each screen sees the 424 itself.
+        if (apiError.code === "AUTH_WALLET_NOT_LINKED" && this.usesSessionToken) walletNotLinkedHandler?.();
         /*
           DEMO ONLY: never sign a visitor out. On a demo host the screens are
           drawn from fixtures, but any path WITHOUT a fixture still reaches the
