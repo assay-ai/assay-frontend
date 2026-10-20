@@ -58,6 +58,8 @@ vi.mock("@/features/auth/wallet-link", () => ({
     };
   },
 }));
+const limits = vi.hoisted(() => ({ stop: vi.fn() }));
+vi.mock("@/features/escrow/after-set-limits", () => ({ stopLimitsRereads: limits.stop }));
 vi.mock("@/libs/demo/demo-api", () => ({ demoEnabled: () => false }));
 const strict = vi.hoisted(() => ({ loadPage: vi.fn() }));
 vi.mock("@/features/oauth/strict-pages", async (original) => {
@@ -161,6 +163,18 @@ describe("PrivySessionBridge, signed-in reload", () => {
     expect(client.invalidateQueries).toHaveBeenCalledTimes(1);
     expect(client.invalidateQueries).toHaveBeenCalledWith({ predicate: expect.any(Function) });
     expect(client.resetQueries).not.toHaveBeenCalled();
+  });
+
+  it("a change of identity stops the escrow limits re-reads of the previous one", () => {
+    const view = mount();
+    vi.clearAllMocks();
+    privy.state = { ready: true, authenticated: false, user: null };
+    view.rerender(
+      <PrivySessionBridge>
+        <p>page</p>
+      </PrivySessionBridge>,
+    );
+    expect(limits.stop).toHaveBeenCalledTimes(1);
   });
 
   it("refetches when the wallet link says the screens need it, and stops listening on unmount", () => {

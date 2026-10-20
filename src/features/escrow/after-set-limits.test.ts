@@ -12,7 +12,7 @@ vi.mock("@/services/escrow.service", () => ({
 
 import { getEscrow, revalidateEscrow } from "@/services/escrow.service";
 
-import { applyLimitsSubmitted, escrowQueryKey, readEscrow } from "./after-set-limits";
+import { applyLimitsSubmitted, escrowQueryKey, readEscrow, stopLimitsRereads } from "./after-set-limits";
 import { LIMITS_LANDING_POLL_MS, LIMITS_LANDING_TIMEOUT_MS } from "./limits-form";
 
 const CHAIN = "eip155:46630";
@@ -196,6 +196,17 @@ describe("applyLimitsSubmitted — reads only while the limits have not shown", 
 
     await advance(LIMITS_LANDING_TIMEOUT_MS);
     expect(revalidateEscrow).toHaveBeenCalledTimes(3);
+  });
+
+  it("stops re-reading when the signed-in identity changes", async () => {
+    reads.revalidated = before;
+    await applyLimitsSubmitted(queryClient, null, signed, null, now);
+    await advance(LIMITS_LANDING_POLL_MS);
+    expect(revalidateEscrow).toHaveBeenCalledTimes(2);
+
+    stopLimitsRereads();
+    await advance(LIMITS_LANDING_TIMEOUT_MS);
+    expect(revalidateEscrow).toHaveBeenCalledTimes(2);
   });
 
   it("gives up after the bounded wait when no read ever shows the limits", async () => {

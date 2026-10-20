@@ -15,6 +15,7 @@ import {
 } from "@/libs/ApiClient";
 
 import { demoEnabled } from "@/libs/demo/demo-api";
+import { stopLimitsRereads } from "@/features/escrow/after-set-limits";
 import { appNavigate } from "@/features/oauth/strict-pages";
 
 import {
@@ -174,7 +175,12 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
       },
       {
         queryClient,
-        resetWalletLink,
+        // Whose wallet was being linked, and whose escrow limits were being
+        // waited for, are part of who was signed in.
+        resetWalletLink: () => {
+          resetWalletLink();
+          stopLimitsRereads();
+        },
         clearSessionToken,
         getAccessToken,
         setSessionToken,
