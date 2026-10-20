@@ -5,16 +5,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-import {
-  getWalletLinkStatus,
-  resetWalletLink,
-  startWalletLink,
-  subscribeWalletLink,
-} from "@/features/auth/wallet-link";
+import { resetWalletLink, startWalletLink, subscribeLinkedRefetch } from "@/features/auth/wallet-link";
 import {
   clearSessionToken,
   onUnauthorized,
   registerSessionTokenProvider,
+  sessionRequestsSentAs,
   setSessionToken,
 } from "@/libs/ApiClient";
 
@@ -45,12 +41,13 @@ import {
  *     logout, or a different user) — the token names a tenant, and cached
  *     data from another tenant must not survive the switch. Same reasoning
  *     as the persona switch this replaced. The first identity a page load
- *     resolves to only refetches; see `identity-cache.ts` for both, and for
- *     why neither is `queryClient.clear()`.
+ *     resolves to only refetches, and not even that when every request so
+ *     far already carried its token; see `identity-cache.ts` for both, and
+ *     for why neither is `queryClient.clear()`.
  *  3. On logout, clear the stored token so the next request goes out
  *     unauthenticated instead of replaying a dead one.
- *  4. Start the wallet link the moment a token exists, and clear the whole
- *     React Query cache once it lands. Privy records the wallet AFTER issuing
+ *  4. Start the wallet link the moment a token exists, and refetch the whole
+ *     React Query cache once it lands if anything was refused for want of it. Privy records the wallet AFTER issuing
  *     the token, so a fresh signup's first requests all fail with
  *     `AUTH_WALLET_NOT_LINKED`; `startWalletLink` asks the API to look again
  *     rather than letting its 60-second cooldown decide when. See
@@ -182,6 +179,7 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
         getAccessToken,
         setSessionToken,
         startWalletLink,
+        sentAs: sessionRequestsSentAs,
       },
     );
     // A new identity after a 401 that stayed: the burst is over, so a later 401 is handled again.
@@ -222,16 +220,14 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
     this replaced `children` with a gate, and `invalidateQueries` then refetched
     nothing at all because it only refetches observers that still exist.
 
+    Only when something WAS refused: an account linked long ago gets `linked`
+    from its first link request, and refetching every query for it fetched the
+    same data a second time on every reload. `subscribeLinkedRefetch` says when
+    (`features/auth/wallet-link.ts`).
+
     `WalletSetupBanner` covers the screens that read outside React Query.
   */
-  useEffect(() => {
-    let seenLinked = getWalletLinkStatus() === "linked";
-    return subscribeWalletLink(() => {
-      const linked = getWalletLinkStatus() === "linked";
-      if (linked && !seenLinked) void queryClient.invalidateQueries();
-      seenLinked = linked;
-    });
-  }, [queryClient]);
+  useEffect(() => subscribeLinkedRefetch(() => void queryClient.invalidateQueries()), [queryClient]);
 
   return <>{children}</>;
 }

@@ -24,10 +24,13 @@ vi.mock("@/services/auth.service", () => ({
 import { ApiError } from "@/libs/ApiClient";
 
 import {
+  forgetWalletRefusals,
   getWalletLinkStatus,
   isWalletNotLinked,
+  noteWalletNotLinked,
   resetWalletLink,
   startWalletLink,
+  subscribeLinkedRefetch,
 } from "./wallet-link";
 
 const LINKED = {
@@ -148,6 +151,86 @@ describe("wallet-link — the first minute of a new account", () => {
     const asked = backend.calls;
     await vi.advanceTimersByTimeAsync(30_000);
     expect(backend.calls).toBe(asked);
+  });
+});
+
+/*
+  F3: on every reload of an account linked long ago the link answers `linked`
+  at once, and the bridge used to refetch every query a second time for it.
+  It refetches only when a screen was refused for want of the wallet.
+*/
+describe("wallet-link — refetching the screens once the link lands", () => {
+  let refetches = 0;
+  let stop: () => void = () => undefined;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    backend.calls = 0;
+    backend.answers = [() => Promise.resolve(LINKED)];
+    resetWalletLink();
+    forgetWalletRefusals();
+    refetches = 0;
+    stop = subscribeLinkedRefetch(() => {
+      refetches += 1;
+    });
+  });
+
+  afterEach(() => {
+    stop();
+    resetWalletLink();
+    forgetWalletRefusals();
+    vi.useRealTimers();
+  });
+
+  it("does not refetch when nothing was refused (an account linked long ago)", async () => {
+    startWalletLink();
+    await settle();
+    expect(getWalletLinkStatus()).toBe("linked");
+    expect(refetches).toBe(0);
+  });
+
+  it("refetches once when a screen was refused before the link landed", async () => {
+    backend.answers = [() => Promise.resolve(NOT_YET), () => Promise.resolve(LINKED)];
+    startWalletLink();
+    await settle();
+    noteWalletNotLinked();
+    noteWalletNotLinked();
+    expect(refetches).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(getWalletLinkStatus()).toBe("linked");
+    expect(refetches).toBe(1);
+
+    // The refetch cancelled the refused requests; their late answers change nothing.
+    noteWalletNotLinked();
+    expect(refetches).toBe(1);
+  });
+
+  it("keeps a refusal from before Privy resolved the identity (the reset at boot)", async () => {
+    noteWalletNotLinked();
+    resetWalletLink();
+    startWalletLink();
+    await settle();
+    expect(refetches).toBe(1);
+  });
+
+  it("refetches once for a request refused just before the link landed and answered after it", async () => {
+    startWalletLink();
+    await settle();
+    expect(refetches).toBe(0);
+
+    noteWalletNotLinked();
+    noteWalletNotLinked();
+    expect(refetches).toBe(1);
+  });
+
+  it("a new identity does not inherit the previous one's late-refusal refetch", async () => {
+    startWalletLink();
+    await settle();
+    resetWalletLink();
+
+    noteWalletNotLinked();
+    expect(refetches).toBe(0);
   });
 });
 
