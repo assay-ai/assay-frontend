@@ -31,6 +31,7 @@ import { AFTER_CONTRACT_WRITE, refreshAfter } from "./refresh-after";
 import { useOperatorSession } from "./session-context";
 import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "./sheet-footer";
 import { WhatHappens, type WhatHappensLine } from "./what-happens";
+import { OPERATOR_TOOLS_LIST_KEY } from "@/features/operator/queries";
 
 /**
  * The editor's confirm steps. Each names exactly what it does — the bump and
@@ -436,7 +437,15 @@ export function NewToolSheet({ open, onClose, onCreated }: { open: boolean; onCl
   const [name, setName] = React.useState("");
   const [category, setCategory] = React.useState("");
   const [errors, setErrors] = React.useState<{ name?: string; category?: string }>({});
-  const create = useMutation({ mutationFn: () => createStandardTool({ name: name.trim(), category: category.trim() }), onSuccess: onCreated });
+  const queryClient = useQueryClient();
+  const create = useMutation({
+    mutationFn: () => createStandardTool({ name: name.trim(), category: category.trim() }),
+    onSuccess: (tool) => {
+      // The tools list shows the new draft at once.
+      void queryClient.invalidateQueries({ queryKey: OPERATOR_TOOLS_LIST_KEY });
+      onCreated(tool);
+    },
+  });
   const { reset } = create;
   React.useEffect(() => {
     if (!open) return;
