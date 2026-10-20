@@ -13,7 +13,7 @@ import { useChains } from "@/hooks/useChains";
 import type { EscrowDelegate } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { servesPaidCalls } from "@/libs/chains/paid-rails";
-import { listAgents, listCredentials } from "@/services/account.service";
+import { listAgents } from "@/services/account.service";
 import { chainDisplayName } from "@/services/chains.service";
 import { listDelegates } from "@/services/delegation.service";
 import { getSpendPolicyTyped, type SpendPolicy } from "@/services/limits.service";
@@ -58,21 +58,75 @@ export interface KeyRow extends CredentialLike {
 }
 
 /**
- * Every agent's keys, one `GET /agents/:id/credentials` each.
- *
- * The same URL on every read, polls included. The list used to carry a
- * `from` cache-buster (an instant in 1970, which filters nothing out) from
- * when GETs were served `max-age=10` and a poll that reused the URL was
- * answered from the browser's cache. The API now answers it
- * `private, no-cache` (BUG-SYS-01), so the browser revalidates every read and
- * an unchanged list costs a 304. A fresh URL per read also cost a fresh CORS
- * preflight per read, and keeps a server-side cache from ever matching.
+ * An agent's key health, worked out by the API from exactly the keys in
+ * `credentials` (`GET /agents?include=health`). Two meanings of "live" are
+ * kept apart: the readiness line's (`liveKeyCount`: not revoked, not past
+ * `expiresAt`) and Get started / Connect's (`unrevokedKeyCount`: not revoked).
  */
-export async function readAgentKeys(agentIds: readonly string[]): Promise<Record<string, KeyRow[]>> {
-  const lists = await Promise.all(
-    agentIds.map((id) => listCredentials(id, { limit: 50 }) as Promise<{ items: KeyRow[] }>),
-  );
-  return Object.fromEntries(agentIds.map((id, i) => [id, lists[i]!.items])) as Record<string, KeyRow[]>;
+export interface AgentHealth {
+  evaluatedAt: string;
+  liveKeyCount: number;
+  unrevokedKeyCount: number;
+  keyBound: boolean;
+  boundKeyCount: number;
+  /** A key that is not revoked has been used. */
+  firstCallSeen: boolean;
+  /** Latest `lastUsedAt` over live keys. */
+  lastUsedAt: string | null;
+  /** Earliest `lastUsedAt` over keys that are not revoked. */
+  earliestLastUsedAt: string | null;
+  /** Latest `lastUsedAt` over every key, revoked ones included. */
+  lastUsedAtAnyKey: string | null;
+}
+
+/** `GET /agents?include=credentials,health`: an agent row with its first 50 keys and their health. */
+export interface AgentWithKeys extends AgentRow {
+  credentials: { items: KeyRow[]; hasMore: boolean };
+  health: AgentHealth;
+}
+
+export interface AgentsWithKeysPage {
+  items: AgentWithKeys[];
+}
+
+/** Every `useAgentsAndKeys` reads this one query; a key or agent write invalidates `["agents"]`. */
+export const AGENTS_WITH_KEYS_KEY = ["agents", "with-keys"] as const;
+
+/**
+ * Every agent with its keys and their health, in ONE request. It replaced one
+ * `GET /agents/:id/credentials` per agent on every poll. The first 50 keys
+ * per agent, as each of those reads asked for.
+ *
+ * The same URL on every read, polls included: the API answers it
+ * `private, no-cache`, so an unchanged list costs a 304.
+ */
+export async function readAgentsWithKeys(): Promise<AgentsWithKeysPage> {
+  const page = (await listAgents({ limit: 50, include: "credentials,health" })) as unknown as AgentsWithKeysPage;
+  // A row without its keys would read as "No key": refuse it as a failed read instead.
+  if ((page.items ?? []).some((agent) => !agent.credentials || !agent.health)) {
+    throw new ApiError("AGENT_KEYS_MISSING", "The agents came back without their keys", 0);
+  }
+  return page;
+}
+
+/** The keys map the screens read, by agent id. */
+export function keysByAgent(page: AgentsWithKeysPage): Record<string, KeyRow[]> {
+  return Object.fromEntries((page.items ?? []).map((agent) => [agent.agentId, agent.credentials.items]));
+}
+
+/** Each agent's key health, by agent id. */
+export function healthByAgent(page: AgentsWithKeysPage): Record<string, AgentHealth> {
+  return Object.fromEntries((page.items ?? []).map((agent) => [agent.agentId, agent.health]));
+}
+
+/** The query's state, for one of its two readings (the agents, or their keys). */
+export interface QueryPart<T> {
+  data: T | undefined;
+  error: unknown;
+  isPending: boolean;
+  isError: boolean;
+  isSuccess: boolean;
+  refetch: () => Promise<unknown>;
 }
 
 export function useSpendPolicyQuery(options: { enabled?: boolean } = {}) {
@@ -98,21 +152,35 @@ export function useSpendPolicyQuery(options: { enabled?: boolean } = {}) {
  */
 export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
   const poll = options.pollMs ?? false;
-  const agentsQuery = useQuery({
-    queryKey: ["agents"],
+  const query = useQuery<AgentsWithKeysPage, unknown>({
+    queryKey: AGENTS_WITH_KEYS_KEY,
     retry: false,
-    queryFn: () => listAgents({ limit: 50 }) as unknown as Promise<{ items: AgentRow[] }>,
-  });
-  const agents = React.useMemo(() => agentsQuery.data?.items ?? [], [agentsQuery.data]);
-  const agentIds = React.useMemo(() => agents.map((a) => a.agentId), [agents]);
-
-  const keysQuery = useQuery({
-    queryKey: ["agent-keys", agentIds],
-    enabled: agentIds.length > 0,
-    retry: 0,
     refetchInterval: poll,
-    queryFn: () => readAgentKeys(agentIds),
+    queryFn: readAgentsWithKeys,
   });
+  const { data: page, refetch } = query;
+  const agents = React.useMemo(() => page?.items ?? [], [page]);
+  const keys = React.useMemo(() => (page ? keysByAgent(page) : undefined), [page]);
+  const health = React.useMemo(() => (page ? healthByAgent(page) : {}), [page]);
+  // Agents and keys come in one answer. The agents read as failed only when
+  // there is nothing to show; a failed refresh (a poll) marks the keys
+  // unreadable and keeps the agents on screen, as the separate keys poll did.
+  const agentsQuery: QueryPart<AgentsWithKeysPage> = {
+    data: page,
+    error: query.isLoadingError ? query.error : null,
+    isPending: query.isPending,
+    isError: query.isLoadingError,
+    isSuccess: page !== undefined,
+    refetch,
+  };
+  const keysQuery: QueryPart<Record<string, KeyRow[]>> = {
+    data: keys,
+    error: query.error,
+    isPending: query.isPending,
+    isError: query.isError,
+    isSuccess: query.isSuccess,
+    refetch,
+  };
 
   const delegationOn = agents.some((a) => supportsDelegation(a.agentAccount));
   const delegatesQuery = useQuery({
@@ -141,7 +209,7 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
     for (const agent of agents) {
       map[agent.agentId] = agentReadiness({
         agentAccount: agent.agentAccount,
-        credentials: keysQuery.data?.[agent.agentId],
+        credentials: keys?.[agent.agentId],
         credentialsUnreadable: keysQuery.isError,
         delegates,
         delegatesUnreadable: delegatesQuery.isError,
@@ -153,7 +221,7 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
       });
     }
     return map;
-  }, [agents, keysQuery.data, keysQuery.isError, delegates, delegatesQuery.isError, escrowQuery.data, escrowQuery.isError, policyQuery.data, freeOnlyChainName, debtOwed]);
+  }, [agents, keys, keysQuery.isError, delegates, delegatesQuery.isError, escrowQuery.data, escrowQuery.isError, policyQuery.data, freeOnlyChainName, debtOwed]);
 
   return {
     agentsQuery,
@@ -162,12 +230,14 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
     escrowQuery,
     policyQuery,
     agents,
-    keys: keysQuery.data ?? {},
+    keys: keys ?? {},
+    /** Each agent's key health (`GET /agents?include=health`), by agent id. */
+    health,
     delegates,
     readiness,
     /** The escrow's chain name when it serves free calls only, else `null`. */
     freeOnlyChainName: freeOnlyChainName(escrowQuery.data?.account),
-    refetchKeys: () => void keysQuery.refetch(),
+    refetchKeys: () => void refetch(),
     refetchDelegates: () => void delegatesQuery.refetch(),
   };
 }

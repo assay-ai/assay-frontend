@@ -33,12 +33,47 @@ import { evmRpcUrl } from "@/libs/chains/evm/chains";
 import { servesPaidCalls } from "@/libs/chains/paid-rails";
 import { firstDepositOpensEscrow } from "@/libs/chains/registry";
 import { loginHref } from "@/libs/login-redirect";
-import { listAgents, listCredentials } from "@/services/account.service";
+import { listAgents, listCredentials, type Agent } from "@/services/account.service";
 import { listDelegates } from "@/services/delegation.service";
 import { addressOfAccount } from "@/utils/chain";
 import { formatMoney } from "@/utils/money";
 
 const HEADING = "Turn on paid calls";
+
+type AgentWithCredentials = Agent & { credentials?: { items: EnablePaidCredential[]; hasMore: boolean } };
+
+/**
+ * Every agent and every one of its keys. `GET /agents?include=credentials`
+ * carries each agent's first 50 keys; an agent with more (`hasMore`) has its
+ * whole list read again from `GET /agents/:id/credentials`, page by page, so
+ * the key this link names is found however many keys there are.
+ */
+async function readAgentsAndKeys(): Promise<{
+  agents: AgentWithCredentials[];
+  credentials: Record<string, EnablePaidCredential[]>;
+}> {
+  const agents = await collectPages(
+    (cursor) =>
+      listAgents({ limit: 50, cursor, include: "credentials" }) as unknown as Promise<{
+        items: AgentWithCredentials[];
+        pageInfo: { nextCursor: string | null; hasMore: boolean };
+      }>,
+  );
+  const lists = await Promise.all(
+    agents.map((agent) => {
+      if (!agent.credentials) throw new Error("The agents came back without their keys");
+      if (!agent.credentials.hasMore) return agent.credentials.items;
+      return collectPages(
+        (cursor) =>
+          listCredentials(agent.agentId, { limit: 50, cursor }) as unknown as Promise<{
+            items: EnablePaidCredential[];
+            pageInfo: { nextCursor: string | null; hasMore: boolean };
+          }>,
+      );
+    }),
+  );
+  return { agents, credentials: Object.fromEntries(agents.map((agent, i) => [agent.agentId, lists[i]!])) };
+}
 
 /**
  * `{WEB}/agents/enable-paid?credential={id}#key={address}`: the buyer approves,
@@ -69,7 +104,7 @@ export default function EnablePaidPage() {
     // credential and its on-chain state with it, so every check runs on the new key (BUG-M3-02).
     const onHashChange = () => {
       setFragmentKey(takePaymentKey(credentialId));
-      void queryClient.invalidateQueries({ queryKey: ["agent-keys", "enable-paid"] });
+      void queryClient.invalidateQueries({ queryKey: ["agents", "enable-paid"] });
       void queryClient.invalidateQueries({ queryKey: ["escrow-delegates", "live"] });
     };
     window.addEventListener("hashchange", onHashChange);
@@ -84,33 +119,16 @@ export default function EnablePaidPage() {
   }, [signedOut, credentialId]);
 
   const signedIn = ready && authenticated;
-  const agentsQuery = useQuery({
+  // Every agent with every key: one read for the agents and their first 50
+  // keys, then the rest only for an agent that has more.
+  const keysQuery = useQuery({
     queryKey: ["agents", "enable-paid"],
     enabled: signedIn,
     retry: false,
-    queryFn: () => collectPages((cursor) => listAgents({ limit: 50, cursor })),
-  });
-  const agents = React.useMemo(() => agentsQuery.data ?? [], [agentsQuery.data]);
-  const credentialsQuery = useQuery({
-    queryKey: ["agent-keys", "enable-paid", agents.map((a) => a.agentId)],
-    enabled: signedIn && agentsQuery.isSuccess,
-    retry: false,
     staleTime: 0,
-    queryFn: async () => {
-      const lists = await Promise.all(
-        agents.map((a) =>
-          collectPages(
-            (cursor) =>
-              listCredentials(a.agentId, { limit: 50, cursor }) as unknown as Promise<{
-                items: EnablePaidCredential[];
-                pageInfo: { nextCursor: string | null; hasMore: boolean };
-              }>,
-          ),
-        ),
-      );
-      return Object.fromEntries(agents.map((a, i) => [a.agentId, lists[i]!]));
-    },
+    queryFn: readAgentsAndKeys,
   });
+  const agents = React.useMemo(() => keysQuery.data?.agents ?? [], [keysQuery.data]);
   const delegatesQuery = useQuery({
     queryKey: ["escrow-delegates", "live"],
     enabled: signedIn,
@@ -123,12 +141,12 @@ export default function EnablePaidPage() {
 
   const nowMs = Date.now();
   const state =
-    credentialsQuery.data && delegatesQuery.data && fragmentKey !== undefined
+    keysQuery.data && delegatesQuery.data && fragmentKey !== undefined
       ? enablePaidState({
           credentialId: credentialId || null,
           fragmentKey,
           agents,
-          credentials: credentialsQuery.data,
+          credentials: keysQuery.data.credentials,
           delegates: delegatesQuery.data.delegates,
           nowMs,
           servesPaid: servesPaidCalls,
@@ -158,15 +176,14 @@ export default function EnablePaidPage() {
   }
   const [depositOpen, setDepositOpen] = React.useState(false);
 
-  const failed = agentsQuery.error ?? credentialsQuery.error ?? delegatesQuery.error ?? money.escrowQuery.error;
+  const failed = keysQuery.error ?? delegatesQuery.error ?? money.escrowQuery.error;
   if (!credentialId) return <Notice text="This link is missing which app it is for. Open the link your app showed again." />;
   if (failed) {
     return (
       <Notice
         text="That did not load. Try again."
         retry={() => {
-          void agentsQuery.refetch();
-          void credentialsQuery.refetch();
+          void keysQuery.refetch();
           void delegatesQuery.refetch();
           void money.escrowQuery.refetch();
         }}

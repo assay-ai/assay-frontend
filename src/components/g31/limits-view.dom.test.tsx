@@ -18,6 +18,8 @@ vi.mock("@/hooks/useSigner", () => ({
 }));
 
 import { LimitsView } from "./limits-view";
+import { AGENTS_WITH_KEYS_KEY } from "@/components/buyer-money/use-agents";
+import { demoAgentsWithKeys, withDemoKeys } from "@/libs/demo/demo-agent-health";
 
 const EVM = "eip155:46630";
 
@@ -50,11 +52,11 @@ function markup(policy: Record<string, unknown> | null, { granted = true }: { gr
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(["spend-policy"], policy);
   client.setQueryData(["spend-policy-history"], { items: [], pageInfo: { nextCursor: null, hasMore: false } });
-  client.setQueryData(["agents"], {
+  client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({
     items: [{ agentId: "f64b7b6e", label: "prod", agentAccount: ACCOUNT, chainId: EVM }],
     pageInfo: { nextCursor: null, hasMore: false },
-  });
-  client.setQueryData(["agent-keys", ["f64b7b6e"]], {
+  }));
+  client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({
     f64b7b6e: [
       {
         id: "k1",
@@ -70,7 +72,7 @@ function markup(policy: Record<string, unknown> | null, { granted = true }: { gr
         createdAt: new Date().toISOString(),
       },
     ],
-  });
+  }));
   client.setQueryData(["escrow", null], {
     exists: true,
     chainReadable: true,

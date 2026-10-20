@@ -8,6 +8,8 @@ import type { FullBalance } from "@/features/g30/balance";
 import { isLiveKey, readyToClose } from "@/features/buyer/close-account";
 
 import { CloseAccountView } from "./close-account-view";
+import { AGENTS_WITH_KEYS_KEY } from "@/components/buyer-money/use-agents";
+import { demoAgentsWithKeys, withDemoKeys } from "@/libs/demo/demo-agent-health";
 
 // A deployment with a support link: the close request is a real link once the steps are done.
 vi.mock("@/libs/support", () => ({ SUPPORT_URL: "mailto:support@example.com" }));
@@ -111,7 +113,7 @@ describe("CloseAccountView — the close request (review B P1)", () => {
     const html = markup([EMPTY_EVM_ROW], (client) => {
       client.setQueryData(["holds"], { items: [] });
       client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: EVM_ROW.accountId, debts: [] } });
-      client.setQueryData(["agents"], { items: [] });
+      client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: [] }));
     });
     const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
     expect(text).toContain("Withdraw your money , done");
@@ -125,7 +127,7 @@ describe("CloseAccountView — unknown or owed is never withdrawn (review m2)", 
   const seedAllBut = (skip: "holds" | "debts") => (client: QueryClient) => {
     if (skip !== "holds") client.setQueryData(["holds"], { items: [] });
     if (skip !== "debts") client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: EVM_ROW.accountId, debts: [] } });
-    client.setQueryData(["agents"], { items: [] });
+    client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: [] }));
   };
   const stripped = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 

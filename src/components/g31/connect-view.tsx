@@ -79,7 +79,9 @@ export function ConnectView() {
   const used = live.find((k) => k.lastUsedAt) ?? null;
   const rootCalled = Boolean(root && (root.firstCallAt || root.lastCallAt));
   const waitingOnRoot = Boolean(root?.waitingForFirstCall);
-  const done = waitingOnRoot ? false : rootCalled || Boolean(used);
+  // A key that is not revoked has been used (the keys' health): its first call arrived.
+  const firstCallSeen = data.agents.some((a) => data.health[a.agentId]?.firstCallSeen === true);
+  const done = waitingOnRoot ? false : rootCalled || firstCallSeen;
   React.useEffect(() => setPoll(done ? false : POLL_MS), [done]);
   const failed = data.agentsQuery.isError || data.keysQuery.isError;
   const recordConnect = useRecordConnect(agent?.agentId);

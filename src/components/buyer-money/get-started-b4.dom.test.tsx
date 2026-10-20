@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AGENTS_WITH_KEYS_KEY } from "@/components/buyer-money/use-agents";
+import { demoAgentsWithKeys, withDemoKeys } from "@/libs/demo/demo-agent-health";
 
 vi.mock("@privy-io/react-auth/solana", () => ({
   useWallets: () => ({ ready: true, wallets: [] }),
@@ -45,8 +47,8 @@ async function renderGetStarted(
 ) {
   const { GetStarted } = await import("./get-started");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] });
-  client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [KEY] });
+  client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] }));
+  client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [KEY] }));
   client.setQueryData(["escrow-delegates", "live"], { delegates: [] });
   client.setQueryData(["escrow", null], {
     exists: true,
@@ -89,10 +91,31 @@ describe("Get started, step 4 by invitation (D14)", { timeout: 30_000 }, () => {
     expect(out).not.toMatch(/\d of \d/);
   });
 
+  it("reads the key and the first call from the keys' health: a key past its expiry but not revoked still counts", async () => {
+    const out = text(
+      await renderGetStarted((client) => {
+        client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [{ ...KEY, expiresAt: "2026-10-18T01:00:00Z" }] }));
+        client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT, maxVoucherAmount: null, maxPerWindow: null, withdrawRequested: null });
+      }),
+    );
+    expect(out).toContain("All set: your agent can make free calls");
+  });
+
+  it("is not done while every key is revoked, whatever they did before", async () => {
+    const out = text(
+      await renderGetStarted((client) => {
+        client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [{ ...KEY, revokedAt: "2026-10-19T00:00:00Z" }] }));
+        client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT, maxVoucherAmount: null, maxPerWindow: null, withdrawRequested: null });
+      }),
+    );
+    expect(out).not.toContain("All set");
+    expect(out).toContain("0 of 2");
+  });
+
   it("names funds and paying as optional while the first call is still awaited", async () => {
     const out = text(
       await renderGetStarted((client) => {
-        client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [{ ...KEY, lastUsedAt: null }] });
+        client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [{ ...KEY, lastUsedAt: null }] }));
         client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT, maxVoucherAmount: null, maxPerWindow: null, withdrawRequested: null });
       }),
     );
@@ -125,7 +148,7 @@ describe("Get started, step 4 by invitation (D14)", { timeout: 30_000 }, () => {
 describe("Get started on Overview, an agent that already pays", { timeout: 30_000 }, () => {
   const DELEGATE = "eip155:46630:0x00000000000000000000000000000000000000d1";
   const bound = (client: QueryClient) => {
-    client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [{ ...KEY, delegateAccount: DELEGATE }] });
+    client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [{ ...KEY, delegateAccount: DELEGATE }] }));
     client.setQueryData(["escrow", null], {
       exists: true,
       readable: true,

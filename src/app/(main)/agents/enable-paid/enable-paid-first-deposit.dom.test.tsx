@@ -31,22 +31,34 @@ vi.mock("@/components/buyer-money/use-buyer-money", () => ({
   useWalletBlocker: () => null,
 }));
 vi.mock("@/services/account.service", () => ({
-  listAgents: async () => ({ items: [{ agentId: "agt-1", label: "research-bot" }], pageInfo: { nextCursor: null, hasMore: false } }),
-  listCredentials: async () => ({
+  // `include=credentials` nests each agent's keys: no per-agent read is needed.
+  listAgents: async () => ({
     items: [
       {
-        id: "cred-1",
         agentId: "agt-1",
-        name: "Assay app on laptop",
-        issuedVia: "OAUTH",
-        oauthClient: { name: "Assay app", paymentClient: true },
-        expiresAt: null,
-        revokedAt: null,
-        delegateAccount: `${EVM}:${bound.key}`,
+        label: "research-bot",
+        credentials: {
+          items: [
+            {
+              id: "cred-1",
+              agentId: "agt-1",
+              name: "Assay app on laptop",
+              issuedVia: "OAUTH",
+              oauthClient: { name: "Assay app", paymentClient: true },
+              expiresAt: null,
+              revokedAt: null,
+              delegateAccount: `${EVM}:${bound.key}`,
+            },
+          ],
+          hasMore: false,
+        },
       },
     ],
     pageInfo: { nextCursor: null, hasMore: false },
   }),
+  listCredentials: async () => {
+    throw new Error("not read: the agents answer carried every key");
+  },
 }));
 vi.mock("@/services/delegation.service", () => ({ listDelegates: async () => ({ delegates: [] }) }));
 // The view as the page hands it over: the balance line and what blocks Approve.

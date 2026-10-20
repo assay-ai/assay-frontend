@@ -23,6 +23,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { AgentsView } from "./agents-view";
+import { AGENTS_WITH_KEYS_KEY } from "@/components/buyer-money/use-agents";
+import { demoAgentsWithKeys, withDemoKeys } from "@/libs/demo/demo-agent-health";
 
 const AGENT = "11111111-1111-1111-1111-111111111111";
 const ACCOUNT = "eip155:46630:0x7FD9A17dE9fd64b35081FbAbaa9f3bb85e59F8d1";
@@ -33,7 +35,7 @@ function text(html: string): string {
 
 function render(seed: (client: QueryClient) => void = () => undefined): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] });
+  client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] }));
   client.setQueryData(["escrow-delegates", "live"], { delegates: [] });
   client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT });
   client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
@@ -48,34 +50,38 @@ function render(seed: (client: QueryClient) => void = () => undefined): string {
 }
 
 describe("the agent card while its keys load", () => {
+  // The agents and their keys are one answer (`GET /agents?include=credentials,health`).
   it("is a skeleton, never 'No key'", () => {
-    const html = render();
+    const html = render((client) => client.removeQueries({ queryKey: AGENTS_WITH_KEYS_KEY }));
     const out = text(html);
-    expect(html).toContain('data-testid="agent-card-loading"');
+    expect(html).toContain("Loading your agents");
     expect(out).not.toMatch(/no key/i);
     expect(out).not.toContain("Create a key first");
-    expect(out).toContain("My agent");
   });
 
   it("says No key only once the keys are read and there are none, with Rename in place", () => {
-    const html = render((client) => client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [] }));
+    const html = render((client) => client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [] })));
     const out = text(html);
     expect(html).toContain('data-testid="agent-card"');
     expect(out).toContain("No key");
     expect(html).toContain('data-testid="rename-agent"');
   });
 
-  it("on a failed keys read, says so with Retry, never No key or Create a key first (review m1)", async () => {
+  it("on a failed keys refresh, says so with Retry, never No key or Create a key first (review m1)", async () => {
     // No refetch on mount: the render shows the failed read as it stands.
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, refetchOnMount: false } } });
-    client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] });
+    client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] }));
     client.setQueryData(["escrow-delegates", "live"], { delegates: [] });
     client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT });
     client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
     client.setQueryData(["spend-policy"], null);
     client.setQueryData(["chains"], { chains: [] });
-    // A keys read that failed: the query's cache entry is in error.
-    await client.prefetchQuery({ queryKey: ["agent-keys", [AGENT]], queryFn: () => Promise.reject(new Error("down")), retry: false });
+    const key = { id: "k1", agentId: AGENT, name: "Key 1", issuedVia: "API_KEY", oauthClient: null, prefix: "assay_sk_live_ab12", scopes: [], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
+    client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [key] }));
+    // A refresh (a poll) that failed: the agents stay on screen, their keys read as unknown.
+    await client
+      .fetchQuery({ queryKey: AGENTS_WITH_KEYS_KEY, queryFn: () => Promise.reject(new Error("down")), retry: false })
+      .catch(() => undefined);
     const html = renderToStaticMarkup(
       <QueryClientProvider client={client}>
         <AgentsView />
@@ -84,13 +90,31 @@ describe("the agent card while its keys load", () => {
     const out = text(html);
     expect(html).toContain('data-testid="keys-unreadable"');
     expect(out).toContain("Retry");
-    expect(out).not.toMatch(/no live key|no key|create a key first/i);
+    expect(out).not.toMatch(/no live key|create a key first/i);
     expect(out).not.toContain("Payment key");
+  });
+
+  it("on a failed first read, the page says it could not load the agents", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, refetchOnMount: false } } });
+    client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
+    client.setQueryData(["spend-policy"], null);
+    client.setQueryData(["chains"], { chains: [] });
+    await client
+      .fetchQuery({ queryKey: AGENTS_WITH_KEYS_KEY, queryFn: () => Promise.reject(new Error("down")), retry: false })
+      .catch(() => undefined);
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <AgentsView />
+      </QueryClientProvider>,
+    );
+    expect(html).not.toContain('data-testid="agent-card"');
+    expect(text(html)).toContain("Your agents could not be loaded");
+    expect(text(html)).not.toMatch(/no key/i);
   });
 
   it("states paid calls as by invitation when the agent has a key but no payment key (D14)", () => {
     const key = { id: "k1", agentId: AGENT, name: "Key 1", issuedVia: "API_KEY", oauthClient: null, prefix: "assay_sk_live_ab12", scopes: [], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
-    const out = text(render((client) => client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [key] })));
+    const out = text(render((client) => client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [key] }))));
     expect(out).toContain("Paid calls are by invitation during testnet");
     expect(out).not.toContain("Needs authorisation");
   });
@@ -98,7 +122,7 @@ describe("the agent card while its keys load", () => {
   it("labels an OAuth grant (null prefix) by its app, never 'null…'", () => {
     const base = { agentId: AGENT, scopes: [], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
     const named = { ...base, id: "g1", name: "Claude Code · 2026-10-17", issuedVia: "OAUTH", prefix: null, oauthClient: THIRD_PARTY };
-    const out = text(render((client) => client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [named] })));
+    const out = text(render((client) => client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [named] }))));
     expect(out).toContain("Signed in from Claude Code (claude.ai) · free tools only");
     expect(out).not.toContain("null");
   });
@@ -108,7 +132,7 @@ describe("the agent card while its keys load", () => {
     const grant = { ...base, id: "g1", name: "Claude Code · 2026-10-17", issuedVia: "OAUTH", prefix: null, oauthClient: THIRD_PARTY };
     const key = { ...base, id: "k1", name: "Key 1", issuedVia: "API_KEY", oauthClient: null, prefix: "assay_sk_live_ab12" };
     const button = (keys: unknown[]) =>
-      text(render((client) => client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: keys })).match(/<button[^>]*data-testid="new-credential"[\s\S]*?<\/button>/)?.[0] ?? "").trim();
+      text(render((client) => client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: keys }))).match(/<button[^>]*data-testid="new-credential"[\s\S]*?<\/button>/)?.[0] ?? "").trim();
     expect(button([])).toBe("Use an API key instead");
     expect(button([grant])).toBe("Use an API key instead");
     expect(button([grant, key])).toBe("New key");
@@ -167,7 +191,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
   it("revoked row with active key shows Stop it", () => {
     const revoked = grantRow("g-old", "Assay app on the old laptop", DELEGATE_A, { revokedAt: "2026-10-18T00:00:00Z" });
     const html = render((client) => {
-      client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [revoked] });
+      client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [revoked] }));
       client.setQueryData(["escrow-delegates", "live"], { account: ACCOUNT, delegates: [onChain(DELEGATE_A)], tightenDelaySeconds: 3600 });
     });
     const out = text(html);
@@ -181,7 +205,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
   it("a revoked row whose key is not active on chain offers no Stop it", () => {
     const revoked = grantRow("g-old", "Assay app on the old laptop", DELEGATE_A, { revokedAt: "2026-10-18T00:00:00Z" });
     const html = render((client) => {
-      client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [revoked] });
+      client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [revoked] }));
       client.setQueryData(["escrow-delegates", "live"], { account: ACCOUNT, delegates: [], tightenDelaySeconds: 3600 });
     });
     expect(html).not.toContain('data-testid="stop-payment-key"');
@@ -192,7 +216,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
     const a = grantRow("g-a", "Assay app on laptop-a", DELEGATE_A);
     const b = grantRow("g-b", "Assay app on laptop-b", DELEGATE_B);
     const html = render((client) => {
-      client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [a, b] });
+      client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [a, b] }));
       client.setQueryData(["escrow-delegates", "live"], {
         account: ACCOUNT,
         delegates: [onChain(DELEGATE_A), onChain(DELEGATE_B)],
@@ -215,7 +239,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
   it("Payment limits is off for a bound key not yet on chain: the enable-paid page checks it (final review I-2)", () => {
     const row = grantRow("g-new", "Assay app on laptop-a", DELEGATE_A);
     const html = render((client) => {
-      client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [row] });
+      client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [row] }));
       client.setQueryData(["escrow-delegates", "live"], { account: ACCOUNT, delegates: [], tightenDelaySeconds: 3600 });
     });
     expect(html).toMatch(/<button[^>]*data-testid="payment-limits"[^>]*disabled=""|<button[^>]*disabled=""[^>]*data-testid="payment-limits"/);
@@ -224,7 +248,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
 
   it("a third-party grant gets no Payment limits button", () => {
     const row = grantRow("g-c", "Claude Code · Oct 19", null, { oauthClient: THIRD_PARTY });
-    const html = render((client) => client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [row] }));
+    const html = render((client) => client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [row] })));
     expect(html).toContain('data-testid="revoke-credential"');
     expect(html).toContain('data-testid="edit-access"');
     expect(html).not.toContain('data-testid="payment-limits"');
@@ -233,12 +257,12 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
   it("a revoked row with a bound key while the chain read is pending: in view, may still be active, never stopped", () => {
     const revoked = grantRow("g-old", "Assay app on the old laptop", DELEGATE_A, { revokedAt: "2026-10-18T00:00:00Z" });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, refetchOnMount: false } } });
-    client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] });
+    client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] }));
     client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT });
     client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
     client.setQueryData(["spend-policy"], null);
     client.setQueryData(["chains"], { chains: [] });
-    client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [revoked] });
+    client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [revoked] }));
     // No ["escrow-delegates", "live"]: the chain read has not answered.
     const html = renderToStaticMarkup(
       <QueryClientProvider client={client}>
@@ -256,12 +280,12 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
   it("a revoked row with a bound key when the chain read failed: in view, may still be active, Check again", async () => {
     const revoked = grantRow("g-old", "Assay app on the old laptop", DELEGATE_A, { revokedAt: "2026-10-18T00:00:00Z" });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, refetchOnMount: false } } });
-    client.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] });
+    client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] }));
     client.setQueryData(["escrow", null], { exists: false, readable: true, account: ACCOUNT });
     client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
     client.setQueryData(["spend-policy"], null);
     client.setQueryData(["chains"], { chains: [] });
-    client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [revoked] });
+    client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [revoked] }));
     await client.prefetchQuery({ queryKey: ["escrow-delegates", "live"], queryFn: () => Promise.reject(new Error("rpc down")), retry: false });
     const html = renderToStaticMarkup(
       <QueryClientProvider client={client}>
@@ -288,7 +312,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
         withdrawRequested: usdg("0"),
         balance: usdg("20000000"),
       });
-      client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [a, b] });
+      client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [a, b] }));
       client.setQueryData(["escrow-delegates", "live"], {
         account: ACCOUNT,
         delegates: [
@@ -318,7 +342,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
     const a = grantRow("g-a", "Assay app on laptop-a", DELEGATE_A, { expiresAt: "2026-10-01T00:00:00Z" });
     const b = grantRow("g-b", "Assay app on laptop-b", DELEGATE_B);
     const html = render((client) => {
-      client.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [a, b] });
+      client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [a, b] }));
       client.setQueryData(["escrow-delegates", "live"], {
         account: ACCOUNT,
         delegates: [onChain(DELEGATE_A), onChain(DELEGATE_B)],

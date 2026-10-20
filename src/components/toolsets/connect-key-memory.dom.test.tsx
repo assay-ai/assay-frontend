@@ -23,14 +23,16 @@ import { Sheet } from "@/components/ui/sheet";
 
 import { ConnectBody } from "./connect-sheet";
 import { toolsetKeys } from "./use-toolsets";
+import { AGENTS_WITH_KEYS_KEY } from "@/components/buyer-money/use-agents";
+import { demoAgentsWithKeys, withDemoKeys } from "@/libs/demo/demo-agent-health";
 
 function client(): QueryClient {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, refetchOnMount: false }, mutations: { retry: false } } });
   qc.setQueryData(["catalogue", "providers"], { providers: [] });
   qc.setQueryData(["catalogue", "tools"], { tools: [] });
   qc.setQueryData(["tool-calls", "catalogue"], { items: [], pageInfo: { nextCursor: null, hasMore: false } });
-  qc.setQueryData(["agents"], { items: [{ agentId: AGENT, label: "My agent" }], pageInfo: { nextCursor: null, hasMore: false } });
-  qc.setQueryData(["agent-keys", [AGENT]], { [AGENT]: [] });
+  qc.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: [{ agentId: AGENT, label: "My agent" }], pageInfo: { nextCursor: null, hasMore: false } }));
+  qc.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [] }));
   qc.setQueryData(toolsetKeys.all, { items: [], pageInfo: { nextCursor: null, hasMore: false } });
   qc.setQueryData(["spend-policy"], null);
   return qc;
