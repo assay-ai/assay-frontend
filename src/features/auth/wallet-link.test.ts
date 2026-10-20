@@ -139,6 +139,24 @@ describe("wallet-link — the first minute of a new account", () => {
     expect(getWalletLinkStatus()).toBe("linked");
   });
 
+  it("waits out a rate limit instead of giving up, never asking sooner than Retry-After", async () => {
+    backend.answers = [
+      () => Promise.reject(new ApiError("TOO_MANY_REQUESTS", "Too many requests. Try again in 10 s.", 429, undefined, undefined, 10)),
+      () => Promise.resolve(LINKED),
+    ];
+
+    startWalletLink();
+    await settle();
+    expect(getWalletLinkStatus()).toBe("provisioning");
+
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(backend.calls).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(backend.calls).toBe(2);
+    expect(getWalletLinkStatus()).toBe("linked");
+  });
+
   it("forgets everything on logout, so the next person starts clean", async () => {
     backend.answers = [() => Promise.resolve(NOT_YET)];
     startWalletLink();

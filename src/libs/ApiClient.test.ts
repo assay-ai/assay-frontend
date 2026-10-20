@@ -6,6 +6,7 @@ import ApiClient, {
   forgetSessionRequests,
   onUnauthorized,
   onWalletNotLinked,
+  parseRetryAfter,
   registerSessionTokenProvider,
   sessionRequestsSentAs,
   sessionTokenSubject,
@@ -302,5 +303,131 @@ describe("AUTH_WALLET_NOT_LINKED is reported, and still reaches the caller", () 
     operator.raw().defaults.adapter = refusing("AUTH_WALLET_NOT_LINKED", 424);
     await expect(operator.get("/a")).rejects.toBeInstanceOf(ApiError);
     expect(seen).not.toHaveBeenCalled();
+  });
+});
+
+/*
+  The API is getting per-caller rate limits that answer 429 with Retry-After.
+  Nothing retries a 429; a person reads the wait; a poll stops reaching the
+  server until the wait is over.
+*/
+describe("429 Too Many Requests", () => {
+  afterEach(() => {
+    registerSessionTokenProvider(null);
+    vi.useRealTimers();
+  });
+
+  /** Answers 429 (with `body` and `retryAfter`) until `limited` is turned off, 200 after. */
+  function limiter(options: { body?: unknown; retryAfter?: string } = {}) {
+    const state = { limited: true, requests: [] as string[] };
+    const adapter: AxiosAdapter = async (config) => {
+      state.requests.push(`${(config.method ?? "get").toUpperCase()} ${config.url}`);
+      if (!state.limited) return { data: { data: { ok: true } }, status: 200, statusText: "OK", headers: {}, config };
+      const response: AxiosResponse = {
+        data: options.body ?? { success: false, error: { code: "TOO_MANY_REQUESTS", message: "Too many requests from this address. Try again shortly.", statusCode: 429 } },
+        status: 429,
+        statusText: "Too Many Requests",
+        headers: options.retryAfter === undefined ? {} : { "retry-after": options.retryAfter },
+        config,
+      };
+      throw new AxiosError("Too Many Requests", "ERR_BAD_REQUEST", config, null, response);
+    };
+    return { adapter, state };
+  }
+
+  it("reads Retry-After as seconds or a date, within bounds", () => {
+    const now = Date.parse("2026-10-20T00:00:00Z");
+    expect(parseRetryAfter("30", now)).toBe(30);
+    expect(parseRetryAfter(" 7 ", now)).toBe(7);
+    expect(parseRetryAfter("0", now)).toBe(1);
+    expect(parseRetryAfter("86400", now)).toBe(300);
+    expect(parseRetryAfter("Tue, 20 Oct 2026 00:00:45 GMT", now)).toBe(45);
+    expect(parseRetryAfter("soon", now)).toBeNull();
+    expect(parseRetryAfter(undefined, now)).toBeNull();
+  });
+
+  it("fails at once with the wait in the sentence, and is never retried", async () => {
+    const { adapter, state } = limiter({ retryAfter: "30" });
+    const provider = vi.fn(async () => "t");
+    registerSessionTokenProvider(provider);
+
+    const refusal = await client(adapter).post("/escrow/limits", {}).catch((error: unknown) => error);
+
+    expect(refusal).toBeInstanceOf(ApiError);
+    expect(refusal).toMatchObject({ code: "TOO_MANY_REQUESTS", status: 429, retryAfterSeconds: 30 });
+    expect((refusal as ApiError).message).toBe("Too many requests. Try again in 30 s.");
+    expect(state.requests).toEqual(["POST /escrow/limits"]);
+    expect(provider).toHaveBeenCalledTimes(1);
+  });
+
+  it("a poll inside the wait is refused without a request, then reaches the server again", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse("2026-10-20T00:00:00Z"));
+    const { adapter, state } = limiter({ retryAfter: "20" });
+    registerSessionTokenProvider(async () => "t");
+    const api = client(adapter);
+
+    await expect(api.get("/receipts/summary", { from: "a" })).rejects.toMatchObject({ retryAfterSeconds: 20 });
+    vi.setSystemTime(Date.parse("2026-10-20T00:00:05Z"));
+    const local = await api.get("/receipts/summary", { from: "b" }).catch((error: unknown) => error);
+    expect(local).toMatchObject({ code: "TOO_MANY_REQUESTS", status: 429, retryAfterSeconds: 15 });
+    expect((local as ApiError).message).toBe("Too many requests. Try again in 15 s.");
+    expect(state.requests).toHaveLength(1);
+
+    // Another route, and a write to this one, still go to the server.
+    await expect(api.get("/balances")).rejects.toMatchObject({ status: 429 });
+    await expect(api.post("/receipts/summary", {})).rejects.toMatchObject({ status: 429 });
+    expect(state.requests).toEqual(["GET /receipts/summary", "GET /balances", "POST /receipts/summary"]);
+
+    state.limited = false;
+    vi.setSystemTime(Date.parse("2026-10-20T00:00:21Z"));
+    await expect(api.get("/receipts/summary", { from: "c" })).resolves.toEqual({ ok: true });
+    expect(state.requests).toHaveLength(4);
+  });
+
+  it("one caller's wait does not hold up another token", async () => {
+    const { adapter, state } = limiter({ retryAfter: "60" });
+    const provider = vi.fn<() => Promise<string>>().mockResolvedValueOnce("alice").mockResolvedValueOnce("bob");
+    registerSessionTokenProvider(provider);
+    const api = client(adapter);
+
+    await expect(api.get("/escrow")).rejects.toMatchObject({ status: 429 });
+    await expect(api.get("/escrow")).rejects.toMatchObject({ status: 429 });
+    expect(state.requests).toEqual(["GET /escrow", "GET /escrow"]);
+  });
+
+  it("without Retry-After: no cooldown, a plain sentence", async () => {
+    const { adapter, state } = limiter();
+    registerSessionTokenProvider(async () => "t");
+    const api = client(adapter);
+
+    const refusal = await api.get("/escrow").catch((error: unknown) => error);
+    expect((refusal as ApiError).message).toBe("Too many requests. Wait a moment and try again.");
+    await expect(api.get("/escrow")).rejects.toMatchObject({ status: 429 });
+    expect(state.requests).toHaveLength(2);
+  });
+
+  it("a 429 with a domain code keeps its code and its sentence", async () => {
+    const { adapter } = limiter({
+      body: { success: false, error: { code: "TOOLSET_LIMIT_EXCEEDED", message: "At most 5 always-loaded tools", statusCode: 429 } },
+    });
+    registerSessionTokenProvider(async () => "t");
+
+    await expect(client(adapter).post("/toolsets", {})).rejects.toMatchObject({
+      code: "TOOLSET_LIMIT_EXCEEDED",
+      message: "At most 5 always-loaded tools",
+      status: 429,
+    });
+  });
+
+  it("a 429 with no API body (an edge limiter's page) is TOO_MANY_REQUESTS", async () => {
+    const { adapter } = limiter({ body: "<html>rate limited</html>", retryAfter: "10" });
+    registerSessionTokenProvider(async () => "t");
+
+    await expect(client(adapter).get("/escrow")).rejects.toMatchObject({
+      code: "TOO_MANY_REQUESTS",
+      message: "Too many requests. Try again in 10 s.",
+      retryAfterSeconds: 10,
+    });
   });
 });
