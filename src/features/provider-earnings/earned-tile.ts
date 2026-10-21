@@ -31,6 +31,25 @@ export function earnedTileSub(
   return `${EARNED_IN_WALLET} · ${format(debt)} more for ${calls(count)} is waiting on buyers`;
 }
 
+/**
+ * "Held in the dispute window" (lot 1 D15): what passed and is still held for
+ * the dispute window or by an open dispute, or null when nothing is (or an
+ * older backend does not say).
+ */
+export function heldInWindowLine(
+  totals: ProviderEarningsFigures | null | undefined,
+  format: (value: Money) => string,
+): { amount: string; calls: number; text: string } | null {
+  const held = totals?.pendingInWindow;
+  const count = totals?.pendingInWindowCalls ?? 0;
+  if (!nonZero(held, count)) return null;
+  return {
+    amount: format(held),
+    calls: count,
+    text: `${calls(count)} passed and ${count === 1 ? "is" : "are"} held while a buyer can still dispute ${count === 1 ? "it" : "them"}. Paid to your wallet when the window closes; not if a dispute is upheld.`,
+  };
+}
+
 /** One way a call that passed paid the provider nothing (yet). */
 export interface UnpaidLine {
   readonly key: "debtOutstanding" | "uncollected" | "forfeited";
